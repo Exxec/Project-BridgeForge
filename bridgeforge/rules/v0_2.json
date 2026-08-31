@@ -1,0 +1,13 @@
+{
+  "rules": [
+    {
+      "id": "metadata-target-starsector-version",
+      "classification": "REVIEW",
+      "confidence": "DETERMINISTIC",
+      "description": "Set mod_info.json gameVersion to the selected target. This is deterministic but requires approval because the target declaration may affect loading behavior.",
+      "file": "mod_info.json",
+      "json_key": "gameVersion",
+      "value_from_target": "starsector"
+    }
+  ]
+}
