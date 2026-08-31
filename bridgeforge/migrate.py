@@ -4,7 +4,7 @@ import difflib
 import json
 import os
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -179,7 +179,7 @@ def build_plan(workspace: Path, target: TargetProfile, rules_paths: list[Path] |
         planned_files.add(rule.file)
     plan = {
         "schema_version": 1,
-        "created_at": datetime.now(UTC).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "target": asdict(target),
         "working_copy": str(working),
         "rule_packs": sorted({rule.pack_id for rule in rules}),
@@ -232,7 +232,7 @@ def apply_plan(workspace: Path, approved_rule_ids: set[str], apply_safe: bool = 
         checkpoint(workspace, "02-approved-fixes", "migrations-applied")
     manifest = {
         "schema_version": 1,
-        "applied_at": datetime.now(UTC).isoformat(),
+        "applied_at": datetime.now(timezone.utc).isoformat(),
         "applied": applied,
         "skipped": skipped,
         "working_copy": str(working),

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .workspace import sha256_file, workspace_paths
@@ -28,7 +28,7 @@ def write_provenance(workspace: Path) -> dict:
             artifacts[name] = sha256_file(path)
     result = {
         "schema_version": 1,
-        "created_at": datetime.now(UTC).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "workspace": str(workspace),
         "source_tree_sha256": manifest.get("source_tree_sha256"),
         "original_reference_tree_sha256": _tree_hash(original),

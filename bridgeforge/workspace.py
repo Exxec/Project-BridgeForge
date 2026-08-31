@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -70,7 +70,7 @@ def create_workspace(source: Path, destination: Path) -> Path:
     source_hash = hashlib.sha256("".join(f"{path.relative_to(source).as_posix()}:{sha256_file(path)}\n" for path in sorted(source.rglob("*")) if path.is_file()).encode("utf-8")).hexdigest()
     manifest = {
         "schema_version": 1,
-        "created_at": datetime.now(UTC).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "source_path": str(source),
         "source_tree_sha256": source_hash,
         "original_reference": "original-reference",
@@ -108,7 +108,7 @@ def checkpoint(workspace: Path, name: str, event_type: str) -> Path:
     _copy_tree(working, target)
     actual_name = target.name
     manifest["checkpoints"].append(actual_name)
-    manifest["events"].append({"type": event_type, "checkpoint": actual_name, "at": datetime.now(UTC).isoformat()})
+    manifest["events"].append({"type": event_type, "checkpoint": actual_name, "at": datetime.now(timezone.utc).isoformat()})
     _write_manifest(workspace.expanduser().resolve(), manifest)
     return target
 
@@ -123,5 +123,5 @@ def rollback(workspace: Path, checkpoint_name: str) -> None:
         raise ValueError(f"Checkpoint contents unavailable: {checkpoint_name}")
     shutil.rmtree(working)
     _copy_tree(checkpoint_path, working)
-    manifest["events"].append({"type": "rollback", "checkpoint": checkpoint_name, "at": datetime.now(UTC).isoformat()})
+    manifest["events"].append({"type": "rollback", "checkpoint": checkpoint_name, "at": datetime.now(timezone.utc).isoformat()})
     _write_manifest(workspace, manifest)
