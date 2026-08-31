@@ -2,6 +2,8 @@
 
 An offline, read-only compatibility scanner for legacy Starsector mods. Bridgeforge V0.1 inventories a mod and produces explainable compatibility findings; it does not modify the mod, rewrite source, or alter bytecode.
 
+Bridgeforge is intentionally separate from the proposed [Starsector Performance Workbench](docs/PERFORMANCE_WORKBENCH_DESIGN.md), which profiles runtime behavior and attributes cost to mods/classes.
+
 ## Run
 
 Requires Python 3.10+.
@@ -15,4 +17,3 @@ The command writes `MODERNIZATION_REPORT.md` and `bridgeforge.compat.json` to th
 ## Safety
 
 Scanning is read-only with respect to the selected mod directory. Generated artifacts are written only to `--output`.
-

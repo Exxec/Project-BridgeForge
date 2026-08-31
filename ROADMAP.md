@@ -2,6 +2,10 @@
 
 Bridgeforge follows the project charter in `docs/PROJECT_CHARTER.md`: understand first, modify second, validate always. The original mod is never changed in place.
 
+## Product boundary
+
+Bridgeforge modernizes legacy mods. It does not profile performance. The related, independent **Starsector Performance Workbench** is specified in [docs/PERFORMANCE_WORKBENCH_DESIGN.md](docs/PERFORMANCE_WORKBENCH_DESIGN.md); the only planned interchange is a small set of versioned JSON schemas.
+
 ## First 10 implementation phases — V0.1 scanner
 
 1. **CLI and target profile** — accept a mod directory and explicit Starsector/Java targets.
@@ -15,15 +19,16 @@ Bridgeforge follows the project charter in `docs/PROJECT_CHARTER.md`: understand
 9. **Environment inference** — estimate source Starsector and Java eras with recorded evidence.
 10. **Artifacts and reporting** — emit `MODERNIZATION_REPORT.md` and `bridgeforge.compat.json`.
 
+**Status: implemented locally.** The V0.1 scanner is deliberately read-only and has no automatic migration, bytecode rewrite, or AI dependency.
+
 ## Subsequent releases
 
-- **V0.2:** working-copy generation, safe deterministic metadata/config fixes, and patch manifests.
+- **V0.2:** working-copy generation, safe deterministic metadata/config fixes, checkpoints, and patch manifests.
 - **V0.3:** AST-based Java source migrations; no regex source rewrites.
 - **V0.4:** JDK/dependency selection and compile validation.
-- **V0.5:** human/AI review queue for ambiguity only.
+- **V0.5:** scoped agent handoff bundles for ambiguity only; Bridgeforge remains the planner and validator.
 - **V0.6:** runtime smoke validation and log collection.
-- **V0.7+:** save-risk analysis.
-- **V0.8+:** migration-pack/plugin ecosystem.
-- **V0.9+:** cross-mod compatibility analysis.
+- **V0.7:** save-risk analysis.
+- **V0.8:** migration-pack/plugin ecosystem, including separate library-migration and library-adoption recommendations.
+- **V0.9:** modernization-opportunity analysis; no automatic adoption.
 - **V1.0:** repeatable scan → diagnose → plan → apply → compile → review → validate → report pipeline.
-

@@ -9,5 +9,6 @@ The supplied design brief is the authoritative charter for Project Bridgeforge. 
 - Never equate compilation with behavioral correctness.
 - Start with the 0.95.x–0.98.x corridor and a CLI-first scanner.
 
-The complete user-supplied brief remains the source design record supplied to this project.
+Bridgeforge is not a runtime profiler. Runtime profiling, attribution, benchmarking, and regression comparison belong to the independently deployable Starsector Performance Workbench. The programs may exchange only explicit, versioned report metadata; neither program requires the other.
 
+The complete user-supplied brief remains the source design record supplied to this project.
