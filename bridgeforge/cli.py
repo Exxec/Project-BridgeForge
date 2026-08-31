@@ -24,6 +24,7 @@ from .doctor import doctor
 from .conflicts import detect_conflicts
 from .provenance import write_provenance
 from .corpus import compare_corpus
+from .bytecode import BytecodeUnavailable, inspect_bytecode
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--output", type=Path, default=Path("bridgeforge-artifacts"))
     scan.add_argument("--target-starsector", default="0.98.x")
     scan.add_argument("--target-java", type=int, default=17)
+    bytecode = subcommands.add_parser("bytecode-inspect", help="inspect class/JAR symbolic references without rewriting")
+    bytecode.add_argument("input", type=Path, nargs="+")
+    bytecode.add_argument("--output", type=Path)
     workspace = subcommands.add_parser("workspace", help="create an immutable-reference workspace and working copy")
     workspace.add_argument("mod_directory", type=Path)
     workspace.add_argument("--output", required=True, type=Path)
@@ -128,6 +132,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Scanned {len(result.files)} files; found {len(result.findings)} findings.")
         print(f"Report: {report}")
         print(f"Manifest: {manifest}")
+        return 0
+    if args.command == "bytecode-inspect":
+        try:
+            result = inspect_bytecode(args.input)
+        except (ValueError, BytecodeUnavailable) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        payload = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            output = args.output.expanduser().resolve()
+            output.write_text(payload + "\n", encoding="utf-8")
+            print(f"Inspected {len(result['classes'])} class(es): {output}")
+        else:
+            print(payload)
         return 0
     if args.command == "workspace":
         try:

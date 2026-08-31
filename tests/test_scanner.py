@@ -3,10 +3,14 @@ import tempfile
 import unittest
 import zipfile
 import shutil
+import subprocess
 from unittest.mock import patch
 from pathlib import Path
 
 from bridgeforge import __version__, scanner
+from bridgeforge.bytecode import inspect_bytecode
+from bridgeforge.bytecode_diff import diff_bytecode
+from bridgeforge.bytecode_rules import plan_bytecode
 from bridgeforge.scanner import scan_mod
 from bridgeforge.report import write_artifacts
 from bridgeforge.migrate import apply_plan, build_plan, load_rules
@@ -29,6 +33,27 @@ from bridgeforge.interface import export_patch, inspect_workspace
 
 
 class ScannerTests(unittest.TestCase):
+    def test_bytecode_inspector_reports_symbolic_references_without_execution(self) -> None:
+        if not shutil.which("javac") or not shutil.which("java"):
+            self.skipTest("JDK is unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "Fixture.java"
+            source.write_text("class Fixture { static String value() { return new String(String.valueOf(Math.abs(-1))); } }", encoding="utf-8")
+            completed = subprocess.run(["javac", "--release", "17", "-d", str(root), str(source)], capture_output=True, text=True, check=False)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            result = inspect_bytecode([root / "Fixture.class"])
+            self.assertEqual(result["mode"], "INSPECTION_ONLY")
+            self.assertEqual(len(result["classes"]), 1)
+            references = result["classes"][0]["references"]
+            self.assertTrue(any(reference.get("owner") == "java/lang/Math" and reference.get("name") == "abs" for reference in references))
+            self.assertEqual(diff_bytecode([root / "Fixture.class"], [root / "Fixture.class"])["changed_classes"], [])
+            rules = root / "bytecode-rules.json"
+            rules.write_text(json.dumps({"schema_version": 1, "kind": "bridgeforge-bytecode-rules", "rules": [{"id": "fixture-type", "action": "remap-class-reference", "classification": "REVIEW", "description": "fixture", "owner": "java/lang/String", "replacement_owner": "example/String", "expected_matches": 1}]}), encoding="utf-8")
+            plan = plan_bytecode([root / "Fixture.class"], rules)
+            self.assertEqual(len(plan["planned"]), 1)
+            self.assertEqual(plan["planned"][0]["constraints"]["application"], "NOT_IMPLEMENTED")
+
     def test_scans_metadata_bytecode_and_assets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
