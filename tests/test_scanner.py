@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 import zipfile
+import shutil
 from pathlib import Path
 
 from bridgeforge.scanner import scan_mod
@@ -9,6 +10,7 @@ from bridgeforge.report import write_artifacts
 from bridgeforge.migrate import apply_plan, build_plan
 from bridgeforge.models import TargetProfile
 from bridgeforge.workspace import create_workspace, rollback, workspace_paths
+from bridgeforge.build import compile_feedback, create_build_profile, run_compile
 
 
 class ScannerTests(unittest.TestCase):
@@ -91,3 +93,36 @@ class ScannerTests(unittest.TestCase):
             content = (working / "Example.java").read_text(encoding="utf-8")
             self.assertIn("import new.api.Helper;", content)
             self.assertIn('"import old.api.Helper;"', content)
+
+    def test_build_profile_records_jdk_and_command_without_compiling(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            (source / "src").mkdir(parents=True)
+            (source / "src" / "Example.java").write_text("class Example {}", encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            jdk = root / "jdk"
+            (jdk / "bin").mkdir(parents=True)
+            (jdk / "release").write_text('IMPLEMENTOR="Eclipse Adoptium"\nJAVA_VERSION="27"\n', encoding="utf-8")
+            profile = create_build_profile(workspace, TargetProfile("0.98a-RC8", 17), jdk, [], [])
+            self.assertEqual(profile.jdk.metadata["JAVA_VERSION"], "27")
+            self.assertEqual(profile.source_roots, ["src"])
+            self.assertIn("--release", profile.command_preview)
+
+    def test_compile_executes_profile_and_classifies_errors(self) -> None:
+        javac = shutil.which("javac")
+        if not javac:
+            self.skipTest("JDK compiler unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            (source / "src").mkdir(parents=True)
+            (source / "src" / "Example.java").write_text("class Example { MissingType x; }", encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            create_build_profile(workspace, TargetProfile("0.98a-RC8", 17), Path(javac).parent.parent, [], [])
+            result = run_compile(workspace)
+            self.assertFalse(result["success"])
+            self.assertTrue(any(item["kind"] == "missing-symbol" for item in result["diagnostics"]))
+            feedback = compile_feedback(workspace)
+            self.assertEqual(len(feedback["findings"]), len(result["diagnostics"]))
+            self.assertTrue((workspace / "COMPILE_FEEDBACK.md").is_file())

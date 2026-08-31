@@ -25,7 +25,7 @@ Bridgeforge modernizes legacy mods. It does not profile performance. The related
 
 - **V0.2:** working-copy generation, safe deterministic metadata/config fixes, checkpoints, and patch manifests. **Status: initial workspace, plan, approval, patch, and rollback foundation implemented; migration-pack coverage remains deliberately minimal.**
 - **V0.3:** AST-based Java source migrations; no regex source rewrites. **Status: parse-only JDK AST import/method evidence and review-gated, AST-confirmed import replacement foundation implemented.**
-- **V0.4:** JDK/dependency selection and compile validation.
+- **V0.4:** JDK/dependency selection and compile validation. **Status: JDK-profile capture, command preview, controlled `javac` execution, diagnostic classification, and non-applying compile feedback implemented.**
 - **V0.5:** scoped agent handoff bundles for ambiguity only; Bridgeforge remains the planner and validator.
 - **V0.6:** runtime smoke validation and log collection.
 - **V0.7:** save-risk analysis.

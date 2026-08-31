@@ -9,6 +9,8 @@ from .report import write_artifacts
 from .scanner import scan_mod
 from .migrate import apply_plan, build_plan
 from .workspace import create_workspace, rollback
+from .build import create_build_profile, preview_shell_command
+from .build import compile_feedback, run_compile
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +36,17 @@ def build_parser() -> argparse.ArgumentParser:
     restore = subcommands.add_parser("rollback", help="restore a working copy from a checkpoint")
     restore.add_argument("workspace", type=Path)
     restore.add_argument("checkpoint")
+    build = subcommands.add_parser("build-plan", help="model a compile environment without running javac")
+    build.add_argument("workspace", type=Path)
+    build.add_argument("--target-starsector", default="0.98.x")
+    build.add_argument("--target-java", type=int, default=17)
+    build.add_argument("--jdk", type=Path)
+    build.add_argument("--api-jar", type=Path, action="append", default=[])
+    build.add_argument("--dependency-jar", type=Path, action="append", default=[])
+    compile_command = subcommands.add_parser("compile", help="run the explicit workspace build profile")
+    compile_command.add_argument("workspace", type=Path)
+    feedback = subcommands.add_parser("compile-feedback", help="link compiler evidence to planned migration candidates")
+    feedback.add_argument("workspace", type=Path)
     return parser
 
 
@@ -85,5 +98,30 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(f"Restored working copy from checkpoint: {args.checkpoint}")
+        return 0
+    if args.command == "build-plan":
+        try:
+            profile = create_build_profile(args.workspace, TargetProfile(args.target_starsector, args.target_java), args.jdk, args.api_jar, args.dependency_jar)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Build profile: {Path(args.workspace).resolve() / 'build-profile.json'}")
+        print(preview_shell_command(profile))
+        return 0
+    if args.command == "compile":
+        try:
+            result = run_compile(args.workspace)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Compile {'passed' if result['success'] else 'failed'}; diagnostics: {len(result['diagnostics'])}")
+        return 0 if result["success"] else 1
+    if args.command == "compile-feedback":
+        try:
+            feedback = compile_feedback(args.workspace)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Generated compile feedback with {len(feedback['findings'])} finding(s).")
         return 0
     return 2

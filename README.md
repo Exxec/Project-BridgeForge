@@ -26,6 +26,12 @@ py -3 -m bridgeforge apply C:\work\OldMod-bridgeforge --approve metadata-target-
 
 Java migration packs can provide a `replace-import` rule. Bridgeforge first parses Java through the selected JDK's compiler API, then replaces only the confirmed import declaration. Method bodies are not rewritten by this V0.3 foundation.
 
+## Build-environment model
+
+`build-plan` records a selected JDK (using its `release` metadata), Java target, API/dependency JARs, discovered source roots, and an exact `javac` preview. It does not compile; that remains a separately controlled step.
+
+`compile` runs only that recorded profile and writes raw output plus classified diagnostics. `compile-feedback` links those diagnostics to already-planned rule candidates and explicitly performs no automatic modification.
+
 ## Safety
 
 Scanning is read-only with respect to the selected mod directory. Generated artifacts are written only to `--output`.
