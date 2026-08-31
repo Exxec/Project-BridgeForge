@@ -17,6 +17,7 @@ from .save_risk import analyze_save_risk
 from .pipeline import run_pipeline
 from .packs import discover_packs
 from .runtime import create_runtime_profile, run_runtime_smoke
+from .interface import export_patch, inspect_workspace
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -83,6 +84,11 @@ def build_parser() -> argparse.ArgumentParser:
     smoke = subcommands.add_parser("runtime-smoke", help="inspect or explicitly run a runtime profile")
     smoke.add_argument("workspace", type=Path)
     smoke.add_argument("--execute", action="store_true")
+    inspect = subcommands.add_parser("inspect", help="show workspace plans, diffs, and checkpoints")
+    inspect.add_argument("workspace", type=Path)
+    export = subcommands.add_parser("export-patch", help="export a patch-only package")
+    export.add_argument("workspace", type=Path)
+    export.add_argument("--output", required=True, type=Path)
     return parser
 
 
@@ -216,4 +222,20 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(f"Runtime smoke status: {result['status']}")
         return 0 if result["status"] in {"PASS", "NOT_EXECUTED"} else 1
+    if args.command == "inspect":
+        try:
+            result = inspect_workspace(args.workspace)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2))
+        return 0
+    if args.command == "export-patch":
+        try:
+            output = export_patch(args.workspace, args.output)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Patch package: {output}")
+        return 0
     return 2

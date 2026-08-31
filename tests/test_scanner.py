@@ -17,6 +17,8 @@ from bridgeforge.save_risk import analyze_save_risk
 from bridgeforge.pipeline import run_pipeline
 from bridgeforge.packs import discover_packs
 from bridgeforge.runtime import create_runtime_profile, run_runtime_smoke
+from bridgeforge.fixtures import discover_compatibility_fixtures
+from bridgeforge.interface import export_patch, inspect_workspace
 
 
 class ScannerTests(unittest.TestCase):
@@ -212,3 +214,21 @@ class ScannerTests(unittest.TestCase):
             executable.write_text("not executed", encoding="utf-8")
             create_runtime_profile(workspace, executable, [], root, 60)
             self.assertEqual(run_runtime_smoke(workspace)["status"], "NOT_EXECUTED")
+
+    def test_synthetic_fixture_corpus_has_declared_expectations(self) -> None:
+        fixtures = discover_compatibility_fixtures()
+        self.assertTrue(any(item["name"] == "import-migration" for item in fixtures))
+        self.assertTrue(all(item["expected"]["classification"] in {"SAFE", "REVIEW", "MANUAL", "UNKNOWN"} for item in fixtures))
+
+    def test_inspect_and_patch_export_exclude_original_mod(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "mod_info.json").write_text(json.dumps({"id": "legacy", "gameVersion": "0.95"}), encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            build_plan(workspace, TargetProfile("0.98", 17))
+            self.assertEqual(len(inspect_workspace(workspace)["planned_migrations"]), 1)
+            output = export_patch(workspace, root / "patch")
+            self.assertTrue((output / "migration-plan.json").is_file())
+            self.assertFalse((output / "original-reference").exists())
