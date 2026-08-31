@@ -10,6 +10,8 @@ inventory → capture → normalize → attribute → analyze → compare → re
 
 SPW does not modernize, rewrite, patch, decompile, or otherwise modify mods. Those are Bridgeforge responsibilities. Bridgeforge does not profile performance. Either program must remain useful when the other is absent.
 
+SPW's primary operating mode is a **low-overhead companion profiler**: a minimal collector runs inside the profiled Starsector process, and all heavy parsing, attribution, analysis, visualization, and reporting happen afterward in the external SPW process. A user should be able to attach SPW to an ordinary, unscripted play session — at a capture level they choose — and get useful evidence without first authoring a benchmark scenario. Controlled benchmark battles (a scripted, reproducible scenario run) are a later, optional mode layered on top of this architecture, not the primary design point; see "Capture levels" and the roadmap below.
+
 ## Design inputs from the local projects and installation
 
 This design incorporates patterns observed in the two existing local projects:
@@ -54,15 +56,16 @@ baseline comparison + PERFORMANCE_REPORT.md / performance-report.json
 | `RuntimeCapability` | capability ID/version/state, detector evidence, parsed configuration, thread/package classifiers enabled, and unsupported assumptions |
 | `ModInventoryEntry` | opaque local ID, relative root, metadata parse status, content hash policy, JAR paths |
 | `JarOwnershipEntry` | normalized JAR path, owner candidates, package prefixes, class index status, confidence |
-| `CaptureDescriptor` | capture type, JVM/JFR settings, start/stop, duration, size, incomplete reason |
+| `CaptureDescriptor` | capture type, capture level (`PASSIVE` / `STANDARD` / `DEEP_DIAGNOSTIC`), JVM/JFR settings, start/stop, duration, size, incomplete reason |
+| `CollectorOverheadEstimate` | capture level, collector CPU time, collector allocation (Deep Diagnostic only), measurement method, paired-baseline reference, confidence |
 | `Attribution` | event/stack evidence, mod/JAR/package/class candidates, confidence, ambiguity reason |
-| `BenchmarkRun` | scenario manifest hash, run settings, summary percentiles, environment snapshot hash |
+| `BenchmarkRun` (optional mode) | scenario manifest hash, run settings, summary percentiles, environment snapshot hash |
 
 An ownership result can be `EXACT`, `LIKELY`, `AMBIGUOUS`, `UNOWNED`, or `UNKNOWN`. Shared library frames must not be automatically attributed to the mod that happens to call them.
 
 ## Environment fingerprinting is mandatory
 
-Every capture starts by creating an immutable `EnvironmentFingerprint`. It is embedded by hash into every JFR descriptor, analysis, and comparison; an incomplete fingerprint is a limitation, not a reason to silently omit context.
+Every capture starts by creating an immutable `EnvironmentFingerprint`. It is embedded by hash into every JFR descriptor, analysis, and comparison; an incomplete fingerprint is a limitation, not a reason to silently omit context. Fingerprinting runs once per session, before any level-specific collection begins, and is unaffected by the selected capture level: even a `PASSIVE` capture gets a full fingerprint, since it is a one-time, negligible-cost step relative to sustained event collection.
 
 The collector records only information needed to interpret measurements:
 
@@ -156,6 +159,30 @@ profiles/<run-id>/
 
 The snapshot contains only locally generated metadata and the user-selected capture. It never copies game/mod sources or JDK binaries.
 
+## Capture levels
+
+Every capture selects one explicit level. The level controls only which JFR event categories the in-JVM collector enables, and whether it adds any custom low-overhead events; it never changes what the external SPW process is allowed to do with the resulting data.
+
+| Level | Intent | Event set | Target overhead |
+| --- | --- | --- | --- |
+| `PASSIVE` | Leave running through ordinary, unscripted play with no perceptible impact. | Stock low-rate JFR events only: GC pauses, coarse CPU-load samples, thread start/stop, exceptions. No method sampling, no allocation profiling. | Near-zero; safe to leave on for an entire session. |
+| `STANDARD` | Default investigative capture for "something feels slow." | Adds JDK method-sampling (execution samples), lock/blocking events, and coarse allocation-rate events at JFR's default intervals. | Low; suitable for a bounded investigation window (minutes), not indefinite play. |
+| `DEEP_DIAGNOSTIC` | Targeted deep dive once `STANDARD` has narrowed a window or category. | Adds high-frequency method sampling, full allocation-profiling events, lock-contention detail, and — only at this level — the minimal custom JFR events described below. | Highest; explicitly time-bounded, never the default. |
+
+The custom events available only at `DEEP_DIAGNOSTIC` are deliberately few and narrow — for V0.1, a simulation-tick-boundary marker emitted by a small, explicit, opt-in Java agent. They exist so the external analyzer can bucket stock JFR samples by game-tick without asking the collector to do that bucketing itself. Where a level's event set is satisfied entirely by stock JDK JFR events (`PASSIVE`, `STANDARD`), no custom agent code loads into the JVM at all.
+
+A `CaptureDescriptor` always records the selected level, and a report must state which level produced its evidence: `PASSIVE` evidence cannot support the same conclusions as `DEEP_DIAGNOSTIC` evidence.
+
+### Profiler overhead accounting
+
+Because the collector runs inside the profiled process, its own cost is a confound the report must account for, not ignore. Every capture records a `CollectorOverheadEstimate` alongside its `CaptureDescriptor`:
+
+- The collector's own CPU time (its dedicated thread(s), read via the JVM's own thread-CPU-time accounting) and, at `DEEP_DIAGNOSTIC`, its own allocation footprint.
+- The active capture level and the JFR event set it enabled, since overhead is primarily a function of level, not of the target application.
+- Where practical, a short paired baseline: the same scenario or a fixed startup segment measured once with the collector at `PASSIVE` and once at the requested level, so the delta between them is an evidence-backed overhead figure rather than a vendor-quoted estimate.
+
+A report's Limitations line must disclose the selected capture level and its estimated overhead whenever a conclusion could plausibly be sensitive to it (for example, a sub-millisecond frame-time claim captured at `DEEP_DIAGNOSTIC`). SPW must never present overhead-inflated timings as if they were the unobserved baseline.
+
 ## Architecture decisions
 
 ### 1. Inventory is read-only and tolerant
@@ -170,15 +197,19 @@ V0.1 uses Java Flight Recorder where the **actual launched JVM** supports it. SP
 
 Resolve a sampled frame in this order: exact class-to-JAR index, package prefix, JAR manifest/metadata, source layout evidence, then unknown. Report both the raw frame and the attribution path. Never map common dependencies (for example shared utility libraries) to one content mod without direct evidence.
 
+### 4. The in-JVM collector stays minimal; the external process does the heavy work
+
+The collector running inside the profiled Starsector process has exactly three jobs: enable/disable the JFR event set for the selected capture level, emit the small number of explicit custom events `DEEP_DIAGNOSTIC` requires, and self-measure its own resource cost (see "Profiler overhead accounting"). It performs no stack resolution, no attribution, no aggregation, no analysis, and no report or visualization rendering — those live entirely in the external SPW process, which consumes the written/streamed JFR data after (or alongside) the capture. This keeps the in-game footprint small and auditable: a user only has to trust a handful of JFR flags and, at `DEEP_DIAGNOSTIC`, one narrow custom-event agent — never a full profiling engine — running inside the game.
+
 ## Roadmap
 
-1. **V0.1 — Environment fingerprint and JFR capture.** Detect installation, selected executable and actual runtime, JVM configuration, core integrity, enabled mods, metadata status, JAR ownership candidates, and thread inventory; emit `environment.json`, `core-integrity.json`, `mod-ownership.json`, `profile.jfr`, and a basic report.
+1. **V0.1 — Environment fingerprint and JFR capture.** Detect installation, selected executable and actual runtime, JVM configuration, core integrity, enabled mods, metadata status, JAR ownership candidates, and thread inventory; emit `environment.json`, `core-integrity.json`, `mod-ownership.json`, `profile.jfr`, and a basic report. Every capture selects an explicit `PASSIVE`/`STANDARD`/`DEEP_DIAGNOSTIC` level and records a paired `CollectorOverheadEstimate`; the in-JVM collector stays limited to stock JFR events at `PASSIVE`/`STANDARD`, with a small opt-in custom-event agent only at `DEEP_DIAGNOSTIC`.
 2. **V0.2 — Runtime capability detectors.** Deliver Vanilla Java 17, Generic Alternate JDK, Mikohime-compatible configuration, Fast Rendering, FR Resource Cache, StarsectorPrepatcher, and Unknown Modified Runtime detectors with evidence/provenance tests. Capabilities compose; no combination-specific profile explosion.
 3. **V0.3 — Startup profiling.** Attribute launcher-to-main-menu time, class loading, resource parsing/loading, mod/dependency initialization.
 4. **V0.4 — CPU and thread analysis.** Analyze sampled CPU, thread states, blocked time, locks, executor waits, and thread lifecycle.
 5. **V0.5 — Mod attribution.** Harden class/JAR/package/dependency resolution and ambiguity reporting; add ownership-map regression fixtures.
 6. **V0.6 — Allocation, GC, and retention analysis.** Report allocation rate, allocating frames, GC frequency/pause time, heap trends, high-water marks, and repeated-transition cleanup evidence.
-7. **V0.7 — Combat benchmark mode.** Use an explicit, user-created scenario manifest; report frame-time mean/median/p95/p99, spikes, CPU, GC, and allocations.
+7. **V0.7 — Combat benchmark mode (optional).** Use an explicit, user-created scenario manifest; report frame-time mean/median/p95/p99, spikes, CPU, GC, and allocations. This is an optional mode layered on the `PASSIVE`/`STANDARD`/`DEEP_DIAGNOSTIC` companion-profiling architecture, not a replacement for it — organic-session profiling remains SPW's primary use case.
 8. **V0.8 — Baseline comparison.** Apply the comparability gate to vanilla/modded/suspect-disabled/patched runs and produce guarded delta reports.
 9. **V0.9 — Rendering diagnostics.** Add advanced, optional render-thread and GL-stall observation. RenderDoc integration remains optional and best-effort.
 10. **V1.0 — Diagnosis pipeline.** Deliver a repeatable inventory → capture → attribute → analyze → compare → report workflow with reproducibility metadata.
@@ -193,6 +224,7 @@ Likely owner: <local mod identifier> / <JAR>
 Evidence: 31% sampled CPU across 3 compatible runs
 Attribution: exact class-to-JAR index
 Confidence: HIGH
+Capture level: STANDARD (estimated collector overhead: <1% CPU)
 Limitations: causation has not been experimentally isolated
 ```
 
