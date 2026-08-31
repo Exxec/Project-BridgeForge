@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bridgeforge"
+version = "0.1.0"
+description = "Offline compatibility scanner for legacy Starsector mods"
+requires-python = ">=3.10"
+
+[project.scripts]
+bridgeforge = "bridgeforge.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["bridgeforge*"]
+
