@@ -11,6 +11,9 @@ from .migrate import apply_plan, build_plan
 from .workspace import create_workspace, rollback
 from .build import create_build_profile, preview_shell_command
 from .build import compile_feedback, run_compile
+from .review import create_review_bundle
+from .validate import validate_workspace
+from .save_risk import analyze_save_risk
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -47,6 +50,14 @@ def build_parser() -> argparse.ArgumentParser:
     compile_command.add_argument("workspace", type=Path)
     feedback = subcommands.add_parser("compile-feedback", help="link compiler evidence to planned migration candidates")
     feedback.add_argument("workspace", type=Path)
+    review = subcommands.add_parser("review-bundle", help="create a bounded human/agent review handoff")
+    review.add_argument("workspace", type=Path)
+    validate = subcommands.add_parser("validate", help="run workspace-integrity and structural validation")
+    validate.add_argument("workspace", type=Path)
+    validate.add_argument("--target-starsector", default="0.98.x")
+    validate.add_argument("--target-java", type=int, default=17)
+    save_risk = subcommands.add_parser("save-risk", help="flag changed persistent-identifier-shaped fields")
+    save_risk.add_argument("workspace", type=Path)
     return parser
 
 
@@ -123,5 +134,29 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(f"Generated compile feedback with {len(feedback['findings'])} finding(s).")
+        return 0
+    if args.command == "review-bundle":
+        try:
+            bundle = create_review_bundle(args.workspace)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Created review bundle: {bundle}")
+        return 0
+    if args.command == "validate":
+        try:
+            result = validate_workspace(args.workspace, TargetProfile(args.target_starsector, args.target_java))
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Validation: reference {result['reference_integrity']['status']}; structural {result['structural_validation']['status']}; runtime {result['runtime_validation']['status']}")
+        return 0
+    if args.command == "save-risk":
+        try:
+            result = analyze_save_risk(args.workspace)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Save compatibility risk: {result['risk']} ({len(result['findings'])} finding(s))")
         return 0
     return 2

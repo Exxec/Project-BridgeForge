@@ -11,6 +11,9 @@ from bridgeforge.migrate import apply_plan, build_plan
 from bridgeforge.models import TargetProfile
 from bridgeforge.workspace import create_workspace, rollback, workspace_paths
 from bridgeforge.build import compile_feedback, create_build_profile, run_compile
+from bridgeforge.review import create_review_bundle
+from bridgeforge.validate import validate_workspace
+from bridgeforge.save_risk import analyze_save_risk
 
 
 class ScannerTests(unittest.TestCase):
@@ -126,3 +129,38 @@ class ScannerTests(unittest.TestCase):
             feedback = compile_feedback(workspace)
             self.assertEqual(len(feedback["findings"]), len(result["diagnostics"]))
             self.assertTrue((workspace / "COMPILE_FEEDBACK.md").is_file())
+
+    def test_review_bundle_is_bounded_to_planned_working_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "mod_info.json").write_text(json.dumps({"id": "legacy", "gameVersion": "0.95"}), encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            build_plan(workspace, TargetProfile("0.98", 17))
+            bundle = create_review_bundle(workspace)
+            self.assertTrue((bundle / "prompt.md").is_file())
+            self.assertTrue((bundle / "working-copy-files" / "mod_info.json").is_file())
+
+    def test_validation_keeps_runtime_explicitly_unconfigured(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "mod_info.json").write_text(json.dumps({"id": "modern", "gameVersion": "0.98"}), encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            result = validate_workspace(workspace, TargetProfile("0.98", 17))
+            self.assertEqual(result["reference_integrity"]["status"], "PASS")
+            self.assertEqual(result["runtime_validation"]["status"], "NOT_CONFIGURED")
+
+    def test_save_risk_flags_changed_persistent_identifier(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "config.json").write_text('{"factionId": "legacy"}', encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            _, working, _ = workspace_paths(workspace)
+            (working / "config.json").write_text('{"factionIdRenamed": "modern"}', encoding="utf-8")
+            result = analyze_save_risk(workspace)
+            self.assertEqual(result["risk"], "HIGH")

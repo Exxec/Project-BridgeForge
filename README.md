@@ -32,6 +32,8 @@ Java migration packs can provide a `replace-import` rule. Bridgeforge first pars
 
 `compile` runs only that recorded profile and writes raw output plus classified diagnostics. `compile-feedback` links those diagnostics to already-planned rule candidates and explicitly performs no automatic modification.
 
+`validate` verifies the immutable reference, structurally re-scans the working copy, and records runtime validation as unconfigured unless an explicit launch profile exists. `save-risk` compares original and working content for changed persistent-identifier-shaped fields; it is a conservative warning, not proof of save compatibility.
+
 ## Safety
 
 Scanning is read-only with respect to the selected mod directory. Generated artifacts are written only to `--output`.
