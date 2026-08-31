@@ -114,9 +114,12 @@ def build_plan(workspace: Path, target: TargetProfile, rules_paths: list[Path] |
             if not rule.from_import or not rule.to_import:
                 raise ValueError(f"Import rule {rule.id} must provide from_import and to_import")
             for fact in source_facts:
-                if fact["kind"] != "import" or fact["value"] != rule.from_import or fact["file"] in planned_files:
+                if fact["kind"] != "import" or fact["value"] != rule.from_import:
                     continue
                 relative = str(fact["file"])
+                if relative in planned_files:
+                    conflicts.append({"rule_id": rule.id, "file": relative, "reason": "A previous planned migration already targets this file; composition is not yet supported."})
+                    continue
                 path = _working_target(working, relative)
                 before = path.read_text(encoding="utf-8")
                 lines = before.splitlines(keepends=True)
@@ -134,9 +137,12 @@ def build_plan(workspace: Path, target: TargetProfile, rules_paths: list[Path] |
             if not rule.from_invocation or not rule.to_invocation:
                 raise ValueError(f"Method rule {rule.id} must provide from_invocation and to_invocation")
             for fact in source_facts:
-                if fact["kind"] != "method_invocation" or fact["value"] != rule.from_invocation or fact["file"] in planned_files:
+                if fact["kind"] != "method_invocation" or fact["value"] != rule.from_invocation:
                     continue
                 relative = str(fact["file"])
+                if relative in planned_files:
+                    conflicts.append({"rule_id": rule.id, "file": relative, "reason": "A previous planned migration already targets this file; composition is not yet supported."})
+                    continue
                 path = _working_target(working, relative)
                 before = path.read_text(encoding="utf-8")
                 position = utf16_offset_to_index(before, int(fact["position"]))
@@ -203,12 +209,20 @@ def apply_plan(workspace: Path, approved_rule_ids: set[str], apply_safe: bool = 
         if not path.is_file() or sha256_file(path) != migration["before_sha256"]:
             raise ValueError(f"Working copy changed since planning: {migration['file']}. Re-plan before applying.")
         approved_migrations.append((migration, path))
-    for migration, path in approved_migrations:
-        temp_path = path.with_suffix(path.suffix + ".bridgeforge-tmp")
-        temp_path.write_text(migration["after_content"], encoding="utf-8")
-        os.replace(temp_path, path)
-        applied.append({key: migration[key] for key in ("rule_id", "pack_id", "classification", "confidence", "file", "before_sha256", "after_sha256")})
-        diff_chunks.append(migration["diff"])
+    original_contents = {path: path.read_bytes() for _, path in approved_migrations}
+    try:
+        for migration, path in approved_migrations:
+            temp_path = path.with_suffix(path.suffix + ".bridgeforge-tmp")
+            temp_path.write_text(migration["after_content"], encoding="utf-8")
+            os.replace(temp_path, path)
+            applied.append({key: migration[key] for key in ("rule_id", "pack_id", "classification", "confidence", "file", "before_sha256", "after_sha256")})
+            diff_chunks.append(migration["diff"])
+    except OSError:
+        for path, contents in original_contents.items():
+            recovery_path = path.with_suffix(path.suffix + ".bridgeforge-recovery")
+            recovery_path.write_bytes(contents)
+            os.replace(recovery_path, path)
+        raise
     if applied:
         checkpoint(workspace, "02-approved-fixes", "migrations-applied")
     manifest = {

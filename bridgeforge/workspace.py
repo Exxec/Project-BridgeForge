@@ -67,10 +67,12 @@ def create_workspace(source: Path, destination: Path) -> Path:
     checkpoints = destination / "checkpoints"
     checkpoints.mkdir()
     _copy_tree(working, checkpoints / "00-original")
+    source_hash = hashlib.sha256("".join(f"{path.relative_to(source).as_posix()}:{sha256_file(path)}\n" for path in sorted(source.rglob("*")) if path.is_file()).encode("utf-8")).hexdigest()
     manifest = {
         "schema_version": 1,
         "created_at": datetime.now(UTC).isoformat(),
         "source_path": str(source),
+        "source_tree_sha256": source_hash,
         "original_reference": "original-reference",
         "working_copy": "working-copy",
         "checkpoints": ["00-original"],

@@ -5,6 +5,7 @@ import zipfile
 import shutil
 from pathlib import Path
 
+from bridgeforge import scanner
 from bridgeforge.scanner import scan_mod
 from bridgeforge.report import write_artifacts
 from bridgeforge.migrate import apply_plan, build_plan
@@ -17,6 +18,9 @@ from bridgeforge.save_risk import analyze_save_risk
 from bridgeforge.pipeline import run_pipeline
 from bridgeforge.packs import discover_packs, resolve_pack_rule_paths
 from bridgeforge.opportunities import analyze_opportunities
+from bridgeforge.doctor import doctor
+from bridgeforge.conflicts import detect_conflicts
+from bridgeforge.provenance import write_provenance
 from bridgeforge.runtime import create_runtime_profile, run_runtime_smoke
 from bridgeforge.fixtures import discover_compatibility_fixtures
 from bridgeforge.interface import export_patch, inspect_workspace
@@ -234,6 +238,15 @@ class ScannerTests(unittest.TestCase):
         self.assertTrue(all(pack.status == "SCAFFOLDED" for pack in packs))
         self.assertEqual(resolve_pack_rule_paths(["java"]), [])
 
+    def test_pack_version_compatibility_is_enforced(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pack = root / "future"
+            pack.mkdir()
+            (pack / "pack.json").write_text(json.dumps({"schema_version": 1, "id": "future", "name": "future", "scope": "test", "status": "SCAFFOLDED", "min_bridgeforge_version": "2.0.0"}), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                resolve_pack_rule_paths(["future"], root)
+
     def test_runtime_profile_never_executes_without_explicit_flag(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -273,3 +286,89 @@ class ScannerTests(unittest.TestCase):
             result = analyze_opportunities(workspace)
             self.assertGreaterEqual(len(result["findings"]), 2)
             self.assertTrue(all("do not adopt automatically" in item["recommendation"].lower() for item in result["findings"]))
+
+    def test_doctor_emits_machine_readable_status(self) -> None:
+        result = doctor()
+        self.assertEqual(result["schema_version"], 1)
+        self.assertTrue(any(check["id"] == "migration-packs" for check in result["checks"]))
+
+    def test_workspace_rejects_manifest_path_escape_and_repeated_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "mod_info.json").write_text(json.dumps({"gameVersion": "0.95"}), encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            build_plan(workspace, TargetProfile("0.98", 17))
+            build_plan(workspace, TargetProfile("0.98", 17))
+            self.assertTrue((workspace / "checkpoints" / "01-scanned-2").is_dir())
+            manifest = json.loads((workspace / "workspace-manifest.json").read_text(encoding="utf-8"))
+            manifest["working_copy"] = "../source"
+            (workspace / "workspace-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                workspace_paths(workspace)
+
+    def test_apply_preflights_all_changes_and_blocks_manual_rules(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "mod_info.json").write_text(json.dumps({"gameVersion": "0.95"}), encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            plan = build_plan(workspace, TargetProfile("0.98", 17))
+            plan["migrations"][0]["classification"] = "MANUAL"
+            (workspace / "migration-plan.json").write_text(json.dumps(plan), encoding="utf-8")
+            self.assertEqual(len(apply_plan(workspace, {"metadata-target-starsector-version"})["applied"]), 0)
+
+    def test_plan_reports_conflicts_and_apply_never_starts_when_a_target_changed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "one.json").write_text(json.dumps({"one": "old"}), encoding="utf-8")
+            (source / "two.json").write_text(json.dumps({"two": "old"}), encoding="utf-8")
+            rules = root / "rules.json"
+            rules.write_text(json.dumps({"pack": {"schema_version": 1, "id": "test"}, "rules": [
+                {"id": "one", "classification": "SAFE", "confidence": "HIGH", "description": "one", "file": "one.json", "json_key": "one", "value_from_target": "starsector"},
+                {"id": "two", "classification": "SAFE", "confidence": "HIGH", "description": "two", "file": "two.json", "json_key": "two", "value_from_target": "starsector"},
+                {"id": "two-conflict", "classification": "SAFE", "confidence": "HIGH", "description": "conflict", "file": "two.json", "json_key": "other", "value_from_target": "starsector"}
+            ]}), encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            plan = build_plan(workspace, TargetProfile("0.98", 17), [rules])
+            self.assertEqual(plan["conflicts"][0]["rule_id"], "two-conflict")
+            (workspace / "working-copy" / "two.json").write_text(json.dumps({"two": "changed"}), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                apply_plan(workspace, {"one", "two"})
+            self.assertEqual(json.loads((workspace / "working-copy" / "one.json").read_text(encoding="utf-8"))["one"], "old")
+
+    def test_scanner_enforces_jar_limits_before_reading_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            with zipfile.ZipFile(root / "large.jar", "w") as archive:
+                archive.writestr("Example.class", b"x" * 20)
+            prior = scanner.MAX_JAR_UNCOMPRESSED_BYTES
+            scanner.MAX_JAR_UNCOMPRESSED_BYTES = 10
+            try:
+                result = scan_mod(root)
+            finally:
+                scanner.MAX_JAR_UNCOMPRESSED_BYTES = prior
+            self.assertTrue(any(finding.id == "jar-scan-limit" for finding in result.findings))
+
+    def test_conflict_and_provenance_artifacts_are_machine_readable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "mod_info.json").write_text("{}", encoding="utf-8")
+            for name in ("one.jar", "two.jar"):
+                with zipfile.ZipFile(source / name, "w") as archive:
+                    archive.writestr("same/Thing.class", b"\xca\xfe\xba\xbe\x00\x00\x00\x34")
+            workspace = create_workspace(source, root / "workspace")
+            conflicts = detect_conflicts(workspace)
+            provenance = write_provenance(workspace)
+            self.assertEqual(conflicts["status"], "CONFLICTS_FOUND")
+            self.assertTrue(any(item["kind"] == "duplicate-class" for item in conflicts["findings"]))
+            self.assertEqual(provenance["schema_version"], 1)
+            self.assertTrue((workspace / "conflicts.json").is_file())
+            self.assertTrue((workspace / "provenance.json").is_file())

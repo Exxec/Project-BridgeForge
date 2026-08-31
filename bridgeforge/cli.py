@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -19,6 +20,9 @@ from .packs import discover_packs, resolve_pack_rule_paths
 from .runtime import create_runtime_profile, run_runtime_smoke
 from .interface import export_patch, inspect_workspace
 from .opportunities import analyze_opportunities
+from .doctor import doctor
+from .conflicts import detect_conflicts
+from .provenance import write_provenance
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -94,6 +98,13 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--output", required=True, type=Path)
     opportunities = subcommands.add_parser("opportunities", help="report non-applying library-adoption opportunities")
     opportunities.add_argument("workspace", type=Path)
+    doctor_command = subcommands.add_parser("doctor", help="check local tooling, packs, and optional workspace integrity")
+    doctor_command.add_argument("--workspace", type=Path)
+    doctor_command.add_argument("--json", action="store_true")
+    conflict_command = subcommands.add_parser("conflicts", help="detect planned-edit and duplicate-class conflicts")
+    conflict_command.add_argument("workspace", type=Path)
+    provenance_command = subcommands.add_parser("provenance", help="write deterministic workspace and artifact hashes")
+    provenance_command.add_argument("workspace", type=Path)
     return parser
 
 
@@ -252,5 +263,29 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(f"Modernization opportunities: {len(result['findings'])}")
+        return 0
+    if args.command == "doctor":
+        result = doctor(args.workspace)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            for check in result["checks"]:
+                print(f"{check['status']}\t{check['id']}")
+        return 0 if result["status"] == "PASS" else 1
+    if args.command == "conflicts":
+        try:
+            result = detect_conflicts(args.workspace)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2))
+        return 0 if result["status"] == "PASS" else 1
+    if args.command == "provenance":
+        try:
+            result = write_provenance(args.workspace)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2))
         return 0
     return 2

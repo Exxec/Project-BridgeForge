@@ -34,6 +34,10 @@ Java migration packs can provide a `replace-import` rule. Bridgeforge first pars
 
 `validate` verifies the immutable reference, structurally re-scans the working copy, and records runtime validation as unconfigured unless an explicit launch profile exists. `save-risk` compares original and working content for changed persistent-identifier-shaped fields; it is a conservative warning, not proof of save compatibility.
 
+## Integrity and automation artifacts
+
+`doctor --json` provides machine-readable local-tool, workspace, and migration-pack compatibility checks. `conflicts <workspace>` writes `conflicts.json` and detects planned-edit conflicts plus duplicate class entries across bundled JARs. `provenance <workspace>` writes `provenance.json`, containing deterministic SHA-256 hashes for the original reference, working copy, and relevant generated artifacts.
+
 ## Safety
 
 Scanning is read-only with respect to the selected mod directory. Generated artifacts are written only to `--output`.

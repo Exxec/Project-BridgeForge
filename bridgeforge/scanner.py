@@ -11,6 +11,8 @@ from .models import ScanResult, TargetProfile
 from .java_ast import AstUnavailable, analyze_sources
 
 CLASS_MAJOR_TO_JAVA = {51: 7, 52: 8, 55: 11, 61: 17, 65: 21, 69: 25}
+MAX_JAR_ENTRIES = 10_000
+MAX_JAR_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
 LIBRARY_PATTERNS = {
     "LazyLib": re.compile(r"lazylib", re.I),
     "MagicLib": re.compile(r"magiclib", re.I),
@@ -72,10 +74,16 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
         entry: dict[str, object] = {"path": _relative(root, jar), "class_file_majors": [], "java_levels": []}
         try:
             with zipfile.ZipFile(jar) as archive:
+                entries = archive.infolist()
+                uncompressed_bytes = sum(item.file_size for item in entries)
+                if len(entries) > MAX_JAR_ENTRIES or uncompressed_bytes > MAX_JAR_UNCOMPRESSED_BYTES:
+                    result.add(id="jar-scan-limit", category="bytecode", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"JAR exceeds safe scan limits ({len(entries)} entries, {uncompressed_bytes} uncompressed bytes).", file=_relative(root, jar))
+                    result.jars.append(entry)
+                    continue
                 majors: set[int] = set()
-                for name in archive.namelist():
-                    if name.endswith(".class"):
-                        with archive.open(name) as class_file:
+                for item in entries:
+                    if item.filename.endswith(".class"):
+                        with archive.open(item) as class_file:
                             header = class_file.read(8)
                         if header[:4] == b"\xca\xfe\xba\xbe" and len(header) == 8:
                             majors.add(int.from_bytes(header[6:8], "big"))

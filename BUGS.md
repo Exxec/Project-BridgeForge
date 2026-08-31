@@ -1,6 +1,23 @@
 # Bridgeforge bug ledger
 
-## Open
+## Resolved in 1.0 hardening
+
+| ID | Resolution |
+| --- | --- |
+| BUG-001 | All workspace and migration targets are resolved beneath their permitted root. |
+| BUG-002 | Manifest paths and checkpoint restores are containment-checked. |
+| BUG-003 | Immutable checkpoints receive deterministic numeric suffixes on repeat runs. |
+| BUG-004 | Apply preflights every approved edit and restores originals if a write fails. |
+| BUG-005 | Java UTF-16 offsets are converted before Python source slicing. |
+| BUG-006 | Subsequent same-file rules are surfaced in plan conflicts instead of omitted silently. |
+| BUG-007 | JAR inspection reads bounded headers and rejects archives over entry/uncompressed-size limits. |
+| BUG-008 | Save-risk compares identifier values across the union of original and working files. |
+| BUG-009 | Compiler paths are normalized relative to the workspace working copy. |
+| BUG-010 | AST analysis and javac compilation use argument/source-list files. |
+| BUG-011 | MANUAL and UNKNOWN rules cannot be automatically applied. |
+| BUG-012 | Explicit empty pack selections no longer fall back to core rules. |
+
+## Original review evidence
 
 ### BUG-001 — Migration paths can escape the working copy
 
