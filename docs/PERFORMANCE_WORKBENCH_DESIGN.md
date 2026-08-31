@@ -33,8 +33,8 @@ No game or mod data, names, extracted entity lists, captures, or benchmarks are 
 
 ```text
 Starsector installation
-  ├─ environment inventory
-  ├─ selected launch profile / runtime
+  ├─ environment fingerprint
+  ├─ selected launch profile / runtime adapter
   ├─ mod inventory + JAR ownership index
   └─ optional JFR capture
              ↓
@@ -49,7 +49,9 @@ baseline comparison + PERFORMANCE_REPORT.md / performance-report.json
 
 | Record | Required fields |
 | --- | --- |
-| `EnvironmentSnapshot` | schema version, selected game path, runtime/JDK, launcher profile, enabled-mod configuration hash, timestamps |
+| `EnvironmentFingerprint` | schema version, Starsector build, executable/launcher, Java vendor/version/build/path, JVM arguments, heap/direct-memory limits, GC/JIT/module flags, agents, OS/GPU/driver, enabled-mod configuration hash, and timestamps |
+| `CoreIntegrity` | selected core/launcher/native file hashes, baseline-catalog version, known modifications, unknown differences, and confidence |
+| `RuntimeAdapterResult` | adapter ID/version, evidence, detected launch mode, thread/package classifiers enabled, and unsupported assumptions |
 | `ModInventoryEntry` | opaque local ID, relative root, metadata parse status, content hash policy, JAR paths |
 | `JarOwnershipEntry` | normalized JAR path, owner candidates, package prefixes, class index status, confidence |
 | `CaptureDescriptor` | capture type, JVM/JFR settings, start/stop, duration, size, incomplete reason |
@@ -57,6 +59,62 @@ baseline comparison + PERFORMANCE_REPORT.md / performance-report.json
 | `BenchmarkRun` | scenario manifest hash, run settings, summary percentiles, environment snapshot hash |
 
 An ownership result can be `EXACT`, `LIKELY`, `AMBIGUOUS`, `UNOWNED`, or `UNKNOWN`. Shared library frames must not be automatically attributed to the mod that happens to call them.
+
+## Environment fingerprinting is mandatory
+
+Every capture starts by creating an immutable `EnvironmentFingerprint`. It is embedded by hash into every JFR descriptor, analysis, and comparison; an incomplete fingerprint is a limitation, not a reason to silently omit context.
+
+The collector records only information needed to interpret measurements:
+
+```text
+Starsector version and selected executable/launcher
+actual JVM path, vendor, version, build, and arguments
+heap, direct-memory, GC, JIT/compiler, preview/module-access, and native JVM flags
+Java and instrumentation agents, native libraries, class path/module path
+operating system, GPU, and graphics-driver identifiers
+enabled-mod order, metadata/JAR ownership status, and configurable local hashes
+Fast Rendering installation/version/launch mode/vmparams when detected
+selected core, launcher, vmparams, and native-library hashes
+```
+
+The fingerprint has redaction controls for export: local paths and mod names may be replaced with stable local aliases, while hashes and comparability fields remain useful.
+
+### Core-integrity classification
+
+Hashing alone does not establish that a file is modified. SPW compares selected files against a versioned, explicitly identified baseline catalog only when that catalog exactly matches the detected Starsector build. Results are `MATCHES_BASELINE`, `KNOWN_MODIFICATION`, `UNKNOWN_DIFFERENCE`, `BASELINE_UNAVAILABLE`, or `UNREADABLE`.
+
+For example, a Fast Rendering installation can be classified as a known modification only when its adapter has direct fingerprint evidence. Otherwise it remains an unknown difference. This preserves the distinction between evidence and inference.
+
+### Runtime adapters
+
+Adapters centralize runtime-specific assumptions instead of scattering launcher, thread, or package special cases through analyzers:
+
+```text
+RuntimeAdapter
+├─ VanillaJava17
+├─ GenericAlternateJDK
+├─ FastRendering
+├─ FastRenderingPlusAlternateJDK
+└─ UnknownModifiedRuntime
+```
+
+An adapter may identify launch files, parse approved VM-parameter files, label known runtime threads/package prefixes, and issue compatibility warnings. It cannot change raw event data or suppress unrecognized threads. Multiple adapters can match; selection records all evidence and uses `UnknownModifiedRuntime` whenever a safe assumption is unavailable.
+
+Fast Rendering warrants an adapter because its published distribution includes its own `fr.bat`, `fr.vmparams`, and Starsector-core installation path, and its public crash report shows renderer-bridge/executor work on a worker thread. The initial adapter is limited to this observed layout and evidence-based labeling; it must not claim a general rendering model or modify the installation. [Fast Rendering repository](https://github.com/Halke1986/starsector-render), [example renderer/executor stack](https://github.com/Halke1986/starsector-render/issues/1)
+
+Alternate-JDK detection is generic first: JVM version output, executable path, launcher, layout, and VM parameters form the evidence. Named third-party kit profiles are added only after maintainable, version-specific fingerprints and fixtures exist; an unrecognized modern JDK remains fully profileable as `GenericAlternateJDK`.
+
+### Comparability gate
+
+Before SPW reports a delta, it compares the two environment fingerprints. It returns:
+
+| Result | Meaning |
+| --- | --- |
+| `COMPARABLE` | Relevant capture, scenario, game, runtime, launcher, mod-set, and measurement settings match. |
+| `PARTIALLY_CONTROLLED` | A reported delta is useful but one or more material variables changed; every changed variable is listed. |
+| `NOT_COMPARABLE` | The run cannot support a direct performance-improvement claim. |
+
+Changing Java major version, GC/JIT settings, launch mode, Fast Rendering state, core-integrity state, enabled-mod set/order, scenario, or capture settings is material by default. Users may explicitly define an A/B experiment that changes one of these variables; the report then calls it an experiment rather than attributing the result to an unrelated mod.
 
 ## Architecture decisions
 
@@ -72,20 +130,16 @@ V0.1 uses Java Flight Recorder where the **actual launched JVM** supports it. SP
 
 Resolve a sampled frame in this order: exact class-to-JAR index, package prefix, JAR manifest/metadata, source layout evidence, then unknown. Report both the raw frame and the attribution path. Never map common dependencies (for example shared utility libraries) to one content mod without direct evidence.
 
-### 4. Comparisons are controlled experiments
-
-Baselines compare only runs whose environment snapshots are compatible: same game/runtime profile, selected mod configuration, scenario manifest, capture settings, and benchmark duration. Differences outside tolerance produce `NOT_COMPARABLE`, not a percent-improvement claim.
-
 ## Roadmap
 
-1. **V0.1 — Environment inventory and JFR capture.** Detect installation, selected runtime/launch profile, enabled mods, metadata status, JAR ownership candidates, thread inventory; emit `environment.json`, `mod-ownership.json`, `profile.jfr`, and a basic report.
-2. **V0.2 — Startup profiling.** Attribute launcher-to-main-menu time, class loading, resource parsing/loading, mod/dependency initialization.
-3. **V0.3 — CPU and thread analysis.** Analyze sampled CPU, thread states, blocked time, locks, executor waits, and thread lifecycle.
-4. **V0.4 — Allocation and GC analysis.** Report allocation rate, allocating frames, GC frequency/pause time, heap trends, and per-frame churn candidates.
+1. **V0.1 — Environment fingerprint and JFR capture.** Detect installation, selected executable and actual runtime, JVM configuration, core integrity, enabled mods, metadata status, JAR ownership candidates, and thread inventory; emit `environment.json`, `core-integrity.json`, `mod-ownership.json`, `profile.jfr`, and a basic report.
+2. **V0.2 — Runtime adapters.** Deliver Vanilla Java 17, Generic Alternate JDK, Fast Rendering, Fast Rendering + Alternate JDK, and Unknown Modified Runtime adapters with evidence/provenance tests.
+3. **V0.3 — Startup profiling.** Attribute launcher-to-main-menu time, class loading, resource parsing/loading, mod/dependency initialization.
+4. **V0.4 — CPU and thread analysis.** Analyze sampled CPU, thread states, blocked time, locks, executor waits, and thread lifecycle.
 5. **V0.5 — Mod attribution.** Harden class/JAR/package/dependency resolution and ambiguity reporting; add ownership-map regression fixtures.
-6. **V0.6 — Retention mode.** Analyze long-session heap, class/thread/direct-buffer counts, high-water marks, and repeated-transition cleanup evidence.
+6. **V0.6 — Allocation, GC, and retention analysis.** Report allocation rate, allocating frames, GC frequency/pause time, heap trends, high-water marks, and repeated-transition cleanup evidence.
 7. **V0.7 — Combat benchmark mode.** Use an explicit, user-created scenario manifest; report frame-time mean/median/p95/p99, spikes, CPU, GC, and allocations.
-8. **V0.8 — Baseline comparison.** Compare compatible vanilla/modded/suspect-disabled/patched runs and produce significance-aware delta reports.
+8. **V0.8 — Baseline comparison.** Apply the comparability gate to vanilla/modded/suspect-disabled/patched runs and produce guarded delta reports.
 9. **V0.9 — Rendering diagnostics.** Add advanced, optional render-thread and GL-stall observation. RenderDoc integration remains optional and best-effort.
 10. **V1.0 — Diagnosis pipeline.** Deliver a repeatable inventory → capture → attribute → analyze → compare → report workflow with reproducibility metadata.
 
@@ -114,4 +168,3 @@ report-metadata.schema.json
 ```
 
 SPW may emit a performance finding that Bridgeforge presents as a **modernization opportunity**. Bridgeforge may provide a patched-build identifier that SPW uses as a comparison label. Neither tool imports the other’s codebase, requires the other at runtime, or treats performance evidence as proof that a migration is behaviorally correct.
-
