@@ -1,6 +1,6 @@
 # Project Bridgeforge
 
-An offline, read-only compatibility scanner for legacy Starsector mods. Bridgeforge V0.1 inventories a mod and produces explainable compatibility findings; it does not modify the mod, rewrite source, or alter bytecode.
+An offline Starsector-mod compatibility workbench. Bridgeforge inventories a mod and produces explainable compatibility findings; source migrations remain review-gated, and bytecode support is limited to evidence-backed, exact symbolic remaps written to a separate output copy. It never changes a supplied mod or binary in place.
 
 Bridgeforge is intentionally separate from the proposed [Starsector Performance Workbench](docs/PERFORMANCE_WORKBENCH_DESIGN.md), which profiles runtime behavior and attributes cost to mods/classes.
 

@@ -7,6 +7,10 @@ def _shape(reference: dict[str, object]) -> tuple[object, object]:
     return reference.get("kind"), reference.get("opcode")
 
 
+def _method_shape(method: dict[str, object], key: str) -> list[object]:
+    return [item.get(key) for item in method]
+
+
 def diff_bytecode(before_inputs: list, after_inputs: list) -> dict[str, object]:
     """Compare normalized symbolic inventories; never compare raw class bytes."""
     before = inspect_bytecode(before_inputs)
@@ -28,8 +32,10 @@ def diff_bytecode(before_inputs: list, after_inputs: list) -> dict[str, object]:
             "same_fields": previous["fields"] == current["fields"],
             "same_methods": previous["methods"] == current["methods"],
             "same_reference_shape": len(old_refs) == len(new_refs) and all(_shape(left) == _shape(right) for left, right in zip(old_refs, new_refs)),
-            "control_flow": "NOT_ASSESSED",
-            "exception_tables": "NOT_ASSESSED",
+            "same_instruction_counts": _method_shape(previous["methods"], "instruction_count") == _method_shape(current["methods"], "instruction_count"),
+            "same_opcode_sequence": _method_shape(previous["methods"], "opcode_sequence") == _method_shape(current["methods"], "opcode_sequence"),
+            "same_branch_counts": _method_shape(previous["methods"], "branch_count") == _method_shape(current["methods"], "branch_count"),
+            "same_exception_tables": _method_shape(previous["methods"], "exception_table_count") == _method_shape(current["methods"], "exception_table_count"),
         }
         if reference_changes or any(value is False for value in invariants.values()): changed.append({"class_name": name, "reference_changes": reference_changes, "invariants": invariants})
     return {"schema_version": 1, "mode": "SEMANTIC_DIFF_ONLY", "added_classes": sorted(set(new) - set(old)), "removed_classes": sorted(set(old) - set(new)), "changed_classes": changed}

@@ -67,10 +67,12 @@ def rewrite_class(input_path: Path, output_path: Path, rule: object) -> int:
     """Apply one exact same-descriptor rule to a .class copy; never changes input."""
     source, output = input_path.expanduser().resolve(), output_path.expanduser().resolve()
     if source.suffix.lower() != ".class" or not source.is_file(): raise ValueError("Bytecode rewrite currently requires an existing .class input.")
+    if source == output: raise ValueError("Bytecode output must differ from input; in-place replacement is forbidden.")
     action = getattr(rule, "action"); name = getattr(rule, "name") or ""; descriptor = getattr(rule, "descriptor") or ""; opcode = getattr(rule, "opcode")
     if action == "remap-class-reference":
-        raise ValueError("Class remapping requires an explicit opcode and is not yet application-enabled.")
-    if action not in {"remap-method-reference", "remap-field-reference"} or not name or not descriptor or opcode is None or getattr(rule, "replacement_descriptor") != descriptor:
+        if opcode is None or name or descriptor or getattr(rule, "replacement_name") or getattr(rule, "replacement_descriptor"):
+            raise ValueError("Class remaps require only an exact type opcode.")
+    elif action not in {"remap-method-reference", "remap-field-reference"} or not name or not descriptor or opcode is None or getattr(rule, "replacement_descriptor") != descriptor:
         raise ValueError("Only exact same-descriptor method/field remaps are application-enabled.")
     helper, asm = _rewrite_helper(), _asm(); output.parent.mkdir(parents=True, exist_ok=True)
     done = subprocess.run(["java", "-cp", str(helper) + __import__("os").pathsep + str(asm), "bridgeforge.bytecode.BridgeforgeBytecodeRewrite", str(source), str(output), action, getattr(rule, "owner"), name, descriptor, str(opcode), getattr(rule, "replacement_owner"), getattr(rule, "replacement_name"), getattr(rule, "replacement_descriptor"), str(getattr(rule, "expected_matches"))], capture_output=True, text=True, check=False)

@@ -10,7 +10,7 @@ from pathlib import Path
 from bridgeforge import __version__, scanner
 from bridgeforge.bytecode import inspect_bytecode, rewrite_class
 from bridgeforge.bytecode_diff import diff_bytecode
-from bridgeforge.bytecode_rules import apply_bytecode_class, load_bytecode_rules, plan_bytecode
+from bridgeforge.bytecode_rules import apply_bytecode_class, apply_bytecode_jar, load_bytecode_rules, plan_bytecode
 from bridgeforge.scanner import scan_mod
 from bridgeforge.report import write_artifacts
 from bridgeforge.migrate import apply_plan, build_plan, load_rules
@@ -39,7 +39,7 @@ class ScannerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "Fixture.java"
-            source.write_text("class Fixture { static String value() { return new String(String.valueOf(Math.abs(-1))); } }", encoding="utf-8")
+            source.write_text("class Fixture { static String value() { try { int i = 1; if (i > 0) System.out.print(\"\"); return new String(String.valueOf(Math.abs(-1))); } catch (RuntimeException ex) { return \"\"; } } }", encoding="utf-8")
             completed = subprocess.run(["javac", "--release", "17", "-d", str(root), str(source)], capture_output=True, text=True, check=False)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             result = inspect_bytecode([root / "Fixture.class"])
@@ -50,10 +50,13 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(diff_bytecode([root / "Fixture.class"], [root / "Fixture.class"])["changed_classes"], [])
             rules = root / "bytecode-rules.json"
             evidence = {"provenance": "fixture", "before_fixture": "fixture", "after_fixture": "fixture", "semantic_diff_validation": "fixture", "idempotence": "fixture", "conflict_review": "fixture", "save_risk_assessment": "fixture"}
-            rules.write_text(json.dumps({"schema_version": 1, "kind": "bridgeforge-bytecode-rules", "rules": [{"id": "fixture-type", "action": "remap-class-reference", "classification": "REVIEW", "description": "fixture", "owner": "java/lang/String", "replacement_owner": "example/String", "expected_matches": 1, "evidence": evidence}]}), encoding="utf-8")
+            rules.write_text(json.dumps({"schema_version": 1, "kind": "bridgeforge-bytecode-rules", "rules": [{"id": "fixture-type", "action": "remap-class-reference", "classification": "REVIEW", "description": "fixture", "owner": "java/lang/String", "replacement_owner": "example/String", "opcode": 187, "expected_matches": 1, "evidence": evidence}]}), encoding="utf-8")
             plan = plan_bytecode([root / "Fixture.class"], rules)
             self.assertEqual(len(plan["planned"]), 1)
-            self.assertEqual(plan["planned"][0]["constraints"]["application"], "NOT_IMPLEMENTED")
+            self.assertEqual(plan["planned"][0]["constraints"]["application"], "REVIEW_GATED_OUTPUT_COPY")
+            type_applied = apply_bytecode_class(root / "Fixture.class", root / "Fixture.type-output.class", rules, {"fixture-type"})
+            self.assertEqual(type_applied["mode"], "REVIEW_APPLIED_TO_OUTPUT_COPY")
+            self.assertTrue(any(reference.get("owner") == "example/String" for reference in inspect_bytecode([root / "Fixture.type-output.class"])["classes"][0]["references"]))
             method_rules = root / "method-rules.json"
             method_rules.write_text(json.dumps({"schema_version": 1, "kind": "bridgeforge-bytecode-rules", "rules": [{"id": "fixture-method", "action": "remap-method-reference", "classification": "REVIEW", "description": "fixture", "owner": "java/lang/Math", "name": "abs", "descriptor": "(I)I", "opcode": 184, "replacement_owner": "example/Math", "replacement_name": "abs", "replacement_descriptor": "(I)I", "expected_matches": 1, "evidence": evidence}]}), encoding="utf-8")
             method_plan = plan_bytecode([root / "Fixture.class"], method_rules)
@@ -63,8 +66,25 @@ class ScannerTests(unittest.TestCase):
             diff = diff_bytecode([root / "Fixture.class"], [rewritten])
             self.assertEqual(len(diff["changed_classes"]), 1)
             self.assertTrue(diff["changed_classes"][0]["invariants"]["same_reference_shape"])
+            for key in ("same_instruction_counts", "same_opcode_sequence", "same_branch_counts", "same_exception_tables"):
+                self.assertTrue(diff["changed_classes"][0]["invariants"][key])
+            self.assertTrue(any(reference.get("owner") == "example/Math" for reference in inspect_bytecode([rewritten])["classes"][0]["references"]))
             applied = apply_bytecode_class(root / "Fixture.class", root / "Fixture.output.class", method_rules, {"fixture-method"})
             self.assertEqual(applied["mode"], "REVIEW_APPLIED_TO_OUTPUT_COPY")
+            input_jar, output_jar = root / "Fixture.jar", root / "Fixture.output.jar"
+            with zipfile.ZipFile(input_jar, "w") as archive:
+                archive.write(root / "Fixture.class", "Fixture.class")
+                archive.writestr("assets/keep.txt", b"unchanged")
+            jar_applied = apply_bytecode_jar(input_jar, output_jar, method_rules, {"fixture-method"})
+            self.assertEqual(jar_applied["mode"], "REVIEW_APPLIED_TO_JAR_COPY")
+            with zipfile.ZipFile(output_jar) as archive:
+                self.assertEqual(archive.read("assets/keep.txt"), b"unchanged")
+            self.assertTrue(any(reference.get("owner") == "example/Math" for reference in inspect_bytecode([output_jar])["classes"][0]["references"]))
+            field_rules = root / "field-rules.json"
+            field_rules.write_text(json.dumps({"schema_version": 1, "kind": "bridgeforge-bytecode-rules", "rules": [{"id": "fixture-field", "action": "remap-field-reference", "classification": "REVIEW", "description": "fixture", "owner": "java/lang/System", "name": "out", "descriptor": "Ljava/io/PrintStream;", "opcode": 178, "replacement_owner": "example/System", "replacement_name": "out", "replacement_descriptor": "Ljava/io/PrintStream;", "expected_matches": 1, "evidence": evidence}]}), encoding="utf-8")
+            self.assertEqual(len(plan_bytecode([root / "Fixture.class"], field_rules)["planned"]), 1)
+            self.assertEqual(apply_bytecode_class(root / "Fixture.class", root / "Fixture.field-output.class", field_rules, {"fixture-field"})["mode"], "REVIEW_APPLIED_TO_OUTPUT_COPY")
+            self.assertTrue(any(reference.get("owner") == "example/System" for reference in inspect_bytecode([root / "Fixture.field-output.class"])["classes"][0]["references"]))
 
     def test_scans_metadata_bytecode_and_assets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -279,6 +299,27 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(result["apply"]["applied_count"], 0)
             self.assertTrue(Path(result["scan"]["manifest"]).is_file())
             self.assertTrue((workspace / "MODERNIZATION_REPORT.md").is_file())
+
+    def test_pipeline_can_emit_review_gated_bytecode_artifact(self) -> None:
+        if not shutil.which("javac") or not shutil.which("java"):
+            self.skipTest("JDK is unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "mod_info.json").write_text(json.dumps({"id": "legacy", "gameVersion": "0.95"}), encoding="utf-8")
+            java_source = source / "Fixture.java"
+            java_source.write_text("class Fixture { static int value() { return Math.abs(-1); } }", encoding="utf-8")
+            completed = subprocess.run(["javac", "--release", "17", "-d", str(source), str(java_source)], capture_output=True, text=True, check=False)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            evidence = {"provenance": "fixture", "before_fixture": "fixture", "after_fixture": "fixture", "semantic_diff_validation": "fixture", "idempotence": "fixture", "conflict_review": "fixture", "save_risk_assessment": "fixture"}
+            rules = root / "bytecode-rules.json"
+            rules.write_text(json.dumps({"schema_version": 1, "kind": "bridgeforge-bytecode-rules", "rules": [{"id": "fixture-method", "action": "remap-method-reference", "classification": "REVIEW", "description": "fixture", "owner": "java/lang/Math", "name": "abs", "descriptor": "(I)I", "opcode": 184, "replacement_owner": "example/Math", "replacement_name": "abs", "replacement_descriptor": "(I)I", "expected_matches": 1, "evidence": evidence}]}), encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            result = run_pipeline(workspace, TargetProfile("0.98", 17), bytecode_file="Fixture.class", bytecode_rules=rules, bytecode_approved={"fixture-method"})
+            self.assertEqual(result["bytecode"]["mode"], "REVIEW_APPLIED_TO_OUTPUT_COPY")
+            self.assertTrue((workspace / "bytecode-artifacts" / "Fixture.class").is_file())
+            self.assertIn("03-bytecode-artifact", workspace_paths(workspace)[2]["checkpoints"])
 
     def test_bundled_pack_registry_is_unique_and_conservative(self) -> None:
         packs = discover_packs()

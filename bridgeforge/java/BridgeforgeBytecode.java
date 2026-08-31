@@ -57,13 +57,25 @@ public final class BridgeforgeBytecode {
             @Override public org.objectweb.asm.AnnotationVisitor visitAnnotation(String descriptor, boolean visible) { annotations.add(descriptor); return null; }
             @Override public FieldVisitor visitField(int access, String name, String descriptor, String signature, Object value) { fields.add(Map.of("name", name, "descriptor", descriptor, "access", access)); return null; }
             @Override public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
-                Map<String, Object> method = new LinkedHashMap<>(); method.put("name", name); method.put("descriptor", descriptor); method.put("access", access); method.put("native", (access & Opcodes.ACC_NATIVE) != 0); methods.add(method);
+                Map<String, Object> method = new LinkedHashMap<>(); method.put("name", name); method.put("descriptor", descriptor); method.put("access", access); method.put("native", (access & Opcodes.ACC_NATIVE) != 0);
+                List<Object> opcodes = new ArrayList<>(); method.put("instruction_count", 0); method.put("opcode_sequence", opcodes); method.put("branch_count", 0); method.put("exception_table_count", 0); methods.add(method);
                 return new MethodVisitor(Opcodes.ASM9) {
-                    @Override public void visitMethodInsn(int opcode, String owner, String target, String desc, boolean itf) { refs.add(Map.of("kind", "method", "opcode", opcode, "owner", owner, "name", target, "descriptor", desc)); }
-                    @Override public void visitFieldInsn(int opcode, String owner, String target, String desc) { refs.add(Map.of("kind", "field", "opcode", opcode, "owner", owner, "name", target, "descriptor", desc)); }
-                    @Override public void visitTypeInsn(int opcode, String type) { refs.add(Map.of("kind", "type", "opcode", opcode, "owner", type)); }
-                    @Override public void visitInvokeDynamicInsn(String name, String desc, org.objectweb.asm.Handle handle, Object... args) { refs.add(Map.of("kind", "invokedynamic", "name", name, "descriptor", desc, "bootstrap_owner", handle.getOwner())); }
-                    @Override public void visitLdcInsn(Object value) { if (value instanceof String) strings.add(value); }
+                    private void opcode(int value) { opcodes.add(value); method.put("instruction_count", ((Integer) method.get("instruction_count")) + 1); }
+                    private void branch(int value) { opcode(value); method.put("branch_count", ((Integer) method.get("branch_count")) + 1); }
+                    @Override public void visitInsn(int opcode) { opcode(opcode); }
+                    @Override public void visitIntInsn(int opcode, int operand) { opcode(opcode); }
+                    @Override public void visitVarInsn(int opcode, int variable) { opcode(opcode); }
+                    @Override public void visitTypeInsn(int opcode, String type) { opcode(opcode); refs.add(Map.of("kind", "type", "opcode", opcode, "owner", type)); }
+                    @Override public void visitFieldInsn(int opcode, String owner, String target, String desc) { opcode(opcode); refs.add(Map.of("kind", "field", "opcode", opcode, "owner", owner, "name", target, "descriptor", desc)); }
+                    @Override public void visitMethodInsn(int opcode, String owner, String target, String desc, boolean itf) { opcode(opcode); refs.add(Map.of("kind", "method", "opcode", opcode, "owner", owner, "name", target, "descriptor", desc)); }
+                    @Override public void visitInvokeDynamicInsn(String name, String desc, org.objectweb.asm.Handle handle, Object... args) { opcode(Opcodes.INVOKEDYNAMIC); refs.add(Map.of("kind", "invokedynamic", "name", name, "descriptor", desc, "bootstrap_owner", handle.getOwner())); }
+                    @Override public void visitJumpInsn(int opcode, org.objectweb.asm.Label label) { branch(opcode); }
+                    @Override public void visitLdcInsn(Object value) { opcode(Opcodes.LDC); if (value instanceof String) strings.add(value); }
+                    @Override public void visitIincInsn(int variable, int increment) { opcode(Opcodes.IINC); }
+                    @Override public void visitTableSwitchInsn(int min, int max, org.objectweb.asm.Label defaultLabel, org.objectweb.asm.Label... labels) { branch(Opcodes.TABLESWITCH); }
+                    @Override public void visitLookupSwitchInsn(org.objectweb.asm.Label defaultLabel, int[] keys, org.objectweb.asm.Label[] labels) { branch(Opcodes.LOOKUPSWITCH); }
+                    @Override public void visitMultiANewArrayInsn(String descriptor, int dimensions) { opcode(Opcodes.MULTIANEWARRAY); }
+                    @Override public void visitTryCatchBlock(org.objectweb.asm.Label start, org.objectweb.asm.Label end, org.objectweb.asm.Label handler, String type) { method.put("exception_table_count", ((Integer) method.get("exception_table_count")) + 1); }
                 };
             }
         }, ClassReader.SKIP_FRAMES);

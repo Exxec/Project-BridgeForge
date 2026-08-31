@@ -25,7 +25,8 @@ from .conflicts import detect_conflicts
 from .provenance import write_provenance
 from .corpus import compare_corpus
 from .bytecode import BytecodeUnavailable, inspect_bytecode
-from .bytecode_rules import apply_bytecode_class, plan_bytecode
+from .bytecode_diff import diff_bytecode
+from .bytecode_rules import apply_bytecode_class, apply_bytecode_jar, plan_bytecode
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -39,6 +40,10 @@ def build_parser() -> argparse.ArgumentParser:
     bytecode = subcommands.add_parser("bytecode-inspect", help="inspect class/JAR symbolic references without rewriting")
     bytecode.add_argument("input", type=Path, nargs="+")
     bytecode.add_argument("--output", type=Path)
+    bytecode_diff = subcommands.add_parser("bytecode-diff", help="compare class/JAR symbolic and structural inventories")
+    bytecode_diff.add_argument("before", type=Path, nargs="+")
+    bytecode_diff.add_argument("--after", required=True, type=Path, nargs="+")
+    bytecode_diff.add_argument("--output", type=Path)
     bytecode_plan = subcommands.add_parser("bytecode-plan", help="produce review-only exact bytecode remap candidates")
     bytecode_plan.add_argument("input", type=Path, nargs="+")
     bytecode_plan.add_argument("--rules", required=True, type=Path)
@@ -174,9 +179,23 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(payload)
         return 0
+    if args.command == "bytecode-diff":
+        try:
+            result = diff_bytecode(args.before, args.after)
+        except (ValueError, BytecodeUnavailable) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        payload = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            output = args.output.expanduser().resolve()
+            output.write_text(payload + "\n", encoding="utf-8")
+            print(f"Compared {len(result['changed_classes'])} changed class(es): {output}")
+        else:
+            print(payload)
+        return 0
     if args.command == "bytecode-apply":
         try:
-            result = apply_bytecode_class(args.input, args.output, args.rules, set(args.approve))
+            result = (apply_bytecode_jar if args.input.suffix.lower() == ".jar" else apply_bytecode_class)(args.input, args.output, args.rules, set(args.approve))
         except (ValueError, BytecodeUnavailable) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
