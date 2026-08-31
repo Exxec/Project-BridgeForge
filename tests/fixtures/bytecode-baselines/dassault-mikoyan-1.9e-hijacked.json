@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "name": "dassault-mikoyan-1.9e-hijacked",
+  "source_kind": "user-approved-installed-jar",
+  "class_count": 252,
+  "class_file_versions": [61],
+  "method_reference_count": 12934,
+  "field_reference_count": 4435,
+  "type_reference_count": 1724,
+  "invokedynamic_count": 223,
+  "native_method_count": 0,
+  "string_constant_count": 3248
+}

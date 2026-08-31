@@ -8,9 +8,9 @@ from unittest.mock import patch
 from pathlib import Path
 
 from bridgeforge import __version__, scanner
-from bridgeforge.bytecode import inspect_bytecode
+from bridgeforge.bytecode import inspect_bytecode, rewrite_class
 from bridgeforge.bytecode_diff import diff_bytecode
-from bridgeforge.bytecode_rules import plan_bytecode
+from bridgeforge.bytecode_rules import apply_bytecode_class, load_bytecode_rules, plan_bytecode
 from bridgeforge.scanner import scan_mod
 from bridgeforge.report import write_artifacts
 from bridgeforge.migrate import apply_plan, build_plan, load_rules
@@ -49,10 +49,22 @@ class ScannerTests(unittest.TestCase):
             self.assertTrue(any(reference.get("owner") == "java/lang/Math" and reference.get("name") == "abs" for reference in references))
             self.assertEqual(diff_bytecode([root / "Fixture.class"], [root / "Fixture.class"])["changed_classes"], [])
             rules = root / "bytecode-rules.json"
-            rules.write_text(json.dumps({"schema_version": 1, "kind": "bridgeforge-bytecode-rules", "rules": [{"id": "fixture-type", "action": "remap-class-reference", "classification": "REVIEW", "description": "fixture", "owner": "java/lang/String", "replacement_owner": "example/String", "expected_matches": 1}]}), encoding="utf-8")
+            evidence = {"provenance": "fixture", "before_fixture": "fixture", "after_fixture": "fixture", "semantic_diff_validation": "fixture", "idempotence": "fixture", "conflict_review": "fixture", "save_risk_assessment": "fixture"}
+            rules.write_text(json.dumps({"schema_version": 1, "kind": "bridgeforge-bytecode-rules", "rules": [{"id": "fixture-type", "action": "remap-class-reference", "classification": "REVIEW", "description": "fixture", "owner": "java/lang/String", "replacement_owner": "example/String", "expected_matches": 1, "evidence": evidence}]}), encoding="utf-8")
             plan = plan_bytecode([root / "Fixture.class"], rules)
             self.assertEqual(len(plan["planned"]), 1)
             self.assertEqual(plan["planned"][0]["constraints"]["application"], "NOT_IMPLEMENTED")
+            method_rules = root / "method-rules.json"
+            method_rules.write_text(json.dumps({"schema_version": 1, "kind": "bridgeforge-bytecode-rules", "rules": [{"id": "fixture-method", "action": "remap-method-reference", "classification": "REVIEW", "description": "fixture", "owner": "java/lang/Math", "name": "abs", "descriptor": "(I)I", "opcode": 184, "replacement_owner": "example/Math", "replacement_name": "abs", "replacement_descriptor": "(I)I", "expected_matches": 1, "evidence": evidence}]}), encoding="utf-8")
+            method_plan = plan_bytecode([root / "Fixture.class"], method_rules)
+            self.assertEqual(len(method_plan["planned"]), 1)
+            rewritten = root / "Fixture.rewritten.class"
+            self.assertEqual(rewrite_class(root / "Fixture.class", rewritten, load_bytecode_rules(method_rules)[0]), 1)
+            diff = diff_bytecode([root / "Fixture.class"], [rewritten])
+            self.assertEqual(len(diff["changed_classes"]), 1)
+            self.assertTrue(diff["changed_classes"][0]["invariants"]["same_reference_shape"])
+            applied = apply_bytecode_class(root / "Fixture.class", root / "Fixture.output.class", method_rules, {"fixture-method"})
+            self.assertEqual(applied["mode"], "REVIEW_APPLIED_TO_OUTPUT_COPY")
 
     def test_scans_metadata_bytecode_and_assets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -329,6 +341,14 @@ class ScannerTests(unittest.TestCase):
         self.assertEqual(baseline["file_count"], 442)
         self.assertRegex(baseline["mod_info_sha256"], r"^[0-9a-f]{64}$")
         self.assertEqual(len(baseline["expected_findings"]), 5)
+
+    def test_sanitized_bytecode_baselines_contain_aggregates_only(self) -> None:
+        root = Path(__file__).parent / "fixtures" / "bytecode-baselines"
+        allowed = {"schema_version", "name", "source_kind", "class_count", "class_file_versions", "method_reference_count", "field_reference_count", "type_reference_count", "invokedynamic_count", "native_method_count", "string_constant_count"}
+        for baseline in root.glob("*.json"):
+            data = json.loads(baseline.read_text(encoding="utf-8"))
+            self.assertEqual(set(data), allowed)
+            self.assertNotIn("path", json.dumps(data).lower())
 
     def test_opt_in_corpus_comparison_uses_only_a_supplied_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

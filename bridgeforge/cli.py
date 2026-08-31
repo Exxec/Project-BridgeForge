@@ -25,6 +25,7 @@ from .conflicts import detect_conflicts
 from .provenance import write_provenance
 from .corpus import compare_corpus
 from .bytecode import BytecodeUnavailable, inspect_bytecode
+from .bytecode_rules import apply_bytecode_class, plan_bytecode
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -38,6 +39,15 @@ def build_parser() -> argparse.ArgumentParser:
     bytecode = subcommands.add_parser("bytecode-inspect", help="inspect class/JAR symbolic references without rewriting")
     bytecode.add_argument("input", type=Path, nargs="+")
     bytecode.add_argument("--output", type=Path)
+    bytecode_plan = subcommands.add_parser("bytecode-plan", help="produce review-only exact bytecode remap candidates")
+    bytecode_plan.add_argument("input", type=Path, nargs="+")
+    bytecode_plan.add_argument("--rules", required=True, type=Path)
+    bytecode_plan.add_argument("--output", type=Path)
+    bytecode_apply = subcommands.add_parser("bytecode-apply", help="apply exact approved bytecode remaps to an output .class copy")
+    bytecode_apply.add_argument("input", type=Path)
+    bytecode_apply.add_argument("--rules", required=True, type=Path)
+    bytecode_apply.add_argument("--approve", required=True, action="append")
+    bytecode_apply.add_argument("--output", required=True, type=Path)
     workspace = subcommands.add_parser("workspace", help="create an immutable-reference workspace and working copy")
     workspace.add_argument("mod_directory", type=Path)
     workspace.add_argument("--output", required=True, type=Path)
@@ -85,6 +95,9 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline.add_argument("--api-jar", type=Path, action="append", default=[])
     pipeline.add_argument("--dependency-jar", type=Path, action="append", default=[])
     pipeline.add_argument("--compile", action="store_true")
+    pipeline.add_argument("--bytecode-file")
+    pipeline.add_argument("--bytecode-rules", type=Path)
+    pipeline.add_argument("--bytecode-approve", action="append", default=[])
     packs = subcommands.add_parser("packs", help="list bundled migration packs")
     packs.add_argument("--root", type=Path)
     runtime = subcommands.add_parser("runtime-profile", help="record an explicit opt-in runtime launch profile")
@@ -146,6 +159,28 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Inspected {len(result['classes'])} class(es): {output}")
         else:
             print(payload)
+        return 0
+    if args.command == "bytecode-plan":
+        try:
+            result = plan_bytecode(args.input, args.rules)
+        except (ValueError, BytecodeUnavailable) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        payload = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            output = args.output.expanduser().resolve()
+            output.write_text(payload + "\n", encoding="utf-8")
+            print(f"Planned {len(result['planned'])} review-only bytecode remap(s): {output}")
+        else:
+            print(payload)
+        return 0
+    if args.command == "bytecode-apply":
+        try:
+            result = apply_bytecode_class(args.input, args.output, args.rules, set(args.approve))
+        except (ValueError, BytecodeUnavailable) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     if args.command == "workspace":
         try:
@@ -232,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "pipeline":
         try:
             selected = [*resolve_pack_rule_paths(args.pack), *args.rules]
-            result = run_pipeline(args.workspace, TargetProfile(args.target_starsector, args.target_java), selected if (args.pack or args.rules) else None, set(args.approve), args.safe, args.jdk, args.api_jar, args.dependency_jar, args.compile)
+            result = run_pipeline(args.workspace, TargetProfile(args.target_starsector, args.target_java), selected if (args.pack or args.rules) else None, set(args.approve), args.safe, args.jdk, args.api_jar, args.dependency_jar, args.compile, args.bytecode_file, args.bytecode_rules, set(args.bytecode_approve))
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
