@@ -512,7 +512,7 @@ class ScannerTests(unittest.TestCase):
             original_read_text = Path.read_text
 
             def read_text(path: Path, *args: object, **kwargs: object) -> str:
-                if path == bad_json:
+                if path.name == bad_json.name:
                     raise OSError("fixture access denied")
                 return original_read_text(path, *args, **kwargs)
 
