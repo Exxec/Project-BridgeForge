@@ -81,3 +81,19 @@
 - Evidence: `java_ast.py` and `build.py` pass every Java source path directly on one subprocess command line.
 - Impact: large installed mods can exceed Windows command-line limits, causing analysis/compile failures before Java starts.
 - Required fix: use javac argument files or bounded batches, with large synthetic-source regression coverage.
+
+### BUG-011 — MANUAL and UNKNOWN migration rules can be applied
+
+- Severity: High
+- Area: migration apply policy
+- Evidence: `apply_plan()` accepts any migration whose ID is supplied through `--approve`; it does not reject `MANUAL` or `UNKNOWN` classifications.
+- Impact: classifications that are supposed to require human resolution can still alter a working copy through the normal automated apply command.
+- Required fix: permit automated apply only for `SAFE` and explicitly approved `REVIEW` rules; reject `MANUAL` and `UNKNOWN` rules regardless of CLI approval.
+
+### BUG-012 — Empty selected packs fall back to the default core rule pack
+
+- Severity: Medium
+- Area: pack selection
+- Evidence: CLI uses `selected or None`; selecting a scaffolded pack with no rules produces an empty list, which `load_rules(None)` converts into the default V0.2 core rules.
+- Impact: `--pack java` or another empty pack can plan an unrelated metadata migration.
+- Required fix: distinguish “no pack/rule option supplied” from “an explicitly selected pack set resolved to zero rule files.”
