@@ -1,4 +1,9 @@
 {
+  "pack": {
+    "id": "bridgeforge-core-v0_2",
+    "schema_version": 1,
+    "description": "Conservative, metadata-only rules shipped with Bridgeforge V0.2."
+  },
   "rules": [
     {
       "id": "metadata-target-starsector-version",

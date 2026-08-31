@@ -8,6 +8,7 @@ from collections import Counter
 from pathlib import Path
 
 from .models import ScanResult, TargetProfile
+from .java_ast import AstUnavailable, analyze_sources
 
 CLASS_MAJOR_TO_JAVA = {51: 7, 52: 8, 55: 11, 61: 17, 65: 21, 69: 25}
 LIBRARY_PATTERNS = {
@@ -94,6 +95,10 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
 
 
 def _scan_sources(root: Path, result: ScanResult) -> None:
+    try:
+        result.source_facts = analyze_sources(root)
+    except AstUnavailable as exc:
+        result.add(id="source-ast-unavailable", category="source", severity="medium", classification="UNKNOWN", confidence="DETERMINISTIC", explanation=f"Structured Java parsing was unavailable; import collection used a limited fallback: {exc}")
     imports: set[str] = set()
     for source in root.rglob("*.java"):
         relative = _relative(root, source)
@@ -102,7 +107,10 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
         except OSError as exc:
             result.add(id="unreadable-source", category="source", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=str(exc), file=relative)
             continue
-        imports.update(re.findall(r"^\s*import\s+([\w.]+(?:\.\*)?)\s*;", text, re.M))
+        if result.source_facts:
+            imports.update(fact["value"] for fact in result.source_facts if fact["kind"] == "import" and fact["file"] == relative)
+        else:
+            imports.update(re.findall(r"^\s*import\s+([\w.]+(?:\.\*)?)\s*;", text, re.M))
         for needle, (rule_id, explanation) in LEGACY_API_RULES.items():
             if needle in text:
                 result.add(id=rule_id, category="source-api", severity="high", classification="REVIEW", confidence="HIGH", explanation=explanation, file=relative, evidence=[needle])
@@ -151,4 +159,3 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None) -> ScanResul
     _scan_assets(root, result)
     _infer_environment(result)
     return result
-

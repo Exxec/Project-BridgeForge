@@ -26,9 +26,11 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("workspace", type=Path)
     plan.add_argument("--target-starsector", default="0.98.x")
     plan.add_argument("--target-java", type=int, default=17)
+    plan.add_argument("--rules", type=Path, action="append", default=[], metavar="PACK_JSON", help="additional migration-rule pack (repeatable)")
     apply = subcommands.add_parser("apply", help="apply only explicitly approved planned rules")
     apply.add_argument("workspace", type=Path)
     apply.add_argument("--approve", action="append", default=[], metavar="RULE_ID")
+    apply.add_argument("--safe", action="store_true", help="apply all SAFE planned rules; REVIEW rules still need --approve")
     restore = subcommands.add_parser("rollback", help="restore a working copy from a checkpoint")
     restore.add_argument("workspace", type=Path)
     restore.add_argument("checkpoint")
@@ -62,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "plan":
         try:
-            plan = build_plan(args.workspace, TargetProfile(args.target_starsector, args.target_java))
+            plan = build_plan(args.workspace, TargetProfile(args.target_starsector, args.target_java), args.rules or None)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -70,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "apply":
         try:
-            manifest = apply_plan(args.workspace, set(args.approve))
+            manifest = apply_plan(args.workspace, set(args.approve), args.safe)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

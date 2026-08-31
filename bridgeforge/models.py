@@ -31,6 +31,7 @@ class ScanResult:
     metadata: dict[str, Any] = field(default_factory=dict)
     jars: list[dict[str, Any]] = field(default_factory=list)
     imports: list[str] = field(default_factory=list)
+    source_facts: list[dict[str, Any]] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
     estimated_starsector: str = "UNKNOWN"
     estimated_java: str = "UNKNOWN"
@@ -51,6 +52,6 @@ class ScanResult:
             "inventory": self.files,
             "jars": self.jars,
             "imports": self.imports,
+            "source_facts": self.source_facts,
             "findings": [asdict(finding) for finding in self.findings],
         }
-

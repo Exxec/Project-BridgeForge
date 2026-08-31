@@ -22,7 +22,9 @@ py -3 -m bridgeforge plan C:\work\OldMod-bridgeforge --target-starsector 0.98a-R
 py -3 -m bridgeforge apply C:\work\OldMod-bridgeforge --approve metadata-target-starsector-version
 ```
 
-`workspace` makes an immutable reference and a separate working copy. `plan` creates a diff-backed plan; `apply` modifies only the working copy and only for rule IDs explicitly approved on the command line. `rollback` restores the working copy from a named checkpoint.
+`workspace` makes an immutable reference and a separate working copy. `plan` creates a diff-backed plan and accepts additional validated JSON rule packs through `--rules`. `apply --safe` modifies only planned `SAFE` rules; `REVIEW` rules always need an explicit `--approve <rule-id>`. `rollback` restores the working copy from a named checkpoint.
+
+Java migration packs can provide a `replace-import` rule. Bridgeforge first parses Java through the selected JDK's compiler API, then replaces only the confirmed import declaration. Method bodies are not rewritten by this V0.3 foundation.
 
 ## Safety
 
