@@ -14,6 +14,7 @@ from .build import compile_feedback, run_compile
 from .review import create_review_bundle
 from .validate import validate_workspace
 from .save_risk import analyze_save_risk
+from .pipeline import run_pipeline
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -58,6 +59,17 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--target-java", type=int, default=17)
     save_risk = subcommands.add_parser("save-risk", help="flag changed persistent-identifier-shaped fields")
     save_risk.add_argument("workspace", type=Path)
+    pipeline = subcommands.add_parser("pipeline", help="run the auditable Bridgeforge modernization pipeline")
+    pipeline.add_argument("workspace", type=Path)
+    pipeline.add_argument("--target-starsector", default="0.98.x")
+    pipeline.add_argument("--target-java", type=int, default=17)
+    pipeline.add_argument("--rules", type=Path, action="append", default=[])
+    pipeline.add_argument("--approve", action="append", default=[])
+    pipeline.add_argument("--safe", action="store_true")
+    pipeline.add_argument("--jdk", type=Path)
+    pipeline.add_argument("--api-jar", type=Path, action="append", default=[])
+    pipeline.add_argument("--dependency-jar", type=Path, action="append", default=[])
+    pipeline.add_argument("--compile", action="store_true")
     return parser
 
 
@@ -158,5 +170,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(f"Save compatibility risk: {result['risk']} ({len(result['findings'])} finding(s))")
+        return 0
+    if args.command == "pipeline":
+        try:
+            result = run_pipeline(args.workspace, TargetProfile(args.target_starsector, args.target_java), args.rules or None, set(args.approve), args.safe, args.jdk, args.api_jar, args.dependency_jar, args.compile)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Pipeline complete: {Path(args.workspace).resolve() / 'MODERNIZATION_REPORT.md'} ({result['apply']['applied_count']} applied migration(s))")
         return 0
     return 2

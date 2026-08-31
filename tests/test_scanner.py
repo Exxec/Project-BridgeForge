@@ -14,6 +14,7 @@ from bridgeforge.build import compile_feedback, create_build_profile, run_compil
 from bridgeforge.review import create_review_bundle
 from bridgeforge.validate import validate_workspace
 from bridgeforge.save_risk import analyze_save_risk
+from bridgeforge.pipeline import run_pipeline
 
 
 class ScannerTests(unittest.TestCase):
@@ -164,3 +165,15 @@ class ScannerTests(unittest.TestCase):
             (working / "config.json").write_text('{"factionIdRenamed": "modern"}', encoding="utf-8")
             result = analyze_save_risk(workspace)
             self.assertEqual(result["risk"], "HIGH")
+
+    def test_pipeline_writes_final_report_without_implicit_review_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "mod_info.json").write_text(json.dumps({"id": "legacy", "gameVersion": "0.95"}), encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            result = run_pipeline(workspace, TargetProfile("0.98", 17))
+            self.assertEqual(result["apply"]["applied_count"], 0)
+            self.assertTrue(Path(result["scan"]["manifest"]).is_file())
+            self.assertTrue((workspace / "MODERNIZATION_REPORT.md").is_file())
