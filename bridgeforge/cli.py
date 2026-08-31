@@ -15,6 +15,8 @@ from .review import create_review_bundle
 from .validate import validate_workspace
 from .save_risk import analyze_save_risk
 from .pipeline import run_pipeline
+from .packs import discover_packs
+from .runtime import create_runtime_profile, run_runtime_smoke
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -70,6 +72,17 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline.add_argument("--api-jar", type=Path, action="append", default=[])
     pipeline.add_argument("--dependency-jar", type=Path, action="append", default=[])
     pipeline.add_argument("--compile", action="store_true")
+    packs = subcommands.add_parser("packs", help="list bundled migration packs")
+    packs.add_argument("--root", type=Path)
+    runtime = subcommands.add_parser("runtime-profile", help="record an explicit opt-in runtime launch profile")
+    runtime.add_argument("workspace", type=Path)
+    runtime.add_argument("--executable", required=True, type=Path)
+    runtime.add_argument("--argument", action="append", default=[])
+    runtime.add_argument("--working-directory", required=True, type=Path)
+    runtime.add_argument("--timeout", type=int, default=60)
+    smoke = subcommands.add_parser("runtime-smoke", help="inspect or explicitly run a runtime profile")
+    smoke.add_argument("workspace", type=Path)
+    smoke.add_argument("--execute", action="store_true")
     return parser
 
 
@@ -179,4 +192,28 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(f"Pipeline complete: {Path(args.workspace).resolve() / 'MODERNIZATION_REPORT.md'} ({result['apply']['applied_count']} applied migration(s))")
         return 0
+    if args.command == "packs":
+        try:
+            for pack in discover_packs(args.root):
+                print(f"{pack.id}\t{pack.status}\t{pack.scope}")
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        return 0
+    if args.command == "runtime-profile":
+        try:
+            create_runtime_profile(args.workspace, args.executable, args.argument, args.working_directory, args.timeout)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print("Recorded runtime profile; it will not execute without `runtime-smoke --execute`.")
+        return 0
+    if args.command == "runtime-smoke":
+        try:
+            result = run_runtime_smoke(args.workspace, args.execute)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Runtime smoke status: {result['status']}")
+        return 0 if result["status"] in {"PASS", "NOT_EXECUTED"} else 1
     return 2

@@ -15,6 +15,8 @@ from bridgeforge.review import create_review_bundle
 from bridgeforge.validate import validate_workspace
 from bridgeforge.save_risk import analyze_save_risk
 from bridgeforge.pipeline import run_pipeline
+from bridgeforge.packs import discover_packs
+from bridgeforge.runtime import create_runtime_profile, run_runtime_smoke
 
 
 class ScannerTests(unittest.TestCase):
@@ -98,6 +100,22 @@ class ScannerTests(unittest.TestCase):
             self.assertIn("import new.api.Helper;", content)
             self.assertIn('"import old.api.Helper;"', content)
 
+    def test_method_migration_uses_ast_source_offset(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "Example.java").write_text('class Example { void x() { String note = "OldApi.foo"; OldApi.foo(); } }', encoding="utf-8")
+            pack = root / "methods.json"
+            pack.write_text(json.dumps({"pack": {"id": "fixture-methods", "schema_version": 1}, "rules": [{"id": "migrate-method", "classification": "REVIEW", "confidence": "DETERMINISTIC", "description": "fixture", "action": "replace-method-invocation", "from_invocation": "OldApi.foo", "to_invocation": "NewApi.bar"}]}), encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            build_plan(workspace, TargetProfile(), [pack])
+            apply_plan(workspace, {"migrate-method"})
+            _, working, _ = workspace_paths(workspace)
+            content = (working / "Example.java").read_text(encoding="utf-8")
+            self.assertIn('"OldApi.foo"', content)
+            self.assertIn("NewApi.bar();", content)
+
     def test_build_profile_records_jdk_and_command_without_compiling(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -177,3 +195,20 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(result["apply"]["applied_count"], 0)
             self.assertTrue(Path(result["scan"]["manifest"]).is_file())
             self.assertTrue((workspace / "MODERNIZATION_REPORT.md").is_file())
+
+    def test_bundled_pack_registry_is_unique_and_conservative(self) -> None:
+        packs = discover_packs()
+        self.assertGreaterEqual(len(packs), 8)
+        self.assertEqual(len({pack.id for pack in packs}), len(packs))
+        self.assertTrue(all(pack.status == "SCAFFOLDED" for pack in packs))
+
+    def test_runtime_profile_never_executes_without_explicit_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            workspace = create_workspace(source, root / "workspace")
+            executable = root / "launcher.exe"
+            executable.write_text("not executed", encoding="utf-8")
+            create_runtime_profile(workspace, executable, [], root, 60)
+            self.assertEqual(run_runtime_smoke(workspace)["status"], "NOT_EXECUTED")

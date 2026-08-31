@@ -31,13 +31,14 @@ public final class BridgeforgeAst {
         String file = new File(unit.getSourceFile().toUri()).getPath();
         for (ImportTree importTree : unit.getImports()) {
           long line = unit.getLineMap().getLineNumber(trees.getSourcePositions().getStartPosition(unit, importTree));
-          System.out.println("I\t" + encode(file) + "\t" + line + "\t" + encode(importTree.getQualifiedIdentifier().toString()));
+          System.out.println("I\t" + encode(file) + "\t" + line + "\t" + trees.getSourcePositions().getStartPosition(unit, importTree) + "\t" + encode(importTree.getQualifiedIdentifier().toString()));
         }
         new TreeScanner<Void, Void>() {
           @Override public Void visitMethodInvocation(MethodInvocationTree node, Void unused) {
             long position = trees.getSourcePositions().getStartPosition(unit, node);
             long line = position >= 0 ? unit.getLineMap().getLineNumber(position) : -1;
-            System.out.println("M\t" + encode(file) + "\t" + line + "\t" + encode(node.getMethodSelect().toString()));
+            long selectPosition = trees.getSourcePositions().getStartPosition(unit, node.getMethodSelect());
+            System.out.println("M\t" + encode(file) + "\t" + line + "\t" + selectPosition + "\t" + encode(node.getMethodSelect().toString()));
             return super.visitMethodInvocation(node, unused);
           }
         }.scan(unit, null);

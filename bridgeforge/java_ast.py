@@ -45,7 +45,7 @@ def analyze_sources(root: Path) -> list[dict[str, object]]:
         raise AstUnavailable((completed.stderr or completed.stdout or "Java AST helper failed").strip())
     facts: list[dict[str, object]] = []
     for raw in completed.stdout.splitlines():
-        kind, file_value, line, value = raw.split("\t", 3)
+        kind, file_value, line, position, value = raw.split("\t", 4)
         source_path = Path(base64.b64decode(file_value).decode("utf-8")).resolve()
-        facts.append({"kind": "import" if kind == "I" else "method_invocation", "file": str(source_path.relative_to(root)).replace("\\", "/"), "line": int(line), "value": base64.b64decode(value).decode("utf-8")})
+        facts.append({"kind": "import" if kind == "I" else "method_invocation", "file": str(source_path.relative_to(root)).replace("\\", "/"), "line": int(line), "position": int(position), "value": base64.b64decode(value).decode("utf-8")})
     return facts

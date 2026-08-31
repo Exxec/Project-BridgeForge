@@ -15,4 +15,4 @@ bridgeforge = "bridgeforge.cli:main"
 include = ["bridgeforge*"]
 
 [tool.setuptools.package-data]
-bridgeforge = ["java/*.java", "rules/*.json"]
+bridgeforge = ["java/*.java", "rules/*.json", "packs/*/*.json"]

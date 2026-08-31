@@ -26,6 +26,8 @@ class MigrationRule:
     action: str = "set-json-value"
     from_import: str = ""
     to_import: str = ""
+    from_invocation: str = ""
+    to_invocation: str = ""
 
 
 @dataclass
@@ -120,6 +122,22 @@ def build_plan(workspace: Path, target: TargetProfile, rules_paths: list[Path] |
                 after_lines = list(lines)
                 after_lines[line_index] = after_lines[line_index].replace(marker, f"import {rule.to_import};", 1)
                 after = "".join(after_lines)
+                migrations.append(_planned(rule, relative, before, after, path))
+                planned_files.add(relative)
+            continue
+        if rule.action == "replace-method-invocation":
+            if not rule.from_invocation or not rule.to_invocation:
+                raise ValueError(f"Method rule {rule.id} must provide from_invocation and to_invocation")
+            for fact in source_facts:
+                if fact["kind"] != "method_invocation" or fact["value"] != rule.from_invocation or fact["file"] in planned_files:
+                    continue
+                relative = str(fact["file"])
+                path = working / relative
+                before = path.read_text(encoding="utf-8")
+                position = int(fact["position"])
+                if before[position:position + len(rule.from_invocation)] != rule.from_invocation:
+                    continue
+                after = before[:position] + rule.to_invocation + before[position + len(rule.from_invocation):]
                 migrations.append(_planned(rule, relative, before, after, path))
                 planned_files.add(relative)
             continue
