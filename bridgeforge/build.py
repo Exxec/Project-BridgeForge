@@ -52,7 +52,12 @@ def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path 
     workspace = workspace.expanduser().resolve()
     _, working, _ = workspace_paths(workspace)
     jdk = read_jdk(jdk_home)
-    sources = [path for path in (working / "src", working / "data" / "scripts") if path.is_dir()]
+    excluded_source_directories = {".git", ".idea", "build", "disabled_files", "jar", "out"}
+    source_files = [
+        path for path in sorted(working.rglob("*.java"))
+        if not any(part in excluded_source_directories for part in path.relative_to(working).parts)
+    ]
+    source_roots = sorted({path.parent for path in source_files})
     api = [str(path.expanduser().resolve()) for path in api_jars]
     dependencies = [str(path.expanduser().resolve()) for path in dependency_jars]
     missing = [path for path in [*api_jars, *dependency_jars] if not path.expanduser().is_file()]
@@ -63,8 +68,8 @@ def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path 
     classpath = [*api, *dependencies]
     if classpath:
         command.extend(["-classpath", __import__("os").pathsep.join(classpath)])
-    command.extend(str(source) for root in sources for source in sorted(root.rglob("*.java")))
-    profile = BuildProfile(1, target, jdk, [str(path.relative_to(working)).replace("\\", "/") for path in sources], api, dependencies, str(classes), command)
+    command.extend(str(source) for source in source_files)
+    profile = BuildProfile(1, target, jdk, [str(path.relative_to(working)).replace("\\", "/") for path in source_roots], api, dependencies, str(classes), command)
     (workspace / "build-profile.json").write_text(json.dumps(asdict(profile), indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return profile
 

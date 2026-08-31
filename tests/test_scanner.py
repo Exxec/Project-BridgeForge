@@ -222,6 +222,21 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(profile.source_roots, ["src"])
             self.assertIn("--release", profile.command_preview)
 
+    def test_build_profile_includes_active_data_sources_but_excludes_disabled_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            (source / "data" / "hullmods").mkdir(parents=True)
+            (source / "disabled_files").mkdir()
+            (source / "mod_info.json").write_text("{}", encoding="utf-8")
+            (source / "data" / "hullmods" / "Active.java").write_text("class Active {}", encoding="utf-8")
+            (source / "disabled_files" / "Disabled.java").write_text("class Disabled {}", encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            profile = create_build_profile(workspace, TargetProfile("0.98a", 17), None, [], [])
+            self.assertEqual(profile.source_roots, ["data/hullmods"])
+            self.assertIn(str(workspace / "working-copy" / "data" / "hullmods" / "Active.java"), profile.command_preview)
+            self.assertNotIn(str(workspace / "working-copy" / "disabled_files" / "Disabled.java"), profile.command_preview)
+
     def test_compile_executes_profile_and_classifies_errors(self) -> None:
         javac = shutil.which("javac")
         if not javac:
