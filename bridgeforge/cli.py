@@ -15,9 +15,10 @@ from .review import create_review_bundle
 from .validate import validate_workspace
 from .save_risk import analyze_save_risk
 from .pipeline import run_pipeline
-from .packs import discover_packs
+from .packs import discover_packs, resolve_pack_rule_paths
 from .runtime import create_runtime_profile, run_runtime_smoke
 from .interface import export_patch, inspect_workspace
+from .opportunities import analyze_opportunities
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -36,6 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--target-starsector", default="0.98.x")
     plan.add_argument("--target-java", type=int, default=17)
     plan.add_argument("--rules", type=Path, action="append", default=[], metavar="PACK_JSON", help="additional migration-rule pack (repeatable)")
+    plan.add_argument("--pack", action="append", default=[], metavar="PACK_ID", help="bundled migration pack to use (repeatable)")
     apply = subcommands.add_parser("apply", help="apply only explicitly approved planned rules")
     apply.add_argument("workspace", type=Path)
     apply.add_argument("--approve", action="append", default=[], metavar="RULE_ID")
@@ -67,6 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline.add_argument("--target-starsector", default="0.98.x")
     pipeline.add_argument("--target-java", type=int, default=17)
     pipeline.add_argument("--rules", type=Path, action="append", default=[])
+    pipeline.add_argument("--pack", action="append", default=[])
     pipeline.add_argument("--approve", action="append", default=[])
     pipeline.add_argument("--safe", action="store_true")
     pipeline.add_argument("--jdk", type=Path)
@@ -89,6 +92,8 @@ def build_parser() -> argparse.ArgumentParser:
     export = subcommands.add_parser("export-patch", help="export a patch-only package")
     export.add_argument("workspace", type=Path)
     export.add_argument("--output", required=True, type=Path)
+    opportunities = subcommands.add_parser("opportunities", help="report non-applying library-adoption opportunities")
+    opportunities.add_argument("workspace", type=Path)
     return parser
 
 
@@ -119,7 +124,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "plan":
         try:
-            plan = build_plan(args.workspace, TargetProfile(args.target_starsector, args.target_java), args.rules or None)
+            selected = [*resolve_pack_rule_paths(args.pack), *args.rules]
+            plan = build_plan(args.workspace, TargetProfile(args.target_starsector, args.target_java), selected or None)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -192,7 +198,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "pipeline":
         try:
-            result = run_pipeline(args.workspace, TargetProfile(args.target_starsector, args.target_java), args.rules or None, set(args.approve), args.safe, args.jdk, args.api_jar, args.dependency_jar, args.compile)
+            selected = [*resolve_pack_rule_paths(args.pack), *args.rules]
+            result = run_pipeline(args.workspace, TargetProfile(args.target_starsector, args.target_java), selected or None, set(args.approve), args.safe, args.jdk, args.api_jar, args.dependency_jar, args.compile)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -237,5 +244,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(f"Patch package: {output}")
+        return 0
+    if args.command == "opportunities":
+        try:
+            result = analyze_opportunities(args.workspace)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Modernization opportunities: {len(result['findings'])}")
         return 0
     return 2

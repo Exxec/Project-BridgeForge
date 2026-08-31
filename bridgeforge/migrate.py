@@ -52,7 +52,7 @@ def _rules_path() -> Path:
 def load_rules(paths: list[Path] | None = None) -> list[MigrationRule]:
     rules: list[MigrationRule] = []
     seen_ids: set[str] = set()
-    for path in paths or [_rules_path()]:
+    for path in [_rules_path()] if paths is None else paths:
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
             pack = raw["pack"]

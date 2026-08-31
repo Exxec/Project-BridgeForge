@@ -15,7 +15,8 @@ from bridgeforge.review import create_review_bundle
 from bridgeforge.validate import validate_workspace
 from bridgeforge.save_risk import analyze_save_risk
 from bridgeforge.pipeline import run_pipeline
-from bridgeforge.packs import discover_packs
+from bridgeforge.packs import discover_packs, resolve_pack_rule_paths
+from bridgeforge.opportunities import analyze_opportunities
 from bridgeforge.runtime import create_runtime_profile, run_runtime_smoke
 from bridgeforge.fixtures import discover_compatibility_fixtures
 from bridgeforge.interface import export_patch, inspect_workspace
@@ -203,6 +204,7 @@ class ScannerTests(unittest.TestCase):
         self.assertGreaterEqual(len(packs), 8)
         self.assertEqual(len({pack.id for pack in packs}), len(packs))
         self.assertTrue(all(pack.status == "SCAFFOLDED" for pack in packs))
+        self.assertEqual(resolve_pack_rule_paths(["java"]), [])
 
     def test_runtime_profile_never_executes_without_explicit_flag(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -232,3 +234,14 @@ class ScannerTests(unittest.TestCase):
             output = export_patch(workspace, root / "patch")
             self.assertTrue((output / "migration-plan.json").is_file())
             self.assertFalse((output / "original-reference").exists())
+
+    def test_opportunities_are_review_only(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            (source / "src").mkdir(parents=True)
+            (source / "src" / "Bounty.java").write_text("class Bounty { void settings() {} }", encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            result = analyze_opportunities(workspace)
+            self.assertGreaterEqual(len(result["findings"]), 2)
+            self.assertTrue(all("do not adopt automatically" in item["recommendation"].lower() for item in result["findings"]))
