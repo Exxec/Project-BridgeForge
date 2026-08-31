@@ -34,7 +34,7 @@ No game or mod data, names, extracted entity lists, captures, or benchmarks are 
 ```text
 Starsector installation
   ├─ environment fingerprint
-  ├─ selected launch profile / runtime adapter
+  ├─ selected launch profile / runtime capability stack
   ├─ mod inventory + JAR ownership index
   └─ optional JFR capture
              ↓
@@ -51,7 +51,7 @@ baseline comparison + PERFORMANCE_REPORT.md / performance-report.json
 | --- | --- |
 | `EnvironmentFingerprint` | schema version, Starsector build, executable/launcher, Java vendor/version/build/path, JVM arguments, heap/direct-memory limits, GC/JIT/module flags, agents, OS/GPU/driver, enabled-mod configuration hash, and timestamps |
 | `CoreIntegrity` | selected core/launcher/native file hashes, baseline-catalog version, known modifications, unknown differences, and confidence |
-| `RuntimeAdapterResult` | adapter ID/version, evidence, detected launch mode, thread/package classifiers enabled, and unsupported assumptions |
+| `RuntimeCapability` | capability ID/version/state, detector evidence, parsed configuration, thread/package classifiers enabled, and unsupported assumptions |
 | `ModInventoryEntry` | opaque local ID, relative root, metadata parse status, content hash policy, JAR paths |
 | `JarOwnershipEntry` | normalized JAR path, owner candidates, package prefixes, class index status, confidence |
 | `CaptureDescriptor` | capture type, JVM/JFR settings, start/stop, duration, size, incomplete reason |
@@ -85,20 +85,41 @@ Hashing alone does not establish that a file is modified. SPW compares selected 
 
 For example, a Fast Rendering installation can be classified as a known modification only when its adapter has direct fingerprint evidence. Otherwise it remains an unknown difference. This preserves the distinction between evidence and inference.
 
-### Runtime adapters
+### Runtime capability stack
 
-Adapters centralize runtime-specific assumptions instead of scattering launcher, thread, or package special cases through analyzers:
+Runtime behavior is modeled as composable layers—not a mutually exclusive profile for every combination. An environment can contain a base game, a Java runtime, a launcher configuration, Fast Rendering, an FR resource cache, a prepatcher, JVM flags, and other instrumentation simultaneously.
+
+Detectors centralize runtime-specific assumptions instead of scattering launcher, thread, or package special cases through analyzers:
 
 ```text
 RuntimeAdapter
 ├─ VanillaJava17
 ├─ GenericAlternateJDK
+├─ MikohimeConfiguration
 ├─ FastRendering
-├─ FastRenderingPlusAlternateJDK
+├─ FastRenderingResourceCache
+├─ StarsectorPrepatcher
 └─ UnknownModifiedRuntime
 ```
 
-An adapter may identify launch files, parse approved VM-parameter files, label known runtime threads/package prefixes, and issue compatibility warnings. It cannot change raw event data or suppress unrecognized threads. Multiple adapters can match; selection records all evidence and uses `UnknownModifiedRuntime` whenever a safe assumption is unavailable.
+Each capability may identify launch files, parse approved configuration files, label known runtime threads/package prefixes, and issue compatibility warnings. It cannot change raw event data or suppress unrecognized threads. Capabilities are independently detected and retained with their evidence; `UnknownModifiedRuntime` is added whenever a safe assumption is unavailable.
+
+The initial collector is deliberately explicit:
+
+```text
+EnvironmentCollector
+├─ JavaDetector
+├─ JVMArgumentParser
+├─ MikohimeDetector
+├─ FastRenderingDetector
+├─ PrepatcherDetector
+├─ GameCoreHasher
+└─ ModInventory
+```
+
+`JavaDetector` fingerprints the actual JDK from its `release` file when available, rather than trusting a folder name. It records fields such as `IMPLEMENTOR`, `IMPLEMENTOR_VERSION`, `JAVA_RUNTIME_VERSION`, `JAVA_VERSION`, `JVM_VARIANT`, `OS_ARCH`, `OS_NAME`, and `IMAGE_TYPE`, alongside direct runtime output if an explicitly selected executable may be queried safely.
+
+`MikohimeDetector` is configuration-oriented, not vendor-name-oriented. It recognizes a Mikohime-compatible configuration only from concrete launcher/configuration evidence (such as `Miko_Rouge.bat`, `Miko_Simple.txt`, or `Miko_Info.txt`) and records the parsed settings separately from the JDK identity. A modern Temurin runtime alone is therefore `GenericAlternateJDK`, not Mikohime. The detector may report configured memory, CPU, logging, large-page, Fast Rendering, resource-cache, and prepatcher settings; actual activation is confirmed independently by the corresponding detector and core-integrity evidence.
 
 Fast Rendering warrants an adapter because its published distribution includes its own `fr.bat`, `fr.vmparams`, and Starsector-core installation path, and its public crash report shows renderer-bridge/executor work on a worker thread. The initial adapter is limited to this observed layout and evidence-based labeling; it must not claim a general rendering model or modify the installation. [Fast Rendering repository](https://github.com/Halke1986/starsector-render), [example renderer/executor stack](https://github.com/Halke1986/starsector-render/issues/1)
 
@@ -115,6 +136,25 @@ Before SPW reports a delta, it compares the two environment fingerprints. It ret
 | `NOT_COMPARABLE` | The run cannot support a direct performance-improvement claim. |
 
 Changing Java major version, GC/JIT settings, launch mode, Fast Rendering state, core-integrity state, enabled-mod set/order, scenario, or capture settings is material by default. Users may explicitly define an A/B experiment that changes one of these variables; the report then calls it an experiment rather than attributing the result to an unrelated mod.
+
+When several material variables change, SPW must state that causal attribution is not possible and propose a matrix of controlled runs. For example, changing Java and Fast Rendering calls for Java-17/Java-27 × FR-off/FR-on runs before reporting an isolated Java or FR effect. Prepatching, resource-cache state, and large-page configuration are independently tracked variables, not hidden implementation details.
+
+### Configuration snapshots
+
+Each capture writes a self-contained, local snapshot directory. This makes a later comparison reproducible even after launchers or Java installations have changed:
+
+```text
+profiles/<run-id>/
+├─ profile.jfr
+├─ environment.json
+├─ java.json
+├─ runtime-capabilities.json
+├─ mods.json
+├─ core-hashes.json
+└─ PERFORMANCE_REPORT.md
+```
+
+The snapshot contains only locally generated metadata and the user-selected capture. It never copies game/mod sources or JDK binaries.
 
 ## Architecture decisions
 
@@ -133,7 +173,7 @@ Resolve a sampled frame in this order: exact class-to-JAR index, package prefix,
 ## Roadmap
 
 1. **V0.1 — Environment fingerprint and JFR capture.** Detect installation, selected executable and actual runtime, JVM configuration, core integrity, enabled mods, metadata status, JAR ownership candidates, and thread inventory; emit `environment.json`, `core-integrity.json`, `mod-ownership.json`, `profile.jfr`, and a basic report.
-2. **V0.2 — Runtime adapters.** Deliver Vanilla Java 17, Generic Alternate JDK, Fast Rendering, Fast Rendering + Alternate JDK, and Unknown Modified Runtime adapters with evidence/provenance tests.
+2. **V0.2 — Runtime capability detectors.** Deliver Vanilla Java 17, Generic Alternate JDK, Mikohime-compatible configuration, Fast Rendering, FR Resource Cache, StarsectorPrepatcher, and Unknown Modified Runtime detectors with evidence/provenance tests. Capabilities compose; no combination-specific profile explosion.
 3. **V0.3 — Startup profiling.** Attribute launcher-to-main-menu time, class loading, resource parsing/loading, mod/dependency initialization.
 4. **V0.4 — CPU and thread analysis.** Analyze sampled CPU, thread states, blocked time, locks, executor waits, and thread lifecycle.
 5. **V0.5 — Mod attribution.** Harden class/JAR/package/dependency resolution and ambiguity reporting; add ownership-map regression fixtures.
