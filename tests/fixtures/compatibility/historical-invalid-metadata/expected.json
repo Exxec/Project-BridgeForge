@@ -1,0 +1,9 @@
+{
+  "classification": "MANUAL",
+  "finding_id": "invalid-mod-info",
+  "findings": [
+    {"id": "invalid-mod-info", "classification": "MANUAL"},
+    {"id": "starsector-version-unknown", "classification": "UNKNOWN"}
+  ],
+  "source_pattern": "historical-release-invalid-metadata"
+}

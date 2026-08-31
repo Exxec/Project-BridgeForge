@@ -1,0 +1,5 @@
+{
+  "classification": "REVIEW",
+  "finding_id": "non-strict-json-trailing-comma",
+  "source_pattern": "historical-release-trailing-comma-json"
+}

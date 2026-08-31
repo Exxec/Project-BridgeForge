@@ -38,6 +38,8 @@ Java migration packs can provide a `replace-import` rule. Bridgeforge first pars
 
 `doctor --json` provides machine-readable local-tool, workspace, and migration-pack compatibility checks. `conflicts <workspace>` writes `conflicts.json` and detects planned-edit conflicts plus duplicate class entries across bundled JARs. `provenance <workspace>` writes `provenance.json`, containing deterministic SHA-256 hashes for the original reference, working copy, and relevant generated artifacts.
 
+`corpus-compare <mod-directory> --baseline <baseline.json>` is an explicit local-only comparison against a sanitized baseline. It reports fingerprint and finding mismatches as JSON and neither stores the selected path nor copies mod content into the repository. See [docs/JSON_COMPATIBILITY_POLICY.md](docs/JSON_COMPATIBILITY_POLICY.md) for the verified trailing-comma JSON policy and [docs/MIGRATION_PACK_CONTRACT.md](docs/MIGRATION_PACK_CONTRACT.md) for the evidence required before a library migration rule can load.
+
 ## Safety
 
 Scanning is read-only with respect to the selected mod directory. Generated artifacts are written only to `--output`.

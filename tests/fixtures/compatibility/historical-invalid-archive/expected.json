@@ -1,0 +1,5 @@
+{
+  "classification": "REVIEW",
+  "finding_id": "unreadable-jar",
+  "source_pattern": "historical-release-invalid-archive"
+}

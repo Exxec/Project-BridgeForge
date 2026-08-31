@@ -6,6 +6,7 @@ import re
 import zipfile
 from collections import Counter
 from pathlib import Path
+from pathlib import PurePosixPath
 
 from .models import ScanResult, TargetProfile
 from .java_ast import AstUnavailable, analyze_sources
@@ -13,6 +14,7 @@ from .java_ast import AstUnavailable, analyze_sources
 CLASS_MAJOR_TO_JAVA = {51: 7, 52: 8, 55: 11, 61: 17, 65: 21, 69: 25}
 MAX_JAR_ENTRIES = 10_000
 MAX_JAR_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
+MAX_JAR_COMPRESSION_RATIO = 100
 LIBRARY_PATTERNS = {
     "LazyLib": re.compile(r"lazylib", re.I),
     "MagicLib": re.compile(r"magiclib", re.I),
@@ -48,17 +50,73 @@ def _java_for_major(major: int) -> str:
     return f"class-file major {major}"
 
 
+def _without_trailing_commas(text: str) -> str:
+    result: list[str] = []
+    in_string = False
+    escaped = False
+    index = 0
+    while index < len(text):
+        character = text[index]
+        if in_string:
+            result.append(character)
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            index += 1
+            continue
+        if character == '"':
+            in_string = True
+        if character == ",":
+            next_index = index + 1
+            while next_index < len(text) and text[next_index].isspace():
+                next_index += 1
+            if next_index < len(text) and text[next_index] in "}]":
+                index += 1
+                continue
+        result.append(character)
+        index += 1
+    return "".join(result)
+
+
+def _parse_json(text: str) -> tuple[object, bool]:
+    try:
+        return json.loads(text), False
+    except json.JSONDecodeError as original_error:
+        normalized = _without_trailing_commas(text)
+        if normalized == text:
+            raise original_error
+        try:
+            return json.loads(normalized), True
+        except json.JSONDecodeError:
+            raise original_error
+
+
+def _non_strict_json_finding(result: ScanResult, category: str, file: str) -> None:
+    result.add(id="non-strict-json-trailing-comma", category=category, severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Trailing-comma JSON was accepted by the verified target parser compatibility path; retain it unchanged and recheck the selected game parser before modifying this file.", file=file)
+
+
 def _scan_metadata(root: Path, result: ScanResult) -> None:
     path = root / "mod_info.json"
     if not path.exists():
         result.add(id="missing-mod-info", category="metadata", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation="mod_info.json was not found at the mod root.")
+        nested_roots = [child.name for child in root.iterdir() if child.is_dir() and (child / "mod_info.json").is_file()]
+        if len(nested_roots) == 1:
+            result.add(id="wrapper-directory-layout", category="metadata", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="A single nested directory contains mod_info.json. Select that directory after extracting the release archive; Bridgeforge will not implicitly change the input root.", evidence=nested_roots)
         return
     try:
-        metadata = json.loads(path.read_text(encoding="utf-8-sig"))
+        metadata, uses_trailing_comma = _parse_json(path.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError) as exc:
         result.add(id="invalid-mod-info", category="metadata", severity="critical", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"mod_info.json could not be parsed: {exc}", file="mod_info.json")
         return
+    if not isinstance(metadata, dict):
+        result.add(id="invalid-mod-info", category="metadata", severity="critical", classification="MANUAL", confidence="DETERMINISTIC", explanation="mod_info.json must contain a JSON object.", file="mod_info.json")
+        return
     result.metadata = metadata
+    if uses_trailing_comma:
+        _non_strict_json_finding(result, "metadata", "mod_info.json")
     game_version = metadata.get("gameVersion") or metadata.get("game_version")
     if game_version:
         result.estimated_starsector = str(game_version)
@@ -76,12 +134,18 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
             with zipfile.ZipFile(jar) as archive:
                 entries = archive.infolist()
                 uncompressed_bytes = sum(item.file_size for item in entries)
-                if len(entries) > MAX_JAR_ENTRIES or uncompressed_bytes > MAX_JAR_UNCOMPRESSED_BYTES:
-                    result.add(id="jar-scan-limit", category="bytecode", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"JAR exceeds safe scan limits ({len(entries)} entries, {uncompressed_bytes} uncompressed bytes).", file=_relative(root, jar))
+                compressed_bytes = sum(item.compress_size for item in entries)
+                ratio = uncompressed_bytes / max(compressed_bytes, 1)
+                if len(entries) > MAX_JAR_ENTRIES or uncompressed_bytes > MAX_JAR_UNCOMPRESSED_BYTES or ratio > MAX_JAR_COMPRESSION_RATIO:
+                    result.add(id="jar-scan-limit", category="bytecode", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"JAR exceeds safe scan limits ({len(entries)} entries, {uncompressed_bytes} uncompressed bytes, {ratio:.1f}:1 compression ratio).", file=_relative(root, jar))
                     result.jars.append(entry)
                     continue
                 majors: set[int] = set()
                 for item in entries:
+                    member = PurePosixPath(item.filename.replace("\\", "/"))
+                    if member.is_absolute() or ".." in member.parts:
+                        result.add(id="jar-path-traversal", category="bytecode", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation="JAR contains an absolute or parent-directory member name; it was not opened.", file=_relative(root, jar))
+                        continue
                     if item.filename.endswith(".class"):
                         with archive.open(item) as class_file:
                             header = class_file.read(8)
@@ -131,9 +195,12 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
         if path.name == "mod_info.json":
             continue
         try:
-            json.loads(path.read_text(encoding="utf-8-sig"))
+            _, uses_trailing_comma = _parse_json(path.read_text(encoding="utf-8-sig"))
         except (OSError, json.JSONDecodeError) as exc:
             result.add(id="invalid-json", category="assets", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"JSON could not be parsed: {exc}", file=_relative(root, path))
+        else:
+            if uses_trailing_comma:
+                _non_strict_json_finding(result, "assets", _relative(root, path))
     for path in root.rglob("*.csv"):
         try:
             with path.open("r", encoding="utf-8-sig", newline="") as handle:

@@ -28,6 +28,7 @@ class MigrationRule:
     to_import: str = ""
     from_invocation: str = ""
     to_invocation: str = ""
+    evidence: dict[str, str] | None = None
 
 
 @dataclass
@@ -70,6 +71,10 @@ def load_rules(paths: list[Path] | None = None) -> list[MigrationRule]:
                 raise ValueError(f"Duplicate migration rule ID across packs: {rule.id}")
             if rule.classification not in {"SAFE", "REVIEW", "MANUAL", "UNKNOWN"}:
                 raise ValueError(f"Invalid classification for rule {rule.id}: {rule.classification}")
+            if any(library in rule.pack_id.lower() for library in ("magiclib", "lazylib", "ashlib")):
+                required_evidence = {"provenance", "before_fixture", "after_fixture", "compile_validation", "idempotence", "conflict_review", "save_risk_assessment"}
+                if not isinstance(rule.evidence, dict) or any(not isinstance(rule.evidence.get(field), str) or not rule.evidence[field].strip() for field in required_evidence):
+                    raise ValueError(f"Library migration rule {rule.id} requires verified evidence: " + ", ".join(sorted(required_evidence)))
             seen_ids.add(rule.id)
             rules.append(rule)
     return rules

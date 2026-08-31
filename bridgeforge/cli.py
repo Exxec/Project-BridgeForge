@@ -23,6 +23,7 @@ from .opportunities import analyze_opportunities
 from .doctor import doctor
 from .conflicts import detect_conflicts
 from .provenance import write_provenance
+from .corpus import compare_corpus
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -105,6 +106,9 @@ def build_parser() -> argparse.ArgumentParser:
     conflict_command.add_argument("workspace", type=Path)
     provenance_command = subcommands.add_parser("provenance", help="write deterministic workspace and artifact hashes")
     provenance_command.add_argument("workspace", type=Path)
+    corpus = subcommands.add_parser("corpus-compare", help="compare an explicitly selected local mod to a sanitized baseline")
+    corpus.add_argument("mod_directory", type=Path)
+    corpus.add_argument("--baseline", required=True, type=Path)
     return parser
 
 
@@ -288,4 +292,12 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(json.dumps(result, indent=2))
         return 0
+    if args.command == "corpus-compare":
+        try:
+            result = compare_corpus(args.mod_directory, args.baseline)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2))
+        return 0 if result["status"] == "PASS" else 1
     return 2

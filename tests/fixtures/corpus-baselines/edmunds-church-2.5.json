@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "name": "edmunds-church-2.5-ai-rewrite",
+  "file_count": 442,
+  "mod_info_sha256": "3dd06dd6a0f972138e363da7b0ce78aff9515035e28dbd8eaab381ae9bd3b8ce",
+  "expected_findings": [
+    {"id": "non-strict-json-trailing-comma", "classification": "REVIEW", "file": "data/config/engine_styles.json"},
+    {"id": "non-strict-json-trailing-comma", "classification": "REVIEW", "file": "data/config/hull_styles.json"},
+    {"id": "non-strict-json-trailing-comma", "classification": "REVIEW", "file": "data/config/settings.json"},
+    {"id": "non-strict-json-trailing-comma", "classification": "REVIEW", "file": "data/world/factions/default_ship_roles.json"},
+    {"id": "non-strict-json-trailing-comma", "classification": "REVIEW", "file": "data/config/exerelinFactionConfig/aDM_jaohe.json"}
+  ]
+}
