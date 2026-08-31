@@ -17,7 +17,7 @@ from bridgeforge.review import create_review_bundle
 from bridgeforge.validate import validate_workspace
 from bridgeforge.save_risk import analyze_save_risk
 from bridgeforge.pipeline import run_pipeline
-from bridgeforge.packs import BRIDGEFORGE_VERSION, discover_packs, resolve_pack_rule_paths
+from bridgeforge.packs import BRIDGEFORGE_VERSION, MigrationPack, compatible, discover_packs, resolve_pack_rule_paths
 from bridgeforge.opportunities import analyze_opportunities
 from bridgeforge.doctor import doctor
 from bridgeforge.conflicts import detect_conflicts
@@ -252,6 +252,10 @@ class ScannerTests(unittest.TestCase):
 
     def test_pack_version_compatibility_is_enforced(self) -> None:
         self.assertEqual(BRIDGEFORGE_VERSION, __version__)
+        alpha_pack = MigrationPack("alpha", "alpha", "test", "SCAFFOLDED", None, Path("."), min_bridgeforge_version="0.1.0a1")
+        final_pack = MigrationPack("final", "final", "test", "SCAFFOLDED", None, Path("."), min_bridgeforge_version="0.1.0")
+        self.assertTrue(compatible(alpha_pack))
+        self.assertFalse(compatible(final_pack))
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             pack = root / "future"

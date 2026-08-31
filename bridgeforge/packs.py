@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -43,7 +44,12 @@ def discover_packs(root: Path | None = None) -> list[MigrationPack]:
 
 
 def _version(value: str) -> tuple[int, ...]:
-    return tuple(int(part) for part in value.split(".")[:3])
+    match = re.fullmatch(r"(\d+(?:\.\d+)*)(?:(a|b|rc)(\d+))?", value)
+    if match is None:
+        raise ValueError(f"unsupported Bridgeforge version: {value}")
+    release = tuple(int(part) for part in match.group(1).split("."))
+    stage = {"a": -3, "b": -2, "rc": -1, None: 0}[match.group(2)]
+    return (*release, stage, int(match.group(3) or 0))
 
 
 def compatible(pack: MigrationPack) -> bool:
