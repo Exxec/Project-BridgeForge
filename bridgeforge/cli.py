@@ -24,6 +24,7 @@ from .doctor import doctor
 from .conflicts import detect_conflicts
 from .provenance import write_provenance
 from .corpus import compare_corpus
+from .evaluation import evaluate_releases
 from .bytecode import BytecodeUnavailable, inspect_bytecode
 from .bytecode_diff import diff_bytecode
 from .bytecode_rules import apply_bytecode_class, apply_bytecode_jar, plan_bytecode
@@ -131,6 +132,12 @@ def build_parser() -> argparse.ArgumentParser:
     corpus = subcommands.add_parser("corpus-compare", help="compare an explicitly selected local mod to a sanitized baseline")
     corpus.add_argument("mod_directory", type=Path)
     corpus.add_argument("--baseline", required=True, type=Path)
+    evaluation = subcommands.add_parser("release-evaluate", help="compare two release directories without modifying either")
+    evaluation.add_argument("before_directory", type=Path)
+    evaluation.add_argument("after_directory", type=Path)
+    evaluation.add_argument("--target-starsector", default="0.98.x")
+    evaluation.add_argument("--target-java", type=int, default=17)
+    evaluation.add_argument("--output", type=Path)
     return parser
 
 
@@ -372,4 +379,19 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(json.dumps(result, indent=2))
         return 0 if result["status"] == "PASS" else 1
+    if args.command == "release-evaluate":
+        try:
+            result = evaluate_releases(args.before_directory, args.after_directory, TargetProfile(args.target_starsector, args.target_java))
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        payload = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            output = args.output.expanduser().resolve()
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(payload + "\n", encoding="utf-8")
+            print(f"Release evaluation: {output}")
+        else:
+            print(payload)
+        return 0
     return 2

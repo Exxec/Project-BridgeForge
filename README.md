@@ -40,6 +40,8 @@ Java migration packs can provide a `replace-import` rule. Bridgeforge first pars
 
 `corpus-compare <mod-directory> --baseline <baseline.json>` is an explicit local-only comparison against a sanitized baseline. It reports fingerprint and finding mismatches as JSON and neither stores the selected path nor copies mod content into the repository. See [docs/JSON_COMPATIBILITY_POLICY.md](docs/JSON_COMPATIBILITY_POLICY.md) for the verified trailing-comma JSON policy and [docs/MIGRATION_PACK_CONTRACT.md](docs/MIGRATION_PACK_CONTRACT.md) for the evidence required before a library migration rule can load.
 
+`release-evaluate <before-directory> <after-directory>` compares two explicitly selected releases without modifying either. Its machine-readable report distinguishes byte-identical content continuity and scanner-finding deltas from bytecode and runtime evidence; it never claims behavioral or save compatibility without an explicit runtime test.
+
 ## Safety
 
 Scanning is read-only with respect to the selected mod directory. Generated artifacts are written only to `--output`.

@@ -27,6 +27,7 @@ from bridgeforge.doctor import doctor
 from bridgeforge.conflicts import detect_conflicts
 from bridgeforge.provenance import write_provenance
 from bridgeforge.corpus import compare_corpus
+from bridgeforge.evaluation import evaluate_releases
 from bridgeforge.runtime import create_runtime_profile, run_runtime_smoke
 from bridgeforge.fixtures import discover_compatibility_fixtures, discover_corpus_baselines
 from bridgeforge.interface import export_patch, inspect_workspace
@@ -405,6 +406,28 @@ class ScannerTests(unittest.TestCase):
             baseline_data["file_count"] = 2
             baseline.write_text(json.dumps(baseline_data), encoding="utf-8")
             self.assertEqual(compare_corpus(mod, baseline)["status"], "MISMATCH")
+
+    def test_release_evaluation_reports_content_and_finding_deltas_without_runtime_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            before, after = root / "before", root / "after"
+            before.mkdir()
+            after.mkdir()
+            (before / "mod_info.json").write_text('{"id":"fixture","gameVersion":"0.95",}', encoding="utf-8")
+            (after / "mod_info.json").write_text('{"id":"fixture","gameVersion":"0.98"}', encoding="utf-8")
+            (before / "shared.txt").write_text("same", encoding="utf-8")
+            (after / "shared.txt").write_text("same", encoding="utf-8")
+            (before / "changed.txt").write_text("old", encoding="utf-8")
+            (after / "changed.txt").write_text("new", encoding="utf-8")
+            (before / "legacy.java").write_text("class Legacy {}", encoding="utf-8")
+            (after / "replacement.jar").write_bytes(b"not a jar")
+            result = evaluate_releases(before, after)
+            self.assertEqual(result["mode"], "READ_ONLY_RELEASE_EVALUATION")
+            self.assertEqual(result["assessment"], "PARTIALLY_COMPARABLE")
+            self.assertEqual(result["content"]["identical_file_count"], 1)
+            self.assertEqual(result["content"]["changed_paths"], ["changed.txt", "mod_info.json"])
+            self.assertEqual(result["comparability"]["runtime_validation"], "NOT_PERFORMED")
+            self.assertFalse(any(str(before) in str(value) or str(after) in str(value) for value in result.values()))
 
     def test_inspect_and_patch_export_exclude_original_mod(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
