@@ -6,7 +6,7 @@ import shutil
 from unittest.mock import patch
 from pathlib import Path
 
-from bridgeforge import scanner
+from bridgeforge import __version__, scanner
 from bridgeforge.scanner import scan_mod
 from bridgeforge.report import write_artifacts
 from bridgeforge.migrate import apply_plan, build_plan, load_rules
@@ -17,7 +17,7 @@ from bridgeforge.review import create_review_bundle
 from bridgeforge.validate import validate_workspace
 from bridgeforge.save_risk import analyze_save_risk
 from bridgeforge.pipeline import run_pipeline
-from bridgeforge.packs import discover_packs, resolve_pack_rule_paths
+from bridgeforge.packs import BRIDGEFORGE_VERSION, discover_packs, resolve_pack_rule_paths
 from bridgeforge.opportunities import analyze_opportunities
 from bridgeforge.doctor import doctor
 from bridgeforge.conflicts import detect_conflicts
@@ -44,7 +44,7 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(result.estimated_java, "8")
             self.assertTrue(any(f.id == "bundled-lazylib" for f in result.findings))
             self.assertTrue(any(f.id == "internal-jvm-api" for f in result.findings))
-            self.assertTrue(any(f.id == "invalid-json" for f in result.findings))
+            self.assertTrue(any(f.id == "unverified-json-syntax" for f in result.findings))
 
     def test_ast_source_analysis_collects_method_invocations(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -251,6 +251,7 @@ class ScannerTests(unittest.TestCase):
         self.assertEqual(resolve_pack_rule_paths(["java"]), [])
 
     def test_pack_version_compatibility_is_enforced(self) -> None:
+        self.assertEqual(BRIDGEFORGE_VERSION, __version__)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             pack = root / "future"
@@ -479,7 +480,56 @@ class ScannerTests(unittest.TestCase):
             result = scan_mod(root)
             non_strict = [finding for finding in result.findings if finding.id == "non-strict-json-trailing-comma"]
             self.assertEqual(len(non_strict), 2)
-            self.assertFalse(any(finding.id in {"invalid-mod-info", "invalid-json", "starsector-version-unknown"} for finding in result.findings))
+            self.assertFalse(any(finding.id in {"unverified-mod-info-syntax", "unverified-json-syntax", "version-inference-blocked"} for finding in result.findings))
+
+    def test_scanner_separates_encoding_and_structural_ambiguity_from_breakage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "legacy.csv").write_bytes(b"id,name\n1,\x92legacy\n")
+            (root / "src").mkdir()
+            source = "class Duplicate {}"
+            (root / "src" / "One.java").write_text(source, encoding="utf-8")
+            (root / "src" / "Two.java").write_text(source, encoding="utf-8")
+            with zipfile.ZipFile(root / "large.jar", "w") as archive:
+                archive.writestr("Example.class", b"\xca\xfe\xba\xbe\x00\x00\x00\x34")
+            prior_limit = scanner.LARGE_BUNDLED_JAR_BYTES
+            scanner.LARGE_BUNDLED_JAR_BYTES = 1
+            try:
+                result = scan_mod(root)
+            finally:
+                scanner.LARGE_BUNDLED_JAR_BYTES = prior_limit
+            self.assertTrue(any(finding.id == "csv-encoding-unverified" for finding in result.findings))
+            self.assertTrue(any(finding.id == "duplicate-source-layout" for finding in result.findings))
+            self.assertTrue(any(finding.id == "large-bundled-archive" for finding in result.findings))
+
+    def test_scanner_keeps_unreadable_json_separate_from_parser_tolerance(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            bad_json = root / "unreadable.json"
+            bad_json.write_text("{}", encoding="utf-8")
+            original_read_text = Path.read_text
+
+            def read_text(path: Path, *args: object, **kwargs: object) -> str:
+                if path == bad_json:
+                    raise OSError("fixture access denied")
+                return original_read_text(path, *args, **kwargs)
+
+            with patch.object(Path, "read_text", read_text):
+                result = scan_mod(root)
+            self.assertTrue(any(finding.id == "unreadable-json" for finding in result.findings))
+            self.assertFalse(any(finding.id == "unverified-json-syntax" for finding in result.findings))
+
+    def test_scanner_hashes_duplicate_sources_as_raw_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "One.java").write_bytes(b"class Source { // \x80\n }")
+            (root / "src" / "Two.java").write_bytes(b"class Source { // \x81\n }")
+            result = scan_mod(root)
+            self.assertFalse(any(finding.id == "duplicate-source-layout" for finding in result.findings))
 
     def test_conflict_and_provenance_artifacts_are_machine_readable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

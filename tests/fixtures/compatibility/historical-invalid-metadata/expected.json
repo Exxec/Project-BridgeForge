@@ -1,9 +1,9 @@
 {
-  "classification": "MANUAL",
-  "finding_id": "invalid-mod-info",
+  "classification": "UNKNOWN",
+  "finding_id": "unverified-mod-info-syntax",
   "findings": [
-    {"id": "invalid-mod-info", "classification": "MANUAL"},
-    {"id": "starsector-version-unknown", "classification": "UNKNOWN"}
+    {"id": "unverified-mod-info-syntax", "classification": "UNKNOWN"},
+    {"id": "version-inference-blocked", "classification": "UNKNOWN"}
   ],
   "source_pattern": "historical-release-invalid-metadata"
 }

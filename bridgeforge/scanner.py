@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import re
 import zipfile
@@ -15,6 +16,7 @@ CLASS_MAJOR_TO_JAVA = {51: 7, 52: 8, 55: 11, 61: 17, 65: 21, 69: 25}
 MAX_JAR_ENTRIES = 10_000
 MAX_JAR_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
 MAX_JAR_COMPRESSION_RATIO = 100
+LARGE_BUNDLED_JAR_BYTES = 25 * 1024 * 1024
 LIBRARY_PATTERNS = {
     "LazyLib": re.compile(r"lazylib", re.I),
     "MagicLib": re.compile(r"magiclib", re.I),
@@ -98,6 +100,10 @@ def _non_strict_json_finding(result: ScanResult, category: str, file: str) -> No
     result.add(id="non-strict-json-trailing-comma", category=category, severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Trailing-comma JSON was accepted by the verified target parser compatibility path; retain it unchanged and recheck the selected game parser before modifying this file.", file=file)
 
 
+def _unverified_json_syntax_finding(result: ScanResult, category: str, file: str, exc: Exception) -> None:
+    result.add(id="unverified-json-syntax", category=category, severity="medium", classification="UNKNOWN", confidence="DETERMINISTIC", explanation=f"A strict JSON parser rejected this file ({exc}). This is not proof that the target game parser rejects it; no matching parser-tolerance evidence is available.", file=file)
+
+
 def _scan_metadata(root: Path, result: ScanResult) -> None:
     path = root / "mod_info.json"
     if not path.exists():
@@ -107,9 +113,14 @@ def _scan_metadata(root: Path, result: ScanResult) -> None:
             result.add(id="wrapper-directory-layout", category="metadata", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="A single nested directory contains mod_info.json. Select that directory after extracting the release archive; Bridgeforge will not implicitly change the input root.", evidence=nested_roots)
         return
     try:
-        metadata, uses_trailing_comma = _parse_json(path.read_text(encoding="utf-8-sig"))
-    except (OSError, json.JSONDecodeError) as exc:
-        result.add(id="invalid-mod-info", category="metadata", severity="critical", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"mod_info.json could not be parsed: {exc}", file="mod_info.json")
+        metadata_text = path.read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        result.add(id="unreadable-mod-info", category="metadata", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"mod_info.json could not be read: {exc}", file="mod_info.json")
+        return
+    try:
+        metadata, uses_trailing_comma = _parse_json(metadata_text)
+    except json.JSONDecodeError as exc:
+        result.add(id="unverified-mod-info-syntax", category="metadata", severity="high", classification="UNKNOWN", confidence="DETERMINISTIC", explanation=f"A strict JSON parser rejected mod_info.json ({exc}). Metadata could not be trusted for environment inference.", file="mod_info.json")
         return
     if not isinstance(metadata, dict):
         result.add(id="invalid-mod-info", category="metadata", severity="critical", classification="MANUAL", confidence="DETERMINISTIC", explanation="mod_info.json must contain a JSON object.", file="mod_info.json")
@@ -140,6 +151,8 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
                     result.add(id="jar-scan-limit", category="bytecode", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"JAR exceeds safe scan limits ({len(entries)} entries, {uncompressed_bytes} uncompressed bytes, {ratio:.1f}:1 compression ratio).", file=_relative(root, jar))
                     result.jars.append(entry)
                     continue
+                if jar.stat().st_size > LARGE_BUNDLED_JAR_BYTES:
+                    result.add(id="large-bundled-archive", category="dependencies", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation=f"Archive is {jar.stat().st_size} bytes. Attribute its ownership and dependency role before changing or redistributing it.", file=_relative(root, jar))
                 majors: set[int] = set()
                 for item in entries:
                     member = PurePosixPath(item.filename.replace("\\", "/"))
@@ -173,13 +186,16 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
     except AstUnavailable as exc:
         result.add(id="source-ast-unavailable", category="source", severity="medium", classification="UNKNOWN", confidence="DETERMINISTIC", explanation=f"Structured Java parsing was unavailable; import collection used a limited fallback: {exc}")
     imports: set[str] = set()
+    content_owners: dict[str, list[str]] = {}
     for source in root.rglob("*.java"):
         relative = _relative(root, source)
         try:
-            text = source.read_text(encoding="utf-8", errors="replace")
+            raw_bytes = source.read_bytes()
         except OSError as exc:
             result.add(id="unreadable-source", category="source", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=str(exc), file=relative)
             continue
+        text = raw_bytes.decode("utf-8", errors="replace")
+        content_owners.setdefault(hashlib.sha256(raw_bytes).hexdigest(), []).append(relative)
         if result.source_facts:
             imports.update(fact["value"] for fact in result.source_facts if fact["kind"] == "import" and fact["file"] == relative)
         else:
@@ -188,6 +204,9 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
             if needle in text:
                 result.add(id=rule_id, category="source-api", severity="high", classification="REVIEW", confidence="HIGH", explanation=explanation, file=relative, evidence=[needle])
     result.imports = sorted(imports)
+    for paths in content_owners.values():
+        if len(paths) > 1:
+            result.add(id="duplicate-source-layout", category="source", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Identical Java source appears at multiple paths. Establish the authoritative source/JAR layout before compiling or modifying it.", evidence=sorted(paths))
 
 
 def _scan_assets(root: Path, result: ScanResult) -> None:
@@ -195,9 +214,14 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
         if path.name == "mod_info.json":
             continue
         try:
-            _, uses_trailing_comma = _parse_json(path.read_text(encoding="utf-8-sig"))
-        except (OSError, json.JSONDecodeError) as exc:
-            result.add(id="invalid-json", category="assets", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"JSON could not be parsed: {exc}", file=_relative(root, path))
+            text = path.read_text(encoding="utf-8-sig")
+        except OSError as exc:
+            result.add(id="unreadable-json", category="assets", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"JSON could not be read: {exc}", file=_relative(root, path))
+            continue
+        try:
+            _, uses_trailing_comma = _parse_json(text)
+        except json.JSONDecodeError as exc:
+            _unverified_json_syntax_finding(result, "assets", _relative(root, path), exc)
         else:
             if uses_trailing_comma:
                 _non_strict_json_finding(result, "assets", _relative(root, path))
@@ -207,6 +231,8 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
                 header = next(csv.reader(handle), [])
             if not header or not any(cell.strip() for cell in header):
                 raise ValueError("CSV has no header row")
+        except UnicodeDecodeError as exc:
+            result.add(id="csv-encoding-unverified", category="assets", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation=f"CSV could not be decoded as UTF-8 ({exc}). Encoding is separate from CSV structure; verify the target loader before conversion.", file=_relative(root, path))
         except (OSError, csv.Error, ValueError) as exc:
             result.add(id="invalid-csv", category="assets", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"CSV could not be read: {exc}", file=_relative(root, path))
 
@@ -218,7 +244,7 @@ def _infer_environment(result: ScanResult) -> None:
         if max(majors) > 61:
             result.add(id="target-bytecode-exceeds-profile", category="java", severity="high", classification="REVIEW", confidence="DETERMINISTIC", explanation=f"Detected {_java_for_major(max(majors))} bytecode exceeds target Java {result.target.java}.")
     if result.estimated_starsector == "UNKNOWN":
-        result.add(id="starsector-version-unknown", category="environment", severity="medium", classification="UNKNOWN", confidence="LOW", explanation="No declared Starsector version was found; inspect metadata, dependencies, and API usage manually.")
+        result.add(id="version-inference-blocked", category="environment", severity="medium", classification="UNKNOWN", confidence="DETERMINISTIC", explanation="No trustworthy declared Starsector version was available. Do not make confident compatibility or migration claims until metadata or independent target evidence is supplied.")
 
 
 def scan_mod(input_path: Path, target: TargetProfile | None = None) -> ScanResult:

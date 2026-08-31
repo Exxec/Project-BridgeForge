@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from bridgeforge import __version__
 
 @dataclass(frozen=True)
 class TargetProfile:
@@ -41,7 +42,7 @@ class ScanResult:
 
     def manifest(self) -> dict[str, Any]:
         return {
-            "bridgeforge_version": "0.1.0",
+            "bridgeforge_version": __version__,
             "input_mod": str(self.input_path),
             "target": asdict(self.target),
             "metadata": self.metadata,

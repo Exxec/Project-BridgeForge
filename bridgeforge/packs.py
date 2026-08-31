@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from bridgeforge import __version__
 
 @dataclass(frozen=True)
 class MigrationPack:
@@ -17,7 +18,7 @@ class MigrationPack:
     max_bridgeforge_version: str | None = None
 
 
-BRIDGEFORGE_VERSION = "1.0.0"
+BRIDGEFORGE_VERSION = __version__
 
 
 def bundled_packs_root() -> Path:
