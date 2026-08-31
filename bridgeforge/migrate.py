@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from .models import TargetProfile
-from .java_ast import AstUnavailable, analyze_sources
-from .workspace import checkpoint, sha256_file, workspace_paths
+from .java_ast import AstUnavailable, analyze_sources, utf16_offset_to_index
+from .workspace import checkpoint, resolve_inside, sha256_file, workspace_paths
 
 
 @dataclass(frozen=True)
@@ -94,10 +94,15 @@ def _planned(rule: MigrationRule, file: str, before: str, after: str, path: Path
     )
 
 
+def _working_target(working: Path, file: str) -> Path:
+    return resolve_inside(working, file)
+
+
 def build_plan(workspace: Path, target: TargetProfile, rules_paths: list[Path] | None = None) -> dict[str, Any]:
     workspace = workspace.expanduser().resolve()
     _, working, _ = workspace_paths(workspace)
     migrations: list[PlannedMigration] = []
+    conflicts: list[dict[str, str]] = []
     rules = load_rules(rules_paths)
     planned_files: set[str] = set()
     try:
@@ -112,7 +117,7 @@ def build_plan(workspace: Path, target: TargetProfile, rules_paths: list[Path] |
                 if fact["kind"] != "import" or fact["value"] != rule.from_import or fact["file"] in planned_files:
                     continue
                 relative = str(fact["file"])
-                path = working / relative
+                path = _working_target(working, relative)
                 before = path.read_text(encoding="utf-8")
                 lines = before.splitlines(keepends=True)
                 line_index = int(fact["line"]) - 1
@@ -132,9 +137,9 @@ def build_plan(workspace: Path, target: TargetProfile, rules_paths: list[Path] |
                 if fact["kind"] != "method_invocation" or fact["value"] != rule.from_invocation or fact["file"] in planned_files:
                     continue
                 relative = str(fact["file"])
-                path = working / relative
+                path = _working_target(working, relative)
                 before = path.read_text(encoding="utf-8")
-                position = int(fact["position"])
+                position = utf16_offset_to_index(before, int(fact["position"]))
                 if before[position:position + len(rule.from_invocation)] != rule.from_invocation:
                     continue
                 after = before[:position] + rule.to_invocation + before[position + len(rule.from_invocation):]
@@ -143,7 +148,10 @@ def build_plan(workspace: Path, target: TargetProfile, rules_paths: list[Path] |
             continue
         if rule.action != "set-json-value":
             raise ValueError(f"Unsupported migration action for rule {rule.id}: {rule.action}")
-        path = working / rule.file
+        path = _working_target(working, rule.file)
+        if rule.file in planned_files:
+            conflicts.append({"rule_id": rule.id, "file": rule.file, "reason": "A previous planned migration already targets this file; composition is not yet supported."})
+            continue
         if not path.is_file():
             continue
         try:
@@ -165,6 +173,7 @@ def build_plan(workspace: Path, target: TargetProfile, rules_paths: list[Path] |
         "working_copy": str(working),
         "rule_packs": sorted({rule.pack_id for rule in rules}),
         "migrations": [asdict(migration) for migration in migrations],
+        "conflicts": conflicts,
     }
     (workspace / "migration-plan.json").write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     checkpoint(workspace, "01-scanned", "plan-created")
@@ -181,14 +190,20 @@ def apply_plan(workspace: Path, approved_rule_ids: set[str], apply_safe: bool = 
     applied: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     diff_chunks: list[str] = []
+    approved_migrations = []
     for migration in plan["migrations"]:
         approved = migration["rule_id"] in approved_rule_ids or (apply_safe and migration["classification"] == "SAFE")
         if not approved:
             skipped.append({"rule_id": migration["rule_id"], "reason": "not explicitly approved"})
             continue
-        path = working / migration["file"]
+        if migration["classification"] in {"MANUAL", "UNKNOWN"}:
+            skipped.append({"rule_id": migration["rule_id"], "reason": "classification cannot be automatically applied"})
+            continue
+        path = _working_target(working, migration["file"])
         if not path.is_file() or sha256_file(path) != migration["before_sha256"]:
             raise ValueError(f"Working copy changed since planning: {migration['file']}. Re-plan before applying.")
+        approved_migrations.append((migration, path))
+    for migration, path in approved_migrations:
         temp_path = path.with_suffix(path.suffix + ".bridgeforge-tmp")
         temp_path.write_text(migration["after_content"], encoding="utf-8")
         os.replace(temp_path, path)

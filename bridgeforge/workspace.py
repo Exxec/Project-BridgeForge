@@ -23,6 +23,14 @@ def _inside(child: Path, parent: Path) -> bool:
         return False
 
 
+def resolve_inside(root: Path, relative: str | Path) -> Path:
+    root = root.resolve()
+    candidate = (root / relative).resolve()
+    if not _inside(candidate, root):
+        raise ValueError(f"Path escapes its permitted root: {relative}")
+    return candidate
+
+
 def _copy_tree(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination, symlinks=True)
 
@@ -75,8 +83,11 @@ def create_workspace(source: Path, destination: Path) -> Path:
 def workspace_paths(workspace: Path) -> tuple[Path, Path, dict]:
     workspace = workspace.expanduser().resolve()
     manifest = _read_manifest(workspace)
-    original = workspace / manifest["original_reference"]
-    working = workspace / manifest["working_copy"]
+    try:
+        original = resolve_inside(workspace, manifest["original_reference"])
+        working = resolve_inside(workspace, manifest["working_copy"])
+    except (KeyError, TypeError) as exc:
+        raise ValueError("Workspace manifest is missing required paths.") from exc
     if not original.is_dir() or not working.is_dir():
         raise ValueError("Workspace is missing its original reference or working copy.")
     return original, working, manifest
@@ -86,12 +97,16 @@ def checkpoint(workspace: Path, name: str, event_type: str) -> Path:
     _, working, manifest = workspace_paths(workspace)
     if not name or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for char in name):
         raise ValueError("Checkpoint names may contain only lowercase letters, numbers, hyphens, and underscores.")
-    target = workspace.expanduser().resolve() / "checkpoints" / name
-    if target.exists():
-        raise ValueError(f"Checkpoint already exists: {name}")
+    checkpoints_root = resolve_inside(workspace.expanduser().resolve(), "checkpoints")
+    target = checkpoints_root / name
+    suffix = 2
+    while target.exists():
+        target = checkpoints_root / f"{name}-{suffix}"
+        suffix += 1
     _copy_tree(working, target)
-    manifest["checkpoints"].append(name)
-    manifest["events"].append({"type": event_type, "checkpoint": name, "at": datetime.now(UTC).isoformat()})
+    actual_name = target.name
+    manifest["checkpoints"].append(actual_name)
+    manifest["events"].append({"type": event_type, "checkpoint": actual_name, "at": datetime.now(UTC).isoformat()})
     _write_manifest(workspace.expanduser().resolve(), manifest)
     return target
 
@@ -101,11 +116,10 @@ def rollback(workspace: Path, checkpoint_name: str) -> None:
     _, working, manifest = workspace_paths(workspace)
     if checkpoint_name not in manifest["checkpoints"]:
         raise ValueError(f"Unknown checkpoint: {checkpoint_name}")
-    checkpoint_path = workspace / "checkpoints" / checkpoint_name
+    checkpoint_path = resolve_inside(workspace, Path("checkpoints") / checkpoint_name)
     if not checkpoint_path.is_dir():
         raise ValueError(f"Checkpoint contents unavailable: {checkpoint_name}")
     shutil.rmtree(working)
     _copy_tree(checkpoint_path, working)
     manifest["events"].append({"type": "rollback", "checkpoint": checkpoint_name, "at": datetime.now(UTC).isoformat()})
     _write_manifest(workspace, manifest)
-

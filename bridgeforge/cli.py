@@ -125,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "plan":
         try:
             selected = [*resolve_pack_rule_paths(args.pack), *args.rules]
-            plan = build_plan(args.workspace, TargetProfile(args.target_starsector, args.target_java), selected or None)
+            plan = build_plan(args.workspace, TargetProfile(args.target_starsector, args.target_java), selected if (args.pack or args.rules) else None)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -199,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "pipeline":
         try:
             selected = [*resolve_pack_rule_paths(args.pack), *args.rules]
-            result = run_pipeline(args.workspace, TargetProfile(args.target_starsector, args.target_java), selected or None, set(args.approve), args.safe, args.jdk, args.api_jar, args.dependency_jar, args.compile)
+            result = run_pipeline(args.workspace, TargetProfile(args.target_starsector, args.target_java), selected if (args.pack or args.rules) else None, set(args.approve), args.safe, args.jdk, args.api_jar, args.dependency_jar, args.compile)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

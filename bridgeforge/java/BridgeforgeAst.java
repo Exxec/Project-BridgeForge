@@ -7,6 +7,8 @@ import com.sun.source.util.JavacTask;
 import com.sun.source.util.TreeScanner;
 import com.sun.source.util.Trees;
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import javax.tools.JavaCompiler;
@@ -23,7 +25,12 @@ public final class BridgeforgeAst {
     JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
     if (compiler == null) throw new IllegalStateException("A JDK compiler is required");
     try (StandardJavaFileManager files = compiler.getStandardFileManager(null, null, StandardCharsets.UTF_8)) {
-      Iterable<? extends javax.tools.JavaFileObject> inputs = files.getJavaFileObjects(args);
+      java.util.List<String> sourceArgs = new java.util.ArrayList<>();
+      for (int i = 0; i < args.length; i++) {
+        if ("--sources-file".equals(args[i]) && i + 1 < args.length) sourceArgs.addAll(Files.readAllLines(Path.of(args[++i]), StandardCharsets.UTF_8));
+        else sourceArgs.add(args[i]);
+      }
+      Iterable<? extends javax.tools.JavaFileObject> inputs = files.getJavaFileObjects(sourceArgs.toArray(new String[0]));
       JavacTask task = (JavacTask) compiler.getTask(null, files, null, java.util.List.of("-proc:none"), null, inputs);
       Iterable<? extends CompilationUnitTree> units = task.parse();
       Trees trees = Trees.instance(task);

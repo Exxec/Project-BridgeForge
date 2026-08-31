@@ -119,6 +119,20 @@ class ScannerTests(unittest.TestCase):
             self.assertIn('"OldApi.foo"', content)
             self.assertIn("NewApi.bar();", content)
 
+    def test_method_migration_handles_utf16_source_offsets(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "Example.java").write_text('class Example { String note = "😀"; void x() { OldApi.foo(); } }', encoding="utf-8")
+            pack = root / "methods.json"
+            pack.write_text(json.dumps({"pack": {"id": "fixture-utf16", "schema_version": 1}, "rules": [{"id": "migrate-utf16", "classification": "REVIEW", "confidence": "DETERMINISTIC", "description": "fixture", "action": "replace-method-invocation", "from_invocation": "OldApi.foo", "to_invocation": "NewApi.bar"}]}), encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            build_plan(workspace, TargetProfile(), [pack])
+            apply_plan(workspace, {"migrate-utf16"})
+            _, working, _ = workspace_paths(workspace)
+            self.assertIn("NewApi.bar();", (working / "Example.java").read_text(encoding="utf-8"))
+
     def test_build_profile_records_jdk_and_command_without_compiling(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -186,6 +200,20 @@ class ScannerTests(unittest.TestCase):
             (working / "config.json").write_text('{"factionIdRenamed": "modern"}', encoding="utf-8")
             result = analyze_save_risk(workspace)
             self.assertEqual(result["risk"], "HIGH")
+
+    def test_save_risk_flags_identifier_value_change_and_deletion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "a.json").write_text('{"factionId": "old"}', encoding="utf-8")
+            (source / "deleted.json").write_text('{"shipId": "removed"}', encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            _, working, _ = workspace_paths(workspace)
+            (working / "a.json").write_text('{"factionId": "new"}', encoding="utf-8")
+            (working / "deleted.json").unlink()
+            result = analyze_save_risk(workspace)
+            self.assertEqual(len(result["findings"]), 2)
 
     def test_pipeline_writes_final_report_without_implicit_review_apply(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

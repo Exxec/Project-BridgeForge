@@ -4,6 +4,7 @@ import json
 import os
 import shlex
 import subprocess
+import tempfile
 from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -101,7 +102,14 @@ def run_compile(workspace: Path) -> dict:
     if not any(argument.endswith(".java") for argument in command):
         raise ValueError("Build profile contains no Java source files.")
     classes.mkdir(parents=True, exist_ok=True)
-    completed = subprocess.run(command, cwd=workspace, capture_output=True, text=True, check=False)
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".javac", delete=False) as handle:
+        for argument in command[1:]:
+            handle.write('"' + argument.replace('\\', '\\\\').replace('"', '\\"') + '"\n')
+        argument_file = Path(handle.name)
+    try:
+        completed = subprocess.run([command[0], "@" + str(argument_file)], cwd=workspace, capture_output=True, text=True, check=False)
+    finally:
+        argument_file.unlink(missing_ok=True)
     diagnostics = [_classify_diagnostic(line) | {"raw": line} for line in completed.stderr.splitlines() if "error:" in line or "cannot find symbol" in line]
     result = {"schema_version": 1, "command": command, "exit_code": completed.returncode, "stdout": completed.stdout, "stderr": completed.stderr, "diagnostics": diagnostics, "success": completed.returncode == 0}
     (workspace / "build-result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -112,6 +120,7 @@ def run_compile(workspace: Path) -> dict:
 
 def compile_feedback(workspace: Path) -> dict:
     workspace = workspace.expanduser().resolve()
+    _, working, _ = workspace_paths(workspace)
     result_path = workspace / "build-result.json"
     if not result_path.is_file():
         raise ValueError("No compile result found. Run `bridgeforge compile` first.")
@@ -121,7 +130,11 @@ def compile_feedback(workspace: Path) -> dict:
     feedback = []
     for diagnostic in result["diagnostics"]:
         raw = diagnostic["raw"]
-        file_hint = raw.split(":", 1)[0].replace("\\", "/") if ".java:" in raw else None
+        raw_path = raw.split(":", 1)[0] if ".java:" in raw else None
+        try:
+            file_hint = Path(raw_path).resolve().relative_to(working).as_posix() if raw_path else None
+        except ValueError:
+            file_hint = None
         candidates = [migration["rule_id"] for migration in plan["migrations"] if file_hint and migration["file"].endswith(file_hint)]
         feedback.append({"diagnostic": diagnostic, "planned_rule_candidates": candidates, "automatic_modification": "not performed"})
     summary = Counter(item["diagnostic"]["classification"] for item in feedback)

@@ -75,7 +75,8 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
                 majors: set[int] = set()
                 for name in archive.namelist():
                     if name.endswith(".class"):
-                        header = archive.read(name)[:8]
+                        with archive.open(name) as class_file:
+                            header = class_file.read(8)
                         if header[:4] == b"\xca\xfe\xba\xbe" and len(header) == 8:
                             majors.add(int.from_bytes(header[6:8], "big"))
                 entry["class_file_majors"] = sorted(majors)
