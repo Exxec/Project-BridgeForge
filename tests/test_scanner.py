@@ -254,8 +254,10 @@ class ScannerTests(unittest.TestCase):
         self.assertEqual(BRIDGEFORGE_VERSION, __version__)
         alpha_pack = MigrationPack("alpha", "alpha", "test", "SCAFFOLDED", None, Path("."), min_bridgeforge_version="0.1.0a1")
         final_pack = MigrationPack("final", "final", "test", "SCAFFOLDED", None, Path("."), min_bridgeforge_version="0.1.0")
+        later_pack = MigrationPack("later", "later", "test", "SCAFFOLDED", None, Path("."), min_bridgeforge_version="0.1.1")
         self.assertTrue(compatible(alpha_pack))
-        self.assertFalse(compatible(final_pack))
+        self.assertTrue(compatible(final_pack))
+        self.assertFalse(compatible(later_pack))
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             pack = root / "future"

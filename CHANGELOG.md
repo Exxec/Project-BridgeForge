@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0a1 — 2026-08-31
+## 0.1.0 — Alpha 1 — 2026-08-31
 
 First public alpha of the read-only Bridgeforge compatibility workflow.
 
