@@ -27,6 +27,7 @@ from .provenance import write_provenance
 from .corpus import compare_corpus
 from .corpus_audit import audit_directories, write_corpus_audit
 from .library_api import inventory_library_api, match_library_imports
+from .archive_intake import inspect_zip_archive
 from .evaluation import evaluate_releases
 from .bytecode import BytecodeUnavailable, inspect_bytecode
 from .bytecode_diff import diff_bytecode
@@ -148,6 +149,10 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_audit.add_argument("--output", required=True, type=Path)
     corpus_audit.add_argument("--target-starsector", default="0.98.x")
     corpus_audit.add_argument("--target-java", type=int, default=17)
+    corpus_audit.add_argument("--continue-on-error", action="store_true")
+    archive_preflight = subcommands.add_parser("archive-preflight", help="inspect a ZIP archive without extracting it")
+    archive_preflight.add_argument("archive", type=Path)
+    archive_preflight.add_argument("--output", type=Path)
     api_inventory = subcommands.add_parser("library-api-inventory", help="inventory class symbols in a supplied local library JAR")
     api_inventory.add_argument("jar", type=Path)
     api_inventory.add_argument("--output", type=Path)
@@ -185,12 +190,25 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "corpus-audit":
         try:
-            report = audit_directories(args.mod_directories, TargetProfile(args.target_starsector, args.target_java))
+            report = audit_directories(args.mod_directories, TargetProfile(args.target_starsector, args.target_java), args.continue_on_error)
             output = write_corpus_audit(report, args.output, args.mod_directories)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(f"Audited {report['mod_count']} mod(s): {output}")
+        return 0
+    if args.command == "archive-preflight":
+        try:
+            result = inspect_zip_archive(args.archive)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        payload = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            args.output.expanduser().resolve().write_text(payload + "\n", encoding="utf-8")
+            print(f"Archive preflight: {args.output.expanduser().resolve()}")
+        else:
+            print(payload)
         return 0
     if args.command == "library-api-inventory":
         try:

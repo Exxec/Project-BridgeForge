@@ -63,6 +63,8 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(__import__("json").loads(output.read_text(encoding="utf-8"))["mod_count"], 2)
             with self.assertRaises(ValueError):
                 write_corpus_audit(report, alpha / "audit.json", [alpha, beta])
+            degraded = audit_directories([alpha, root / "missing"], TargetProfile(), continue_on_error=True)
+            self.assertEqual(degraded["unavailable_mod_count"], 1)
 
     def test_zip_preflight_rejects_path_traversal_without_extraction(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -82,11 +84,12 @@ class ScannerTests(unittest.TestCase):
             mod = root / "mod"
             (mod / "src").mkdir(parents=True)
             (mod / "mod_info.json").write_text("{}", encoding="utf-8")
-            (mod / "src" / "Example.java").write_text("import org.lazywizard.lazylib.MathUtils; class Example { void f() { MathUtils.getDistance(); } }", encoding="utf-8")
+            (mod / "src" / "Example.java").write_text("import org.lazywizard.lazylib.MathUtils; import com.fs.starfarer.api.Global; class Example { void f() { MathUtils.getDistance(); } }", encoding="utf-8")
             inventory = inventory_library_api(jar)
             match = match_library_imports(mod, inventory, TargetProfile())
             self.assertEqual(inventory["class_count"], 1)
             self.assertEqual(match["unmatched_imports"], [])
+            self.assertEqual(match["inventory_namespace"], "org.lazywizard.lazylib")
             self.assertEqual(match["migration_candidates"][0]["mode"], "RESEARCH_CANDIDATE_ONLY")
     def test_bytecode_inspector_reports_symbolic_references_without_execution(self) -> None:
         if not shutil.which("javac") or not shutil.which("java"):

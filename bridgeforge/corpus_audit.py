@@ -22,13 +22,22 @@ def _source_layout(inventory: list[dict], finding_counts: Counter) -> dict:
     }
 
 
-def audit_directories(mod_directories: list[Path], target: TargetProfile) -> dict:
+def audit_directories(mod_directories: list[Path], target: TargetProfile, continue_on_error: bool = False) -> dict:
     """Create a deterministic, read-only compatibility summary for explicit mod roots."""
     rows = []
     for directory in sorted((path.expanduser().resolve() for path in mod_directories), key=lambda path: path.name.casefold()):
         if not directory.is_dir():
+            if continue_on_error:
+                rows.append({"mod": directory.name, "audit_status": "UNAVAILABLE", "error": "Input directory does not exist."})
+                continue
             raise ValueError(f"Corpus mod directory does not exist: {directory}")
-        result = scan_mod(directory, target)
+        try:
+            result = scan_mod(directory, target)
+        except (OSError, ValueError) as exc:
+            if not continue_on_error:
+                raise
+            rows.append({"mod": directory.name, "audit_status": "UNAVAILABLE", "error": str(exc)})
+            continue
         finding_counts = Counter(finding.id for finding in result.findings)
         rows.append({
             "mod": directory.name,
@@ -43,12 +52,13 @@ def audit_directories(mod_directories: list[Path], target: TargetProfile) -> dic
         })
     aggregate = Counter()
     for row in rows:
-        aggregate.update(row["finding_counts"])
+        aggregate.update(row.get("finding_counts", {}))
     return {
         "schema_version": 1,
         "mode": "READ_ONLY_CORPUS_AUDIT",
         "target": asdict(target),
         "mod_count": len(rows),
+        "unavailable_mod_count": sum(row.get("audit_status") == "UNAVAILABLE" for row in rows),
         "finding_counts": dict(sorted(aggregate.items())),
         "mods": rows,
     }
