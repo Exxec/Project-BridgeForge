@@ -292,6 +292,8 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(result["compile_status"], "UNAVAILABLE")
             self.assertIsNone(result["compile"])
             self.assertEqual(result["compile_validation"]["findings"][0]["jar"], str(missing.resolve()))
+            self.assertIn(str(missing.resolve()), (workspace / "BUILD_REPORT.md").read_text(encoding="utf-8"))
+            self.assertIn(str(missing.resolve()), (workspace / "MODERNIZATION_REPORT.md").read_text(encoding="utf-8"))
             self.assertTrue((workspace / "MODERNIZATION_REPORT.md").is_file())
 
     def test_review_bundle_is_bounded_to_planned_working_files(self) -> None:

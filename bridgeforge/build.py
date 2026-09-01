@@ -112,7 +112,10 @@ def run_compile(workspace: Path) -> dict:
     if validation.get("status") == "UNAVAILABLE":
         result = {"schema_version": 1, "status": "UNAVAILABLE", "success": None, "command": profile_data.get("command_preview", []), "diagnostics": [], "findings": validation.get("findings", []), "reason": "One or more requested compile-validation JARs are unavailable."}
         (workspace / "build-result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        report = ["# Bridgeforge compile report", "", "- Result: UNAVAILABLE", "- Reason: one or more requested API/dependency JARs are unavailable.", "", "## Scope boundary", "", "Compilation was skipped; this does not prove source, runtime, or behavioral compatibility.", ""]
+        report = ["# Bridgeforge compile report", "", "- Result: UNAVAILABLE", "- Reason: one or more requested API/dependency JARs are unavailable.", "", "## Unresolved compile-validation JARs", ""]
+        for finding in result["findings"]:
+            report.extend([f"- [{finding['classification']}] {finding['jar_kind']} JAR: `{finding['jar']}`", f"  - {finding['explanation']}"])
+        report.extend(["", "## Scope boundary", "", "Compilation was skipped; this does not prove source, runtime, or behavioral compatibility.", ""])
         (workspace / "BUILD_REPORT.md").write_text("\n".join(report), encoding="utf-8")
         return result
     jdk = profile_data.get("jdk") or {}
@@ -210,7 +213,10 @@ def compile_feedback(workspace: Path) -> dict:
     summary = Counter(item["diagnostic"]["classification"] for item in feedback)
     artifact = {"schema_version": 1, "compile_status": result.get("status", "PASS" if result["success"] else "FAILED"), "compile_success": result["success"], "findings": feedback, "validation_findings": result.get("findings", []), "classification_counts": dict(summary)}
     (workspace / "compile-feedback.json").write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    lines = ["# Bridgeforge compile feedback", "", f"- Compile result: {'PASS' if result['success'] else 'FAILED'}", f"- Feedback findings: {len(feedback)}", ""]
+    compile_label = result.get("status", "PASS" if result["success"] else "FAILED")
+    lines = ["# Bridgeforge compile feedback", "", f"- Compile result: {compile_label}", f"- Feedback findings: {len(feedback)}", ""]
+    for finding in result.get("findings", []):
+        lines.extend([f"## [{finding['classification']}] {finding['id']}", "", f"- Requested {finding['jar_kind']} JAR: `{finding['jar']}`", f"- {finding['explanation']}", ""])
     for item in feedback:
         diagnostic = item["diagnostic"]
         lines.extend([f"## [{diagnostic['classification']}] {diagnostic['kind']}", "", f"- Evidence: `{diagnostic['raw']}`", f"- Planned rule candidates: {', '.join(item['planned_rule_candidates']) or 'none'}", "- Automatic modification: not performed", ""])

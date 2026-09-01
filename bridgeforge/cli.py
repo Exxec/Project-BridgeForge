@@ -256,6 +256,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Build profile: {Path(args.workspace).resolve() / 'build-profile.json'}")
         if profile.compile_validation["status"] == "UNAVAILABLE":
             print(f"Compile validation unavailable: {len(profile.compile_validation['findings'])} requested JAR(s) could not be verified.")
+            for finding in profile.compile_validation["findings"]:
+                print(f"- Missing {finding['jar_kind']} JAR: {finding['jar']}")
         print(preview_shell_command(profile))
         return 0
     if args.command == "compile":
@@ -266,6 +268,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if result.get("status") == "UNAVAILABLE":
             print(f"Compile validation unavailable; findings: {len(result['findings'])}")
+            for finding in result["findings"]:
+                print(f"- Missing {finding['jar_kind']} JAR: {finding['jar']}")
             return 0
         print(f"Compile {'passed' if result['success'] else 'failed'}; diagnostics: {len(result['diagnostics'])}")
         return 0 if result["success"] else 1
