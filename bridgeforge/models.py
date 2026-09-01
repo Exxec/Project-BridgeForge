@@ -34,6 +34,8 @@ class ScanResult:
     imports: list[str] = field(default_factory=list)
     source_facts: list[dict[str, Any]] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
+    metadata_parse_mode: str = "UNAVAILABLE"
+    declared_starsector: str | None = None
     estimated_starsector: str = "UNKNOWN"
     estimated_java: str = "UNKNOWN"
 
@@ -46,6 +48,7 @@ class ScanResult:
             "input_mod": str(self.input_path),
             "target": asdict(self.target),
             "metadata": self.metadata,
+            "metadata_parse": {"mode": self.metadata_parse_mode, "declared_starsector": self.declared_starsector},
             "estimated_original_environment": {
                 "starsector": self.estimated_starsector,
                 "java": self.estimated_java,

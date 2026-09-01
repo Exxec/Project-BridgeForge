@@ -612,6 +612,21 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(len(non_strict), 2)
             self.assertFalse(any(finding.id in {"unverified-mod-info-syntax", "unverified-json-syntax", "version-inference-blocked"} for finding in result.findings))
 
+    def test_scanner_structurally_reads_hash_comments_without_claiming_target_compatibility(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"zorg", # retained historical comment\n"gameVersion":"0.98a"}', encoding="utf-8")
+            (root / "data").mkdir()
+            (root / "data" / "settings.json").write_text('{"label":"# not a comment", # comment\n"value":1}', encoding="utf-8")
+            result = scan_mod(root)
+            self.assertEqual(result.metadata["id"], "zorg")
+            self.assertEqual(result.declared_starsector, "0.98a")
+            self.assertEqual(result.estimated_starsector, "UNKNOWN")
+            self.assertEqual(result.metadata_parse_mode, "HASH-COMMENTS")
+            self.assertTrue(any(finding.id == "historical-json-hash-comment" and finding.file == "mod_info.json" for finding in result.findings))
+            self.assertTrue(any(finding.id == "historical-json-hash-comment" and finding.file == "data/settings.json" for finding in result.findings))
+            self.assertTrue(any(finding.id == "version-inference-blocked" for finding in result.findings))
+
     def test_scanner_separates_encoding_and_structural_ambiguity_from_breakage(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -83,21 +83,61 @@ def _without_trailing_commas(text: str) -> str:
     return "".join(result)
 
 
-def _parse_json(text: str) -> tuple[object, bool]:
+def _without_hash_comments(text: str) -> str:
+    result: list[str] = []
+    in_string = False
+    escaped = False
+    index = 0
+    while index < len(text):
+        character = text[index]
+        if in_string:
+            result.append(character)
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            index += 1
+            continue
+        if character == '"':
+            in_string = True
+            result.append(character)
+        elif character == "#":
+            while index < len(text) and text[index] not in "\r\n":
+                index += 1
+            continue
+        else:
+            result.append(character)
+        index += 1
+    return "".join(result)
+
+
+def _parse_json(text: str) -> tuple[object, set[str]]:
     try:
-        return json.loads(text), False
+        return json.loads(text), set()
     except json.JSONDecodeError as original_error:
-        normalized = _without_trailing_commas(text)
-        if normalized == text:
+        normalized = _without_hash_comments(text)
+        tolerances: set[str] = set()
+        if normalized != text:
+            tolerances.add("hash-comments")
+        without_commas = _without_trailing_commas(normalized)
+        if without_commas != normalized:
+            tolerances.add("trailing-commas")
+        if not tolerances:
             raise original_error
         try:
-            return json.loads(normalized), True
+            return json.loads(without_commas), tolerances
         except json.JSONDecodeError:
             raise original_error
 
 
 def _non_strict_json_finding(result: ScanResult, category: str, file: str) -> None:
     result.add(id="non-strict-json-trailing-comma", category=category, severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Trailing-comma JSON was accepted by the verified target parser compatibility path; retain it unchanged and recheck the selected game parser before modifying this file.", file=file)
+
+
+def _hash_comment_json_finding(result: ScanResult, category: str, file: str) -> None:
+    result.add(id="historical-json-hash-comment", category=category, severity="high", classification="REVIEW", confidence="DETERMINISTIC", explanation="Bridgeforge parsed # comments outside JSON strings only to inspect historical structure. This syntax is not accepted by the verified 0.98a org.json parser, so it must not support confident target-version inference or automatic rewriting.", file=file)
 
 
 def _unverified_json_syntax_finding(result: ScanResult, category: str, file: str, exc: Exception) -> None:
@@ -118,7 +158,7 @@ def _scan_metadata(root: Path, result: ScanResult) -> None:
         result.add(id="unreadable-mod-info", category="metadata", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"mod_info.json could not be read: {exc}", file="mod_info.json")
         return
     try:
-        metadata, uses_trailing_comma = _parse_json(metadata_text)
+        metadata, tolerances = _parse_json(metadata_text)
     except json.JSONDecodeError as exc:
         result.add(id="unverified-mod-info-syntax", category="metadata", severity="high", classification="UNKNOWN", confidence="DETERMINISTIC", explanation=f"A strict JSON parser rejected mod_info.json ({exc}). Metadata could not be trusted for environment inference.", file="mod_info.json")
         return
@@ -126,11 +166,16 @@ def _scan_metadata(root: Path, result: ScanResult) -> None:
         result.add(id="invalid-mod-info", category="metadata", severity="critical", classification="MANUAL", confidence="DETERMINISTIC", explanation="mod_info.json must contain a JSON object.", file="mod_info.json")
         return
     result.metadata = metadata
-    if uses_trailing_comma:
+    result.metadata_parse_mode = "STRICT" if not tolerances else "+".join(sorted(tolerances)).upper()
+    if "trailing-commas" in tolerances:
         _non_strict_json_finding(result, "metadata", "mod_info.json")
+    if "hash-comments" in tolerances:
+        _hash_comment_json_finding(result, "metadata", "mod_info.json")
     game_version = metadata.get("gameVersion") or metadata.get("game_version")
     if game_version:
-        result.estimated_starsector = str(game_version)
+        result.declared_starsector = str(game_version)
+        if "hash-comments" not in tolerances:
+            result.estimated_starsector = str(game_version)
     dependencies = metadata.get("dependencies") or metadata.get("requiredDependencies") or []
     if dependencies:
         result.add(id="declared-dependencies", category="dependencies", severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="Dependency declarations were found.", file="mod_info.json", evidence=[str(item) for item in dependencies])
@@ -219,12 +264,14 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
             result.add(id="unreadable-json", category="assets", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"JSON could not be read: {exc}", file=_relative(root, path))
             continue
         try:
-            _, uses_trailing_comma = _parse_json(text)
+            _, tolerances = _parse_json(text)
         except json.JSONDecodeError as exc:
             _unverified_json_syntax_finding(result, "assets", _relative(root, path), exc)
         else:
-            if uses_trailing_comma:
+            if "trailing-commas" in tolerances:
                 _non_strict_json_finding(result, "assets", _relative(root, path))
+            if "hash-comments" in tolerances:
+                _hash_comment_json_finding(result, "assets", _relative(root, path))
     for path in root.rglob("*.csv"):
         try:
             with path.open("r", encoding="utf-8-sig", newline="") as handle:
