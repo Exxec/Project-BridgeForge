@@ -12,6 +12,7 @@ from .migrate import apply_plan, build_plan
 from .workspace import create_workspace, rollback
 from .build import create_build_profile, preview_shell_command
 from .build import compile_feedback, package_compiled_jar, run_compile
+from .library_registry import load_library_registry
 from .review import create_review_bundle
 from .validate import validate_workspace
 from .save_risk import analyze_save_risk
@@ -77,6 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--jdk", type=Path)
     build.add_argument("--api-jar", type=Path, action="append", default=[])
     build.add_argument("--dependency-jar", type=Path, action="append", default=[])
+    build.add_argument("--library-registry", type=Path, help="local dependency-id -> jar-path map (never bundled or committed)")
     compile_command = subcommands.add_parser("compile", help="run the explicit workspace build profile")
     compile_command.add_argument("workspace", type=Path)
     package = subcommands.add_parser("package-jar", help="package successful workspace classes into a reviewable JAR output copy")
@@ -104,6 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline.add_argument("--jdk", type=Path)
     pipeline.add_argument("--api-jar", type=Path, action="append", default=[])
     pipeline.add_argument("--dependency-jar", type=Path, action="append", default=[])
+    pipeline.add_argument("--library-registry", type=Path, help="local dependency-id -> jar-path map (never bundled or committed)")
     pipeline.add_argument("--compile", action="store_true")
     pipeline.add_argument("--bytecode-file")
     pipeline.add_argument("--bytecode-rules", type=Path)
@@ -249,7 +252,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "build-plan":
         try:
-            profile = create_build_profile(args.workspace, TargetProfile(args.target_starsector, args.target_java), args.jdk, args.api_jar, args.dependency_jar)
+            registry = load_library_registry(args.library_registry) if args.library_registry else None
+            profile = create_build_profile(args.workspace, TargetProfile(args.target_starsector, args.target_java), args.jdk, args.api_jar, args.dependency_jar, registry)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -257,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
         if profile.compile_validation["status"] == "UNAVAILABLE":
             print(f"Compile validation unavailable: {len(profile.compile_validation['findings'])} requested JAR(s) could not be verified.")
             for finding in profile.compile_validation["findings"]:
-                print(f"- Missing {finding['jar_kind']} JAR: {finding['jar']}")
+                print(f"- {finding['explanation']}")
         print(preview_shell_command(profile))
         return 0
     if args.command == "compile":
@@ -269,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
         if result.get("status") == "UNAVAILABLE":
             print(f"Compile validation unavailable; findings: {len(result['findings'])}")
             for finding in result["findings"]:
-                print(f"- Missing {finding['jar_kind']} JAR: {finding['jar']}")
+                print(f"- {finding['explanation']}")
             return 0
         print(f"Compile {'passed' if result['success'] else 'failed'}; diagnostics: {len(result['diagnostics'])}")
         return 0 if result["success"] else 1
@@ -316,7 +320,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "pipeline":
         try:
             selected = [*resolve_pack_rule_paths(args.pack), *args.rules]
-            result = run_pipeline(args.workspace, TargetProfile(args.target_starsector, args.target_java), selected if (args.pack or args.rules) else None, set(args.approve), args.safe, args.jdk, args.api_jar, args.dependency_jar, args.compile, args.bytecode_file, args.bytecode_rules, set(args.bytecode_approve))
+            registry = load_library_registry(args.library_registry) if args.library_registry else None
+            result = run_pipeline(args.workspace, TargetProfile(args.target_starsector, args.target_java), selected if (args.pack or args.rules) else None, set(args.approve), args.safe, args.jdk, args.api_jar, args.dependency_jar, args.compile, args.bytecode_file, args.bytecode_rules, set(args.bytecode_approve), registry)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

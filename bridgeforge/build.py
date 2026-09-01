@@ -11,7 +11,9 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .library_registry import LibraryRegistryEntry
 from .models import TargetProfile
+from .scanner import scan_mod
 from .workspace import resolve_inside, workspace_paths
 
 
@@ -51,7 +53,53 @@ def read_jdk(home: Path | None) -> JdkDescriptor | None:
     return JdkDescriptor(home=str(home), metadata=metadata, javac=str(javac) if javac.is_file() else None)
 
 
-def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path | None, api_jars: list[Path], dependency_jars: list[Path]) -> BuildProfile:
+def resolve_registered_dependency_jars(working: Path, target: TargetProfile, registry: dict[str, LibraryRegistryEntry] | None) -> tuple[list[Path], list[dict[str, object]]]:
+    """Auto-resolve a mod's declared dependency ids to local jars via a library registry.
+
+    Reuses scan_mod's own tolerant mod_info.json parsing rather than
+    reimplementing it, so this degrades exactly the same way scanning
+    already does when metadata can't be trusted. A declared dependency
+    with no supplied registry, no matching id, or a registered path that
+    no longer exists on disk produces a REVIEW finding explaining exactly
+    why -- never a guess, and never silently skipped. Bridgeforge does not
+    bundle, fetch, or assume the presence of third-party library jars.
+    """
+    scan = scan_mod(working, target)
+    dependencies = scan.metadata.get("dependencies") or scan.metadata.get("requiredDependencies") or []
+    resolved: list[Path] = []
+    findings: list[dict[str, object]] = []
+    for dependency in dependencies:
+        library_id = dependency.get("id") if isinstance(dependency, dict) else None
+        if not library_id:
+            continue
+        entry = registry.get(str(library_id)) if registry is not None else None
+        if entry is None:
+            reason = "no --library-registry was supplied" if registry is None else "the supplied library registry has no entry for it"
+            findings.append({
+                "id": "declared-dependency-unregistered",
+                "classification": "REVIEW",
+                "confidence": "DETERMINISTIC",
+                "jar_kind": "dependency",
+                "library_id": str(library_id),
+                "explanation": f"mod_info.json declares a dependency on {library_id!r}, but {reason}. Compile validation involving it is unverified, not confirmed unnecessary.",
+            })
+            continue
+        candidate = Path(entry.path).expanduser()
+        if not candidate.is_file():
+            findings.append({
+                "id": "declared-dependency-unregistered",
+                "classification": "REVIEW",
+                "confidence": "DETERMINISTIC",
+                "jar_kind": "dependency",
+                "library_id": str(library_id),
+                "explanation": f"The library registry names a path for {library_id!r} that no longer exists on disk: {candidate}. Compile validation involving it is unverified, not confirmed unnecessary.",
+            })
+            continue
+        resolved.append(candidate)
+    return resolved, findings
+
+
+def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path | None, api_jars: list[Path], dependency_jars: list[Path], library_registry: dict[str, LibraryRegistryEntry] | None = None) -> BuildProfile:
     workspace = workspace.expanduser().resolve()
     _, working, _ = workspace_paths(workspace)
     jdk = read_jdk(jdk_home)
@@ -61,6 +109,9 @@ def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path 
         if not any(part in excluded_source_directories for part in path.relative_to(working).parts)
     ]
     source_roots = sorted({path.parent for path in source_files})
+    registered_jars, registry_findings = resolve_registered_dependency_jars(working, target, library_registry)
+    explicit_resolved = {path.expanduser().resolve() for path in dependency_jars}
+    dependency_jars = list(dependency_jars) + [jar for jar in registered_jars if jar.resolve() not in explicit_resolved]
     requested_jars = [("api", path) for path in api_jars] + [("dependency", path) for path in dependency_jars]
     available_jars = [(kind, path.expanduser().resolve()) for kind, path in requested_jars if path.expanduser().is_file()]
     missing_jars = [(kind, path.expanduser().resolve()) for kind, path in requested_jars if not path.expanduser().is_file()]
@@ -76,7 +127,7 @@ def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path 
             "explanation": f"The requested {kind} JAR is unavailable, so compile validation cannot verify sources against it. The remaining modernization pipeline will continue without compilation.",
         }
         for kind, path in missing_jars
-    ]
+    ] + registry_findings
     compile_validation = {"status": "UNAVAILABLE" if findings else "AVAILABLE", "findings": findings}
     classes = workspace / "build" / "classes"
     command = [jdk.javac if jdk and jdk.javac else "<javac-not-configured>", "--release", str(target.java), "-d", str(classes)]
@@ -114,7 +165,8 @@ def run_compile(workspace: Path) -> dict:
         (workspace / "build-result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         report = ["# Bridgeforge compile report", "", "- Result: UNAVAILABLE", "- Reason: one or more requested API/dependency JARs are unavailable.", "", "## Unresolved compile-validation JARs", ""]
         for finding in result["findings"]:
-            report.extend([f"- [{finding['classification']}] {finding['jar_kind']} JAR: `{finding['jar']}`", f"  - {finding['explanation']}"])
+            label = f"`{finding['jar']}`" if "jar" in finding else repr(finding.get("library_id", finding["id"]))
+            report.extend([f"- [{finding['classification']}] {finding['jar_kind']} JAR: {label}", f"  - {finding['explanation']}"])
         report.extend(["", "## Scope boundary", "", "Compilation was skipped; this does not prove source, runtime, or behavioral compatibility.", ""])
         (workspace / "BUILD_REPORT.md").write_text("\n".join(report), encoding="utf-8")
         return result
@@ -216,7 +268,8 @@ def compile_feedback(workspace: Path) -> dict:
     compile_label = result.get("status", "PASS" if result["success"] else "FAILED")
     lines = ["# Bridgeforge compile feedback", "", f"- Compile result: {compile_label}", f"- Feedback findings: {len(feedback)}", ""]
     for finding in result.get("findings", []):
-        lines.extend([f"## [{finding['classification']}] {finding['id']}", "", f"- Requested {finding['jar_kind']} JAR: `{finding['jar']}`", f"- {finding['explanation']}", ""])
+        label = f"`{finding['jar']}`" if "jar" in finding else repr(finding.get("library_id", finding["id"]))
+        lines.extend([f"## [{finding['classification']}] {finding['id']}", "", f"- Requested {finding['jar_kind']} JAR: {label}", f"- {finding['explanation']}", ""])
     for item in feedback:
         diagnostic = item["diagnostic"]
         lines.extend([f"## [{diagnostic['classification']}] {diagnostic['kind']}", "", f"- Evidence: `{diagnostic['raw']}`", f"- Planned rule candidates: {', '.join(item['planned_rule_candidates']) or 'none'}", "- Automatic modification: not performed", ""])

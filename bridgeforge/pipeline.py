@@ -5,6 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .build import compile_feedback, create_build_profile, run_compile
+from .library_registry import LibraryRegistryEntry
 from .migrate import apply_plan, build_plan
 from .models import TargetProfile
 from .review import create_review_bundle
@@ -17,7 +18,7 @@ from .workspace import resolve_inside
 from .bytecode_rules import apply_bytecode_class, apply_bytecode_jar
 
 
-def run_pipeline(workspace: Path, target: TargetProfile, rules: list[Path] | None = None, approved: set[str] | None = None, apply_safe: bool = False, jdk: Path | None = None, api_jars: list[Path] | None = None, dependency_jars: list[Path] | None = None, compile_requested: bool = False, bytecode_file: str | None = None, bytecode_rules: Path | None = None, bytecode_approved: set[str] | None = None) -> dict:
+def run_pipeline(workspace: Path, target: TargetProfile, rules: list[Path] | None = None, approved: set[str] | None = None, apply_safe: bool = False, jdk: Path | None = None, api_jars: list[Path] | None = None, dependency_jars: list[Path] | None = None, compile_requested: bool = False, bytecode_file: str | None = None, bytecode_rules: Path | None = None, bytecode_approved: set[str] | None = None, library_registry: dict[str, LibraryRegistryEntry] | None = None) -> dict:
     workspace = workspace.expanduser().resolve()
     _, working, _ = workspace_paths(workspace)
     scan = scan_mod(working, target)
@@ -36,7 +37,7 @@ def run_pipeline(workspace: Path, target: TargetProfile, rules: list[Path] | Non
         bytecode = (apply_bytecode_jar if bytecode_input.suffix.lower() == ".jar" else apply_bytecode_class)(bytecode_input, bytecode_output, bytecode_rules, bytecode_approved or set())
         checkpoint(workspace, "03-bytecode-artifact", "bytecode-output-validated")
     if jdk is not None:
-        build = asdict(create_build_profile(workspace, target, jdk, api_jars or [], dependency_jars or []))
+        build = asdict(create_build_profile(workspace, target, jdk, api_jars or [], dependency_jars or [], library_registry))
     if compile_requested:
         if build is None:
             raise ValueError("Pipeline compile requires --jdk and a generated build profile.")
@@ -50,6 +51,8 @@ def run_pipeline(workspace: Path, target: TargetProfile, rules: list[Path] | Non
     (workspace / "pipeline-result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     report = ["# Bridgeforge V1.0 modernization report", "", f"- Target: Starsector {target.starsector}, Java {target.java}", f"- Planned migrations: {len(plan['migrations'])}", f"- Applied migrations: {len(applied['applied'])}", f"- Bytecode artifact: {'NOT RUN' if bytecode is None else bytecode['output']}", f"- Compile: {'NOT RUN' if compile_status is None else compile_status}", f"- Structural validation: {validation['structural_validation']['status']}", f"- Runtime validation: {validation['runtime_validation']['status']}", f"- Save risk: {save_risk['risk']}", "", "## Scope boundary", "", "This pipeline preserves the original reference, applies only explicitly authorized changes, and does not claim runtime or behavioral correctness when runtime validation is unconfigured.", ""]
     if build is not None and build["compile_validation"]["status"] == "UNAVAILABLE":
-        report[9:9] = ["## Unresolved compile-validation JARs", "", *[f"- [{finding['classification']}] Missing {finding['jar_kind']} JAR: `{finding['jar']}`" for finding in build["compile_validation"]["findings"]], ""]
+        def _label(finding: dict[str, object]) -> str:
+            return f"Missing {finding['jar_kind']} JAR: `{finding['jar']}`" if "jar" in finding else f"Unregistered {finding['jar_kind']} library: {finding['library_id']!r}"
+        report[9:9] = ["## Unresolved compile-validation JARs", "", *[f"- [{finding['classification']}] {_label(finding)}" for finding in build["compile_validation"]["findings"]], ""]
     (workspace / "MODERNIZATION_REPORT.md").write_text("\n".join(report), encoding="utf-8")
     return result

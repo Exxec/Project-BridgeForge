@@ -16,7 +16,8 @@ from bridgeforge.report import write_artifacts
 from bridgeforge.migrate import apply_plan, build_plan, load_rules
 from bridgeforge.models import TargetProfile
 from bridgeforge.workspace import create_workspace, rollback, workspace_paths
-from bridgeforge.build import compile_feedback, create_build_profile, package_compiled_jar, run_compile
+from bridgeforge.build import compile_feedback, create_build_profile, package_compiled_jar, resolve_registered_dependency_jars, run_compile
+from bridgeforge.library_registry import LibraryRegistryEntry, load_library_registry
 from bridgeforge.review import create_review_bundle
 from bridgeforge.validate import validate_workspace
 from bridgeforge.save_risk import analyze_save_risk
@@ -295,6 +296,102 @@ class ScannerTests(unittest.TestCase):
             self.assertIn(str(missing.resolve()), (workspace / "BUILD_REPORT.md").read_text(encoding="utf-8"))
             self.assertIn(str(missing.resolve()), (workspace / "MODERNIZATION_REPORT.md").read_text(encoding="utf-8"))
             self.assertTrue((workspace / "MODERNIZATION_REPORT.md").is_file())
+
+    def test_library_registry_rejects_invalid_schema_and_missing_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bad_schema = root / "bad-schema.json"
+            bad_schema.write_text(json.dumps({"schema_version": 2, "libraries": {}}), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_library_registry(bad_schema)
+            bad_entry = root / "bad-entry.json"
+            bad_entry.write_text(json.dumps({"schema_version": 1, "libraries": {"lw_lazylib": {}}}), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_library_registry(bad_entry)
+
+    def test_library_registry_loads_valid_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            registry_path = root / "libraries.json"
+            registry_path.write_text(json.dumps({"schema_version": 1, "libraries": {"lw_lazylib": {"path": "C:/lazylib/LazyLib.jar", "note": "LazyLib 3.0.0"}}}), encoding="utf-8")
+            registry = load_library_registry(registry_path)
+            self.assertEqual(registry["lw_lazylib"], LibraryRegistryEntry("lw_lazylib", "C:/lazylib/LazyLib.jar", "LazyLib 3.0.0"))
+
+    def test_resolve_registered_dependency_jars_warns_without_a_registry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "mod_info.json").write_text(json.dumps({"id": "fixture", "gameVersion": "0.98", "dependencies": [{"id": "lw_lazylib", "name": "LazyLib"}]}), encoding="utf-8")
+            resolved, findings = resolve_registered_dependency_jars(source, TargetProfile("0.98", 17), None)
+            self.assertEqual(resolved, [])
+            self.assertEqual(findings[0]["id"], "declared-dependency-unregistered")
+            self.assertIn("no --library-registry was supplied", findings[0]["explanation"])
+
+    def test_resolve_registered_dependency_jars_warns_on_unregistered_id_and_missing_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "mod_info.json").write_text(json.dumps({"id": "fixture", "gameVersion": "0.98", "dependencies": [{"id": "lw_lazylib", "name": "LazyLib"}, {"id": "org_magiclib", "name": "MagicLib"}]}), encoding="utf-8")
+            registry = {"org_magiclib": LibraryRegistryEntry("org_magiclib", str(root / "does-not-exist.jar"))}
+            resolved, findings = resolve_registered_dependency_jars(source, TargetProfile("0.98", 17), registry)
+            self.assertEqual(resolved, [])
+            findings_by_id = {finding["library_id"]: finding for finding in findings}
+            self.assertIn("no entry for it", findings_by_id["lw_lazylib"]["explanation"])
+            self.assertIn("no longer exists on disk", findings_by_id["org_magiclib"]["explanation"])
+
+    def test_resolve_registered_dependency_jars_resolves_a_real_local_jar(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "mod_info.json").write_text(json.dumps({"id": "fixture", "gameVersion": "0.98", "dependencies": [{"id": "lw_lazylib", "name": "LazyLib"}]}), encoding="utf-8")
+            real_jar = root / "LazyLib.jar"
+            with zipfile.ZipFile(real_jar, "w") as archive:
+                archive.writestr("marker.txt", "lazylib")
+            registry = {"lw_lazylib": LibraryRegistryEntry("lw_lazylib", str(real_jar))}
+            resolved, findings = resolve_registered_dependency_jars(source, TargetProfile("0.98", 17), registry)
+            self.assertEqual(resolved, [real_jar])
+            self.assertEqual(findings, [])
+
+    def test_build_profile_auto_resolves_declared_dependency_via_registry(self) -> None:
+        javac = shutil.which("javac")
+        if not javac:
+            self.skipTest("JDK compiler unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            (source / "src").mkdir(parents=True)
+            (source / "mod_info.json").write_text(json.dumps({"id": "fixture", "gameVersion": "0.98", "dependencies": [{"id": "lw_lazylib", "name": "LazyLib"}]}), encoding="utf-8")
+            (source / "src" / "Example.java").write_text("class Example {}", encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            real_jar = root / "LazyLib.jar"
+            with zipfile.ZipFile(real_jar, "w") as archive:
+                archive.writestr("marker.txt", "lazylib")
+            registry = {"lw_lazylib": LibraryRegistryEntry("lw_lazylib", str(real_jar))}
+            profile = create_build_profile(workspace, TargetProfile("0.98", 17), Path(javac).parent.parent, [], [], registry)
+            self.assertEqual(profile.compile_validation["status"], "AVAILABLE")
+            self.assertIn(str(real_jar.resolve()), profile.dependency_jars)
+
+    def test_build_profile_prefers_explicit_dependency_jar_over_registry_without_duplicating(self) -> None:
+        javac = shutil.which("javac")
+        if not javac:
+            self.skipTest("JDK compiler unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            (source / "src").mkdir(parents=True)
+            (source / "mod_info.json").write_text(json.dumps({"id": "fixture", "gameVersion": "0.98", "dependencies": [{"id": "lw_lazylib", "name": "LazyLib"}]}), encoding="utf-8")
+            (source / "src" / "Example.java").write_text("class Example {}", encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            real_jar = root / "LazyLib.jar"
+            with zipfile.ZipFile(real_jar, "w") as archive:
+                archive.writestr("marker.txt", "lazylib")
+            registry = {"lw_lazylib": LibraryRegistryEntry("lw_lazylib", str(real_jar))}
+            profile = create_build_profile(workspace, TargetProfile("0.98", 17), Path(javac).parent.parent, [], [real_jar], registry)
+            self.assertEqual(profile.dependency_jars, [str(real_jar.resolve())])
+            self.assertEqual(profile.compile_validation["status"], "AVAILABLE")
 
     def test_review_bundle_is_bounded_to_planned_working_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
