@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+Work landed since the `v0.1.0-alpha.1` tag; the package version has not yet
+moved past 0.1.0.
+
+- Add a review-gated bytecode inspection, diff, plan, and apply workflow
+  bounded to pinned-ASM class/JAR symbolic remaps written to a separate
+  output copy (`bytecode-inspect`, `bytecode-diff`, `bytecode-plan`,
+  `bytecode-apply`); see `docs/BYTECODE_BOUNDARY.md`.
+- Add read-only ZIP archive intake (`archive-preflight`, `archive-stage`)
+  that reports traversal, symlink, duplicate-member, and mod-root ambiguity
+  evidence before any extraction, and never writes beside the input archive.
+- Add read-only, budget-bounded multi-mod corpus auditing (`corpus-audit`)
+  and two-directory release comparison (`release-evaluate`).
+- Add local, review-only library API inventory/match research tooling
+  (`library-api-inventory`, `library-api-match`) and an opt-in local
+  library registry (`--library-registry`) that auto-resolves a mod's
+  declared dependency IDs to local JARs for compile validation.
+- Add deterministic output-copy JAR packaging after a successful compile
+  (`package-jar`), with an input/output SHA-256 manifest confirming the
+  source JAR was preserved.
+- Bytecode rewriting is therefore no longer an alpha-1 limitation: it is
+  available as a narrow, review-gated remap of exact same-descriptor
+  symbols only. Library API *transformation* and cross-mod dependency
+  graphing remain unimplemented; see the roadmap.
+
 ## 0.1.0 — Alpha 1 — 2026-08-31
 
 First public alpha of the read-only Bridgeforge compatibility workflow.

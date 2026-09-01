@@ -52,6 +52,14 @@ After a successful compile, `package-jar <workspace> <working-copy-relative-jar>
 
 `release-evaluate <before-directory> <after-directory>` compares two explicitly selected releases without modifying either. Its machine-readable report distinguishes byte-identical content continuity and scanner-finding deltas from bytecode and runtime evidence; it never claims behavioral or save compatibility without an explicit runtime test.
 
+## Bytecode inspection and remapping
+
+`bytecode-inspect <class-or-jar>...` reads class-file bytes through pinned ASM 9.7.1 and emits JSON only; it never defines, loads, or executes a mod class. `bytecode-diff <before>... --after <after>...` compares symbolic class inventories, method opcode sequences, instruction/branch counts, and exception-table counts. `bytecode-plan <input>... --rules <rules.json>` produces review-only exact remap candidates. `bytecode-apply <input> --rules <rules.json> --approve <rule-id> --output <path>` applies only explicitly approved, exact same-descriptor method/field or type-opcode remaps to a distinct output copy; a semantic verifier rejects any other class, method, or instruction change, and JAR application also verifies every unselected archive member is byte-for-byte unchanged. See [docs/BYTECODE_BOUNDARY.md](docs/BYTECODE_BOUNDARY.md).
+
+## Orchestration, review, and opportunity reports
+
+`pipeline <workspace>` runs scan, plan, apply, optional bytecode/compile validation, validate, save-risk, and review-bundle in one auditable step and writes `MODERNIZATION_REPORT.md`. `packs [--root <dir>]` lists bundled migration packs with their ID, status, and scope. `review-bundle <workspace>` writes a bounded `findings.json`, an affected-file list, acceptance-criteria and context notes, and copies of the affected working-copy files, for a scoped human/agent review handoff. `inspect <workspace>` prints the workspace's paths, checkpoints, and planned migrations as JSON. `export-patch <workspace> --output <dir>` copies only the migration manifest, plan, and diff into a standalone patch package; it never includes the original mod. `opportunities <workspace>` reports heuristic, review-only library-adoption signals (MagicLib, LunaLib, AshLib, LazyLib) with no automatic change path.
+
 ## Safety
 
 Scanning is read-only with respect to the selected mod directory. Generated artifacts are written only to `--output`.
