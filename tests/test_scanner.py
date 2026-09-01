@@ -16,7 +16,7 @@ from bridgeforge.report import write_artifacts
 from bridgeforge.migrate import apply_plan, build_plan, load_rules
 from bridgeforge.models import TargetProfile
 from bridgeforge.workspace import create_workspace, rollback, workspace_paths
-from bridgeforge.build import compile_feedback, create_build_profile, run_compile
+from bridgeforge.build import compile_feedback, create_build_profile, package_compiled_jar, run_compile
 from bridgeforge.review import create_review_bundle
 from bridgeforge.validate import validate_workspace
 from bridgeforge.save_risk import analyze_save_risk
@@ -399,6 +399,47 @@ class ScannerTests(unittest.TestCase):
             executable.write_text("not executed", encoding="utf-8")
             create_runtime_profile(workspace, executable, [], root, 60)
             self.assertEqual(run_runtime_smoke(workspace)["status"], "NOT_EXECUTED")
+
+    def test_runtime_smoke_can_require_explicit_log_markers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            workspace = create_workspace(source, root / "workspace")
+            create_runtime_profile(workspace, Path(__import__("sys").executable), ["-c", "from pathlib import Path; Path('runtime.log').write_text('READY')"], root, 10, "runtime.log", ["READY"])
+            self.assertEqual(run_runtime_smoke(workspace, execute=True)["status"], "PASS")
+
+    def test_runtime_smoke_fails_when_expected_log_marker_is_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            workspace = create_workspace(source, root / "workspace")
+            create_runtime_profile(workspace, Path(__import__("sys").executable), ["-c", "from pathlib import Path; Path('runtime.log').write_text('READY')"], root, 10, "runtime.log", ["STARTED"])
+            result = run_runtime_smoke(workspace, execute=True)
+            self.assertEqual(result["status"], "FAILED")
+            self.assertEqual(result["log_validation"]["missing_markers"], ["STARTED"])
+
+    def test_package_compiled_jar_writes_output_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            (source / "jar").mkdir(parents=True)
+            (source / "mod_info.json").write_text("{}", encoding="utf-8")
+            with zipfile.ZipFile(source / "jar" / "fixture.jar", "w") as archive:
+                archive.writestr("keep.txt", b"keep")
+            workspace = create_workspace(source, root / "workspace")
+            classes = workspace / "build" / "classes"
+            (classes / "data").mkdir(parents=True)
+            (classes / "data" / "Fixture.class").write_bytes(b"\xca\xfe\xba\xbe\x00\x00\x00\x34")
+            (workspace / "build-result.json").write_text(json.dumps({"success": True}), encoding="utf-8")
+            result = package_compiled_jar(workspace, "jar/fixture.jar")
+            repeat = package_compiled_jar(workspace, "jar/fixture.jar", "repeat.jar")
+            with zipfile.ZipFile(result["output"]) as archive:
+                self.assertEqual(archive.read("keep.txt"), b"keep")
+                self.assertEqual(archive.read("data/Fixture.class"), b"\xca\xfe\xba\xbe\x00\x00\x00\x34")
+            self.assertTrue(result["input_preserved"])
+            self.assertEqual(Path(result["output"]).read_bytes(), Path(repeat["output"]).read_bytes())
 
     def test_synthetic_fixture_corpus_has_declared_expectations(self) -> None:
         fixtures = discover_compatibility_fixtures()

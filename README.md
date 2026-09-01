@@ -32,6 +32,12 @@ Java migration packs can provide a `replace-import` rule. Bridgeforge first pars
 
 `compile` runs only that recorded profile and writes raw output plus classified diagnostics. `compile-feedback` links those diagnostics to already-planned rule candidates and explicitly performs no automatic modification.
 
+After a successful compile, `package-jar <workspace> <working-copy-relative-jar>` creates a deterministic JAR in `package-artifacts/`; it never replaces the input JAR. The accompanying `package-manifest.json` records input/output SHA-256 values and confirms the input was preserved.
+
+## Controlled runtime smoke checks
+
+`runtime-profile` records an opt-in command only. `runtime-smoke` inspects that profile unless `--execute` is supplied explicitly. A profile can constrain validation to a log inside its working directory with `--log-file` and one or more `--expect-log` markers; a zero exit code still fails when an expected marker is absent. This is controlled process/log evidence, not a claim of behavioral or save compatibility.
+
 `validate` verifies the immutable reference, structurally re-scans the working copy, and records runtime validation as unconfigured unless an explicit launch profile exists. `save-risk` compares original and working content for changed persistent-identifier-shaped fields; it is a conservative warning, not proof of save compatibility.
 
 ## Integrity and automation artifacts

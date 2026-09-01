@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shlex
 import subprocess
 import tempfile
+import zipfile
 from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .models import TargetProfile
-from .workspace import workspace_paths
+from .workspace import resolve_inside, workspace_paths
 
 
 @dataclass(frozen=True)
@@ -121,6 +123,49 @@ def run_compile(workspace: Path) -> dict:
     report = ["# Bridgeforge compile report", "", f"- Result: {'PASS' if result['success'] else 'FAILED'}", f"- Exit code: {completed.returncode}", f"- Diagnostics: {len(diagnostics)}", "", "## Scope boundary", "", "Compilation does not prove runtime or behavioral compatibility.", ""]
     (workspace / "BUILD_REPORT.md").write_text("\n".join(report), encoding="utf-8")
     return result
+
+
+def package_compiled_jar(workspace: Path, input_jar: str, output_name: str | None = None) -> dict:
+    """Package successful workspace classes into a new JAR, preserving the input JAR."""
+    workspace = workspace.expanduser().resolve()
+    _, working, _ = workspace_paths(workspace)
+    result_path = workspace / "build-result.json"
+    if not result_path.is_file() or not json.loads(result_path.read_text(encoding="utf-8")).get("success"):
+        raise ValueError("Successful workspace compilation is required before packaging a JAR.")
+    source = resolve_inside(working, input_jar)
+    if source.suffix.lower() != ".jar" or not source.is_file():
+        raise ValueError("Packaging requires an existing working-copy JAR.")
+    classes = workspace / "build" / "classes"
+    class_files = sorted(path for path in classes.rglob("*.class") if path.is_file())
+    if not class_files:
+        raise ValueError("Compilation produced no class files to package.")
+    artifact_directory = workspace / "package-artifacts"
+    output = resolve_inside(artifact_directory, output_name or source.name)
+    if output.resolve() == source:
+        raise ValueError("Packaged JAR output must differ from the working-copy input JAR.")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    input_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
+    replacements = {path.relative_to(classes).as_posix(): path for path in class_files}
+    try:
+        with zipfile.ZipFile(source) as original:
+            original_entries = {info.filename: original.read(info) for info in original.infolist()}
+    except zipfile.BadZipFile as exc:
+        raise ValueError("Packaging requires a readable JAR/ZIP archive.") from exc
+    contents = {
+        name: replacements[name].read_bytes() if name in replacements else data
+        for name, data in original_entries.items()
+    }
+    contents.update({name: path.read_bytes() for name, path in replacements.items()})
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as packaged:
+        for name in sorted(contents):
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.create_system = 3
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = (0o40755 if name.endswith("/") else 0o100644) << 16
+            packaged.writestr(info, contents[name], compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+    manifest = {"schema_version": 1, "mode": "REVIEW_PACKAGED_JAR_OUTPUT_COPY", "input_jar": str(Path(input_jar).as_posix()), "output": str(output), "compiled_class_count": len(class_files), "input_sha256": input_sha256, "output_sha256": hashlib.sha256(output.read_bytes()).hexdigest(), "input_preserved": input_sha256 == hashlib.sha256(source.read_bytes()).hexdigest()}
+    (artifact_directory / "package-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return manifest
 
 
 def compile_feedback(workspace: Path) -> dict:

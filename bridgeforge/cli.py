@@ -11,7 +11,7 @@ from .scanner import scan_mod
 from .migrate import apply_plan, build_plan
 from .workspace import create_workspace, rollback
 from .build import create_build_profile, preview_shell_command
-from .build import compile_feedback, run_compile
+from .build import compile_feedback, package_compiled_jar, run_compile
 from .review import create_review_bundle
 from .validate import validate_workspace
 from .save_risk import analyze_save_risk
@@ -79,6 +79,10 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--dependency-jar", type=Path, action="append", default=[])
     compile_command = subcommands.add_parser("compile", help="run the explicit workspace build profile")
     compile_command.add_argument("workspace", type=Path)
+    package = subcommands.add_parser("package-jar", help="package successful workspace classes into a reviewable JAR output copy")
+    package.add_argument("workspace", type=Path)
+    package.add_argument("input_jar")
+    package.add_argument("--output-name")
     feedback = subcommands.add_parser("compile-feedback", help="link compiler evidence to planned migration candidates")
     feedback.add_argument("workspace", type=Path)
     review = subcommands.add_parser("review-bundle", help="create a bounded human/agent review handoff")
@@ -112,6 +116,8 @@ def build_parser() -> argparse.ArgumentParser:
     runtime.add_argument("--argument", action="append", default=[])
     runtime.add_argument("--working-directory", required=True, type=Path)
     runtime.add_argument("--timeout", type=int, default=60)
+    runtime.add_argument("--log-file")
+    runtime.add_argument("--expect-log", action="append", default=[])
     smoke = subcommands.add_parser("runtime-smoke", help="inspect or explicitly run a runtime profile")
     smoke.add_argument("workspace", type=Path)
     smoke.add_argument("--execute", action="store_true")
@@ -258,6 +264,14 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(f"Compile {'passed' if result['success'] else 'failed'}; diagnostics: {len(result['diagnostics'])}")
         return 0 if result["success"] else 1
+    if args.command == "package-jar":
+        try:
+            result = package_compiled_jar(args.workspace, args.input_jar, args.output_name)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
     if args.command == "compile-feedback":
         try:
             feedback = compile_feedback(args.workspace)
@@ -309,7 +323,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "runtime-profile":
         try:
-            create_runtime_profile(args.workspace, args.executable, args.argument, args.working_directory, args.timeout)
+            create_runtime_profile(args.workspace, args.executable, args.argument, args.working_directory, args.timeout, args.log_file, args.expect_log)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

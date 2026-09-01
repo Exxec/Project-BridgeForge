@@ -4,10 +4,10 @@ import json
 import subprocess
 from pathlib import Path
 
-from .workspace import workspace_paths
+from .workspace import resolve_inside, workspace_paths
 
 
-def create_runtime_profile(workspace: Path, executable: Path, arguments: list[str], working_directory: Path, timeout_seconds: int) -> dict:
+def create_runtime_profile(workspace: Path, executable: Path, arguments: list[str], working_directory: Path, timeout_seconds: int, log_file: str | None = None, required_markers: list[str] | None = None) -> dict:
     workspace = workspace.expanduser().resolve()
     workspace_paths(workspace)
     executable = executable.expanduser().resolve()
@@ -16,7 +16,9 @@ def create_runtime_profile(workspace: Path, executable: Path, arguments: list[st
         raise ValueError("Runtime executable or working directory does not exist.")
     if timeout_seconds <= 0:
         raise ValueError("Runtime timeout must be positive.")
-    profile = {"schema_version": 1, "executable": str(executable), "arguments": arguments, "working_directory": str(working_directory), "timeout_seconds": timeout_seconds, "execution_requires_explicit_flag": True}
+    if log_file is not None:
+        resolve_inside(working_directory, log_file)
+    profile = {"schema_version": 1, "executable": str(executable), "arguments": arguments, "working_directory": str(working_directory), "timeout_seconds": timeout_seconds, "log_file": log_file, "required_markers": required_markers or [], "execution_requires_explicit_flag": True}
     (workspace / "runtime-profile.json").write_text(json.dumps(profile, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return profile
 
@@ -33,7 +35,14 @@ def run_runtime_smoke(workspace: Path, execute: bool = False) -> dict:
     command = [profile["executable"], *profile["arguments"]]
     try:
         completed = subprocess.run(command, cwd=profile["working_directory"], capture_output=True, text=True, timeout=profile["timeout_seconds"], check=False)
-        result = {"status": "PASS" if completed.returncode == 0 else "FAILED", "exit_code": completed.returncode, "stdout": completed.stdout, "stderr": completed.stderr}
+        markers = profile.get("required_markers") or []
+        log_validation = {"status": "NOT_CONFIGURED"}
+        if profile.get("log_file"):
+            log_path = resolve_inside(Path(profile["working_directory"]), profile["log_file"])
+            text = log_path.read_text(encoding="utf-8", errors="replace") if log_path.is_file() else ""
+            missing = [marker for marker in markers if marker not in text]
+            log_validation = {"status": "PASS" if log_path.is_file() and not missing else "FAILED", "log_file": profile["log_file"], "missing_markers": missing}
+        result = {"status": "PASS" if completed.returncode == 0 and log_validation["status"] != "FAILED" else "FAILED", "exit_code": completed.returncode, "stdout": completed.stdout, "stderr": completed.stderr, "log_validation": log_validation}
     except subprocess.TimeoutExpired as exc:
         result = {"status": "TIMED_OUT", "stdout": exc.stdout or "", "stderr": exc.stderr or ""}
     (workspace / "runtime-result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
