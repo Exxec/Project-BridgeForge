@@ -36,6 +36,7 @@ from bridgeforge.corpus_audit import audit_directories
 from bridgeforge.corpus_audit import write_corpus_audit
 from bridgeforge.archive_intake import inspect_zip_archive
 from bridgeforge.library_api import inventory_library_api, match_library_imports
+from bridgeforge.cli import main
 
 
 class ScannerTests(unittest.TestCase):
@@ -75,6 +76,31 @@ class ScannerTests(unittest.TestCase):
             self.assertFalse(result["safe_to_extract"])
             self.assertEqual(result["findings"][0]["id"], "archive-path-traversal")
 
+    def test_zip_preflight_flags_symlinks_and_duplicate_extraction_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "fixture.zip"
+            link = zipfile.ZipInfo("link")
+            link.external_attr = 0o120777 << 16
+            with zipfile.ZipFile(archive, "w") as bundle:
+                bundle.writestr(link, "target")
+                bundle.writestr("nested\\mod_info.json", "{}")
+                bundle.writestr("nested/mod_info.json", "{}")
+            findings = {item["id"] for item in inspect_zip_archive(archive)["findings"]}
+            self.assertEqual(findings, {"archive-symlink-member", "archive-duplicate-member"})
+
+    def test_preflight_and_inventory_cli_never_replace_input_archives(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "fixture.zip"
+            jar = Path(directory) / "fixture.jar"
+            with zipfile.ZipFile(archive, "w") as bundle:
+                bundle.writestr("mod_info.json", "{}")
+            with zipfile.ZipFile(jar, "w") as bundle:
+                bundle.writestr("sample/Api.class", b"\xca\xfe\xba\xbe")
+            self.assertEqual(main(["archive-preflight", str(archive), "--output", str(archive)]), 2)
+            self.assertEqual(main(["library-api-inventory", str(jar), "--output", str(jar)]), 2)
+            self.assertTrue(zipfile.is_zipfile(archive))
+            self.assertTrue(zipfile.is_zipfile(jar))
+
     def test_library_api_inventory_and_match_are_review_only(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -90,6 +116,7 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(inventory["class_count"], 1)
             self.assertEqual(match["unmatched_imports"], [])
             self.assertEqual(match["inventory_namespace"], "org.lazywizard.lazylib")
+            self.assertEqual(match["inventory_packages"], ["org.lazywizard.lazylib"])
             self.assertEqual(match["migration_candidates"][0]["mode"], "RESEARCH_CANDIDATE_ONLY")
     def test_bytecode_inspector_reports_symbolic_references_without_execution(self) -> None:
         if not shutil.which("javac") or not shutil.which("java"):

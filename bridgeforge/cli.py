@@ -200,13 +200,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "archive-preflight":
         try:
             result = inspect_zip_archive(args.archive)
+            archive = args.archive.expanduser().resolve()
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         payload = json.dumps(result, indent=2, sort_keys=True)
         if args.output:
-            args.output.expanduser().resolve().write_text(payload + "\n", encoding="utf-8")
-            print(f"Archive preflight: {args.output.expanduser().resolve()}")
+            output = args.output.expanduser().resolve()
+            if output == archive:
+                print("bridgeforge: Archive preflight output must not replace the input archive.", file=sys.stderr)
+                return 2
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(payload + "\n", encoding="utf-8")
+            print(f"Archive preflight: {output}")
         else:
             print(payload)
         return 0
@@ -218,8 +224,13 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         payload = json.dumps(result, indent=2, sort_keys=True)
         if args.output:
-            args.output.expanduser().resolve().write_text(payload + "\n", encoding="utf-8")
-            print(f"Inventoried {result['class_count']} class symbol(s): {args.output.expanduser().resolve()}")
+            output = args.output.expanduser().resolve()
+            if output == args.jar.expanduser().resolve():
+                print("bridgeforge: Library API inventory output must not replace the input JAR.", file=sys.stderr)
+                return 2
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(payload + "\n", encoding="utf-8")
+            print(f"Inventoried {result['class_count']} class symbol(s): {output}")
         else:
             print(payload)
         return 0
