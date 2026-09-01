@@ -690,6 +690,7 @@ class ScannerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "legacy.json").write_bytes(b'{"name":"\x92legacy"}')
             (root / "legacy.csv").write_bytes(b"id,name\n1,\x92legacy\n")
             (root / "src").mkdir()
             source = "class Duplicate {}"
@@ -703,6 +704,7 @@ class ScannerTests(unittest.TestCase):
                 result = scan_mod(root)
             finally:
                 scanner.LARGE_BUNDLED_JAR_BYTES = prior_limit
+            self.assertTrue(any(finding.id == "json-encoding-unverified" for finding in result.findings))
             self.assertTrue(any(finding.id == "csv-encoding-unverified" for finding in result.findings))
             self.assertTrue(any(finding.id == "duplicate-source-layout" for finding in result.findings))
             self.assertTrue(any(finding.id == "large-bundled-archive" for finding in result.findings))

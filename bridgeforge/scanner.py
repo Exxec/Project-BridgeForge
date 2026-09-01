@@ -145,6 +145,10 @@ def _unverified_json_syntax_finding(result: ScanResult, category: str, file: str
     result.add(id="unverified-json-syntax", category=category, severity="medium", classification="UNKNOWN", confidence="DETERMINISTIC", explanation=f"A strict JSON parser rejected this file ({exc}). This is not proof that the target game parser rejects it; no matching parser-tolerance evidence is available.", file=file)
 
 
+def _json_encoding_finding(result: ScanResult, category: str, file: str, exc: UnicodeDecodeError) -> None:
+    result.add(id="json-encoding-unverified", category=category, severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation=f"JSON could not be decoded as UTF-8 ({exc}). Encoding is separate from JSON structure; verify the target loader before conversion.", file=file)
+
+
 def _scan_metadata(root: Path, result: ScanResult) -> None:
     path = root / "mod_info.json"
     if not path.exists():
@@ -155,6 +159,9 @@ def _scan_metadata(root: Path, result: ScanResult) -> None:
         return
     try:
         metadata_text = path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError as exc:
+        _json_encoding_finding(result, "metadata", "mod_info.json", exc)
+        return
     except OSError as exc:
         result.add(id="unreadable-mod-info", category="metadata", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"mod_info.json could not be read: {exc}", file="mod_info.json")
         return
@@ -266,6 +273,9 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
             continue
         try:
             text = path.read_text(encoding="utf-8-sig")
+        except UnicodeDecodeError as exc:
+            _json_encoding_finding(result, "assets", _relative(root, path), exc)
+            continue
         except OSError as exc:
             result.add(id="unreadable-json", category="assets", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"JSON could not be read: {exc}", file=_relative(root, path))
             continue
