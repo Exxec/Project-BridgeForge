@@ -26,6 +26,7 @@ from .conflicts import detect_conflicts
 from .provenance import write_provenance
 from .corpus import compare_corpus
 from .corpus_audit import audit_directories, write_corpus_audit
+from .library_api import inventory_library_api, match_library_imports
 from .evaluation import evaluate_releases
 from .bytecode import BytecodeUnavailable, inspect_bytecode
 from .bytecode_diff import diff_bytecode
@@ -147,6 +148,15 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_audit.add_argument("--output", required=True, type=Path)
     corpus_audit.add_argument("--target-starsector", default="0.98.x")
     corpus_audit.add_argument("--target-java", type=int, default=17)
+    api_inventory = subcommands.add_parser("library-api-inventory", help="inventory class symbols in a supplied local library JAR")
+    api_inventory.add_argument("jar", type=Path)
+    api_inventory.add_argument("--output", type=Path)
+    api_match = subcommands.add_parser("library-api-match", help="compare a mod's imports with a supplied local library API inventory")
+    api_match.add_argument("mod_directory", type=Path)
+    api_match.add_argument("inventory", type=Path)
+    api_match.add_argument("--target-starsector", default="0.98.x")
+    api_match.add_argument("--target-java", type=int, default=17)
+    api_match.add_argument("--output", type=Path)
     evaluation = subcommands.add_parser("release-evaluate", help="compare two release directories without modifying either")
     evaluation.add_argument("before_directory", type=Path)
     evaluation.add_argument("after_directory", type=Path)
@@ -181,6 +191,41 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(f"Audited {report['mod_count']} mod(s): {output}")
+        return 0
+    if args.command == "library-api-inventory":
+        try:
+            result = inventory_library_api(args.jar)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        payload = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            args.output.expanduser().resolve().write_text(payload + "\n", encoding="utf-8")
+            print(f"Inventoried {result['class_count']} class symbol(s): {args.output.expanduser().resolve()}")
+        else:
+            print(payload)
+        return 0
+    if args.command == "library-api-match":
+        try:
+            inventory = json.loads(args.inventory.expanduser().resolve().read_text(encoding="utf-8"))
+            result = match_library_imports(args.mod_directory, inventory, TargetProfile(args.target_starsector, args.target_java))
+        except (OSError, ValueError, json.JSONDecodeError, KeyError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        payload = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            output = args.output.expanduser().resolve()
+            try:
+                output.relative_to(args.mod_directory.expanduser().resolve())
+            except ValueError:
+                pass
+            else:
+                print("bridgeforge: API match output must not be inside the input mod directory.", file=sys.stderr)
+                return 2
+            output.write_text(payload + "\n", encoding="utf-8")
+            print(f"Reported {len(result['migration_candidates'])} research candidate(s): {output}")
+        else:
+            print(payload)
         return 0
     if args.command == "bytecode-inspect":
         try:
