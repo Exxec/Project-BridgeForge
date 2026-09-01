@@ -254,6 +254,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(f"Build profile: {Path(args.workspace).resolve() / 'build-profile.json'}")
+        if profile.compile_validation["status"] == "UNAVAILABLE":
+            print(f"Compile validation unavailable: {len(profile.compile_validation['findings'])} requested JAR(s) could not be verified.")
         print(preview_shell_command(profile))
         return 0
     if args.command == "compile":
@@ -262,6 +264,9 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
+        if result.get("status") == "UNAVAILABLE":
+            print(f"Compile validation unavailable; findings: {len(result['findings'])}")
+            return 0
         print(f"Compile {'passed' if result['success'] else 'failed'}; diagnostics: {len(result['diagnostics'])}")
         return 0 if result["success"] else 1
     if args.command == "package-jar":

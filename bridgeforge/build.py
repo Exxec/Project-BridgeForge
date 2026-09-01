@@ -32,6 +32,7 @@ class BuildProfile:
     dependency_jars: list[str]
     classes_directory: str
     command_preview: list[str]
+    compile_validation: dict
 
 
 def read_jdk(home: Path | None) -> JdkDescriptor | None:
@@ -60,18 +61,30 @@ def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path 
         if not any(part in excluded_source_directories for part in path.relative_to(working).parts)
     ]
     source_roots = sorted({path.parent for path in source_files})
-    api = [str(path.expanduser().resolve()) for path in api_jars]
-    dependencies = [str(path.expanduser().resolve()) for path in dependency_jars]
-    missing = [path for path in [*api_jars, *dependency_jars] if not path.expanduser().is_file()]
-    if missing:
-        raise ValueError("Selected API/dependency JAR does not exist: " + ", ".join(map(str, missing)))
+    requested_jars = [("api", path) for path in api_jars] + [("dependency", path) for path in dependency_jars]
+    available_jars = [(kind, path.expanduser().resolve()) for kind, path in requested_jars if path.expanduser().is_file()]
+    missing_jars = [(kind, path.expanduser().resolve()) for kind, path in requested_jars if not path.expanduser().is_file()]
+    api = [str(path) for kind, path in available_jars if kind == "api"]
+    dependencies = [str(path) for kind, path in available_jars if kind == "dependency"]
+    findings = [
+        {
+            "id": "compile-validation-unavailable",
+            "classification": "REVIEW",
+            "confidence": "DETERMINISTIC",
+            "jar_kind": kind,
+            "jar": str(path),
+            "explanation": f"The requested {kind} JAR is unavailable, so compile validation cannot verify sources against it. The remaining modernization pipeline will continue without compilation.",
+        }
+        for kind, path in missing_jars
+    ]
+    compile_validation = {"status": "UNAVAILABLE" if findings else "AVAILABLE", "findings": findings}
     classes = workspace / "build" / "classes"
     command = [jdk.javac if jdk and jdk.javac else "<javac-not-configured>", "--release", str(target.java), "-d", str(classes)]
     classpath = [*api, *dependencies]
     if classpath:
         command.extend(["-classpath", __import__("os").pathsep.join(classpath)])
     command.extend(str(source) for source in source_files)
-    profile = BuildProfile(1, target, jdk, [str(path.relative_to(working)).replace("\\", "/") for path in source_roots], api, dependencies, str(classes), command)
+    profile = BuildProfile(1, target, jdk, [str(path.relative_to(working)).replace("\\", "/") for path in source_roots], api, dependencies, str(classes), command, compile_validation)
     (workspace / "build-profile.json").write_text(json.dumps(asdict(profile), indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return profile
 
@@ -95,6 +108,13 @@ def run_compile(workspace: Path) -> dict:
     workspace = workspace.expanduser().resolve()
     _, _, _ = workspace_paths(workspace)
     profile_data = json.loads((workspace / "build-profile.json").read_text(encoding="utf-8"))
+    validation = profile_data.get("compile_validation", {"status": "AVAILABLE", "findings": []})
+    if validation.get("status") == "UNAVAILABLE":
+        result = {"schema_version": 1, "status": "UNAVAILABLE", "success": None, "command": profile_data.get("command_preview", []), "diagnostics": [], "findings": validation.get("findings", []), "reason": "One or more requested compile-validation JARs are unavailable."}
+        (workspace / "build-result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        report = ["# Bridgeforge compile report", "", "- Result: UNAVAILABLE", "- Reason: one or more requested API/dependency JARs are unavailable.", "", "## Scope boundary", "", "Compilation was skipped; this does not prove source, runtime, or behavioral compatibility.", ""]
+        (workspace / "BUILD_REPORT.md").write_text("\n".join(report), encoding="utf-8")
+        return result
     jdk = profile_data.get("jdk") or {}
     javac = jdk.get("javac")
     if not javac or not Path(javac).is_file():
@@ -188,7 +208,7 @@ def compile_feedback(workspace: Path) -> dict:
         candidates = [migration["rule_id"] for migration in plan["migrations"] if file_hint and migration["file"].endswith(file_hint)]
         feedback.append({"diagnostic": diagnostic, "planned_rule_candidates": candidates, "automatic_modification": "not performed"})
     summary = Counter(item["diagnostic"]["classification"] for item in feedback)
-    artifact = {"schema_version": 1, "compile_success": result["success"], "findings": feedback, "classification_counts": dict(summary)}
+    artifact = {"schema_version": 1, "compile_status": result.get("status", "PASS" if result["success"] else "FAILED"), "compile_success": result["success"], "findings": feedback, "validation_findings": result.get("findings", []), "classification_counts": dict(summary)}
     (workspace / "compile-feedback.json").write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     lines = ["# Bridgeforge compile feedback", "", f"- Compile result: {'PASS' if result['success'] else 'FAILED'}", f"- Feedback findings: {len(feedback)}", ""]
     for item in feedback:

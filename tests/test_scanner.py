@@ -273,6 +273,27 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(len(feedback["findings"]), len(result["diagnostics"]))
             self.assertTrue((workspace / "COMPILE_FEEDBACK.md").is_file())
 
+    def test_missing_compile_library_keeps_pipeline_running_as_unavailable(self) -> None:
+        javac = shutil.which("javac")
+        if not javac:
+            self.skipTest("JDK compiler unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            (source / "src").mkdir(parents=True)
+            (source / "mod_info.json").write_text(json.dumps({"id": "fixture", "gameVersion": "0.98"}), encoding="utf-8")
+            (source / "src" / "Example.java").write_text("class Example {}", encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+            missing = root / "missing-lazylib.jar"
+            profile = create_build_profile(workspace, TargetProfile("0.98", 17), Path(javac).parent.parent, [], [missing])
+            self.assertEqual(profile.compile_validation["status"], "UNAVAILABLE")
+            self.assertEqual(profile.compile_validation["findings"][0]["id"], "compile-validation-unavailable")
+            result = run_pipeline(workspace, TargetProfile("0.98", 17), jdk=Path(javac).parent.parent, dependency_jars=[missing], compile_requested=True)
+            self.assertEqual(result["compile_status"], "UNAVAILABLE")
+            self.assertIsNone(result["compile"])
+            self.assertEqual(result["compile_validation"]["findings"][0]["jar"], str(missing.resolve()))
+            self.assertTrue((workspace / "MODERNIZATION_REPORT.md").is_file())
+
     def test_review_bundle_is_bounded_to_planned_working_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

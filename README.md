@@ -30,7 +30,7 @@ Java migration packs can provide a `replace-import` rule. Bridgeforge first pars
 
 `build-plan` records a selected JDK (using its `release` metadata), Java target, API/dependency JARs, discovered source roots, and an exact `javac` preview. It does not compile; that remains a separately controlled step.
 
-`compile` runs only that recorded profile and writes raw output plus classified diagnostics. `compile-feedback` links those diagnostics to already-planned rule candidates and explicitly performs no automatic modification.
+`compile` runs only that recorded profile and writes raw output plus classified diagnostics. If a requested API or dependency JAR is missing, `build-plan` records deterministic `compile-validation-unavailable` review findings instead of aborting; `compile` then records `UNAVAILABLE` and the pipeline continues without making a compile-compatibility claim. `compile-feedback` links available diagnostics to already-planned rule candidates and explicitly performs no automatic modification.
 
 After a successful compile, `package-jar <workspace> <working-copy-relative-jar>` creates a deterministic JAR in `package-artifacts/`; it never replaces the input JAR. The accompanying `package-manifest.json` records input/output SHA-256 values and confirms the input was preserved.
 
