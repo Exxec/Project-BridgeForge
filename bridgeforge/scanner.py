@@ -26,6 +26,7 @@ LIBRARY_PATTERNS = {
     "Kotlin runtime": re.compile(r"kotlin-(stdlib|reflect)|kotlinx-coroutines", re.I),
     "Gson": re.compile(r"gson", re.I),
 }
+LIBRARY_PACKAGES = {"LazyLib": "org.lazywizard.lazylib", "MagicLib": "org.magiclib"}
 LEGACY_API_RULES = {
     "com.fs.starfarer.api.util.Misc.getHyperspaceTerrain": (
         "legacy-api-hyperspace-terrain",
@@ -206,9 +207,14 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
                         continue
                     if item.filename.endswith(".class"):
                         with archive.open(item) as class_file:
-                            header = class_file.read(8)
+                            class_bytes = class_file.read()
+                        header = class_bytes[:8]
                         if header[:4] == b"\xca\xfe\xba\xbe" and len(header) == 8:
                             majors.add(int.from_bytes(header[6:8], "big"))
+                            result.compiled_class_names.add(item.filename[:-6].replace("/", ".").replace("\\", "."))
+                            for library, prefix in LIBRARY_PACKAGES.items():
+                                if prefix.replace(".", "/").encode() in class_bytes:
+                                    result.bytecode_library_references.add(library)
                 entry["class_file_majors"] = sorted(majors)
                 entry["java_levels"] = sorted({_java_for_major(major) for major in majors})
         except (OSError, zipfile.BadZipFile) as exc:
@@ -284,6 +290,48 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
             result.add(id="invalid-csv", category="assets", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"CSV could not be read: {exc}", file=_relative(root, path))
 
 
+def _source_class_names(root: Path) -> set[str]:
+    names: set[str] = set()
+    for path in root.rglob("*.java"):
+        if "disabled_files" in path.relative_to(root).parts:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        package = re.search(r"^\s*package\s+([\w.]+)\s*;", text, re.M)
+        declared = re.search(r"\b(?:public\s+)?(?:class|interface|enum)\s+(\w+)", text)
+        if package and declared:
+            names.add(f"{package.group(1)}.{declared.group(1)}")
+    return names
+
+
+def _scan_configured_class_integrity(root: Path, result: ScanResult) -> None:
+    local_classes = _source_class_names(root)
+    references: set[str] = set()
+    for path in root.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in {".csv", ".json", ".faction", ".ship", ".variant", ".system"}:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        references.update(re.findall(r"\bdata(?:\.[A-Za-z_$][\w$]*)+", text))
+    missing = sorted(local_classes & references - result.compiled_class_names)
+    if missing:
+        result.add(id="configured-source-class-missing-from-jar", category="bytecode", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation="Mod data references local source classes that are absent from every scanned JAR. Compile/package the active sources before runtime testing.", evidence=missing)
+
+
+def _attribute_library_usage(result: ScanResult) -> None:
+    dependencies = " ".join(map(str, result.metadata.get("dependencies") or result.metadata.get("requiredDependencies") or [])).lower()
+    calls = [fact.get("value", "") for fact in result.source_facts if fact.get("kind") == "method_invocation"]
+    for library, prefix in LIBRARY_PACKAGES.items():
+        imports = [item for item in result.imports if item.startswith(prefix)]
+        simple_names = {item.rsplit(".", 1)[-1] for item in imports if not item.endswith(".*")}
+        source_calls = [call for call in calls if call.split(".", 1)[0] in simple_names]
+        bundled = any(LIBRARY_PATTERNS[library].search(str(item.get("path", ""))) for item in result.jars)
+        declared = library.lower() in dependencies or library.replace("Lib", "").lower() in dependencies
+        bytecode_referenced = library in result.bytecode_library_references
+        if declared or bundled or imports:
+            result.library_usage.append({"library": library, "declared": declared, "bundled": bundled, "imported": bool(imports), "source_called": bool(source_calls), "bytecode_referenced": bytecode_referenced, "evidence": {"imports": imports, "source_calls": source_calls}})
+            if declared and not bundled and not imports:
+                result.add(id="declared-library-unreferenced", category="dependencies", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="A declared library has no bundled, import, or source-call evidence. Confirm whether it is required before removing or changing it.", evidence=[library])
+
+
 def _infer_environment(result: ScanResult) -> None:
     majors = [major for jar in result.jars for major in jar.get("class_file_majors", [])]
     if majors:
@@ -306,5 +354,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None) -> ScanResul
     _scan_jars(root, result)
     _scan_sources(root, result)
     _scan_assets(root, result)
+    _scan_configured_class_integrity(root, result)
+    _attribute_library_usage(result)
     _infer_environment(result)
     return result

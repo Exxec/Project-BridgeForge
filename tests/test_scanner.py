@@ -104,6 +104,24 @@ class ScannerTests(unittest.TestCase):
             self.assertTrue(any(f.id == "internal-jvm-api" for f in result.findings))
             self.assertTrue(any(f.id == "unverified-json-syntax" for f in result.findings))
 
+    def test_scanner_reports_missing_configured_classes_and_library_usage_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text(json.dumps({"id": "fixture", "dependencies": ["LazyLib"]}), encoding="utf-8")
+            (root / "data" / "hullmods").mkdir(parents=True)
+            (root / "data" / "hullmods" / "Local.java").write_text("package data.hullmods; import org.lazywizard.lazylib.MathUtils; public class Local { void x() { MathUtils.getRandomNumberInRange(1, 2); } }", encoding="utf-8")
+            (root / "data" / "hullmods" / "hull_mods.csv").write_text("script\ndata.hullmods.Local\n", encoding="utf-8")
+            with zipfile.ZipFile(root / "fixture.jar", "w") as archive:
+                archive.writestr("Example.class", b"\xca\xfe\xba\xbe\x00\x00\x00\x34org/lazywizard/lazylib")
+            result = scan_mod(root)
+            missing = next(finding for finding in result.findings if finding.id == "configured-source-class-missing-from-jar")
+            self.assertEqual(missing.evidence, ["data.hullmods.Local"])
+            lazy = next(item for item in result.library_usage if item["library"] == "LazyLib")
+            self.assertTrue(lazy["declared"])
+            self.assertTrue(lazy["imported"])
+            self.assertTrue(lazy["source_called"])
+            self.assertTrue(lazy["bytecode_referenced"])
+
     def test_ast_source_analysis_collects_method_invocations(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

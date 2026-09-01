@@ -31,6 +31,9 @@ class ScanResult:
     files: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     jars: list[dict[str, Any]] = field(default_factory=list)
+    compiled_class_names: set[str] = field(default_factory=set)
+    bytecode_library_references: set[str] = field(default_factory=set)
+    library_usage: list[dict[str, Any]] = field(default_factory=list)
     imports: list[str] = field(default_factory=list)
     source_facts: list[dict[str, Any]] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
@@ -55,6 +58,7 @@ class ScanResult:
             },
             "inventory": self.files,
             "jars": self.jars,
+            "library_usage": self.library_usage,
             "imports": self.imports,
             "source_facts": self.source_facts,
             "findings": [asdict(finding) for finding in self.findings],
