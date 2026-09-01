@@ -32,6 +32,7 @@ class BuildProfile:
     source_roots: list[str]
     api_jars: list[str]
     dependency_jars: list[str]
+    dependency_provenance: list[dict[str, str]]
     classes_directory: str
     command_preview: list[str]
     compile_validation: dict
@@ -99,6 +100,24 @@ def resolve_registered_dependency_jars(working: Path, target: TargetProfile, reg
     return resolved, findings
 
 
+def _classpath_ambiguity_findings(jars: list[Path]) -> list[dict[str, object]]:
+    owners: dict[str, list[str]] = {}
+    findings: list[dict[str, object]] = []
+    for jar in jars:
+        try:
+            with zipfile.ZipFile(jar) as archive:
+                for entry in archive.namelist():
+                    if entry.endswith(".class"):
+                        owners.setdefault(entry, []).append(str(jar))
+        except zipfile.BadZipFile:
+            findings.append({"id": "compile-classpath-jar-unreadable", "classification": "REVIEW", "confidence": "DETERMINISTIC", "jar_kind": "classpath", "jar": str(jar), "explanation": "This selected compile classpath entry is not a readable JAR/ZIP archive. Compilation may be incomplete or fail."})
+    for class_name, class_owners in sorted(owners.items()):
+        unique_owners = sorted(set(class_owners))
+        if len(unique_owners) > 1:
+            findings.append({"id": "compile-classpath-duplicate-class", "classification": "REVIEW", "confidence": "DETERMINISTIC", "class": class_name, "jars": unique_owners, "explanation": "Multiple selected compile classpath JARs provide this class. Compile results may depend on classpath order; resolve ownership before treating them as compatibility proof."})
+    return findings
+
+
 def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path | None, api_jars: list[Path], dependency_jars: list[Path], library_registry: dict[str, LibraryRegistryEntry] | None = None) -> BuildProfile:
     workspace = workspace.expanduser().resolve()
     _, working, _ = workspace_paths(workspace)
@@ -117,7 +136,8 @@ def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path 
     missing_jars = [(kind, path.expanduser().resolve()) for kind, path in requested_jars if not path.expanduser().is_file()]
     api = [str(path) for kind, path in available_jars if kind == "api"]
     dependencies = [str(path) for kind, path in available_jars if kind == "dependency"]
-    findings = [
+    dependency_provenance = [{"jar": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for kind, path in available_jars if kind == "dependency"]
+    unavailable_findings = [
         {
             "id": "compile-validation-unavailable",
             "classification": "REVIEW",
@@ -128,14 +148,15 @@ def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path 
         }
         for kind, path in missing_jars
     ] + registry_findings
-    compile_validation = {"status": "UNAVAILABLE" if findings else "AVAILABLE", "findings": findings}
+    findings = unavailable_findings + _classpath_ambiguity_findings([path for _, path in available_jars])
+    compile_validation = {"status": "UNAVAILABLE" if unavailable_findings else "AVAILABLE", "findings": findings}
     classes = workspace / "build" / "classes"
     command = [jdk.javac if jdk and jdk.javac else "<javac-not-configured>", "--release", str(target.java), "-d", str(classes)]
     classpath = [*api, *dependencies]
     if classpath:
         command.extend(["-classpath", __import__("os").pathsep.join(classpath)])
     command.extend(str(source) for source in source_files)
-    profile = BuildProfile(1, target, jdk, [str(path.relative_to(working)).replace("\\", "/") for path in source_roots], api, dependencies, str(classes), command, compile_validation)
+    profile = BuildProfile(1, target, jdk, [str(path.relative_to(working)).replace("\\", "/") for path in source_roots], api, dependencies, dependency_provenance, str(classes), command, compile_validation)
     (workspace / "build-profile.json").write_text(json.dumps(asdict(profile), indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return profile
 

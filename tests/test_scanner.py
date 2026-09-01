@@ -427,6 +427,24 @@ class ScannerTests(unittest.TestCase):
             registry = {"lw_lazylib": LibraryRegistryEntry("lw_lazylib", str(real_jar))}
             profile = create_build_profile(workspace, TargetProfile("0.98", 17), Path(javac).parent.parent, [], [real_jar], registry)
             self.assertEqual(profile.dependency_jars, [str(real_jar.resolve())])
+
+    def test_build_profile_reports_duplicate_compile_classpath_classes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "mod_info.json").write_text("{}", encoding="utf-8")
+            first, second = root / "first.jar", root / "second.jar"
+            for jar in (first, second):
+                with zipfile.ZipFile(jar, "w") as archive:
+                    archive.writestr("shared/Thing.class", b"\xca\xfe\xba\xbe")
+            workspace = create_workspace(source, root / "workspace")
+            profile = create_build_profile(workspace, TargetProfile("0.98", 17), None, [first], [second])
+            finding = next(item for item in profile.compile_validation["findings"] if item["id"] == "compile-classpath-duplicate-class")
+            self.assertEqual(profile.compile_validation["status"], "AVAILABLE")
+            self.assertEqual(finding["class"], "shared/Thing.class")
+            self.assertEqual(profile.dependency_provenance[0]["jar"], str(second.resolve()))
+            self.assertEqual(len(profile.dependency_provenance[0]["sha256"]), 64)
             self.assertEqual(profile.compile_validation["status"], "AVAILABLE")
 
     def test_review_bundle_is_bounded_to_planned_working_files(self) -> None:
