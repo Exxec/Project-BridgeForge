@@ -110,7 +110,7 @@ class ScannerTests(unittest.TestCase):
             self.assertTrue(report["safe_to_stage"])
             self.assertEqual(report["candidate_mod_roots"], ["Wrapper"])
             self.assertIn("archive-wrapper-directory-layout", {item["id"] for item in report["findings"]})
-            self.assertEqual(stage_zip_archive(archive, staged), staged)
+            self.assertEqual(stage_zip_archive(archive, staged), staged.resolve())
             self.assertEqual((staged / "Wrapper" / "data" / "value.txt").read_text(encoding="utf-8"), "ok")
             with self.assertRaises(ValueError):
                 stage_zip_archive(archive, staged)
