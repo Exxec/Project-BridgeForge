@@ -25,7 +25,9 @@ def _source_layout(inventory: list[dict], finding_counts: Counter) -> dict:
 def audit_directories(mod_directories: list[Path], target: TargetProfile, continue_on_error: bool = False) -> dict:
     """Create a deterministic, read-only compatibility summary for explicit mod roots."""
     rows = []
-    for directory in sorted((path.expanduser().resolve() for path in mod_directories), key=lambda path: path.name.casefold()):
+    requested = [path.expanduser().resolve() for path in mod_directories]
+    directories = sorted(dict.fromkeys(requested), key=lambda path: path.name.casefold())
+    for directory in directories:
         if not directory.is_dir():
             if continue_on_error:
                 rows.append({"mod": directory.name, "audit_status": "UNAVAILABLE", "error": "Input directory does not exist."})
@@ -36,11 +38,12 @@ def audit_directories(mod_directories: list[Path], target: TargetProfile, contin
         except (OSError, ValueError) as exc:
             if not continue_on_error:
                 raise
-            rows.append({"mod": directory.name, "audit_status": "UNAVAILABLE", "error": str(exc)})
+            rows.append({"mod": directory.name, "audit_status": "UNAVAILABLE", "error": f"Scan unavailable ({type(exc).__name__})."})
             continue
         finding_counts = Counter(finding.id for finding in result.findings)
         rows.append({
             "mod": directory.name,
+            "audit_status": "AVAILABLE",
             "metadata_parse_mode": result.metadata_parse_mode,
             "declared_starsector": result.declared_starsector,
             "estimated_starsector": result.estimated_starsector,
@@ -58,6 +61,7 @@ def audit_directories(mod_directories: list[Path], target: TargetProfile, contin
         "mode": "READ_ONLY_CORPUS_AUDIT",
         "target": asdict(target),
         "mod_count": len(rows),
+        "duplicate_input_count": len(requested) - len(directories),
         "unavailable_mod_count": sum(row.get("audit_status") == "UNAVAILABLE" for row in rows),
         "finding_counts": dict(sorted(aggregate.items())),
         "mods": rows,

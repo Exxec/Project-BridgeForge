@@ -1,9 +1,12 @@
 import json
+import io
 import tempfile
 import unittest
+import warnings
 import zipfile
 import shutil
 import subprocess
+from contextlib import redirect_stderr
 from unittest.mock import patch
 from pathlib import Path
 
@@ -52,9 +55,11 @@ class ScannerTests(unittest.TestCase):
             (beta / "disabled_files" / "Old.java").write_text("class Old {}", encoding="utf-8")
             (beta / "jars" / "sources").mkdir(parents=True)
             (beta / "jars" / "sources" / "Bundled.java").write_text("class Bundled {}", encoding="utf-8")
-            report = audit_directories([beta, alpha], TargetProfile("0.98", 17))
+            report = audit_directories([beta, alpha, alpha], TargetProfile("0.98", 17))
             self.assertEqual(report["mode"], "READ_ONLY_CORPUS_AUDIT")
             self.assertEqual([row["mod"] for row in report["mods"]], ["Alpha", "Beta"])
+            self.assertEqual(report["duplicate_input_count"], 1)
+            self.assertEqual(report["mods"][0]["audit_status"], "AVAILABLE")
             self.assertEqual(report["finding_counts"]["non-strict-json-trailing-comma"], 1)
             beta_row = next(row for row in report["mods"] if row["mod"] == "Beta")
             self.assertEqual(beta_row["source_layout"]["disabled_java_file_count"], 1)
@@ -81,10 +86,12 @@ class ScannerTests(unittest.TestCase):
             archive = Path(directory) / "fixture.zip"
             link = zipfile.ZipInfo("link")
             link.external_attr = 0o120777 << 16
-            with zipfile.ZipFile(archive, "w") as bundle:
-                bundle.writestr(link, "target")
-                bundle.writestr("nested\\mod_info.json", "{}")
-                bundle.writestr("nested/mod_info.json", "{}")
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                with zipfile.ZipFile(archive, "w") as bundle:
+                    bundle.writestr(link, "target")
+                    bundle.writestr("nested\\mod_info.json", "{}")
+                    bundle.writestr("nested/mod_info.json", "{}")
             findings = {item["id"] for item in inspect_zip_archive(archive)["findings"]}
             self.assertEqual(findings, {"archive-symlink-member", "archive-duplicate-member"})
 
@@ -96,8 +103,9 @@ class ScannerTests(unittest.TestCase):
                 bundle.writestr("mod_info.json", "{}")
             with zipfile.ZipFile(jar, "w") as bundle:
                 bundle.writestr("sample/Api.class", b"\xca\xfe\xba\xbe")
-            self.assertEqual(main(["archive-preflight", str(archive), "--output", str(archive)]), 2)
-            self.assertEqual(main(["library-api-inventory", str(jar), "--output", str(jar)]), 2)
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["archive-preflight", str(archive), "--output", str(archive)]), 2)
+                self.assertEqual(main(["library-api-inventory", str(jar), "--output", str(jar)]), 2)
             self.assertTrue(zipfile.is_zipfile(archive))
             self.assertTrue(zipfile.is_zipfile(jar))
 
