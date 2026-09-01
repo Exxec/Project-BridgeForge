@@ -22,7 +22,7 @@ def _source_layout(inventory: list[dict], finding_counts: Counter) -> dict:
     }
 
 
-def audit_directories(mod_directories: list[Path], target: TargetProfile, continue_on_error: bool = False) -> dict:
+def audit_directories(mod_directories: list[Path], target: TargetProfile, continue_on_error: bool = False, max_files_per_mod: int | None = None, max_jars_per_mod: int | None = None) -> dict:
     """Create a deterministic, read-only compatibility summary for explicit mod roots."""
     rows = []
     requested = [path.expanduser().resolve() for path in mod_directories]
@@ -33,6 +33,12 @@ def audit_directories(mod_directories: list[Path], target: TargetProfile, contin
                 rows.append({"mod": directory.name, "audit_status": "UNAVAILABLE", "error": "Input directory does not exist."})
                 continue
             raise ValueError(f"Corpus mod directory does not exist: {directory}")
+        file_count = sum(1 for path in directory.rglob("*") if path.is_file())
+        jar_count = sum(1 for path in directory.rglob("*.jar") if path.is_file())
+        if ((max_files_per_mod is not None and file_count > max_files_per_mod) or
+                (max_jars_per_mod is not None and jar_count > max_jars_per_mod)):
+            rows.append({"mod": directory.name, "audit_status": "SKIPPED_BUDGET", "file_count": file_count, "jar_count": jar_count, "budget": {"max_files_per_mod": max_files_per_mod, "max_jars_per_mod": max_jars_per_mod}, "error": "Input exceeds the declared corpus budget; it was not scanned."})
+            continue
         try:
             result = scan_mod(directory, target)
         except (OSError, ValueError) as exc:
@@ -63,6 +69,7 @@ def audit_directories(mod_directories: list[Path], target: TargetProfile, contin
         "mod_count": len(rows),
         "duplicate_input_count": len(requested) - len(directories),
         "unavailable_mod_count": sum(row.get("audit_status") == "UNAVAILABLE" for row in rows),
+        "skipped_budget_mod_count": sum(row.get("audit_status") == "SKIPPED_BUDGET" for row in rows),
         "finding_counts": dict(sorted(aggregate.items())),
         "mods": rows,
     }

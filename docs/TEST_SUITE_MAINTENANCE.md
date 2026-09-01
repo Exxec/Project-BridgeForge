@@ -1,15 +1,17 @@
 # Test-suite maintenance threshold
 
-`tests/test_scanner.py` currently contains 35 tests across scanner, workspace,
-migration, AST, build, pack, conflict, save-risk, provenance, and pipeline
-concerns. It is deliberately retained as one file for now: the tests share
-small local fixture helpers and the current review/edit cost remains low.
+The suite is separated by concern so a failure is visible in its domain:
 
-Split it into the roadmap's named modules when one of these conditions is
+- `test_scanner.py`: intake, scanner evidence, archives, corpus, and API inventory;
+- `test_workspace.py`, `test_migrations.py`, and `test_java_ast.py`;
+- `test_build.py`, `test_packs.py`, `test_conflicts.py`, and `test_save_risk.py`;
+- `test_provenance.py` and `test_pipeline.py`.
+
+Keep individual modules focused, and split one further when either condition is
 observed:
 
 - the file exceeds 50 KiB or 700 lines;
 - a change regularly requires editing unrelated test domains; or
-- failures are difficult to locate because of the mixed layout.
+- failures are difficult to locate because of a mixed layout.
 
 The split is hygiene only and does not block reliability or product work.

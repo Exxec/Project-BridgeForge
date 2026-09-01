@@ -46,6 +46,10 @@ After a successful compile, `package-jar <workspace> <working-copy-relative-jar>
 
 `corpus-compare <mod-directory> --baseline <baseline.json>` is an explicit local-only comparison against a sanitized baseline. It reports fingerprint and finding mismatches as JSON and neither stores the selected path nor copies mod content into the repository. See [docs/JSON_COMPATIBILITY_POLICY.md](docs/JSON_COMPATIBILITY_POLICY.md) for the verified trailing-comma JSON policy and [docs/MIGRATION_PACK_CONTRACT.md](docs/MIGRATION_PACK_CONTRACT.md) for the evidence required before a library migration rule can load.
 
+`archive-preflight <archive.zip>` inspects ZIP metadata without extracting it. It reports traversal, symlink, duplicate-member, wrapper-layout, and mod-root ambiguity evidence. `archive-stage <archive.zip> --output <empty-directory>` extracts only an archive whose preflight has no extraction hazards; it never writes beside or replaces the supplied archive. `corpus-audit` accepts `--max-files-per-mod` and `--max-jars-per-mod` to skip oversized inputs deterministically rather than making partial compatibility claims.
+
+`library-api-inventory <library.jar> --library-id <id> --library-version <version>` records a supplied library identity alongside its class inventory. Without explicit identity/version evidence, `library-api-match` reports that assessment as unverified; wildcard imports, reflection, and bytecode-only references remain review findings rather than missing-API claims.
+
 `release-evaluate <before-directory> <after-directory>` compares two explicitly selected releases without modifying either. Its machine-readable report distinguishes byte-identical content continuity and scanner-finding deltas from bytecode and runtime evidence; it never claims behavioral or save compatibility without an explicit runtime test.
 
 ## Safety

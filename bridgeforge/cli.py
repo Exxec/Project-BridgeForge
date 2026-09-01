@@ -27,7 +27,7 @@ from .provenance import write_provenance
 from .corpus import compare_corpus
 from .corpus_audit import audit_directories, write_corpus_audit
 from .library_api import inventory_library_api, match_library_imports
-from .archive_intake import inspect_zip_archive
+from .archive_intake import inspect_zip_archive, stage_zip_archive
 from .evaluation import evaluate_releases
 from .bytecode import BytecodeUnavailable, inspect_bytecode
 from .bytecode_diff import diff_bytecode
@@ -150,12 +150,19 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_audit.add_argument("--target-starsector", default="0.98.x")
     corpus_audit.add_argument("--target-java", type=int, default=17)
     corpus_audit.add_argument("--continue-on-error", action="store_true")
+    corpus_audit.add_argument("--max-files-per-mod", type=int)
+    corpus_audit.add_argument("--max-jars-per-mod", type=int)
     archive_preflight = subcommands.add_parser("archive-preflight", help="inspect a ZIP archive without extracting it")
     archive_preflight.add_argument("archive", type=Path)
     archive_preflight.add_argument("--output", type=Path)
+    archive_stage = subcommands.add_parser("archive-stage", help="extract a preflight-safe ZIP into a new explicit destination")
+    archive_stage.add_argument("archive", type=Path)
+    archive_stage.add_argument("--output", required=True, type=Path)
     api_inventory = subcommands.add_parser("library-api-inventory", help="inventory class symbols in a supplied local library JAR")
     api_inventory.add_argument("jar", type=Path)
     api_inventory.add_argument("--output", type=Path)
+    api_inventory.add_argument("--library-id")
+    api_inventory.add_argument("--library-version")
     api_match = subcommands.add_parser("library-api-match", help="compare a mod's imports with a supplied local library API inventory")
     api_match.add_argument("mod_directory", type=Path)
     api_match.add_argument("inventory", type=Path)
@@ -190,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "corpus-audit":
         try:
-            report = audit_directories(args.mod_directories, TargetProfile(args.target_starsector, args.target_java), args.continue_on_error)
+            report = audit_directories(args.mod_directories, TargetProfile(args.target_starsector, args.target_java), args.continue_on_error, args.max_files_per_mod, args.max_jars_per_mod)
             output = write_corpus_audit(report, args.output, args.mod_directories)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
@@ -216,9 +223,17 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(payload)
         return 0
+    if args.command == "archive-stage":
+        try:
+            destination = stage_zip_archive(args.archive, args.output)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Staged archive to: {destination}")
+        return 0
     if args.command == "library-api-inventory":
         try:
-            result = inventory_library_api(args.jar)
+            result = inventory_library_api(args.jar, args.library_id, args.library_version)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

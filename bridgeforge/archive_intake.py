@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 from pathlib import PurePosixPath
 import re
+import shutil
 import stat
 
 
@@ -20,7 +21,7 @@ def _normalized_member_name(name: str) -> str | None:
 
 
 def inspect_zip_archive(path: Path, max_entries: int = 20_000, max_uncompressed_bytes: int = 800 * 1024 * 1024) -> dict:
-    """Read ZIP metadata only; reject unsafe members before any extraction workflow."""
+    """Read ZIP metadata only; identify extraction hazards and mod-root ambiguity."""
     path = path.expanduser().resolve()
     if not path.is_file() or path.suffix.lower() != ".zip":
         raise ValueError(f"Archive is not a readable ZIP file: {path}")
@@ -30,11 +31,12 @@ def inspect_zip_archive(path: Path, max_entries: int = 20_000, max_uncompressed_
     except zipfile.BadZipFile as exc:
         raise ValueError(f"Archive is not a readable ZIP file: {path}") from exc
     total = sum(entry.file_size for entry in entries)
-    unsafe = sorted(entry.filename for entry in entries if _normalized_member_name(entry.filename) is None)
-    symlinks = sorted(entry.filename for entry in entries if stat.S_ISLNK(entry.external_attr >> 16))
     normalized = [_normalized_member_name(entry.filename) for entry in entries]
+    unsafe = sorted(entry.filename for entry, name in zip(entries, normalized) if name is None)
+    symlinks = sorted(entry.filename for entry in entries if stat.S_ISLNK(entry.external_attr >> 16))
     duplicates = sorted(name for name, count in Counter(name for name in normalized if name).items() if count > 1)
-    mod_info = sorted(entry.filename for entry in entries if Path(entry.filename).name == "mod_info.json")
+    mod_info = sorted(name for name in normalized if name and PurePosixPath(name).name == "mod_info.json")
+    roots = sorted({str(PurePosixPath(name).parent) if str(PurePosixPath(name).parent) != "." else "." for name in mod_info})
     findings = []
     if len(entries) > max_entries:
         findings.append({"id": "archive-entry-limit", "classification": "REVIEW", "count": len(entries), "limit": max_entries})
@@ -46,4 +48,36 @@ def inspect_zip_archive(path: Path, max_entries: int = 20_000, max_uncompressed_
         findings.append({"id": "archive-symlink-member", "classification": "MANUAL", "entries": symlinks})
     if duplicates:
         findings.append({"id": "archive-duplicate-member", "classification": "REVIEW", "entries": duplicates})
-    return {"schema_version": 1, "mode": "ZIP_PREFLIGHT_ONLY", "archive": path.name, "entry_count": len(entries), "uncompressed_bytes": total, "mod_info_entries": mod_info, "findings": findings, "safe_to_extract": not findings}
+    if not mod_info:
+        findings.append({"id": "archive-no-mod-info", "classification": "REVIEW", "explanation": "No mod_info.json member was found; extraction may not yield a selectable mod root."})
+    elif len(mod_info) > 1:
+        findings.append({"id": "archive-multiple-mod-info", "classification": "MANUAL", "entries": mod_info, "explanation": "Multiple candidate mod roots require explicit ownership selection."})
+    elif roots != ["."]:
+        findings.append({"id": "archive-wrapper-directory-layout", "classification": "REVIEW", "mod_root": roots[0], "explanation": "The archive has one wrapper directory; select the nested mod root after staging."})
+    blocking_ids = {"archive-entry-limit", "archive-size-limit", "archive-path-traversal", "archive-symlink-member", "archive-duplicate-member"}
+    safe_to_stage = not any(item["id"] in blocking_ids for item in findings)
+    return {"schema_version": 1, "mode": "ZIP_PREFLIGHT_ONLY", "archive": path.name, "entry_count": len(entries), "uncompressed_bytes": total, "mod_info_entries": mod_info, "candidate_mod_roots": roots, "findings": findings, "safe_to_stage": safe_to_stage, "safe_to_extract": safe_to_stage}
+
+
+def stage_zip_archive(path: Path, destination: Path) -> Path:
+    """Extract a preflight-safe ZIP into a new or empty explicit destination only."""
+    path = path.expanduser().resolve()
+    destination = destination.expanduser().resolve()
+    report = inspect_zip_archive(path)
+    if not report["safe_to_stage"]:
+        raise ValueError("Archive staging is blocked by preflight extraction hazards.")
+    if destination.exists() and any(destination.iterdir()):
+        raise ValueError("Archive staging destination must be new or empty.")
+    if destination == path.parent:
+        raise ValueError("Archive staging destination must not be the archive's containing directory.")
+    destination.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path) as archive:
+        for entry in archive.infolist():
+            name = _normalized_member_name(entry.filename)
+            if not name or entry.is_dir():
+                continue
+            target = destination.joinpath(*PurePosixPath(name).parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(entry) as source, target.open("wb") as output:
+                shutil.copyfileobj(source, output)
+    return destination
