@@ -32,9 +32,45 @@ from bridgeforge.evaluation import evaluate_releases
 from bridgeforge.runtime import create_runtime_profile, run_runtime_smoke
 from bridgeforge.fixtures import discover_compatibility_fixtures, discover_corpus_baselines
 from bridgeforge.interface import export_patch, inspect_workspace
+from bridgeforge.corpus_audit import audit_directories
+from bridgeforge.corpus_audit import write_corpus_audit
+from bridgeforge.archive_intake import inspect_zip_archive
 
 
 class ScannerTests(unittest.TestCase):
+    def test_corpus_audit_is_deterministic_and_path_minimal(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            alpha, beta = root / "Alpha", root / "Beta"
+            alpha.mkdir()
+            beta.mkdir()
+            (alpha / "mod_info.json").write_text('{"id":"alpha","gameVersion":"0.98"}', encoding="utf-8")
+            (beta / "mod_info.json").write_text('{"id":"beta","gameVersion":"0.95",}', encoding="utf-8")
+            (beta / "disabled_files").mkdir()
+            (beta / "disabled_files" / "Old.java").write_text("class Old {}", encoding="utf-8")
+            (beta / "jars" / "sources").mkdir(parents=True)
+            (beta / "jars" / "sources" / "Bundled.java").write_text("class Bundled {}", encoding="utf-8")
+            report = audit_directories([beta, alpha], TargetProfile("0.98", 17))
+            self.assertEqual(report["mode"], "READ_ONLY_CORPUS_AUDIT")
+            self.assertEqual([row["mod"] for row in report["mods"]], ["Alpha", "Beta"])
+            self.assertEqual(report["finding_counts"]["non-strict-json-trailing-comma"], 1)
+            beta_row = next(row for row in report["mods"] if row["mod"] == "Beta")
+            self.assertEqual(beta_row["source_layout"]["disabled_java_file_count"], 1)
+            self.assertEqual(beta_row["source_layout"]["bundled_or_archive_java_file_count"], 1)
+            self.assertNotIn(str(root), __import__("json").dumps(report))
+            output = write_corpus_audit(report, root / "audit.json", [alpha, beta])
+            self.assertEqual(__import__("json").loads(output.read_text(encoding="utf-8"))["mod_count"], 2)
+            with self.assertRaises(ValueError):
+                write_corpus_audit(report, alpha / "audit.json", [alpha, beta])
+
+    def test_zip_preflight_rejects_path_traversal_without_extraction(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "fixture.zip"
+            with zipfile.ZipFile(archive, "w") as bundle:
+                bundle.writestr("../escape/mod_info.json", "{}")
+            result = inspect_zip_archive(archive)
+            self.assertFalse(result["safe_to_extract"])
+            self.assertEqual(result["findings"][0]["id"], "archive-path-traversal")
     def test_bytecode_inspector_reports_symbolic_references_without_execution(self) -> None:
         if not shutil.which("javac") or not shutil.which("java"):
             self.skipTest("JDK is unavailable")

@@ -25,6 +25,7 @@ from .doctor import doctor
 from .conflicts import detect_conflicts
 from .provenance import write_provenance
 from .corpus import compare_corpus
+from .corpus_audit import audit_directories, write_corpus_audit
 from .evaluation import evaluate_releases
 from .bytecode import BytecodeUnavailable, inspect_bytecode
 from .bytecode_diff import diff_bytecode
@@ -141,6 +142,11 @@ def build_parser() -> argparse.ArgumentParser:
     corpus = subcommands.add_parser("corpus-compare", help="compare an explicitly selected local mod to a sanitized baseline")
     corpus.add_argument("mod_directory", type=Path)
     corpus.add_argument("--baseline", required=True, type=Path)
+    corpus_audit = subcommands.add_parser("corpus-audit", help="write a read-only aggregate report for explicit mod directories")
+    corpus_audit.add_argument("mod_directories", type=Path, nargs="+")
+    corpus_audit.add_argument("--output", required=True, type=Path)
+    corpus_audit.add_argument("--target-starsector", default="0.98.x")
+    corpus_audit.add_argument("--target-java", type=int, default=17)
     evaluation = subcommands.add_parser("release-evaluate", help="compare two release directories without modifying either")
     evaluation.add_argument("before_directory", type=Path)
     evaluation.add_argument("after_directory", type=Path)
@@ -166,6 +172,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Scanned {len(result.files)} files; found {len(result.findings)} findings.")
         print(f"Report: {report}")
         print(f"Manifest: {manifest}")
+        return 0
+    if args.command == "corpus-audit":
+        try:
+            report = audit_directories(args.mod_directories, TargetProfile(args.target_starsector, args.target_java))
+            output = write_corpus_audit(report, args.output, args.mod_directories)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Audited {report['mod_count']} mod(s): {output}")
         return 0
     if args.command == "bytecode-inspect":
         try:
