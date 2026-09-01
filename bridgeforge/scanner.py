@@ -295,7 +295,10 @@ def _source_class_names(root: Path) -> set[str]:
     for path in root.rglob("*.java"):
         if "disabled_files" in path.relative_to(root).parts:
             continue
-        text = path.read_text(encoding="utf-8", errors="replace")
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
         package = re.search(r"^\s*package\s+([\w.]+)\s*;", text, re.M)
         declared = re.search(r"\b(?:public\s+)?(?:class|interface|enum)\s+(\w+)", text)
         if package and declared:
@@ -309,7 +312,10 @@ def _scan_configured_class_integrity(root: Path, result: ScanResult) -> None:
     for path in root.rglob("*"):
         if not path.is_file() or path.suffix.lower() not in {".csv", ".json", ".faction", ".ship", ".variant", ".system"}:
             continue
-        text = path.read_text(encoding="utf-8", errors="replace")
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
         references.update(re.findall(r"\bdata(?:\.[A-Za-z_$][\w$]*)+", text))
     missing = sorted(local_classes & references - result.compiled_class_names)
     if missing:
