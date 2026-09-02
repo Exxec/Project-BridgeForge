@@ -35,6 +35,9 @@ EXTERNAL_MOD_API_PACKAGES = {
     "Industrial Evolution": ("com.fs.starfarer.api.impl.campaign.ids.IndEvo_ids", "indevo.ids."),
     "MagicLib": ("data.scripts.util.",),
 }
+EXTERNAL_CAMPAIGN_MEMORY_PREFIXES = {
+    "Nexerelin": "$nex_",
+}
 LEGACY_API_RULES = {
     "com.fs.starfarer.api.util.Misc.getHyperspaceTerrain": (
         "legacy-api-hyperspace-terrain",
@@ -67,6 +70,10 @@ RELEASE_BLOCKING_TODO_PATTERN = re.compile(
     re.I,
 )
 ROBOT_INPUT_INJECTION_PATTERN = re.compile(r"\bnew\s+(?:java\.awt\.)?Robot\s*\(")
+MEMORY_SELF_STORE_PATTERN = re.compile(
+    r"(?:\b\w*(?:memory|mem)\w*\s*|\.getMemoryWithoutUpdate\(\)\s*)\.set\s*\(\s*[^,]+\s*,\s*this\b",
+    re.I,
+)
 
 
 def _relative(root: Path, path: Path) -> str:
@@ -310,17 +317,19 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
                 file=relative,
                 evidence=["throw new UnsupportedOperationException"],
             )
-        if active_source and CUSTOM_UI_PLUGIN_PATTERN.search(text) and not re.search(r"\bbuttonPressed\s*\(", text):
-            result.add(
-                id="missing-custom-ui-button-pressed-callback",
-                category="source-api",
-                severity="high",
-                classification="REVIEW",
-                confidence="HIGH",
-                explanation="CustomUIPanelPlugin implementations in 0.98a require buttonPressed(Object). Add a no-op callback when the panel has no button handling, then runtime-test the UI.",
-                file=relative,
-                evidence=["CustomUIPanelPlugin", "buttonPressed(Object) missing"],
-            )
+        if active_source:
+            missing_callbacks = _custom_ui_plugins_missing_button_callback(text)
+            if missing_callbacks:
+                result.add(
+                    id="missing-custom-ui-button-pressed-callback",
+                    category="source-api",
+                    severity="high",
+                    classification="REVIEW",
+                    confidence="HIGH",
+                    explanation="CustomUIPanelPlugin implementations in 0.98a require buttonPressed(Object). Add a no-op callback when the panel has no button handling, then runtime-test the UI.",
+                    file=relative,
+                    evidence=[f"{missing_callbacks} plugin block(s) missing buttonPressed(Object)"],
+                )
         if active_source and CUSTOM_DIALOG_DELEGATE_PATTERN.search(text) and re.search(r"\bcreateCustomDialog\s*\(\s*CustomPanelAPI\s+\w+\s*\)", text):
             result.add(
                 id="legacy-custom-dialog-delegate-signature",
@@ -354,6 +363,17 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
                 file=relative,
                 evidence=["new Robot()"],
             )
+        if active_source and MEMORY_SELF_STORE_PATTERN.search(text):
+            result.add(
+                id="campaign-memory-live-object",
+                category="save-risk",
+                severity="medium",
+                classification="REVIEW",
+                confidence="HIGH",
+                explanation="Campaign memory stores `this`, a live Java object. Persistent campaign memory should normally use primitive values, IDs, or serializable data; inspect save/load behavior and replace UI/runtime objects where practical.",
+                file=relative,
+                evidence=["MemoryAPI.set(..., this)"],
+            )
         if active_source and PERCENT_MULTIPLIER_PATTERN.search(text):
             result.add(
                 id="suspicious-percent-multiplier",
@@ -373,7 +393,7 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
                     severity="medium",
                     classification="REVIEW",
                     confidence="DETERMINISTIC",
-                    explanation="Campaign code looks up a star system by a fixed display name. Verify that the target is guaranteed to exist and prefer a stable entity ID or guarded lookup for optional/total-conversion environments.",
+                    explanation="Campaign code looks up a star system using a literal string. Verify that it is the stable system ID, that the target is guaranteed to exist, and that optional/total-conversion environments are guarded.",
                     file=relative,
                     evidence=[system_name],
                 )
@@ -388,6 +408,19 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
                     file=relative,
                     evidence=[entity_id],
                 )
+            for integration, prefix in EXTERNAL_CAMPAIGN_MEMORY_PREFIXES.items():
+                keys = sorted(set(re.findall(rf'"({re.escape(prefix)}[A-Za-z0-9_]+)"', text)))
+                if keys:
+                    result.add(
+                        id="external-campaign-memory-key",
+                        category="campaign",
+                        severity="medium",
+                        classification="REVIEW",
+                        confidence="DETERMINISTIC",
+                        explanation=f"Campaign code reads {integration}-namespaced memory state directly. Verify the integration is optional, null-safe, and tested with {integration} disabled.",
+                        file=relative,
+                        evidence=[integration, *keys],
+                    )
         commented_spawns = re.findall(r"//[^\r\n]*\b(?:addSpawnPoint|spawnFleet)\s*\(", text)
         uncommented_text = re.sub(r"//[^\r\n]*", "", text)
         active_spawns = re.findall(r"\b(?:addSpawnPoint|spawnFleet)\s*\(", uncommented_text)
@@ -438,6 +471,37 @@ def _scan_source_build_dependencies(root: Path, result: ScanResult) -> None:
             )
 
 
+def _custom_ui_plugins_missing_button_callback(text: str) -> int:
+    """Return plugin blocks that lack the 0.98a button callback.
+
+    This is deliberately brace-aware rather than file-wide: an anonymous
+    plugin can be missing the callback even when another implementation in the
+    same source file defines one. Java parsing is not required for this narrow
+    structural check, and an unmatched brace simply leaves that block for
+    manual review.
+    """
+    missing = 0
+    for match in CUSTOM_UI_PLUGIN_PATTERN.finditer(text):
+        opening = match.end() - 1 if text[match.end() - 1] == "{" else text.find("{", match.end())
+        if opening < 0:
+            missing += 1
+            continue
+        depth = 0
+        closing = -1
+        for index in range(opening, len(text)):
+            if text[index] == "{":
+                depth += 1
+            elif text[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    closing = index
+                    break
+        block = text[opening: closing + 1] if closing >= 0 else text[opening:]
+        if not re.search(r"\bbuttonPressed\s*\(", block):
+            missing += 1
+    return missing
+
+
 def _scan_mission_local_fleet_references(root: Path, result: ScanResult) -> None:
     mod_id = str(result.metadata.get("id") or "").strip()
     if not mod_id:
@@ -455,7 +519,11 @@ def _scan_mission_local_fleet_references(root: Path, result: ScanResult) -> None
                         wings.add(wing_id)
         except (OSError, csv.Error, UnicodeDecodeError):
             return
-    for source in (root / "src").glob("data/missions/*/MissionDefinition.java"):
+    mission_sources = {
+        * (root / "src").glob("data/missions/*/MissionDefinition.java"),
+        * (root / "data").glob("missions/*/MissionDefinition.java"),
+    }
+    for source in sorted(mission_sources):
         try:
             text = source.read_text(encoding="utf-8", errors="replace")
         except OSError:

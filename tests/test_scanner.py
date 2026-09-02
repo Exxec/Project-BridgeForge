@@ -249,6 +249,20 @@ class ScannerTests(unittest.TestCase):
             self.assertIn("legacy-custom-dialog-delegate-signature", findings)
 
 
+    def test_scanner_reports_missing_callback_in_anonymous_custom_ui_plugin(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "MixedUi.java").write_text(
+                "class MixedUi implements CustomUIPanelPlugin { void buttonPressed(Object id) {} void f() { new CustomUIPanelPlugin() { void render(float alpha) {} }; } }",
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            finding = next(item for item in result.findings if item.id == "missing-custom-ui-button-pressed-callback")
+            self.assertEqual(finding.evidence, ["1 plugin block(s) missing buttonPressed(Object)"])
+
+
     def test_scanner_reports_release_blocking_source_todo(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -273,6 +287,21 @@ class ScannerTests(unittest.TestCase):
             )
             result = scan_mod(root)
             self.assertTrue(any(item.id == "campaign-ui-robot-input-injection" for item in result.findings))
+
+
+    def test_scanner_reports_live_objects_and_external_keys_in_campaign_memory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "Memory.java").write_text(
+                "class Memory { void save(MemoryAPI memory) { memory.set(\"$local\", this); memory.getFleet(\"$nex_responseFleet\"); } }",
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            findings = {item.id for item in result.findings}
+            self.assertIn("campaign-memory-live-object", findings)
+            self.assertIn("external-campaign-memory-key", findings)
 
 
     def test_scanner_reports_campaign_spawning_disabled_only_in_active_source(self) -> None:
@@ -311,7 +340,7 @@ class ScannerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "mod_info.json").write_text('{"id":"zorg"}', encoding="utf-8")
-            source = root / "src" / "data" / "missions" / "fixture"
+            source = root / "data" / "missions" / "fixture"
             source.mkdir(parents=True)
             (source / "MissionDefinition.java").write_text(
                 "class MissionDefinition { void define() { sector.getStarSystem(\"Askonia\"); sector.getEntityById(\"zorg_signal\"); api.addToFleet(FleetSide.PLAYER, \"zorg_missing_Configurated\", FleetMemberType.SHIP, \"Z\", true); } }",
