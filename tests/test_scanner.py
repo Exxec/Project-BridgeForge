@@ -192,6 +192,140 @@ class ScannerTests(unittest.TestCase):
             self.assertTrue(lazy["bytecode_referenced"])
 
 
+    def test_scanner_reports_runtime_placeholders_in_source_and_compiled_classes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "Placeholder.java").write_text(
+                "class Placeholder { void callback() { throw new UnsupportedOperationException(); } }",
+                encoding="utf-8",
+            )
+            with zipfile.ZipFile(root / "fixture.jar", "w") as archive:
+                archive.writestr(
+                    "example/Placeholder.class",
+                    b"\xca\xfe\xba\xbe\x00\x00\x00\x34java/lang/UnsupportedOperationException",
+                )
+            result = scan_mod(root)
+            findings = {finding.id for finding in result.findings}
+            self.assertIn("runtime-placeholder-unsupported-operation", findings)
+            self.assertIn("bytecode-runtime-placeholder-reference", findings)
+
+
+    def test_scanner_reports_lombok_and_external_mod_api_build_dependencies(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "Example.java").write_text(
+                "import lombok.Getter; import org.lazywizard.console.Console; import data.scripts.util.MagicRender; import indevo.ids.Ids; class Example { @Getter int value; }",
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            findings = {item.id for item in result.findings}
+            self.assertIn("source-lombok-annotation-processing", findings)
+            self.assertIn("external-mod-api-import", findings)
+            self.assertEqual(3, sum(item.id == "external-mod-api-import" for item in result.findings))
+            magic = next(item for item in result.library_usage if item["library"] == "MagicLib")
+            self.assertTrue(magic["imported"])
+
+
+    def test_scanner_reports_legacy_custom_ui_and_dialog_callbacks(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "LegacyUi.java").write_text(
+                "class LegacyUi implements CustomUIPanelPlugin { void processInput() {} }",
+                encoding="utf-8",
+            )
+            (root / "src" / "LegacyDialog.java").write_text(
+                "class LegacyDialog implements CustomDialogDelegate { void createCustomDialog(CustomPanelAPI panel) {} }",
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            findings = {item.id for item in result.findings}
+            self.assertIn("missing-custom-ui-button-pressed-callback", findings)
+            self.assertIn("legacy-custom-dialog-delegate-signature", findings)
+
+
+    def test_scanner_reports_release_blocking_source_todo(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "DevLeak.java").write_text(
+                "class DevLeak { void load() { // TODO remove before final release\n } }",
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            self.assertTrue(any(item.id == "release-blocking-source-todo" for item in result.findings))
+
+
+    def test_scanner_reports_campaign_ui_robot_input_injection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "Dialog.java").write_text(
+                "class Dialog { void open() throws Exception { new java.awt.Robot(); } }",
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            self.assertTrue(any(item.id == "campaign-ui-robot-input-injection" for item in result.findings))
+
+
+    def test_scanner_reports_campaign_spawning_disabled_only_in_active_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "World.java").write_text(
+                "class World { void generate() { // system.addSpawnPoint(oldSpawner); } }",
+                encoding="utf-8",
+            )
+            (root / "disabled_files").mkdir()
+            (root / "disabled_files" / "Archived.java").write_text(
+                "class Archived { void generate() { // system.addSpawnPoint(oldSpawner); } }",
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            finding = next(item for item in result.findings if item.id == "campaign-spawn-registration-disabled")
+            self.assertEqual(finding.file, "src/World.java")
+
+
+    def test_scanner_reports_multiplier_expression_passed_to_modify_percent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "Hullmod.java").write_text(
+                "class Hullmod { void apply(Object stats, String id) { stats.getTurnRate().modifyPercent(id, 1f - PENALTY * 0.01f); } }",
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            self.assertTrue(any(item.id == "suspicious-percent-multiplier" for item in result.findings))
+
+
+    def test_scanner_reports_hard_coded_campaign_references_and_missing_local_mission_member(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"zorg"}', encoding="utf-8")
+            source = root / "src" / "data" / "missions" / "fixture"
+            source.mkdir(parents=True)
+            (source / "MissionDefinition.java").write_text(
+                "class MissionDefinition { void define() { sector.getStarSystem(\"Askonia\"); sector.getEntityById(\"zorg_signal\"); api.addToFleet(FleetSide.PLAYER, \"zorg_missing_Configurated\", FleetMemberType.SHIP, \"Z\", true); } }",
+                encoding="utf-8",
+            )
+            (root / "data" / "variants").mkdir(parents=True)
+            (root / "data" / "variants" / "zorg_present_Configurated.variant").write_text("{}", encoding="utf-8")
+            result = scan_mod(root)
+            findings = {item.id for item in result.findings}
+            self.assertIn("hard-coded-campaign-system-reference", findings)
+            self.assertIn("hard-coded-campaign-entity-reference", findings)
+            self.assertIn("mission-local-fleet-reference-missing", findings)
+
+
     def test_scanner_reports_wrapper_directory_layout_without_retargeting_input(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

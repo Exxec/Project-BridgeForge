@@ -26,7 +26,15 @@ LIBRARY_PATTERNS = {
     "Kotlin runtime": re.compile(r"kotlin-(stdlib|reflect)|kotlinx-coroutines", re.I),
     "Gson": re.compile(r"gson", re.I),
 }
-LIBRARY_PACKAGES = {"LazyLib": "org.lazywizard.lazylib", "MagicLib": "org.magiclib"}
+LIBRARY_PACKAGES = {
+    "LazyLib": ("org.lazywizard.lazylib",),
+    "MagicLib": ("org.magiclib", "data.scripts.util"),
+}
+EXTERNAL_MOD_API_PACKAGES = {
+    "Console Commands": ("org.lazywizard.console.",),
+    "Industrial Evolution": ("com.fs.starfarer.api.impl.campaign.ids.IndEvo_ids", "indevo.ids."),
+    "MagicLib": ("data.scripts.util.",),
+}
 LEGACY_API_RULES = {
     "com.fs.starfarer.api.util.Misc.getHyperspaceTerrain": (
         "legacy-api-hyperspace-terrain",
@@ -41,6 +49,24 @@ LEGACY_API_RULES = {
         "SecurityManager APIs are obsolete on modern Java runtimes and require manual review.",
     ),
 }
+RUNTIME_PLACEHOLDER_PATTERN = re.compile(
+    r"\bthrow\s+new\s+(?:java\.lang\.)?UnsupportedOperationException\s*\(", re.M
+)
+PERCENT_MULTIPLIER_PATTERN = re.compile(
+    r"\.modifyPercent\s*\(\s*[^,]+,\s*1f\s*-\s*[A-Za-z_$][\w$]*\s*\*\s*0\.01f\s*\)"
+)
+HARDCODED_SYSTEM_LOOKUP_PATTERN = re.compile(r"\bgetStarSystem\s*\(\s*\"([^\"]+)\"\s*\)")
+HARDCODED_ENTITY_LOOKUP_PATTERN = re.compile(r"\bgetEntityById\s*\(\s*\"([^\"]+)\"\s*\)")
+MISSION_FLEET_REFERENCE_PATTERN = re.compile(
+    r"\baddToFleet\s*\(\s*FleetSide\.(?:PLAYER|ENEMY)\s*,\s*\"([^\"]+)\"\s*,\s*FleetMemberType\.(SHIP|FIGHTER_WING)"
+)
+CUSTOM_UI_PLUGIN_PATTERN = re.compile(r"\b(?:implements\s+CustomUIPanelPlugin|new\s+CustomUIPanelPlugin\s*\(\s*\)\s*\{)")
+CUSTOM_DIALOG_DELEGATE_PATTERN = re.compile(r"\bimplements\s+CustomDialogDelegate\b")
+RELEASE_BLOCKING_TODO_PATTERN = re.compile(
+    r"//[^\r\n]*\b(?:TODO|FIXME)\b[^\r\n]*\b(?:remove|delete|disable)\b[^\r\n]*\b(?:final|release)\b",
+    re.I,
+)
+ROBOT_INPUT_INJECTION_PATTERN = re.compile(r"\bnew\s+(?:java\.awt\.)?Robot\s*\(")
 
 
 def _relative(root: Path, path: Path) -> str:
@@ -219,9 +245,20 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
                         if header[:4] == b"\xca\xfe\xba\xbe" and len(header) == 8:
                             majors.add(int.from_bytes(header[6:8], "big"))
                             result.compiled_class_names.add(item.filename[:-6].replace("/", ".").replace("\\", "."))
-                            for library, prefix in LIBRARY_PACKAGES.items():
-                                if prefix.replace(".", "/").encode() in class_bytes:
+                            for library, prefixes in LIBRARY_PACKAGES.items():
+                                if any(prefix.replace(".", "/").encode() in class_bytes for prefix in prefixes):
                                     result.bytecode_library_references.add(library)
+                            if b"java/lang/UnsupportedOperationException" in class_bytes:
+                                result.add(
+                                    id="bytecode-runtime-placeholder-reference",
+                                    category="bytecode",
+                                    severity="high",
+                                    classification="REVIEW",
+                                    confidence="HIGH",
+                                    explanation="This compiled class references UnsupportedOperationException. It may be an unfinished callback implementation; inspect the class control flow before runtime testing.",
+                                    file=_relative(root, jar),
+                                    evidence=[item.filename[:-6].replace("/", ".").replace("\\", ".")],
+                                )
                 entry["class_file_majors"] = sorted(majors)
                 entry["java_levels"] = sorted({_java_for_major(major) for major in majors})
         except (OSError, zipfile.BadZipFile) as exc:
@@ -254,6 +291,7 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
             continue
         text = raw_bytes.decode("utf-8", errors="replace")
         content_owners.setdefault(hashlib.sha256(raw_bytes).hexdigest(), []).append(relative)
+        active_source = "disabled_files" not in source.relative_to(root).parts
         if result.source_facts:
             imports.update(fact["value"] for fact in result.source_facts if fact["kind"] == "import" and fact["file"] == relative)
         else:
@@ -261,10 +299,182 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
         for needle, (rule_id, explanation) in LEGACY_API_RULES.items():
             if needle in text:
                 result.add(id=rule_id, category="source-api", severity="high", classification="REVIEW", confidence="HIGH", explanation=explanation, file=relative, evidence=[needle])
+        if active_source and RUNTIME_PLACEHOLDER_PATTERN.search(text):
+            result.add(
+                id="runtime-placeholder-unsupported-operation",
+                category="source",
+                severity="high",
+                classification="REVIEW",
+                confidence="DETERMINISTIC",
+                explanation="Active Java source explicitly throws UnsupportedOperationException. This commonly indicates an IDE-generated placeholder that will crash when the callback is invoked.",
+                file=relative,
+                evidence=["throw new UnsupportedOperationException"],
+            )
+        if active_source and CUSTOM_UI_PLUGIN_PATTERN.search(text) and not re.search(r"\bbuttonPressed\s*\(", text):
+            result.add(
+                id="missing-custom-ui-button-pressed-callback",
+                category="source-api",
+                severity="high",
+                classification="REVIEW",
+                confidence="HIGH",
+                explanation="CustomUIPanelPlugin implementations in 0.98a require buttonPressed(Object). Add a no-op callback when the panel has no button handling, then runtime-test the UI.",
+                file=relative,
+                evidence=["CustomUIPanelPlugin", "buttonPressed(Object) missing"],
+            )
+        if active_source and CUSTOM_DIALOG_DELEGATE_PATTERN.search(text) and re.search(r"\bcreateCustomDialog\s*\(\s*CustomPanelAPI\s+\w+\s*\)", text):
+            result.add(
+                id="legacy-custom-dialog-delegate-signature",
+                category="source-api",
+                severity="high",
+                classification="REVIEW",
+                confidence="HIGH",
+                explanation="CustomDialogDelegate#createCustomDialog now receives CustomDialogCallback in 0.98a. Update the signature and preserve any required callback behavior before runtime-testing the dialog.",
+                file=relative,
+                evidence=["createCustomDialog(CustomPanelAPI)"],
+            )
+        if active_source and RELEASE_BLOCKING_TODO_PATTERN.search(text):
+            result.add(
+                id="release-blocking-source-todo",
+                category="source",
+                severity="high",
+                classification="REVIEW",
+                confidence="HIGH",
+                explanation="Active source contains a TODO/FIXME explicitly saying behavior must be removed, deleted, or disabled before release. Inspect it as a possible development-only gameplay or save-state leak.",
+                file=relative,
+                evidence=["TODO/FIXME release-removal marker"],
+            )
+        if active_source and ROBOT_INPUT_INJECTION_PATTERN.search(text):
+            result.add(
+                id="campaign-ui-robot-input-injection",
+                category="campaign-ui",
+                severity="medium",
+                classification="REVIEW",
+                confidence="DETERMINISTIC",
+                explanation="Campaign UI code creates java.awt.Robot to synthesize operating-system input. This can fail under restricted desktops, overlays, focus changes, or platform-specific input handling; prefer an in-game UI transition when possible and runtime-test every affected dialog.",
+                file=relative,
+                evidence=["new Robot()"],
+            )
+        if active_source and PERCENT_MULTIPLIER_PATTERN.search(text):
+            result.add(
+                id="suspicious-percent-multiplier",
+                category="combat-stats",
+                severity="medium",
+                classification="REVIEW",
+                confidence="HIGH",
+                explanation="modifyPercent() received a multiplier-shaped expression (for example, 1f - penalty * 0.01f). It will apply approximately +1 percent rather than the intended multiplier or negative percentage in Starsector's mutable-stat API.",
+                file=relative,
+                evidence=["modifyPercent(..., 1f - value * 0.01f)"],
+            )
+        if active_source:
+            for system_name in HARDCODED_SYSTEM_LOOKUP_PATTERN.findall(text):
+                result.add(
+                    id="hard-coded-campaign-system-reference",
+                    category="campaign",
+                    severity="medium",
+                    classification="REVIEW",
+                    confidence="DETERMINISTIC",
+                    explanation="Campaign code looks up a star system by a fixed display name. Verify that the target is guaranteed to exist and prefer a stable entity ID or guarded lookup for optional/total-conversion environments.",
+                    file=relative,
+                    evidence=[system_name],
+                )
+            for entity_id in HARDCODED_ENTITY_LOOKUP_PATTERN.findall(text):
+                result.add(
+                    id="hard-coded-campaign-entity-reference",
+                    category="campaign",
+                    severity="medium",
+                    classification="REVIEW",
+                    confidence="DETERMINISTIC",
+                    explanation="Campaign code looks up an entity by a fixed ID. Verify that the entity is created before this code runs and null-check optional or save-dependent entities before dereferencing them.",
+                    file=relative,
+                    evidence=[entity_id],
+                )
+        commented_spawns = re.findall(r"//[^\r\n]*\b(?:addSpawnPoint|spawnFleet)\s*\(", text)
+        uncommented_text = re.sub(r"//[^\r\n]*", "", text)
+        active_spawns = re.findall(r"\b(?:addSpawnPoint|spawnFleet)\s*\(", uncommented_text)
+        if active_source and commented_spawns and not active_spawns:
+            result.add(
+                id="campaign-spawn-registration-disabled",
+                category="campaign",
+                severity="high",
+                classification="REVIEW",
+                confidence="HIGH",
+                explanation="Campaign fleet-spawn calls are present only in comments. The mod may generate its system but will not create those fleets until the spawning code is ported and enabled.",
+                file=relative,
+                evidence=[f"{len(commented_spawns)} commented spawn call(s)"],
+            )
     result.imports = sorted(imports)
     for paths in content_owners.values():
         if len(paths) > 1:
             result.add(id="duplicate-source-layout", category="source", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Identical Java source appears at multiple paths. Establish the authoritative source/JAR layout before compiling or modifying it.", evidence=sorted(paths))
+    _scan_mission_local_fleet_references(root, result)
+    _scan_source_build_dependencies(root, result)
+
+
+def _scan_source_build_dependencies(root: Path, result: ScanResult) -> None:
+    lombok_imports = sorted(item for item in result.imports if item == "lombok" or item.startswith("lombok."))
+    if lombok_imports:
+        build_files = [name for name in ("pom.xml", "build.gradle", "build.gradle.kts") if (root / name).is_file()]
+        detail = " Build metadata was not found." if not build_files else f" Build metadata found: {', '.join(build_files)}."
+        result.add(
+            id="source-lombok-annotation-processing",
+            category="build",
+            severity="high",
+            classification="MANUAL",
+            confidence="DETERMINISTIC",
+            explanation="Source imports Lombok, which generates methods and constructors during compilation. A plain javac rebuild will fail or produce missing members unless Lombok is supplied as an annotation processor." + detail,
+            evidence=lombok_imports,
+        )
+    for dependency, prefixes in EXTERNAL_MOD_API_PACKAGES.items():
+        imports = sorted(item for item in result.imports if any(item == prefix.rstrip(".") or item.startswith(prefix) for prefix in prefixes))
+        if imports:
+            result.add(
+                id="external-mod-api-import",
+                category="dependencies",
+                severity="high",
+                classification="MANUAL",
+                confidence="DETERMINISTIC",
+                explanation=f"Source imports {dependency}'s API directly. Compile and runtime compatibility require that optional mod, or an explicit source-level compatibility shim/removal.",
+                evidence=[dependency, *imports],
+            )
+
+
+def _scan_mission_local_fleet_references(root: Path, result: ScanResult) -> None:
+    mod_id = str(result.metadata.get("id") or "").strip()
+    if not mod_id:
+        return
+    prefix = f"{mod_id}_"
+    variants = {path.stem for path in (root / "data" / "variants").glob("*.variant")}
+    wing_data = root / "data" / "hulls" / "wing_data.csv"
+    wings: set[str] = set()
+    if wing_data.is_file():
+        try:
+            with wing_data.open("r", encoding="utf-8-sig", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    wing_id = row.get("id")
+                    if wing_id:
+                        wings.add(wing_id)
+        except (OSError, csv.Error, UnicodeDecodeError):
+            return
+    for source in (root / "src").glob("data/missions/*/MissionDefinition.java"):
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for fleet_id, member_type in MISSION_FLEET_REFERENCE_PATTERN.findall(text):
+            if not fleet_id.startswith(prefix):
+                continue
+            expected = variants if member_type == "SHIP" else wings
+            if fleet_id not in expected:
+                result.add(
+                    id="mission-local-fleet-reference-missing",
+                    category="missions",
+                    severity="high",
+                    classification="MANUAL",
+                    confidence="DETERMINISTIC",
+                    explanation="A mission references a fleet member with this mod's ID prefix, but the corresponding local variant or fighter wing was not found.",
+                    file=_relative(root, source),
+                    evidence=[f"{member_type}:{fleet_id}"],
+                )
 
 
 def _scan_assets(root: Path, result: ScanResult) -> None:
@@ -335,8 +545,8 @@ def _scan_configured_class_integrity(root: Path, result: ScanResult) -> None:
 def _attribute_library_usage(result: ScanResult) -> None:
     dependencies = " ".join(map(str, result.metadata.get("dependencies") or result.metadata.get("requiredDependencies") or [])).lower()
     calls = [fact.get("value", "") for fact in result.source_facts if fact.get("kind") == "method_invocation"]
-    for library, prefix in LIBRARY_PACKAGES.items():
-        imports = [item for item in result.imports if item.startswith(prefix)]
+    for library, prefixes in LIBRARY_PACKAGES.items():
+        imports = [item for item in result.imports if any(item.startswith(prefix) for prefix in prefixes)]
         simple_names = {item.rsplit(".", 1)[-1] for item in imports if not item.endswith(".*")}
         source_calls = [call for call in calls if call.split(".", 1)[0] in simple_names]
         bundled = any(LIBRARY_PATTERNS[library].search(str(item.get("path", ""))) for item in result.jars)

@@ -23,6 +23,13 @@ quality. They are not copied into this repository and their code is never run.
   Its distribution assets sit under `mod/`, separate from source and docs.
 - [MagicLib](https://github.com/MagicLibStarsector/MagicLib) is dependency
   archaeology and a build-artifact attribution specimen.
+- [Void-Tec](https://github.com/Schaf-Unschaf/Void-Tec) `develop`
+  (`9cd8121f90e89c972e55fe1f6256f20af6a8fa7b`) is a user-approved,
+  compile-validated 0.95a-RC15 to 0.98a source migration specimen. It covers
+  Lombok annotation processing, optional Console Commands/Industrial Evolution
+  APIs, MagicLib `MagicRender`, and the 0.98a custom UI/dialog callback
+  signatures. It is not runtime- or save-certified and must not be used as an
+  automatic migration rule source.
 
 ## Release-lineage intake
 
