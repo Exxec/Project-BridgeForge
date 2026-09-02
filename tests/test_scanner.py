@@ -37,8 +37,12 @@ from bridgeforge.fixtures import discover_compatibility_fixtures, discover_corpu
 from bridgeforge.interface import export_patch, inspect_workspace
 from bridgeforge.corpus_audit import audit_directories
 from bridgeforge.corpus_audit import write_corpus_audit
+from bridgeforge.cross_mod import analyze_mod_set
+from bridgeforge.identity_registry import build_campaign_identity_inventory, check_campaign_identity_references
+from bridgeforge.decompiler import create_decompiler_review, run_decompiler_review
+from bridgeforge.lineage import analyze_release_lineage
 from bridgeforge.archive_intake import inspect_zip_archive, stage_zip_archive
-from bridgeforge.library_api import inventory_library_api, match_library_imports
+from bridgeforge.library_api import check_dependency_apis, inventory_library_api, match_library_imports
 from bridgeforge.cli import main
 
 
@@ -72,6 +76,94 @@ class ScannerTests(unittest.TestCase):
                 write_corpus_audit(report, alpha / "audit.json", [alpha, beta])
             degraded = audit_directories([alpha, root / "missing"], TargetProfile(), continue_on_error=True)
             self.assertEqual(degraded["unavailable_mod_count"], 1)
+
+    def test_cross_mod_analysis_resolves_selected_dependencies_classes_and_campaign_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            alpha, beta = root / "Alpha", root / "Beta"
+            for mod, metadata, source in (
+                (alpha, '{"id":"alpha"}', 'package data.shared; class Same { void f() { createStarSystem("alpha_system"); } }'),
+                (beta, '{"id":"beta","dependencies":["alpha"]}', 'package data.shared; class Same { void f() { getStarSystem("alpha_system"); } }'),
+            ):
+                (mod / "src").mkdir(parents=True)
+                (mod / "mod_info.json").write_text(metadata, encoding="utf-8")
+                (mod / "src" / "Example.java").write_text(source, encoding="utf-8")
+            report = analyze_mod_set([beta, alpha, alpha], TargetProfile())
+            self.assertEqual(report["mod_count"], 2)
+            self.assertEqual(report["duplicate_input_count"], 1)
+            self.assertEqual(report["dependency_edges"][0]["status"], "RESOLVED_IN_SELECTED_SET")
+            self.assertEqual(report["duplicate_class_ownership"], [{"class": "data.shared.Same", "owners": ["Alpha", "Beta"]}])
+            lookup = report["campaign_lookup_resolution"][0]
+            self.assertEqual(lookup["status"], "RESOLVED_BY_SELECTED_MOD")
+            self.assertNotIn(str(root), json.dumps(report))
+
+    def test_cross_mod_analysis_uses_explicit_alias_for_unavailable_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            consumer, legacy = root / "Consumer", root / "LegacyLibrary"
+            consumer.mkdir()
+            legacy.mkdir()
+            (consumer / "mod_info.json").write_text('{"id":"consumer","dependencies":["LegacyLib"]}', encoding="utf-8")
+            (legacy / "mod_info.json").write_text("{ invalid", encoding="utf-8")
+            report = analyze_mod_set([consumer, legacy], TargetProfile(), {"LegacyLibrary": "LegacyLib"})
+            library = next(item for item in report["mods"] if item["mod"] == "LegacyLibrary")
+            self.assertEqual(library["identity_source"], "EXPLICIT_ALIAS")
+            self.assertEqual(report["dependency_edges"][0]["status"], "RESOLVED_IN_SELECTED_SET")
+
+    def test_campaign_identity_inventory_and_check_are_explicit_and_read_only(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            owner, consumer = root / "Owner", root / "Consumer"
+            for mod, source in (
+                (owner, 'class Owner { void f() { createStarSystem("owner_system"); addCustomEntity("owner_entity", "N", "T", "f"); } }'),
+                (consumer, 'class Consumer { void f() { getStarSystem("owner_system"); getEntityById("owner_entity"); getStarSystem("Askonia"); } }'),
+            ):
+                (mod / "src").mkdir(parents=True)
+                (mod / "mod_info.json").write_text('{"id":"' + mod.name.lower() + '"}', encoding="utf-8")
+                (mod / "src" / "Example.java").write_text(source, encoding="utf-8")
+            inventory = build_campaign_identity_inventory([owner], TargetProfile())
+            self.assertEqual([(item["kind"], item["id"]) for item in inventory["entries"]], [("entity", "owner_entity"), ("system", "owner_system")])
+            result = check_campaign_identity_references(consumer, inventory, TargetProfile())
+            statuses = {item["id"]: item["status"] for item in result["checks"]}
+            self.assertEqual(statuses["owner_system"], "RESOLVED_EXPLICIT_REGISTRY")
+            self.assertEqual(statuses["owner_entity"], "RESOLVED_EXPLICIT_REGISTRY")
+            self.assertEqual(statuses["Askonia"], "NOT_IN_EXPLICIT_REGISTRY")
+
+    def test_decompiler_review_requires_explicit_execution_and_marks_output_untrusted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "legacy.class"
+            source.write_bytes(b"\xca\xfe\xba\xbe")
+            output = root / "review"
+            plan = create_decompiler_review(
+                source,
+                output,
+                Path(__import__("sys").executable),
+                ["-c", "from pathlib import Path; Path(r'{output}/Recovered.java').write_text('class Recovered {}')", "{input}", "{output}"],
+            )
+            self.assertTrue((output / "decompiler-review-plan.json").is_file())
+            self.assertEqual(run_decompiler_review(output)["status"], "NOT_EXECUTED")
+            result = run_decompiler_review(output, execute=True)
+            self.assertEqual(result["status"], "PASS")
+            self.assertEqual(result["mode"], "DECOMPILER_OUTPUT_UNTRUSTED_REVIEW_ONLY")
+            self.assertTrue((output / "decompiled" / "Recovered.java").is_file())
+            self.assertEqual(source.read_bytes(), b"\xca\xfe\xba\xbe")
+            self.assertEqual(plan["input"]["name"], "legacy.class")
+
+    def test_release_lineage_preserves_user_order_and_reports_transition_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first, second, third = root / "v1", root / "v2", root / "v3"
+            for release, version, body in ((first, "0.95", "one"), (second, "0.96", "two"), (third, "0.98", "two")):
+                release.mkdir()
+                (release / "mod_info.json").write_text('{"id":"fixture","gameVersion":"' + version + '"}', encoding="utf-8")
+                (release / "content.txt").write_text(body, encoding="utf-8")
+            report = analyze_release_lineage([first, second, third], TargetProfile())
+            self.assertEqual(report["mode"], "READ_ONLY_RELEASE_LINEAGE")
+            self.assertEqual([item["release"] for item in report["releases"]], ["v1", "v2", "v3"])
+            self.assertEqual(len(report["transitions"]), 2)
+            self.assertEqual(report["transitions"][0]["content"]["changed_file_count"], 2)
+            self.assertEqual(report["transitions"][1]["content"]["changed_file_count"], 1)
 
 
     def test_zip_preflight_rejects_path_traversal_without_extraction(self) -> None:
@@ -163,6 +255,43 @@ class ScannerTests(unittest.TestCase):
             result = match_library_imports(mod, inventory_library_api(jar), TargetProfile())
             self.assertEqual({item["id"] for item in result["uncertainty_findings"]}, {"library-api-wildcard-import", "library-api-reflection-uncertain", "library-api-identity-unknown", "library-api-version-unknown"})
 
+    def test_dependency_api_check_uses_only_explicit_matching_inventories(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            magic_jar = root / "magic.jar"
+            with zipfile.ZipFile(magic_jar, "w") as archive:
+                archive.writestr("data/scripts/util/MagicRender.class", b"\xca\xfe\xba\xbe")
+            mod = root / "mod"
+            (mod / "src").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"dependencies":["MagicLib"]}', encoding="utf-8")
+            (mod / "data").mkdir()
+            (mod / "data" / "plugins.json").write_text('{"script":"data.scripts.util.MagicRender"}', encoding="utf-8")
+            (mod / "src" / "Example.java").write_text(
+                "import data.scripts.util.MagicRender; import org.lazywizard.console.Console; class Example {}",
+                encoding="utf-8",
+            )
+            result = check_dependency_apis(mod, [inventory_library_api(magic_jar, "MagicLib", "0.48")], TargetProfile())
+            checks = {item["dependency"]: item for item in result["checks"]}
+            self.assertEqual(checks["MagicLib"]["status"], "IMPORT_CLASSES_PRESENT")
+            self.assertTrue(checks["MagicLib"]["declared"])
+            self.assertEqual(checks["Console Commands"]["status"], "NO_MATCHING_LOCAL_INVENTORY")
+            self.assertEqual(result["configured_class_checks"][0]["status"], "PRESENT_IN_EXPLICIT_INVENTORY")
+
+    def test_dependency_api_check_compares_unambiguous_imported_method_names(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = root / "mod"
+            (mod / "src").mkdir(parents=True)
+            (mod / "mod_info.json").write_text("{}", encoding="utf-8")
+            (mod / "src" / "Example.java").write_text(
+                "import data.scripts.util.MagicRender; class Example { void f() { MagicRender.draw(); MagicRender.missing(); } }",
+                encoding="utf-8",
+            )
+            inventory = {"classes": ["data.scripts.util.MagicRender"], "method_symbol_status": "AVAILABLE", "method_symbols": ["data.scripts.util.MagicRender#draw"], "identity": {"library_id": "MagicLib", "version": "fixture"}, "sha256": "fixture"}
+            result = check_dependency_apis(mod, [inventory], TargetProfile())
+            checks = result["checks"][0]["method_checks"]
+            self.assertEqual(checks, [{"class": "data.scripts.util.MagicRender", "method": "draw", "status": "METHOD_NAME_PRESENT"}, {"class": "data.scripts.util.MagicRender", "method": "missing", "status": "METHOD_NAME_MISSING"}])
+
 
     def test_corpus_audit_skips_declared_budget_excess(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -191,6 +320,58 @@ class ScannerTests(unittest.TestCase):
             self.assertTrue(lazy["source_called"])
             self.assertTrue(lazy["bytecode_referenced"])
 
+    def test_scanner_attaches_packaging_and_reachability_context(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            (root / "data" / "scripts").mkdir(parents=True)
+            (root / "data" / "scripts" / "Plugin.java").write_text(
+                "package data.scripts; public class Plugin { void init() { throw new UnsupportedOperationException(); } }",
+                encoding="utf-8",
+            )
+            (root / "data" / "scripts" / "plugins.json").write_text('{"plugin":"data.scripts.Plugin"}', encoding="utf-8")
+            result = scan_mod(root)
+            context = result.migration_context["configured_class_integrity"]
+            self.assertEqual(context["source_only"], ["data.scripts.Plugin"])
+            self.assertEqual(context["configured_entrypoint_sources"], ["data/scripts/Plugin.java"])
+            placeholder = next(item for item in result.findings if item.id == "runtime-placeholder-unsupported-operation")
+            self.assertIn("reachability: configured-entrypoint", placeholder.evidence)
+
+    def test_scanner_follows_unambiguous_local_call_from_configured_entrypoint(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            (root / "data" / "scripts").mkdir(parents=True)
+            (root / "data" / "scripts" / "Entry.java").write_text(
+                "package data.scripts; public class Entry { void init() { Helper.run(); } }",
+                encoding="utf-8",
+            )
+            (root / "data" / "scripts" / "Helper.java").write_text(
+                "package data.scripts; public class Helper { static void run() { throw new UnsupportedOperationException(); } }",
+                encoding="utf-8",
+            )
+            (root / "data" / "scripts" / "plugins.json").write_text('{"plugin":"data.scripts.Entry"}', encoding="utf-8")
+            result = scan_mod(root)
+            context = result.migration_context["source_reachability"]
+            self.assertEqual(context["reachable_local_sources"], ["data/scripts/Entry.java", "data/scripts/Helper.java"])
+            placeholder = next(item for item in result.findings if item.id == "runtime-placeholder-unsupported-operation")
+            self.assertIn("reachability: reachable-local-call", placeholder.evidence)
+
+    def test_scanner_attributes_local_campaign_identifiers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "World.java").write_text(
+                'class World { void generate() { createStarSystem("fixture_system"); addCustomEntity("fixture_entity", "N", "T", "f"); getStarSystem("fixture_system"); getEntityById("fixture_entity"); getStarSystem("Askonia"); } }',
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            findings = {item.evidence[0]: item.evidence[-1] for item in result.findings if item.id.startswith("hard-coded-campaign-")}
+            self.assertEqual(findings["fixture_system"], "ownership: defined-locally")
+            self.assertEqual(findings["fixture_entity"], "ownership: defined-locally")
+            self.assertEqual(findings["Askonia"], "ownership: external-or-core-unresolved")
+
 
     def test_scanner_reports_runtime_placeholders_in_source_and_compiled_classes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -211,6 +392,75 @@ class ScannerTests(unittest.TestCase):
             self.assertIn("runtime-placeholder-unsupported-operation", findings)
             self.assertIn("bytecode-runtime-placeholder-reference", findings)
 
+    def test_scanner_reports_missing_target_levelup_plugin_contract_method(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "data" / "scripts" / "plugins").mkdir(parents=True)
+            source = root / "data" / "scripts" / "plugins" / "LevelupPluginImpl.java"
+            source.write_text(
+                "import com.fs.starfarer.api.plugins.LevelupPlugin; public class LevelupPluginImpl implements LevelupPlugin { public int getPointsAtLevel(int l) { return 1; } }",
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            finding = next(item for item in result.findings if item.id == "target-interface-method-missing")
+            self.assertEqual(finding.evidence, ["LevelupPlugin", "int getBonusXPUseMultAtMaxLevel()"])
+            source.write_text(
+                "import com.fs.starfarer.api.plugins.LevelupPlugin; public class LevelupPluginImpl implements LevelupPlugin { public int getBonusXPUseMultAtMaxLevel() { return 1; } }",
+                encoding="utf-8",
+            )
+            self.assertFalse(any(item.id == "target-interface-method-missing" for item in scan_mod(root).findings))
+
+
+    def test_scanner_reports_only_type_proven_lazylib_30_removals(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "data" / "scripts" / "Fixture.java"
+            source.parent.mkdir(parents=True)
+            source.write_text("""import org.lazywizard.lazylib.ui.LazyFont;
+import org.lazywizard.lazylib.campaign.orbits.KeplerOrbit;
+class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object unknown) { text.appendText(\"x\"); text.setColor(null); text.getColor(); text.checkRebuild(); font.drawText(\"x\", 0f, 0f, 1f, 1f, 1f); unknown.appendText(\"x\"); } }""", encoding="utf-8")
+            findings = {item.id: item for item in scan_mod(root).findings}
+            self.assertEqual(findings["lazylib-drawable-string-appendText"].classification, "REVIEW")
+            self.assertIn("lazylib-drawable-string-setColor", findings)
+            self.assertIn("lazylib-drawable-string-getColor", findings)
+            self.assertIn("lazylib-drawable-string-checkRebuild", findings)
+            self.assertEqual(findings["lazylib-lazy-font-draw-text"].classification, "MANUAL")
+            self.assertEqual(findings["lazylib-kepler-orbit-removed"].classification, "MANUAL")
+            self.assertEqual(len([item for item in findings if item == "lazylib-drawable-string-appendText"]), 1)
+
+    def test_scanner_records_ashlib_evidence_without_inferring_a_rewrite(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            (root / "ashlib.version").write_text('{"modVersion":{"major":2,"minor":2,"patch":3}}', encoding="utf-8")
+            source = root / "data" / "scripts" / "Fixture.java"
+            source.parent.mkdir(parents=True)
+            source.write_text("import ashlib.data.plugins.misc.AshMisc; class Fixture {}", encoding="utf-8")
+            findings = {item.id: item for item in scan_mod(root).findings}
+            self.assertEqual(findings["ashlib-version-evidence"].evidence, ["2.2.3"])
+            self.assertEqual(findings["ashlib-api-usage"].classification, "SAFE")
+            self.assertFalse(any("candidate" in item.id for item in findings.values()))
+
+    def test_scanner_reports_graphicslib_98a_removals_as_manual_only(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            (root / "shaderlib.version").write_text('{"modVersion":{"major":1,"minor":10,"patch":0}}', encoding="utf-8")
+            config = root / "data" / "config"
+            config.mkdir(parents=True)
+            (config / "no_self_destruct.csv").write_text("id\nfixture_missile\n", encoding="utf-8")
+            (root / "shaderSettings.json").write_text('{"enableShaders":true,}', encoding="utf-8")
+            source = root / "src" / "Fixture.java"
+            source.parent.mkdir()
+            source.write_text("import org.dark.shaders.plugins.MissileSelfDestruct; class Fixture {}", encoding="utf-8")
+            findings = {item.id: item for item in scan_mod(root).findings}
+            self.assertEqual(findings["graphicslib-version-evidence"].evidence, ["1.10.0"])
+            self.assertEqual(findings["graphicslib-api-usage"].classification, "SAFE")
+            self.assertEqual(findings["graphicslib-missile-self-destruct-removed"].classification, "MANUAL")
+            self.assertEqual(findings["graphicslib-no-self-destruct-config-removed"].classification, "MANUAL")
+            self.assertEqual(findings["graphicslib-shader-settings-renamed"].classification, "REVIEW")
+
 
     def test_scanner_reports_lombok_and_external_mod_api_build_dependencies(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -228,6 +478,19 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(3, sum(item.id == "external-mod-api-import" for item in result.findings))
             magic = next(item for item in result.library_usage if item["library"] == "MagicLib")
             self.assertTrue(magic["imported"])
+
+    def test_scanner_records_declared_status_for_direct_external_apis(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"dependencies":[{"id":"MagicLib","name":"MagicLib"}]}', encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "Example.java").write_text(
+                "import data.scripts.util.MagicRender; class Example {}",
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            matrix = result.migration_context["dependency_compatibility"]["direct_api_dependencies"]
+            self.assertEqual(matrix, [{"dependency": "MagicLib", "declared": True, "imports": ["data.scripts.util.MagicRender"]}])
 
 
     def test_scanner_reports_legacy_custom_ui_and_dialog_callbacks(self) -> None:
@@ -353,6 +616,26 @@ class ScannerTests(unittest.TestCase):
             self.assertIn("hard-coded-campaign-system-reference", findings)
             self.assertIn("hard-coded-campaign-entity-reference", findings)
             self.assertIn("mission-local-fleet-reference-missing", findings)
+
+    def test_scanner_resolves_local_mission_variant_hull_and_weapon_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            mission = root / "data" / "missions" / "fixture"
+            mission.mkdir(parents=True)
+            (mission / "MissionDefinition.java").write_text(
+                'class MissionDefinition { void define() { api.addToFleet(FleetSide.PLAYER, "fixture_variant", FleetMemberType.SHIP, "F", true); } }',
+                encoding="utf-8",
+            )
+            (root / "data" / "variants").mkdir(parents=True)
+            (root / "data" / "variants" / "fixture_variant.variant").write_text(
+                '{"hullId":"fixture_hull","weaponGroups":[{"weapons":{"WS001":"fixture_weapon"}}]}',
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            findings = {item.id for item in result.findings}
+            self.assertIn("mission-local-variant-hull-missing", findings)
+            self.assertIn("mission-local-variant-weapon-missing", findings)
 
 
     def test_scanner_reports_wrapper_directory_layout_without_retargeting_input(self) -> None:

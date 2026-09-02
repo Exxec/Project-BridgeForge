@@ -11,6 +11,10 @@ from pathlib import PurePosixPath
 
 from .models import ScanResult, TargetProfile
 from .java_ast import AstUnavailable, analyze_sources
+from .ashlib_compat import scan_ashlib_compat
+from .graphicslib_compat import scan_graphicslib_compat
+from .lazylib_compat import scan_lazylib_compat
+from .magiclib_compat import scan_magiclib_compat
 
 CLASS_MAJOR_TO_JAVA = {51: 7, 52: 8, 55: 11, 61: 17, 65: 21, 69: 25}
 MAX_JAR_ENTRIES = 10_000
@@ -20,6 +24,7 @@ LARGE_BUNDLED_JAR_BYTES = 25 * 1024 * 1024
 LIBRARY_PATTERNS = {
     "LazyLib": re.compile(r"lazylib", re.I),
     "MagicLib": re.compile(r"magiclib", re.I),
+    "AshLib": re.compile(r"ashlib", re.I),
     "GraphicsLib": re.compile(r"graphicslib", re.I),
     "LunaLib": re.compile(r"lunalib", re.I),
     "Nexerelin": re.compile(r"nexerelin", re.I),
@@ -60,6 +65,8 @@ PERCENT_MULTIPLIER_PATTERN = re.compile(
 )
 HARDCODED_SYSTEM_LOOKUP_PATTERN = re.compile(r"\bgetStarSystem\s*\(\s*\"([^\"]+)\"\s*\)")
 HARDCODED_ENTITY_LOOKUP_PATTERN = re.compile(r"\bgetEntityById\s*\(\s*\"([^\"]+)\"\s*\)")
+CAMPAIGN_SYSTEM_CREATION_PATTERN = re.compile(r"\b(?:createStarSystem|addStarSystem)\s*\(\s*\"([^\"]+)\"")
+CAMPAIGN_ENTITY_CREATION_PATTERN = re.compile(r"\b(?:addCustomEntity|addEntity)\s*\(\s*\"([^\"]+)\"")
 MISSION_FLEET_REFERENCE_PATTERN = re.compile(
     r"\baddToFleet\s*\(\s*FleetSide\.(?:PLAYER|ENEMY)\s*,\s*\"([^\"]+)\"\s*,\s*FleetMemberType\.(SHIP|FIGHTER_WING)"
 )
@@ -70,6 +77,14 @@ RELEASE_BLOCKING_TODO_PATTERN = re.compile(
     re.I,
 )
 ROBOT_INPUT_INJECTION_PATTERN = re.compile(r"\bnew\s+(?:java\.awt\.)?Robot\s*\(")
+TARGET_INTERFACE_CONTRACTS = {
+    "LevelupPlugin": {
+        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?LevelupPlugin\b"),
+        "method": re.compile(r"\bpublic\s+int\s+getBonusXPUseMultAtMaxLevel\s*\(\s*\)"),
+        "signature": "int getBonusXPUseMultAtMaxLevel()",
+        "suggestion": "For a settings-driven level-up curve, return (int) Global.getSettings().getFloat(\"bonusXPUseMultAtMaxLevel\").",
+    },
+}
 MEMORY_SELF_STORE_PATTERN = re.compile(
     r"(?:\b\w*(?:memory|mem)\w*\s*|\.getMemoryWithoutUpdate\(\)\s*)\.set\s*\(\s*[^,]+\s*,\s*this\b",
     re.I,
@@ -318,6 +333,19 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
                 evidence=["throw new UnsupportedOperationException"],
             )
         if active_source:
+            for interface, contract in TARGET_INTERFACE_CONTRACTS.items():
+                if contract["implements"].search(text) and not contract["method"].search(text):
+                    result.add(
+                        id="target-interface-method-missing",
+                        category="source-api",
+                        severity="critical",
+                        classification="MANUAL",
+                        confidence="DETERMINISTIC",
+                        explanation=f"This source implements Starsector's {interface} but lacks the 0.98a-required {contract['signature']}. It will fail Janino/Javac loading before the mod can start. {contract['suggestion']}",
+                        file=relative,
+                        evidence=[interface, contract["signature"]],
+                    )
+        if active_source:
             missing_callbacks = _custom_ui_plugins_missing_button_callback(text)
             if missing_callbacks:
                 result.add(
@@ -442,6 +470,11 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
     _scan_mission_local_fleet_references(root, result)
     _scan_source_build_dependencies(root, result)
 
+    scan_lazylib_compat(root, result)
+    scan_magiclib_compat(result)
+    scan_ashlib_compat(root, result)
+    scan_graphicslib_compat(root, result)
+
 
 def _scan_source_build_dependencies(root: Path, result: ScanResult) -> None:
     lombok_imports = sorted(item for item in result.imports if item == "lombok" or item.startswith("lombok."))
@@ -508,6 +541,8 @@ def _scan_mission_local_fleet_references(root: Path, result: ScanResult) -> None
         return
     prefix = f"{mod_id}_"
     variants = {path.stem for path in (root / "data" / "variants").glob("*.variant")}
+    hulls = {path.stem for path in (root / "data" / "hulls").glob("*.ship")}
+    weapons = {path.stem for path in (root / "data" / "weapons").glob("*.wpn")}
     wing_data = root / "data" / "hulls" / "wing_data.csv"
     wings: set[str] = set()
     if wing_data.is_file():
@@ -523,12 +558,18 @@ def _scan_mission_local_fleet_references(root: Path, result: ScanResult) -> None
         * (root / "src").glob("data/missions/*/MissionDefinition.java"),
         * (root / "data").glob("missions/*/MissionDefinition.java"),
     }
+    references: list[dict[str, str]] = []
+    inspected_variants: set[str] = set()
     for source in sorted(mission_sources):
         try:
             text = source.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         for fleet_id, member_type in MISSION_FLEET_REFERENCE_PATTERN.findall(text):
+            resolution = "external-or-core"
+            if fleet_id.startswith(prefix):
+                resolution = "resolved-local" if fleet_id in (variants if member_type == "SHIP" else wings) else "missing-local"
+            references.append({"file": _relative(root, source), "kind": member_type, "id": fleet_id, "resolution": resolution})
             if not fleet_id.startswith(prefix):
                 continue
             expected = variants if member_type == "SHIP" else wings
@@ -541,8 +582,53 @@ def _scan_mission_local_fleet_references(root: Path, result: ScanResult) -> None
                     confidence="DETERMINISTIC",
                     explanation="A mission references a fleet member with this mod's ID prefix, but the corresponding local variant or fighter wing was not found.",
                     file=_relative(root, source),
-                    evidence=[f"{member_type}:{fleet_id}"],
+                    evidence=[f"{member_type}:{fleet_id}", "resolution: missing-local"],
                 )
+            elif member_type == "SHIP" and fleet_id not in inspected_variants:
+                inspected_variants.add(fleet_id)
+                _scan_mission_variant_assets(root, result, fleet_id, prefix, hulls, weapons)
+    result.migration_context["mission_fleet_references"] = references
+
+
+def _scan_mission_variant_assets(root: Path, result: ScanResult, variant_id: str, prefix: str, hulls: set[str], weapons: set[str]) -> None:
+    path = root / "data" / "variants" / f"{variant_id}.variant"
+    try:
+        data, _ = _parse_json(path.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return
+    if not isinstance(data, dict):
+        return
+    hull_id = data.get("hullId")
+    if isinstance(hull_id, str) and hull_id.startswith(prefix) and hull_id not in hulls:
+        result.add(
+            id="mission-local-variant-hull-missing",
+            category="missions",
+            severity="high",
+            classification="MANUAL",
+            confidence="DETERMINISTIC",
+            explanation="A locally referenced mission variant uses a hull with this mod's ID prefix, but no matching local .ship definition was found.",
+            file=_relative(root, path),
+            evidence=[f"variant:{variant_id}", f"hull:{hull_id}", "resolution: missing-local"],
+        )
+    weapon_ids: set[str] = set()
+    for group in data.get("weaponGroups", []):
+        if not isinstance(group, dict):
+            continue
+        assigned = group.get("weapons", {})
+        if isinstance(assigned, dict):
+            weapon_ids.update(value for value in assigned.values() if isinstance(value, str))
+    missing_weapons = sorted(weapon_id for weapon_id in weapon_ids if weapon_id.startswith(prefix) and weapon_id not in weapons)
+    if missing_weapons:
+        result.add(
+            id="mission-local-variant-weapon-missing",
+            category="missions",
+            severity="high",
+            classification="MANUAL",
+            confidence="DETERMINISTIC",
+            explanation="A locally referenced mission variant uses weapon IDs with this mod's prefix, but matching local .wpn definitions were not found.",
+            file=_relative(root, path),
+            evidence=[f"variant:{variant_id}", *[f"weapon:{weapon_id}" for weapon_id in missing_weapons], "resolution: missing-local"],
+        )
 
 
 def _scan_assets(root: Path, result: ScanResult) -> None:
@@ -578,8 +664,8 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
             result.add(id="invalid-csv", category="assets", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"CSV could not be read: {exc}", file=_relative(root, path))
 
 
-def _source_class_names(root: Path) -> set[str]:
-    names: set[str] = set()
+def _source_class_index(root: Path) -> dict[str, str]:
+    names: dict[str, str] = {}
     for path in root.rglob("*.java"):
         if "disabled_files" in path.relative_to(root).parts:
             continue
@@ -590,12 +676,12 @@ def _source_class_names(root: Path) -> set[str]:
         package = re.search(r"^\s*package\s+([\w.]+)\s*;", text, re.M)
         declared = re.search(r"\b(?:public\s+)?(?:class|interface|enum)\s+(\w+)", text)
         if package and declared:
-            names.add(f"{package.group(1)}.{declared.group(1)}")
+            names[f"{package.group(1)}.{declared.group(1)}"] = _relative(root, path)
     return names
 
 
 def _scan_configured_class_integrity(root: Path, result: ScanResult) -> None:
-    local_classes = _source_class_names(root)
+    local_classes = _source_class_index(root)
     references: set[str] = set()
     for path in root.rglob("*"):
         if not path.is_file() or path.suffix.lower() not in {".csv", ".json", ".faction", ".ship", ".variant", ".system"}:
@@ -605,9 +691,118 @@ def _scan_configured_class_integrity(root: Path, result: ScanResult) -> None:
         except OSError:
             continue
         references.update(re.findall(r"\bdata(?:\.[A-Za-z_$][\w$]*)+", text))
-    missing = sorted(local_classes & references - result.compiled_class_names)
-    if missing:
-        result.add(id="configured-source-class-missing-from-jar", category="bytecode", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation="Mod data references local source classes that are absent from every scanned JAR. Compile/package the active sources before runtime testing.", evidence=missing)
+    source_only = sorted(set(local_classes) & references - result.compiled_class_names)
+    packaged = sorted(references & result.compiled_class_names)
+    unresolved = sorted(references - set(local_classes) - result.compiled_class_names)
+    entrypoint_sources = sorted(local_classes[name] for name in set(local_classes) & references)
+    result.migration_context["configured_class_integrity"] = {
+        "source_class_names": sorted(local_classes),
+        "configured_references": sorted(references),
+        "source_only": source_only,
+        "packaged": packaged,
+        "unresolved": unresolved,
+        "configured_entrypoint_sources": entrypoint_sources,
+    }
+    for finding in result.findings:
+        if finding.file in entrypoint_sources and finding.id in {"runtime-placeholder-unsupported-operation", "campaign-spawn-registration-disabled", "missing-custom-ui-button-pressed-callback", "legacy-custom-dialog-delegate-signature"}:
+            finding.evidence.append("reachability: configured-entrypoint")
+        elif finding.id == "runtime-placeholder-unsupported-operation":
+            finding.evidence.append("reachability: active-source-unconfigured")
+    if source_only:
+        result.add(id="configured-source-class-missing-from-jar", category="bytecode", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation="Mod data references active local source classes that are absent from every scanned JAR. Compile/package the active sources before runtime testing; this finding does not claim that every unresolved configured class belongs to this mod.", evidence=source_only)
+
+
+def _scan_campaign_identifier_context(root: Path, result: ScanResult) -> None:
+    """Attribute literal campaign lookups without assuming a global ID registry.
+
+    A local definition is deterministic evidence. A mod-ID prefix is only a
+    useful hint, so it remains explicitly labeled as such instead of becoming a
+    compatibility claim.
+    """
+    mod_id = str(result.metadata.get("id") or "").strip()
+    local_systems: set[str] = set()
+    local_entities: set[str] = set()
+    for source in root.rglob("*.java"):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        local_systems.update(CAMPAIGN_SYSTEM_CREATION_PATTERN.findall(text))
+        local_entities.update(CAMPAIGN_ENTITY_CREATION_PATTERN.findall(text))
+
+    def ownership(identifier: str, defined: set[str]) -> str:
+        if identifier in defined:
+            return "defined-locally"
+        if mod_id and identifier.startswith(f"{mod_id}_"):
+            return "likely-mod-local-prefix"
+        return "external-or-core-unresolved"
+
+    lookups: list[dict[str, str]] = []
+    for finding in result.findings:
+        if finding.id == "hard-coded-campaign-system-reference" and finding.evidence:
+            identifier = finding.evidence[0]
+            state = ownership(identifier, local_systems)
+            finding.evidence.append(f"ownership: {state}")
+            lookups.append({"kind": "system", "id": identifier, "ownership": state})
+        elif finding.id == "hard-coded-campaign-entity-reference" and finding.evidence:
+            identifier = finding.evidence[0]
+            state = ownership(identifier, local_entities)
+            finding.evidence.append(f"ownership: {state}")
+            lookups.append({"kind": "entity", "id": identifier, "ownership": state})
+    result.migration_context["campaign_identifier_context"] = {
+        "defined_system_ids": sorted(local_systems),
+        "defined_entity_ids": sorted(local_entities),
+        "lookups": lookups,
+    }
+
+
+def _annotate_source_reachability(root: Path, result: ScanResult) -> None:
+    """Resolve only unambiguous local class-qualified calls from configured roots."""
+    integrity = result.migration_context.get("configured_class_integrity", {})
+    entrypoints = set(integrity.get("configured_entrypoint_sources", []))
+    source_index = _source_class_index(root)
+    by_simple_name: dict[str, set[str]] = {}
+    for class_name, file in source_index.items():
+        by_simple_name.setdefault(class_name.rsplit(".", 1)[-1], set()).add(file)
+    calls: dict[str, list[str]] = {}
+    for fact in result.source_facts:
+        if fact.get("kind") == "call_edge":
+            calls.setdefault(str(fact["file"]), []).append(str(fact["value"]))
+    reachable = set(entrypoints)
+    pending = list(sorted(entrypoints))
+    resolved_edges: list[dict[str, str]] = []
+    uncertain_edges = 0
+    while pending:
+        source = pending.pop()
+        for edge in calls.get(source, []):
+            _, _, select = edge.partition("->")
+            receiver, separator, _ = select.partition(".")
+            candidates = by_simple_name.get(receiver, set()) if separator else set()
+            if len(candidates) != 1:
+                uncertain_edges += 1
+                continue
+            target = next(iter(candidates))
+            resolved_edges.append({"from": source, "to": target, "call": select})
+            if target not in reachable:
+                reachable.add(target)
+                pending.append(target)
+    result.migration_context["source_reachability"] = {
+        "configured_entrypoint_sources": sorted(entrypoints),
+        "reachable_local_sources": sorted(reachable),
+        "resolved_local_edges": sorted(resolved_edges, key=lambda item: (item["from"], item["to"], item["call"])),
+        "uncertain_call_edge_count": uncertain_edges,
+        "limitation": "Only unambiguous local class-qualified calls are followed; unqualified, instance, inherited, reflective, and dependency calls remain unresolved.",
+    }
+    tracked = {"runtime-placeholder-unsupported-operation", "campaign-spawn-registration-disabled", "missing-custom-ui-button-pressed-callback", "legacy-custom-dialog-delegate-signature"}
+    for finding in result.findings:
+        if finding.id not in tracked or not finding.file:
+            continue
+        if finding.file in entrypoints and "reachability: configured-entrypoint" not in finding.evidence:
+            finding.evidence.append("reachability: configured-entrypoint")
+        elif finding.file in reachable and "reachability: reachable-local-call" not in finding.evidence:
+            finding.evidence.append("reachability: reachable-local-call")
 
 
 def _attribute_library_usage(result: ScanResult) -> None:
@@ -624,6 +819,35 @@ def _attribute_library_usage(result: ScanResult) -> None:
             result.library_usage.append({"library": library, "declared": declared, "bundled": bundled, "imported": bool(imports), "source_called": bool(source_calls), "bytecode_referenced": bytecode_referenced, "evidence": {"imports": imports, "source_calls": source_calls}})
             if declared and not bundled and not imports:
                 result.add(id="declared-library-unreferenced", category="dependencies", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="A declared library has no bundled, import, or source-call evidence. Confirm whether it is required before removing or changing it.", evidence=[library])
+
+
+def _dependency_compatibility_context(result: ScanResult) -> None:
+    """Record dependency evidence without guessing API replacements or versions."""
+    raw_declared = result.metadata.get("dependencies") or result.metadata.get("requiredDependencies") or []
+    declared: list[dict[str, str | None]] = []
+    normalized: set[str] = set()
+    for item in raw_declared:
+        if isinstance(item, dict):
+            dependency_id = str(item.get("id") or "").strip() or None
+            dependency_name = str(item.get("name") or "").strip() or None
+        else:
+            dependency_id = str(item).strip() or None
+            dependency_name = None
+        declared.append({"id": dependency_id, "name": dependency_name})
+        normalized.update(re.sub(r"[^a-z0-9]", "", value.lower()) for value in (dependency_id, dependency_name) if value)
+    direct_apis: list[dict[str, object]] = []
+    for finding in result.findings:
+        if finding.id != "external-mod-api-import" or not finding.evidence:
+            continue
+        dependency = finding.evidence[0]
+        key = re.sub(r"[^a-z0-9]", "", dependency.lower())
+        direct_apis.append({"dependency": dependency, "declared": key in normalized, "imports": finding.evidence[1:]})
+    result.migration_context["dependency_compatibility"] = {
+        "declared_dependencies": declared,
+        "direct_api_dependencies": direct_apis,
+        "library_usage": result.library_usage,
+        "limitation": "Static evidence does not establish an installed dependency version or API-symbol compatibility.",
+    }
 
 
 def _infer_environment(result: ScanResult) -> None:
@@ -649,6 +873,9 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None) -> ScanResul
     _scan_sources(root, result)
     _scan_assets(root, result)
     _scan_configured_class_integrity(root, result)
+    _annotate_source_reachability(root, result)
+    _scan_campaign_identifier_context(root, result)
     _attribute_library_usage(result)
+    _dependency_compatibility_context(result)
     _infer_environment(result)
     return result

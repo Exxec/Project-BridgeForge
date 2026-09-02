@@ -64,5 +64,8 @@ def analyze_sources(root: Path) -> list[dict[str, object]]:
     for raw in completed.stdout.splitlines():
         kind, file_value, line, position, value = raw.split("\t", 4)
         source_path = Path(base64.b64decode(file_value).decode("utf-8")).resolve()
-        facts.append({"kind": "import" if kind == "I" else "method_invocation", "file": str(source_path.relative_to(root)).replace("\\", "/"), "line": int(line), "position": int(position), "value": base64.b64decode(value).decode("utf-8")})
+        fact_kind = {"I": "import", "M": "method_invocation", "D": "method_declaration", "C": "call_edge", "V": "variable_declaration"}.get(kind)
+        if fact_kind is None:
+            raise AstUnavailable(f"Java AST helper emitted an unknown fact type: {kind}")
+        facts.append({"kind": fact_kind, "file": str(source_path.relative_to(root)).replace("\\", "/"), "line": int(line), "position": int(position), "value": base64.b64decode(value).decode("utf-8")})
     return facts

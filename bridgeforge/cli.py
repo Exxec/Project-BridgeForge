@@ -26,12 +26,17 @@ from .conflicts import detect_conflicts
 from .provenance import write_provenance
 from .corpus import compare_corpus
 from .corpus_audit import audit_directories, write_corpus_audit
-from .library_api import inventory_library_api, match_library_imports
+from .cross_mod import analyze_mod_set
+from .identity_registry import build_campaign_identity_inventory, check_campaign_identity_references, load_campaign_identity_inventory
+from .decompiler import create_decompiler_review, run_decompiler_review
+from .lineage import analyze_release_lineage
+from .library_api import check_dependency_apis, inventory_library_api, match_library_imports
 from .archive_intake import inspect_zip_archive, stage_zip_archive
 from .evaluation import evaluate_releases
 from .bytecode import BytecodeUnavailable, inspect_bytecode
 from .bytecode_diff import diff_bytecode
 from .bytecode_rules import apply_bytecode_class, apply_bytecode_jar, plan_bytecode
+from .pack_candidate import create_migration_pack_candidate
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -80,6 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--target-java", type=int, default=17)
     build.add_argument("--jdk", type=Path)
     build.add_argument("--api-jar", type=Path, action="append", default=[])
+    build.add_argument("--starsector-install", type=Path, help="explicit local Starsector install; hash-record its core compile classpath")
     build.add_argument("--dependency-jar", type=Path, action="append", default=[])
     build.add_argument("--library-registry", type=Path, help="local dependency-id -> jar-path map (never bundled or committed)")
     compile_command = subcommands.add_parser("compile", help="run the explicit workspace build profile")
@@ -108,6 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline.add_argument("--safe", action="store_true")
     pipeline.add_argument("--jdk", type=Path)
     pipeline.add_argument("--api-jar", type=Path, action="append", default=[])
+    pipeline.add_argument("--starsector-install", type=Path, help="explicit local Starsector install; hash-record its core compile classpath")
     pipeline.add_argument("--dependency-jar", type=Path, action="append", default=[])
     pipeline.add_argument("--library-registry", type=Path, help="local dependency-id -> jar-path map (never bundled or committed)")
     pipeline.add_argument("--compile", action="store_true")
@@ -116,6 +123,12 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline.add_argument("--bytecode-approve", action="append", default=[])
     packs = subcommands.add_parser("packs", help="list bundled migration packs")
     packs.add_argument("--root", type=Path)
+    candidate = subcommands.add_parser("migration-pack-candidate", help="create a non-applying evidence contract for a proposed library mapping")
+    candidate.add_argument("--library-id", required=True)
+    candidate.add_argument("--mapping-id", required=True)
+    candidate.add_argument("--from-symbol", required=True)
+    candidate.add_argument("--to-symbol", required=True)
+    candidate.add_argument("--output", required=True, type=Path)
     runtime = subcommands.add_parser("runtime-profile", help="record an explicit opt-in runtime launch profile")
     runtime.add_argument("workspace", type=Path)
     runtime.add_argument("--executable", required=True, type=Path)
@@ -124,6 +137,8 @@ def build_parser() -> argparse.ArgumentParser:
     runtime.add_argument("--timeout", type=int, default=60)
     runtime.add_argument("--log-file")
     runtime.add_argument("--expect-log", action="append", default=[])
+    runtime.add_argument("--scenario", action="append", choices=["campaign-load", "mission-launch", "custom-ui"], default=[])
+    runtime.add_argument("--scenario-expect", action="append", default=[], metavar="SCENARIO=LOG_MARKER", help="require a log marker for one selected scenario; repeatable")
     smoke = subcommands.add_parser("runtime-smoke", help="inspect or explicitly run a runtime profile")
     smoke.add_argument("workspace", type=Path)
     smoke.add_argument("--execute", action="store_true")
@@ -152,6 +167,34 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_audit.add_argument("--continue-on-error", action="store_true")
     corpus_audit.add_argument("--max-files-per-mod", type=int)
     corpus_audit.add_argument("--max-jars-per-mod", type=int)
+    cross_mod = subcommands.add_parser("cross-mod-analyze", help="build a read-only dependency, class, and campaign-ID graph for explicit mod directories")
+    cross_mod.add_argument("mod_directories", type=Path, nargs="+")
+    cross_mod.add_argument("--target-starsector", default="0.98.x")
+    cross_mod.add_argument("--target-java", type=int, default=17)
+    cross_mod.add_argument("--output", type=Path)
+    cross_mod.add_argument("--alias", action="append", default=[], metavar="DIRECTORY_NAME=MOD_ID", help="explicit identity for a selected non-standard metadata layout; repeatable")
+    identity_inventory = subcommands.add_parser("campaign-identity-inventory", help="inventory source-defined campaign IDs from explicit mod directories")
+    identity_inventory.add_argument("mod_directories", type=Path, nargs="+")
+    identity_inventory.add_argument("--target-starsector", default="0.98.x")
+    identity_inventory.add_argument("--target-java", type=int, default=17)
+    identity_inventory.add_argument("--output", required=True, type=Path)
+    identity_check = subcommands.add_parser("campaign-identity-check", help="resolve campaign literal lookups against an explicit identity inventory")
+    identity_check.add_argument("mod_directory", type=Path)
+    identity_check.add_argument("--inventory", required=True, type=Path)
+    identity_check.add_argument("--target-starsector", default="0.98.x")
+    identity_check.add_argument("--target-java", type=int, default=17)
+    identity_check.add_argument("--output", type=Path)
+    decompiler = subcommands.add_parser("decompiler-review", help="record or explicitly run a user-supplied decompiler as untrusted review evidence")
+    decompiler.add_argument("input", type=Path)
+    decompiler.add_argument("--adapter", type=Path, required=True)
+    decompiler.add_argument("--adapter-argument", action="append", default=[], help="adapter argument; include {input} and {output} placeholders")
+    decompiler.add_argument("--output", required=True, type=Path)
+    decompiler.add_argument("--execute", action="store_true")
+    lineage = subcommands.add_parser("release-lineage", help="compare an explicitly ordered sequence of mod releases without modifying them")
+    lineage.add_argument("release_directories", type=Path, nargs="+")
+    lineage.add_argument("--target-starsector", default="0.98.x")
+    lineage.add_argument("--target-java", type=int, default=17)
+    lineage.add_argument("--output", type=Path)
     archive_preflight = subcommands.add_parser("archive-preflight", help="inspect a ZIP archive without extracting it")
     archive_preflight.add_argument("archive", type=Path)
     archive_preflight.add_argument("--output", type=Path)
@@ -169,6 +212,12 @@ def build_parser() -> argparse.ArgumentParser:
     api_match.add_argument("--target-starsector", default="0.98.x")
     api_match.add_argument("--target-java", type=int, default=17)
     api_match.add_argument("--output", type=Path)
+    dependency_api = subcommands.add_parser("dependency-api-check", help="compare direct optional-mod imports with explicit local API inventories")
+    dependency_api.add_argument("mod_directory", type=Path)
+    dependency_api.add_argument("--inventory", type=Path, action="append", required=True)
+    dependency_api.add_argument("--target-starsector", default="0.98.x")
+    dependency_api.add_argument("--target-java", type=int, default=17)
+    dependency_api.add_argument("--output", type=Path)
     evaluation = subcommands.add_parser("release-evaluate", help="compare two release directories without modifying either")
     evaluation.add_argument("before_directory", type=Path)
     evaluation.add_argument("after_directory", type=Path)
@@ -203,6 +252,109 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(f"Audited {report['mod_count']} mod(s): {output}")
+        return 0
+    if args.command == "cross-mod-analyze":
+        try:
+            aliases = {}
+            for item in args.alias:
+                directory_name, separator, mod_id = item.partition("=")
+                if not separator or not directory_name or not mod_id or directory_name in aliases:
+                    raise ValueError("Each --alias must be a unique DIRECTORY_NAME=MOD_ID pair.")
+                aliases[directory_name] = mod_id
+            result = analyze_mod_set(args.mod_directories, TargetProfile(args.target_starsector, args.target_java), aliases)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        payload = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            output = args.output.expanduser().resolve()
+            for directory in args.mod_directories:
+                try:
+                    output.relative_to(directory.expanduser().resolve())
+                except ValueError:
+                    continue
+                print("bridgeforge: Cross-mod analysis output must not be inside an input mod directory.", file=sys.stderr)
+                return 2
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(payload + "\n", encoding="utf-8")
+            print(f"Cross-mod analysis: {result['mod_count']} mod(s); {output}")
+        else:
+            print(payload)
+        return 0
+    if args.command == "campaign-identity-inventory":
+        try:
+            result = build_campaign_identity_inventory(args.mod_directories, TargetProfile(args.target_starsector, args.target_java))
+            output = args.output.expanduser().resolve()
+            for directory in args.mod_directories:
+                try:
+                    output.relative_to(directory.expanduser().resolve())
+                except ValueError:
+                    continue
+                raise ValueError("Campaign identity inventory output must not be inside an input mod directory.")
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Campaign identity inventory: {len(result['entries'])} entry(s); {output}")
+        return 0
+    if args.command == "campaign-identity-check":
+        try:
+            inventory = load_campaign_identity_inventory(args.inventory)
+            result = check_campaign_identity_references(args.mod_directory, inventory, TargetProfile(args.target_starsector, args.target_java))
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        payload = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            output = args.output.expanduser().resolve()
+            try:
+                output.relative_to(args.mod_directory.expanduser().resolve())
+            except ValueError:
+                pass
+            else:
+                print("bridgeforge: Campaign identity check output must not be inside the input mod directory.", file=sys.stderr)
+                return 2
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(payload + "\n", encoding="utf-8")
+            print(f"Campaign identity checks: {len(result['checks'])}; report: {output}")
+        else:
+            print(payload)
+        return 0
+    if args.command == "decompiler-review":
+        try:
+            output = args.output.expanduser().resolve()
+            if (output / "decompiler-review-plan.json").is_file():
+                result = run_decompiler_review(output, args.execute)
+            else:
+                plan = create_decompiler_review(args.input, output, args.adapter, args.adapter_argument)
+                result = {"status": "NOT_EXECUTED", "plan": plan}
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Decompiler review status: {result['status']}")
+        return 0 if result["status"] in {"PASS", "NOT_EXECUTED"} else 1
+    if args.command == "release-lineage":
+        try:
+            result = analyze_release_lineage(args.release_directories, TargetProfile(args.target_starsector, args.target_java))
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        payload = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            output = args.output.expanduser().resolve()
+            for directory in args.release_directories:
+                try:
+                    output.relative_to(directory.expanduser().resolve())
+                except ValueError:
+                    continue
+                print("bridgeforge: Release lineage output must not be inside an input release directory.", file=sys.stderr)
+                return 2
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(payload + "\n", encoding="utf-8")
+            print(f"Release lineage: {result['release_count']} release(s); {output}")
+        else:
+            print(payload)
         return 0
     if args.command == "archive-preflight":
         try:
@@ -268,6 +420,29 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             output.write_text(payload + "\n", encoding="utf-8")
             print(f"Reported {len(result['migration_candidates'])} research candidate(s): {output}")
+        else:
+            print(payload)
+        return 0
+    if args.command == "dependency-api-check":
+        try:
+            inventories = [json.loads(path.expanduser().resolve().read_text(encoding="utf-8")) for path in args.inventory]
+            result = check_dependency_apis(args.mod_directory, inventories, TargetProfile(args.target_starsector, args.target_java))
+        except (OSError, ValueError, json.JSONDecodeError, KeyError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        payload = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            output = args.output.expanduser().resolve()
+            try:
+                output.relative_to(args.mod_directory.expanduser().resolve())
+            except ValueError:
+                pass
+            else:
+                print("bridgeforge: Dependency API check output must not be inside the input mod directory.", file=sys.stderr)
+                return 2
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(payload + "\n", encoding="utf-8")
+            print(f"Dependency API checks: {len(result['checks'])}; report: {output}")
         else:
             print(payload)
         return 0
@@ -357,7 +532,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "build-plan":
         try:
             registry = load_library_registry(args.library_registry) if args.library_registry else None
-            profile = create_build_profile(args.workspace, TargetProfile(args.target_starsector, args.target_java), args.jdk, args.api_jar, args.dependency_jar, registry)
+            profile = create_build_profile(args.workspace, TargetProfile(args.target_starsector, args.target_java), args.jdk, args.api_jar, args.dependency_jar, registry, args.starsector_install)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -425,7 +600,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             selected = [*resolve_pack_rule_paths(args.pack), *args.rules]
             registry = load_library_registry(args.library_registry) if args.library_registry else None
-            result = run_pipeline(args.workspace, TargetProfile(args.target_starsector, args.target_java), selected if (args.pack or args.rules) else None, set(args.approve), args.safe, args.jdk, args.api_jar, args.dependency_jar, args.compile, args.bytecode_file, args.bytecode_rules, set(args.bytecode_approve), registry)
+            result = run_pipeline(args.workspace, TargetProfile(args.target_starsector, args.target_java), selected if (args.pack or args.rules) else None, set(args.approve), args.safe, args.jdk, args.api_jar, args.dependency_jar, args.compile, args.bytecode_file, args.bytecode_rules, set(args.bytecode_approve), registry, args.starsector_install)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -439,9 +614,23 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         return 0
+    if args.command == "migration-pack-candidate":
+        try:
+            output = create_migration_pack_candidate(args.library_id, args.mapping_id, args.from_symbol, args.to_symbol, args.output)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Migration-pack research candidate: {output}")
+        return 0
     if args.command == "runtime-profile":
         try:
-            create_runtime_profile(args.workspace, args.executable, args.argument, args.working_directory, args.timeout, args.log_file, args.expect_log)
+            scenario_markers = {}
+            for item in args.scenario_expect:
+                scenario, separator, marker = item.partition("=")
+                if not separator or not scenario or not marker:
+                    raise ValueError("Each --scenario-expect must be SCENARIO=LOG_MARKER.")
+                scenario_markers.setdefault(scenario, []).append(marker)
+            create_runtime_profile(args.workspace, args.executable, args.argument, args.working_directory, args.timeout, args.log_file, args.expect_log, args.scenario, scenario_markers)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

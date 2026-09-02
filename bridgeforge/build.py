@@ -14,6 +14,7 @@ from pathlib import Path
 from .library_registry import LibraryRegistryEntry
 from .models import TargetProfile
 from .scanner import scan_mod
+from .starsector_install import inventory_starsector_install
 from .workspace import resolve_inside, workspace_paths
 
 
@@ -36,6 +37,7 @@ class BuildProfile:
     classes_directory: str
     command_preview: list[str]
     compile_validation: dict
+    starsector_install: dict | None = None
 
 
 def read_jdk(home: Path | None) -> JdkDescriptor | None:
@@ -118,7 +120,7 @@ def _classpath_ambiguity_findings(jars: list[Path]) -> list[dict[str, object]]:
     return findings
 
 
-def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path | None, api_jars: list[Path], dependency_jars: list[Path], library_registry: dict[str, LibraryRegistryEntry] | None = None) -> BuildProfile:
+def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path | None, api_jars: list[Path], dependency_jars: list[Path], library_registry: dict[str, LibraryRegistryEntry] | None = None, starsector_install: Path | None = None) -> BuildProfile:
     workspace = workspace.expanduser().resolve()
     _, working, _ = workspace_paths(workspace)
     jdk = read_jdk(jdk_home)
@@ -131,6 +133,11 @@ def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path 
     registered_jars, registry_findings = resolve_registered_dependency_jars(working, target, library_registry)
     explicit_resolved = {path.expanduser().resolve() for path in dependency_jars}
     dependency_jars = list(dependency_jars) + [jar for jar in registered_jars if jar.resolve() not in explicit_resolved]
+    install_inventory = None
+    if starsector_install is not None:
+        install_jars, install_inventory = inventory_starsector_install(starsector_install)
+        explicit_api = {path.expanduser().resolve() for path in api_jars}
+        api_jars = list(api_jars) + [jar for jar in install_jars if jar.resolve() not in explicit_api]
     requested_jars = [("api", path) for path in api_jars] + [("dependency", path) for path in dependency_jars]
     available_jars = [(kind, path.expanduser().resolve()) for kind, path in requested_jars if path.expanduser().is_file()]
     missing_jars = [(kind, path.expanduser().resolve()) for kind, path in requested_jars if not path.expanduser().is_file()]
@@ -156,7 +163,7 @@ def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path 
     if classpath:
         command.extend(["-classpath", __import__("os").pathsep.join(classpath)])
     command.extend(str(source) for source in source_files)
-    profile = BuildProfile(1, target, jdk, [str(path.relative_to(working)).replace("\\", "/") for path in source_roots], api, dependencies, dependency_provenance, str(classes), command, compile_validation)
+    profile = BuildProfile(1, target, jdk, [str(path.relative_to(working)).replace("\\", "/") for path in source_roots], api, dependencies, dependency_provenance, str(classes), command, compile_validation, install_inventory)
     (workspace / "build-profile.json").write_text(json.dumps(asdict(profile), indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return profile
 

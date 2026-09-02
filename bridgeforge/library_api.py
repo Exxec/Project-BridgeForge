@@ -7,6 +7,31 @@ from pathlib import Path
 
 from .models import TargetProfile
 from .scanner import scan_mod
+from .bytecode import BytecodeUnavailable, inspect_bytecode
+
+
+DEPENDENCY_ID_ALIASES = {
+    "industrialevolution": {"indevo", "industrialevolution"},
+    "consolecommands": {"consolecommands", "console"},
+}
+
+
+def _normalized_identity(value: object) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(value).lower())
+
+
+def _inventory_classes(inventory: dict) -> set[str]:
+    classes = inventory.get("classes")
+    if not isinstance(classes, list) or not all(isinstance(item, str) for item in classes):
+        raise ValueError("Library API inventory must contain a classes array of strings.")
+    return set(classes)
+
+
+def _inventory_matches_dependency(inventory: dict, dependency: str) -> bool:
+    supplied = _normalized_identity(inventory.get("identity", {}).get("library_id", ""))
+    expected = _normalized_identity(dependency)
+    aliases = DEPENDENCY_ID_ALIASES.get(expected, {expected})
+    return supplied in aliases
 
 
 def _manifest_value(archive: zipfile.ZipFile) -> str | None:
@@ -34,15 +59,26 @@ def inventory_library_api(jar: Path, library_id: str | None = None, library_vers
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     version = library_version or manifest_version
-    return {"schema_version": 1, "mode": "READ_ONLY_LIBRARY_CLASS_INVENTORY", "jar": jar.name, "sha256": digest.hexdigest(), "identity": {"library_id": library_id or "UNKNOWN", "version": version or "UNKNOWN", "version_source": "EXPLICIT" if library_version else "MANIFEST_UNVERIFIED" if manifest_version else "UNKNOWN"}, "class_count": len(classes), "classes": classes}
+    method_symbols: list[str] = []
+    method_symbol_status = "UNAVAILABLE"
+    try:
+        inspected = inspect_bytecode([jar])
+        method_symbols = sorted(
+            f"{str(entry['class_name']).replace('/', '.')}#{method['name']}"
+            for entry in inspected["classes"]
+            for method in entry.get("methods", [])
+            if method.get("name") not in {"<init>", "<clinit>"}
+        )
+        method_symbol_status = "AVAILABLE"
+    except (BytecodeUnavailable, ValueError, KeyError, TypeError):
+        pass
+    return {"schema_version": 2, "mode": "READ_ONLY_LIBRARY_CLASS_INVENTORY", "jar": jar.name, "sha256": digest.hexdigest(), "identity": {"library_id": library_id or "UNKNOWN", "version": version or "UNKNOWN", "version_source": "EXPLICIT" if library_version else "MANIFEST_UNVERIFIED" if manifest_version else "UNKNOWN"}, "class_count": len(classes), "classes": classes, "method_symbol_status": method_symbol_status, "method_symbols": method_symbols}
 
 
 def match_library_imports(mod_directory: Path, inventory: dict, target: TargetProfile) -> dict:
     result = scan_mod(mod_directory, target)
     classes = inventory.get("classes")
-    if not isinstance(classes, list) or not all(isinstance(item, str) for item in classes):
-        raise ValueError("Library API inventory must contain a classes array of strings.")
-    available = set(classes)
+    available = _inventory_classes(inventory)
     class_parts = [item.split(".") for item in classes]
     shared = class_parts[0][:-1] if class_parts else []
     for parts in class_parts[1:]:
@@ -81,3 +117,70 @@ def match_library_imports(mod_directory: Path, inventory: dict, target: TargetPr
     if identity.get("version", "UNKNOWN") == "UNKNOWN":
         uncertainty.append({"id": "library-api-version-unknown", "classification": "UNKNOWN", "explanation": "The supplied API inventory has no explicit or manifest version; version compatibility is unverified."})
     return {"schema_version": 1, "mode": "READ_ONLY_LIBRARY_API_MATCH", "mod": mod_directory.expanduser().resolve().name, "inventory_sha256": inventory.get("sha256"), "inventory_identity": identity, "inventory_namespace": namespace or None, "inventory_packages": packages, "matched_import_count": len(imports) - len(missing), "unmatched_imports": missing, "uncertainty_findings": uncertainty, "migration_candidates": candidates}
+
+
+def check_dependency_apis(mod_directory: Path, inventories: list[dict], target: TargetProfile) -> dict:
+    """Compare direct optional-mod imports to explicit local API inventories.
+
+    This checks imported class names only. It never fetches a dependency,
+    infers its installed version, checks method signatures, or proposes code
+    changes.
+    """
+    result = scan_mod(mod_directory, target)
+    direct = result.migration_context.get("dependency_compatibility", {}).get("direct_api_dependencies", [])
+    checks: list[dict[str, object]] = []
+    for item in direct:
+        dependency = str(item["dependency"])
+        imports = list(item.get("imports", []))
+        matching = [inventory for inventory in inventories if _inventory_matches_dependency(inventory, dependency)]
+        if not matching:
+            checks.append({"dependency": dependency, "declared": bool(item.get("declared")), "imports": imports, "status": "NO_MATCHING_LOCAL_INVENTORY", "missing_imports": imports})
+            continue
+        if len(matching) > 1:
+            checks.append({"dependency": dependency, "declared": bool(item.get("declared")), "imports": imports, "status": "AMBIGUOUS_LOCAL_INVENTORY", "inventory_identities": [inventory.get("identity", {}) for inventory in matching], "missing_imports": imports})
+            continue
+        inventory = matching[0]
+        available = _inventory_classes(inventory)
+        missing = sorted(import_name for import_name in imports if import_name not in available)
+        method_checks = _check_imported_method_names(result, imports, inventory)
+        checks.append({"dependency": dependency, "declared": bool(item.get("declared")), "imports": imports, "status": "IMPORT_CLASSES_PRESENT" if not missing else "MISSING_IMPORTED_CLASSES", "inventory_identity": inventory.get("identity", {}), "inventory_sha256": inventory.get("sha256"), "missing_imports": missing, "method_checks": method_checks})
+    configured = result.migration_context.get("configured_class_integrity", {})
+    configured_checks: list[dict[str, object]] = []
+    for class_name in configured.get("unresolved", []):
+        matching = [inventory for inventory in inventories if class_name in _inventory_classes(inventory)]
+        if not matching:
+            configured_checks.append({"class": class_name, "status": "NOT_FOUND_IN_EXPLICIT_INVENTORIES"})
+        elif len(matching) == 1:
+            inventory = matching[0]
+            configured_checks.append({"class": class_name, "status": "PRESENT_IN_EXPLICIT_INVENTORY", "inventory_identity": inventory.get("identity", {}), "inventory_sha256": inventory.get("sha256")})
+        else:
+            configured_checks.append({"class": class_name, "status": "AMBIGUOUS_EXPLICIT_INVENTORY_OWNERSHIP", "inventory_identities": [inventory.get("identity", {}) for inventory in matching]})
+    return {
+        "schema_version": 1,
+        "mode": "READ_ONLY_DEPENDENCY_API_CHECK",
+        "mod": mod_directory.expanduser().resolve().name,
+        "checks": checks,
+        "configured_class_checks": configured_checks,
+        "limitations": [
+            "Only explicit local inventories are considered; Bridgeforge does not detect installed mods automatically.",
+            "Matching imported or configured classes does not prove method-signature, runtime, load-order, or behavioral compatibility.",
+        ],
+    }
+
+
+def _check_imported_method_names(result, imports: list[str], inventory: dict) -> list[dict[str, str]]:
+    if inventory.get("method_symbol_status") != "AVAILABLE":
+        return [{"status": "METHOD_SYMBOLS_UNAVAILABLE"}] if imports else []
+    symbols = set(inventory.get("method_symbols", []))
+    by_simple_name = {item.rsplit(".", 1)[-1]: item for item in imports}
+    checks: set[tuple[str, str, str]] = set()
+    for fact in result.source_facts:
+        if fact.get("kind") != "method_invocation":
+            continue
+        receiver, separator, method = str(fact.get("value", "")).partition(".")
+        class_name = by_simple_name.get(receiver)
+        if not separator or not class_name or method == "":
+            continue
+        status = "METHOD_NAME_PRESENT" if f"{class_name}#{method}" in symbols else "METHOD_NAME_MISSING"
+        checks.add((class_name, method, status))
+    return [{"class": class_name, "method": method, "status": status} for class_name, method, status in sorted(checks)]

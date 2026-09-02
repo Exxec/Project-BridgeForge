@@ -18,7 +18,7 @@ from .workspace import resolve_inside
 from .bytecode_rules import apply_bytecode_class, apply_bytecode_jar
 
 
-def run_pipeline(workspace: Path, target: TargetProfile, rules: list[Path] | None = None, approved: set[str] | None = None, apply_safe: bool = False, jdk: Path | None = None, api_jars: list[Path] | None = None, dependency_jars: list[Path] | None = None, compile_requested: bool = False, bytecode_file: str | None = None, bytecode_rules: Path | None = None, bytecode_approved: set[str] | None = None, library_registry: dict[str, LibraryRegistryEntry] | None = None) -> dict:
+def run_pipeline(workspace: Path, target: TargetProfile, rules: list[Path] | None = None, approved: set[str] | None = None, apply_safe: bool = False, jdk: Path | None = None, api_jars: list[Path] | None = None, dependency_jars: list[Path] | None = None, compile_requested: bool = False, bytecode_file: str | None = None, bytecode_rules: Path | None = None, bytecode_approved: set[str] | None = None, library_registry: dict[str, LibraryRegistryEntry] | None = None, starsector_install: Path | None = None) -> dict:
     workspace = workspace.expanduser().resolve()
     _, working, _ = workspace_paths(workspace)
     scan = scan_mod(working, target)
@@ -37,7 +37,7 @@ def run_pipeline(workspace: Path, target: TargetProfile, rules: list[Path] | Non
         bytecode = (apply_bytecode_jar if bytecode_input.suffix.lower() == ".jar" else apply_bytecode_class)(bytecode_input, bytecode_output, bytecode_rules, bytecode_approved or set())
         checkpoint(workspace, "03-bytecode-artifact", "bytecode-output-validated")
     if jdk is not None:
-        build = asdict(create_build_profile(workspace, target, jdk, api_jars or [], dependency_jars or [], library_registry))
+        build = asdict(create_build_profile(workspace, target, jdk, api_jars or [], dependency_jars or [], library_registry, starsector_install))
     if compile_requested:
         if build is None:
             raise ValueError("Pipeline compile requires --jdk and a generated build profile.")

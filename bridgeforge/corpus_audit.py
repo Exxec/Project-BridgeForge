@@ -58,6 +58,8 @@ def audit_directories(mod_directories: list[Path], target: TargetProfile, contin
             "finding_counts": dict(sorted(finding_counts.items())),
             "source_layout": _source_layout(result.files, finding_counts),
             "library_usage": result.library_usage,
+            "dependency_compatibility": result.migration_context.get("dependency_compatibility", {}),
+            "migration_context": result.migration_context,
         })
     aggregate = Counter()
     for row in rows:

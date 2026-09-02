@@ -36,6 +36,7 @@ class ScanResult:
     library_usage: list[dict[str, Any]] = field(default_factory=list)
     imports: list[str] = field(default_factory=list)
     source_facts: list[dict[str, Any]] = field(default_factory=list)
+    migration_context: dict[str, Any] = field(default_factory=dict)
     findings: list[Finding] = field(default_factory=list)
     metadata_parse_mode: str = "UNAVAILABLE"
     declared_starsector: str | None = None
@@ -61,5 +62,6 @@ class ScanResult:
             "library_usage": self.library_usage,
             "imports": self.imports,
             "source_facts": self.source_facts,
+            "migration_context": self.migration_context,
             "findings": [asdict(finding) for finding in self.findings],
         }

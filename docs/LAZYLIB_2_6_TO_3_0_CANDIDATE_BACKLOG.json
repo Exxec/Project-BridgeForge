@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "mode": "RESEARCH_CANDIDATES_NOT_EXECUTABLE_MIGRATION_RULES",
+  "library": "LazyLib",
+  "history": "2.6-3.0",
+  "required_evidence": ["real_old_to_new_mod_example", "sanitized_fixture", "old_new_library_compile_validation", "idempotence_test", "conflict_test", "save_risk_review"],
+  "candidates": [
+    {"from": "DrawableString.appendText(...)", "to": "append(...)", "status": "BLOCKED"},
+    {"from": "DrawableString.setColor(...)", "to": "setBaseColor(...)", "status": "BLOCKED"},
+    {"from": "DrawableString.getColor(...)", "to": "getBaseColor(...)", "status": "BLOCKED"},
+    {"from": "DrawableString.checkRebuild()", "to": "triggerRebuildIfNeeded()", "status": "BLOCKED"}
+  ],
+  "manual_only": ["LazyFont.drawText()", "KeplerOrbit"],
+  "packaging_only": ["LazyLib 3.0 internal/Kotlin JAR layout"]
+}

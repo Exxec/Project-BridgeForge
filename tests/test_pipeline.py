@@ -93,6 +93,34 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(result["runtime_validation"]["status"], "NOT_CONFIGURED")
 
 
+    def test_validation_requires_full_compile_coverage_for_active_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            (source / "src").mkdir(parents=True)
+            (source / "mod_info.json").write_text(json.dumps({"id": "fixture", "gameVersion": "0.98"}), encoding="utf-8")
+            first = source / "src" / "First.java"
+            second = source / "src" / "Second.java"
+            first.write_text("class First {}", encoding="utf-8")
+            second.write_text("class Second {}", encoding="utf-8")
+            workspace = create_workspace(source, root / "workspace")
+
+            uncompiled = validate_workspace(workspace, TargetProfile("0.98", 17))
+            self.assertEqual(uncompiled["compile_validation"]["status"], "REQUIRED_NOT_RUN")
+            self.assertEqual(uncompiled["compile_validation"]["missing_sources"], ["src/First.java", "src/Second.java"])
+
+            working = workspace / "working-copy"
+            (workspace / "build-result.json").write_text(json.dumps({"success": True, "command": [str(working / "src" / "First.java")]}), encoding="utf-8")
+            partial = validate_workspace(workspace, TargetProfile("0.98", 17))
+            self.assertEqual(partial["compile_validation"]["status"], "PARTIAL")
+            self.assertEqual(partial["compile_validation"]["missing_sources"], ["src/Second.java"])
+
+            (workspace / "build-result.json").write_text(json.dumps({"success": True, "command": [str(working / "src" / "First.java"), str(working / "src" / "Second.java")]}), encoding="utf-8")
+            complete = validate_workspace(workspace, TargetProfile("0.98", 17))
+            self.assertEqual(complete["compile_validation"]["status"], "PASS")
+            self.assertEqual(complete["compile_validation"]["compiled_source_count"], 2)
+
+
     def test_pipeline_writes_final_report_without_implicit_review_apply(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -138,6 +166,41 @@ class PipelineTests(unittest.TestCase):
             executable.write_text("not executed", encoding="utf-8")
             create_runtime_profile(workspace, executable, [], root, 60)
             self.assertEqual(run_runtime_smoke(workspace)["status"], "NOT_EXECUTED")
+
+    def test_runtime_profile_records_only_supported_user_authored_scenarios(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            workspace = create_workspace(source, root / "workspace")
+            profile = create_runtime_profile(workspace, Path(__import__("sys").executable), [], root, 10, scenarios=["campaign-load", "custom-ui"])
+            self.assertEqual(profile["scenarios"], ["campaign-load", "custom-ui"])
+            self.assertEqual(Path(profile["staged_mod_directory"]), workspace / "working-copy")
+            self.assertEqual(run_runtime_smoke(workspace)["scenarios"], ["campaign-load", "custom-ui"])
+            with self.assertRaises(ValueError):
+                create_runtime_profile(workspace, Path(__import__("sys").executable), [], root, 10, scenarios=["combat"])
+
+    def test_runtime_smoke_validates_per_scenario_markers_and_refuses_stale_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            workspace = create_workspace(source, root / "workspace")
+            create_runtime_profile(
+                workspace,
+                Path(__import__("sys").executable),
+                ["-c", "from pathlib import Path; Path('runtime.log').write_text('CAMPAIGN UI')"],
+                root,
+                10,
+                "runtime.log",
+                scenarios=["campaign-load", "custom-ui"],
+                scenario_markers={"campaign-load": ["CAMPAIGN"], "custom-ui": ["UI"]},
+            )
+            result = run_runtime_smoke(workspace, execute=True)
+            self.assertEqual(result["status"], "PASS")
+            self.assertEqual(result["scenario_validation"]["campaign-load"]["status"], "PASS")
+            (workspace / "working-copy" / "changed.txt").write_text("changed", encoding="utf-8")
+            self.assertEqual(run_runtime_smoke(workspace, execute=True)["status"], "STALE_STAGED_MOD")
 
 
     def test_runtime_smoke_can_require_explicit_log_markers(self) -> None:

@@ -28,7 +28,7 @@ Java migration packs can provide a `replace-import` rule. Bridgeforge first pars
 
 ## Build-environment model
 
-`build-plan` records a selected JDK (using its `release` metadata), Java target, API/dependency JARs, discovered source roots, and an exact `javac` preview. It does not compile; that remains a separately controlled step.
+`build-plan` records a selected JDK (using its `release` metadata), Java target, API/dependency JARs, discovered source roots, and an exact `javac` preview. `--starsector-install <path>` opt-in inventories every non-source JAR in that selected install's `starsector-core`, records its SHA-256 values, and supplies that captured core classpath; this covers game-bundled compile types that `starfarer.api.jar` alone does not expose. It does not compile; that remains a separately controlled step.
 
 `compile` runs only that recorded profile and writes raw output plus classified diagnostics. If a requested API or dependency JAR is missing, `build-plan` records deterministic `compile-validation-unavailable` review findings instead of aborting; `compile` then records `UNAVAILABLE` and the pipeline continues without making a compile-compatibility claim. `compile-feedback` links available diagnostics to already-planned rule candidates and explicitly performs no automatic modification.
 
@@ -36,9 +36,9 @@ After a successful compile, `package-jar <workspace> <working-copy-relative-jar>
 
 ## Controlled runtime smoke checks
 
-`runtime-profile` records an opt-in command only. `runtime-smoke` inspects that profile unless `--execute` is supplied explicitly. A profile can constrain validation to a log inside its working directory with `--log-file` and one or more `--expect-log` markers; a zero exit code still fails when an expected marker is absent. This is controlled process/log evidence, not a claim of behavioral or save compatibility.
+`runtime-profile` records an opt-in command only. `runtime-smoke` inspects that profile unless `--execute` is supplied explicitly. A profile can label user-authored `--scenario` checks as `campaign-load`, `mission-launch`, or `custom-ui`, and records the staged workspace mod path; those labels do not prove that the game loaded it. A profile can constrain validation to a log inside its working directory with `--log-file` and one or more `--expect-log` markers; a zero exit code still fails when an expected marker is absent. This is controlled process/log evidence, not a claim of behavioral or save compatibility.
 
-`validate` verifies the immutable reference, structurally re-scans the working copy, and records runtime validation as unconfigured unless an explicit launch profile exists. `save-risk` compares original and working content for changed persistent-identifier-shaped fields as review context only; Bridgeforge does not support or claim cross-patch save compatibility.
+`validate` verifies the immutable reference, structurally re-scans the working copy, and records runtime validation as unconfigured unless an explicit launch profile exists. For a mod with active Java sources, compile validation is `REQUIRED_NOT_RUN` until a recorded full-project compile exists; a successful one-file probe is reported as `PARTIAL`. A `PASS` requires that the compiler invocation included every active source file. `save-risk` compares original and working content for changed persistent-identifier-shaped fields as review context only; Bridgeforge does not support or claim cross-patch save compatibility.
 
 ## Integrity and automation artifacts
 
@@ -46,9 +46,25 @@ After a successful compile, `package-jar <workspace> <working-copy-relative-jar>
 
 `corpus-compare <mod-directory> --baseline <baseline.json>` is an explicit local-only comparison against a sanitized baseline. It reports fingerprint and finding mismatches as JSON and neither stores the selected path nor copies mod content into the repository. See [docs/JSON_COMPATIBILITY_POLICY.md](docs/JSON_COMPATIBILITY_POLICY.md) for the verified trailing-comma JSON policy and [docs/MIGRATION_PACK_CONTRACT.md](docs/MIGRATION_PACK_CONTRACT.md) for the evidence required before a library migration rule can load.
 
-`archive-preflight <archive.zip>` inspects ZIP metadata without extracting it. It reports traversal, symlink, duplicate-member, wrapper-layout, and mod-root ambiguity evidence. `archive-stage <archive.zip> --output <empty-directory>` extracts only an archive whose preflight has no extraction hazards; it never writes beside or replaces the supplied archive. `corpus-audit` accepts `--max-files-per-mod` and `--max-jars-per-mod` to skip oversized inputs deterministically rather than making partial compatibility claims.
+`archive-preflight <archive.zip>` inspects ZIP metadata without extracting it. It reports traversal, symlink, duplicate-member, wrapper-layout, and mod-root ambiguity evidence. `archive-stage <archive.zip> --output <empty-directory>` extracts only an archive whose preflight has no extraction hazards; it never writes beside or replaces the supplied archive. `corpus-audit` accepts `--max-files-per-mod` and `--max-jars-per-mod` to skip oversized inputs deterministically rather than making partial compatibility claims. Scanner and corpus artifacts retain read-only migration context for configured-class packaging, campaign identifier ownership, mission fleet references, and declared/direct API dependency evidence.
+
+`dependency-api-check <mod> --inventory <inventory.json>` compares direct optional-mod imports with one or more explicit local API inventories. It only establishes whether imported class names are present in the supplied inventory; versions, methods, runtime load order, and behavior remain unverified.
+
+The scanner also reports `target-interface-method-missing` when active source implements a known 0.98a engine interface but omits a newly required method. This is a load-blocking source contract finding; BridgeForge provides only a review suggestion and never edits interface implementations automatically.
+
+`cross-mod-analyze <mods...>` builds a read-only graph only for the mod folders supplied on that command line: dependency edges, duplicate class ownership, and source-defined campaign-ID lookup resolution. Use `--alias DIRECTORY_NAME=MOD_ID` when a selected legacy metadata file is deliberately non-strict. `campaign-identity-inventory <mods...>` and `campaign-identity-check <mod> --inventory <ids.json>` create and consume the same kind of explicit, source-defined system/entity registry.
+
+`release-lineage <releases...>` compares a user-ordered release sequence without inferring chronology or maintainer intent. `decompiler-review` records a hash-bound plan for a user-supplied adapter and runs it only with `--execute`; its output remains untrusted review evidence and is never compiled or applied by BridgeForge.
 
 `library-api-inventory <library.jar> --library-id <id> --library-version <version>` records a supplied library identity alongside its class inventory. Without explicit identity/version evidence, `library-api-match` reports that assessment as unverified; wildcard imports, reflection, and bytecode-only references remain review findings rather than missing-API claims.
+
+`migration-pack-candidate` creates a non-loadable research contract for a proposed MagicLib/LazyLib/AshLib mapping. It always requires provenance, before/after fixtures, full compile evidence, idempotence, conflict review, and save-risk assessment before a separately reviewed pack rule may exist; it never creates an executable migration.
+
+The scanner’s LazyLib 2.6–3.0 detector is read-only and requires AST variable-type evidence before reporting the four blocked `LazyFont.DrawableString` candidates: `appendText`, `setColor`, `getColor`, and `checkRebuild`. `drawText` and `KeplerOrbit` are MANUAL only; LazyLib 3.0 Kotlin/internal-JAR evidence is dependency packaging review only. See [the candidate backlog](docs/LAZYLIB_2_6_TO_3_0_CANDIDATE_BACKLOG.json).
+
+AshLib is also handled read-only: BridgeForge records `ashlib.version` and direct `ashlib.*` import evidence, but its public legacy-to-2.2.3 history supplies no documented removed/deprecated API replacement. Consequently, it emits no source rewrite candidates. See [the AshLib evidence record](docs/ASHLIB_CANDIDATE_BACKLOG.json).
+
+GraphicsLib/ShaderLib is handled the same way. Its documented 0.98a removal of `MissileSelfDestruct` and `data/config/no_self_destruct.csv` is reported as MANUAL only because no replacement is documented; version/import evidence is read-only. See [the GraphicsLib evidence record](docs/GRAPHICSLIB_CANDIDATE_BACKLOG.json).
 
 `release-evaluate <before-directory> <after-directory>` compares two explicitly selected releases without modifying either. Its machine-readable report distinguishes byte-identical content continuity and scanner-finding deltas from bytecode and runtime evidence; it never claims behavioral or save compatibility without an explicit runtime test.
 

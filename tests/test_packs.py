@@ -39,11 +39,23 @@ from bridgeforge.corpus_audit import audit_directories
 from bridgeforge.corpus_audit import write_corpus_audit
 from bridgeforge.archive_intake import inspect_zip_archive, stage_zip_archive
 from bridgeforge.library_api import inventory_library_api, match_library_imports
+from bridgeforge.pack_candidate import create_migration_pack_candidate
 from bridgeforge.cli import main
 
 
 
 class PacksTests(unittest.TestCase):
+    def test_pack_candidate_is_non_loadable_evidence_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "candidate.json"
+            create_migration_pack_candidate("org.magiclib", "magic-render-example", "Old.render", "MagicRender.battlespace", output)
+            candidate = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(candidate["mode"], "RESEARCH_CANDIDATE_NOT_A_MIGRATION_PACK")
+            self.assertEqual(candidate["automatic_modification"], "FORBIDDEN_UNTIL_EVIDENCE_COMPLETE")
+            self.assertEqual(len(candidate["evidence_required"]), 7)
+            with self.assertRaises(ValueError):
+                create_migration_pack_candidate("org.magiclib", "magic-render-example", "Old.render", "MagicRender.battlespace", output)
+
     def test_bundled_pack_registry_is_unique_and_conservative(self) -> None:
         packs = discover_packs()
         self.assertGreaterEqual(len(packs), 8)

@@ -76,6 +76,25 @@ class BuildTests(unittest.TestCase):
             self.assertNotIn(str(workspace / "working-copy" / "disabled_files" / "Disabled.java"), profile.command_preview)
 
 
+    def test_build_profile_records_explicit_starsector_install_classpath(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "mod_info.json").write_text("{}", encoding="utf-8")
+            install = root / "starsector"
+            core = install / "starsector-core"
+            core.mkdir(parents=True)
+            for name in ("starfarer.api.jar", "log4j-1.2.9.jar", "ignored-sources.jar"):
+                with zipfile.ZipFile(core / name, "w") as archive:
+                    archive.writestr("marker.txt", name)
+            workspace = create_workspace(source, root / "workspace")
+            profile = create_build_profile(workspace, TargetProfile("0.98a", 17), None, [], [], starsector_install=install)
+            self.assertEqual(profile.starsector_install["mode"], "EXPLICIT_LOCAL_STARSECTOR_INSTALL")
+            self.assertEqual(len(profile.starsector_install["jars"]), 2)
+            self.assertTrue(any(item.endswith("log4j-1.2.9.jar") for item in profile.api_jars))
+
+
     def test_compile_executes_profile_and_classifies_errors(self) -> None:
         javac = shutil.which("javac")
         if not javac:
