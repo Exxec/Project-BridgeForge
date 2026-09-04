@@ -124,6 +124,24 @@ These sources are retained as external, user-approved evidence only. Bridgeforge
 
 Bridgeforge modernizes legacy mods. It does not profile performance. The related, independent **Starsector Performance Workbench** is specified in [docs/PERFORMANCE_WORKBENCH_DESIGN.md](docs/PERFORMANCE_WORKBENCH_DESIGN.md); the only planned interchange is a small set of versioned JSON schemas.
 
+## Void-Tec working-tree evidence tranche
+
+1. **Working-tree layout classification:** distinguish generated and backup
+   candidates from source/content candidates without suppressing any files.
+   **Status: implemented as read-only `working-tree-layout` evidence.**
+2. **Source-authority selection:** require an explicit source-root manifest when
+   a working tree contains multiple non-generated Java roots.
+   **Status: implemented as output-only `source-authority`.**
+3. **Build-input manifests:** expose Lombok/annotation-processing imports,
+   local processor JAR hints, and build metadata without assuming a processor
+   version or attempting a rebuild. **Status: implemented.**
+4. **Optional-integration scenarios:** translate direct optional API imports,
+   external campaign-memory access, and UI injection into review-only staged
+   runtime prompts. **Status: implemented; no runtime health claim is made.**
+5. **Generated-artifact-aware release deltas:** report build/log/class and
+   backup candidate deltas separately from normal content deltas. **Status:
+   implemented; candidates are never ignored automatically.**
+
 ## First 10 implementation phases — V0.1 scanner
 
 1. **CLI and target profile** — accept a mod directory and explicit Starsector/Java targets.

@@ -33,6 +33,9 @@ from .lineage import analyze_release_lineage
 from .library_api import check_dependency_apis, inventory_library_api, match_library_imports
 from .archive_intake import inspect_zip_archive, stage_zip_archive
 from .evaluation import evaluate_releases
+from .working_tree import analyze_working_tree, write_source_authority_selection
+from .build_inputs import build_input_manifest, write_build_input_manifest
+from .integration_scenarios import suggest_integration_scenarios
 from .bytecode import BytecodeUnavailable, inspect_bytecode
 from .bytecode_diff import diff_bytecode
 from .bytecode_rules import apply_bytecode_class, apply_bytecode_jar, plan_bytecode
@@ -226,6 +229,22 @@ def build_parser() -> argparse.ArgumentParser:
     evaluation.add_argument("--target-starsector", default="0.98.x")
     evaluation.add_argument("--target-java", type=int, default=17)
     evaluation.add_argument("--output", type=Path)
+    layout = subcommands.add_parser("working-tree-layout", help="classify generated, backup, and source/content candidates without changing a mod")
+    layout.add_argument("mod_directory", type=Path)
+    layout.add_argument("--output", type=Path)
+    authority = subcommands.add_parser("source-authority", help="record an explicit selected source root for a working tree")
+    authority.add_argument("mod_directory", type=Path)
+    authority.add_argument("--select-root", required=True)
+    authority.add_argument("--output", required=True, type=Path)
+    build_inputs = subcommands.add_parser("build-input-manifest", help="record source authority and annotation-processing build evidence")
+    build_inputs.add_argument("mod_directory", type=Path)
+    build_inputs.add_argument("--source-root")
+    build_inputs.add_argument("--output", required=True, type=Path)
+    scenarios = subcommands.add_parser("integration-scenarios", help="suggest review-only runtime scenarios from optional integration evidence")
+    scenarios.add_argument("mod_directory", type=Path)
+    scenarios.add_argument("--target-starsector", default="0.98.x")
+    scenarios.add_argument("--target-java", type=int, default=17)
+    scenarios.add_argument("--output", type=Path)
     return parser
 
 
@@ -714,6 +733,59 @@ def main(argv: list[str] | None = None) -> int:
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(payload + "\n", encoding="utf-8")
             print(f"Release evaluation: {output}")
+        else:
+            print(payload)
+        return 0
+    if args.command == "working-tree-layout":
+        try:
+            result = analyze_working_tree(args.mod_directory)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        payload = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            output = args.output.expanduser().resolve()
+            if output.is_relative_to(args.mod_directory.expanduser().resolve()):
+                print("bridgeforge: Working-tree layout output must not be inside the input mod directory.", file=sys.stderr)
+                return 2
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(payload + "\n", encoding="utf-8")
+            print(f"Working-tree layout: {output}")
+        else:
+            print(payload)
+        return 0
+    if args.command == "source-authority":
+        try:
+            output = write_source_authority_selection(args.mod_directory, args.select_root, args.output)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Source authority selection: {output}")
+        return 0
+    if args.command == "build-input-manifest":
+        try:
+            manifest = build_input_manifest(args.mod_directory, args.source_root)
+            output = write_build_input_manifest(manifest, args.output, args.mod_directory)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"Build-input manifest: {output}")
+        return 0
+    if args.command == "integration-scenarios":
+        try:
+            result = suggest_integration_scenarios(args.mod_directory, TargetProfile(args.target_starsector, args.target_java))
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        payload = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            output = args.output.expanduser().resolve()
+            if output.is_relative_to(args.mod_directory.expanduser().resolve()):
+                print("bridgeforge: Integration scenario output must not be inside the input mod directory.", file=sys.stderr)
+                return 2
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(payload + "\n", encoding="utf-8")
+            print(f"Integration scenarios: {output}")
         else:
             print(payload)
         return 0

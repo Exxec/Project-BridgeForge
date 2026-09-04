@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .models import ScanResult, TargetProfile
 from .scanner import scan_mod
+from .working_tree import classify_path
 
 
 def _tree_hashes(root: Path) -> dict[str, str]:
@@ -49,6 +50,9 @@ def evaluate_releases(before_directory: Path, after_directory: Path, target: Tar
     identical = {path for path in shared if before_hashes[path] == after_hashes[path]}
     changed = shared - identical
     before_only, after_only = set(before_hashes) - set(after_hashes), set(after_hashes) - set(before_hashes)
+    generated_after_only = {path for path in after_only if classify_path(path) == "GENERATED_CANDIDATE"}
+    generated_changed = {path for path in changed if classify_path(path) == "GENERATED_CANDIDATE"}
+    backup_after_only = {path for path in after_only if classify_path(path) == "BACKUP_CANDIDATE"}
     before_findings, after_findings = _finding_keys(before_scan), _finding_keys(after_scan)
     same_mod_id = bool(before_scan.metadata.get("id")) and before_scan.metadata.get("id") == after_scan.metadata.get("id")
     return {
@@ -64,6 +68,6 @@ def evaluate_releases(before_directory: Path, after_directory: Path, target: Tar
         },
         "before": _release_inventory(before_scan),
         "after": _release_inventory(after_scan),
-        "content": {"shared_path_count": len(shared), "identical_file_count": len(identical), "changed_file_count": len(changed), "before_only_file_count": len(before_only), "after_only_file_count": len(after_only), "changed_paths": sorted(changed), "before_only_extensions": _extension_counts(before_only), "after_only_extensions": _extension_counts(after_only)},
+        "content": {"shared_path_count": len(shared), "identical_file_count": len(identical), "changed_file_count": len(changed), "before_only_file_count": len(before_only), "after_only_file_count": len(after_only), "changed_paths": sorted(changed), "before_only_extensions": _extension_counts(before_only), "after_only_extensions": _extension_counts(after_only), "after_only_generated_candidates": sorted(generated_after_only), "after_only_generated_candidate_count": len(generated_after_only), "changed_generated_candidates": sorted(generated_changed), "changed_generated_candidate_count": len(generated_changed), "after_only_backup_candidates": sorted(backup_after_only), "after_only_backup_candidate_count": len(backup_after_only)},
         "finding_delta": {"resolved": _finding_records(before_findings - after_findings), "introduced": _finding_records(after_findings - before_findings), "shared_count": len(before_findings & after_findings)},
     }
