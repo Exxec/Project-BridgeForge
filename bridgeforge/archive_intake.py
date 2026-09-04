@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections import Counter
+import hashlib
+import json
 import zipfile
 from pathlib import Path
 from pathlib import PurePosixPath
@@ -59,10 +61,19 @@ def inspect_zip_archive(path: Path, max_entries: int = 20_000, max_uncompressed_
     return {"schema_version": 1, "mode": "ZIP_PREFLIGHT_ONLY", "archive": path.name, "entry_count": len(entries), "uncompressed_bytes": total, "mod_info_entries": mod_info, "candidate_mod_roots": roots, "findings": findings, "safe_to_stage": safe_to_stage, "safe_to_extract": safe_to_stage}
 
 
-def stage_zip_archive(path: Path, destination: Path) -> Path:
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def stage_zip_archive(path: Path, destination: Path, selected_root: str | None = None, manifest_output: Path | None = None) -> Path:
     """Extract a preflight-safe ZIP into a new or empty explicit destination only."""
     path = path.expanduser().resolve()
     destination = destination.expanduser().resolve()
+    archive_sha256 = _sha256(path)
     report = inspect_zip_archive(path)
     if not report["safe_to_stage"]:
         raise ValueError("Archive staging is blocked by preflight extraction hazards.")
@@ -70,6 +81,15 @@ def stage_zip_archive(path: Path, destination: Path) -> Path:
         raise ValueError("Archive staging destination must be new or empty.")
     if destination == path.parent:
         raise ValueError("Archive staging destination must not be the archive's containing directory.")
+    roots = report["candidate_mod_roots"]
+    if selected_root is not None and selected_root not in roots:
+        raise ValueError("Selected archive mod root is not a preflight candidate.")
+    if len(roots) > 1 and selected_root is None:
+        raise ValueError("Archive has multiple mod roots; select one explicitly before staging.")
+    selected_root = selected_root or (roots[0] if len(roots) == 1 else None)
+    manifest = (manifest_output.expanduser().resolve() if manifest_output else destination.parent / f"{destination.name}.bridgeforge-stage.json")
+    if manifest == path or manifest.is_relative_to(destination):
+        raise ValueError("Archive stage manifest must be outside the staged destination and must not replace the input archive.")
     destination.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(path) as archive:
         for entry in archive.infolist():
@@ -80,4 +100,16 @@ def stage_zip_archive(path: Path, destination: Path) -> Path:
             target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(entry) as source, target.open("wb") as output:
                 shutil.copyfileobj(source, output)
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(json.dumps({"schema_version": 1, "mode": "EXPLICIT_ARCHIVE_STAGE", "archive": path.name, "archive_sha256": archive_sha256, "destination": destination.name, "staged_tree_sha256": _tree_sha256(destination), "selected_mod_root": selected_root, "preflight": report, "input_preserved": archive_sha256 == _sha256(path)}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return destination
+
+
+def _tree_sha256(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted((item for item in root.rglob("*") if item.is_file()), key=lambda item: item.relative_to(root).as_posix()):
+        digest.update(path.relative_to(root).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(_sha256(path).encode("ascii"))
+        digest.update(b"\n")
+    return digest.hexdigest()

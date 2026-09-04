@@ -201,6 +201,8 @@ def build_parser() -> argparse.ArgumentParser:
     archive_stage = subcommands.add_parser("archive-stage", help="extract a preflight-safe ZIP into a new explicit destination")
     archive_stage.add_argument("archive", type=Path)
     archive_stage.add_argument("--output", required=True, type=Path)
+    archive_stage.add_argument("--select-root", help="one preflight candidate mod root when the archive contains multiple")
+    archive_stage.add_argument("--manifest-output", type=Path, help="optional manifest path outside the staged directory")
     api_inventory = subcommands.add_parser("library-api-inventory", help="inventory class symbols in a supplied local library JAR")
     api_inventory.add_argument("jar", type=Path)
     api_inventory.add_argument("--output", type=Path)
@@ -377,7 +379,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "archive-stage":
         try:
-            destination = stage_zip_archive(args.archive, args.output)
+            destination = stage_zip_archive(args.archive, args.output, args.select_root, args.manifest_output)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

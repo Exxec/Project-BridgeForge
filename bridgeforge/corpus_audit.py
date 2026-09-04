@@ -72,6 +72,12 @@ def audit_directories(mod_directories: list[Path], target: TargetProfile, contin
         "duplicate_input_count": len(requested) - len(directories),
         "unavailable_mod_count": sum(row.get("audit_status") == "UNAVAILABLE" for row in rows),
         "skipped_budget_mod_count": sum(row.get("audit_status") == "SKIPPED_BUDGET" for row in rows),
+        "budget_summary": {
+            "max_files_per_mod": max_files_per_mod,
+            "max_jars_per_mod": max_jars_per_mod,
+            "observed_file_count": sum(int(row.get("file_count", 0)) for row in rows),
+            "observed_jar_count": sum(int(row.get("jar_count", 0)) for row in rows),
+        },
         "finding_counts": dict(sorted(aggregate.items())),
         "mods": rows,
     }

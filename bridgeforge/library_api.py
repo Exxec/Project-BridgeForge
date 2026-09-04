@@ -21,10 +21,34 @@ def _normalized_identity(value: object) -> str:
 
 
 def _inventory_classes(inventory: dict) -> set[str]:
+    validate_library_api_inventory(inventory)
     classes = inventory.get("classes")
     if not isinstance(classes, list) or not all(isinstance(item, str) for item in classes):
         raise ValueError("Library API inventory must contain a classes array of strings.")
     return set(classes)
+
+
+def validate_library_api_inventory(inventory: object) -> None:
+    """Reject malformed or incompatible inventory reports before compatibility matching."""
+    if not isinstance(inventory, dict):
+        raise ValueError("Library API inventory must be a JSON object.")
+    schema_version = inventory.get("schema_version")
+    if schema_version not in (None, 1, 2):
+        raise ValueError("Library API inventory has an unsupported schema.")
+    if schema_version in (1, 2) and inventory.get("mode") != "READ_ONLY_LIBRARY_CLASS_INVENTORY":
+        raise ValueError("Library API inventory has an unsupported mode.")
+    classes = inventory.get("classes")
+    if not isinstance(classes, list) or not all(isinstance(item, str) for item in classes):
+        raise ValueError("Library API inventory must contain a classes array of strings.")
+    if schema_version == 2 and inventory.get("class_count") != len(classes):
+        raise ValueError("Library API inventory class_count does not match its classes array.")
+    digest = inventory.get("sha256")
+    if not isinstance(digest, str) or (schema_version == 2 and not re.fullmatch(r"[0-9a-f]{64}", digest)):
+        raise ValueError("Library API inventory must contain a SHA-256 digest.")
+    identity = inventory.get("identity")
+    identity_keys = ("library_id", "version", "version_source") if schema_version == 2 else ("library_id", "version")
+    if not isinstance(identity, dict) or not all(isinstance(identity.get(key), str) for key in identity_keys):
+        raise ValueError("Library API inventory must contain string identity fields.")
 
 
 def _inventory_matches_dependency(inventory: dict, dependency: str) -> bool:
@@ -126,6 +150,8 @@ def check_dependency_apis(mod_directory: Path, inventories: list[dict], target: 
     infers its installed version, checks method signatures, or proposes code
     changes.
     """
+    for inventory in inventories:
+        validate_library_api_inventory(inventory)
     result = scan_mod(mod_directory, target)
     direct = result.migration_context.get("dependency_compatibility", {}).get("direct_api_dependencies", [])
     checks: list[dict[str, object]] = []
