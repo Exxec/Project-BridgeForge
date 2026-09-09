@@ -33,6 +33,7 @@ from .lineage import analyze_release_lineage
 from .library_api import check_dependency_apis, inventory_library_api, match_library_imports
 from .archive_intake import inspect_zip_archive, stage_zip_archive
 from .evaluation import evaluate_releases
+from .revival_audit import audit_revival
 from .working_tree import analyze_working_tree, write_source_authority_selection
 from .build_inputs import build_input_manifest, write_build_input_manifest
 from .integration_scenarios import suggest_integration_scenarios
@@ -229,6 +230,10 @@ def build_parser() -> argparse.ArgumentParser:
     evaluation.add_argument("--target-starsector", default="0.98.x")
     evaluation.add_argument("--target-java", type=int, default=17)
     evaluation.add_argument("--output", type=Path)
+    revival_audit = subcommands.add_parser("revival-audit", help="audit final revival evidence and optionally attest its release ZIP")
+    revival_audit.add_argument("candidate", type=Path)
+    revival_audit.add_argument("--archive", type=Path)
+    revival_audit.add_argument("--output", type=Path)
     layout = subcommands.add_parser("working-tree-layout", help="classify generated, backup, and source/content candidates without changing a mod")
     layout.add_argument("mod_directory", type=Path)
     layout.add_argument("--output", type=Path)
@@ -736,6 +741,24 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(payload)
         return 0
+    if args.command == "revival-audit":
+        try:
+            result = audit_revival(args.candidate, args.archive)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        payload = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            output = args.output.expanduser().resolve()
+            if output.is_relative_to(args.candidate.expanduser().resolve()):
+                print("bridgeforge: Revival audit output must not be inside the candidate directory.", file=sys.stderr)
+                return 2
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(payload + "\n", encoding="utf-8")
+            print(f"Revival audit: {output} ({result['status']})")
+        else:
+            print(payload)
+        return 0 if result["status"] in {"PASS", "REVIEW"} else 1
     if args.command == "working-tree-layout":
         try:
             result = analyze_working_tree(args.mod_directory)

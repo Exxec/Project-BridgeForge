@@ -5,3 +5,28 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+Project BridgeForge.code-workspace
+docs/PERFORMANCE_WORKBENCH_DESIGN.md
+
+# Local revival inputs, candidates, completed builds, and generated evidence.
+/In operation/
+/Done/
+/artifacts/
+/.bridgeforge-push-worktree/
+/config/
+
+# Local agent/tooling scaffolding not required by the BridgeForge package.
+/.githooks/
+/AGENTS.md
+/EXAMPLES.md
+/tools/*.ps1
+
+# Local revival planning/reference material and supplied binary evidence.
+/docs/BridgeForge_Tooling_Pack.zip
+/docs/starsector_install-*.exe
+/docs/ESCALATION_TEMPLATE.md
+/docs/RECREATION_PLAN_FLUX_VACUUM.md
+/docs/REVIVAL_TEMPLATE.md
+/docs/REVIVAL_WORKFLOW.md
+/docs/fable-briefs/
+/docs/fable-solutions/

@@ -34,6 +34,7 @@ LIBRARY_PATTERNS = {
 LIBRARY_PACKAGES = {
     "LazyLib": ("org.lazywizard.lazylib",),
     "MagicLib": ("org.magiclib", "data.scripts.util"),
+    "Nexerelin": ("exerelin.",),
 }
 EXTERNAL_MOD_API_PACKAGES = {
     "Console Commands": ("org.lazywizard.console.",),
@@ -83,6 +84,69 @@ TARGET_INTERFACE_CONTRACTS = {
         "method": re.compile(r"\bpublic\s+int\s+getBonusXPUseMultAtMaxLevel\s*\(\s*\)"),
         "signature": "int getBonusXPUseMultAtMaxLevel()",
         "suggestion": "For a settings-driven level-up curve, return (int) Global.getSettings().getFloat(\"bonusXPUseMultAtMaxLevel\").",
+    },
+    "OnHitEffectPlugin.onHit": {
+        "interface": "OnHitEffectPlugin",
+        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?OnHitEffectPlugin\b"),
+        "method": re.compile(r"\bonHit\s*\([^)]*\bApplyDamageResultAPI\b[^)]*\)"),
+        "signature": "void onHit(..., ApplyDamageResultAPI, CombatEngineAPI)",
+        "suggestion": "The target callback inserts ApplyDamageResultAPI before CombatEngineAPI; preserve the existing effect body and validate it in combat.",
+    },
+    "AutofireAIPlugin.getTargetMissile": {
+        "interface": "AutofireAIPlugin",
+        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?AutofireAIPlugin\b"),
+        "method": re.compile(r"\b(?:[\w.]+\.)?MissileAPI\s+getTargetMissile\s*\(\s*\)"),
+        "signature": "MissileAPI getTargetMissile()",
+        "suggestion": "Return the tracked missile target when the legacy AI has one; a null return requires combat validation.",
+    },
+    "ShipSystemStatsScript.getActiveOverride": {
+        "interface": "ShipSystemStatsScript",
+        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?ShipSystemStatsScript\b"),
+        "method": re.compile(r"\bfloat\s+getActiveOverride\s*\(\s*(?:[\w.]+\.)?ShipAPI\s+\w+\s*\)"),
+        "signature": "float getActiveOverride(ShipAPI)",
+        "suggestion": "Establish the intended active duration override; the target default sentinel is behavior-sensitive.",
+    },
+    "ShipSystemStatsScript.getInOverride": {
+        "interface": "ShipSystemStatsScript",
+        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?ShipSystemStatsScript\b"),
+        "method": re.compile(r"\bfloat\s+getInOverride\s*\(\s*(?:[\w.]+\.)?ShipAPI\s+\w+\s*\)"),
+        "signature": "float getInOverride(ShipAPI)",
+        "suggestion": "Establish the intended activation-in duration override; the target default sentinel is behavior-sensitive.",
+    },
+    "ShipSystemStatsScript.getOutOverride": {
+        "interface": "ShipSystemStatsScript",
+        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?ShipSystemStatsScript\b"),
+        "method": re.compile(r"\bfloat\s+getOutOverride\s*\(\s*(?:[\w.]+\.)?ShipAPI\s+\w+\s*\)"),
+        "signature": "float getOutOverride(ShipAPI)",
+        "suggestion": "Establish the intended activation-out duration override; the target default sentinel is behavior-sensitive.",
+    },
+    "ShipSystemStatsScript.getUsesOverride": {
+        "interface": "ShipSystemStatsScript",
+        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?ShipSystemStatsScript\b"),
+        "method": re.compile(r"\bint\s+getUsesOverride\s*\(\s*(?:[\w.]+\.)?ShipAPI\s+\w+\s*\)"),
+        "signature": "int getUsesOverride(ShipAPI)",
+        "suggestion": "Establish the intended uses override; the target default sentinel is behavior-sensitive.",
+    },
+    "ShipSystemStatsScript.getRegenOverride": {
+        "interface": "ShipSystemStatsScript",
+        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?ShipSystemStatsScript\b"),
+        "method": re.compile(r"\bfloat\s+getRegenOverride\s*\(\s*(?:[\w.]+\.)?ShipAPI\s+\w+\s*\)"),
+        "signature": "float getRegenOverride(ShipAPI)",
+        "suggestion": "Establish the intended regeneration override; the target default sentinel is behavior-sensitive.",
+    },
+    "ShipSystemStatsScript.getDisplayNameOverride": {
+        "interface": "ShipSystemStatsScript",
+        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?ShipSystemStatsScript\b"),
+        "method": re.compile(r"\bString\s+getDisplayNameOverride\s*\(\s*(?:[\w.]+\.)?(?:ShipSystemStatsScript\.)?State\s+\w+\s*,\s*float\s+\w+\s*\)"),
+        "signature": "String getDisplayNameOverride(ShipSystemStatsScript.State, float)",
+        "suggestion": "Return the intended dynamic display name or the target default sentinel, then validate combat UI text.",
+    },
+    "HullModEffect.showInRefitScreenModPickerFor": {
+        "interface": "HullModEffect",
+        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?HullModEffect\b"),
+        "method": re.compile(r"\bboolean\s+showInRefitScreenModPickerFor\s*\(\s*(?:[\w.]+\.)?ShipAPI\s+\w+\s*\)"),
+        "signature": "boolean showInRefitScreenModPickerFor(ShipAPI)",
+        "suggestion": "Prefer extending the target BaseHullMod where behavior permits; otherwise establish picker visibility explicitly and run the full compile for all remaining obligations.",
     },
 }
 MEMORY_SELF_STORE_PATTERN = re.compile(
@@ -186,7 +250,7 @@ def _non_strict_json_finding(result: ScanResult, category: str, file: str) -> No
 
 
 def _hash_comment_json_finding(result: ScanResult, category: str, file: str) -> None:
-    result.add(id="historical-json-hash-comment", category=category, severity="high", classification="REVIEW", confidence="DETERMINISTIC", explanation="Bridgeforge parsed # comments outside JSON strings only to inspect historical structure. This syntax is not accepted by the verified 0.98a org.json parser, so it must not support confident target-version inference or automatic rewriting.", file=file)
+    result.add(id="json-hash-comment", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file uses # comments outside JSON strings, matching Starsector 0.98a core data conventions. BridgeForge parsed them structurally and does not recommend removing or rewriting them.", file=file)
 
 
 def _unverified_json_syntax_finding(result: ScanResult, category: str, file: str, exc: Exception) -> None:
@@ -230,8 +294,7 @@ def _scan_metadata(root: Path, result: ScanResult) -> None:
     game_version = metadata.get("gameVersion") or metadata.get("game_version")
     if game_version:
         result.declared_starsector = str(game_version)
-        if "hash-comments" not in tolerances:
-            result.estimated_starsector = str(game_version)
+        result.estimated_starsector = str(game_version)
     dependencies = metadata.get("dependencies") or metadata.get("requiredDependencies") or []
     if dependencies:
         result.add(id="declared-dependencies", category="dependencies", severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="Dependency declarations were found.", file="mod_info.json", evidence=[str(item) for item in dependencies])
@@ -333,8 +396,9 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
                 evidence=["throw new UnsupportedOperationException"],
             )
         if active_source:
-            for interface, contract in TARGET_INTERFACE_CONTRACTS.items():
+            for contract_id, contract in TARGET_INTERFACE_CONTRACTS.items():
                 if contract["implements"].search(text) and not contract["method"].search(text):
+                    interface = contract.get("interface", contract_id)
                     result.add(
                         id="target-interface-method-missing",
                         category="source-api",
@@ -655,13 +719,145 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
     for path in root.rglob("*.csv"):
         try:
             with path.open("r", encoding="utf-8-sig", newline="") as handle:
-                header = next(csv.reader(handle), [])
-            if not header or not any(cell.strip() for cell in header):
-                raise ValueError("CSV has no header row")
+                rows = csv.reader(handle)
+                header = next(rows, [])
+                if not header or not any(cell.strip() for cell in header):
+                    raise ValueError("CSV has no header row")
+                for line_number, row in enumerate(rows, start=2):
+                    if len(row) <= len(header) or not any(cell.strip() for cell in row):
+                        continue
+                    result.add(
+                        id="csv-row-extra-columns",
+                        category="assets",
+                        severity="high",
+                        classification="MANUAL",
+                        confidence="DETERMINISTIC",
+                        explanation="A CSV row has more fields than its header. Live revival testing showed that spilled description and hullmod rows can pass superficial parsing but load into the wrong columns; restore the intended row structure from authoritative data.",
+                        file=_relative(root, path),
+                        evidence=[f"line:{line_number}", f"header-columns:{len(header)}", f"row-columns:{len(row)}", *[f"extra:{value}" for value in row[len(header):len(header) + 3]]],
+                    )
         except UnicodeDecodeError as exc:
             result.add(id="csv-encoding-unverified", category="assets", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation=f"CSV could not be decoded as UTF-8 ({exc}). Encoding is separate from CSV structure; verify the target loader before conversion.", file=_relative(root, path))
         except (OSError, csv.Error, ValueError) as exc:
             result.add(id="invalid-csv", category="assets", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"CSV could not be read: {exc}", file=_relative(root, path))
+    _scan_wing_roles(root, result)
+    _scan_content_graph(root, result)
+
+
+def _scan_wing_roles(root: Path, result: ScanResult) -> None:
+    """Validate the role field that makes a fighter wing loadable by the combat layer."""
+    path = root / "data" / "hulls" / "wing_data.csv"
+    if not path.is_file():
+        return
+    relative = _relative(root, path)
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+    except (OSError, UnicodeDecodeError, csv.Error) as exc:
+        return
+    allowed = {"FIGHTER", "INTERCEPTOR", "BOMBER", "SUPPORT"}
+    evidence: list[dict[str, str | int]] = []
+    for index, row in enumerate(rows, start=2):
+        wing_id = (row.get("id") or "").strip()
+        if not wing_id or wing_id.startswith("#"):
+            continue
+        role = (row.get("role") or "").strip().upper()
+        evidence.append({"line": index, "id": wing_id, "role": role})
+        if not role:
+            result.add(id="fighter-wing-role-missing", category="fighters", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation="A fighter wing has no role in data/hulls/wing_data.csv. Starsector requires a recognized role before the wing can load; choose the intended fighter, interceptor, bomber, or support behavior and runtime-test the wing.", file=relative, evidence=[f"line:{index}", f"wing:{wing_id}"])
+        elif role not in allowed:
+            result.add(id="fighter-wing-role-invalid", category="fighters", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation="A fighter wing role is not recognized by the target profile. Use a documented role and verify combat behavior; BridgeForge will not guess the intended tactical role.", file=relative, evidence=[f"line:{index}", f"wing:{wing_id}", f"role:{role}", f"allowed:{','.join(sorted(allowed))}"])
+    result.migration_context["fighter_wing_roles"] = evidence
+
+
+def _registered_csv_ids(path: Path) -> set[str] | None:
+    if not path.is_file():
+        return None
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            rows = csv.reader(handle)
+            header = next(rows, [])
+            normalized = [cell.strip().lower() for cell in header]
+            if "id" not in normalized:
+                return None
+            id_index = normalized.index("id")
+            registered: set[str] = set()
+            for row in rows:
+                first_value = next((cell.strip() for cell in row if cell.strip()), "")
+                if first_value.startswith("#") or id_index >= len(row):
+                    continue
+                identifier = row[id_index].strip()
+                if identifier:
+                    registered.add(identifier)
+            return registered
+    except (OSError, UnicodeDecodeError, csv.Error):
+        return None
+
+
+def _scan_content_graph(root: Path, result: ScanResult) -> None:
+    """Check local spec registrations and value kinds without inferring repairs."""
+    weapons_root = root / "data" / "weapons"
+    weapon_specs = {path.stem: path for path in weapons_root.glob("*.wpn")}
+    registered_weapons = _registered_csv_ids(weapons_root / "weapon_data.csv")
+    if registered_weapons is not None:
+        for identifier, path in sorted(weapon_specs.items()):
+            if identifier in registered_weapons:
+                continue
+            result.add(
+                id="local-weapon-spec-unregistered",
+                category="assets",
+                severity="high",
+                classification="REVIEW",
+                confidence="DETERMINISTIC",
+                explanation="A local .wpn file has no matching id row in this mod's weapon_data.csv. It may be an intentional override registered by another provider, unused content, or a load error; inspect the merged target registry and boot log before adding data or deleting the spec.",
+                file=_relative(root, path),
+                evidence=[f"weapon:{identifier}", "local-registration:missing"],
+            )
+
+    variants_root = root / "data" / "variants"
+    variant_ids = {path.stem for path in variants_root.glob("*.variant")}
+    misplaced: list[dict[str, str]] = []
+    for path in sorted(variants_root.glob("*.variant")):
+        try:
+            data, _ = _parse_json(path.read_text(encoding="utf-8-sig"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        weapon_groups = data.get("weaponGroups", [])
+        if not isinstance(weapon_groups, list):
+            continue
+        for group_index, group in enumerate(weapon_groups):
+            if not isinstance(group, dict) or not isinstance(group.get("weapons"), dict):
+                continue
+            for slot, assigned in sorted(group["weapons"].items()):
+                if not isinstance(assigned, str) or assigned not in variant_ids or assigned in weapon_specs:
+                    continue
+                evidence = {
+                    "file": _relative(root, path),
+                    "slot": str(slot),
+                    "variant": assigned,
+                    "group": str(group_index),
+                }
+                misplaced.append(evidence)
+                result.add(
+                    id="variant-id-in-weapon-slot",
+                    category="assets",
+                    severity="critical",
+                    classification="MANUAL",
+                    confidence="DETERMINISTIC",
+                    explanation="A weaponGroups assignment names a local ship variant rather than a local weapon spec. This caused a boot-fatal module-loading error in a real revival; verify that the hull slot is a station module and move the assignment to the target version's modules structure only when the hull evidence confirms it.",
+                    file=evidence["file"],
+                    evidence=[f"group:{group_index}", f"slot:{slot}", f"variant:{assigned}"],
+                )
+
+    result.migration_context["content_graph"] = {
+        "local_weapon_specs": sorted(weapon_specs),
+        "locally_registered_weapons": sorted(registered_weapons) if registered_weapons is not None else None,
+        "local_variants": sorted(variant_ids),
+        "variant_ids_in_weapon_slots": misplaced,
+        "limitation": "Local registration and value-kind evidence does not establish merged target/provider ownership or intended balance.",
+    }
 
 
 def _source_class_index(root: Path) -> dict[str, str]:
@@ -819,6 +1015,17 @@ def _attribute_library_usage(result: ScanResult) -> None:
             result.library_usage.append({"library": library, "declared": declared, "bundled": bundled, "imported": bool(imports), "source_called": bool(source_calls), "bytecode_referenced": bytecode_referenced, "evidence": {"imports": imports, "source_calls": source_calls}})
             if declared and not bundled and not imports:
                 result.add(id="declared-library-unreferenced", category="dependencies", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="A declared library has no bundled, import, or source-call evidence. Confirm whether it is required before removing or changing it.", evidence=[library])
+            if imports and not declared and not bundled:
+                result.add(
+                    id="source-library-dependency-undeclared",
+                    category="dependencies",
+                    severity="high",
+                    classification="REVIEW",
+                    confidence="DETERMINISTIC",
+                    explanation=f"Source imports {library}, but mod_info.json does not declare it and no bundled {library} JAR was found. Determine whether the library is mandatory or an optional integration before changing metadata or source.",
+                    file="mod_info.json",
+                    evidence=[library, *imports],
+                )
 
 
 def _dependency_compatibility_context(result: ScanResult) -> None:

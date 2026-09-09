@@ -461,6 +461,19 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             self.assertEqual(findings["graphicslib-no-self-destruct-config-removed"].classification, "MANUAL")
             self.assertEqual(findings["graphicslib-shader-settings-renamed"].classification, "REVIEW")
 
+    def test_scanner_names_missing_and_invalid_fighter_wing_roles(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wings = root / "data" / "hulls"
+            wings.mkdir(parents=True)
+            (wings / "wing_data.csv").write_text(
+                "id,variant,role,role desc\nmissing,missing_variant,,\ninvalid,invalid_variant,SCOUT,Scout\nvalid,valid_variant,FIGHTER,Fighter\n",
+                encoding="utf-8",
+            )
+            findings = {item.id: item for item in scan_mod(root).findings}
+            self.assertEqual(findings["fighter-wing-role-missing"].evidence, ["line:2", "wing:missing"])
+            self.assertEqual(findings["fighter-wing-role-invalid"].evidence[2], "role:SCOUT")
+
 
     def test_scanner_reports_lombok_and_external_mod_api_build_dependencies(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -491,6 +504,25 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             result = scan_mod(root)
             matrix = result.migration_context["dependency_compatibility"]["direct_api_dependencies"]
             self.assertEqual(matrix, [{"dependency": "MagicLib", "declared": True, "imports": ["data.scripts.util.MagicRender"]}])
+
+    def test_scanner_reports_imported_libraries_missing_from_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"dependencies":["LazyLib"]}', encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "Example.java").write_text(
+                "import org.magiclib.util.MagicRender; import exerelin.campaign.SectorManager; class Example {}",
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            undeclared = [item for item in result.findings if item.id == "source-library-dependency-undeclared"]
+            self.assertEqual([item.evidence[0] for item in undeclared], ["MagicLib", "Nexerelin"])
+            self.assertTrue(all(item.classification == "REVIEW" for item in undeclared))
+            usage = {item["library"]: item for item in result.library_usage}
+            self.assertTrue(usage["MagicLib"]["imported"])
+            self.assertTrue(usage["Nexerelin"]["imported"])
+            self.assertFalse(usage["MagicLib"]["declared"])
+            self.assertFalse(usage["Nexerelin"]["declared"])
 
 
     def test_scanner_reports_legacy_custom_ui_and_dialog_callbacks(self) -> None:
@@ -694,7 +726,7 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             self.assertFalse(any(finding.id in {"unverified-mod-info-syntax", "unverified-json-syntax", "version-inference-blocked"} for finding in result.findings))
 
 
-    def test_scanner_structurally_reads_hash_comments_without_claiming_target_compatibility(self) -> None:
+    def test_scanner_structurally_reads_hash_comments_as_target_supported_syntax(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "mod_info.json").write_text('{"id":"zorg", # retained historical comment\n"gameVersion":"0.98a"}', encoding="utf-8")
@@ -703,11 +735,11 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             result = scan_mod(root)
             self.assertEqual(result.metadata["id"], "zorg")
             self.assertEqual(result.declared_starsector, "0.98a")
-            self.assertEqual(result.estimated_starsector, "UNKNOWN")
+            self.assertEqual(result.estimated_starsector, "0.98a")
             self.assertEqual(result.metadata_parse_mode, "HASH-COMMENTS")
-            self.assertTrue(any(finding.id == "historical-json-hash-comment" and finding.file == "mod_info.json" for finding in result.findings))
-            self.assertTrue(any(finding.id == "historical-json-hash-comment" and finding.file == "data/settings.json" for finding in result.findings))
-            self.assertTrue(any(finding.id == "version-inference-blocked" for finding in result.findings))
+            self.assertTrue(any(finding.id == "json-hash-comment" and finding.file == "mod_info.json" for finding in result.findings))
+            self.assertTrue(any(finding.id == "json-hash-comment" and finding.file == "data/settings.json" for finding in result.findings))
+            self.assertFalse(any(finding.id == "version-inference-blocked" for finding in result.findings))
 
 
     def test_scanner_separates_encoding_and_structural_ambiguity_from_breakage(self) -> None:
