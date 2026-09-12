@@ -127,7 +127,7 @@ def write_descriptor(
     game_version: str = "0.98a-RC8",
 ) -> None:
     """Write a synthetic descriptor.xml matching the real structure verified against
-    `In operation/Flu-X-rc8-runtime/saves/save_FourthAnderson_*/descriptor.xml`:
+    `In operation/_rig/saves/save_FourthAnderson_*/descriptor.xml`:
     `allModsEverEnabled/EnabledModData/spec[@z]` plus `enabledMods/EnabledModData/spec[@ref]`.
     """
     lines = ['<?xml version="1.0" ?>', '<SaveGameData z="1">']

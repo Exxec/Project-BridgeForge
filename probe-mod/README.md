@@ -33,7 +33,7 @@ writes that marker, only into an isolated rig whose `starsector-core` is a junct
 
 ```
 .venv\Scripts\python.exe -m bridgeforge build-probe-mod ^
-    --jdk "In operation\Flu-X-rc8-runtime\jdk-25.0.4.1+1" ^
+    --jdk "In operation\_rig\jdk-25.0.4.1+1" ^
     --core "C:\Program Files (x86)\Fractal Softworks\Starsector\starsector-core" ^
     --install-release
 ```
@@ -110,7 +110,7 @@ load programmatically:
 - `com.fs.starfarer.api.Global` and `SectorAPI` expose no save/load method anywhere in
   `starfarer.api.jar` (`javap -p` over both interfaces lists none).
 - Console Commands 4.0.9's own command registry
-  (`In operation/Flu-X-rc8-runtime/mods/Console Commands-4.0.9/data/console/commands.csv`) has no
+  (`In operation/_rig/mods/Console Commands-4.0.9/data/console/commands.csv`) has no
   save- or load-related command; its jar (`jars/*.jar`) has no class under
   `org/lazywizard/console/commands/` whose name references saving or loading a game — the only
   `*Save*`/`*Load*`-named class in the jar is `ConsoleFont$FontLoader`, a font resource loader

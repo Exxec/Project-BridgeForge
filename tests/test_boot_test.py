@@ -67,6 +67,7 @@ class BootTestRefusalTests(unittest.TestCase):
             self.assertEqual(data["enabledMods"], ["existing_mod"])
 
 
+@unittest.skipUnless(sys.platform == "win32", "boot-test launches the rig's Windows .bat")
 class BootTestLaunchTests(unittest.TestCase):
     def setUp(self) -> None:
         self._orig_poll = boot_test.POLL_INTERVAL_SECONDS
@@ -156,6 +157,7 @@ def _write_target_mod_info(runtime_dir: Path, mod_id: str, dependency_ids: list[
     )
 
 
+@unittest.skipUnless(sys.platform == "win32", "boot-test launches the rig's Windows .bat")
 class BootMatrixTests(unittest.TestCase):
     def setUp(self) -> None:
         self._orig_poll = boot_test.POLL_INTERVAL_SECONDS

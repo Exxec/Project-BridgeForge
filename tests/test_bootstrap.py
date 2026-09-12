@@ -33,7 +33,7 @@ class BootstrapTests(unittest.TestCase):
 
     def test_bootstrap_writes_baseline_and_r0_manifest_without_touching_mod_tree(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()  # CI temp dirs are 8.3 short paths; the code resolves them
             mod_dir = self._make_mod(root, "fixture_mod")
             before = _snapshot(mod_dir)
 

@@ -21,7 +21,8 @@ from tests.save_fixtures import write_descriptor, write_text
 class ResolveSaveTests(unittest.TestCase):
     def test_resolve_save_dir_accepts_dir_or_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            save_dir = Path(directory) / "save_Foo_1"
+            # resolve(): CI temp dirs arrive as 8.3 short paths (RUNNER~1) while the code resolves them.
+            save_dir = Path(directory).resolve() / "save_Foo_1"
             write_text(save_dir / "campaign.xml", "<CampaignEngine z=\"1\"></CampaignEngine>\n")
             self.assertEqual(resolve_save_dir(save_dir), save_dir)
             self.assertEqual(resolve_save_dir(save_dir / "campaign.xml"), save_dir)

@@ -209,7 +209,7 @@ def diff_saves(
 
     Tracked objects are matched by `(class, path)`, **not** `(class, z)`: XStream's `z=` id is
     only a per-file sequence number, not a stable object identity -- confirmed on a real save and
-    its own `.bak` predecessor (`In operation/Flu-X-rc8-runtime/saves/save_FourthAnderson_*`),
+    its own `.bak` predecessor (`In operation/_rig/saves/save_FourthAnderson_*`),
     where the same `ExipiratedAvestaMovement` singleton was `z="889"` in the `.bak` and `z="891"`
     in the current save, while its containment path was byte-identical between the two. Path is
     stable for a singleton-per-campaign tracked class (the common case for a mod's own manager

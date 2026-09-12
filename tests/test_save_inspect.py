@@ -125,7 +125,7 @@ class DiffSavesTests(unittest.TestCase):
             self.assertEqual(changed["fields"]["waypoint"], {"a": 1, "b": 5})
 
     def test_diff_matches_by_path_not_z_across_independently_saved_files(self) -> None:
-        # Real finding (validation against In operation/Flu-X-rc8-runtime/saves/
+        # Real finding (validation against In operation/_rig/saves/
         # save_FourthAnderson_*): the same ExipiratedAvestaMovement singleton had z="889" in
         # campaign.xml.bak and z="891" in campaign.xml -- XStream's z is a per-file sequence
         # number, not a stable id. Matching on path (not z) is what lets this be seen as

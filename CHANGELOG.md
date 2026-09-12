@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fix the CI failures of the 0.2.0 push.
+  - `test_prepare_test` imported the Windows-only `_winapi` unguarded, which broke Linux.
+  - The boot-test launch and matrix tests are now Windows-only, since they launch a `.bat`.
+  - Five tests now resolve their temp dirs, because GitHub's Windows runners use 8.3 short paths (`RUNNER~1`).
+- `test_probe_mod_build` no longer deletes the real `probe-mod/releases/bridgeforge-probe` copy that `probe-config --install` ships. It parks and restores it.
+- `rig-doctor` finds working copies by the folder convention (`In operation/<Mod>/working`, then `Done/<Mod>/<release>`) instead of a hard-coded list. The test rig is now `In operation/_rig`.
+
 ## 0.2.0 — 2026-09-11
 
 Everything landed since the `v0.1.0-alpha.1` tag. The package moves to `0.2.0`, and the

@@ -11,20 +11,13 @@ from .scanner import _base_game_version, _load_lenient_json_file
 TARGET_BASE_GAME_VERSION = "0.98a"
 DEFAULT_BASELINE_RELATIVE = Path("bridgeforge-state") / "real-saves-baseline.json"
 
-# Known working-copy source locations for the Flu-X-rc8 rig's mods, keyed by the mod id declared in
-# each mod's mod_info.json. Paths are relative to the repo root and only returned by
-# default_working_copies() when they actually exist on disk -- this module never invents a mapping.
-CANDIDATE_WORKING_COPIES: dict[str, Path] = {
-    "exigency": Path("In operation") / "Exigency-0.7.2-assessment" / "Exigency 0.7.2",
-    "SEEKER": Path("Done") / "SEEKER-0.98a",
-    "ArkLeg_dev": Path("In operation") / "Legacy-of-Arkgneisis-0.98a",
-    "infected": Path("In operation") / "Flu-X-0.98a",
-    "broke": Path("In operation") / "Broken-Star-assessment",
-    "flowergod": Path("In operation") / "FlowerGod-assessment",
-    "Omega_Psychasthenia": Path("In operation") / "Omega-Trauma-assessment" / "Omega-Trauma",
-    "a16709513_wkt": Path("In operation") / "Edmunds-Church-2.5-assessment" / "Edmund's Church2.5",
-    "voidtec": Path("In operation") / "Void-Tec-r13-assessment" / "Void-Tec-0.98a-revival-r13",
-}
+# Working copies are found by the project layout (In operation/README.md), keyed by the mod id in
+# each copy's mod_info.json -- never by a hand-kept list:
+#   In operation/<Mod>/working/      the one copy BridgeForge edits (wins when a mod is in both places)
+#   Done/<Mod>/<release folder>/     a finished mod's released copy
+# Folders starting with "_" (the rigs, _attic) and the per-mod original/, scratch/, reports/,
+# builds/ and workspace/ folders are never working copies.
+NON_WORKING_FOLDER_NAMES = {"original", "scratch", "reports", "builds", "workspace"}
 
 
 def _repo_root() -> Path:
@@ -36,14 +29,29 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def _declared_id(folder: Path) -> str | None:
+    info = _load_lenient_json_file(folder / "mod_info.json") if (folder / "mod_info.json").is_file() else None
+    mod_id = info.get("id") if isinstance(info, dict) else None
+    return mod_id if isinstance(mod_id, str) and mod_id else None
+
+
 def default_working_copies(repo_root: Path) -> dict[str, Path]:
-    """CANDIDATE_WORKING_COPIES filtered to entries that exist on disk under repo_root."""
+    """Discover working copies by the layout convention (see NON_WORKING_FOLDER_NAMES above)."""
     repo_root = Path(repo_root)
     found: dict[str, Path] = {}
-    for mod_id, relative in CANDIDATE_WORKING_COPIES.items():
-        candidate = repo_root / relative
-        if candidate.is_dir():
-            found[mod_id] = candidate
+    for area in ("In operation", "Done"):  # In operation first: a mod under re-test beats its release
+        base = repo_root / area
+        if not base.is_dir():
+            continue
+        for mod_folder in sorted(p for p in base.iterdir() if p.is_dir() and not p.name.startswith("_")):
+            if area == "In operation":
+                candidates = [mod_folder / "working"]
+            else:
+                candidates = sorted(p for p in mod_folder.iterdir() if p.is_dir() and p.name not in NON_WORKING_FOLDER_NAMES)
+            for candidate in candidates:
+                mod_id = _declared_id(candidate) if candidate.is_dir() else None
+                if mod_id and mod_id not in found:
+                    found[mod_id] = candidate
     return found
 
 

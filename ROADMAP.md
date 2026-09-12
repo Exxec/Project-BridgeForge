@@ -116,7 +116,7 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
    Avionics excluded, its installed copy is RC5). `bridgeforge compat-set install <set> --runtime <rig>
    --source-mods <dir> [--dry-run] [--json]` copies only what's missing/drifted (never rig → source),
    refuses off a non-junction rig, warns (doesn't block) on a `gameVersion` mismatch. Dry-run against
-   the real rig (`In operation/Flu-X-rc8-runtime`): libs/AI Tweaks/Nexerelin already identical, would
+   the real rig (`In operation/_rig`): libs/AI Tweaks/Nexerelin already identical, would
    add Industrial.Evolution/Unknown Skies/Ship_Weapon Pack/Tahlan Shipworks. `boot_test.run_boot_matrix`
    (new; `run_boot_test`'s signature unchanged) runs the target alone with the libs it declares, then
    with the whole pack, restoring `enabled_mods.json` after each leg; verdict `PASS` /
@@ -206,6 +206,110 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
      - Each confirmed risk that bites live becomes a `BUG_CLASSES.md` row and a check (P7 closure rule).
 
    **Order:** P9-0 now; then the folder reorganisation and the first offline live session; then P9-1 → P9-2/3 → P9-4 → P9-5 → P9-6. **Status: P9-0 done; the rest planned.**
+
+   **P9 v2: BridgeForge becomes a behaviour-discovery engine (second review, 2026-09-11; design only, no code yet).**
+   The review's diagnosis: BridgeForge is strong at catching known bug classes, but nothing in it discovers unknown behaviour before modernization starts. Discovery currently happens only after something breaks. The fix is not more bespoke detectors: BridgeForge assembles the facts it already extracts into a behaviour model *before* any change. Stages are named D0–D6 so they don't clash with P1–P8. Existing pieces are reused, not rebuilt:
+   - scanner and bytecode checks
+   - dossier
+   - `save-compat` aliases and `save-inspect`
+   - probe and scenarios
+   - `release-evaluate`, `test-plan` and `BUG_CLASSES`
+
+   | Stage | Command(s) | Output | Built from |
+   |---|---|---|---|
+   | **D0 Archaeology** (read-only, deterministic) | `archaeology` | `archaeology/architecture.json` + `ARCHITECTURE_MAP.md`, `cross_reference.json` | P9-1 plus the items below |
+   | **D1 Behaviour model** | `behavior-map`, `risk-register`, `hypotheses` | `behavior.json` + `BEHAVIOR_MAP.md`, `risks.json` + `RISK_REGISTER.md`, `hypotheses.json`, `UNKNOWN_BEHAVIORS.md`, `coverage_seed.json` | D0 |
+   | **D2 Runtime baseline** | `probe-baseline` | `baseline-<build>-<scenario>.json` (records what happened, no verdicts) | probe census (P9-5) + scenarios |
+   | **D3 Test synthesis** | `hypotheses --tests` | proposed tests per hypothesis; Opus/Sol make them adversarial | D1 |
+   | **D4 Modernization** | (existing tools) | every change cites RISK/HYP/TEST ids (P9-3) | — |
+   | **D5 Differential validation** | `behavior-diff`, `release-behavior-evaluate` | delta report per behaviour | D2 on both builds + map diff (P9-4) |
+   | **D6 Coverage and residual human testing** | `coverage` | coverage matrix; human tests only for what stays uncovered | D1 + D2 + D5 |
+
+   - **D0 additions beyond P9-1:**
+     - **A real cross-reference graph, not grep.** Nodes: Java, bytecode, CSV, JSON, `.faction`, `.variant`, `.ship`, `.wpn`, rules.csv, `mod_info.json`, jar resources, save aliases. Edges: "can make X relevant" paths, e.g. `rules.csv` command → class, or hullmod id → variant → fleet.
+     - **"No known reference" instead of a dead-code verdict.** BridgeForge never says "dead code". It reports `NO KNOWN REFERENCE (confidence 0.72)` with two explicit lists: **Checked** (source, bytecode, CSV, JSON, faction data, variants, rules.csv, reflection-shaped strings) and **Not verified** (runtime registration, generated references, external mod integration). This enforces P9-0.
+     - **Lifecycle graph.** Every hook (`onApplicationLoad`, `onNewGame`, `onNewGameAfterProcGen`, `onNewGameAfterEconomyLoad`, `onNewGameAfterTimePass`, `onGameLoad`) and every registration (`addScript`, `addTransientScript`, `addListener`, `ListenerManager`, combat plugins) is drawn as a tree. A script or listener reachable from more than one route with no visible guard is flagged as a possible duplicate registration. This is the pre-runtime version of `save-scripts`.
+     - **Persistent-state map:** classes and fields that land in saves, confirmed by `save-compat` aliases on real saves.
+     - **Source ↔ bytecode divergence:** bundled source that doesn't match the shipped jar, as SEEKER's didn't.
+   - **D1 details:**
+     - Each **behaviour** entry has: subsystem, entry point, trigger, Java classes, data files, ids consumed and produced, persistent state, external APIs, other mods involved, lifecycle, side effects, confidence and evidence. The review's worked example is the Avesta movement, already partly proven by `save-inspect`.
+     - **Hypotheses (HYP-nnn).** These are generated, not hand-written. Example: "FooMovement is persistent and moves an entity; unknowns: survives save/load? registered once? position continuous after load? destination kept? exactly one instance per new game?" Each unknown comes with the observations that would answer it (script count before and after a load, entity position at T0/T+1d/T+5d, waypoint state across a load). This bridges archaeology and testing: Opus/Sol get concrete hypotheses instead of inventing what might matter.
+     - **Unknown-behaviours ledger (UNK-nnn).** Statuses: `EXPLAINED`, `LIKELY INTENTIONAL`, `LIKELY DEFECT`, `UNKNOWN`, `RUNTIME TEST REQUIRED`, `PRESERVE UNTIL EXPLAINED`. A modernization agent must not "clean up" anything in the last status.
+     - Hypotheses and unknowns sit alongside the P9-2 risk register, sharing its stable ids and statuses.
+   - **D2 details:**
+     - `probe-baseline` is a no-verdict mode of the probe. It records entities, scripts, markets, factions, fleets and tracked state per scenario: new game, day 5, save/load, progression, combat, and compat-set environments.
+     - **The reference build is the hard part, since originals usually can't run on RC8.** In order of preference:
+       - (a) An older game version, where you have one, installed as a second isolated rig, running the **original** mod. This is the true oracle.
+       - (b) The first bootable revived build (`r1`).
+       - (c) Whatever the original does manage to run before it fails.
+       - (d) The static map diff (P9-4) as the floor.
+   - **D5 details:** `behavior-diff` sorts every observation into one of five categories:
+     - `UNCHANGED`
+     - `EXPECTED_CHANGE`, matched against a declared-changes file written alongside each change
+     - `UNEXPLAINED_CHANGE`
+     - `MISSING_OBSERVATION`
+     - `NEW_BEHAVIOR`
+
+     `release-behavior-evaluate` extends `release-evaluate` to consume this runtime evidence. That's the step `release-evaluate` deliberately refuses today without such evidence.
+   - **D6 coverage matrix:** one row per behaviour, with columns static, runtime, save/load, compat and human, and a status of `COVERED` or `OPEN`.
+     - It reports counts first ("37 known behaviours, 31 covered, 4 need runtime evidence, 2 need human judgment") and a percentage only second.
+     - Its footer says "known behaviours" plainly: a percentage of the known can't speak for the unknown, which is exactly why the unknowns ledger exists.
+   - **The dossier becomes the presentation layer:**
+     - The index adds ARCHITECTURE, BEHAVIOUR, RISKS, UNKNOWNS, COVERAGE and RECOMMENDED TESTS sections.
+     - It keeps split-never-truncate and "triage in ≤5 reads".
+     - It's the packet handed to Qwen/Hermes or Opus.
+   - **New release gate:** "scan, compile, boot and probe clean" is no longer enough.
+     - No HIGH-risk behaviour may remain `UNKNOWN` or `PRESERVE UNTIL EXPLAINED` without a written decision.
+     - Every observed delta between the reference and the revived build must be explained, explicitly approved or covered by a test.
+     - It joins the P8 gates, after P9-2's risk gate.
+   - **Workflow and model routing:**
+     1. BridgeForge archaeology (deterministic) plus a Qwen exhaustive *review* of its output, plus the reference baseline, produce the map, risks, unknowns and hypotheses.
+     2. Opus/Sol design adversarial tests.
+     3. Qwen/Hermes implement the modernization.
+     4. BridgeForge runs the differential validation.
+     5. Opus/Sol review only the unexplained deltas.
+
+     Qwen's role is reviewing and annotating the archaeology output, not replacing the deterministic crawl (principle above).
+   - **Order (after the offline live session):** D0 (archaeology + cross-reference + lifecycle) → D1 (behaviour, risks, hypotheses, unknowns) → dossier integration → D2 `probe-baseline` (with P9-5 census) → D5 `behavior-diff` → D6 coverage + release gate → D3 test synthesis. D4 is the existing tools plus the breadcrumbs.
+   - **Pilot:** run D0/D1 on Exigency and SEEKER first. Their live bugs are already known, so they measure how many of this week's surprises archaeology would have predicted, which is the acceptance test.
+   - **Open decisions for the owner:**
+     1. Is an older Starsector version available for a reference rig (D2 option a)?
+     2. Coverage: counts only, or counts plus a percentage?
+     3. Is local Qwen/Hermes available for the D1 review, and how should its output come back (file drop or MCP)?
+     4. The format of the declared-expected-changes file (per build tag, next to the manifest).
+
+10. **P10: Reference rigs on older game versions (the D2 oracle).** The owner can install older Starsector versions, so each original mod can run on the game it was built for.
+    - **Needed versions,** read from the untouched originals' `mod_info.json`:
+
+      | Game version | Mods |
+      |---|---|
+      | **0.8.1a** | FlowerGod, Flu-X |
+      | **0.7.2a** | Exigency |
+      | **0.97a-RC11** | Omega Trauma |
+      | 0.65.2a | SEEKER |
+      | 0.62a | Vacuum |
+
+      Arkgneisis and Broken Star already target 0.98a. Edmund's Church and Void-Tec have no untouched original here.
+    - **`rig-create --game-version <v> --install <dir>`:** registers an old install as an isolated reference rig. Old versions keep saves inside their own install, so each version needs its own folder, never the real install. It records the bundled Java version and the run command, and `rig-doctor` learns about reference rigs.
+    - **Era compat sets:** `era-0.8.1a`, `era-0.7.2a` and so on. Old mods need old LazyLib, MagicLib and GraphicsLib, and finding those builds is part of the setup. Missing libraries are the most likely blocker.
+    - **Observation without the probe:** the probe is compiled against the RC8 API, so it won't run on old versions. The cheap oracle is the **old game's saves**, since they're XStream too: `save-inspect` and `save-content` read a save from the original mod on its own game, as the D2 baseline. A per-era `probe-legacy` build comes later, only if saves prove too thin.
+    - **Pilot:** Exigency on 0.7.2a, comparing the Avesta movement, markets and known lists against the revived build. Then FlowerGod and Flu-X on 0.8.1a (one install covers both).
+11. **P11: Tool hygiene** (found 2026-09-11 while reorganising).
+    - **Stale processes:** 22 `tail -f`/`grep` log watchers from the Sep 9 boot tests were still running two days later and locking the rig.
+      - `rig-doctor` gains a lock check: open files via Restart Manager, stale watchers, and processes whose current folder is inside the rig.
+      - Every monitor BridgeForge or `bf-test.ps1` starts must stop its children.
+      - A new `bridgeforge who-locks <path>` names the process holding a path. That diagnosis took several steps by hand.
+    - **Test hermeticity:** a test deleted the real `probe-mod/releases` copy on every run; now fixed.
+      - A CI or suite guard should fail when a test changes anything outside temp dirs: check that `git status` and the ignored release copy are unchanged before and after the run.
+      - A shared test helper should resolve temp paths, because GitHub's Windows runners use 8.3 short paths (`RUNNER~1`).
+    - **CI upkeep:** move `actions/checkout` and `actions/setup-python` off Node 20, which GitHub has deprecated. Keep the Linux and Windows matrix, with Windows-only features (junctions, `.bat` launch) skipped on Linux.
+12. **P12: Workflow tooling for the new layout.**
+    - **`bridgeforge intake <archive>`:** creates `In operation\<Mod>\{original,working,reports,builds,scratch}` from a download (keeping the archive in `original\`), then runs `scan`, `dossier` and, later, `archaeology`.
+    - **`bridgeforge board`:** generates the status table from each mod's folder (stage, build tag, last test, open risks), so `STATUS.md` stops being hand-maintained.
+    - **`rig-doctor` layout check:** flags strays at the `In operation\` root and working copies outside the convention.
+    - **`bridgeforge promote <mod>`:** runs `release --apply` into `Done\<Mod>\`, keeping the previous release as `builds\`.
+    - **Finish Vacuum's move** once its folder is free.
+    - **Release hygiene:** tag `v0.2.0` in git, with GitHub release notes taken from the CHANGELOG.
 
 ## Post-1.0 research and gated automation
 

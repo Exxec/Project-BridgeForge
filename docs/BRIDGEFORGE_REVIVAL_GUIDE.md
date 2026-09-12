@@ -12,7 +12,7 @@ Two shorthands used below, adjust to your machine:
 
 ```powershell
 $core = "C:\Program Files (x86)\Fractal Softworks\Starsector\starsector-core"   # vanilla game data, read-only
-$rig  = "C:\Users\exxec\Documents\Project BridgeForge\In operation\Flu-X-rc8-runtime"  # isolated test rig
+$rig  = "C:\Users\exxec\Documents\Project BridgeForge\In operation\_rig"  # isolated test rig
 ```
 
 ## 0. Safety rules (read once)

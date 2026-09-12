@@ -133,7 +133,7 @@ class BuildTagTests(unittest.TestCase):
 
     def test_nested_mod_root_is_found_at_depth_two(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()  # CI temp dirs are 8.3 short paths; the code resolves them
             nested = root / "Extracted" / "MyMod 1.0"
             nested.mkdir(parents=True)
             (nested / "mod_info.json").write_text('{"id":"fixture","name":"Fixture Mod","version":"1.0"}', encoding="utf-8")

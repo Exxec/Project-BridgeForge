@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import _winapi
 import json
 import os
 import tempfile
@@ -8,6 +7,11 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.prepare_test import PrepareTestError, prepare_test
+
+try:
+    import _winapi
+except ImportError:  # pragma: no cover - non-Windows (the junction test then skips)
+    _winapi = None
 
 
 def _write(path: Path, text: str) -> None:

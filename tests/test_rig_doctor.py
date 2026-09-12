@@ -290,7 +290,7 @@ class WorkingCopyDriftCheckTests(unittest.TestCase):
 
     def test_warn_on_drift_with_fix_command(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()  # CI temp dirs are 8.3 short paths; the detail uses resolved ones
             rig = _make_isolated_rig(root)
             if rig is None:
                 self.skipTest("Could not create an NTFS junction in this environment.")
@@ -468,17 +468,22 @@ class OverallStatusTests(unittest.TestCase):
 
 
 class DefaultWorkingCopiesTests(unittest.TestCase):
-    def test_only_existing_paths_are_returned(self) -> None:
+    def test_discovers_working_copies_by_layout_convention(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "In operation" / "Flu-X-0.98a").mkdir(parents=True)
-            (root / "Done" / "SEEKER-0.98a").mkdir(parents=True)
-            # ArkLeg_dev, exigency, and the RC8-mods candidates are deliberately not created.
+            _write_json(root / "In operation" / "Flu-X" / "working" / "mod_info.json", {"id": "infected"})
+            _write_json(root / "In operation" / "Flu-X" / "scratch" / "old" / "mod_info.json", {"id": "infected_old"})
+            _write_json(root / "In operation" / "_rig" / "mods" / "X" / "mod_info.json", {"id": "rig_only"})
+            _write_json(root / "Done" / "SEEKER" / "SEEKER-0.98a" / "mod_info.json", {"id": "SEEKER"})
+            _write_json(root / "Done" / "SEEKER" / "original" / "Old SEEKER" / "mod_info.json", {"id": "SEEKER"})
+            _write_json(root / "Done" / "SEEKER" / "workspace" / "mod_info.json", {"id": "seeker_ws"})
+            # A finished mod still under re-test: the In operation working copy wins over Done's release.
+            _write_json(root / "Done" / "Flu-X" / "Flu-X-0.98a" / "mod_info.json", {"id": "infected"})
 
             found = default_working_copies(root)
             self.assertEqual(set(found), {"infected", "SEEKER"})
-            self.assertEqual(found["infected"], root / "In operation" / "Flu-X-0.98a")
-            self.assertEqual(found["SEEKER"], root / "Done" / "SEEKER-0.98a")
+            self.assertEqual(found["infected"], root / "In operation" / "Flu-X" / "working")
+            self.assertEqual(found["SEEKER"], root / "Done" / "SEEKER" / "SEEKER-0.98a")
 
     def test_empty_when_nothing_exists(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -16,15 +16,17 @@ def _write(path: Path, text: str) -> None:
 class BuildManifestTests(unittest.TestCase):
     def test_apply_build_tag_records_manifest_outside_mod_folder(self) -> None:
         with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as manifests_dir:
-            root = Path(mod_dir)
+            # resolve(): CI temp dirs arrive as 8.3 short paths (RUNNER~1) while the code resolves them.
+            root = Path(mod_dir).resolve()
+            manifests_root = Path(manifests_dir).resolve()
             _write(root / "mod_info.json", '{"id":"fixture_mod","name":"Fixture","version":"1.0"}')
             _write(root / "data" / "hulls" / "ship_data.csv", "id\nfixture_hull\n")
 
-            result = apply_build_tag(root, manifests_dir=Path(manifests_dir), record_manifest=True)
+            result = apply_build_tag(root, manifests_dir=manifests_root, record_manifest=True)
 
             manifest_path = Path(result["manifest_path"])
             self.assertTrue(manifest_path.is_file())
-            self.assertTrue(str(manifest_path).startswith(str(Path(manifests_dir))))
+            self.assertTrue(str(manifest_path).startswith(str(manifests_root)))
             self.assertNotIn(str(root), str(manifest_path))  # never inside the mod folder
 
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))

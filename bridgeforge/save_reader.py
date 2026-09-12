@@ -32,7 +32,7 @@ This module resolves those `ref=` links itself (`ElementTree` has no notion
 of XStream's `z`/`ref` graph reuse) and returns both the full "ever enabled"
 list and the resolved "currently enabled" list.
 
-Confirmed on `In operation/Flu-X-rc8-runtime/saves/save_FourthAnderson_*`:
+Confirmed on `In operation/_rig/saves/save_FourthAnderson_*`:
 Exigency's `spec` shows `id=exigency`, `name=Exigency`,
 `versionInfo/string=0.7.2`, `gameVersion/string=0.98a-RC8`,
 `dirName=Exigency`; `enabledMods` resolves via `ref=` back to that same

@@ -8,7 +8,7 @@ from bridgeforge.jar_audit import REFLECTION_SYMBOL_PREFIXES, _resolve_jar_class
 from bridgeforge.probe_mod_build import ProbeModBuildError, build_probe_mod, install_release
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-JDK_DIR = REPO_ROOT / "In operation" / "Flu-X-rc8-runtime" / "jdk-25.0.4.1+1"
+JDK_DIR = REPO_ROOT / "In operation" / "_rig" / "jdk-25.0.4.1+1"
 CORE_DIR = Path(r"C:\Program Files (x86)\Fractal Softworks\Starsector\starsector-core")
 
 _RIG_AVAILABLE = JDK_DIR.is_dir() and CORE_DIR.is_dir()
@@ -49,10 +49,19 @@ class ProbeModBuildTests(unittest.TestCase):
             shutil.rmtree(build_dir, ignore_errors=True)
 
     def test_install_release_assembles_runtime_only_copy(self) -> None:
-        build_probe_mod(REPO_ROOT, JDK_DIR, CORE_DIR)
-        result = install_release(REPO_ROOT)
-        release_dir = Path(result["release_dir"])
+        # install_release writes the REAL release copy that `probe-config --install` ships into rigs.
+        # This test used to delete it afterwards (every suite run left the rig with nothing to
+        # install), so park any existing copy first and put it back untouched when done.
+        real_release = REPO_ROOT / "probe-mod" / "releases" / "bridgeforge-probe"
+        parked_root = Path(tempfile.mkdtemp())
+        parked = parked_root / "bridgeforge-probe"
+        had_release = real_release.exists()
+        if had_release:
+            shutil.move(str(real_release), str(parked))
         try:
+            build_probe_mod(REPO_ROOT, JDK_DIR, CORE_DIR)
+            result = install_release(REPO_ROOT)
+            release_dir = Path(result["release_dir"])
             self.assertTrue((release_dir / "mod_info.json").is_file())
             self.assertTrue((release_dir / "jars" / "bridgeforge-probe.jar").is_file())
             self.assertTrue((release_dir / "data" / "missions" / "mission_list.csv").is_file())
@@ -61,9 +70,11 @@ class ProbeModBuildTests(unittest.TestCase):
             self.assertFalse((release_dir / "src").exists())
             self.assertFalse((release_dir / "build").exists())
         finally:
-            shutil.rmtree(release_dir, ignore_errors=True)
-            build_dir = REPO_ROOT / "probe-mod" / "build"
-            shutil.rmtree(build_dir, ignore_errors=True)
+            shutil.rmtree(real_release, ignore_errors=True)
+            if had_release:
+                shutil.move(str(parked), str(real_release))
+            shutil.rmtree(parked_root, ignore_errors=True)
+            shutil.rmtree(REPO_ROOT / "probe-mod" / "build", ignore_errors=True)
 
 
 class ProbeModBuildErrorTests(unittest.TestCase):
