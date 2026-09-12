@@ -282,3 +282,8 @@ P12D pre-publication full guarded suite: 630 tests passed, one environment symli
 skip, checkout/probe-release hermeticity PASS. Log: P12D-test-suite.log. Runtime
 and package versions are both 0.2.0. Commit/tag/package/CI evidence follows in
 the per-phase local publication handoff; do not claim publication until verified.
+
+Release package preflight caught a missing source-distribution changelog. Add
+CHANGELOG.md to MANIFEST.in and rebuild against a new final release SHA; the
+superseded 3eb1fa3 package is not a published artifact. All runtime blobs and
+installed smoke had passed; no tag/draft was created before this correction.

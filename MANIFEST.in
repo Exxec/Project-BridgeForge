@@ -1,4 +1,5 @@
 include tests/support.py
+include CHANGELOG.md
 include tools/bf-test.ps1
 include docs/P12_LAYOUT_TOOLING.md
 include docs/P12_PROMOTION.md
