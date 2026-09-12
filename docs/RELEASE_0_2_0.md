@@ -2,7 +2,10 @@
 
 Published 2026-09-12 21:30:31 UTC:
 [BridgeForge 0.2.0](https://github.com/Exxec/Project-BridgeForge/releases/tag/v0.2.0).
-The observable release is public, not draft, not prerelease.
+The observable release is public and marked pre-release, not draft.
+Per owner direction, full-release promotion waits until the remaining validation
+gates below are complete. The initially published stable designation was corrected;
+the source tag and all three artifact digests remain unchanged.
 
 Release source and remote annotated tag's peeled commit:
 `e98522109a00c27dbe73e2bb1cffcd5978427ea8`.

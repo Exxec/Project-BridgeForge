@@ -304,3 +304,11 @@ goal remains open: boot/probe acceptance, human campaign/combat/save checks,
 SPW owner thresholds/report, reference behavior closure and gated research.
 Next tranche: refresh acceptance evidence and scope a rig-only validation plan.
 No new mod build/promotion, original/game/save edit or live test performed.
+
+### Owner-directed pre-release gate
+
+v0.2.0 is now marked pre-release and not Latest. Source tag and all three asset
+digests remain unchanged. Full-release promotion is deferred until remaining
+validation is complete; passing tool tests/source/tag CI is not enough to close
+boot/probe, interactive, persistence and reference-evidence gates. Updated release
+receipt and public notes reflect this direction. No retag/rebuild needed.
