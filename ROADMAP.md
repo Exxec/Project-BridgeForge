@@ -369,6 +369,11 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
       match; only launcher JDK path and working-copy junction were corrected.
       No source/gameplay changes or new live test. Probe/report/live gates remain
       explicit; release hygiene is next. See `docs/P12_VACUUM_LAYOUT.md`.
+    - **P12D release hygiene completed (2026-09-12):** public `v0.2.0` tool
+      release at `e98522109a00c27dbe73e2bb1cffcd5978427ea8`; six source CI and
+      six tag CI jobs passed. Exact-source packages and fresh public downloads
+      verified, with changelog notes and SHA256 receipts. P12 is complete;
+      live/manual/research acceptance gates are not. See `docs/RELEASE_0_2_0.md`.
 
 ## Post-1.0 research and gated automation
 

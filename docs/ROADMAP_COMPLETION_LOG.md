@@ -287,3 +287,20 @@ Release package preflight caught a missing source-distribution changelog. Add
 CHANGELOG.md to MANIFEST.in and rebuild against a new final release SHA; the
 superseded 3eb1fa3 package is not a published artifact. All runtime blobs and
 installed smoke had passed; no tag/draft was created before this correction.
+
+### P12D publication verified
+
+Public v0.2.0 release published 2026-09-12 21:30:31 UTC:
+https://github.com/Exxec/Project-BridgeForge/releases/tag/v0.2.0.
+Source, remote peeled tag, metadata and notes all identify
+`e98522109a00c27dbe73e2bb1cffcd5978427ea8`. All six source CI jobs and all six
+tag CI jobs passed before publication. Exact-source wheel/sdist and independent
+draft/public downloads matched SHA256; installed-wheel checks passed. Complete
+receipts/CI links are in docs/RELEASE_0_2_0.md and local P12D_PUBLICATION.md.
+
+P12 tooling/layout/release hygiene is complete. This receipt is a documentation
+follow-up, not a retag or replacement of published source/assets. Overall roadmap
+goal remains open: boot/probe acceptance, human campaign/combat/save checks,
+SPW owner thresholds/report, reference behavior closure and gated research.
+Next tranche: refresh acceptance evidence and scope a rig-only validation plan.
+No new mod build/promotion, original/game/save edit or live test performed.

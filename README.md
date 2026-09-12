@@ -2,6 +2,10 @@
 
 Reusable validation tools and Git hooks for Project BridgeForge.
 
+[Download BridgeForge 0.2.0](https://github.com/Exxec/Project-BridgeForge/releases/tag/v0.2.0).
+See [verified publication evidence](docs/RELEASE_0_2_0.md) for source/asset hashes
+and the separate live-validation limits.
+
 Included:
 - `tools/hash-baseline.ps1`
 - `tools/compile-diagnostic.ps1`
