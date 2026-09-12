@@ -252,8 +252,8 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
 
      `release-behavior-evaluate` extends `release-evaluate` to consume this runtime evidence. That's the step `release-evaluate` deliberately refuses today without such evidence.
    - **D6 coverage matrix:** one row per behaviour, with columns static, runtime, save/load, compat and human, and a status of `COVERED` or `OPEN`.
-     - It reports counts first ("37 known behaviours, 31 covered, 4 need runtime evidence, 2 need human judgment") and a percentage only second.
-     - Its footer says "known behaviours" plainly: a percentage of the known can't speak for the unknown, which is exactly why the unknowns ledger exists.
+     - **It reports counts only** (owner decision, 2026-09-11), e.g. "37 known behaviours: 31 covered, 4 need runtime evidence, 2 need human judgment; 7 unknowns open".
+     - There is no percentage: a share of the *known* behaviours says nothing about the unknown ones, which is why the unknowns ledger is counted alongside.
    - **The dossier becomes the presentation layer:**
      - The index adds ARCHITECTURE, BEHAVIOUR, RISKS, UNKNOWNS, COVERAGE and RECOMMENDED TESTS sections.
      - It keeps split-never-truncate and "triage in ≤5 reads".
@@ -272,11 +272,16 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
      Qwen's role is reviewing and annotating the archaeology output, not replacing the deterministic crawl (principle above).
    - **Order (after the offline live session):** D0 (archaeology + cross-reference + lifecycle) → D1 (behaviour, risks, hypotheses, unknowns) → dossier integration → D2 `probe-baseline` (with P9-5 census) → D5 `behavior-diff` → D6 coverage + release gate → D3 test synthesis. D4 is the existing tools plus the breadcrumbs.
    - **Pilot:** run D0/D1 on Exigency and SEEKER first. Their live bugs are already known, so they measure how many of this week's surprises archaeology would have predicted, which is the acceptance test.
-   - **Open decisions for the owner:**
-     1. Is an older Starsector version available for a reference rig (D2 option a)?
-     2. Coverage: counts only, or counts plus a percentage?
-     3. Is local Qwen/Hermes available for the D1 review, and how should its output come back (file drop or MCP)?
-     4. The format of the declared-expected-changes file (per build tag, next to the manifest).
+   - **Owner decisions (2026-09-11):**
+     1. **Reference rig:** yes. The owner will install older versions (see P10).
+     2. **Coverage:** counts only.
+     3. **Qwen/Hermes:** optional, still in testing. Every stage must work without it. Its D1 review is an extra pass whose output is a file dropped into `reports/` for BridgeForge to merge.
+     4. **Expected-changes format:** designed in `docs/EXPECTED_CHANGES_FORMAT.md`.
+        - One lenient-JSON file per mod, at `In operation/<Mod>/reports/expected-changes.json`.
+        - Entries have ids (`EXP-<MOD>-nnn`) and are tagged with the build that made the change.
+        - Matchers are typed; statuses run PROPOSED → APPROVED → RETIRED.
+        - `behavior-diff` sorts every observed change into EXPECTED / UNEXPLAINED / EXPECTED_BUT_ABSENT.
+        - The release gate counts only APPROVED entries.
 
 10. **P10: Reference rigs on older game versions (the D2 oracle).** The owner can install older Starsector versions, so each original mod can run on the game it was built for.
     - **Needed versions,** read from the untouched originals' `mod_info.json`:
