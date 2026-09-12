@@ -47,6 +47,8 @@ score the per-mod revival plan before editing. No compile or live test is implie
 manual `STATUS.md`. Missing evidence is unknown, and a folder under `Done` is not
 automatically a verified release. `rig-doctor` also warns about project-layout strays.
 See [P12 workflow details](docs/P12_LAYOUT_TOOLING.md).
+See [guarded promotion](docs/P12_PROMOTION.md) for dry-run-first `promote`,
+prior-release retention, and explicit validation/release gates.
 
 ```powershell
 py -3 -m bridgeforge workspace C:\path\to\OldMod --output C:\work\OldMod-bridgeforge

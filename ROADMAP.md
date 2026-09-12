@@ -356,6 +356,13 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
       layout warnings. Existing originals/manual STATUS/builds are not replaced.
       Promotion, Vacuum movement and release hygiene remain pending; see
       `docs/P12_LAYOUT_TOOLING.md` and the completion log for exact validation gates.
+    - **P12B promotion implemented (2026-09-12):** dry-run-default promotion with
+      audited plan/report and D5 release gates, exact staged package identity,
+      prior-release retention, per-release evidence and rollback. Bundled release
+      policy is installed and missing/invalid policy blocks distribution. Full
+      guarded suite: 630 tests, one skip, no checkout/probe drift. No actual mod
+      promotion or new live test; Vacuum movement and release hygiene remain open.
+      See `docs/P12_PROMOTION.md` and `docs/ROADMAP_COMPLETION_LOG.md`.
 
 ## Post-1.0 research and gated automation
 

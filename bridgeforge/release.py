@@ -11,6 +11,7 @@ from .jar_audit import audit_jar
 from .models import TargetProfile
 from .scanner import _load_lenient_json_file, scan_mod
 from .behavior_discovery import check_expected_changes, evaluate_behavior_release
+from .archive_intake import _normalized_member_name
 
 """Release pipeline (roadmap P8 + P3b-M).
 
@@ -37,8 +38,20 @@ class ReleaseError(ValueError):
 def _load_policy(policy_path: Path | None) -> dict[str, object]:
     path = Path(policy_path).expanduser().resolve() if policy_path is not None else DEFAULT_POLICY_PATH
     if not path.is_file():
-        return {"schema_version": 1, "mods": {}, "default": {"local_only": False, "reason": None}}
-    return json.loads(path.read_text(encoding="utf-8"))
+        raise ReleaseError(f"Required release licence policy is missing: {path}")
+    try:
+        policy = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        raise ReleaseError(f"Cannot read release licence policy: {path}: {exc}") from exc
+    if not isinstance(policy, dict) or policy.get("schema_version", 1) != 1:
+        raise ReleaseError("Release policy must be a schema-1 object")
+    mods, default = policy.get("mods", {}), policy.get("default", {})
+    if not isinstance(mods, dict) or not isinstance(default, dict):
+        raise ReleaseError("Release policy mods/default must be objects")
+    for entry in [default, *mods.values()]:
+        if not isinstance(entry, dict) or not isinstance(entry.get("local_only", False), bool):
+            raise ReleaseError("Release policy entries must be objects with boolean local_only")
+    return policy
 
 
 def _policy_for_mod(policy: dict[str, object], mod_id: str | None, mod_name: str | None) -> dict[str, object]:
@@ -198,7 +211,9 @@ def _save_corpus_gate(root: Path, mod_id: str | None, corpus_dir: Path | None) -
 def _release_basename(mod_id: str | None, version: object, root: Path) -> str:
     base = mod_id or root.name
     if isinstance(version, str) and version:
-        return f"{base}-{version}"
+        base = f"{base}-{version}"
+    if "/" in base or "\\" in base or _normalized_member_name(base) != base or len(base) > 180:
+        raise ReleaseError("Release id/version must form a single portable filename component")
     return base
 
 

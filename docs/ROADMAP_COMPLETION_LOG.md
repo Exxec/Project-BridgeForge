@@ -155,3 +155,54 @@ passed against the actual repo without source-checkout imports or writes (log:
 `In operation/_attic/P12A-installed-board.log`). Package logs/artifacts are in
 `In operation/_attic/P12A-package.log` and `p12a-dist`. Exact-SHA CI is pending
 commit/push and final publication verification.
+
+P12A publication verified: `9d2f53b39e624cba5da2fa94cc671510fc0ecd2b`, all six
+CI jobs passed: https://github.com/Exxec/Project-BridgeForge/actions/runs/34718586654.
+Final packages rebuilt from an exact-commit LF checkout; all 96 wheel runtime/data
+files and required sdist helper/script/doc assets equal committed blobs.
+
+## P12B plan: guarded promotion and remaining layout/release gates
+
+SAFE tooling scope: a dry-run-default `promote` wrapper around existing release
+gates, with required revival report/plan audit, D-series behavior evidence, staged
+package validation, exclusive destinations, prior-release retention and rollback.
+Do not promote actual mods with missing/incomplete reports or unresolved live gates.
+Preserve original/working copies and unrelated Done contents. No mod code changes;
+revival complexity scoring remains in the mod's approved plan, not invented here.
+
+SAFE packaging gap: the wheel currently omits bundled release_policy.json; include
+it and fail closed if explicit/default policy is missing or malformed rather than
+silently granting release permission. This protects Exigency's local-only gate.
+
+Vacuum layout move: inspect exact sources/destinations and locks before authorizing
+any move; preserve bytes, record manifests, and never relabel an unvalidated build.
+Stop if ownership/lock status or layout role cannot be established safely.
+Tool v0.2.0 release: inspect existing tags/releases, exact-SHA CI and package policy
+before publishing. No original mod/license-restricted material in tool artifacts.
+
+Validation: promotion dry-run/pass/block/collision/prior-retention/rollback tests;
+missing-policy checks; full guarded suite; exact-commit wheel/policy inventory and
+installed smoke; commit/push with exact-SHA CI. Preserve CLAUDE.md and new .vscode/.
+Promotion implementation is the first checkpoint; live/uncertain gates stay open.
+
+### P12B promotion checkpoint
+
+Implemented `promote` with audited external plan/report evidence, explicit scored
+workflow routing, separate affirmative validation labels, mandatory D5 release
+gates, staged exact ZIP identity, unchanged input/report hashes, prior-release
+retention, per-release report copies and lock-journaled reversible publication.
+Negative live-test evidence cannot be hidden behind historical PASS text.
+Installed packages include release_policy.json; absent/invalid policy fails closed.
+See docs/P12_PROMOTION.md for CLI and interrupted-promotion recovery limits.
+
+Validation: 42 focused tests passed; full guarded suite passed 630 tests (one
+environment symlink skip), checkout/probe-release hermeticity PASS. Log:
+`In operation/_attic/P12B-test-suite.log`. No actual mod promotion, live test,
+original/working mod edit, or layout move performed. Exact-commit package and CI
+publication evidence follows in ignored `In operation/_attic/P12B_PUBLICATION.md`.
+
+Next tranche: finish Vacuum layout migration after byte inventories and lock checks.
+The old Vacuum root is an earlier modified attempt, not untouched original input;
+preserve it under scratch. The Vacuum rig's Java25 BAT still points at the old
+Flu-X-rc8-runtime JDK path and needs a documented mechanical path correction when
+moving to _rig-vacuum. Tool v0.2.0 tag/release and outstanding live gates remain open.

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Implement P12B dry-run-first guarded `promote`, staged package identity checks,
+  per-release reports, recoverable prior-release retention, and publication rollback.
+  Preserve declared live-test requirements. Bundle release policy in installed
+  packages and fail closed on missing or malformed policies.
+
 - Implement P12A source-preserving ZIP `intake`, deterministic declared-evidence
   `board`, optional generated status files, and read-only rig-doctor layout warnings.
   Intake never replaces existing mod folders or approves a revival plan; unknown

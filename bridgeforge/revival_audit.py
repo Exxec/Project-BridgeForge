@@ -87,13 +87,14 @@ def _completion_statuses(report: str) -> tuple[list[str], bool]:
     return declared, final
 
 
-def audit_revival(candidate: Path, archive: Path | None = None) -> dict[str, Any]:
+def audit_revival(candidate: Path, archive: Path | None = None, *, reports_dir: Path | None = None) -> dict[str, Any]:
     """Audit report completeness and attest an optional release ZIP without modifying inputs."""
     root = candidate.expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"Revival candidate is not a directory: {root}")
-    report_path = root / "reports" / "REVIVAL_REPORT.md"
-    plan_path = root / "reports" / "REVIVAL_PLAN.md"
+    reports = reports_dir.expanduser().resolve() if reports_dir is not None else root / "reports"
+    report_path = reports / "REVIVAL_REPORT.md"
+    plan_path = reports / "REVIVAL_PLAN.md"
     if not report_path.is_file():
         raise ValueError(f"Missing required revival report: {report_path}")
     if not plan_path.is_file():

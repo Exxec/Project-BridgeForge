@@ -68,6 +68,8 @@ def _row(area: str, folder: Path, working: Path | None) -> dict[str, object]:
         warnings.append("working metadata unavailable")
     def evidence_path(relative: str) -> Path | None:
         candidates = [folder / "reports" / relative]
+        if area == "Done" and working is not None:
+            candidates.insert(0, folder / "reports" / working.name / relative)
         if working is not None:
             candidates.append(working / "reports" / relative)
         for candidate in candidates:

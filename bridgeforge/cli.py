@@ -66,6 +66,7 @@ from .rig_doctor import default_working_copies, rig_doctor
 from .locks import who_locks
 from .intake import intake_archive
 from .project_board import project_board, render_board, write_board
+from .promote import promote_mod
 from .reference_rigs import ReferenceRigError, write_reference_rig_manifest
 from .bootstrap import bootstrap_mods
 from .build_tag import record_current_manifest
@@ -459,6 +460,15 @@ def build_parser() -> argparse.ArgumentParser:
     board_cmd.add_argument("--repo-root", type=Path, default=Path.cwd())
     board_cmd.add_argument("--write", action="store_true", help="write STATUS.generated.json/.md; never replaces manual STATUS.md")
     board_cmd.add_argument("--json", action="store_true")
+    promote_cmd = subcommands.add_parser("promote", help="stage/audit a release and retain prior builds; dry-run by default")
+    promote_cmd.add_argument("mod", help="folder name under In operation (not a source path)")
+    promote_cmd.add_argument("--repo-root", type=Path, default=Path.cwd())
+    for option in ("original", "baseline", "behavior-diff", "behavior-risks", "behavior-unknowns"):
+        promote_cmd.add_argument("--" + option, required=True, type=Path)
+    for option in ("expected-changes", "vanilla-core", "rig", "corpus-dir", "policy"):
+        promote_cmd.add_argument("--" + option, type=Path)
+    promote_cmd.add_argument("--apply", action="store_true")
+    promote_cmd.add_argument("--json", action="store_true")
     rig_doctor_cmd = subcommands.add_parser("rig-doctor", help="pre-flight checks for a test rig: isolation, running game, probe install, enabled mods, working-copy drift, real-install saves untouched")
     rig_doctor_cmd.add_argument("runtime_dir", type=Path)
     rig_doctor_cmd.add_argument("--working", action="append", default=[], metavar="ID=PATH", help="working copy for a mod id (adds to/overrides the defaults); repeatable")
@@ -628,6 +638,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "promote":
+        try:
+            result = promote_mod(args.mod, args.repo_root, original=args.original, baseline=args.baseline,
+                behavior_diff=args.behavior_diff, behavior_risks=args.behavior_risks,
+                behavior_unknowns=args.behavior_unknowns, expected_changes=args.expected_changes,
+                vanilla_core=args.vanilla_core, rig=args.rig, corpus_dir=args.corpus_dir,
+                policy=args.policy, apply=args.apply)
+        except (ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2, sort_keys=True) if args.json else f"{result['status']}: {args.mod}")
+        return 1 if result["status"] == "BLOCKED" else 0
     if args.command in {"intake", "board"}:
         try:
             if args.command == "intake":
