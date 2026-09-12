@@ -4,7 +4,8 @@
 
 ## 0.2.0 — 2026-09-11
 
-Everything landed since the `v0.1.0-alpha.1` tag.
+Everything landed since the `v0.1.0-alpha.1` tag. The package moves to `0.2.0`, and the
+`bridgeforge-probe` mod to `0.2.0` (it gained `ProbeSetup` and `ProbeProfile`). Its `BF-PROBE|0.2.0|…` lines show which probe build produced a log.
 
 - `log-triage --mods-dir <mods>` (with `--all-mods` for a log from another mod list) names the mod whose loaded jar threw each exception.
   - Each exception gets `suspect`, the mod closest to the throw, and `involved`, every mod on the stack. The attribution summary counts exceptions per suspect.
