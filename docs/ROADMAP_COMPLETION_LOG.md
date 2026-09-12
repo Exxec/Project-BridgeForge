@@ -18,6 +18,11 @@ No unresolved live/manual or research gate is silently treated as complete.
 
 ## P11 tranche: implemented, publication verification pending
 
+Python/CI tranche pushed as `ebc42466fcb60cc5d1c173f56735b35cc07f61ca`.
+The general tools/*.ps1 ignore rule required an explicit exception for the canonical
+monitor; the following publication commit includes that script. Verify CI on the
+final publication SHA, not the intermediate Python-only commit.
+
 SAFE tooling changes only; no individual mod behavior is changed.
 
 - Added a checkout/probe-release end-state guard and wired all six CI jobs to it.

@@ -22,6 +22,7 @@ docs/PERFORMANCE_WORKBENCH_DESIGN.md
 /AGENTS.md
 /EXAMPLES.md
 /tools/*.ps1
+!/tools/bf-test.ps1
 
 # Local revival planning/reference material and supplied binary evidence.
 /docs/BridgeForge_Tooling_Pack.zip
