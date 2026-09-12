@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Implement P11 tool hygiene: read-only `who-locks` and rig-doctor process-path
+  checks, Windows Restart Manager diagnostics, declared psutil dependency, and
+  PID/start-time-scoped interruption cleanup in the versioned `tools/bf-test.ps1`.
+- Guard the six-job CI suite against checkout/probe-release end-state drift;
+  add resolved-temp-path fixtures and move checkout/setup-python to Node24.
+
 - Implement the offline portion of roadmap P10 reference rigs.
   - Add `rig-create` manifests with core/JRE hashes, bundled Java metadata, run command, save location, and an explicit unprovable-isolation limitation.
   - Teach `rig-doctor --reference-manifest` to validate historical rig identity/version while skipping the incompatible RC8 probe.

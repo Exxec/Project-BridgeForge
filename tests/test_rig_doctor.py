@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,7 @@ except ImportError:  # pragma: no cover - non-Windows
 
 from bridgeforge.probe_mod_build import RELEASE_RELATIVE
 from bridgeforge.rig_doctor import (
+    _check_path_locks,
     default_working_copies,
     rig_doctor,
 )
@@ -56,11 +58,24 @@ def _make_isolated_rig(root: Path) -> Path | None:
     return rig
 
 
+@contextmanager
 def _patch_repo_root(repo_root: Path):
-    return mock.patch("bridgeforge.rig_doctor._repo_root", return_value=repo_root)
+    # Machine process state is not part of these filesystem fixtures.
+    with mock.patch("bridgeforge.rig_doctor._repo_root", return_value=repo_root), mock.patch(
+        "bridgeforge.rig_doctor.who_locks", return_value={"processes": [], "limitations": []}
+    ):
+        yield
 
 
 class IsolationCheckTests(unittest.TestCase):
+    def test_lock_candidate_warns_without_stopping_process(self):
+        with mock.patch("bridgeforge.rig_doctor.who_locks", return_value={
+            "processes": [{"pid": 42, "name": "tail", "sources": ["cwd"]}], "limitations": []
+        }):
+            result = _check_path_locks(Path("fixture"))
+        self.assertEqual(result["status"], "WARN")
+        self.assertIn("pid 42", result["detail"])
+
     def test_fail_when_core_is_a_plain_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

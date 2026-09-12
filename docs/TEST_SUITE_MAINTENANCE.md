@@ -15,3 +15,23 @@ observed:
 - failures are difficult to locate because of a mixed layout.
 
 The split is hygiene only and does not block reliability or product work.
+
+## Hermetic suite runner
+
+Run `python -m bridgeforge.test_guard` from the checkout root. CI uses this runner
+on all six Windows/Linux and Python-version combinations. It compares git status,
+hashes tracked and non-ignored untracked files (including pre-existing dirty files),
+and inventories/hashes the ignored `probe-mod/releases/bridgeforge-probe` tree
+before and after unittest. Changed inputs fail the run even when tests pass.
+This is an end-state guard, not a filesystem access sandbox: temporary writes that
+are restored, other ignored build outputs, and writes outside the checkout are
+not detected. No files are restored automatically.
+
+Use `tests.support.resolved_temp_dir()` for new path-sensitive fixtures; it yields
+a resolved `Path` so Windows runner 8.3 aliases do not change comparisons.
+
+Managed-sandbox diagnostics (2026-09-12): four boot cleanup tests and two real
+probe compiler tests failed with process/log-lock or compiler-resource permission
+errors. Running `tests.test_boot_test` and `tests.test_probe_mod_build` outside the
+sandbox passed all 12 tests. These failures are environment limitations, not
+evidence that a behavior-changing process fix is needed.

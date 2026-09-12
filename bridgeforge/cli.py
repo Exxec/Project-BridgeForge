@@ -63,6 +63,7 @@ from .test_plan import TestPlanError, plan_tests
 from .spw_bridge import SpwBridgeError, ingest_spw_report, log_spam, perf_gate
 from .release import ReleaseError, release_mod
 from .rig_doctor import default_working_copies, rig_doctor
+from .locks import who_locks
 from .reference_rigs import ReferenceRigError, write_reference_rig_manifest
 from .bootstrap import bootstrap_mods
 from .build_tag import record_current_manifest
@@ -442,6 +443,9 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap_cmd.add_argument("--manifests-dir", type=Path, help="default: <repo>/bridgeforge-state/build-manifests")
     bootstrap_cmd.add_argument("--overwrite", action="store_true", help="replace existing baselines (default: keep them)")
     bootstrap_cmd.add_argument("--json", action="store_true")
+    locks_cmd = subcommands.add_parser("who-locks", help="read-only process/Restart Manager diagnosis; never stops processes")
+    locks_cmd.add_argument("path", type=Path)
+    locks_cmd.add_argument("--json", action="store_true")
     rig_doctor_cmd = subcommands.add_parser("rig-doctor", help="pre-flight checks for a test rig: isolation, running game, probe install, enabled mods, working-copy drift, real-install saves untouched")
     rig_doctor_cmd.add_argument("runtime_dir", type=Path)
     rig_doctor_cmd.add_argument("--working", action="append", default=[], metavar="ID=PATH", help="working copy for a mod id (adds to/overrides the defaults); repeatable")
@@ -1674,6 +1678,22 @@ def main(argv: list[str] | None = None) -> int:
             for check in result["checks"]:
                 print(f"  {check['status']:<8} {check['name']}: {check['detail']}")
         return 1 if result["status"] == "FAIL" else 0
+    if args.command == "who-locks":
+        try:
+            result = who_locks(args.path)
+        except (ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(f"{result['status']}: {result['target']}")
+            for process in result["processes"]:
+                print(f"  pid {process['pid']} {process['name']}: {', '.join(process['sources'])}")
+            for limitation in result["limitations"]:
+                print(f"  limitation: {limitation}")
+            print(result["note"])
+        return 0
     if args.command == "test-plan":
         try:
             result = plan_tests(args.mod_dir, args.since, manifests_dir=args.manifests_dir, live_test_instructions=args.live_test_instructions)

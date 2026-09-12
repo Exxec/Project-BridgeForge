@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
-import tempfile
+from tests.support import resolved_temp_dir
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -46,7 +46,7 @@ def _write_fake_launcher(runtime_dir: Path, script_body: str) -> None:
 
 class BootTestRefusalTests(unittest.TestCase):
     def test_refuses_when_core_is_not_a_link(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        with resolved_temp_dir() as directory:
             runtime_dir = _make_rig(Path(directory), link_core=False)
             _write_fake_launcher(runtime_dir, "print('unused')\n")
             result = boot_test.run_boot_test(runtime_dir, ["demo_mod"], timeout=3)
@@ -54,7 +54,7 @@ class BootTestRefusalTests(unittest.TestCase):
             self.assertIn("junction/symlink", result["reason"])
 
     def test_refuses_when_java_already_running_under_runtime_dir(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        with resolved_temp_dir() as directory:
             runtime_dir = _make_rig(Path(directory))
             _write_fake_launcher(runtime_dir, "print('unused')\n")
             fake_exe = str(runtime_dir / "jdk" / "bin" / "java.exe")
@@ -77,7 +77,7 @@ class BootTestLaunchTests(unittest.TestCase):
         boot_test.POLL_INTERVAL_SECONDS = self._orig_poll
 
     def test_pass_when_marker_appears(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        with resolved_temp_dir() as directory:
             runtime_dir = _make_rig(Path(directory))
             _write_fake_launcher(
                 runtime_dir,
@@ -95,7 +95,7 @@ class BootTestLaunchTests(unittest.TestCase):
             self.assertEqual(data["enabledMods"], ["existing_mod"])
 
     def test_suspect_fatal_dialog_when_alive_without_marker(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        with resolved_temp_dir() as directory:
             runtime_dir = _make_rig(Path(directory))
             _write_fake_launcher(runtime_dir, "import time\ntime.sleep(30)\n")
             with mock.patch.object(boot_test, "_running_java_under", return_value=[]):
@@ -104,7 +104,7 @@ class BootTestLaunchTests(unittest.TestCase):
             self.assertIn("Fatal", result["reason"])
 
     def test_fail_when_process_exits_early(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        with resolved_temp_dir() as directory:
             runtime_dir = _make_rig(Path(directory))
             _write_fake_launcher(runtime_dir, "print('booting')\n")
             with mock.patch.object(boot_test, "_running_java_under", return_value=[]):
@@ -113,7 +113,7 @@ class BootTestLaunchTests(unittest.TestCase):
             self.assertTrue(result["restored"])
 
     def test_keep_mods_leaves_new_enabled_mods_in_place(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        with resolved_temp_dir() as directory:
             runtime_dir = _make_rig(Path(directory))
             _write_fake_launcher(runtime_dir, "print('booting')\n")
             with mock.patch.object(boot_test, "_running_java_under", return_value=[]):
@@ -167,7 +167,7 @@ class BootMatrixTests(unittest.TestCase):
         boot_test.POLL_INTERVAL_SECONDS = self._orig_poll
 
     def test_fails_only_with_pack_when_pack_only_id_triggers_failure(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        with resolved_temp_dir() as directory:
             root = Path(directory)
             runtime_dir = _make_rig(root)
             compat_sets_path = _write_fixture_compat_sets(root)
@@ -203,7 +203,7 @@ class BootMatrixTests(unittest.TestCase):
             self.assertEqual(data["enabledMods"], ["existing_mod"])
 
     def test_pass_pass_verdict_is_pass(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        with resolved_temp_dir() as directory:
             root = Path(directory)
             runtime_dir = _make_rig(root)
             compat_sets_path = _write_fixture_compat_sets(root)
@@ -226,7 +226,7 @@ class BootMatrixTests(unittest.TestCase):
             self.assertEqual(data["enabledMods"], ["existing_mod"])
 
     def test_fail_alone_short_circuits_verdict(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        with resolved_temp_dir() as directory:
             root = Path(directory)
             runtime_dir = _make_rig(root)
             compat_sets_path = _write_fixture_compat_sets(root)

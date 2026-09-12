@@ -82,7 +82,9 @@ class ReferenceRigTests(unittest.TestCase):
             root = Path(directory)
             install = _make_install(root)
             manifest = write_reference_rig_manifest(install, game_version="0.7.2a", output=root / "rig.json")
-            with mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]), mock.patch(
+                "bridgeforge.rig_doctor.who_locks", return_value={"processes": [], "limitations": []}
+            ):
                 result = rig_doctor(install, reference_manifest=manifest)
             self.assertEqual(result["status"], "PASS")
             probe = next(c for c in result["checks"] if c["name"] == "probe_installed")

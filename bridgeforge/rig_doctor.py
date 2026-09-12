@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .boot_test import _is_link, _running_java_under
 from .copy_drift import compare_copies
+from .locks import who_locks
 from .probe_mod_build import RELEASE_RELATIVE
 from .reference_rigs import verify_reference_rig_manifest
 from .scanner import _base_game_version, _load_lenient_json_file
@@ -99,6 +100,16 @@ def _check_game_not_running(runtime_dir: Path) -> dict[str, object]:
         "WARN",
         f"java.exe already running under {runtime_dir} (pid {pids}). Stop it before launching a new test.",
     )
+
+
+def _check_path_locks(runtime_dir: Path) -> dict[str, object]:
+    result = who_locks(runtime_dir)
+    processes = result["processes"]
+    if processes:
+        detail = "; ".join(f"pid {p['pid']} {p['name']} ({', '.join(p['sources'])})" for p in processes)
+        return _check("path_locks", "WARN", detail + ". Review with who-locks; no process stopped.")
+    unavailable = any("psutil unavailable" in str(item) for item in result["limitations"])
+    return _check("path_locks", "SKIPPED" if unavailable else "PASS", "No process found. Limited visibility: " + "; ".join(result["limitations"]))
 
 
 def _check_probe_installed(runtime_dir: Path, repo_root: Path) -> dict[str, object]:
@@ -323,6 +334,7 @@ def rig_doctor(
         checks.extend([
             _check("reference_isolation", "PASS", "Registered as an operator-selected dedicated historical install; this assertion is not independently provable."),
             _check_game_not_running(runtime_dir),
+            _check_path_locks(runtime_dir),
             _check("probe_installed", "SKIPPED", "The RC8 probe is unsupported on historical reference rigs; use save-baseline."),
             _check_enabled_mods_resolve(runtime_dir, target_base),
             _check_working_copy_drift(runtime_dir, working_copies or {}),
@@ -332,6 +344,7 @@ def rig_doctor(
         checks = [
             _check_isolation(runtime_dir),
             _check_game_not_running(runtime_dir),
+            _check_path_locks(runtime_dir),
             _check_probe_installed(runtime_dir, repo_root),
             _check_enabled_mods_resolve(runtime_dir),
             _check_working_copy_drift(runtime_dir, working_copies or {}),

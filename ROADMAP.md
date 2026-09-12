@@ -336,6 +336,13 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
       - A CI or suite guard should fail when a test changes anything outside temp dirs: check that `git status` and the ignored release copy are unchanged before and after the run.
       - A shared test helper should resolve temp paths, because GitHub's Windows runners use 8.3 short paths (`RUNNER~1`).
     - **CI upkeep:** move `actions/checkout` and `actions/setup-python` off Node 20, which GitHub has deprecated. Keep the Linux and Windows matrix, with Windows-only features (junctions, `.bat` launch) skipped on Linux.
+    - **Implemented/locally verified (2026-09-12):** read-only `who-locks`, rig
+      process-path checks with explicit visibility limits, session-scoped monitor
+      interruption cleanup (`tools/bf-test.ps1`), shared resolved-temp fixtures,
+      guarded CI and minimal Node24 action upgrades. The guarded local suite passed
+      601 tests (one skip); Windows Restart Manager identified an exclusive temp
+      file owner. No live game was launched. Exact-SHA CI is the publication gate;
+      see `docs/ROADMAP_COMPLETION_LOG.md` for evidence and remaining scope.
 12. **P12: Workflow tooling for the new layout.**
     - **`bridgeforge intake <archive>`:** creates `In operation\<Mod>\{original,working,reports,builds,scratch}` from a download (keeping the archive in `original\`), then runs `scan`, `dossier` and, later, `archaeology`.
     - **`bridgeforge board`:** generates the status table from each mod's folder (stage, build tag, last test, open risks), so `STATUS.md` stops being hand-maintained.
