@@ -64,6 +64,8 @@ from .spw_bridge import SpwBridgeError, ingest_spw_report, log_spam, perf_gate
 from .release import ReleaseError, release_mod
 from .rig_doctor import default_working_copies, rig_doctor
 from .locks import who_locks
+from .intake import intake_archive
+from .project_board import project_board, render_board, write_board
 from .reference_rigs import ReferenceRigError, write_reference_rig_manifest
 from .bootstrap import bootstrap_mods
 from .build_tag import record_current_manifest
@@ -446,6 +448,17 @@ def build_parser() -> argparse.ArgumentParser:
     locks_cmd = subcommands.add_parser("who-locks", help="read-only process/Restart Manager diagnosis; never stops processes")
     locks_cmd.add_argument("path", type=Path)
     locks_cmd.add_argument("--json", action="store_true")
+    intake_cmd = subcommands.add_parser("intake", help="preserve a ZIP and create a fresh convention-layout assessment copy")
+    intake_cmd.add_argument("archive", type=Path)
+    intake_cmd.add_argument("--repo-root", type=Path, default=Path.cwd())
+    intake_cmd.add_argument("--name", help="portable mod folder name (default: sanitized metadata id)")
+    intake_cmd.add_argument("--selected-root", help="exact ZIP mod-root candidate when ambiguous")
+    intake_cmd.add_argument("--archaeology", action="store_true", help="also collect static D0 discovery evidence")
+    intake_cmd.add_argument("--json", action="store_true")
+    board_cmd = subcommands.add_parser("board", help="read-only declared-evidence status board; missing evidence remains unknown")
+    board_cmd.add_argument("--repo-root", type=Path, default=Path.cwd())
+    board_cmd.add_argument("--write", action="store_true", help="write STATUS.generated.json/.md; never replaces manual STATUS.md")
+    board_cmd.add_argument("--json", action="store_true")
     rig_doctor_cmd = subcommands.add_parser("rig-doctor", help="pre-flight checks for a test rig: isolation, running game, probe install, enabled mods, working-copy drift, real-install saves untouched")
     rig_doctor_cmd.add_argument("runtime_dir", type=Path)
     rig_doctor_cmd.add_argument("--working", action="append", default=[], metavar="ID=PATH", help="working copy for a mod id (adds to/overrides the defaults); repeatable")
@@ -615,6 +628,25 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command in {"intake", "board"}:
+        try:
+            if args.command == "intake":
+                result = intake_archive(args.archive, args.repo_root, name=args.name,
+                                        selected_root=args.selected_root, archaeology=args.archaeology)
+                if args.json:
+                    print(json.dumps(result, indent=2, sort_keys=True))
+                else:
+                    print(f"{result['status']}: {result['destination']}")
+                    print("Archive/upstream bytes preserved. Complete and score a revival plan before editing.")
+            else:
+                result = project_board(args.repo_root)
+                if args.write:
+                    write_board(result, args.repo_root)
+                print(json.dumps(result, indent=2, sort_keys=True) if args.json else render_board(result), end="\n" if args.json else "")
+        except (ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        return 0
     if args.command in {"archaeology", "behavior-map", "risk-register", "hypotheses", "probe-baseline", "save-baseline", "expect", "behavior-diff", "release-behavior-evaluate", "coverage"}:
         try:
             if args.command == "archaeology":

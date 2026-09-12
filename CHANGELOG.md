@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Implement P12A source-preserving ZIP `intake`, deterministic declared-evidence
+  `board`, optional generated status files, and read-only rig-doctor layout warnings.
+  Intake never replaces existing mod folders or approves a revival plan; unknown
+  test/risk evidence remains explicit. Harden portable ZIP paths/collisions and
+  retain empty upstream directories. Promotion/release hygiene remain separate.
+
 - Implement P11 tool hygiene: read-only `who-locks` and rig-doctor process-path
   checks, Windows Restart Manager diagnostics, declared psutil dependency, and
   PID/start-time-scoped interruption cleanup in the versioned `tools/bf-test.ps1`.

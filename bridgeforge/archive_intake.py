@@ -19,6 +19,12 @@ def _normalized_member_name(name: str) -> str | None:
     parts = PurePosixPath(portable).parts
     if ".." in parts:
         return None
+    reserved = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"} | {
+        f"{prefix}{number}" for prefix in ("COM", "LPT") for number in "123456789¹²³"
+    }
+    if any(any(char in '<>:"|?*' or ord(char) < 32 for char in part) or part.endswith((".", " ")) or
+           part.split(".")[0].upper() in reserved for part in parts if part not in (".", "/")):
+        return None
     return "/".join(part for part in parts if part not in (".", "/"))
 
 
@@ -36,7 +42,10 @@ def inspect_zip_archive(path: Path, max_entries: int = 20_000, max_uncompressed_
     normalized = [_normalized_member_name(entry.filename) for entry in entries]
     unsafe = sorted(entry.filename for entry, name in zip(entries, normalized) if name is None)
     symlinks = sorted(entry.filename for entry in entries if stat.S_ISLNK(entry.external_attr >> 16))
-    duplicates = sorted(name for name, count in Counter(name for name in normalized if name).items() if count > 1)
+    duplicates = sorted(name for name, count in Counter(name.casefold() for name in normalized if name).items() if count > 1)
+    file_names = {name.casefold() for entry, name in zip(entries, normalized) if name and not entry.is_dir()}
+    collisions = sorted(name for name in file_names if any(
+        str(parent) in file_names for parent in PurePosixPath(name).parents if str(parent) != "."))
     mod_info = sorted(name for name in normalized if name and PurePosixPath(name).name == "mod_info.json")
     roots = sorted({str(PurePosixPath(name).parent) if str(PurePosixPath(name).parent) != "." else "." for name in mod_info})
     findings = []
@@ -50,13 +59,15 @@ def inspect_zip_archive(path: Path, max_entries: int = 20_000, max_uncompressed_
         findings.append({"id": "archive-symlink-member", "classification": "MANUAL", "entries": symlinks})
     if duplicates:
         findings.append({"id": "archive-duplicate-member", "classification": "REVIEW", "entries": duplicates})
+    if collisions:
+        findings.append({"id": "archive-path-collision", "classification": "MANUAL", "entries": collisions})
     if not mod_info:
         findings.append({"id": "archive-no-mod-info", "classification": "REVIEW", "explanation": "No mod_info.json member was found; extraction may not yield a selectable mod root."})
     elif len(mod_info) > 1:
         findings.append({"id": "archive-multiple-mod-info", "classification": "MANUAL", "entries": mod_info, "explanation": "Multiple candidate mod roots require explicit ownership selection."})
     elif roots != ["."]:
         findings.append({"id": "archive-wrapper-directory-layout", "classification": "REVIEW", "mod_root": roots[0], "explanation": "The archive has one wrapper directory; select the nested mod root after staging."})
-    blocking_ids = {"archive-entry-limit", "archive-size-limit", "archive-path-traversal", "archive-symlink-member", "archive-duplicate-member"}
+    blocking_ids = {"archive-entry-limit", "archive-size-limit", "archive-path-traversal", "archive-symlink-member", "archive-duplicate-member", "archive-path-collision"}
     safe_to_stage = not any(item["id"] in blocking_ids for item in findings)
     return {"schema_version": 1, "mode": "ZIP_PREFLIGHT_ONLY", "archive": path.name, "entry_count": len(entries), "uncompressed_bytes": total, "mod_info_entries": mod_info, "candidate_mod_roots": roots, "findings": findings, "safe_to_stage": safe_to_stage, "safe_to_extract": safe_to_stage}
 
@@ -94,9 +105,12 @@ def stage_zip_archive(path: Path, destination: Path, selected_root: str | None =
     with zipfile.ZipFile(path) as archive:
         for entry in archive.infolist():
             name = _normalized_member_name(entry.filename)
-            if not name or entry.is_dir():
+            if not name:
                 continue
             target = destination.joinpath(*PurePosixPath(name).parts)
+            if entry.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
             target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(entry) as source, target.open("wb") as output:
                 shutil.copyfileobj(source, output)

@@ -6,6 +6,7 @@ from pathlib import Path
 from .boot_test import _is_link, _running_java_under
 from .copy_drift import compare_copies
 from .locks import who_locks
+from .project_board import layout_findings
 from .probe_mod_build import RELEASE_RELATIVE
 from .reference_rigs import verify_reference_rig_manifest
 from .scanner import _base_game_version, _load_lenient_json_file
@@ -110,6 +111,15 @@ def _check_path_locks(runtime_dir: Path) -> dict[str, object]:
         return _check("path_locks", "WARN", detail + ". Review with who-locks; no process stopped.")
     unavailable = any("psutil unavailable" in str(item) for item in result["limitations"])
     return _check("path_locks", "SKIPPED" if unavailable else "PASS", "No process found. Limited visibility: " + "; ".join(result["limitations"]))
+
+
+def _check_layout(repo_root: Path, working_copies: dict[str, Path]) -> dict[str, object]:
+    try:
+        findings = layout_findings(repo_root, working_copies)
+    except (ValueError, OSError) as exc:
+        return _check("project_layout", "WARN", str(exc))
+    return _check("project_layout", "WARN" if findings else "PASS", "; ".join(
+        f"{item['code']}: {item['path']}" for item in findings) or "No convention-layout strays found.")
 
 
 def _check_probe_installed(runtime_dir: Path, repo_root: Path) -> dict[str, object]:
@@ -351,6 +361,7 @@ def rig_doctor(
             _check_real_install_saves_untouched(repo_root, real_install, saves_baseline, write_saves_baseline),
         ]
 
+    checks.append(_check_layout(repo_root, working_copies or {}))
     if any(item["status"] == "FAIL" for item in checks):
         overall = "FAIL"
     elif any(item["status"] == "WARN" for item in checks):

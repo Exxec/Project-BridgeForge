@@ -1,0 +1,3 @@
+include tests/support.py
+include tools/bf-test.ps1
+include docs/P12_LAYOUT_TOOLING.md

@@ -16,12 +16,14 @@ No unresolved live/manual or research gate is silently treated as complete.
 - Next: P11 hygiene, then P12 layout tooling, followed by outstanding acceptance
   evidence/release gates. Post-1.0 research needs an explicit evidence/scope gate.
 
-## P11 tranche: implemented, publication verification pending
+## P11 tranche: implemented and publication verified
 
 Python/CI tranche pushed as `ebc42466fcb60cc5d1c173f56735b35cc07f61ca`.
 The general tools/*.ps1 ignore rule required an explicit exception for the canonical
 monitor; the following publication commit includes that script. Verify CI on the
 final publication SHA, not the intermediate Python-only commit.
+Final SHA `05cec13efe9b35f8fc5077fe26b66d3a5af2376b`: all six CI jobs passed at
+https://github.com/Exxec/Project-BridgeForge/actions/runs/34717846238.
 
 SAFE tooling changes only; no individual mod behavior is changed.
 
@@ -62,7 +64,7 @@ SAFE tooling changes only; no individual mod behavior is changed.
   LIVE STARSECTOR TEST: `LIVE TEST NOT PERFORMED`. SAVE COMPATIBILITY: not changed.
   PACKAGE VALIDATION: uv built sdist/wheel under `In operation/_attic/p11-dist`;
   wheel metadata declares psutil, and all four changed Python runtime modules
-  match checkout bytes exactly. Exact-SHA CI: pending publication checks.
+  match checkout bytes exactly. Exact-SHA CI: all six jobs passed (link above).
 
 ### Environment evidence
 
@@ -84,3 +86,72 @@ release exists. Do not mistake the package version for a published release.
 CI runtime-upgrade evidence: [checkout v5](https://github.com/actions/checkout#checkout-v5)
 and [setup-python v6](https://github.com/actions/setup-python#breaking-changes-in-v6)
 use Node24. Later major releases are unnecessary for this narrowly scoped upgrade.
+
+## P12A plan: intake, board and layout warnings
+
+Approved scope from the roadmap continuation: SAFE offline tooling only. No mod
+source changes, architecture migration, release promotion or install writes.
+Revival scoring is not applicable to this tool tranche; an intake is explicitly
+`ASSESSMENT_REQUIRED`, not an approved revival plan. The authoritative workflow
+and template were read before implementation; actual revival changes still require
+their per-mod score, capability routing and completed plan.
+
+- SAFE: intake of a preflight-safe ZIP with one selected mod root into a fresh
+  `In operation/<Mod>/{original,working,reports,builds,scratch}`. Preserve archive
+  and full upstream extract byte-for-byte; copy only the selected root to working.
+  Generate scan/dossier evidence (optional archaeology). Reject collisions, unsafe
+  portable paths and ambiguous roots. Stage analysis before publishing; never
+  overwrite an existing mod folder, including incomplete attempts.
+- SAFE: deterministic board from layout, metadata and explicitly named evidence
+  files. Missing/malformed evidence means unknown, never zero risks or readiness.
+  Report-declared completion is not independently verified release status. Default
+  read-only output; optional generated status files must not replace manual STATUS.
+- SAFE: rig-doctor layout warnings for root strays/nonconforming working paths.
+  Do not move/delete strays or inspect original/scratch mod contents as active copies.
+- REVIEW/MANUAL outside this tranche: promotion and prior-release retention, safe
+  Vacuum move after lock checks, v0.2.0 publication and outstanding live evidence.
+
+Validation: focused archive/layout/board/CLI tests, forced-analysis failure and
+collision regression tests; read-only actual board/layout check; full guarded
+suite; built wheel/source checks; commit/push and exact-final-SHA six-job CI.
+Resume at this section after any usage interruption. Preserve `CLAUDE.md`.
+
+### P12A implementation checkpoint
+
+Implemented `intake`, `board`/generated status files and `project_layout` rig check.
+Generic dossier output protection remains unchanged. Portable ZIP preflight now
+rejects invalid/reserved components, case collisions and file/ancestor collisions;
+empty directories are retained. Intake checks stored archive, whole extracted tree
+and working bytes after analysis, relocates staging paths in evidence, and publishes
+the completion marker last after exclusive reservation. Failure/mutation/collision
+tests cover both analysis and controlled publication rollback.
+
+Focused validation: 96 scanner/layout/rig/reference tests passed, followed by 51
+focused tests after adding provenance/legacy/marker/output-link coverage. Actual
+`board --write` created only STATUS.generated files: 13 rows, with four known
+Vacuum root layout findings. Free-form legacy completion reports and absent named
+test/risk evidence are reported as unknown/invalid instead of inferred as ready.
+No existing mod was intaken, repaired, moved or promoted; no game/install/save write.
+
+Next checkpoint: full guarded suite and package/source proof, then commit/push and
+exact-SHA CI. P12B promotion/Vacuum/release remains open.
+
+Full guarded suite passed: **621 tests, OK (skipped=1), 45.340 seconds**;
+checkout/probe release unchanged. Log: `In operation/_attic/P12A-test-suite.log`.
+Initial wheel matched all five changed runtime modules byte-for-byte. Source
+archive inspection found setuptools omitted the shared test helper, canonical
+monitor and new workflow doc; added a narrow MANIFEST.in to include those already
+public/approved source files (no original mods or local revival-planning material).
+Rebuild/inventory checks are required before publication.
+
+SOURCE REVIEW: tool-only diff, original ownership preserved. STATIC VALIDATION:
+focused/full suites passed. COMPILE: full suite exercised local probe javac.
+DEPENDENCY CHECK: unchanged declared psutil dependency. API SIGNATURE CHECK:
+full suite exercised Windows Restart Manager. SAVE COMPATIBILITY: not changed.
+LIVE STARSECTOR TEST: `LIVE TEST NOT PERFORMED`. PACKAGE VALIDATION: rebuilt
+sdist contains all three required helper/script/doc files; wheel matches all five
+changed runtime modules. Isolated installed-wheel `python -I -m bridgeforge board`
+passed against the actual repo without source-checkout imports or writes (log:
+`In operation/_attic/P12A-installed-board.log`). Package logs/artifacts are in
+`In operation/_attic/P12A-package.log` and `p12a-dist`. Exact-SHA CI is pending
+commit/push and final publication verification.

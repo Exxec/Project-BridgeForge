@@ -27,6 +27,27 @@ The command writes `MODERNIZATION_REPORT.md` and `bridgeforge.compat.json` to th
 
 ## V0.2 working-copy workflow
 
+For the convention layout, start from the repository root:
+
+```powershell
+python -m bridgeforge intake C:\downloads\OldMod.zip --name OldMod --archaeology
+python -m bridgeforge board
+python -m bridgeforge board --write
+```
+
+`intake` preserves the ZIP in `In operation/OldMod/original/archive`, extracts the
+full upstream tree under `original/extracted`, and creates a byte-matching copy of
+the selected mod root under `working`. Scan/dossier evidence goes in `reports`;
+`--archaeology` adds D0 evidence. Ambiguous ZIPs need `--selected-root`; no existing
+mod folder is ever replaced. Intake means `ASSESSMENT_REQUIRED`: complete and
+score the per-mod revival plan before editing. No compile or live test is implied.
+
+`board` reads declared report/test/risk evidence without scanning or changing mods.
+`--write` updates only `In operation/STATUS.generated.json` and `.md`, preserving
+manual `STATUS.md`. Missing evidence is unknown, and a folder under `Done` is not
+automatically a verified release. `rig-doctor` also warns about project-layout strays.
+See [P12 workflow details](docs/P12_LAYOUT_TOOLING.md).
+
 ```powershell
 py -3 -m bridgeforge workspace C:\path\to\OldMod --output C:\work\OldMod-bridgeforge
 py -3 -m bridgeforge plan C:\work\OldMod-bridgeforge --target-starsector 0.98a-RC8

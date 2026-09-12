@@ -350,6 +350,12 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
     - **`bridgeforge promote <mod>`:** runs `release --apply` into `Done\<Mod>\`, keeping the previous release as `builds\`.
     - **Finish Vacuum's move** once its folder is free.
     - **Release hygiene:** tag `v0.2.0` in git, with GitHub release notes taken from the CHANGELOG.
+    - **P12A implemented (2026-09-12):** source-preserving `intake` with explicit
+      root selection, scan/dossier and optional archaeology; deterministic declared
+      evidence `board` with optional STATUS.generated files; read-only rig-doctor
+      layout warnings. Existing originals/manual STATUS/builds are not replaced.
+      Promotion, Vacuum movement and release hygiene remain pending; see
+      `docs/P12_LAYOUT_TOOLING.md` and the completion log for exact validation gates.
 
 ## Post-1.0 research and gated automation
 
