@@ -206,3 +206,51 @@ The old Vacuum root is an earlier modified attempt, not untouched original input
 preserve it under scratch. The Vacuum rig's Java25 BAT still points at the old
 Flu-X-rc8-runtime JDK path and needs a documented mechanical path correction when
 moving to _rig-vacuum. Tool v0.2.0 tag/release and outstanding live gates remain open.
+
+P12B publication verified: `c8cbbb79a78bb94436a31c37cdfc1bce81504900`, all six
+CI jobs passed: https://github.com/Exxec/Project-BridgeForge/actions/runs/34719147496.
+All 98 wheel runtime/data files plus required sdist assets match committed blobs;
+isolated install confirms bundled Exigency denial. Exact hashes are recorded in
+`In operation/_attic/P12B_PUBLICATION.md`.
+
+## P12C plan: byte-attested Vacuum layout completion
+
+Layout-only SAFE scope, no new revival architecture or gameplay implementation:
+move the active mod to `Vacuum/working`, earlier modified attempt to
+`Vacuum/scratch/Vacuum-earlier-copy`, pre-carrier ZIP to `Vacuum/builds`, and
+isolated rig to `_rig-vacuum`. Do not claim earlier files are untouched originals.
+Preserve existing HIGH plan/report, all mod bytes, saves and installed core.
+Only permitted non-byte-identical changes: the rig launcher shared JDK path and
+the rig Vacuum junction target. Mod-facing folder and ids remain unchanged.
+
+Lock diagnostics: no process candidates in all three roots; hundreds of denied
+process queries mean absence is not proof of no locks. OS moves stop on failure.
+Before/after file SHA256, directory and non-traversed link inventories plus an
+intent/completion journal are kept in `In operation/_attic/P12C-vacuum`.
+One-shot operation and recovery limitations are recorded beside that evidence.
+No promotion to Done or new live validation. LIVE VALIDATION REQUIRED remains.
+
+### P12C layout checkpoint
+
+Completed all four mapped root moves; every file/directory/link inventory matched.
+Earlier: 1592 files/134 directories. Working: 1755/148. Rig: 16422/396/two links.
+Archive SHA256 matched. Final rig verification allows only the documented BAT
+JDK/comment change and Vacuum junction retarget; all other entries match exactly.
+No deleted user/mod/game bytes. The old dangling link itself was replaced safely.
+
+`board` discovers Vacuum/working r1, with unknown readiness/test/risk evidence and
+an existing non-final report warning. `rig-doctor` has layout/working identity/
+dependencies/isolation PASS, overall WARN for absent probe; real-install save
+baseline check SKIPPED. No compile/API/save-compatibility/live claim added.
+See docs/P12_VACUUM_LAYOUT.md and local inventories/journal for exact scope,
+operational verifier correction, validation levels and non-speculative recovery.
+Updated ignored In operation/README.md to remove stale move/undo instructions.
+
+Next: v0.2.0 exact-commit tool publication; remaining live/manual gates stay open.
+Publication and regression evidence for this checkpoint is recorded under
+`In operation/_attic/P12C_PUBLICATION.md` after commit/push.
+
+Full guarded tool suite: 630 tests passed (one environment-dependent symlink
+skip), checkout/probe-release hermeticity PASS. No tool runtime module changed
+in this tranche. Final docs/package manifest and exact-SHA CI are publication
+gates; previous binary tests are not treated as proof of new gameplay behavior.

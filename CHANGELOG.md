@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Complete P12C Vacuum layout migration with before/after byte and link evidence.
+  Retain the earlier modified attempt and pre-carrier ZIP, correct only the rig
+  JDK path and working-copy junction, and keep probe/report/live gates explicit.
+
 - Implement P12B dry-run-first guarded `promote`, staged package identity checks,
   per-release reports, recoverable prior-release retention, and publication rollback.
   Preserve declared live-test requirements. Bundle release policy in installed

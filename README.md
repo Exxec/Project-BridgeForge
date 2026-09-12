@@ -49,6 +49,8 @@ automatically a verified release. `rig-doctor` also warns about project-layout s
 See [P12 workflow details](docs/P12_LAYOUT_TOOLING.md).
 See [guarded promotion](docs/P12_PROMOTION.md) for dry-run-first `promote`,
 prior-release retention, and explicit validation/release gates.
+Vacuum's local layout and outstanding live gates are recorded in
+[P12C layout evidence](docs/P12_VACUUM_LAYOUT.md).
 
 ```powershell
 py -3 -m bridgeforge workspace C:\path\to\OldMod --output C:\work\OldMod-bridgeforge

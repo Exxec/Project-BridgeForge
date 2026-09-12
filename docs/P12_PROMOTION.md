@@ -31,5 +31,6 @@ The installed tool now includes its release policy and refuses missing, malforme
 or invalid policies. Exigency remains local-only under the bundled policy.
 No actual mod promotion or new live validation is implied by tooling tests.
 
-Remaining P12 gates: verified Vacuum layout migration and exact-commit tool
-release publication. These are not completed by this promotion checkpoint.
+Vacuum's subsequent layout migration is recorded in P12_VACUUM_LAYOUT.md.
+Remaining P12 gate: exact-commit tool release publication. Promotion/layout
+checkpoints do not complete outstanding gameplay or persistence validation.

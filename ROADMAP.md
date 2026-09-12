@@ -363,6 +363,12 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
       guarded suite: 630 tests, one skip, no checkout/probe drift. No actual mod
       promotion or new live test; Vacuum movement and release hygiene remain open.
       See `docs/P12_PROMOTION.md` and `docs/ROADMAP_COMPLETION_LOG.md`.
+    - **P12C Vacuum layout completed (2026-09-12):** active copy at
+      `Vacuum/working`, earlier attempt preserved under scratch, pre-carrier ZIP
+      retained under builds, rig at `_rig-vacuum`. Before/after byte inventories
+      match; only launcher JDK path and working-copy junction were corrected.
+      No source/gameplay changes or new live test. Probe/report/live gates remain
+      explicit; release hygiene is next. See `docs/P12_VACUUM_LAYOUT.md`.
 
 ## Post-1.0 research and gated automation
 
