@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "name": "avesta-near",
+  "subject_mod": "exigency",
+  "mods": ["exigency"],
+  "extra_mods": [],
+  "compat_set": null,
+  "probe_setups": ["rep:exipirated=FRIENDLY"],
+  "track_entities": ["exipirated_avesta"],
+  "snapshot_tag": null,
+  "notes": "Exigency: bring the player to FRIENDLY with the exipirated faction and confirm Avesta's own market submarket is actually stocked (roadmap docs/P3B_SAVE_TOOLING_RECOMMENDATIONS.md K).",
+  "expect": {
+    "probe": [
+      {
+        "check": "setup",
+        "status": "OK",
+        "subject_pattern": "^rep:exipirated=FRIENDLY$",
+        "min_count": 1
+      },
+      {
+        "check": "submarket-stock",
+        "status": "OK",
+        "subject_pattern": "exipirated",
+        "min_count": 1
+      },
+      {
+        "check": "tracked-entities",
+        "status": "INFO",
+        "subject_pattern": "^exipirated_avesta$",
+        "min_count": 1
+      }
+    ],
+    "save": []
+  }
+}

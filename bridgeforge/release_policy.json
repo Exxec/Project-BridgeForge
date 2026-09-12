@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "mods": {
+    "exigency": {
+      "local_only": true,
+      "reason": "Licence: local testing only, not for release distribution, per 'In operation/Exigency-0.7.2-assessment/please read me.txt' -- awaiting MesoTroniK's permission (roadmap ROADMAP.md, STATUS.md)."
+    }
+  },
+  "default": {
+    "local_only": false,
+    "reason": null
+  }
+}

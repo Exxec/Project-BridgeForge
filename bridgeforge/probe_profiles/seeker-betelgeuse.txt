@@ -1,0 +1,9 @@
+# BridgeForge probe profile: SEEKER Betelgeuse damaged-module scenario
+# Put a dimension-manipulator-equipped ship and a spawned pirate fleet in play, then confirm the
+# combat probe actually runs and the SK-13 null-personality class never fires on a Betelgeuse
+# module (docs/REVIVAL_ASSURANCE_PLAN.md P3's combat probe check; matches the
+# betelgeuse-damaged scenario in bridgeforge/scenarios/).
+apply = once-per-save
+
+ship ART_dimention_manipulator x1
+spawn pirates 120

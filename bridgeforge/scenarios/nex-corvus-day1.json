@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "name": "nex-corvus-day1",
+  "subject_mod": "exigency",
+  "mods": ["exigency"],
+  "extra_mods": ["nexerelin"],
+  "compat_set": "libs",
+  "probe_setups": [],
+  "track_entities": ["exipirated_avesta"],
+  "snapshot_tag": null,
+  "notes": "Exigency + Nexerelin + the 'libs' compat set (LazyLib/MagicLib/LunaLib/GraphicsLib), a fresh day-1 sector: confirm the campaign probe actually completes and Exigency's Tasserus system/entity was not procedurally generated twice (the RingBand-crash-adjacent new-game worldgen class from docs/REVIVAL_ASSURANCE_PLAN.md P4).",
+  "expect": {
+    "probe": [
+      {
+        "check": "probe",
+        "status": "INFO",
+        "subject_pattern": "^campaign$",
+        "min_count": 2
+      },
+      {
+        "check": "*",
+        "status": "*",
+        "subject_pattern": "Tasserus",
+        "max_count": 1
+      }
+    ],
+    "save": []
+  }
+}

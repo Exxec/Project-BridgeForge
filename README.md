@@ -1,10 +1,21 @@
-# Project Bridgeforge
+# BridgeForge Tooling Pack
 
-An offline Starsector-mod compatibility workbench. Bridgeforge inventories a mod and produces explainable compatibility findings; source migrations remain review-gated, and bytecode support is limited to evidence-backed, exact symbolic remaps written to a separate output copy. It never changes a supplied mod or binary in place.
+Reusable validation tools and Git hooks for Project BridgeForge.
 
-Bridgeforge is intentionally separate from the proposed [Starsector Performance Workbench](docs/PERFORMANCE_WORKBENCH_DESIGN.md), which profiles runtime behavior and attributes cost to mods/classes.
+Included:
+- `tools/hash-baseline.ps1`
+- `tools/compile-diagnostic.ps1`
+- `tools/compile-clean.ps1`
+- `tools/verify-jar-inventory.ps1`
+- `tools/verify-package.ps1`
+- `tools/scope-guard.ps1`
+- `tools/extract-migration-candidates.ps1`
+- `tools/install-githooks.ps1`
+- `.githooks/pre-commit`
+- `.githooks/pre-push`
 
-## Run
+The defaults assume:
+`C:\Users\exxec\Documents\Project BridgeForge`
 
 Requires Python 3.10+.
 
@@ -79,3 +90,5 @@ GraphicsLib/ShaderLib is handled the same way. Its documented 0.98a removal of `
 ## Safety
 
 Scanning is read-only with respect to the selected mod directory. Generated artifacts are written only to `--output`.
+
+These tools enforce reproducibility, scope, packaging, and evidence discipline. They do not automatically resolve REVIEW or MANUAL findings.

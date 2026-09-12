@@ -1,0 +1,9 @@
+# BridgeForge probe profile: Exigency rep test
+# Bring the player to FRIENDLY with the exipirated faction, fund the fleet, and jump to Corvus,
+# so the rep-gated Avesta market checks (docs/P3B_SAVE_TOOLING_RECOMMENDATIONS.md K) can run
+# without manual setup grind. Mirrors docs/BRIDGEFORGE_REVIVAL_GUIDE.md's --setup example.
+apply = once-per-save
+
+rep exipirated = FRIENDLY
+credits = 500000
+jump Corvus

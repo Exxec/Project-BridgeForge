@@ -153,6 +153,50 @@ MEMORY_SELF_STORE_PATTERN = re.compile(
     r"(?:\b\w*(?:memory|mem)\w*\s*|\.getMemoryWithoutUpdate\(\)\s*)\.set\s*\(\s*[^,]+\s*,\s*this\b",
     re.I,
 )
+FACTION_SPECIAL_ROLE_KEYS = {"doctrine", "includeDefault", "fallback", "fallback2"}
+OBSOLETE_FIGHTER_ROLE_NAMES = {"interceptor", "fighter", "bomber"}
+BLACK_HOLE_HINT_PATTERN = re.compile(r"black[_\s]?hole|bhole", re.I)
+SHADOW_PATH_EXTENSIONS = {".system", ".ship", ".wpn", ".variant", ".skin", ".java"}
+GAME_VERSION_RC_PATTERN = re.compile(r"^\d+(?:\.\d+)*[a-zA-Z]*-RC\d+$")
+
+# RC8 script-sandbox classloader forbids these at load time (SecurityException:
+# "File access and reflection are not allowed to scripts"). java.lang.ReflectiveOperationException
+# and java.io.IOException are deliberately NOT in these sets/prefixes; they load fine.
+FORBIDDEN_REFLECT_PREFIX = "java/lang/reflect/"
+FORBIDDEN_NIO_FILE_PREFIX = "java/nio/file/"
+FORBIDDEN_IO_CLASSES = {
+    "java/io/File",
+    "java/io/FileInputStream",
+    "java/io/FileOutputStream",
+    "java/io/FileReader",
+    "java/io/FileWriter",
+    "java/io/RandomAccessFile",
+}
+FORBIDDEN_SANDBOX_SOURCE_PATTERN = re.compile(
+    r"\bjava\.lang\.reflect\.[A-Za-z_$][\w$]*"
+    r"|\bjava\.nio\.file\.[A-Za-z_$][\w$]*"
+    r"|\bjava\.io\.(?:File|FileInputStream|FileOutputStream|FileReader|FileWriter|RandomAccessFile)\b"
+)
+BUNDLED_LIBRARY_PACKAGE_PREFIXES = {
+    "GraphicsLib": ("org/dark/",),
+    "LazyLib": ("org/lazywizard/",),
+    "MagicLib": ("org/magiclib/", "data/scripts/util/Magic"),
+    "LunaLib": ("lunalib/",),
+    "Nexerelin": ("exerelin/",),
+    "JSON": ("org/json/",),
+    "LWJGL": ("org/lwjgl/",),
+}
+LIBRARY_DEPENDENCY_IDS = {
+    "GraphicsLib": "shaderlib",
+    "LazyLib": "lw_lazylib",
+    "MagicLib": "magiclib",
+    "LunaLib": "lunalib",
+    "Nexerelin": "nexerelin",
+}
+DESIGN_TYPE_CSV_TARGETS = (
+    ("data", "hulls", "ship_data.csv"),
+    ("data", "weapons", "weapon_data.csv"),
+)
 
 
 def _relative(root: Path, path: Path) -> str:
@@ -196,47 +240,211 @@ def _without_trailing_commas(text: str) -> str:
     return "".join(result)
 
 
-def _without_hash_comments(text: str) -> str:
+def _strip_line_comments(text: str) -> tuple[str, set[str]]:
+    """Remove `#` and `//` line comments, quote-aware for both `'` and `"`.
+
+    Single quotes are not valid JSON syntax, but this pass runs before single
+    quotes are converted to double quotes -- at this point a mod's
+    single-quoted scalar (e.g. a URL like `'https://example.com/mod'`, or a
+    value like `'costs #500 credits'`) is still single-quoted, so a `#`/`//`
+    inside it must not be mistaken for the start of a comment. Tracking only
+    double quotes would let exactly that happen.
+    """
     result: list[str] = []
-    in_string = False
+    tolerances: set[str] = set()
+    string_delim: str | None = None
     escaped = False
     index = 0
-    while index < len(text):
+    length = len(text)
+    while index < length:
         character = text[index]
-        if in_string:
+        if string_delim is not None:
             result.append(character)
             if escaped:
                 escaped = False
             elif character == "\\":
                 escaped = True
-            elif character == '"':
-                in_string = False
+            elif character == string_delim:
+                string_delim = None
+            index += 1
+            continue
+        if character in "\"'":
+            string_delim = character
+            result.append(character)
+            index += 1
+            continue
+        if character == "#":
+            tolerances.add("hash-comments")
+            while index < length and text[index] not in "\r\n":
+                index += 1
+            continue
+        if character == "/" and index + 1 < length and text[index + 1] == "/":
+            tolerances.add("slash-comments")
+            while index < length and text[index] not in "\r\n":
+                index += 1
+            continue
+        result.append(character)
+        index += 1
+    return "".join(result), tolerances
+
+
+def _convert_single_quoted_strings(text: str) -> str:
+    """Rewrite `'...'` string tokens (outside double-quoted strings) as `"..."`.
+
+    Observed in real mod_info.json files for scalar-looking values, e.g.
+    `{"major": '1', "minor": '5'}`. An apostrophe inside a normal
+    double-quoted string is left untouched because conversion only happens
+    while not already inside a `"..."` span. An unterminated single-quoted
+    token raises ValueError rather than being "repaired" by treating
+    end-of-input as an implicit closing quote.
+    """
+    result: list[str] = []
+    in_double = False
+    index = 0
+    length = len(text)
+    while index < length:
+        character = text[index]
+        if in_double:
+            result.append(character)
+            if character == "\\" and index + 1 < length:
+                result.append(text[index + 1])
+                index += 2
+                continue
+            if character == '"':
+                in_double = False
             index += 1
             continue
         if character == '"':
-            in_string = True
+            in_double = True
             result.append(character)
-        elif character == "#":
-            while index < len(text) and text[index] not in "\r\n":
-                index += 1
+            index += 1
             continue
-        else:
-            result.append(character)
+        if character == "'":
+            cursor = index + 1
+            content: list[str] = []
+            while cursor < length and text[cursor] != "'":
+                if text[cursor] == "\\" and cursor + 1 < length:
+                    escaped_char = text[cursor + 1]
+                    if escaped_char == "'":
+                        # The only escape meaningful to a single-quoted string that isn't
+                        # already valid JSON escape syntax: drop the backslash, since a
+                        # bare "'" needs no escaping inside a double-quoted string.
+                        content.append("'")
+                    elif escaped_char == '"':
+                        content.append('\\"')
+                    else:
+                        # Any other escape (\\, \n, \t, \uXXXX, ...) is already valid JSON
+                        # escape syntax and carries over unchanged.
+                        content.append(text[cursor])
+                        content.append(escaped_char)
+                    cursor += 2
+                    continue
+                if text[cursor] == '"':
+                    content.append('\\"')
+                    cursor += 1
+                    continue
+                content.append(text[cursor])
+                cursor += 1
+            if cursor >= length:
+                raise ValueError(f"Unterminated single-quoted string starting at position {index}")
+            inner = "".join(content)
+            result.append(f'"{inner}"')
+            index = cursor + 1
+            continue
+        result.append(character)
         index += 1
     return "".join(result)
 
 
+_JSON_STRING_TOKEN_PATTERN = r'"(?:\\.|[^"\\])*"'
+_JAVA_NUMBER_SUFFIX_PATTERN = re.compile(
+    _JSON_STRING_TOKEN_PATTERN + r"|(?<![\w.])-?\d+(?:\.\d+)?[fFdD](?![\w.])"
+)
+_BAREWORD_TOKEN_PATTERN = re.compile(
+    _JSON_STRING_TOKEN_PATTERN + r"|(?<![\w.$])[A-Za-z_$][A-Za-z0-9_$]*"
+)
+_JSON_LITERAL_TOKENS = {"true", "false", "null"}
+
+
+def _strip_java_number_suffixes(text: str) -> tuple[str, bool]:
+    """Drop a trailing f/F/d/D from Java-style float/double literals (e.g. `0.5f`, `2d`).
+
+    Restricted to tokens outside double-quoted strings so a legitimate string
+    value ending in one of those letters is never touched.
+    """
+    found = False
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal found
+        token = match.group(0)
+        if token.startswith('"'):
+            return token
+        found = True
+        return token[:-1]
+
+    return _JAVA_NUMBER_SUFFIX_PATTERN.sub(replace, text), found
+
+
+def _quote_barewords_and_keys(text: str) -> tuple[str, set[str]]:
+    """Wrap unquoted identifiers (object keys or bareword scalar values) in double quotes.
+
+    `true`/`false`/`null` are left as literals. Whether a given identifier is
+    followed (ignoring whitespace) by `:` distinguishes an unquoted key from a
+    bareword value for tolerance reporting; both are rewritten the same way.
+    """
+    tolerances: set[str] = set()
+
+    def replace(match: re.Match[str]) -> str:
+        token = match.group(0)
+        if token.startswith('"') or token in _JSON_LITERAL_TOKENS:
+            return token
+        lookahead = match.end()
+        while lookahead < len(text) and text[lookahead] in " \t\r\n":
+            lookahead += 1
+        if lookahead < len(text) and text[lookahead] == ":":
+            tolerances.add("unquoted-keys")
+        else:
+            tolerances.add("bareword-values")
+        return f'"{token}"'
+
+    return _BAREWORD_TOKEN_PATTERN.sub(replace, text), tolerances
+
+
 def _parse_json(text: str) -> tuple[object, set[str]]:
+    """Parse JSON the way Starsector's lenient (org.json-based) loader does.
+
+    Strict `json.loads` is tried first so the common, well-formed case is not
+    slowed down by unnecessary rewriting. On failure, a sequence of
+    string-aware rewrites brings the text into strict-JSON shape: strip `#`/
+    `//` comments, convert single-quoted strings to double-quoted, strip Java
+    float/double suffixes, quote unquoted keys/bareword values, then strip
+    trailing commas. Each tolerance actually used is recorded so callers can
+    report it rather than silently "fixing" the file.
+    """
     try:
         return json.loads(text), set()
     except json.JSONDecodeError as original_error:
-        normalized = _without_hash_comments(text)
         tolerances: set[str] = set()
-        if normalized != text:
-            tolerances.add("hash-comments")
-        without_commas = _without_trailing_commas(normalized)
-        if without_commas != normalized:
-            tolerances.add("trailing-commas")
+        try:
+            without_comments, comment_tolerances = _strip_line_comments(text)
+            tolerances |= comment_tolerances
+            without_single_quotes = _convert_single_quoted_strings(without_comments)
+            if without_single_quotes != without_comments:
+                tolerances.add("single-quotes")
+            without_number_suffix, suffix_found = _strip_java_number_suffixes(without_single_quotes)
+            if suffix_found:
+                tolerances.add("java-number-suffix")
+            without_barewords, bareword_tolerances = _quote_barewords_and_keys(without_number_suffix)
+            tolerances |= bareword_tolerances
+            without_commas = _without_trailing_commas(without_barewords)
+            # Starsector also accepts a comma after the root object's closing brace (e.g. Exigency factions).
+            without_commas = re.sub(r"([}\]])\s*,\s*\Z", r"\1", without_commas)
+            if without_commas != without_barewords:
+                tolerances.add("trailing-commas")
+        except ValueError:
+            # An unterminated single-quoted string is malformed, not a dialect
+            # we tolerate; "repairing" it would hide a genuinely broken file.
+            raise original_error
         if not tolerances:
             raise original_error
         try:
@@ -251,6 +459,43 @@ def _non_strict_json_finding(result: ScanResult, category: str, file: str) -> No
 
 def _hash_comment_json_finding(result: ScanResult, category: str, file: str) -> None:
     result.add(id="json-hash-comment", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file uses # comments outside JSON strings, matching Starsector 0.98a core data conventions. BridgeForge parsed them structurally and does not recommend removing or rewriting them.", file=file)
+
+
+def _slash_comment_json_finding(result: ScanResult, category: str, file: str) -> None:
+    result.add(id="json-slash-comment", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file uses // comments outside JSON strings. Starsector's lenient (org.json-based) loader accepts them; BridgeForge parsed them structurally and does not recommend removing or rewriting them.", file=file)
+
+
+def _single_quote_json_finding(result: ScanResult, category: str, file: str) -> None:
+    result.add(id="json-single-quoted-string", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file uses single-quoted strings in place of double quotes. Starsector's lenient loader accepts them; BridgeForge parsed them structurally and does not recommend rewriting them to double quotes.", file=file)
+
+
+def _unquoted_key_json_finding(result: ScanResult, category: str, file: str) -> None:
+    result.add(id="json-unquoted-key", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file has one or more unquoted object keys. Starsector's lenient loader accepts them; BridgeForge parsed them structurally and does not recommend adding quotes.", file=file)
+
+
+def _bareword_value_json_finding(result: ScanResult, category: str, file: str) -> None:
+    result.add(id="json-bareword-value", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file has one or more unquoted bareword values, which Starsector's lenient loader reads as plain strings. BridgeForge parsed them structurally and does not recommend adding quotes.", file=file)
+
+
+def _java_number_suffix_json_finding(result: ScanResult, category: str, file: str) -> None:
+    result.add(id="json-java-number-suffix", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file has one or more Java-style numeric literal suffixes (e.g. 0.5f, 2d). Starsector's lenient loader reads them as plain numbers; BridgeForge parsed them structurally and does not recommend rewriting them.", file=file)
+
+
+def _emit_json_tolerance_findings(result: ScanResult, category: str, file: str, tolerances: set[str]) -> None:
+    if "trailing-commas" in tolerances:
+        _non_strict_json_finding(result, category, file)
+    if "hash-comments" in tolerances:
+        _hash_comment_json_finding(result, category, file)
+    if "slash-comments" in tolerances:
+        _slash_comment_json_finding(result, category, file)
+    if "single-quotes" in tolerances:
+        _single_quote_json_finding(result, category, file)
+    if "unquoted-keys" in tolerances:
+        _unquoted_key_json_finding(result, category, file)
+    if "bareword-values" in tolerances:
+        _bareword_value_json_finding(result, category, file)
+    if "java-number-suffix" in tolerances:
+        _java_number_suffix_json_finding(result, category, file)
 
 
 def _unverified_json_syntax_finding(result: ScanResult, category: str, file: str, exc: Exception) -> None:
@@ -287,10 +532,7 @@ def _scan_metadata(root: Path, result: ScanResult) -> None:
         return
     result.metadata = metadata
     result.metadata_parse_mode = "STRICT" if not tolerances else "+".join(sorted(tolerances)).upper()
-    if "trailing-commas" in tolerances:
-        _non_strict_json_finding(result, "metadata", "mod_info.json")
-    if "hash-comments" in tolerances:
-        _hash_comment_json_finding(result, "metadata", "mod_info.json")
+    _emit_json_tolerance_findings(result, "metadata", "mod_info.json", tolerances)
     game_version = metadata.get("gameVersion") or metadata.get("game_version")
     if game_version:
         result.declared_starsector = str(game_version)
@@ -301,7 +543,7 @@ def _scan_metadata(root: Path, result: ScanResult) -> None:
 
 
 def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
-    jars = list(root.rglob("*.jar"))
+    jars = _loaded_mod_jars(root)
     bundled: Counter[str] = Counter()
     for jar in jars:
         entry: dict[str, object] = {"path": _relative(root, jar), "class_file_majors": [], "java_levels": []}
@@ -366,6 +608,7 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
     except AstUnavailable as exc:
         result.add(id="source-ast-unavailable", category="source", severity="medium", classification="UNKNOWN", confidence="DETERMINISTIC", explanation=f"Structured Java parsing was unavailable; import collection used a limited fallback: {exc}")
     imports: set[str] = set()
+    import_locations: dict[str, tuple[str, int | None]] = {}
     content_owners: dict[str, list[str]] = {}
     for source in root.rglob("*.java"):
         relative = _relative(root, source)
@@ -378,9 +621,15 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
         content_owners.setdefault(hashlib.sha256(raw_bytes).hexdigest(), []).append(relative)
         active_source = "disabled_files" not in source.relative_to(root).parts
         if result.source_facts:
-            imports.update(fact["value"] for fact in result.source_facts if fact["kind"] == "import" and fact["file"] == relative)
+            file_import_facts = [fact for fact in result.source_facts if fact["kind"] == "import" and fact["file"] == relative]
+            imports.update(fact["value"] for fact in file_import_facts)
+            for fact in file_import_facts:
+                import_locations.setdefault(fact["value"], (relative, fact.get("line")))
         else:
-            imports.update(re.findall(r"^\s*import\s+([\w.]+(?:\.\*)?)\s*;", text, re.M))
+            found_imports = re.findall(r"^\s*import\s+([\w.]+(?:\.\*)?)\s*;", text, re.M)
+            imports.update(found_imports)
+            for name in found_imports:
+                import_locations.setdefault(name, (relative, None))
         for needle, (rule_id, explanation) in LEGACY_API_RULES.items():
             if needle in text:
                 result.add(id=rule_id, category="source-api", severity="high", classification="REVIEW", confidence="HIGH", explanation=explanation, file=relative, evidence=[needle])
@@ -532,7 +781,7 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
         if len(paths) > 1:
             result.add(id="duplicate-source-layout", category="source", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Identical Java source appears at multiple paths. Establish the authoritative source/JAR layout before compiling or modifying it.", evidence=sorted(paths))
     _scan_mission_local_fleet_references(root, result)
-    _scan_source_build_dependencies(root, result)
+    _scan_source_build_dependencies(root, result, import_locations)
 
     scan_lazylib_compat(root, result)
     scan_magiclib_compat(result)
@@ -540,7 +789,7 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
     scan_graphicslib_compat(root, result)
 
 
-def _scan_source_build_dependencies(root: Path, result: ScanResult) -> None:
+def _scan_source_build_dependencies(root: Path, result: ScanResult, import_locations: dict[str, tuple[str, int | None]] | None = None) -> None:
     lombok_imports = sorted(item for item in result.imports if item == "lombok" or item.startswith("lombok."))
     if lombok_imports:
         build_files = [name for name in ("pom.xml", "build.gradle", "build.gradle.kts") if (root / name).is_file()]
@@ -557,6 +806,15 @@ def _scan_source_build_dependencies(root: Path, result: ScanResult) -> None:
     for dependency, prefixes in EXTERNAL_MOD_API_PACKAGES.items():
         imports = sorted(item for item in result.imports if any(item == prefix.rstrip(".") or item.startswith(prefix) for prefix in prefixes))
         if imports:
+            first_file: str | None = None
+            first_line: int | None = None
+            if import_locations:
+                locations = [import_locations[name] for name in imports if name in import_locations]
+                if locations:
+                    first_file, first_line = min(locations, key=lambda loc: (loc[0], loc[1] if loc[1] is not None else -1))
+            evidence = [dependency, *imports]
+            if first_line is not None:
+                evidence.append(f"line:{first_line}")
             result.add(
                 id="external-mod-api-import",
                 category="dependencies",
@@ -564,7 +822,8 @@ def _scan_source_build_dependencies(root: Path, result: ScanResult) -> None:
                 classification="MANUAL",
                 confidence="DETERMINISTIC",
                 explanation=f"Source imports {dependency}'s API directly. Compile and runtime compatibility require that optional mod, or an explicit source-level compatibility shim/removal.",
-                evidence=[dependency, *imports],
+                file=first_file,
+                evidence=evidence,
             )
 
 
@@ -712,10 +971,7 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
         except json.JSONDecodeError as exc:
             _unverified_json_syntax_finding(result, "assets", _relative(root, path), exc)
         else:
-            if "trailing-commas" in tolerances:
-                _non_strict_json_finding(result, "assets", _relative(root, path))
-            if "hash-comments" in tolerances:
-                _hash_comment_json_finding(result, "assets", _relative(root, path))
+            _emit_json_tolerance_findings(result, "assets", _relative(root, path), tolerances)
     for path in root.rglob("*.csv"):
         try:
             with path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -1048,7 +1304,8 @@ def _dependency_compatibility_context(result: ScanResult) -> None:
             continue
         dependency = finding.evidence[0]
         key = re.sub(r"[^a-z0-9]", "", dependency.lower())
-        direct_apis.append({"dependency": dependency, "declared": key in normalized, "imports": finding.evidence[1:]})
+        finding_imports = [item for item in finding.evidence[1:] if not item.startswith("line:")]
+        direct_apis.append({"dependency": dependency, "declared": key in normalized, "imports": finding_imports})
     result.migration_context["dependency_compatibility"] = {
         "declared_dependencies": declared,
         "direct_api_dependencies": direct_apis,
@@ -1067,10 +1324,2121 @@ def _infer_environment(result: ScanResult) -> None:
         result.add(id="version-inference-blocked", category="environment", severity="medium", classification="UNKNOWN", confidence="DETERMINISTIC", explanation="No trustworthy declared Starsector version was available. Do not make confident compatibility or migration claims until metadata or independent target evidence is supplied.")
 
 
-def scan_mod(input_path: Path, target: TargetProfile | None = None) -> ScanResult:
+def _load_lenient_json_file(path: Path) -> object | None:
+    """Read a Starsector-legacy JSON file (# comments, trailing commas) or return None."""
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeDecodeError):
+        return None
+    try:
+        data, _ = _parse_json(text)
+    except json.JSONDecodeError:
+        return None
+    return data
+
+
+def _csv_header(path: Path) -> list[str] | None:
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            return next(csv.reader(handle), None)
+    except (OSError, UnicodeDecodeError, csv.Error):
+        return None
+
+
+def _read_csv_rows(path: Path) -> list[dict[str, str]] | None:
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            return list(csv.DictReader(handle))
+    except (OSError, UnicodeDecodeError, csv.Error):
+        return None
+
+
+def _read_csv_rows_lenient(path: Path) -> list[dict[str, str]] | None:
+    """Like _read_csv_rows, but tolerates non-UTF-8 bytes (errors='replace').
+
+    Vanilla's own data/strings/descriptions.csv is not valid UTF-8 (it has stray CP-1252 curly-quote
+    bytes). Vanilla content is only ever consulted here as fallback lookup data, never audited for
+    its own encoding, so a byte-level decode error must not silently drop the whole file (which would
+    make every id it describes look undescribed).
+    """
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="", errors="replace") as handle:
+            return list(csv.DictReader(handle))
+    except (OSError, csv.Error):
+        return None
+
+
+def _csv_first_column_ids(path: Path) -> set[str]:
+    """IDs from a procgen CSV's first column (data rows only, comments skipped)."""
+    if not path.is_file():
+        return set()
+    ids: set[str] = set()
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            rows = csv.reader(handle)
+            next(rows, None)
+            for row in rows:
+                if not row:
+                    continue
+                first = row[0].strip()
+                if not first or first.startswith("#"):
+                    continue
+                ids.add(first)
+    except (OSError, UnicodeDecodeError, csv.Error):
+        return set()
+    return ids
+
+
+def _wing_ids_set(path: Path) -> set[str]:
+    rows = _read_csv_rows(path)
+    if not rows:
+        return set()
+    ids: set[str] = set()
+    for row in rows:
+        wing_id = (row.get("id") or "").strip()
+        if wing_id and not wing_id.startswith("#"):
+            ids.add(wing_id)
+    return ids
+
+
+def _is_mission_source(root: Path, path: Path) -> bool:
+    parts = path.relative_to(root).parts
+    if "data" in parts:
+        index = parts.index("data")
+        if index + 1 < len(parts) and parts[index + 1] == "missions":
+            return True
+    return False
+
+
+def _scan_procgen_rows(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """Every campaign-placed planets.json type needs a procgen CSV row (crash if absent)."""
+    planets_path = root / "data" / "config" / "planets.json"
+    data = _load_lenient_json_file(planets_path)
+    if not isinstance(data, dict):
+        return
+
+    campaign_ids_used: dict[str, list[str]] = {}
+    mission_ids_used: set[str] = set()
+    jar_present = bool(list(root.rglob("*.jar")))
+    for source in root.rglob("*.java"):
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        literals = set(re.findall(r'"([A-Za-z0-9_]+)"', text))
+        matched = literals & data.keys()
+        if not matched:
+            continue
+        if _is_mission_source(root, source):
+            mission_ids_used.update(matched)
+        else:
+            relative = _relative(root, source)
+            for type_id in matched:
+                campaign_ids_used.setdefault(type_id, []).append(relative)
+
+    star_csv = root / "data" / "campaign" / "procgen" / "star_gen_data.csv"
+    planet_csv = root / "data" / "campaign" / "procgen" / "planet_gen_data.csv"
+    mod_star_ids = _csv_first_column_ids(star_csv)
+    mod_planet_ids = _csv_first_column_ids(planet_csv)
+    vanilla_star_ids: set[str] = set()
+    vanilla_planet_ids: set[str] = set()
+    vanilla_note: str | None = None
+    if vanilla_core is not None:
+        vanilla_star_ids = _csv_first_column_ids(vanilla_core / "data" / "campaign" / "procgen" / "star_gen_data.csv")
+        vanilla_planet_ids = _csv_first_column_ids(vanilla_core / "data" / "campaign" / "procgen" / "planet_gen_data.csv")
+    else:
+        vanilla_note = "vanilla-core:unavailable; vanilla-row exemption could not be checked"
+
+    for type_id in sorted(campaign_ids_used):
+        spec = data.get(type_id)
+        is_star = bool(isinstance(spec, dict) and spec.get("isStar"))
+        registered = mod_star_ids if is_star else mod_planet_ids
+        vanilla_registered = vanilla_star_ids if is_star else vanilla_planet_ids
+        if type_id in registered or type_id in vanilla_registered:
+            continue
+        csv_relative = "data/campaign/procgen/star_gen_data.csv" if is_star else "data/campaign/procgen/planet_gen_data.csv"
+        spec_class = "StarGenDataSpec" if is_star else "PlanetGenDataSpec"
+        used_files = sorted(set(campaign_ids_used[type_id]))
+        evidence = [f"type:{type_id}", f"isStar:{is_star}", f"missing-row-in:{csv_relative}", *[f"used-in:{f}" for f in used_files[:5]]]
+        if jar_present:
+            evidence.append("class-file-constant-strings:not-scanned (java sources only)")
+        if vanilla_note:
+            evidence.append(vanilla_note)
+        result.add(
+            id="procgen-star-row-missing" if is_star else "procgen-planet-row-missing",
+            category="campaign",
+            severity="critical",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation=(
+                f"data/config/planets.json defines '{type_id}' and it is used from campaign code, but no row "
+                f"with that id exists in {csv_relative} (locally or in vanilla). StarSystem."
+                "autogenerateHyperspaceJumpPoints -> PlanetConditionGenerator throws a fatal "
+                f"'Spec of class [...{spec_class}] with id [{type_id}] not found' during new-game generation. "
+                "Clone the closest vanilla row, rename its id, and set the frequency columns "
+                "(frequency for planets; freqYOUNG/freqAVERAGE/freqOLD for stars) to 0 if it should not be "
+                "randomly generated."
+            ),
+            file=_relative(root, planets_path),
+            evidence=evidence,
+        )
+
+
+def _vanilla_faction_ids(vanilla_core: Path) -> set[str]:
+    ids: set[str] = set()
+    faction_dir = vanilla_core / "data" / "world" / "factions"
+    if not faction_dir.is_dir():
+        return ids
+    for path in faction_dir.glob("*.faction"):
+        data = _load_lenient_json_file(path)
+        if isinstance(data, dict):
+            faction_id = data.get("id")
+            if isinstance(faction_id, str) and faction_id:
+                ids.add(faction_id)
+    return ids
+
+
+def _scan_faction_known_lists(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """A new faction missing known* lists gets silently empty markets/fleets since 0.8a."""
+    faction_dir = root / "data" / "world" / "factions"
+    if not faction_dir.is_dir():
+        return
+    vanilla_ids: set[str] | None = _vanilla_faction_ids(vanilla_core) if vanilla_core is not None else None
+    for path in sorted(faction_dir.glob("*.faction")):
+        data = _load_lenient_json_file(path)
+        if not isinstance(data, dict):
+            # Never skip silently: an unchecked faction file must not read as a clean one.
+            result.add(
+                id="faction-file-unparsed",
+                category="factions",
+                severity="medium",
+                classification="UNKNOWN",
+                confidence="DETERMINISTIC",
+                explanation="BridgeForge's legacy-JSON parser could not read this faction file, so the known-lists check did not run on it. This is not proof the game rejects the file; inspect it manually.",
+                file=_relative(root, path),
+            )
+            continue
+        faction_id = data.get("id")
+        if not isinstance(faction_id, str) or not faction_id:
+            continue
+        if vanilla_ids is not None and faction_id in vanilla_ids:
+            continue
+        missing = [key for key in ("knownShips", "knownWeapons", "knownFighters") if not data.get(key)]
+        if not missing:
+            continue
+        ship_roles = data.get("shipRoles")
+        role_variant_count = 0
+        if isinstance(ship_roles, dict):
+            for block in ship_roles.values():
+                if isinstance(block, dict):
+                    role_variant_count += sum(1 for key in block if key not in FACTION_SPECIAL_ROLE_KEYS)
+        evidence = [f"missing:{','.join(missing)}", f"shipRoles-present:{isinstance(ship_roles, dict)}", f"role-variant-keys:{role_variant_count}"]
+        if vanilla_ids is None:
+            evidence.append("vanilla-faction-list:unavailable; merge-fragment exemption could not be checked")
+        result.add(
+            id="faction-known-lists-missing",
+            category="factions",
+            severity="high",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation=(
+                "This faction is missing one or more of knownShips/knownWeapons/knownFighters. Since 0.8a, "
+                "market stocking (BaseSubmarketPlugin.addWeapons/addFighters/addShips) and fleet generation "
+                "(FleetFactoryV3) only draw from a faction's known lists, so a missing list silently produces "
+                "empty market stock or empty fleets instead of an error."
+            ),
+            file=_relative(root, path),
+            evidence=evidence,
+        )
+
+
+def _scan_shiproles(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """0.8a carrier rework: shipRoles keys must be variant ids, not wing ids or fighter-role names."""
+    faction_dir = root / "data" / "world" / "factions"
+    if not faction_dir.is_dir():
+        return
+    wing_ids = _wing_ids_set(root / "data" / "hulls" / "wing_data.csv")
+    if vanilla_core is not None:
+        wing_ids |= _wing_ids_set(vanilla_core / "data" / "hulls" / "wing_data.csv")
+    for path in sorted(faction_dir.glob("*.faction")):
+        data = _load_lenient_json_file(path)
+        if not isinstance(data, dict):
+            continue
+        ship_roles = data.get("shipRoles")
+        if not isinstance(ship_roles, dict):
+            continue
+        relative = _relative(root, path)
+        for role_name, block in sorted(ship_roles.items()):
+            if role_name.lower() in OBSOLETE_FIGHTER_ROLE_NAMES:
+                result.add(
+                    id="shiproles-obsolete-fighter-role",
+                    category="factions",
+                    severity="medium",
+                    classification="REVIEW",
+                    confidence="HIGH",
+                    explanation="This shipRoles block name (interceptor/fighter/bomber) was removed in the 0.8a carrier rework; its entries are not used by 0.98a fleet generation.",
+                    file=relative,
+                    evidence=[f"role:{role_name}"],
+                )
+            if not isinstance(block, dict):
+                continue
+            for key in sorted(block):
+                if key in FACTION_SPECIAL_ROLE_KEYS:
+                    continue
+                if key.endswith("_wing") or key in wing_ids:
+                    result.add(
+                        id="shiproles-wing-id",
+                        category="factions",
+                        severity="critical",
+                        classification="MANUAL",
+                        confidence="HIGH",
+                        explanation="0.98a resolves every shipRoles entry through a variant-only lookup. This key looks like a fighter wing id (the pre-0.8a convention), which is fatal at load rather than being ignored.",
+                        file=relative,
+                        evidence=[f"role:{role_name}", f"key:{key}"],
+                    )
+
+
+def _scan_carrier_rework_gap(root: Path, result: ScanResult) -> None:
+    """ship_data/wing_data structural symptoms of the 0.8a carrier rework."""
+    ship_data_path = root / "data" / "hulls" / "ship_data.csv"
+    wing_data_path = root / "data" / "hulls" / "wing_data.csv"
+    ship_rows: list[dict[str, str]] = []
+    if ship_data_path.is_file():
+        header = _csv_header(ship_data_path)
+        if header is not None:
+            normalized = [cell.strip().lower() for cell in header]
+            if "fighter bays" not in normalized:
+                result.add(
+                    id="ship-data-missing-fighter-bays-column",
+                    category="hulls",
+                    severity="high",
+                    classification="REVIEW",
+                    confidence="DETERMINISTIC",
+                    explanation="data/hulls/ship_data.csv has no 'fighter bays' column. This mod predates the 0.8a carrier rework; every carrier hull will silently load with 0 fighter bays.",
+                    file=_relative(root, ship_data_path),
+                    evidence=[f"columns:{len(header)}"],
+                )
+        ship_rows = _read_csv_rows(ship_data_path) or []
+
+    variant_wings_by_hull: dict[str, bool] = {}
+    variants_root = root / "data" / "variants"
+    if variants_root.is_dir():
+        for path in variants_root.rglob("*.variant"):
+            data = _load_lenient_json_file(path)
+            if not isinstance(data, dict):
+                continue
+            hull_id = data.get("hullId")
+            if not isinstance(hull_id, str) or not hull_id:
+                continue
+            wings = data.get("wings")
+            has_wings = isinstance(wings, list) and len(wings) > 0
+            variant_wings_by_hull[hull_id] = variant_wings_by_hull.get(hull_id, False) or has_wings
+
+    if wing_data_path.is_file():
+        header = _csv_header(wing_data_path)
+        if header is not None:
+            normalized = [cell.strip().lower() for cell in header]
+            if "role desc" not in normalized:
+                result.add(
+                    id="wing-data-missing-role-desc-column",
+                    category="hulls",
+                    severity="critical",
+                    classification="MANUAL",
+                    confidence="DETERMINISTIC",
+                    explanation="data/hulls/wing_data.csv has no 'role desc' column, which the 0.98a loader requires; the file fails to load.",
+                    file=_relative(root, wing_data_path),
+                    evidence=[f"columns:{len(header)}"],
+                )
+        for index, row in enumerate(_read_csv_rows(wing_data_path) or [], start=2):
+            wing_id = (row.get("id") or "").strip()
+            if not wing_id or wing_id.startswith("#"):
+                continue
+            role = (row.get("role") or "").strip()
+            if role.upper() == "ASSAULT":
+                result.add(
+                    id="wing-role-assault-removed",
+                    category="hulls",
+                    severity="low",
+                    classification="SAFE",
+                    confidence="DETERMINISTIC",
+                    explanation="The ASSAULT wing role was removed; FIGHTER is its 0.98a equivalent.",
+                    file=_relative(root, wing_data_path),
+                    evidence=[f"line:{index}", f"wing:{wing_id}", "role:ASSAULT->FIGHTER"],
+                )
+            op_cost = (row.get("op cost") or "").strip()
+            if not op_cost:
+                result.add(
+                    id="wing-op-cost-blank",
+                    category="hulls",
+                    severity="medium",
+                    classification="REVIEW",
+                    confidence="DETERMINISTIC",
+                    explanation="This wing_data.csv row has a blank 'op cost' value.",
+                    file=_relative(root, wing_data_path),
+                    evidence=[f"line:{index}", f"wing:{wing_id}"],
+                )
+
+    for row in ship_rows:
+        hull_id = (row.get("id") or "").strip()
+        if not hull_id or hull_id.startswith("#"):
+            continue
+        hints = (row.get("hints") or "").upper()
+        if "CARRIER" not in hints:
+            continue
+        bays_raw = (row.get("fighter bays") or "").strip()
+        try:
+            bays = int(float(bays_raw)) if bays_raw else 0
+        except ValueError:
+            bays = 0
+        has_wings = variant_wings_by_hull.get(hull_id, False)
+        if bays <= 0 and not has_wings:
+            result.add(
+                id="carrier-without-bays-or-wings",
+                category="hulls",
+                severity="high",
+                classification="REVIEW",
+                confidence="HIGH",
+                explanation="This hull is tagged CARRIER in ship_data.csv hints but has 0/absent fighter bays and none of its variants declare a non-empty wings array, so it cannot deploy fighters.",
+                file=_relative(root, ship_data_path),
+                evidence=[f"hull:{hull_id}", f"fighter-bays:{bays_raw or '0'}", f"variants-with-wings:{has_wings}"],
+            )
+
+
+def _scan_black_hole_flag(root: Path, result: ScanResult) -> None:
+    planets_path = root / "data" / "config" / "planets.json"
+    data = _load_lenient_json_file(planets_path)
+    if not isinstance(data, dict):
+        return
+    for type_id, spec in sorted(data.items()):
+        if not isinstance(spec, dict) or not spec.get("isStar") or spec.get("isBlackHole"):
+            continue
+        name = str(spec.get("name") or "")
+        texture = str(spec.get("texture") or "")
+        if not (BLACK_HOLE_HINT_PATTERN.search(type_id) or BLACK_HOLE_HINT_PATTERN.search(name) or BLACK_HOLE_HINT_PATTERN.search(texture)):
+            continue
+        result.add(
+            id="black-hole-type-missing-flag",
+            category="campaign",
+            severity="low",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation="This star type's id/name/texture indicates a black hole, but isBlackHole:true is not set, so 0.98a renders it as a plain star instead of a black hole.",
+            file=_relative(root, planets_path),
+            evidence=[f"type:{type_id}", f"name:{name}", f"texture:{texture}"],
+        )
+
+
+def _base_game_version(version: str) -> str:
+    """'0.98a-RC8' -> '0.98a'. The launcher accepts any RC of the same base version."""
+    return re.sub(r"-RC\d+$", "", version.strip(), flags=re.I).lower()
+
+
+def _scan_mod_info_game_version(result: ScanResult) -> None:
+    target_version = result.target.starsector
+    if not target_version or not GAME_VERSION_RC_PATTERN.match(target_version):
+        return
+    declared = result.declared_starsector
+    if not declared or declared == target_version:
+        return
+    # The launcher matches on the BASE version: mods declaring 0.98a-RC5 / 0.98a-RC7 loaded and ran
+    # all week in an RC8 rig (LazyLib, LunaLib, Console Commands, MagicLib), so an older RC is fine.
+    if _base_game_version(declared) == _base_game_version(target_version):
+        return
+    result.add(
+        id="mod-info-game-version-inexact",
+        category="metadata",
+        severity="high",
+        classification="REVIEW",
+        confidence="DETERMINISTIC",
+        explanation=f"mod_info.json gameVersion ('{declared}') targets a different base game version than the configured target ({target_version}). The Starsector launcher unchecks a mod whose base version differs. An older release candidate of the same version (e.g. 0.98a-RC5 on RC8) is accepted, so only the base version matters.",
+        file="mod_info.json",
+        evidence=[f"declared:{declared}", f"target:{target_version}"],
+    )
+
+
+def _scan_vanilla_path_shadowing(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    if vanilla_core is None:
+        return
+    data_root = root / "data"
+    if not data_root.is_dir():
+        return
+    mod_info = _load_lenient_json_file(root / "mod_info.json")
+    total_conversion = isinstance(mod_info, dict) and mod_info.get("totalConversion") is True
+    for path in data_root.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in SHADOW_PATH_EXTENSIONS:
+            continue
+        relative = path.relative_to(root)
+        vanilla_path = vanilla_core / relative
+        if not vanilla_path.is_file():
+            continue
+        try:
+            mod_bytes = path.read_bytes()
+            vanilla_bytes = vanilla_path.read_bytes()
+        except OSError:
+            continue
+        if mod_bytes == vanilla_bytes:
+            continue
+        evidence = [f"vanilla-path:{vanilla_path.as_posix()}"]
+        if total_conversion:
+            evidence.append("mod_info:totalConversion=true")
+        result.add(
+            id="vanilla-path-shadowing",
+            category="assets",
+            severity="low" if total_conversion else "critical",
+            classification="REVIEW" if total_conversion else "MANUAL",
+            confidence="DETERMINISTIC",
+            explanation=(
+                "This total-conversion mod replaces a vanilla file at the same data-relative path; overrides are expected for a total conversion, so spot-check rather than treat as a defect."
+                if total_conversion
+                else "This mod file shadows a vanilla file at the same data-relative path with different bytes. Confirm the override is intentional; an unintended shadow silently replaces core game content."
+            ),
+            file=_relative(root, path),
+            evidence=evidence,
+        )
+
+
+def _class_pool_u2(data: bytes, pos: int) -> tuple[int, int]:
+    return int.from_bytes(data[pos:pos + 2], "big"), pos + 2
+
+
+def _class_pool_u4(data: bytes, pos: int) -> tuple[int, int]:
+    return int.from_bytes(data[pos:pos + 4], "big"), pos + 4
+
+
+def _skip_attributes(data: bytes, pos: int, count: int) -> int:
+    for _ in range(count):
+        pos += 2  # attribute_name_index
+        length, pos = _class_pool_u4(data, pos)
+        pos += length
+    return pos
+
+
+class _ClassFileInfo:
+    """Parsed facts about one .class file, resolved from its constant pool."""
+
+    __slots__ = ("this_class", "referenced_classes", "methods")
+
+    def __init__(self, this_class: str, referenced_classes: set[str], methods: list[tuple[str, str, bool]]) -> None:
+        self.this_class = this_class
+        self.referenced_classes = referenced_classes
+        self.methods = methods
+
+
+def _parse_class_file(data: bytes) -> _ClassFileInfo | None:
+    """Parse a .class file's constant pool and method table.
+
+    Returns the internal (slash-separated) class names referenced via CONSTANT_Class
+    entries and (name, descriptor, is_public) for each declared method. This is a
+    proper constant-pool walk (not a substring search) so that, for example,
+    "java/io/FileSystemNotFoundException" is never confused with "java/io/File".
+    Returns None for anything that is not a well-formed, currently-understood class
+    file; callers must treat that as "unknown", not "no forbidden references".
+    """
+    if len(data) < 10 or data[:4] != b"\xca\xfe\xba\xbe":
+        return None
+    try:
+        pos = 8  # magic(4) + minor_version(2) + major_version(2)
+        constant_pool_count, pos = _class_pool_u2(data, pos)
+        utf8: dict[int, str] = {}
+        class_name_index: dict[int, int] = {}
+        index = 1
+        while index < constant_pool_count:
+            tag = data[pos]
+            pos += 1
+            if tag == 1:  # Utf8
+                length, pos = _class_pool_u2(data, pos)
+                raw = data[pos:pos + length]
+                pos += length
+                utf8[index] = raw.decode("utf-8", errors="replace")
+            elif tag == 7:  # Class
+                name_index, pos = _class_pool_u2(data, pos)
+                class_name_index[index] = name_index
+            elif tag in (9, 10, 11, 12, 17, 18):  # Fieldref/Methodref/IfaceMethodref/NameAndType/Dynamic/InvokeDynamic
+                pos += 4
+            elif tag == 8:  # String
+                pos += 2
+            elif tag in (3, 4):  # Integer/Float
+                pos += 4
+            elif tag in (5, 6):  # Long/Double (occupies two constant-pool entries)
+                pos += 8
+                index += 1
+            elif tag == 15:  # MethodHandle
+                pos += 3
+            elif tag == 16:  # MethodType
+                pos += 2
+            elif tag in (19, 20):  # Module/Package
+                pos += 2
+            else:
+                return None  # unrecognized constant-pool tag; do not guess
+            index += 1
+        referenced_classes = {utf8[name_index] for name_index in class_name_index.values() if name_index in utf8}
+        pos += 2  # access_flags
+        this_class_index, pos = _class_pool_u2(data, pos)
+        this_class = utf8.get(class_name_index.get(this_class_index, -1), "")
+        pos += 2  # super_class
+        interfaces_count, pos = _class_pool_u2(data, pos)
+        pos += 2 * interfaces_count
+        fields_count, pos = _class_pool_u2(data, pos)
+        for _ in range(fields_count):
+            pos += 6  # access_flags, name_index, descriptor_index
+            attr_count, pos = _class_pool_u2(data, pos)
+            pos = _skip_attributes(data, pos, attr_count)
+        methods_count, pos = _class_pool_u2(data, pos)
+        methods: list[tuple[str, str, bool]] = []
+        for _ in range(methods_count):
+            access_flags, pos = _class_pool_u2(data, pos)
+            name_index, pos = _class_pool_u2(data, pos)
+            descriptor_index, pos = _class_pool_u2(data, pos)
+            attr_count, pos = _class_pool_u2(data, pos)
+            pos = _skip_attributes(data, pos, attr_count)
+            methods.append((utf8.get(name_index, ""), utf8.get(descriptor_index, ""), bool(access_flags & 0x0001)))
+        return _ClassFileInfo(this_class, referenced_classes, methods)
+    except (IndexError, KeyError, UnicodeDecodeError):
+        return None
+
+
+NON_MOD_JAR_DIRS = {"build", "out", "tmp", "target"}
+
+
+def _loaded_mod_jars(root: Path) -> list[Path]:
+    """Jars Starsector actually loads: mod_info.json's "jars" list, else every jar outside build-output dirs.
+
+    Bytecode checks must not read compile-classpath caches (e.g. build/cp/ holding vanilla's own jar), unloaded
+    legacy jars, or backups; those produced thousands of false findings on real revival working copies.
+    """
+    mod_info = _load_lenient_json_file(root / "mod_info.json")
+    declared = mod_info.get("jars") if isinstance(mod_info, dict) else None
+    if isinstance(declared, list):
+        jars = [root / entry for entry in declared if isinstance(entry, str) and (root / entry).is_file()]
+        if jars:
+            return sorted(jars)
+    return sorted(
+        jar for jar in root.rglob("*.jar")
+        if not NON_MOD_JAR_DIRS.intersection(part.lower() for part in jar.relative_to(root).parts[:-1])
+    )
+
+
+def _iter_jar_class_files(root: Path):
+    """Yield (jar_path, member_name, class_bytes) for readable .class members of the mod's loaded jars."""
+    for jar in _loaded_mod_jars(root):
+        try:
+            with zipfile.ZipFile(jar) as archive:
+                entries = archive.infolist()
+                if len(entries) > MAX_JAR_ENTRIES:
+                    continue
+                for item in entries:
+                    if not item.filename.endswith(".class"):
+                        continue
+                    member = PurePosixPath(item.filename.replace("\\", "/"))
+                    if member.is_absolute() or ".." in member.parts:
+                        continue
+                    try:
+                        with archive.open(item) as class_file:
+                            data = class_file.read()
+                    except (OSError, zipfile.BadZipFile, KeyError):
+                        continue
+                    yield jar, item.filename.replace("\\", "/"), data
+        except (OSError, zipfile.BadZipFile):
+            continue
+
+
+def _scan_script_sandbox_forbidden_api(root: Path, result: ScanResult) -> None:
+    """RC8's script classloader crashes at runtime the first time a scripted class touches reflection/file I/O."""
+    explanation = (
+        "RC8's script sandbox classloader throws SecurityException(\"File access and reflection are not allowed "
+        "to scripts\") the first time this class is loaded at runtime, because it references java.lang.reflect, "
+        "java.nio.file, or a java.io.File-family type. This is lazy (it only surfaces when the class is actually "
+        "loaded, which can be mid-combat), so a clean boot does not prove it is safe. Remove the reflection/file-I/O "
+        "usage, or move it out of the scripted class, before runtime testing."
+    )
+    for jar, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None:
+            continue
+        forbidden = sorted(
+            name for name in info.referenced_classes
+            if name.startswith(FORBIDDEN_REFLECT_PREFIX) or name.startswith(FORBIDDEN_NIO_FILE_PREFIX) or name in FORBIDDEN_IO_CLASSES
+        )
+        if not forbidden:
+            continue
+        class_name = (info.this_class or member[:-6]).replace("/", ".")
+        result.add(
+            id="script-sandbox-forbidden-api",
+            category="bytecode",
+            severity="critical",
+            classification="MANUAL",
+            confidence="HIGH",
+            explanation=explanation,
+            file=_relative(root, jar),
+            evidence=[f"class:{class_name}", *[f"forbidden:{name.replace('/', '.')}" for name in forbidden]],
+        )
+
+    source_dirs = [root / "data" / "scripts", root / "src"]
+    seen_sources: set[Path] = set()
+    for source_dir in source_dirs:
+        if not source_dir.is_dir():
+            continue
+        for source in sorted(source_dir.rglob("*.java")):
+            if source in seen_sources:
+                continue
+            seen_sources.add(source)
+            if "disabled_files" in source.relative_to(root).parts:
+                continue
+            try:
+                text = source.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            matches = sorted(set(FORBIDDEN_SANDBOX_SOURCE_PATTERN.findall(text)))
+            if not matches:
+                continue
+            result.add(
+                id="script-sandbox-forbidden-api",
+                category="bytecode",
+                severity="critical",
+                classification="MANUAL",
+                confidence="HIGH",
+                explanation=explanation,
+                file=_relative(root, source),
+                evidence=[f"forbidden:{name}" for name in matches[:10]],
+            )
+
+
+def _scan_bundled_library_classes(root: Path, result: ScanResult) -> None:
+    """A mod jar can silently absorb another mod/library's compiled classes during a rebuild."""
+    for jar in _loaded_mod_jars(root):
+        try:
+            with zipfile.ZipFile(jar) as archive:
+                entries = archive.infolist()
+                if len(entries) > MAX_JAR_ENTRIES:
+                    continue
+                names = [item.filename.replace("\\", "/") for item in entries if item.filename.endswith(".class")]
+        except (OSError, zipfile.BadZipFile):
+            continue
+        counts: Counter[str] = Counter()
+        for name in names:
+            internal = name[:-6]
+            for library, prefixes in BUNDLED_LIBRARY_PACKAGE_PREFIXES.items():
+                if any(internal.startswith(prefix) for prefix in prefixes):
+                    counts[library] += 1
+        for library, count in sorted(counts.items()):
+            prefixes = ", ".join(BUNDLED_LIBRARY_PACKAGE_PREFIXES[library])
+            result.add(
+                id="bundled-library-classes",
+                category="dependencies",
+                severity="high",
+                classification="MANUAL",
+                confidence="DETERMINISTIC",
+                explanation=(
+                    f"This jar contains {count} compiled class(es) under {library}'s package(s) ({prefixes}). "
+                    f"A rebuild that compiles against {library}'s sources found on the classpath can silently "
+                    "bundle its classes into this mod's own jar, duplicating them for every player who also has "
+                    f"the real {library} installed. Rebuild against {library} as a provided/compile-only "
+                    "dependency instead of packaging its classes."
+                ),
+                file=_relative(root, jar),
+                evidence=[f"library:{library}", f"class-count:{count}"],
+            )
+
+
+def _vanilla_api_jar_class_info(vanilla_core: Path) -> dict[str, _ClassFileInfo]:
+    classes: dict[str, _ClassFileInfo] = {}
+    for jar_name in ("starfarer.api.jar", "starfarer_obf.jar"):
+        jar_path = vanilla_core / jar_name
+        if not jar_path.is_file():
+            continue
+        try:
+            with zipfile.ZipFile(jar_path) as archive:
+                for item in archive.infolist():
+                    if not item.filename.endswith(".class"):
+                        continue
+                    fqn = item.filename.replace("\\", "/")[:-6].replace("/", ".")
+                    if fqn in classes:
+                        continue
+                    try:
+                        data = archive.read(item)
+                    except (OSError, zipfile.BadZipFile, KeyError):
+                        continue
+                    info = _parse_class_file(data)
+                    if info is not None:
+                        classes[fqn] = info
+        except (OSError, zipfile.BadZipFile):
+            continue
+    return classes
+
+
+def _vanilla_loose_script_fqns(vanilla_core: Path) -> set[str]:
+    """Every loose vanilla .java source under data/** (not just data/scripts), by path-derived FQN.
+
+    Starsector loads loose scripts from many data/ subdirectories, not only data/scripts (e.g.
+    data/shipsystems/scripts/SensorDroneStats.java, referenced by vanilla ship systems). The FQN is
+    the path relative to starsector-core with '/' -> '.', minus the .java suffix; when the file
+    declares a 'package' line, that is used instead so a mismatched directory layout does not
+    produce a false FQN.
+    """
+    data_root = vanilla_core / "data"
+    if not data_root.is_dir():
+        return set()
+    fqns: set[str] = set()
+    for path in data_root.rglob("*.java"):
+        relative = path.relative_to(vanilla_core)
+        path_fqn = ".".join(relative.with_suffix("").parts)
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            fqns.add(path_fqn)
+            continue
+        package_match = re.search(r"^\s*package\s+([\w.]+)\s*;", text, re.M)
+        if package_match:
+            fqns.add(f"{package_match.group(1)}.{path.stem}")
+        else:
+            fqns.add(path_fqn)
+    return fqns
+
+
+def _scan_vanilla_duplicated_classes(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """A mod jar's own copy of a vanilla class replaces the target release's class for every mod loaded after it."""
+    if vanilla_core is None:
+        return
+    vanilla_jar_classes = _vanilla_api_jar_class_info(vanilla_core)
+    vanilla_loose_fqns = _vanilla_loose_script_fqns(vanilla_core)
+    if not vanilla_jar_classes and not vanilla_loose_fqns:
+        return
+    for jar, member, data in _iter_jar_class_files(root):
+        fqn = member[:-6].replace("/", ".")
+        # A mod's own new rulecmd command classes are how rules.csv registers commands; only classes
+        # that also exist in vanilla are duplicates, so a brand-new rulecmd class is never flagged here.
+        if fqn.startswith("com.fs.starfarer.api.impl.campaign.rulecmd.") and fqn not in vanilla_jar_classes and fqn not in vanilla_loose_fqns:
+            continue
+        if fqn in vanilla_jar_classes:
+            info = _parse_class_file(data)
+            if info is None:
+                continue
+            vanilla_info = vanilla_jar_classes[fqn]
+            vanilla_public = {(name, descriptor) for name, descriptor, is_public in vanilla_info.methods if is_public}
+            mod_public = {(name, descriptor) for name, descriptor, is_public in info.methods if is_public}
+            missing = sorted(f"{name}{descriptor}" for name, descriptor in (vanilla_public - mod_public))
+            classification = "MANUAL" if missing else "REVIEW"
+            severity = "critical" if missing else "high"
+            result.add(
+                id="vanilla-class-duplicated-in-jar",
+                category="bytecode",
+                severity=severity,
+                classification=classification,
+                confidence="HIGH",
+                explanation=(
+                    "This mod jar contains its own compiled copy of a vanilla API class, replacing the target "
+                    "release's class on the classpath for every mod loaded after it."
+                    + (
+                        f" The mod's copy is missing {len(missing)} public method(s) the current release's class "
+                        "has, so code compiled against the real class fails with NoSuchMethodError at runtime."
+                        if missing
+                        else " Its public method signatures currently match the target release; confirm this is an "
+                        "intentional override rather than a stale copy."
+                    )
+                ),
+                file=_relative(root, jar),
+                evidence=[f"class:{fqn}", "vanilla-source:api-jar", *[f"missing-public-method:{m}" for m in missing[:10]]],
+            )
+        elif fqn in vanilla_loose_fqns:
+            result.add(
+                id="vanilla-class-duplicated-in-jar",
+                category="bytecode",
+                severity="high",
+                classification="REVIEW",
+                confidence="HIGH",
+                explanation=(
+                    "This mod jar contains a compiled class at the same fully-qualified name as a vanilla loose "
+                    "script (data/scripts/**/*.java). A compiled class on the classpath takes priority over the "
+                    "game's loose script, silently replacing that vanilla script's behavior game-wide, not just "
+                    "for this mod."
+                ),
+                file=_relative(root, jar),
+                evidence=[f"class:{fqn}", "vanilla-source:loose-script"],
+            )
+
+
+def _scan_obfuscated_internal_api_use(root: Path, result: ScanResult) -> None:
+    """com.fs.starfarer classes outside the api package are obfuscated internals renamed each release."""
+    for jar, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None:
+            continue
+        internal_refs = sorted(
+            name.replace("/", ".") for name in info.referenced_classes
+            if name.startswith("com/fs/starfarer/") and not name.startswith("com/fs/starfarer/api/")
+        )
+        if not internal_refs:
+            continue
+        class_name = (info.this_class or member[:-6]).replace("/", ".")
+        result.add(
+            id="obfuscated-internal-api-use",
+            category="bytecode",
+            severity="medium",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation=(
+                "This compiled class references com.fs.starfarer internal (non-api) classes. Names outside "
+                "com.fs.starfarer.api are obfuscated implementation details that get renamed between releases "
+                "without notice; verify each reference still resolves against the target release before runtime "
+                "testing."
+            ),
+            file=_relative(root, jar),
+            evidence=[f"class:{class_name}", *[f"internal:{name}" for name in internal_refs[:15]]],
+        )
+
+
+def _scan_csv_design_type_column(root: Path, result: ScanResult) -> None:
+    """0.8a's tech/manufacturer column drives the RC8 UI's design-type label; without it every row shows 'Common'."""
+    for parts in DESIGN_TYPE_CSV_TARGETS:
+        path = root.joinpath(*parts)
+        if not path.is_file():
+            continue
+        header = _csv_header(path)
+        if header is None:
+            continue
+        normalized = [cell.strip().lower() for cell in header]
+        if any("tech" in cell or "manufacturer" in cell for cell in normalized):
+            continue
+        result.add(
+            id="csv-missing-design-type-column",
+            category="assets",
+            severity="low",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=(
+                f"{path.name} has no 'tech' or 'manufacturer' column, the 0.8a-era design-type source column. "
+                "0.98a reads it to classify each item's design type in the UI; without it, every row in this file "
+                "displays as design type 'Common'. If a custom design type is intended, also add a matching entry "
+                "under the settings.json 'designTypeColors' key."
+            ),
+            file=_relative(root, path),
+            evidence=[f"columns:{len(header)}", f"header:{','.join(header)[:200]}"],
+        )
+
+
+ORBIT_CALL_ARG_INDICES: dict[str, list[int]] = {
+    "addRingBand": [8],
+    "addAsteroidBelt": [4, 5],
+    "setCircularOrbit": [3],
+    "setCircularOrbitPointingDown": [3],
+    "setCircularOrbitWithSpin": [3],
+}
+_ORBIT_CALL_NAME_PATTERN = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+_ZERO_LITERAL_PATTERN = re.compile(r"^-?0+(\.0+)?[fFdD]?$")
+_ORBIT_GUARD_PATTERN = re.compile(r"Math\.max\s*\(|isNaN\s*\(|>\s*0\b")
+_METHOD_SIGNATURE_PATTERN = re.compile(
+    r"(?:public|private|protected|static)[^;{}]*?\b[\w$]+\s*\([^()]*\)\s*(?:throws\s+[\w.,\s]+)?\s*\{"
+)
+
+
+def _extract_call_arguments_text(text: str, open_paren_index: int) -> str | None:
+    """Return the text between a call's matching parens, respecting nesting and quoted strings."""
+    depth = 0
+    in_string: str | None = None
+    index = open_paren_index
+    length = len(text)
+    while index < length:
+        character = text[index]
+        if in_string:
+            if character == "\\" and index + 1 < length:
+                index += 2
+                continue
+            if character == in_string:
+                in_string = None
+            index += 1
+            continue
+        if character in "\"'":
+            in_string = character
+            index += 1
+            continue
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if depth == 0:
+                return text[open_paren_index + 1:index]
+        index += 1
+    return None
+
+
+def _split_call_arguments(args_text: str) -> list[str]:
+    """Split a call's argument text on top-level commas only (quote/paren/bracket-aware)."""
+    args: list[str] = []
+    current: list[str] = []
+    depth = 0
+    in_string: str | None = None
+    index = 0
+    length = len(args_text)
+    while index < length:
+        character = args_text[index]
+        if in_string:
+            current.append(character)
+            if character == "\\" and index + 1 < length:
+                current.append(args_text[index + 1])
+                index += 2
+                continue
+            if character == in_string:
+                in_string = None
+            index += 1
+            continue
+        if character in "\"'":
+            in_string = character
+            current.append(character)
+            index += 1
+            continue
+        if character in "([{":
+            depth += 1
+            current.append(character)
+            index += 1
+            continue
+        if character in ")]}":
+            depth -= 1
+            current.append(character)
+            index += 1
+            continue
+        if character == "," and depth == 0:
+            args.append("".join(current).strip())
+            current = []
+            index += 1
+            continue
+        current.append(character)
+        index += 1
+    if current or args:
+        args.append("".join(current).strip())
+    return args
+
+
+def _enclosing_method_span(text: str, position: int) -> tuple[int, int]:
+    """Return the (start, end) offsets of the innermost method body enclosing `position`.
+
+    Uses a simple signature regex plus brace counting; falls back to the whole file when no
+    enclosing method is recognized (still safe: guard detection then just looks file-wide).
+    """
+    best: tuple[int, int] | None = None
+    for match in _METHOD_SIGNATURE_PATTERN.finditer(text):
+        body_start = match.end() - 1
+        if body_start > position:
+            continue
+        depth = 0
+        end = None
+        for index in range(body_start, len(text)):
+            if text[index] == "{":
+                depth += 1
+            elif text[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    end = index + 1
+                    break
+        if end is None or not (body_start <= position < end):
+            continue
+        if best is None or match.start() > best[0]:
+            best = (match.start(), end)
+    if best is None:
+        return 0, len(text)
+    return best
+
+
+def _looks_like_division(expr: str) -> bool:
+    cleaned = re.sub(r'"(?:\\.|[^"\\])*"', '""', expr)
+    return bool(re.search(r"(?<!/)/(?!/)", cleaned))
+
+
+def _classify_orbit_argument(arg_text: str, method_text: str) -> str | None:
+    """Classify one orbit-period call argument: 'zero', 'computed-unguarded', or None (no finding)."""
+    arg = arg_text.strip()
+    if not arg:
+        return None
+    if _ZERO_LITERAL_PATTERN.match(arg):
+        return "zero"
+    is_computed = _looks_like_division(arg)
+    if not is_computed and re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", arg):
+        is_computed = bool(re.search(rf"\b{re.escape(arg)}\s*=(?!=)\s*[^;]*?/[^;]*?;", method_text))
+    if not is_computed:
+        return None
+    if _ORBIT_GUARD_PATTERN.search(method_text):
+        return None
+    return "computed-unguarded"
+
+
+def _blank_java_comments(text: str) -> str:
+    """Blank out // and /* */ comment text with spaces, keeping newlines so offsets and line numbers hold.
+
+    String and char literals are skipped, so "http://..." survives. Without this, source checks flagged
+    commented-out code (a disabled setCircularOrbit block in Legacy of Arkgneisis's procgen generator).
+    """
+    out = list(text)
+    index, length = 0, len(text)
+    while index < length:
+        char = text[index]
+        if char in "\"'":
+            index += 1
+            while index < length and text[index] != char and text[index] != "\n":
+                index += 2 if text[index] == "\\" else 1
+            index += 1
+            continue
+        if text.startswith("//", index):
+            while index < length and text[index] != "\n":
+                out[index] = " "
+                index += 1
+            continue
+        if text.startswith("/*", index):
+            end = text.find("*/", index + 2)
+            end = length if end < 0 else end + 2
+            for position in range(index, end):
+                if out[position] != "\n":
+                    out[position] = " "
+            index = end
+            continue
+        index += 1
+    return "".join(out)
+
+
+def _scan_orbit_period_hazards(root: Path, result: ScanResult) -> None:
+    """RC8 crashes at the next save when a ring/belt/orbit is given a zero (or unguarded-computed) period.
+
+    A zero orbit period is infinite angular speed; RingBand and similar orbit objects cannot
+    serialize a non-finite number, so the next autosave/save throws
+    "RingBand.writeReplace: JSON does not allow non-finite numbers" (or an equivalent crash).
+    Real case: Legacy of Arkgneisis's SpawnChampionRing computed `float orbitTime = orbitRadius / 20f;`
+    where orbitRadius can be -1 (no jump points) or <= 0 (a cramped system).
+    """
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        relative = _relative(root, source)
+        for match in _ORBIT_CALL_NAME_PATTERN.finditer(text):
+            call_name = match.group(1)
+            indices = ORBIT_CALL_ARG_INDICES.get(call_name)
+            if indices is None:
+                continue
+            open_paren = match.end() - 1
+            args_text = _extract_call_arguments_text(text, open_paren)
+            if args_text is None:
+                continue
+            args = _split_call_arguments(args_text)
+            line_number = text.count("\n", 0, match.start()) + 1
+            method_text: str | None = None
+            for index in indices:
+                if index >= len(args):
+                    continue
+                arg_text = args[index]
+                if method_text is None:
+                    start, end = _enclosing_method_span(text, match.start())
+                    method_text = text[start:end]
+                classification = _classify_orbit_argument(arg_text, method_text)
+                if classification == "zero":
+                    result.add(
+                        id="orbit-period-zero",
+                        category="source",
+                        severity="critical",
+                        classification="MANUAL",
+                        confidence="DETERMINISTIC",
+                        explanation=(
+                            f"This call to {call_name}(...) passes a literal 0 orbit-period. A zero orbit period "
+                            "is infinite angular speed; the next save throws "
+                            "'RingBand.writeReplace: JSON does not allow non-finite numbers' (or an equivalent "
+                            "non-finite-orbit crash) the first time this object is serialized."
+                        ),
+                        file=relative,
+                        evidence=[f"line:{line_number}", f"call:{call_name}", f"arg-index:{index}", f"arg:{arg_text}"],
+                    )
+                elif classification == "computed-unguarded":
+                    result.add(
+                        id="orbit-period-computed-unguarded",
+                        category="source",
+                        severity="medium",
+                        classification="REVIEW",
+                        confidence="MEDIUM",
+                        explanation=(
+                            f"This call to {call_name}(...) passes a computed orbit-period with no visible "
+                            "Math.max/'> 0'/isNaN guard in the enclosing method. If the underlying value can be "
+                            "zero, negative, or NaN, the next save throws a non-finite-number crash "
+                            "(RingBand.writeReplace or equivalent). Real case: Legacy of Arkgneisis's "
+                            "SpawnChampionRing computed `float orbitTime = orbitRadius / 20f;` where orbitRadius "
+                            "can be -1 or <= 0."
+                        ),
+                        file=relative,
+                        evidence=[f"line:{line_number}", f"call:{call_name}", f"arg-index:{index}", f"arg:{arg_text}"],
+                    )
+
+
+def _scan_module_captain_personality_risk(root: Path, result: ScanResult) -> None:
+    """RC8's Ship.getPersonality() NPEs for a module/spawned ship whose captain has no personality."""
+    ship_data_path = root / "data" / "hulls" / "ship_data.csv"
+    for row in _read_csv_rows(ship_data_path) or []:
+        hull_id = (row.get("id") or "").strip()
+        if not hull_id or hull_id.startswith("#"):
+            continue
+        hints = (row.get("hints") or "").upper()
+        if "SHIP_WITH_MODULES" not in hints:
+            continue
+        result.add(
+            id="module-captain-personality-risk",
+            category="hulls",
+            severity="medium",
+            classification="REVIEW",
+            confidence="MEDIUM",
+            explanation=(
+                "This hull is tagged SHIP_WITH_MODULES. Reported live, pending confirmation: RC8's "
+                "Ship.getPersonality() NPEs if a module's captain has no personality, and AI-replacement mods "
+                "(e.g. AI Tweaks) construct BasicShipAI for modules without a personality override, crashing in "
+                "CombatFleetManager.deployAll. Ensure module/spawned-ship captains get a personality."
+            ),
+            file=_relative(root, ship_data_path),
+            evidence=[f"hull:{hull_id}", "hint:SHIP_WITH_MODULES"],
+        )
+
+
+_SPAWN_SHIP_CALL_PATTERN = re.compile(r"\b(spawnShipOrWing|spawnFleetMember)\s*\(\s*\"([^\"]+)\"")
+
+
+def _scan_spawned_ship_captain_personality_risk(root: Path, result: ScanResult) -> None:
+    """A ship (not wing) spawned directly via spawnShipOrWing/spawnFleetMember gets an AI captain with no personality."""
+    wing_ids = _wing_ids_set(root / "data" / "hulls" / "wing_data.csv")
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        relative = _relative(root, source)
+        for match in _SPAWN_SHIP_CALL_PATTERN.finditer(text):
+            call_name, spawned_id = match.group(1), match.group(2)
+            if spawned_id.endswith("_wing") or spawned_id in wing_ids:
+                continue
+            line_number = text.count("\n", 0, match.start()) + 1
+            result.add(
+                id="spawned-ship-captain-personality-risk",
+                category="source",
+                severity="low",
+                classification="REVIEW",
+                confidence="MEDIUM",
+                explanation=(
+                    f"This {call_name}(...) call spawns '{spawned_id}', which resolves as a ship variant rather "
+                    "than a fighter wing (it is not in wing_data.csv and does not end in '_wing'). RC8's "
+                    "Ship.getPersonality() NPEs if the spawned ship's captain has no personality; real case: "
+                    "SEEKER hullmods spawn ART_*_hulk* debris ships on death this way."
+                ),
+                file=relative,
+                evidence=[f"line:{line_number}", f"call:{call_name}", f"spawned:{spawned_id}"],
+            )
+
+
+# Banner forms only. A bare, case-insensitive "broken" also matched the real mod name "Broken Star"
+# after its "(BROEKN MAYBE)" banner was removed, so "BROKEN" must be all-caps or parenthesised.
+MOD_INFO_TRIAGE_BANNER_PATTERN = re.compile(
+    r"\bBROKEN\b|(?i:\(\s*broken|BROEKN|UNREVIVED|NEEDS TO BE UPDATED|fetch an old game version)"
+)
+
+
+def _scan_mod_info_triage_banner(root: Path, result: ScanResult) -> None:
+    """A mod_info.json name/description/author still carrying a pre-release triage banner."""
+    mod_info = _load_lenient_json_file(root / "mod_info.json")
+    if not isinstance(mod_info, dict):
+        return
+    for field in ("name", "description", "author"):
+        value = mod_info.get(field)
+        if not isinstance(value, str) or not value:
+            continue
+        if not MOD_INFO_TRIAGE_BANNER_PATTERN.search(value):
+            continue
+        result.add(
+            id="mod-info-triage-banner",
+            category="metadata",
+            severity="low",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation=(
+                f"mod_info.json's '{field}' still carries a pre-release triage banner (e.g. BROKEN/BROEKN/"
+                "UNREVIVED/NEEDS TO BE UPDATED/'fetch an old game version'). Clean this up before release."
+            ),
+            file="mod_info.json",
+            evidence=[f"field:{field}", f"value:{value}"],
+        )
+
+
+_EXTERNAL_DEPENDENCY_PREFIXES = ("org.lazywizard", "org.magiclib", "org.dark", "lunalib", "exerelin")
+_RULE_COMMAND_PATTERN = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _is_external_dependency_class(fqn: str) -> bool:
+    """True when a FQN matches a known third-party library/mod API package we cannot see the jar for."""
+    lower = fqn.lower()
+    if lower.startswith(_EXTERNAL_DEPENDENCY_PREFIXES):
+        return True
+    if lower.startswith("data.scripts.util."):
+        simple_name = fqn.rsplit(".", 1)[-1]
+        if simple_name.lower().startswith("magic"):
+            return True
+    return False
+
+
+def _collect_csv_column_class_refs(path: Path, column: str, root: Path, references: list[tuple[str, str, str]]) -> None:
+    header = _csv_header(path)
+    if not header or column not in header:
+        return
+    rows = _read_csv_rows(path)
+    if not rows:
+        return
+    relative = _relative(root, path)
+    for row in rows:
+        values = list(row.values())
+        if values and str(values[0] or "").strip().startswith("#"):
+            continue
+        value = (row.get(column) or "").strip()
+        if not value or value.startswith("#"):
+            continue
+        references.append((relative, column, value))
+
+
+def _scan_data_class_references_missing(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """Every fully qualified class named in mod data must resolve to a class Starsector can actually load.
+
+    Checked against: this mod's loaded jars (result.compiled_class_names), a loose data/scripts .java source
+    (FQN via package+class name), vanilla (when vanilla_core is supplied), or a known third-party library
+    package (classified UNKNOWN/external, since that dependency's jar is not visible to BridgeForge). A row
+    or line commented out with '#' is skipped, so it never fires for a deliberately disabled reference (e.g.
+    Exigency's commented-out exigency_RepulsorRenderer combat_radar_plugins.csv row).
+    """
+    references: list[tuple[str, str, str]] = []
+
+    _collect_csv_column_class_refs(root / "data" / "hullmods" / "hull_mods.csv", "script", root, references)
+    _collect_csv_column_class_refs(root / "data" / "shipsystems" / "ship_systems.csv", "script", root, references)
+    _collect_csv_column_class_refs(root / "data" / "campaign" / "submarkets.csv", "script", root, references)
+    _collect_csv_column_class_refs(root / "data" / "campaign" / "industries.csv", "plugin", root, references)
+
+    weapon_data_path = root / "data" / "weapons" / "weapon_data.csv"
+    weapon_header = _csv_header(weapon_data_path) or []
+    for column in weapon_header:
+        if column and "script" in column.lower():
+            _collect_csv_column_class_refs(weapon_data_path, column, root, references)
+
+    for suffix in ("*.system",):
+        for path in (root / "data" / "shipsystems").rglob(suffix) if (root / "data" / "shipsystems").is_dir() else []:
+            data = _load_lenient_json_file(path)
+            if not isinstance(data, dict):
+                continue
+            for field in ("statsScript", "aiScript"):
+                value = data.get(field)
+                if isinstance(value, str) and value.strip() and not value.strip().startswith("#"):
+                    references.append((_relative(root, path), field, value.strip()))
+
+    for suffix in ("*.wpn", "*.proj"):
+        for path in root.rglob(suffix):
+            data = _load_lenient_json_file(path)
+            if not isinstance(data, dict):
+                continue
+            for field in ("onHitEffect", "everyFrameEffect", "onFireEffect"):
+                value = data.get(field)
+                if isinstance(value, str) and value.strip() and not value.strip().startswith("#"):
+                    references.append((_relative(root, path), field, value.strip()))
+
+    rules_path = root / "data" / "campaign" / "rules.csv"
+    rules_header = _csv_header(rules_path) or []
+    if "script" in rules_header and vanilla_core is not None:
+        rules_rows = _read_csv_rows(rules_path) or []
+        relative = _relative(root, rules_path)
+        for row in rules_rows:
+            values = list(row.values())
+            if values and str(values[0] or "").strip().startswith("#"):
+                continue
+            script_text = row.get("script") or ""
+            for line in script_text.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or line.startswith("$"):
+                    continue
+                match = _RULE_COMMAND_PATTERN.match(line)
+                if not match:
+                    continue
+                command = match.group(1)
+                references.append((relative, "script(rule-command)", f"com.fs.starfarer.api.impl.campaign.rulecmd.{command}"))
+
+    settings_path = root / "data" / "config" / "settings.json"
+    settings = _load_lenient_json_file(settings_path)
+    if isinstance(settings, dict):
+        plugins = settings.get("plugins")
+        relative = _relative(root, settings_path)
+        if isinstance(plugins, dict):
+            for key, value in plugins.items():
+                if isinstance(value, str) and value.strip():
+                    references.append((relative, f"plugins.{key}", value.strip()))
+        elif isinstance(plugins, list):
+            for value in plugins:
+                if isinstance(value, str) and value.strip():
+                    references.append((relative, "plugins", value.strip()))
+
+    mod_info_path = root / "mod_info.json"
+    mod_info = _load_lenient_json_file(mod_info_path)
+    if isinstance(mod_info, dict):
+        mod_plugin = mod_info.get("modPlugin")
+        if isinstance(mod_plugin, str) and mod_plugin.strip():
+            references.append((_relative(root, mod_info_path), "modPlugin", mod_plugin.strip()))
+
+    local_source_fqns = set(_source_class_index(root))
+    vanilla_jar_classes = _vanilla_api_jar_class_info(vanilla_core) if vanilla_core is not None else {}
+    vanilla_loose_fqns = _vanilla_loose_script_fqns(vanilla_core) if vanilla_core is not None else set()
+    local_simple_names = {name.rsplit(".", 1)[-1] for name in result.compiled_class_names} | {
+        name.rsplit(".", 1)[-1] for name in local_source_fqns
+    }
+    # Vanilla rule commands also live in rulecmd sub-packages (e.g. rulecmd.salvage.AddBarEvent), so a bare
+    # rules.csv command resolves by simple name against any vanilla class under a ".rulecmd." package.
+    vanilla_rulecmd_simple_names = {
+        name.rsplit(".", 1)[-1] for name in (set(vanilla_jar_classes) | vanilla_loose_fqns) if ".rulecmd." in name
+    }
+
+    def resolve(fqn: str, is_rule_command: bool) -> str:
+        if fqn in result.compiled_class_names or fqn in local_source_fqns:
+            return "resolved"
+        if vanilla_core is not None and (fqn in vanilla_jar_classes or fqn in vanilla_loose_fqns):
+            return "resolved"
+        if is_rule_command and fqn.rsplit(".", 1)[-1] in local_simple_names:
+            return "resolved"
+        if is_rule_command and fqn.rsplit(".", 1)[-1] in vanilla_rulecmd_simple_names:
+            return "resolved"
+        if _is_external_dependency_class(fqn):
+            return "external"
+        if vanilla_core is None and (fqn.startswith("com.fs.starfarer.") or fqn.startswith("com.fs.")):
+            # This is plausibly a vanilla engine class; without vanilla_core we cannot tell a genuine
+            # vanilla reference (normal) from a removed/renamed API (a real bug) apart.
+            return "vanilla-unverified"
+        return "missing"
+
+    seen: set[tuple[str, str, str]] = set()
+    for file, field, class_name in references:
+        key = (file, field, class_name)
+        if key in seen:
+            continue
+        seen.add(key)
+        status = resolve(class_name, field == "script(rule-command)")
+        if status == "resolved":
+            continue
+        if status == "external":
+            result.add(
+                id="data-class-reference-missing",
+                category="content",
+                severity="low",
+                classification="UNKNOWN",
+                confidence="LOW",
+                explanation="This class reference matches a known third-party library/mod API package (LazyLib, MagicLib, org.dark, LunaLib, Nexerelin). BridgeForge cannot see that dependency's jar, so this cannot be verified as present; treat it as an external dependency reference, unverified, not a defect.",
+                file=file,
+                evidence=[f"field:{field}", f"class:{class_name}", "external dependency, unverified"],
+            )
+            continue
+        if status == "vanilla-unverified":
+            result.add(
+                id="data-class-reference-missing",
+                category="content",
+                severity="low",
+                classification="UNKNOWN",
+                confidence="LOW",
+                explanation="This class reference is under com.fs.* (Starsector's own package namespace) and could not be checked against the mod's jars or sources. No --vanilla-core was supplied, so BridgeForge cannot distinguish an ordinary vanilla-engine class reference from a genuinely removed/renamed API; supply --vanilla-core to verify.",
+                file=file,
+                evidence=[f"field:{field}", f"class:{class_name}", "vanilla class, unverified (no vanilla core supplied)"],
+            )
+            continue
+        result.add(
+            id="data-class-reference-missing",
+            category="content",
+            severity="critical",
+            classification="MANUAL",
+            confidence="HIGH" if vanilla_core is not None else "MEDIUM",
+            explanation="A fully qualified class named in mod data does not resolve to any class in this mod's loaded jars, a loose data/scripts source file, or (when supplied) the vanilla core. Loading this row/field at runtime throws a class-not-found-class crash. Confirm whether the class was removed, renamed, or simply not rebuilt into the jar, then restore it or remove the reference.",
+            file=file,
+            evidence=[f"field:{field}", f"class:{class_name}"],
+        )
+
+
+_COORDINATE_NUMBER = r"-?\d+(?:\.\d+)?f?"
+_VECTOR_LITERAL_PATTERN = re.compile(
+    rf"(?:new\s+Vector2f\s*\(\s*({_COORDINATE_NUMBER})\s*,\s*({_COORDINATE_NUMBER})\s*\))"
+    rf"|(?:getLocation\(\)\.set\s*\(\s*({_COORDINATE_NUMBER})\s*,\s*({_COORDINATE_NUMBER})\s*\))"
+)
+_HYPERSPACE_TOUCH_PATTERN = re.compile(r"getHyperspace\(\)|getLocationInHyperspace|\bwaypoints?\b", re.I)
+_TERRAIN_GRID_LITERAL_PATTERN = re.compile(r"(?:[/%]\s*(\d{2,4})\b)|(?:\[\s*(\d{2,4})\s*\])")
+
+
+def _scan_hardcoded_hyperspace_coordinates(root: Path, result: ScanResult) -> None:
+    """A hyperspace-touching class hard-coding >=3 literal coordinate pairs (e.g. a stale pre-rework layout)."""
+    for path in root.rglob("*.java"):
+        if "disabled_files" in path.relative_to(root).parts:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        blanked = _blank_java_comments(text)
+        if not _HYPERSPACE_TOUCH_PATTERN.search(blanked):
+            continue
+        pairs: list[tuple[int, str, str]] = []
+        for match in _VECTOR_LITERAL_PATTERN.finditer(blanked):
+            groups = match.groups()
+            x = groups[0] if groups[0] is not None else groups[2]
+            y = groups[1] if groups[1] is not None else groups[3]
+            line = blanked.count("\n", 0, match.start()) + 1
+            pairs.append((line, x, y))
+        if len(pairs) < 3:
+            continue
+        evidence = [f"line:{line}:({x},{y})" for line, x, y in pairs[:5]]
+        evidence.append(f"total_coordinate_pairs:{len(pairs)}")
+        result.add(
+            id="hardcoded-hyperspace-coordinates",
+            category="content",
+            severity="low",
+            classification="REVIEW",
+            confidence="MEDIUM",
+            explanation="This class touches hyperspace (getHyperspace()/getLocationInHyperspace/a waypoint-like list) and hard-codes 3 or more literal Vector2f coordinate pairs. A stale pre-rework layout (e.g. old hyperspace-terrain-era coordinates) can land in the wrong place after a hyperspace rework; verify these coordinates are still sane for the target game version.",
+            file=_relative(root, path),
+            evidence=evidence,
+        )
+
+
+def _scan_hardcoded_terrain_grid_size(root: Path, result: ScanResult) -> None:
+    """Code that indexes/divides a getTiles() terrain grid by a hard-coded literal grid size or mask."""
+    for path in root.rglob("*.java"):
+        if "disabled_files" in path.relative_to(root).parts:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        blanked = _blank_java_comments(text)
+        if "getTileCenter" in blanked:
+            continue  # already fixed to use the grid's own accessor; must not fire
+        for match in re.finditer(r"getTiles\(\)", blanked):
+            start = max(0, match.start() - 200)
+            end = min(len(blanked), match.end() + 200)
+            grid_match = _TERRAIN_GRID_LITERAL_PATTERN.search(blanked[start:end])
+            if not grid_match:
+                continue
+            value = grid_match.group(1) or grid_match.group(2)
+            line = blanked.count("\n", 0, match.start()) + 1
+            result.add(
+                id="hardcoded-terrain-grid-size",
+                category="content",
+                severity="low",
+                classification="REVIEW",
+                confidence="MEDIUM",
+                explanation="Code indexes or divides a getTiles() terrain grid by a hard-coded literal grid size/mask near this call. This breaks if the grid's actual dimensions ever differ from the constant; use the grid's own reported size/center accessor (e.g. getTileCenter) instead of a fixed literal.",
+                file=_relative(root, path),
+                evidence=[f"line:{line}", f"literal:{value}"],
+            )
+            break
+
+
+def _mod_info_declares_dependency(result: ScanResult, dependency_id: str) -> bool:
+    dependencies = result.metadata.get("dependencies") or result.metadata.get("requiredDependencies") or []
+    target = dependency_id.strip().lower()
+    for item in dependencies:
+        if isinstance(item, dict):
+            candidates = (str(item.get("id") or ""), str(item.get("name") or ""))
+        else:
+            candidates = (str(item),)
+        if any(candidate.strip().lower() == target for candidate in candidates):
+            return True
+    return False
+
+
+def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
+    """Code that reaches a known library's package without mod_info.json declaring that dependency."""
+    for library, dependency_id in LIBRARY_DEPENDENCY_IDS.items():
+        if _mod_info_declares_dependency(result, dependency_id):
+            continue
+        prefixes = BUNDLED_LIBRARY_PACKAGE_PREFIXES[library]
+        dotted_needles = [prefix.replace("/", ".").rstrip(".") for prefix in prefixes]
+        source_hits: list[str] = []
+        guarded = False
+        for source in sorted(root.rglob("*.java")):
+            if "disabled_files" in source.relative_to(root).parts:
+                continue
+            try:
+                text = source.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if not any(needle in text for needle in dotted_needles):
+                continue
+            source_hits.append(_relative(root, source))
+            if re.search(r"\bisModEnabled\s*\(", text):
+                guarded = True
+        bytecode_hits: list[str] = []
+        if not source_hits:
+            for jar, member, data in _iter_jar_class_files(root):
+                info = _parse_class_file(data)
+                if info is None:
+                    continue
+                if any(ref.startswith(prefix) for ref in info.referenced_classes for prefix in prefixes):
+                    relative_jar = _relative(root, jar)
+                    if relative_jar not in bytecode_hits:
+                        bytecode_hits.append(relative_jar)
+        if not source_hits and not bytecode_hits:
+            continue
+        classification = "REVIEW" if guarded else "MANUAL"
+        result.add(
+            id="undeclared-library-dependency",
+            category="dependencies",
+            severity="high",
+            classification=classification,
+            confidence="HIGH",
+            explanation=(
+                f"Code references {library}'s package(s) ({', '.join(prefixes)}), but mod_info.json does not "
+                f"declare a matching '{dependency_id}' dependency. An undeclared mandatory dependency lets the "
+                f"mod load and crash later, the first time it calls {library}."
+                + (
+                    " A source isModEnabled(...) guard was found in a referencing file, suggesting this is an "
+                    "optional integration rather than a hard dependency."
+                    if guarded
+                    else ""
+                )
+            ),
+            file="mod_info.json",
+            evidence=[f"library:{library}", f"dependency-id:{dependency_id}", *source_hits[:5], *bytecode_hits[:5]],
+        )
+
+
+WEAPON_SLOT_SKIP_TYPES = {"BUILT_IN", "DECORATIVE", "SYSTEM", "LAUNCH_BAY", "STATION_MODULE"}
+WEAPON_SLOT_SIZE_RANK = {"SMALL": 1, "MEDIUM": 2, "LARGE": 3}
+HULL_MOD_COST_COLUMN_BY_SIZE = {
+    "FRIGATE": "cost_frigate",
+    "DESTROYER": "cost_dest",
+    "CRUISER": "cost_cruiser",
+    "CAPITAL": "cost_capital",
+}
+
+
+def _csv_id_index(mod_path: Path, vanilla_path: Path | None) -> dict[str, dict[str, str]]:
+    """Merge a mod CSV's 'id'-keyed rows over the matching vanilla CSV (vanilla first, mod wins)."""
+    index: dict[str, dict[str, str]] = {}
+    for path in (vanilla_path, mod_path):
+        if path is None or not path.is_file():
+            continue
+        for row in _read_csv_rows(path) or []:
+            row_id = (row.get("id") or "").strip()
+            if row_id and not row_id.startswith("#"):
+                index[row_id] = row
+    return index
+
+
+def _float_or(value: object, default: float = 0.0) -> float:
+    try:
+        text = str(value).strip()
+        if not text:
+            return default
+        return float(text)
+    except (TypeError, ValueError):
+        return default
+
+
+def _ship_file_index(root: Path, vanilla_core: Path | None) -> dict[str, dict]:
+    """hullId -> parsed .ship data, vanilla first so a mod's own hull of the same id wins."""
+    index: dict[str, dict] = {}
+    for base in (vanilla_core, root):
+        if base is None or not base.is_dir():
+            continue
+        for path in base.rglob("*.ship"):
+            data = _load_lenient_json_file(path)
+            if not isinstance(data, dict):
+                continue
+            hull_id = data.get("hullId")
+            if isinstance(hull_id, str) and hull_id.strip():
+                index[hull_id.strip()] = data
+            else:
+                index[path.stem] = data
+    return index
+
+
+def _skin_index(root: Path, vanilla_core: Path | None) -> dict[str, str]:
+    """skinHullId -> baseHullId, from .skin files in the mod and vanilla."""
+    index: dict[str, str] = {}
+    for base in (vanilla_core, root):
+        if base is None or not base.is_dir():
+            continue
+        for path in base.rglob("*.skin"):
+            data = _load_lenient_json_file(path)
+            if not isinstance(data, dict):
+                continue
+            skin_id = data.get("skinHullId")
+            base_id = data.get("baseHullId")
+            if isinstance(skin_id, str) and skin_id.strip() and isinstance(base_id, str) and base_id.strip():
+                index[skin_id.strip()] = base_id.strip()
+    return index
+
+
+def _resolve_hull_id(hull_id: str, skins: dict[str, str]) -> str:
+    """Chase a skin's baseHullId chain to the underlying hull id (cycle-safe)."""
+    seen: set[str] = set()
+    current = hull_id
+    while current in skins and current not in seen:
+        seen.add(current)
+        current = skins[current]
+    return current
+
+
+def _wpn_type_size_index(root: Path, vanilla_core: Path | None) -> dict[str, dict[str, str]]:
+    """weapon id -> {'type':..., 'size':...} parsed from the actual .wpn spec files."""
+    index: dict[str, dict[str, str]] = {}
+    for base in (vanilla_core, root):
+        if base is None or not base.is_dir():
+            continue
+        for path in base.rglob("*.wpn"):
+            data = _load_lenient_json_file(path)
+            if not isinstance(data, dict):
+                continue
+            weapon_id = data.get("id")
+            if isinstance(weapon_id, str) and weapon_id.strip():
+                index[weapon_id.strip()] = {
+                    "type": str(data.get("type") or "").strip().upper(),
+                    "size": str(data.get("size") or "").strip().upper(),
+                    # mountTypeOverride lets a weapon fit other slot types (e.g. an ENERGY weapon with
+                    # HYBRID fits BALLISTIC slots); ignoring it produced false slot mismatches.
+                    "mount_override": str(data.get("mountTypeOverride") or "").strip().upper(),
+                }
+    return index
+
+
+# Slot types a weapon's mountTypeOverride lets it occupy, on top of its base type.
+MOUNT_OVERRIDE_FITS = {
+    "HYBRID": {"BALLISTIC", "ENERGY", "HYBRID", "UNIVERSAL"},
+    "COMPOSITE": {"BALLISTIC", "MISSILE", "COMPOSITE", "UNIVERSAL"},
+    "SYNERGY": {"ENERGY", "MISSILE", "SYNERGY", "UNIVERSAL"},
+    "UNIVERSAL": {"BALLISTIC", "ENERGY", "MISSILE", "HYBRID", "COMPOSITE", "SYNERGY", "UNIVERSAL"},
+}
+
+# Hull mods that add fighter bays when present (built-in or installed), e.g. vanilla converted_hangar.
+BAY_ADDING_HULL_MODS = {"converted_hangar": 1}
+
+
+def _override_fits(slot_type: str, mount_override: str) -> bool:
+    return bool(mount_override) and slot_type in MOUNT_OVERRIDE_FITS.get(mount_override, {mount_override})
+
+
+def _weapon_slot_type_compatible(slot_type: str, weapon_type: str) -> bool:
+    if slot_type == "UNIVERSAL":
+        return True
+    if slot_type == "HYBRID":
+        return weapon_type in {"BALLISTIC", "ENERGY"}
+    if slot_type == "COMPOSITE":
+        return weapon_type in {"BALLISTIC", "MISSILE"}
+    if slot_type == "SYNERGY":
+        return weapon_type in {"ENERGY", "MISSILE"}
+    if slot_type in {"BALLISTIC", "ENERGY", "MISSILE"}:
+        return weapon_type == slot_type
+    # Unrecognized slot type (e.g. a modded enum BridgeForge does not know): do not guess.
+    return True
+
+
+def _scan_variant_validity(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """Cross-check .variant files against their resolved hull's bays, OP budget, and slot rules.
+
+    hullId is resolved through .skin baseHullId chains first (a variant commonly targets a skin's
+    id, not the underlying hull's). A hull that cannot be resolved to both a .ship file and a
+    ship_data.csv row (mod or vanilla) is left alone entirely: BridgeForge does not have enough
+    evidence to compute a bay/OP budget or slot compatibility for it, and reports UNKNOWN, not a
+    finding, for such gaps elsewhere; it stays silent here rather than guessing.
+    """
+    variants_root = root / "data" / "variants"
+    if not variants_root.is_dir():
+        return
+
+    ship_files = _ship_file_index(root, vanilla_core)
+    skins = _skin_index(root, vanilla_core)
+    ship_data = _csv_id_index(
+        root / "data" / "hulls" / "ship_data.csv",
+        (vanilla_core / "data" / "hulls" / "ship_data.csv") if vanilla_core else None,
+    )
+    weapon_data = _csv_id_index(
+        root / "data" / "weapons" / "weapon_data.csv",
+        (vanilla_core / "data" / "weapons" / "weapon_data.csv") if vanilla_core else None,
+    )
+    weapon_specs = _wpn_type_size_index(root, vanilla_core)
+    hull_mod_costs = _csv_id_index(
+        root / "data" / "hullmods" / "hull_mods.csv",
+        (vanilla_core / "data" / "hullmods" / "hull_mods.csv") if vanilla_core else None,
+    )
+    wing_data = _csv_id_index(
+        root / "data" / "hulls" / "wing_data.csv",
+        (vanilla_core / "data" / "hulls" / "wing_data.csv") if vanilla_core else None,
+    )
+
+    for path in sorted(variants_root.rglob("*.variant")):
+        data = _load_lenient_json_file(path)
+        if not isinstance(data, dict):
+            continue
+        relative = _relative(root, path)
+        variant_id = data.get("variantId") or path.stem
+        raw_hull_id = data.get("hullId")
+        if not isinstance(raw_hull_id, str) or not raw_hull_id.strip():
+            continue
+        resolved_hull_id = _resolve_hull_id(raw_hull_id.strip(), skins)
+        ship_json = ship_files.get(resolved_hull_id)
+        row = ship_data.get(resolved_hull_id)
+        if ship_json is None or row is None:
+            continue  # Unresolvable hull: UNKNOWN, handled elsewhere; no finding fabricated here.
+        if str(ship_json.get("hullSize") or "").strip().upper() == "FIGHTER":
+            # Fighter-size hulls are not refit through the OP-budget/bays system: their ship_data.csv
+            # "ordnance points" is almost always 0 (verified against vanilla: 30/32 fighter hulls), and
+            # any hullMods/wings on a fighter variant are baked into its fixed design, not player-fitted.
+            # Checking them against a budget/bay count that does not apply produces false positives.
+            continue
+
+        wings = data.get("wings")
+        wing_list = [w for w in wings if isinstance(w, str)] if isinstance(wings, list) else []
+        built_in_wings = ship_json.get("builtInWings")
+        built_in_wing_count = len(built_in_wings) if isinstance(built_in_wings, list) else 0
+        fighter_bays = int(_float_or(row.get("fighter bays")))
+        # Bays can also come from hull mods (e.g. converted_hangar), built in or installed by the variant.
+        bay_mods = set(ship_json.get("builtInMods") or []) | {
+            mod for key in ("hullMods", "permaMods") for mod in (data.get(key) or []) if isinstance(mod, str)
+        }
+        fighter_bays += sum(BAY_ADDING_HULL_MODS.get(mod, 0) for mod in bay_mods)
+        total_wings = len(wing_list) + built_in_wing_count
+        if total_wings > fighter_bays:
+            result.add(
+                id="variant-wings-exceed-bays",
+                category="variants",
+                severity="high",
+                classification="REVIEW",
+                confidence="DETERMINISTIC",
+                explanation=(
+                    f"Variant '{variant_id}' equips {len(wing_list)} wing(s) plus {built_in_wing_count} "
+                    f"built-in wing(s) ({total_wings} total) but hull '{resolved_hull_id}' has only "
+                    f"{fighter_bays} fighter bay(s) in ship_data.csv. Extra wings will not deploy."
+                ),
+                file=relative,
+                evidence=[f"variant:{variant_id}", f"hull:{resolved_hull_id}", f"wings:{len(wing_list)}", f"built-in-wings:{built_in_wing_count}", f"fighter-bays:{fighter_bays}"],
+            )
+
+        built_in_weapon_slots = ship_json.get("builtInWeapons")
+        built_in_weapon_slot_ids = set(built_in_weapon_slots.keys()) if isinstance(built_in_weapon_slots, dict) else set()
+        slot_by_id: dict[str, dict] = {}
+        for slot in ship_json.get("weaponSlots") or []:
+            if isinstance(slot, dict) and isinstance(slot.get("id"), str):
+                slot_by_id[slot["id"]] = slot
+
+        weapon_op_total = 0.0
+        weapon_groups = data.get("weaponGroups") if isinstance(data.get("weaponGroups"), list) else []
+        for group in weapon_groups:
+            if not isinstance(group, dict):
+                continue
+            weapons = group.get("weapons")
+            if not isinstance(weapons, dict):
+                continue
+            for slot_id, weapon_id in weapons.items():
+                if slot_id in built_in_weapon_slot_ids or not isinstance(weapon_id, str):
+                    continue
+                w_row = weapon_data.get(weapon_id)
+                if w_row is None:
+                    continue
+                weapon_op_total += _float_or(w_row.get("OPs"))
+
+        built_in_mods = set(ship_json.get("builtInMods") or [])
+        hull_size = str(ship_json.get("hullSize") or "").strip().upper()
+        cost_column = HULL_MOD_COST_COLUMN_BY_SIZE.get(hull_size, "cost_cruiser")
+        hull_mod_total = 0.0
+        hull_mods = data.get("hullMods") if isinstance(data.get("hullMods"), list) else []
+        for mod_id in hull_mods:
+            if not isinstance(mod_id, str) or mod_id in built_in_mods:
+                continue
+            hm_row = hull_mod_costs.get(mod_id)
+            if hm_row is None:
+                continue
+            hull_mod_total += _float_or(hm_row.get(cost_column))
+
+        flux_vents = _float_or(data.get("fluxVents"))
+        flux_caps = _float_or(data.get("fluxCapacitors"))
+
+        wing_op_total = 0.0
+        for wing_id in wing_list:
+            w_row = wing_data.get(wing_id)
+            if w_row is None:
+                continue
+            wing_op_total += _float_or(w_row.get("op cost"))
+
+        ordnance_points = _float_or(row.get("ordnance points"))
+        total_op = weapon_op_total + hull_mod_total + flux_vents + flux_caps + wing_op_total
+        # Skill/hullmod OP-cost modifiers (e.g. Ordnance Expert, Weapon/Field Modulation) legitimately
+        # let a live loadout exceed the *raw* budget in-game; a small tolerance keeps this check from
+        # flagging those borderline, still-in-game-valid loadouts instead of genuine authoring bugs.
+        tolerance = max(3.0, ordnance_points * 0.05)
+        if total_op > ordnance_points + tolerance:
+            result.add(
+                id="variant-op-over-budget",
+                category="variants",
+                severity="high",
+                classification="REVIEW",
+                confidence="DETERMINISTIC",
+                explanation=(
+                    f"Variant '{variant_id}' costs {total_op:.1f} raw OP (weapons {weapon_op_total:.1f} + "
+                    f"hullmods {hull_mod_total:.1f} + flux vents {flux_vents:.1f} + flux capacitors "
+                    f"{flux_caps:.1f} + wings {wing_op_total:.1f}) against hull '{resolved_hull_id}''s "
+                    f"{ordnance_points:.1f} ordnance points, beyond a {tolerance:.1f} OP tolerance for "
+                    "skill/hullmod OP modifiers. Non-built-in costs only; verify in the refit screen."
+                ),
+                file=relative,
+                evidence=[
+                    f"variant:{variant_id}",
+                    f"hull:{resolved_hull_id}",
+                    f"weapons-op:{weapon_op_total:.1f}",
+                    f"hullmods-op:{hull_mod_total:.1f}",
+                    f"flux-vents:{flux_vents:.1f}",
+                    f"flux-capacitors:{flux_caps:.1f}",
+                    f"wings-op:{wing_op_total:.1f}",
+                    f"total-op:{total_op:.1f}",
+                    f"budget:{ordnance_points:.1f}",
+                ],
+            )
+
+        for group in weapon_groups:
+            if not isinstance(group, dict):
+                continue
+            weapons = group.get("weapons")
+            if not isinstance(weapons, dict):
+                continue
+            for slot_id, weapon_id in weapons.items():
+                if not isinstance(weapon_id, str):
+                    continue
+                slot = slot_by_id.get(slot_id)
+                if slot is None:
+                    continue
+                slot_type = str(slot.get("type") or "").strip().upper()
+                if slot_type in WEAPON_SLOT_SKIP_TYPES:
+                    continue
+                spec = weapon_specs.get(weapon_id)
+                if spec is None:
+                    continue
+                slot_size = str(slot.get("size") or "").strip().upper()
+                weapon_size = spec.get("size", "")
+                weapon_type = spec.get("type", "")
+                size_mismatch = WEAPON_SLOT_SIZE_RANK.get(weapon_size, 0) > WEAPON_SLOT_SIZE_RANK.get(slot_size, 0)
+                type_mismatch = weapon_type and not (
+                    _weapon_slot_type_compatible(slot_type, weapon_type)
+                    or _override_fits(slot_type, spec.get("mount_override", ""))
+                )
+                if size_mismatch or type_mismatch:
+                    reasons = []
+                    if size_mismatch:
+                        reasons.append(f"weapon size {weapon_size} exceeds slot size {slot_size}")
+                    if type_mismatch:
+                        reasons.append(f"weapon type {weapon_type} incompatible with slot type {slot_type}")
+                    result.add(
+                        id="variant-weapon-slot-mismatch",
+                        category="variants",
+                        severity="high",
+                        classification="REVIEW",
+                        confidence="DETERMINISTIC",
+                        explanation=(
+                            f"Variant '{variant_id}' puts weapon '{weapon_id}' in slot '{slot_id}' on hull "
+                            f"'{resolved_hull_id}': {'; '.join(reasons)}."
+                        ),
+                        file=relative,
+                        evidence=[f"variant:{variant_id}", f"hull:{resolved_hull_id}", f"slot:{slot_id}", f"slot-type:{slot_type}", f"slot-size:{slot_size}", f"weapon:{weapon_id}", f"weapon-type:{weapon_type}", f"weapon-size:{weapon_size}"],
+                    )
+
+
+def _hull_hints(row: dict[str, str]) -> set[str]:
+    return {token.strip().upper() for token in (row.get("hints") or "").split(",") if token.strip()}
+
+
+def _scan_description_missing(root: Path, result: ScanResult, vanilla_core: Path | None = None) -> None:
+    """A mod hull/weapon/ship-system id with no matching descriptions.csv row of the right type.
+
+    descriptions.csv rows are keyed by id, and Starsector does not require a mod to redeclare a row
+    for an id it did not otherwise remove: a mod that reuses/rebalances a vanilla id (in weapon_data,
+    ship_data, or ship_systems) inherits vanilla's description for that id unless it overrides it. So
+    an id is "described" if it has a row in the mod's OWN descriptions.csv OR (when vanilla_core is
+    given) vanilla's.
+    """
+    descriptions_path = root / "data" / "strings" / "descriptions.csv"
+    described: dict[str, set[str]] = {}
+    vanilla_descriptions_path = (vanilla_core / "data" / "strings" / "descriptions.csv") if vanilla_core else None
+    if vanilla_descriptions_path is not None:
+        for row in _read_csv_rows_lenient(vanilla_descriptions_path) or []:
+            row_id = (row.get("id") or "").strip()
+            row_type = (row.get("type") or "").strip().upper()
+            if row_id and not row_id.startswith("#"):
+                described.setdefault(row_id, set()).add(row_type)
+    for row in _read_csv_rows(descriptions_path) or []:
+        row_id = (row.get("id") or "").strip()
+        row_type = (row.get("type") or "").strip().upper()
+        if row_id and not row_id.startswith("#"):
+            described.setdefault(row_id, set()).add(row_type)
+
+    ship_files = _ship_file_index(root, None)
+
+    ship_data_path = root / "data" / "hulls" / "ship_data.csv"
+    for row in _read_csv_rows(ship_data_path) or []:
+        hull_id = (row.get("id") or "").strip()
+        if not hull_id or hull_id.startswith("#"):
+            continue
+        hints = _hull_hints(row)
+        if "HIDE_IN_CODEX" in hints or "MODULE" in hints:
+            continue
+        ship_json = ship_files.get(hull_id)
+        if isinstance(ship_json, dict) and str(ship_json.get("hullSize") or "").strip().upper() == "FIGHTER":
+            continue
+        if "SHIP" in described.get(hull_id, set()):
+            continue
+        result.add(
+            id="description-missing",
+            category="content",
+            severity="low",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=f"Hull '{hull_id}' has no SHIP-type row in data/strings/descriptions.csv; the codex/refit screen will show a blank description.",
+            file=_relative(root, ship_data_path),
+            evidence=[f"hull:{hull_id}"],
+        )
+
+    weapon_data_path = root / "data" / "weapons" / "weapon_data.csv"
+    for row in _read_csv_rows(weapon_data_path) or []:
+        weapon_id = (row.get("id") or "").strip()
+        if not weapon_id or weapon_id.startswith("#"):
+            continue
+        hints = {token.strip().upper() for token in (row.get("hints") or "").split(",") if token.strip()}
+        if "SYSTEM" in hints:
+            continue
+        if not (row.get("OPs") or "").strip():
+            continue
+        if "WEAPON" in described.get(weapon_id, set()):
+            continue
+        result.add(
+            id="description-missing",
+            category="content",
+            severity="low",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=f"Weapon '{weapon_id}' has no WEAPON-type row in data/strings/descriptions.csv; the codex/refit screen will show a blank description.",
+            file=_relative(root, weapon_data_path),
+            evidence=[f"weapon:{weapon_id}"],
+        )
+
+    ship_systems_path = root / "data" / "shipsystems" / "ship_systems.csv"
+    for row in _read_csv_rows(ship_systems_path) or []:
+        system_id = (row.get("id") or "").strip()
+        if not system_id or system_id.startswith("#"):
+            continue
+        if "SHIP_SYSTEM" in described.get(system_id, set()):
+            continue
+        result.add(
+            id="description-missing",
+            category="content",
+            severity="low",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=f"Ship system '{system_id}' has no SHIP_SYSTEM-type row in data/strings/descriptions.csv; the codex will show a blank description.",
+            file=_relative(root, ship_systems_path),
+            evidence=[f"ship-system:{system_id}"],
+        )
+
+
+def _asset_exists(candidate: str, root: Path, vanilla_core: Path | None) -> bool:
+    normalized = candidate.strip().lstrip("/\\").replace("\\", "/")
+    if not normalized:
+        return True
+    if (root / normalized).is_file():
+        return True
+    if vanilla_core is not None and (vanilla_core / normalized).is_file():
+        return True
+    return False
+
+
+def _report_asset_reference_missing(result: ScanResult, root: Path, vanilla_core: Path | None, file: str, field: str, candidate: str) -> None:
+    if _asset_exists(candidate, root, vanilla_core):
+        return
+    if vanilla_core is None:
+        result.add(
+            id="asset-reference-missing",
+            category="assets",
+            severity="low",
+            classification="UNKNOWN",
+            confidence="LOW",
+            explanation=f"'{field}' references '{candidate}', which is not present in this mod. No --vanilla-core was supplied, so BridgeForge cannot tell this apart from a legitimate vanilla asset path.",
+            file=file,
+            evidence=[f"field:{field}", f"path:{candidate}", "no vanilla core supplied"],
+        )
+        return
+    result.add(
+        id="asset-reference-missing",
+        category="assets",
+        severity="medium",
+        classification="REVIEW",
+        confidence="DETERMINISTIC",
+        explanation=f"'{field}' references '{candidate}', which exists in neither this mod nor the supplied vanilla core. The asset will fail to load.",
+        file=file,
+        evidence=[f"field:{field}", f"path:{candidate}"],
+    )
+
+
+def _walk_sounds_json_files(node: object) -> list[tuple[str, str | None]]:
+    """Every ('file', 'source'-or-None) pair found anywhere in a sounds.json structure."""
+    found: list[tuple[str, str | None]] = []
+    if isinstance(node, dict):
+        file_value = node.get("file")
+        if isinstance(file_value, str) and file_value.strip():
+            source_value = node.get("source")
+            found.append((file_value.strip(), source_value.strip() if isinstance(source_value, str) and source_value.strip() else None))
+        for value in node.values():
+            found.extend(_walk_sounds_json_files(value))
+    elif isinstance(node, list):
+        for item in node:
+            found.extend(_walk_sounds_json_files(item))
+    return found
+
+
+def _scan_asset_reference_missing(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """A sprite/sound path named in mod data that resolves to no file in the mod or vanilla."""
+    for path in sorted(root.rglob("*.ship")):
+        data = _load_lenient_json_file(path)
+        if not isinstance(data, dict):
+            continue
+        sprite = data.get("spriteName")
+        if isinstance(sprite, str) and sprite.strip():
+            _report_asset_reference_missing(result, root, vanilla_core, _relative(root, path), "spriteName", sprite)
+
+    wpn_fields = ("turretSprite", "hardpointSprite", "turretUnderSprite", "hardpointUnderSprite", "turretGunSprite", "hardpointGunSprite")
+    for path in sorted(root.rglob("*.wpn")):
+        data = _load_lenient_json_file(path)
+        if not isinstance(data, dict):
+            continue
+        for field in wpn_fields:
+            value = data.get(field)
+            if isinstance(value, str) and value.strip():
+                _report_asset_reference_missing(result, root, vanilla_core, _relative(root, path), field, value)
+
+    for path in sorted(root.rglob("*.proj")):
+        data = _load_lenient_json_file(path)
+        if not isinstance(data, dict):
+            continue
+        for field in ("sprite", "bulletSprite"):
+            value = data.get(field)
+            if isinstance(value, str) and value.strip():
+                _report_asset_reference_missing(result, root, vanilla_core, _relative(root, path), field, value)
+
+    sounds_path = root / "data" / "config" / "sounds.json"
+    if sounds_path.is_file():
+        data = _load_lenient_json_file(sounds_path)
+        if isinstance(data, dict):
+            relative = _relative(root, sounds_path)
+            for file_value, source_value in _walk_sounds_json_files(data):
+                if source_value and not source_value.lower().endswith((".bin", ".zip", ".jar")):
+                    candidate = f"{source_value.rstrip('/')}/{file_value.lstrip('/')}"
+                elif source_value:
+                    continue  # Packed inside a binary/archive container; not independently verifiable.
+                else:
+                    candidate = file_value
+                _report_asset_reference_missing(result, root, vanilla_core, relative, "sounds.json:file", candidate)
+
+
+def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core: Path | None = None) -> ScanResult:
     root = input_path.expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"Input mod directory does not exist: {root}")
+    vanilla_root = vanilla_core.expanduser().resolve() if vanilla_core is not None else None
+    if vanilla_root is not None and not vanilla_root.is_dir():
+        vanilla_root = None
     result = ScanResult(input_path=root, target=target or TargetProfile())
     for path in sorted(root.rglob("*")):
         if path.is_file():
@@ -1085,4 +3453,27 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None) -> ScanResul
     _attribute_library_usage(result)
     _dependency_compatibility_context(result)
     _infer_environment(result)
+    _scan_procgen_rows(root, result, vanilla_root)
+    _scan_faction_known_lists(root, result, vanilla_root)
+    _scan_shiproles(root, result, vanilla_root)
+    _scan_carrier_rework_gap(root, result)
+    _scan_black_hole_flag(root, result)
+    _scan_mod_info_game_version(result)
+    _scan_vanilla_path_shadowing(root, result, vanilla_root)
+    _scan_script_sandbox_forbidden_api(root, result)
+    _scan_bundled_library_classes(root, result)
+    _scan_vanilla_duplicated_classes(root, result, vanilla_root)
+    _scan_obfuscated_internal_api_use(root, result)
+    _scan_csv_design_type_column(root, result)
+    _scan_undeclared_library_dependency(root, result)
+    _scan_orbit_period_hazards(root, result)
+    _scan_module_captain_personality_risk(root, result)
+    _scan_spawned_ship_captain_personality_risk(root, result)
+    _scan_mod_info_triage_banner(root, result)
+    _scan_data_class_references_missing(root, result, vanilla_root)
+    _scan_hardcoded_hyperspace_coordinates(root, result)
+    _scan_hardcoded_terrain_grid_size(root, result)
+    _scan_variant_validity(root, result, vanilla_root)
+    _scan_description_missing(root, result, vanilla_root)
+    _scan_asset_reference_missing(root, result, vanilla_root)
     return result

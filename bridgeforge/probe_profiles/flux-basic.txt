@@ -1,0 +1,12 @@
+# BridgeForge probe profile: Flu-X/Vacuum basic smoke test
+# A minimal rep + credits + jump setup for the Flu-X ("infected" mod id) / Vacuum recreation,
+# enough to get the player into the Radikius system with the infected faction friendly and some
+# credits to work with, before running the campaign probe.
+apply = once-per-save
+
+rep infected = FRIENDLY
+credits = 100000
+jump Radikius
+
+# Example of a disabled line: leave a spare ship request here, ready to enable later.
+-ship infected_frigate_Standard x1

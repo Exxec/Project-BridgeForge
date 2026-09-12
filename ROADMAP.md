@@ -2,6 +2,211 @@
 
 Bridgeforge follows the project charter in `docs/PROJECT_CHARTER.md`: understand first, modify second, validate always. The original mod is never changed in place.
 
+## Revival assurance track (2026-09-11)
+
+Goal: revived mods reach players with the fewest bugs for the least human testing. The full design is in `docs/REVIVAL_ASSURANCE_PLAN.md`. **How to use the tools: `docs/BRIDGEFORGE_REVIVAL_GUIDE.md`.** Further P3b save-tooling ideas for review: `docs/P3B_SAVE_TOOLING_RECOMMENDATIONS.md`. **P2 polish is done (2026-09-11):** noise-free, collapsed open questions; readable Markdown; a real location for `external-mod-api-import`; the Arkgneisis index went from 25.5 KB and 62 questions to 16.0 KB and 21. Evidence tiers, cheapest first: static scan → automated rig boot → in-game probe → human play. Every live-found bug becomes a permanent check. SPW (`Exxec/SPW`, performance) stays a separate program and integrates through artifacts only.
+
+Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling: B → A → D → C) → P4 → P7 (in parallel) → P5 → P6 → P8. **All implemented as of 2026-09-11; next is the first live run.** Then P3c (ease-of-use setup: profiles → Console Commands → LunaLib).
+
+1. **P1: Finish the in-flight tooling.** `fix` (SAFE fixers only, dry-run by default), `prepare-test`, `boot-test` (quoted-bat launch, main-menu marker, flags a suspected Fatal dialog), variant validity (OP budget, wings vs bays, weapon slots), `description-missing` / `asset-reference-missing`, vanilla loose-script resolution under all of `data/**`, and per-mod scan baselines.
+   Acceptance: suite green; real-mod validation with `--vanilla-core`; one owner-approved real rig boot.
+   **Status: implemented 2026-09-11 (329 tests green).** `fix` (8 SAFE fixers), `prepare-test`, `boot-test` (CLI and module verified end to end on the save-isolation refusal path, without launching), the variant validity checks, `description-missing`/`asset-reference-missing`, and vanilla loose-script resolution have landed, together with the earlier data→class references, hard-coded coordinates/grid, baselines, orbit-period and captain-personality checks, triage banners, `build-tag` and comment-aware source checks.
+   **Remaining:** one owner-approved real rig `boot-test` run; per-mod baseline files; triage of the new variant/description findings (table in `In operation/STATUS.md`).
+2. **P2: Agent dossier (review-bundle v2).** `bridgeforge dossier <mod>`: size-capped JSON + Markdown covering the inventory, findings new since the baseline (with code context and available fixers), `jar-audit`, `copy-drift`, the latest `log-triage`, and the open judgment questions.
+   Acceptance: a mod can be triaged from the dossier plus ≤5 file reads.
+   **Status: implemented and accepted 2026-09-11 (340 tests green).** Acceptance passed: Legacy of Arkgneisis was triaged from its dossier index plus 3 targeted reads, finding one real bug (LOA-VAR-01, a Vulcan in an ENERGY slot) and two check gaps. The gaps were fixed: `mountTypeOverride`, and bays added by hull mods. Validation dossiers: Arkgneisis index 25.5 KB + 2 parts; Exigency 16.5 KB + 1; SEEKER 10.2 KB + 2; every part under the 40 KB cap, nothing dropped.
+   **Polish follow-ups (from real use):**
+   - Keep SAFE-ish "retain unchanged" notes (e.g. `non-strict-json-trailing-comma`) out of `open_questions`.
+   - Collapse a finding id repeated across many files into one line with a count and a file list.
+   - Render inventory and artifact dicts as readable Markdown, not Python reprs.
+   - Give `external-mod-api-import` a real file location, not "unknown location".
+
+   These would also shrink the 25 KB Arkgneisis index.
+   Earlier progress note (started 2026-09-11): `bridgeforge dossier` is being built (versioned JSON + Markdown, baseline-filtered findings with context snippets and fixer availability, `jar-audit`/`copy-drift`/`log-triage` summaries, open questions). **Size cap splits rather than truncates (owner decision):** a small index (identity, inventory summary, all open questions, and a manifest of parts), plus numbered parts each under the cap. MANUAL findings are in part-01, findings are grouped by file, and nothing is dropped. Acceptance test: triage Legacy of Arkgneisis's open variant findings from its dossier.
+3. **P3: In-game probe mod (`bridgeforge-probe`).** Public API only, reusing SPW's Tick Marker build recipe. It emits `BF-PROBE` log lines that `log-triage` parses.
+   - Campaign probe: finite ring/orbit values, faction known lists, market stock, patrol presence, entity movement, procgen spec lookups, script exceptions.
+   - Combat probe mission: every mod hull under AI.
+   - Save round-trip: spike needed.
+   - Rig-only, behind a marker file.
+
+   Acceptance: reproduces ≥3 of this week's bugs from pre-fix backups, and is silent on vanilla plus the fixed mods.
+   **Status: implemented and statically verified 2026-09-11; live rig run pending.**
+   - `probe-mod/`: 13-class jar, deterministic build, zero reflection/file-API references (checked independently); BridgeForge scan: 0 findings.
+   - CLI: `bridgeforge build-probe-mod` and `probe-config --install`; `log-triage` gained a `probe` section. Suite: 360 green.
+   - API facts: `CircularOrbitAPI` and `StarGenDataSpec`/`PlanetGenDataSpec` are not public in RC8 (it uses `OrbitAPI.getOrbitalPeriod`, `RingBandAPI` and `PlanetSpecAPI` instead).
+   - Save round-trip: no public API or Console Commands trigger exists, so it stays manual (T3).
+   Design decisions:
+   - Vanilla API only (no reflection or file APIs, which the RC8 sandbox forbids).
+   - A rig-only gate via a `bf_probe_rig` marker read through Starsector's common-file API (`saves/common`, inside the isolated rig), so it does nothing on a player's install.
+   - `bridgeforge probe-config` writes the target hulls, variants and tracked entities from the dossier inventory.
+   - Results go to `BF-PROBE|…` log lines, parsed by `log-triage`, plus a `bf_probe_report` common file.
+   - Built the way SPW's Tick Marker is.
+   - Save round-trip: spike only. Console Commands 4.0.9's command list shows no save or load command.
+3b. **P3b: Test-oriented save tooling (owner-approved 2026-09-11; owner will expand later).** Not a general save editor. Saves are ~10 MB XStream XML with `z=`/`ref=` object links and class aliases, and hand edits can create states the game can't produce, so tests against them prove nothing. Mostly read-only; state changes happen inside the game.
+   - **B. `bridgeforge save-compat <save> <mod>`** (read-only, FIRST): lists every mod class a save references and checks it against the build's jar. Answers "will this build load existing saves?" and catches the Arkgneisis "rebuild drops classes → `CannotResolveClassException`" trap; pairs with `jar-audit`. Needs research: saves reference mod classes by alias (e.g. `<ExipiratedAvestaMovement z="…">`, and `ExipiratedAvestaMovementWaypoint` for an inner class), so aliases must map back to jar FQNs.
+   - **A. `bridgeforge save-inspect <save> [--diff <save2>]`** (read-only): streams the save and reports tracked mod state (entity positions and script fields such as Avesta's `waypoint`/`progress`/`loitering`; faction known lists; market stock; fleet members' and modules' hull/armour), with a diff across two saves.
+   - **D. `bridgeforge save-snapshot`** (rig-only file copies): tag, list and restore rig saves by build tag, giving reusable test starting points.
+   - **C. In-game test setups via the P3 probe** (`probe-config --setup …`): reputation, credits, ships, a nearby enemy fleet, a player jump. Applied through the public API so every state is game-valid; removes setup grind (EX-5 rep gating, SK-6c damaged modules).
+   - **Expansion (owner-approved 2026-09-11, from `docs/P3B_SAVE_TOOLING_RECOMMENDATIONS.md`):**
+     - E. `save-content`: data ids stored as strings (hulls, variants, weapons, wings, hull mods, factions, commodities, industries, conditions, special items), checked against the build plus vanilla.
+     - F. `save-scripts`: a duplicate-script and listener audit (scripts re-added on every load).
+     - G. `save-growth`: per-mod object and size growth across a save chain.
+     - H. `save-provenance`: which mod versions and BF build tags made the save, against the current working copies.
+     - I. `save-removal`: "can this mod be removed mid-campaign?" (internal only).
+     - J. Dossier `--save` runtime footprint.
+     - K. Named scenarios, each with expected results (`scenario plan|check`).
+     - L. `save-summary`: a redacted, shareable bug-report summary with no player data (local file only).
+     - M. A save corpus under `In operation/save_corpus/<mod-id>/` (local only), re-checked as a release gate (P8).
+   - Order: B → E → A → F → H → D → C → K → G → I → J → L → M. Direct XML editing is excluded; at most a last resort on copies, validated by a rig load test.
+   **Status: B implemented 2026-09-11** (`bridgeforge save-compat`, `bridgeforge/save_compat.py`, 8 tests). Alias rules were verified on real rig saves: simple-name tags, outer+inner concatenation, dotted FQNs with `_-`/`$`, and vanilla short `cl=` aliases excluded. Real Exigency save: `LOADS`, CLI exit 0.
+   **Status: A, C, D, E, F, G, H, I, K and L implemented 2026-09-11** (CLI wired; validated read-only on real rig saves).
+   - A: `save-inspect` and `save-diff` (objects matched by path, since XStream `z=` ids aren't stable).
+   - F: `save-scripts`.
+   - G: `save-growth`.
+   - H: `save-provenance` (Exigency save: `STALE_BUILD`, recorded `0.7.2` against the working copy's `0.7.2+bf.1`).
+   - E: `save-content` (SEEKER: `LOADS`).
+   - I: `save-removal` (internal only).
+   - L: `save-summary`.
+   - D: `save-snapshot`.
+   - C: `probe-config --setup`, with `ProbeSetup` in a 15-class sandbox-clean jar. RC8 has no public `FleetFactoryV3`.
+   - K: `scenario list/plan/check`.
+   J (dossier `--save`) and M (corpus gate) ship with P6/P8. C and K still need their first live rig run.
+3c. **P3c: Ease-of-use test setup (owner-approved 2026-09-11).** Three front ends to the same `ProbeSetup` engine (P3b-C), so every path applies state through the public API only. A desktop GUI for all of BridgeForge was considered and dropped (owner, 2026-09-11).
+   **Order: 1 → 2 → 3, each after the previous one's first live run confirms `ProbeSetup` works.**
+   **Status: step 1 (profiles) implemented 2026-09-11, ahead of the live run at the owner's request.**
+   - `probe-config --profile`, bundled profiles, and the Java `ProbeProfile` parser (16-class jar, sandbox-clean).
+   - The rig file `saves/common/bf_probe_profile` replaces the setups; a leftover one is retired to `.prev` when a later run has no profile.
+   - Steps 2 and 3 wait for the first live run.
+   1. **Editable setup profiles (text files).**
+      - A commented, Notepad-friendly file with one setup per line, e.g. `rep exipirated = FRIENDLY`, `credits = 500000`, `ship ART_dimention_manipulator x1`, `spawn pirates 120`, `jump Corvus`, plus `# comments`.
+      - Profiles live in `bridgeforge/probe_profiles/*.txt` (bundled examples: one per scenario), or any path you give.
+      - `probe-config --profile <file>` validates the file with the existing `validate_setup_spec` (a line number with each error) and writes it into the rig's `saves/common`.
+      - The probe also re-reads a rig-side `bf_probe_profile` common file at every new game, so you can edit it and start a new game with no CLI step.
+      - Options per profile: `apply = once-per-save | every-load`, and `enabled = true/false` per line.
+      - Sandbox: `SettingsAPI.readTextFileFromCommon` only, with no file APIs.
+      - Tests: the parser, line-numbered errors, and a round trip against `--setup`.
+   2. **In-game commands through Console Commands** (soft dependency; `lw_console` 4.0.9 is in the rig).
+      - The probe mod ships `data/console/commands.csv` (header `command,class,tags,syntax,help`; Exigency and Void-Tec use the same format) with classes implementing `org.lazywizard.console.BaseCommand`.
+      - Commands, available any time in the campaign and not just once per save:
+        - `bfsetup <spec>`, e.g. `bfsetup rep exipirated FRIENDLY`
+        - `bfprofile <name>` (apply a profile)
+        - `bfprobe run` (run the campaign probe now)
+        - `bfprobe status` (what was applied and when)
+      - Build: compile the command classes against `lw_Console.jar`. Console Commands loads them only when present, so the probe still runs without it. Verify this with a rig boot that has Console Commands disabled.
+      - Every command logs `BF-PROBE|…|setup|…` as usual, so `log-triage` and `scenario check` work unchanged.
+   3. **In-game settings screen through LunaLib (optional)** (soft dependency; LunaLib 2.0.5 is in the rig).
+      - A `data/config/LunaSettings.csv` (header `fieldID,fieldName,fieldType,defaultValue,secondaryValue,fieldDescription,minValue,maxValue,tab`) for simple values:
+        - on/off toggles: probe enabled, campaign probe, combat log detail, apply the profile at new game
+        - numbers: probe interval in days, combat seconds, combat cap
+        - a `Radio` or `String` field choosing the active profile
+      - Lists (ships, reputation for several factions) stay in profiles (1), because LunaLib fits them poorly.
+      - Values are read through LunaLib's settings API only when `lunalib` is enabled; otherwise `bf_probe_config` still governs.
+      - Verify the exact LunaLib method names with javap against `LunaLib.jar` before building.
+   - **Guardrails (all three):**
+     - Still rig-gated by the `bf_probe_rig` marker, so none of it does anything on a player install.
+     - Nothing writes saves directly.
+     - Each command, profile line and setting maps 1:1 onto an existing `--setup` spec, so there is one validation path.
+     - The jar must stay sandbox-clean (constant-pool scan in its tests).
+4. **P4: Standard compatibility pack.** `boot-test --pack standard` runs each mod alone and then with AI Tweaks, Nexerelin+MagicLib, LunaLib, GraphicsLib and a few popular content mods, producing a matrix report.
+   Acceptance: the SK-13 AI Tweaks NPE is reproduced or ruled out automatically.
+   **Status: implemented 2026-09-11 (376 tests green).** `bridgeforge/compat_sets/standard.json` (data)
+   + `bridgeforge/compat_sets.py`: `libs` (`lw_lazylib`, `MagicLib`, `lunalib`, `shaderLib`/GraphicsLib)
+   and `standard` (`extends` libs, plus `aitweaks`, `nexerelin`, and four content mods verified present
+   in the owner's real install at RC8 or a compatible `0.98a`: `swp`, `IndEvo`, `US`, `tahlan`; Diable
+   Avionics excluded, its installed copy is RC5). `bridgeforge compat-set install <set> --runtime <rig>
+   --source-mods <dir> [--dry-run] [--json]` copies only what's missing/drifted (never rig → source),
+   refuses off a non-junction rig, warns (doesn't block) on a `gameVersion` mismatch. Dry-run against
+   the real rig (`In operation/Flu-X-rc8-runtime`): libs/AI Tweaks/Nexerelin already identical, would
+   add Industrial.Evolution/Unknown Skies/Ship_Weapon Pack/Tahlan Shipworks. `boot_test.run_boot_matrix`
+   (new; `run_boot_test`'s signature unchanged) runs the target alone with the libs it declares, then
+   with the whole pack, restoring `enabled_mods.json` after each leg; verdict `PASS` /
+   `FAIL_ALONE` / `FAIL_WITH_PACK_ONLY` / `SUSPECT_FATAL_DIALOG`. Wired as `boot-test <rig> --mods ...
+   --pack standard`. **SK-13 next step:** `compat-set install standard` then `boot-test <rig> --mods
+   SEEKER --pack standard` proves the boot; the combat NPE itself still needs the P3 combat probe run
+   with SEEKER plus the pack (a boot-to-main-menu test never deploys a hull into combat).
+5. **P5: Change-impact test selection.** `bridgeforge test-plan <mod> --since <build-tag>` maps changed files to features and returns the minimal live-test IDs and probe assertions. It needs `build-tag` to record a per-tag hash manifest.
+   **Status: implemented 2026-09-11.**
+   - `bridgeforge/test_plan.py` (data-driven rules table) is wired as `test-plan <mod> --since rN`.
+   - `build-tag` and `prepare-test --bump` record manifests by default, stored outside the mod in `bridgeforge-state/build-manifests/`.
+   - Validated on a copied Arkgneisis tree: a touched faction file mapped to markets and fleets.
+   - Manifests start with the next `build-tag`. Tags made earlier have no manifest to diff against.
+6. **P6: SPW performance gate.** Run SPW `diagnose --level STANDARD` on the rig after correctness passes; the dossier ingests SPW's `performance-report.json` and log-spam counts.
+   Acceptance: an owner-agreed regression threshold.
+   **Status: implemented 2026-09-11 (file-level only).**
+   - `bridgeforge/spw_bridge.py` is wired as `perf-gate`; the dossier gains `--perf`.
+   - It is report-only until the owner sets thresholds. The report reader is schema-tolerant because SPW's report schema is still only a design document.
+   - Acceptance still needs owner-agreed thresholds and a real SPW report.
+7. **P7: Bug-class registry.** `docs/BUG_CLASSES.md` gives one row per live-found class (symptom, cause, check or probe assertion, test, first mod). Durable conventions move from `In operation/STATUS.md` into `docs/`, and the "no live finding closes without a check" rule goes into `AGENTS.md`.
+   **Status: implemented 2026-09-11.**
+   - `docs/BUG_CLASSES.md` has 14 rows, 2 of them with a written "no check yet" reason.
+   - `tests/test_bug_class_registry.py` asserts every listed id exists.
+   - The closure rule is now in `AGENTS.md`.
+   - Moving the durable conventions out of `STATUS.md` remains incremental.
+8. **P8: Release pipeline.** `bridgeforge release <mod>`:
+   - Gates: a clean scan against the baseline, `jar-audit` against the original, the final build tag.
+   - Output: a forward-slash zip and the `Done/` layout, with source and backups excluded.
+   - Licence gates (Exigency stays local-only).
+   - A release note built from the build-tag deltas.
+
+   **Status: implemented 2026-09-11** (`bridgeforge/release.py`, `release_policy.json`, wired as `release`), including the P3b-M save-corpus gate.
+   - It is a dry run by default; `--apply` writes only when every gate passes.
+   - Validation: a dry run on Arkgneisis correctly returned BLOCKED on the scan gate (no reviewed baseline yet) and wrote nothing.
+   - Before the first real release, each mod needs a reviewed baseline (`scan --write-baseline`) and a save corpus.
+
+9. **P9: Discovery first (owner-approved 2026-09-11).** Discovery moves ahead of test design, following an external review.
+   Today the flow is: design tests → modernize → something breaks → BridgeForge finds the hidden behaviour. It flips to: BridgeForge archaeology → architecture map + risk register → tests designed to falsify each risk → modernize → compare against a baseline.
+   **Principle: the tool does the crawl and models do the reasoning.** Exhaustive discovery is search and bytecode work, which BridgeForge does completely and repeatably. A model's claim that something is "missing", "unused" or "dead" is a hypothesis until BridgeForge confirms it: a Haiku sweep once flagged 16 vanilla ids in Vacuum as missing.
+   - **P9-0. Standing rule (done 2026-09-11):** `AGENTS.md` "Never infer dead code". No code is dead, redundant or safe to refactor until textual, data-file, rules.csv, reflection, serialization, event-registration and runtime references are checked. Precedents:
+     - SEEKER's `SensorDroneStats`, loaded by vanilla from a data path
+     - mod `rulecmd` classes, called by name from rules.csv
+     - SEEKER's bundled source, which differed from its shipped jar
+   - **P9-1. `bridgeforge archaeology <mod>` → `ARCHITECTURE_MAP.json` + `.md`** (deterministic, read-only). It reuses the scanner, bytecode and save-compat pieces, and every entry carries file:line evidence, lifecycle, API age and confidence. Sections:
+     - **Entry points:** mod plugin hooks (`onApplicationLoad`, `onNewGame`, `onNewGameAfterEconomyLoad`, `onGameLoad`, `beforeGameSave`/`afterGameSave`), `settings.json` plugins, and missions.
+     - **Scripts and listeners:** each registration paired with its removal and its `hasScript`/`hasListener` guard. An unguarded add in `onGameLoad` means a duplicate on every load, which pairs with `save-scripts`.
+     - **Memory keys and `$variables`:** across Java and rules.csv, including keys read but never written (and the reverse), plus persistent-data keys.
+     - **`Global.getSector()` touchpoints by area:** economy (markets, submarkets, industries, conditions), fleets (spawn and despawn), factions and reputation, intel and bar events, hyperspace and terrain, combat plugins.
+     - **Cross-file id graph:** CSV, `.ship`, `.variant`, `.wpn`, `.faction`, rules.csv, `settings.json` and Java string literals, with dangling and unused ids. Unused ids are only reported after every source has been checked (P9-0).
+     - **String and reflective class references:** data files, `Class.forName`, and the ones the RC8 sandbox forbids.
+     - **Serialization-sensitive classes:** everything that lands in saves (script, listener and intel fields, statically, plus `save-compat` on real saves). Renaming or removing any of them breaks existing saves.
+     - **External mod APIs and load-order assumptions:** hard versus soft dependencies, `isModEnabled` guards, and `onApplicationLoad` ordering.
+     - **API age:** bytecode linkage against the RC8 API, covering removed and changed methods.
+     - **Stat modifier ids:** `modify*` paired with `unmodify*`. A missing `unmodify` is a permanent buff or debuff leak.
+     - **Timing and state machines:** `IntervalUtil`, day math, and enum or int state fields in scripts.
+   - **P9-2. `RISK_REGISTER.md`, seeded automatically from the map.**
+     - A data-driven table maps each risky entry kind to a risk template and a detection method: probe assertion, `save-inspect` check, census diff, scenario or scan check.
+     - Ids are stable across runs (`RISK-<mod>-nnn`, derived from kind plus evidence key), with statuses OPEN / TESTED / ACCEPTED / CLOSED.
+     - A model then refines each risk's failure mode and confidence.
+     - `release` gets a gate: no OPEN high-severity risks. `test-plan` maps changed files → risks touched → tests.
+   - **P9-3. Breadcrumbs.** Each change cites its risk and test ids (`RISK-EXI-014`, `TEST-T22`) through `build-tag --note` (stored in the build manifest) and a commit-message convention. The release note lists the risks addressed, giving a trail from discovered behaviour → risk → test → change.
+   - **P9-4. Static map diff, original versus working copy (the practical baseline).** The originals usually can't run on RC8, which is why they're being revived. So compare `archaeology` output for the original against the working copy: a listener dropped, a memory key renamed, an id orphaned, a save-sensitive class renamed, a lifecycle hook moved. It catches behavioural drift without running anything, and runs in `release` and `test-plan`.
+   - **P9-5. Probe census + `census-diff` (runtime snapshot testing).**
+     - At fixed points (day 1, day N, after combat) the probe dumps the mod's live state to a census file:
+       - registered scripts and listeners by class
+       - memory keys with the mod's prefix (type plus value hash)
+       - mod entities (id and location)
+       - markets and submarkets (industries, conditions, stock counts)
+       - fleets per faction (count and fleet points)
+       - persistent-data keys
+       - stat modifier ids on the player fleet
+     - The baseline is the first build that boots (`r1`), stored per tag and scenario under `bridgeforge-state/census/`.
+     - The diff is structural, with tolerance bands, because campaign RNG makes exact counts meaningless.
+     - It pairs with scenarios (P3b-K) so the same scenario is captured on every build.
+   - **P9-6. Discovery-first workflow and model routing (`docs/DISCOVERY_FIRST_WORKFLOW.md`).** Five stages:
+     1. **Discovery:** `archaeology`, `dossier` and `scan`. Deterministic, no edits.
+     2. **Risk extraction:** a local model (Qwen/Hermes) reads the map plus source and writes the risk narratives. No edits.
+     3. **Test design:** Opus/Sol designs tests that try to falsify each risk, not happy paths.
+     4. **Modernization:** the implementer changes code, and every change cites its RISK and TEST ids.
+     5. **Compare:** `census-diff`, the map diff, the save tools and scenarios.
+
+     The document includes a fixed audit template and prompts per stage, so every mod gets the same map, register, dependency graph and test candidates. Data-era gap checks (procgen rows, known lists, carrier rework, wing roles) stay mandatory: most live bugs so far were data-format gaps, not Java behaviour.
+   - **Related recommendations:**
+     - Run `archaeology` automatically at intake, alongside `scan` and `dossier`, once the folder reorganisation adds `bridgeforge intake`.
+     - Store the map and register in each mod's `reports/`, and let a future `bridgeforge board` show open risks per mod.
+     - Feed the save-sensitive class list into `save-compat --compare-old/--compare-new` and the `release` jar gate, so a renamed class without a migration path blocks the release.
+     - Each confirmed risk that bites live becomes a `BUG_CLASSES.md` row and a check (P7 closure rule).
+
+   **Order:** P9-0 now; then the folder reorganisation and the first offline live session; then P9-1 → P9-2/3 → P9-4 → P9-5 → P9-6. **Status: P9-0 done; the rest planned.**
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit

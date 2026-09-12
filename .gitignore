@@ -14,6 +14,8 @@ docs/PERFORMANCE_WORKBENCH_DESIGN.md
 /artifacts/
 /.bridgeforge-push-worktree/
 /config/
+/bridgeforge-state/
+/bridgeforge-dossier/
 
 # Local agent/tooling scaffolding not required by the BridgeForge package.
 /.githooks/

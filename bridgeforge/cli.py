@@ -8,6 +8,8 @@ from pathlib import Path
 from .models import TargetProfile
 from .report import write_artifacts
 from .scanner import scan_mod
+from .baseline import finding_baseline_key, load_baseline_keys, split_by_baseline
+from .dossier import DEFAULT_CONTEXT_LINES, DEFAULT_MAX_KB, DossierError, write_dossier
 from .migrate import apply_plan, build_plan
 from .workspace import create_workspace, rollback
 from .build import create_build_profile, preview_shell_command
@@ -41,6 +43,32 @@ from .bytecode import BytecodeUnavailable, inspect_bytecode
 from .bytecode_diff import diff_bytecode
 from .bytecode_rules import apply_bytecode_class, apply_bytecode_jar, plan_bytecode
 from .pack_candidate import create_migration_pack_candidate
+from .log_triage import triage_log
+from .copy_drift import compare_copies
+from .jar_audit import audit_jar
+from .build_tag import apply_build_tag, BuildTagError, DEFAULT_LABEL
+from .fixers import SUPPORTED_FINDINGS, FixerError, apply_fix, compute_fix, unified_diff_for_change
+from .prepare_test import PrepareTestError, prepare_test
+from .probe_config import ProbeConfigError, write_probe_config
+from .probe_mod_build import ProbeModBuildError, build_probe_mod, install_release
+from .save_compat import SaveCompatError, check_save_compat, compare_builds
+from .compat_sets import CompatSetError, install_compat_set
+from .save_snapshot import SaveSnapshotError, snapshot_list, snapshot_restore, snapshot_tag
+from .scenarios import ScenarioError, list_scenarios, scenario_check, scenario_plan
+from .save_reader import SaveReadError
+from .save_inspect import audit_scripts, diff_saves, growth_trend, inspect_save, save_provenance
+from .save_content_compat import check_save_content, removal_safety
+from .save_summary import redacted_summary
+from .test_plan import TestPlanError, plan_tests
+from .spw_bridge import SpwBridgeError, ingest_spw_report, log_spam, perf_gate
+from .release import ReleaseError, release_mod
+from .rig_doctor import default_working_copies, rig_doctor
+from .bootstrap import bootstrap_mods
+from .build_tag import record_current_manifest
+from .probe_config import load_profile
+
+# Save-tool statuses that mean "look at this" (non-zero exit).
+_SAVE_ATTENTION_STATUSES = {"WILL_FAIL", "DUPLICATES_FOUND", "GROWTH_WARNING", "STALE_BUILD", "UNSAFE"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,6 +79,9 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--output", type=Path, default=Path("bridgeforge-artifacts"))
     scan.add_argument("--target-starsector", default="0.98.x")
     scan.add_argument("--target-java", type=int, default=17)
+    scan.add_argument("--vanilla-core", type=Path, help="path to a read-only starsector-core directory, used for vanilla-row/faction/path exemptions")
+    scan.add_argument("--baseline", type=Path, help="only report findings not present in this baseline file, plus a count of previously accepted findings that are now resolved")
+    scan.add_argument("--write-baseline", type=Path, help="write the current scan's finding keys to this file as an accepted baseline")
     bytecode = subcommands.add_parser("bytecode-inspect", help="inspect class/JAR symbolic references without rewriting")
     bytecode.add_argument("input", type=Path, nargs="+")
     bytecode.add_argument("--output", type=Path)
@@ -250,6 +281,211 @@ def build_parser() -> argparse.ArgumentParser:
     scenarios.add_argument("--target-starsector", default="0.98.x")
     scenarios.add_argument("--target-java", type=int, default=17)
     scenarios.add_argument("--output", type=Path)
+    log_triage = subcommands.add_parser("log-triage", help="classify a Starsector log into FATAL / MOD-ERROR / KNOWN-NOISE / OTHER without modifying it")
+    log_triage.add_argument("log", type=Path)
+    log_triage.add_argument("--mod-prefix", action="append", default=[], metavar="PREFIX", help="additional mod source/package prefix to attribute errors to; repeatable")
+    log_triage.add_argument("--mods-dir", type=Path, help="mods folder the log ran with: names the mod whose jar owns each crash frame (suspect/involved)")
+    log_triage.add_argument("--all-mods", action="store_true", help="with --mods-dir: index every mod folder, not just enabled_mods.json (e.g. a log from a different mod list)")
+    log_triage.add_argument("--json", action="store_true")
+    copy_drift = subcommands.add_parser("copy-drift", help="hash-compare a mod working copy against its deployed/test-rig copy")
+    copy_drift.add_argument("working_copy", type=Path)
+    copy_drift.add_argument("deployed_copy", type=Path)
+    copy_drift.add_argument("--json", action="store_true")
+    jar_audit = subcommands.add_parser("jar-audit", help="compare a rebuilt mod jar with its original for bundled libraries, removed classes, and reflection use")
+    jar_audit.add_argument("rebuilt", type=Path)
+    jar_audit.add_argument("--original", required=True, type=Path, help="original .jar file, or a .zip archive containing one")
+    jar_audit.add_argument("--json", action="store_true")
+    build_tag = subcommands.add_parser("build-tag", help="iterate a visible build tag in a revived mod's mod_info.json name/version, surgically (never re-serializes the file)")
+    build_tag.add_argument("mod_dir", type=Path)
+    build_tag.add_argument("--label", default=DEFAULT_LABEL, help=f"suffix label used in the name tag, e.g. '[LABEL rN]' (default: {DEFAULT_LABEL})")
+    build_tag.add_argument("--set", dest="set_value", type=int, help="force the build number instead of incrementing")
+    build_tag.add_argument("--dry-run", action="store_true", help="print the proposed change without writing mod_info.json")
+    build_tag.add_argument("--no-manifest", action="store_true", help="don't record the per-tag file hash manifest that test-plan diffs against")
+    build_tag.add_argument("--record-only", action="store_true", help="record the manifest for the CURRENT build (r0 if untagged) without bumping or writing mod_info.json")
+    build_tag.add_argument("--manifests-dir", type=Path, help="where build manifests go (default: <repo>/bridgeforge-state/build-manifests; never inside the mod)")
+    build_tag.add_argument("--json", action="store_true")
+    fix = subcommands.add_parser("fix", help="apply a SAFE, mechanical fixer for one supported finding id (dry-run diff by default)")
+    fix.add_argument("mod_dir", type=Path)
+    fix.add_argument("--finding", required=True, metavar="ID", help=f"supported: {', '.join(SUPPORTED_FINDINGS)}")
+    fix.add_argument("--apply", action="store_true", help="write the change (default: print a dry-run diff only)")
+    fix.add_argument("--json", action="store_true")
+    fix.add_argument("--target-game-version", help="required for mod-info-game-version-inexact")
+    fix.add_argument("--design-type", help="required for csv-missing-design-type-column")
+    fix.add_argument("--id-prefix", action="append", default=[], metavar="PREFIX", help="repeatable; required for csv-missing-design-type-column")
+    fix.add_argument("--design-color", metavar="R,G,B", help="required for csv-missing-design-type-column")
+    fix.add_argument("--vanilla-core", type=Path, help="required for procgen-*-row-missing and faction-known-lists-missing")
+    fix.add_argument("--type-id", help="required for procgen-planet-row-missing/procgen-star-row-missing")
+    fix.add_argument("--from-vanilla-id", help="required for procgen-planet-row-missing/procgen-star-row-missing")
+    fix.add_argument("--faction-file", type=Path, help="required for faction-known-lists-missing")
+    prepare_test_cmd = subcommands.add_parser("prepare-test", help="sync a rig test copy from a working copy, and optionally run a boot test")
+    prepare_test_cmd.add_argument("working_dir", type=Path)
+    prepare_test_cmd.add_argument("rig_mod_dir", type=Path)
+    prepare_test_cmd.add_argument("--sync", action="store_true", help="copy drifted/missing working -> rig files (never the reverse, never deletes rig extras)")
+    prepare_test_cmd.add_argument("--bump", action="store_true", help="apply_build_tag the working copy before comparing")
+    prepare_test_cmd.add_argument("--label", default=DEFAULT_LABEL)
+    prepare_test_cmd.add_argument("--no-manifest", action="store_true", help="with --bump: don't record the per-tag build manifest for test-plan")
+    prepare_test_cmd.add_argument("--boot", type=Path, metavar="RUNTIME_DIR", help="run a boot test against this runtime after a successful sync")
+    prepare_test_cmd.add_argument("--mods", nargs="+", default=[], metavar="ID", help="mod ids to enable for --boot")
+    prepare_test_cmd.add_argument("--timeout", type=int, default=240)
+    prepare_test_cmd.add_argument("--log-name")
+    prepare_test_cmd.add_argument("--keep-mods", action="store_true")
+    prepare_test_cmd.add_argument("--json", action="store_true")
+    boot_test_cmd = subcommands.add_parser("boot-test", help="run a boot smoke test of a Starsector runtime with explicit mods enabled")
+    boot_test_cmd.add_argument("runtime_dir", type=Path)
+    boot_test_cmd.add_argument("--mods", nargs="+", required=True, metavar="ID")
+    boot_test_cmd.add_argument("--pack", metavar="SET", help="also run a compat-set matrix (roadmap P4): --mods alone with the libs it needs, then --mods plus this whole named set (e.g. 'standard')")
+    boot_test_cmd.add_argument("--timeout", type=int, default=240)
+    boot_test_cmd.add_argument("--log-name")
+    boot_test_cmd.add_argument("--keep-mods", action="store_true")
+    boot_test_cmd.add_argument("--json", action="store_true")
+    compat_set_cmd = subcommands.add_parser("compat-set", help="install a named standard compatibility pack (roadmap P4) into a test rig")
+    compat_set_subcommands = compat_set_cmd.add_subparsers(dest="compat_set_command", required=True)
+    compat_set_install_cmd = compat_set_subcommands.add_parser("install", help="copy a named compat set's mods from a source mods directory into a rig's mods/")
+    compat_set_install_cmd.add_argument("set_name", metavar="SET")
+    compat_set_install_cmd.add_argument("--runtime", required=True, type=Path, help="isolated test-rig runtime directory (starsector-core must be a junction/symlink)")
+    compat_set_install_cmd.add_argument("--source-mods", required=True, type=Path, help="read-only directory to copy mods FROM (never written to)")
+    compat_set_install_cmd.add_argument("--dry-run", action="store_true", help="report the install plan without copying anything")
+    compat_set_install_cmd.add_argument("--json", action="store_true")
+    dossier = subcommands.add_parser("dossier", help="build a size-capped agent triage dossier for a mod (index + parts)")
+    dossier.add_argument("mod_directory", type=Path)
+    dossier.add_argument("--vanilla-core", type=Path)
+    dossier.add_argument("--baseline", type=Path, help="only include findings not present in this scan baseline")
+    dossier.add_argument("--original-jar", type=Path, help="original .jar (or .zip containing one) for the jar-audit artifact")
+    dossier.add_argument("--rig", type=Path, help="deployed/test-rig mod copy for the copy-drift artifact")
+    dossier.add_argument("--log", type=Path, help="Starsector stdout log for the log-triage artifact")
+    dossier.add_argument("--save", type=Path, help="rig save dir or campaign.xml for a runtime-footprint section (live classes, scripts, factions, markets)")
+    dossier.add_argument("--perf", type=Path, help="SPW performance-report.json for a performance section")
+    dossier.add_argument("--perf-mod-prefix", action="append", default=[], metavar="PREFIX", help="log-spam prefix for the performance section (needs --log); repeatable")
+    dossier.add_argument("--output", type=Path, help="output directory (default: bridgeforge-dossier/<mod-id> under the cwd); never inside In operation/Done")
+    dossier.add_argument("--max-kb", type=float, default=DEFAULT_MAX_KB, help=f"per-file (index and each part) size cap in KB (default: {DEFAULT_MAX_KB})")
+    dossier.add_argument("--context-lines", type=int, default=DEFAULT_CONTEXT_LINES, help=f"snippet context lines around a flagged line (default: {DEFAULT_CONTEXT_LINES})")
+    dossier.add_argument("--json", action="store_true")
+    build_probe_mod_cmd = subcommands.add_parser("build-probe-mod", help="compile the bridgeforge-probe in-game probe mod (roadmap P3) and pack it deterministically")
+    build_probe_mod_cmd.add_argument("--jdk", required=True, type=Path, help="JDK 17+ home directory (containing bin/javac.exe)")
+    build_probe_mod_cmd.add_argument("--core", required=True, type=Path, help="starsector-core directory (for starfarer.api.jar and its sibling jars)")
+    build_probe_mod_cmd.add_argument("--install-release", action="store_true", help="also assemble the runtime-only release copy under probe-mod/releases/")
+    build_probe_mod_cmd.add_argument("--json", action="store_true")
+    probe_config_cmd = subcommands.add_parser("probe-config", help="write bf_probe_config/bf_probe_rig into a test rig's saves/common, and optionally install the probe mod")
+    probe_config_cmd.add_argument("mod_dir", type=Path)
+    probe_config_cmd.add_argument("--runtime", required=True, type=Path, help="isolated test-rig runtime directory (starsector-core must be a junction/symlink)")
+    probe_config_cmd.add_argument("--seconds", type=float, default=60.0, help="combat probe duration in seconds (default: 60)")
+    probe_config_cmd.add_argument("--campaign-interval-days", type=float, default=5.0, help="campaign probe re-run interval in in-game days (default: 5)")
+    probe_config_cmd.add_argument("--combat-cap", type=int, default=12, help="max hulls per side in the combat probe mission (default: 12)")
+    probe_config_cmd.add_argument("--track", action="append", default=[], metavar="ENTITY", help="custom entity id to track position for; repeatable")
+    probe_config_cmd.add_argument("--setup", action="append", default=[], metavar="SPEC", help="in-game setup applied once per save via the public API: rep:<faction>=<RepLevel|n>, credits:<N>, ship:<variant>[:<count>], spawn-fleet:<faction>:<fp>, jump:<system>; repeatable")
+    probe_config_cmd.add_argument("--profile", metavar="NAME|PATH", help="setup profile (Notepad-friendly .txt): a bundled name (exigency-rep, seeker-betelgeuse, flux-basic) or a path; merged after --setup")
+    probe_config_cmd.add_argument("--install", action="store_true", help="also install/refresh the probe mod into <runtime>/mods/bridgeforge-probe/ from the release copy")
+    probe_config_cmd.add_argument("--dry-run", action="store_true", help="report what would be written without touching the rig")
+    probe_config_cmd.add_argument("--json", action="store_true")
+    save_compat_cmd = subcommands.add_parser("save-compat", help="check whether a save's referenced mod classes exist in the build's loaded jars (read-only)")
+    save_compat_cmd.add_argument("save", type=Path, help="save directory or its campaign.xml")
+    save_compat_cmd.add_argument("mod_dir", type=Path)
+    save_compat_cmd.add_argument("--vanilla-core", type=Path, help="starsector-core directory, to help rule out vanilla-only aliases")
+    save_compat_cmd.add_argument("--compare-old", type=Path, help="compare builds instead: old jar or mod dir (requires --compare-new)")
+    save_compat_cmd.add_argument("--compare-new", type=Path, help="compare builds: new jar or mod dir (requires --compare-old)")
+    save_compat_cmd.add_argument("--json", action="store_true")
+    def _save_tool(name: str, help_text: str, *, mod_dir: str | None = None, multi_save: bool = False, second_save: bool = False) -> argparse.ArgumentParser:
+        cmd = subcommands.add_parser(name, help=help_text)
+        if multi_save:
+            cmd.add_argument("saves", nargs="+", type=Path, help="save directories or campaign.xml files, oldest first")
+        else:
+            cmd.add_argument("save", type=Path, help="save directory or its campaign.xml")
+        if second_save:
+            cmd.add_argument("save_b", type=Path, help="second save (or campaign.xml.bak) to compare against")
+        if mod_dir == "positional":
+            cmd.add_argument("mod_dir", type=Path)
+        elif mod_dir == "optional":
+            cmd.add_argument("--mod-dir", type=Path)
+        elif mod_dir == "multi":
+            cmd.add_argument("--mod-dir", action="append", default=[], type=Path, required=True, help="mod working copy; repeatable")
+        cmd.add_argument("--json", action="store_true")
+        return cmd
+
+    for name, help_text, second in (
+        ("save-inspect", "stream a save and report tracked mod state, known-list sizes and per-mod object counts (read-only)", False),
+        ("save-diff", "compare tracked mod state between two saves, e.g. campaign.xml vs campaign.xml.bak (read-only)", True),
+    ):
+        cmd = _save_tool(name, help_text, mod_dir="optional", second_save=second)
+        cmd.add_argument("--track-class", action="append", default=[], metavar="ALIAS", help="class alias to report scalar fields for; repeatable")
+        cmd.add_argument("--track-id", action="append", default=[], metavar="ID", help="entity id to locate; repeatable")
+        cmd.add_argument("--vanilla-core", type=Path)
+    _save_tool("save-scripts", "count a mod's scripts/listeners per holder in a save and flag duplicates (read-only)", mod_dir="positional").add_argument("--vanilla-core", type=Path)
+    growth_cmd = _save_tool("save-growth", "per-mod object counts and file sizes across a save chain, with a growth warning (read-only)", mod_dir="optional", multi_save=True)
+    growth_cmd.add_argument("--warn-ratio", type=float, default=2.0, help="growth multiplier between consecutive saves that triggers a warning (default: 2.0)")
+    _save_tool("save-provenance", "compare the mod versions/BF build tags a save was made with against current working copies (read-only)", mod_dir="multi")
+    _save_tool("save-content", "check the data ids a save stores (hulls, variants, weapons, factions, ...) against the build plus vanilla (read-only)", mod_dir="positional").add_argument("--vanilla-core", type=Path)
+    _save_tool("save-removal", "INTERNAL ONLY: everything a save still depends on for one mod; SAFE_TO_REMOVE or UNSAFE (read-only)", mod_dir="positional").add_argument("--vanilla-core", type=Path)
+    summary_cmd = _save_tool("save-summary", "write a redacted, shareable save summary with no player data (local file only)", mod_dir="multi")
+    summary_cmd.add_argument("--out", required=True, type=Path, help="output JSON path")
+    summary_cmd.add_argument("--vanilla-core", type=Path)
+    bootstrap_cmd = subcommands.add_parser("bootstrap", help="one-time: write a scan baseline and record the current build manifest for each mod (nothing written inside mods)")
+    bootstrap_cmd.add_argument("mod_dirs", nargs="+", type=Path)
+    bootstrap_cmd.add_argument("--vanilla-core", required=True, type=Path)
+    bootstrap_cmd.add_argument("--baselines-dir", type=Path, help="default: <repo>/bridgeforge-state/baselines")
+    bootstrap_cmd.add_argument("--manifests-dir", type=Path, help="default: <repo>/bridgeforge-state/build-manifests")
+    bootstrap_cmd.add_argument("--overwrite", action="store_true", help="replace existing baselines (default: keep them)")
+    bootstrap_cmd.add_argument("--json", action="store_true")
+    rig_doctor_cmd = subcommands.add_parser("rig-doctor", help="pre-flight checks for a test rig: isolation, running game, probe install, enabled mods, working-copy drift, real-install saves untouched")
+    rig_doctor_cmd.add_argument("runtime_dir", type=Path)
+    rig_doctor_cmd.add_argument("--working", action="append", default=[], metavar="ID=PATH", help="working copy for a mod id (adds to/overrides the defaults); repeatable")
+    rig_doctor_cmd.add_argument("--no-default-working", action="store_true", help="don't use the project's known working-copy mapping")
+    rig_doctor_cmd.add_argument("--real-install", type=Path, help="real Starsector install, to confirm its saves are untouched (read-only)")
+    rig_doctor_cmd.add_argument("--write-saves-baseline", action="store_true", help="record the real install's saves listing as the baseline (the only write)")
+    rig_doctor_cmd.add_argument("--json", action="store_true")
+    test_plan_cmd = subcommands.add_parser("test-plan", help="list the minimal live tests and probe assertions for what changed since a build tag (read-only)")
+    test_plan_cmd.add_argument("mod_dir", type=Path)
+    test_plan_cmd.add_argument("--since", required=True, metavar="TAG", help="build tag to diff against, e.g. r3 or 3")
+    test_plan_cmd.add_argument("--manifests-dir", type=Path)
+    test_plan_cmd.add_argument("--live-test-instructions", type=Path, help="default: In operation/LIVE_TEST_INSTRUCTIONS.md")
+    test_plan_cmd.add_argument("--json", action="store_true")
+    perf_gate_cmd = subcommands.add_parser("perf-gate", help="summarise an SPW performance report and log spam; PASS/WARN/FAIL against thresholds (report-only by default)")
+    perf_gate_cmd.add_argument("--perf-report", type=Path, help="SPW performance-report.json")
+    perf_gate_cmd.add_argument("--log", type=Path, help="Starsector stdout log for spam counts")
+    perf_gate_cmd.add_argument("--mod-prefix", action="append", default=[], metavar="PREFIX", help="mod id/package for log-spam counting; repeatable")
+    perf_gate_cmd.add_argument("--min-repeats", type=int, default=5)
+    perf_gate_cmd.add_argument("--thresholds", type=Path, help='JSON {"metric": {"warn": x, "fail": y}}; omit for report-only')
+    perf_gate_cmd.add_argument("--json", action="store_true")
+    release_cmd = subcommands.add_parser("release", help="run the release gates and, with --apply and all gates passing, package the mod (dry run by default)")
+    release_cmd.add_argument("mod_dir", type=Path)
+    release_cmd.add_argument("--original", required=True, type=Path, help="original jar or archive for jar-audit")
+    release_cmd.add_argument("--baseline", required=True, type=Path, help="reviewed scan baseline; any new MANUAL finding blocks")
+    release_cmd.add_argument("--out-dir", required=True, type=Path)
+    release_cmd.add_argument("--vanilla-core", type=Path)
+    release_cmd.add_argument("--rig", type=Path, help="rig copy of the mod for the copy-drift gate")
+    release_cmd.add_argument("--corpus-dir", type=Path, help="save corpus to re-check (default: In operation/save_corpus/<mod-id>/)")
+    release_cmd.add_argument("--policy", type=Path, help="licence policy JSON (default: bundled release_policy.json)")
+    release_cmd.add_argument("--apply", action="store_true", help="write the release (only if every gate passes)")
+    release_cmd.add_argument("--json", action="store_true")
+    snapshot_cmd = subcommands.add_parser("save-snapshot", help="tag, list and restore rig-only save copies (never touches a real install)")
+    snapshot_subcommands = snapshot_cmd.add_subparsers(dest="snapshot_command", required=True)
+    snapshot_tag_cmd = snapshot_subcommands.add_parser("tag", help="copy <rig>/saves/<save> into <rig>/save_snapshots/<tag>/ with a hash manifest")
+    snapshot_tag_cmd.add_argument("runtime_dir", type=Path)
+    snapshot_tag_cmd.add_argument("save_name")
+    snapshot_tag_cmd.add_argument("tag")
+    snapshot_tag_cmd.add_argument("--json", action="store_true")
+    snapshot_list_cmd = snapshot_subcommands.add_parser("list", help="list snapshot tags in a rig")
+    snapshot_list_cmd.add_argument("runtime_dir", type=Path)
+    snapshot_list_cmd.add_argument("--json", action="store_true")
+    snapshot_restore_cmd = snapshot_subcommands.add_parser("restore", help="copy a snapshot back into <rig>/saves/ (never overwrites without --replace)")
+    snapshot_restore_cmd.add_argument("runtime_dir", type=Path)
+    snapshot_restore_cmd.add_argument("tag")
+    snapshot_restore_cmd.add_argument("--as-name", help="restore under this save folder name instead of the original")
+    snapshot_restore_cmd.add_argument("--replace", action="store_true", help="overwrite an existing save folder of the same name")
+    snapshot_restore_cmd.add_argument("--json", action="store_true")
+    scenario_cmd = subcommands.add_parser("scenario", help="named test scenarios with expected results (plan is a dry run; check reads a log/save)")
+    scenario_subcommands = scenario_cmd.add_subparsers(dest="scenario_command", required=True)
+    scenario_list_cmd = scenario_subcommands.add_parser("list", help="list bundled scenarios")
+    scenario_list_cmd.add_argument("--json", action="store_true")
+    scenario_plan_cmd = scenario_subcommands.add_parser("plan", help="show the mods, probe-config command and snapshot a scenario needs (writes nothing)")
+    scenario_plan_cmd.add_argument("name")
+    scenario_plan_cmd.add_argument("runtime_dir", type=Path)
+    scenario_plan_cmd.add_argument("--mod", action="append", default=[], metavar="ID=PATH", help="source directory for a mod id the scenario uses; repeatable")
+    scenario_plan_cmd.add_argument("--json", action="store_true")
+    scenario_check_cmd = scenario_subcommands.add_parser("check", help="evaluate a scenario's expected results against a probe log (and optionally a save)")
+    scenario_check_cmd.add_argument("name")
+    scenario_check_cmd.add_argument("log_path", type=Path)
+    scenario_check_cmd.add_argument("--save", type=Path, help="save directory or campaign.xml for save assertions")
+    scenario_check_cmd.add_argument("--json", action="store_true")
     return parser
 
 
@@ -257,7 +493,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "scan":
         try:
-            result = scan_mod(args.mod_directory, TargetProfile(args.target_starsector, args.target_java))
+            result = scan_mod(args.mod_directory, TargetProfile(args.target_starsector, args.target_java), args.vanilla_core)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -266,6 +502,26 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
+        if args.write_baseline:
+            keys = sorted({finding_baseline_key(finding) for finding in result.findings})
+            args.write_baseline.parent.mkdir(parents=True, exist_ok=True)
+            args.write_baseline.write_text(json.dumps({"findings": keys}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            print(f"Scanned {len(result.files)} files; found {len(result.findings)} findings.")
+            print(f"Report: {report}")
+            print(f"Manifest: {manifest}")
+            print(f"Baseline written: {args.write_baseline} ({len(keys)} accepted finding(s))")
+            return 0
+        if args.baseline:
+            try:
+                baseline_keys = load_baseline_keys(args.baseline)
+            except (OSError, json.JSONDecodeError) as exc:
+                print(f"bridgeforge: could not read baseline file: {exc}", file=sys.stderr)
+                return 2
+            new_findings, resolved_count = split_by_baseline(result.findings, baseline_keys)
+            print(f"Scanned {len(result.files)} files; found {len(new_findings)} new finding(s) not in baseline ({resolved_count} previously accepted finding(s) resolved).")
+            print(f"Report: {report}")
+            print(f"Manifest: {manifest}")
+            return 0
         print(f"Scanned {len(result.files)} files; found {len(result.findings)} findings.")
         print(f"Report: {report}")
         print(f"Manifest: {manifest}")
@@ -811,5 +1067,547 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Integration scenarios: {output}")
         else:
             print(payload)
+        return 0
+    if args.command == "log-triage":
+        try:
+            result = triage_log(args.log, args.mod_prefix, mods_dir=args.mods_dir, all_mods=args.all_mods)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            counts = result["counts"]
+            print(f"FATAL={counts['FATAL']} MOD-ERROR={counts['MOD-ERROR']} KNOWN-NOISE={counts['KNOWN-NOISE']} OTHER={counts['OTHER']}")
+            milestones = result["milestones"]
+            print(f"Main menu reached: {milestones['main_menu_reached']}; campaign loads: {len(milestones['campaign_loads'])}; finished-saving events: {milestones['finished_saving_count']}; mission variant preloads (startup, not play): {len(milestones['mission_variant_preloads'])}")
+            for event in result["fatal"]:
+                print(f"FATAL line {event['line']} [{event['matched_rule']}]: {event['message']}")
+                if event.get("top_mod_frame"):
+                    print(f"  top mod frame: {event['top_mod_frame']}")
+            for event in result["mod_errors"]:
+                print(f"MOD-ERROR line {event['line']}: {event.get('top_mod_frame') or event['message']}")
+            for symptom in result["vanilla_shadowing_symptoms"]:
+                print(f"Vanilla-shadowing symptom line {symptom['line']}: ship system [{symptom['ship_system']}] from {symptom['csv']}")
+            attribution = result.get("attribution")
+            if attribution:
+                print(f"Crash attribution (mod whose code threw, by exception count): {json.dumps(attribution.get('counts_by_suspect', {}), sort_keys=True)}")
+                for event in result["fatal"] + result["mod_errors"]:
+                    if event.get("suspect"):
+                        print(f"  line {event['line']}: suspect {event['suspect']}; on stack: {', '.join(event.get('involved') or [])}")
+            print(result["caveat"])
+        return 0 if not result["fatal"] else 1
+    if args.command == "copy-drift":
+        try:
+            result = compare_copies(args.working_copy, args.deployed_copy)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(f"Working root: {result['working_root']}")
+            print(f"Deployed root: {result['deployed_root']}")
+            for item in result["missing_in_deployed"]:
+                print(f"MISSING-IN-DEPLOYED {item}")
+            for item in result["different"]:
+                print(f"DIFFERENT {item['path']} (newer: {item['newer_side']})")
+            for item in result["extra_in_deployed"]:
+                print(f"EXTRA-IN-DEPLOYED {item}")
+            print(f"Drift: {result['drift_count']} ({result['status']})")
+        return 0 if result["status"] == "PASS" else 1
+    if args.command == "jar-audit":
+        try:
+            result = audit_jar(args.rebuilt, args.original)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(f"Classes: rebuilt={result['rebuilt_class_count']} original={result['original_class_count']}")
+            print(f"Removed: {len(result['removed_classes'])}; changed: {result['changed_class_count']}; unchanged: {result['unchanged_class_count']}")
+            for entry in result["bundled_library_packages"]:
+                print(f"MANUAL bundled library package: {entry['package']}")
+            for entry in result["unexpected_new_packages"]:
+                print(f"REVIEW unexpected new package: {entry['package']}")
+            for entry in result["reflection_findings"]:
+                print(f"MANUAL reflection/File/NIO reference in {entry['class']}: {', '.join(entry['referenced_symbols'])}")
+            for entry in result["removed_classes"]:
+                print(f"REVIEW removed class: {entry['class']}")
+            print(f"Status: {result['status']}")
+        return 0 if result["status"] == "PASS" else 1
+    if args.command == "build-tag" and args.record_only:
+        try:
+            manifest = record_current_manifest(args.mod_dir, manifests_dir=args.manifests_dir)
+        except BuildTagError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(manifest, indent=2, sort_keys=True, default=str))
+        else:
+            print(f"Recorded manifest r{manifest['build']} for {manifest['mod_id']}: {manifest['path']} ({manifest['file_count']} files); mod_info.json untouched.")
+        return 0
+    if args.command == "build-tag":
+        try:
+            result = apply_build_tag(
+                args.mod_dir,
+                label=args.label,
+                set_value=args.set_value,
+                dry_run=args.dry_run,
+                manifests_dir=args.manifests_dir,
+                record_manifest=not (args.dry_run or args.no_manifest),
+            )
+        except BuildTagError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(f"mod_info: {result['mod_info']}")
+            print(f"name: {result['old_name']} -> {result['new_name']}")
+            if result["version_is_object"]:
+                print(f"version: unchanged (an object, not a string): {result['old_version']}")
+            else:
+                print(f"version: {result['old_version']} -> {result['new_version']}")
+            print("Dry run: mod_info.json was not written." if args.dry_run else "mod_info.json updated.")
+            if result.get("manifest_path"):
+                print(f"Build manifest: {result['manifest_path']} ({result['manifest_file_count']} files)")
+        return 0
+    if args.command == "fix":
+        options = {
+            "target_game_version": args.target_game_version,
+            "design_type": args.design_type,
+            "id_prefixes": args.id_prefix,
+            "design_color": args.design_color,
+            "vanilla_core": args.vanilla_core,
+            "type_id": args.type_id,
+            "from_vanilla_id": args.from_vanilla_id,
+            "faction_file": args.faction_file,
+        }
+        try:
+            plan = compute_fix(args.mod_dir, args.finding, options)
+        except FixerError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if not args.apply:
+            diffs = {str(change.path): unified_diff_for_change(change) for change in plan.changes}
+            if args.json:
+                print(json.dumps({"finding_id": plan.finding_id, "dry_run": True, "diffs": diffs}, indent=2, sort_keys=True))
+            else:
+                for path, diff_text in diffs.items():
+                    print(f"--- dry-run diff for {path} ---")
+                    print(diff_text or "(no textual diff; binary or empty change)")
+            return 0
+        applied = apply_fix(plan)
+        try:
+            rescan = scan_mod(plan.mod_root)
+        except ValueError as exc:
+            print(f"bridgeforge: fix applied but rescan failed: {exc}", file=sys.stderr)
+            return 2
+        finding_resolved = not any(finding.id == plan.finding_id for finding in rescan.findings)
+        result = {"finding_id": plan.finding_id, "applied": applied, "finding_resolved": finding_resolved}
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            for item in applied:
+                print(f"Fixed: {item['path']} (backup: {item['backup']})")
+            print(f"Finding '{plan.finding_id}' {'resolved' if finding_resolved else 'STILL PRESENT'} after rescan.")
+        return 0 if finding_resolved else 1
+    if args.command == "prepare-test":
+        try:
+            result = prepare_test(
+                args.working_dir,
+                args.rig_mod_dir,
+                sync=args.sync,
+                bump=args.bump,
+                label=args.label,
+                boot=args.boot,
+                mods=args.mods,
+                timeout=args.timeout,
+                log_name=args.log_name,
+                keep_mods=args.keep_mods,
+                record_manifest=args.bump and not args.no_manifest,
+            )
+        except (PrepareTestError, ValueError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(f"Status: {result['status']}")
+            if result.get("message"):
+                print(result["message"])
+            if "drift_before_sync" in result:
+                print(f"Drift before sync: {result['drift_before_sync']['drift_count']}")
+            if result.get("synced"):
+                print(f"Synced {len(result.get('synced_files', []))} file(s).")
+                for extra in result.get("extra_in_deployed", []):
+                    print(f"EXTRA-IN-DEPLOYED (not touched): {extra}")
+            if "bump" in result:
+                print(f"Bumped build tag: {result['bump']['old_name']} -> {result['bump']['new_name']}")
+            if "boot_test" in result:
+                boot_result = result["boot_test"]
+                print(f"Boot test: {boot_result.get('status')} {boot_result.get('reason', '')}".rstrip())
+        return 0 if result["status"] in {"PASS", "SAME_FOLDER"} else 1
+    if args.command == "boot-test":
+        try:
+            from . import boot_test as boot_test_module
+        except ImportError:
+            print("bridgeforge: boot-test module unavailable", file=sys.stderr)
+            return 2
+        if args.pack:
+            try:
+                result = boot_test_module.run_boot_matrix(args.runtime_dir, args.mods, args.pack, timeout=args.timeout, log_name=args.log_name)
+            except (ValueError, CompatSetError) as exc:
+                print(f"bridgeforge: {exc}", file=sys.stderr)
+                return 2
+            if args.json:
+                print(json.dumps(result, indent=2, sort_keys=True))
+            else:
+                print(f"Verdict: {result.get('verdict')}")
+                for row in result.get("matrix", []):
+                    print(f"  {row['config']}: {row['status']} mods={row['mods']} triage={row['triage']}")
+                    if row.get("reason"):
+                        print(f"    reason: {row['reason']}")
+            return 0 if result.get("verdict") == "PASS" else 1
+        try:
+            result = boot_test_module.run_boot_test(args.runtime_dir, args.mods, timeout=args.timeout, log_name=args.log_name, keep_mods=args.keep_mods)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(f"Status: {result.get('status')}")
+            if result.get("reason"):
+                print(f"Reason: {result['reason']}")
+            if result.get("log"):
+                print(f"Log: {result['log']}")
+            if result.get("triage"):
+                print(f"Triage counts: {result['triage'].get('counts')}")
+        return 0 if result.get("status") == "PASS" else 1
+    if args.command == "compat-set" and args.compat_set_command == "install":
+        try:
+            result = install_compat_set(args.set_name, args.runtime, args.source_mods, dry_run=args.dry_run)
+        except CompatSetError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(f"Set: {result['set']} ({len(result['resolved_mod_ids'])} mods)")
+            print(f"Rig gameVersion (inferred): {result.get('rig_game_version')}")
+            if result["missing"]:
+                print(f"Missing from source: {result['missing']}")
+            for warning in result["warnings"]:
+                print(f"WARN: {warning}")
+            if result["dry_run"]:
+                for item in result["plan"]:
+                    print(f"WOULD COPY {item['id']} ({item['reason']}): {item['source']} -> {item['destination']}")
+                print(f"Already identical (skipped): {result['skipped_identical']}")
+            else:
+                for item in result["installed"]:
+                    print(f"COPIED {item['id']}: {len(item['files_copied'])} file(s) -> {item['destination']}")
+        return 0
+    if args.command == "dossier":
+        try:
+            result = write_dossier(
+                args.mod_directory,
+                output=args.output,
+                vanilla_core=args.vanilla_core,
+                baseline=args.baseline,
+                original_jar=args.original_jar,
+                rig=args.rig,
+                log=args.log,
+                save=args.save,
+                perf=args.perf,
+                perf_mod_prefixes=args.perf_mod_prefix or None,
+                max_kb=args.max_kb,
+                context_lines=args.context_lines,
+            )
+        except (DossierError, ValueError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        summary = result["summary"]
+        if args.json:
+            print(json.dumps({"index_json": str(result["index_json"]), "index_markdown": str(result["index_markdown"]), "summary": summary}, indent=2, sort_keys=True))
+        else:
+            print(f"Dossier index: {result['index_json']}")
+            print(f"Dossier index (Markdown): {result['index_markdown']}")
+            print(f"Parts: {summary['part_count']} (sizes KB: {summary['part_sizes_kb']})")
+            print(f"Index size: {summary['index_size_kb']} KB")
+            print(f"New findings: {summary['new_finding_count']} (baselined: {summary['baselined_count']}, resolved: {summary['resolved_count']})")
+            print(f"Open questions: {summary['open_question_count']}")
+        return 0
+    if args.command == "build-probe-mod":
+        repo_root = Path(__file__).resolve().parent.parent
+        try:
+            result = build_probe_mod(repo_root, args.jdk, args.core)
+            if args.install_release:
+                result["release"] = install_release(repo_root)
+        except ProbeModBuildError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(f"Jar: {result['jar']} ({result['class_count']} classes)")
+            print(f"Mission source compiles: {result['mission_compiles']}")
+            if result.get("mission_error"):
+                print(f"Mission compile error: {result['mission_error']}")
+            if "release" in result:
+                print(f"Release: {result['release']['release_dir']}")
+        return 0 if result["mission_compiles"] else 1
+    if args.command == "save-compat":
+        try:
+            if args.compare_old or args.compare_new:
+                if not (args.compare_old and args.compare_new):
+                    print("bridgeforge: --compare-old and --compare-new must be given together", file=sys.stderr)
+                    return 2
+                result = compare_builds(args.save, args.compare_old, args.compare_new)
+            else:
+                result = check_save_compat(args.save, args.mod_dir, vanilla_core=args.vanilla_core)
+        except (SaveCompatError, ValueError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True, default=str))
+        else:
+            print(f"Status: {result['status']}")
+            for entry in result.get("missing", []):
+                print(f"MISSING {entry['reference']} (x{entry['occurrences']}) at {entry['sample_path']}")
+            for entry in result.get("dropped_in_new", []):
+                print(f"DROPPED {entry}")
+        return 0 if result["status"] != "WILL_FAIL" else 1
+    if args.command == "probe-config":
+        try:
+            result = write_probe_config(
+                args.mod_dir,
+                args.runtime,
+                track_entities=args.track,
+                combat_seconds=args.seconds,
+                campaign_interval_days=args.campaign_interval_days,
+                combat_cap_per_side=args.combat_cap,
+                setups=args.setup,
+                profile=load_profile(args.profile) if args.profile else None,
+                dry_run=args.dry_run,
+                install=args.install,
+            )
+        except ProbeConfigError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            config = result["config"]
+            print(f"Target mod: {config['target_mod_id']}")
+            print(f"Hulls with a variant: {len(config['hulls'])} (skipped, no variant: {len(config['hulls_skipped_no_variant'])})")
+            print(f"Config: {result['config_path']} (written: {result['written']})")
+            print(f"Rig marker: {result['marker_path']}")
+            if result.get("installed"):
+                print(f"Installed probe mod: {result['install']['destination']}")
+            for spec in config.get("setups", []) or []:
+                print(f"Setup: {spec}")
+        return 0
+    if args.command in {"save-inspect", "save-diff", "save-scripts", "save-growth", "save-provenance", "save-content", "save-removal", "save-summary"}:
+        try:
+            if args.command == "save-inspect":
+                result = inspect_save(args.save, track_classes=args.track_class, track_ids=args.track_id, mod_dir=args.mod_dir, vanilla_core=args.vanilla_core)
+            elif args.command == "save-diff":
+                result = diff_saves(args.save, args.save_b, track_classes=args.track_class, track_ids=args.track_id, mod_dir=args.mod_dir, vanilla_core=args.vanilla_core)
+            elif args.command == "save-scripts":
+                result = audit_scripts(args.save, args.mod_dir, vanilla_core=args.vanilla_core)
+            elif args.command == "save-growth":
+                result = growth_trend(args.saves, mod_dir=args.mod_dir, growth_rate_warning=args.warn_ratio)
+            elif args.command == "save-provenance":
+                result = save_provenance(args.save, mod_dirs=args.mod_dir)
+            elif args.command == "save-content":
+                result = check_save_content(args.save, args.mod_dir, vanilla_core=args.vanilla_core)
+            elif args.command == "save-removal":
+                result = removal_safety(args.save, args.mod_dir, vanilla_core=args.vanilla_core)
+            else:
+                result = redacted_summary(args.save, args.mod_dir, out_path=args.out, vanilla_core=args.vanilla_core)
+        except (SaveReadError, SaveCompatError, ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        status = result.get("status")
+        if args.json or status is None:
+            print(json.dumps(result, indent=2, sort_keys=True, default=str))
+        else:
+            print(f"Status: {status}")
+            for key in ("missing", "duplicates", "warnings", "reasons"):
+                items = result.get(key) or []
+                for item in items[:50] if isinstance(items, list) else []:
+                    print(f"  {key.upper().rstrip('S')}: {item if isinstance(item, str) else json.dumps(item, sort_keys=True, default=str)}")
+            if args.command == "save-summary":
+                print(f"Written: {args.out}")
+        return 1 if status in _SAVE_ATTENTION_STATUSES else 0
+    if args.command == "bootstrap":
+        try:
+            result = bootstrap_mods(args.mod_dirs, vanilla_core=args.vanilla_core, baselines_dir=args.baselines_dir, manifests_dir=args.manifests_dir, overwrite=args.overwrite)
+        except (BuildTagError, ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True, default=str))
+        else:
+            for label, entry in result.items():
+                kept = " (kept existing)" if entry["baseline_kept_existing"] else ""
+                print(f"{label}: baseline {entry['baseline_path']}{kept} - {entry['finding_count']} findings, {entry['manual_finding_count']} MANUAL; manifest r{entry['manifest_build']} ({entry['manifest_file_count']} files)")
+        return 0
+    if args.command == "rig-doctor":
+        working: dict[str, Path] = {} if args.no_default_working else dict(default_working_copies(Path(__file__).resolve().parent.parent))
+        for item in args.working:
+            mod_id, sep, path = item.partition("=")
+            if not sep or not mod_id or not path:
+                print(f"bridgeforge: --working expects ID=PATH, got {item!r}", file=sys.stderr)
+                return 2
+            working[mod_id] = Path(path)
+        try:
+            result = rig_doctor(args.runtime_dir, working_copies=working, real_install=args.real_install, write_saves_baseline=args.write_saves_baseline)
+        except (ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True, default=str))
+        else:
+            print(f"Rig doctor: {result['status']}")
+            for check in result["checks"]:
+                print(f"  {check['status']:<8} {check['name']}: {check['detail']}")
+        return 1 if result["status"] == "FAIL" else 0
+    if args.command == "test-plan":
+        try:
+            result = plan_tests(args.mod_dir, args.since, manifests_dir=args.manifests_dir, live_test_instructions=args.live_test_instructions)
+        except (TestPlanError, ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True, default=str))
+        else:
+            print(f"Changed since {result['since_tag']}: {result['changed_file_count']} file(s)")
+            print(f"Features to re-test: {', '.join(result['features']) or 'none'}")
+            for assertion in result["probe_assertions"]:
+                print(f"  probe: {assertion if isinstance(assertion, str) else json.dumps(assertion, sort_keys=True)}")
+            print(f"Live-test IDs ({result['live_test_section'] or 'no section for this mod'}): {', '.join(map(str, result['live_test_ids'])) or 'none'}")
+            if result["unmatched_files"]:
+                print(f"Unmatched files (review by hand): {len(result['unmatched_files'])}")
+        return 0
+    if args.command == "perf-gate":
+        if not args.perf_report and not args.log:
+            print("bridgeforge: give --perf-report and/or --log", file=sys.stderr)
+            return 2
+        try:
+            summary: dict[str, object] = {}
+            report = ingest_spw_report(args.perf_report) if args.perf_report else None
+            spam = log_spam(args.log, args.mod_prefix, min_repeats=args.min_repeats) if args.log else None
+            if report:
+                startup_ms = (report.get("startup") or {}).get("total_ms")
+                if isinstance(startup_ms, (int, float)):
+                    summary["startup_ms"] = startup_ms
+                shares = [entry.get("cpu_share") for entry in report.get("per_mod", []) if isinstance(entry.get("cpu_share"), (int, float))]
+                if shares:
+                    summary["cpu_share"] = max(shares)
+            if spam:
+                summary["spam_count"] = spam["total_spam_lines"]
+            thresholds = json.loads(args.thresholds.read_text(encoding="utf-8")) if args.thresholds else None
+            gate = perf_gate(summary, thresholds)
+        except (SpwBridgeError, ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        result = {"gate": gate, "summary": summary, "report": report, "spam": spam}
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True, default=str))
+        else:
+            print(f"Perf gate: {gate['status']}")
+            for check in gate["checks"]:
+                print(f"  {check['metric']}={check['value']} ({check['result']})")
+            for prefix, entries in (spam or {}).get("by_prefix", {}).items():
+                for entry in entries[:5]:
+                    print(f"  spam [{prefix}] x{entry['count']}: {entry['message'][:160]}")
+        return 1 if gate["status"] == "FAIL" else 0
+    if args.command == "release":
+        try:
+            result = release_mod(
+                args.mod_dir,
+                original=args.original,
+                baseline=args.baseline,
+                out_dir=args.out_dir,
+                vanilla_core=args.vanilla_core,
+                rig=args.rig,
+                corpus_dir=args.corpus_dir,
+                policy_path=args.policy,
+                apply=args.apply,
+            )
+        except (ReleaseError, ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True, default=str))
+        else:
+            print(f"Release: {result['status']}")
+            for name, gate in result["gates"].items():
+                detail = gate.get("reason") or gate.get("error") or ""
+                print(f"  {gate['status']:<8} {name}" + (f" - {detail}" if detail else ""))
+            for path in result.get("written", []):
+                print(f"  wrote {path}")
+        return 1 if result["status"] == "BLOCKED" else 0
+    if args.command == "save-snapshot":
+        try:
+            if args.snapshot_command == "tag":
+                result = snapshot_tag(args.runtime_dir, args.save_name, args.tag)
+            elif args.snapshot_command == "list":
+                result = snapshot_list(args.runtime_dir)
+            else:
+                result = snapshot_restore(args.runtime_dir, args.tag, as_name=args.as_name, replace=args.replace)
+        except SaveSnapshotError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        elif args.snapshot_command == "tag":
+            print(f"Snapshot {result['tag']}: {result['snapshot_dir']} ({len(result['manifest']['hashes'])} files)")
+            for mod, tag in (result["manifest"].get("bf_build_tags") or {}).items():
+                print(f"  build tag {mod}: {tag}")
+        elif args.snapshot_command == "list":
+            if not result:
+                print("No snapshots.")
+            for entry in result:
+                manifest = entry.get("manifest") or {}
+                print(f"{entry['tag']}: {manifest.get('source_save', '?')} ({manifest.get('created', '?')})")
+        else:
+            print(f"Restored {result['tag']} to {result['restored_to']} (replaced: {result['replaced']})")
+        return 0
+    if args.command == "scenario":
+        try:
+            if args.scenario_command == "list":
+                result = list_scenarios()
+            elif args.scenario_command == "plan":
+                mod_dirs: dict[str, Path] = {}
+                for item in args.mod:
+                    mod_id, sep, path = item.partition("=")
+                    if not sep or not mod_id or not path:
+                        print(f"bridgeforge: --mod expects ID=PATH, got {item!r}", file=sys.stderr)
+                        return 2
+                    mod_dirs[mod_id] = Path(path)
+                result = scenario_plan(args.name, args.runtime_dir, mod_dirs)
+            else:
+                result = scenario_check(args.name, args.log_path, args.save)
+        except ScenarioError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json or args.scenario_command == "plan":
+            print(json.dumps(result, indent=2, sort_keys=True, default=str))
+        elif args.scenario_command == "list":
+            print("\n".join(result) if result else "No scenarios.")
+        else:
+            print(f"Scenario {result['scenario']}: {result['status']}")
+            for entry in result["probe_assertions"] + result["save_assertions"]:
+                reasons = entry.get("reasons") or ([entry["reason"]] if entry.get("reason") else [])
+                print(f"  {entry['status']} {json.dumps(entry['assertion'], sort_keys=True)}" + (f" - {'; '.join(reasons)}" if reasons else ""))
+            if result.get("save_note"):
+                print(f"  note: {result['save_note']}")
+        if args.scenario_command == "check":
+            return 0 if result["status"] == "PASS" else 1
         return 0
     return 2

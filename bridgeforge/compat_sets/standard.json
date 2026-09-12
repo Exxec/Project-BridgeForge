@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "sets": {
+    "libs": {
+      "description": "Shared libraries most modern mods (and the standard set's content mods) declare as dependencies.",
+      "mods": {
+        "lw_lazylib": {
+          "name": "LazyLib",
+          "folder_hint": "LazyLib",
+          "role": "lib",
+          "gameVersion": "0.98a-RC5",
+          "required_by": ["MagicLib", "lunalib", "shaderLib", "aitweaks", "nexerelin", "swp", "IndEvo", "US", "tahlan"]
+        },
+        "MagicLib": {
+          "name": "MagicLib",
+          "folder_hint": "MagicLib",
+          "role": "lib",
+          "gameVersion": "0.98a-RC7",
+          "required_by": ["nexerelin (new-game sector generation)", "IndEvo", "US", "tahlan"],
+          "notes": "Nexerelin needs MagicLib present to reach new-game sector generation; a missing MagicLib produced the ~150-mod-pack RingBand non-finite save crash class observed 2026-09-11."
+        },
+        "lunalib": {
+          "name": "LunaLib",
+          "folder_hint": "LunaLib",
+          "role": "lib",
+          "gameVersion": "0.98a-RC5",
+          "required_by": ["aitweaks", "IndEvo", "US"]
+        },
+        "shaderLib": {
+          "name": "zz GraphicsLib",
+          "folder_hint": "zz GraphicsLib",
+          "role": "lib",
+          "gameVersion": "0.98a-RC8",
+          "required_by": ["swp", "IndEvo"]
+        }
+      }
+    },
+    "standard": {
+      "description": "The standard compatibility pack (roadmap P4): libs plus AI Tweaks, Nexerelin and a handful of widely used content mods, verified present in the owner's real Starsector install at RC8 or a compatible 0.98a.",
+      "extends": ["libs"],
+      "mods": {
+        "aitweaks": {
+          "name": "AI Tweaks",
+          "folder_hint": "AI Tweaks",
+          "role": "content",
+          "gameVersion": "0.98a-RC8",
+          "required_by": [],
+          "notes": "SK-13 repro target: a SEEKER NPE via Person.getPersonality() returning null in CombatFleetManager.deployAll only appears with AI Tweaks enabled alongside SEEKER."
+        },
+        "nexerelin": {
+          "name": "Nexerelin",
+          "folder_hint": "Nexerelin",
+          "role": "content",
+          "gameVersion": "0.98a-RC8",
+          "required_by": [],
+          "notes": "Depends on MagicLib to reach new-game sector generation; missing MagicLib was implicated in the 2026-09-11 RingBand non-finite save crash inside a ~150-mod pack."
+        },
+        "swp": {
+          "name": "Ship/Weapon Pack",
+          "folder_hint": "Ship_Weapon Pack",
+          "role": "content",
+          "gameVersion": "0.98a-RC8",
+          "required_by": [],
+          "notes": "Widely used content mod; depends on LazyLib and GraphicsLib (shaderLib)."
+        },
+        "IndEvo": {
+          "name": "Industrial.Evolution",
+          "folder_hint": "Industrial.Evolution",
+          "role": "content",
+          "gameVersion": "0.98a",
+          "required_by": [],
+          "notes": "Widely used campaign-content mod; depends on LazyLib, MagicLib, LunaLib and GraphicsLib (shaderLib)."
+        },
+        "US": {
+          "name": "Unknown Skies",
+          "folder_hint": "Unknown Skies",
+          "role": "content",
+          "gameVersion": "0.98a-RC8",
+          "required_by": [],
+          "notes": "Widely used procgen/planet-content mod; depends on LunaLib and MagicLib."
+        },
+        "tahlan": {
+          "name": "Tahlan Shipworks",
+          "folder_hint": "Tahlan Shipworks",
+          "role": "content",
+          "gameVersion": "0.98a",
+          "required_by": [],
+          "notes": "Widely used ship-pack content mod; depends on LazyLib and MagicLib."
+        }
+      }
+    }
+  }
+}

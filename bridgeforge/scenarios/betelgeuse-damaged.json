@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "name": "betelgeuse-damaged",
+  "subject_mod": "SEEKER",
+  "mods": ["SEEKER"],
+  "extra_mods": [],
+  "compat_set": null,
+  "probe_setups": ["ship:ART_dimention_manipulator", "spawn-fleet:pirates:120"],
+  "track_entities": [],
+  "snapshot_tag": null,
+  "notes": "SEEKER: put a dimension-manipulator-equipped ship and a spawned pirate fleet in play, then confirm the combat probe actually runs and the SK-13 null-personality class never fires on a Betelgeuse module (docs/REVIVAL_ASSURANCE_PLAN.md P3's combat probe check).",
+  "expect": {
+    "probe": [
+      {
+        "check": "setup",
+        "status": "OK",
+        "subject_pattern": "^ship:ART_dimention_manipulator$",
+        "min_count": 1
+      },
+      {
+        "check": "setup",
+        "status": "OK",
+        "subject_pattern": "^spawn-fleet:pirates:120$",
+        "min_count": 1
+      },
+      {
+        "check": "probe",
+        "status": "INFO",
+        "subject_pattern": "^combat$",
+        "min_count": 2
+      },
+      {
+        "check": "combat-captain-personality",
+        "status": "WARN",
+        "subject_pattern": "betelgeuse",
+        "max_count": 0
+      }
+    ],
+    "save": []
+  }
+}

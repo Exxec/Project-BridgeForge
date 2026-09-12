@@ -1,0 +1,23 @@
+# BridgeForge probe profile grammar parity fixture (roadmap P3c-1).
+#
+# Both parsers must agree on this exact file:
+#   - Python: bridgeforge/probe_config.py's parse_profile, asserted against it in
+#     tests/test_probe_profile.py (ProbeProfileParityTests).
+#   - Java: probe-mod/src/com/bridgeforge/probe/ProbeProfile.java hand-parses the identical
+#     grammar (same keywords, same '#'/'-'/case/whitespace rules) but has no JVM test harness in
+#     this repo to run it against a file at test time; its javadoc restates the same rules so a
+#     change on either side is easy to notice against the other. Any change to this fixture's
+#     expected setups list in the Python test should be mirrored by re-reading ProbeProfile.java's
+#     grammar description.
+apply = every-load
+
+rep exipirated = FRIENDLY
+credits = 500000
+ship ART_dimention_manipulator x1
+ship fx_hull1
+spawn pirates 120
+jump Corvus
+
+# Disabled lines of several kinds: parsed and validated, but excluded from the active setups.
+-credits = 100
+-ship fx_hull2 x2
