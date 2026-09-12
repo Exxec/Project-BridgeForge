@@ -254,3 +254,31 @@ Full guarded tool suite: 630 tests passed (one environment-dependent symlink
 skip), checkout/probe-release hermeticity PASS. No tool runtime module changed
 in this tranche. Final docs/package manifest and exact-SHA CI are publication
 gates; previous binary tests are not treated as proof of new gameplay behavior.
+
+P12C publication verified: `a45ce62f300d7feb1869443a94fbfd86feefe528`, all six
+CI jobs passed: https://github.com/Exxec/Project-BridgeForge/actions/runs/34719606396.
+All 98 wheel runtime/data files and six required sdist assets match committed
+blobs; installed-wheel moved-layout/license smoke PASS. Final hashes recorded
+in `In operation/_attic/P12C_PUBLICATION.md`.
+
+## P12D plan: exact-commit v0.2.0 tool publication
+
+SAFE release-only scope: consolidate the changelog into one dated 0.2.0 section,
+commit/push, run full guarded suite and exact-SHA six-job CI, rebuild from a clean
+LF exact-commit checkout, verify wheel/sdist blobs and installed version/license
+checks, then create the absent v0.2.0 tag and publish wheel/sdist with changelog
+notes and SHA256 receipts. No proprietary game, original mod, rig saves, or local
+operation trees are release assets. Do not infer live validation from tool release.
+
+Read-only remote preflight: only v0.1.0-alpha.1 release exists; no v0.2.0 remote
+tag. Reverify immediately before publishing; never replace an existing tag or
+release blindly. Keep exact source SHA, CI URL, asset hashes and release URL in
+`In operation/_attic/P12D_PUBLICATION.md` as each phase finishes. Publish a draft
+first; verify downloaded draft assets before making the release public.
+Update tracked roadmap completion evidence after observable publication.
+Overall goal remains unfinished until remaining live/manual/research gates close.
+
+P12D pre-publication full guarded suite: 630 tests passed, one environment symlink
+skip, checkout/probe-release hermeticity PASS. Log: P12D-test-suite.log. Runtime
+and package versions are both 0.2.0. Commit/tag/package/CI evidence follows in
+the per-phase local publication handoff; do not claim publication until verified.

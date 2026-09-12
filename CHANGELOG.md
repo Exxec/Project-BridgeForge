@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+No changes yet.
+
+## 0.2.0 — 2026-09-12
+
+Everything landed since the `v0.1.0-alpha.1` tag. The tool and
+`bridgeforge-probe` report version `0.2.0`. This tool release does not certify
+individual mod revivals, historical runtime behavior, or save compatibility.
+
 - Complete P12C Vacuum layout migration with before/after byte and link evidence.
   Retain the earlier modified attempt and pre-carrier ZIP, correct only the rig
   JDK path and working-copy junction, and keep probe/report/live gates explicit.
@@ -27,7 +35,7 @@
   - Add `rig-create` manifests with core/JRE hashes, bundled Java metadata, run command, save location, and an explicit unprovable-isolation limitation.
   - Teach `rig-doctor --reference-manifest` to validate historical rig identity/version while skipping the incompatible RC8 probe.
   - Add five evidence-gated `era-*` compatibility sets; their installer accepts a verified `--reference-manifest` without weakening the normal junction guard. Add `save-baseline` conversion of old-game saves into D2 no-verdict observations.
-  - Keep the Exigency and 0.8.1a live pilots blocked until dedicated installs and authoritative historical library builds are supplied.
+  - Keep the Exigency and 0.8.1a live pilots separately gated on dedicated-install identity, authoritative dependencies, and observed runtime evidence.
 
 - Implement roadmap P9 v2 stages D0-D6 as an interruption-safe behavior-discovery pipeline.
   - Add deterministic `archaeology`, `behavior-map`/`risk-register`, no-verdict `probe-baseline`, `hypotheses --tests`, `behavior-diff`, `release-behavior-evaluate`, and counts-only `coverage` commands.
@@ -35,7 +43,7 @@
   - Dossier presentation now includes architecture, behavior, risk, unknown, coverage, and recommended-test sections.
   - CLI release packaging now requires D5 behavior evidence and can block on unresolved deltas, open HIGH risks, preserved unknowns, or invalid expected changes; approved changes are grouped by build in release notes.
   - Exigency and SEEKER D0/D1 pilots are kept under ignored artifact storage; they do not modify source mods or completed releases.
-  - Align the runtime `bridgeforge.__version__` with the already released `0.2.0` package metadata so generated evidence records the correct tool version.
+  - Align runtime `bridgeforge.__version__` with the `0.2.0` package metadata so generated evidence records the correct tool version.
 
 - Fix the CI failures of the 0.2.0 push.
   - `test_prepare_test` imported the Windows-only `_winapi` unguarded, which broke Linux.
@@ -44,10 +52,8 @@
 - `test_probe_mod_build` no longer deletes the real `probe-mod/releases/bridgeforge-probe` copy that `probe-config --install` ships. It parks and restores it.
 - `rig-doctor` finds working copies by the folder convention (`In operation/<Mod>/working`, then `Done/<Mod>/<release>`) instead of a hard-coded list. The test rig is now `In operation/_rig`.
 
-## 0.2.0 — 2026-09-11
-
-Everything landed since the `v0.1.0-alpha.1` tag. The package moves to `0.2.0`, and the
-`bridgeforge-probe` mod to `0.2.0` (it gained `ProbeSetup` and `ProbeProfile`). Its `BF-PROBE|0.2.0|…` lines show which probe build produced a log.
+The probe gained `ProbeSetup` and `ProbeProfile`. Its `BF-PROBE|0.2.0|…` lines
+show which probe build produced a log.
 
 - `log-triage --mods-dir <mods>` (with `--all-mods` for a log from another mod list) names the mod whose loaded jar threw each exception.
   - Each exception gets `suspect`, the mod closest to the throw, and `involved`, every mod on the stack. The attribution summary counts exceptions per suspect.
