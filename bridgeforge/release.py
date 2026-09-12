@@ -10,6 +10,7 @@ from .copy_drift import _collect, _find_mod_root, compare_copies
 from .jar_audit import audit_jar
 from .models import TargetProfile
 from .scanner import _load_lenient_json_file, scan_mod
+from .behavior_discovery import check_expected_changes, evaluate_behavior_release
 
 """Release pipeline (roadmap P8 + P3b-M).
 
@@ -224,7 +225,7 @@ def _write_release_layout(root: Path, out_dir: Path, basename: str, exclude: lis
     return release_dir, zip_path
 
 
-def _release_note(mod_id: str | None, mod_name: str | None, gates: dict[str, object]) -> str:
+def _release_note(mod_id: str | None, mod_name: str | None, gates: dict[str, object], expected_changes: list[dict[str, object]] | None = None) -> str:
     lines = [f"# Release note: {mod_name or mod_id or '(unknown mod)'}", ""]
     build_gate = gates["build_tag"]
     if build_gate.get("build") is not None:
@@ -235,6 +236,20 @@ def _release_note(mod_id: str | None, mod_name: str | None, gates: dict[str, obj
     lines.append(f"- Gate: copy-drift -- {gates['copy_drift']['status']}")
     lines.append(f"- Gate: save-corpus -- {gates['save_corpus']['status']}")
     lines.append(f"- Gate: licence -- {gates['licence']['status']}" + (f" ({gates['licence']['reason']})" if gates["licence"].get("reason") else ""))
+    lines.append(f"- Gate: expected-changes -- {gates['expected_changes']['status']}")
+    lines.append(f"- Gate: behavior -- {gates['behavior']['status']}")
+    approved = [item for item in (expected_changes or []) if item.get("status") == "APPROVED"]
+    if approved:
+        lines.extend(["", "## Changes from the original", ""])
+        by_build: dict[str, list[dict[str, object]]] = {}
+        for item in approved:
+            by_build.setdefault(str(item.get("build")), []).append(item)
+        for build in sorted(by_build):
+            lines.append(f"### {build}")
+            lines.append("")
+            for item in sorted(by_build[build], key=lambda entry: str(entry.get("id", ""))):
+                lines.append(f"- {item.get('id')}: {item.get('summary')} -- {item.get('why')}")
+            lines.append("")
     lines.append("")
     return "\n".join(lines) + "\n"
 
@@ -254,6 +269,11 @@ def release_mod(
     rig: Path | None = None,
     corpus_dir: Path | None = None,
     policy_path: Path | None = None,
+    behavior_diff_path: Path | None = None,
+    behavior_risks_path: Path | None = None,
+    behavior_unknowns_path: Path | None = None,
+    expected_changes_path: Path | None = None,
+    require_behavior_evidence: bool = False,
     apply: bool = False,
 ) -> dict[str, object]:
     """Run every release gate read-only; write the packaged release only if `apply` and all pass."""
@@ -272,6 +292,18 @@ def release_mod(
     drift_gate = _copy_drift_gate(root, rig)
     corpus_gate = _save_corpus_gate(root, mod_id, corpus_dir)
     licence_gate = _licence_gate(mod_id, mod_name, policy_path)
+    if behavior_diff_path is not None:
+        behavior_gate = evaluate_behavior_release(behavior_diff_path, risks_path=behavior_risks_path, unknowns_path=behavior_unknowns_path)
+    elif require_behavior_evidence:
+        behavior_gate = {"status": "FAIL", "blocking_reasons": ["behavior-evidence-not-supplied"]}
+    else:
+        behavior_gate = {"status": "SKIPPED", "not_supplied": True}
+    expected_entries: list[dict[str, object]] = []
+    if expected_changes_path is not None:
+        expected_gate = check_expected_changes(expected_changes_path)
+        expected_entries = expected_gate.pop("changes")
+    else:
+        expected_gate = {"status": "SKIPPED", "not_supplied": True}
 
     gates = {
         "scan": scan_gate,
@@ -280,6 +312,8 @@ def release_mod(
         "copy_drift": drift_gate,
         "save_corpus": corpus_gate,
         "licence": licence_gate,
+        "expected_changes": expected_gate,
+        "behavior": behavior_gate,
     }
     blocking_gates = [name for name, gate in gates.items() if gate["status"] == "FAIL"]
     all_clear = not blocking_gates
@@ -307,7 +341,7 @@ def release_mod(
     basename = _release_basename(mod_id, version, root)
     release_dir, zip_path = _write_release_layout(root, out_dir_path, basename, result["excluded_unlisted_jars"])
     note_path = out_dir_path / f"{basename}-RELEASE_NOTE.md"
-    note_path.write_text(_release_note(mod_id, mod_name, gates), encoding="utf-8")
+    note_path.write_text(_release_note(mod_id, mod_name, gates, expected_entries), encoding="utf-8")
     result["written"] = [str(release_dir), str(zip_path), str(note_path)]
     result["release_dir"] = str(release_dir)
     result["zip_path"] = str(zip_path)

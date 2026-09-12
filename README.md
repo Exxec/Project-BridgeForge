@@ -79,6 +79,30 @@ GraphicsLib/ShaderLib is handled the same way. Its documented 0.98a removal of `
 
 `release-evaluate <before-directory> <after-directory>` compares two explicitly selected releases without modifying either. Its machine-readable report distinguishes byte-identical content continuity and scanner-finding deltas from bytecode and runtime evidence; it never claims behavioral or save compatibility without an explicit runtime test.
 
+## Behaviour discovery (roadmap D0-D6)
+
+`archaeology` builds a deterministic static architecture, cross-reference and
+lifecycle map; `behavior-map` derives linked behaviors, risks, hypotheses and
+unknowns. `probe-baseline` imports hash-bound runtime observations without a
+verdict, `hypotheses --tests` proposes adversarial tests, `behavior-diff`
+classifies runtime and static changes against `expected-changes.json`, and
+`coverage` emits a counts-only evidence matrix plus residual tests.
+
+For historical behavior, `rig-create --game-version <v> --install <dedicated-dir>`
+records a hash-bound reference-rig manifest without launching or modifying the
+old install. Pass that manifest to `rig-doctor --reference-manifest`; the RC8
+probe is deliberately skipped. `save-baseline <save> --build <id> --scenario
+<name> --output <json>` turns selected `save-inspect` observations into the same
+no-verdict D2 contract. Historical compatibility sets are named `era-<version>`;
+unverified exact library builds remain explicit warnings. See
+[docs/P10_REFERENCE_RIG_STATUS.md](docs/P10_REFERENCE_RIG_STATUS.md).
+
+The `expect add|approve|retire|check` lifecycle keeps deliberate changes tied
+to RISK/HYP/TEST ids. The CLI `release` gate requires `--behavior-diff`; open
+HIGH risks, preserved unknowns, unapproved or unexplained deltas, and expected
+changes that did not occur block packaging. See
+[docs/DISCOVERY_FIRST_WORKFLOW.md](docs/DISCOVERY_FIRST_WORKFLOW.md).
+
 ## Bytecode inspection and remapping
 
 `bytecode-inspect <class-or-jar>...` reads class-file bytes through pinned ASM 9.7.1 and emits JSON only; it never defines, loads, or executes a mod class. `bytecode-diff <before>... --after <after>...` compares symbolic class inventories, method opcode sequences, instruction/branch counts, and exception-table counts. `bytecode-plan <input>... --rules <rules.json>` produces review-only exact remap candidates. `bytecode-apply <input> --rules <rules.json> --approve <rule-id> --output <path>` applies only explicitly approved, exact same-descriptor method/field or type-opcode remaps to a distinct output copy; a semantic verifier rejects any other class, method, or instruction change, and JAR application also verifies every unselected archive member is byte-for-byte unchanged. See [docs/BYTECODE_BOUNDARY.md](docs/BYTECODE_BOUNDARY.md).

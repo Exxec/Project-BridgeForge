@@ -183,6 +183,21 @@ class DossierTests(unittest.TestCase):
             for entry in entries:
                 self.assertIsNotNone(entry["file"])
 
+    def test_discovery_artifacts_are_presented_as_dedicated_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as discovery_dir:
+            root, discovery = Path(mod_dir), Path(discovery_dir)
+            _fixture_mod(root)
+            _write(discovery / "archaeology" / "architecture.json", json.dumps({"schema_version": 1, "nodes": [{"id": "file:x"}]}))
+            _write(discovery / "behavior.json", json.dumps({"schema_version": 1, "behaviors": [{"id": "BEH-X"}]}))
+            _write(discovery / "risks.json", json.dumps({"schema_version": 1, "risks": [{"id": "RISK-X"}]}))
+            _write(discovery / "unknowns.json", json.dumps({"schema_version": 1, "unknowns": [{"id": "UNK-X"}]}))
+            _write(discovery / "coverage.json", json.dumps({"schema_version": 1, "coverage": [{"behavior_id": "BEH-X"}]}))
+            _write(discovery / "tests.json", json.dumps({"schema_version": 1, "tests": [{"id": "TEST-X"}]}))
+            result = build_dossier(root, discovery_dir=discovery)
+            self.assertTrue(all(entry["status"] == "AVAILABLE" for entry in result["index"]["discovery"].values()))
+            for heading in ("Architecture", "Behaviour", "Risks", "Unknowns", "Coverage", "Recommended tests"):
+                self.assertIn(f"## {heading}", result["index_markdown"])
+
 
 if __name__ == "__main__":
     unittest.main()

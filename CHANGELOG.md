@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Implement the offline portion of roadmap P10 reference rigs.
+  - Add `rig-create` manifests with core/JRE hashes, bundled Java metadata, run command, save location, and an explicit unprovable-isolation limitation.
+  - Teach `rig-doctor --reference-manifest` to validate historical rig identity/version while skipping the incompatible RC8 probe.
+  - Add five evidence-gated `era-*` compatibility sets; their installer accepts a verified `--reference-manifest` without weakening the normal junction guard. Add `save-baseline` conversion of old-game saves into D2 no-verdict observations.
+  - Keep the Exigency and 0.8.1a live pilots blocked until dedicated installs and authoritative historical library builds are supplied.
+
+- Implement roadmap P9 v2 stages D0-D6 as an interruption-safe behavior-discovery pipeline.
+  - Add deterministic `archaeology`, `behavior-map`/`risk-register`, no-verdict `probe-baseline`, `hypotheses --tests`, `behavior-diff`, `release-behavior-evaluate`, and counts-only `coverage` commands.
+  - Add the `expect add|approve|retire|check` decision lifecycle with required RISK/HYP/TEST breadcrumbs and recoverable last-edit backups.
+  - Dossier presentation now includes architecture, behavior, risk, unknown, coverage, and recommended-test sections.
+  - CLI release packaging now requires D5 behavior evidence and can block on unresolved deltas, open HIGH risks, preserved unknowns, or invalid expected changes; approved changes are grouped by build in release notes.
+  - Exigency and SEEKER D0/D1 pilots are kept under ignored artifact storage; they do not modify source mods or completed releases.
+  - Align the runtime `bridgeforge.__version__` with the already released `0.2.0` package metadata so generated evidence records the correct tool version.
+
 - Fix the CI failures of the 0.2.0 push.
   - `test_prepare_test` imported the Windows-only `_winapi` unguarded, which broke Linux.
   - The boot-test launch and matrix tests are now Windows-only, since they launch a `.bat`.

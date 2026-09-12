@@ -207,7 +207,7 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
 
    **Order:** P9-0 now; then the folder reorganisation and the first offline live session; then P9-1 → P9-2/3 → P9-4 → P9-5 → P9-6. **Status: P9-0 done; the rest planned.**
 
-   **P9 v2: BridgeForge becomes a behaviour-discovery engine (second review, 2026-09-11; design only, no code yet).**
+   **P9 v2: BridgeForge becomes a behaviour-discovery engine (second review, 2026-09-11; D0-D6 tooling implemented).**
    The review's diagnosis: BridgeForge is strong at catching known bug classes, but nothing in it discovers unknown behaviour before modernization starts. Discovery currently happens only after something breaks. The fix is not more bespoke detectors: BridgeForge assembles the facts it already extracts into a behaviour model *before* any change. Stages are named D0–D6 so they don't clash with P1–P8. Existing pieces are reused, not rebuilt:
    - scanner and bytecode checks
    - dossier
@@ -282,6 +282,33 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
         - Matchers are typed; statuses run PROPOSED → APPROVED → RETIRED.
         - `behavior-diff` sorts every observed change into EXPECTED / UNEXPLAINED / EXPECTED_BUT_ABSENT.
         - The release gate counts only APPROVED entries.
+   - **Implementation (2026-09-11):**
+     - D0 `archaeology` writes deterministic architecture, cross-reference,
+       lifecycle, registration, persistence-candidate, source/package authority,
+       scanner-finding and `NO_KNOWN_REFERENCE` evidence. Java/data/JAR and
+       constant-pool references are joined without loading mod classes.
+     - D1 `behavior-map`/`risk-register` write stable behavior, risk,
+       hypothesis, unknown and coverage-seed artifacts without requiring a
+       model. Scanner findings and data-selected local classes become explicit
+       behavior/risk entries.
+     - D2 `probe-baseline` imports hash-bound observations in a no-verdict
+       schema. It does not launch a game; reference-rig capture remains an
+       explicit live step.
+     - D3 `hypotheses --tests` emits proposed adversarial tests with acceptance
+       and stop conditions.
+     - D4 `expect add|approve|retire|check` implements the expected-change
+       lifecycle, requires RISK/HYP/TEST breadcrumbs and keeps a last-edit
+       backup.
+     - D5 `behavior-diff` compares runtime baselines and optional original/new
+       static maps, including `EXPECTED_BUT_ABSENT`; the standalone and normal
+       release gates reject unresolved deltas and open HIGH/unknown behavior.
+     - D6 `coverage` emits the counts-only matrix and residual test list. The
+       dossier presents all six discovery views, and approved expected changes
+       are grouped by build in release notes.
+     - Exigency and SEEKER D0/D1 pilot evidence is generated under ignored
+       `artifacts/d-series-pilot/`; no source mod or known-good release was
+       modified. Reference baselines and live D2/D5/D6 closure remain dependent
+       on the isolated old/current game sessions described in P10.
 
 10. **P10: Reference rigs on older game versions (the D2 oracle).** The owner can install older Starsector versions, so each original mod can run on the game it was built for.
     - **Needed versions,** read from the untouched originals' `mod_info.json`:
@@ -299,6 +326,7 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
     - **Era compat sets:** `era-0.8.1a`, `era-0.7.2a` and so on. Old mods need old LazyLib, MagicLib and GraphicsLib, and finding those builds is part of the setup. Missing libraries are the most likely blocker.
     - **Observation without the probe:** the probe is compiled against the RC8 API, so it won't run on old versions. The cheap oracle is the **old game's saves**, since they're XStream too: `save-inspect` and `save-content` read a save from the original mod on its own game, as the D2 baseline. A per-era `probe-legacy` build comes later, only if saves prove too thin.
     - **Pilot:** Exigency on 0.7.2a, comparing the Avesta movement, markets and known lists against the revived build. Then FlowerGod and Flu-X on 0.8.1a (one install covers both).
+    - **Offline tooling implemented (2026-09-12):** `rig-create` records a hash-bound historical-install manifest (core API, bundled Java metadata, run command and saves path); `rig-doctor --reference-manifest` verifies drift and the era base version while skipping the incompatible RC8 probe. Five `era-*` sets represent the original mods and known dependencies without inventing exact historical library versions. `save-baseline` converts selected old-save state into D2's no-verdict schema. No old install was available, so the Exigency/FlowerGod/Flu-X runtime pilots remain `LIVE VALIDATION REQUIRED`; see `docs/P10_REFERENCE_RIG_STATUS.md`.
 11. **P11: Tool hygiene** (found 2026-09-11 while reorganising).
     - **Stale processes:** 22 `tail -f`/`grep` log watchers from the Sep 9 boot tests were still running two days later and locking the rig.
       - `rig-doctor` gains a lock check: open files via Restart Manager, stale watchers, and processes whose current folder is inside the rig.

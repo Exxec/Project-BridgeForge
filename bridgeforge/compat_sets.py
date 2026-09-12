@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .boot_test import _is_link
 from .copy_drift import _collect, _find_mod_root, compare_copies
+from .reference_rigs import ReferenceRigError, verify_reference_rig_manifest
 from .scanner import _load_lenient_json_file
 
 _RC_PATTERN = re.compile(r"^0\.98a-RC(\d+)$")
@@ -63,13 +64,24 @@ def lib_mod_ids(data: dict[str, object], name: str) -> list[str]:
     return sorted(mod_id for mod_id, info in resolve_set(data, name).items() if isinstance(info, dict) and info.get("role") == "lib")
 
 
-def _refuse_non_rig(runtime_dir: Path) -> None:
+def _refuse_non_rig(runtime_dir: Path, reference_manifest: Path | None = None) -> None:
     core_path = runtime_dir / "starsector-core"
-    if not _is_link(core_path):
-        raise CompatSetError(
-            f"{core_path} is not a junction/symlink. compat-set install refuses to write into a "
-            "non-isolated runtime to avoid corrupting a real player's mods folder."
-        )
+    if _is_link(core_path):
+        return
+    if reference_manifest is not None:
+        try:
+            verification = verify_reference_rig_manifest(reference_manifest)
+        except ReferenceRigError as exc:
+            raise CompatSetError(str(exc)) from exc
+        if Path(str(verification["runtime_dir"])).resolve() != runtime_dir:
+            raise CompatSetError("reference-rig manifest does not name this runtime directory")
+        if verification["status"] != "FAIL":
+            return
+        raise CompatSetError("reference-rig manifest verification failed; run rig-doctor for details")
+    raise CompatSetError(
+        f"{core_path} is not a junction/symlink. compat-set install refuses to write into a "
+        "non-isolated runtime unless a valid --reference-manifest identifies it."
+    )
 
 
 def _index_source_mods(source_mods_dir: Path) -> dict[str, Path]:
@@ -152,6 +164,7 @@ def install_compat_set(
     source_mods_dir: Path,
     data_path: Path | None = None,
     dry_run: bool = False,
+    reference_manifest: Path | None = None,
 ) -> dict[str, object]:
     """Copy every mod in a named compat set from source_mods_dir into <runtime_dir>/mods/.
 
@@ -162,7 +175,7 @@ def install_compat_set(
     """
     runtime_dir = Path(runtime_dir).expanduser().resolve()
     source_mods_dir = Path(source_mods_dir).expanduser().resolve()
-    _refuse_non_rig(runtime_dir)
+    _refuse_non_rig(runtime_dir, reference_manifest)
 
     data = load_compat_sets(data_path)
     resolved = resolve_set(data, set_name)
@@ -176,6 +189,11 @@ def install_compat_set(
 
     for mod_id in sorted(resolved):
         info = resolved[mod_id]
+        if isinstance(info, dict) and info.get("evidence_status") == "EXACT_VERSION_UNRESOLVED":
+            warnings.append(
+                f"{mod_id}: the era set identifies this dependency but not an authoritative exact library build; "
+                "verify the supplied archive/version before treating the reference run as valid."
+            )
         source_root = source_index.get(mod_id)
         if source_root is None:
             missing.append(mod_id)
@@ -210,6 +228,7 @@ def install_compat_set(
         "set": set_name,
         "runtime_dir": str(runtime_dir),
         "source_mods_dir": str(source_mods_dir),
+        "reference_manifest": str(Path(reference_manifest).resolve()) if reference_manifest is not None else None,
         "resolved_mod_ids": sorted(resolved),
         "rig_game_version": rig_version,
         "missing": missing,

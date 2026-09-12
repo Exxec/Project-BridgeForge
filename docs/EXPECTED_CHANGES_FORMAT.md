@@ -1,8 +1,9 @@
-# Expected-changes file (design, roadmap P9 v2 D5)
+# Expected-changes file (roadmap P9 v2 D4/D5)
 
 A revival changes a mod on purpose: added known lists, a migrated wing schema, a fixed crash. Differential validation (`behavior-diff`) compares the reference with the revived build and finds **every** difference, deliberate or not. This file is how a deliberate change is declared, so it can be told apart from drift.
 
-Status: **design only**. No code yet.
+Status: **implemented in the D-series command set**. See
+`docs/DISCOVERY_FIRST_WORKFLOW.md` for the executable workflow.
 
 ## Where it lives
 
@@ -54,7 +55,7 @@ Status: **design only**. No code yet.
 | `build` | Build tag that introduced the change. The release note groups entries by it. |
 | `layer` | Which comparison it answers. `runtime` = probe baseline or census diff; `save` = `save-inspect` / `save-content` diff; `static` = archaeology map diff (P9-4). |
 | `summary` / `why` | One line each, readable in a release note. `why` is required: an unexplained expectation is just a disguised unknown. |
-| `links` | Breadcrumbs (P9-3) to bug classes, risks, tests and hypotheses. `expect check` rejects ids that don't exist. |
+| `links` | Breadcrumbs (P9-3) to bug classes, risks, tests and hypotheses. At least one RISK/HYP/TEST id is required; `expect check --artifact ...` rejects ids that don't exist in the supplied artifacts. |
 | `match` | What the diff must see. See below. |
 | `status` | PROPOSED (written with the change) → APPROVED (owner accepted it) → RETIRED (no longer applies, kept for history). |
 
@@ -87,11 +88,11 @@ Every delta between the reference baseline and the revived build's baseline land
 
 `EXPECTED_BUT_ABSENT` is the bucket plain diffing can't give you. It catches a fix that silently stopped working: for example, known lists added but markets still empty.
 
-## Lifecycle and commands (planned)
+## Lifecycle and commands
 
 - **`expect add <mod> …`:** written by the agent or person **in the same step as the change**, as PROPOSED. This is the P9-3 breadcrumb.
-- **`expect approve <mod> EXP-…`:** the owner accepts it and it becomes APPROVED. Nothing counts toward release until this happens.
-- **`expect retire <mod> EXP-… --why "…"`:** for when a later change supersedes an entry.
+- **`expect approve <file> EXP-… --by <owner> --on <YYYY-MM-DD>`:** the owner accepts it and it becomes APPROVED. Nothing counts toward release until this happens, and approval provenance is mandatory.
+- **`expect retire <file> EXP-… --by <owner> --why "…"`:** for when a later change supersedes an entry; retirement provenance is mandatory.
 - **`expect check <mod>`** reports:
   - links to ids that don't exist
   - duplicate ids
@@ -120,6 +121,7 @@ Every delta between the reference baseline and the revived build's baseline land
 { "id": "EXP-SKR-001", "build": "r0", "layer": "static",
   "summary": "All SEEKER hulls tagged rare_bp; Betelgeuse added to sim opponents",
   "why": "Owner decision: Betelgeuse was unreachable in the original.",
+  "links": { "test": ["SK-8"] },
   "match": { "observation": "hull.tags", "subject": "SKR_*", "field": "tags", "change": "added" },
   "status": "APPROVED" }
 ```

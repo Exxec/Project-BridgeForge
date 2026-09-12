@@ -59,6 +59,38 @@ def _write_empty_baseline(path: Path) -> None:
 
 
 class ReleaseGateTests(unittest.TestCase):
+    def test_d_series_release_gate_blocks_when_behavior_evidence_is_required_but_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as out_dir:
+            root = Path(mod_dir)
+            _clean_fixture_mod(root)
+            baseline = root / "baseline.json"
+            _write_empty_baseline(baseline)
+            apply_build_tag(root, record_manifest=False)
+            result = release_mod(root, original=root / "jars" / "fixture.jar", baseline=baseline, out_dir=Path(out_dir), require_behavior_evidence=True)
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertIn("behavior", result["blocking_gates"])
+
+    def test_release_note_lists_only_approved_expected_changes_by_build(self) -> None:
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as out_dir:
+            root = Path(mod_dir)
+            _clean_fixture_mod(root)
+            baseline = root / "baseline.json"
+            _write_empty_baseline(baseline)
+            apply_build_tag(root, record_manifest=False)
+            diff = root / "behavior-diff.json"
+            _write(diff, json.dumps({"schema_version": 1, "status": "PASS", "deltas": [], "counts": {}, "blocking_count": 0}))
+            expected = root / "expected-changes.json"
+            _write(expected, json.dumps({"schema_version": 1, "mod_id": "fixture_mod", "changes": [
+                {"id": "EXP-FIX-001", "build": "r1", "layer": "runtime", "summary": "Approved behavior", "why": "Required fix", "links": {"test": ["TEST-ONE"]}, "match": {"observation": "x", "subject": "y", "change": "any"}, "status": "APPROVED", "approved_by": "owner", "approved_on": "2026-09-11"},
+                {"id": "EXP-FIX-002", "build": "r2", "layer": "runtime", "summary": "Pending behavior", "why": "Not accepted", "links": {"risk": ["RISK-TWO"]}, "match": {"observation": "x", "subject": "z", "change": "any"}, "status": "PROPOSED"},
+            ]}))
+            result = release_mod(root, original=root / "jars" / "fixture.jar", baseline=baseline, out_dir=Path(out_dir), behavior_diff_path=diff, expected_changes_path=expected, require_behavior_evidence=True, apply=True)
+            self.assertEqual(result["status"], "RELEASED")
+            note = Path(result["release_note"]).read_text(encoding="utf-8")
+            self.assertIn("## Changes from the original", note)
+            self.assertIn("Approved behavior", note)
+            self.assertNotIn("Pending behavior", note)
+
     def test_missing_build_tag_blocks_release(self) -> None:
         with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as out_dir:
             root = Path(mod_dir)

@@ -95,6 +95,28 @@ def referenced_class_names(entries: list[tuple | None]) -> set[str]:
     return names
 
 
+def referenced_members(entries: list[tuple | None]) -> set[tuple[str, str, str]]:
+    """Resolve constant-pool member refs as (owner, name, descriptor), without loading code."""
+    result: set[tuple[str, str, str]] = set()
+    for entry in entries:
+        if entry is None or entry[0] not in (_CONSTANT_FIELDREF, _CONSTANT_METHODREF, _CONSTANT_INTERFACE_METHODREF):
+            continue
+        class_index, name_type_index = entry[1], entry[2]
+        if not (0 < class_index < len(entries) and 0 < name_type_index < len(entries)):
+            continue
+        class_entry, name_type = entries[class_index], entries[name_type_index]
+        if class_entry is None or class_entry[0] != _CONSTANT_CLASS or name_type is None or name_type[0] != _CONSTANT_NAME_AND_TYPE:
+            continue
+        owner_index, name_index, descriptor_index = class_entry[1], name_type[1], name_type[2]
+        values = []
+        for index in (owner_index, name_index, descriptor_index):
+            value = entries[index] if 0 < index < len(entries) else None
+            values.append(value[1] if value is not None and value[0] == _CONSTANT_UTF8 else None)
+        if all(isinstance(value, str) for value in values):
+            result.add((values[0], values[1], values[2]))
+    return result
+
+
 def _classes_from_zip(archive: zipfile.ZipFile) -> dict[str, bytes]:
     classes: dict[str, bytes] = {}
     for info in archive.infolist():

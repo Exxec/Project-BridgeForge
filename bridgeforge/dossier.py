@@ -823,6 +823,19 @@ def _render_index_markdown(index: dict[str, object]) -> str:
     lines.append(f"- {_render_runtime_footprint_line(index['artifacts']['runtime_footprint'])}")
     lines.append(f"- {_render_performance_line(index['artifacts']['performance'])}")
     lines.append("")
+    discovery = index.get("discovery") or {}
+    for title, key in (
+        ("Architecture", "architecture"), ("Behaviour", "behavior"),
+        ("Risks", "risks"), ("Unknowns", "unknowns"),
+        ("Coverage", "coverage"), ("Recommended tests", "tests"),
+    ):
+        lines.append(f"## {title}")
+        entry = discovery.get(key, {"status": "NOT_SUPPLIED"})
+        if entry.get("status") == "AVAILABLE":
+            lines.append(f"- Available: `{entry['path']}` ({entry.get('count', 0)} entries)")
+        else:
+            lines.append(f"- {entry.get('status', 'NOT_SUPPLIED')}")
+        lines.append("")
     lines.append("## Open questions")
     if index["open_questions"]:
         for question in index["open_questions"]:
@@ -849,6 +862,7 @@ def build_dossier(
     save: Path | None = None,
     perf: Path | None = None,
     perf_mod_prefixes: list[str] | None = None,
+    discovery_dir: Path | None = None,
     max_kb: float = DEFAULT_MAX_KB,
     context_lines: int = DEFAULT_CONTEXT_LINES,
 ) -> dict[str, object]:
@@ -910,6 +924,27 @@ def build_dossier(
         "runtime_footprint": _runtime_footprint_artifact(root, save, vanilla_core),
         "performance": _performance_artifact(perf, log, perf_mod_prefixes),
     }
+    discovery_specs = {
+        "architecture": ("archaeology/architecture.json", "nodes"),
+        "behavior": ("behavior.json", "behaviors"),
+        "risks": ("risks.json", "risks"),
+        "unknowns": ("unknowns.json", "unknowns"),
+        "coverage": ("coverage.json", "coverage"),
+        "tests": ("tests.json", "tests"),
+    }
+    discovery: dict[str, object] = {}
+    discovery_root = discovery_dir.expanduser().resolve() if discovery_dir is not None else None
+    for name, (relative, list_key) in discovery_specs.items():
+        path = discovery_root / relative if discovery_root is not None else None
+        if path is None or not path.is_file():
+            discovery[name] = {"status": "NOT_SUPPLIED"}
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            entries_for_count = payload.get(list_key, []) if isinstance(payload, dict) else []
+            discovery[name] = {"status": "AVAILABLE", "path": str(path), "count": len(entries_for_count) if isinstance(entries_for_count, list) else 0}
+        except (OSError, json.JSONDecodeError) as exc:
+            discovery[name] = {"status": "INVALID", "path": str(path), "error": str(exc)}
 
     index: dict[str, object] = {
         "dossier_version": DOSSIER_VERSION,
@@ -919,6 +954,7 @@ def build_dossier(
         "finding_counts": {"new": len(new_findings), "baselined": baselined_count, "resolved": resolved_count},
         "parts": part_manifest,
         "artifacts": artifacts,
+        "discovery": discovery,
         "open_questions": open_questions,
     }
 
@@ -990,6 +1026,7 @@ def write_dossier(
     save: Path | None = None,
     perf: Path | None = None,
     perf_mod_prefixes: list[str] | None = None,
+    discovery_dir: Path | None = None,
     max_kb: float = DEFAULT_MAX_KB,
     context_lines: int = DEFAULT_CONTEXT_LINES,
 ) -> dict[str, object]:
@@ -1005,6 +1042,7 @@ def write_dossier(
         save=save,
         perf=perf,
         perf_mod_prefixes=perf_mod_prefixes,
+        discovery_dir=discovery_dir,
         max_kb=max_kb,
         context_lines=context_lines,
     )

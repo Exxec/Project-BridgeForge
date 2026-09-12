@@ -35,6 +35,43 @@
         }
       }
     },
+    "era-0.8.1a": {
+      "description": "Historical 0.8.1a reference set for the untouched FlowerGod and Flu-X originals. Neither original declares an external dependency.",
+      "mods": {
+        "flowergod": {"name": "FlowerGod", "role": "content", "gameVersion": "0.8.1a", "required_by": []},
+        "infected": {"name": "Flu-X", "role": "content", "gameVersion": "0.8.1a", "required_by": []}
+      }
+    },
+    "era-0.7.2a": {
+      "description": "Historical 0.7.2a Exigency reference set. Exact compatible library builds must be supplied and verified locally.",
+      "mods": {
+        "exigency": {"name": "Exigency", "role": "content", "gameVersion": "0.7.2a", "required_by": []},
+        "lw_lazylib": {"name": "LazyLib", "role": "lib", "gameVersion": "0.7.2a", "required_by": ["exigency"], "evidence_status": "EXACT_VERSION_UNRESOLVED"},
+        "shaderLib": {"name": "GraphicsLib", "role": "lib", "gameVersion": "0.7.2a", "required_by": ["exigency"], "evidence_status": "EXACT_VERSION_UNRESOLVED"}
+      }
+    },
+    "era-0.97a-RC11": {
+      "description": "Historical 0.97a-RC11 Omega Trauma reference set. Exact dependency builds remain evidence-gated.",
+      "mods": {
+        "Omega_Psychasthenia": {"name": "Omega Trauma", "role": "content", "gameVersion": "0.97a-RC11", "required_by": []},
+        "lw_lazylib": {"name": "LazyLib", "role": "lib", "gameVersion": "0.97a-RC11", "required_by": ["Omega_Psychasthenia"], "evidence_status": "EXACT_VERSION_UNRESOLVED"},
+        "MagicLib": {"name": "MagicLib", "role": "lib", "gameVersion": "0.97a-RC11", "required_by": ["Omega_Psychasthenia"], "evidence_status": "EXACT_VERSION_UNRESOLVED"},
+        "nexerelin": {"name": "Nexerelin", "role": "content", "gameVersion": "0.97a-RC11", "required_by": ["Omega_Psychasthenia"], "evidence_status": "EXACT_VERSION_UNRESOLVED"},
+        "shaderLib": {"name": "GraphicsLib", "role": "lib", "gameVersion": "0.97a-RC11", "required_by": ["Omega_Psychasthenia"], "evidence_status": "EXACT_VERSION_UNRESOLVED"}
+      }
+    },
+    "era-0.65.2a": {
+      "description": "Historical 0.65.2a reference set for the untouched SEEKER original, which declares no external dependency.",
+      "mods": {
+        "SEEKER OLD": {"name": "SEEKER", "role": "content", "gameVersion": "0.65.2a", "required_by": []}
+      }
+    },
+    "era-0.62a": {
+      "description": "Historical 0.62a Vacuum reference set. Vacuum bundles its own LazyLib and shader JARs, so they are not installed as external mods.",
+      "mods": {
+        "exerelin_vacuum": {"name": "Vacuum", "role": "content", "gameVersion": "0.62a", "required_by": []}
+      }
+    },
     "standard": {
       "description": "The standard compatibility pack (roadmap P4): libs plus AI Tweaks, Nexerelin and a handful of widely used content mods, verified present in the owner's real Starsector install at RC8 or a compatible 0.98a.",
       "extends": ["libs"],

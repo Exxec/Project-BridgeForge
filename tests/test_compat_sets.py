@@ -19,6 +19,7 @@ from bridgeforge.compat_sets import (
     resolve_set,
     set_mod_ids,
 )
+from bridgeforge.reference_rigs import write_reference_rig_manifest
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -75,6 +76,14 @@ def _make_rig(root: Path) -> Path | None:
 
 
 class LoadAndResolveTests(unittest.TestCase):
+    def test_historical_era_sets_do_not_invent_exact_library_versions(self) -> None:
+        data = load_compat_sets()
+        for name in ("era-0.8.1a", "era-0.7.2a", "era-0.97a-RC11", "era-0.65.2a", "era-0.62a"):
+            self.assertIn(name, data["sets"])
+        exigency = resolve_set(data, "era-0.7.2a")
+        self.assertEqual(exigency["lw_lazylib"]["evidence_status"], "EXACT_VERSION_UNRESOLVED")
+        self.assertEqual(exigency["shaderLib"]["evidence_status"], "EXACT_VERSION_UNRESOLVED")
+
     def test_resolve_set_merges_extends(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             data_path = _fixture_data_file(Path(directory))
@@ -102,6 +111,21 @@ class LoadAndResolveTests(unittest.TestCase):
 
 
 class InstallCompatSetTests(unittest.TestCase):
+    def test_registered_historical_install_does_not_require_core_junction(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rig = root / "historical"
+            (rig / "starsector-core").mkdir(parents=True)
+            (rig / "starsector-core" / "starfarer.api.jar").write_bytes(b"old-api")
+            (rig / "starsector.bat").write_text("@echo off\n", encoding="utf-8")
+            (rig / "mods").mkdir()
+            manifest = write_reference_rig_manifest(rig, game_version="0.7.2a", output=root / "rig.json")
+            data_path = _fixture_data_file(root)
+            source = root / "source"
+            result = install_compat_set("standard", rig, source, data_path=data_path, dry_run=True, reference_manifest=manifest)
+            self.assertEqual(result["missing"], ["content_a", "content_b", "lib_a", "lib_b"])
+            self.assertEqual(result["reference_manifest"], str(manifest.resolve()))
+
     def test_refuses_when_core_is_not_a_link(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

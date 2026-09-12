@@ -6,6 +6,7 @@ from pathlib import Path
 from .boot_test import _is_link, _running_java_under
 from .copy_drift import compare_copies
 from .probe_mod_build import RELEASE_RELATIVE
+from .reference_rigs import verify_reference_rig_manifest
 from .scanner import _base_game_version, _load_lenient_json_file
 
 TARGET_BASE_GAME_VERSION = "0.98a"
@@ -126,7 +127,7 @@ def _check_probe_installed(runtime_dir: Path, repo_root: Path) -> dict[str, obje
     )
 
 
-def _check_enabled_mods_resolve(runtime_dir: Path) -> dict[str, object]:
+def _check_enabled_mods_resolve(runtime_dir: Path, target_base_game_version: str = TARGET_BASE_GAME_VERSION) -> dict[str, object]:
     mods_dir = runtime_dir / "mods"
     enabled_path = mods_dir / "enabled_mods.json"
     if not enabled_path.is_file():
@@ -162,7 +163,7 @@ def _check_enabled_mods_resolve(runtime_dir: Path) -> dict[str, object]:
                     dep_warnings.append(f"{mod_id} depends on {dep_id} (not enabled)")
         game_version = info.get("gameVersion") or info.get("game_version")
         if isinstance(game_version, str) and game_version.strip():
-            if _base_game_version(game_version) != TARGET_BASE_GAME_VERSION:
+            if _base_game_version(game_version) != target_base_game_version:
                 version_warnings.append(f"{mod_id} declares gameVersion {game_version}")
 
     if unresolved:
@@ -178,9 +179,9 @@ def _check_enabled_mods_resolve(runtime_dir: Path) -> dict[str, object]:
     if dep_warnings:
         parts.append("Dependencies not enabled: " + "; ".join(dep_warnings))
     if version_warnings:
-        parts.append(f"gameVersion base differs from {TARGET_BASE_GAME_VERSION}: " + "; ".join(version_warnings))
+        parts.append(f"gameVersion base differs from {target_base_game_version}: " + "; ".join(version_warnings))
     if not parts:
-        parts.append(f"All {len(enabled_ids)} enabled mod id(s) resolve; dependencies enabled; gameVersion matches {TARGET_BASE_GAME_VERSION}.")
+        parts.append(f"All {len(enabled_ids)} enabled mod id(s) resolve; dependencies enabled; gameVersion matches {target_base_game_version}.")
     return _check("enabled_mods_resolve", status, " | ".join(parts))
 
 
@@ -302,6 +303,7 @@ def rig_doctor(
     real_install: Path | None = None,
     saves_baseline: Path | None = None,
     write_saves_baseline: bool = False,
+    reference_manifest: Path | None = None,
 ) -> dict[str, object]:
     """Read-only pre-flight checks for a Starsector test rig; the only write is the opt-in saves baseline.
 
@@ -311,14 +313,30 @@ def rig_doctor(
     runtime_dir = Path(runtime_dir).expanduser().resolve()
     repo_root = _repo_root()
 
-    checks = [
-        _check_isolation(runtime_dir),
-        _check_game_not_running(runtime_dir),
-        _check_probe_installed(runtime_dir, repo_root),
-        _check_enabled_mods_resolve(runtime_dir),
-        _check_working_copy_drift(runtime_dir, working_copies or {}),
-        _check_real_install_saves_untouched(repo_root, real_install, saves_baseline, write_saves_baseline),
-    ]
+    if reference_manifest is not None:
+        reference = verify_reference_rig_manifest(reference_manifest)
+        registered_runtime = Path(str(reference["runtime_dir"])).resolve()
+        if registered_runtime != runtime_dir:
+            raise ValueError(f"runtime {runtime_dir} does not match reference-rig manifest install {registered_runtime}")
+        target_base = _base_game_version(str(reference["game_version"]))
+        checks = list(reference["checks"])
+        checks.extend([
+            _check("reference_isolation", "PASS", "Registered as an operator-selected dedicated historical install; this assertion is not independently provable."),
+            _check_game_not_running(runtime_dir),
+            _check("probe_installed", "SKIPPED", "The RC8 probe is unsupported on historical reference rigs; use save-baseline."),
+            _check_enabled_mods_resolve(runtime_dir, target_base),
+            _check_working_copy_drift(runtime_dir, working_copies or {}),
+            _check_real_install_saves_untouched(repo_root, real_install, saves_baseline, write_saves_baseline),
+        ])
+    else:
+        checks = [
+            _check_isolation(runtime_dir),
+            _check_game_not_running(runtime_dir),
+            _check_probe_installed(runtime_dir, repo_root),
+            _check_enabled_mods_resolve(runtime_dir),
+            _check_working_copy_drift(runtime_dir, working_copies or {}),
+            _check_real_install_saves_untouched(repo_root, real_install, saves_baseline, write_saves_baseline),
+        ]
 
     if any(item["status"] == "FAIL" for item in checks):
         overall = "FAIL"
@@ -331,6 +349,7 @@ def rig_doctor(
         "schema_version": 1,
         "mode": "RIG_DOCTOR",
         "runtime_dir": str(runtime_dir),
+        "reference_manifest": str(Path(reference_manifest).resolve()) if reference_manifest is not None else None,
         "status": overall,
         "checks": checks,
     }
