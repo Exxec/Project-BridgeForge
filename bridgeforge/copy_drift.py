@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 
 INCLUDED_DIRS = ("data", "jars", "graphics", "sounds")
+INCLUDED_ROOT_FILE_GLOBS = ("*.csv", "*.ini", "*.jar", "*.json", "*.properties", "*.version")
 EXCLUDE_DIR_NAME_GLOBS = ("reports", "src*")
 EXCLUDE_FILE_NAME_GLOBS = ("*.bak", "*.pre-*", "*orig-backup*", "src.zip")
 
@@ -45,6 +46,11 @@ def _collect(root: Path) -> dict[str, Path]:
             if _is_excluded(relative):
                 continue
             files[relative] = item
+    for item in root.iterdir():
+        if not item.is_file() or not any(fnmatch.fnmatch(item.name.lower(), pattern) for pattern in INCLUDED_ROOT_FILE_GLOBS):
+            continue
+        if not _is_excluded(item.name):
+            files[item.name] = item
     mod_info = root / "mod_info.json"
     if mod_info.is_file():
         files["mod_info.json"] = mod_info

@@ -58,6 +58,7 @@ def _make_source_mod(root: Path, mod_id: str, folder_name: str, game_version: st
     _write_json(mod / "mod_info.json", {"id": mod_id, "gameVersion": game_version})
     (mod / "data").mkdir(exist_ok=True)
     (mod / "data" / "file.txt").write_text("content", encoding="utf-8")
+    (mod / "runtime_settings.json").write_text('{"enabled":true}', encoding="utf-8")
     return mod
 
 
@@ -76,13 +77,15 @@ def _make_rig(root: Path) -> Path | None:
 
 
 class LoadAndResolveTests(unittest.TestCase):
-    def test_historical_era_sets_do_not_invent_exact_library_versions(self) -> None:
+    def test_historical_era_sets_track_exact_library_evidence_status(self) -> None:
         data = load_compat_sets()
         for name in ("era-0.8.1a", "era-0.7.2a", "era-0.97a-RC11", "era-0.65.2a", "era-0.62a"):
             self.assertIn(name, data["sets"])
         exigency = resolve_set(data, "era-0.7.2a")
-        self.assertEqual(exigency["lw_lazylib"]["evidence_status"], "EXACT_VERSION_UNRESOLVED")
-        self.assertEqual(exigency["shaderLib"]["evidence_status"], "EXACT_VERSION_UNRESOLVED")
+        self.assertEqual(exigency["lw_lazylib"]["evidence_status"], "EXACT_VERSION_LOCATED")
+        self.assertEqual(exigency["lw_lazylib"]["version"], "2.1")
+        self.assertEqual(exigency["shaderLib"]["evidence_status"], "EXACT_VERSION_LOCATED")
+        self.assertEqual(exigency["shaderLib"]["version"], "Beta 1.2.1b")
 
     def test_resolve_set_merges_extends(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -178,6 +181,7 @@ class InstallCompatSetTests(unittest.TestCase):
             installed_ids = {item["id"] for item in result["installed"]}
             self.assertEqual(installed_ids, {"lib_a", "lib_b", "content_a", "content_b"})
             self.assertTrue((rig / "mods" / "LibA" / "data" / "file.txt").is_file())
+            self.assertTrue((rig / "mods" / "LibA" / "runtime_settings.json").is_file())
             self.assertTrue((rig / "mods" / "ContentB" / "mod_info.json").is_file())
 
             # A second install run should find everything already identical and copy nothing.

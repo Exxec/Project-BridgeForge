@@ -14,6 +14,7 @@ def _make_mod(root: Path, mod_id: str = "fixture") -> Path:
     (root / "data" / "scripts" / "Plugin.java").write_text("class Plugin {}", encoding="utf-8")
     (root / "jars").mkdir()
     (root / "jars" / "mod.jar").write_bytes(b"jar-bytes")
+    (root / "runtime_settings.json").write_text('{"enabled":true}', encoding="utf-8")
     return root
 
 
@@ -45,6 +46,15 @@ class CopyDriftTests(unittest.TestCase):
             self.assertIn("data/scripts/OnlyDeployed.java", result["extra_in_deployed"])
             different = {item["path"]: item["newer_side"] for item in result["different"]}
             self.assertEqual(different["jars/mod.jar"], "working")
+
+    def test_detects_root_runtime_payload_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            working = _make_mod(root / "working" / "MyMod")
+            deployed = _make_mod(root / "deployed" / "MyMod")
+            (deployed / "runtime_settings.json").unlink()
+            result = compare_copies(working, deployed)
+            self.assertIn("runtime_settings.json", result["missing_in_deployed"])
 
     def test_ignores_backup_and_report_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

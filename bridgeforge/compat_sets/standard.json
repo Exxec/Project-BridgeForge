@@ -43,11 +43,11 @@
       }
     },
     "era-0.7.2a": {
-      "description": "Historical 0.7.2a Exigency reference set. Exact compatible library builds must be supplied and verified locally.",
+      "description": "Historical 0.7.2a Exigency reference set. The era-matched library archives were recovered from links in archived official mod threads and verified locally; their hashes identify the retrieved bytes but are not independent vendor signatures.",
       "mods": {
         "exigency": {"name": "Exigency", "role": "content", "gameVersion": "0.7.2a", "required_by": []},
-        "lw_lazylib": {"name": "LazyLib", "role": "lib", "gameVersion": "0.7.2a", "required_by": ["exigency"], "evidence_status": "EXACT_VERSION_UNRESOLVED"},
-        "shaderLib": {"name": "GraphicsLib", "role": "lib", "gameVersion": "0.7.2a", "required_by": ["exigency"], "evidence_status": "EXACT_VERSION_UNRESOLVED"}
+        "lw_lazylib": {"name": "LazyLib", "role": "lib", "version": "2.1", "gameVersion": "0.7a", "required_by": ["exigency"], "evidence_status": "EXACT_VERSION_LOCATED", "archive_sha256": "e7257fec8ad0d949397bc691a18f73193852d251f8ebdf28d7bcd7ca9f3f8983", "source_url": "https://www.mediafire.com/download/9f6xh3flb2axni8/LazyLib_2.1.zip", "notes": "The official repository has a 2015-11-19 '2.1 release' commit; the archived official forum thread linked this package. Hash is local identity evidence, not an independent vendor signature."},
+        "shaderLib": {"name": "ShaderLib", "role": "lib", "version": "Beta 1.2.1b", "gameVersion": "0.7.2a", "required_by": ["exigency"], "evidence_status": "EXACT_VERSION_LOCATED", "archive_sha256": "37bb253494b8056c43257c626098e6174b50a205934a4f5c626b27e20d8f9b02", "source_url": "https://www.mediafire.com/?aex71w33te57l2d", "notes": "The archived official forum thread is titled '[0.7.2a] ShaderLib Beta 1.2.1b (Legacy)' and linked this package. Embedded mod_info reports Beta 1.2.1. Hash is local identity evidence, not an independent vendor signature."}
       }
     },
     "era-0.97a-RC11": {
