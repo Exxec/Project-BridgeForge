@@ -20,6 +20,8 @@ class ProbeModBuildTests(unittest.TestCase):
         result = build_probe_mod(REPO_ROOT, JDK_DIR, CORE_DIR)
         try:
             self.assertTrue(result["mission_compiles"], result.get("mission_error"))
+            # The game compiles the loose mission with Janino, not javac (PRB-MISSION-02).
+            self.assertEqual(result["mission_janino"], "PASS", result.get("mission_error"))
             self.assertGreater(result["class_count"], 0)
 
             jar_path = Path(result["jar"])
@@ -60,12 +62,15 @@ class ProbeModBuildTests(unittest.TestCase):
             shutil.move(str(real_release), str(parked))
         try:
             build_probe_mod(REPO_ROOT, JDK_DIR, CORE_DIR)
-            result = install_release(REPO_ROOT)
+            result = install_release(REPO_ROOT, CORE_DIR)
             release_dir = Path(result["release_dir"])
             self.assertTrue((release_dir / "mod_info.json").is_file())
             self.assertTrue((release_dir / "jars" / "bridgeforge-probe.jar").is_file())
             self.assertTrue((release_dir / "data" / "missions" / "mission_list.csv").is_file())
             self.assertTrue((release_dir / "data" / "missions" / "bfprobe_combat" / "MissionDefinition.java").is_file())
+            # Every vanilla mission ships these; a missing one is a Fatal dialog at startup (PRB-MISSION-01).
+            self.assertTrue((release_dir / "data" / "missions" / "bfprobe_combat" / "mission_text.txt").is_file())
+            self.assertTrue((release_dir / "data" / "missions" / "bfprobe_combat" / "icon.jpg").is_file())
             # Runtime-only: no source tree, no build scratch dir.
             self.assertFalse((release_dir / "src").exists())
             self.assertFalse((release_dir / "build").exists())

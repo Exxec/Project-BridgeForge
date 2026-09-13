@@ -781,6 +781,12 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
         if len(paths) > 1:
             result.add(id="duplicate-source-layout", category="source", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Identical Java source appears at multiple paths. Establish the authoritative source/JAR layout before compiling or modifying it.", evidence=sorted(paths))
     _scan_mission_local_fleet_references(root, result)
+    _scan_mission_required_files(root, result)
+    _scan_loose_script_janino_risk(root, result)
+    _scan_weapon_effect_static_state(root, result)
+    _scan_rules_firebest_populate_options(root, result)
+    _scan_hullmod_instance_state(root, result)
+    _scan_personality_ids(root, result)
     _scan_source_build_dependencies(root, result, import_locations)
 
     scan_lazylib_compat(root, result)
@@ -856,6 +862,104 @@ def _custom_ui_plugins_missing_button_callback(text: str) -> int:
         if not re.search(r"\bbuttonPressed\s*\(", block):
             missing += 1
     return missing
+
+
+MISSION_REQUIRED_FILES = ("descriptor.json", "MissionDefinition.java", "mission_text.txt")
+
+
+def _scan_mission_required_files(root: Path, result: ScanResult) -> None:
+    """Every mission in mission_list.csv needs the files vanilla missions all ship (live bug PRB-MISSION-01).
+
+    The game loads them when the Missions screen opens, so a missing one is a `Fatal: Error loading
+    [data/missions/<id>/mission_text.txt]` dialog at startup, never a log line. An `icon` declared in
+    descriptor.json must exist too.
+    """
+    mission_list = root / "data" / "missions" / "mission_list.csv"
+    if not mission_list.is_file():
+        return
+    try:
+        with mission_list.open("r", encoding="utf-8-sig", newline="") as handle:
+            rows = list(csv.reader(handle))
+    except (OSError, csv.Error, UnicodeDecodeError):
+        return
+    mission_ids = [row[0].strip() for row in rows[1:] if row and row[0].strip() and not row[0].strip().startswith("#")]
+    # Many mods compile MissionDefinition into their jar instead of shipping the loose .java (SEEKER's
+    # missions ran live that way), so a compiled data/missions/<id>/MissionDefinition.class counts.
+    compiled_entries: set[str] = set()
+    for jar in _loaded_mod_jars(root):
+        try:
+            with zipfile.ZipFile(jar) as archive:
+                compiled_entries.update(name for name in archive.namelist() if name.startswith("data/missions/"))
+        except (OSError, zipfile.BadZipFile):
+            continue
+    for mission_id in mission_ids:
+        mission_dir = root / "data" / "missions" / mission_id
+        if not mission_dir.is_dir():
+            result.add(
+                id="mission-required-file-missing",
+                category="missions",
+                severity="high",
+                classification="MANUAL",
+                confidence="DETERMINISTIC",
+                explanation="mission_list.csv lists this mission but the mod has no data/missions/<id>/ folder. Unless the id is a vanilla mission, the game shows a Fatal dialog when it loads the mission list.",
+                file=_relative(root, mission_list),
+                evidence=[f"mission:{mission_id}", "missing: folder"],
+            )
+            continue
+        missing = [name for name in MISSION_REQUIRED_FILES if not (mission_dir / name).is_file()]
+        if "MissionDefinition.java" in missing and f"data/missions/{mission_id}/MissionDefinition.class" in compiled_entries:
+            missing.remove("MissionDefinition.java")
+        descriptor = _load_lenient_json_file(mission_dir / "descriptor.json") if (mission_dir / "descriptor.json").is_file() else None
+        icon = descriptor.get("icon") if isinstance(descriptor, dict) else None
+        if isinstance(icon, str) and icon.strip() and not (mission_dir / icon.strip()).is_file():
+            missing.append(f"{icon.strip()} (descriptor icon)")
+        if missing:
+            result.add(
+                id="mission-required-file-missing",
+                category="missions",
+                severity="high",
+                classification="MANUAL",
+                confidence="DETERMINISTIC",
+                explanation="A listed mission is missing a file that every vanilla mission ships. The game raises a Fatal dialog (\"Error loading [data/missions/<id>/...] resource, not found\") when it loads the mission list, so the game never reaches the main menu.",
+                file=_relative(root, mission_dir),
+                evidence=[f"mission:{mission_id}"] + [f"missing:{name}" for name in missing],
+            )
+
+
+LOOSE_SCRIPT_JANINO_PATTERNS = (
+    ("typed-for-each", re.compile(r"\bfor\s*\(\s*(?:final\s+)?(?!Object\b)([A-Za-z_][\w.]*(?:\s*<[^>;]*>)?(?:\s*\[\s*\])*)\s+\w+\s*:(?!:)")),
+    ("diamond", re.compile(r"\bnew\s+[A-Za-z_][\w.]*\s*<\s*>")),
+    ("lambda", re.compile(r"(?:\)|\b[A-Za-z_]\w*)\s*->")),
+)
+
+
+def _scan_loose_script_janino_risk(root: Path, result: ScanResult) -> None:
+    """Loose .java under data/ is compiled at runtime by Janino, which ignores generics (live bug PRB-MISSION-02).
+
+    A for-each over a generic collection (element typed as Object -> String), a diamond or a lambda is a
+    Fatal dialog before the main menu. Vanilla's 116 loose scripts use none of these; they iterate with
+    raw iterators and explicit casts. REVIEW, not MANUAL: a for-each over an array does compile.
+    """
+    for source in sorted((root / "data").rglob("*.java")) if (root / "data").is_dir() else []:
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        evidence: list[str] = []
+        for kind, pattern in LOOSE_SCRIPT_JANINO_PATTERNS:
+            for match in pattern.finditer(text):
+                evidence.append(f"line:{text.count(chr(10), 0, match.start()) + 1}:{kind}")
+        if evidence:
+            result.add(
+                id="loose-script-janino-risk",
+                category="scripts",
+                severity="high",
+                classification="REVIEW",
+                confidence="HEURISTIC",
+                explanation="This loose script is compiled at runtime by the game's Janino compiler, which ignores generics and predates lambdas. A for-each over a generic collection (the element reads as Object), a diamond <> or a lambda fails to compile, and the game shows a Fatal dialog before the main menu. Rewrite it the way vanilla loose scripts are written: a raw Iterator with explicit casts. A for-each over an array is fine.",
+                file=_relative(root, source),
+                evidence=sorted(set(evidence), key=lambda item: int(item.split(":")[1]))[:20],
+            )
 
 
 def _scan_mission_local_fleet_references(root: Path, result: ScanResult) -> None:
@@ -1816,12 +1920,29 @@ def _skip_attributes(data: bytes, pos: int, count: int) -> int:
 class _ClassFileInfo:
     """Parsed facts about one .class file, resolved from its constant pool."""
 
-    __slots__ = ("this_class", "referenced_classes", "methods")
+    __slots__ = ("this_class", "referenced_classes", "methods", "super_class", "interfaces", "fields", "string_constants", "utf8_values")
 
-    def __init__(self, this_class: str, referenced_classes: set[str], methods: list[tuple[str, str, bool]]) -> None:
+    def __init__(
+        self,
+        this_class: str,
+        referenced_classes: set[str],
+        methods: list[tuple[str, str, bool]],
+        super_class: str = "",
+        interfaces: list[str] | None = None,
+        fields: list[tuple[str, str, bool, bool]] | None = None,
+        string_constants: set[str] | None = None,
+        utf8_values: frozenset[str] = frozenset(),
+    ) -> None:
         self.this_class = this_class
         self.referenced_classes = referenced_classes
         self.methods = methods
+        self.super_class = super_class
+        self.interfaces = interfaces or []
+        # (name, descriptor, is_static, is_final) per declared field
+        self.fields = fields or []
+        # Java string literals (CONSTANT_String), and every Utf8 entry (member names referenced, etc.)
+        self.string_constants = string_constants or set()
+        self.utf8_values = utf8_values
 
 
 def _parse_class_file(data: bytes) -> _ClassFileInfo | None:
@@ -1841,6 +1962,7 @@ def _parse_class_file(data: bytes) -> _ClassFileInfo | None:
         constant_pool_count, pos = _class_pool_u2(data, pos)
         utf8: dict[int, str] = {}
         class_name_index: dict[int, int] = {}
+        string_indexes: list[int] = []
         index = 1
         while index < constant_pool_count:
             tag = data[pos]
@@ -1856,7 +1978,8 @@ def _parse_class_file(data: bytes) -> _ClassFileInfo | None:
             elif tag in (9, 10, 11, 12, 17, 18):  # Fieldref/Methodref/IfaceMethodref/NameAndType/Dynamic/InvokeDynamic
                 pos += 4
             elif tag == 8:  # String
-                pos += 2
+                string_index, pos = _class_pool_u2(data, pos)
+                string_indexes.append(string_index)
             elif tag in (3, 4):  # Integer/Float
                 pos += 4
             elif tag in (5, 6):  # Long/Double (occupies two constant-pool entries)
@@ -1875,14 +1998,22 @@ def _parse_class_file(data: bytes) -> _ClassFileInfo | None:
         pos += 2  # access_flags
         this_class_index, pos = _class_pool_u2(data, pos)
         this_class = utf8.get(class_name_index.get(this_class_index, -1), "")
-        pos += 2  # super_class
+        super_index, pos = _class_pool_u2(data, pos)
+        super_class = utf8.get(class_name_index.get(super_index, -1), "")
         interfaces_count, pos = _class_pool_u2(data, pos)
-        pos += 2 * interfaces_count
+        interfaces: list[str] = []
+        for _ in range(interfaces_count):
+            interface_index, pos = _class_pool_u2(data, pos)
+            interfaces.append(utf8.get(class_name_index.get(interface_index, -1), ""))
         fields_count, pos = _class_pool_u2(data, pos)
+        fields: list[tuple[str, str, bool, bool]] = []
         for _ in range(fields_count):
-            pos += 6  # access_flags, name_index, descriptor_index
+            field_flags, pos = _class_pool_u2(data, pos)
+            field_name_index, pos = _class_pool_u2(data, pos)
+            field_descriptor_index, pos = _class_pool_u2(data, pos)
             attr_count, pos = _class_pool_u2(data, pos)
             pos = _skip_attributes(data, pos, attr_count)
+            fields.append((utf8.get(field_name_index, ""), utf8.get(field_descriptor_index, ""), bool(field_flags & 0x0008), bool(field_flags & 0x0010)))
         methods_count, pos = _class_pool_u2(data, pos)
         methods: list[tuple[str, str, bool]] = []
         for _ in range(methods_count):
@@ -1892,9 +2023,197 @@ def _parse_class_file(data: bytes) -> _ClassFileInfo | None:
             attr_count, pos = _class_pool_u2(data, pos)
             pos = _skip_attributes(data, pos, attr_count)
             methods.append((utf8.get(name_index, ""), utf8.get(descriptor_index, ""), bool(access_flags & 0x0001)))
-        return _ClassFileInfo(this_class, referenced_classes, methods)
+        string_constants = {utf8[string_index] for string_index in string_indexes if string_index in utf8}
+        return _ClassFileInfo(this_class, referenced_classes, methods, super_class, interfaces, fields, string_constants, frozenset(utf8.values()))
     except (IndexError, KeyError, UnicodeDecodeError):
         return None
+
+
+# Plugins Starsector instantiates once PER WEAPON (or per projectile); a static field is shared by
+# every copy in the battle. Live run SK13-1: SEEKER's ART_thrusterRotation kept `static ShipAPI ship`,
+# so Vector-cruiser debris spawned mid-battle overwrote it and a living cruiser's flame weapon read a
+# ship with no system -> NPE -> Fatal dialog.
+PER_WEAPON_PLUGIN_INTERFACES = {
+    "com/fs/starfarer/api/combat/EveryFrameWeaponEffectPlugin",
+    "com/fs/starfarer/api/combat/EveryFrameWeaponEffectPluginWithAdvanceAfter",
+    "com/fs/starfarer/api/combat/OnFireEffectPlugin",
+    "com/fs/starfarer/api/combat/OnHitEffectPlugin",
+    "com/fs/starfarer/api/combat/WeaponEffectPluginWithInit",
+}
+COMBAT_STATE_TYPES = ("ShipAPI", "WeaponAPI", "ShipEngineControllerAPI", "ShipSystemAPI", "MissileAPI", "DamagingProjectileAPI", "BeamAPI")
+_COMBAT_STATE_DESCRIPTORS = {f"Lcom/fs/starfarer/api/combat/{name};" for name in COMBAT_STATE_TYPES}
+_SOURCE_STATIC_STATE = re.compile(r"\bstatic\s+(?!final\b)(?:(?:private|protected|public|volatile|transient)\s+)*(" + "|".join(COMBAT_STATE_TYPES) + r")\s+(\w+)\s*[;=]")
+
+
+_HULLMOD_BASES = {"com/fs/starfarer/api/combat/BaseHullMod"}
+_SOURCE_HULLMOD_FIELD = re.compile(r"^\s*(?:private|protected|public)?\s*(?!static\b)(?!final\b)(?:transient\s+|volatile\s+)*([A-Za-z_][\w.<>\[\], ]*?)\s+(\w+)\s*(?:=[^;]*)?;", re.MULTILINE)
+
+
+def _looks_like_constant(name: str) -> bool:
+    """UPPER_SNAKE fields are constants by convention even when not declared final (never mutated)."""
+    return bool(re.fullmatch(r"[A-Z][A-Z0-9_]*", name))
+
+
+def _scan_hullmod_instance_state(root: Path, result: ScanResult) -> None:
+    """Hull mods are single shared instances: mutable instance fields leak state between ships (SEEKER-DEATH-01).
+
+    Starsector creates ONE object per hull mod spec and calls advanceInCombat(ship, ...) for every
+    ship that has it, so a non-static, non-final field is shared across all of those ships. SEEKER's
+    ART_organicHull kept runOnce/RADIUS/timers that way, and re-ran its death effect every frame
+    on a wreck. REVIEW: constants stored in non-final fields are harmless; per-ship state belongs in
+    ship.getCustomData().
+    """
+    explanation = (
+        "This hull mod keeps changeable instance fields. Starsector shares ONE hull mod object across every "
+        "ship with it, so per-ship state (timers, 'runOnce' flags, cached radius) leaks between ships and is "
+        "never reset per ship. SEEKER's ART_organicHull did this and also re-ran its death effect every frame "
+        "on a wreck, spawning debris until the game crawled. Keep per-ship state in ship.getCustomData()."
+    )
+    for jar, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None or info.super_class not in _HULLMOD_BASES:
+            continue
+        mutable = sorted(
+            name for name, descriptor, is_static, is_final in info.fields
+            if not is_static and not is_final and not _looks_like_constant(name) and not descriptor.startswith("Ljava/util/")
+        )
+        if mutable:
+            result.add(id="hullmod-instance-state", category="scripts", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation=explanation, file=f"{_relative(root, jar)}!{member}", evidence=[f"field:{name}" for name in mutable[:12]])
+    for source in sorted(root.rglob("*.java")):
+        if any(part in NON_MOD_JAR_DIRS or part.startswith("src-decompiled") for part in source.relative_to(root).parts):
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        class_match = re.search(r"\bclass\s+\w+\s+extends\s+BaseHullMod\b[^{]*\{", text)
+        if not class_match:
+            continue
+        # Only fields declared at class-body depth 1 (not locals inside methods).
+        body = text[class_match.end():]
+        depth, top_level = 1, []
+        for line in body.splitlines():
+            if depth == 1:
+                top_level.append(line)
+            depth += line.count("{") - line.count("}")
+            if depth <= 0:
+                break
+        mutable = sorted({
+            match.group(2) for match in _SOURCE_HULLMOD_FIELD.finditer("\n".join(top_level))
+            if "(" not in match.group(0)
+            and not re.search(r"\b(static|final|return|package|import)\b", match.group(0))
+            and not _looks_like_constant(match.group(2))
+            and not re.search(r"\b(Map|HashMap|List|ArrayList|Set|HashSet|Collection|WeakHashMap)\b", match.group(1))
+        })
+        if mutable:
+            result.add(id="hullmod-instance-state", category="scripts", severity="medium", classification="REVIEW", confidence="HEURISTIC", explanation=explanation, file=_relative(root, source), evidence=[f"field:{name}" for name in mutable[:12]])
+
+
+def _scan_rules_firebest_populate_options(root: Path, result: ScanResult) -> None:
+    """`FireBest PopulateOptions` rebuilds a menu from ONE rule, dropping vanilla's options (live bug VAC-DIALOG-01).
+
+    PopulateOptions is fired by many rules that each add options (trade, comm directory, Leave...).
+    Vanilla's rules.csv uses `FireAll PopulateOptions` 462 times and `FireBest` never. Vacuum's
+    recreated station options used FireBest after "take bounty", so only one rule ran and the player
+    was left in the dialog with no Leave option.
+    """
+    rules = root / "data" / "campaign" / "rules.csv"
+    if not rules.is_file():
+        return
+    try:
+        text = rules.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return
+    lines = [text.count("\n", 0, match.start()) + 1 for match in re.finditer(r"\bFireBest\s+PopulateOptions\b", text)]
+    if lines:
+        result.add(
+            id="rules-firebest-populate-options",
+            category="rules",
+            severity="high",
+            classification="MANUAL",
+            confidence="DETERMINISTIC",
+            explanation="rules.csv fires PopulateOptions with FireBest, which runs only the single best-scoring rule. Menus are built by many PopulateOptions rules together (trade, comm directory, Leave...), so the player can be left in a dialog with no way out. Vanilla uses FireAll PopulateOptions everywhere (462 times, FireBest never); use FireAll.",
+            file=_relative(root, rules),
+            evidence=[f"line:{line}" for line in lines],
+        )
+
+
+# Personality ids RC8 defines (starsector-core data/characters/personalities.csv; 0.7.2 already lacked
+# the legacy ones). 0.6.x also had cowardly/suicidal/fearless: setPersonality() with one of those now
+# leaves the officer's personality null, and the ship AI built on deploy NPEs in Ship.getPersonality ->
+# Fatal dialog (live run SK13-1d, SEEKER's missions).
+VANILLA_PERSONALITY_IDS = frozenset({"timid", "cautious", "steady", "aggressive", "reckless"})
+LEGACY_PERSONALITY_IDS = {"cowardly": "timid", "suicidal": "reckless", "fearless": "reckless"}
+_SOURCE_SET_PERSONALITY = re.compile(r'\bsetPersonality\s*\(\s*"([^"\\]+)"\s*\)')
+
+
+def _mod_personality_ids(root: Path) -> set[str]:
+    """Ids the mod adds itself: data/characters/personalities.csv merges into vanilla's by id (Vacuum does this)."""
+    path = root / "data" / "characters" / "personalities.csv"
+    try:
+        with path.open(encoding="utf-8-sig", errors="replace", newline="") as handle:
+            return {(row.get("id") or "").strip() for row in csv.DictReader(handle) if (row.get("id") or "").strip()}
+    except OSError:
+        return set()
+
+
+def _scan_personality_ids(root: Path, result: ScanResult) -> None:
+    valid = VANILLA_PERSONALITY_IDS | _mod_personality_ids(root)
+    explanation = (
+        "This code gives an officer a personality id that Starsector 0.98a does not define (only timid, cautious, "
+        "steady, aggressive and reckless exist, plus any this mod adds in data/characters/personalities.csv). The "
+        "officer's personality is left empty, and the game crashes with a Fatal dialog when that ship deploys. "
+        "SEEKER's missions used 0.6-era 'suicidal'/'fearless'. Use a valid id (suggested: "
+        + ", ".join(f"{old}->{new}" for old, new in LEGACY_PERSONALITY_IDS.items()) + ")."
+    )
+    for jar, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None or "setPersonality" not in info.utf8_values:
+            continue
+        # Bytecode can't tie a literal to its call, so only exact legacy ids count (not briefing text).
+        unknown = sorted(value for value in info.string_constants if value in LEGACY_PERSONALITY_IDS and value not in valid)
+        if unknown:
+            result.add(id="personality-id-unknown", category="scripts", severity="high", classification="MANUAL", confidence="HIGH", explanation=explanation, file=f"{_relative(root, jar)}!{member}", evidence=[f"personality:{value}" for value in unknown])
+    for source in sorted(root.rglob("*.java")):
+        if any(part in NON_MOD_JAR_DIRS or part.startswith("src-decompiled") for part in source.relative_to(root).parts):
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        unknown = sorted({match.group(1) for match in _SOURCE_SET_PERSONALITY.finditer(text) if match.group(1) not in valid})
+        if unknown:
+            result.add(id="personality-id-unknown", category="scripts", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=explanation, file=_relative(root, source), evidence=[f"personality:{value}" for value in unknown])
+
+
+def _scan_weapon_effect_static_state(root: Path, result: ScanResult) -> None:
+    explanation = (
+        "This weapon-effect plugin keeps combat state (a ship, weapon, engine controller, system or "
+        "projectile) in a static field. Starsector creates one plugin per weapon, so a static field is "
+        "shared by every copy in the battle: the last one to initialise overwrites it for all of them. "
+        "SEEKER's ART_thrusterRotation did this, and a ship spawned mid-battle made another ship's weapon "
+        "read a ship with no system, which crashed the game with a Fatal dialog. Make the field an instance "
+        "field, and null-check getSystem()."
+    )
+    for jar, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None or not PER_WEAPON_PLUGIN_INTERFACES.intersection(info.interfaces):
+            continue
+        shared = sorted(f"{name}:{descriptor.rsplit('/', 1)[-1].rstrip(';')}" for name, descriptor, is_static, is_final in info.fields if is_static and not is_final and descriptor in _COMBAT_STATE_DESCRIPTORS)
+        if shared:
+            result.add(id="weapon-effect-static-combat-state", category="scripts", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=explanation, file=f"{_relative(root, jar)}!{member}", evidence=[f"static:{item}" for item in shared])
+    for source in sorted(root.rglob("*.java")):
+        if any(part in NON_MOD_JAR_DIRS or part.startswith("src-decompiled") for part in source.relative_to(root).parts):
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if not re.search(r"\bimplements\b[^{]*\b(EveryFrameWeaponEffectPlugin|OnFireEffectPlugin|OnHitEffectPlugin|WeaponEffectPluginWithInit)\b", text):
+            continue
+        shared = sorted(f"{match.group(2)}:{match.group(1)}" for match in _SOURCE_STATIC_STATE.finditer(text))
+        if shared:
+            result.add(id="weapon-effect-static-combat-state", category="scripts", severity="high", classification="MANUAL", confidence="HEURISTIC", explanation=explanation, file=_relative(root, source), evidence=[f"static:{item}" for item in shared])
 
 
 NON_MOD_JAR_DIRS = {"build", "out", "tmp", "target"}

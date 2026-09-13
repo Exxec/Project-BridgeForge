@@ -47,8 +47,12 @@ public class CampaignProbeScript implements EveryFrameScript {
 
     private boolean done = false;
     private ProbeConfig config;
-    private long startTimestamp = -1L;
-    private long lastRunTimestamp = -1L;
+    // A boolean, not a -1 sentinel: campaign clock timestamps can be negative, and the old
+    // "startTimestamp < 0" test re-armed the script every frame so no check ever ran
+    // (live bug PRB-CAMPAIGN-01: 1519 campaign-armed lines in one session).
+    private boolean started = false;
+    private long startTimestamp = 0L;
+    private long lastRunTimestamp = 0L;
     private boolean firstRunDone = false;
 
     @Override
@@ -77,8 +81,13 @@ public class CampaignProbeScript implements EveryFrameScript {
         }
 
         CampaignClockAPI clock = Global.getSector().getClock();
-        if (startTimestamp < 0) {
+        if (!started) {
+            started = true;
             startTimestamp = clock.getTimestamp();
+            // Heartbeat, so a log shows the probe was running even if no check window was reached.
+            ProbeLog.emit("campaign-armed", ProbeLog.STATUS_INFO, "campaign",
+                    "first checks after 1 in-game day, then every " + config.campaignIntervalDays
+                    + " days; clockTimestamp=" + startTimestamp);
             // Setups apply after this first real campaign tick (roadmap P3b-C, extended by P3c-1)
             // -- deliberately not gated behind the 1-day threshold below, so rep/credits/ships/
             // fleets/jump are in place before the day-1 checks (and any human observation) happen.
@@ -347,18 +356,29 @@ public class CampaignProbeScript implements EveryFrameScript {
     // ---- custom planet/star spec lookups ---------------------------------------------
 
     private void checkPlanetSpecs() {
+        // Planet types are keyed by PlanetSpecAPI.getPlanetType() and listed by getAllPlanetSpecs().
+        // SettingsAPI.getSpec(PlanetSpecAPI.class, typeId, ...) never resolves them: it reported all
+        // 1,010 vanilla planets as FAIL on the first working live run (PRB-PLANET-01).
+        Set<String> knownTypes = new HashSet<String>();
+        for (PlanetSpecAPI spec : Global.getSettings().getAllPlanetSpecs()) {
+            if (spec != null && spec.getPlanetType() != null) {
+                knownTypes.add(spec.getPlanetType());
+            }
+        }
+        int checked = 0;
+        int unresolved = 0;
         for (StarSystemAPI system : Global.getSector().getStarSystems()) {
             for (PlanetAPI planet : system.getPlanets()) {
+                checked++;
                 String typeId = planet.getTypeId();
-                Object spec = Global.getSettings().getSpec(PlanetSpecAPI.class, typeId, true);
-                String subject = system.getBaseName() + "/" + planet.getId();
-                if (spec == null) {
-                    ProbeLog.emit("planet-specs", ProbeLog.STATUS_FAIL, subject,
-                            "No PlanetSpecAPI resolves for type [" + typeId + "]");
-                } else {
-                    ProbeLog.emit("planet-specs", ProbeLog.STATUS_OK, subject, "type=" + typeId);
+                if (planet.getSpec() == null || typeId == null || !knownTypes.contains(typeId)) {
+                    unresolved++;
+                    ProbeLog.emit("planet-specs", ProbeLog.STATUS_FAIL, system.getBaseName() + "/" + planet.getId(),
+                            "planet type [" + typeId + "] has no planet spec (getSpec()=" + (planet.getSpec() == null ? "null" : "set") + ")");
                 }
             }
         }
+        ProbeLog.emit("planet-specs", unresolved == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "all-systems",
+                "planets checked=" + checked + " unresolved=" + unresolved + " known types=" + knownTypes.size());
     }
 }

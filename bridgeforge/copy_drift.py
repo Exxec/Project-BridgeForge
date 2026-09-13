@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import re
 from pathlib import Path
 
 INCLUDED_DIRS = ("data", "jars", "graphics", "sounds")
@@ -54,7 +55,30 @@ def _collect(root: Path) -> dict[str, Path]:
     mod_info = root / "mod_info.json"
     if mod_info.is_file():
         files["mod_info.json"] = mod_info
+        # Jars mod_info.json declares are runtime payload wherever they live. SEEKER loads
+        # "jar/SEEKER.jar" (singular), which the fixed INCLUDED_DIRS never saw: drift reported PASS,
+        # --sync never copied a patched jar, and a release would have shipped without its code
+        # (live bug BF-DRIFT-01, 2026-09-13).
+        for relative in _declared_jars(mod_info):
+            item = root / relative
+            if item.is_file() and not _is_excluded(relative):
+                files[relative] = item
     return files
+
+
+_JARS_ARRAY = re.compile(r'"jars"\s*:\s*\[([^\]]*)\]', re.DOTALL)
+
+
+def _declared_jars(mod_info: Path) -> list[str]:
+    """Relative jar paths from mod_info.json's "jars" array (tolerant of comments/odd JSON)."""
+    try:
+        text = mod_info.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return []
+    match = _JARS_ARRAY.search(text)
+    if not match:
+        return []
+    return [entry.replace("\\", "/").lstrip("./") for entry in re.findall(r'"([^"]+)"', match.group(1))]
 
 
 def compare_copies(working_copy: Path, deployed_copy: Path) -> dict[str, object]:

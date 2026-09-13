@@ -24,6 +24,11 @@ docs/PERFORMANCE_WORKBENCH_DESIGN.md
 /tools/*.ps1
 !/tools/bf-test.ps1
 
+# Vanilla Starsector asset (Fractal Softworks): never redistributed. build-probe-mod copies it
+# from the local --core into the probe's mission folder.
+/probe-mod/data/missions/bfprobe_combat/icon.jpg
+/probe-mod/releases/bridgeforge-probe/data/missions/bfprobe_combat/icon.jpg
+
 # Local revival planning/reference material and supplied binary evidence.
 /docs/BridgeForge_Tooling_Pack.zip
 /docs/starsector_install-*.exe

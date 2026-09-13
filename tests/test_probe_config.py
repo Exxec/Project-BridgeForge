@@ -86,7 +86,7 @@ class ProbeConfigRigTests(unittest.TestCase):
                 self.skipTest("Directory junctions are not supported in this environment.")
             result = write_probe_config(mod, rig, dry_run=True)
             self.assertFalse(result["written"])
-            self.assertFalse((rig / "saves" / "common" / "bf_probe_config").exists())
+            self.assertFalse((rig / "saves" / "common" / "bf_probe_config.data").exists())
 
     def test_writes_config_and_marker_into_rig_common(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -97,8 +97,8 @@ class ProbeConfigRigTests(unittest.TestCase):
                 self.skipTest("Directory junctions are not supported in this environment.")
             result = write_probe_config(mod, rig, track_entities=["exipirated_avesta"], combat_seconds=30.0)
             self.assertTrue(result["written"])
-            config_path = rig / "saves" / "common" / "bf_probe_config"
-            marker_path = rig / "saves" / "common" / "bf_probe_rig"
+            config_path = rig / "saves" / "common" / "bf_probe_config.data"
+            marker_path = rig / "saves" / "common" / "bf_probe_rig.data"
             self.assertTrue(config_path.is_file())
             self.assertTrue(marker_path.is_file())
             written = json.loads(config_path.read_text(encoding="utf-8"))
@@ -114,7 +114,7 @@ class ProbeConfigRigTests(unittest.TestCase):
                 self.skipTest("Directory junctions are not supported in this environment.")
             rc = main(["probe-config", str(mod), "--runtime", str(rig), "--dry-run", "--json"])
             self.assertEqual(rc, 0)
-            self.assertFalse((rig / "saves" / "common" / "bf_probe_config").exists())
+            self.assertFalse((rig / "saves" / "common" / "bf_probe_config.data").exists())
 
 
 if __name__ == "__main__":

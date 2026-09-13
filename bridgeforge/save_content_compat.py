@@ -113,7 +113,9 @@ def collect_mod_id_universe(mod_dir: Path) -> dict[str, set[str]]:
     universe: dict[str, set[str]] = {}
     for category, (sub1, sub2, suffix) in _CATEGORY_DIRS.items():
         universe[category] = _stems(mod_dir / sub1 / sub2, suffix)
-    universe["wing"] = universe["variant"]
+    # Wing ids are the `id` column of wing_data.csv (e.g. exigency_azata_wing), not variant file
+    # stems; using variants flagged every knownFighters entry as missing (PRB-2, 2026-09-13).
+    universe["wing"] = _csv_ids(mod_dir / "data" / "hulls" / "wing_data.csv")
     for category, (sub1, sub2, filename) in _CATEGORY_CSVS.items():
         universe[category] = _csv_ids(mod_dir / sub1 / sub2 / filename)
     universe["faction"] = _faction_ids(mod_dir / "data" / "world" / "factions")
@@ -142,15 +144,30 @@ def _prefixes(ids: set[str]) -> set[str]:
     return prefixes
 
 
+# Path segments under which a save stores real data ids (known lists, hullmods, wings). A prefix-only
+# token counts as MISSING (a load failure) only here; elsewhere it is often an id the mod's own code
+# creates at runtime (markets, memory keys), reported as unattributed instead of failing the check.
+_DATA_ID_PATH_SEGMENTS = {
+    "knownShips", "knownFighters", "knownWeapons", "knownHullMods", "knownIndustries",
+    "priorityShips", "priorityFighters", "priorityWeapons", "hullMods", "sMods", "permaMods",
+    "wings", "variant", "hullSpec",
+}
+# Faction relations are stored as "<factionA>_<factionB>" keys (e.g. exigency_hegemony), which look
+# like mod-prefixed ids but are not data ids at all (PRB-2: 50+ false "missing" entries).
+_SKIP_PATH_SEGMENTS = {"relations"}
+
+
 def _candidate_tokens(campaign_xml: Path):
-    """Yield (token, sample_path) for the two confirmed data-id shapes (see module docstring)."""
+    """Yield (token, sample_path, in_data_id_list) for the confirmed data-id shapes (see module docstring)."""
     for element in iter_elements(campaign_xml):
         if element.tag == "st" and element.text:
-            yield element.text, "/" + "/".join(element.path)
+            if _SKIP_PATH_SEGMENTS.intersection(element.path):
+                continue
+            yield element.text, "/" + "/".join(element.path), bool(_DATA_ID_PATH_SEGMENTS.intersection(element.path))
         elif element.tag == "FMmbr":
             sid = element.attrs.get("sid")
             if sid:
-                yield sid, "/" + "/".join(element.path)
+                yield sid, "/" + "/".join(element.path), True
 
 
 def check_save_content(save: Path, mod_dir: Path, *, vanilla_core: Path | None = None) -> dict:
@@ -171,8 +188,9 @@ def check_save_content(save: Path, mod_dir: Path, *, vanilla_core: Path | None =
 
     present: dict[str, dict[str, object]] = {}
     missing: dict[str, dict[str, object]] = {}
+    unattributed: dict[str, dict[str, object]] = {}
 
-    for token, sample_path in _candidate_tokens(campaign_xml):
+    for token, sample_path, in_data_id_list in _candidate_tokens(campaign_xml):
         if token in mod_all:
             entry = present.setdefault(
                 token, {"category": _categorize(token, universe), "occurrences": 0, "sample_path": sample_path}
@@ -182,7 +200,8 @@ def check_save_content(save: Path, mod_dir: Path, *, vanilla_core: Path | None =
         if token in vanilla_all:
             continue
         if any(token.startswith(prefix) for prefix in mod_prefixes):
-            entry = missing.setdefault(token, {"occurrences": 0, "sample_path": sample_path})
+            bucket = missing if in_data_id_list else unattributed
+            entry = bucket.setdefault(token, {"occurrences": 0, "sample_path": sample_path})
             entry["occurrences"] += 1
 
     if missing:
@@ -209,6 +228,12 @@ def check_save_content(save: Path, mod_dir: Path, *, vanilla_core: Path | None =
         "missing": [
             {"id": token, "occurrences": entry["occurrences"], "sample_path": entry["sample_path"]}
             for token, entry in sorted(missing.items())
+        ],
+        # Mod-prefixed strings outside data-id lists (runtime-created market ids, memory keys...):
+        # reported for review, never a load failure on their own.
+        "unattributed_prefix_matches": [
+            {"id": token, "occurrences": entry["occurrences"], "sample_path": entry["sample_path"]}
+            for token, entry in sorted(unattributed.items())
         ],
     }
 

@@ -6,7 +6,9 @@ import com.fs.starfarer.api.combat.CombatEngineAPI;
 import com.fs.starfarer.api.combat.ShipAPI;
 import com.fs.starfarer.api.input.InputEventAPI;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Combat-side half of the probe (mission {@code bfprobe_combat}): logs
@@ -21,7 +23,9 @@ import java.util.List;
 public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
 
     private final float combatSeconds;
-    private boolean loggedDeployment = false;
+    // Ships spawn after init() (the first live run logged START/END and no ships at all), so each
+    // ship is logged the first time advance() sees it, which also catches reinforcements.
+    private final Set<ShipAPI> loggedShips = new HashSet<ShipAPI>();
     private boolean ended = false;
 
     public BfProbeCombatPlugin(float combatSeconds) {
@@ -31,17 +35,16 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
     @Override
     public void init(CombatEngineAPI engine) {
         ProbeLog.start("combat");
-        logDeployment(engine);
     }
 
-    private void logDeployment(CombatEngineAPI engine) {
-        if (loggedDeployment) {
-            return;
-        }
-        loggedDeployment = true;
+    private void logNewShips(CombatEngineAPI engine) {
         for (ShipAPI ship : engine.getShips()) {
+            if (ship == null || ship.isFighter() || !loggedShips.add(ship)) {
+                continue;
+            }
             String hullId = ship.getHullSpec() != null ? ship.getHullSpec().getHullId() : "?";
-            ProbeLog.emit("combat-deployment", ProbeLog.STATUS_INFO, ship.getName(), "hull=" + hullId);
+            ProbeLog.emit("combat-deployment", ProbeLog.STATUS_INFO, ship.getName(),
+                    "hull=" + hullId + " owner=" + ship.getOwner());
             PersonAPI captain = ship.getCaptain();
             if (captain != null && captain.getPersonalityAPI() == null) {
                 ProbeLog.emit("combat-captain-personality", ProbeLog.STATUS_WARN, ship.getName(),
@@ -59,8 +62,10 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
         if (engine == null || engine.isPaused()) {
             return;
         }
+        logNewShips(engine);
         if (engine.getTotalElapsedTime(false) >= combatSeconds) {
             ended = true;
+            ProbeLog.emit("combat-summary", ProbeLog.STATUS_INFO, "combat", "ships logged=" + loggedShips.size());
             ProbeLog.end("combat");
             engine.endCombat(0f);
         }

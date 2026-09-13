@@ -1588,7 +1588,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             result = build_probe_mod(repo_root, args.jdk, args.core)
             if args.install_release:
-                result["release"] = install_release(repo_root)
+                result["release"] = install_release(repo_root, args.core)
         except ProbeModBuildError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -1713,7 +1713,17 @@ def main(argv: list[str] | None = None) -> int:
             print("Isolation is an operator assertion; run rig-doctor with --reference-manifest before every session.")
         return 0
     if args.command == "rig-doctor":
-        working: dict[str, Path] = {} if args.no_default_working else dict(default_working_copies(Path(__file__).resolve().parent.parent))
+        # A historical reference rig holds the ORIGINAL mods on purpose: comparing it with the revived
+        # working copies would suggest a `prepare-test --sync` that overwrites the reference. Only
+        # explicit --working entries are compared there.
+        use_defaults = not (args.no_default_working or args.reference_manifest)
+        working: dict[str, Path] = dict(default_working_copies(Path(__file__).resolve().parent.parent)) if use_defaults else {}
+        if use_defaults:
+            # Defaults cover every project mod, but each rig holds only some (Vacuum has its own rig), so
+            # compare only the ones installed in THIS rig. Explicit --working entries are never filtered.
+            from .rig_doctor import _mods_by_id
+            installed = _mods_by_id(Path(args.runtime_dir) / "mods") if (Path(args.runtime_dir) / "mods").is_dir() else {}
+            working = {mod_id: path for mod_id, path in working.items() if mod_id in installed}
         for item in args.working:
             mod_id, sep, path = item.partition("=")
             if not sep or not mod_id or not path:

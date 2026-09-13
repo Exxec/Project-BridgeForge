@@ -44,10 +44,10 @@ Editing a profile directly in the rig
 --------------------------------------
 
 `bridgeforge probe-config --profile ...` also writes the profile's raw text into the rig itself,
-as the common file named exactly `bf_probe_profile` (no extension is appended -- this is the
-literal on-disk file name), next to `bf_probe_config`, under:
+as the common file `bf_probe_profile`. Starsector adds `.data` to every common file's name, so
+on disk it is `bf_probe_profile.data`, next to `bf_probe_config.data`, under:
 
-    <runtime_dir>/saves/common/bf_probe_profile
+    <runtime_dir>/saves/common/bf_probe_profile.data
 
 You can open that file directly in Notepad and edit it. The probe mod re-reads it at the first
 campaign tick of a save: if present, its setups REPLACE the config's setups (so you can change

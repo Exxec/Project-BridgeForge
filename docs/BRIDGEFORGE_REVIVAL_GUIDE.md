@@ -169,8 +169,8 @@ spawn pirates 120
 ```
 
 - **Using it:** `probe-config … --profile exigency-rep` (bundled: `exigency-rep`, `seeker-betelgeuse`, `flux-basic`) or `--profile C:\path\my.txt`.
-- **Editing in the rig:** the profile is copied to the rig as `saves\common\bf_probe_profile`. Edit that file in Notepad and start a New Game; no command needed. When a profile is present it replaces the `--setup` list.
-- **Leftover profiles:** running `probe-config` without `--profile` retires an old rig profile to `bf_probe_profile.prev`.
+- **Editing in the rig:** the profile is copied to the rig as `saves\common\bf_probe_profile.data`. Starsector adds `.data` to every file a mod keeps there. Edit that file in Notepad and start a New Game; no command needed. When a profile is present it replaces the `--setup` list.
+- **Leftover profiles:** running `probe-config` without `--profile` retires an old rig profile to `bf_probe_profile.data.prev`.
 
 **Snapshots.** Keep good starting points and reuse them. Snapshots stay inside the rig; restoring never overwrites a save unless you pass `--replace`:
 

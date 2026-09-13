@@ -1,0 +1,7 @@
+BridgeForge Probe: Combat
+
+A test-rig-only diagnostic mission. Every hull from the mod under test is deployed under AI
+control against a mirrored fleet. The probe logs each ship deployed and flags any captain with
+no personality (BF-PROBE lines in starsector.log).
+
+Just let the battle play out, then close the mission.

@@ -9,6 +9,7 @@ import com.fs.starfarer.api.mission.FleetSide;
 import com.fs.starfarer.api.mission.MissionDefinitionAPI;
 import com.fs.starfarer.api.mission.MissionDefinitionPlugin;
 
+import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -52,9 +53,14 @@ public class MissionDefinition implements MissionDefinitionPlugin {
         int index = 0;
         int deployedA = 0;
         int deployedB = 0;
-        for (Map.Entry<String, String> entry : config.variantByHull.entrySet()) {
-            String hullId = entry.getKey();
-            String variantId = entry.getValue();
+        // The game compiles this loose file with Janino, which ignores generics: a for-each over
+        // Map.Entry<String, String> reads as Object -> String and fails to compile (live bug
+        // PRB-MISSION-02). Use a raw iterator with explicit casts, like vanilla loose scripts.
+        Iterator it = config.variantByHull.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry entry = (Map.Entry) it.next();
+            String hullId = (String) entry.getKey();
+            String variantId = (String) entry.getValue();
             FleetSide side = (index % 2 == 0) ? FleetSide.PLAYER : FleetSide.ENEMY;
             boolean sideFull = side == FleetSide.PLAYER ? deployedA >= cap : deployedB >= cap;
             if (sideFull) {

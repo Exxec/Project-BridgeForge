@@ -41,8 +41,10 @@ class CheckSaveContentTests(unittest.TestCase):
             write_mod_data(mod_dir, hulls=("samplemod_hull",))
             save_dir = Path(directory) / "save"
             # samplemod_removedhull shares the mod's "samplemod_" prefix but the build no
-            # longer has that hull -- the id-level analogue of a removed class.
-            xml = SAVE_HEADER + "<st>samplemod_removedhull</st>\n" + SAVE_FOOTER
+            # longer has that hull -- the id-level analogue of a removed class. It sits in a
+            # knownShips list, where a save stores real data ids (a prefix match elsewhere is only
+            # reported as unattributed; see test_save_content_false_positives.py).
+            xml = SAVE_HEADER + "<knownShips><st>samplemod_removedhull</st></knownShips>\n" + SAVE_FOOTER
             write_text(save_dir / "campaign.xml", xml)
 
             result = check_save_content(save_dir, mod_dir)

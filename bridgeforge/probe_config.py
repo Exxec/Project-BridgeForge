@@ -14,12 +14,16 @@ DEFAULT_CAMPAIGN_INTERVAL_DAYS = 5.0
 DEFAULT_COMBAT_SECONDS = 60.0
 DEFAULT_COMBAT_CAP_PER_SIDE = 12
 
-RIG_MARKER_FILE = "bf_probe_rig"
-CONFIG_FILE = "bf_probe_config"
-# roadmap P3c-1: the rig-editable profile common file, read straight through Java's
-# ProbeFiles/ProbeConfig the same way CONFIG_FILE is -- SettingsAPI's common-file methods append
-# no extension, so this is the literal on-disk name under <runtime_dir>/saves/common/.
-PROFILE_FILE = "bf_probe_profile"
+# On-disk names under <runtime_dir>/saves/common/. Starsector's SettingsAPI common-file methods
+# APPEND ".data" to the name the mod asks for: the probe's Java side reads "bf_probe_rig" and the
+# game looks for "bf_probe_rig.data" (every other mod's common file there ends in .data too, and the
+# probe's own writeTextFileToCommon("bf_probe_report") produced bf_probe_report.data). Writing the
+# bare names left the probe switched off on its first live run (live bug PRB-COMMON-01).
+COMMON_FILE_SUFFIX = ".data"
+RIG_MARKER_FILE = "bf_probe_rig" + COMMON_FILE_SUFFIX
+CONFIG_FILE = "bf_probe_config" + COMMON_FILE_SUFFIX
+# roadmap P3c-1: the rig-editable profile, read by Java's ProbeFiles.PROFILE ("bf_probe_profile").
+PROFILE_FILE = "bf_probe_profile" + COMMON_FILE_SUFFIX
 PROBE_MOD_ID = "bridgeforge_probe"
 
 # Bundled profiles live under bridgeforge/probe_profiles/<name>.txt (roadmap P3c-1).
@@ -248,19 +252,56 @@ def _render_profile_text(profile: dict[str, object]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _hull_sizes(mod_root: Path) -> dict[str, str]:
+    """hullId -> hullSize from every data/hulls/*.ship file (keyed by the declared hullId, not the file name)."""
+    sizes: dict[str, str] = {}
+    for path in sorted((mod_root / "data" / "hulls").glob("*.ship")):
+        data = _load_lenient_json_file(path)
+        if isinstance(data, dict) and isinstance(data.get("hullId"), str) and isinstance(data.get("hullSize"), str):
+            sizes[data["hullId"]] = data["hullSize"].strip().upper()
+    return sizes
+
+
 def _hull_inventory(mod_root: Path) -> list[str]:
-    """Non-module, non-fighter hull ids from data/hulls/ship_data.csv, same convention as dossier._hull_inventory."""
+    """Deployable hull ids from data/hulls/ship_data.csv: no modules, no fighters.
+
+    A fighter is caught by its ship_data `hints` OR by its .ship `hullSize` of FIGHTER. Many mods
+    leave `hints` blank for fighters (Exigency's Tarujan/Azata/Naxos), and deploying a fighter variant
+    as a SHIP made the game substitute a vanilla Nebula starliner (live bug PRB-FIGHTER-01).
+    """
     path = mod_root / "data" / "hulls" / "ship_data.csv"
+    sizes = _hull_sizes(mod_root)
     hulls: list[str] = []
     for row in _read_csv_rows(path) or []:
         hull_id = (row.get("id") or "").strip()
         if not hull_id or hull_id.startswith("#"):
             continue
         hints = (row.get("hints") or "").upper()
-        if "MODULE" in hints or "FIGHTER" in hints:
+        if "MODULE" in hints or "FIGHTER" in hints or sizes.get(hull_id) == "FIGHTER":
+            continue
+        if _is_wreck_piece(row):
             continue
         hulls.append(hull_id)
     return sorted(set(hulls))
+
+
+_WRECK_DESIGNATION_WORDS = ("debris", "wreck", "hulk", "fragment")
+
+
+def _is_wreck_piece(row: dict[str, str]) -> bool:
+    """Hulls a mod spawns only as wreckage (SEEKER's 13 "Debris" hulks), never as fighting ships.
+
+    Deployed as ships they are disabled on the spot ("... debris class disabled") and crowd real
+    hulls out of the per-side cap (live run SK13-1c: 13 debris pieces pushed ART_armor, SKR_clipper
+    and CIV_titanic out of the battle) (PRB-DEBRIS-01).
+    """
+    designation = (row.get("designation") or "").strip().lower()
+    return any(word in designation for word in _WRECK_DESIGNATION_WORDS)
+
+
+def _wreck_pieces(mod_root: Path) -> list[str]:
+    path = mod_root / "data" / "hulls" / "ship_data.csv"
+    return sorted({(row.get("id") or "").strip() for row in _read_csv_rows(path) or [] if (row.get("id") or "").strip() and _is_wreck_piece(row)})
 
 
 def _variant_by_hull(mod_root: Path, hulls: list[str]) -> dict[str, str]:

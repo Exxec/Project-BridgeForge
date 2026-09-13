@@ -35,7 +35,7 @@ class LogTriageTests(unittest.TestCase):
                         "\tat data.scripts.world.exigency.Tasserus.generate(Tasserus.java:250)",
                         "400 [Thread-8] INFO  sound.O  - Creating streaming player for music with id [miscallenous_main_menu.ogg]",
                         "500 [Thread-8] INFO  sound.H  - Playing music with id [miscallenous_main_menu.ogg]",
-                        "600 [Thread-2] WARN  com.fs.starfarer.loading.WeaponSpreadsheetLoader  - Weapon [lightmortar_fighter] from weapon_data.csv not found in store",
+                        "600 [Thread-2] WARN  com.fs.starfarer.loading.WeaponSpreadsheetLoader  - Weapon [my_mod_gun] from weapon_data.csv not found in store",
                     ]
                 ),
                 encoding="utf-8",

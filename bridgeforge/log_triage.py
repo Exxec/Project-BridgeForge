@@ -20,9 +20,16 @@ LINE_RE = re.compile(r"^(?P<millis>\d+)\s+\[(?P<thread>[^\]]*)\]\s+(?P<level>INF
 
 # Lines/stack traces that end the game outright.
 FATAL_PATTERNS = (
+    # Live run SK13-1d: setPersonality() with an id RC8 does not define (0.6.x's "suicidal"/"fearless")
+    # leaves the officer's personality null; the ship AI then NPEs on deploy (scanner: personality-id-unknown).
+    ("Null officer personality (unknown personality id)", re.compile(r'rpg\.Person\.getPersonality\(\)" is null')),
     ("Fatal error dialog", re.compile(r"\bFatal:")),
     ("SecurityException", re.compile(r"java\.lang\.SecurityException")),
     ("Spec not found", re.compile(r"RuntimeException: Spec of class \[.+?\] with id \[.+?\] not found")),
+    # Loose scripts (missions, data/**/*.java) are compiled at runtime by Janino; a failure there is
+    # a Fatal dialog before the main menu (live bug PRB-MISSION-02), logged only as these two lines.
+    ("Janino script compile error", re.compile(r"org\.codehaus\.commons\.compiler\.CompileException")),
+    ("Script class load error", re.compile(r"RuntimeException: Error loading \[[\w.$]+\]")),
     ("NoClassDefFoundError", re.compile(r"NoClassDefFoundError")),
     ("AbstractMethodError", re.compile(r"AbstractMethodError")),
     ("NoSuchMethodError", re.compile(r"NoSuchMethodError")),
@@ -42,6 +49,7 @@ KNOWN_NOISE = (
     ("Nexerelin quest-skip JSON", re.compile(r"QuestChainSkipEntry"), "Nexerelin quest-skip list JSON parse hiccup; known non-fatal first-run/format issue."),
     ("Nexerelin first-run setup", re.compile(r"ExerelinSetupData"), "Nexerelin first-run setup-data initialization notice; non-fatal."),
     ("MagicLib subsystemInfoKey", re.compile(r"subsystemInfoKey"), "MagicLib subsystem settings key type warning; falls back to a default, non-fatal."),
+    ("Vanilla lightmortar_fighter row", re.compile(r"Weapon \[lightmortar_fighter\] from weapon_data\.csv not found in store"), "RC8's own weapon_data.csv keeps a '#'-named Light Mortar (Fighter) row with no .wpn file; logged every run, no effect."),
 )
 
 SPEC_STORE_SHIP_SYSTEM_RE = re.compile(r"Ship system \[(?P<system>[^\]]+)\] from (?P<csv>\S+\.csv) not found in store")
@@ -109,6 +117,10 @@ def _classify_event(event: _Event, mod_prefixes: tuple[str, ...]) -> dict[str, o
     for label, pattern in FATAL_PATTERNS:
         if pattern.search(event.haystack):
             return {"category": "FATAL", "matched_rule": label}
+    # An exception escaping the combat loop is a Fatal dialog (live run SK13-1: SEEKER's
+    # ART_thrusterRotation NPE). The logger/level live outside `haystack`, so check them directly.
+    if event.level == "ERROR" and event.logger.endswith("combat.CombatMain") and re.match(r"java\.lang\.\w+(?:Exception|Error)\b", event.head_message.strip()):
+        return {"category": "FATAL", "matched_rule": "Combat loop exception"}
     if _first_mod_frame(event, mod_prefixes) is not None:
         return {"category": "MOD-ERROR"}
     return {"category": "OTHER"}

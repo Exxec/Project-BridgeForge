@@ -10,6 +10,7 @@ import com.fs.starfarer.api.campaign.StarSystemAPI;
 import com.fs.starfarer.api.campaign.rules.MemoryAPI;
 import com.fs.starfarer.api.fleet.FleetMemberAPI;
 import com.fs.starfarer.api.fleet.FleetMemberType;
+import com.fs.starfarer.api.impl.campaign.ids.ShipRoles;
 
 import java.util.List;
 
@@ -188,17 +189,23 @@ final class ProbeSetup {
         // requested budget rather than trusting a single call to hit it exactly.
         CampaignFleetAPI fleet = Global.getFactory().createEmptyFleet(faction, true);
         FactionAPI.ShipPickParams params = FactionAPI.ShipPickParams.all();
-        float accumulated = 0f;
-        for (int i = 0; i < 20 && accumulated < targetFp; i++) {
-            float added = faction.pickShipAndAddToFleet("combat", params, fleet);
-            if (added <= 0f) {
-                break;
+        // Real role ids (ShipRoles constants in starfarer.api.jar). The first live run asked for a
+        // role named "combat", which no faction has, so no fleet ever spawned (PRB-FLEET-01).
+        String[] roles = { ShipRoles.COMBAT_SMALL, ShipRoles.COMBAT_MEDIUM, ShipRoles.COMBAT_LARGE, ShipRoles.COMBAT_CAPITAL };
+        // Size by the fleet's real fleet points: pickShipAndAddToFleet's return value is not FP (the
+        // SK13-1b run asked for 120 FP and got a 40-ship fleet, "actualFP=40") (PRB-FLEET-02).
+        int misses = 0;
+        for (int i = 0; i < 60 && fleet.getFleetPoints() < targetFp && misses < roles.length * 2; i++) {
+            int before = fleet.getFleetData().getMembersListCopy().size();
+            faction.pickShipAndAddToFleet(roles[i % roles.length], params, fleet);
+            if (fleet.getFleetData().getMembersListCopy().size() <= before) {
+                misses++;
             }
-            accumulated += added;
         }
+        float accumulated = fleet.getFleetPoints();
         if (fleet.getFleetData().getMembersListCopy().isEmpty()) {
             ProbeLog.emit("setup", ProbeLog.STATUS_FAIL, setup,
-                    "No ships could be added for faction=" + factionId + " (role 'combat' unavailable)");
+                    "No ships could be added for faction=" + factionId + " (roles combatSmall/Medium/Large/Capital all empty)");
             return;
         }
         location.addEntity(fleet);

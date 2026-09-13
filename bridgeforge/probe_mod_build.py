@@ -30,8 +30,34 @@ MISSION_SOURCE_RELATIVE = MOD_ROOT_RELATIVE / "data" / "missions" / "bfprobe_com
 RELEASE_RELATIVE = MOD_ROOT_RELATIVE / "releases" / "bridgeforge-probe"
 
 
+MISSION_CLASS_NAME = "data.missions.bfprobe_combat.MissionDefinition"
+# The game compiles loose scripts at runtime with Janino, which ignores generics; javac does not, so a
+# javac-only check once let a Fatal-at-startup mission ship (live bug PRB-MISSION-02).
+_JANINO_JAR_NAMES = ("janino.jar", "commons-compiler.jar")
+_JANINO_HARNESS = Path(__file__).with_name("java") / "JaninoCheck.java"
+
+
 class ProbeModBuildError(ValueError):
     """Raised for a refused or failed probe-mod build."""
+
+
+def _janino_check(javac: Path, core_dir: Path, parent_classpath: str, source_root: Path, class_name: str, work_dir: Path) -> tuple[str, str | None]:
+    """Compile one loose script exactly as the game does (Janino JavaSourceClassLoader). PASS / FAIL / UNAVAILABLE."""
+    core = Path(core_dir).expanduser().resolve()
+    janino_jars = [core / name for name in _JANINO_JAR_NAMES]
+    if not all(jar.is_file() for jar in janino_jars) or not _JANINO_HARNESS.is_file():
+        return "UNAVAILABLE", "janino.jar / commons-compiler.jar not found under --core"
+    janino_classpath = ";".join(str(jar) for jar in janino_jars)
+    harness_dir = work_dir / "janino-harness"
+    _run_javac(javac, janino_classpath, [_JANINO_HARNESS], harness_dir)
+    java = javac.with_name("java.exe")
+    completed = subprocess.run(
+        [str(java), "-cp", f"{janino_classpath};{harness_dir}", "JaninoCheck", str(source_root), class_name, parent_classpath],
+        capture_output=True, text=True, check=False,
+    )
+    if completed.returncode == 0:
+        return "PASS", None
+    return "FAIL", (completed.stdout + completed.stderr).strip()
 
 
 def _find_javac(jdk_dir: Path) -> Path:
@@ -115,6 +141,13 @@ def build_probe_mod(repo_root: Path, jdk_dir: Path, core_dir: Path, keep_build_d
             mission_ok = False
             mission_error = str(exc)
 
+    janino_status, janino_error = "SKIPPED", None
+    if mission_source.is_file() and mission_ok:
+        janino_status, janino_error = _janino_check(javac, core_dir, f"{classpath};{jar_path}", mod_root, MISSION_CLASS_NAME, build_dir)
+        if janino_status == "FAIL":
+            mission_ok = False
+            mission_error = f"Janino (the game's runtime compiler) rejected the loose mission: {janino_error}"
+
     if not keep_build_dir:
         shutil.rmtree(build_dir, ignore_errors=True)
 
@@ -125,11 +158,22 @@ def build_probe_mod(repo_root: Path, jdk_dir: Path, core_dir: Path, keep_build_d
         "mission_source": str(mission_source),
         "mission_compiles": mission_ok,
         "mission_error": mission_error,
+        "mission_janino": janino_status,
     }
 
 
-def install_release(repo_root: Path) -> dict[str, object]:
-    """Assemble the runtime-only release copy (mod_info + jar + data), no source/build files."""
+# The probe mission's icon is vanilla art (Fractal Softworks), so the public repo never carries it
+# (.gitignore): the release copies it from the local starsector-core. A mission without its declared
+# icon is a Fatal dialog at startup (PRB-MISSION-01).
+VANILLA_MISSION_ICON = Path("data") / "missions" / "afistfulofcredits" / "icon.jpg"
+PROBE_MISSION_ICON = Path("data") / "missions" / "bfprobe_combat" / "icon.jpg"
+
+
+def install_release(repo_root: Path, core_dir: Path | None = None) -> dict[str, object]:
+    """Assemble the runtime-only release copy (mod_info + jar + data), no source/build files.
+
+    `core_dir` (starsector-core) supplies the vanilla mission icon; required when the source tree lacks it.
+    """
     repo_root = Path(repo_root).expanduser().resolve()
     mod_root = repo_root / MOD_ROOT_RELATIVE
     release_dir = repo_root / RELEASE_RELATIVE
@@ -151,5 +195,16 @@ def install_release(repo_root: Path) -> dict[str, object]:
     data_src = mod_root / "data"
     data_dst = release_dir / "data"
     shutil.copytree(data_src, data_dst)
+
+    icon_dst = release_dir / PROBE_MISSION_ICON
+    icon_src = Path(core_dir).expanduser().resolve() / VANILLA_MISSION_ICON if core_dir else None
+    if icon_src is not None and icon_src.is_file():
+        shutil.copy2(icon_src, icon_dst)
+    elif not icon_dst.is_file():
+        shutil.rmtree(release_dir, ignore_errors=True)
+        raise ProbeModBuildError(
+            f"the probe mission needs {PROBE_MISSION_ICON.as_posix()} (vanilla art, not in the repo); "
+            f"pass --core so it can be copied from {VANILLA_MISSION_ICON.as_posix()}"
+        )
 
     return {"release_dir": str(release_dir)}

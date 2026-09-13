@@ -69,6 +69,12 @@ def resolve_save_dir(save: Path | str) -> Path:
 
 
 def campaign_xml_path(save: Path | str) -> Path:
+    # An explicit campaign.xml* file (notably campaign.xml.bak, the previous save) is used as given;
+    # mapping it back to its folder made `save-diff campaign.xml campaign.xml.bak` compare a file
+    # with itself (PRB-2, 2026-09-13).
+    explicit = Path(save).expanduser().resolve()
+    if explicit.is_file() and explicit.name.startswith("campaign.xml"):
+        return explicit
     save_dir = resolve_save_dir(save)
     campaign = save_dir / "campaign.xml"
     if not campaign.is_file():

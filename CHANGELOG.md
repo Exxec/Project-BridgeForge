@@ -2,6 +2,69 @@
 
 ## Unreleased
 
+- The probe mission's `icon.jpg` is vanilla art (Fractal Softworks), so the public repo no longer carries it. Both copies are gitignored. `build-probe-mod --install-release` copies it from `--core` (`data/missions/afistfulofcredits/icon.jpg`), and without it the release fails with a clear error instead of shipping a mission that Fatals at startup.
+- Live run SK13-1e confirmed SEEKER-PERSONALITY-01 fixed on Seeker [BF r3]: triage FATAL=0, MOD-ERROR=0, no `getPersonality` NPE. Live runs FLX-R4b (Nexerelin Corvus: Radikius generated once, Infected fleets normal) and FLX-R5 passed, so Flu-X has now passed FLX-R1..R5.
+- `log-triage` now files RC8's own `Weapon [lightmortar_fighter] from weapon_data.csv not found in store` warning as known noise. Vanilla keeps a `#`-named row with no `.wpn` file, so every run logged it and it showed up as an unexplained OTHER event.
+- SEEKER fix for SEEKER-PERSONALITY-01, a Fatal on deploy in five SEEKER missions (live run SK13-1d). The missions gave enemy captains the 0.6-era personalities "suicidal"/"fearless", which RC8 lacks, so the personality stayed null and the ship AI crashed. The five `MissionDefinition` classes now use "reckless", changed by a same-length constant-pool edit in `jar/SEEKER.jar` with no recompile; the other 122 jar entries are byte-identical. Build tag Seeker [BF r3].
+- New check `personality-id-unknown` (MANUAL) flags `setPersonality` ids RC8 doesn't define, in jars and in source. Ids a mod adds in its own `data/characters/personalities.csv` count as valid (Vacuum). A sweep of every working copy found SEEKER's 5 classes and nothing else. Flu-X's "The infected are fearless" briefing line is correctly ignored.
+- `log-triage` names this crash: new FATAL rule "Null officer personality (unknown personality id)".
+- `bf-test.ps1` gains a `flux-nex` preset (Flu-X plus Nexerelin) for FLX-R4. Live runs FLX-R1..R3 passed with no issues.
+
+- The probe combat mission no longer deploys wreck-only hulls (PRB-DEBRIS-01): hulls whose `ship_data.csv` designation is Debris, Wreck, Hulk or Fragment. SEEKER's 13 "Debris" hulks were disabled on arrival and pushed real hulls (ART_armor, SKR_clipper, CIV_titanic) out of the battle.
+- Live run SK13-1c confirmed SEEKER-DEATH-01 fixed (the Betelgeuse shatters once, with no slowdown) and the pirate spawn sized correctly (12 ships, ~120 FP).
+
+- SEEKER fix for SEEKER-DEATH-01, the Betelgeuse death slowdown (live run SK13-1b). `ART_organicHull` ran its death effect every frame on the persisting wreck, spawning 3 debris ships and 15 projectiles each frame. It now runs once per ship, guarded by the ship's custom data. The class was patched into `jar/SEEKER.jar` the same way as SEEKER-STATIC-01.
+- New check `hullmod-instance-state` (REVIEW) flags hull mods that keep mutable instance fields, which are shared across every ship with that hull mod. It works on jars or source.
+- Fix the probe's `spawn-fleet` sizing (PRB-FLEET-02). It stops at the requested fleet points via `getFleetPoints()`; before, 120 FP produced a 40-ship fleet.
+
+- Fix `copy_drift` ignoring jars outside `jars/` (BF-DRIFT-01). It now also collects every jar `mod_info.json` declares. SEEKER's `jar/SEEKER.jar` had never been compared or synced, so drift reported PASS while the rig ran an old jar, and a `release` would have shipped SEEKER without its code.
+
+- SEEKER fix for SEEKER-STATIC-01, the first real mod crash found by a live run (SK13-1).
+  - `ART_thrusterRotation` and `ART_shockwave_weaponGlow` kept per-weapon state in `static` fields shared across every copy in a battle. Vector-cruiser debris spawned mid-battle overwrote them, and a living cruiser then read a ship with no system, which was a Fatal NPE.
+  - The fields are now instance fields, `getSystem()` is null-checked, and the glow effect skips ships lacking their gun or beam.
+  - The two classes were recompiled from the jar's own decompiled source and swapped into `jar/SEEKER.jar` surgically; all other entries are unchanged, and the pre-patch jar is kept as `SEEKER.jar.pre-static-fix.bak`.
+
+- Fix the Vacuum bounty-board dialog lock (VAC-DIALOG-01, player report). The revival's station options re-populated the menu with `FireBest PopulateOptions`, so only one options rule ran and Leave could disappear. Both rows now use `FireAll PopulateOptions`, as vanilla does everywhere. Vacuum's build tag is bumped.
+  - New check `rules-firebest-populate-options` (MANUAL) flags this in any mod's `rules.csv`; Vacuum was the only mod affected.
+- SEEKER and Flu-X pulled back from `Done/` for re-processing (owner, 2026-09-13), logged in `In operation/_REORG_2026-09-13_done-pullback.json`. SEEKER's working copy is now `In operation/SEEKER/working`.
+
+- New check `weapon-effect-static-combat-state` (MANUAL) from live run SK13-1, SEEKER's first real crash found by a live run.
+  - It flags per-weapon plugin classes (`EveryFrameWeaponEffectPlugin`, `OnFire`/`OnHit` effects) that keep a ship, weapon, engine controller, system or projectile in a `static` field, in loaded jars or in source.
+  - SEEKER's `ART_thrusterRotation` shares `static ShipAPI ship` across every weapon copy, so Vector-cruiser debris spawned mid-battle made a living cruiser read a ship with no system, which is a Fatal NPE.
+  - The class-file parser now records the superclass, interfaces and field flags.
+- `log-triage` classifies an exception escaping `CombatMain` as FATAL ("Combat loop exception"). It had shown as MOD-ERROR, although the game shows a Fatal dialog.
+- Fix the probe's `spawn-fleet` setup (PRB-FLEET-01). It asked factions for role `"combat"`, which doesn't exist, and now tries `combatSmall`/`Medium`/`Large`/`Capital`.
+
+- Fix `save-content` false failures found by live run PRB-2: 50+ false "missing" ids on a healthy Exigency save.
+  - Wing ids now come from `wing_data.csv`, not variant file names.
+  - Faction relation keys (`exigency_hegemony`…) are skipped.
+  - A mod-prefixed string counts as MISSING only inside real data-id lists: known lists, hullmods, wings, fleet-member variants. Elsewhere, for example runtime-created market ids, it goes to a new `unattributed_prefix_matches` list and doesn't fail the check.
+- Fix `save-diff campaign.xml campaign.xml.bak` comparing a file with itself. An explicit `campaign.xml*` path is now used as given.
+
+- Fix the probe's planet check reporting every planet as a failure (PRB-PLANET-01). It looked types up with `getSpec(PlanetSpecAPI.class, …)`, which never resolves them. It now checks each planet's type against `getAllPlanetSpecs()`, logs FAIL only for genuinely unresolved types, and ends with one summary line instead of one line per planet.
+- First fully working live run (PRB-1c): the campaign checks ran, 12 real Exigency ships deployed with no Nebulas, and the `avesta-near` scenario passed. The clock timestamp was logged as `-55661260032000`, confirming PRB-CAMPAIGN-01's negative-timestamp cause.
+
+- Fix fighter hulls being deployed as ships in the probe combat mission (PRB-FIGHTER-01). Exigency's Tarujan, Azata and Naxos have blank `ship_data.csv` hints, so the probe treated them as ships, and the game swapped in a vanilla Nebula starliner. The probe's hull list now also excludes any hull whose `.ship` file declares `hullSize: FIGHTER`.
+
+- Fix the probe's combat logging (PRB-COMBAT-01). The first successful run logged only START and END: ships spawn after the plugin's `init()`, so the deployment and captain-personality checks saw no ships.
+  - Each ship is now logged the first time a combat frame sees it, with a `combat-summary` count at the end.
+  - The campaign script logs `campaign-armed` on its first tick, so a log shows whether the check window was ever reached.
+- Fix the campaign probe never running its checks (PRB-CAMPAIGN-01). It used `startTimestamp < 0` as "not started", but campaign clock timestamps can be negative, so it re-armed every frame (1,519 `campaign-armed` lines in one session). It now uses a boolean, and the heartbeat records the clock timestamp.
+
+- Fix the third live-run failure (PRB-COMMON-01): the probe stayed switched off because Starsector appends `.data` to common-file names.
+  - `probe-config` now writes `bf_probe_rig.data`, `bf_probe_config.data` and `bf_probe_profile.data`.
+  - A new test pins each on-disk name to its Java `ProbeFiles` name plus `.data`.
+
+- Fix the second live-run crash (PRB-MISSION-02). The game compiles loose scripts with Janino, which ignores generics, so the probe mission's for-each over `Map.Entry<String, String>` failed as Object → String.
+  - The mission now iterates with a raw iterator and explicit casts, the way vanilla loose scripts do.
+  - A new scanner check, `loose-script-janino-risk` (REVIEW), flags typed for-each loops, diamonds and lambdas in loose `data/**/*.java` files.
+  - `log-triage` now classifies Janino compile errors and `Error loading [class]` failures as FATAL; before, they showed as FATAL=0.
+
+- Fix the first live-run crash (PRB-MISSION-01). The probe's combat mission shipped without `mission_text.txt` and an icon, which is a Fatal dialog before the main menu.
+  - The mission now ships all four files every vanilla mission has.
+  - A new scanner check, `mission-required-file-missing`, flags any listed mission missing a required file or its declared icon.
+- `rig-doctor` no longer compares the revived working copies with a historical reference rig. It had suggested a `prepare-test --sync` that would overwrite the original mod there. By default it now compares only the mods installed in the rig being checked (Vacuum has its own rig), and explicit `--working` entries are still always checked.
+
 No changes yet.
 
 ## 0.2.0 — 2026-09-12
