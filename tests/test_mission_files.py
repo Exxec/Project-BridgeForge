@@ -75,7 +75,11 @@ class MissionRequiredFilesTests(unittest.TestCase):
 
     def test_probe_mod_mission_is_complete(self) -> None:
         # The probe's own combat mission once shipped without mission_text.txt (Fatal at the first live run).
-        self.assertEqual(_findings(REPO_ROOT / "probe-mod"), [])
+        # Its icon is vanilla art: gitignored, and install_release copies it from --core, so a clean
+        # checkout may lack exactly that file (tests/test_probe_release_icon.py) and nothing else.
+        allowed = {"mission:bfprobe_combat", "missing:icon.jpg (descriptor icon)"}
+        evidence = [item for finding in _findings(REPO_ROOT / "probe-mod") for item in finding.evidence]
+        self.assertEqual([item for item in evidence if item not in allowed], [])
 
 
 if __name__ == "__main__":
