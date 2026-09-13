@@ -328,6 +328,24 @@ def _mod_root(mod_dir: Path) -> Path:
     return _find_mod_info(mod_dir).parent
 
 
+def _mod_faction_ids(mod_root: Path) -> list[str]:
+    """Faction ids the mod declares in data/world/factions/*.faction.
+
+    The probe checks these even when they own no markets. In live run EX-7, Exigency's
+    market-less faction had 0 fleets for ~20 days and no probe check looked at it.
+    """
+    ids: set[str] = set()
+    for path in sorted((mod_root / "data" / "world" / "factions").glob("*.faction")):
+        try:
+            data = _load_lenient_json_file(path)
+        except (OSError, ValueError):
+            continue
+        faction_id = data.get("id") if isinstance(data, dict) else None
+        if isinstance(faction_id, str) and faction_id:
+            ids.add(faction_id)
+    return sorted(ids)
+
+
 def build_probe_config(
     mod_dir: Path,
     track_entities: list[str] | None = None,
@@ -370,6 +388,7 @@ def build_probe_config(
         "hulls": hulls_with_variant,
         "variants": variants,
         "track_entities": sorted(set(track_entities or [])),
+        "factions": _mod_faction_ids(mod_root),
         "campaign_interval_days": campaign_interval_days,
         "combat_seconds": combat_seconds,
         "combat_cap_per_side": combat_cap_per_side,

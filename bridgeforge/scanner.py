@@ -787,6 +787,8 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
     _scan_rules_firebest_populate_options(root, result)
     _scan_hullmod_instance_state(root, result)
     _scan_personality_ids(root, result)
+    _scan_bare_market_fleet_source(root, result)
+    _scan_legacy_event_report(root, result)
     _scan_source_build_dependencies(root, result, import_locations)
 
     scan_lazylib_compat(root, result)
@@ -2184,6 +2186,96 @@ def _scan_personality_ids(root: Path, result: ScanResult) -> None:
         unknown = sorted({match.group(1) for match in _SOURCE_SET_PERSONALITY.finditer(text) if match.group(1) not in valid})
         if unknown:
             result.add(id="personality-id-unknown", category="scripts", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=explanation, file=_relative(root, source), evidence=[f"personality:{value}" for value in unknown])
+
+
+# RC8's FleetFactoryV3 multiplies fleet size by the source market's Stats.COMBAT_FLEET_SIZE_MULT.
+# A bare Global.getFactory().createMarket(...) has no industries, so the multiplier is 0 and every
+# fleet comes out empty and vanishes (live run EX-7: no Exigency fleets in Tasserus, no error).
+_FLEET_FACTORY_V3 = "com/fs/starfarer/api/impl/campaign/fleets/FleetFactoryV3"
+_FLEET_SIZE_MULT_KEY = "combat_fleet_size_mult"  # value of Stats.COMBAT_FLEET_SIZE_MULT
+
+
+_SECTOR_API = "com/fs/starfarer/api/campaign/SectorAPI"
+
+
+def _scan_legacy_event_report(root: Path, result: ScanResult) -> None:
+    """SectorAPI.reportEventStage is a documented no-op in 0.98a (live run EX-7b, EXI-EVENT-01).
+
+    Old event plugins put their real effect (reputation changes, rewards) in the
+    OnMessageDeliveryScript passed to reportEventStage. RC8 still accepts the call but does nothing,
+    so that script never runs: no message, no penalty, no error.
+    """
+    explanation = (
+        "This code calls Global.getSector().reportEventStage(...). In 0.98a that method is deprecated and does "
+        "nothing (the old comm-message system was replaced by intel), so any effect placed in its delivery "
+        "script never happens, with no error. Exigency's illegal-tech event caught the player but never applied "
+        "its reputation penalty this way. Apply the effect directly (e.g. adjustPlayerReputation) and notify via "
+        "getCampaignUI().addMessage(...) or an intel item."
+    )
+    for jar, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None or "reportEventStage" not in info.utf8_values or _SECTOR_API not in info.referenced_classes:
+            continue
+        result.add(id="legacy-event-report-noop", category="campaign", severity="high", classification="MANUAL", confidence="HIGH", explanation=explanation, file=f"{_relative(root, jar)}!{member}", evidence=["call:SectorAPI.reportEventStage"])
+    for source in sorted(root.rglob("*.java")):
+        if any(part in NON_MOD_JAR_DIRS or part.startswith("src-decompiled") for part in source.relative_to(root).parts):
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        lines = [text.count("\n", 0, match.start()) + 1 for match in re.finditer(r"\.reportEventStage\s*\(", text)]
+        if lines:
+            result.add(id="legacy-event-report-noop", category="campaign", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=explanation, file=_relative(root, source), evidence=[f"line:{line}" for line in lines])
+
+
+def _scan_bare_market_fleet_source(root: Path, result: ScanResult) -> None:
+    """Flag fleets built from a bare createMarket() source, unless the same tier sets the fleet-size multiplier.
+
+    Jars and source are judged separately: a fix in the source tree does not help a jar that was never
+    rebuilt (the game runs the jar), and a fix in the jar does not cover loose scripts.
+    """
+    jar_callers: list[str] = []
+    jar_mitigated = False
+    for jar, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None:
+            continue
+        if _FLEET_SIZE_MULT_KEY in info.string_constants:
+            jar_mitigated = True
+        if _FLEET_FACTORY_V3 in info.referenced_classes and {"createMarket", "createFleet"} <= info.utf8_values:
+            jar_callers.append(f"{_relative(root, jar)}!{member}")
+    source_callers: list[str] = []
+    source_mitigated = False
+    for source in sorted(root.rglob("*.java")):
+        if any(part in NON_MOD_JAR_DIRS or part.startswith("src-decompiled") for part in source.relative_to(root).parts):
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if "COMBAT_FLEET_SIZE_MULT" in text or f'"{_FLEET_SIZE_MULT_KEY}"' in text:
+            source_mitigated = True
+        if re.search(r"\bcreateMarket\s*\(", text) and re.search(r"\bFleetFactoryV3\s*\.\s*createFleet\s*\(", text):
+            source_callers.append(_relative(root, source))
+    callers = (jar_callers if not jar_mitigated else []) + (source_callers if not source_mitigated else [])
+    if callers:
+        result.add(
+            id="fleet-source-bare-market",
+            category="campaign",
+            severity="high",
+            classification="REVIEW",
+            confidence="HEURISTIC",
+            explanation=(
+                "This code builds fleets with FleetFactoryV3 from a market made by Global.getFactory().createMarket(...). "
+                "In 0.98a, fleet size is multiplied by the source market's combat fleet size stat, which is 0 on a bare "
+                "market with no industries, so every fleet comes out empty and silently vanishes. Exigency's fleets never "
+                "appeared this way. Give the market what vanilla's own fallback gets (Stats.COMBAT_FLEET_SIZE_MULT flat 1, "
+                "Stats.FLEET_QUALITY_MOD flat FleetFactoryV3.BASE_QUALITY_WHEN_NO_MARKET), or pass a null source with a "
+                "hyperspace location."
+            ),
+            evidence=sorted(set(callers))[:12],
+        )
 
 
 def _scan_weapon_effect_static_state(root: Path, result: ScanResult) -> None:

@@ -22,6 +22,8 @@ public final class ProbeConfig {
     public final List<String> hulls = new ArrayList<String>();
     public final Map<String, String> variantByHull = new LinkedHashMap<String, String>();
     public final List<String> trackEntities = new ArrayList<String>();
+    // The target mod's own faction ids (data/world/factions/*.faction), checked even with no markets.
+    public final List<String> factions = new ArrayList<String>();
     public float campaignIntervalDays = 5f;
     public float combatSeconds = 60f;
     public int combatCapPerSide = 12;
@@ -57,6 +59,13 @@ public final class ProbeConfig {
         if (track != null) {
             for (int i = 0; i < track.length(); i++) {
                 config.trackEntities.add(track.getString(i));
+            }
+        }
+
+        JSONArray factions = root.optJSONArray("factions");
+        if (factions != null) {
+            for (int i = 0; i < factions.length(); i++) {
+                config.factions.add(factions.getString(i));
             }
         }
 

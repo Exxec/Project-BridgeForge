@@ -15,6 +15,7 @@ import com.fs.starfarer.api.campaign.StarSystemAPI;
 import com.fs.starfarer.api.campaign.SubmarketPlugin;
 import com.fs.starfarer.api.campaign.econ.MarketAPI;
 import com.fs.starfarer.api.campaign.econ.SubmarketAPI;
+import com.fs.starfarer.api.impl.campaign.ids.Submarkets;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -242,15 +243,36 @@ public class CampaignProbeScript implements EveryFrameScript {
 
     // ---- faction known lists ----------------------------------------------------------
 
-    private void checkFactionKnownLists() {
-        Set<String> factionsWithMarkets = new HashSet<String>();
+    private Set<String> factionsWithMarkets() {
+        Set<String> result = new HashSet<String>();
         for (MarketAPI market : Global.getSector().getEconomy().getMarketsCopy()) {
             String factionId = market.getFactionId();
             if (factionId != null) {
-                factionsWithMarkets.add(factionId);
+                result.add(factionId);
             }
         }
-        for (String factionId : factionsWithMarkets) {
+        return result;
+    }
+
+    /**
+     * The target mod's own non-vanilla factions that own no market. The market-driven checks never
+     * saw them: in live run EX-7, Exigency's market-less faction had 0 fleets for ~20 days, unreported.
+     */
+    private Set<String> modFactionsWithoutMarkets(Set<String> withMarkets) {
+        Set<String> result = new HashSet<String>();
+        for (String factionId : config.factions) {
+            if (!VANILLA_FACTIONS.contains(factionId) && !withMarkets.contains(factionId)
+                    && Global.getSector().getFaction(factionId) != null) {
+                result.add(factionId);
+            }
+        }
+        return result;
+    }
+
+    private void checkFactionKnownLists() {
+        Set<String> factionsToCheck = factionsWithMarkets();
+        factionsToCheck.addAll(modFactionsWithoutMarkets(factionsToCheck));
+        for (String factionId : factionsToCheck) {
             FactionAPI faction = Global.getSector().getFaction(factionId);
             if (faction == null) {
                 continue;
@@ -277,6 +299,11 @@ public class CampaignProbeScript implements EveryFrameScript {
             for (SubmarketAPI submarket : market.getSubmarketsCopy()) {
                 SubmarketPlugin plugin = submarket.getPlugin();
                 if (plugin == null) {
+                    continue;
+                }
+                // Storage is the player's own locker, empty until used. Live runs EX-B5/B6/EX-7
+                // flagged every market's storage as missing stock.
+                if (Submarkets.SUBMARKET_STORAGE.equals(submarket.getSpecId())) {
                     continue;
                 }
                 try {
@@ -309,13 +336,7 @@ public class CampaignProbeScript implements EveryFrameScript {
     // ---- fleet presence per faction -------------------------------------------------
 
     private void checkFleetPresence() {
-        Set<String> factionsWithMarkets = new HashSet<String>();
-        for (MarketAPI market : Global.getSector().getEconomy().getMarketsCopy()) {
-            String factionId = market.getFactionId();
-            if (factionId != null) {
-                factionsWithMarkets.add(factionId);
-            }
-        }
+        Set<String> factionsWithMarkets = factionsWithMarkets();
         java.util.Map<String, Integer> counts = new java.util.HashMap<String, Integer>();
         for (LocationAPI location : Global.getSector().getAllLocations()) {
             for (CampaignFleetAPI fleet : location.getFleets()) {
@@ -335,6 +356,14 @@ public class CampaignProbeScript implements EveryFrameScript {
             } else {
                 ProbeLog.emit("fleet-presence", ProbeLog.STATUS_OK, factionId, n + " fleets in the sector");
             }
+        }
+        // INFO, not WARN: some mod factions legitimately field no fleets (contacts, story factions).
+        // The count is the evidence; a scenario or the reviewer decides whether 0 is wrong.
+        for (String factionId : modFactionsWithoutMarkets(factionsWithMarkets)) {
+            Integer count = counts.get(factionId);
+            int n = count == null ? 0 : count;
+            ProbeLog.emit("fleet-presence", ProbeLog.STATUS_INFO, factionId,
+                    n + " fleets in the sector (mod faction, no markets)");
         }
     }
 
