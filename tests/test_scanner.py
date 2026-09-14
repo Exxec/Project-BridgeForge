@@ -312,8 +312,10 @@ class ScannerTests(unittest.TestCase):
             with zipfile.ZipFile(root / "fixture.jar", "w") as archive:
                 archive.writestr("Example.class", b"\xca\xfe\xba\xbe\x00\x00\x00\x34org/lazywizard/lazylib")
             result = scan_mod(root)
-            missing = next(finding for finding in result.findings if finding.id == "configured-source-class-missing-from-jar")
-            self.assertEqual(missing.evidence, ["data.hullmods.Local"])
+            # A loose data/ script is compiled by the game itself (vanilla ships loose data/hullmods/*.java;
+            # live bug PRB-MISSION-02 was Janino compiling one), so it is not "missing from jar" (2026-09-14).
+            self.assertFalse([finding for finding in result.findings if finding.id == "configured-source-class-missing-from-jar"])
+            self.assertEqual(result.migration_context["configured_class_integrity"]["loose_scripts"], ["data.hullmods.Local"])
             lazy = next(item for item in result.library_usage if item["library"] == "LazyLib")
             self.assertTrue(lazy["declared"])
             self.assertTrue(lazy["imported"])
@@ -332,7 +334,8 @@ class ScannerTests(unittest.TestCase):
             (root / "data" / "scripts" / "plugins.json").write_text('{"plugin":"data.scripts.Plugin"}', encoding="utf-8")
             result = scan_mod(root)
             context = result.migration_context["configured_class_integrity"]
-            self.assertEqual(context["source_only"], ["data.scripts.Plugin"])
+            self.assertEqual(context["source_only"], [])
+            self.assertEqual(context["loose_scripts"], ["data.scripts.Plugin"])
             self.assertEqual(context["configured_entrypoint_sources"], ["data/scripts/Plugin.java"])
             placeholder = next(item for item in result.findings if item.id == "runtime-placeholder-unsupported-operation")
             self.assertIn("reachability: configured-entrypoint", placeholder.evidence)

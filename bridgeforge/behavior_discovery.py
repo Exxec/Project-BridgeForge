@@ -43,6 +43,13 @@ class DiscoveryError(ValueError):
     pass
 
 
+_JAVA_KEYWORDS = frozenset(
+    "abstract assert boolean break byte case catch char class const continue default do double else enum extends final "
+    "finally float for goto if implements import instanceof int interface long native new package private protected public "
+    "return short static strictfp super switch synchronized this throw throws transient try void volatile while var record".split()
+)
+
+
 def _resolved_directory(path: Path, label: str) -> Path:
     result = path.expanduser().resolve()
     if not result.is_dir():
@@ -244,8 +251,11 @@ def build_archaeology(mod_directory: Path, *, save_aliases: Path | None = None, 
             package = package_match.group(1) if package_match else ""
             # Comments blanked first: "// Only class allowed to import" (Flu-X NexCompat) was read as a
             # declaration of a class named "allowed".
-            for match in re.finditer(r"\b(?:class|interface|enum)\s+([A-Za-z_$][\w$]*)", _blank_java_comments(text)):
+            # Strings blanked as well: a log message "the class for a System" produced a class `for`.
+            for match in re.finditer(r"\b(?:class|interface|enum)\s+([A-Za-z_$][\w$]*)", _blank_java_comments(text, strings=True)):
                 simple = match.group(1)
+                if simple in _JAVA_KEYWORDS:
+                    continue
                 class_name = f"{package}.{simple}" if package else simple
                 source_classes[class_name] = rel
                 class_id = f"class:{class_name}"

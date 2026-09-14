@@ -664,6 +664,21 @@ def build_parser() -> argparse.ArgumentParser:
     docs_cmd = subcommands.add_parser("docs-index", help="regenerate docs/CHECKS.md (every finding id: where it's emitted, tests, bug classes; scanner helpers) and docs/COMMANDS.md (every command and argument) from the source")
     docs_cmd.add_argument("--check", action="store_true", help="don't write; exit 1 if either file is stale")
     docs_cmd.add_argument("--json", action="store_true")
+    lookup_cmd = subcommands.add_parser("lookup", help="query a mod's archaeology graph for a class/id/file: definitions, references, related classes, lifecycle, save evidence, source/bytecode status, findings, runtime observations, and an inspection priority")
+    lookup_cmd.add_argument("thing", nargs="?", help="class name (full or short), id, file path or symbol; omit with --top for the treasure map")
+    lookup_cmd.add_argument("--mod", required=True, type=Path, help="mod working copy")
+    lookup_cmd.add_argument("--discovery", type=Path, help="discovery folder (default: <Mod>/reports/discovery/<working folder name>)")
+    lookup_cmd.add_argument("--top", type=int, default=0, help="also rank the mod's classes and registrations by inspection priority")
+    lookup_cmd.add_argument("--limit", type=int, default=3, help="matches to show in detail (default 3)")
+    lookup_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, used when the graph has to be rebuilt")
+    lookup_cmd.add_argument("--json", action="store_true")
+    novelty_cmd = subcommands.add_parser("novelty", help="compare a mod's fingerprint (API usage, lifecycle patterns, structures, findings, weak ownership) with the mods already seen")
+    novelty_cmd.add_argument("mod", type=Path, help="mod working copy")
+    novelty_cmd.add_argument("--discovery", type=Path)
+    novelty_cmd.add_argument("--corpus", type=Path, help="fingerprint folder (default: bridgeforge-state/corpus-fingerprints)")
+    novelty_cmd.add_argument("--record", action="store_true", help="add or refresh this mod's fingerprint in the corpus")
+    novelty_cmd.add_argument("--vanilla-core", type=Path)
+    novelty_cmd.add_argument("--json", action="store_true")
     preset_cmd = subcommands.add_parser("preset-check", help="check bf-test.ps1 presets against the rig's installed mods: own mod and declared dependencies enabled, enabled ids installed, no undeclared libraries")
     preset_cmd.add_argument("script", type=Path, help="path to bf-test.ps1")
     preset_cmd.add_argument("--rig-mods", type=Path, help="rig mods folder (default: <script folder>/_rig/mods)")
@@ -683,6 +698,59 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print("Written: " + ", ".join(result["written"]) if result["written"] else "docs/CHECKS.md and docs/COMMANDS.md are up to date")
         return 1 if result["status"] == "STALE" else 0
+    if args.command == "lookup":
+        from .lookup import lookup
+        if not args.thing and not args.top:
+            print("bridgeforge: give a thing to look up, or --top N", file=sys.stderr)
+            return 2
+        result = lookup(args.mod, args.thing, discovery_dir=args.discovery, top=args.top, limit=args.limit, vanilla_core=args.vanilla_core)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0 if result.get("status") != "NOT_FOUND" else 1
+        print(f"Graph: {result['graph']}; behavior map: {'yes' if result['behavior_map'] else 'no'}; baselines: {result['baselines']}")
+        if args.thing:
+            if not result["matches"]:
+                print(f"No match for {args.thing!r}.")
+            for extra in result["matches"][args.limit:]:
+                print(f"  also matches: {extra['kind']} {extra['name']}")
+            for item in result.get("items", []):
+                print(f"\n== {item['kind']} {item['name']}  (inspection priority {item['priority']})")
+                for reason in item["priority_reasons"]:
+                    print(f"   {reason}")
+                sections = [("Defined by", item["definitions"]), ("Source/bytecode", [item["source_bytecode_status"]] if item["source_bytecode_status"] != "-" else []),
+                            ("Lifecycle hooks", item["lifecycle_hooks"]), ("Registrations", item["registrations"]), ("Persistent state", item["persistent_state"]),
+                            ("Save/probe observations", item["save_and_probe_observations"]), ("Findings", item["findings"]), ("Related", item["related"]),
+                            ("Behaviours", [f"{b['id']} {b['lifecycle']} runtime_verified={b['runtime_verified']}" for b in item["behaviors"]]), ("External mods", item["external_mods"])]
+                for title, values in sections:
+                    if values:
+                        print(f"   {title}: " + "; ".join(values[:8]) + (f" (+{len(values) - 8} more)" if len(values) > 8 else ""))
+                for direction, table in (("<-", item["references_in"]), ("->", item["references_out"])):
+                    for relation, targets in table.items():
+                        print(f"   {direction} {relation} ({len(targets)}): " + ", ".join(targets[:5]) + (" ..." if len(targets) > 5 else ""))
+        if result.get("treasure_map"):
+            print("\nInspection priority (archaeology, not errors):")
+            for entry in result["treasure_map"]:
+                print(f"  {entry['priority']:>3}  {entry['name']}  [{'; '.join(reason.split(' ', 1)[1] for reason in entry['reasons'])}]")
+        return 0 if result.get("status") != "NOT_FOUND" else 1
+    if args.command == "novelty":
+        from .novelty import novelty
+        result = novelty(args.mod, discovery_dir=args.discovery, corpus_dir=args.corpus, record=args.record, vanilla_core=args.vanilla_core)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        print(f"Novelty for {result['mod_id']} against {result['corpus_size']} other mod(s){' (small corpus)' if result['small_corpus'] else ''}:")
+        print(f"  {result['patterns_seen']} of {result['patterns_total']} patterns already seen")
+        print(f"  {result['unusual_structures']} unusual structures (seen in fewer than 2 other mods)")
+        print(f"  {result['new_api_usages']} API usages not seen in previous mods")
+        print(f"  {result['new_lifecycle_patterns']} lifecycle patterns not previously observed")
+        print(f"  {result['new_finding_kinds']} finding kinds not seen before")
+        print(f"  {result['weak_ownership']} IDs/functions with weak ownership or reference evidence")
+        for key, values in result["examples"].items():
+            if values:
+                print(f"  e.g. {key}: " + "; ".join(values[:5]))
+        if result.get("recorded"):
+            print(f"Recorded: {result['recorded']}")
+        return 0
     if args.command == "preset-check":
         from .preset_check import check_presets
         result = check_presets(args.script, args.rig_mods)

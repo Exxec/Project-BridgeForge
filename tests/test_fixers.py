@@ -18,6 +18,35 @@ def _findings(result, finding_id: str):
     return [item for item in result.findings if item.id == finding_id]
 
 
+class WingDataMissingRoleDescTests(unittest.TestCase):
+    """VAC-R002: RC8 cannot load wing_data.csv without 'role desc'; a blank value is accepted."""
+
+    def _mod(self, root: Path, wing_data: str) -> Path:
+        _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+        _write(root / "data" / "hulls" / "wing_data.csv", wing_data)
+        return root / "data" / "hulls" / "wing_data.csv"
+
+    def test_apply_appends_a_blank_column_padding_short_rows_then_rescan_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(root, "id,variant,tags,op cost\nwing_a,a_Wing,,4\n#note,x\nwing_b,b_Wing\n")
+            self.assertEqual(len(_findings(scan_mod(root), "wing-data-missing-role-desc-column")), 1)
+            applied = apply_fix(compute_fix(root, "wing-data-missing-role-desc-column"))
+            self.assertTrue(Path(applied[0]["backup"]).is_file())
+            self.assertEqual(path.read_text(encoding="utf-8"), "id,variant,tags,op cost,role desc\nwing_a,a_Wing,,4,\n#note,x,,,\nwing_b,b_Wing,,,\n")
+            self.assertEqual(_findings(scan_mod(root), "wing-data-missing-role-desc-column"), [])
+
+    def test_refuses_when_present_or_rows_span_lines(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, "id,role desc\nwing_a,x\n")
+            with self.assertRaises(FixerError):
+                compute_fix(root, "wing-data-missing-role-desc-column")
+            self._mod(root, 'id,variant\nwing_a,"two\nlines"\n')
+            with self.assertRaises(FixerError):
+                compute_fix(root, "wing-data-missing-role-desc-column")
+
+
 class WingRoleAssaultRemovedTests(unittest.TestCase):
     def _mod(self, root: Path) -> None:
         _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')

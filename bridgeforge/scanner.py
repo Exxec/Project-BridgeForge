@@ -409,6 +409,46 @@ def _normalize_lenient_numbers(text: str) -> tuple[str, bool]:
     return _LENIENT_NUMBER_PATTERN.sub(replace, text), found
 
 
+def _orgjson_separators(text: str) -> tuple[str, set[str]]:
+    """org.json also accepts `;` between pairs/elements and `=` or `=>` between key and value.
+
+    Xenoargh's Rebal settings.json has `"baseNumOfficers":45;` and loads in-game (verified against
+    starsector-core/json.jar, 2026-09-14). Rewritten outside double-quoted strings only; single quotes
+    are already converted by the time this runs.
+    """
+    out: list[str] = []
+    tolerances: set[str] = set()
+    in_string = escaped = False
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if in_string:
+            out.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            out.append(char)
+        elif char == ";":
+            tolerances.add("semicolon-separators")
+            out.append(",")
+        elif char == "=":
+            tolerances.add("equals-key-separators")
+            out.append(":")
+            if index + 1 < len(text) and text[index + 1] == ">":
+                index += 1
+        else:
+            out.append(char)
+        index += 1
+    return "".join(out), tolerances
+
+
 def _quote_barewords_and_keys(text: str) -> tuple[str, set[str]]:
     """Wrap unquoted identifiers (object keys or bareword scalar values) in double quotes.
 
@@ -461,6 +501,8 @@ def _parse_json(text: str) -> tuple[object, set[str]]:
             without_number_suffix, lenient_numbers = _normalize_lenient_numbers(without_number_suffix)
             if lenient_numbers:
                 tolerances.add("lenient-numbers")
+            without_number_suffix, separator_tolerances = _orgjson_separators(without_number_suffix)
+            tolerances |= separator_tolerances
             without_barewords, bareword_tolerances = _quote_barewords_and_keys(without_number_suffix)
             tolerances |= bareword_tolerances
             without_commas = _without_trailing_commas(without_barewords)
@@ -476,7 +518,13 @@ def _parse_json(text: str) -> tuple[object, set[str]]:
             data = json.loads(without_commas)
         except json.JSONDecodeError as rewritten_error:
             if rewritten_error.msg != "Extra data":
-                raise original_error
+                # Say where the lenient rewrite really stopped: Rebal's file failed on a ';' at line 29
+                # while the report only showed the strict parser's complaint about a '#' at line 3.
+                raise json.JSONDecodeError(
+                    f"{original_error.msg} (after lenient rewrites it still fails: {rewritten_error.msg} at line {rewritten_error.lineno} column {rewritten_error.colno})",
+                    original_error.doc,
+                    original_error.pos,
+                ) from rewritten_error
             # org.json (Starsector's loader) stops after the first complete value and ignores the
             # rest -- including real keys when an extra '}' closes the root early (Blackrock's
             # br_consortium.faction loses its factionDoctrine this way).
@@ -532,6 +580,9 @@ def _json_trailing_data_finding(result: ScanResult, category: str, file: str, to
 def _emit_json_tolerance_findings(result: ScanResult, category: str, file: str, tolerances: set[str]) -> None:
     if "lenient-numbers" in tolerances:
         _lenient_number_json_finding(result, category, file)
+    if tolerances & {"semicolon-separators", "equals-key-separators"}:
+        used = sorted(tolerances & {"semicolon-separators", "equals-key-separators"})
+        result.add(id="json-orgjson-separator", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file separates entries with ';' or keys from values with '=' / '=>'. Starsector's org.json loader accepts both (verified against starsector-core/json.jar); BridgeForge parsed them structurally and does not recommend rewriting them, though strict tools will reject the file.", file=file, evidence=used)
     if "trailing-data" in tolerances:
         _json_trailing_data_finding(result, category, file, tolerances)
     if "trailing-commas" in tolerances:
@@ -1559,7 +1610,7 @@ def _source_class_index(root: Path) -> dict[str, str]:
             continue
         package = re.search(r"^\s*package\s+([\w.]+)\s*;", text, re.M)
         # Comments blanked: "// Only class allowed to import ..." came before Flu-X NexCompat's declaration.
-        declared = re.search(r"\b(?:public\s+)?(?:class|interface|enum)\s+(\w+)", _blank_java_comments(text))
+        declared = re.search(r"\b(?:public\s+)?(?:class|interface|enum)\s+(\w+)", _blank_java_comments(text, strings=True))
         if package and declared:
             names[f"{package.group(1)}.{declared.group(1)}"] = _relative(root, path)
     return names
@@ -1576,7 +1627,10 @@ def _scan_configured_class_integrity(root: Path, result: ScanResult) -> None:
         except OSError:
             continue
         references.update(re.findall(r"\bdata(?:\.[A-Za-z_$][\w$]*)+", text))
-    source_only = sorted(set(local_classes) & references - result.compiled_class_names)
+    # Loose .java under data/ is compiled by the game at load (Janino), so it needs no jar: old mods such
+    # as Gekelonians (0.53) ship only loose scripts and were all reported MANUAL (2026-09-14 batch).
+    loose = {name for name, relative in local_classes.items() if str(relative).replace("\\", "/").startswith("data/")}
+    source_only = sorted(set(local_classes) & references - result.compiled_class_names - loose)
     packaged = sorted(references & result.compiled_class_names)
     unresolved = sorted(references - set(local_classes) - result.compiled_class_names)
     entrypoint_sources = sorted(local_classes[name] for name in set(local_classes) & references)
@@ -1584,6 +1638,7 @@ def _scan_configured_class_integrity(root: Path, result: ScanResult) -> None:
         "source_class_names": sorted(local_classes),
         "configured_references": sorted(references),
         "source_only": source_only,
+        "loose_scripts": sorted(loose & references - result.compiled_class_names),
         "packaged": packaged,
         "unresolved": unresolved,
         "configured_entrypoint_sources": entrypoint_sources,
@@ -2465,13 +2520,23 @@ def _base_game_version(version: str) -> str:
     return re.sub(r"-RC\d+$", "", version.strip(), flags=re.I).lower()
 
 
+def _version_series(version: str) -> str:
+    """'0.98a-RC8' -> '0.98', '0.9.1a' -> '0.9.1', '0.98.x' -> '0.98'."""
+    base = _base_game_version(version)
+    return re.sub(r"(?:\.x|[a-z]+)$", "", base)
+
+
 def _scan_mod_info_game_version(result: ScanResult) -> None:
     target_version = result.target.starsector
-    if not target_version or not GAME_VERSION_RC_PATTERN.match(target_version):
-        return
     declared = result.declared_starsector
-    if not declared or declared == target_version:
+    if not target_version or not declared or declared == target_version:
         return
+    # A generic target ('0.98.x', the default) used to skip this check entirely, so the 2026-09-14 batch
+    # of 0.53a-0.9.1a mods never heard that the launcher would untick every one of them.
+    if not GAME_VERSION_RC_PATTERN.match(target_version):
+        if not re.fullmatch(r"\d+(?:\.\d+)*\.x", target_version.strip()) or _version_series(declared) == _version_series(target_version):
+            return
+        target_version = f"{_version_series(target_version)}a"
     # The launcher matches on the BASE version: mods declaring 0.98a-RC5 / 0.98a-RC7 loaded and ran
     # all week in an RC8 rig (LazyLib, LunaLib, Console Commands, MagicLib), so an older RC is fine.
     if _base_game_version(declared) == _base_game_version(target_version):
@@ -2488,6 +2553,9 @@ def _scan_mod_info_game_version(result: ScanResult) -> None:
     )
 
 
+VANILLA_SHADOW_GROUP_THRESHOLD = 5
+
+
 def _scan_vanilla_path_shadowing(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
     if vanilla_core is None:
         return
@@ -2496,6 +2564,7 @@ def _scan_vanilla_path_shadowing(root: Path, result: ScanResult, vanilla_core: P
         return
     mod_info = _load_lenient_json_file(root / "mod_info.json")
     total_conversion = isinstance(mod_info, dict) and mod_info.get("totalConversion") is True
+    shadowed: dict[str, list[tuple[Path, Path]]] = {}
     for path in data_root.rglob("*"):
         if not path.is_file() or path.suffix.lower() not in SHADOW_PATH_EXTENSIONS:
             continue
@@ -2510,23 +2579,43 @@ def _scan_vanilla_path_shadowing(root: Path, result: ScanResult, vanilla_core: P
             continue
         if mod_bytes == vanilla_bytes:
             continue
-        evidence = [f"vanilla-path:{vanilla_path.as_posix()}"]
-        if total_conversion:
-            evidence.append("mod_info:totalConversion=true")
-        result.add(
-            id="vanilla-path-shadowing",
-            category="assets",
-            severity="low" if total_conversion else "critical",
-            classification="REVIEW" if total_conversion else "MANUAL",
-            confidence="DETERMINISTIC",
-            explanation=(
-                "This total-conversion mod replaces a vanilla file at the same data-relative path; overrides are expected for a total conversion, so spot-check rather than treat as a defect."
-                if total_conversion
-                else "This mod file shadows a vanilla file at the same data-relative path with different bytes. Confirm the override is intentional; an unintended shadow silently replaces core game content."
-            ),
-            file=_relative(root, path),
-            evidence=evidence,
-        )
+        shadowed.setdefault(_relative(root, path.parent), []).append((path, vanilla_path))
+    severity = "low" if total_conversion else "critical"
+    classification = "REVIEW" if total_conversion else "MANUAL"
+    for folder, files in sorted(shadowed.items()):
+        # A rebalance that replaces a whole vanilla folder (Xenoargh's Rebal: 498 hullmod/weapon scripts)
+        # reads as one decision, not hundreds of findings burying the rest of the report.
+        if len(files) > VANILLA_SHADOW_GROUP_THRESHOLD:
+            listed = sorted(_relative(root, path) for path, _vanilla in files)
+            result.add(
+                id="vanilla-path-shadowing",
+                category="assets",
+                severity=severity,
+                classification=classification,
+                confidence="DETERMINISTIC",
+                explanation=f"{len(files)} files in this folder shadow vanilla files at the same data-relative paths with different bytes. Confirm the override is intentional (a rebalance mod does this on purpose); every shadow replaces core game content, and old copies of vanilla scripts can break against the current API.",
+                file=folder,
+                evidence=[f"count:{len(files)}", *(["mod_info:totalConversion=true"] if total_conversion else []), *listed[:25]],
+            )
+            continue
+        for path, vanilla_path in files:
+            evidence = [f"vanilla-path:{vanilla_path.as_posix()}"]
+            if total_conversion:
+                evidence.append("mod_info:totalConversion=true")
+            result.add(
+                id="vanilla-path-shadowing",
+                category="assets",
+                severity=severity,
+                classification=classification,
+                confidence="DETERMINISTIC",
+                explanation=(
+                    "This total-conversion mod replaces a vanilla file at the same data-relative path; overrides are expected for a total conversion, so spot-check rather than treat as a defect."
+                    if total_conversion
+                    else "This mod file shadows a vanilla file at the same data-relative path with different bytes. Confirm the override is intentional; an unintended shadow silently replaces core game content."
+                ),
+                file=_relative(root, path),
+                evidence=evidence,
+            )
 
 
 def _class_pool_u2(data: bytes, pos: int) -> tuple[int, int]:
@@ -3397,11 +3486,14 @@ def _classify_orbit_argument(arg_text: str, method_text: str) -> str | None:
     return "computed-unguarded"
 
 
-def _blank_java_comments(text: str) -> str:
+def _blank_java_comments(text: str, strings: bool = False) -> str:
     """Blank out // and /* */ comment text with spaces, keeping newlines so offsets and line numbers hold.
 
     String and char literals are skipped, so "http://..." survives. Without this, source checks flagged
     commented-out code (a disabled setCircularOrbit block in Legacy of Arkgneisis's procgen generator).
+    With strings=True the literals' contents are blanked too (quotes kept): declaration matchers need it,
+    since Xenoargh's AI Overhaul logs "couldn't find the class for a System" and archaeology read a class
+    named `for` out of it (2026-09-14).
     """
     out = list(text)
     index, length = 0, len(text)
@@ -3410,7 +3502,12 @@ def _blank_java_comments(text: str) -> str:
         if char in "\"'":
             index += 1
             while index < length and text[index] != char and text[index] != "\n":
-                index += 2 if text[index] == "\\" else 1
+                step = 2 if text[index] == "\\" else 1
+                if strings:
+                    for position in range(index, min(index + step, length)):
+                        if out[position] != "\n":
+                            out[position] = " "
+                index += step
             index += 1
             continue
         if text.startswith("//", index):
