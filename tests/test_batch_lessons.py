@@ -134,43 +134,80 @@ class SourceImportUnresolvedTests(unittest.TestCase):
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0].evidence, ["data.scripts.fx_Particle"])  # own class and MagicLib's util package are fine
 
-    def test_removed_vanilla_classes_are_their_own_manual_finding_and_disabled_files_are_ignored(self) -> None:
-        # Cobalt Arms & co. import 0.6's BaseSpawnPoint; Zorg18 keeps such imports only in disabled_files.
+    def test_vanilla_loose_scripts_are_defined_classes_and_disabled_files_are_ignored(self) -> None:
+        # Correction, 2026-09-14: RC8 still ships BaseSpawnPoint and corvus.Corvus as loose scripts in
+        # starsector-core/data/scripts, so Cobalt Arms & co. importing them is neither a removed-class
+        # use nor another mod's class. Zorg18 keeps old imports in disabled_files, which never load.
         with tempfile.TemporaryDirectory() as directory:
             mod = _mod(Path(directory))
             (mod / "data" / "scripts" / "world").mkdir(parents=True)
-            (mod / "data" / "scripts" / "world" / "Spawn.java").write_text("package data.scripts.world;\nimport data.scripts.world.BaseSpawnPoint;\npublic class Spawn {}\n", encoding="utf-8")
+            (mod / "data" / "scripts" / "world" / "Spawn.java").write_text("package data.scripts.world;\nimport data.scripts.world.BaseSpawnPoint;\nimport data.scripts.world.corvus.Corvus;\npublic class Spawn extends BaseSpawnPoint {}\n", encoding="utf-8")
             (mod / "disabled_files").mkdir()
-            (mod / "disabled_files" / "Old.java").write_text("package data.scripts.world;\nimport data.scripts.world.corvus.Corvus;\nimport data.scripts.Gone;\npublic class Old {}\n", encoding="utf-8")
+            (mod / "disabled_files" / "Old.java").write_text("package data.scripts.world;\nimport data.scripts.Gone;\npublic class Old {}\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual(_ids(result, "legacy-vanilla-class-import"), [])
+        self.assertEqual(_ids(result, "source-import-unresolved"), [])
+
+    def test_vanilla_loose_hullmod_import_is_not_another_mods_class(self) -> None:
+        # Adjusted Sector imports data.hullmods.HeavyArmor, one of RC8's 116 loose vanilla scripts.
+        import bridgeforge.scanner as scanner_module
+
+        self.assertIn("data.hullmods.HeavyArmor", scanner_module.VANILLA_LOOSE_SCRIPT_CLASSES)
+        self.assertEqual(len(scanner_module.VANILLA_LOOSE_SCRIPT_CLASSES), 116)
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "hullmods").mkdir(parents=True)
+            (mod / "data" / "hullmods" / "Tough.java").write_text("package data.hullmods;\nimport data.hullmods.HeavyArmor;\npublic class Tough extends HeavyArmor {}\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual(_ids(result, "source-import-unresolved"), [])
+
+    def test_removed_sector_create_fleet_call_is_manual_but_fleet_factory_is_not(self) -> None:
+        # Gekelonians' spawn point: getSector().createFleet("gekelonian", type); RC8's SectorAPI has no
+        # createFleet (javap). FleetFactoryV3.createFleet(params) is the current API.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            world = mod / "data" / "scripts" / "world"
+            world.mkdir(parents=True)
+            (world / "Spawn.java").write_text("package data.scripts.world;\npublic class Spawn extends BaseSpawnPoint {\n  Object f() {\n    // getSector().createFleet(\"x\", \"y\") in a comment\n    return getSector().createFleet(\"gekelonian\", type);\n  }\n}\n", encoding="utf-8")
+            (world / "Good.java").write_text("package data.scripts.world;\nclass Good { Object f() { return FleetFactoryV3.createFleet(params); } }\n", encoding="utf-8")
+            (mod / "disabled_files").mkdir()
+            (mod / "disabled_files" / "Old.java").write_text("class Old { Object f() { return Global.getSector().createFleet(\"a\", \"b\"); } }\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        hits = _ids(result, "removed-api-call")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].classification, "MANUAL")
+        self.assertEqual(hits[0].evidence[:2], ["SectorAPI.createFleet(factionId, fleetTypeId): 1 call(s)", "data/scripts/world/Spawn.java:5"])
+
+    def test_a_listed_removed_class_is_found_by_import_or_from_its_own_package(self) -> None:
+        # The machinery stays for evidenced entries: an import-only check would miss a same-package use.
+        from unittest import mock
+
+        import bridgeforge.scanner as scanner_module
+
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(scanner_module.LEGACY_VANILLA_CLASSES, {"data.scripts.world.GoneSpawner": "test entry, removed"}):
+            mod = _mod(Path(directory))
+            world = mod / "data" / "scripts" / "world"
+            world.mkdir(parents=True)
+            (world / "A.java").write_text("package data.scripts.world;\npublic class A extends GoneSpawner {}\n", encoding="utf-8")
+            (mod / "data" / "scripts" / "B.java").write_text("package data.scripts;\nimport data.scripts.world.GoneSpawner;\npublic class B {}\n", encoding="utf-8")
             result = scan_mod(mod, TargetProfile())
         legacy = _ids(result, "legacy-vanilla-class-import")
         self.assertEqual(len(legacy), 1)
         self.assertEqual(legacy[0].classification, "MANUAL")
-        self.assertTrue(legacy[0].evidence[0].startswith("data.scripts.world.BaseSpawnPoint:"))
-        self.assertEqual(_ids(result, "source-import-unresolved"), [])  # disabled_files never load
-
-    def test_removed_vanilla_class_used_from_its_own_package_without_import(self) -> None:
-        # Antediluvians' AntediluvianSpawnPoint sits in data.scripts.world and extends BaseSpawnPoint
-        # with no import line, so an import-only check missed it.
-        with tempfile.TemporaryDirectory() as directory:
-            mod = _mod(Path(directory))
-            world = mod / "data" / "scripts" / "world"
-            world.mkdir(parents=True)
-            (world / "AntediluvianSpawnPoint.java").write_text("package data.scripts.world;\npublic class AntediluvianSpawnPoint extends BaseSpawnPoint {}\n", encoding="utf-8")
-            (world / "AntediluvianConvoySpawnPoint.java").write_text("package data.scripts.world;\npublic class AntediluvianConvoySpawnPoint extends BaseSpawnPoint {}\n", encoding="utf-8")
-            result = scan_mod(mod, TargetProfile())
-        legacy = _ids(result, "legacy-vanilla-class-import")
-        self.assertEqual(len(legacy), 1)
         self.assertIn("(2 file(s):", legacy[0].evidence[0])
 
-    def test_a_mod_shipping_its_own_copy_of_the_removed_class_is_not_flagged(self) -> None:
-        # Vacuum's earlier copy shipped a data.scripts.world.BaseSpawnPoint shim.
-        with tempfile.TemporaryDirectory() as directory:
+    def test_a_mod_shipping_its_own_copy_of_a_listed_removed_class_is_not_flagged(self) -> None:
+        # Vacuum's earlier copy shipped its own data.scripts.world.BaseSpawnPoint.
+        from unittest import mock
+
+        import bridgeforge.scanner as scanner_module
+
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(scanner_module.LEGACY_VANILLA_CLASSES, {"data.scripts.world.GoneSpawner": "test entry, removed"}):
             mod = _mod(Path(directory))
             world = mod / "data" / "scripts" / "world"
             world.mkdir(parents=True)
-            (world / "BaseSpawnPoint.java").write_text("package data.scripts.world;\npublic abstract class BaseSpawnPoint {}\n", encoding="utf-8")
-            (world / "Spawn.java").write_text("package data.scripts.world;\npublic class Spawn extends BaseSpawnPoint {}\n", encoding="utf-8")
+            (world / "GoneSpawner.java").write_text("package data.scripts.world;\npublic abstract class GoneSpawner {}\n", encoding="utf-8")
+            (world / "Spawn.java").write_text("package data.scripts.world;\npublic class Spawn extends GoneSpawner {}\n", encoding="utf-8")
             result = scan_mod(mod, TargetProfile())
         self.assertEqual(_ids(result, "legacy-vanilla-class-import"), [])
 

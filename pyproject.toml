@@ -16,4 +16,4 @@ bridgeforge = "bridgeforge.cli:main"
 include = ["bridgeforge*"]
 
 [tool.setuptools.package-data]
-bridgeforge = ["release_policy.json", "java/*.java", "java-tools/bytecode/lib/*.jar", "rules/*.json", "packs/*/*.json", "compat_sets/*.json", "scenarios/*.json", "probe_profiles/*.txt"]
+bridgeforge = ["release_policy.json", "dependency_successors.json", "vanilla_loose_scripts_rc8.json","java/*.java", "java-tools/bytecode/lib/*.jar", "rules/*.json", "packs/*/*.json", "compat_sets/*.json", "scenarios/*.json", "probe_profiles/*.txt"]

@@ -1026,11 +1026,51 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
     _scan_data_encoding(root, result)
     _scan_fullwidth_numbers(root, result)
     _scan_source_build_dependencies(root, result, import_locations)
+    _scan_removed_api_calls(root, result)
 
     scan_lazylib_compat(root, result)
     scan_magiclib_compat(result)
     scan_ashlib_compat(root, result)
     scan_graphicslib_compat(root, result)
+
+
+# API calls the target no longer has, matched only on receivers whose type is certain. Each entry needs
+# javap evidence from the target's starfarer.api.jar.
+REMOVED_API_CALLS = (
+    (
+        re.compile(r"\b(?:Global\s*\.\s*)?getSector\s*\(\s*\)\s*\.\s*createFleet\s*\("),
+        "SectorAPI.createFleet(factionId, fleetTypeId)",
+        # javap of RC8 starfarer.api.jar: SectorAPI has no createFleet (2026-09-14). The 0.6 BaseSpawnPoint
+        # spawners (Gekelonians, Cobalt-Arms, Batavia, ...) built fleets from faction fleet types with it.
+        "0.6-era fleet creation from a faction's fleet types; RC8's SectorAPI has no createFleet. Build the fleet "
+        "with FleetFactoryV3.createFleet(FleetParamsV3) (see Zorg18 r1's ZorgFleetSpawner) and keep the spawn point.",
+    ),
+)
+
+
+def _scan_removed_api_calls(root: Path, result: ScanResult) -> None:
+    """Calls to API methods the target removed, in loose scripts and bundled sources."""
+    for pattern, signature, explanation in REMOVED_API_CALLS:
+        hits: list[str] = []
+        for source in sorted(root.rglob("*.java")):
+            if "disabled_files" in source.relative_to(root).parts:
+                continue  # never loaded by the game
+            try:
+                text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                continue
+            for match in pattern.finditer(text):
+                hits.append(f"{_relative(root, source)}:{text.count(chr(10), 0, match.start()) + 1}")
+        if hits:
+            result.add(
+                id="removed-api-call",
+                category="source-api",
+                severity="critical",
+                classification="MANUAL",
+                confidence="DETERMINISTIC",
+                explanation=f"Source calls {signature}, which the target API no longer has: {explanation} A loose script with this call fails to compile at load, so the game doesn't start.",
+                evidence=[f"{signature}: {len(hits)} call(s)"] + hits[:12] + (["..."] if len(hits) > 12 else []),
+            )
 
 
 def _scan_source_build_dependencies(root: Path, result: ScanResult, import_locations: dict[str, tuple[str, int | None]] | None = None) -> None:
@@ -1096,7 +1136,7 @@ def _scan_source_build_dependencies(root: Path, result: ScanResult, import_locat
         )
     foreign = sorted(
         item for item in active_imports
-        if item.startswith("data.") and item not in LEGACY_VANILLA_CLASSES
+        if item.startswith("data.") and item not in LEGACY_VANILLA_CLASSES and item not in VANILLA_LOOSE_SCRIPT_CLASSES
         and item not in local_classes and item.rsplit(".", 1)[0] not in local_classes
         and not item.startswith(known_prefixes)
     )
@@ -4147,10 +4187,28 @@ def _mod_info_declares_dependency(result: ScanResult, dependency_id: str) -> boo
 
 # Vanilla classes that 0.53-0.65 mods import and that 0.98a no longer ships (2026-09-14 batch: Batavia,
 # Cobalt Arms, Gekelonians, Independant Mining Faction, Qualljom).
-LEGACY_VANILLA_CLASSES = {
-    "data.scripts.world.BaseSpawnPoint": "0.6-era fleet spawn-point base class, removed",
-    "data.scripts.world.corvus.Corvus": "old vanilla Corvus generator, removed",
-}
+# Vanilla classes that old mods use but the target no longer has. Add an entry only with evidence from
+# the target's own starsector-core: its jars AND its loose data/scripts.
+# Correction, 2026-09-14: BaseSpawnPoint and corvus.Corvus were listed here as removed, but RC8 still
+# ships both as loose scripts (starsector-core/data/scripts/world/BaseSpawnPoint.java, with the same
+# constructor and abstract spawnFleet(), and .../corvus/Corvus.java). The earlier evidence had checked
+# only the jars.
+LEGACY_VANILLA_CLASSES: dict[str, str] = {}
+def _load_rc8_vanilla_loose_script_classes() -> frozenset[str]:
+    """RC8's loose vanilla scripts (all 116: hull mods, ship systems, missions, world generation).
+
+    The game compiles them at startup, so mods may import them like API classes: Adjusted Sector imports
+    data.hullmods.HeavyArmor. The list is read from vanilla_loose_scripts_rc8.json, which was generated
+    from RC8's starsector-core, because the import check runs without a vanilla core path.
+    """
+    try:
+        data = json.loads(Path(__file__).with_name("vanilla_loose_scripts_rc8.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return frozenset()
+    return frozenset(str(name) for name in data.get("classes", []))
+
+
+VANILLA_LOOSE_SCRIPT_CLASSES = _load_rc8_vanilla_loose_script_classes()
 
 
 def _console_command_classes(root: Path) -> set[str]:

@@ -10,7 +10,16 @@
   - `bridgeforge/dependency_successors.json` records renames and dead ends with evidence: MagicLib's legacy `data.scripts.util.Magic*` classes, `BaseSpawnPoint`, `Corvus`, GraphicsLib's `shaderLib`, and the discontinued Vayra's Sector.
   - `docs/DEPENDENCY_STRATEGY.md` explains the courses and when to revive a dependency, strip it, or escalate.
 - ROADMAP P14 (planned): dependency intelligence and queue throughput.
-- `legacy-vanilla-class-import` changes:
+- **Correction: `BaseSpawnPoint` and `corvus.Corvus` were never removed.**
+  - RC8's `starsector-core` still ships both as loose scripts (`data/scripts/world/BaseSpawnPoint.java`, `.../corvus/Corvus.java`). `BaseSpawnPoint` has the same constructor and abstract `spawnFleet()` that the 0.6 mods extend, and `LocationAPI.addSpawnPoint` still exists (javap).
+  - The earlier "removed" evidence had checked only the jars. `LEGACY_VANILLA_CLASSES` is now empty, with a rule that entries need evidence from both the jars and the loose scripts.
+  - All 116 of RC8's loose vanilla scripts count as defined classes: 58 hull mods, 23 star systems, 13 ship-system scripts, 18 missions and 4 others. They are listed in the new `bridgeforge/vanilla_loose_scripts_rc8.json`, generated from the core. So they are neither `legacy-vanilla-class-import` nor `source-import-unresolved`; Adjusted Sector imports `data.hullmods.HeavyArmor`.
+  - The spawn-point findings on Cobalt-Arms, Gekelonians, Independant-Mining-Faction, Batavia, Qualljom, Antediluvians and Adjusted Sector were false positives for the class.
+  - **The real blocker is the new MANUAL finding `removed-api-call`.** Those spawn points build fleets with `getSector().createFleet(faction, fleetType)`, and RC8's `SectorAPI` has no `createFleet` (javap). That's 17 calls in 6 mods.
+    - The check matches only receivers whose type is certain (`getSector()`, `Global.getSector()`), and it ignores comments and `disabled_files`.
+    - Without it, the three mods escalated for spawn points would have scanned with 0 MANUAL.
+- **Packaging:** `pyproject.toml` package data now includes `dependency_successors.json` and `vanilla_loose_scripts_rc8.json`; the former was missing from installed copies.
+- `legacy-vanilla-class-import` changes (the machinery is kept for evidenced entries):
   - It now finds a removed class used by simple name from its own package: `data.scripts.world` scripts extend `BaseSpawnPoint` with no import. Antediluvians wasn't flagged before; Batavia and Qualljom were flagged only partly; Cobalt-Arms and Independant-Mining-Faction each had a second, missed spawn-point file.
   - A mod that ships its own copy of the class, such as Vacuum's earlier shim, is no longer flagged.
   - The evidence gives the file count and up to 6 files, instead of silently cutting at 3.
