@@ -66,4 +66,4 @@ Whatever the course, record it in the mod's REVIVAL_PLAN, and keep the untouched
 | FX Example | REVIVE_DEPENDENCY | FX Core (0.91a, 10 MANUAL) provides all three classes. |
 | Rebal | REVIVE_DEPENDENCY | Declare EZ Damage and Vacuum (both 0.98a here). Revive AI Overhaul (12 MANUAL) and FX Core. |
 | Explorer Society | ESCALATE | EZ Damage and Vacuum cover two needs. `shields_formshield` (14 places) exists only in Rebal (84 MANUAL). Options: wait for Rebal, vendor that hull mod if the licence allows, or strip it. |
-| Communist Clouds | ESCALATE | 6 `vayra_*` ids in 16 places, and no provider anywhere. Vayra's Sector was last released for 0.9.1a. |
+| Communist Clouds | ESCALATE | 6 `vayra_*` ids in 16 places. The forum's last release of Vayra's Sector targets 0.9.1a, but the owner's Ironclads archive has a 3.2.1 build for 0.95.1a that provides all six. Reviving that build is the cheaper path, licence permitting. |

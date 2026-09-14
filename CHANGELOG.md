@@ -6,10 +6,22 @@
   - It indexes the hull mods, weapons, wings, hulls and classes (jar and loose) of every visible mod (`In operation` and the rig by default, or `--providers`).
   - It finds the smallest set of mods that provides what the mod needs, from the scanner's `content-reference-unresolved` and `source-import-unresolved` findings.
   - It recommends one course: SWAP, REVIVE_DEPENDENCY (an outdated provider that is a workspace here with 15 MANUAL or fewer), STRIP_FROM_MOD (3 or fewer unprovided ids in 5 or fewer places), or ESCALATE.
-  - Queue results: FX Example → revive FX Core; Rebal → declare EZ Damage and Vacuum, revive AI Overhaul and FX Core; Explorer Society → escalate (`shields_formshield`, 14 places, exists only in Rebal); Communist Clouds → escalate (6 `vayra_*` ids, no provider).
+  - Queue results: FX Example → revive FX Core; Rebal → declare EZ Damage and Vacuum, revive AI Overhaul and FX Core; Explorer Society → escalate (`shields_formshield`, 14 places, exists only in Rebal); Communist Clouds → escalate (6 `vayra_*` ids; only a local, unrevived 0.95.1a Vayra's Sector 3.2.1 build provides them).
   - `bridgeforge/dependency_successors.json` records renames and dead ends with evidence: MagicLib's legacy `data.scripts.util.Magic*` classes, `BaseSpawnPoint`, `Corvus`, GraphicsLib's `shaderLib`, and the discontinued Vayra's Sector.
   - `docs/DEPENDENCY_STRATEGY.md` explains the courses and when to revive a dependency, strip it, or escalate.
 - ROADMAP P14 (planned): dependency intelligence and queue throughput.
+- Lenient JSON now follows RC8's `org.json` on every case found in the Ironclads archive triage. Each case was run through `starsector-core/json.jar` itself, not inferred.
+  - **Strings:**
+    - Raw tabs and other control characters load, so they're now accepted: new SAFE finding `json-raw-control-char` (Metelson Industries).
+    - `\'` reads as an apostrophe: new SAFE finding `json-escaped-apostrophe` (Magellan, Foundation of Borken).
+  - **Unquoted values** follow org.json's own rule. The value runs to the next `, : ] } / \ " [ { ; = #` or control character, and trailing spaces are trimmed. So `0b` and `博尔肯基金会（F.O.B）` are text, and a full-width `１.0` stays text, as in the game, where `getDouble` then fails on it.
+    - `True`, `TRUE` and `False` are booleans (`equalsIgnoreCase`). 97 values across 31,713 files were previously read as text.
+  - **Numbers:** these now read as org.json reads them: `1.`, `0.`, `.0f`, `1.f`, `+5`, `+0.5` and hex `0x1F` (Dassault-Mikoyan, Magellan, SCY, VAO).
+  - **Empty array elements** (`["a",,"b"]`, `[,"a"]`) load as null. New REVIEW finding `json-empty-array-element`, since list readers may fail on the null (Valhalla Starworks' Nexerelin start ships).
+  - **Result:** compared with the previous parser on 31,713 real files, no value changed except those 97 booleans, and 436 more files now parse. The 5 files that still fail are also rejected by the game's `org.json`:
+    - missing commas in Hiigaran Descendants `polaris.json`, Yuri Expedition `vesperon_blueprints.json` and wotani `Wotani04.json`;
+    - `::` in Tyrador `blacklist.json`;
+    - bare Chinese notes in Mirfak's annotated copy of a `.proj` file.
 
 - **Correction:** RC8's `com.fs.starfarer.api.loading.WingRole` still has ASSAULT (javap on starfarer.api.jar; Vacuum's ASSAULT wings load live, VAC-R003).
   - `fighter-wing-role-invalid` no longer reports ASSAULT.

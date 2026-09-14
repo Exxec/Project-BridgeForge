@@ -359,12 +359,84 @@ def _convert_single_quoted_strings(text: str) -> str:
 
 _JSON_STRING_TOKEN_PATTERN = r'"(?:\\.|[^"\\])*"'
 _JAVA_NUMBER_SUFFIX_PATTERN = re.compile(
-    _JSON_STRING_TOKEN_PATTERN + r"|(?<![\w.])-?\d+(?:\.\d+)?[fFdD](?![\w.])"
+    # 0.5f and 2d, plus the dotted forms Java's Double.valueOf also takes: 1.f and .0f (Magellan engine_styles).
+    _JSON_STRING_TOKEN_PATTERN + r"|(?<![\w.])-?(?:\d+\.?\d*|\.\d+)[fFdD](?![\w.])"
 )
+# org.json's nextValue reads an unquoted value up to one of these delimiters or a control character
+# (spaces included, then trimmed); stringToValue makes it true/false/null in any case, a number, or
+# else the text itself. Every case was run through RC8's json.jar on 2026-09-14.
+_ORGJSON_UNQUOTED_RUN = r'[^\x00-\x1f,:\]}/\\"\[{;=#]*'
 _BAREWORD_TOKEN_PATTERN = re.compile(
-    _JSON_STRING_TOKEN_PATTERN + r"|(?<![\w.$])[A-Za-z_$][A-Za-z0-9_$]*"
+    _JSON_STRING_TOKEN_PATTERN
+    # STATIONS, or Foundation of Borken's displayName:博尔肯基金会（F.O.B）
+    + r"|(?<![\w.$])(?:[A-Za-z_$]|[^\x00-\x7f\s])" + _ORGJSON_UNQUOTED_RUN
+    # A digit-led run that isn't a number stays text: Erexeus Tech Complex's "patch":0b. A leading
+    # '+' is part of a number: SCY's "renderOrderMod":+5.
+    + r"|(?<![\w.$])\+?[0-9]" + _ORGJSON_UNQUOTED_RUN
 )
+_LOOSE_NUMBER_PATTERN = re.compile(r"\d+(?:\.\d*)?(?:[eE][+-]?\d+)?", re.ASCII)
+_HEX_NUMBER_PATTERN = re.compile(r"0[xX][0-9a-fA-F]+")
+_RAW_CONTROL_IN_STRING_PATTERN = re.compile(r'"(?:\\.|[^"\\\r\n])*"')
 _JSON_LITERAL_TOKENS = {"true", "false", "null"}
+
+
+def _normalize_string_contents(text: str) -> tuple[str, set[str]]:
+    """Bring double-quoted string contents that org.json accepts into strict-JSON shape.
+
+    org.json's nextString rejects only NUL, `\\n` and `\\r` inside a string, and it reads `\\'` as an
+    apostrophe (RC8's json.jar, 2026-09-14). Metelson Industries has raw tabs in its description;
+    Magellan and Foundation of Borken escape apostrophes. Strict JSON rejects both. Line breaks and
+    illegal escapes such as `\\%` are left alone, because the game rejects them too.
+    """
+    tolerances: set[str] = set()
+
+    def replace(match: re.Match[str]) -> str:
+        token = match.group(0)
+        unescaped = re.sub(r"\\(.)", lambda escape: "'" if escape.group(1) == "'" else escape.group(0), token, flags=re.S)
+        if unescaped != token:
+            tolerances.add("apostrophe-escapes")
+        escaped = re.sub(r"[\x01-\x09\x0b\x0c\x0e-\x1f]", lambda char: f"\\u{ord(char.group(0)):04x}", unescaped)
+        if escaped != unescaped:
+            tolerances.add("raw-control-chars")
+        return escaped
+
+    return _RAW_CONTROL_IN_STRING_PATTERN.sub(replace, text), tolerances
+
+
+def _fill_empty_array_elements(text: str) -> tuple[str, bool]:
+    """Write `null` for an empty array element, as org.json's JSONArray reads it.
+
+    `["a",,"b"]` and `[,"a"]` load in game with a null element (RC8's json.jar, 2026-09-14; Valhalla
+    Starworks' startShipsCombatLarge). Objects get no such leniency, and a comma before `]` stays a
+    trailing comma, which is dropped later.
+    """
+    out: list[str] = []
+    stack: list[str] = []
+    in_string = escaped = found = False
+    for index, char in enumerate(text):
+        out.append(char)
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char in "[{":
+            stack.append(char)
+        elif char in "]}" and stack:
+            stack.pop()
+        if char in "[," and stack and stack[-1] == "[":
+            ahead = index + 1
+            while ahead < len(text) and text[ahead] in " \t\r\n":
+                ahead += 1
+            if ahead < len(text) and text[ahead] == ",":
+                out.append("null")
+                found = True
+    return "".join(out), found
 
 
 def _strip_java_number_suffixes(text: str) -> tuple[str, bool]:
@@ -459,9 +531,28 @@ def _quote_barewords_and_keys(text: str) -> tuple[str, set[str]]:
     tolerances: set[str] = set()
 
     def replace(match: re.Match[str]) -> str:
-        token = match.group(0)
-        if token.startswith('"') or token in _JSON_LITERAL_TOKENS:
-            return token
+        raw = match.group(0)
+        if raw.startswith('"'):
+            return raw
+        token = raw.rstrip(" ")  # org.json trims the unquoted run
+        trailing = raw[len(token):]
+        if token.lower() in _JSON_LITERAL_TOKENS:
+            if token != token.lower():
+                tolerances.add("bareword-values")  # org.json: equalsIgnoreCase("true") and so on
+            return token.lower() + trailing
+        if token[0] == "+" and _LOOSE_NUMBER_PATTERN.fullmatch(token[1:]):
+            tolerances.add("lenient-numbers")  # org.json: new Long("+5"), Double.valueOf("+0.5")
+            token, raw = token[1:], raw[1:]
+        # ASCII digits only: org.json reads a full-width １.0 as text (Traverser Design Bureau).
+        if token[0] in "0123456789":
+            if re.fullmatch(r"[0-9]+\.", token):
+                tolerances.add("lenient-numbers")  # Dassault-Mikoyan's "pitch":1.
+                return token + "0" + trailing
+            if _LOOSE_NUMBER_PATTERN.fullmatch(token):
+                return raw
+            if _HEX_NUMBER_PATTERN.fullmatch(token) and int(token, 16) <= 0x7FFFFFFF:
+                tolerances.add("lenient-numbers")  # org.json: Integer.parseInt(hex, 16)
+                return str(int(token, 16)) + trailing
         lookahead = match.end()
         while lookahead < len(text) and text[lookahead] in " \t\r\n":
             lookahead += 1
@@ -469,7 +560,7 @@ def _quote_barewords_and_keys(text: str) -> tuple[str, set[str]]:
             tolerances.add("unquoted-keys")
         else:
             tolerances.add("bareword-values")
-        return f'"{token}"'
+        return f'"{token}"' + trailing
 
     return _BAREWORD_TOKEN_PATTERN.sub(replace, text), tolerances
 
@@ -505,11 +596,16 @@ def _parse_json(text: str) -> tuple[object, set[str]]:
             tolerances |= separator_tolerances
             without_barewords, bareword_tolerances = _quote_barewords_and_keys(without_number_suffix)
             tolerances |= bareword_tolerances
+            without_barewords, empty_found = _fill_empty_array_elements(without_barewords)
+            if empty_found:
+                tolerances.add("empty-array-elements")
             without_commas = _without_trailing_commas(without_barewords)
             # Starsector also accepts a comma after the root object's closing brace (e.g. Exigency factions).
             without_commas = re.sub(r"([}\]])\s*,\s*\Z", r"\1", without_commas)
             if without_commas != without_barewords:
                 tolerances.add("trailing-commas")
+            without_commas, string_tolerances = _normalize_string_contents(without_commas)
+            tolerances |= string_tolerances
         except ValueError:
             # An unterminated single-quoted string is malformed, not a dialect
             # we tolerate; "repairing" it would hide a genuinely broken file.
@@ -567,7 +663,7 @@ def _java_number_suffix_json_finding(result: ScanResult, category: str, file: st
 
 
 def _lenient_number_json_finding(result: ScanResult, category: str, file: str) -> None:
-    result.add(id="json-lenient-number", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file has numbers with leading zeros (e.g. 098) or a leading dot (e.g. .7). Starsector's lenient loader reads them as plain numbers; BridgeForge parsed them structurally and does not recommend rewriting them.", file=file)
+    result.add(id="json-lenient-number", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file has numbers with leading zeros (e.g. 098), a leading or trailing dot (e.g. .7 or 1.), or hex digits (0x1F). Starsector's lenient loader reads them as plain numbers; BridgeForge parsed them structurally and does not recommend rewriting them.", file=file)
 
 
 def _json_trailing_data_finding(result: ScanResult, category: str, file: str, tolerances: set[str]) -> None:
@@ -599,6 +695,12 @@ def _emit_json_tolerance_findings(result: ScanResult, category: str, file: str, 
         _bareword_value_json_finding(result, category, file)
     if "java-number-suffix" in tolerances:
         _java_number_suffix_json_finding(result, category, file)
+    if "raw-control-chars" in tolerances:
+        result.add(id="json-raw-control-char", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="A string holds a raw tab or other control character. Starsector's org.json loader keeps it (its nextString rejects only NUL and line breaks; verified against starsector-core/json.jar), but strict JSON tools reject the file. BridgeForge parsed it structurally and does not recommend rewriting it.", file=file)
+    if "empty-array-elements" in tolerances:
+        result.add(id="json-empty-array-element", category=category, severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="An array has an empty element, such as [a,,b] or [,a]. Starsector's org.json loader reads it as null (verified against starsector-core/json.jar), so the file loads, but code that reads the list (ship, faction or blueprint lists) may fail on the null or drop the entry. Check what the author meant.", file=file)
+    if "apostrophe-escapes" in tolerances:
+        result.add(id="json-escaped-apostrophe", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="A double-quoted string escapes an apostrophe as \\'. Starsector's org.json loader reads it as a plain apostrophe (verified against starsector-core/json.jar), but strict JSON rejects the escape. BridgeForge parsed it structurally and does not recommend rewriting it.", file=file)
 
 
 def _unverified_json_syntax_finding(result: ScanResult, category: str, file: str, exc: Exception) -> None:

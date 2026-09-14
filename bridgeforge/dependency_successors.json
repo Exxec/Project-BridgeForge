@@ -33,9 +33,9 @@
     {
       "match": "vayrasector",
       "kind": "discontinued",
-      "successor": "None known. The newest release found is titled \"[0.9.1a] Vayra's Sector 3.2 - back from the dead 2021-02-11\"; no local mod provides its ids.",
-      "action": "Escalate: revive Vayra's Sector (licence permitting), strip its content from the add-on, or wait for a successor.",
-      "evidence": "fractalsoftworks.com forum topic 16058 (searched 2026-09-14); ~150 mods of the owner's install checked, none defines vayra_* content"
+      "successor": "No 0.98a release known. The newest forum release is titled \"[0.9.1a] Vayra's Sector 3.2 - back from the dead 2021-02-11\", but a 3.2.1 build targeting 0.95.1a-RC6 exists locally, provenance unverified, and defines every vayra_* id Communist Clouds uses.",
+      "action": "Escalate. Reviving the 0.95.1a build is the cheaper path (a 0.95 to 0.98 gap, not 0.9.1a), licence permitting; otherwise strip its content from the add-on or wait for a successor.",
+      "evidence": "fractalsoftworks.com forum topic 16058 (searched 2026-09-14); ~150 mods of the owner's install define no vayra_* content; C:/Users/exxec/Downloads/Ironclads mega archive/Vayra's Sector (3.2.1, 0.95.1a-RC6), dependency-substitutes 2026-09-14"
     }
   ]
 }

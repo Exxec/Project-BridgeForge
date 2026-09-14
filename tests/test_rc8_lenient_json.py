@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -89,6 +90,58 @@ class ParseJsonToleranceTests(unittest.TestCase):
         self.assertEqual(data, {"half": 0.5, "two": 2, "n": -3.5})
         self.assertIn("java-number-suffix", tolerances)
 
+    def test_raw_tab_inside_a_string_is_kept_like_org_json(self) -> None:
+        # Metelson Industries' mod_info.json: literal tabs in the description, plus inline # comments.
+        data, tolerances = _parse_json('{\n  "id":"m", # internal id\n  "description":"a\tb"\n}')
+        self.assertEqual(data, {"id": "m", "description": "a\tb"})
+        self.assertIn("raw-control-chars", tolerances)
+
+    def test_raw_line_break_inside_a_string_still_fails(self) -> None:
+        # org.json's nextString throws "Unterminated string" on \n and \r.
+        with self.assertRaises(json.JSONDecodeError):
+            _parse_json('{"d": "a\nb", # x\n}')
+
+    def test_digit_led_bareword_is_text_and_hex_is_a_number_like_org_json(self) -> None:
+        # Erexeus Tech Complex: "version":{"major":1, "minor":2, "patch":0b}
+        data, tolerances = _parse_json('{"version":{"major":1, "minor":2, "patch":0b}, "e": 2E-3, "big": 1e10, "h": 0x1F}')
+        self.assertEqual(data, {"version": {"major": 1, "minor": 2, "patch": "0b"}, "e": 2e-3, "big": 1e10, "h": 31})
+        self.assertIn("bareword-values", tolerances)
+
+    # The cases below were run through RC8's own org.json (starsector-core/json.jar) on 2026-09-14.
+    def test_trailing_dot_and_dotted_java_suffix_numbers(self) -> None:
+        # Dassault-Mikoyan: "pitch":1. and "commanderSkillLevelPerLevel":0.; Magellan: "contrailMaxSpeedMult":.0f
+        data, tolerances = _parse_json('{"pitch":1., "lvl":0., "m":.0f, "n":1.f, "v": 2.5}')
+        self.assertEqual(data, {"pitch": 1.0, "lvl": 0.0, "m": 0.0, "n": 1.0, "v": 2.5})
+        self.assertIn("lenient-numbers", tolerances)
+
+    def test_escaped_apostrophe_inside_a_double_quoted_string(self) -> None:
+        # Magellan and Foundation of Borken strings.json: "...how it sounds t' them...\'"
+        text = '{"q": "it~' + "'" + 's", # c\n}'
+        data, tolerances = _parse_json(text.replace("~", chr(92)))
+        self.assertEqual(data, {"q": "it's"})
+        self.assertIn("apostrophe-escapes", tolerances)
+
+    def test_unicode_bareword_value_is_one_string(self) -> None:
+        # Foundation of Borken's backup faction file: displayName:博尔肯基金会（F.O.B）,
+        data, tolerances = _parse_json('{displayName:博尔肯基金会（F.O.B）, "x": 1, "t": TRUE}')
+        self.assertEqual(data, {"displayName": "博尔肯基金会（F.O.B）", "x": 1, "t": True})
+        self.assertIn("bareword-values", tolerances)
+
+    def test_plus_signs_empty_array_elements_and_fullwidth_digits(self) -> None:
+        # SCY "renderOrderMod":+5, VAO "luddic_church":+0.5, Valhalla [["a",,"b"]], and Traverser
+        # Design Bureau's "pixelsPerTexel":１.0, which org.json keeps as text.
+        data, tolerances = _parse_json('{"r":+5, "l":+0.5, "s":[["a",,"b"]], "t":[,"x"], "p":１.0, "e": 2E+3, "k": [1,],}')
+        self.assertEqual(data, {"r": 5, "l": 0.5, "s": [["a", None, "b"]], "t": [None, "x"], "p": "１.0", "e": 2000.0, "k": [1]})
+        self.assertTrue({"lenient-numbers", "empty-array-elements", "bareword-values"} <= tolerances)
+
+    def test_what_org_json_rejects_still_fails(self) -> None:
+        # Hiigaran Descendants' polaris.json misses a comma between array items; org.json throws
+        # "Expected a ',' or ']'". An illegal escape such as \% throws "Illegal escape.".
+        # Tyrador Safeguard Coalition's blacklist.json has "TSC_DroneKaburaya"::TRUE ("Missing value").
+        for text in ('{"c": ["organics_common"\n "habitable"], # x\n}', '{"q": "50~%", # x\n}'.replace("~", chr(92)), '{"a"::TRUE, # x\n}'):
+            with self.assertRaises(json.JSONDecodeError):
+                _parse_json(text)
+
     def test_scientific_notation_number_is_not_corrupted_by_bareword_pass(self) -> None:
         data, tolerances = _parse_json('{"big": 1e10, "small": 2E-3}')
         self.assertEqual(data, {"big": 1e10, "small": 2e-3})
@@ -155,6 +208,34 @@ class ScanMetadataLenientJsonFindingsTests(unittest.TestCase):
             )
             result = scan_mod(root)
             self.assertEqual(_findings(result, "faction-file-unparsed"), [])
+
+    def test_raw_tab_in_mod_info_is_a_safe_finding_not_unparsed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{\n "id":"metelson", # internal id\n "name":"M",\n "description":"simple.\tLazyLib required.",\n "version":{"major":1, "patch":0b}\n}')
+            result = scan_mod(root)
+            self.assertEqual(result.metadata.get("id"), "metelson")
+            self.assertEqual(_findings(result, "unverified-mod-info-syntax"), [])
+            self.assertTrue(_findings(result, "json-raw-control-char"))
+
+    def test_empty_array_element_is_a_review_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"valhalla","name":"V","version":"1","gameVersion":"0.95.1a-RC6","tags":["a",,"b"],}')
+            result = scan_mod(root)
+            self.assertEqual(result.metadata.get("id"), "valhalla")
+            findings = _findings(result, "json-empty-array-element")
+            self.assertTrue(findings)
+            self.assertEqual(findings[0].classification, "REVIEW")
+
+    def test_escaped_apostrophe_in_strings_json_is_a_safe_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"magellan","name":"M","version":"1","gameVersion":"0.95.1a-RC6"}')
+            _write(root / "data" / "strings" / "strings.json", ('{"q": "sounds t~' + "'" + ' them", # quote\n}').replace("~", chr(92)))
+            result = scan_mod(root)
+            self.assertEqual(_findings(result, "unverified-json-syntax"), [])
+            self.assertTrue(_findings(result, "json-escaped-apostrophe"))
 
     def test_generic_asset_json_emits_new_tolerance_findings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
