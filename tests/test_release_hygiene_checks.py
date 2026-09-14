@@ -86,6 +86,18 @@ class RevivalAuditDependencyClaimTests(unittest.TestCase):
             audit = audit_revival(self._candidate(Path(directory), [], claim))
         self.assertFalse([issue for issue in audit["issues"] if issue["id"] == "dependency-claim-stale"])
 
+    def test_not_performed_is_not_read_as_done(self) -> None:
+        # Zorg18 r1: an unticked plan box beside "NOT PERFORMED" was reported as stale.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = self._candidate(Path(directory), [])
+            report = (mod / "reports" / "REVIVAL_REPORT.md").read_text(encoding="utf-8")
+            report = report.replace("- LIVE STARSECTOR TEST — PASS", "- LIVE STARSECTOR TEST — NOT PERFORMED (tests pending)")
+            (mod / "reports" / "REVIVAL_REPORT.md").write_text(report, encoding="utf-8")
+            (mod / "reports" / "REVIVAL_PLAN.md").write_text("# Plan\n- [ ] LIVE STARSECTOR TEST\n- [ ] COMPILE\n", encoding="utf-8")
+            audit = audit_revival(mod)
+        stale = [issue["evidence"][0] for issue in audit["issues"] if issue["id"] == "plan-validation-state-stale"]
+        self.assertEqual(stale, ["COMPILE"])  # COMPILE says PASS but is unticked; LIVE is honestly not done
+
     def test_claims_matching_mod_info_are_quiet(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             audit = audit_revival(self._candidate(Path(directory), [{"id": "lw_lazylib", "name": "LazyLib"}, {"id": "MagicLib", "name": "MagicLib"}]))

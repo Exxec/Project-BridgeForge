@@ -800,15 +800,18 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
             )
         if active_source:
             for system_name in HARDCODED_SYSTEM_LOOKUP_PATTERN.findall(text):
+                # Zorg18's spawner and Flu-X's plugin both null-check the lookup (2026-09-14): a guarded
+                # lookup already survives a missing system, so it isn't a review item.
+                guarded = _system_lookup_null_guarded(_blank_java_comments(text), system_name)
                 result.add(
                     id="hard-coded-campaign-system-reference",
                     category="campaign",
-                    severity="medium",
-                    classification="REVIEW",
+                    severity="low" if guarded else "medium",
+                    classification="SAFE" if guarded else "REVIEW",
                     confidence="DETERMINISTIC",
-                    explanation="Campaign code looks up a star system using a literal string. Verify that it is the stable system ID, that the target is guaranteed to exist, and that optional/total-conversion environments are guarded.",
+                    explanation=("Campaign code looks up a star system using a literal string, and null-checks the result, so a missing system is handled. Confirm the ID is the stable system ID." if guarded else "Campaign code looks up a star system using a literal string. Verify that it is the stable system ID, that the target is guaranteed to exist, and that optional/total-conversion environments are guarded."),
                     file=relative,
-                    evidence=[system_name],
+                    evidence=[system_name] + (["null-guarded"] if guarded else []),
                 )
             for entity_id in HARDCODED_ENTITY_LOOKUP_PATTERN.findall(text):
                 result.add(
@@ -853,6 +856,9 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
         if len(paths) > 1:
             result.add(id="duplicate-source-layout", category="source", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Identical Java source appears at multiple paths. Establish the authoritative source/JAR layout before compiling or modifying it.", evidence=sorted(paths))
     _scan_mission_local_fleet_references(root, result)
+    _scan_campaign_fleet_references(root, result)
+    _scan_core_campaign_plugin_reregistered(root, result)
+    _scan_system_generation_unguarded(root, result)
     _scan_mission_required_files(root, result)
     _scan_loose_script_janino_risk(root, result)
     _scan_weapon_effect_static_state(root, result)
@@ -1088,6 +1094,182 @@ def _declared_spec_ids(folder: Path, pattern: str, key: str) -> dict[str, Path]:
             pass
         specs[declared.strip() if isinstance(declared, str) and declared.strip() else path.stem] = path
     return specs
+
+
+def _scan_core_campaign_plugin_reregistered(root: Path, result: ScanResult) -> None:
+    """A mod that registers vanilla's CoreCampaignPluginImpl again (Zorg18's ZorgGen, 2026-09-14).
+
+    Vanilla's own SectorGen already calls sector.registerPlugin(new CoreCampaignPluginImpl()) (RC8
+    data/scripts/world/SectorGen.java:168). 0.6-era system templates copied that line into mod
+    generators, so every new game gains a second core plugin that is kept in the save. A total
+    conversion that replaces SectorGen (Vacuum) legitimately registers it and is skipped.
+    """
+    if result.metadata.get("totalConversion") in (True, "true", "TRUE"):
+        return
+    hits: list[str] = []
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if "SectorGeneratorPlugin" in text:
+            continue
+        for match in re.finditer(r"\bregisterPlugin\s*\(\s*new\s+(?:[\w.]+\.)?CoreCampaignPluginImpl\s*\(", text):
+            hits.append(f"{_relative(root, source)}:{text.count(chr(10), 0, match.start()) + 1}")
+    if hits:
+        result.add(
+            id="core-campaign-plugin-reregistered",
+            category="campaign",
+            severity="low",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation="The mod registers vanilla's CoreCampaignPluginImpl, which vanilla's SectorGen already registers (RC8 SectorGen.java:168). Each new game then carries a duplicate core plugin in its save. It is a leftover from 0.6-era system templates; remove the line unless the mod replaces vanilla sector generation.",
+            evidence=hits,
+        )
+
+
+_MEMORY_FLAG_CHECK = re.compile(r"getMemory(?:WithoutUpdate)?\s*\(\s*\)\s*\.\s*(?:getBoolean|contains|is)\s*\(")
+
+
+def _method_body(text: str, name: str) -> str:
+    """Body of the first method called `name` (brace-matched on comment-blanked text), or ''."""
+    match = re.search(rf"\b{re.escape(name)}\s*\([^)]*\)\s*(?:throws[^{{]*)?\{{", text)
+    if not match:
+        return ""
+    depth, index = 1, match.end()
+    while index < len(text) and depth:
+        depth += {"{": 1, "}": -1}.get(text[index], 0)
+        index += 1
+    return text[match.end(): index - 1]
+
+
+def _method_body_with_helpers(text: str, name: str) -> str:
+    """A method's body plus the bodies of same-class methods it calls (one level), e.g. onNewGame -> initExigency."""
+    body = _method_body(text, name)
+    extra = []
+    for called in sorted(set(re.findall(r"\b([a-z_$][\w$]*)\s*\(", body))):
+        if called not in {"if", "for", "while", "switch", "return", "new", "catch", name}:
+            extra.append(_method_body(text, called))
+    return body + "\n" + "\n".join(extra)
+
+
+def _scan_system_generation_unguarded(root: Path, result: ScanResult) -> None:
+    """Star systems created with no "already generated?" guard (Zorg18, 2026-09-14).
+
+    createStarSystem("X") is safe when some code null-checks getStarSystem("X") or checks a memory flag
+    around the generator (Flu-X's plugin does the first; Zorg18 r2 both). Unguarded generation reached
+    from onGameLoad creates the system again on every load; from onNewGame it relies on being called
+    once per sector. Total conversions and SectorGeneratorPlugin replacements build the whole sector and
+    are skipped.
+    """
+    if result.metadata.get("totalConversion") in (True, "true", "TRUE"):
+        return
+    texts: dict[Path, str] = {}
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            texts[source] = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+    plugins = {path: text for path, text in texts.items() if re.search(r"\bextends\s+BaseModPlugin\b", text)}
+    hits: list[str] = []
+    worst = "low"
+    for source, text in texts.items():
+        if "SectorGeneratorPlugin" in text:
+            continue
+        for match in re.finditer(r'\bcreateStarSystem\s*\(\s*"([^"]+)"', text):
+            name = match.group(1)
+            names = {name, name.lower(), name.replace(" ", "_").lower()}
+            guarded = any(_system_lookup_null_guarded(other, candidate) for other in texts.values() for candidate in names)
+            class_name = source.stem
+            callers = [path for path, body in plugins.items() if re.search(rf"\b{re.escape(class_name)}\b", body)] or ([source] if source in plugins else [])
+            if not guarded:
+                guarded = bool(_MEMORY_FLAG_CHECK.search(text)) or any(_MEMORY_FLAG_CHECK.search(plugins[path]) for path in callers if path in plugins)
+            if guarded:
+                continue
+            reached = "unknown"
+            # Only a generation call counts: Exigency's onGameLoad calls the static Tasserus.getExiHome(),
+            # while `new Tasserus().generate(...)` sits in initExigency(), called from onNewGame.
+            generates = re.compile(rf"\bnew\s+{re.escape(class_name)}\s*\(|\b{re.escape(class_name)}\s*\.\s*generate\s*\(")
+            for path in callers:
+                plugin_text = plugins.get(path, "")
+                if generates.search(_method_body_with_helpers(plugin_text, "onGameLoad")):
+                    reached = "onGameLoad"
+                    worst = "medium"
+                    break
+                if generates.search(_method_body_with_helpers(plugin_text, "onNewGame")):
+                    reached = "onNewGame"
+            line = text.count("\n", 0, match.start()) + 1
+            hits.append(f"{_relative(root, source)}:{line}: {name} (called from {reached})")
+    if hits:
+        result.add(
+            id="system-generation-unguarded",
+            category="campaign",
+            severity=worst,
+            classification="REVIEW",
+            confidence="MEDIUM",
+            explanation="A star system is created with no check that it already exists (no null check on getStarSystem for it, no memory flag). Called from onGameLoad this duplicates the system on every load; from onNewGame it relies on running exactly once per sector. Add a memory-flag or getStarSystem guard.",
+            evidence=hits,
+        )
+
+
+def _system_lookup_null_guarded(text: str, system_name: str) -> bool:
+    """True when getStarSystem("<name>") is compared with null, inline or through the variable it's assigned to."""
+    call = r'getStarSystem\s*\(\s*"' + re.escape(system_name) + r'"\s*\)'
+    if re.search(call + r"\s*[!=]=\s*null|null\s*[!=]=\s*[^;]*" + call, text):
+        return True
+    for variable in re.findall(r"\b([A-Za-z_$][\w$]*)\s*=\s*[^;=]*" + call, text):
+        if re.search(rf"\b{re.escape(variable)}\s*[!=]=\s*null\b|\bnull\s*[!=]=\s*{re.escape(variable)}\b", text):
+            return True
+    return False
+
+
+def _scan_campaign_fleet_references(root: Path, result: ScanResult) -> None:
+    """Variant and wing ids that campaign code builds fleets from must exist (Zorg18 spawner, 2026-09-14).
+
+    Missions are covered by mission-local-fleet-reference-missing. Campaign spawners often keep ids in
+    arrays and pick one at run time, so every string literal with this mod's prefix is checked in any
+    source that uses FleetMemberType: "<prefix>..._wing" must be a wing, and a literal that starts with
+    one of the mod's hull ids plus "_" must be a variant. A missing one fails only when that fleet spawns.
+    """
+    mod_id = str(result.metadata.get("id") or "").strip()
+    if not mod_id:
+        return
+    prefix = f"{mod_id}_"
+    variants = set(_declared_spec_ids(root / "data" / "variants", "*.variant", "variantId"))
+    hulls = set(_declared_spec_ids(root / "data" / "hulls", "*.ship", "hullId"))
+    wings = _wing_ids_set(root / "data" / "hulls" / "wing_data.csv")
+    if not hulls and not wings:
+        return
+    missing: list[str] = []
+    for source in sorted(root.rglob("*.java")):
+        parts = source.relative_to(root).parts
+        if "disabled_files" in parts or "missions" in parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if "FleetMemberType" not in text:
+            continue
+        for literal in sorted(set(re.findall(r'"(' + re.escape(prefix) + r'[A-Za-z0-9_]+)"', text))):
+            if literal in variants or literal in hulls or literal in wings:
+                continue
+            if literal.endswith("_wing") or any(literal.startswith(hull + "_") for hull in hulls):
+                missing.append(f"{_relative(root, source)}: {literal}")
+    if missing:
+        result.add(
+            id="campaign-fleet-reference-missing",
+            category="campaign",
+            severity="high",
+            classification="MANUAL",
+            confidence="HIGH",
+            explanation="Campaign code builds fleets from a variant or wing id that this mod doesn't define. createFleetMember fails (or the member is skipped) only when that fleet spawns, which can be hours into a game.",
+            evidence=missing,
+        )
 
 
 def _scan_mission_local_fleet_references(root: Path, result: ScanResult) -> None:
@@ -2046,10 +2228,15 @@ def _scan_faction_known_lists(root: Path, result: ScanResult, vanilla_core: Path
         evidence = [f"missing:{','.join(missing)}", f"shipRoles-present:{isinstance(ship_roles, dict)}", f"role-variant-keys:{role_variant_count}"]
         if vanilla_ids is None:
             evidence.append("vanilla-faction-list:unavailable; merge-fragment exemption could not be checked")
+        # Zorg18 (2026-09-14): no markets, no shipRoles, fleets assembled member by member. Nothing reads
+        # its known lists, so HIGH overstated it. Keep HIGH whenever market use can't be ruled out.
+        market_use = _faction_market_evidence(root, faction_id)
+        unused = role_variant_count == 0 and market_use == "none"
+        evidence.append(f"market-evidence:{market_use}")
         result.add(
             id="faction-known-lists-missing",
             category="factions",
-            severity="high",
+            severity="low" if unused else "high",
             classification="REVIEW",
             confidence="HIGH",
             explanation=(
@@ -2057,10 +2244,44 @@ def _scan_faction_known_lists(root: Path, result: ScanResult, vanilla_core: Path
                 "market stocking (BaseSubmarketPlugin.addWeapons/addFighters/addShips) and fleet generation "
                 "(FleetFactoryV3) only draw from a faction's known lists, so a missing list silently produces "
                 "empty market stock or empty fleets instead of an error."
+                + (" This faction has no shipRoles and no market was found in its data or sources, so nothing obvious reads the lists; add them if it gains markets, FleetFactoryV3 fleets or a Nexerelin config." if unused else "")
             ),
             file=_relative(root, path),
             evidence=evidence,
         )
+
+
+def _faction_market_evidence(root: Path, faction_id: str) -> str:
+    """'found' when the faction owns or configures a market, 'none' when sources rule it out, else 'unknown'."""
+    quoted = f'"{faction_id}"'
+    econ = root / "data" / "campaign" / "econ"
+    for path in econ.rglob("*.json") if econ.is_dir() else []:
+        data = _load_lenient_json_file(path)
+        if isinstance(data, dict) and data.get("faction") == faction_id:
+            return "found"
+    if (root / "data" / "config" / "exerelinFactionConfig" / f"{faction_id}.json").is_file():
+        return "found"
+    sources = [path for path in root.rglob("*.java") if "disabled_files" not in path.relative_to(root).parts]
+    for path in sources:
+        try:
+            text = _blank_java_comments(path.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if quoted in text and re.search(r"\b(?:setFactionId|createMarket|addMarket|createEmptyFleet|createFleet)\s*\(", text):
+            if re.search(r"\b(?:setFactionId|createMarket|addMarket)\s*\(", text):
+                return "found"
+    # Shipped jars often differ from bundled sources, so the bytecode is checked too: a class holding the
+    # faction id as a string constant and calling a market-ownership method.
+    has_classes = False
+    for _jar, _member, data in _iter_jar_class_files(root):
+        has_classes = True
+        info = _parse_class_file(data)
+        if info is None or faction_id not in (info.string_constants or set()):
+            continue
+        if {"setFactionId", "createMarket", "addMarket"} & set(info.utf8_values or ()):
+            return "found"
+    # Compiled code without any sources could still build markets in ways we can't read.
+    return "unknown" if has_classes and not sources else "none"
 
 
 def _scan_shiproles(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:

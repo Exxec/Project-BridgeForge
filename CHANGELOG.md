@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fix: `revival-audit` no longer reads "NOT PERFORMED" as a completed validation. It had reported `plan-validation-state-stale` for honestly unticked plan items (Zorg18 r1).
+- Scanner, from Zorg18:
+  - New `campaign-fleet-reference-missing` (MANUAL). Campaign spawners that keep variant and wing ids in arrays and pick one at run time are now checked. In any source that uses `FleetMemberType`, a mod-prefixed `..._wing` literal must be a wing, and a literal starting with one of the mod's hull ids must be a variant. Missions keep their own check.
+  - `faction-known-lists-missing` drops to low when the faction has no shipRoles and no market evidence: no econ JSON, no Nexerelin faction config, and no `setFactionId`/`createMarket`/`addMarket` beside the faction id in the sources or in the jar's bytecode. It stays high when compiled code without sources could create markets. First sweep: only helper factions dropped (Exigency `mysterious_contact`, FlowerGod `copyplayer`, Zorg18 `zorg`).
+  - New `system-generation-unguarded` (REVIEW): `createStarSystem("X")` with no null check on `getStarSystem("X")` anywhere and no memory-flag check around the generator. It rates medium when the generator is named in a ModPlugin's `onGameLoad` (the system is duplicated on every load) and low otherwise. Total conversions and `SectorGeneratorPlugin` replacements are exempt. Zorg18 r2 now has both guards.
+  - New `core-campaign-plugin-reregistered` (REVIEW/low): a mod that registers vanilla's `CoreCampaignPluginImpl`, which vanilla's SectorGen already registers (RC8 `SectorGen.java:168`), so each new game keeps a duplicate core plugin in its save. It's a 0.6-era template line. Total conversions and `SectorGeneratorPlugin` replacements (Vacuum) are exempt. First sweep: Zorg18 only.
+  - `hard-coded-campaign-system-reference` is SAFE/low when the lookup is null-checked, inline or through the variable it is assigned to (Flu-X `radikius`, Zorg18 `askonia`, Arkgneisis `Anargaia`, Broken-Star `Danai`). Unguarded lookups stay REVIEW/medium.
 - Fix: `translate-apply --out` makes its own copy writable. `copytree` kept the read-only attribute of Mirfak's source files, so writing the translation failed half-way. The source keeps its attributes.
 - Scanner (P13), three more checks from the Chinese mods:
   - `non-ascii-identifier` flags spec ids (CSV `id`, `hullId`, `skinHullId`, `variantId`, `.wpn`/`.proj`/`.faction`/`.system` `id`) with non-ASCII characters. Prose spilled into an id column is left to `csv-row-extra-columns`.

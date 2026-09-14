@@ -159,7 +159,8 @@ def audit_revival(candidate: Path, archive: Path | None = None, *, reports_dir: 
 
     for label, value in validations.items():
         unchecked = re.search(rf"(?im)^\s*[-*]\s*\[\s\]\s*{re.escape(label)}\b", plan)
-        passed = re.search(r"\b(PASS|PERFORMED)\b", value, re.IGNORECASE)
+        # "NOT PERFORMED" contains "PERFORMED"; it used to read as done (Zorg18 r1, 2026-09-14).
+        passed = re.search(r"\b(PASS|PERFORMED)\b", re.sub(r"(?i)\bnot\s+performed\b", "", value), re.IGNORECASE)
         if unchecked and passed:
             issues.append(_issue("plan-validation-state-stale", "WARNING", f"The plan leaves {label} unchecked while the final report records completed evidence.", [label, value]))
 
