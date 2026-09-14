@@ -10,6 +10,11 @@
   - `bridgeforge/dependency_successors.json` records renames and dead ends with evidence: MagicLib's legacy `data.scripts.util.Magic*` classes, `BaseSpawnPoint`, `Corvus`, GraphicsLib's `shaderLib`, and the discontinued Vayra's Sector.
   - `docs/DEPENDENCY_STRATEGY.md` explains the courses and when to revive a dependency, strip it, or escalate.
 - ROADMAP P14 (planned): dependency intelligence and queue throughput.
+- `legacy-vanilla-class-import` changes:
+  - It now finds a removed class used by simple name from its own package: `data.scripts.world` scripts extend `BaseSpawnPoint` with no import. Antediluvians wasn't flagged before; Batavia and Qualljom were flagged only partly; Cobalt-Arms and Independant-Mining-Faction each had a second, missed spawn-point file.
+  - A mod that ships its own copy of the class, such as Vacuum's earlier shim, is no longer flagged.
+  - The evidence gives the file count and up to 6 files, instead of silently cutting at 3.
+- **Correction:** `dependency-substitutes` no longer offers a total conversion as a provider unless the mod declares it (an add-on). Vacuum defines `thruster_fighter_sm`, but Explorer Society and Rebal can't run beside it, so the earlier advice to declare Vacuum was wrong. The report lists excluded total conversions.
 - Lenient JSON now follows RC8's `org.json` on every case found in the Ironclads archive triage. Each case was run through `starsector-core/json.jar` itself, not inferred.
   - **Strings:**
     - Raw tabs and other control characters load, so they're now accepted: new SAFE finding `json-raw-control-char` (Metelson Industries).

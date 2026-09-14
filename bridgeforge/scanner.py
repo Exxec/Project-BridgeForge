@@ -1061,6 +1061,9 @@ def _scan_source_build_dependencies(root: Path, result: ScanResult, import_locat
     # MagicLib's legacy packages (data.scripts.util.Magic*, data.scripts.plugins.Magic*) count as a library.
     known_prefixes = tuple(prefix for prefixes in (*LIBRARY_PACKAGES.values(), *EXTERNAL_MOD_API_PACKAGES.values()) for prefix in prefixes) + ("data.scripts.plugins.Magic",)
     active_imports: dict[str, set[str]] = {}
+    # A script in the removed class's own package uses it without an import: Antediluvians'
+    # data.scripts.world.AntediluvianSpawnPoint extends BaseSpawnPoint directly (2026-09-14).
+    same_package_uses: dict[str, set[str]] = {}
     for source in sorted(root.rglob("*.java")):
         if "disabled_files" in source.relative_to(root).parts:
             continue  # never loaded by the game (Zorg18 keeps its 0.6 spawn points there)
@@ -1070,7 +1073,17 @@ def _scan_source_build_dependencies(root: Path, result: ScanResult, import_locat
             continue
         for imported in re.findall(r"(?m)^\s*import\s+([\w.]+)\s*;", text):
             active_imports.setdefault(imported, set()).add(_relative(root, source))
-    legacy = {name: files for name, files in active_imports.items() if name in LEGACY_VANILLA_CLASSES}
+        package = re.search(r"(?m)^\s*package\s+([\w.]+)\s*;", text)
+        if package:
+            for name in LEGACY_VANILLA_CLASSES:
+                owner, simple = name.rsplit(".", 1)
+                if owner == package.group(1) and re.search(rf"\b{re.escape(simple)}\b", text):
+                    same_package_uses.setdefault(name, set()).add(_relative(root, source))
+    # A mod that ships its own copy of the class (Vacuum's earlier BaseSpawnPoint shim) is not affected.
+    legacy = {name: set(files) for name, files in active_imports.items() if name in LEGACY_VANILLA_CLASSES and name not in local_classes}
+    for name, files in same_package_uses.items():
+        if name not in local_classes:
+            legacy.setdefault(name, set()).update(files)
     if legacy:
         result.add(
             id="legacy-vanilla-class-import",
@@ -1078,8 +1091,8 @@ def _scan_source_build_dependencies(root: Path, result: ScanResult, import_locat
             severity="critical",
             classification="MANUAL",
             confidence="DETERMINISTIC",
-            explanation="Source imports a vanilla class that no longer exists in 0.98a. A loose script importing it fails to compile at load; a jar class fails when it loads. Port the code to the current API (e.g. BaseSpawnPoint fleets to an EveryFrameScript that builds fleets, as Zorg18 did).",
-            evidence=[f"{name}: {LEGACY_VANILLA_CLASSES[name]} ({', '.join(sorted(files)[:3])})" for name, files in sorted(legacy.items())],
+            explanation="Source uses a vanilla class that no longer exists in 0.98a, by import or by simple name from the same package. A loose script using it fails to compile at load; a jar class fails when it loads. Port the code to the current API (e.g. BaseSpawnPoint fleets to an EveryFrameScript that builds fleets, as Zorg18 did).",
+            evidence=[f"{name}: {LEGACY_VANILLA_CLASSES[name]} ({len(files)} file(s): {', '.join(sorted(files)[:6])}{' ...' if len(files) > 6 else ''})" for name, files in sorted(legacy.items())],
         )
     foreign = sorted(
         item for item in active_imports

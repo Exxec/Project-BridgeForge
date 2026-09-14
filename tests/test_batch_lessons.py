@@ -149,6 +149,31 @@ class SourceImportUnresolvedTests(unittest.TestCase):
         self.assertTrue(legacy[0].evidence[0].startswith("data.scripts.world.BaseSpawnPoint:"))
         self.assertEqual(_ids(result, "source-import-unresolved"), [])  # disabled_files never load
 
+    def test_removed_vanilla_class_used_from_its_own_package_without_import(self) -> None:
+        # Antediluvians' AntediluvianSpawnPoint sits in data.scripts.world and extends BaseSpawnPoint
+        # with no import line, so an import-only check missed it.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            world = mod / "data" / "scripts" / "world"
+            world.mkdir(parents=True)
+            (world / "AntediluvianSpawnPoint.java").write_text("package data.scripts.world;\npublic class AntediluvianSpawnPoint extends BaseSpawnPoint {}\n", encoding="utf-8")
+            (world / "AntediluvianConvoySpawnPoint.java").write_text("package data.scripts.world;\npublic class AntediluvianConvoySpawnPoint extends BaseSpawnPoint {}\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        legacy = _ids(result, "legacy-vanilla-class-import")
+        self.assertEqual(len(legacy), 1)
+        self.assertIn("(2 file(s):", legacy[0].evidence[0])
+
+    def test_a_mod_shipping_its_own_copy_of_the_removed_class_is_not_flagged(self) -> None:
+        # Vacuum's earlier copy shipped a data.scripts.world.BaseSpawnPoint shim.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            world = mod / "data" / "scripts" / "world"
+            world.mkdir(parents=True)
+            (world / "BaseSpawnPoint.java").write_text("package data.scripts.world;\npublic abstract class BaseSpawnPoint {}\n", encoding="utf-8")
+            (world / "Spawn.java").write_text("package data.scripts.world;\npublic class Spawn extends BaseSpawnPoint {}\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual(_ids(result, "legacy-vanilla-class-import"), [])
+
 
 class UnresolvedContentTests(unittest.TestCase):
     def _core(self, root: Path) -> Path:

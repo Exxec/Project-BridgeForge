@@ -108,6 +108,24 @@ class SubstituteTests(unittest.TestCase):
         self.assertEqual(report["uncovered"], [])
         self.assertEqual(report["strategy"], "SWAP")
 
+    def test_a_total_conversion_is_only_a_provider_when_declared(self) -> None:
+        # Vacuum (a total conversion) defines thruster_fighter_sm, but Explorer Society can't run beside it.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tc = _provider(root, "vacuum", "0.98a-RC8", "Red,old_red_army\n", "old_yak_wing,v\n")
+            info = json.loads((tc / "mod_info.json").read_text(encoding="utf-8"))
+            info["totalConversion"] = True
+            (tc / "mod_info.json").write_text(json.dumps(info), encoding="utf-8")
+            addon = _addon(root)
+            report = dependency_substitutes(addon, [root / "mods"], vanilla_core=_core(root), ops=root / "none")
+            self.assertEqual(report["provider_set"], [])
+            self.assertEqual(report["total_conversions_excluded"], ["vacuum"])
+            info = json.loads((addon / "mod_info.json").read_text(encoding="utf-8"))
+            info["dependencies"] = [{"id": "vacuum"}]
+            (addon / "mod_info.json").write_text(json.dumps(info), encoding="utf-8")
+            report = dependency_substitutes(addon, [root / "mods"], vanilla_core=_core(root), ops=root / "none")
+        self.assertEqual(report["strategy"], "SWAP")
+
     def test_provider_lists_jar_classes_as_dotted_names(self) -> None:
         import zipfile
 

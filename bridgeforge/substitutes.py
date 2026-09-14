@@ -41,6 +41,7 @@ class Provider:
     path: str
     game_version: str
     provides: dict[str, set[str]] = field(default_factory=lambda: {kind: set() for kind in KINDS})
+    total_conversion: bool = False
 
 
 def _csv_ids(path: Path) -> set[str]:
@@ -57,6 +58,7 @@ def provider_for(folder: Path) -> Provider | None:
     if not isinstance(info, dict) or not info.get("id"):
         return None
     provider = Provider(str(info["id"]), str(info.get("name") or info["id"]), str(folder), str(info.get("gameVersion") or ""))
+    provider.total_conversion = bool(info.get("totalConversion"))
     data = folder / "data"
     provider.provides["hullmod"] |= _csv_ids(data / "hullmods" / "hull_mods.csv")
     provider.provides["weapon"] |= _csv_ids(data / "weapons" / "weapon_data.csv")
@@ -266,10 +268,14 @@ def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla
     mod_dir = Path(mod_dir).expanduser().resolve()
     result = scan_mod(mod_dir, TargetProfile(), vanilla_core)
     needed, files = required_from_scan(result)
+    declared = [str(item.get("id")) for item in (result.metadata.get("dependencies") or []) if isinstance(item, dict) and item.get("id")]
     providers = provider_index(provider_roots, exclude=mod_dir)
     provided_ids = {provider.mod_id for provider in providers}
-    declared = [str(item.get("id")) for item in (result.metadata.get("dependencies") or []) if isinstance(item, dict) and item.get("id")]
     missing_declared = [dep for dep in declared if dep not in provided_ids]
+    # A total conversion can't run beside another mod unless that mod is its add-on (declares it).
+    # Vacuum defines thruster_fighter_sm, but Explorer Society and Rebal can't use it.
+    excluded_tcs = sorted(p.name for p in providers if p.total_conversion and p.mod_id not in declared)
+    providers = [p for p in providers if not p.total_conversion or p.mod_id in declared]
     candidates = rank(needed, providers)
     successors = [entry for entry in load_successors() if entry.get("match") in missing_declared or any(ident.startswith(entry.get("match", "\0")) for ids in needed.values() for ident in ids)]
     ops_dir = Path(ops) if ops else REPO_ROOT / "In operation"
@@ -289,6 +295,7 @@ def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla
     return {
         "schema_version": SCHEMA_VERSION, "mode": "DEPENDENCY_SUBSTITUTES", "mod": str(mod_dir), "mod_id": result.metadata.get("id"),
         "providers_indexed": len(providers),
+        "total_conversions_excluded": excluded_tcs,
         "needed": {kind: sorted(ids) for kind, ids in needed.items() if ids},
         "declared_dependencies_missing": missing_declared,
         "provider_set": chosen, "uncovered": sorted(uncovered),

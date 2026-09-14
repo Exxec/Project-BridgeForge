@@ -769,6 +769,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  needs {kind}: {', '.join(ids[:8])}{' ...' if len(ids) > 8 else ''}")
         if result["declared_dependencies_missing"]:
             print(f"  declared but not found: {', '.join(result['declared_dependencies_missing'])}")
+        if result.get("total_conversions_excluded"):
+            print(f"  not usable as providers (total conversions): {', '.join(result['total_conversions_excluded'])}")
         for item in result["provider_set"]:
             state = item.get("workspace")
             where = f"; workspace {state['workspace']}: {state['status'] or 'no revival report'}, {state['manual_findings'] if state['manual_findings'] is not None else '?'} MANUAL" if state else ""
