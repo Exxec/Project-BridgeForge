@@ -398,6 +398,29 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
       - **Translation memory across mods:** reuse approved zh→en pairs, such as shared faction or ship-class terms. Glossary files are per mod for now.
     - **Handed to Project Go's maintainer:** non-ASCII paths in `ssmt-cli.bat`; strict CSV/JSON; the missing cause in "Could not create localization project"; JSON keys not extracted; incomplete CSV and jar coverage (861 Nightcross strings missed).
 
+## P14: Dependency intelligence and queue throughput (planned 2026-09-14)
+
+Starting point:
+- The 2026-09-14 queue of 25 older mods showed that the hard cases are dependencies, not syntax. Add-ons of dead mods (Communist Clouds → Vayra's Sector), abandoned library families (Xenoargh's FX Core and EZ Damage), and removed vanilla systems (0.6's BaseSpawnPoint) block more mods than any data problem.
+- `dependency-substitutes` and `dependency_successors.json` are the first step.
+  - `dependency-substitutes` finds the smallest set of visible mods that provides what a mod needs. Each provider in the set is current, revivable (a workspace here with 15 MANUAL or fewer) or heavy.
+  - It recommends SWAP, REVIVE_DEPENDENCY, STRIP_FROM_MOD or ESCALATE, per `docs/DEPENDENCY_STRATEGY.md`.
+
+Progression, each stage feeding the next:
+
+1. **Done 2026-09-14.**
+   - `dependency-substitutes`, the evidenced successor file and the strategy guide.
+   - Scanner checks: `content-reference-unresolved`, `source-import-unresolved`, `legacy-vanilla-class-import`, `library-import-unused-in-jar`, `console-command-optional`, `carrier-bays-proposal`.
+   - Fixers: `target-interface-method-missing`, `wing-data-missing-role-desc-column`.
+2. **Provider index as a corpus artefact.** Store each visible mod's "provides" set beside the novelty fingerprints (`bridgeforge-state/`, gitignored), so a lookup is instant and works when the provider isn't installed. Record game version and mod version.
+3. **Dependency graph across the queue.** Build a graph of which queued mods need which missing mods, and order revival by unblocking value. As of 2026-09-14: FX Core (10 MANUAL) unblocks FX Example and part of Rebal; AI Overhaul (12 MANUAL) the rest of Rebal. EZ Damage is already revived (r1). Show it in `board`.
+4. **Strip and vendor plans.** For STRIP_FROM_MOD, generate the exact edit list: which variant, `.ship` and faction lines lose which ids, plus proposed vanilla substitutes of the same slot type and size. Also generate the matching PROPOSED expected changes, so approval goes through `expect` as usual. Where the licence allows, offer vendoring as an alternative: copy the one missing piece (for example Rebal's `shields_formshield` into Explorer Society) instead of reviving a heavy provider.
+5. **Spawn-point port kit.** A BaseSpawnPoint compatibility shim and a fixer that registers legacy spawn points through `sector.addScript`, generalising Zorg18 r1 and Vacuum's earlier copy. It is proposed per mod, never auto-applied, because fleet behaviour changes. Five queued mods need it.
+6. **Carrier-bay fixer.** Apply the approved `carrier-bays-proposal` counts, adding the `fighter bays` column where the file predates it, with per-hull approval (`--hull ID=N`).
+7. **Jar class rebuild for missing interface methods.** For classes compiled into a jar (AI-War), patch just those classes from source after a class-by-class diff, following the Arkgneisis precedent.
+8. **Removed-vanilla-content catalogue.** Record ids and classes vanilla dropped between versions (the `thruster_fighter_sm` / `shields_formshield` kind), with evidence and successors, so "defined nowhere" becomes "removed in 0.9x; use X".
+9. **Licence-aware revival of dependencies.** Before REVIVE_DEPENDENCY, check `release_policy.json` so a revived library is marked local-only when its licence doesn't allow redistribution.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit

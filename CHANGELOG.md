@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- New command `dependency-substitutes <mod>`: can a missing or discontinued dependency be replaced?
+  - It indexes the hull mods, weapons, wings, hulls and classes (jar and loose) of every visible mod (`In operation` and the rig by default, or `--providers`).
+  - It finds the smallest set of mods that provides what the mod needs, from the scanner's `content-reference-unresolved` and `source-import-unresolved` findings.
+  - It recommends one course: SWAP, REVIVE_DEPENDENCY (an outdated provider that is a workspace here with 15 MANUAL or fewer), STRIP_FROM_MOD (3 or fewer unprovided ids in 5 or fewer places), or ESCALATE.
+  - Queue results: FX Example → revive FX Core; Rebal → declare EZ Damage and Vacuum, revive AI Overhaul and FX Core; Explorer Society → escalate (`shields_formshield`, 14 places, exists only in Rebal); Communist Clouds → escalate (6 `vayra_*` ids, no provider).
+  - `bridgeforge/dependency_successors.json` records renames and dead ends with evidence: MagicLib's legacy `data.scripts.util.Magic*` classes, `BaseSpawnPoint`, `Corvus`, GraphicsLib's `shaderLib`, and the discontinued Vayra's Sector.
+  - `docs/DEPENDENCY_STRATEGY.md` explains the courses and when to revive a dependency, strip it, or escalate.
+- ROADMAP P14 (planned): dependency intelligence and queue throughput.
+
 - **Correction:** RC8's `com.fs.starfarer.api.loading.WingRole` still has ASSAULT (javap on starfarer.api.jar; Vacuum's ASSAULT wings load live, VAC-R003).
   - `fighter-wing-role-invalid` no longer reports ASSAULT.
   - `wing-role-assault-removed` and its fixer, which rewrote ASSAULT to FIGHTER and silently changed wing AI, are retired.

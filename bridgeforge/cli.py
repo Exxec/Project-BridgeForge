@@ -679,6 +679,11 @@ def build_parser() -> argparse.ArgumentParser:
     novelty_cmd.add_argument("--record", action="store_true", help="add or refresh this mod's fingerprint in the corpus")
     novelty_cmd.add_argument("--vanilla-core", type=Path)
     novelty_cmd.add_argument("--json", action="store_true")
+    subs_cmd = subcommands.add_parser("dependency-substitutes", help="rank visible mods that could replace a missing or discontinued dependency (EXACT / PARTIAL / NONE) and recommend SWAP, REVIVE_DEPENDENCY, STRIP_FROM_MOD or ESCALATE")
+    subs_cmd.add_argument("mod", type=Path, help="mod working copy")
+    subs_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
+    subs_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla content isn't counted as missing")
+    subs_cmd.add_argument("--json", action="store_true")
     preset_cmd = subcommands.add_parser("preset-check", help="check bf-test.ps1 presets against the rig's installed mods: own mod and declared dependencies enabled, enabled ids installed, no undeclared libraries")
     preset_cmd.add_argument("script", type=Path, help="path to bf-test.ps1")
     preset_cmd.add_argument("--rig-mods", type=Path, help="rig mods folder (default: <script folder>/_rig/mods)")
@@ -750,6 +755,28 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  e.g. {key}: " + "; ".join(values[:5]))
         if result.get("recorded"):
             print(f"Recorded: {result['recorded']}")
+        return 0
+    if args.command == "dependency-substitutes":
+        from .substitutes import REPO_ROOT, dependency_substitutes
+        roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
+        result = dependency_substitutes(args.mod, roots, vanilla_core=args.vanilla_core)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        print(f"{result['mod_id']}: {result['strategy']} ({result['providers_indexed']} mods searched)")
+        print(f"  {result['reason']}")
+        for kind, ids in result["needed"].items():
+            print(f"  needs {kind}: {', '.join(ids[:8])}{' ...' if len(ids) > 8 else ''}")
+        if result["declared_dependencies_missing"]:
+            print(f"  declared but not found: {', '.join(result['declared_dependencies_missing'])}")
+        for item in result["provider_set"]:
+            state = item.get("workspace")
+            where = f"; workspace {state['workspace']}: {state['status'] or 'no revival report'}, {state['manual_findings'] if state['manual_findings'] is not None else '?'} MANUAL" if state else ""
+            print(f"  provides {', '.join(item['covers'])}: {item['name']} ({item['game_version'] or 'no version'}{where})")
+        if result["uncovered"]:
+            print(f"  in no visible mod: {', '.join(result['uncovered'])}")
+        for entry in result["successors"]:
+            print(f"  known successor for {entry['match']}: {entry['successor']} [{entry.get('evidence', '')}]")
         return 0
     if args.command == "preset-check":
         from .preset_check import check_presets
