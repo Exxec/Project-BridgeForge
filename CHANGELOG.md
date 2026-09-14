@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- New `preset-check <bf-test.ps1>`: checks every test preset against the rig's installed mods. Errors: the preset's own mod or a dependency it declares isn't enabled, an enabled id isn't installed, or the folder has no mod_info. Warning: an enabled library that no enabled non-library mod needs, either through declared dependencies (followed transitively) or by referencing its package in sources or jar classes. That keeps optional LunaLib use quiet when a mod really uses it. First run: the `flux` preset still enabled the LazyLib and MagicLib that Flu-X r3 dropped (fixed); five other presets carry a possibly deliberate extra library.
+- New `docs-index` command (with `--check`). It regenerates `docs/CHECKS.md` and a new `docs/COMMANDS.md`, which covers every command and nested subcommand with its arguments, notes and help, taken from the real argument parser. `docs/CHECKS.md` gains a *Bug classes* column linking each finding to the `docs/BUG_CLASSES.md` rows that cite it. A ratchet (`tests/untested_checks_baseline.json`, 23 ids today) fails when a new finding id has no test naming it, and when a baselined id gains one, so the list can only shrink. `docs/CHECKS.md` is built from the source with `ast`:
+  - every scan finding id (including table-driven ones like `LEGACY_API_RULES` and computed `bundled-{...}` ids), with its classifications and severities (both branches of a conditional), the `module:function` that emits it, the first sentence of its explanation, and the test modules that name it;
+  - every `revival-audit` issue id;
+  - an index of `scanner.py`'s private helpers with signatures, to reuse instead of re-deriving.
+
+  `tests/test_checks_index.py` fails when either file is stale, so neither can drift. The first index shows which finding ids no test names; for example, the lenient-JSON findings are only tested through the parser's tolerance list.
 - Fix: `revival-audit` no longer reads "NOT PERFORMED" as a completed validation. It had reported `plan-validation-state-stale` for honestly unticked plan items (Zorg18 r1).
 - Scanner, from Zorg18:
   - New `campaign-fleet-reference-missing` (MANUAL). Campaign spawners that keep variant and wing ids in arrays and pick one at run time are now checked. In any source that uses `FleetMemberType`, a mod-prefixed `..._wing` literal must be a wing, and a literal starting with one of the mod's hull ids must be a variant. Missions keep their own check.

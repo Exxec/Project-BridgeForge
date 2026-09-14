@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "untested": [
+    "ashlib-version-marker-unreadable",
+    "declared-dependencies",
+    "declared-library-unreferenced",
+    "graphicslib-version-marker-unreadable",
+    "invalid-csv",
+    "invalid-mod-info",
+    "json-content-after-root",
+    "json-lenient-number",
+    "json-slash-comment",
+    "json-trailing-brackets",
+    "lazylib-3-internal-runtime-layout",
+    "lazylib-version-evidence",
+    "legacy-api-hyperspace-terrain",
+    "magiclib-activator-lifecycle",
+    "magiclib-activator-manager",
+    "magiclib-activators-package",
+    "magiclib-add-activator",
+    "magiclib-combat-activator",
+    "security-manager",
+    "source-ast-unavailable",
+    "target-bytecode-exceeds-profile",
+    "unreadable-mod-info",
+    "unreadable-source"
+  ]
+}

@@ -661,11 +661,43 @@ def build_parser() -> argparse.ArgumentParser:
     decide_cmd.add_argument("decisions", type=Path, help="decisions JSON (schema_version 1; each decision: select, status, why, by, on[, evidence, applies_to])")
     decide_cmd.add_argument("--output", type=Path, help="where the .decided.json files go (default: the discovery folder)")
     decide_cmd.add_argument("--json", action="store_true")
+    docs_cmd = subcommands.add_parser("docs-index", help="regenerate docs/CHECKS.md (every finding id: where it's emitted, tests, bug classes; scanner helpers) and docs/COMMANDS.md (every command and argument) from the source")
+    docs_cmd.add_argument("--check", action="store_true", help="don't write; exit 1 if either file is stale")
+    docs_cmd.add_argument("--json", action="store_true")
+    preset_cmd = subcommands.add_parser("preset-check", help="check bf-test.ps1 presets against the rig's installed mods: own mod and declared dependencies enabled, enabled ids installed, no undeclared libraries")
+    preset_cmd.add_argument("script", type=Path, help="path to bf-test.ps1")
+    preset_cmd.add_argument("--rig-mods", type=Path, help="rig mods folder (default: <script folder>/_rig/mods)")
+    preset_cmd.add_argument("--json", action="store_true")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "docs-index":
+        from .checks_index import write_reference_docs
+        result = write_reference_docs(check_only=args.check)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        elif result["status"] == "STALE":
+            print("Stale (run bridgeforge docs-index): " + ", ".join(result["stale"]))
+        else:
+            print("Written: " + ", ".join(result["written"]) if result["written"] else "docs/CHECKS.md and docs/COMMANDS.md are up to date")
+        return 1 if result["status"] == "STALE" else 0
+    if args.command == "preset-check":
+        from .preset_check import check_presets
+        result = check_presets(args.script, args.rig_mods)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"Preset check: {result['status']} ({len(result['presets'])} presets, rig mods {result['rig_mods']})")
+            for preset in result["presets"]:
+                if preset["status"] != "PASS":
+                    print(f"  {preset['preset']} [{preset['status']}]")
+                    for line in preset["errors"]:
+                        print(f"    ERROR   {line}")
+                    for line in preset["warnings"]:
+                        print(f"    WARNING {line}")
+        return 1 if result["status"] == "FAIL" else 0
     if args.command == "behavior-decide":
         from .behavior_discovery import write_behavior_decisions
         try:
