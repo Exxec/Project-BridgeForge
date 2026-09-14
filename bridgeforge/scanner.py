@@ -863,6 +863,9 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
     _scan_legacy_event_report(root, result)
     _scan_non_english_text(root, result)
     _scan_shippable_work_files(root, result)
+    _scan_non_ascii_names(root, result)
+    _scan_data_encoding(root, result)
+    _scan_fullwidth_numbers(root, result)
     _scan_source_build_dependencies(root, result, import_locations)
 
     scan_lazylib_compat(root, result)
@@ -1895,7 +1898,8 @@ def _scan_non_english_text(root: Path, result: ScanResult) -> None:
 
 
 # Design docs and IDE files came from the Chinese mods (2026-09-13): .docx/.sai2 notes, IntelliJ .iml.
-_WORK_FILE_GLOBS = ("*.psd", "*.xcf", "*.kra", "*.sai", "*.sai2", "*.blend", "*.blend1", "*.docx", "*.iml", "*.tmp", "*.orig", "*.old", "*.log", "*~", "*.swp", "*.rej", "*.diff", "*.patch")
+# Archives and Windows shortcuts: Omega-Trauma ships a .rar and "... - 快捷方式.lnk" files (2026-09-14).
+_WORK_FILE_GLOBS = ("*.psd", "*.xcf", "*.kra", "*.sai", "*.sai2", "*.blend", "*.blend1", "*.docx", "*.iml", "*.tmp", "*.orig", "*.old", "*.log", "*~", "*.swp", "*.rej", "*.diff", "*.patch", "*.rar", "*.7z", "*.zip", "*.lnk", "*.url")
 
 
 def _scan_shippable_work_files(root: Path, result: ScanResult) -> None:
@@ -1909,6 +1913,100 @@ def _scan_shippable_work_files(root: Path, result: ScanResult) -> None:
     found = sorted(relative for relative in _collect(root) if any(fnmatch.fnmatch(relative.rsplit("/", 1)[-1].lower(), pattern) for pattern in _WORK_FILE_GLOBS))
     if found:
         result.add(id="shippable-work-file", category="packaging", severity="low", classification="REVIEW", confidence="DETERMINISTIC", explanation="Editor or work files sit in folders a release ships (image-editor sources, temp/backup copies, logs, patches). The game never loads them; move them out of the working copy before packaging.", evidence=found[:25] + ([f"... {len(found) - 25} more"] if len(found) > 25 else []))
+
+
+_SPEC_ID_KEYS = {".ship": ("hullId",), ".skin": ("skinHullId",), ".variant": ("variantId",), ".wpn": ("id",), ".proj": ("id",), ".faction": ("id",), ".system": ("id",)}
+
+
+def _scan_non_ascii_names(root: Path, result: ScanResult) -> None:
+    """Non-ASCII spec ids and shipped file paths (P13, from the Chinese mods, 2026-09-13).
+
+    The game may accept them, but a translation pass that translates an id breaks every reference to
+    it, and tools BridgeForge drives (Project Go's ssmt-cli.bat, some unzippers and launchers) mangle
+    non-ASCII paths.
+    """
+    ids: list[str] = []
+    data = root / "data"
+    for path in sorted(data.rglob("*.csv")) if data.is_dir() else []:
+        for row in _read_csv_rows_lenient(path) or []:
+            value = (row.get("id") or "").strip()
+            # Whitespace means prose spilled into the id column (Omega-Trauma description.csv); that is
+            # csv-row-extra-columns' finding, not an id.
+            if value and not value.startswith("#") and not value.isascii() and not re.search(r"\s", value):
+                ids.append(f"{_relative(root, path)}: {value}")
+    for suffix, keys in _SPEC_ID_KEYS.items():
+        for path in sorted(data.rglob(f"*{suffix}")) if data.is_dir() else []:
+            spec = _load_lenient_json_file(path)
+            if isinstance(spec, dict):
+                for key in keys:
+                    value = spec.get(key)
+                    if isinstance(value, str) and not value.isascii():
+                        ids.append(f"{_relative(root, path)}: {key}={value}")
+    if ids:
+        result.add(id="non-ascii-identifier", category="localization", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Spec ids contain non-ASCII characters. Ids are references, not player text: never translate them, and keep them identical everywhere they are used (data files, rules.csv, code, saves). Renaming one breaks existing saves.", evidence=ids[:25] + ([f"... {len(ids) - 25} more"] if len(ids) > 25 else []))
+    from .copy_drift import _collect
+
+    paths = sorted(relative for relative in _collect(root) if not relative.isascii())
+    if paths:
+        result.add(id="non-ascii-file-path", category="packaging", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Shipped files have non-ASCII names. Data files that reference them by path must match byte for byte, and some unzippers, launchers and tools (Project Go's CLI) mangle such names. Prefer ASCII file names.", evidence=paths[:25] + ([f"... {len(paths) - 25} more"] if len(paths) > 25 else []))
+
+
+def _scan_data_encoding(root: Path, result: ScanResult) -> None:
+    """Data text files that are not valid UTF-8 (P13). Chinese mods are often saved as GBK.
+
+    Starsector reads its data as UTF-8, so other encodings show as garbled text. Vanilla's own
+    descriptions.csv has a few stray CP-1252 bytes, hence REVIEW/low rather than an error.
+    """
+    bad: list[str] = []
+    data = root / "data"
+    paths = [root / "mod_info.json"] + ([path for path in data.rglob("*") if path.suffix.lower() in _PLAYER_TEXT_SUFFIXES] if data.is_dir() else [])
+    for path in sorted(paths):
+        try:
+            raw = path.read_bytes()
+        except OSError:
+            continue
+        try:
+            raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            line = raw.count(b"\n", 0, exc.start) + 1
+            guess = ""
+            for encoding in ("gb18030", "cp1252"):
+                try:
+                    raw.decode(encoding)
+                except UnicodeDecodeError:
+                    continue
+                guess = f", decodes as {encoding}"
+                break
+            bad.append(f"{_relative(root, path)}: line {line}{guess}")
+    if bad:
+        result.add(id="data-file-not-utf8", category="localization", severity="low", classification="REVIEW", confidence="DETERMINISTIC", explanation="Data files contain bytes that are not valid UTF-8. Starsector reads data as UTF-8, so the text renders garbled. Re-save the file as UTF-8 from its real encoding (often GB18030/GBK in Chinese mods) rather than editing the bytes.", evidence=bad[:25] + ([f"... {len(bad) - 25} more"] if len(bad) > 25 else []))
+
+
+_FULLWIDTH_NUMBER_CHARS = re.compile(r"[０-９，．。－＋％]")
+_NUMBER_CELL = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)%?")
+
+
+def _scan_fullwidth_numbers(root: Path, result: ScanResult) -> None:
+    """CSV cells that are numbers written with full-width characters (P13; FlowerGod used '，' in its CSVs).
+
+    "１５" or "0。5" reads as a number to a person but not to the loader, which rejects the row or
+    silently uses a default. Only cells that become a plain number after normalisation are reported,
+    so prose with Chinese punctuation is left alone.
+    """
+    import unicodedata
+
+    hits: list[str] = []
+    data = root / "data"
+    for path in sorted(data.rglob("*.csv")) if data.is_dir() else []:
+        for index, row in enumerate(_read_csv_rows_lenient(path) or [], start=2):
+            for column, value in row.items():
+                if not isinstance(value, str) or not _FULLWIDTH_NUMBER_CHARS.search(value):
+                    continue
+                normalised = unicodedata.normalize("NFKC", value.replace("。", ".")).strip()
+                if _NUMBER_CELL.fullmatch(normalised):
+                    hits.append(f"{_relative(root, path)} row {index} [{column}]: {value!r} -> {normalised}")
+    if hits:
+        result.add(id="csv-fullwidth-number", category="assets", severity="high", classification="SAFE", confidence="DETERMINISTIC", explanation="CSV cells hold numbers written with full-width digits or punctuation. The loader can't parse them; converting to ASCII keeps the value the author wrote.", evidence=hits[:25] + ([f"... {len(hits) - 25} more"] if len(hits) > 25 else []))
 
 
 def _scan_faction_known_lists(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:

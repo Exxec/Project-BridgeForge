@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fix: `translate-apply --out` makes its own copy writable. `copytree` kept the read-only attribute of Mirfak's source files, so writing the translation failed half-way. The source keeps its attributes.
+- Scanner (P13), three more checks from the Chinese mods:
+  - `non-ascii-identifier` flags spec ids (CSV `id`, `hullId`, `skinHullId`, `variantId`, `.wpn`/`.proj`/`.faction`/`.system` `id`) with non-ASCII characters. Prose spilled into an id column is left to `csv-row-extra-columns`.
+  - `non-ascii-file-path` flags shipped file names with non-ASCII characters.
+  - `data-file-not-utf8` flags data files that aren't valid UTF-8, with the line and the likely encoding (GB18030 or CP-1252).
+  - `csv-fullwidth-number` (SAFE) flags CSV cells that are numbers written with full-width digits or punctuation (`１５００`, `0。5`); prose with Chinese punctuation is ignored.
+  - `shippable-work-file` now also lists archives (`.rar`, `.7z`, `.zip`) and Windows shortcuts (`.lnk`, `.url`); Omega-Trauma ships both.
+
 - New `behavior-decide <discovery_dir> <decisions.json>`: applies written decisions (select by risk/unknown/behavior ids, lifecycle, subsystem or entry-point prefix; status, why, evidence, by, on) and writes `risks.decided.json` / `unknowns.decided.json` for `release-behavior-evaluate`. The generated maps are never edited. A decision that selects nothing is refused as stale, so regenerating the maps can't silently drop one. Exit 1 while HIGH risks or unknowns are still open. First used on Flu-X: 38 of 42 unknowns decided; the 4 mission-plugin unknowns and 4 HIGH risks wait for the mission live test.
 - Scanner: `rules-condition-merged-lines` flags a rules.csv condition where two lines were glued together (`$faction.id == infected$faction.hostileToPlayer`), so the rule never fires. Vanilla RC8 has 0 such rules in 11,107. `rules-condition-unknown-faction` (needs `--vanilla-core`) flags `$faction.id ==` naming a faction neither vanilla nor the mod defines. Found in the original Flu-X greetings, including one copied from Templars.
 - Fix: archaeology no longer reads class declarations out of comments. Flu-X's `// Only class allowed to import exerelin.*` produced a fake class `allowed`. The scanner's own-class index had the same bug.

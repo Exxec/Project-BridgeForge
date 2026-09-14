@@ -19,8 +19,10 @@ import csv
 import hashlib
 import io
 import json
+import os
 import re
 import shutil
+import stat
 import time
 import zipfile
 from collections import Counter, defaultdict
@@ -568,6 +570,11 @@ def apply_translation(mod_dir: Path, document: dict, out_dir: Path | None = None
         if target == mod_dir or mod_dir in target.parents:
             raise TranslationError("the output folder must not be inside the source mod")
         shutil.copytree(mod_dir, target)
+        # copytree keeps the read-only attribute, and Mirfak's source has read-only files: writing the
+        # translation into our own copy then failed half-way (2026-09-14). The source is left as it is.
+        for path in target.rglob("*"):
+            if path.is_file() and not os.access(path, os.W_OK):
+                path.chmod(path.stat().st_mode | stat.S_IWRITE)
     applied: Counter = Counter()
     for rel, entries in sorted(by_file.items()):
         path = target / rel

@@ -385,6 +385,12 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
         - OS/VCS litter is excluded from releases and copy-drift (`.idea/`, `.vscode/`, `.git/`, `__MACOSX/`, Thumbs.db…). `shippable-work-file` lists editor and design files that would ship (`.psd`, `.sai2`, `.docx`, `.iml`, `.orig`…).
         - `player-text-non-english`: CJK in data files outside comments.
         - `design-type-color-duplicate-key` / `-unused` / `design-type-without-color`: designTypeColors keys against the tech/manufacturer text, counting vanilla's keys.
+      - **Done 2026-09-14:**
+        - `non-ascii-identifier` and `non-ascii-file-path`.
+        - `data-file-not-utf8`, with the likely encoding.
+        - `csv-fullwidth-number`.
+        - `shippable-work-file` now also covers archives and `.lnk`/`.url` shortcuts.
+        - First sweep of these checks: Arkgneisis has a GBK `rules OLD.csv`; Omega-Trauma ships a `.rar` and three `.lnk` shortcuts.
     - **Planned:**
       - **Decompile dumps and translator working folders** (`_u0001_cmp`, translator `ai/`). They sit outside the shipped folders in the mods seen so far; add globs when one turns up inside `data/`/`graphics/`.
       - **CSV narrower-row check:** rows shorter than the header; tolerated by the game, rejected by strict tools.

@@ -1,6 +1,8 @@
 """Translation export / prefill / apply / check (plan B for the 2026-09-13 Chinese intake)."""
 
 import json
+import os
+import stat
 import struct
 import tempfile
 import unittest
@@ -239,6 +241,23 @@ class ApplyTests(unittest.TestCase):
             doc["glossary"] = {"天船三": "Mirfak"}
             result = apply_translation(root, doc, out_dir=Path(directory) / "out")
             self.assertEqual(result["status"], "OK", result)
+
+    def test_read_only_source_files_are_translated_in_the_copy(self) -> None:
+        # Mirfak's source had read-only files; copytree carried the attribute and apply failed half-way.
+        with tempfile.TemporaryDirectory() as directory:
+            root = _mod(Path(directory) / "mod")
+            doc = self._translated(root)
+            source = root / "data" / "hulls" / "ship_data.csv"
+            source.chmod(stat.S_IREAD)
+            try:
+                result = apply_translation(root, doc, out_dir=Path(directory) / "out")
+                self.assertEqual(result["status"], "OK", result)
+                self.assertIn("fx_frigate", (Path(directory) / "out" / "data" / "hulls" / "ship_data.csv").read_text(encoding="utf-8"))
+                self.assertFalse(os.access(source, os.W_OK))  # the source keeps its attribute
+            finally:
+                for path in Path(directory).rglob("*"):
+                    if path.is_file():
+                        path.chmod(stat.S_IREAD | stat.S_IWRITE)
 
 
 class PrefillTests(unittest.TestCase):
