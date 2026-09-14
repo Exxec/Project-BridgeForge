@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+- New `behavior-decide <discovery_dir> <decisions.json>`: applies written decisions (select by risk/unknown/behavior ids, lifecycle, subsystem or entry-point prefix; status, why, evidence, by, on) and writes `risks.decided.json` / `unknowns.decided.json` for `release-behavior-evaluate`. The generated maps are never edited. A decision that selects nothing is refused as stale, so regenerating the maps can't silently drop one. Exit 1 while HIGH risks or unknowns are still open. First used on Flu-X: 38 of 42 unknowns decided; the 4 mission-plugin unknowns and 4 HIGH risks wait for the mission live test.
+- Scanner: `rules-condition-merged-lines` flags a rules.csv condition where two lines were glued together (`$faction.id == infected$faction.hostileToPlayer`), so the rule never fires. Vanilla RC8 has 0 such rules in 11,107. `rules-condition-unknown-faction` (needs `--vanilla-core`) flags `$faction.id ==` naming a faction neither vanilla nor the mod defines. Found in the original Flu-X greetings, including one copied from Templars.
+- Fix: archaeology no longer reads class declarations out of comments. Flu-X's `// Only class allowed to import exerelin.*` produced a fake class `allowed`. The scanner's own-class index had the same bug.
+- Fix: `archaeology --output <discovery>/archaeology` no longer nests a second `archaeology/` folder, which had left the old maps in place and stale (Flu-X). The discovery folder is still the documented argument.
+- Scanner: `jar-entry-unreadable` names jar entries that fail their CRC or can't be decompressed, and the rest of the jar is still scanned. Previously a single bad entry turned the whole jar into `unreadable-jar` (the Chinese Nightcross jar). Every entry is now read, so resource files are checked too.
+- `revival-audit`: new WARNING `dependency-claim-stale` when the report's DEPENDENCY CHECK calls a library (LazyLib, MagicLib, GraphicsLib, Nexerelin, LunaLib) declared but mod_info.json doesn't declare it. Clauses that call a library optional are ignored. Found on Flu-X after its unused libraries were dropped.
+- Releases and copy-drift never include OS/VCS litter: `Thumbs.db`, `desktop.ini`, `.DS_Store`, `__MACOSX/`, `.git/`, `.svn/`, `.idea/`, `.vscode/`. New scanner check `shippable-work-file` (REVIEW) lists editor and work files that would ship (`.psd`, `.xcf`, `.kra`, `.blend`, `.tmp`, `.orig`, `.old`, `.log`, `*~`, `.swp`, `.rej`, `.diff`, `.patch`).
+- Scanner (P13): `player-text-non-english` counts CJK text in data files outside comments, per file; `translate-check` also covers jar strings. `design-type-color-duplicate-key`, `design-type-color-unused` and `design-type-without-color` (the last needs `--vanilla-core`) check that designTypeColors keys match the tech/manufacturer text exactly, counting vanilla's keys. Starsector's `#` comments are honoured.
+
+- New `translate-export` / `translate-apply` / `translate-check` commands (`bridgeforge/translation.py`) for mods whose player-visible text isn't English. They read Starsector's own lenient formats directly, with no input normalisation:
+  - CSV cells by raw span
+  - JSON-like strings and keys, with their paths, through `#` and `//` comments, single quotes and barewords
+  - loose Janino `.java` scripts outside `src/`
+  - jar string constants (CONSTANT_String → Utf8)
+  - prefill from a zh/en translator record (`--record`) or an English copy of the mod (`--reference`: CSV row+column, JSON path, and jar constants when the class layout matches)
+  - apply refuses changed sources, checks placeholders (`%s`, `$vars`, `\u0001`), edits only each value's span, and re-verifies CSV shape, JSON parsing and class parsing
+  - `translate-check` reports leftover CJK and designTypeColors keys that no tech/manufacturer uses
+  - jar entries with bad CRCs are reported, not fatal
+  - `translate-tm` writes a translation layer as Project Go (SSMT) translation memory, for `ssmt tm import <db> json <file>`. English recovered from the original author is marked `AUTHOR_LOCALIZATION`; our translations are `AI_TRANSLATED`. Verified on Nightcross: 1,035 entries imported into a Project Go database, passed `tm integrity`, and exported back identical.
+  - `$variable` placeholders are ASCII-only. Python's `\w` also matches CJK, so a memory key glued to Chinese text (`$LTHS_Person1标记的NPC…`, Mirfak's rules notes) had swallowed the sentence into one "placeholder" that no translation could keep.
+  Built for the 2026-09-13 Chinese intake (Nightcross, Mirfak Parcel Service, Blackrock CN), where Project Go's strict parsers and partial coverage fell short.
+- `_parse_json` now accepts the remaining org.json leniencies seen in that intake: leading-zero and leading-dot numbers (`098`, `.7`), and data after the root value, taking the first value as the game does. New findings:
+  - `json-lenient-number` (SAFE)
+  - `json-trailing-brackets` (SAFE)
+  - `json-content-after-root` (REVIEW): keys after an early closing brace never load; Blackrock's `br_consortium.faction` loses its `factionDoctrine`
+  All 19 Mirfak and Blackrock files that failed to parse now parse.
+- Scanner false positives fixed:
+  - `.wpn` / `.variant` / `.ship` specs are keyed by their declared id, not their filename. Nightcross's `naai_mare_center.wpn` declares `naai_mare_deco`, which is registered.
+  - `csv-row-extra-columns` now separates spilled content (MANUAL/high) from empty spreadsheet padding (SAFE/low).
+  - `undeclared-library-dependency` recognises `isModEnabled` guards in bytecode, for jar-only mods, not just in source.
+  - `loose-script-janino-risk` skips loose scripts whose class is also in a loaded jar. The game never compiles those ("already loaded (perhaps from jar file) ... skipping compilation"). They are reported once as the new `loose-script-shadowed-by-jar` (SAFE): Mirfak ships most of its hullmods both ways.
+  - With `--vanilla-core`, a local `.wpn` that overrides a vanilla-registered weapon (Blackrock's `blinker_green`) is no longer also reported as `local-weapon-spec-unregistered`; `vanilla-path-shadowing` already reports the override.
+  - `external-mod-api-import` ignores imports of the mod's own classes, even in a library-named package. Blackrock ships its own `data.scripts.util.AnamorphicFlare` / `BRDYMulti`, and `data.scripts.util` is MagicLib's legacy prefix.
+- `scan --output` help now says it is an output folder.
+- Nightcross (English mod shipped as a Chinese re-translation): English fully restored into `working` from the translator's own record, via Project Go plus a finishing pass (861 more strings: 530 jar constants, 331 data values). Its three required libraries are now declared in `mod_info.json`. Build tag Nightcross Armory [BF r1]; synced to the rig. `bf-test.ps1` presets `nightcross` / `nightcross-nex`.
+
 - Live run EX-7c confirmed EXI-EVENT-01 fixed on Exigency [BF r3]. Flying an Exigency destroyer past an Exigency fleet showed the "caught" message and "Relationship with ExigencyCorp reduced by 20 (hostile)". Exigency EX-7 now passes, along with EX-B5 (Nex Corvus, scenario PASS) and EX-B6 (Nex random sector, clean).
 - Live run EX-7b confirmed EXI-FLEET-01 fixed. Exigency fleets spawn from the Tasserus anomaly, and probe 0.2.1 counted 21-23 of them.
 - Exigency fix for EXI-EVENT-01 (live run EX-7b). The illegal-tech event detected Exigency hardware in the player's fleet but applied its reputation penalty inside a `reportEventStage` delivery script, and that call does nothing in 0.98a. The penalty now runs directly, with a campaign message ("An ExigencyCorp fleet has identified restricted Exigency technology in your fleet."); RC8's reputation plugin posts its own notice of the change. The recompile kept the jar's class names (`$1`/`$2`/`$3`/`$Offense`). Backup `EXI.jar.pre-event-fix.bak`. Build tag Exigency [BF r3].

@@ -75,6 +75,44 @@ def _validation_evidence(report: str) -> dict[str, str]:
     return evidence
 
 
+# Library names reports use, with the mod_info dependency ids they stand for.
+_LIBRARY_DEPENDENCY_IDS = {
+    "LazyLib": {"lw_lazylib"},
+    "MagicLib": {"MagicLib"},
+    "GraphicsLib": {"shaderLib"},
+    "Nexerelin": {"nexerelin"},
+    "LunaLib": {"lunalib"},
+}
+
+
+def _stale_dependency_claims(dependency_check: str, mod_info_path: Path) -> list[str]:
+    """Libraries a DEPENDENCY CHECK clause calls declared that mod_info.json doesn't declare.
+
+    Flu-X's report kept "LazyLib, MagicLib present and declared" after both were dropped from mod_info.
+    Clauses (split on ';') that call a library optional or undeclared are ignored.
+    """
+    if not dependency_check or not mod_info_path.is_file():
+        return []
+    from .scanner import _load_lenient_json_file
+
+    metadata = _load_lenient_json_file(mod_info_path)
+    if not isinstance(metadata, dict):
+        return []
+    declared: set[str] = set()
+    for item in metadata.get("dependencies") or []:
+        if isinstance(item, dict):
+            declared.update(str(item.get(key) or "").lower() for key in ("id", "name"))
+    stale = []
+    for clause in re.split(r"[;(]", dependency_check):
+        # "were declared ... and were removed" records history, not a current claim.
+        if not re.search(r"(?i)\bdeclared\b", clause) or re.search(r"(?i)optional|undeclared|not declared|removed|dropped|no longer|never used|unused", clause):
+            continue
+        for name, ids in _LIBRARY_DEPENDENCY_IDS.items():
+            if re.search(rf"(?i)\b{name}\b", clause) and name.lower() not in declared and not {i.lower() for i in ids} & declared:
+                stale.append(name)
+    return sorted(set(stale))
+
+
 def _completion_statuses(report: str) -> tuple[list[str], bool]:
     """Return every standalone status and whether the sole one ends the report."""
     nonempty_lines = [line for line in report.splitlines() if line.strip()]
@@ -124,6 +162,10 @@ def audit_revival(candidate: Path, archive: Path | None = None, *, reports_dir: 
         passed = re.search(r"\b(PASS|PERFORMED)\b", value, re.IGNORECASE)
         if unchecked and passed:
             issues.append(_issue("plan-validation-state-stale", "WARNING", f"The plan leaves {label} unchecked while the final report records completed evidence.", [label, value]))
+
+    stale_claims = _stale_dependency_claims(validations.get("DEPENDENCY CHECK", ""), root / "mod_info.json")
+    if stale_claims:
+        issues.append(_issue("dependency-claim-stale", "WARNING", "The report's DEPENDENCY CHECK says these libraries are declared, but mod_info.json no longer declares them. Update the report or the metadata.", stale_claims))
 
     if "Done" in root.parts and re.search(r"(?i)(?:working copy|output package).*In operation", report):
         issues.append(_issue("report-path-state-stale", "WARNING", "The completed copy's report still identifies an In operation path; record both source and final artifact locations explicitly."))

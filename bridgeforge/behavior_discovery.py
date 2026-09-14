@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from . import __version__
-from .scanner import _load_lenient_json_file, scan_mod
+from .scanner import _blank_java_comments, _load_lenient_json_file, scan_mod
 from .models import TargetProfile
 from .jar_audit import ClassFileError, parse_constant_pool, referenced_class_names, referenced_members
 from .save_inspect import inspect_save
@@ -115,7 +115,7 @@ def _load_save_aliases(path: Path | None) -> set[str]:
     return aliases
 
 
-def build_archaeology(mod_directory: Path, *, save_aliases: Path | None = None) -> dict[str, object]:
+def build_archaeology(mod_directory: Path, *, save_aliases: Path | None = None, vanilla_core: Path | None = None) -> dict[str, object]:
     root = _resolved_directory(mod_directory, "mod directory")
     aliases = _load_save_aliases(save_aliases)
     mod_info = _load_lenient_json_file(root / "mod_info.json") if (root / "mod_info.json").is_file() else None
@@ -133,7 +133,9 @@ def build_archaeology(mod_directory: Path, *, save_aliases: Path | None = None) 
     lifecycle: list[dict[str, object]] = []
     registrations: list[dict[str, object]] = []
     persistent_candidates: list[dict[str, object]] = []
-    scan_result = scan_mod(root, TargetProfile())
+    # With vanilla_core, assets a mod borrows from vanilla resolve instead of reading as missing
+    # (Flu-X: 9 false HIGH "asset-reference-missing" risks without it).
+    scan_result = scan_mod(root, TargetProfile(), vanilla_core)
 
     def add_node(node_id: str, kind: str, **extra: object) -> None:
         existing = nodes.setdefault(node_id, {"id": node_id, "kind": kind})
@@ -240,7 +242,9 @@ def build_archaeology(mod_directory: Path, *, save_aliases: Path | None = None) 
         if suffix == ".java":
             package_match = re.search(r"(?m)^\s*package\s+([\w.]+)\s*;", text)
             package = package_match.group(1) if package_match else ""
-            for match in re.finditer(r"\b(?:class|interface|enum)\s+([A-Za-z_$][\w$]*)", text):
+            # Comments blanked first: "// Only class allowed to import" (Flu-X NexCompat) was read as a
+            # declaration of a class named "allowed".
+            for match in re.finditer(r"\b(?:class|interface|enum)\s+([A-Za-z_$][\w$]*)", _blank_java_comments(text)):
                 simple = match.group(1)
                 class_name = f"{package}.{simple}" if package else simple
                 source_classes[class_name] = rel
@@ -408,7 +412,7 @@ def _architecture_markdown(result: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
-def write_archaeology(mod_directory: Path, output: Path, *, save_aliases: Path | None = None) -> dict[str, str]:
+def write_archaeology(mod_directory: Path, output: Path, *, save_aliases: Path | None = None, vanilla_core: Path | None = None) -> dict[str, str]:
     root = _resolved_directory(mod_directory, "mod directory")
     out = output.expanduser().resolve()
     try:
@@ -417,7 +421,11 @@ def write_archaeology(mod_directory: Path, output: Path, *, save_aliases: Path |
         pass
     else:
         raise DiscoveryError("archaeology output must be outside the selected mod directory")
-    result = build_archaeology(root, save_aliases=save_aliases)
+    # --output names the discovery folder; the files go in its archaeology/ subfolder. Passing the
+    # archaeology folder itself used to nest a second one and leave the old maps stale (Flu-X, 2026-09-13).
+    if out.name.lower() == "archaeology":
+        out = out.parent
+    result = build_archaeology(root, save_aliases=save_aliases, vanilla_core=vanilla_core)
     archaeology_dir = out / "archaeology"
     architecture = _write_json(archaeology_dir / "architecture.json", result)
     cross_reference = _write_json(archaeology_dir / "cross_reference.json", {
@@ -657,11 +665,20 @@ def build_save_baseline(
             "fields": item["fields"],
             "source": "save-inspect",
         })
+    # XStream writes each faction in full wherever it is first referenced (inside some fleet or
+    # route), so a known list's path changes from save to save. List tag + owning faction is the
+    # stable subject; the path (plus an occurrence number) is only a fallback for owner-less lists.
+    # behavior-diff refuses duplicate subjects, and unstable ones read as missing/new behaviour.
+    seen_subjects: Counter = Counter()
     for item in inspected["known_lists"]:
+        subject = f"{item['tag']}[{item['owner']}]" if item.get("owner") else f"{item['tag']}@{item['path']}"
+        seen_subjects[subject] += 1
+        if seen_subjects[subject] > 1:
+            subject += f"#{seen_subjects[subject]}"
         observations.append({
             "behavior_id": None,
             "observation": "save.known-list",
-            "subject": f"{item['tag']}@{item['path']}",
+            "subject": subject,
             "fields": {"size": item["size"]},
             "source": "save-inspect-heuristic",
         })
@@ -1073,6 +1090,91 @@ def evaluate_behavior_release(diff_path: Path, *, risks_path: Path | None = None
     if preserved_unknowns:
         blocking_reasons.append("unknown-behavior-lacks-written-decision")
     return {"schema_version": SCHEMA_VERSION, "status": "PASS" if not blocking_reasons else "FAIL", "blocking_reasons": blocking_reasons, "high_risks_open": high_open, "unknowns_open": preserved_unknowns, "diff_status": diff.get("status")}
+
+
+DECIDED_UNKNOWN_STATUSES = frozenset({"EXPLAINED", "LIKELY INTENTIONAL", "LIKELY DEFECT"})
+DECIDED_RISK_STATUSES = frozenset({"MITIGATED", "ACCEPTED", "EXPLAINED"})
+_DECISION_SELECTORS = frozenset({"ids", "lifecycle", "subsystem", "entry_point_prefix"})
+
+
+def _decision_selects(select: dict, item: dict, behavior: dict) -> bool:
+    ids = set(select.get("ids") or [])
+    if "ids" in select and item.get("id") not in ids and item.get("behavior_id") not in ids:
+        return False
+    if "lifecycle" in select and behavior.get("lifecycle") != select["lifecycle"]:
+        return False
+    if "subsystem" in select and behavior.get("subsystem") != select["subsystem"]:
+        return False
+    if "entry_point_prefix" in select and not str(behavior.get("entry_point", "")).startswith(str(select["entry_point_prefix"])):
+        return False
+    return True
+
+
+def apply_behavior_decisions(discovery_dir: Path, decisions_path: Path) -> dict[str, object]:
+    """Apply written decisions to a D1 model's risks and unknowns, leaving the generated files untouched.
+
+    Each decision selects items (by risk/unknown/behavior id, lifecycle, subsystem or entry-point
+    prefix) and must carry a status, why, by and on (YYYY-MM-DD). A decision that selects nothing is
+    refused as stale, so regenerated maps can't silently drop a decision.
+    """
+    base = _resolved_directory(discovery_dir, "discovery directory")
+    behavior = _load_object(base / "behavior.json", "behavior map")
+    risks = _load_object(base / "risks.json", "risks")
+    unknowns = _load_object(base / "unknowns.json", "unknowns")
+    decisions_file = Path(decisions_path).expanduser().resolve()
+    decisions = _load_object(decisions_file, "decisions")
+    if decisions.get("schema_version") != SCHEMA_VERSION or not isinstance(decisions.get("decisions"), list):
+        raise DiscoveryError("decisions file needs schema_version 1 and a decisions list")
+    by_behavior = {b["id"]: b for b in behavior.get("behaviors", []) if isinstance(b, dict)}
+    items = {"risks": risks.get("risks", []), "unknowns": unknowns.get("unknowns", [])}
+    applied: Counter = Counter()
+    for index, decision in enumerate(decisions["decisions"], start=1):
+        where = f"decision {index}"
+        for field in ("status", "why", "by", "on"):
+            if not str(decision.get(field) or "").strip():
+                raise DiscoveryError(f"{where}: missing {field}")
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(decision["on"])):
+            raise DiscoveryError(f"{where}: 'on' must be YYYY-MM-DD")
+        select = decision.get("select") or {}
+        if not select or set(select) - _DECISION_SELECTORS:
+            raise DiscoveryError(f"{where}: select needs only keys from {sorted(_DECISION_SELECTORS)}")
+        matched = 0
+        for kind in decision.get("applies_to") or ["unknowns", "risks"]:
+            if kind not in items:
+                raise DiscoveryError(f"{where}: applies_to must be unknowns and/or risks")
+            allowed = DECIDED_UNKNOWN_STATUSES if kind == "unknowns" else DECIDED_RISK_STATUSES
+            if decision["status"] not in allowed:
+                raise DiscoveryError(f"{where}: status {decision['status']!r} is not valid for {kind} ({sorted(allowed)})")
+            for item in items[kind]:
+                if isinstance(item, dict) and _decision_selects(select, item, by_behavior.get(item.get("behavior_id"), {})):
+                    item["status"] = decision["status"]
+                    item["decision"] = {
+                        "why": decision["why"],
+                        "evidence": list(decision.get("evidence") or []),
+                        "by": decision["by"],
+                        "on": decision["on"],
+                        "source": f"{decisions_file.name}#{index}",
+                    }
+                    matched += 1
+                    applied[kind] += 1
+        if not matched:
+            raise DiscoveryError(f"{where}: selects nothing (stale after regenerating the maps?)")
+    open_unknowns = [u["id"] for u in items["unknowns"] if isinstance(u, dict) and u.get("status") not in DECIDED_UNKNOWN_STATUSES]
+    open_high = [r["id"] for r in items["risks"] if isinstance(r, dict) and r.get("level") == "HIGH" and r.get("status") in {"OPEN", "UNKNOWN", "PRESERVE UNTIL EXPLAINED"}]
+    return {
+        "risks": risks,
+        "unknowns": unknowns,
+        "summary": {"decisions": len(decisions["decisions"]), "applied": dict(applied), "unknowns_open": open_unknowns, "high_risks_open": open_high},
+    }
+
+
+def write_behavior_decisions(discovery_dir: Path, decisions_path: Path, output: Path | None = None) -> dict[str, object]:
+    """Write risks.decided.json / unknowns.decided.json for the release gate."""
+    result = apply_behavior_decisions(discovery_dir, decisions_path)
+    out = Path(output or discovery_dir).expanduser().resolve()
+    risks_path = _write_json(out / "risks.decided.json", result["risks"])
+    unknowns_path = _write_json(out / "unknowns.decided.json", result["unknowns"])
+    return {"schema_version": SCHEMA_VERSION, "risks": str(risks_path), "unknowns": str(unknowns_path), **result["summary"]}
 
 
 def build_coverage(behavior_path: Path, *, baselines: Iterable[Path] = (), diff_path: Path | None = None, tests_path: Path | None = None, unknowns_path: Path | None = None) -> dict[str, object]:

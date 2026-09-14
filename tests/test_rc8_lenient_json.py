@@ -57,6 +57,33 @@ class ParseJsonToleranceTests(unittest.TestCase):
         self.assertEqual(data, {"a": True, "b": False, "c": None, "d": ["X"]})
         self.assertIn("bareword-values", tolerances)
 
+    def test_leading_zero_numbers_tolerance(self) -> None:
+        # Mirfak Parcel Service colours: [255,098,000,205]. Strings keep their zeros.
+        data, tolerances = _parse_json('{"c": [255,098,000,205], "s": "098", "n": -007}')
+        self.assertEqual(data, {"c": [255, 98, 0, 205], "s": "098", "n": -7})
+        self.assertIn("lenient-numbers", tolerances)
+
+    def test_leading_dot_numbers_tolerance(self) -> None:
+        # Blackrock skins: "baseValueMult":.7
+        data, tolerances = _parse_json('{"m":.7, "n":-.5, "v": 1.5, "id": "a.7"}')
+        self.assertEqual(data, {"m": 0.7, "n": -0.5, "v": 1.5, "id": "a.7"})
+        self.assertIn("lenient-numbers", tolerances)
+
+    def test_ordinary_numbers_are_strict(self) -> None:
+        self.assertEqual(_parse_json('{"a": 0, "b": 0.5, "c": 10, "d": -0.25}'), ({"a": 0, "b": 0.5, "c": 10, "d": -0.25}, set()))
+
+    def test_stray_brackets_after_root_are_ignored_like_the_game(self) -> None:
+        data, tolerances = _parse_json('{"a": 1}\n    }\n}')
+        self.assertEqual(data, {"a": 1})
+        self.assertIn("trailing-data", tolerances)
+        self.assertNotIn("trailing-content", tolerances)
+
+    def test_keys_after_an_early_closing_brace_are_flagged(self) -> None:
+        # Blackrock br_consortium.faction: an extra '}' closes the root, so later keys never load.
+        data, tolerances = _parse_json('{"id": "x", "a": {"b": 1}},\n "factionDoctrine": {"w": 2}\n}')
+        self.assertEqual(data, {"id": "x", "a": {"b": 1}})
+        self.assertIn("trailing-content", tolerances)
+
     def test_java_number_suffix_tolerance(self) -> None:
         data, tolerances = _parse_json('{"half": 0.5f, "two": 2d, "n": -3.5F}')
         self.assertEqual(data, {"half": 0.5, "two": 2, "n": -3.5})

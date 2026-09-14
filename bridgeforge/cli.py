@@ -47,6 +47,7 @@ from .log_triage import triage_log
 from .copy_drift import compare_copies
 from .jar_audit import audit_jar
 from .build_tag import apply_build_tag, BuildTagError, DEFAULT_LABEL
+from .translation import TranslationError, apply_translation, check_translation, export_project_go_tm, export_translation, prefill_from_record, prefill_from_reference
 from .fixers import SUPPORTED_FINDINGS, FixerError, apply_fix, compute_fix, unified_diff_for_change
 from .prepare_test import PrepareTestError, prepare_test
 from .probe_config import ProbeConfigError, write_probe_config
@@ -95,7 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
     subcommands = parser.add_subparsers(dest="command", required=True)
     scan = subcommands.add_parser("scan", help="scan a mod directory without modifying it")
     scan.add_argument("mod_directory", type=Path)
-    scan.add_argument("--output", type=Path, default=Path("bridgeforge-artifacts"))
+    scan.add_argument("--output", type=Path, default=Path("bridgeforge-artifacts"), help="output FOLDER (created if missing) for MODERNIZATION_REPORT.md and bridgeforge.compat.json; not a file name")
     scan.add_argument("--target-starsector", default="0.98.x")
     scan.add_argument("--target-java", type=int, default=17)
     scan.add_argument("--vanilla-core", type=Path, help="path to a read-only starsector-core directory, used for vanilla-row/faction/path exemptions")
@@ -323,6 +324,27 @@ def build_parser() -> argparse.ArgumentParser:
     build_tag.add_argument("--record-only", action="store_true", help="record the manifest for the CURRENT build (r0 if untagged) without bumping or writing mod_info.json")
     build_tag.add_argument("--manifests-dir", type=Path, help="where build manifests go (default: <repo>/bridgeforge-state/build-manifests; never inside the mod)")
     build_tag.add_argument("--json", action="store_true")
+    translate_export = subcommands.add_parser("translate-export", help="export every non-English (CJK) player-visible string with a stable id (read-only; handles Starsector's lenient CSV/JSON and jar strings)")
+    translate_export.add_argument("mod_dir", type=Path)
+    translate_export.add_argument("output", type=Path, help="translation JSON to write (must not be inside the mod)")
+    translate_export.add_argument("--record", type=Path, action="append", default=[], help="zh/en record JSON file or folder to prefill from (e.g. a translator's ai/en); repeatable")
+    translate_export.add_argument("--reference", type=Path, help="an English copy of the same mod: prefill CSV text by row+column and JSON text by path")
+    translate_export.add_argument("--json", action="store_true")
+    translate_apply = subcommands.add_parser("translate-apply", help="write a filled translation JSON into a copy of the mod (or an explicit working copy with --in-place)")
+    translate_apply.add_argument("mod_dir", type=Path)
+    translate_apply.add_argument("translations", type=Path)
+    translate_apply_target = translate_apply.add_mutually_exclusive_group(required=True)
+    translate_apply_target.add_argument("--out", type=Path, help="new folder for the translated copy")
+    translate_apply_target.add_argument("--in-place", action="store_true", help="edit mod_dir itself (use only on a working copy)")
+    translate_apply.add_argument("--json", action="store_true")
+    translate_tm = subcommands.add_parser("translate-tm", help="write a translation JSON's pairs as Project Go (SSMT) translation memory, for `ssmt tm import <db> json <file>`")
+    translate_tm.add_argument("translations", type=Path)
+    translate_tm.add_argument("output", type=Path)
+    translate_tm.add_argument("--context", default="", help="Project Go TM context (default empty: exact matches ignore context; fuzzy matches filter on it)")
+    translate_tm.add_argument("--json", action="store_true")
+    translate_check = subcommands.add_parser("translate-check", help="report leftover non-English strings and designTypeColors keys that no tech/manufacturer uses")
+    translate_check.add_argument("mod_dir", type=Path)
+    translate_check.add_argument("--json", action="store_true")
     fix = subcommands.add_parser("fix", help="apply a SAFE, mechanical fixer for one supported finding id (dry-run diff by default)")
     fix.add_argument("mod_dir", type=Path)
     fix.add_argument("--finding", required=True, metavar="ID", help=f"supported: {', '.join(SUPPORTED_FINDINGS)}")
@@ -545,6 +567,7 @@ def build_parser() -> argparse.ArgumentParser:
     archaeology_cmd.add_argument("mod_directory", type=Path)
     archaeology_cmd.add_argument("--output", required=True, type=Path)
     archaeology_cmd.add_argument("--save-aliases", type=Path, help="optional real-save alias evidence for confirmed persistent classes")
+    archaeology_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so assets a mod borrows from vanilla are not reported as missing")
     archaeology_cmd.add_argument("--json", action="store_true")
     for command_name, help_text in (
         ("behavior-map", "derive the D1 behavior model, risks, hypotheses and unknowns from archaeology"),
@@ -633,11 +656,29 @@ def build_parser() -> argparse.ArgumentParser:
     coverage_cmd.add_argument("--unknowns", type=Path)
     coverage_cmd.add_argument("--output", required=True, type=Path)
     coverage_cmd.add_argument("--json", action="store_true")
+    decide_cmd = subcommands.add_parser("behavior-decide", help="apply written decisions to D1 risks/unknowns -> risks.decided.json / unknowns.decided.json for the release gate")
+    decide_cmd.add_argument("discovery_dir", type=Path, help="folder holding behavior.json, risks.json, unknowns.json")
+    decide_cmd.add_argument("decisions", type=Path, help="decisions JSON (schema_version 1; each decision: select, status, why, by, on[, evidence, applies_to])")
+    decide_cmd.add_argument("--output", type=Path, help="where the .decided.json files go (default: the discovery folder)")
+    decide_cmd.add_argument("--json", action="store_true")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "behavior-decide":
+        from .behavior_discovery import write_behavior_decisions
+        try:
+            result = write_behavior_decisions(args.discovery_dir, args.decisions, args.output)
+        except (DiscoveryError, OSError, json.JSONDecodeError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"Decided files: {result['risks']} / {result['unknowns']}")
+            print(f"Applied: {result['applied']}; unknowns still open: {len(result['unknowns_open'])}; HIGH risks still open: {len(result['high_risks_open'])}")
+        return 0 if not result["unknowns_open"] and not result["high_risks_open"] else 1
     if args.command == "promote":
         try:
             result = promote_mod(args.mod, args.repo_root, original=args.original, baseline=args.baseline,
@@ -672,7 +713,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in {"archaeology", "behavior-map", "risk-register", "hypotheses", "probe-baseline", "save-baseline", "expect", "behavior-diff", "release-behavior-evaluate", "coverage"}:
         try:
             if args.command == "archaeology":
-                result = write_archaeology(args.mod_directory, args.output, save_aliases=args.save_aliases)
+                result = write_archaeology(args.mod_directory, args.output, save_aliases=args.save_aliases, vanilla_core=args.vanilla_core)
             elif args.command in {"behavior-map", "risk-register"}:
                 result = write_behavior_model(args.architecture, args.output)
             elif args.command == "hypotheses":
@@ -1416,6 +1457,79 @@ def main(argv: list[str] | None = None) -> int:
             if result.get("manifest_path"):
                 print(f"Build manifest: {result['manifest_path']} ({result['manifest_file_count']} files)")
         return 0
+    if args.command == "translate-export":
+        output = args.output.expanduser().resolve()
+        if Path(args.mod_dir).expanduser().resolve() in output.parents:
+            print("bridgeforge: the translation JSON must not be written inside the mod", file=sys.stderr)
+            return 2
+        try:
+            document = export_translation(args.mod_dir)
+            prefill: dict[str, object] = {}
+            if args.record:
+                prefill["record"] = prefill_from_record(document, args.record)
+            if args.reference:
+                prefill["reference"] = prefill_from_reference(document, args.mod_dir, args.reference)
+        except TranslationError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(document, ensure_ascii=False, indent=1), encoding="utf-8")
+        blank = sum(1 for entry in document["entries"] if not entry["translation"])
+        summary = {"output": str(output), "entries": document["entry_count"], "unique_sources": document["unique_source_count"], "prefill": prefill, "still_blank": blank}
+        if args.json:
+            print(json.dumps(summary, indent=2, ensure_ascii=False))
+        else:
+            print(f"Translation export: {output}")
+            print(f"Entries: {document['entry_count']} ({document['unique_source_count']} unique sources); still blank: {blank}")
+            for source, stats in prefill.items():
+                print(f"Prefill from {source}: {stats}")
+        return 0
+    if args.command == "translate-apply":
+        try:
+            document = json.loads(args.translations.read_text(encoding="utf-8"))
+            result = apply_translation(args.mod_dir, document, out_dir=args.out, in_place=args.in_place)
+        except (OSError, json.JSONDecodeError, TranslationError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"Translation apply: {result['status']} -> {result['target']}")
+            print(f"Applied: {result['applied']}; leftover non-English units: {result['leftover_cjk_units']}")
+            for problem in result["problems"][:20]:
+                print(f"  problem: {problem}")
+        return 0 if result["status"] == "OK" else 1
+    if args.command == "translate-tm":
+        try:
+            memory = export_project_go_tm(json.loads(args.translations.read_text(encoding="utf-8")), context=args.context)
+        except (OSError, json.JSONDecodeError, KeyError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(memory, ensure_ascii=False, indent=1), encoding="utf-8")
+        from collections import Counter as _Counter
+        by_provenance = dict(_Counter(item["provenance"] for item in memory["entries"]))
+        if args.json:
+            print(json.dumps({"output": str(args.output), "entries": len(memory["entries"]), "by_provenance": by_provenance}, indent=2))
+        else:
+            print(f"Project Go translation memory: {args.output} ({len(memory['entries'])} entries; {by_provenance})")
+            print("Import with: ssmt tm import <database.sqlite> json <this file>")
+        return 0
+    if args.command == "translate-check":
+        try:
+            result = check_translation(args.mod_dir)
+        except TranslationError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"Translation check: {result['status']}; leftover non-English units: {result['leftover_count']}")
+            for rel, count in list(result["leftover_by_file"].items())[:15]:
+                print(f"  {count:5} {rel}")
+            if result["design_type_keys_unused"]:
+                print(f"designTypeColors keys no tech/manufacturer uses: {result['design_type_keys_unused']}")
+        return 0 if result["status"] == "OK" else 1
     if args.command == "fix":
         options = {
             "target_game_version": args.target_game_version,

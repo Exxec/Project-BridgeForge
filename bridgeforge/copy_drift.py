@@ -7,8 +7,9 @@ from pathlib import Path
 
 INCLUDED_DIRS = ("data", "jars", "graphics", "sounds")
 INCLUDED_ROOT_FILE_GLOBS = ("*.csv", "*.ini", "*.jar", "*.json", "*.properties", "*.version")
-EXCLUDE_DIR_NAME_GLOBS = ("reports", "src*")
-EXCLUDE_FILE_NAME_GLOBS = ("*.bak", "*.pre-*", "*orig-backup*", "src.zip")
+# OS and VCS litter never ships: the game ignores it and it only bloats or confuses a release.
+EXCLUDE_DIR_NAME_GLOBS = ("reports", "src*", "__MACOSX", ".git", ".svn", ".idea", ".vscode")
+EXCLUDE_FILE_NAME_GLOBS = ("*.bak", "*.pre-*", "*orig-backup*", "src.zip", "Thumbs.db", "desktop.ini", ".DS_Store")
 
 
 def _is_excluded(relative_posix_path: str) -> bool:

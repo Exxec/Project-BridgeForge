@@ -39,9 +39,17 @@ def _single_pass(campaign_xml: Path, *, track_classes: set[str], track_ids: set[
     # Open-record stacks, keyed by the depth (len(path)) at which the record started.
     open_tracked: list[dict[str, object]] = []
     open_known: list[dict[str, object]] = []
+    # Last <id> leaf seen directly under the element at each depth, so a known list can name its
+    # owning faction. Every faction's list has the same path; without this, save baselines had
+    # duplicate subjects and behavior-diff refused them (Flu-X, 2026-09-13).
+    ids_by_parent_depth: dict[int, str] = {}
 
     for element in iter_elements(campaign_xml):
         depth = len(element.path)
+        for stale in [key for key in ids_by_parent_depth if key >= depth]:
+            del ids_by_parent_depth[stale]
+        if element.tag == "id" and element.text is not None:
+            ids_by_parent_depth[depth - 1] = str(element.text)
 
         # Close any open records whose scope has ended (this element is a sibling or higher).
         while open_tracked and depth <= open_tracked[-1]["depth"]:
@@ -61,6 +69,7 @@ def _single_pass(campaign_xml: Path, *, track_classes: set[str], track_ids: set[
                     "tag": finished["tag"],
                     "path": "/" + "/".join(finished["path"]),
                     "size": finished["count"],
+                    "owner": finished.get("owner"),
                 }
             )
 
@@ -85,7 +94,7 @@ def _single_pass(campaign_xml: Path, *, track_classes: set[str], track_ids: set[
 
         # Open a new known-list container (heuristic: tag name containing "known").
         if element.text is None and _KNOWN_LIST_TAG.search(element.tag):
-            open_known.append({"depth": depth, "tag": element.tag, "path": element.path, "count": 0})
+            open_known.append({"depth": depth, "tag": element.tag, "path": element.path, "count": 0, "owner": ids_by_parent_depth.get(depth - 1)})
 
         # Tracked entity ids: match on leaf text or on any attribute value.
         if track_ids:
@@ -136,7 +145,7 @@ def _single_pass(campaign_xml: Path, *, track_classes: set[str], track_ids: set[
         )
     for finished in open_known:
         known_lists.append(
-            {"tag": finished["tag"], "path": "/" + "/".join(finished["path"]), "size": finished["count"]}
+            {"tag": finished["tag"], "path": "/" + "/".join(finished["path"]), "size": finished["count"], "owner": finished.get("owner")}
         )
 
     return tracked_objects, tracked_id_hits, known_lists, namespace_counts, script_instances

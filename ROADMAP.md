@@ -374,6 +374,23 @@ Order: P1 → P2 → P3 (spike the save round-trip first) → P3b (save tooling:
       six tag CI jobs passed. Exact-source packages and fresh public downloads
       verified, with changelog notes and SHA256 receipts. P12 is complete;
       live/manual/research acceptance gates are not. See `docs/RELEASE_0_2_0.md`.
+13. **P13: Non-English intake (from the 2026-09-13 Chinese mods: Nightcross, Mirfak Parcel Service, Blackrock CN).**
+    - **Implemented now, because these mods needed it:**
+      - `translate-export` / `translate-apply` / `translate-check` (`bridgeforge/translation.py`). Stable ids for CSV cells, JSON-like strings and keys, loose Janino scripts and jar string constants. Prefill from a zh/en record (`--record`) or an English copy (`--reference`: CSV row+column, JSON path, jar constants when the class layout matches). Apply is hash-guarded, span-exact and structure-verified.
+      - `_parse_json` gained the remaining org.json leniencies: leading-zero and leading-dot numbers, and data after the root value. There's a new `json-content-after-root` (REVIEW) for keys the game never loads.
+      - `csv-row-extra-columns` now separates spilled content (MANUAL/high) from empty padding (SAFE/low).
+      - Spec ids come from the file, not its name (`.wpn`/`.variant`/`.ship`). `undeclared-library-dependency` sees `isModEnabled` guards in bytecode. New `loose-script-shadowed-by-jar` (SAFE): the game never compiles a loose script whose class is in the jar, so its Janino risks are dropped. A local `.wpn` that overrides a vanilla-registered weapon is no longer also reported as unregistered.
+      - **Done 2026-09-13 (second pass):**
+        - `jar-entry-unreadable`: CRC and corrupt-entry check. The rest of the jar is still scanned.
+        - OS/VCS litter is excluded from releases and copy-drift (`.idea/`, `.vscode/`, `.git/`, `__MACOSX/`, Thumbs.db…). `shippable-work-file` lists editor and design files that would ship (`.psd`, `.sai2`, `.docx`, `.iml`, `.orig`…).
+        - `player-text-non-english`: CJK in data files outside comments.
+        - `design-type-color-duplicate-key` / `-unused` / `design-type-without-color`: designTypeColors keys against the tech/manufacturer text, counting vanilla's keys.
+    - **Planned:**
+      - **Decompile dumps and translator working folders** (`_u0001_cmp`, translator `ai/`). They sit outside the shipped folders in the mods seen so far; add globs when one turns up inside `data/`/`graphics/`.
+      - **CSV narrower-row check:** rows shorter than the header; tolerated by the game, rejected by strict tools.
+      - **Non-ASCII path safety** for every external tool BridgeForge drives (JDK tools, launchers, Project Go): use ASCII staging copies automatically.
+      - **Translation memory across mods:** reuse approved zh→en pairs, such as shared faction or ship-class terms. Glossary files are per mod for now.
+    - **Handed to Project Go's maintainer:** non-ASCII paths in `ssmt-cli.bat`; strict CSV/JSON; the missing cause in "Could not create localization project"; JSON keys not extracted; incomplete CSV and jar coverage (861 Nightcross strings missed).
 
 ## Post-1.0 research and gated automation
 

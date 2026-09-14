@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import fnmatch
 import hashlib
 import json
 import re
@@ -385,6 +386,29 @@ def _strip_java_number_suffixes(text: str) -> tuple[str, bool]:
     return _JAVA_NUMBER_SUFFIX_PATTERN.sub(replace, text), found
 
 
+# org.json reads `098` / `000` (leading zeros) and `.7` (leading dot) as numbers; strict JSON rejects
+# both. Seen in Mirfak Parcel Service colours ([255,098,000,205]) and Blackrock skins ("baseValueMult":.7).
+_LENIENT_NUMBER_PATTERN = re.compile(
+    _JSON_STRING_TOKEN_PATTERN + r"|(?<![\w.])(-?)(?:0+(\d+(?:\.\d+)?)|\.(\d+))(?![\w.])"
+)
+
+
+def _normalize_lenient_numbers(text: str) -> tuple[str, bool]:
+    """Rewrite leading-zero and leading-dot numbers outside strings into strict JSON numbers."""
+    found = False
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal found
+        token = match.group(0)
+        if token.startswith('"'):
+            return token
+        found = True
+        sign, digits, fraction = match.group(1), match.group(2), match.group(3)
+        return f"{sign}{digits}" if digits is not None else f"{sign}0.{fraction}"
+
+    return _LENIENT_NUMBER_PATTERN.sub(replace, text), found
+
+
 def _quote_barewords_and_keys(text: str) -> tuple[str, set[str]]:
     """Wrap unquoted identifiers (object keys or bareword scalar values) in double quotes.
 
@@ -434,6 +458,9 @@ def _parse_json(text: str) -> tuple[object, set[str]]:
             without_number_suffix, suffix_found = _strip_java_number_suffixes(without_single_quotes)
             if suffix_found:
                 tolerances.add("java-number-suffix")
+            without_number_suffix, lenient_numbers = _normalize_lenient_numbers(without_number_suffix)
+            if lenient_numbers:
+                tolerances.add("lenient-numbers")
             without_barewords, bareword_tolerances = _quote_barewords_and_keys(without_number_suffix)
             tolerances |= bareword_tolerances
             without_commas = _without_trailing_commas(without_barewords)
@@ -445,12 +472,22 @@ def _parse_json(text: str) -> tuple[object, set[str]]:
             # An unterminated single-quoted string is malformed, not a dialect
             # we tolerate; "repairing" it would hide a genuinely broken file.
             raise original_error
+        try:
+            data = json.loads(without_commas)
+        except json.JSONDecodeError as rewritten_error:
+            if rewritten_error.msg != "Extra data":
+                raise original_error
+            # org.json (Starsector's loader) stops after the first complete value and ignores the
+            # rest -- including real keys when an extra '}' closes the root early (Blackrock's
+            # br_consortium.faction loses its factionDoctrine this way).
+            stripped = without_commas.lstrip()
+            data, end = json.JSONDecoder().raw_decode(stripped)
+            tolerances.add("trailing-data")
+            if re.search(r'["\w]', stripped[end:]):
+                tolerances.add("trailing-content")
         if not tolerances:
             raise original_error
-        try:
-            return json.loads(without_commas), tolerances
-        except json.JSONDecodeError:
-            raise original_error
+        return data, tolerances
 
 
 def _non_strict_json_finding(result: ScanResult, category: str, file: str) -> None:
@@ -481,7 +518,22 @@ def _java_number_suffix_json_finding(result: ScanResult, category: str, file: st
     result.add(id="json-java-number-suffix", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file has one or more Java-style numeric literal suffixes (e.g. 0.5f, 2d). Starsector's lenient loader reads them as plain numbers; BridgeForge parsed them structurally and does not recommend rewriting them.", file=file)
 
 
+def _lenient_number_json_finding(result: ScanResult, category: str, file: str) -> None:
+    result.add(id="json-lenient-number", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file has numbers with leading zeros (e.g. 098) or a leading dot (e.g. .7). Starsector's lenient loader reads them as plain numbers; BridgeForge parsed them structurally and does not recommend rewriting them.", file=file)
+
+
+def _json_trailing_data_finding(result: ScanResult, category: str, file: str, tolerances: set[str]) -> None:
+    if "trailing-content" in tolerances:
+        result.add(id="json-content-after-root", category=category, severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="The root object closes before the end of the file, and keys follow it. Starsector's loader stops at the first complete object, so everything after it never loads. Usually an extra '}' earlier closed the root too soon (Blackrock's br_consortium.faction lost its factionDoctrine this way). Find the stray brace; don't just delete the tail.", file=file)
+    else:
+        result.add(id="json-trailing-brackets", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="Stray closing brackets or commas follow the root object. Starsector's loader ignores anything after the first complete object, so nothing is lost.", file=file)
+
+
 def _emit_json_tolerance_findings(result: ScanResult, category: str, file: str, tolerances: set[str]) -> None:
+    if "lenient-numbers" in tolerances:
+        _lenient_number_json_finding(result, category, file)
+    if "trailing-data" in tolerances:
+        _json_trailing_data_finding(result, category, file, tolerances)
     if "trailing-commas" in tolerances:
         _non_strict_json_finding(result, category, file)
     if "hash-comments" in tolerances:
@@ -560,14 +612,23 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
                 if jar.stat().st_size > LARGE_BUNDLED_JAR_BYTES:
                     result.add(id="large-bundled-archive", category="dependencies", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation=f"Archive is {jar.stat().st_size} bytes. Attribute its ownership and dependency role before changing or redistributing it.", file=_relative(root, jar))
                 majors: set[int] = set()
+                bad_entries: list[str] = []
                 for item in entries:
                     member = PurePosixPath(item.filename.replace("\\", "/"))
                     if member.is_absolute() or ".." in member.parts:
                         result.add(id="jar-path-traversal", category="bytecode", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation="JAR contains an absolute or parent-directory member name; it was not opened.", file=_relative(root, jar))
                         continue
+                    if item.is_dir():
+                        continue
+                    # Every entry is read so its CRC is checked: the Chinese Nightcross jar had entries
+                    # whose CRC failed, which used to abort this jar's whole scan as "unreadable".
+                    try:
+                        entry_bytes = archive.read(item)
+                    except (zipfile.BadZipFile, OSError, NotImplementedError) as exc:
+                        bad_entries.append(f"{item.filename}: {exc}")
+                        continue
                     if item.filename.endswith(".class"):
-                        with archive.open(item) as class_file:
-                            class_bytes = class_file.read()
+                        class_bytes = entry_bytes
                         header = class_bytes[:8]
                         if header[:4] == b"\xca\xfe\xba\xbe" and len(header) == 8:
                             majors.add(int.from_bytes(header[6:8], "big"))
@@ -586,6 +647,17 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
                                     file=_relative(root, jar),
                                     evidence=[item.filename[:-6].replace("/", ".").replace("\\", ".")],
                                 )
+                if bad_entries:
+                    result.add(
+                        id="jar-entry-unreadable",
+                        category="bytecode",
+                        severity="high",
+                        classification="MANUAL",
+                        confidence="DETERMINISTIC",
+                        explanation="JAR entries fail their CRC check or cannot be decompressed. Java's class loader rejects a corrupt class the first time it is needed (a crash mid-game, not at boot); rebuild or re-download the jar. The rest of the jar was scanned.",
+                        file=_relative(root, jar),
+                        evidence=bad_entries[:25] + ([f"... {len(bad_entries) - 25} more"] if len(bad_entries) > 25 else []),
+                    )
                 entry["class_file_majors"] = sorted(majors)
                 entry["java_levels"] = sorted({_java_for_major(major) for major in majors})
         except (OSError, zipfile.BadZipFile) as exc:
@@ -789,6 +861,8 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
     _scan_personality_ids(root, result)
     _scan_bare_market_fleet_source(root, result)
     _scan_legacy_event_report(root, result)
+    _scan_non_english_text(root, result)
+    _scan_shippable_work_files(root, result)
     _scan_source_build_dependencies(root, result, import_locations)
 
     scan_lazylib_compat(root, result)
@@ -811,8 +885,16 @@ def _scan_source_build_dependencies(root: Path, result: ScanResult, import_locat
             explanation="Source imports Lombok, which generates methods and constructors during compilation. A plain javac rebuild will fail or produce missing members unless Lombok is supplied as an annotation processor." + detail,
             evidence=lombok_imports,
         )
+    # An import of one of the mod's own classes needs no library, even inside a library-named package:
+    # Blackrock ships its own data.scripts.util.AnamorphicFlare / BRDYMulti / I18nUtil, which is
+    # MagicLib's legacy package prefix.
+    local_classes = set(_source_class_index(root))
+    for _jar, _member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is not None and info.this_class:
+            local_classes.add(info.this_class.replace("/", "."))
     for dependency, prefixes in EXTERNAL_MOD_API_PACKAGES.items():
-        imports = sorted(item for item in result.imports if any(item == prefix.rstrip(".") or item.startswith(prefix) for prefix in prefixes))
+        imports = sorted(item for item in result.imports if item not in local_classes and any(item == prefix.rstrip(".") or item.startswith(prefix) for prefix in prefixes))
         if imports:
             first_file: str | None = None
             first_line: int | None = None
@@ -941,8 +1023,21 @@ def _scan_loose_script_janino_risk(root: Path, result: ScanResult) -> None:
     A for-each over a generic collection (element typed as Object -> String), a diamond or a lambda is a
     Fatal dialog before the main menu. Vanilla's 116 loose scripts use none of these; they iterate with
     raw iterators and explicit casts. REVIEW, not MANUAL: a for-each over an array does compile.
+
+    A loose script whose class is also in a loaded jar is never compiled: the game loads the jar class
+    and logs "already loaded (perhaps from jar file) ... skipping compilation". Mirfak Parcel Service
+    ships both, so those are reported once as shadowed instead of as Janino risks.
     """
+    jar_classes = set()
+    for _jar, _member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is not None and info.this_class:
+            jar_classes.add(info.this_class.replace("/", "."))
+    shadowed: list[str] = []
     for source in sorted((root / "data").rglob("*.java")) if (root / "data").is_dir() else []:
+        if ".".join(source.relative_to(root).with_suffix("").parts) in jar_classes:
+            shadowed.append(_relative(root, source))
+            continue
         try:
             text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
         except OSError:
@@ -962,6 +1057,34 @@ def _scan_loose_script_janino_risk(root: Path, result: ScanResult) -> None:
                 file=_relative(root, source),
                 evidence=sorted(set(evidence), key=lambda item: int(item.split(":")[1]))[:20],
             )
+    if shadowed:
+        result.add(
+            id="loose-script-shadowed-by-jar",
+            category="scripts",
+            severity="info",
+            classification="SAFE",
+            confidence="HIGH",
+            explanation="These loose scripts have the same class name as a class in the mod's loaded jar. The game loads the jar class and skips compiling the loose copy (starsector.log: 'already loaded (perhaps from jar file) ... skipping compilation'), so their Janino risks don't apply and edits to them have no effect. Change the jar (or its source) instead.",
+            evidence=[f"count:{len(shadowed)}", *shadowed[:10]],
+        )
+
+
+def _declared_spec_ids(folder: Path, pattern: str, key: str) -> dict[str, Path]:
+    """Spec id -> file, keyed by the id declared inside each file, which is what Starsector registers.
+
+    Filenames often differ from ids (Nightcross's naai_mare_center.wpn declares naai_mare_deco). The
+    filename is only a fallback when a file can't be parsed or declares no id.
+    """
+    specs: dict[str, Path] = {}
+    for path in sorted(folder.glob(pattern)):
+        declared = None
+        try:
+            data, _ = _parse_json(path.read_text(encoding="utf-8-sig"))
+            declared = data.get(key) if isinstance(data, dict) else None
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            pass
+        specs[declared.strip() if isinstance(declared, str) and declared.strip() else path.stem] = path
+    return specs
 
 
 def _scan_mission_local_fleet_references(root: Path, result: ScanResult) -> None:
@@ -969,9 +1092,9 @@ def _scan_mission_local_fleet_references(root: Path, result: ScanResult) -> None
     if not mod_id:
         return
     prefix = f"{mod_id}_"
-    variants = {path.stem for path in (root / "data" / "variants").glob("*.variant")}
-    hulls = {path.stem for path in (root / "data" / "hulls").glob("*.ship")}
-    weapons = {path.stem for path in (root / "data" / "weapons").glob("*.wpn")}
+    variants = set(_declared_spec_ids(root / "data" / "variants", "*.variant", "variantId"))
+    hulls = set(_declared_spec_ids(root / "data" / "hulls", "*.ship", "hullId"))
+    weapons = set(_declared_spec_ids(root / "data" / "weapons", "*.wpn", "id"))
     wing_data = root / "data" / "hulls" / "wing_data.csv"
     wings: set[str] = set()
     if wing_data.is_file():
@@ -1078,6 +1201,16 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
             _unverified_json_syntax_finding(result, "assets", _relative(root, path), exc)
         else:
             _emit_json_tolerance_findings(result, "assets", _relative(root, path), tolerances)
+    # Starsector's other JSON-like files: only the trailing-data result is reported here (content
+    # after the root never loads); their other tolerances are routine and checked elsewhere.
+    for suffix in ("*.faction", "*.ship", "*.skin", "*.variant", "*.wpn", "*.proj", "*.system"):
+        for path in root.rglob(suffix):
+            try:
+                _, tolerances = _parse_json(path.read_text(encoding="utf-8-sig"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            if "trailing-data" in tolerances:
+                _json_trailing_data_finding(result, "assets", _relative(root, path), tolerances)
     for path in root.rglob("*.csv"):
         try:
             with path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -1088,13 +1221,21 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
                 for line_number, row in enumerate(rows, start=2):
                     if len(row) <= len(header) or not any(cell.strip() for cell in row):
                         continue
+                    # Content beyond the header is a spilled row (loads into the wrong columns). Only
+                    # empty trailing cells (spreadsheet padding; Mirfak's hull_mods rows reach 14,726
+                    # cells) are ignored by Starsector but rejected by strict tools; that is SAFE to trim.
+                    spilled = any(cell.strip() for cell in row[len(header):])
                     result.add(
                         id="csv-row-extra-columns",
                         category="assets",
-                        severity="high",
-                        classification="MANUAL",
+                        severity="high" if spilled else "low",
+                        classification="MANUAL" if spilled else "SAFE",
                         confidence="DETERMINISTIC",
-                        explanation="A CSV row has more fields than its header. Live revival testing showed that spilled description and hullmod rows can pass superficial parsing but load into the wrong columns; restore the intended row structure from authoritative data.",
+                        explanation=(
+                            "A CSV row has more fields than its header. Live revival testing showed that spilled description and hullmod rows can pass superficial parsing but load into the wrong columns; restore the intended row structure from authoritative data."
+                            if spilled else
+                            "A CSV row has empty cells beyond its header (spreadsheet padding). Starsector ignores them, but strict tools such as Project Go reject the file. `fix csv-row-extra-columns` trims them without changing any value."
+                        ),
                         file=_relative(root, path),
                         evidence=[f"line:{line_number}", f"header-columns:{len(header)}", f"row-columns:{len(row)}", *[f"extra:{value}" for value in row[len(header):len(header) + 3]]],
                     )
@@ -1159,7 +1300,7 @@ def _registered_csv_ids(path: Path) -> set[str] | None:
 def _scan_content_graph(root: Path, result: ScanResult) -> None:
     """Check local spec registrations and value kinds without inferring repairs."""
     weapons_root = root / "data" / "weapons"
-    weapon_specs = {path.stem: path for path in weapons_root.glob("*.wpn")}
+    weapon_specs = _declared_spec_ids(weapons_root, "*.wpn", "id")
     registered_weapons = _registered_csv_ids(weapons_root / "weapon_data.csv")
     if registered_weapons is not None:
         for identifier, path in sorted(weapon_specs.items()):
@@ -1177,7 +1318,7 @@ def _scan_content_graph(root: Path, result: ScanResult) -> None:
             )
 
     variants_root = root / "data" / "variants"
-    variant_ids = {path.stem for path in variants_root.glob("*.variant")}
+    variant_ids = set(_declared_spec_ids(variants_root, "*.variant", "variantId"))
     misplaced: list[dict[str, str]] = []
     for path in sorted(variants_root.glob("*.variant")):
         try:
@@ -1232,7 +1373,8 @@ def _source_class_index(root: Path) -> dict[str, str]:
         except OSError:
             continue
         package = re.search(r"^\s*package\s+([\w.]+)\s*;", text, re.M)
-        declared = re.search(r"\b(?:public\s+)?(?:class|interface|enum)\s+(\w+)", text)
+        # Comments blanked: "// Only class allowed to import ..." came before Flu-X NexCompat's declaration.
+        declared = re.search(r"\b(?:public\s+)?(?:class|interface|enum)\s+(\w+)", _blank_java_comments(text))
         if package and declared:
             names[f"{package.group(1)}.{declared.group(1)}"] = _relative(root, path)
     return names
@@ -1602,6 +1744,171 @@ def _vanilla_faction_ids(vanilla_core: Path) -> set[str]:
             if isinstance(faction_id, str) and faction_id:
                 ids.add(faction_id)
     return ids
+
+
+_RULES_MERGED_CONDITION = re.compile(r"[A-Za-z0-9_)]\$[A-Za-z_]")
+_RULES_FACTION_ID_CONDITION = re.compile(r"\$faction\.id\s*==\s*([A-Za-z0-9_]+)")
+
+
+def _scan_rules_condition_defects(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """rules.csv conditions that can never match as written (Flu-X greetings, found 2026-09-13).
+
+    Each condition is its own line in the cell. "$faction.id == infected$faction.hostileToPlayer" lost its
+    line break, so it compares the id with that whole string and the rule never fires (vanilla RC8: 0 of
+    11107 rules have a variable glued to a preceding word). A `$faction.id ==` naming a faction neither
+    vanilla nor the mod defines is usually copy-paste (Flu-X's "greetinginfectedTOffWeaker" tests
+    templars); it can also be a deliberate cross-mod integration, hence REVIEW.
+    """
+    rules = root / "data" / "campaign" / "rules.csv"
+    try:
+        with rules.open(encoding="utf-8-sig", errors="replace", newline="") as handle:
+            rows = [row for row in csv.DictReader(handle) if not (row.get("id") or "").lstrip().startswith("#")]
+    except OSError:
+        return
+    merged: list[str] = []
+    faction_refs: list[tuple[str, str]] = []
+    for row in rows:
+        rule_id = (row.get("id") or "").strip() or "<no id>"
+        conditions = row.get("conditions") or ""
+        for line in conditions.splitlines():
+            if _RULES_MERGED_CONDITION.search(line):
+                merged.append(f"rule:{rule_id}: {line.strip()}")
+        faction_refs.extend((rule_id, faction) for faction in _RULES_FACTION_ID_CONDITION.findall(conditions))
+    relative = _relative(root, rules)
+    if merged:
+        result.add(
+            id="rules-condition-merged-lines",
+            category="rules",
+            severity="medium",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation="A rules.csv condition has a variable glued to the previous word, so two conditions lost their line break and the rule compares against the joined string: it never fires as written. Fixing it changes live behaviour (the rule starts firing), so treat it as a decision, not a cleanup.",
+            file=relative,
+            evidence=merged,
+        )
+    if vanilla_core is None or not faction_refs:
+        return
+    known = _vanilla_faction_ids(vanilla_core)
+    for path in (root / "data" / "world" / "factions").glob("*.faction"):
+        data = _load_lenient_json_file(path)
+        known.add(data["id"] if isinstance(data, dict) and isinstance(data.get("id"), str) else path.stem)
+    unknown = sorted({f"rule:{rule_id} -> {faction}" for rule_id, faction in faction_refs if faction not in known})
+    if unknown:
+        result.add(
+            id="rules-condition-unknown-faction",
+            category="rules",
+            severity="medium",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation="A rules.csv condition tests $faction.id against a faction that neither vanilla nor this mod defines. Usually a copy-paste from another mod (the rule never fires for the intended faction and shows its text to the other one); confirm it is not a deliberate integration before changing it.",
+            file=relative,
+            evidence=unknown,
+        )
+
+
+_DESIGN_TYPE_SOURCES = ("data/hulls/ship_data.csv", "data/weapons/weapon_data.csv", "data/hullmods/hull_mods.csv", "data/campaign/special_items.csv")
+
+
+def _design_type_color_keys(settings: Path) -> list[str]:
+    """designTypeColors keys in file order, duplicates kept (a parsed dict would hide them)."""
+    try:
+        text = settings.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return []
+    start = re.search(r'"designTypeColors"\s*:\s*\{', text)
+    if not start:
+        return []
+    end = text.find("}", start.end())
+    block = _blank_java_comments(text[start.end(): end if end >= 0 else len(text)])
+    # Starsector JSON also takes '#' line comments; drop them unless the '#' is inside a string.
+    lines = []
+    for line in block.splitlines():
+        in_string = False
+        for index, char in enumerate(line):
+            if char == '"' and (index == 0 or line[index - 1] != "\\"):
+                in_string = not in_string
+            elif char == "#" and not in_string:
+                line = line[:index]
+                break
+        lines.append(line)
+    return [match.group(1) for match in re.finditer(r'"((?:\\.|[^"\\])*)"\s*:\s*\[', "\n".join(lines))]
+
+
+def _scan_design_type_colors(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """designTypeColors keys must equal tech/manufacturer text exactly (found translating Blackrock, 2026-09-13).
+
+    A translated manufacturer with an untranslated colour key (or the reverse) loses its colour silently;
+    two keys translating to the same text become a duplicate key, and only one survives.
+    """
+    keys = _design_type_color_keys(root / "data" / "config" / "settings.json")
+    if not keys:
+        return
+    relative = "data/config/settings.json"
+    duplicates = sorted(key for key, count in Counter(keys).items() if count > 1)
+    if duplicates:
+        result.add(id="design-type-color-duplicate-key", category="assets", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="settings.json designTypeColors repeats a key; only one of the colours survives. Usually two source-language keys translated to the same text.", file=relative, evidence=duplicates)
+    manufacturers: set[str] = set()
+    for rel in _DESIGN_TYPE_SOURCES:
+        for row in _read_csv_rows_lenient(root / rel) or []:
+            value = (row.get("tech/manufacturer") or "").strip()
+            if value and not value.startswith("#"):
+                manufacturers.add(value)
+    vanilla_keys: set[str] = set(_design_type_color_keys(vanilla_core / "data" / "config" / "settings.json")) if vanilla_core is not None else set()
+    unused = sorted(set(keys) - manufacturers - vanilla_keys)
+    if unused:
+        result.add(id="design-type-color-unused", category="assets", severity="low", classification="REVIEW", confidence="HIGH" if vanilla_core is not None else "MEDIUM", explanation="A designTypeColors key matches no tech/manufacturer value in this mod" + (" or vanilla" if vanilla_core is not None else "") + ". Keys must equal the manufacturer text exactly, so a translated or renamed manufacturer loses its colour. It may also be meant for another mod's ships.", file=relative, evidence=unused)
+    if vanilla_core is not None:
+        uncoloured = sorted(manufacturers - set(keys) - vanilla_keys)
+        if uncoloured:
+            result.add(id="design-type-without-color", category="assets", severity="low", classification="REVIEW", confidence="HIGH", explanation="These tech/manufacturer values have no designTypeColors entry here or in vanilla, so the codex and refit screens show them uncoloured. Cosmetic; usually a manufacturer renamed or translated without its colour key.", file=relative, evidence=uncoloured)
+
+
+_CJK_TEXT = re.compile(r"[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uff00-\uffef]")
+_PLAYER_TEXT_SUFFIXES = {".csv", ".json", ".faction", ".ship", ".skin", ".wpn", ".variant", ".system", ".proj"}
+
+
+def _scan_non_english_text(root: Path, result: ScanResult) -> None:
+    """Chinese/Japanese/Korean text in data files, outside comments (P13, non-English intake).
+
+    Not a defect in itself; it tells a reviewer the mod needs translation (translate-export) before
+    English testing, and after a translation it finds what was missed. Jar string constants are not
+    counted here; translate-check covers them.
+    """
+    counts: Counter[str] = Counter()
+    paths = [root / "mod_info.json"] + [path for path in (root / "data").rglob("*") if path.suffix.lower() in _PLAYER_TEXT_SUFFIXES]
+    for path in paths:
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith("#") or stripped.startswith("//"):
+                continue
+            hits = len(_CJK_TEXT.findall(line))
+            if hits:
+                counts[_relative(root, path)] += hits
+    if counts:
+        result.add(id="player-text-non-english", category="localization", severity="low", classification="REVIEW", confidence="DETERMINISTIC", explanation=f"{len(counts)} data file(s) hold CJK text outside comments ({sum(counts.values())} characters). Translate with translate-export / translate-apply before English live tests; translate-check also covers jar strings.", evidence=[f"{path}: {count}" for path, count in counts.most_common(15)] + ([f"... {len(counts) - 15} more file(s)"] if len(counts) > 15 else []))
+
+
+# Design docs and IDE files came from the Chinese mods (2026-09-13): .docx/.sai2 notes, IntelliJ .iml.
+_WORK_FILE_GLOBS = ("*.psd", "*.xcf", "*.kra", "*.sai", "*.sai2", "*.blend", "*.blend1", "*.docx", "*.iml", "*.tmp", "*.orig", "*.old", "*.log", "*~", "*.swp", "*.rej", "*.diff", "*.patch")
+
+
+def _scan_shippable_work_files(root: Path, result: ScanResult) -> None:
+    """Editor/work files a release would ship (release packs copy_drift's file set).
+
+    OS litter (Thumbs.db, .DS_Store, __MACOSX, .git...) is excluded from releases outright; these are
+    left to a person because a mod could, rarely, read one on purpose.
+    """
+    from .copy_drift import _collect
+
+    found = sorted(relative for relative in _collect(root) if any(fnmatch.fnmatch(relative.rsplit("/", 1)[-1].lower(), pattern) for pattern in _WORK_FILE_GLOBS))
+    if found:
+        result.add(id="shippable-work-file", category="packaging", severity="low", classification="REVIEW", confidence="DETERMINISTIC", explanation="Editor or work files sit in folders a release ships (image-editor sources, temp/backup copies, logs, patches). The game never loads them; move them out of the working copy before packaging.", evidence=found[:25] + ([f"... {len(found) - 25} more"] if len(found) > 25 else []))
 
 
 def _scan_faction_known_lists(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
@@ -3285,6 +3592,10 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                     relative_jar = _relative(root, jar)
                     if relative_jar not in bytecode_hits:
                         bytecode_hits.append(relative_jar)
+                # Bytecode-only mods (no source, e.g. Nightcross): a loaded class that calls
+                # isModEnabled and carries this mod id as a string literal is the same guard.
+                if "isModEnabled" in info.utf8_values and any(value.strip().lower() == dependency_id.lower() for value in info.string_constants):
+                    guarded = True
         if not source_hits and not bytecode_hits:
             continue
         classification = "REVIEW" if guarded else "MANUAL"
@@ -3299,8 +3610,9 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                 f"declare a matching '{dependency_id}' dependency. An undeclared mandatory dependency lets the "
                 f"mod load and crash later, the first time it calls {library}."
                 + (
-                    " A source isModEnabled(...) guard was found in a referencing file, suggesting this is an "
-                    "optional integration rather than a hard dependency."
+                    " An isModEnabled(...) guard was found (in a referencing source file, or in a loaded class "
+                    "that checks this mod id), suggesting an optional integration rather than a hard dependency. "
+                    "A plugin may also use that check to fail fast when a required library is missing, so confirm."
                     if guarded
                     else ""
                 )
@@ -3843,6 +4155,26 @@ def _scan_asset_reference_missing(root: Path, result: ScanResult, vanilla_core: 
                 _report_asset_reference_missing(result, root, vanilla_core, relative, "sounds.json:file", candidate)
 
 
+def _drop_vanilla_registered_weapon_specs(result: ScanResult, vanilla_core: Path | None) -> None:
+    """A local .wpn whose id vanilla's weapon_data.csv registers is an override, not unregistered.
+
+    Blackrock's blinker_green.wpn replaces vanilla's own; vanilla-path-shadowing already reports the
+    override (critical), so also calling it 'unregistered' is noise.
+    """
+    if vanilla_core is None:
+        return
+    vanilla_ids = _registered_csv_ids(vanilla_core / "data" / "weapons" / "weapon_data.csv") or set()
+    if not vanilla_ids:
+        return
+
+    def overrides_vanilla(finding) -> bool:
+        return finding.id == "local-weapon-spec-unregistered" and any(
+            str(item).startswith("weapon:") and str(item)[len("weapon:"):] in vanilla_ids for item in finding.evidence
+        )
+
+    result.findings[:] = [finding for finding in result.findings if not overrides_vanilla(finding)]
+
+
 def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core: Path | None = None) -> ScanResult:
     root = input_path.expanduser().resolve()
     if not root.is_dir():
@@ -3866,11 +4198,14 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _infer_environment(result)
     _scan_procgen_rows(root, result, vanilla_root)
     _scan_faction_known_lists(root, result, vanilla_root)
+    _scan_rules_condition_defects(root, result, vanilla_root)
+    _scan_design_type_colors(root, result, vanilla_root)
     _scan_shiproles(root, result, vanilla_root)
     _scan_carrier_rework_gap(root, result)
     _scan_black_hole_flag(root, result)
     _scan_mod_info_game_version(result)
     _scan_vanilla_path_shadowing(root, result, vanilla_root)
+    _drop_vanilla_registered_weapon_specs(result, vanilla_root)
     _scan_script_sandbox_forbidden_api(root, result)
     _scan_bundled_library_classes(root, result)
     _scan_vanilla_duplicated_classes(root, result, vanilla_root)
