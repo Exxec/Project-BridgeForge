@@ -953,8 +953,67 @@ def _scan_source_build_dependencies(root: Path, result: ScanResult, import_locat
         info = _parse_class_file(data)
         if info is not None and info.this_class:
             local_classes.add(info.this_class.replace("/", "."))
+    # Imports of mod-style classes (data.*) that this mod defines nowhere and no known library provides:
+    # another mod's classes. FX Example imports FX Core's data.scripts.fx_Particle / fx_SharedLib /
+    # fx_Trail but declared no dependency on it (2026-09-14).
+    # MagicLib's legacy packages (data.scripts.util.Magic*, data.scripts.plugins.Magic*) count as a library.
+    known_prefixes = tuple(prefix for prefixes in (*LIBRARY_PACKAGES.values(), *EXTERNAL_MOD_API_PACKAGES.values()) for prefix in prefixes) + ("data.scripts.plugins.Magic",)
+    active_imports: dict[str, set[str]] = {}
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue  # never loaded by the game (Zorg18 keeps its 0.6 spawn points there)
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        for imported in re.findall(r"(?m)^\s*import\s+([\w.]+)\s*;", text):
+            active_imports.setdefault(imported, set()).add(_relative(root, source))
+    legacy = {name: files for name, files in active_imports.items() if name in LEGACY_VANILLA_CLASSES}
+    if legacy:
+        result.add(
+            id="legacy-vanilla-class-import",
+            category="source-api",
+            severity="critical",
+            classification="MANUAL",
+            confidence="DETERMINISTIC",
+            explanation="Source imports a vanilla class that no longer exists in 0.98a. A loose script importing it fails to compile at load; a jar class fails when it loads. Port the code to the current API (e.g. BaseSpawnPoint fleets to an EveryFrameScript that builds fleets, as Zorg18 did).",
+            evidence=[f"{name}: {LEGACY_VANILLA_CLASSES[name]} ({', '.join(sorted(files)[:3])})" for name, files in sorted(legacy.items())],
+        )
+    foreign = sorted(
+        item for item in active_imports
+        if item.startswith("data.") and item not in LEGACY_VANILLA_CLASSES
+        and item not in local_classes and item.rsplit(".", 1)[0] not in local_classes
+        and not item.startswith(known_prefixes)
+    )
+    if foreign:
+        declared = bool(result.metadata.get("dependencies") or result.metadata.get("requiredDependencies"))
+        result.add(
+            id="source-import-unresolved",
+            category="dependencies",
+            severity="high",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation="Source imports mod classes that this mod defines nowhere (no source, no jar class) and no known library provides. They belong to another mod, which must be installed and declared in mod_info.json, or the importing class fails when it loads." + (" The mod declares dependencies that may provide them; confirm." if declared else " The mod declares no dependency."),
+            evidence=foreign[:20] + ([f"... {len(foreign) - 20} more"] if len(foreign) > 20 else []),
+        )
+    console_commands = _console_command_classes(root)
     for dependency, prefixes in EXTERNAL_MOD_API_PACKAGES.items():
         imports = sorted(item for item in result.imports if item not in local_classes and any(item == prefix.rstrip(".") or item.startswith(prefix) for prefix in prefixes))
+        if imports and dependency == "Console Commands" and console_commands:
+            # Console Commands loads command classes only from data/console/commands.csv, so without it
+            # they are never loaded (Bionic Alteration's four commands, 2026-09-14).
+            importing = _sources_mentioning(root, [prefix.rstrip(".") for prefix in prefixes])
+            if importing and all(name in console_commands for name in importing.values()):
+                result.add(
+                    id="console-command-optional",
+                    category="dependencies",
+                    severity="info",
+                    classification="SAFE",
+                    confidence="HIGH",
+                    explanation="Every class that uses Console Commands' API is registered in data/console/commands.csv, which only Console Commands reads, so the classes load only when it is installed. An optional integration; no dependency needed.",
+                    evidence=sorted(importing)[:10],
+                )
+                continue
         if imports:
             first_file: str | None = None
             first_line: int | None = None
@@ -1494,7 +1553,9 @@ def _scan_wing_roles(root: Path, result: ScanResult) -> None:
             rows = list(csv.DictReader(handle))
     except (OSError, UnicodeDecodeError, csv.Error) as exc:
         return
-    allowed = {"FIGHTER", "INTERCEPTOR", "BOMBER", "SUPPORT"}
+    # RC8's com.fs.starfarer.api.loading.WingRole enum (javap, 2026-09-14): BOMBER, FIGHTER, INTERCEPTOR,
+    # ASSAULT, SUPPORT. ASSAULT was wrongly treated as removed; Vacuum's ASSAULT wings load live (VAC-R003).
+    allowed = {"FIGHTER", "INTERCEPTOR", "BOMBER", "ASSAULT", "SUPPORT"}
     evidence: list[dict[str, str | int]] = []
     for index, row in enumerate(rows, start=2):
         wing_id = (row.get("id") or "").strip()
@@ -1759,7 +1820,9 @@ def _attribute_library_usage(result: ScanResult) -> None:
             result.library_usage.append({"library": library, "declared": declared, "bundled": bundled, "imported": bool(imports), "source_called": bool(source_calls), "bytecode_referenced": bytecode_referenced, "evidence": {"imports": imports, "source_calls": source_calls}})
             if declared and not bundled and not imports:
                 result.add(id="declared-library-unreferenced", category="dependencies", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="A declared library has no bundled, import, or source-call evidence. Confirm whether it is required before removing or changing it.", evidence=[library])
-            if imports and not declared and not bundled:
+            if imports and not declared and not bundled and not bytecode_referenced and _library_import_only(Path(result.input_path), result, [prefix.replace(".", "/") for prefix in prefixes]):
+                pass  # an unused import compiled away; reported once as library-import-unused-in-jar
+            elif imports and not declared and not bundled:
                 result.add(
                     id="source-library-dependency-undeclared",
                     category="dependencies",
@@ -2440,18 +2503,8 @@ def _scan_carrier_rework_gap(root: Path, result: ScanResult) -> None:
             wing_id = (row.get("id") or "").strip()
             if not wing_id or wing_id.startswith("#"):
                 continue
-            role = (row.get("role") or "").strip()
-            if role.upper() == "ASSAULT":
-                result.add(
-                    id="wing-role-assault-removed",
-                    category="hulls",
-                    severity="low",
-                    classification="SAFE",
-                    confidence="DETERMINISTIC",
-                    explanation="The ASSAULT wing role was removed; FIGHTER is its 0.98a equivalent.",
-                    file=_relative(root, wing_data_path),
-                    evidence=[f"line:{index}", f"wing:{wing_id}", "role:ASSAULT->FIGHTER"],
-                )
+            # `wing-role-assault-removed` retired 2026-09-14: ASSAULT is still a valid RC8 WingRole, and
+            # rewriting it to FIGHTER silently changed the wing's AI behaviour.
             op_cost = (row.get("op cost") or "").strip()
             if not op_cost:
                 result.add(
@@ -3977,12 +4030,90 @@ def _mod_info_declares_dependency(result: ScanResult, dependency_id: str) -> boo
     return False
 
 
+# Vanilla classes that 0.53-0.65 mods import and that 0.98a no longer ships (2026-09-14 batch: Batavia,
+# Cobalt Arms, Gekelonians, Independant Mining Faction, Qualljom).
+LEGACY_VANILLA_CLASSES = {
+    "data.scripts.world.BaseSpawnPoint": "0.6-era fleet spawn-point base class, removed",
+    "data.scripts.world.corvus.Corvus": "old vanilla Corvus generator, removed",
+}
+
+
+def _console_command_classes(root: Path) -> set[str]:
+    """Classes registered in data/console/commands.csv (loaded only by Console Commands)."""
+    rows = _read_csv_rows_lenient(root / "data" / "console" / "commands.csv") or []
+    return {(row.get("class") or "").strip() for row in rows if (row.get("class") or "").strip()}
+
+
+def _sources_mentioning(root: Path, dotted: list[str]) -> dict[str, str]:
+    """{relative source path: class name} for .java files that mention any dotted package."""
+    found: dict[str, str] = {}
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if any(needle in text for needle in dotted):
+            package = re.search(r"(?m)^\s*package\s+([\w.]+)\s*;", text)
+            found[_relative(root, source)] = f"{package.group(1)}.{source.stem}" if package else source.stem
+    return found
+
+
+def _library_import_only(root: Path, result: ScanResult, slash_prefixes: tuple[str, ...] | list[str]) -> list[str]:
+    """Source files that mention a library although the shipped jar never references it.
+
+    Returns the mentioning sources when every one of them compiles into a loaded jar class and no loaded
+    jar class references the library's packages; otherwise []. Bionic Alteration imports Nexerelin's
+    StringHelper but never calls it, so its jar has no exerelin/ reference and it runs without
+    Nexerelin: an unused import is not a dependency (2026-09-14).
+    """
+    if not result.compiled_class_names:
+        return []
+    dotted = [prefix.replace("/", ".").rstrip(".") for prefix in slash_prefixes]
+    mentioning: list[str] = []
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if not any(needle in text for needle in dotted):
+            continue
+        package = re.search(r"(?m)^\s*package\s+([\w.]+)\s*;", text)
+        class_name = f"{package.group(1)}.{source.stem}" if package else source.stem
+        if class_name not in result.compiled_class_names:
+            return []  # a loose or uncompiled source: its import may be live
+        mentioning.append(_relative(root, source))
+    if not mentioning:
+        return []
+    for _jar, _member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is not None and any(ref.startswith(prefix) for ref in info.referenced_classes for prefix in slash_prefixes):
+            return []
+    return mentioning
+
+
 def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
     """Code that reaches a known library's package without mod_info.json declaring that dependency."""
     for library, dependency_id in LIBRARY_DEPENDENCY_IDS.items():
         if _mod_info_declares_dependency(result, dependency_id):
             continue
         prefixes = BUNDLED_LIBRARY_PACKAGE_PREFIXES[library]
+        import_only = _library_import_only(root, result, prefixes)
+        if import_only:
+            result.add(
+                id="library-import-unused-in-jar",
+                category="dependencies",
+                severity="info",
+                classification="SAFE",
+                confidence="HIGH",
+                explanation=f"Source files mention {library}, but they all compile into the shipped jar and no jar class references {library}'s packages (an unused import). The mod runs without {library}; no dependency is needed.",
+                file="mod_info.json",
+                evidence=[f"library:{library}", *import_only[:5]],
+            )
+            continue
         dotted_needles = [prefix.replace("/", ".").rstrip(".") for prefix in prefixes]
         source_hits: list[str] = []
         guarded = False
@@ -4167,6 +4298,139 @@ def _weapon_slot_type_compatible(slot_type: str, weapon_type: str) -> bool:
         return weapon_type == slot_type
     # Unrecognized slot type (e.g. a modded enum BridgeForge does not know): do not guess.
     return True
+
+
+def _system_type_index(root: Path, vanilla_core: Path | None) -> dict[str, str]:
+    """ship system id -> .system "type" (e.g. DRONE_LAUNCHER), vanilla first so the mod wins."""
+    index: dict[str, str] = {}
+    for base in ([vanilla_core] if vanilla_core else []) + [root]:
+        folder = base / "data" / "shipsystems"
+        for path in sorted(folder.glob("*.system")) if folder.is_dir() else []:
+            spec = _load_lenient_json_file(path)
+            if isinstance(spec, dict) and isinstance(spec.get("id"), str):
+                index[spec["id"]] = str(spec.get("type") or "")
+    return index
+
+
+def _scan_carrier_bays_proposal(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """Pre-0.8 mods: propose fighter bays per hull from the evidence the old data still carries.
+
+    The owner asked whether a description saying "carrier" is enough (2026-09-14). Across 25 mods it is
+    not: descriptions mention carriers on non-carriers, and modern hulls use LAUNCH_BAY slots for drone
+    launchers. The pre-0.8 `hangar` column (the author's own carrier record) and variant wings are what
+    make a carrier; the LAUNCH_BAY slot count gives the number. Only runs on pre-0.8 ship_data.
+    """
+    path = root / "data" / "hulls" / "ship_data.csv"
+    header = _csv_header(path) if path.is_file() else None
+    if not header:
+        return
+    columns = [cell.strip().lower() for cell in header]
+    if "fighter bays" in columns and "hangar" not in columns:
+        return  # 0.8+ schema: a blank bay count there is the author's choice
+    rows = _read_csv_rows_lenient(path) or []
+    ships = _ship_file_index(root, None)
+    systems = _system_type_index(root, vanilla_core)
+    wings_by_hull: Counter[str] = Counter()
+    variants_root = root / "data" / "variants"
+    for variant in sorted(variants_root.rglob("*.variant")) if variants_root.is_dir() else []:
+        spec = _load_lenient_json_file(variant)
+        if isinstance(spec, dict) and isinstance(spec.get("hullId"), str) and isinstance(spec.get("wings"), list):
+            wings_by_hull[spec["hullId"]] = max(wings_by_hull[spec["hullId"]], len(spec["wings"]))
+    proposals: list[str] = []
+    hints_only: list[str] = []
+    for row in rows:
+        normalized = {str(key).strip().lower(): (value or "").strip() for key, value in row.items() if key}
+        hull_id = normalized.get("id", "")
+        if not hull_id or hull_id.startswith("#"):
+            continue
+        spec = ships.get(hull_id) or {}
+        if str(spec.get("hullSize") or "").upper() == "FIGHTER":
+            continue
+        hangar = _float_or(normalized.get("hangar"))
+        wings = wings_by_hull.get(hull_id, 0)
+        slots = sum(1 for slot in spec.get("weaponSlots") or [] if isinstance(slot, dict) and slot.get("type") == "LAUNCH_BAY")
+        drones = systems.get(normalized.get("system id", ""), "") == "DRONE_LAUNCHER"
+        evidence = [f"hangar:{int(hangar)}" if hangar else "", f"variant-wings:{wings}" if wings else "", f"launch-bays:{slots}" if slots else "", "system:DRONE_LAUNCHER (slots may be for drones)" if drones else ""]
+        evidence = [item for item in evidence if item]
+        if hangar or wings:
+            proposed = slots or wings
+            proposals.append(f"{hull_id}: {f'{proposed} bay(s)' if proposed else 'choose a number (no launch-bay slots)'} [{', '.join(evidence)}]")
+        elif "CARRIER" in normalized.get("hints", "").upper() or "carrier" in normalized.get("designation", "").lower():
+            hints_only.append(f"{hull_id}: hint only ({', '.join(evidence + ['CARRIER hint/designation'])})")
+    if proposals or hints_only:
+        result.add(
+            id="carrier-bays-proposal",
+            category="hulls",
+            severity="medium",
+            classification="REVIEW",
+            confidence="MEDIUM",
+            explanation="Pre-0.8a data: these hulls carried fighters under the old system (a `hangar` value or wings in the mod's variants), but 0.8a+ needs a `fighter bays` count. Proposed counts come from each hull's LAUNCH_BAY slots, or its variants' wings. A description mentioning carriers is not treated as evidence, and hint-only hulls get no number. Approve per hull before applying.",
+            file=_relative(root, path),
+            evidence=proposals + hints_only,
+        )
+
+
+def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """Hull mods, wings, weapons and hulls used by the mod's data but defined by neither it nor vanilla.
+
+    Communist Clouds builds `vayra_red_army` into its hulls and fields `vayra_*` wings and weapons: it
+    is a Vayra's Sector add-on, which its mod_info didn't declare and no check noticed (2026-09-14).
+    """
+    if vanilla_core is None:
+        return
+    weapons = set(_csv_id_index(root / "data" / "weapons" / "weapon_data.csv", vanilla_core / "data" / "weapons" / "weapon_data.csv")) | set(_wpn_type_size_index(root, vanilla_core))
+    hull_mods = set(_csv_id_index(root / "data" / "hullmods" / "hull_mods.csv", vanilla_core / "data" / "hullmods" / "hull_mods.csv"))
+    wings = set(_csv_id_index(root / "data" / "hulls" / "wing_data.csv", vanilla_core / "data" / "hulls" / "wing_data.csv"))
+    skins = _skin_index(root, vanilla_core)
+    hulls = set(_ship_file_index(root, vanilla_core)) | set(skins)
+    if not (weapons and hull_mods and wings and hulls):
+        return
+    missing: dict[str, dict[str, set[str]]] = {"hullmod": {}, "wing": {}, "weapon": {}, "hull": {}}
+
+    def check(kind: str, ident: object, known: set[str], where: str) -> None:
+        if isinstance(ident, str) and ident.strip() and ident not in known:
+            missing[kind].setdefault(ident, set()).add(where)
+
+    data = root / "data"
+    for path in sorted(data.rglob("*")) if data.is_dir() else []:
+        if path.suffix.lower() not in (".variant", ".ship", ".skin"):
+            continue
+        spec = _load_lenient_json_file(path)
+        if not isinstance(spec, dict):
+            continue
+        where = _relative(root, path)
+        for key in ("hullMods", "permaMods", "sMods", "builtInMods", "removeBuiltInMods"):
+            for ident in spec.get(key) or []:
+                check("hullmod", ident, hull_mods, where)
+        for key in ("wings", "builtInWings"):
+            for ident in spec.get(key) or []:
+                check("wing", ident, wings, where)
+        for group in spec.get("weaponGroups") or []:
+            if isinstance(group, dict) and isinstance(group.get("weapons"), dict):
+                for ident in group["weapons"].values():
+                    check("weapon", ident, weapons, where)
+        if isinstance(spec.get("builtInWeapons"), dict):
+            for ident in spec["builtInWeapons"].values():
+                check("weapon", ident, weapons, where)
+        if path.suffix.lower() == ".variant":
+            check("hull", spec.get("hullId"), hulls, where)
+        if path.suffix.lower() == ".skin":
+            check("hull", spec.get("baseHullId"), hulls, where)
+    unresolved = [(kind, ident, files) for kind, table in missing.items() for ident, files in sorted(table.items())]
+    if not unresolved:
+        return
+    prefixes = Counter(ident.split("_", 1)[0] + "_" for _kind, ident, _files in unresolved if "_" in ident)
+    prefix_note = [f"common prefix: {prefix} ({count} ids)" for prefix, count in prefixes.most_common(3) if count > 1]
+    declares = bool(result.metadata.get("dependencies") or result.metadata.get("requiredDependencies"))
+    result.add(
+        id="content-reference-unresolved",
+        category="dependencies",
+        severity="high",
+        classification="REVIEW" if declares else "MANUAL",
+        confidence="HIGH",
+        explanation="The mod's hulls, skins or variants use hull mods, wings, weapons or hulls that neither the mod nor vanilla defines. They must come from another mod, which then has to be installed (and declared in mod_info.json), or the specs fail to load." + (" The mod declares dependencies that may provide them; confirm." if declares else " The mod declares no dependency."),
+        evidence=prefix_note + [f"{kind}:{ident} ({len(files)} file(s))" for kind, ident, files in unresolved[:25]] + ([f"... {len(unresolved) - 25} more"] if len(unresolved) > 25 else []),
+    )
 
 
 def _scan_variant_validity(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
@@ -4636,6 +4900,8 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_hardcoded_hyperspace_coordinates(root, result)
     _scan_hardcoded_terrain_grid_size(root, result)
     _scan_variant_validity(root, result, vanilla_root)
+    _scan_unresolved_content_references(root, result, vanilla_root)
+    _scan_carrier_bays_proposal(root, result, vanilla_root)
     _scan_description_missing(root, result, vanilla_root)
     _scan_asset_reference_missing(root, result, vanilla_root)
     return result

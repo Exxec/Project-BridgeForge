@@ -74,6 +74,142 @@ class VanillaShadowGroupingTests(unittest.TestCase):
         self.assertEqual(by_file["data/weapons/one.wpn"].classification, "MANUAL")
 
 
+class LibraryImportOnlyTests(unittest.TestCase):
+    def test_an_import_the_jar_never_uses_is_not_a_dependency(self) -> None:
+        # Bionic Alteration imports Nexerelin's StringHelper but never calls it; the jar has no exerelin/ ref.
+        import zipfile
+
+        from tests.test_personality_ids import _class_with_strings
+
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory), jars=["jars/p.jar"])
+            (mod / "src" / "demo").mkdir(parents=True)
+            (mod / "src" / "demo" / "Plug.java").write_text("package demo;\nimport exerelin.utilities.StringHelper;\npublic class Plug {}\n", encoding="utf-8")
+            (mod / "jars").mkdir()
+            with zipfile.ZipFile(mod / "jars" / "p.jar", "w") as archive:
+                archive.writestr("demo/Plug.class", _class_with_strings("demo/Plug", ["hello"], []))
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual(len(_ids(result, "library-import-unused-in-jar")), 1)
+        self.assertEqual(_ids(result, "undeclared-library-dependency"), [])
+        self.assertEqual(_ids(result, "source-library-dependency-undeclared"), [])
+
+
+class ConsoleCommandOptionalTests(unittest.TestCase):
+    def test_classes_registered_only_as_console_commands_are_optional(self) -> None:
+        # Bionic Alteration: its Console Commands classes are listed in data/console/commands.csv.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "src" / "demo").mkdir(parents=True)
+            (mod / "src" / "demo" / "Cheat.java").write_text("package demo;\nimport org.lazywizard.console.BaseCommand;\npublic class Cheat implements BaseCommand {}\n", encoding="utf-8")
+            (mod / "data" / "console").mkdir(parents=True)
+            (mod / "data" / "console" / "commands.csv").write_text("command,class,tags,syntax,help\ncheat,demo.Cheat,x,cheat,help\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual(len(_ids(result, "console-command-optional")), 1)
+        self.assertEqual(_ids(result, "external-mod-api-import"), [])
+
+    def test_an_unregistered_class_still_needs_console_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "src" / "demo").mkdir(parents=True)
+            (mod / "src" / "demo" / "Plugin.java").write_text("package demo;\nimport org.lazywizard.console.Console;\npublic class Plugin {}\n", encoding="utf-8")
+            (mod / "data" / "console").mkdir(parents=True)
+            (mod / "data" / "console" / "commands.csv").write_text("command,class,tags,syntax,help\ncheat,demo.Cheat,x,cheat,help\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual(len(_ids(result, "external-mod-api-import")), 1)
+
+
+class SourceImportUnresolvedTests(unittest.TestCase):
+    def test_another_mods_classes_are_flagged_and_own_classes_are_not(self) -> None:
+        # FX Example imports FX Core's data.scripts.fx_Particle without declaring FX Core.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "scripts" / "plugins").mkdir(parents=True)
+            (mod / "data" / "scripts" / "fx_ExampleStorage.java").write_text("package data.scripts;\npublic class fx_ExampleStorage {}\n", encoding="utf-8")
+            (mod / "data" / "scripts" / "plugins" / "Thruster.java").write_text(
+                "package data.scripts.plugins;\nimport data.scripts.fx_ExampleStorage;\nimport data.scripts.fx_Particle;\nimport data.scripts.util.MagicRender;\npublic class Thruster {}\n",
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile())
+        hits = _ids(result, "source-import-unresolved")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].evidence, ["data.scripts.fx_Particle"])  # own class and MagicLib's util package are fine
+
+    def test_removed_vanilla_classes_are_their_own_manual_finding_and_disabled_files_are_ignored(self) -> None:
+        # Cobalt Arms & co. import 0.6's BaseSpawnPoint; Zorg18 keeps such imports only in disabled_files.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "scripts" / "world").mkdir(parents=True)
+            (mod / "data" / "scripts" / "world" / "Spawn.java").write_text("package data.scripts.world;\nimport data.scripts.world.BaseSpawnPoint;\npublic class Spawn {}\n", encoding="utf-8")
+            (mod / "disabled_files").mkdir()
+            (mod / "disabled_files" / "Old.java").write_text("package data.scripts.world;\nimport data.scripts.world.corvus.Corvus;\nimport data.scripts.Gone;\npublic class Old {}\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        legacy = _ids(result, "legacy-vanilla-class-import")
+        self.assertEqual(len(legacy), 1)
+        self.assertEqual(legacy[0].classification, "MANUAL")
+        self.assertTrue(legacy[0].evidence[0].startswith("data.scripts.world.BaseSpawnPoint:"))
+        self.assertEqual(_ids(result, "source-import-unresolved"), [])  # disabled_files never load
+
+
+class UnresolvedContentTests(unittest.TestCase):
+    def _core(self, root: Path) -> Path:
+        core = root / "core"
+        (core / "data" / "hullmods").mkdir(parents=True)
+        (core / "data" / "hullmods" / "hull_mods.csv").write_text("name,id,cost_frigate\nArmor,heavyarmor,5\n", encoding="utf-8")
+        (core / "data" / "hulls").mkdir(parents=True)
+        (core / "data" / "hulls" / "wing_data.csv").write_text("id,variant\ntalon_wing,talon_Interceptor\n", encoding="utf-8")
+        (core / "data" / "hulls" / "lasher.ship").write_text(json.dumps({"hullId": "lasher", "hullSize": "FRIGATE"}), encoding="utf-8")
+        (core / "data" / "weapons").mkdir(parents=True)
+        (core / "data" / "weapons" / "weapon_data.csv").write_text("name,id,OPs\nLight MG,lightmg,3\n", encoding="utf-8")
+        return core
+
+    def _scan(self, dependencies: list):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = _mod(root, dependencies=dependencies)
+            (mod / "data" / "variants").mkdir(parents=True)
+            (mod / "data" / "variants" / "x.variant").write_text(json.dumps({"variantId": "x", "hullId": "lasher", "hullMods": ["heavyarmor", "vayra_red_army"], "wings": ["talon_wing", "vayra_yak_wing"], "weaponGroups": [{"weapons": {"WS1": "lightmg", "WS2": "vayra_kashtan"}}]}), encoding="utf-8")
+            return _ids(scan_mod(mod, TargetProfile(), self._core(root)), "content-reference-unresolved")
+
+    def test_foreign_ids_are_reported_with_their_prefix(self) -> None:
+        # Communist Clouds: a Vayra's Sector add-on that never declared Vayra's Sector.
+        hits = self._scan([])
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].classification, "MANUAL")
+        self.assertEqual(hits[0].evidence[0], "common prefix: vayra_ (3 ids)")
+        self.assertIn("hullmod:vayra_red_army (1 file(s))", hits[0].evidence)
+        self.assertIn("wing:vayra_yak_wing (1 file(s))", hits[0].evidence)
+        self.assertIn("weapon:vayra_kashtan (1 file(s))", hits[0].evidence)
+
+    def test_a_declared_dependency_may_provide_them(self) -> None:
+        self.assertEqual(self._scan([{"id": "vayrasector"}])[0].classification, "REVIEW")
+
+
+class CarrierBaysProposalTests(unittest.TestCase):
+    def test_pre08_hangar_and_launch_bays_give_a_proposal_and_descriptions_do_not(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = _mod(root)
+            hulls = mod / "data" / "hulls"
+            hulls.mkdir(parents=True)
+            (hulls / "ship_data.csv").write_text(
+                "name,id,designation,system id,hangar,hints\n"
+                "Big,big,Carrier,,6,\nNoSlots,noslots,Cruiser,,4,\nDrone,droney,Cruiser,dronesys,3,\nPlain,plain,Heavy Carrier,,,\nNothing,nothing,Frigate,,,\n",
+                encoding="utf-8",
+            )
+            bay = {"type": "LAUNCH_BAY", "id": "LB"}
+            for hull, slots in (("big", 2), ("noslots", 0), ("droney", 1), ("plain", 1), ("nothing", 0)):
+                (hulls / f"{hull}.ship").write_text(json.dumps({"hullId": hull, "hullSize": "CRUISER", "weaponSlots": [bay] * slots}), encoding="utf-8")
+            (mod / "data" / "shipsystems").mkdir(parents=True)
+            (mod / "data" / "shipsystems" / "dronesys.system").write_text(json.dumps({"id": "dronesys", "type": "DRONE_LAUNCHER"}), encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        evidence = _ids(result, "carrier-bays-proposal")[0].evidence
+        self.assertEqual(evidence[0], "big: 2 bay(s) [hangar:6, launch-bays:2]")
+        self.assertEqual(evidence[1], "noslots: choose a number (no launch-bay slots) [hangar:4]")
+        self.assertIn("droney: 1 bay(s) [hangar:3, launch-bays:1, system:DRONE_LAUNCHER (slots may be for drones)]", evidence)
+        self.assertIn("plain: hint only (launch-bays:1, CARRIER hint/designation)", evidence)
+        self.assertFalse([item for item in evidence if item.startswith("nothing")])
+
+
 class GameVersionDefaultTargetTests(unittest.TestCase):
     def _version_findings(self, declared: str) -> list:
         with tempfile.TemporaryDirectory() as directory:

@@ -36,6 +36,14 @@ class WingDataMissingRoleDescTests(unittest.TestCase):
             self.assertEqual(path.read_text(encoding="utf-8"), "id,variant,tags,op cost,role desc\nwing_a,a_Wing,,4,\n#note,x,,,\nwing_b,b_Wing,,,\n")
             self.assertEqual(_findings(scan_mod(root), "wing-data-missing-role-desc-column"), [])
 
+    def test_comma_only_padding_rows_are_not_mistaken_for_multiline_fields(self) -> None:
+        # Cobalt Arms pads wing_data.csv with rows of bare commas; the fixer wrongly refused it.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(root, "id,variant,role,,number\nwing_a,a,ASSAULT,,\n,,,,\n,,,,26\n")
+            apply_fix(compute_fix(root, "wing-data-missing-role-desc-column"))
+            self.assertEqual(path.read_text(encoding="utf-8"), "id,variant,role,,number,role desc\nwing_a,a,ASSAULT,,,\n,,,,,\n,,,,26,\n")
+
     def test_refuses_when_present_or_rows_span_lines(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -47,77 +55,51 @@ class WingDataMissingRoleDescTests(unittest.TestCase):
                 compute_fix(root, "wing-data-missing-role-desc-column")
 
 
-class WingRoleAssaultRemovedTests(unittest.TestCase):
-    def _mod(self, root: Path) -> None:
-        _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
-        _write(
-            root / "data" / "hulls" / "wing_data.csv",
-            "id,role,role desc,op cost\n"
-            "wing_a,ASSAULT,desc,4\n"
-            "wing_b,FIGHTER,desc,4\n",
-        )
+class AssaultRoleIsValidTests(unittest.TestCase):
+    """RC8's WingRole enum still has ASSAULT (javap, 2026-09-14); the old rewrite to FIGHTER is retired."""
 
-    def test_dry_run_leaves_file_byte_identical(self) -> None:
+    def test_assault_wings_raise_nothing_and_have_no_rewrite_fixer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            self._mod(root)
-            path = root / "data" / "hulls" / "wing_data.csv"
-            before = path.read_bytes()
-            plan = compute_fix(root, "wing-role-assault-removed")
-            unified_diff_for_change(plan.changes[0])  # dry-run diff computation must not touch disk
-            self.assertEqual(path.read_bytes(), before)
-
-    def test_apply_fixes_and_backs_up(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self._mod(root)
-            path = root / "data" / "hulls" / "wing_data.csv"
-            plan = compute_fix(root, "wing-role-assault-removed")
-            applied = apply_fix(plan)
-            self.assertEqual(len(applied), 1)
-            backup = Path(applied[0]["backup"])
-            self.assertTrue(backup.is_file())
-            self.assertIn("wing_a,FIGHTER,desc,4", path.read_text(encoding="utf-8"))
-            self.assertIn("wing_b,FIGHTER,desc,4", path.read_text(encoding="utf-8"))
-            self.assertIn("wing_a,ASSAULT,desc,4", backup.read_text(encoding="utf-8"))
-
-    def test_rescan_no_longer_reports_finding(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self._mod(root)
-            before_scan = scan_mod(root)
-            self.assertEqual(len(_findings(before_scan, "wing-role-assault-removed")), 1)
-            apply_fix(compute_fix(root, "wing-role-assault-removed"))
-            after_scan = scan_mod(root)
-            self.assertEqual(_findings(after_scan, "wing-role-assault-removed"), [])
-
-    def test_refuses_when_no_assault_role(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            _write(
-                root / "data" / "hulls" / "wing_data.csv",
-                "id,role,role desc,op cost\nwing_b,FIGHTER,desc,4\n",
-            )
+            _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+            _write(root / "data" / "hulls" / "wing_data.csv", "id,role,role desc,op cost\nwing_a,ASSAULT,desc,4\n")
+            result = scan_mod(root)
+            self.assertEqual(_findings(result, "wing-role-assault-removed"), [])
+            self.assertEqual(_findings(result, "fighter-wing-role-invalid"), [])
             with self.assertRaises(FixerError):
                 compute_fix(root, "wing-role-assault-removed")
 
-    def test_apply_twice_does_not_clobber_first_backup(self) -> None:
+
+class TargetInterfaceMethodMissingTests(unittest.TestCase):
+    SYSTEM = "package data.shipsystems.scripts;\nimport com.fs.starfarer.api.plugins.ShipSystemStatsScript;\npublic class Old implements ShipSystemStatsScript {\n    public void apply() {}\n    public float getActiveOverride(com.fs.starfarer.api.combat.ShipAPI s) { return 2f; }\n}\n"
+    HIT = "package data.scripts;\npublic class Hit implements OnHitEffectPlugin {\n    public void onHit(DamagingProjectileAPI projectile, CombatEntityAPI target, Vector2f point, boolean shieldHit, CombatEngineAPI engine) { engine.getTotalElapsedTime(false); }\n}\n"
+    MOD = "package data.hullmods;\npublic class Tow implements HullModEffect {\n    public void init() {}\n}\n"
+
+    def test_loose_scripts_gain_rc8_members_without_touching_bodies_then_rescan_clean(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            self._mod(root)
-            path = root / "data" / "hulls" / "wing_data.csv"
-            plan = compute_fix(root, "wing-role-assault-removed")
-            applied = apply_fix(plan)
-            first_backup = Path(applied[0]["backup"])
-            # Reintroduce an ASSAULT row (simulating a second independent fix run) and apply again.
-            _write(path, "id,role,role desc,op cost\nwing_c,ASSAULT,desc,4\n")
-            second_plan = compute_fix(root, "wing-role-assault-removed")
-            second_applied = apply_fix(second_plan)
-            second_backup = Path(second_applied[0]["backup"])
-            self.assertNotEqual(first_backup, second_backup)
-            self.assertTrue(first_backup.is_file())
-            self.assertTrue(second_backup.is_file())
-            self.assertIn("wing_c,ASSAULT,desc,4", second_backup.read_text(encoding="utf-8"))
+            _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+            _write(root / "data" / "shipsystems" / "scripts" / "Old.java", self.SYSTEM)
+            _write(root / "data" / "scripts" / "Hit.java", self.HIT)
+            _write(root / "data" / "hullmods" / "Tow.java", self.MOD)
+            self.assertEqual(len(_findings(scan_mod(root), "target-interface-method-missing")), 7)
+            apply_fix(compute_fix(root, "target-interface-method-missing"))
+            system = (root / "data" / "shipsystems" / "scripts" / "Old.java").read_text(encoding="utf-8")
+            self.assertIn("return 2f;", system)  # an existing override is kept
+            self.assertEqual(system.count("getActiveOverride"), 1)
+            self.assertIn("public int getUsesOverride(com.fs.starfarer.api.combat.ShipAPI ship) { return -1; }", system)
+            self.assertIn("com.fs.starfarer.api.combat.listeners.ApplyDamageResultAPI damageResult, CombatEngineAPI engine)", (root / "data" / "scripts" / "Hit.java").read_text(encoding="utf-8"))
+            self.assertIn("showInRefitScreenModPickerFor", (root / "data" / "hullmods" / "Tow.java").read_text(encoding="utf-8"))
+            self.assertEqual(_findings(scan_mod(root), "target-interface-method-missing"), [])
+
+    def test_jar_sources_are_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+            _write(root / "jars" / "src" / "data" / "scripts" / "Hit.java", self.HIT)
+            with self.assertRaises(FixerError) as caught:
+                compute_fix(root, "target-interface-method-missing")
+            self.assertIn("jar sources need a rebuild", str(caught.exception))
 
 
 class ModInfoGameVersionInexactTests(unittest.TestCase):
@@ -350,7 +332,7 @@ class UnsupportedFindingTests(unittest.TestCase):
             root = Path(directory)
             with self.assertRaises(FixerError) as ctx:
                 compute_fix(root, "not-a-real-finding")
-            self.assertIn("wing-role-assault-removed", str(ctx.exception))
+            self.assertIn("wing-data-missing-role-desc-column", str(ctx.exception))
 
 
 if __name__ == "__main__":

@@ -204,7 +204,8 @@ class CarrierReworkColumnTests(unittest.TestCase):
             result = scan_mod(root)
             self.assertEqual(_findings(result, "wing-data-missing-role-desc-column"), [])
 
-    def test_assault_role_is_flagged_safe(self) -> None:
+    def test_assault_role_is_valid_in_rc8(self) -> None:
+        # RC8's WingRole enum still has ASSAULT (javap, 2026-09-14); it is neither removed nor invalid.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _write(
@@ -212,9 +213,8 @@ class CarrierReworkColumnTests(unittest.TestCase):
                 "id,variant,role,role desc,op cost\nfixture_wing,v,ASSAULT,Old Role,5\n",
             )
             result = scan_mod(root)
-            findings = _findings(result, "wing-role-assault-removed")
-            self.assertEqual(len(findings), 1)
-            self.assertEqual(findings[0].classification, "SAFE")
+            self.assertEqual(_findings(result, "wing-role-assault-removed"), [])
+            self.assertEqual(_findings(result, "fighter-wing-role-invalid"), [])
 
     def test_fighter_role_is_not_flagged_as_assault(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **Correction:** RC8's `com.fs.starfarer.api.loading.WingRole` still has ASSAULT (javap on starfarer.api.jar; Vacuum's ASSAULT wings load live, VAC-R003).
+  - `fighter-wing-role-invalid` no longer reports ASSAULT.
+  - `wing-role-assault-removed` and its fixer, which rewrote ASSAULT to FIGHTER and silently changed wing AI, are retired.
+  - BUG_CLASSES SK-10 is updated. SEEKER was not affected: its 5 ASSAULT wings were replaced in its module migration, not rewritten.
+- New fixer `target-interface-method-missing`, for loose `data/` scripts only; jar sources are refused, since the jar needs a rebuild. Types are fully qualified, so imports are untouched. It adds:
+  - the six `ShipSystemStatsScript` `*Override` methods, with `BaseShipSystemScript`'s defaults (-1f / -1 / null);
+  - RC8's `ApplyDamageResultAPI` parameter in `OnHitEffectPlugin.onHit`, before `CombatEngineAPI`;
+  - `HullModEffect.showInRefitScreenModPickerFor`, returning `true` (BaseHullMod's default).
+
+  All values were read from RC8's jar. The three API changes cause every `target-interface-method-missing` in the 2026-09-14 batch.
+- Scanner, from the owner's carrier question and the queue:
+  - `carrier-bays-proposal` (pre-0.8 data only): carriers come from the old `hangar` column or variant wings, and the count from the hull's LAUNCH_BAY slots. Drone-launcher systems get a caution. A description mentioning carriers is not evidence, and CARRIER hints or designations alone get no number.
+  - `content-reference-unresolved`: hull mods, wings, weapons or hulls used by hulls, skins and variants that neither the mod nor vanilla defines, with the common id prefix named. It is MANUAL without declared dependencies. Communist Clouds is a Vayra's Sector add-on (`vayra_*`); Explorer Society and Rebal use a `thruster_fighter_sm` defined nowhere.
+  - `library-import-unused-in-jar` (SAFE): source mentions a library, but the shipped jar never references it, so no dependency is needed. Examples: Bionic Alteration's unused Nexerelin import, AI-War, Edmunds-Church. `source-library-dependency-undeclared` defers to it.
+  - `console-command-optional` (SAFE): Console Commands API used only by classes registered in `data/console/commands.csv`.
+  - `source-import-unresolved` (REVIEW): `data.*` imports defined neither in the mod nor in a known library, so another mod is required (FX Example → FX Core; Explorer Society → EZ Damage). `disabled_files/` is ignored.
+  - `legacy-vanilla-class-import` (MANUAL): 0.6-era vanilla classes that 0.98a no longer ships (`data.scripts.world.BaseSpawnPoint`, `data.scripts.world.corvus.Corvus`). Five queued mods build their faction fleets on BaseSpawnPoint.
+- Fix: the `wing-data-missing-role-desc-column` fixer counted comma-only padding rows as blank and refused Cobalt Arms as if it had a multi-line field.
 - New fixer `wing-data-missing-role-desc-column` (`bridgeforge fix --finding wing-data-missing-role-desc-column`). It appends a blank `role desc` column to `wing_data.csv`, padding short rows so the blank lands in the new column. RC8 cannot load the file without it (live bug VAC-R002, Vacuum), and a blank value was shown live to be accepted. It refuses when the column exists or a quoted field spans lines. Applied to four pre-0.8 mods from the 2026-09-14 queue.
 - Fix: `mod-info-game-version-inexact` now also runs against a generic target such as the default `0.98.x`, comparing version series (`0.9.1a-RC8` is series 0.9.1, `0.98a-RC7` is series 0.98). It used to return early, so none of the 25 batch mods (0.53a–0.9.1a) was told the launcher would untick them.
 - Lessons from the 2026-09-14 batch intake of 25 older mods (0.53a–0.98a). BridgeForge had no crashes; these five fixes came out of it:

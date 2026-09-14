@@ -25,8 +25,9 @@ def _fixture_mod(root: Path, missing_classes: int = 3) -> None:
     )
     _write(
         root / "data" / "hulls" / "wing_data.csv",
-        "id,variant,tags,tier,rarity,fleet pts,op cost,formation,range,attack run range,num,refit,base value,role,role desc\n"
-        "fixture_wing,fixture_variant,,0,,1,5,V,4000,,2,5,1000,ASSAULT,Fixture\n",
+        # No 'role desc' column: a finding that has a fixer (the ASSAULT rewrite used here was retired).
+        "id,variant,tags,tier,rarity,fleet pts,op cost,formation,range,attack run range,num,refit,base value,role\n"
+        "fixture_wing,fixture_variant,,0,,1,5,V,4000,,2,5,1000,ASSAULT\n",
     )
 
 
@@ -61,7 +62,7 @@ class DossierTests(unittest.TestCase):
             _fixture_mod(root)
             findings = _all_part_findings(build_dossier(root))
             by_id = {entry["id"]: entry for entry in findings}
-            self.assertTrue(by_id["wing-role-assault-removed"]["fixer_available"])
+            self.assertTrue(by_id["wing-data-missing-role-desc-column"]["fixer_available"])
             self.assertFalse(by_id["data-class-reference-missing"]["fixer_available"])
 
     def test_cap_splits_into_parts_without_losing_findings(self) -> None:

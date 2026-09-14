@@ -21,7 +21,6 @@ from .scanner import (
 )
 
 SUPPORTED_FINDINGS = (
-    "wing-role-assault-removed",
     "mod-info-game-version-inexact",
     "csv-row-extra-columns",
     "csv-missing-design-type-column",
@@ -30,6 +29,7 @@ SUPPORTED_FINDINGS = (
     "faction-known-lists-missing",
     "mod-info-triage-banner",
     "wing-data-missing-role-desc-column",
+    "target-interface-method-missing",
 )
 
 
@@ -166,6 +166,8 @@ def _parse_rgb(text: str) -> list[int]:
 # ---------------------------------------------------------------------------
 
 
+# Retired 2026-09-14 and no longer registered: ASSAULT is still a valid RC8 WingRole (javap on
+# com.fs.starfarer.api.loading.WingRole), so rewriting it to FIGHTER changed behaviour for nothing.
 def _fix_wing_role_assault_removed(root: Path, options: dict) -> list[FileChange]:
     path = root / "data" / "hulls" / "wing_data.csv"
     if not path.is_file():
@@ -209,6 +211,73 @@ def _fix_wing_role_assault_removed(root: Path, options: dict) -> list[FileChange
 
 
 # ---------------------------------------------------------------------------
+# Fixer: target-interface-method-missing (loose scripts only)
+# ---------------------------------------------------------------------------
+
+# RC8 defaults, read from starfarer.api.jar with javap (2026-09-14): BaseShipSystemScript returns -1f /
+# -1 / null ("no override", i.e. what a pre-0.95 script did implicitly). Fully qualified types avoid
+# touching imports.
+_SHIP_SYSTEM_DEFAULTS = (
+    ("getActiveOverride", "public float getActiveOverride(com.fs.starfarer.api.combat.ShipAPI ship) { return -1f; }"),
+    ("getInOverride", "public float getInOverride(com.fs.starfarer.api.combat.ShipAPI ship) { return -1f; }"),
+    ("getOutOverride", "public float getOutOverride(com.fs.starfarer.api.combat.ShipAPI ship) { return -1f; }"),
+    ("getRegenOverride", "public float getRegenOverride(com.fs.starfarer.api.combat.ShipAPI ship) { return -1f; }"),
+    ("getUsesOverride", "public int getUsesOverride(com.fs.starfarer.api.combat.ShipAPI ship) { return -1; }"),
+    ("getDisplayNameOverride", "public String getDisplayNameOverride(com.fs.starfarer.api.plugins.ShipSystemStatsScript.State state, float effectLevel) { return null; }"),
+)
+_REFIT_PICKER_DEFAULT = "public boolean showInRefitScreenModPickerFor(com.fs.starfarer.api.combat.ShipAPI ship) { return true; }"
+
+
+def _insert_before_class_end(text: str, members: list[str], note: str) -> str:
+    end = text.rstrip().rfind("}")
+    if end < 0 or not members:
+        return text
+    newline = "\r\n" if "\r\n" in text else "\n"
+    block = newline + f"    // BridgeForge: {note}" + newline + newline.join(f"    {member}" for member in members) + newline
+    return text[:end] + block + text[end:]
+
+
+def _fix_target_interface_method_missing(root: Path, options: dict) -> list[FileChange]:
+    """Bring loose scripts up to RC8's callback signatures (they fail to compile at load otherwise).
+
+    - ShipSystemStatsScript: add the six *Override methods with BaseShipSystemScript's defaults.
+    - OnHitEffectPlugin.onHit: insert the ApplyDamageResultAPI parameter before CombatEngineAPI.
+    - HullModEffect: add showInRefitScreenModPickerFor returning BaseHullMod's default.
+    Bodies are untouched. Classes compiled into a jar need the jar rebuilt, so those are refused.
+    """
+    from .scanner import scan_mod
+
+    files = sorted({f.file for f in scan_mod(root).findings if f.id == "target-interface-method-missing" and f.file})
+    loose = [rel for rel in files if rel.startswith("data/")]
+    if not loose:
+        detail = f" (jar sources need a rebuild: {', '.join(files[:5])})" if files else ""
+        raise FixerError(f"No loose data/ script has a missing RC8 interface method{detail}.")
+    changes: list[FileChange] = []
+    for rel in loose:
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        new = text
+        if re.search(r"\bimplements\s+(?:[^{]*?\b)?ShipSystemStatsScript\b", new):
+            missing = [stub for name, stub in _SHIP_SYSTEM_DEFAULTS if not re.search(rf"\b{name}\s*\(", new)]
+            new = _insert_before_class_end(new, missing, "RC8 ShipSystemStatsScript overrides, BaseShipSystemScript defaults (no override)")
+        if re.search(r"\bimplements\s+(?:[^{]*?\b)?OnHitEffectPlugin\b", new) and not re.search(r"\bonHit\s*\([^)]*\bApplyDamageResultAPI\b", new):
+            new = re.sub(
+                r"(\bonHit\s*\([^)]*?,)(\s*)((?:final\s+)?(?:[\w.]+\.)?CombatEngineAPI\s+\w+\s*\))",
+                r"\1\2com.fs.starfarer.api.combat.listeners.ApplyDamageResultAPI damageResult,\2\3",
+                new,
+                count=1,
+            )
+        if re.search(r"\bimplements\s+(?:[^{]*?\b)?HullModEffect\b", new) and not re.search(r"\bshowInRefitScreenModPickerFor\s*\(", new):
+            new = _insert_before_class_end(new, [_REFIT_PICKER_DEFAULT], "RC8 HullModEffect method, BaseHullMod default")
+        if new != text:
+            changes.append(FileChange(path=path, before=raw, after=_encode(new, had_bom)))
+    if not changes:
+        raise FixerError("The flagged loose scripts could not be rewritten mechanically; fix them by hand.")
+    return changes
+
+
+# ---------------------------------------------------------------------------
 # Fixer: wing-data-missing-role-desc-column
 # ---------------------------------------------------------------------------
 
@@ -226,7 +295,9 @@ def _fix_wing_data_missing_role_desc_column(root: Path, options: dict) -> list[F
     lines = text.splitlines(keepends=True)
     if not lines:
         raise FixerError(f"{path} is empty.")
-    records = [row for row in csv.reader(io.StringIO(text)) if any(cell.strip() for cell in row)]
+    # Count every record the reader returns (a padding row of bare commas is a record too; Cobalt Arms has
+    # 44 of them), against every non-blank line: they differ only when a quoted field spans lines.
+    records = [row for row in csv.reader(io.StringIO(text)) if row]
     if len(records) != sum(1 for line in lines if line.strip()):
         raise FixerError(f"{path} has a quoted field spanning several lines; add the column by hand rather than guess the row boundaries.")
     header_content, header_term = _split_terminator(lines[0])
@@ -699,6 +770,7 @@ _FIXER_FUNCS = {
     "wing-role-assault-removed": _fix_wing_role_assault_removed,
     "mod-info-game-version-inexact": _fix_mod_info_game_version_inexact,
     "wing-data-missing-role-desc-column": _fix_wing_data_missing_role_desc_column,
+    "target-interface-method-missing": _fix_target_interface_method_missing,
     "csv-row-extra-columns": _fix_csv_row_extra_columns,
     "csv-missing-design-type-column": _fix_csv_missing_design_type_column,
     "procgen-planet-row-missing": lambda root, options: _fix_procgen_row_missing(root, "procgen-planet-row-missing", options),
