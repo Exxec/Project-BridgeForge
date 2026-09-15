@@ -688,6 +688,22 @@ def build_parser() -> argparse.ArgumentParser:
     preset_cmd.add_argument("script", type=Path, help="path to bf-test.ps1")
     preset_cmd.add_argument("--rig-mods", type=Path, help="rig mods folder (default: <script folder>/_rig/mods)")
     preset_cmd.add_argument("--json", action="store_true")
+    compile_check_cmd = subcommands.add_parser("compile-check", help="compile a mod's loose scripts against RC8 with javac and report every error (javac, not the game's runtime Janino compiler)")
+    compile_check_cmd.add_argument("mod", type=Path, help="mod working copy")
+    compile_check_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, put on the compile classpath")
+    compile_check_cmd.add_argument("--jdk", type=Path, help="JDK home (default: this repo's rig JDK, else JAVA_HOME, else PATH)")
+    compile_check_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search for declared dependencies; repeatable (default: <repo>/In operation and its rig's mods)")
+    compile_check_cmd.add_argument("--json", action="store_true")
+    rebuild_jar_cmd = subcommands.add_parser("rebuild-jar", help="rebuild a mod's jar from its sources and compare it with the original: class/method/field added or removed, forbidden sandbox references")
+    rebuild_jar_cmd.add_argument("mod", type=Path, help="mod workspace (holding working/) or the working copy itself")
+    rebuild_jar_cmd.add_argument("--sources", required=True, help="sources directory, relative to the workspace or the working copy (e.g. working/data/scripts)")
+    rebuild_jar_cmd.add_argument("--jar", required=True, help="the ORIGINAL jar to rebuild and compare against, relative to the workspace, an original/<archive folder>/, or the working copy (e.g. jars/Name.jar)")
+    rebuild_jar_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, put on the compile classpath")
+    rebuild_jar_cmd.add_argument("--jdk", type=Path, help="JDK home (default: this repo's rig JDK, else JAVA_HOME, else PATH)")
+    rebuild_jar_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search for declared dependencies; repeatable (default: <repo>/In operation and its rig's mods)")
+    rebuild_jar_cmd.add_argument("--output", type=Path, help="where the rebuilt jar and compiled classes go (default: a new temp directory)")
+    rebuild_jar_cmd.add_argument("--install", action="store_true", help="only when status is PASS: move the working copy's current jar to scratch/moved-<date>/ (logged in MOVES.log) and copy the rebuilt jar in")
+    rebuild_jar_cmd.add_argument("--json", action="store_true")
     return parser
 
 
@@ -2140,4 +2156,49 @@ def main(argv: list[str] | None = None) -> int:
         if args.scenario_command == "check":
             return 0 if result["status"] == "PASS" else 1
         return 0
+    if args.command == "compile-check":
+        from .compile_check import compile_loose_scripts
+        try:
+            result = compile_loose_scripts(args.mod, vanilla_core=args.vanilla_core, jdk=args.jdk, provider_roots=args.providers)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"{result['status']}: {args.mod} ({result.get('error_count', 0)} error(s) in {len(result.get('files', []))} loose script(s))")
+            if result["status"] == "UNAVAILABLE":
+                print(f"  {result['reason']}")
+            for kind, count in result.get("error_counts_by_kind", {}).items():
+                print(f"  {kind}: {count}")
+            missing = (result.get("classpath") or {}).get("dependencies_missing") or []
+            if missing:
+                print(f"  dependency jars not found: {', '.join(missing)}")
+            for warning in result.get("janino_gap_warnings", [])[:10]:
+                print(f"  WARNING javac-vs-Janino gap in {warning['file']}: {', '.join(warning['java8plus_syntax'])}")
+        return 0 if result["status"] == "PASS" else 1
+    if args.command == "rebuild-jar":
+        from .rebuild_jar import RebuildJarError, rebuild_jar
+        try:
+            result = rebuild_jar(args.mod, args.sources, args.jar, vanilla_core=args.vanilla_core, jdk=args.jdk,
+                                  provider_roots=args.providers, output=args.output, install=args.install)
+        except (RebuildJarError, ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"{result['status']}: {args.mod}")
+            if result["status"] == "UNAVAILABLE":
+                print(f"  {result['reason']}")
+            comparison = result.get("comparison")
+            if comparison:
+                print(f"  classes: +{len(comparison['added_classes'])} -{len(comparison['removed_classes'])}; changed: {len(comparison['class_changes'])}")
+                if comparison["forbidden_sandbox_references"]:
+                    print(f"  forbidden sandbox references: {len(comparison['forbidden_sandbox_references'])} class(es)")
+            if result.get("installed"):
+                print(f"  installed: {result.get('installed_to')} (previous jar: {result.get('moved_original_to') or 'none'})")
+            elif result.get("install_note"):
+                print(f"  {result['install_note']}")
+        return 0 if result["status"] == "PASS" else 1
     return 2

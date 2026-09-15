@@ -104,7 +104,9 @@ class TargetInterfaceMethodMissingTests(unittest.TestCase):
 
 class RemovedApiCallTests(unittest.TestCase):
     """removed-api-call: 0.6's getSector().createFleet(...) has no RC8 SectorAPI equivalent (javap,
-    2026-09-14); the fixer ports call sites to the BF Legacy Fleets library instead."""
+    2026-09-14); the fixer ports call sites to bf.legacyfleets.LegacyFleets (RevenantLib) instead.
+    RevenantLib 1.1.0+bf.1 folded in the standalone BF Legacy Fleets library (owner decision 2026-09-15),
+    so the dependency this fixer adds is `revenantlib`, not the retired `bf_legacy_fleets`."""
 
     SPAWN_SRC = (
         "package data.scripts.world;\n"
@@ -158,7 +160,7 @@ class RemovedApiCallTests(unittest.TestCase):
             self.assertNotIn("Global.getSector()", convoy_text)
 
             mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
-            self.assertEqual(mod_info["dependencies"], [{"id": "bf_legacy_fleets", "name": "BF Legacy Fleets"}])
+            self.assertEqual(mod_info["dependencies"], [{"id": "revenantlib", "name": "RevenantLib"}])
 
             after_scan = scan_mod(root)
             self.assertEqual(_findings(after_scan, "removed-api-call"), [])
@@ -174,19 +176,19 @@ class RemovedApiCallTests(unittest.TestCase):
             mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
             self.assertEqual(
                 mod_info["dependencies"],
-                [{"id": "bf_legacy_fleets", "name": "BF Legacy Fleets"}, {"id": "lw_lazylib", "name": "LazyLib"}],
+                [{"id": "revenantlib", "name": "RevenantLib"}, {"id": "lw_lazylib", "name": "LazyLib"}],
             )
 
     def test_dependency_already_present_is_not_duplicated_and_only_source_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            self._mod(root, '{"id":"fixture","dependencies":[{"id":"bf_legacy_fleets","name":"BF Legacy Fleets"}]}')
+            self._mod(root, '{"id":"fixture","dependencies":[{"id":"revenantlib","name":"RevenantLib"}]}')
             plan = compute_fix(root, "removed-api-call")
             changed = {change.path.relative_to(root).as_posix() for change in plan.changes}
             self.assertEqual(changed, {"data/scripts/world/Spawn.java", "data/scripts/world/Convoy.java"})
             apply_fix(plan)
             mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
-            self.assertEqual(mod_info["dependencies"], [{"id": "bf_legacy_fleets", "name": "BF Legacy Fleets"}])
+            self.assertEqual(mod_info["dependencies"], [{"id": "revenantlib", "name": "RevenantLib"}])
 
     def test_disabled_files_are_never_touched_or_counted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -234,7 +236,7 @@ class RemovedApiCallTests(unittest.TestCase):
             self.assertIn('bf.legacyfleets.LegacyFleets.createFleet("CAPSCO", type);', text)
             self.assertNotIn("getSectorAPI()", text)
             mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
-            self.assertEqual(mod_info["dependencies"], [{"id": "bf_legacy_fleets", "name": "BF Legacy Fleets"}])
+            self.assertEqual(mod_info["dependencies"], [{"id": "revenantlib", "name": "RevenantLib"}])
 
 
 class AddMessageRewriteTests(unittest.TestCase):
@@ -315,31 +317,70 @@ class AddMessageRewriteTests(unittest.TestCase):
             self.assertIn('bf.legacyfleets.LegacyFleets.createFleet("CAPSCO", "supplyConvoy");', text)
             self.assertIn('Global.getSectorAPI().getCampaignUI().addMessage("under way");', text)
             mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
-            self.assertEqual(mod_info["dependencies"], [{"id": "bf_legacy_fleets", "name": "BF Legacy Fleets"}])
+            self.assertEqual(mod_info["dependencies"], [{"id": "revenantlib", "name": "RevenantLib"}])
             self.assertEqual(_findings(scan_mod(root), "removed-api-call"), [])
 
 
-class CrewXPLevelNotRewrittenTests(unittest.TestCase):
-    """removed-api-call, E6 (2026-09-14): RC8's CargoAPI no longer nests CrewXPLevel, and its plain
-    addCrew(int) is not a behaviour-equivalent replacement, so this fixer never rewrites it."""
+class CrewXPLevelRewriteTests(unittest.TestCase):
+    """removed-api-call, owner decision 2026-09-15 ("crew quality no longer exists in RC8; crew counts
+    are kept"): RC8's CargoAPI no longer nests CrewXPLevel, and its plain addCrew(int) drops the
+    crew-quality level; the fixer drops the level and keeps the count. addCrew(CrewXPLevel.X, n) ->
+    addCrew(n); a MissionDefinitionAPI.addToFleet trailing CrewXPLevel argument is dropped the same way;
+    the now-unresolvable import is removed. No `bf.` call is introduced, so this rule never adds a
+    dependency (createFleet/addPlanet/addOrbitalStation do; CrewXPLevel does not)."""
 
-    def test_crewxplevel_only_file_refuses_rather_than_guess(self) -> None:
+    def test_addcrew_leading_crewxplevel_argument_is_dropped_import_removed_then_rescan_clean(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _write(root / "mod_info.json", '{"id":"fixture"}')
+            path = root / "data" / "scripts" / "world" / "Convoy.java"
             _write(
-                root / "data" / "scripts" / "world" / "Convoy.java",
+                path,
                 "package data.scripts.world;\n"
                 "import com.fs.starfarer.api.campaign.CargoAPI.CrewXPLevel;\n"
                 "public class Convoy extends BaseSpawnPoint {\n"
                 "    void crew(CargoAPI cargo) { cargo.addCrew(CrewXPLevel.VETERAN, 5); }\n}\n",
             )
-            with self.assertRaises(FixerError) as caught:
-                compute_fix(root, "removed-api-call")
-            self.assertIn("no safe mechanical rewrite", str(caught.exception))
-            self.assertIn("CargoAPI.CrewXPLevel", str(caught.exception))
+            before_scan = scan_mod(root)
+            self.assertEqual(len(_findings(before_scan, "removed-api-call")), 1)
 
-    def test_addmessage_is_rewritten_but_crewxplevel_in_the_same_file_is_left_for_the_owner(self) -> None:
+            plan = compute_fix(root, "removed-api-call")
+            # No `bf.` call is introduced, so no mod_info.json dependency change.
+            changed = {change.path.relative_to(root).as_posix() for change in plan.changes}
+            self.assertEqual(changed, {"data/scripts/world/Convoy.java"})
+            apply_fix(plan)
+
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("CrewXPLevel", text)
+            self.assertIn("cargo.addCrew(5);", text)
+            self.assertNotIn("dependencies", json.loads((root / "mod_info.json").read_text(encoding="utf-8")))
+
+            after_scan = scan_mod(root)
+            self.assertEqual(_findings(after_scan, "removed-api-call"), [])
+
+    def test_addtofleet_trailing_crewxplevel_argument_is_dropped_both_overload_shapes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            path = root / "data" / "missions" / "m" / "MissionDefinition.java"
+            _write(
+                path,
+                "package data.missions.m;\n"
+                "import com.fs.starfarer.api.campaign.CargoAPI.CrewXPLevel;\n"
+                "public class MissionDefinition implements MissionDefinitionPlugin {\n"
+                "    public void defineMission(MissionDefinitionAPI api) {\n"
+                '        api.addToFleet(FleetSide.PLAYER, "hull_Standard", FleetMemberType.SHIP, "Name", true, CrewXPLevel.REGULAR);\n'
+                '        api.addToFleet(FleetSide.PLAYER, "wing", FleetMemberType.FIGHTER_WING, true, CrewXPLevel.VETERAN);\n'
+                "    }\n}\n",
+            )
+            apply_fix(compute_fix(root, "removed-api-call"))
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("CrewXPLevel", text)
+            self.assertIn('api.addToFleet(FleetSide.PLAYER, "hull_Standard", FleetMemberType.SHIP, "Name", true);', text)
+            self.assertIn('api.addToFleet(FleetSide.PLAYER, "wing", FleetMemberType.FIGHTER_WING, true);', text)
+            self.assertEqual(_findings(scan_mod(root), "removed-api-call"), [])
+
+    def test_addmessage_and_crewxplevel_in_the_same_file_are_both_rewritten_no_dependency_added(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _write(root / "mod_info.json", '{"id":"fixture"}')
@@ -360,14 +401,147 @@ class CrewXPLevelNotRewrittenTests(unittest.TestCase):
             apply_fix(compute_fix(root, "removed-api-call"))
             text = path.read_text(encoding="utf-8")
             self.assertIn('Global.getSectorAPI().getCampaignUI().addMessage("heavy convoy returned");', text)
-            # CrewXPLevel is untouched: no rewrite exists for it.
-            self.assertIn("import com.fs.starfarer.api.campaign.CargoAPI.CrewXPLevel;", text)
-            self.assertIn("cargo.addCrew(CrewXPLevel.VETERAN, 5);", text)
+            self.assertNotIn("CrewXPLevel", text)
+            self.assertIn("cargo.addCrew(5);", text)
+            self.assertNotIn("dependencies", json.loads((root / "mod_info.json").read_text(encoding="utf-8")))
 
             after_scan = scan_mod(root)
-            remaining = _findings(after_scan, "removed-api-call")
-            self.assertEqual(len(remaining), 1)
-            self.assertEqual(remaining[0].evidence[0], "CargoAPI.CrewXPLevel: 1 call(s)")
+            self.assertEqual(_findings(after_scan, "removed-api-call"), [])
+
+
+class LegacyWorldRewriteTests(unittest.TestCase):
+    """removed-api-call: the 0.6 7-argument LocationAPI.addPlanet(...) and the 6-argument
+    LocationAPI.addOrbitalStation(...) both become a bf.legacyworld.LegacyWorld (RevenantLib) call, with
+    the old receiver forwarded as the new static method's first argument. RC8's own 8-argument id-first
+    addPlanet and MissionDefinitionAPI's unrelated 5/6-argument addPlanet must never be flagged (task
+    instruction: count top-level arguments, be conservative)."""
+
+    def test_seven_argument_addplanet_is_rewritten_receiver_becomes_first_argument(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            path = root / "data" / "scripts" / "world" / "Gen.java"
+            _write(
+                path,
+                "package data.scripts.world;\n"
+                "public class Gen implements SectorGeneratorPlugin {\n"
+                "    public void generate(SectorAPI sector) {\n"
+                '        SectorEntityToken anchor = system.addPlanet(lot, "Anchor", "lava", 0, 0, 1, 1);\n'
+                "    }\n}\n",
+            )
+            before_scan = scan_mod(root)
+            self.assertEqual(len(_findings(before_scan, "removed-api-call")), 1)
+
+            plan = compute_fix(root, "removed-api-call")
+            changed = {change.path.relative_to(root).as_posix() for change in plan.changes}
+            self.assertEqual(changed, {"data/scripts/world/Gen.java", "mod_info.json"})
+            apply_fix(plan)
+
+            text = path.read_text(encoding="utf-8")
+            self.assertIn(
+                'bf.legacyworld.LegacyWorld.addPlanet(system, lot, "Anchor", "lava", 0, 0, 1, 1);', text
+            )
+            self.assertNotIn("system.addPlanet(", text)
+            mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(mod_info["dependencies"], [{"id": "revenantlib", "name": "RevenantLib"}])
+
+            after_scan = scan_mod(root)
+            self.assertEqual(_findings(after_scan, "removed-api-call"), [])
+
+    def test_six_argument_addorbitalstation_is_rewritten_and_adds_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            path = root / "data" / "scripts" / "world" / "Gen.java"
+            _write(
+                path,
+                "package data.scripts.world;\n"
+                "public class Gen implements SectorGeneratorPlugin {\n"
+                "    public void generate(SectorAPI sector) {\n"
+                '        SectorEntityToken station = system.addOrbitalStation(anchor, 45, 13000, 365, "Depot", "faction");\n'
+                "    }\n}\n",
+            )
+            apply_fix(compute_fix(root, "removed-api-call"))
+            text = path.read_text(encoding="utf-8")
+            self.assertIn(
+                'bf.legacyworld.LegacyWorld.addOrbitalStation(system, anchor, 45, 13000, 365, "Depot", "faction");',
+                text,
+            )
+            self.assertNotIn("system.addOrbitalStation(", text)
+            mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(mod_info["dependencies"], [{"id": "revenantlib", "name": "RevenantLib"}])
+            self.assertEqual(_findings(scan_mod(root), "removed-api-call"), [])
+
+    def test_rc8_eight_argument_id_first_addplanet_is_never_flagged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            _write(
+                root / "data" / "scripts" / "world" / "Gen.java",
+                "package data.scripts.world;\n"
+                "public class Gen implements SectorGeneratorPlugin {\n"
+                "    public void generate(SectorAPI sector) {\n"
+                '        PlanetAPI p = system.addPlanet("asharu", star, "Asharu", "desert", 55, 150, 2800, 100);\n'
+                "    }\n}\n",
+            )
+            self.assertEqual(_findings(scan_mod(root), "removed-api-call"), [])
+            with self.assertRaises(FixerError):
+                compute_fix(root, "removed-api-call")
+
+    def test_missiondefinitionapi_addplanet_five_and_six_argument_forms_are_never_flagged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            _write(
+                root / "data" / "missions" / "m" / "MissionDefinition.java",
+                "package data.missions.m;\n"
+                "public class MissionDefinition implements MissionDefinitionPlugin {\n"
+                "    public void defineMission(MissionDefinitionAPI api) {\n"
+                '        api.addPlanet(minX + width * 0.2f, minY + height * 0.2f, 300f, "cryovolcanic", 300f);\n'
+                '        api.addPlanet(minX, minY, 300f, "cryovolcanic", 300f, true);\n'
+                "    }\n}\n",
+            )
+            self.assertEqual(_findings(scan_mod(root), "removed-api-call"), [])
+            with self.assertRaises(FixerError):
+                compute_fix(root, "removed-api-call")
+
+    def test_addplanet_and_addorbitalstation_together_add_the_dependency_only_once(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            _write(
+                root / "data" / "scripts" / "world" / "Gen.java",
+                "package data.scripts.world;\n"
+                "public class Gen implements SectorGeneratorPlugin {\n"
+                "    public void generate(SectorAPI sector) {\n"
+                '        SectorEntityToken a = system.addPlanet(lot, "Anchor", "lava", 0, 0, 1, 1);\n'
+                '        SectorEntityToken s = system.addOrbitalStation(a, 45, 13000, 365, "Depot", "faction");\n'
+                "    }\n}\n",
+            )
+            apply_fix(compute_fix(root, "removed-api-call"))
+            mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(mod_info["dependencies"], [{"id": "revenantlib", "name": "RevenantLib"}])
+
+    def test_fixed_output_is_not_re_flagged_by_a_second_scan_no_self_matching_loop(self) -> None:
+        # bf.legacyworld.LegacyWorld.addOrbitalStation(...) itself has the shape `LegacyWorld.
+        # addOrbitalStation(` - without an explicit guard the scanner's own receiver.addOrbitalStation(
+        # pattern would re-match its own fixer's output forever.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            _write(
+                root / "data" / "scripts" / "world" / "Gen.java",
+                "package data.scripts.world;\n"
+                "public class Gen implements SectorGeneratorPlugin {\n"
+                "    public void generate(SectorAPI sector) {\n"
+                '        SectorEntityToken a = system.addPlanet(lot, "Anchor", "lava", 0, 0, 1, 1);\n'
+                '        SectorEntityToken s = system.addOrbitalStation(a, 45, 13000, 365, "Depot", "faction");\n'
+                "    }\n}\n",
+            )
+            apply_fix(compute_fix(root, "removed-api-call"))
+            self.assertEqual(_findings(scan_mod(root), "removed-api-call"), [])
+            with self.assertRaises(FixerError):
+                compute_fix(root, "removed-api-call")
 
 
 class ModInfoGameVersionInexactTests(unittest.TestCase):

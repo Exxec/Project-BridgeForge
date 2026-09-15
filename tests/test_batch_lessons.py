@@ -267,7 +267,57 @@ class SourceImportUnresolvedTests(unittest.TestCase):
         hits = _ids(result, "removed-api-call")
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0].classification, "MANUAL")
-        self.assertEqual(hits[0].evidence[:2], ["CargoAPI.CrewXPLevel: 1 call(s)", "data/scripts/world/Convoy.java:2"])
+        # 2 call(s): the now-unresolvable import line, plus the addCrew(CrewXPLevel.X, ...) call - the
+        # fine() method's addCrew(5) (already the RC8 shape) doesn't match at all.
+        self.assertEqual(
+            hits[0].evidence[:3],
+            ["CargoAPI.CrewXPLevel: 2 call(s)", "data/scripts/world/Convoy.java:2", "data/scripts/world/Convoy.java:5"],
+        )
+
+    def test_seven_argument_addplanet_is_manual_but_rc8_eight_argument_form_is_not(self) -> None:
+        # javap of RC8's starfarer.api.jar (2026-09-15): LocationAPI.addPlanet is id-first, 8 arguments;
+        # the removed 0.6 form took 7, the location itself as the receiver.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            world = mod / "data" / "scripts" / "world"
+            world.mkdir(parents=True)
+            (world / "Gen.java").write_text(
+                "package data.scripts.world;\n"
+                "public class Gen implements SectorGeneratorPlugin {\n"
+                "  public void generate(SectorAPI sector) {\n"
+                '    SectorEntityToken old = system.addPlanet(lot, "Anchor", "lava", 0, 0, 1, 1);\n'
+                '    PlanetAPI rc8 = system.addPlanet("asharu", star, "Asharu", "desert", 55, 150, 2800, 100);\n'
+                "  }\n}\n",
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile())
+        hits = _ids(result, "removed-api-call")
+        matching = [h for h in hits if h.evidence[0].startswith("LocationAPI.addPlanet")]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0].classification, "MANUAL")
+        self.assertEqual(matching[0].evidence[:2], ["LocationAPI.addPlanet(focus, name, type, angle, radius, orbitRadius, orbitDays): 1 call(s)", "data/scripts/world/Gen.java:4"])
+
+    def test_addorbitalstation_has_no_rc8_equivalent_at_all_and_is_manual(self) -> None:
+        # javap of RC8's starfarer.api.jar (2026-09-15): LocationAPI/StarSystemAPI have no addOrbitalStation
+        # method at all, so unlike addPlanet there is no RC8 form to avoid conflating with.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            world = mod / "data" / "scripts" / "world"
+            world.mkdir(parents=True)
+            (world / "Gen.java").write_text(
+                "package data.scripts.world;\n"
+                "public class Gen implements SectorGeneratorPlugin {\n"
+                "  public void generate(SectorAPI sector) {\n"
+                '    SectorEntityToken s = system.addOrbitalStation(anchor, 45, 13000, 365, "Depot", "faction");\n'
+                "  }\n}\n",
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile())
+        hits = _ids(result, "removed-api-call")
+        matching = [h for h in hits if h.evidence[0].startswith("LocationAPI.addOrbitalStation")]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0].classification, "MANUAL")
+        self.assertEqual(matching[0].evidence[:2], ["LocationAPI.addOrbitalStation(focus, angle, orbitRadius, orbitDays, name, factionId): 1 call(s)", "data/scripts/world/Gen.java:4"])
 
     def test_a_listed_removed_class_is_found_by_import_or_from_its_own_package(self) -> None:
         # The machinery stays for evidenced entries: an import-only check would miss a same-package use.

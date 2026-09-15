@@ -20,6 +20,7 @@ from .scanner import (
     _parse_json,
     _read_csv_rows,
     _relative,
+    _removed_api_call_spans,
     _wing_ids_set,
 )
 
@@ -286,16 +287,18 @@ def _fix_target_interface_method_missing(root: Path, options: dict) -> list[File
 # ---------------------------------------------------------------------------
 #
 # Each bridgeforge.scanner.REMOVED_API_CALLS entry can have its own mechanical rewrite here, keyed by
-# that entry's `signature` string. An entry with no key in _REMOVED_API_CALL_REWRITES (CargoAPI.CrewXPLevel,
-# 2026-09-14: RC8's plain addCrew(int) is not a behaviour-equivalent replacement) is detected by the
-# scanner but never rewritten by this fixer; it is left for the owner to fix by hand.
+# that entry's `signature` string. An entry with no key in _REMOVED_API_CALL_REWRITES is detected by the
+# scanner but never rewritten by this fixer; it is left for the owner to fix by hand (every entry as of
+# 2026-09-15 has a rewrite; the mechanism stays generic for a future entry that doesn't).
 
 _LEGACY_FLEETS_CALL = "bf.legacyfleets.LegacyFleets.createFleet("
-_LEGACY_FLEETS_DEPENDENCY_ENTRY = '{"id":"bf_legacy_fleets","name":"BF Legacy Fleets"}'
+_REVENANTLIB_DEPENDENCY_ENTRY = '{"id":"revenantlib","name":"RevenantLib"}'
 _DEPENDENCIES_ARRAY_PATTERN = re.compile(r"['\"]dependencies['\"]\s*:\s*\[")
 
 # REMOVED_API_CALLS[0]: SectorAPI.createFleet(...) -> bf.legacyfleets.LegacyFleets.createFleet(...). The
-# whole matched receiver+method-name span is replaced; the dependency is added only when this rule fires.
+# whole matched receiver+method-name span is replaced. This and the two LegacyWorld rewrites below each
+# introduce a `bf.` call, so each adds RevenantLib as a dependency (once) when it actually rewrote
+# something in this run - see _BF_CALL_SIGNATURES below.
 _CREATE_FLEET_SIGNATURE = REMOVED_API_CALLS[0][1]
 
 
@@ -313,35 +316,90 @@ def _rewrite_add_message_span(matched_text: str) -> str:
     return _ADD_MESSAGE_TAIL_PATTERN.sub(lambda m: ".getCampaignUI()" + m.group(0), matched_text, count=1)
 
 
+# REMOVED_API_CALLS[2]: CargoAPI.CrewXPLevel -> deleted outright (owner decision 2026-09-15: crew quality
+# no longer exists in RC8; crew counts are kept). The scanner's combined pattern matches exactly the text
+# that needs to disappear in each of its three shapes (the now-unresolvable import line; CrewXPLevel.X as
+# addCrew's leading argument, including its trailing comma; and a trailing `, CrewXPLevel.X` argument to
+# addToFleet), so every matched span is simply removed - no `bf.` call is introduced, so this rule never
+# adds a dependency.
+_CREW_XP_LEVEL_SIGNATURE = REMOVED_API_CALLS[2][1]
+
+
+def _rewrite_crew_xp_level_span(_matched_text: str) -> str:
+    return ""
+
+
+# REMOVED_API_CALLS[3]/[4]: the 0.6 7-argument LocationAPI.addPlanet(...) and the 6-argument
+# LocationAPI.addOrbitalStation(...) both become a call to bf.legacyworld.LegacyWorld (RevenantLib),
+# with the old receiver forwarded as this static method's new first argument and every other argument
+# unchanged. The scanner's finder functions (bridgeforge.scanner._find_legacy_add_planet_calls /
+# _find_legacy_add_orbital_station_calls) already return the *whole* call span (receiver through the
+# matching close paren), so the rewrite only needs to re-split that same text at the same "receiver .
+# methodName (" boundary - it never re-parses arguments, since the call's own argument text (already
+# validated exactly once, when the scanner counted it) is carried through untouched.
+_ADD_PLANET_SIGNATURE = REMOVED_API_CALLS[3][1]
+_ADD_ORBITAL_STATION_SIGNATURE = REMOVED_API_CALLS[4][1]
+_CALL_PREFIX_ADD_PLANET = re.compile(r"\A([A-Za-z_]\w*)\s*\.\s*addPlanet\s*\(", re.S)
+_CALL_PREFIX_ADD_ORBITAL_STATION = re.compile(r"\A([A-Za-z_]\w*)\s*\.\s*addOrbitalStation\s*\(", re.S)
+
+
+def _rewrite_add_planet_span(matched_text: str) -> str:
+    match = _CALL_PREFIX_ADD_PLANET.match(matched_text)
+    assert match is not None, f"addPlanet rewrite span did not start with a receiver.addPlanet( prefix: {matched_text!r}"
+    receiver = match.group(1)
+    args_text = matched_text[match.end():-1]  # drop the call's own trailing ')'
+    return f"bf.legacyworld.LegacyWorld.addPlanet({receiver}, {args_text})"
+
+
+def _rewrite_add_orbital_station_span(matched_text: str) -> str:
+    match = _CALL_PREFIX_ADD_ORBITAL_STATION.match(matched_text)
+    assert match is not None, f"addOrbitalStation rewrite span did not start with a receiver.addOrbitalStation( prefix: {matched_text!r}"
+    receiver = match.group(1)
+    args_text = matched_text[match.end():-1]
+    return f"bf.legacyworld.LegacyWorld.addOrbitalStation({receiver}, {args_text})"
+
+
+# Signatures whose rewrite introduces a `bf.` call: each adds the revenantlib dependency, once, when it
+# actually rewrote something in this run (CrewXPLevel and addMessage never do - neither introduces a new
+# call to RevenantLib code).
+_BF_CALL_SIGNATURES = frozenset({_CREATE_FLEET_SIGNATURE, _ADD_PLANET_SIGNATURE, _ADD_ORBITAL_STATION_SIGNATURE})
+
 _REMOVED_API_CALL_REWRITES: dict[str, Callable[[str], str]] = {
     _CREATE_FLEET_SIGNATURE: _rewrite_create_fleet_span,
     "SectorAPI.addMessage(String)": _rewrite_add_message_span,
+    _CREW_XP_LEVEL_SIGNATURE: _rewrite_crew_xp_level_span,
+    _ADD_PLANET_SIGNATURE: _rewrite_add_planet_span,
+    _ADD_ORBITAL_STATION_SIGNATURE: _rewrite_add_orbital_station_span,
 }
 
 
 def _fix_removed_api_call(root: Path, options: dict) -> list[FileChange]:
     """Rewrite every `bridgeforge.scanner.REMOVED_API_CALLS` rule that has a mechanical rewrite.
 
-    Each rule matches (comments and disabled_files ignored, same as the scanner) on the receiver+method-
-    name text only; the call's own arguments are always left untouched. A loose script with an unrewritten
-    removed API call fails to compile at load, so this only ever touches `data/` scripts - a match found
-    only in a compiled jar's bundled source is refused, same as target-interface-method-missing. A rule
-    with no rewrite (CargoAPI.CrewXPLevel) is never touched; if it is the only thing found, this refuses
-    rather than guess. `bf_legacy_fleets` is added to mod_info.json's `dependencies` only when the
-    createFleet rule actually rewrote something in this run (not, for example, when only addMessage did).
+    Most rules match (comments and disabled_files ignored, same as the scanner) on the receiver+method-
+    name text only, leaving the call's own arguments untouched; the addPlanet/addOrbitalStation rules
+    match the *whole* call (receiver through the closing paren), since their rewrite has to move the
+    receiver into the argument list. A loose script with an unrewritten removed API call fails to compile
+    at load, so this only ever touches `data/` scripts - a match found only in a compiled jar's bundled
+    source is refused, same as target-interface-method-missing. A rule with no key in
+    _REMOVED_API_CALL_REWRITES is never touched; if it is the only thing found, this refuses rather than
+    guess. RevenantLib (`revenantlib`) is added to mod_info.json's `dependencies` only when a rule that
+    introduces a `bf.` call (createFleet, addPlanet, addOrbitalStation - see _BF_CALL_SIGNATURES) actually
+    rewrote something in this run (not, for example, when only addMessage or CrewXPLevel did).
     """
-    # (pattern, rewrite, signature) for every rule this fixer knows how to rewrite.
-    rewrite_rules: list[tuple[re.Pattern, Callable[[str], str], str]] = [
-        (pattern, _REMOVED_API_CALL_REWRITES[signature], signature)
-        for pattern, signature, _explanation in REMOVED_API_CALLS
+    # (matcher, rewrite, signature) for every rule this fixer knows how to rewrite. `matcher` is whatever
+    # bridgeforge.scanner._removed_api_call_spans accepts (a compiled regex or a text -> spans function).
+    rewrite_rules: list[tuple[object, Callable[[str], str], str]] = [
+        (matcher, _REMOVED_API_CALL_REWRITES[signature], signature)
+        for matcher, signature, _explanation in REMOVED_API_CALLS
         if signature in _REMOVED_API_CALL_REWRITES
     ]
-    unrewritable_patterns: list[re.Pattern] = [
-        pattern for pattern, signature, _explanation in REMOVED_API_CALLS if signature not in _REMOVED_API_CALL_REWRITES
+    unrewritable_matchers: list[object] = [
+        matcher for matcher, signature, _explanation in REMOVED_API_CALLS if signature not in _REMOVED_API_CALL_REWRITES
     ]
 
     matched_files: list[Path] = []  # any REMOVED_API_CALLS rule, any location
-    rewrites_by_file: dict[Path, list[tuple[re.Pattern, Callable[[str], str], str]]] = {}
+    rewrites_by_file: dict[Path, list[tuple[object, Callable[[str], str], str]]] = {}
     rewritable_hit = False
     for source in sorted(root.rglob("*.java")):
         if "disabled_files" in source.relative_to(root).parts:
@@ -351,8 +409,8 @@ def _fix_removed_api_call(root: Path, options: dict) -> list[FileChange]:
         except OSError:
             continue
         blanked = _blank_java_comments(text)
-        file_rewrites = [(pattern, rewrite, signature) for pattern, rewrite, signature in rewrite_rules if pattern.search(blanked)]
-        has_unrewritable = any(pattern.search(blanked) for pattern in unrewritable_patterns)
+        file_rewrites = [(matcher, rewrite, signature) for matcher, rewrite, signature in rewrite_rules if _removed_api_call_spans(matcher, blanked)]
+        has_unrewritable = any(_removed_api_call_spans(matcher, blanked) for matcher in unrewritable_matchers)
         if file_rewrites or has_unrewritable:
             matched_files.append(source)
         if file_rewrites:
@@ -365,7 +423,7 @@ def _fix_removed_api_call(root: Path, options: dict) -> list[FileChange]:
             names = ", ".join(_relative(root, source) for source in matched_files[:5])
             if not rewritable_hit:
                 raise FixerError(
-                    f"Every removed-api-call match found has no safe mechanical rewrite (e.g. CargoAPI.CrewXPLevel): {names}. Fix by hand."
+                    f"Every removed-api-call match found has no safe mechanical rewrite: {names}. Fix by hand."
                 )
             raise FixerError(f"No loose data/ script has a rewritable removed API call (jar sources need a rebuild: {names}).")
         raise FixerError(
@@ -379,9 +437,9 @@ def _fix_removed_api_call(root: Path, options: dict) -> list[FileChange]:
         text, had_bom = _decode(raw)
         blanked = _blank_java_comments(text)
         spans: list[tuple[int, int, Callable[[str], str], str]] = []
-        for pattern, rewrite, signature in rewrites_by_file[source]:
-            for match in pattern.finditer(blanked):
-                spans.append((match.start(), match.end(), rewrite, signature))
+        for matcher, rewrite, signature in rewrites_by_file[source]:
+            for start, end in _removed_api_call_spans(matcher, blanked):
+                spans.append((start, end, rewrite, signature))
         if not spans:
             continue
         new_text = text
@@ -393,14 +451,21 @@ def _fix_removed_api_call(root: Path, options: dict) -> list[FileChange]:
     if not changes:
         raise FixerError("The flagged loose scripts could not be rewritten mechanically; fix them by hand.")
 
-    if _CREATE_FLEET_SIGNATURE in rewritten_signatures:
-        dependency_change = _add_legacy_fleets_dependency(root / "mod_info.json")
+    if rewritten_signatures & _BF_CALL_SIGNATURES:
+        dependency_change = _add_revenantlib_dependency(root / "mod_info.json")
         if dependency_change is not None:
             changes.append(dependency_change)
     return changes
 
 
-def _add_legacy_fleets_dependency(path: Path) -> FileChange | None:
+def _add_revenantlib_dependency(path: Path) -> FileChange | None:
+    """Add RevenantLib (id `revenantlib`) as a dependency, unless already declared.
+
+    RevenantLib 1.1.0+bf.1 folded in the retired BF Legacy Fleets library (`bf.legacyfleets.LegacyFleets`,
+    id `bf_legacy_fleets`, owner decision 2026-09-15) and added `bf.legacyworld.LegacyWorld`; both are
+    what the createFleet/addPlanet/addOrbitalStation rewrites above now point at, so this replaces the
+    older `_add_legacy_fleets_dependency` (which added `bf_legacy_fleets` instead).
+    """
     if not path.is_file():
         raise FixerError(f"No mod_info.json found at {path}.")
     raw = path.read_bytes()
@@ -410,20 +475,20 @@ def _add_legacy_fleets_dependency(path: Path) -> FileChange | None:
         raise FixerError(f"{path} could not be parsed as JSON.")
     dependencies = data.get("dependencies")
     if dependencies is not None and not isinstance(dependencies, list):
-        raise FixerError(f"{path} 'dependencies' is not a JSON array; add the bf_legacy_fleets dependency by hand.")
-    if isinstance(dependencies, list) and any(isinstance(item, dict) and item.get("id") == "bf_legacy_fleets" for item in dependencies):
+        raise FixerError(f"{path} 'dependencies' is not a JSON array; add the revenantlib dependency by hand.")
+    if isinstance(dependencies, list) and any(isinstance(item, dict) and item.get("id") == "revenantlib" for item in dependencies):
         return None
 
     match = _DEPENDENCIES_ARRAY_PATTERN.search(text)
     if match is not None:
         insert_at = match.end()  # just after the array's '['
         needs_comma = not text[insert_at:].lstrip().startswith("]")
-        new_text = text[:insert_at] + _LEGACY_FLEETS_DEPENDENCY_ENTRY + ("," if needs_comma else "") + text[insert_at:]
+        new_text = text[:insert_at] + _REVENANTLIB_DEPENDENCY_ENTRY + ("," if needs_comma else "") + text[insert_at:]
     else:
         brace_index = text.find("{")
         if brace_index == -1:
             raise FixerError(f"{path} has no '{{' to insert dependencies after.")
-        insertion = '"dependencies":[' + _LEGACY_FLEETS_DEPENDENCY_ENTRY + "],"
+        insertion = '"dependencies":[' + _REVENANTLIB_DEPENDENCY_ENTRY + "],"
         new_text = text[: brace_index + 1] + insertion + text[brace_index + 1 :]
 
     try:
@@ -432,9 +497,9 @@ def _add_legacy_fleets_dependency(path: Path) -> FileChange | None:
         raise FixerError(f"Edited {path} failed to re-parse: {exc}") from exc
     new_dependencies = parsed.get("dependencies") if isinstance(parsed, dict) else None
     if not isinstance(new_dependencies, list) or not any(
-        isinstance(item, dict) and item.get("id") == "bf_legacy_fleets" for item in new_dependencies
+        isinstance(item, dict) and item.get("id") == "revenantlib" for item in new_dependencies
     ):
-        raise FixerError(f"Edited {path} did not round-trip the bf_legacy_fleets dependency as expected.")
+        raise FixerError(f"Edited {path} did not round-trip the revenantlib dependency as expected.")
     return FileChange(path=path, before=raw, after=_encode(new_text, had_bom))
 
 

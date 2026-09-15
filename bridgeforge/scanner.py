@@ -1036,6 +1036,97 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
     scan_graphicslib_compat(root, result)
 
 
+# A REMOVED_API_CALLS "matcher" (1st tuple element) is either a compiled regex (matched directly with
+# .finditer) or a plain function text -> list[(start, end)] (for rules argument-count disambiguation
+# alone can't express safely - see _find_legacy_add_planet_calls below). _removed_api_call_spans hides
+# the difference from both this scanner and fixers._fix_removed_api_call.
+def _removed_api_call_spans(matcher, text: str) -> list[tuple[int, int]]:
+    if hasattr(matcher, "finditer"):
+        return [(match.start(), match.end()) for match in matcher.finditer(text)]
+    return matcher(text)
+
+
+# 0.6-era LocationAPI.addPlanet(focus, name, type, angle, radius, orbitRadius, orbitDays) - 7 arguments,
+# the location as the *receiver*. RC8's LocationAPI.addPlanet (javap, 2026-09-15) is id-first with 8
+# arguments: addPlanet(String id, SectorEntityToken focus, String name, String type, float angle, float
+# radius, float orbitRadius, float orbitDays) - same 7 trailing arguments, unchanged order (cross-checked
+# against a real RC8 call site read off the install, data/scripts/world/corvus/Corvus.java:
+# system.addPlanet("asharu", star, "Asharu", "desert", 55, 150, 2800, 100)). MissionDefinitionAPI also has
+# an addPlanet (javap: 5- and 6-argument overloads, e.g. Gekelonians'/Batavia's own mission files:
+# api.addPlanet(minX + width * 0.2f, minY + height * 0.2f, 300f, "cryovolcanic", 300f)) - a different,
+# still-valid method on a different receiver type. Argument count (not receiver type, which can't be
+# inferred from source text alone) is what tells all three apart; a receiver-type check isn't available
+# from a lone regex, so this counts top-level arguments the same paren/quote-aware way
+# _split_call_arguments does and only matches an exact 7 - "be conservative": a call whose argument count
+# doesn't come out to exactly 7 (RC8's own 8, MissionDefinitionAPI's 5/6, or anything unexpected) is left
+# alone, never guessed at.
+_LEGACY_ADD_PLANET_RECEIVER_PATTERN = re.compile(r"\b([A-Za-z_]\w*)\s*\.\s*addPlanet\s*\(")
+
+# RC8's LocationAPI/StarSystemAPI have no addOrbitalStation method at all (javap -p on both, 2026-09-15:
+# no method of that name), so unlike addPlanet there is no RC8 form to avoid conflating with - any call
+# is safe to flag/rewrite without an argument-count check. Every real 0.6 call site found (Cobalt Arms,
+# Gekelonians, Independant Mining Faction, Batavia, Qualljom x2, Antediluvians) has the same 6-argument
+# shape: addOrbitalStation(SectorEntityToken focus, float angle, float orbitRadius, float orbitDays,
+# String name, String factionId).
+_LEGACY_ADD_ORBITAL_STATION_RECEIVER_PATTERN = re.compile(r"\b([A-Za-z_]\w*)\s*\.\s*addOrbitalStation\s*\(")
+
+
+# Neither finder must re-match its own fixer's output: the rewrite is
+# `bf.legacyworld.LegacyWorld.addPlanet(...)`/`...addOrbitalStation(...)`, and `LegacyWorld` alone is a
+# syntactically valid receiver for `\b([A-Za-z_]\w*)\s*\.\s*addPlanet\s*\(` - a real 0.6 script calling a
+# receiver literally named `LegacyWorld` is not a real case this needs to support, so it's excluded
+# outright rather than guessed at (addPlanet's 7-argument count check already prevents this by accident,
+# since the rewritten call always has 8 arguments; addOrbitalStation has no such count check, so without
+# this guard a fixed file would be re-flagged, and re-fixed, forever).
+_LEGACY_WORLD_RECEIVER_NAME = "LegacyWorld"
+
+
+def _find_legacy_add_planet_calls(text: str) -> list[tuple[int, int]]:
+    """(start, end) spans for `receiver.addPlanet(` calls with exactly 7 top-level arguments."""
+    spans: list[tuple[int, int]] = []
+    for match in _LEGACY_ADD_PLANET_RECEIVER_PATTERN.finditer(text):
+        if match.group(1) == _LEGACY_WORLD_RECEIVER_NAME:
+            continue
+        open_paren = match.end() - 1
+        args_text = _extract_call_arguments_text(text, open_paren)
+        if args_text is None:
+            continue
+        if len(_split_call_arguments(args_text)) != 7:
+            continue
+        spans.append((match.start(1), open_paren + 1 + len(args_text) + 1))
+    return spans
+
+
+def _find_legacy_add_orbital_station_calls(text: str) -> list[tuple[int, int]]:
+    """(start, end) spans for every `receiver.addOrbitalStation(...)` call (whole span, any arg count)."""
+    spans: list[tuple[int, int]] = []
+    for match in _LEGACY_ADD_ORBITAL_STATION_RECEIVER_PATTERN.finditer(text):
+        if match.group(1) == _LEGACY_WORLD_RECEIVER_NAME:
+            continue
+        open_paren = match.end() - 1
+        args_text = _extract_call_arguments_text(text, open_paren)
+        if args_text is None:
+            continue
+        spans.append((match.start(1), open_paren + 1 + len(args_text) + 1))
+    return spans
+
+
+# 0.6-era CargoAPI.CrewXPLevel, per owner decision 2026-09-15 (crew quality no longer exists in RC8; crew
+# counts are kept): three alternatives, all deleted outright by the fixer (see
+# _rewrite_crew_xp_level_span) - the now-unresolvable import line; CrewXPLevel.X, as addCrew's first
+# argument (addCrew(CrewXPLevel.X, n) -> addCrew(n)); and , CrewXPLevel.X as addToFleet's trailing
+# argument (addToFleet(..., CrewXPLevel.X) -> addToFleet(...)). Every real call site found across all six
+# mods (Cobalt Arms, Gekelonians, Independant Mining Faction, Batavia, Qualljom, Antediluvians - 11 files)
+# matches one of these three shapes exactly; nothing else in CargoAPI/MissionDefinitionAPI ever took a
+# CrewXPLevel (javap of RC8's starfarer.api.jar, 2026-09-14: CargoAPI has only addCrew(int); a jar-wide
+# search finds no CrewXPLevel/XPLevel anywhere in RC8, confirming the type itself is gone, not just moved).
+_CREW_XP_LEVEL_PATTERN = re.compile(
+    r"import\s+com\.fs\.starfarer\.api\.campaign\.CargoAPI\.CrewXPLevel\s*;[ \t]*\r?\n?"
+    r"|CrewXPLevel\s*\.\s*\w+\s*,\s*"
+    r"|,\s*CrewXPLevel\s*\.\s*\w+"
+)
+
+
 # API calls the target no longer has, matched only on receivers whose type is certain. Each entry needs
 # javap evidence from the target's starfarer.api.jar.
 REMOVED_API_CALLS = (
@@ -1064,17 +1155,49 @@ REMOVED_API_CALLS = (
         ".addMessage( on the same receiver: CampaignUIAPI is where RC8 kept the method.",
     ),
     (
-        re.compile(r"\bCargoAPI\s*\.\s*CrewXPLevel\b"),
+        _CREW_XP_LEVEL_PATTERN,
         "CargoAPI.CrewXPLevel",
         # javap of RC8 starfarer.api.jar (2026-09-14): CargoAPI no longer nests a CrewXPLevel enum (a
         # jar-wide search for CrewXPLevel/XPLevel across starfarer.api.jar finds nothing); CargoAPI now has
-        # only addCrew(int) (a plain headcount, no quality level) and gainCrewXP(float). addCrew(int) is not
-        # a behaviour-equivalent replacement for the old addCrew(CrewXPLevel, int) overload (it drops the
-        # crew-quality distinction 0.6 fleets used), so no mechanical rewrite is offered here.
-        "0.6-era CargoAPI.CrewXPLevel (used with an addCrew(CrewXPLevel, int) overload); RC8's CargoAPI has no "
-        "nested CrewXPLevel and no overload that takes one, and its plain addCrew(int) is not an exact "
-        "behaviour-equivalent replacement (it drops the crew-quality level). No fixer rewrite is offered; fix "
-        "by hand.",
+        # only addCrew(int) (a plain headcount, no quality level) and gainCrewXP(float).
+        # Owner decision 2026-09-15 (coordinator's recommendation; RC8 has no crew quality): drop the
+        # level, keep the counts. addCrew(CrewXPLevel.X, n) -> addCrew(n); MissionDefinitionAPI.addToFleet's
+        # trailing CrewXPLevel argument is dropped the same way (RC8's addToFleet overloads, javap-confirmed,
+        # take no crew-quality argument at all). Recorded as the expected change "crew quality no longer
+        # exists in RC8; crew counts are kept."
+        "0.6-era CargoAPI.CrewXPLevel (used with an addCrew(CrewXPLevel, int) overload, and/or "
+        "MissionDefinitionAPI.addToFleet's trailing CrewXPLevel argument); RC8's CargoAPI has no nested "
+        "CrewXPLevel and no overload that takes one. Owner decision 2026-09-15: drop the crew-quality level, "
+        "keep the crew counts (addCrew(CrewXPLevel.X, n) -> addCrew(n); addToFleet's trailing CrewXPLevel "
+        "argument is dropped).",
+    ),
+    (
+        _find_legacy_add_planet_calls,
+        "LocationAPI.addPlanet(focus, name, type, angle, radius, orbitRadius, orbitDays)",
+        # javap of RC8 starfarer.api.jar (2026-09-15): LocationAPI.addPlanet is now id-first, 8 arguments
+        # (String id, SectorEntityToken focus, String name, String type, float angle, float radius, float
+        # orbitRadius, float orbitDays); the removed 0.6 form took the same 7 trailing arguments with the
+        # location itself as the receiver. bf.legacyworld.LegacyWorld.addPlanet (RevenantLib) generates the
+        # missing id and forwards to RC8's method.
+        "0.6-era LocationAPI.addPlanet(focus, name, type, angle, radius, orbitRadius, orbitDays) (7 "
+        "arguments, the location as the receiver); RC8's LocationAPI.addPlanet needs a leading String id "
+        "(8 arguments total) that the 0.6 call never supplied. Rewritten to "
+        "bf.legacyworld.LegacyWorld.addPlanet(<receiver>, <same 7 arguments>), which generates a "
+        "deterministic id and forwards to RC8's method.",
+    ),
+    (
+        _find_legacy_add_orbital_station_calls,
+        "LocationAPI.addOrbitalStation(focus, angle, orbitRadius, orbitDays, name, factionId)",
+        # javap of RC8 starfarer.api.jar (2026-09-15): LocationAPI/StarSystemAPI have no addOrbitalStation
+        # method at all. Owner decision 2026-09-15 ("option A"): 0.6 orbital stations become real, dockable
+        # RC8 markets. bf.legacyworld.LegacyWorld.addOrbitalStation (RevenantLib) builds the station entity,
+        # a real market (open/black-market/storage submarkets, economy registration), and a one-shot script
+        # that moves whatever the caller stocks into the returned token's cargo into the market's open
+        # submarket cargo.
+        "0.6-era LocationAPI.addOrbitalStation(focus, angle, orbitRadius, orbitDays, name, factionId); RC8's "
+        "LocationAPI/StarSystemAPI have no method of that name at all. Rewritten to "
+        "bf.legacyworld.LegacyWorld.addOrbitalStation(<receiver>, <same 6 arguments>), which creates a real, "
+        "dockable RC8 market in place of the old token (owner decision 2026-09-15, option A).",
     ),
 )
 
@@ -1090,8 +1213,8 @@ def _scan_removed_api_calls(root: Path, result: ScanResult) -> None:
                 text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
             except OSError:
                 continue
-            for match in pattern.finditer(text):
-                hits.append(f"{_relative(root, source)}:{text.count(chr(10), 0, match.start()) + 1}")
+            for start, _end in _removed_api_call_spans(pattern, text):
+                hits.append(f"{_relative(root, source)}:{text.count(chr(10), 0, start) + 1}")
         if hits:
             result.add(
                 id="removed-api-call",

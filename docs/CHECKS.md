@@ -202,6 +202,8 @@ Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_j
 | `_extract_call_arguments_text` | `(text: str, open_paren_index: int) -> str \| None` | Return the text between a call's matching parens, respecting nesting and quoted strings. |
 | `_faction_market_evidence` | `(root: Path, faction_id: str) -> str` | 'found' when the faction owns or configures a market, 'none' when sources rule it out, else 'unknown'. |
 | `_fill_empty_array_elements` | `(text: str) -> tuple[str, bool]` | Write `null` for an empty array element, as org.json's JSONArray reads it. |
+| `_find_legacy_add_orbital_station_calls` | `(text: str) -> list[tuple[int, int]]` | (start, end) spans for every `receiver.addOrbitalStation(...)` call (whole span, any arg count). |
+| `_find_legacy_add_planet_calls` | `(text: str) -> list[tuple[int, int]]` | (start, end) spans for `receiver.addPlanet(` calls with exactly 7 top-level arguments. |
 | `_float_or` | `(value: object, default: float=0.0) -> float` | - |
 | `_hash_comment_json_finding` | `(result: ScanResult, category: str, file: str) -> None` | - |
 | `_hull_hints` | `(row: dict[str, str]) -> set[str]` | - |
@@ -237,6 +239,7 @@ Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_j
 | `_read_csv_rows_lenient` | `(path: Path) -> list[dict[str, str]] \| None` | Like _read_csv_rows, but tolerates non-UTF-8 bytes (errors='replace'). |
 | `_registered_csv_ids` | `(path: Path) -> set[str] \| None` | - |
 | `_relative` | `(root: Path, path: Path) -> str` | - |
+| `_removed_api_call_spans` | `(matcher, text: str) -> list[tuple[int, int]]` | - |
 | `_report_asset_reference_missing` | `(result: ScanResult, root: Path, vanilla_core: Path \| None, file: str, field: str, candidate: str) -> None` | - |
 | `_resolve_hull_id` | `(hull_id: str, skins: dict[str, str]) -> str` | Chase a skin's baseHullId chain to the underlying hull id (cycle-safe). |
 | `_ship_file_index` | `(root: Path, vanilla_core: Path \| None) -> dict[str, dict]` | hullId -> parsed .ship data, vanilla first so a mod's own hull of the same id wins. |
