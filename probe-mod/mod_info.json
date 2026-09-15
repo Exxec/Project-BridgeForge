@@ -1,7 +1,7 @@
 {
 	"id":"bridgeforge_probe",
 	"name":"BridgeForge Probe",
-	"author":"BridgeForge",
+	"author":"BridgeForge by Exxec",
 	"version":"0.2.1",
 	"description":"Rig-only diagnostic probe for BridgeForge (T2 evidence tier). Does nothing unless a rig marker common-file is present. Adds no gameplay content and changes no game behavior for players.",
 	"gameVersion":"0.98a-RC8",

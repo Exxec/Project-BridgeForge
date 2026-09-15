@@ -406,6 +406,18 @@ Starting point:
   - `dependency-substitutes` finds the smallest set of visible mods that provides what a mod needs. Each provider in the set is current, revivable (a workspace here with 15 MANUAL or fewer) or heavy.
   - It recommends SWAP, REVIVE_DEPENDENCY, STRIP_FROM_MOD or ESCALATE, per `docs/DEPENDENCY_STRATEGY.md`.
 
+**Working order (owner, 2026-09-15; live testing deferred until more comes to light):**
+1. Loose-script compile check (item 11).
+2. Carrier-bay fixer (item 6).
+3. Jar rebuild command (item 7).
+4. Fold-in workflow (item 10), then fold FX Core into RevenantLib.
+5. Strip/vendor planner (item 4), with Rebal phase 2.
+6. Provider index and dependency graph (items 2–3).
+7. Licence-aware revival (item 9).
+8. The Ironclads queue, last.
+
+Items 1 and 3 share a Java-toolchain module and are built together (task A9).
+
 Progression, each stage feeding the next:
 
 1. **Done 2026-09-14.**
