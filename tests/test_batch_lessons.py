@@ -118,6 +118,29 @@ class ConsoleCommandOptionalTests(unittest.TestCase):
         self.assertEqual(len(_ids(result, "external-mod-api-import")), 1)
 
 
+class MagicLibAttributionTests(unittest.TestCase):
+    def test_own_data_scripts_util_classes_are_not_magiclib(self) -> None:
+        # AI-War ships data.scripts.util.AIW_StringHelper; only data.scripts.util.Magic* is MagicLib's legacy API.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "scripts" / "util").mkdir(parents=True)
+            (mod / "data" / "scripts" / "util" / "AIW_StringHelper.java").write_text("package data.scripts.util;\npublic class AIW_StringHelper {}\n", encoding="utf-8")
+            (mod / "data" / "scripts" / "Plugin.java").write_text("package data.scripts;\nimport data.scripts.util.AIW_StringHelper;\npublic class Plugin {}\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual(_ids(result, "source-library-dependency-undeclared"), [])
+        self.assertEqual(_ids(result, "external-mod-api-import"), [])
+        self.assertFalse(any(item["library"] == "MagicLib" for item in result.library_usage))
+
+    def test_a_magic_class_import_is_still_magiclib(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "scripts").mkdir(parents=True)
+            (mod / "data" / "scripts" / "Plugin.java").write_text("package data.scripts;\nimport data.scripts.util.MagicRender;\npublic class Plugin {}\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        self.assertTrue(any(item["library"] == "MagicLib" for item in result.library_usage))
+        self.assertTrue(_ids(result, "external-mod-api-import"))
+
+
 class SourceImportUnresolvedTests(unittest.TestCase):
     def test_another_mods_classes_are_flagged_and_own_classes_are_not(self) -> None:
         # FX Example imports FX Core's data.scripts.fx_Particle without declaring FX Core.
@@ -177,6 +200,74 @@ class SourceImportUnresolvedTests(unittest.TestCase):
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0].classification, "MANUAL")
         self.assertEqual(hits[0].evidence[:2], ["SectorAPI.createFleet(factionId, fleetTypeId): 1 call(s)", "data/scripts/world/Spawn.java:5"])
+
+    def test_global_getsectorapi_create_fleet_receiver_is_also_manual(self) -> None:
+        # E6, 2026-09-14: javap confirms Global.getSectorAPI() also returns SectorAPI (same as
+        # Global.getSector()), so a spawn point written against that receiver needs the same finding.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            world = mod / "data" / "scripts" / "world"
+            world.mkdir(parents=True)
+            (world / "Spawn.java").write_text(
+                "package data.scripts.world;\npublic class Spawn extends BaseSpawnPoint {\n  Object f() {\n    return Global.getSectorAPI().createFleet(\"CAPSCO\", type);\n  }\n}\n",
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile())
+        hits = _ids(result, "removed-api-call")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].evidence[:2], ["SectorAPI.createFleet(factionId, fleetTypeId): 1 call(s)", "data/scripts/world/Spawn.java:4"])
+
+    def test_sector_add_message_call_is_manual_but_campaignui_addmessage_is_not(self) -> None:
+        # E6, 2026-09-14: javap confirms RC8's SectorAPI has no addMessage; CampaignUIAPI (from
+        # SectorAPI.getCampaignUI()) does. Real case: CAPSCOConvoySpawnPoint.java calls
+        # Global.getSectorAPI().addMessage(String) to post a comm message.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            world = mod / "data" / "scripts" / "world"
+            world.mkdir(parents=True)
+            (world / "Convoy.java").write_text(
+                "package data.scripts.world;\npublic class Convoy extends BaseSpawnPoint {\n"
+                "  void arrived() {\n"
+                "    // Global.getSectorAPI().addMessage(\"x\") in a comment\n"
+                "    Global.getSectorAPI().addMessage(\"A supply convoy is under way\");\n"
+                "  }\n"
+                "  void good() {\n"
+                "    Global.getSectorAPI().getCampaignUI().addMessage(\"fine\");\n"
+                "  }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile())
+        hits = _ids(result, "removed-api-call")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].classification, "MANUAL")
+        self.assertEqual(hits[0].evidence[:2], ["SectorAPI.addMessage(String): 1 call(s)", "data/scripts/world/Convoy.java:5"])
+
+    def test_cargo_crewxplevel_reference_is_manual_but_addcrew_int_is_not(self) -> None:
+        # E6, 2026-09-14: jar-wide javap search confirms RC8's CargoAPI has no nested CrewXPLevel enum any
+        # more (only plain addCrew(int)). Real case: BataviaConvoySpawnPoint.java imports and uses it.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            world = mod / "data" / "scripts" / "world"
+            world.mkdir(parents=True)
+            (world / "Convoy.java").write_text(
+                "package data.scripts.world;\n"
+                "import com.fs.starfarer.api.campaign.CargoAPI.CrewXPLevel;\n"
+                "public class Convoy extends BaseSpawnPoint {\n"
+                "  void crew(CargoAPI cargo) {\n"
+                "    cargo.addCrew(CrewXPLevel.VETERAN, 5);\n"
+                "  }\n"
+                "  void fine(CargoAPI cargo) {\n"
+                "    cargo.addCrew(5);\n"
+                "  }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile())
+        hits = _ids(result, "removed-api-call")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].classification, "MANUAL")
+        self.assertEqual(hits[0].evidence[:2], ["CargoAPI.CrewXPLevel: 1 call(s)", "data/scripts/world/Convoy.java:2"])
 
     def test_a_listed_removed_class_is_found_by_import_or_from_its_own_package(self) -> None:
         # The machinery stays for evidenced entries: an import-only check would miss a same-package use.

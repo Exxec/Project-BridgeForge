@@ -164,6 +164,42 @@ class ScriptSandboxForbiddenApiTests(unittest.TestCase):
             result = scan_mod(root)
             self.assertEqual(_findings(result, "script-sandbox-forbidden-api"), [])
 
+    def test_forbidden_api_named_only_in_a_comment_is_not_flagged(self) -> None:
+        # BF Legacy Fleets, 2026-09-14: a class Javadoc explaining what the RC8 sandbox forbids (naming
+        # java.io.File and java.nio.file to say they are avoided) was itself misread as a violation,
+        # because the source check matched the raw text instead of blanking comments first the way
+        # _scan_removed_api_calls already does. // and /* */ forms are both covered here.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(
+                root / "data" / "scripts" / "Loader.java",
+                "package data.scripts;\n"
+                "/**\n"
+                " * No direct java.io.File access and no java.lang.reflect.Method use here - both are\n"
+                " * forbidden by the RC8 script sandbox (java.nio.file too).\n"
+                " */\n"
+                "class Loader {\n"
+                "    // java.io.FileInputStream would crash at load\n"
+                "    void go() {}\n"
+                "}\n",
+            )
+            result = scan_mod(root)
+            self.assertEqual(_findings(result, "script-sandbox-forbidden-api"), [])
+
+    def test_forbidden_api_use_outside_a_comment_on_the_same_line_is_still_flagged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(
+                root / "data" / "scripts" / "Loader.java",
+                "package data.scripts;\n"
+                "import java.lang.reflect.Method; // not just a comment mention\n"
+                "class Loader { void go() { Method m = null; } }\n",
+            )
+            result = scan_mod(root)
+            findings = _findings(result, "script-sandbox-forbidden-api")
+            self.assertEqual(len(findings), 1)
+            self.assertIn("forbidden:java.lang.reflect.Method", findings[0].evidence)
+
 
 class BundledLibraryClassesTests(unittest.TestCase):
     def test_graphicslib_classes_in_own_jar_is_manual(self) -> None:

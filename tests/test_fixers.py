@@ -102,6 +102,274 @@ class TargetInterfaceMethodMissingTests(unittest.TestCase):
             self.assertIn("jar sources need a rebuild", str(caught.exception))
 
 
+class RemovedApiCallTests(unittest.TestCase):
+    """removed-api-call: 0.6's getSector().createFleet(...) has no RC8 SectorAPI equivalent (javap,
+    2026-09-14); the fixer ports call sites to the BF Legacy Fleets library instead."""
+
+    SPAWN_SRC = (
+        "package data.scripts.world;\n"
+        "public class Spawn extends BaseSpawnPoint {\n"
+        "    protected CampaignFleetAPI spawnFleet() {\n"
+        "        // getSector().createFleet(\"x\", \"y\") -- commented out, must stay untouched\n"
+        "        CampaignFleetAPI fleet = getSector().createFleet(\"gekelonian\", type);\n"
+        "        return fleet;\n"
+        "    }\n"
+        "}\n"
+    )
+    CONVOY_SRC = (
+        "package data.scripts.world;\n"
+        "public class Convoy extends BaseSpawnPoint {\n"
+        "    protected CampaignFleetAPI spawnFleet() {\n"
+        "        return Global.getSector().createFleet(\"gekelonian\", \"heavy\");\n"
+        "    }\n"
+        "}\n"
+    )
+
+    def _mod(self, root: Path, mod_info: str = '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}') -> None:
+        _write(root / "mod_info.json", mod_info)
+        _write(root / "data" / "scripts" / "world" / "Spawn.java", self.SPAWN_SRC)
+        _write(root / "data" / "scripts" / "world" / "Convoy.java", self.CONVOY_SRC)
+
+    def test_rewrites_both_receiver_forms_leaves_comments_alone_adds_dependency_once_then_rescan_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root)
+            before_scan = scan_mod(root)
+            self.assertEqual(len(_findings(before_scan, "removed-api-call")), 1)
+
+            plan = compute_fix(root, "removed-api-call")
+            changed = {change.path.relative_to(root).as_posix() for change in plan.changes}
+            self.assertEqual(
+                changed,
+                {"data/scripts/world/Spawn.java", "data/scripts/world/Convoy.java", "mod_info.json"},
+            )
+            applied = apply_fix(plan)
+            self.assertTrue(all(Path(item["backup"]).is_file() for item in applied))
+
+            spawn_lines = (root / "data" / "scripts" / "world" / "Spawn.java").read_text(encoding="utf-8").split("\n")
+            # The commented-out call keeps its original (unqualified) receiver text untouched...
+            self.assertIn('// getSector().createFleet("x", "y") -- commented out', spawn_lines[3])
+            # ...while the real, active call is rewritten.
+            self.assertNotIn("getSector().createFleet(", spawn_lines[4])
+            self.assertIn('bf.legacyfleets.LegacyFleets.createFleet("gekelonian", type);', spawn_lines[4])
+
+            convoy_text = (root / "data" / "scripts" / "world" / "Convoy.java").read_text(encoding="utf-8")
+            self.assertIn('bf.legacyfleets.LegacyFleets.createFleet("gekelonian", "heavy");', convoy_text)
+            self.assertNotIn("Global.getSector()", convoy_text)
+
+            mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(mod_info["dependencies"], [{"id": "bf_legacy_fleets", "name": "BF Legacy Fleets"}])
+
+            after_scan = scan_mod(root)
+            self.assertEqual(_findings(after_scan, "removed-api-call"), [])
+
+    def test_existing_dependencies_array_gets_the_entry_prepended_once(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(
+                root,
+                '{\n\t"id":"fixture",\n\t"dependencies": [\n\t\t{"id": "lw_lazylib", "name": "LazyLib"}\n\t]\n}\n',
+            )
+            apply_fix(compute_fix(root, "removed-api-call"))
+            mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                mod_info["dependencies"],
+                [{"id": "bf_legacy_fleets", "name": "BF Legacy Fleets"}, {"id": "lw_lazylib", "name": "LazyLib"}],
+            )
+
+    def test_dependency_already_present_is_not_duplicated_and_only_source_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, '{"id":"fixture","dependencies":[{"id":"bf_legacy_fleets","name":"BF Legacy Fleets"}]}')
+            plan = compute_fix(root, "removed-api-call")
+            changed = {change.path.relative_to(root).as_posix() for change in plan.changes}
+            self.assertEqual(changed, {"data/scripts/world/Spawn.java", "data/scripts/world/Convoy.java"})
+            apply_fix(plan)
+            mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(mod_info["dependencies"], [{"id": "bf_legacy_fleets", "name": "BF Legacy Fleets"}])
+
+    def test_disabled_files_are_never_touched_or_counted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            _write(root / "data" / "scripts" / "world" / "disabled_files" / "Old.java", self.SPAWN_SRC)
+            with self.assertRaises(FixerError):
+                compute_fix(root, "removed-api-call")
+
+    def test_jar_sources_are_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            _write(root / "jars" / "src" / "data" / "scripts" / "world" / "Spawn.java", self.SPAWN_SRC)
+            with self.assertRaises(FixerError) as caught:
+                compute_fix(root, "removed-api-call")
+            self.assertIn("jar sources need a rebuild", str(caught.exception))
+
+    def test_refuses_when_no_removed_call_is_present(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            with self.assertRaises(FixerError):
+                compute_fix(root, "removed-api-call")
+
+    def test_refuses_when_dependencies_is_not_an_array(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, '{"id":"fixture","dependencies":"oops"}')
+            with self.assertRaises(FixerError):
+                compute_fix(root, "removed-api-call")
+
+    def test_global_getsectorapi_create_fleet_receiver_is_also_rewritten(self) -> None:
+        # E6, 2026-09-14: javap confirms Global.getSectorAPI() returns SectorAPI too.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            _write(
+                root / "data" / "scripts" / "world" / "Spawn.java",
+                'package data.scripts.world;\npublic class Spawn extends BaseSpawnPoint {\n'
+                '    CampaignFleetAPI f() { return Global.getSectorAPI().createFleet("CAPSCO", type); }\n}\n',
+            )
+            apply_fix(compute_fix(root, "removed-api-call"))
+            text = (root / "data" / "scripts" / "world" / "Spawn.java").read_text(encoding="utf-8")
+            self.assertIn('bf.legacyfleets.LegacyFleets.createFleet("CAPSCO", type);', text)
+            self.assertNotIn("getSectorAPI()", text)
+            mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(mod_info["dependencies"], [{"id": "bf_legacy_fleets", "name": "BF Legacy Fleets"}])
+
+
+class AddMessageRewriteTests(unittest.TestCase):
+    """removed-api-call, E6 (2026-09-14): RC8's SectorAPI has no addMessage; the fixer inserts
+    .getCampaignUI() before .addMessage(, keeping the original receiver, since CampaignUIAPI has it."""
+
+    CONVOY_SRC = (
+        "package data.scripts.world;\n"
+        "public class Convoy extends BaseSpawnPoint {\n"
+        "    protected CampaignFleetAPI spawnFleet() {\n"
+        "        // Global.getSectorAPI().addMessage(\"x\") -- commented out, must stay untouched\n"
+        "        Global.getSectorAPI().addMessage(\"A CAPSCO supply convoy is in-system\");\n"
+        "        return null;\n"
+        "    }\n"
+        "    private Script createArrivedScript() {\n"
+        "        return new Script() {\n"
+        "            public void run() {\n"
+        "                Global.getSectorAPI().addMessage(\"delivered\");\n"
+        "            }\n"
+        "        };\n"
+        "    }\n"
+        "    private void bare() {\n"
+        "        getSector().addMessage(\"bare receiver\");\n"
+        "    }\n"
+        "}\n"
+    )
+
+    def _mod(self, root: Path) -> Path:
+        _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+        path = root / "data" / "scripts" / "world" / "Convoy.java"
+        _write(path, self.CONVOY_SRC)
+        return path
+
+    def test_inserts_getcampaignui_before_addmessage_keeping_receiver_and_does_not_add_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(root)
+            before_scan = scan_mod(root)
+            self.assertEqual(len(_findings(before_scan, "removed-api-call")), 1)
+
+            plan = compute_fix(root, "removed-api-call")
+            changed = {change.path.relative_to(root).as_posix() for change in plan.changes}
+            # mod_info.json is untouched: no createFleet rewrite happened in this run, so no dependency is added.
+            self.assertEqual(changed, {"data/scripts/world/Convoy.java"})
+            apply_fix(plan)
+
+            lines = path.read_text(encoding="utf-8").split("\n")
+            # The commented-out call keeps its original text untouched...
+            self.assertIn('// Global.getSectorAPI().addMessage("x") -- commented out', lines[3])
+            # ...while the real calls are rewritten, receiver kept, .getCampaignUI() inserted before .addMessage(.
+            self.assertIn('Global.getSectorAPI().getCampaignUI().addMessage("A CAPSCO supply convoy is in-system");', lines[4])
+            text = path.read_text(encoding="utf-8")
+            self.assertIn('Global.getSectorAPI().getCampaignUI().addMessage("delivered");', text)
+            self.assertIn('getSector().getCampaignUI().addMessage("bare receiver");', text)
+
+            mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+            self.assertNotIn("dependencies", mod_info)
+
+            after_scan = scan_mod(root)
+            self.assertEqual(_findings(after_scan, "removed-api-call"), [])
+
+    def test_create_fleet_and_add_message_together_rewrite_both_and_add_dependency_once(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            _write(
+                root / "data" / "scripts" / "world" / "Convoy.java",
+                "package data.scripts.world;\npublic class Convoy extends BaseSpawnPoint {\n"
+                "    CampaignFleetAPI spawnFleet() {\n"
+                '        CampaignFleetAPI fleet = getSector().createFleet("CAPSCO", "supplyConvoy");\n'
+                '        Global.getSectorAPI().addMessage("under way");\n'
+                "        return fleet;\n"
+                "    }\n}\n",
+            )
+            plan = compute_fix(root, "removed-api-call")
+            apply_fix(plan)
+            text = (root / "data" / "scripts" / "world" / "Convoy.java").read_text(encoding="utf-8")
+            self.assertIn('bf.legacyfleets.LegacyFleets.createFleet("CAPSCO", "supplyConvoy");', text)
+            self.assertIn('Global.getSectorAPI().getCampaignUI().addMessage("under way");', text)
+            mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(mod_info["dependencies"], [{"id": "bf_legacy_fleets", "name": "BF Legacy Fleets"}])
+            self.assertEqual(_findings(scan_mod(root), "removed-api-call"), [])
+
+
+class CrewXPLevelNotRewrittenTests(unittest.TestCase):
+    """removed-api-call, E6 (2026-09-14): RC8's CargoAPI no longer nests CrewXPLevel, and its plain
+    addCrew(int) is not a behaviour-equivalent replacement, so this fixer never rewrites it."""
+
+    def test_crewxplevel_only_file_refuses_rather_than_guess(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            _write(
+                root / "data" / "scripts" / "world" / "Convoy.java",
+                "package data.scripts.world;\n"
+                "import com.fs.starfarer.api.campaign.CargoAPI.CrewXPLevel;\n"
+                "public class Convoy extends BaseSpawnPoint {\n"
+                "    void crew(CargoAPI cargo) { cargo.addCrew(CrewXPLevel.VETERAN, 5); }\n}\n",
+            )
+            with self.assertRaises(FixerError) as caught:
+                compute_fix(root, "removed-api-call")
+            self.assertIn("no safe mechanical rewrite", str(caught.exception))
+            self.assertIn("CargoAPI.CrewXPLevel", str(caught.exception))
+
+    def test_addmessage_is_rewritten_but_crewxplevel_in_the_same_file_is_left_for_the_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            path = root / "data" / "scripts" / "world" / "Convoy.java"
+            _write(
+                path,
+                "package data.scripts.world;\n"
+                "import com.fs.starfarer.api.campaign.CargoAPI.CrewXPLevel;\n"
+                "public class Convoy extends BaseSpawnPoint {\n"
+                "    void spawn(CargoAPI cargo) {\n"
+                "        cargo.addCrew(CrewXPLevel.VETERAN, 5);\n"
+                '        Global.getSectorAPI().addMessage("heavy convoy returned");\n'
+                "    }\n}\n",
+            )
+            before_scan = scan_mod(root)
+            self.assertEqual(len(_findings(before_scan, "removed-api-call")), 2)  # addMessage + CrewXPLevel
+
+            apply_fix(compute_fix(root, "removed-api-call"))
+            text = path.read_text(encoding="utf-8")
+            self.assertIn('Global.getSectorAPI().getCampaignUI().addMessage("heavy convoy returned");', text)
+            # CrewXPLevel is untouched: no rewrite exists for it.
+            self.assertIn("import com.fs.starfarer.api.campaign.CargoAPI.CrewXPLevel;", text)
+            self.assertIn("cargo.addCrew(CrewXPLevel.VETERAN, 5);", text)
+
+            after_scan = scan_mod(root)
+            remaining = _findings(after_scan, "removed-api-call")
+            self.assertEqual(len(remaining), 1)
+            self.assertEqual(remaining[0].evidence[0], "CargoAPI.CrewXPLevel: 1 call(s)")
+
+
 class ModInfoGameVersionInexactTests(unittest.TestCase):
     def _mod(self, root: Path) -> None:
         _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.97a"}')

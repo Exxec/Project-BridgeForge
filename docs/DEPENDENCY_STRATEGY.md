@@ -59,6 +59,27 @@ intent, so revive the dependency or shelve the pair.
 
 Whatever the course, record it in the mod's REVIVAL_PLAN, and keep the untouched original.
 
+## Folding discontinued libraries into RevenantLib (owner policy, 2026-09-14)
+
+When a revival turns up another discontinued dependency, fold it into **RevenantLib**
+(`revenantlib`, workspace `In operation\RevenantLib`) rather than reviving it as one more standalone
+mod. Fold it when all of these hold:
+
+- **It's discontinued:** no release for the current game version and no active maintainer. Record the evidence in `dependency_successors.json`.
+- **It's library-like:** other mods use its ids, classes or assets, and it doesn't change gameplay on its own. If part of it does, that part stays off by default in the fold.
+- **Its licence allows redistribution,** or the build stays local-only.
+
+Don't fold:
+- maintained libraries (LazyLib, MagicLib, GraphicsLib);
+- content mods (factions, ships: VayraMerged is revived as its own mod);
+- total conversions;
+- mods whose global behaviour players opt into (AI Overhaul's AI rewrite).
+
+How to fold:
+1. Keep the original ids and class names, so dependents and saves still resolve them. Record each origin in its own section of `reports\PROVENANCE.md` (source path, SHA-256, licence status).
+2. Point dependents' dependency lines at `revenantlib`, and add a `dependency_successors.json` entry so that `dependency-substitutes` proposes the swap.
+3. Never enable the original mod and RevenantLib together: the same class names clash. A standalone revival, if one exists, stays as a fallback, not as a companion.
+
 ## The 2026-09-14 queue
 
 | Mod | Course | Why |

@@ -7,12 +7,15 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 from .build_tag import _NAME_PATTERN, _string_literal_to_text, _text_to_string_literal
 from .scanner import (
     DESIGN_TYPE_CSV_TARGETS,
     FACTION_SPECIAL_ROLE_KEYS,
     MOD_INFO_TRIAGE_BANNER_PATTERN,
+    REMOVED_API_CALLS,
+    _blank_java_comments,
     _load_lenient_json_file,
     _parse_json,
     _read_csv_rows,
@@ -30,6 +33,7 @@ SUPPORTED_FINDINGS = (
     "mod-info-triage-banner",
     "wing-data-missing-role-desc-column",
     "target-interface-method-missing",
+    "removed-api-call",
 )
 
 
@@ -275,6 +279,163 @@ def _fix_target_interface_method_missing(root: Path, options: dict) -> list[File
     if not changes:
         raise FixerError("The flagged loose scripts could not be rewritten mechanically; fix them by hand.")
     return changes
+
+
+# ---------------------------------------------------------------------------
+# Fixer: removed-api-call (loose scripts only)
+# ---------------------------------------------------------------------------
+#
+# Each bridgeforge.scanner.REMOVED_API_CALLS entry can have its own mechanical rewrite here, keyed by
+# that entry's `signature` string. An entry with no key in _REMOVED_API_CALL_REWRITES (CargoAPI.CrewXPLevel,
+# 2026-09-14: RC8's plain addCrew(int) is not a behaviour-equivalent replacement) is detected by the
+# scanner but never rewritten by this fixer; it is left for the owner to fix by hand.
+
+_LEGACY_FLEETS_CALL = "bf.legacyfleets.LegacyFleets.createFleet("
+_LEGACY_FLEETS_DEPENDENCY_ENTRY = '{"id":"bf_legacy_fleets","name":"BF Legacy Fleets"}'
+_DEPENDENCIES_ARRAY_PATTERN = re.compile(r"['\"]dependencies['\"]\s*:\s*\[")
+
+# REMOVED_API_CALLS[0]: SectorAPI.createFleet(...) -> bf.legacyfleets.LegacyFleets.createFleet(...). The
+# whole matched receiver+method-name span is replaced; the dependency is added only when this rule fires.
+_CREATE_FLEET_SIGNATURE = REMOVED_API_CALLS[0][1]
+
+
+def _rewrite_create_fleet_span(_matched_text: str) -> str:
+    return _LEGACY_FLEETS_CALL
+
+
+# REMOVED_API_CALLS[1]: SectorAPI.addMessage(String) -> insert .getCampaignUI() before .addMessage(,
+# keeping the original receiver (Global.getSector()/Global.getSectorAPI()/getSector()/getSectorAPI())
+# untouched, since CampaignUIAPI.addMessage is what RC8 kept (javap, 2026-09-14).
+_ADD_MESSAGE_TAIL_PATTERN = re.compile(r"\.\s*addMessage\s*\(\Z")
+
+
+def _rewrite_add_message_span(matched_text: str) -> str:
+    return _ADD_MESSAGE_TAIL_PATTERN.sub(lambda m: ".getCampaignUI()" + m.group(0), matched_text, count=1)
+
+
+_REMOVED_API_CALL_REWRITES: dict[str, Callable[[str], str]] = {
+    _CREATE_FLEET_SIGNATURE: _rewrite_create_fleet_span,
+    "SectorAPI.addMessage(String)": _rewrite_add_message_span,
+}
+
+
+def _fix_removed_api_call(root: Path, options: dict) -> list[FileChange]:
+    """Rewrite every `bridgeforge.scanner.REMOVED_API_CALLS` rule that has a mechanical rewrite.
+
+    Each rule matches (comments and disabled_files ignored, same as the scanner) on the receiver+method-
+    name text only; the call's own arguments are always left untouched. A loose script with an unrewritten
+    removed API call fails to compile at load, so this only ever touches `data/` scripts - a match found
+    only in a compiled jar's bundled source is refused, same as target-interface-method-missing. A rule
+    with no rewrite (CargoAPI.CrewXPLevel) is never touched; if it is the only thing found, this refuses
+    rather than guess. `bf_legacy_fleets` is added to mod_info.json's `dependencies` only when the
+    createFleet rule actually rewrote something in this run (not, for example, when only addMessage did).
+    """
+    # (pattern, rewrite, signature) for every rule this fixer knows how to rewrite.
+    rewrite_rules: list[tuple[re.Pattern, Callable[[str], str], str]] = [
+        (pattern, _REMOVED_API_CALL_REWRITES[signature], signature)
+        for pattern, signature, _explanation in REMOVED_API_CALLS
+        if signature in _REMOVED_API_CALL_REWRITES
+    ]
+    unrewritable_patterns: list[re.Pattern] = [
+        pattern for pattern, signature, _explanation in REMOVED_API_CALLS if signature not in _REMOVED_API_CALL_REWRITES
+    ]
+
+    matched_files: list[Path] = []  # any REMOVED_API_CALLS rule, any location
+    rewrites_by_file: dict[Path, list[tuple[re.Pattern, Callable[[str], str], str]]] = {}
+    rewritable_hit = False
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        blanked = _blank_java_comments(text)
+        file_rewrites = [(pattern, rewrite, signature) for pattern, rewrite, signature in rewrite_rules if pattern.search(blanked)]
+        has_unrewritable = any(pattern.search(blanked) for pattern in unrewritable_patterns)
+        if file_rewrites or has_unrewritable:
+            matched_files.append(source)
+        if file_rewrites:
+            rewrites_by_file[source] = file_rewrites
+            rewritable_hit = True
+
+    loose_files = [source for source in rewrites_by_file if source.relative_to(root).as_posix().startswith("data/")]
+    if not loose_files:
+        if matched_files:
+            names = ", ".join(_relative(root, source) for source in matched_files[:5])
+            if not rewritable_hit:
+                raise FixerError(
+                    f"Every removed-api-call match found has no safe mechanical rewrite (e.g. CargoAPI.CrewXPLevel): {names}. Fix by hand."
+                )
+            raise FixerError(f"No loose data/ script has a rewritable removed API call (jar sources need a rebuild: {names}).")
+        raise FixerError(
+            "No loose data/ script calls getSector().createFleet(...)/Global.getSector().createFleet(...) or a similar removed API this fixer knows how to rewrite."
+        )
+
+    changes: list[FileChange] = []
+    rewritten_signatures: set[str] = set()
+    for source in sorted(loose_files, key=lambda path: path.as_posix()):
+        raw = source.read_bytes()
+        text, had_bom = _decode(raw)
+        blanked = _blank_java_comments(text)
+        spans: list[tuple[int, int, Callable[[str], str], str]] = []
+        for pattern, rewrite, signature in rewrites_by_file[source]:
+            for match in pattern.finditer(blanked):
+                spans.append((match.start(), match.end(), rewrite, signature))
+        if not spans:
+            continue
+        new_text = text
+        for start, end, rewrite, signature in sorted(spans, key=lambda item: item[0], reverse=True):
+            new_text = new_text[:start] + rewrite(new_text[start:end]) + new_text[end:]
+            rewritten_signatures.add(signature)
+        changes.append(FileChange(path=source, before=raw, after=_encode(new_text, had_bom)))
+
+    if not changes:
+        raise FixerError("The flagged loose scripts could not be rewritten mechanically; fix them by hand.")
+
+    if _CREATE_FLEET_SIGNATURE in rewritten_signatures:
+        dependency_change = _add_legacy_fleets_dependency(root / "mod_info.json")
+        if dependency_change is not None:
+            changes.append(dependency_change)
+    return changes
+
+
+def _add_legacy_fleets_dependency(path: Path) -> FileChange | None:
+    if not path.is_file():
+        raise FixerError(f"No mod_info.json found at {path}.")
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    data = _load_lenient_json_file(path)
+    if not isinstance(data, dict):
+        raise FixerError(f"{path} could not be parsed as JSON.")
+    dependencies = data.get("dependencies")
+    if dependencies is not None and not isinstance(dependencies, list):
+        raise FixerError(f"{path} 'dependencies' is not a JSON array; add the bf_legacy_fleets dependency by hand.")
+    if isinstance(dependencies, list) and any(isinstance(item, dict) and item.get("id") == "bf_legacy_fleets" for item in dependencies):
+        return None
+
+    match = _DEPENDENCIES_ARRAY_PATTERN.search(text)
+    if match is not None:
+        insert_at = match.end()  # just after the array's '['
+        needs_comma = not text[insert_at:].lstrip().startswith("]")
+        new_text = text[:insert_at] + _LEGACY_FLEETS_DEPENDENCY_ENTRY + ("," if needs_comma else "") + text[insert_at:]
+    else:
+        brace_index = text.find("{")
+        if brace_index == -1:
+            raise FixerError(f"{path} has no '{{' to insert dependencies after.")
+        insertion = '"dependencies":[' + _LEGACY_FLEETS_DEPENDENCY_ENTRY + "],"
+        new_text = text[: brace_index + 1] + insertion + text[brace_index + 1 :]
+
+    try:
+        parsed, _tolerances = _parse_json(new_text)
+    except json.JSONDecodeError as exc:
+        raise FixerError(f"Edited {path} failed to re-parse: {exc}") from exc
+    new_dependencies = parsed.get("dependencies") if isinstance(parsed, dict) else None
+    if not isinstance(new_dependencies, list) or not any(
+        isinstance(item, dict) and item.get("id") == "bf_legacy_fleets" for item in new_dependencies
+    ):
+        raise FixerError(f"Edited {path} did not round-trip the bf_legacy_fleets dependency as expected.")
+    return FileChange(path=path, before=raw, after=_encode(new_text, had_bom))
 
 
 # ---------------------------------------------------------------------------
@@ -771,6 +932,7 @@ _FIXER_FUNCS = {
     "mod-info-game-version-inexact": _fix_mod_info_game_version_inexact,
     "wing-data-missing-role-desc-column": _fix_wing_data_missing_role_desc_column,
     "target-interface-method-missing": _fix_target_interface_method_missing,
+    "removed-api-call": _fix_removed_api_call,
     "csv-row-extra-columns": _fix_csv_row_extra_columns,
     "csv-missing-design-type-column": _fix_csv_missing_design_type_column,
     "procgen-planet-row-missing": lambda root, options: _fix_procgen_row_missing(root, "procgen-planet-row-missing", options),

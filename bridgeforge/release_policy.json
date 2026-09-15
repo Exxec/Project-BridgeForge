@@ -4,6 +4,42 @@
     "exigency": {
       "local_only": true,
       "reason": "Licence: local testing only, not for release distribution, per 'In operation/Exigency/working/please read me.txt' -- awaiting MesoTroniK's permission (roadmap ROADMAP.md, STATUS.md)."
+    },
+    "vayramerged": {
+      "local_only": false,
+      "reason": "Owner decision 2026-09-14, on this evidence: fractalsoftworks.com/forum/index.php?topic=16058.435, reply #442 (2021-09-14, geminitiger quoting BadDragn, author of the unofficial 0.95 update of Vayra's Sector): 'while I have permission, Vayra probably doesn't want to be bothered about bugs' and 'Feel free to share this'. Vayra's permission is second-hand and covers unofficial updates; VayraMerged is RkShaRkz's later revival ('Vayra, but Shark brought it back to life') and is not named. Share only as unofficial, credit Vayra, BadDragn and RkShaRkz, and route bug reports to us, not Vayra."
+    },
+    "xxx_ss_FX_mod_core": {
+      "local_only": true,
+      "reason": "Xenoargh: no licence or permission text in the mod files (checked 2026-09-14); the author has been unresponsive for years (owner, 2026-09-14). Abandonment is not a licence, so publishing is the owner's decision."
+    },
+    "xxx_Starsector_AI_Overhaul": {
+      "local_only": true,
+      "reason": "Xenoargh: no licence or permission text in the mod files (checked 2026-09-14); the author has been unresponsive for years (owner, 2026-09-14). Abandonment is not a licence, so publishing is the owner's decision."
+    },
+    "xxx_ss_FX_example_project": {
+      "local_only": true,
+      "reason": "Xenoargh: no licence or permission text in the mod files (checked 2026-09-14); the author has been unresponsive for years (owner, 2026-09-14). Abandonment is not a licence, so publishing is the owner's decision."
+    },
+    "@_ss_rebal_@": {
+      "local_only": true,
+      "reason": "Xenoargh: no licence or permission text in the mod files (checked 2026-09-14); the author has been unresponsive for years (owner, 2026-09-14). Abandonment is not a licence, so publishing is the owner's decision."
+    },
+    "explorer_society": {
+      "local_only": true,
+      "reason": "Xenoargh: no licence or permission text in the mod files (checked 2026-09-14); the author has been unresponsive for years (owner, 2026-09-14). Abandonment is not a licence, so publishing is the owner's decision."
+    },
+    "ez_damage": {
+      "local_only": true,
+      "reason": "Xenoargh: no licence or permission text in the mod files (checked 2026-09-14); the author has been unresponsive for years (owner, 2026-09-14). Abandonment is not a licence, so publishing is the owner's decision."
+    },
+    "ezfaction": {
+      "local_only": true,
+      "reason": "Xenoargh: no licence or permission text in the mod files (checked 2026-09-14); the author has been unresponsive for years (owner, 2026-09-14). Abandonment is not a licence, so publishing is the owner's decision."
+    },
+    "revenantlib": {
+      "local_only": true,
+      "reason": "Holds folded Xenoargh content with no licence on record (see the Xenoargh entries). Owner decision 2026-09-14: private until the owner confirms the original authors are fully abandoned and can simply be credited under Starsector's forum policy. A separate GitHub repo for it would be private until then."
     }
   },
   "default": {

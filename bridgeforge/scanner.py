@@ -34,13 +34,15 @@ LIBRARY_PATTERNS = {
 }
 LIBRARY_PACKAGES = {
     "LazyLib": ("org.lazywizard.lazylib",),
-    "MagicLib": ("org.magiclib", "data.scripts.util"),
+    # MagicLib's legacy API is data.scripts.util.Magic* (MagicLib 1.5.6 ships 32 such classes); other
+    # data.scripts.util classes belong to whichever mod ships them (AI-War's AIW_StringHelper, 2026-09-15).
+    "MagicLib": ("org.magiclib", "data.scripts.util.Magic"),
     "Nexerelin": ("exerelin.",),
 }
 EXTERNAL_MOD_API_PACKAGES = {
     "Console Commands": ("org.lazywizard.console.",),
     "Industrial Evolution": ("com.fs.starfarer.api.impl.campaign.ids.IndEvo_ids", "indevo.ids."),
-    "MagicLib": ("data.scripts.util.",),
+    "MagicLib": ("data.scripts.util.Magic",),
 }
 EXTERNAL_CAMPAIGN_MEMORY_PREFIXES = {
     "Nexerelin": "$nex_",
@@ -1038,12 +1040,41 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
 # javap evidence from the target's starfarer.api.jar.
 REMOVED_API_CALLS = (
     (
-        re.compile(r"\b(?:Global\s*\.\s*)?getSector\s*\(\s*\)\s*\.\s*createFleet\s*\("),
+        re.compile(
+            r"\b(?:Global\s*\.\s*)?getSector\s*\(\s*\)\s*\.\s*createFleet\s*\("
+            r"|\bGlobal\s*\.\s*getSectorAPI\s*\(\s*\)\s*\.\s*createFleet\s*\("
+        ),
         "SectorAPI.createFleet(factionId, fleetTypeId)",
         # javap of RC8 starfarer.api.jar: SectorAPI has no createFleet (2026-09-14). The 0.6 BaseSpawnPoint
         # spawners (Gekelonians, Cobalt-Arms, Batavia, ...) built fleets from faction fleet types with it.
+        # Global.getSectorAPI() is also confirmed (javap) to return SectorAPI, same as Global.getSector(), so
+        # the same removed call through that receiver is caught too (2026-09-14).
         "0.6-era fleet creation from a faction's fleet types; RC8's SectorAPI has no createFleet. Build the fleet "
         "with FleetFactoryV3.createFleet(FleetParamsV3) (see Zorg18 r1's ZorgFleetSpawner) and keep the spawn point.",
+    ),
+    (
+        re.compile(r"\b(?:Global\s*\.\s*)?getSector(?:API)?\s*\(\s*\)\s*\.\s*addMessage\s*\("),
+        "SectorAPI.addMessage(String)",
+        # javap of RC8 starfarer.api.jar (2026-09-14): SectorAPI has no addMessage (Global.getSector() and
+        # Global.getSectorAPI() both still exist and both return SectorAPI). SectorAPI.getCampaignUI()
+        # returns CampaignUIAPI, which has addMessage(String), addMessage(String, java.awt.Color) and further
+        # IntelInfoPlugin overloads. Real 0.6 convoy spawn points (Cobalt-Arms, Independant-Mining-Faction,
+        # Batavia, Qualljom, Antediluvians) call Global.getSectorAPI().addMessage(String) to post a comm message.
+        "0.6-era comm-message posting; RC8's SectorAPI has no addMessage. Insert .getCampaignUI() before "
+        ".addMessage( on the same receiver: CampaignUIAPI is where RC8 kept the method.",
+    ),
+    (
+        re.compile(r"\bCargoAPI\s*\.\s*CrewXPLevel\b"),
+        "CargoAPI.CrewXPLevel",
+        # javap of RC8 starfarer.api.jar (2026-09-14): CargoAPI no longer nests a CrewXPLevel enum (a
+        # jar-wide search for CrewXPLevel/XPLevel across starfarer.api.jar finds nothing); CargoAPI now has
+        # only addCrew(int) (a plain headcount, no quality level) and gainCrewXP(float). addCrew(int) is not
+        # a behaviour-equivalent replacement for the old addCrew(CrewXPLevel, int) overload (it drops the
+        # crew-quality distinction 0.6 fleets used), so no mechanical rewrite is offered here.
+        "0.6-era CargoAPI.CrewXPLevel (used with an addCrew(CrewXPLevel, int) overload); RC8's CargoAPI has no "
+        "nested CrewXPLevel and no overload that takes one, and its plain addCrew(int) is not an exact "
+        "behaviour-equivalent replacement (it drops the crew-quality level). No fixer rewrite is offered; fix "
+        "by hand.",
     ),
 )
 
@@ -1090,11 +1121,7 @@ def _scan_source_build_dependencies(root: Path, result: ScanResult, import_locat
     # An import of one of the mod's own classes needs no library, even inside a library-named package:
     # Blackrock ships its own data.scripts.util.AnamorphicFlare / BRDYMulti / I18nUtil, which is
     # MagicLib's legacy package prefix.
-    local_classes = set(_source_class_index(root))
-    for _jar, _member, data in _iter_jar_class_files(root):
-        info = _parse_class_file(data)
-        if info is not None and info.this_class:
-            local_classes.add(info.this_class.replace("/", "."))
+    local_classes = _local_class_names(root)
     # Imports of mod-style classes (data.*) that this mod defines nowhere and no known library provides:
     # another mod's classes. FX Example imports FX Core's data.scripts.fx_Particle / fx_SharedLib /
     # fx_Trail but declared no dependency on it (2026-09-14).
@@ -1961,11 +1988,23 @@ def _annotate_source_reachability(root: Path, result: ScanResult) -> None:
             finding.evidence.append("reachability: reachable-local-call")
 
 
+def _local_class_names(root: Path) -> set[str]:
+    """Classes the mod defines itself, in its loose sources or its jars (dotted names)."""
+    names = set(_source_class_index(root))
+    for _jar, _member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is not None and info.this_class:
+            names.add(info.this_class.replace("/", "."))
+    return names
+
+
 def _attribute_library_usage(result: ScanResult) -> None:
     dependencies = " ".join(map(str, result.metadata.get("dependencies") or result.metadata.get("requiredDependencies") or [])).lower()
     calls = [fact.get("value", "") for fact in result.source_facts if fact.get("kind") == "method_invocation"]
+    # The mod's own classes are never a library's, even in a library-looking package.
+    local_classes = _local_class_names(Path(result.input_path)) if result.input_path else set()
     for library, prefixes in LIBRARY_PACKAGES.items():
-        imports = [item for item in result.imports if any(item.startswith(prefix) for prefix in prefixes)]
+        imports = [item for item in result.imports if item not in local_classes and any(item.startswith(prefix) for prefix in prefixes)]
         simple_names = {item.rsplit(".", 1)[-1] for item in imports if not item.endswith(".*")}
         source_calls = [call for call in calls if call.split(".", 1)[0] in simple_names]
         bundled = any(LIBRARY_PATTERNS[library].search(str(item.get("path", ""))) for item in result.jars)
@@ -3322,7 +3361,11 @@ def _scan_script_sandbox_forbidden_api(root: Path, result: ScanResult) -> None:
                 text = source.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            matches = sorted(set(FORBIDDEN_SANDBOX_SOURCE_PATTERN.findall(text)))
+            # Blank comments first (same helper _scan_removed_api_calls uses), so a comment that merely
+            # names java.io.File/java.nio.file/java.lang.reflect (to explain the sandbox, or to say they are
+            # avoided) doesn't read the same as code that actually references them. Real case: BF Legacy
+            # Fleets' own class Javadoc named these APIs to describe what it avoids (2026-09-14).
+            matches = sorted(set(FORBIDDEN_SANDBOX_SOURCE_PATTERN.findall(_blank_java_comments(text))))
             if not matches:
                 continue
             result.add(
