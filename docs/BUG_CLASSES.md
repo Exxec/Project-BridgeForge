@@ -47,6 +47,8 @@ check yet must instead read `NONE (written reason: ...)` and give the reason inl
 | PRB-DEBRIS-01 | The probe combat mission shows a string of "... (Ubique debris class) disabled" messages, and real hulls are skipped at the per-side cap | The probe deployed a mod's wreck-only hulls (SEEKER's 13 "Debris" hulks) as fighting ships; they are disabled on arrival and took 13 of the 24 slots | NONE (written reason: a probe-selection bug, not a mod defect; enforced by `tests/test_probe_hull_inventory.py`) | `tests/test_probe_hull_inventory.py` | SEEKER (live run SK13-1c, 2026-09-13) |
 | VT-7 (script/listener duplication) | A UI-lifecycle script re-adds itself on every open/close cycle, or on every `onGameLoad`, growing per-frame cost | `onGameLoad`/dialog-open code re-registers an `EveryFrameScript`/listener without checking it is already present | NONE (written reason: needs a save-inspect-style duplication audit of live per-entity script counts from a real save -- roadmap P3b-A and P3B_SAVE_TOOLING_RECOMMENDATIONS.md item F; not yet implemented) | -- | Void-Tec r13 |
 
+| BF-SKIN-01 | `mission-local-variant-hull-missing` false-flagged real, campaign-wired mission content as a missing-hull gap | The check built its known-hulls set from `*.ship` files only, never chasing a `.skin`'s `baseHullId` chain the way `_scan_variant_validity` already does | `mission-local-variant-hull-missing` | `tests/test_scanner.py` | Leon-Heavy-Industries (found 2026-09-20 resolving owner decision O3, task A21) |
+
 ## Durable conventions (moved out of `In operation/STATUS.md`)
 
 - **Scope authority:** revival targets player-visible behaviour on the current API, not

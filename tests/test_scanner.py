@@ -726,6 +726,54 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             self.assertIn("mission-local-variant-hull-missing", findings)
             self.assertIn("mission-local-variant-weapon-missing", findings)
 
+    def test_scanner_resolves_local_mission_variant_hull_through_a_skin(self) -> None:
+        """A variant's hullId commonly targets a .skin's id, not the underlying .ship's -- the same
+        pattern _scan_variant_validity already resolves. Found 2026-09-20 on Leon-Heavy-Industries:
+        four real, campaign-wired `*_pirate_raider` missions were false-flagged as missing content
+        because this check built its known-hulls set from *.ship only and never chased the skin's
+        baseHullId chain."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            mission = root / "data" / "missions" / "fixture"
+            mission.mkdir(parents=True)
+            (mission / "MissionDefinition.java").write_text(
+                'class MissionDefinition { void define() { api.addToFleet(FleetSide.PLAYER, "fixture_variant", FleetMemberType.SHIP, "F", true); } }',
+                encoding="utf-8",
+            )
+            (root / "data" / "hulls").mkdir(parents=True)
+            (root / "data" / "hulls" / "fixture_hull.ship").write_text('{"hullId":"fixture_hull"}', encoding="utf-8")
+            (root / "data" / "hulls" / "skins").mkdir()
+            (root / "data" / "hulls" / "skins" / "fixture_hull_pirate.skin").write_text(
+                '{"skinHullId":"fixture_hull_pirate","baseHullId":"fixture_hull"}', encoding="utf-8"
+            )
+            (root / "data" / "variants").mkdir(parents=True)
+            (root / "data" / "variants" / "fixture_variant.variant").write_text(
+                '{"hullId":"fixture_hull_pirate"}', encoding="utf-8"
+            )
+            result = scan_mod(root)
+            findings = {item.id for item in result.findings}
+            self.assertNotIn("mission-local-variant-hull-missing", findings)
+
+    def test_scanner_still_flags_a_hull_no_skin_resolves(self) -> None:
+        """The skin-resolution fix must not swallow a genuinely missing hull."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            mission = root / "data" / "missions" / "fixture"
+            mission.mkdir(parents=True)
+            (mission / "MissionDefinition.java").write_text(
+                'class MissionDefinition { void define() { api.addToFleet(FleetSide.PLAYER, "fixture_variant", FleetMemberType.SHIP, "F", true); } }',
+                encoding="utf-8",
+            )
+            (root / "data" / "variants").mkdir(parents=True)
+            (root / "data" / "variants" / "fixture_variant.variant").write_text(
+                '{"hullId":"fixture_hull_pirate"}', encoding="utf-8"
+            )
+            result = scan_mod(root)
+            findings = {item.id for item in result.findings}
+            self.assertIn("mission-local-variant-hull-missing", findings)
+
 
     def test_scanner_reports_wrapper_directory_layout_without_retargeting_input(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Fixed: `mission-local-variant-hull-missing` (and its sibling weapon check) now resolves a variant's hullId through any `.skin` chain before flagging it missing, matching `_scan_variant_validity`. Found on Leon-Heavy-Industries: 4 real, campaign-wired pirate-raider missions were false-flagged (BF-SKIN-01).
 
 - **Xenoargh FX Core folded into RevenantLib (ROADMAP P14 item 10, task A13, owner decision `In operation/ESCALATIONS.md` E9 course A: 2026-09-20).**
   - `bridgeforge fold "In operation/Xenoargh-FX-Core/working" "In operation/RevenantLib"` run for real (dry-run first); its 13-file byte-for-byte copy landed at `original/working/` (the tool names that folder after the literal basename of `source`, which is always `working` under BridgeForge's own workspace layout) and was renamed to `original/Xenoargh-FX-Core/` to match the `original/Vacuum`/`original/Xenoargh-Rebal` naming convention, logged in RevenantLib's `scratch/MOVES.log`.

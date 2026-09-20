@@ -858,7 +858,7 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
     return jars
 
 
-def _scan_sources(root: Path, result: ScanResult) -> None:
+def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = None) -> None:
     try:
         result.source_facts = analyze_sources(root)
     except AstUnavailable as exc:
@@ -1039,7 +1039,7 @@ def _scan_sources(root: Path, result: ScanResult) -> None:
     for paths in content_owners.values():
         if len(paths) > 1:
             result.add(id="duplicate-source-layout", category="source", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Identical Java source appears at multiple paths. Establish the authoritative source/JAR layout before compiling or modifying it.", evidence=sorted(paths))
-    _scan_mission_local_fleet_references(root, result)
+    _scan_mission_local_fleet_references(root, result, vanilla_core)
     _scan_campaign_fleet_references(root, result)
     _scan_core_campaign_plugin_reregistered(root, result)
     _scan_system_generation_unguarded(root, result)
@@ -1716,7 +1716,7 @@ def _scan_campaign_fleet_references(root: Path, result: ScanResult) -> None:
         )
 
 
-def _scan_mission_local_fleet_references(root: Path, result: ScanResult) -> None:
+def _scan_mission_local_fleet_references(root: Path, result: ScanResult, vanilla_core: Path | None = None) -> None:
     mod_id = str(result.metadata.get("id") or "").strip()
     if not mod_id:
         return
@@ -1724,6 +1724,11 @@ def _scan_mission_local_fleet_references(root: Path, result: ScanResult) -> None
     variants = set(_declared_spec_ids(root / "data" / "variants", "*.variant", "variantId"))
     hulls = set(_declared_spec_ids(root / "data" / "hulls", "*.ship", "hullId"))
     weapons = set(_declared_spec_ids(root / "data" / "weapons", "*.wpn", "id"))
+    # A mission variant's hullId commonly targets a .skin's id rather than a bare .ship's, the
+    # same pattern _scan_variant_validity already resolves (Leon-Heavy-Industries' four
+    # `*_pirate_raider` missions, found 2026-09-20: real, art-backed, campaign-wired content, not
+    # a gap). Built lazily below, only if a local variant actually needs checking.
+    skins: dict[str, str] | None = None
     wing_data = root / "data" / "hulls" / "wing_data.csv"
     wings: set[str] = set()
     if wing_data.is_file():
@@ -1767,11 +1772,15 @@ def _scan_mission_local_fleet_references(root: Path, result: ScanResult) -> None
                 )
             elif member_type == "SHIP" and fleet_id not in inspected_variants:
                 inspected_variants.add(fleet_id)
-                _scan_mission_variant_assets(root, result, fleet_id, prefix, hulls, weapons)
+                if skins is None:
+                    skins = _skin_index(root, vanilla_core)
+                _scan_mission_variant_assets(root, result, fleet_id, prefix, hulls, weapons, skins)
     result.migration_context["mission_fleet_references"] = references
 
 
-def _scan_mission_variant_assets(root: Path, result: ScanResult, variant_id: str, prefix: str, hulls: set[str], weapons: set[str]) -> None:
+def _scan_mission_variant_assets(
+    root: Path, result: ScanResult, variant_id: str, prefix: str, hulls: set[str], weapons: set[str], skins: dict[str, str] | None = None
+) -> None:
     path = root / "data" / "variants" / f"{variant_id}.variant"
     try:
         data, _ = _parse_json(path.read_text(encoding="utf-8-sig"))
@@ -1780,17 +1789,22 @@ def _scan_mission_variant_assets(root: Path, result: ScanResult, variant_id: str
     if not isinstance(data, dict):
         return
     hull_id = data.get("hullId")
-    if isinstance(hull_id, str) and hull_id.startswith(prefix) and hull_id not in hulls:
-        result.add(
-            id="mission-local-variant-hull-missing",
-            category="missions",
-            severity="high",
-            classification="MANUAL",
-            confidence="DETERMINISTIC",
-            explanation="A locally referenced mission variant uses a hull with this mod's ID prefix, but no matching local .ship definition was found.",
-            file=_relative(root, path),
-            evidence=[f"variant:{variant_id}", f"hull:{hull_id}", "resolution: missing-local"],
-        )
+    if isinstance(hull_id, str) and hull_id.startswith(prefix):
+        resolved_hull_id = _resolve_hull_id(hull_id, skins or {})
+        if resolved_hull_id not in hulls:
+            evidence = [f"variant:{variant_id}", f"hull:{hull_id}", "resolution: missing-local"]
+            if resolved_hull_id != hull_id:
+                evidence.append(f"resolved-via-skin:{resolved_hull_id}")
+            result.add(
+                id="mission-local-variant-hull-missing",
+                category="missions",
+                severity="high",
+                classification="MANUAL",
+                confidence="DETERMINISTIC",
+                explanation="A locally referenced mission variant uses a hull with this mod's ID prefix, but no matching local .ship definition was found, even after resolving the id through any .skin chain.",
+                file=_relative(root, path),
+                evidence=evidence,
+            )
     weapon_ids: set[str] = set()
     for group in data.get("weaponGroups", []):
         if not isinstance(group, dict):
@@ -5359,7 +5373,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_metadata(root, result)
     _scan_mod_info_jar_missing(root, result)
     _scan_jars(root, result)
-    _scan_sources(root, result)
+    _scan_sources(root, result, vanilla_core)
     _scan_assets(root, result)
     _scan_configured_class_integrity(root, result)
     _annotate_source_reachability(root, result)
