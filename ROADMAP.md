@@ -491,6 +491,18 @@ Progression, each stage feeding the next:
     `compile_check`/`substitutes.provider_index` already assemble, plus a new finding
     (`loose-script-shadowed-by-dependency-jar`, MANUAL: the edit has no effect) and a scanner test.
 
+13. **compile-check: two javac-integration bugs (found by task A14, 2026-09-20).**
+    - `compile_check` does not pass `-sourcepath ""`, so when a dependency jar bundles `.java`
+      sources beside its classes (Interstellar Imperium`s `II.jar` does), javac implicitly
+      recompiles those bundled sources and reports errors for libraries the mod under test never
+      declared. Pure noise, attributed to the wrong mod.
+    - `java_toolchain.parse_javac_errors` does not recognise javac`s jar-embedded source header
+      format `somejar.jar(/entry.java):LINE: error:`, so those lines` `symbol:`/`location:` detail
+      lines are appended to whichever real error was parsed last. In A14`s run one genuine error
+      accumulated 726 spurious detail entries.
+    Both inflate error counts and mis-attribute them, which matters most for `scan --compile-check`
+    across the Ironclads queue. Needs a fix plus a regression test with a jar that carries sources.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit
