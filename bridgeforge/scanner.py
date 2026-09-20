@@ -4391,6 +4391,52 @@ def _mod_info_declares_dependency(result: ScanResult, dependency_id: str) -> boo
     return False
 
 
+def _scan_revenantlib_fold_conflict(result: ScanResult) -> None:
+    """MANUAL: mod_info.json declares both revenantlib and an id `dependency_successors.json` records
+    as folded into it (`bridgeforge fold`, roadmap P14 item 10; docs/DEPENDENCY_STRATEGY.md).
+
+    Folding keeps the original mod's ids and class names unchanged, so enabling the original mod
+    alongside RevenantLib double-registers the same ids and classes. Local imports: fold.py and
+    substitutes.py both import this module at load time, so importing either back at module scope
+    here would cycle; deferring to call time (after both are fully loaded) avoids that, the same way
+    `_scan_compile_check` defers its import of compile_check.
+    """
+    if not _mod_info_declares_dependency(result, "revenantlib"):
+        return
+    from .fold import FOLD_KIND
+    from .substitutes import load_successors
+
+    folded_ids = {
+        str(entry.get("match") or "").strip().lower()
+        for entry in load_successors()
+        if entry.get("kind") == FOLD_KIND and entry.get("match")
+    }
+    if not folded_ids:
+        return
+    dependencies = result.metadata.get("dependencies") or result.metadata.get("requiredDependencies") or []
+    conflicts: list[str] = []
+    for item in dependencies:
+        candidate = str(item.get("id") or "").strip() if isinstance(item, dict) else str(item).strip()
+        if candidate and candidate.lower() != "revenantlib" and candidate.lower() in folded_ids:
+            conflicts.append(candidate)
+    if not conflicts:
+        return
+    result.add(
+        id="revenantlib-fold-conflict",
+        category="dependencies",
+        severity="high",
+        classification="MANUAL",
+        confidence="DETERMINISTIC",
+        explanation=(
+            f"mod_info.json declares both revenantlib and {', '.join(sorted(set(conflicts)))}, which "
+            "RevenantLib has folded in with the same ids and class names; enabling both together "
+            "double-registers them. Declare only revenantlib."
+        ),
+        file="mod_info.json",
+        evidence=sorted(set(conflicts)),
+    )
+
+
 # Vanilla classes that 0.53-0.65 mods import and that 0.98a no longer ships (2026-09-14 batch: Batavia,
 # Cobalt Arms, Gekelonians, Independant Mining Faction, Qualljom).
 # Vanilla classes that old mods use but the target no longer has. Add an entry only with evidence from
@@ -5320,6 +5366,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_campaign_identifier_context(root, result)
     _attribute_library_usage(result)
     _dependency_compatibility_context(result)
+    _scan_revenantlib_fold_conflict(result)
     _infer_environment(result)
     _scan_procgen_rows(root, result, vanilla_root)
     _scan_faction_known_lists(root, result, vanilla_root)

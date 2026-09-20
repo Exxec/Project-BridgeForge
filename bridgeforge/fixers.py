@@ -36,6 +36,7 @@ SUPPORTED_FINDINGS = (
     "target-interface-method-missing",
     "removed-api-call",
     "carrier-bays-proposal",
+    "revenantlib-fold-conflict",
 )
 
 
@@ -500,7 +501,12 @@ def _add_revenantlib_dependency(path: Path) -> FileChange | None:
     RevenantLib 1.1.0+bf.1 folded in the retired BF Legacy Fleets library (`bf.legacyfleets.LegacyFleets`,
     id `bf_legacy_fleets`, owner decision 2026-09-15) and added `bf.legacyworld.LegacyWorld`; both are
     what the createFleet/addPlanet/addOrbitalStation rewrites above now point at, so this replaces the
-    older `_add_legacy_fleets_dependency` (which added `bf_legacy_fleets` instead).
+    older `_add_legacy_fleets_dependency` (which added `bf_legacy_fleets` instead). "Already declared"
+    checks both a `{"id": "revenantlib", ...}` object entry and a bare `"revenantlib"` string entry --
+    Starsector accepts either shape (`_mod_info_declares_dependency` in scanner.py already does the same
+    both-shapes check); recognizing only the object shape here let `revenantlib-fold-conflict`'s fixer
+    double-add a second, redundant `{"id": "revenantlib", ...}` entry onto a mod_info.json that already
+    declared it as a bare string (found by that fixer's own test, 2026-09-20).
     """
     if not path.is_file():
         raise FixerError(f"No mod_info.json found at {path}.")
@@ -512,7 +518,9 @@ def _add_revenantlib_dependency(path: Path) -> FileChange | None:
     dependencies = data.get("dependencies")
     if dependencies is not None and not isinstance(dependencies, list):
         raise FixerError(f"{path} 'dependencies' is not a JSON array; add the revenantlib dependency by hand.")
-    if isinstance(dependencies, list) and any(isinstance(item, dict) and item.get("id") == "revenantlib" for item in dependencies):
+    if isinstance(dependencies, list) and any(
+        (isinstance(item, dict) and item.get("id") == "revenantlib") or item == "revenantlib" for item in dependencies
+    ):
         return None
 
     match = _DEPENDENCIES_ARRAY_PATTERN.search(text)
@@ -537,6 +545,122 @@ def _add_revenantlib_dependency(path: Path) -> FileChange | None:
     ):
         raise FixerError(f"Edited {path} did not round-trip the revenantlib dependency as expected.")
     return FileChange(path=path, before=raw, after=_encode(new_text, had_bom))
+
+
+# ---------------------------------------------------------------------------
+# Fixer: revenantlib-fold-conflict (roadmap P14 item 10, fold-in workflow)
+# ---------------------------------------------------------------------------
+
+# One dependencies-array entry: a bare id string (either quote style) or a flat {"id":...} object
+# (no nested braces expected in a real dependency entry -- same assumption _OBJECT_LITERAL in
+# build_tag.py already makes for "version").
+_DEPENDENCY_ENTRY_PATTERN = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\{[^{}]*\}')
+_DEPENDENCY_ENTRY_ID_PATTERN = re.compile(r"""['"]id['"]\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')""")
+
+
+def _remove_dependency_entries(text: str, remove_ids: list[str]) -> tuple[str, list[str]]:
+    """Drop each `dependencies` array entry (a bare id string or an {"id": ...} object) whose id
+    case-insensitively matches one of `remove_ids` -- `revenantlib` itself is never a candidate.
+    Everything else in the file (comments, formatting, other keys) is left untouched. Returns
+    (new_text, ids actually removed); an id with no matching array entry is silently not removed --
+    the caller decides whether that's an error.
+    """
+    targets = {item.strip().lower() for item in remove_ids if item.strip() and item.strip().lower() != "revenantlib"}
+    match = _DEPENDENCIES_ARRAY_PATTERN.search(text)
+    if match is None or not targets:
+        return text, []
+    depths = _structural_depths(text)
+    open_pos = match.end() - 1  # the '[' itself
+    inner_depth = depths[open_pos] + 1
+    close_pos = None
+    for i in range(open_pos + 1, len(text)):
+        if text[i] == "]" and depths[i] == inner_depth:
+            close_pos = i
+            break
+    if close_pos is None:
+        return text, []
+
+    body = text[open_pos + 1 : close_pos]
+    remove_spans: list[tuple[int, int]] = []
+    removed: list[str] = []
+    for entry_match in _DEPENDENCY_ENTRY_PATTERN.finditer(body):
+        raw_entry = entry_match.group(0)
+        if raw_entry.startswith("{"):
+            id_match = _DEPENDENCY_ENTRY_ID_PATTERN.search(raw_entry)
+            entry_id = _string_literal_to_text(id_match.group(1)) if id_match else None
+        else:
+            entry_id = _string_literal_to_text(raw_entry)
+        if entry_id and entry_id.strip().lower() in targets:
+            remove_spans.append((entry_match.start(), entry_match.end()))
+            removed.append(entry_id)
+    if not remove_spans:
+        return text, []
+
+    new_body = body
+    for start, end in sorted(remove_spans, reverse=True):
+        seg_start, seg_end = start, end
+        after_match = re.match(r"[ \t]*,", new_body[seg_end:])
+        if after_match:
+            seg_end += after_match.end()
+        else:
+            before_match = re.search(r",\s*\Z", new_body[:seg_start])
+            if before_match:
+                seg_start = before_match.start()
+        new_body = new_body[:seg_start] + new_body[seg_end:]
+    new_text = text[: open_pos + 1] + new_body + text[close_pos:]
+    return new_text, removed
+
+
+def _fix_revenantlib_fold_conflict(root: Path, options: dict) -> list[FileChange]:
+    """Resolve `revenantlib-fold-conflict`: drop the redundant original dependency entry/entries a
+    mod_info.json also declares alongside revenantlib (per dependency_successors.json's
+    "folded-into-revenantlib" entries, written by `bridgeforge fold` -- see bridgeforge/fold.py).
+    revenantlib's own entry is left exactly as it is; `_add_revenantlib_dependency` is still called
+    first (as every other dependency-touching fixer above does) so a mod_info.json that somehow lost
+    its revenantlib entry between scan and fix gets it back, and so the removal below always edits
+    the same in-memory text that ends up written (never a second, independently-read FileChange for
+    the same path, which could otherwise clobber this one).
+    """
+    from .scanner import scan_mod
+
+    findings = [f for f in scan_mod(root).findings if f.id == "revenantlib-fold-conflict"]
+    if not findings:
+        raise FixerError(
+            "No revenantlib-fold-conflict finding for this mod: mod_info.json does not declare both "
+            "revenantlib and an original mod RevenantLib has folded in."
+        )
+    conflicting_ids = sorted({item for finding in findings for item in finding.evidence})
+
+    path = root / "mod_info.json"
+    if not path.is_file():
+        raise FixerError(f"No mod_info.json found at {path}.")
+
+    dependency_change = _add_revenantlib_dependency(path)
+    if dependency_change is not None:
+        raw = dependency_change.before
+        text, had_bom = _decode(dependency_change.after)
+    else:
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+
+    new_text, removed = _remove_dependency_entries(text, conflicting_ids)
+    if not removed:
+        raise FixerError(f"{path}: could not locate a removable dependency entry among {', '.join(conflicting_ids)}.")
+
+    try:
+        parsed, _tolerances = _parse_json(new_text)
+    except json.JSONDecodeError as exc:
+        raise FixerError(f"Edited {path} failed to re-parse: {exc}") from exc
+    remaining_ids = {
+        (str(item.get("id") or "").strip().lower() if isinstance(item, dict) else str(item).strip().lower())
+        for item in ((parsed.get("dependencies") or []) if isinstance(parsed, dict) else [])
+    }
+    if any(removed_id.lower() in remaining_ids for removed_id in removed):
+        raise FixerError(f"Edited {path} still declares {', '.join(removed)} after removal; refusing to write a partial edit.")
+    if "revenantlib" not in remaining_ids:
+        raise FixerError(f"Edited {path} no longer declares revenantlib; refusing to write an edit that would leave dependents unable to resolve either id.")
+
+    return [FileChange(path=path, before=raw, after=_encode(new_text, had_bom))]
 
 
 # ---------------------------------------------------------------------------
@@ -1160,6 +1284,7 @@ _FIXER_FUNCS = {
     "faction-known-lists-missing": _fix_faction_known_lists_missing,
     "mod-info-triage-banner": _fix_mod_info_triage_banner,
     "carrier-bays-proposal": _fix_carrier_bays_proposal,
+    "revenantlib-fold-conflict": _fix_revenantlib_fold_conflict,
 }
 
 

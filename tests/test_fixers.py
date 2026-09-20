@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from bridgeforge.cli import main
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix, unified_diff_for_change
@@ -987,6 +988,109 @@ class ModInfoTriageBannerTests(unittest.TestCase):
             _write(root / "mod_info.json", '{"id":"fixture","name":"Clean Mod Name"}')
             with self.assertRaises(FixerError):
                 compute_fix(root, "mod-info-triage-banner")
+
+
+class RevenantlibFoldConflictFixerTests(unittest.TestCase):
+    """revenantlib-fold-conflict (roadmap P14 item 10, the fold-in workflow's fixer): a mod that still
+    declares an original id RevenantLib has folded in, alongside revenantlib itself, double-registers
+    the same ids and classes. This fixer drops the redundant original entry/entries and leaves
+    revenantlib's own entry alone. `bridgeforge.substitutes.load_successors` is patched (not the real
+    dependency_successors.json) so this stays independent of whatever real folds exist when it runs.
+    """
+
+    FOLDED = [
+        {"match": "oldlib", "kind": "folded-into-revenantlib", "successor": "s", "action": "a", "evidence": "e"},
+        {"match": "anotherlib", "kind": "folded-into-revenantlib", "successor": "s", "action": "a", "evidence": "e"},
+    ]
+
+    def _patch(self):
+        return mock.patch("bridgeforge.substitutes.load_successors", return_value=self.FOLDED)
+
+    def test_removes_the_redundant_original_entry_leaves_revenantlib_then_rescan_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", json.dumps({
+                "id": "dependent", "name": "Dependent", "gameVersion": "0.98a",
+                "dependencies": [{"id": "revenantlib", "name": "RevenantLib"}, {"id": "oldlib", "name": "OldLib"}],
+            }))
+            with self._patch():
+                self.assertEqual(len(_findings(scan_mod(root), "revenantlib-fold-conflict")), 1)
+                plan = compute_fix(root, "revenantlib-fold-conflict")
+                applied = apply_fix(plan)
+                self.assertTrue(Path(applied[0]["backup"]).is_file())
+                self.assertTrue(Path(applied[0]["backup"]).name.endswith(".pre-bf-fix-revenantlib-fold-conflict.bak"))
+                mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+                self.assertEqual(mod_info["dependencies"], [{"id": "revenantlib", "name": "RevenantLib"}])
+                self.assertEqual(_findings(scan_mod(root), "revenantlib-fold-conflict"), [])
+
+    def test_multiple_conflicting_entries_are_all_removed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", json.dumps({
+                "id": "dependent",
+                "dependencies": [
+                    {"id": "oldlib", "name": "OldLib"},
+                    {"id": "revenantlib", "name": "RevenantLib"},
+                    {"id": "anotherlib", "name": "AnotherLib"},
+                ],
+            }))
+            with self._patch():
+                apply_fix(compute_fix(root, "revenantlib-fold-conflict"))
+            mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(mod_info["dependencies"], [{"id": "revenantlib", "name": "RevenantLib"}])
+
+    def test_bare_string_dependency_entries_are_removed_too(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", json.dumps({"id": "dependent", "dependencies": ["revenantlib", "oldlib"]}))
+            with self._patch():
+                apply_fix(compute_fix(root, "revenantlib-fold-conflict"))
+            mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(mod_info["dependencies"], ["revenantlib"])
+
+    def test_comments_and_other_keys_are_left_untouched(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            text = (
+                "{\n"
+                "\t# a leading comment\n"
+                '\t"id":"dependent",\n'
+                '\t"name":"Dependent",\n'
+                '\t"dependencies":[\n'
+                '\t\t{"id":"revenantlib","name":"RevenantLib"},\n'
+                '\t\t{"id":"oldlib","name":"OldLib"}\n'
+                "\t]\n"
+                "}\n"
+            )
+            _write(root / "mod_info.json", text)
+            with self._patch():
+                apply_fix(compute_fix(root, "revenantlib-fold-conflict"))
+            new_text = (root / "mod_info.json").read_text(encoding="utf-8")
+            self.assertIn("# a leading comment", new_text)
+            self.assertIn('"name":"Dependent"', new_text)
+            self.assertNotIn("oldlib", new_text)
+            self.assertIn('"id":"revenantlib"', new_text)
+
+    def test_refuses_when_no_conflict_finding_is_present(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", json.dumps({"id": "dependent", "dependencies": [{"id": "revenantlib", "name": "RevenantLib"}]}))
+            with self._patch():
+                with self.assertRaises(FixerError):
+                    compute_fix(root, "revenantlib-fold-conflict")
+
+    def test_cli_fix_apply_end_to_end(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", json.dumps({
+                "id": "dependent",
+                "dependencies": [{"id": "revenantlib", "name": "RevenantLib"}, {"id": "oldlib", "name": "OldLib"}],
+            }))
+            with self._patch():
+                exit_code = main(["fix", str(root), "--finding", "revenantlib-fold-conflict", "--apply", "--json"])
+            self.assertEqual(exit_code, 0)
+            mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(mod_info["dependencies"], [{"id": "revenantlib", "name": "RevenantLib"}])
 
 
 class UnsupportedFindingTests(unittest.TestCase):

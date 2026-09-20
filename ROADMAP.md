@@ -446,6 +446,20 @@ Progression, each stage feeding the next:
     - a `dependency_successors.json` entry per folded mod;
     - a check that warns when an original mod and RevenantLib are enabled together.
 
+    **Tooling done 2026-09-20 (task A12).** `fold <source> <target>` (`bridgeforge/fold.py`) copies the
+    source mod byte-for-byte into `<target>/original/<source name>/`, records a provenance section
+    (source path, mod id, name, author, version, `gameVersion`, licence-file evidence, per-file SHA-256)
+    in `<target>/reports/PROVENANCE.md`, and appends a `dependency_successors.json` entry (kind
+    `folded-into-revenantlib`) so `dependency-substitutes` proposes the swap. `--dry-run` writes nothing;
+    an existing `original/<name>/` is refused without `--overwrite`; a file that already exists with
+    different content is a conflict that stops the whole run, reported rather than resolved. New scanner
+    check `revenantlib-fold-conflict` (MANUAL) fires when a mod declares both `revenantlib` and a folded
+    original id; `fix <mod> --finding revenantlib-fold-conflict --apply` drops the redundant original
+    entry, reusing `_add_revenantlib_dependency`. Source/target are always explicit arguments; nothing
+    under "In operation" was touched by this task, and folding FX Core itself is still the coordinator's
+    next step, not done here. Tests: `tests/test_fold.py`, `tests/test_fixers.py`
+    (`RevenantlibFoldConflictFixerTests`).
+
 12. **Cross-mod loose-script shadowing.** `loose-script-shadowed-by-jar` only compares a mod's loose
     `data/**.java` against **its own** jars. A mod that overrides a *dependency's* loose script is
     therefore misreported: the scanner raises `loose-script-janino-risk` on a file the game never

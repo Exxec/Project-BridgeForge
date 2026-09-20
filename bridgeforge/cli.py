@@ -706,6 +706,13 @@ def build_parser() -> argparse.ArgumentParser:
     rebuild_jar_cmd.add_argument("--output", type=Path, help="where the rebuilt jar and compiled classes go (default: a new temp directory)")
     rebuild_jar_cmd.add_argument("--install", action="store_true", help="only when status is PASS: move the working copy's current jar to scratch/moved-<date>/ (logged in MOVES.log) and copy the rebuilt jar in")
     rebuild_jar_cmd.add_argument("--json", action="store_true")
+    fold_cmd = subcommands.add_parser("fold", help="fold a discontinued library-like mod into a RevenantLib-shaped target directory (roadmap P14 item 10): copy it byte-for-byte, keeping its ids and class names, and record provenance plus a dependency_successors.json entry")
+    fold_cmd.add_argument("source", type=Path, help="the library mod's own directory (holding mod_info.json), e.g. a working copy")
+    fold_cmd.add_argument("target", type=Path, help="the RevenantLib-shaped target directory (holds/gets original/<source name>/ and reports/PROVENANCE.md)")
+    fold_cmd.add_argument("--overwrite", action="store_true", help="allow folding into an existing original/<source name>/ (files that differ from the source are still never overwritten -- reported as conflicts instead)")
+    fold_cmd.add_argument("--dry-run", action="store_true", help="report what would happen; write nothing")
+    fold_cmd.add_argument("--successors-path", type=Path, help="dependency_successors.json to update (default: bridgeforge's own copy)")
+    fold_cmd.add_argument("--json", action="store_true")
     return parser
 
 
@@ -2239,4 +2246,22 @@ def main(argv: list[str] | None = None) -> int:
             elif result.get("install_note"):
                 print(f"  {result['install_note']}")
         return 0 if result["status"] == "PASS" else 1
+    if args.command == "fold":
+        from .fold import FoldError, fold
+        try:
+            result = fold(args.source, args.target, dry_run=args.dry_run, overwrite=args.overwrite, successors_path=args.successors_path)
+        except FoldError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"{result['status']}: {result['source']} -> {result['destination']}" + (" (dry run)" if result["dry_run"] else ""))
+            if result["status"] == "CONFLICT":
+                print("  conflicts: " + ", ".join(result["conflicts"][:10]) + (" ..." if len(result["conflicts"]) > 10 else ""))
+            elif result["status"] == "REFUSED":
+                print(f"  {result['message']}")
+            else:
+                print(f"  files copied: {len(result['files_copied'])}; provenance written: {result['provenance_written']}; successors entry written: {result['successors_entry_written']}")
+        return 0 if result["status"] in ("OK", "NOOP") else 1
     return 2
