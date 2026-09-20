@@ -36,6 +36,13 @@
       "successor": "No 0.98a release known. The newest forum release is titled \"[0.9.1a] Vayra's Sector 3.2 - back from the dead 2021-02-11\", but a 3.2.1 build targeting 0.95.1a-RC6 exists locally, provenance unverified, and defines every vayra_* id Communist Clouds uses.",
       "action": "Escalate. Reviving the 0.95.1a build is the cheaper path (a 0.95 to 0.98 gap, not 0.9.1a), licence permitting; otherwise strip its content from the add-on or wait for a successor.",
       "evidence": "fractalsoftworks.com forum topic 16058 (searched 2026-09-14); ~150 mods of the owner's install define no vayra_* content; C:/Users/exxec/Downloads/Ironclads mega archive/Vayra's Sector (3.2.1, 0.95.1a-RC6), dependency-substitutes 2026-09-14"
+    },
+    {
+      "match": "xxx_ss_FX_mod_core",
+      "kind": "folded-into-revenantlib",
+      "successor": "Folded into RevenantLib (id revenantlib). Original: $$ Starsector FX CORE $$ by xenoargh, version 9.1a+bf.1, gameVersion 0.98a-RC8.",
+      "action": "Declare revenantlib instead of xxx_ss_FX_mod_core. Never enable xxx_ss_FX_mod_core alongside revenantlib: folding keeps its ids and class names unchanged, so both loaded together would double-register them (bridgeforge fix --finding revenantlib-fold-conflict resolves that if it already happened).",
+      "evidence": "bridgeforge fold C:\\Users\\exxec\\Documents\\Project BridgeForge\\In operation\\Xenoargh-FX-Core\\working C:\\Users\\exxec\\Documents\\Project BridgeForge\\In operation\\RevenantLib, copied byte-for-byte; see C:\\Users\\exxec\\Documents\\Project BridgeForge\\In operation\\RevenantLib\\reports\\PROVENANCE.md."
     }
   ]
 }

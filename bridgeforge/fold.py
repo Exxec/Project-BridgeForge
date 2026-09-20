@@ -80,6 +80,21 @@ def _relative_files(root: Path) -> list[str]:
     return sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file())
 
 
+def _origin_folder_name(source_root: Path) -> str:
+    """Folder name for the fold under `<target>/original/`.
+
+    BridgeForge workspaces are laid out as `<Workspace>/working`, so the source basename is almost
+    always the literal `working` - every fold would land at `original/working/` and collide with the
+    next one. Use the workspace folder instead, which is what the hand-curated sections already use
+    (`original/Vacuum`, `original/Xenoargh-Rebal`). Falls back to the basename if that is unhelpful.
+    """
+    if source_root.name.lower() in {"working", "original", "src"}:
+        parent = source_root.parent.name
+        if parent:
+            return parent
+    return source_root.name
+
+
 def _append_provenance_section(
     path: Path,
     source_root: Path,
@@ -88,9 +103,10 @@ def _append_provenance_section(
     relative_files: list[str],
     manifest: dict[str, str],
 ) -> None:
-    under = f"original/{source_root.name}/"
+    origin_name = _origin_folder_name(source_root)
+    under = f"original/{origin_name}/"
     lines = [
-        f"## Origin: {source_root.name}",
+        f"## Origin: {origin_name}",
         "",
         f"- **Source path:** `{source_root}` (mod id `{metadata['id']}`, version `{metadata['version']}`, "
         f"`gameVersion \"{metadata['game_version']}\"`, author `{metadata['author']}`)",
@@ -179,7 +195,7 @@ def fold(
         raise FoldError(f"Source ({source_root}) and target ({target_root}) must not be nested inside each other.")
 
     metadata = _mod_metadata(source_root)
-    dest_root = target_root / "original" / source_root.name
+    dest_root = target_root / "original" / _origin_folder_name(source_root)
 
     result: dict[str, object] = {
         "schema_version": SCHEMA_VERSION,
@@ -238,7 +254,7 @@ def fold(
     result["manifest_sha256"] = manifest
 
     provenance_path = target_root / "reports" / "PROVENANCE.md"
-    origin_heading = f"## Origin: {source_root.name}"
+    origin_heading = f"## Origin: {_origin_folder_name(source_root)}"
     provenance_exists_already = provenance_path.is_file() and origin_heading in provenance_path.read_text(encoding="utf-8", errors="replace")
 
     successors_exists_already = any(

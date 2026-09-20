@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 from bridgeforge.cli import main
-from bridgeforge.fold import FoldError, fold
+from bridgeforge.fold import FoldError, _origin_folder_name, fold
 from bridgeforge.scanner import scan_mod
 
 
@@ -283,6 +283,21 @@ class RevenantlibFoldConflictScanTests(unittest.TestCase):
             with _successors_patch([]):
                 result = scan_mod(root)
             self.assertEqual([f for f in result.findings if f.id == "revenantlib-fold-conflict"], [])
+
+
+class OriginFolderNameTests(unittest.TestCase):
+    """The fold lands under the workspace name, not the literal `working` basename."""
+
+    def test_working_basename_uses_the_workspace_folder(self) -> None:
+        self.assertEqual(_origin_folder_name(Path("In operation/Xenoargh-FX-Core/working")), "Xenoargh-FX-Core")
+
+    def test_two_folds_do_not_collide_on_working(self) -> None:
+        first = _origin_folder_name(Path("In operation/Vacuum/working"))
+        second = _origin_folder_name(Path("In operation/Xenoargh-Rebal/working"))
+        self.assertNotEqual(first, second)
+
+    def test_a_plain_folder_keeps_its_own_name(self) -> None:
+        self.assertEqual(_origin_folder_name(Path("somewhere/Xenoargh-Rebal")), "Xenoargh-Rebal")
 
 
 if __name__ == "__main__":

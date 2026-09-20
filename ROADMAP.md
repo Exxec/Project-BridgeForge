@@ -460,6 +460,26 @@ Progression, each stage feeding the next:
     next step, not done here. Tests: `tests/test_fold.py`, `tests/test_fixers.py`
     (`RevenantlibFoldConflictFixerTests`).
 
+    **FX Core folded 2026-09-20 (task A13, `In operation/ESCALATIONS.md` E9, owner course A).** Ran
+    `fold` for real against `In operation/Xenoargh-FX-Core/working` (dry-run first). The tool names the
+    copied provenance folder after the literal basename of its `source` argument, which under
+    BridgeForge's own `<Mod>/working` layout is always `working` — the raw output landed at
+    `original/working/` and was renamed to `original/Xenoargh-FX-Core/` right after (logged in
+    RevenantLib's `scratch/MOVES.log`), to match the naming convention `original/Vacuum`/
+    `original/Xenoargh-Rebal` already set; every future fold of a `working/` copy will hit the same
+    naming quirk unless `fold.py` is changed to name the folder from mod_info.json's own id/name
+    instead of the source path's basename. Unlike Vacuum/Rebal, FX Core's package (`data.scripts.*`)
+    was deliberately kept unrenamed (Xenoargh-FX-Example resolves it by name), making this fold's
+    do-not-enable-alongside-the-original warning a hard class clash rather than the softer duplicate-id
+    case. The owner's "make the cost lazy" decision was implemented as a lazy, thread-safe
+    (double-checked locking) `ensureExecutor()` around `FX_Plugin`'s static `ExecutorService` field,
+    scoped to exactly that field per the task; `FX_Plugin`'s modPlugin was not declared (redundant with
+    RevenantLib's existing `lw_lazylib` dependency). RevenantLib bumped to `1.2.0+bf.1`.
+    Xenoargh-FX-Example's dependency was repointed via the `revenantlib-fold-conflict` fixer path
+    (add `revenantlib` by hand first, then `fix --apply`); rescanned clean (0 MANUAL, same REVIEW/SAFE
+    counts as before). Details: `In operation/RevenantLib/reports/PROVENANCE.md` ("Origin: Xenoargh FX
+    Core"), `reports/README.md`, `working/reports/REVIVAL_REPORT.md`'s 2026-09-20 update.
+
 12. **Cross-mod loose-script shadowing.** `loose-script-shadowed-by-jar` only compares a mod's loose
     `data/**.java` against **its own** jars. A mod that overrides a *dependency's* loose script is
     therefore misreported: the scanner raises `loose-script-janino-risk` on a file the game never
