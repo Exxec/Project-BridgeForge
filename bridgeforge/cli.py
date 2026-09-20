@@ -102,6 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--vanilla-core", type=Path, help="path to a read-only starsector-core directory, used for vanilla-row/faction/path exemptions")
     scan.add_argument("--baseline", type=Path, help="only report findings not present in this baseline file, plus a count of previously accepted findings that are now resolved")
     scan.add_argument("--write-baseline", type=Path, help="write the current scan's finding keys to this file as an accepted baseline")
+    scan.add_argument("--compile-check", action="store_true", help="also javac-compile loose scripts against RC8 (needs --vanilla-core); opt-in, off by default so scans stay fast and hermetic")
     bytecode = subcommands.add_parser("bytecode-inspect", help="inspect class/JAR symbolic references without rewriting")
     bytecode.add_argument("input", type=Path, nargs="+")
     bytecode.add_argument("--output", type=Path)
@@ -358,6 +359,7 @@ def build_parser() -> argparse.ArgumentParser:
     fix.add_argument("--type-id", help="required for procgen-planet-row-missing/procgen-star-row-missing")
     fix.add_argument("--from-vanilla-id", help="required for procgen-planet-row-missing/procgen-star-row-missing")
     fix.add_argument("--faction-file", type=Path, help="required for faction-known-lists-missing")
+    fix.add_argument("--hull", action="append", default=[], metavar="ID=N", help="repeatable; required for carrier-bays-proposal, e.g. --hull my_carrier=4 (0-6, vanilla's own maximum)")
     prepare_test_cmd = subcommands.add_parser("prepare-test", help="sync a rig test copy from a working copy, and optionally run a boot test")
     prepare_test_cmd.add_argument("working_dir", type=Path)
     prepare_test_cmd.add_argument("rig_mod_dir", type=Path)
@@ -707,7 +709,42 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _reconfigure_streams_for_pipes(streams=None) -> list:
+    """Switch stdout/stderr to UTF-8 (errors="replace") when they aren't an interactive console.
+
+    Windows' default piped/redirected-output codepage (cp1252) corrupts the non-ASCII text several
+    modules print (`--json` output built with `ensure_ascii=False`, translate-check's CJK strings,
+    ...) -- `UnicodeEncodeError` piping `bridgeforge ... --json > out.json` on Windows (task A9).
+    An interactive console is left exactly as the user configured it: this only touches a stream
+    that exposes `TextIOWrapper.reconfigure` and whose `isatty()` returns false (a pipe or a
+    redirected file) -- a real console's own encoding is never overridden. A stream with no
+    `isatty` at all (unusual for real stdout/stderr, but true of some test doubles) is treated as
+    non-interactive and reconfigured; one whose `isatty()` call itself raises is left untouched,
+    since that failure means the stream's state can't be trusted either way. Returns the streams
+    actually reconfigured, so this can be asserted on directly in a test.
+    """
+    reconfigured = []
+    for stream in streams if streams is not None else (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        isatty = getattr(stream, "isatty", None)
+        if isatty is not None:
+            try:
+                if isatty():
+                    continue
+            except (OSError, ValueError):
+                continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            continue
+        reconfigured.append(stream)
+    return reconfigured
+
+
 def main(argv: list[str] | None = None) -> int:
+    _reconfigure_streams_for_pipes()
     args = build_parser().parse_args(argv)
     if args.command == "docs-index":
         from .checks_index import write_reference_docs
@@ -921,7 +958,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "scan":
         try:
-            result = scan_mod(args.mod_directory, TargetProfile(args.target_starsector, args.target_java), args.vanilla_core)
+            result = scan_mod(args.mod_directory, TargetProfile(args.target_starsector, args.target_java), args.vanilla_core, compile_check=args.compile_check)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -1685,6 +1722,7 @@ def main(argv: list[str] | None = None) -> int:
             "type_id": args.type_id,
             "from_vanilla_id": args.from_vanilla_id,
             "faction_file": args.faction_file,
+            "hulls": args.hull,
         }
         try:
             plan = compute_fix(args.mod_dir, args.finding, options)

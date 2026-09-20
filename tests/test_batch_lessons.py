@@ -412,6 +412,24 @@ class CarrierBaysProposalTests(unittest.TestCase):
         self.assertIn("plain: hint only (launch-bays:1, CARRIER hint/designation)", evidence)
         self.assertFalse([item for item in evidence if item.startswith("nothing")])
 
+    def test_a_hull_with_fighter_bays_already_set_is_not_proposed(self) -> None:
+        # Once `fix ... --finding carrier-bays-proposal --hull big=2` has run, "big" already has a
+        # fighter bays value; re-scanning must not keep proposing it (roadmap P14 item 6).
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = _mod(root)
+            hulls = mod / "data" / "hulls"
+            hulls.mkdir(parents=True)
+            (hulls / "ship_data.csv").write_text(
+                "name,id,designation,system id,hangar,hints,fighter bays\n"
+                "Big,big,Carrier,,6,,2\nNoSlots,noslots,Cruiser,,4,,\n",
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile())
+        evidence = _ids(result, "carrier-bays-proposal")[0].evidence
+        self.assertFalse([item for item in evidence if item.startswith("big:")])
+        self.assertTrue([item for item in evidence if item.startswith("noslots:")])
+
 
 class GameVersionDefaultTargetTests(unittest.TestCase):
     def _version_findings(self, declared: str) -> list:

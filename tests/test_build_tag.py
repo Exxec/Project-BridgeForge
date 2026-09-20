@@ -140,6 +140,39 @@ class BuildTagTests(unittest.TestCase):
             result = apply_build_tag(root)
             self.assertEqual(Path(result["mod_info"]), nested / "mod_info.json")
 
+    def test_dependencies_first_name_is_not_mistaken_for_the_top_level_name(self) -> None:
+        # Batavia, Qualljom and Antediluvians all list a "dependencies" entry with its own "name"
+        # before the mod's real top-level "name" (2026-09-15). A plain first-match search used to
+        # tag "RevenantLib" instead of the mod's own name.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text(
+                '{"id":"batavia","dependencies":[{"id":"revenantlib","name":"RevenantLib"}],'
+                '"name":"Batavia","version":"1.0"}',
+                encoding="utf-8",
+            )
+            result = apply_build_tag(root)
+            self.assertEqual(result["old_name"], "Batavia")
+            self.assertEqual(result["new_name"], "Batavia [BF r1]")
+            written = (root / "mod_info.json").read_text(encoding="utf-8")
+            self.assertIn('"name":"Batavia [BF r1]"', written)
+            self.assertIn('"name":"RevenantLib"', written)  # the dependency entry is untouched
+
+    def test_dependencies_first_version_is_not_mistaken_for_the_top_level_version(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text(
+                '{"id":"qualljom","dependencies":[{"id":"revenantlib","name":"RevenantLib","version":"1.1.0"}],'
+                '"name":"Qualljom","version":"2.0"}',
+                encoding="utf-8",
+            )
+            result = apply_build_tag(root)
+            self.assertEqual(result["old_version"], "2.0")
+            self.assertEqual(result["new_version"], "2.0+bf.1")
+            written = (root / "mod_info.json").read_text(encoding="utf-8")
+            self.assertIn('"version":"2.0+bf.1"', written)
+            self.assertIn('"version":"1.1.0"', written)  # the dependency's own version is untouched
+
     def test_missing_mod_info_raises(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

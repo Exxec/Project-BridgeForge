@@ -749,6 +749,35 @@ def _scan_metadata(root: Path, result: ScanResult) -> None:
         result.add(id="declared-dependencies", category="dependencies", severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="Dependency declarations were found.", file="mod_info.json", evidence=[str(item) for item in dependencies])
 
 
+def _scan_mod_info_jar_missing(root: Path, result: ScanResult) -> None:
+    """Each mod_info.json "jars" entry that doesn't exist under the mod root.
+
+    Xenoargh's EZFaction and AI Overhaul originals both list "jars/LazyLib.jar" (read 2026-09-15:
+    In operation/Xenoargh-EZFaction/original and In operation/Xenoargh-AI-Overhaul/original), and
+    neither ships it. Starsector is asked to load a jar that isn't there; whether that is a Fatal
+    dialog, a silent skip, or something else has not been confirmed in game, so this is reported as
+    a launch blocker to verify, not a confirmed crash.
+    """
+    declared = result.metadata.get("jars")
+    if not isinstance(declared, list):
+        return
+    missing = sorted(
+        entry for entry in declared
+        if isinstance(entry, str) and entry.strip() and not (root / entry).is_file()
+    )
+    if missing:
+        result.add(
+            id="mod-info-jar-missing",
+            category="metadata",
+            severity="high",
+            classification="MANUAL",
+            confidence="DETERMINISTIC",
+            explanation="mod_info.json's \"jars\" list names a jar that does not exist under the mod root; Starsector is asked to load it at startup. Treat this as a launch blocker until verified in game.",
+            file="mod_info.json",
+            evidence=missing,
+        )
+
+
 def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
     jars = _loaded_mod_jars(root)
     bundled: Counter[str] = Counter()
@@ -2130,7 +2159,18 @@ def _attribute_library_usage(result: ScanResult) -> None:
         imports = [item for item in result.imports if item not in local_classes and any(item.startswith(prefix) for prefix in prefixes)]
         simple_names = {item.rsplit(".", 1)[-1] for item in imports if not item.endswith(".*")}
         source_calls = [call for call in calls if call.split(".", 1)[0] in simple_names]
-        bundled = any(LIBRARY_PATTERNS[library].search(str(item.get("path", ""))) for item in result.jars)
+        # "Bundled" means a matching jar actually exists under the mod root, not merely that
+        # mod_info.json's "jars" list names one: EZFaction and AI Overhaul (Xenoargh) both declare
+        # "jars/LazyLib.jar" without shipping it (read 2026-09-15), which would hide their real,
+        # undeclared LazyLib dependency (48 javac errors, found later by compile-check) if a
+        # declared-but-absent entry counted as bundled. result.jars is already filtered to existing
+        # files by _loaded_mod_jars()/_scan_jars(), but the existence check is repeated explicitly
+        # here so this invariant holds even if that upstream filtering ever changes.
+        bundled = any(
+            LIBRARY_PATTERNS[library].search(str(item.get("path", "")))
+            and (Path(result.input_path) / str(item.get("path", ""))).is_file()
+            for item in result.jars
+        )
         declared = library.lower() in dependencies or library.replace("Lib", "").lower() in dependencies
         bytecode_referenced = library in result.bytecode_library_references
         if declared or bundled or imports:
@@ -4682,6 +4722,8 @@ def _scan_carrier_bays_proposal(root: Path, result: ScanResult, vanilla_core: Pa
         hull_id = normalized.get("id", "")
         if not hull_id or hull_id.startswith("#"):
             continue
+        if normalized.get("fighter bays"):
+            continue  # already set (e.g. by `fix ... --finding carrier-bays-proposal --hull`); don't re-propose it
         spec = ships.get(hull_id) or {}
         if str(spec.get("hullSize") or "").upper() == "FIGHTER":
             continue
@@ -5194,7 +5236,70 @@ def _drop_vanilla_registered_weapon_specs(result: ScanResult, vanilla_core: Path
     result.findings[:] = [finding for finding in result.findings if not overrides_vanilla(finding)]
 
 
-def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core: Path | None = None) -> ScanResult:
+def _format_compile_error(error: dict[str, object]) -> str:
+    detail = error.get("detail") or []
+    symbol = next((str(item).split(":", 1)[1].strip() for item in detail if str(item).startswith("symbol:")), None)
+    text = f"line {error.get('line')}: {error.get('message')}"
+    return f"{text} (symbol: {symbol})" if symbol else text
+
+
+def _scan_compile_check(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """Opt-in (`scan --compile-check`): javac-compile the mod's loose scripts against RC8.
+
+    Off by default so a plain scan stays fast and hermetic; `bridgeforge.compile_check` does the
+    actual compile (see its module docstring for the Janino caveat). Real cases (2026-09-15):
+    Renis-Imperium, AI-War, Argamede-Union and EZFaction were each marked ready by every other
+    check and failed only this one.
+    """
+    if vanilla_core is None:
+        result.add(
+            id="loose-script-compile-unavailable",
+            category="build",
+            severity="medium",
+            classification="UNKNOWN",
+            confidence="DETERMINISTIC",
+            explanation="--compile-check was requested but no --vanilla-core was given, so loose scripts could not be compiled against RC8's API.",
+        )
+        return
+    from .compile_check import compile_loose_scripts  # local: avoids a scanner<->compile_check<->java_toolchain import cycle
+
+    outcome = compile_loose_scripts(root, vanilla_core=vanilla_core)
+    if outcome["status"] == "UNAVAILABLE":
+        result.add(
+            id="loose-script-compile-unavailable",
+            category="build",
+            severity="medium",
+            classification="UNKNOWN",
+            confidence="DETERMINISTIC",
+            explanation=str(outcome.get("reason") or "No JDK was available to compile-check this mod's loose scripts."),
+        )
+        return
+    if outcome["status"] != "FAIL":
+        return
+    errors_by_file: dict[str, list[dict[str, object]]] = {}
+    for error in outcome["errors"]:
+        errors_by_file.setdefault(str(error["file"]), []).append(error)
+    for file_path, errors in sorted(errors_by_file.items()):
+        try:
+            rel = _relative(root, Path(file_path))
+        except ValueError:
+            rel = file_path
+        evidence = [_format_compile_error(error) for error in errors[:5]]
+        if len(errors) > 5:
+            evidence.append(f"... {len(errors) - 5} more")
+        result.add(
+            id="loose-script-compile-error",
+            category="build",
+            severity="critical",
+            classification="MANUAL",
+            confidence="DETERMINISTIC",
+            explanation=f"javac rejects this loose script against RC8 ({len(errors)} error(s)); the game's own class loader would fail the same way at startup.",
+            file=rel,
+            evidence=evidence,
+        )
+
+
+def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core: Path | None = None, compile_check: bool = False) -> ScanResult:
     root = input_path.expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"Input mod directory does not exist: {root}")
@@ -5206,6 +5311,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
         if path.is_file():
             result.files.append({"path": _relative(root, path), "size_bytes": path.stat().st_size})
     _scan_metadata(root, result)
+    _scan_mod_info_jar_missing(root, result)
     _scan_jars(root, result)
     _scan_sources(root, result)
     _scan_assets(root, result)
@@ -5243,4 +5349,6 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_carrier_bays_proposal(root, result, vanilla_root)
     _scan_description_missing(root, result, vanilla_root)
     _scan_asset_reference_missing(root, result, vanilla_root)
+    if compile_check:
+        _scan_compile_check(root, result, vanilla_root)
     return result

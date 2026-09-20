@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from .build_tag import _NAME_PATTERN, _string_literal_to_text, _text_to_string_literal
+from .build_tag import _NAME_PATTERN, _find_top_level_key, _string_literal_to_text, _structural_depths, _text_to_string_literal
 from .scanner import (
     DESIGN_TYPE_CSV_TARGETS,
     FACTION_SPECIAL_ROLE_KEYS,
@@ -35,6 +35,7 @@ SUPPORTED_FINDINGS = (
     "wing-data-missing-role-desc-column",
     "target-interface-method-missing",
     "removed-api-call",
+    "carrier-bays-proposal",
 )
 
 
@@ -322,11 +323,27 @@ def _rewrite_add_message_span(matched_text: str) -> str:
 # addCrew's leading argument, including its trailing comma; and a trailing `, CrewXPLevel.X` argument to
 # addToFleet), so every matched span is simply removed - no `bf.` call is introduced, so this rule never
 # adds a dependency.
+_CREW_XP_LEVEL_MATCHER = REMOVED_API_CALLS[2][0]
 _CREW_XP_LEVEL_SIGNATURE = REMOVED_API_CALLS[2][1]
 
 
 def _rewrite_crew_xp_level_span(_matched_text: str) -> str:
     return ""
+
+
+# A CrewXPLevel-typed variable or parameter declaration (e.g. `CrewXPLevel level` or
+# `CargoAPI.CrewXPLevel x`) means some local helper carries the level through its own signature and
+# body, not just call-site arguments. Real case (AI-War, 2026-09-15):
+# data/missions/aiw_midnight/MissionDefinition.java declared
+# `addToFleetAndAddSkills(..., CrewXPLevel level, boolean isFlagship)`, with a body line
+# `if (level == null) level = CrewXPLevel.REGULAR;`. The call-site-only rewrite above (matching
+# `CrewXPLevel.X` member access, never a bare type name) would drop the argument at every call site
+# while leaving the parameter's own type (now unresolvable, since the import line is also removed)
+# and the body's default-value line untouched - some call sites keep 6 arguments, some now pass 5,
+# against a signature still declaring 6 params of a type that no longer resolves. The owner's task
+# A10 hand-ported this file instead (see its `.pre-bf-fix` era working copy). Matched on the type
+# name followed by whitespace, so it never fires on `CrewXPLevel.ELITE` (a dot, not whitespace).
+_CREW_XP_LEVEL_DECLARATION_PATTERN = re.compile(r"\bCrewXPLevel\s+[A-Za-z_$][\w$]*\s*[,);=]")
 
 
 # REMOVED_API_CALLS[3]/[4]: the 0.6 7-argument LocationAPI.addPlanet(...) and the 6-argument
@@ -401,6 +418,7 @@ def _fix_removed_api_call(root: Path, options: dict) -> list[FileChange]:
     matched_files: list[Path] = []  # any REMOVED_API_CALLS rule, any location
     rewrites_by_file: dict[Path, list[tuple[object, Callable[[str], str], str]]] = {}
     rewritable_hit = False
+    crew_xp_level_refusals: list[Path] = []  # matched CrewXPLevel, but the file also declares the type
     for source in sorted(root.rglob("*.java")):
         if "disabled_files" in source.relative_to(root).parts:
             continue
@@ -409,9 +427,20 @@ def _fix_removed_api_call(root: Path, options: dict) -> list[FileChange]:
         except OSError:
             continue
         blanked = _blank_java_comments(text)
-        file_rewrites = [(matcher, rewrite, signature) for matcher, rewrite, signature in rewrite_rules if _removed_api_call_spans(matcher, blanked)]
+        # A file that declares a CrewXPLevel-typed variable/parameter is refused for that one rule
+        # (see _CREW_XP_LEVEL_DECLARATION_PATTERN above); other rules in the same file are untouched
+        # by this and still get their mechanical rewrite.
+        declares_crew_xp_level_type = bool(_CREW_XP_LEVEL_DECLARATION_PATTERN.search(blanked))
+        file_rewrite_rules = (
+            [(matcher, rewrite, signature) for matcher, rewrite, signature in rewrite_rules if signature != _CREW_XP_LEVEL_SIGNATURE]
+            if declares_crew_xp_level_type else rewrite_rules
+        )
+        file_rewrites = [(matcher, rewrite, signature) for matcher, rewrite, signature in file_rewrite_rules if _removed_api_call_spans(matcher, blanked)]
         has_unrewritable = any(_removed_api_call_spans(matcher, blanked) for matcher in unrewritable_matchers)
-        if file_rewrites or has_unrewritable:
+        refused_crew_xp_level = declares_crew_xp_level_type and bool(_removed_api_call_spans(_CREW_XP_LEVEL_MATCHER, blanked))
+        if refused_crew_xp_level:
+            crew_xp_level_refusals.append(source)
+        if file_rewrites or has_unrewritable or refused_crew_xp_level:
             matched_files.append(source)
         if file_rewrites:
             rewrites_by_file[source] = file_rewrites
@@ -419,6 +448,13 @@ def _fix_removed_api_call(root: Path, options: dict) -> list[FileChange]:
 
     loose_files = [source for source in rewrites_by_file if source.relative_to(root).as_posix().startswith("data/")]
     if not loose_files:
+        if crew_xp_level_refusals and not rewritable_hit:
+            names = ", ".join(_relative(root, source) for source in crew_xp_level_refusals[:5])
+            raise FixerError(
+                f"{names}: declares a CrewXPLevel-typed variable or parameter (e.g. a helper method's own "
+                "signature), so rewriting only the literal call-site arguments would desync it from the "
+                "helper's own calls and its default-value logic. Hand-port this file instead."
+            )
         if matched_files:
             names = ", ".join(_relative(root, source) for source in matched_files[:5])
             if not rewritable_hit:
@@ -540,6 +576,123 @@ def _fix_wing_data_missing_role_desc_column(root: Path, options: dict) -> list[F
         present = len(_line_field_spans(content))
         # Pad a short row first so the blank lands in the new column, not an earlier one.
         edited_lines.append(content + "," * max(0, width - present) + "," + term)
+    return [FileChange(path=path, before=raw, after=_encode("".join(edited_lines), had_bom))]
+
+
+# ---------------------------------------------------------------------------
+# Fixer: carrier-bays-proposal
+# ---------------------------------------------------------------------------
+
+# RC8's own ship_data.csv (starsector-core/data/hulls/ship_data.csv, read 2026-09-15): the highest
+# "fighter bays" value any vanilla hull carries is 6 (the Astral, RC8's dedicated fleet carrier;
+# the Legion and both carrier hull-mod modules are 4). Nothing in vanilla goes higher, so a --hull
+# value above this is refused rather than guessed at.
+_MAX_FIGHTER_BAYS = 6
+
+
+def _parse_hull_bay_assignments(raw: list[str]) -> dict[str, int]:
+    if not raw:
+        raise FixerError("--hull ID=N is required (repeatable) for carrier-bays-proposal.")
+    assignments: dict[str, int] = {}
+    for item in raw:
+        hull_id, sep, value = item.strip().rpartition("=")
+        if not sep:
+            raise FixerError(f"--hull must be ID=N (got '{item}').")
+        hull_id = hull_id.strip()
+        value = value.strip()
+        if not hull_id:
+            raise FixerError(f"--hull '{item}' has no hull id.")
+        if not re.fullmatch(r"-?\d+", value):
+            raise FixerError(f"--hull {hull_id}=... value must be an integer (got '{value}').")
+        count = int(value)
+        if not 0 <= count <= _MAX_FIGHTER_BAYS:
+            raise FixerError(f"--hull {hull_id}={count}: fighter bays must be 0-{_MAX_FIGHTER_BAYS} (vanilla's own maximum, the Astral, RC8 ship_data.csv).")
+        if hull_id in assignments and assignments[hull_id] != count:
+            raise FixerError(f"--hull {hull_id} was given more than once with different values.")
+        assignments[hull_id] = count
+    return assignments
+
+
+def _fix_carrier_bays_proposal(root: Path, options: dict) -> list[FileChange]:
+    """Write approved `--hull ID=N` fighter-bay counts into ship_data.csv (roadmap P14 item 6).
+
+    "fighter bays" is RC8's own ship_data.csv header name for the column (read from the core, see
+    _MAX_FIGHTER_BAYS above). If the mod's file predates it (the pre-0.8 `hangar` schema), the
+    column is appended the same way `wing-data-missing-role-desc-column` adds `role desc`: blank for
+    every hull not named on the command line, so untouched rows keep their author's silence rather
+    than an invented 0. Every --hull id must already exist as a ship_data.csv row (comment/blank-id
+    rows don't count); an id this file has no row for is refused rather than silently skipped.
+    """
+    assignments = _parse_hull_bay_assignments(options.get("hulls") or [])
+    path = root / "data" / "hulls" / "ship_data.csv"
+    if not path.is_file():
+        raise FixerError(f"No ship_data.csv found at {path}.")
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    lines = text.splitlines(keepends=True)
+    if not lines:
+        raise FixerError(f"{path} is empty.")
+    # Same quoted-multiline-field guard as wing-data-missing-role-desc-column: refuse rather than
+    # guess row boundaries if a quoted field spans lines.
+    records = [row for row in csv.reader(io.StringIO(text)) if row]
+    if len(records) != sum(1 for line in lines if line.strip()):
+        raise FixerError(f"{path} has a quoted field spanning several lines; add fighter bays by hand rather than guess the row boundaries.")
+
+    header_content, header_term = _split_terminator(lines[0])
+    header_fields = [_field_value(item[2]) for item in _line_field_spans(header_content)]
+    normalized_header = [cell.strip().lower() for cell in header_fields]
+    if "id" not in normalized_header:
+        raise FixerError(f"{path} has no 'id' column.")
+    id_index = normalized_header.index("id")
+    width = len(header_fields)
+    add_column = "fighter bays" not in normalized_header
+    bay_index = width if add_column else normalized_header.index("fighter bays")
+
+    def row_hull_id(content: str) -> str:
+        spans = _line_field_spans(content)
+        return _field_value(spans[id_index][2]).strip() if id_index < len(spans) else ""
+
+    existing_ids = {
+        row_hull_id(_split_terminator(line)[0])
+        for line in lines[1:] if _split_terminator(line)[0].strip()
+    }
+    existing_ids = {hull_id for hull_id in existing_ids if hull_id and not hull_id.startswith("#")}
+    unknown = sorted(set(assignments) - existing_ids)
+    if unknown:
+        raise FixerError(f"{path} has no row for hull id(s): {', '.join(unknown)}.")
+
+    edited_lines = [header_content + (",fighter bays" if add_column else "") + (header_term or "\n")]
+    touched: set[str] = set()
+    for line in lines[1:]:
+        content, term = _split_terminator(line)
+        if not content.strip():
+            edited_lines.append(line)
+            continue
+        spans = _line_field_spans(content)
+        hull_id = row_hull_id(content)
+        present = len(spans)
+        if hull_id in assignments and not hull_id.startswith("#"):
+            count = assignments[hull_id]
+            touched.add(hull_id)
+            if add_column:
+                padded = content + ("," * max(0, width - present))
+                edited_lines.append(padded + "," + str(count) + term)
+            elif present <= bay_index:
+                padded = content + ("," * (bay_index - present + 1))
+                pad_start, pad_end, _pad_raw = _line_field_spans(padded)[bay_index]
+                edited_lines.append(padded[:pad_start] + str(count) + padded[pad_end:] + term)
+            else:
+                start, end, raw_field = spans[bay_index]
+                edited_lines.append(content[:start] + _quote_like(raw_field, str(count)) + content[end:] + term)
+        elif add_column:
+            # Not an approved hull: pad so the new blank column still lands at the same position.
+            edited_lines.append(content + ("," * max(0, width - present)) + "," + term)
+        else:
+            edited_lines.append(line)
+
+    missed = sorted(set(assignments) - touched)
+    if missed:
+        raise FixerError(f"{path}: could not locate row(s) for hull id(s): {', '.join(missed)}.")
     return [FileChange(path=path, before=raw, after=_encode("".join(edited_lines), had_bom))]
 
 
@@ -968,9 +1121,11 @@ def _fix_mod_info_triage_banner(root: Path, options: dict) -> list[FileChange]:
         raise FixerError(f"No mod_info.json found at {path}.")
     raw = path.read_bytes()
     text, had_bom = _decode(raw)
-    match = _NAME_PATTERN.search(text)
+    # Top-level only (build_tag._structural_depths): a "dependencies" entry can carry its own
+    # "name" (e.g. {"id":"revenantlib","name":"RevenantLib"}) before the mod's real one.
+    match = _find_top_level_key(text, _NAME_PATTERN, _structural_depths(text))
     if match is None:
-        raise FixerError(f"{path} has no 'name' string.")
+        raise FixerError(f"{path} has no top-level 'name' string.")
     old_literal = match.group("value")
     old_name = _string_literal_to_text(old_literal)
     leading_match = _LEADING_BANNER_PATTERN.match(old_name)
@@ -1004,6 +1159,7 @@ _FIXER_FUNCS = {
     "procgen-star-row-missing": lambda root, options: _fix_procgen_row_missing(root, "procgen-star-row-missing", options),
     "faction-known-lists-missing": _fix_faction_known_lists_missing,
     "mod-info-triage-banner": _fix_mod_info_triage_banner,
+    "carrier-bays-proposal": _fix_carrier_bays_proposal,
 }
 
 

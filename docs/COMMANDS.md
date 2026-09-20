@@ -130,6 +130,7 @@ scan a mod directory without modifying it
 | `--vanilla-core` VANILLA_CORE | - | path to a read-only starsector-core directory, used for vanilla-row/faction/path exemptions |
 | `--baseline` BASELINE | - | only report findings not present in this baseline file, plus a count of previously accepted findings that are now resolved |
 | `--write-baseline` WRITE_BASELINE | - | write the current scan's finding keys to this file as an accepted baseline |
+| `--compile-check` | - | also javac-compile loose scripts against RC8 (needs --vanilla-core); opt-in, off by default so scans stay fast and hermetic |
 
 ## bytecode-inspect
 
@@ -692,7 +693,7 @@ apply a SAFE, mechanical fixer for one supported finding id (dry-run diff by def
 | Argument | Notes | Help |
 |---|---|---|
 | `mod_dir` | - | - |
-| `--finding` ID | required | supported: mod-info-game-version-inexact, csv-row-extra-columns, csv-missing-design-type-column, procgen-planet-row-missing, procgen-star-row-missing, faction-known-lists-missing, mod-info-triage-banner, wing-data-missing-role-desc-column, target-interface-method-missing, removed-api-call |
+| `--finding` ID | required | supported: mod-info-game-version-inexact, csv-row-extra-columns, csv-missing-design-type-column, procgen-planet-row-missing, procgen-star-row-missing, faction-known-lists-missing, mod-info-triage-banner, wing-data-missing-role-desc-column, target-interface-method-missing, removed-api-call, carrier-bays-proposal |
 | `--apply` | - | write the change (default: print a dry-run diff only) |
 | `--json` | - | - |
 | `--target-game-version` TARGET_GAME_VERSION | - | required for mod-info-game-version-inexact |
@@ -703,6 +704,7 @@ apply a SAFE, mechanical fixer for one supported finding id (dry-run diff by def
 | `--type-id` TYPE_ID | - | required for procgen-planet-row-missing/procgen-star-row-missing |
 | `--from-vanilla-id` FROM_VANILLA_ID | - | required for procgen-planet-row-missing/procgen-star-row-missing |
 | `--faction-file` FACTION_FILE | - | required for faction-known-lists-missing |
+| `--hull` ID=N | repeatable | repeatable; required for carrier-bays-proposal, e.g. --hull my_carrier=4 (0-6, vanilla's own maximum) |
 
 ## prepare-test
 

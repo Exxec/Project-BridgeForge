@@ -53,6 +53,66 @@ _VERSION_PATTERN = _key_value_pattern("version", allow_object=True)
 _VERSION_BF_SUFFIX_PATTERN = re.compile(r"\+bf\.(\d+)\s*$")
 
 
+def _structural_depths(text: str) -> list[int]:
+    """Brace/bracket nesting depth "at" each character offset (the depth enclosing that character).
+
+    Batavia, Qualljom and Antediluvians all list `"dependencies":[{"id":"revenantlib",
+    "name":"RevenantLib"}]` before the mod's own top-level "name" (read 2026-09-15); a plain
+    `_NAME_PATTERN.search(text)` finds that dependency's "name" first and tags it instead. This
+    walks the raw text once, skipping string contents (both `"`/`'` quoting, backslash-escaped) and
+    `#`/`//` line comments (the leniences build_tag's caller-facing JSON already tolerates) so only
+    real structural `{[`/`}]` characters change the count. A key whose opening quote sits at depth 1
+    is a direct property of the root object; anything deeper (inside "dependencies", say) is not.
+    """
+    n = len(text)
+    depths = [0] * n
+    depth = 0
+    in_string = False
+    quote = ""
+    escaped = False
+    in_comment = False
+    i = 0
+    while i < n:
+        char = text[i]
+        if in_comment:
+            depths[i] = depth
+            if char in "\r\n":
+                in_comment = False
+            i += 1
+            continue
+        if in_string:
+            depths[i] = depth
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                in_string = False
+            i += 1
+            continue
+        depths[i] = depth
+        if char in "\"'":
+            in_string = True
+            quote = char
+        elif char == "#" or (char == "/" and i + 1 < n and text[i + 1] == "/"):
+            in_comment = True
+        elif char in "{[":
+            depth += 1
+        elif char in "}]":
+            depth = max(0, depth - 1)
+        i += 1
+    return depths
+
+
+def _find_top_level_key(text: str, pattern: re.Pattern[str], depths: list[int]) -> re.Match[str] | None:
+    """The first match of `pattern` whose key sits directly inside the root object (depth 1)."""
+    for match in pattern.finditer(text):
+        start = match.start("key")
+        if start < len(depths) and depths[start] == 1:
+            return match
+    return None
+
+
 def _string_literal_to_text(literal: str) -> str:
     quote = literal[0]
     body = literal[1:-1]
@@ -116,15 +176,16 @@ def build_tag(mod_dir: Path, label: str = DEFAULT_LABEL, set_value: int | None =
     except UnicodeDecodeError as exc:
         raise BuildTagError(f"{mod_info_path} is not valid UTF-8: {exc}") from exc
 
-    name_match = _NAME_PATTERN.search(text)
+    depths = _structural_depths(text)
+    name_match = _find_top_level_key(text, _NAME_PATTERN, depths)
     if name_match is None:
-        raise BuildTagError(f'{mod_info_path} has no "name" string to tag.')
+        raise BuildTagError(f'{mod_info_path} has no top-level "name" string to tag.')
     old_name_literal = name_match.group("value")
     old_name = _string_literal_to_text(old_name_literal)
     new_name, build = _bump_name(old_name, label, set_value)
     new_name_literal = _text_to_string_literal(new_name, old_name_literal[0])
 
-    version_match = _VERSION_PATTERN.search(text)
+    version_match = _find_top_level_key(text, _VERSION_PATTERN, depths)
     version_is_object = False
     old_version: str | None = None
     new_version: str | None = None
@@ -240,7 +301,7 @@ def _current_build(mod_info_path: Path, label: str = DEFAULT_LABEL) -> int:
         text = mod_info_path.read_text(encoding="utf-8-sig")
     except OSError as exc:
         raise BuildTagError(f"{mod_info_path} could not be read: {exc}") from exc
-    match = _NAME_PATTERN.search(text)
+    match = _find_top_level_key(text, _NAME_PATTERN, _structural_depths(text))
     if match is None:
         return 0
     name = _string_literal_to_text(match.group("value"))

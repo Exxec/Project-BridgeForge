@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from bridgeforge.cli import main
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix, unified_diff_for_change
 from bridgeforge.scanner import scan_mod
 
@@ -68,6 +69,136 @@ class AssaultRoleIsValidTests(unittest.TestCase):
             self.assertEqual(_findings(result, "fighter-wing-role-invalid"), [])
             with self.assertRaises(FixerError):
                 compute_fix(root, "wing-role-assault-removed")
+
+
+class CarrierBaysProposalFixerTests(unittest.TestCase):
+    """`fix <mod> --finding carrier-bays-proposal --hull ID=N` (roadmap P14 item 6)."""
+
+    def _mod(self, root: Path, ship_data: str) -> Path:
+        _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+        path = root / "data" / "hulls" / "ship_data.csv"
+        _write(path, ship_data)
+        return path
+
+    def test_pre08_hangar_schema_adds_column_blank_for_untouched_hulls(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(
+                root,
+                "name,id,designation,system id,hangar,hints\nBig,big,Carrier,,6,\nSmall,small,Frigate,,,\n",
+            )
+            self.assertEqual(len(_findings(scan_mod(root), "carrier-bays-proposal")), 1)
+            applied = apply_fix(compute_fix(root, "carrier-bays-proposal", {"hulls": ["big=2"]}))
+            self.assertTrue(Path(applied[0]["backup"]).is_file())
+            self.assertEqual(
+                path.read_text(encoding="utf-8"),
+                "name,id,designation,system id,hangar,hints,fighter bays\nBig,big,Carrier,,6,,2\nSmall,small,Frigate,,,,\n",
+            )
+            # "big" is no longer proposed (it has a fighter bays value now); "small" has no evidence
+            # of its own, so the check is fully quiet.
+            self.assertEqual(_findings(scan_mod(root), "carrier-bays-proposal"), [])
+
+    def test_existing_fighter_bays_column_is_overwritten_for_the_approved_hull_only(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(
+                root,
+                "name,id,designation,fighter bays,hints\nBig,big,Carrier,,\nSmall,small,Frigate,,\n",
+            )
+            apply_fix(compute_fix(root, "carrier-bays-proposal", {"hulls": ["big=3"]}))
+            self.assertEqual(
+                path.read_text(encoding="utf-8"),
+                "name,id,designation,fighter bays,hints\nBig,big,Carrier,3,\nSmall,small,Frigate,,\n",
+            )
+
+    def test_multiple_hulls_in_one_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(
+                root,
+                "name,id,designation,hangar\nBig,big,Carrier,6\nMed,med,Cruiser,3\nSmall,small,Frigate,\n",
+            )
+            apply_fix(compute_fix(root, "carrier-bays-proposal", {"hulls": ["big=4", "med=2"]}))
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("Big,big,Carrier,6,4\n", text)
+            self.assertIn("Med,med,Cruiser,3,2\n", text)
+            self.assertIn("Small,small,Frigate,,\n", text)
+
+    def test_only_the_approved_hull_stops_being_proposed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(
+                root,
+                "name,id,designation,hangar\nBig,big,Carrier,6\nMed,med,Cruiser,3\n",
+            )
+            self.assertEqual(len(_findings(scan_mod(root), "carrier-bays-proposal")), 1)
+            apply_fix(compute_fix(root, "carrier-bays-proposal", {"hulls": ["big=4"]}))
+            remaining = _findings(scan_mod(root), "carrier-bays-proposal")
+            self.assertEqual(len(remaining), 1)
+            self.assertFalse([item for item in remaining[0].evidence if item.startswith("big:")])
+            self.assertTrue([item for item in remaining[0].evidence if item.startswith("med:")])
+
+    def test_refuses_unknown_hull_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
+            with self.assertRaises(FixerError):
+                compute_fix(root, "carrier-bays-proposal", {"hulls": ["ghost=2"]})
+
+    def test_refuses_a_value_above_vanillas_own_maximum(self) -> None:
+        # RC8's own ship_data.csv maximum is 6 (the Astral); see fixers._MAX_FIGHTER_BAYS.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
+            with self.assertRaises(FixerError):
+                compute_fix(root, "carrier-bays-proposal", {"hulls": ["big=7"]})
+
+    def test_refuses_a_negative_value(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
+            with self.assertRaises(FixerError):
+                compute_fix(root, "carrier-bays-proposal", {"hulls": ["big=-1"]})
+
+    def test_zero_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
+            apply_fix(compute_fix(root, "carrier-bays-proposal", {"hulls": ["big=0"]}))
+            self.assertIn("Big,big,Carrier,6,0\n", path.read_text(encoding="utf-8"))
+
+    def test_requires_at_least_one_hull(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
+            with self.assertRaises(FixerError):
+                compute_fix(root, "carrier-bays-proposal", {})
+
+    def test_malformed_hull_assignment_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
+            with self.assertRaises(FixerError):
+                compute_fix(root, "carrier-bays-proposal", {"hulls": ["big"]})  # no '='
+            with self.assertRaises(FixerError):
+                compute_fix(root, "carrier-bays-proposal", {"hulls": ["big=two"]})  # not an integer
+
+    def test_cli_apply_and_resolved_status(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
+            exit_code = main(["fix", str(root), "--finding", "carrier-bays-proposal", "--hull", "big=4", "--apply", "--json"])
+            self.assertEqual(exit_code, 0)  # the finding is fully resolved (one hull, now fixed)
+            self.assertEqual(_findings(scan_mod(root), "carrier-bays-proposal"), [])
+
+    def test_cli_dry_run_does_not_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
+            original = path.read_text(encoding="utf-8")
+            exit_code = main(["fix", str(root), "--finding", "carrier-bays-proposal", "--hull", "big=4"])
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
 
 
 class TargetInterfaceMethodMissingTests(unittest.TestCase):
@@ -407,6 +538,96 @@ class CrewXPLevelRewriteTests(unittest.TestCase):
 
             after_scan = scan_mod(root)
             self.assertEqual(_findings(after_scan, "removed-api-call"), [])
+
+
+class CrewXPLevelTypeDeclarationRefusalTests(unittest.TestCase):
+    """removed-api-call, CrewXPLevel rule: a file that declares a CrewXPLevel-typed variable or
+    parameter is refused, not rewritten. Real case (AI-War, 2026-09-15):
+    data/missions/aiw_midnight/MissionDefinition.java had a helper
+    `addToFleetAndAddSkills(..., CrewXPLevel level, boolean isFlagship)` with a body line
+    `if (level == null) level = CrewXPLevel.REGULAR;`. The call-site-only rewrite (which only
+    touches `CrewXPLevel.X` member access, never a bare type name) would drop the argument at call
+    sites while leaving the parameter's own (now-unresolvable) type and the default-value line
+    untouched -- desyncing call-site argument counts from the helper's own signature. The owner's
+    task A10 hand-ported this file; this rule refuses it instead of guessing."""
+
+    _WRAPPER_SHAPE = (
+        "package data.missions.m;\n"
+        "import com.fs.starfarer.api.campaign.CargoAPI.CrewXPLevel;\n"
+        "public class MissionDefinition implements MissionDefinitionPlugin {\n"
+        "    public void defineMission(MissionDefinitionAPI api) {\n"
+        '        addToFleetAndAddSkills(api, FleetSide.PLAYER, "hull_Standard", "Name", CrewXPLevel.ELITE, true);\n'
+        '        addToFleetAndAddSkills(api, FleetSide.PLAYER, "hull2_Standard", null, null, false);\n'
+        "    }\n"
+        "    protected void addToFleetAndAddSkills(MissionDefinitionAPI api, FleetSide fleetSide, String variantId, String name, CrewXPLevel level, boolean isFlagship) {\n"
+        "        if (level == null) level = CrewXPLevel.REGULAR;\n"
+        "        api.addToFleet(fleetSide, variantId, name, isFlagship);\n"
+        "    }\n}\n"
+    )
+
+    def test_refused_when_it_is_the_only_removed_api_call_match(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            path = root / "data" / "missions" / "m" / "MissionDefinition.java"
+            _write(path, self._WRAPPER_SHAPE)
+            before = path.read_bytes()
+
+            self.assertEqual(len(_findings(scan_mod(root), "removed-api-call")), 1)
+            with self.assertRaises(FixerError) as ctx:
+                compute_fix(root, "removed-api-call")
+            message = str(ctx.exception)
+            self.assertIn("CrewXPLevel", message)
+            self.assertIn("hand-port", message.lower())
+            self.assertIn("MissionDefinition.java", message)
+            self.assertEqual(path.read_bytes(), before)  # compute_fix never writes; still unchanged
+
+    def test_a_plain_call_site_in_another_file_is_still_fixed(self) -> None:
+        # The refusal is per-file: a second, unrelated loose script with a plain (non-wrapper)
+        # CrewXPLevel call site still gets its mechanical rewrite.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            refused_path = root / "data" / "missions" / "m" / "MissionDefinition.java"
+            _write(refused_path, self._WRAPPER_SHAPE)
+            plain_path = root / "data" / "scripts" / "world" / "Convoy.java"
+            _write(
+                plain_path,
+                "package data.scripts.world;\n"
+                "import com.fs.starfarer.api.campaign.CargoAPI.CrewXPLevel;\n"
+                "public class Convoy extends BaseSpawnPoint {\n"
+                "    void crew(CargoAPI cargo) { cargo.addCrew(CrewXPLevel.VETERAN, 5); }\n}\n",
+            )
+            refused_before = refused_path.read_bytes()
+
+            plan = compute_fix(root, "removed-api-call")
+            changed = {change.path.relative_to(root).as_posix() for change in plan.changes}
+            self.assertEqual(changed, {"data/scripts/world/Convoy.java"})
+            apply_fix(plan)
+
+            self.assertEqual(refused_path.read_bytes(), refused_before)  # untouched
+            plain_text = plain_path.read_text(encoding="utf-8")
+            self.assertNotIn("CrewXPLevel", plain_text)
+            self.assertIn("cargo.addCrew(5);", plain_text)
+
+            after = scan_mod(root)
+            remaining = _findings(after, "removed-api-call")
+            self.assertEqual(len(remaining), 1)
+            self.assertTrue(any("data/missions/m/MissionDefinition.java" in item for item in remaining[0].evidence))
+
+    def test_dotted_type_qualifier_also_counts_as_a_declaration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            path = root / "data" / "scripts" / "world" / "Convoy.java"
+            _write(
+                path,
+                "package data.scripts.world;\n"
+                "public class Convoy extends BaseSpawnPoint {\n"
+                "    void crew(CargoAPI cargo, CargoAPI.CrewXPLevel x) { cargo.addCrew(CargoAPI.CrewXPLevel.VETERAN, 5); }\n}\n",
+            )
+            with self.assertRaises(FixerError):
+                compute_fix(root, "removed-api-call")
 
 
 class LegacyWorldRewriteTests(unittest.TestCase):

@@ -23,6 +23,17 @@ SCHEMA_VERSION = 1
 # Cheap (regex, not a parser), comment-blanked signs of Java 8+ syntax Janino predates/rejects:
 # a lambda, a method reference, the diamond operator, try-with-resources, multi-catch, `var`.
 # False positives/negatives are expected; this is a warning, not a verdict.
+#
+# Version evidence (2026-09-15): RC8's starsector-core/janino.jar manifest
+# (META-INF/MANIFEST.MF) reads `Implementation-Version: 2.7.8` (and `Bundle-Version: 2.7.8`) -- so
+# RC8 runs Janino 2.7.8, not a later 3.x line. Janino's own changelog
+# (https://janino-compiler.github.io/janino/changelog.html) dates every one of these constructs to
+# releases well after 2.7.8: a diamond-operator test was added in 3.0.7 (2017-03-22), the
+# try-with-resources statement was implemented in 3.0.9 (2018-08-23), and multi-catch parsing plus
+# lambda/method-reference parsing were added in 3.0.13 (2019-06-23; lambda COMPILATION was still
+# "NYI" there). `var` (a Java 10 feature) has no earlier claim at all. None of that is in 2.7.8, so
+# every pattern below stays exactly as flagged -- there is no construct here Janino 2.7.8 is
+# documented to accept; keep flagging all of them.
 _JANINO_GAP_PATTERNS = (
     ("lambda", re.compile(r"(?:\)|\b[A-Za-z_$][\w$]*)\s*->\s*")),
     ("method-reference", re.compile(r"\b[A-Za-z_$][\w.$]*::\w+")),

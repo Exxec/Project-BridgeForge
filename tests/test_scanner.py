@@ -527,6 +527,60 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             self.assertFalse(usage["MagicLib"]["declared"])
             self.assertFalse(usage["Nexerelin"]["declared"])
 
+    def test_mod_info_jar_missing_flags_a_declared_but_absent_jar(self) -> None:
+        # Xenoargh's EZFaction and AI Overhaul originals both declare "jars/LazyLib.jar" without
+        # shipping it (In operation/Xenoargh-EZFaction/original, .../Xenoargh-AI-Overhaul/original,
+        # read 2026-09-15).
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "jars").mkdir()
+            with zipfile.ZipFile(root / "jars" / "AAA_EZFaction.jar", "w"):
+                pass
+            (root / "mod_info.json").write_text(
+                '{"id":"ezfaction","name":"EZ Faction","jars":["jars/LazyLib.jar","jars/AAA_EZFaction.jar"]}',
+                encoding="utf-8",
+            )
+            findings = [item for item in scan_mod(root).findings if item.id == "mod-info-jar-missing"]
+            self.assertEqual(len(findings), 1)
+            self.assertEqual(findings[0].classification, "MANUAL")
+            self.assertEqual(findings[0].file, "mod_info.json")
+            self.assertEqual(findings[0].evidence, ["jars/LazyLib.jar"])
+
+    def test_mod_info_jar_missing_is_quiet_when_every_declared_jar_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with zipfile.ZipFile(root / "Real.jar", "w"):
+                pass
+            (root / "mod_info.json").write_text('{"id":"m","name":"M","jars":["Real.jar"]}', encoding="utf-8")
+            findings = [item for item in scan_mod(root).findings if item.id == "mod-info-jar-missing"]
+            self.assertEqual(findings, [])
+
+    def test_declared_but_missing_jar_is_not_bundled_and_undeclared_use_is_flagged(self) -> None:
+        # EZFaction: mod_info.json lists jars/LazyLib.jar but never ships it (48 javac errors found
+        # later by compile-check, 2026-09-15). A declared-but-absent jar must not count as "bundled"
+        # -- that would hide the mod's real, undeclared LazyLib dependency.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "jars").mkdir()
+            with zipfile.ZipFile(root / "jars" / "AAA_EZFaction.jar", "w"):
+                pass
+            (root / "mod_info.json").write_text(
+                '{"id":"ezfaction","name":"EZ Faction","jars":["jars/LazyLib.jar","jars/AAA_EZFaction.jar"]}',
+                encoding="utf-8",
+            )
+            (root / "data" / "scripts").mkdir(parents=True)
+            (root / "data" / "scripts" / "EZFactionModPlugin.java").write_text(
+                "import org.lazywizard.lazylib.MathUtils; class EZFactionModPlugin { void f() { MathUtils.getRandom(); } }",
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            usage = {item["library"]: item for item in result.library_usage}
+            self.assertFalse(usage["LazyLib"]["bundled"])
+            self.assertTrue(usage["LazyLib"]["imported"])
+            undeclared = [item for item in result.findings if item.id == "source-library-dependency-undeclared"]
+            self.assertEqual(len(undeclared), 1)
+            self.assertEqual(undeclared[0].evidence[0], "LazyLib")
+            self.assertEqual(undeclared[0].classification, "REVIEW")
 
     def test_scanner_reports_legacy_custom_ui_and_dialog_callbacks(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -797,3 +851,81 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             (root / "src" / "Two.java").write_bytes(b"class Source { // \x81\n }")
             result = scan_mod(root)
             self.assertFalse(any(finding.id == "duplicate-source-layout" for finding in result.findings))
+
+
+class CompileCheckScanIntegrationTests(unittest.TestCase):
+    """`scan --compile-check` (opt-in): 2026-09-15, Renis-Imperium/AI-War/Argamede-Union/EZFaction
+    were each marked ready by every other check and failed only this one. compile_loose_scripts is
+    mocked here (bridgeforge.compile_check is exercised end-to-end, with a real javac, by
+    tests/test_compile_check.py); this only tests scan_mod's own opt-in wiring and finding shape."""
+
+    def _mod(self, root: Path) -> Path:
+        (root / "mod_info.json").write_text('{"id":"m","name":"M"}', encoding="utf-8")
+        return root
+
+    def test_off_by_default_even_if_it_would_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._mod(Path(directory))
+            with patch("bridgeforge.compile_check.compile_loose_scripts") as mocked:
+                result = scan_mod(root)
+            mocked.assert_not_called()
+            self.assertFalse(any(f.id.startswith("loose-script-compile-") for f in result.findings))
+
+    def test_requested_without_vanilla_core_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._mod(Path(directory))
+            with patch("bridgeforge.compile_check.compile_loose_scripts") as mocked:
+                result = scan_mod(root, compile_check=True)
+            mocked.assert_not_called()
+            findings = [f for f in result.findings if f.id == "loose-script-compile-unavailable"]
+            self.assertEqual(len(findings), 1)
+            self.assertEqual(findings[0].classification, "UNKNOWN")
+            self.assertIn("--vanilla-core", findings[0].explanation)
+
+    def test_no_jdk_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._mod(Path(directory))
+            core = Path(directory) / "core"
+            core.mkdir()
+            outcome = {"status": "UNAVAILABLE", "reason": "No JDK found."}
+            with patch("bridgeforge.compile_check.compile_loose_scripts", return_value=outcome) as mocked:
+                result = scan_mod(root, vanilla_core=core, compile_check=True)
+            mocked.assert_called_once()
+            findings = [f for f in result.findings if f.id == "loose-script-compile-unavailable"]
+            self.assertEqual(len(findings), 1)
+            self.assertEqual(findings[0].classification, "UNKNOWN")
+            self.assertIn("No JDK found.", findings[0].explanation)
+
+    def test_pass_adds_no_findings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._mod(Path(directory))
+            core = Path(directory) / "core"
+            core.mkdir()
+            outcome = {"status": "PASS", "errors": []}
+            with patch("bridgeforge.compile_check.compile_loose_scripts", return_value=outcome):
+                result = scan_mod(root, vanilla_core=core, compile_check=True)
+            self.assertFalse(any(f.id.startswith("loose-script-compile-") for f in result.findings))
+
+    def test_fail_groups_errors_one_finding_per_file_with_up_to_five_of_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._mod(Path(directory))
+            core = Path(directory) / "core"
+            core.mkdir()
+            bad = str(root / "data" / "scripts" / "Bad.java")
+            other = str(root / "data" / "scripts" / "Other.java")
+            errors = [
+                {"file": bad, "line": n, "message": f"cannot find symbol: {n}", "detail": [f"symbol:   method thing{n}()"]}
+                for n in range(1, 7)
+            ] + [{"file": other, "line": 3, "message": "';' expected", "detail": []}]
+            outcome = {"status": "FAIL", "errors": errors}
+            with patch("bridgeforge.compile_check.compile_loose_scripts", return_value=outcome):
+                result = scan_mod(root, vanilla_core=core, compile_check=True)
+            findings = {f.file: f for f in result.findings if f.id == "loose-script-compile-error"}
+            self.assertEqual(set(findings), {"data/scripts/Bad.java", "data/scripts/Other.java"})
+            bad_finding = findings["data/scripts/Bad.java"]
+            self.assertEqual(bad_finding.classification, "MANUAL")
+            self.assertEqual(len(bad_finding.evidence), 6)  # 5 errors + a "... N more" line
+            self.assertIn("line 1: cannot find symbol: 1 (symbol: method thing1())", bad_finding.evidence)
+            self.assertEqual(bad_finding.evidence[-1], "... 1 more")
+            other_finding = findings["data/scripts/Other.java"]
+            self.assertEqual(other_finding.evidence, ["line 3: ';' expected"])
