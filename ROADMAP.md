@@ -500,6 +500,13 @@ Progression, each stage feeding the next:
       format `somejar.jar(/entry.java):LINE: error:`, so those lines` `symbol:`/`location:` detail
       lines are appended to whichever real error was parsed last. In A14`s run one genuine error
       accumulated 726 spurious detail entries.
+    **Done 2026-09-20.** `DEFAULT_JAVAC_ARGS` now carries `-sourcepath ""` (every caller already
+    passes its sources explicitly, so nothing relied on implicit lookup), and
+    `parse_javac_errors` recognises the `<jar>(/entry.java):LINE:` header and skips it, resetting
+    `current` so its continuation lines cannot attach to the previous real error. Verified on the
+    real case (Maelstrom compiled against Interstellar Imperium): the worst error went from 726
+    spurious detail entries to 2, with all 22 errors still correctly attributed to the one
+    pre-existing file. Tests: `tests/test_java_toolchain.py` (`JarEmbeddedSourceDiagnosticTests`).
     Both inflate error counts and mis-attribute them, which matters most for `scan --compile-check`
     across the Ironclads queue. Needs a fix plus a regression test with a jar that carries sources.
 

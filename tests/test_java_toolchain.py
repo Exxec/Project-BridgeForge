@@ -11,6 +11,7 @@ from bridgeforge.java_toolchain import (
     assemble_classpath,
     declared_dependencies,
     find_jdk,
+    DEFAULT_JAVAC_ARGS,
     parse_javac_errors,
     run_javac,
 )
@@ -257,6 +258,55 @@ class RunJavacEndToEndTests(unittest.TestCase):
             self.assertEqual(len(run.errors), 1)
             self.assertEqual(run.errors[0]["kind"], "missing-symbol")
             self.assertIn("undefinedThing", run.errors[0]["detail"][0])
+
+
+class JarEmbeddedSourceDiagnosticTests(unittest.TestCase):
+    """ROADMAP P14 item 13: some mods ship .java inside their jar (Interstellar Imperium's II.jar).
+
+    javac would otherwise recompile those classpath entries and blame the mod under test, and its
+    diagnostics -- which `_ERROR_HEADER` cannot match, because of the "(" -- used to leave the
+    parser appending every following "symbol:"/"location:" line to the previous real error.
+    """
+
+    FIXTURE = "\n".join(
+        [
+            r"C:\work\mod\data\scripts\Real.java:12: error: cannot find symbol",
+            "  symbol:   variable Foo",
+            "  location: class Real",
+            r"C:\mods\II\jars\II.jar(/data/scripts/Bundled.java):55: error: package org.lazywizard.lazylib does not exist",
+            "  symbol:   class MathUtils",
+            "  location: class Bundled",
+            r"C:\mods\II\jars\II.jar(/data/scripts/Other.java):77: error: cannot find symbol",
+            "  symbol:   variable Bar",
+        ]
+    )
+
+    def test_jar_embedded_errors_are_not_recorded(self) -> None:
+        errors = parse_javac_errors(self.FIXTURE)
+        self.assertEqual(len(errors), 1)
+        self.assertTrue(errors[0]["file"].endswith("Real.java"))
+
+    def test_jar_embedded_details_do_not_pollute_the_previous_error(self) -> None:
+        errors = parse_javac_errors(self.FIXTURE)
+        self.assertEqual(errors[0]["detail"], ["symbol: variable Foo", "location: class Real"])
+
+    def test_posix_jar_paths_are_recognised_too(self) -> None:
+        fixture = "\n".join(
+            [
+                "/home/u/mod/data/scripts/Real.java:3: error: cannot find symbol",
+                "  symbol: variable Foo",
+                "/home/u/mods/II/jars/II.jar(/data/scripts/Bundled.java):9: error: cannot find symbol",
+                "  symbol: class Gone",
+            ]
+        )
+        errors = parse_javac_errors(fixture)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(errors[0]["detail"], ["symbol: variable Foo"])
+
+    def test_empty_sourcepath_is_passed_to_javac(self) -> None:
+        args = list(DEFAULT_JAVAC_ARGS)
+        self.assertIn("-sourcepath", args)
+        self.assertEqual(args[args.index("-sourcepath") + 1], "")
 
 
 if __name__ == "__main__":

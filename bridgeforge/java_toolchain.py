@@ -179,10 +179,26 @@ def assemble_classpath(mod_dir: Path, vanilla_core: Path | None, provider_roots:
 # Windows drive-letter colon ("C:\Users\...\Foo.java:12: error: ...") is not mistaken for the
 # line-number separator.
 _ERROR_HEADER = re.compile(r"^(?P<file>.*?\.java):(?P<line>\d+): error: (?P<message>.*)$")
+# javac can also report diagnostics for sources bundled INSIDE a classpath jar, printed as
+# "C:\\...\\II.jar(/data/scripts/Foo.java):12: error: ...". _ERROR_HEADER deliberately does not
+# match these (the ")" defeats it), which used to leave `current` pointing at the previous real
+# error so every following "symbol:"/"location:" line was appended to its detail list -- one
+# genuine error once accumulated 726 spurious entries. `-sourcepath ""` above stops javac
+# compiling them at all; this pattern is the guard for any that still appear. They are never
+# the mod under test's errors, so they are skipped rather than recorded.
+_JAR_EMBEDDED_HEADER = re.compile(r"^.*?\.jar\([^)]*\.java\):\d+: (?:error|warning): ")
 # The "symbol:"/"location:" continuation lines javac prints under an error, indented.
 _DETAIL_LINE = re.compile(r"^\s+(symbol|location):\s*(.*)$")
 
-DEFAULT_JAVAC_ARGS = ("--release", "17", "-proc:none", "-nowarn", "-encoding", "UTF-8", "-Xmaxerrs", "10000")
+# `-sourcepath ""` is load-bearing (ROADMAP P14 item 13): some mods ship .java sources INSIDE
+# their jar beside the .class files (Interstellar Imperium's II.jar does). Without an empty
+# sourcepath, javac's default source-preference finds those entries on the classpath and tries
+# to recompile them, reporting errors for libraries the mod under test never declared. Every
+# caller passes its sources explicitly (compile_check and rebuild_jar both rglob the whole
+# tree), so nothing relies on implicit source lookup.
+DEFAULT_JAVAC_ARGS = (
+    "--release", "17", "-proc:none", "-nowarn", "-encoding", "UTF-8", "-Xmaxerrs", "10000", "-sourcepath", "",
+)
 
 
 def _classify_error(message: str) -> str:
@@ -205,6 +221,9 @@ def parse_javac_errors(stderr: str) -> list[dict[str, object]]:
     errors: list[dict[str, object]] = []
     current: dict[str, object] | None = None
     for line in stderr.splitlines():
+        if _JAR_EMBEDDED_HEADER.match(line):
+            current = None
+            continue
         header = _ERROR_HEADER.match(line)
         if header:
             current = {
