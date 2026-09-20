@@ -446,6 +446,17 @@ Progression, each stage feeding the next:
     - a `dependency_successors.json` entry per folded mod;
     - a check that warns when an original mod and RevenantLib are enabled together.
 
+12. **Cross-mod loose-script shadowing.** `loose-script-shadowed-by-jar` only compares a mod's loose
+    `data/**.java` against **its own** jars. A mod that overrides a *dependency's* loose script is
+    therefore misreported: the scanner raises `loose-script-janino-risk` on a file the game never
+    compiles, because all mod jars share one classloader and the dependency's jar already supplies the
+    class ("already loaded (perhaps from jar file) ... skipping compilation"). Worse, the override
+    itself silently does nothing, which is a defect in the mod that no check currently reports.
+    Found 2026-09-20 on Maelstrom Interstellar Imperium Unofficial Expansion (escalation E8): its two
+    Titan scripts are shadowed by base Interstellar Imperium's `II.jar`. Needs the provider jars that
+    `compile_check`/`substitutes.provider_index` already assemble, plus a new finding
+    (`loose-script-shadowed-by-dependency-jar`, MANUAL: the edit has no effect) and a scanner test.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit
