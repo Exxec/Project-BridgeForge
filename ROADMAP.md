@@ -510,6 +510,20 @@ Progression, each stage feeding the next:
     Both inflate error counts and mis-attribute them, which matters most for `scan --compile-check`
     across the Ironclads queue. Needs a fix plus a regression test with a jar that carries sources.
 
+14. **Fixers must refuse to edit a jar-shadowed loose script.** `loose-script-shadowed-by-jar` is
+    SAFE/informational, and its own explanation says edits to those files have no effect - yet
+    nothing stops a fixer (or an agent) editing one. On 2026-09-20 task A17 converted six
+    `setPersonality("suicidal")` calls to `"reckless"` in Thule-Legacy's
+    `data/missions/thule_mission_operation_n/MissionDefinition.java`, wrote a full evidence trail,
+    and produced **no behaviour change at all**, because `jars/ThuleLegacy.jar` ships that class and
+    the jar wins. The scan it ran listed the file under `loose-script-shadowed-by-jar` (`count:18`)
+    both before and after.
+    Fix: `apply_fix` should check the target against the shadow set and refuse (or demand an explicit
+    override), naming the jar that supplies the class and pointing at the real remedy - rebuild the
+    jar from patched source, or strip the class so the loose script compiles. Pairs with item 12
+    (the same detection across mods) and the `loose-script-jar-precedence` rule. Needs a regression
+    test with a mod whose jar shadows a file a fixer would otherwise edit.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit
