@@ -1406,6 +1406,7 @@ re-scan every mod with real revival work recorded (ROADMAP P14 item 32): finding
 | `--repo-root` REPO_ROOT | default . | repo root holding In operation/ (default: cwd) |
 | `--vanilla-core` VANILLA_CORE | - | read-only starsector-core; without it, most checks return UNKNOWN and no compile signal is produced |
 | `--write-markdown` WRITE_MARKDOWN | - | also write a roll-up table to this path |
+| `--include-intake` | - | also include mods with a working/ copy but no REVIVAL_REPORT.md yet (ROADMAP P14 item 8: the Ironclads intake queue) |
 | `--json` | - | - |
 
 ## provider-index-update
@@ -1427,6 +1428,7 @@ which mods with revival work recorded need which missing content, and which unre
 | `--repo-root` REPO_ROOT | default . | repo root holding In operation/ (default: cwd) |
 | `--vanilla-core` VANILLA_CORE | - | read-only starsector-core, so vanilla content isn't counted as missing |
 | `--provider-index` PROVIDER_INDEX | - | cached provider index directory written by provider-index-update (default: <repo>/bridgeforge-state/provider-index) |
+| `--include-intake` | - | also check mods with a working/ copy but no REVIVAL_REPORT.md yet (ROADMAP P14 item 8: the Ironclads intake queue) |
 | `--json` | - | - |
 
 ## archive-index
