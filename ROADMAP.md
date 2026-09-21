@@ -691,6 +691,29 @@ Progression, each stage feeding the next:
     "\.is_file\(\)"` audit of every ad hoc "is this shadowed" check written during a live
     investigation (not just the scanner's own checks, which item 24 already covers) would catch the
     next instance of this same shortcut before it produces a wrong claim that reaches the owner.
+26. **New command: `verify-shadow` - the real jar-parsing check, callable directly instead of
+    reimplemented ad hoc.** Item 25's actual fix, not just its lesson. `loose-script-shadowed-by-jar`
+    already has the correct logic buried inside a scanner pass
+    (`_iter_jar_class_files`/`_parse_class_file`, real class-file parsing against a target jar set),
+    but there is no way to just ask it "does *this* jar set actually contain a compiled class for
+    *this* loose script" outside a full mod scan - which is exactly why E12 happened: a live
+    investigation reached for a quick `Path.is_file()` check instead of the real one, because the
+    real one wasn't directly callable. `bridgeforge verify-shadow <script-path> --against <jar-or-core-dir>`
+    should answer that one question directly, reusing the scanner's own parsing (not a second
+    implementation of it), and print which jar (if any) supplies the class. Every future "is this
+    safe to drop" claim - in a task brief, an investigation script, a fixer - should call this
+    instead of writing a path check.
+27. **The full corpus recheck (item 23) should include an audit of every "moved because shadowed"
+    decision made before item 25 was found, not just a fresh scan.** E12 (2026-09-20/21) found that
+    a `Path.is_file()` path-existence check had been trusted as proof of jar-shadowing at least once
+    (Rebal's 50 `.java` files) with the actual claim never verified. Item 23's sweep already re-scans
+    every revived mod with current tooling, which will re-run the scanner's own (correct)
+    `loose-script-shadowed-by-jar` check - but it won't by itself catch a file that was manually
+    *moved out of* a working tree on the same flawed reasoning before the sweep runs, since a moved
+    file has nothing left in `working/` to rescan. Item 23's procedure should add an explicit step:
+    grep every mod's `scratch/MOVES.log` for a "shadow"/"jar" rationale, and for each one, run item
+    26's `verify-shadow` against the actual jar set that reasoning named, before trusting the move
+    was correct.
 
 ## Post-1.0 research and gated automation
 
