@@ -560,6 +560,16 @@ Progression, each stage feeding the next:
     reference checks, carrier-bay/OP-budget checks) to confirm each one that should resolve through
     `.skin` chains actually does, rather than finding the next instance the same way this one was
     found.
+    **Done 2026-09-20.** Audited every `hulls = set(_declared_spec_ids(..., "*.ship", "hullId"))`
+    site and every `_ship_file_index` call. Found and fixed one real second instance:
+    `_scan_campaign_fleet_references` (`campaign-fleet-reference-missing`) had the exact same gap -
+    fixed by resolving a hull literal through `_resolve_hull_id`/`_skin_index` before checking
+    membership, same as `_scan_mission_variant_assets`. Two other candidates checked and found
+    correctly scoped as-is: `_scan_carrier_bays_proposal`/`_scan_description_missing` iterate
+    `ship_data.csv`'s own base-hull rows (which are never skin ids, so no gap), and
+    `_scan_faction_known_lists` only checks list *presence*, not whether listed ids resolve (a
+    different check shape, out of scope for this bug class). Tests:
+    `tests/test_zorg_campaign_checks.py`. Recorded as the second instance under BF-SKIN-01.
 18. **Downloads-wide research needs an index, not a live `grep -r` with a short timeout.** While
     investigating O2.2 (2026-09-20), a `timeout 60 grep -rl "shieldbypass" "Downloads"` returned zero
     matches - a false negative caused purely by the timeout, not by the string's absence: the file

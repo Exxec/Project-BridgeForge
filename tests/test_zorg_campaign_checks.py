@@ -49,6 +49,23 @@ class CampaignFleetReferenceTests(unittest.TestCase):
         self.assertEqual(len(missing), 1)
         self.assertEqual(missing[0].evidence, ["src/data/scripts/world/Spawner.java: zorg_cube_wing", "src/data/scripts/world/Spawner.java: zorg_probe_Missing"])
 
+    def test_campaign_spawner_hull_literal_resolves_through_a_skin(self) -> None:
+        """A campaign spawner commonly names a skin's id, not the underlying .ship's -- the same
+        pattern BF-SKIN-01 fixed for mission variants (docs/BUG_CLASSES.md). Found by auditing every
+        scanner "known ids" builder for the same blind spot (ROADMAP P14 item 17), 2026-09-20."""
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "hulls" / "skins").mkdir(parents=True)
+            (mod / "data" / "hulls" / "skins" / "zorg_probe_pirate.skin").write_text(
+                json.dumps({"skinHullId": "zorg_probe_pirate", "baseHullId": "zorg_probe"}), encoding="utf-8"
+            )
+            spawner = SPAWNER.replace('"zorg_probe_Configurated", "zorg_probe_Missing"', '"zorg_probe_Configurated", "zorg_probe_pirate"')
+            (mod / "src" / "data" / "scripts" / "world" / "Spawner.java").write_text(spawner, encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        missing = _ids(result, "campaign-fleet-reference-missing")
+        self.assertEqual(len(missing), 1)
+        self.assertEqual(missing[0].evidence, ["src/data/scripts/world/Spawner.java: zorg_cube_wing"])
+
 
 class KnownListsSeverityTests(unittest.TestCase):
     def test_faction_without_markets_or_roles_is_low(self) -> None:

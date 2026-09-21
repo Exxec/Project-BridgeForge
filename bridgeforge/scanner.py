@@ -1040,7 +1040,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
         if len(paths) > 1:
             result.add(id="duplicate-source-layout", category="source", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Identical Java source appears at multiple paths. Establish the authoritative source/JAR layout before compiling or modifying it.", evidence=sorted(paths))
     _scan_mission_local_fleet_references(root, result, vanilla_core)
-    _scan_campaign_fleet_references(root, result)
+    _scan_campaign_fleet_references(root, result, vanilla_core)
     _scan_core_campaign_plugin_reregistered(root, result)
     _scan_system_generation_unguarded(root, result)
     _scan_mission_required_files(root, result)
@@ -1671,13 +1671,16 @@ def _system_lookup_null_guarded(text: str, system_name: str) -> bool:
     return False
 
 
-def _scan_campaign_fleet_references(root: Path, result: ScanResult) -> None:
+def _scan_campaign_fleet_references(root: Path, result: ScanResult, vanilla_core: Path | None = None) -> None:
     """Variant and wing ids that campaign code builds fleets from must exist (Zorg18 spawner, 2026-09-14).
 
     Missions are covered by mission-local-fleet-reference-missing. Campaign spawners often keep ids in
     arrays and pick one at run time, so every string literal with this mod's prefix is checked in any
     source that uses FleetMemberType: "<prefix>..._wing" must be a wing, and a literal that starts with
     one of the mod's hull ids plus "_" must be a variant. A missing one fails only when that fleet spawns.
+
+    A hull literal is resolved through any .skin chain first (BF-SKIN-01, docs/BUG_CLASSES.md): a
+    campaign spawner commonly names a skin's id, not the underlying .ship's, same as a mission variant.
     """
     mod_id = str(result.metadata.get("id") or "").strip()
     if not mod_id:
@@ -1688,6 +1691,11 @@ def _scan_campaign_fleet_references(root: Path, result: ScanResult) -> None:
     wings = _wing_ids_set(root / "data" / "hulls" / "wing_data.csv")
     if not hulls and not wings:
         return
+    skins = _skin_index(root, vanilla_core)
+
+    def _is_known_hull(literal: str) -> bool:
+        return literal in hulls or _resolve_hull_id(literal, skins) in hulls
+
     missing: list[str] = []
     for source in sorted(root.rglob("*.java")):
         parts = source.relative_to(root).parts
@@ -1700,7 +1708,7 @@ def _scan_campaign_fleet_references(root: Path, result: ScanResult) -> None:
         if "FleetMemberType" not in text:
             continue
         for literal in sorted(set(re.findall(r'"(' + re.escape(prefix) + r'[A-Za-z0-9_]+)"', text))):
-            if literal in variants or literal in hulls or literal in wings:
+            if literal in variants or literal in wings or _is_known_hull(literal):
                 continue
             if literal.endswith("_wing") or any(literal.startswith(hull + "_") for hull in hulls):
                 missing.append(f"{_relative(root, source)}: {literal}")
