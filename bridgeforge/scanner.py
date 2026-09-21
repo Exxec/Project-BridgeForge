@@ -858,7 +858,7 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
     return jars
 
 
-def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = None) -> None:
+def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = None, provider_roots: list[Path] | None = None) -> None:
     try:
         result.source_facts = analyze_sources(root)
     except AstUnavailable as exc:
@@ -1044,7 +1044,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_core_campaign_plugin_reregistered(root, result)
     _scan_system_generation_unguarded(root, result)
     _scan_mission_required_files(root, result)
-    _scan_loose_script_janino_risk(root, result)
+    _scan_loose_script_janino_risk(root, result, provider_roots)
     _scan_weapon_effect_static_state(root, result)
     _scan_rules_firebest_populate_options(root, result)
     _scan_hullmod_instance_state(root, result)
@@ -1580,7 +1580,47 @@ def verify_shadow(script: Path, against: Path, root: Path | None = None) -> dict
     }
 
 
-def _scan_loose_script_janino_risk(root: Path, result: ScanResult) -> None:
+def _dependency_jar_class_names(root: Path, provider_roots: list[Path] | None = None) -> dict[str, str]:
+    """{fully-qualified class name: provider mod name} for every class in a declared dependency's
+    own jars (ROADMAP P14 item 12). Only declared dependencies are checked - an undeclared mod
+    happening to share a class name is a coincidence, not a real shadowing risk this check should
+    claim (and `undeclared-library-dependency`/`source-import-unresolved` are its own checks).
+
+    Deliberately requires an EXPLICIT `provider_roots` - no default fallback to
+    `java_toolchain.DEFAULT_PROVIDER_ROOTS` here. That default (this repo's own `In operation`
+    folder) is fine for an explicit, single-purpose command like `compile-check`/`fix`, but this
+    function is called from `_scan_loose_script_janino_risk`, which runs on *every* `scan_mod` call
+    unconditionally - a silent fallback here made every scan of a mod with declared dependencies
+    walk this repo's real, ~325-mod `In operation` folder regardless of what was actually being
+    scanned, turning a 75-second test suite into an 8-minute one before this was caught. Pass
+    `scan --providers`/`corpus_recheck`'s own default, etc. explicitly to opt in, same as
+    `compile-check` already requires.
+    """
+    from .substitutes import provider_index
+
+    if not provider_roots:
+        return {}
+    from .java_toolchain import declared_dependencies
+
+    deps = declared_dependencies(root)
+    if not deps:
+        return {}
+    roots = [Path(entry) for entry in provider_roots]
+    providers = provider_index(roots, exclude=root)
+    by_id = {provider.mod_id: provider for provider in providers}
+    classes: dict[str, str] = {}
+    for dep_id in deps:
+        provider = by_id.get(dep_id)
+        if provider is None:
+            continue
+        for _jar, _member, data in _iter_class_files_in(Path(provider.path)):
+            info = _parse_class_file(data)
+            if info is not None and info.this_class:
+                classes.setdefault(info.this_class.replace("/", "."), provider.name)
+    return classes
+
+
+def _scan_loose_script_janino_risk(root: Path, result: ScanResult, provider_roots: list[Path] | None = None) -> None:
     """Loose .java under data/ is compiled at runtime by Janino, which ignores generics (live bug PRB-MISSION-02).
 
     A for-each over a generic collection (element typed as Object -> String), a diamond or a lambda is a
@@ -1590,12 +1630,24 @@ def _scan_loose_script_janino_risk(root: Path, result: ScanResult) -> None:
     A loose script whose class is also in a loaded jar is never compiled: the game loads the jar class
     and logs "already loaded (perhaps from jar file) ... skipping compilation". Mirfak Parcel Service
     ships both, so those are reported once as shadowed instead of as Janino risks.
+
+    ROADMAP P14 item 12 (found 2026-09-20 on Maelstrom Interstellar Imperium Unofficial Expansion,
+    escalation E8): the same classloader-sharing rule applies across mods too - a script that
+    overrides a *declared dependency's* jar-compiled class is shadowed exactly the same way, but the
+    mod's own jars aren't the only jar that can supply the class. `dependency_classes` extends the
+    same detection to every declared dependency's provider jars.
     """
     jar_classes = mod_jar_class_names(root)
+    dependency_classes = _dependency_jar_class_names(root, provider_roots)
     shadowed: list[str] = []
+    dependency_shadowed: dict[str, str] = {}  # relative path -> shadowing dependency's name
     for source in sorted((root / "data").rglob("*.java")) if (root / "data").is_dir() else []:
-        if ".".join(source.relative_to(root).with_suffix("").parts) in jar_classes:
+        class_name = ".".join(source.relative_to(root).with_suffix("").parts)
+        if class_name in jar_classes:
             shadowed.append(_relative(root, source))
+            continue
+        if class_name in dependency_classes:
+            dependency_shadowed[_relative(root, source)] = dependency_classes[class_name]
             continue
         try:
             text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
@@ -1625,6 +1677,17 @@ def _scan_loose_script_janino_risk(root: Path, result: ScanResult) -> None:
             confidence="HIGH",
             explanation="These loose scripts have the same class name as a class in the mod's loaded jar. The game loads the jar class and skips compiling the loose copy (starsector.log: 'already loaded (perhaps from jar file) ... skipping compilation'), so their Janino risks don't apply and edits to them have no effect. Change the jar (or its source) instead.",
             evidence=[f"count:{len(shadowed)}", *shadowed[:10]],
+        )
+    for path, provider_name in sorted(dependency_shadowed.items()):
+        result.add(
+            id="loose-script-shadowed-by-dependency-jar",
+            category="dependencies",
+            severity="high",
+            classification="MANUAL",
+            confidence="HIGH",
+            explanation=f"This loose script has the same class name as a compiled class already in the declared dependency {provider_name}'s own jar. All mod jars share one classloader, so the game loads {provider_name}'s class first and skips compiling this override (starsector.log: 'already loaded (perhaps from jar file) ... skipping compilation') - the override silently has no effect. Either patch {provider_name}'s jar (or its source, if you can rebuild it) instead, or drop this loose copy.",
+            file=path,
+            evidence=[f"shadowed by: {provider_name}"],
         )
 
 
@@ -5625,7 +5688,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_metadata(root, result)
     _scan_mod_info_jar_missing(root, result)
     _scan_jars(root, result)
-    _scan_sources(root, result, vanilla_core)
+    _scan_sources(root, result, vanilla_core, provider_roots)
     _scan_assets(root, result)
     _scan_configured_class_integrity(root, result)
     _annotate_source_reachability(root, result)

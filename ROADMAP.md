@@ -554,6 +554,34 @@ Progression, each stage feeding the next:
     Titan scripts are shadowed by base Interstellar Imperium's `II.jar`. Needs the provider jars that
     `compile_check`/`substitutes.provider_index` already assemble, plus a new finding
     (`loose-script-shadowed-by-dependency-jar`, MANUAL: the edit has no effect) and a scanner test.
+    **Done 2026-09-21.** New `scanner._dependency_jar_class_names`, extending
+    `_scan_loose_script_janino_risk` (already the single place that walks every loose script once)
+    to also check a script's class name against every *declared dependency's* jar classes, using
+    the same `provider_index`/class-file-parsing machinery `compile-check`/`verify-shadow` already
+    use - not a second implementation. A shadowed script's `loose-script-janino-risk` is suppressed
+    the same way the existing same-mod case already was, and the new
+    `loose-script-shadowed-by-dependency-jar` (MANUAL) names the shadowing dependency. Only a
+    *declared* dependency counts - an undeclared mod sharing a class name by coincidence is not
+    claimed as shadowing.
+    **A real regression caught and fixed before committing:** the first version defaulted
+    `provider_roots` to `java_toolchain.DEFAULT_PROVIDER_ROOTS` (this repo's own real `In
+    operation` folder) whenever the caller didn't supply one - reasonable for an explicit,
+    single-purpose command like `compile-check`, but `_scan_loose_script_janino_risk` runs on
+    *every* `scan_mod` call unconditionally, so this silently made every scan of a mod with
+    declared dependencies walk the real ~325-mod `In operation` folder regardless of what was
+    actually being scanned. The full test suite went from ~78 seconds to 518 seconds before this
+    was caught by simply re-running it after the change. Fixed by requiring an explicit
+    `provider_roots` with no default fallback at all - the check is a safe no-op unless the caller
+    opts in (`scan --providers`, `fix --providers`, or any direct caller that supplies its own),
+    mirroring `compile-check`'s own explicit opt-in. Extended item 14's `_refuse_shadowed_edits`
+    fixer guard to the same cross-mod case (a new `fix --providers` flag), since a fixer editing a
+    dependency-jar-shadowed script is exactly as dead-on-arrival as editing a same-mod-shadowed one.
+    Verified against the real, original Maelstrom bug state (the two files item 27 had already
+    moved out of the working copy this session were copied back in for this test): the check
+    correctly fires with real evidence naming "Interstellar Imperium," and correctly produces
+    nothing when `provider_roots` isn't supplied. Tests: `tests/test_intake_scanner_fixes.py`
+    (`CrossModLooseScriptShadowTests`, 3 cases), `tests/test_fixers.py`
+    (`RefuseCrossModShadowedEditTests`, 3 cases).
 
 13. **compile-check: two javac-integration bugs (found by task A14, 2026-09-20).**
     - `compile_check` does not pass `-sourcepath ""`, so when a dependency jar bundles `.java`

@@ -361,7 +361,8 @@ def build_parser() -> argparse.ArgumentParser:
     fix.add_argument("--from-vanilla-id", help="required for procgen-planet-row-missing/procgen-star-row-missing")
     fix.add_argument("--faction-file", type=Path, help="required for faction-known-lists-missing")
     fix.add_argument("--hull", action="append", default=[], metavar="ID=N", help="repeatable; required for carrier-bays-proposal, e.g. --hull my_carrier=4 (0-6, vanilla's own maximum)")
-    fix.add_argument("--allow-shadowed-edit", action="store_true", help="override the refusal to edit a loose script one of this mod's own jars already shadows (the edit has no effect unless the jar is also being rebuilt from the patched source)")
+    fix.add_argument("--allow-shadowed-edit", action="store_true", help="override the refusal to edit a loose script one of this mod's own jars, or a declared dependency's jar, already shadows (the edit has no effect unless the jar is also being rebuilt from the patched source)")
+    fix.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search for declared dependencies, for the dependency-jar shadow check (default: <repo>/In operation and its rig's mods)")
     prepare_test_cmd = subcommands.add_parser("prepare-test", help="sync a rig test copy from a working copy, and optionally run a boot test")
     prepare_test_cmd.add_argument("working_dir", type=Path)
     prepare_test_cmd.add_argument("rig_mod_dir", type=Path)
@@ -1898,6 +1899,7 @@ def main(argv: list[str] | None = None) -> int:
             "faction_file": args.faction_file,
             "hulls": args.hull,
             "allow_shadowed_edit": args.allow_shadowed_edit,
+            "provider_roots": args.providers or None,
         }
         try:
             plan = compute_fix(args.mod_dir, args.finding, options)

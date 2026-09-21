@@ -63,6 +63,66 @@ class LooseScriptShadowTests(unittest.TestCase):
         self.assertEqual(shadow[0].evidence, ["count:1", "data/hullmods/InJar.java"])
 
 
+class CrossModLooseScriptShadowTests(unittest.TestCase):
+    """ROADMAP P14 item 12: a mod's loose script can also be shadowed by a *declared dependency's*
+    jar, not just its own - found 2026-09-20 on Maelstrom Interstellar Imperium Unofficial
+    Expansion (escalation E8): its Titan scripts duplicate classes the base mod's own II.jar
+    already supplies, so the override silently had no effect. All mod jars share one classloader.
+    """
+
+    def _base_mod(self, root: Path, class_name: str) -> Path:
+        base = root / "providers" / "basemod"
+        _write(base / "mod_info.json", json.dumps({"id": "basemod", "name": "Base Mod"}))
+        (base / "jars").mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(base / "jars" / "base.jar", "w") as archive:
+            archive.writestr(f"{class_name.replace('.', '/')}.class", _class(class_name.replace(".", "/")))
+        return base
+
+    def test_a_loose_script_shadowed_by_a_declared_dependencys_jar_is_flagged_manual(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._base_mod(root, "data.scripts.hullmods.Shared")
+            mod = root / "mod"
+            _write(mod / "mod_info.json", json.dumps({"id": "addon", "name": "Addon", "dependencies": [{"id": "basemod"}]}))
+            _write(mod / "data" / "scripts" / "hullmods" / "Shared.java", "package data.scripts.hullmods;\nclass Shared {}\n")
+            findings = scan_mod(mod, TargetProfile(), provider_roots=[root / "providers"]).findings
+        shadow = [f for f in findings if f.id == "loose-script-shadowed-by-dependency-jar"]
+        self.assertEqual(len(shadow), 1)
+        self.assertEqual(shadow[0].classification, "MANUAL")
+        self.assertEqual(shadow[0].file, "data/scripts/hullmods/Shared.java")
+        self.assertIn("shadowed by: Base Mod", shadow[0].evidence)
+        # The shadowed script's own janino-risk (if any) is suppressed the same way the same-mod case is.
+        self.assertEqual([f for f in findings if f.id == "loose-script-janino-risk"], [])
+
+    def test_an_undeclared_mod_sharing_a_class_name_is_not_flagged(self) -> None:
+        # Only a DECLARED dependency's jar counts - an undeclared mod happening to share a class
+        # name is a coincidence this check must not guess at.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._base_mod(root, "data.scripts.hullmods.Shared")
+            mod = root / "mod"
+            _write(mod / "mod_info.json", json.dumps({"id": "addon", "name": "Addon"}))  # no dependencies declared
+            _write(mod / "data" / "scripts" / "hullmods" / "Shared.java", "package data.scripts.hullmods;\nclass Shared {}\n")
+            findings = scan_mod(mod, TargetProfile(), provider_roots=[root / "providers"]).findings
+        self.assertEqual([f for f in findings if f.id == "loose-script-shadowed-by-dependency-jar"], [])
+
+    def test_own_jar_shadow_takes_precedence_over_dependency_shadow(self) -> None:
+        # If the mod's OWN jar also supplies the class, that's still loose-script-shadowed-by-jar
+        # (SAFE, item 14's existing case) - not double-reported as the dependency variant too.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._base_mod(root, "data.scripts.hullmods.Shared")
+            mod = root / "mod"
+            _write(mod / "mod_info.json", json.dumps({"id": "addon", "name": "Addon", "jars": ["jars/addon.jar"], "dependencies": [{"id": "basemod"}]}))
+            (mod / "jars").mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(mod / "jars" / "addon.jar", "w") as archive:
+                archive.writestr("data/scripts/hullmods/Shared.class", _class("data/scripts/hullmods/Shared"))
+            _write(mod / "data" / "scripts" / "hullmods" / "Shared.java", "package data.scripts.hullmods;\nclass Shared {}\n")
+            findings = scan_mod(mod, TargetProfile(), provider_roots=[root / "providers"]).findings
+        self.assertEqual([f for f in findings if f.id == "loose-script-shadowed-by-dependency-jar"], [])
+        self.assertEqual(len([f for f in findings if f.id == "loose-script-shadowed-by-jar"]), 1)
+
+
 class VanillaWeaponOverrideTests(unittest.TestCase):
     def test_wpn_overriding_a_vanilla_weapon_is_not_unregistered(self) -> None:
         # Blackrock ships blinker_green.wpn, a deliberate override of vanilla's weapon of the same id.

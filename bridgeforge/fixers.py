@@ -1401,11 +1401,11 @@ def compute_fix(mod_dir: Path, finding_id: str, options: dict | None = None) -> 
     if not changes:
         raise FixerError(f"No change was computed for finding '{finding_id}'.")
     if not options.get("allow_shadowed_edit"):
-        _refuse_shadowed_edits(root, changes)
+        _refuse_shadowed_edits(root, changes, options.get("provider_roots"))
     return FixPlan(finding_id=finding_id, mod_root=root, changes=changes)
 
 
-def _refuse_shadowed_edits(root: Path, changes: list[FileChange]) -> None:
+def _refuse_shadowed_edits(root: Path, changes: list[FileChange], provider_roots: list[Path] | None = None) -> None:
     """Refuse a plan that edits a loose script one of this mod's own jars already shadows (ROADMAP
     P14 item 14). `loose-script-shadowed-by-jar` already says editing such a file has no effect - the
     game loads the jar class and never compiles the loose one - but nothing previously stopped a
@@ -1414,9 +1414,16 @@ def _refuse_shadowed_edits(root: Path, changes: list[FileChange]) -> None:
     in-game, because `ThuleLegacy.jar` shipped that exact class. Pass `allow_shadowed_edit: True` in
     `compute_fix`'s `options` only when the jar is also being rebuilt from the patched source in the
     same pass (as this exact case was, once caught) - otherwise the edit is dead on arrival.
-    """
-    from .scanner import loose_script_jar_shadowed_class
 
+    ROADMAP P14 item 12 extends the same guard to a *declared dependency's* jar (Maelstrom
+    Interstellar Imperium Unofficial Expansion, escalation E8) - all mod jars share one classloader,
+    so the rule is identical either way. `options["provider_roots"]` (default: the same
+    `<repo>/In operation` + rig mods default `compile-check`/`dependency-substitutes` use) can
+    override which providers are searched.
+    """
+    from .scanner import _dependency_jar_class_names, loose_script_jar_shadowed_class
+
+    dependency_classes = None  # computed lazily, once, only if a candidate script needs it
     for change in changes:
         if change.path.suffix.lower() != ".java":
             continue
@@ -1434,6 +1441,18 @@ def _refuse_shadowed_edits(root: Path, changes: list[FileChange]) -> None:
                 "so editing it has no effect. Rebuild the jar from the patched source (or strip the class "
                 "so the loose script compiles), or pass allow_shadowed_edit=True if that is already planned "
                 "as part of this same fix."
+            )
+        if dependency_classes is None:
+            dependency_classes = _dependency_jar_class_names(root, provider_roots)
+        class_name = ".".join(relative.with_suffix("").parts)
+        provider_name = dependency_classes.get(class_name)
+        if provider_name is not None:
+            raise FixerError(
+                f"{change.path} is shadowed by a class already compiled into the declared dependency "
+                f"{provider_name}'s own jar ({class_name}): the game loads {provider_name}'s class and never "
+                "compiles this loose script, so editing it has no effect. Patch the dependency's jar (or its "
+                "source, if you can rebuild it) instead, or pass allow_shadowed_edit=True if that is already "
+                "planned as part of this same fix."
             )
 
 

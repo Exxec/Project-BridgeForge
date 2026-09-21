@@ -1148,6 +1148,58 @@ class RefuseShadowedEditTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
 
 
+class RefuseCrossModShadowedEditTests(unittest.TestCase):
+    """ROADMAP P14 item 12/14: the same refusal for a loose script shadowed by a *declared
+    dependency's* jar - all mod jars share one classloader, so the rule is identical to item 14's
+    own-jar case. Real shape confirmed on Maelstrom Interstellar Imperium Unofficial Expansion
+    (escalation E8): its Titan scripts duplicated classes the base mod's own II.jar already supplied.
+    """
+
+    MOD = "package data.hullmods;\npublic class Tow implements HullModEffect {\n    public void init() {}\n}\n"
+
+    def _provider(self, root: Path) -> Path:
+        provider = root / "providers" / "basemod"
+        _write(provider / "mod_info.json", '{"id":"basemod","name":"Base Mod"}')
+        write_jar(provider / "jars" / "base.jar", {"data/hullmods/Tow.class": build_class_file("data/hullmods/Tow")})
+        return provider
+
+    def test_refuses_when_a_declared_dependencys_jar_shadows_the_edited_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._provider(root)
+            mod = root / "mod"
+            _write(mod / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a","dependencies":[{"id":"basemod"}]}')
+            _write(mod / "data" / "hullmods" / "Tow.java", self.MOD)
+            with self.assertRaises(FixerError) as ctx:
+                compute_fix(mod, "target-interface-method-missing", {"provider_roots": [root / "providers"]})
+            self.assertIn("Base Mod", str(ctx.exception))
+            self.assertIn("data.hullmods.Tow", str(ctx.exception))
+            self.assertEqual((mod / "data" / "hullmods" / "Tow.java").read_text(encoding="utf-8"), self.MOD)
+
+    def test_allow_shadowed_edit_overrides_the_cross_mod_refusal_too(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._provider(root)
+            mod = root / "mod"
+            _write(mod / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a","dependencies":[{"id":"basemod"}]}')
+            _write(mod / "data" / "hullmods" / "Tow.java", self.MOD)
+            plan = compute_fix(mod, "target-interface-method-missing", {"allow_shadowed_edit": True, "provider_roots": [root / "providers"]})
+            apply_fix(plan)
+            self.assertIn("showInRefitScreenModPickerFor", (mod / "data" / "hullmods" / "Tow.java").read_text(encoding="utf-8"))
+
+    def test_cli_wires_the_providers_flag_through(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._provider(root)
+            mod = root / "mod"
+            _write(mod / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a","dependencies":[{"id":"basemod"}]}')
+            _write(mod / "data" / "hullmods" / "Tow.java", self.MOD)
+            exit_code = main(["fix", str(mod), "--finding", "target-interface-method-missing", "--apply", "--providers", str(root / "providers")])
+            self.assertEqual(exit_code, 2)
+            exit_code = main(["fix", str(mod), "--finding", "target-interface-method-missing", "--apply", "--allow-shadowed-edit", "--providers", str(root / "providers")])
+            self.assertEqual(exit_code, 0)
+
+
 class UndeclaredLibraryDependencyFixerTests(unittest.TestCase):
     """undeclared-library-dependency (roadmap P14 item 16): a mod that reaches a known library's
     package without declaring it in mod_info.json - hand-applied three times this session
