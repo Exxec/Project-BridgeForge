@@ -169,5 +169,56 @@ class CompileLooseScriptsEndToEndTests(unittest.TestCase):
             self.assertIn("not_installed_anywhere", result["classpath"]["dependencies_missing"])
 
 
+class ScanCompileCheckProviderRootsTests(unittest.TestCase):
+    """ROADMAP P14 item 29: `scan --compile-check` must actually resolve a declared dependency
+    against a supplied provider set, not silently default and misreport a missing symbol as a mod
+    defect. Found 2026-09-21 during item 23's full corpus recheck: `scanner._scan_compile_check`
+    called `compile_loose_scripts` with no `provider_roots` at all (not even the function's own
+    `None` default) until this fix, and `Maelstrom-Interstellar-Imperium-Unofficial-Expansion`'s
+    real base-mod dependency lives outside the default provider roots entirely.
+    """
+
+    def setUp(self) -> None:
+        if shutil.which("javac") is None:
+            self.skipTest("no javac on PATH")
+
+    def test_scan_mod_resolves_a_declared_dependency_via_provider_roots(self) -> None:
+        from bridgeforge.scanner import scan_mod
+        from bridgeforge.models import TargetProfile
+
+        with resolved_temp_dir() as root:
+            provider = root / "providers" / "BaseLib"
+            (provider / "jars").mkdir(parents=True)
+            (provider / "mod_info.json").write_text('{"id":"baselib","name":"BaseLib"}', encoding="utf-8")
+            src = root / "provider-src"
+            (src / "lib").mkdir(parents=True)
+            (src / "lib" / "Helper.java").write_text("package lib;\npublic class Helper { public static void go() {} }", encoding="utf-8")
+            import subprocess
+            classes = root / "provider-classes"
+            subprocess.run(["javac", "-d", str(classes), str(src / "lib" / "Helper.java")], check=True)
+            import zipfile
+            with zipfile.ZipFile(provider / "jars" / "BaseLib.jar", "w") as archive:
+                archive.write(classes / "lib" / "Helper.class", "lib/Helper.class")
+
+            mod = root / "mod"
+            (mod / "data" / "scripts").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id":"m1","dependencies":[{"id":"baselib"}]}', encoding="utf-8")
+            (mod / "data" / "scripts" / "Uses.java").write_text(
+                "package data.scripts;\npublic class Uses { void go() { lib.Helper.go(); } }", encoding="utf-8",
+            )
+            vanilla_core = root / "core"
+            vanilla_core.mkdir()
+
+            # A provider_roots that does NOT include our temp provider: the dependency cannot
+            # resolve and the mod's own genuine symbol reference fails to compile.
+            without = scan_mod(mod, TargetProfile(), vanilla_core, compile_check=True, provider_roots=[root / "no-providers-here"])
+            self.assertTrue(any(f.id == "loose-script-compile-error" for f in without.findings), without.findings)
+
+            # With the real provider root supplied explicitly, it resolves and compiles clean.
+            with_providers = scan_mod(mod, TargetProfile(), vanilla_core, compile_check=True, provider_roots=[root / "providers"])
+            compile_findings = [f for f in with_providers.findings if f.category == "build"]
+            self.assertEqual(compile_findings, [], compile_findings)
+
+
 if __name__ == "__main__":
     unittest.main()

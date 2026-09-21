@@ -103,6 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--baseline", type=Path, help="only report findings not present in this baseline file, plus a count of previously accepted findings that are now resolved")
     scan.add_argument("--write-baseline", type=Path, help="write the current scan's finding keys to this file as an accepted baseline")
     scan.add_argument("--compile-check", action="store_true", help="also javac-compile loose scripts against RC8 (needs --vanilla-core); opt-in, off by default so scans stay fast and hermetic")
+    scan.add_argument("--providers", type=Path, action="append", default=[], help="with --compile-check: mods folder, mod folder or In operation tree to search for declared dependencies; repeatable (default: <repo>/In operation and its rig's mods, same as the standalone compile-check command)")
     bytecode = subcommands.add_parser("bytecode-inspect", help="inspect class/JAR symbolic references without rewriting")
     bytecode.add_argument("input", type=Path, nargs="+")
     bytecode.add_argument("--output", type=Path)
@@ -982,7 +983,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "scan":
         try:
-            result = scan_mod(args.mod_directory, TargetProfile(args.target_starsector, args.target_java), args.vanilla_core, compile_check=args.compile_check)
+            result = scan_mod(args.mod_directory, TargetProfile(args.target_starsector, args.target_java), args.vanilla_core, compile_check=args.compile_check, provider_roots=args.providers or None)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

@@ -5537,13 +5537,23 @@ def _format_compile_error(error: dict[str, object]) -> str:
     return f"{text} (symbol: {symbol})" if symbol else text
 
 
-def _scan_compile_check(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+def _scan_compile_check(root: Path, result: ScanResult, vanilla_core: Path | None, provider_roots: list[Path] | None = None) -> None:
     """Opt-in (`scan --compile-check`): javac-compile the mod's loose scripts against RC8.
 
     Off by default so a plain scan stays fast and hermetic; `bridgeforge.compile_check` does the
     actual compile (see its module docstring for the Janino caveat). Real cases (2026-09-15):
     Renis-Imperium, AI-War, Argamede-Union and EZFaction were each marked ready by every other
     check and failed only this one.
+
+    `provider_roots` (ROADMAP P14 item 29, found during item 23's full corpus recheck 2026-09-21):
+    without it, a mod with a declared dependency (LazyLib, MagicLib, a base mod) gets misleading
+    missing-symbol errors here, because `compile_loose_scripts` otherwise defaults to
+    `DEFAULT_PROVIDER_ROOTS` (`<repo>/In operation` and its rig's mods) rather than whatever the
+    caller actually wants searched - a mod whose declared dependency lives outside that default
+    (e.g. a base mod only in the real Starsector install's own `mods/` folder, as
+    `Maelstrom-Interstellar-Imperium-Unofficial-Expansion` does) got a false FAIL under the plain
+    default. Passing `None` keeps that same default; a caller that knows a wider provider set should
+    supply it explicitly.
     """
     if vanilla_core is None:
         result.add(
@@ -5557,7 +5567,7 @@ def _scan_compile_check(root: Path, result: ScanResult, vanilla_core: Path | Non
         return
     from .compile_check import compile_loose_scripts  # local: avoids a scanner<->compile_check<->java_toolchain import cycle
 
-    outcome = compile_loose_scripts(root, vanilla_core=vanilla_core)
+    outcome = compile_loose_scripts(root, vanilla_core=vanilla_core, provider_roots=provider_roots)
     if outcome["status"] == "UNAVAILABLE":
         result.add(
             id="loose-script-compile-unavailable",
@@ -5593,7 +5603,7 @@ def _scan_compile_check(root: Path, result: ScanResult, vanilla_core: Path | Non
         )
 
 
-def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core: Path | None = None, compile_check: bool = False) -> ScanResult:
+def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core: Path | None = None, compile_check: bool = False, provider_roots: list[Path] | None = None) -> ScanResult:
     root = input_path.expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"Input mod directory does not exist: {root}")
@@ -5646,5 +5656,5 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_asset_reference_missing(root, result, vanilla_root)
     _scan_preset_whole_entry_replace(root, result, vanilla_root)
     if compile_check:
-        _scan_compile_check(root, result, vanilla_root)
+        _scan_compile_check(root, result, vanilla_root, provider_roots)
     return result

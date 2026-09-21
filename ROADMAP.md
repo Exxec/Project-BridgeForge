@@ -857,6 +857,25 @@ Progression, each stage feeding the next:
     by checking the skin's own `weaponSlotChanges` directly. Tests:
     `tests/test_rc8_variant_and_asset_checks.py` (`test_skin_slot_override_resolves_a_false_positive`,
     `test_skin_slot_override_can_also_reveal_a_real_mismatch`).
+29. **`scan --compile-check` cannot resolve a declared dependency at all - it never passed
+    `provider_roots` to `compile_loose_scripts`.** Found 2026-09-21 during item 23's full corpus
+    recheck: `scanner._scan_compile_check` called `compile_loose_scripts(root,
+    vanilla_core=vanilla_core)` with no third argument, unlike the standalone `compile-check`
+    command, which defaults `provider_roots` to `<repo>/In operation` and its rig's mods. A mod
+    whose declared dependency (a base mod, a library) lives outside even that default - as
+    `Maelstrom-Interstellar-Imperium-Unofficial-Expansion`'s base mod does, installed only in the
+    real Starsector install's own `mods/` folder - got a false compile FAIL under `scan
+    --compile-check` that the standalone command (given the right `--providers`) does not produce.
+    Needs a `provider_roots` parameter threaded through `scan_mod` and a `scan --providers` CLI flag
+    mirroring `compile-check --providers`.
+    **Done 2026-09-21.** `scan_mod(..., provider_roots: list[Path] | None = None)` now passes it to
+    `_scan_compile_check`, which passes it to `compile_loose_scripts` (previously called with no
+    third argument at all). New `scan --providers` CLI flag (repeatable, same help text as
+    `compile-check --providers`). Verified against the real case: `scan
+    --compile-check --vanilla-core <RC8> --providers "<real install>/mods/Interstellar
+    Imperium-2.6.9" --providers "In operation" --providers "In operation/_rig/mods"` on Maelstrom
+    now produces zero `loose-script-compile-*` findings, matching the standalone command's own PASS.
+    Tests: `tests/test_compile_check.py` (`ScanCompileCheckProviderRootsTests`).
 
 ## Post-1.0 research and gated automation
 

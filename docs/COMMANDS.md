@@ -135,6 +135,7 @@ scan a mod directory without modifying it
 | `--baseline` BASELINE | - | only report findings not present in this baseline file, plus a count of previously accepted findings that are now resolved |
 | `--write-baseline` WRITE_BASELINE | - | write the current scan's finding keys to this file as an accepted baseline |
 | `--compile-check` | - | also javac-compile loose scripts against RC8 (needs --vanilla-core); opt-in, off by default so scans stay fast and hermetic |
+| `--providers` PROVIDERS | repeatable | with --compile-check: mods folder, mod folder or In operation tree to search for declared dependencies; repeatable (default: <repo>/In operation and its rig's mods, same as the standalone compile-check command) |
 
 ## bytecode-inspect
 
