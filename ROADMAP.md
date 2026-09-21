@@ -412,9 +412,11 @@ Starting point:
 3. Jar rebuild command (item 7). **Done 2026-09-14/15 (task A9).**
 4. Fold-in workflow (item 10), then fold FX Core into RevenantLib. **Done 2026-09-20** (tooling
    task A12; FX Core fold task A13).
-5. Strip/vendor planner (item 4), with Rebal phase 2. **Still open** - skipped ahead of in this
-   order at the owner's explicit direction (2026-09-21: "start item 18 then P14 items", read as
-   items 6/7/8 specifically, per the coordinator's own prior framing the owner was replying to).
+5. Strip/vendor planner (item 4), with Rebal phase 2. **Tooling done 2026-09-21** (`strip-plan`/
+   `vendor-copy` commands, picked up out of order at the owner's later direction, 2026-09-21:
+   "pick those up and look for more tooling gaps"). **Rebal phase 2 itself still open** - the
+   tooling exists; actually running it against Rebal's own remaining gaps is separate follow-up
+   work, not done here.
 6. Provider index and dependency graph (items 2–3). **Done 2026-09-21.**
 7. Licence-aware revival (item 9). **Done 2026-09-21.**
 8. The Ironclads queue, last. **Triage pass started 2026-09-21** (owner-directed scope, in
@@ -481,6 +483,53 @@ Progression, each stage feeding the next:
     unblock count, a need with no cached coverage anywhere is never a ranked blocker, CLI wiring
     for both new commands together).
 4. **Strip and vendor plans.** For STRIP_FROM_MOD, generate the exact edit list: which variant, `.ship` and faction lines lose which ids, plus proposed vanilla substitutes of the same slot type and size. Also generate the matching PROPOSED expected changes, so approval goes through `expect` as usual. Where the licence allows, offer vendoring as an alternative: copy the one missing piece (for example Rebal's `shields_formshield` into Explorer Society) instead of reviving a heavy provider.
+    **Done 2026-09-21.** New `bridgeforge/strip_plan.py`, wired as three commands:
+    - `bridgeforge strip-plan <mod> [--providers] [--vanilla-core] [--ops] [--write-expected <path> --build <tag>]`
+      computes `substitutes.hard_to_cover_ids` (genuinely uncovered, or covered only by a
+      too-large-to-revive provider - the exact set `strategy()` already reasons about, extracted
+      into a shared `classify_chosen_providers`/`hard_to_cover_ids` rather than a second
+      implementation) and, for each hard id, the exact `.variant`/`.ship`/`.skin`/`.faction`
+      file+field that references it (`find_content_references`, reading every candidate file
+      itself, not trusting a scanner finding's id-only, capped evidence). For weapons only, real
+      vanilla substitute candidates "of the same slot type and size": the slot a missing weapon
+      occupies is resolved via `_resolve_variant_hull_and_slots` (extracted, behavior-preserving,
+      from `_scan_variant_validity` - the same skin-override-aware resolution item 28 built), then
+      matched against vanilla-only weapons using the scanner's own
+      `_weapon_slot_type_compatible`/`_override_fits`/`WEAPON_SLOT_SIZE_RANK` - never invented,
+      never a second fit-check implementation. Hullmods/wings have no comparable "slot type and
+      size" concept, so those entries honestly propose removal only.
+    - `--write-expected` turns each entry into a real `expect` PROPOSED entry
+      (`behavior_discovery.add_expected_change`, the actual D4/D5 mechanism, not a new one), so
+      approval goes through `expect` exactly as the item asked.
+    - `bridgeforge vendor-copy hullmod <id> <from-provider> <to-mod> [--policy] [--apply]`: the
+      vendoring alternative, scoped to hullmods (a CSV row plus its declared script is a single,
+      well-defined unit to copy; a weapon/wing/hull involves sprite/balance data this command has
+      no reliable way to locate or validate, so those kinds are refused outright rather than
+      copied incompletely). Also copies any *same-mod* loose script the declared script's own
+      source directly references (one hop, best-effort, always listed - not claimed exhaustive). A
+      licence gate (`release._licence_gate`, the same one item 7 uses) refuses a local-only
+      source. Dry-run by default; `--apply` required to write, matching `fold`'s own convention. A
+      conflict (the target already declares the id, or already has different content at a target
+      file path) refuses the whole copy rather than guessing which side is right.
+    Verified against real data: `strip_plan` against a synthetic ENERGY/SMALL slot correctly
+    proposes a real vanilla weapon of matching type/size (and correctly excludes a same-size
+    BALLISTIC weapon and a larger ENERGY one); `vendor_copy` against Zorg18's real
+    `zorg_zetaoverride` correctly reports its script as jar-only (not vendored, honestly flagged);
+    against Batavia's real, loose `pb_batavianradar` it copies the CSV row and script end-to-end
+    (dry-run then a real `--apply`, verified on disk); and against the exact real case this item's
+    own text was written from (Rebal's `shields_formshield`), it correctly **refuses** vendoring,
+    because Rebal is genuinely local-only per `release_policy.json` - the licence gate doing
+    exactly its job on the item's own worked example.
+    **A related gap found and fixed while building this:** `substitutes.required_from_scan`'s own
+    `needed` set was silently capped (see item 33) - fixed first, since `strip_plan` is built
+    directly on it.
+    Tests: `tests/test_strip_plan.py` (28 cases: file/field reference-finding for all four kinds
+    and the faction-known-lists case, weapon substitute matching including size/type/exclusion
+    edge cases, a live provider correctly zeroing out the hard-id set, `write_expected_changes`
+    producing a real PROPOSED entry with mod-id sanitization, and the full `vendor_copy` matrix -
+    dry-run, apply, transitive same-mod dependency copying, jar-only scripts, not-found, both
+    conflict shapes, identical-content is not a conflict, the licence refusal both synthetically
+    and against the real Rebal case, kind restriction, and CLI wiring for both commands).
 5. **Spawn-point fleet port kit.** RC8 keeps `BaseSpawnPoint` and `addSpawnPoint`, but not `SectorAPI.createFleet(faction, fleetType)`, which 0.6 spawners use to build fleets from old faction fleet definitions. The kit is:
    - a helper that builds the equivalent fleet with FleetFactoryV3, following Zorg18 r1's spawner;
    - a scanner check for the removed call.

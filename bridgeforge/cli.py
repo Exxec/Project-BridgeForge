@@ -706,6 +706,22 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_recheck_cmd.add_argument("--write-markdown", type=Path, help="also write a roll-up table to this path")
     corpus_recheck_cmd.add_argument("--include-intake", action="store_true", help="also include mods with a working/ copy but no REVIVAL_REPORT.md yet (ROADMAP P14 item 8: the Ironclads intake queue)")
     corpus_recheck_cmd.add_argument("--json", action="store_true")
+    strip_plan_cmd = subcommands.add_parser("strip-plan", help="for a STRIP_FROM_MOD recommendation, the exact edit list (which file/field loses which id) and real vanilla weapon substitute candidates (ROADMAP P14 item 4)")
+    strip_plan_cmd.add_argument("mod", type=Path, help="mod working copy")
+    strip_plan_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
+    strip_plan_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla content isn't counted as missing and substitute candidates can be found")
+    strip_plan_cmd.add_argument("--ops", type=Path, help="In operation tree to check a heavy provider's own revival state (default: <repo>/In operation)")
+    strip_plan_cmd.add_argument("--write-expected", type=Path, help="also write each entry as a PROPOSED expect entry to this expected-changes file")
+    strip_plan_cmd.add_argument("--build", help="build tag for --write-expected's entries (required with --write-expected)")
+    strip_plan_cmd.add_argument("--json", action="store_true")
+    vendor_copy_cmd = subcommands.add_parser("vendor-copy", help="copy one hullmod (its hull_mods.csv row and its declared script) from a provider mod into another mod, instead of reviving or declaring a dependency on the whole provider (ROADMAP P14 item 4)")
+    vendor_copy_cmd.add_argument("kind", choices=["hullmod"], help="only 'hullmod' is supported (see the command's own help for why)")
+    vendor_copy_cmd.add_argument("id", help="the hullmod id to vendor")
+    vendor_copy_cmd.add_argument("from_provider", type=Path, help="the mod folder to copy from")
+    vendor_copy_cmd.add_argument("to_mod", type=Path, help="the mod folder to copy into")
+    vendor_copy_cmd.add_argument("--policy", type=Path, help="licence policy JSON (default: bundled release_policy.json)")
+    vendor_copy_cmd.add_argument("--apply", action="store_true", help="actually write the files (default: dry-run plan only)")
+    vendor_copy_cmd.add_argument("--json", action="store_true")
     provider_index_update_cmd = subcommands.add_parser("provider-index-update", help="recompute every visible provider and cache it to bridgeforge-state/provider-index/ (ROADMAP P14 item 6/2), so a lookup is instant and still works for a mod that isn't currently installed anywhere live")
     provider_index_update_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
     provider_index_update_cmd.add_argument("--output", type=Path, help="cache directory (default: <repo>/bridgeforge-state/provider-index)")
@@ -1066,6 +1082,42 @@ def main(argv: list[str] | None = None) -> int:
             if args.write_markdown:
                 print(f"Roll-up written: {args.write_markdown}")
         return 1 if result["status"] == "REGRESSION" else 0
+    if args.command == "strip-plan":
+        from .strip_plan import strip_plan, write_expected_changes
+        result = strip_plan(args.mod, args.providers or None, args.vanilla_core, args.ops)
+        if args.write_expected:
+            if not args.build:
+                print("bridgeforge: --write-expected requires --build", file=sys.stderr)
+                return 2
+            from .scanner import _load_lenient_json_file
+            metadata = _load_lenient_json_file(args.mod / "mod_info.json")
+            mod_id = str(metadata.get("id")) if isinstance(metadata, dict) and metadata.get("id") else args.mod.name
+            result["written_expected_changes"] = write_expected_changes(result, args.write_expected, mod_id, args.build)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"{result['hard_id_count']} hard id(s) with no visible provider, out of {result['candidates_considered']} candidate provider(s) considered")
+            for entry in result["entries"]:
+                files = ", ".join(sorted({ref["file"] for ref in entry["references"]})) or "no file found"
+                print(f"  {entry['action'].upper()} {entry['kind']} '{entry['id']}' - {files}")
+                for sub in entry["substitute_candidates"]:
+                    print(f"    substitute candidates ({sub['slot_type']}/{sub['slot_size']}): {', '.join(sub['candidates'][:8])}")
+            if args.write_expected:
+                for written in result["written_expected_changes"]:
+                    print(f"  expect: {written['status']} {written['id']}")
+        return 0
+    if args.command == "vendor-copy":
+        from .strip_plan import vendor_copy
+        result = vendor_copy(args.kind, args.id, args.from_provider, args.to_mod, args.policy, args.apply)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"{result['status']}" + (f": {result['reason']}" if result.get("reason") else ""))
+            if result.get("files"):
+                print(f"  files: {', '.join(result['files'])}")
+            if result.get("note"):
+                print(f"  note: {result['note']}")
+        return 0 if result["status"] in ("PLANNED", "APPLIED") else 1
     if args.command == "provider-index-update":
         from .substitutes import DEFAULT_PROVIDER_INDEX_DIR, update_provider_index
         roots = args.providers or None
