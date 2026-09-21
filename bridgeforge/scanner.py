@@ -5607,6 +5607,14 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     root = input_path.expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"Input mod directory does not exist: {root}")
+    if not (root / "mod_info.json").is_file() and (root / "original").is_dir() and (root / "working" / "mod_info.json").is_file():
+        # ROADMAP P14 item 30: this is a workspace root (In operation/<Mod>/), not the mod itself.
+        # Scanning it walks into the untouched `original/` copy alongside `working/` and reports
+        # original's findings as if they were live on the revived mod - found 2026-09-21 doing
+        # item 23's own corpus recheck by hand: BF-Legacy-Fleets and Leon-Heavy-Industries were
+        # each scanned this way, misattributing 7 findings from Leon's frozen `original/` to its
+        # actual revived `working/` copy, which was in fact clean.
+        raise ValueError(f"{root} looks like a workspace root (holds original/ and working/, not its own mod_info.json) - scan {root / 'working'} instead.")
     vanilla_root = vanilla_core.expanduser().resolve() if vanilla_core is not None else None
     if vanilla_root is not None and not vanilla_root.is_dir():
         vanilla_root = None

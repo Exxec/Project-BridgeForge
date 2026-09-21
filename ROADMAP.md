@@ -876,6 +876,26 @@ Progression, each stage feeding the next:
     Imperium-2.6.9" --providers "In operation" --providers "In operation/_rig/mods"` on Maelstrom
     now produces zero `loose-script-compile-*` findings, matching the standalone command's own PASS.
     Tests: `tests/test_compile_check.py` (`ScanCompileCheckProviderRootsTests`).
+30. **`scan_mod` should refuse a workspace root (`In operation/<Mod>/`, holding sibling `original/`
+    and `working/`) instead of silently walking into the untouched `original/` copy alongside
+    `working/` and misattributing its findings to the live mod.** Found 2026-09-21 doing item 23's
+    own corpus recheck by hand: `BF-Legacy-Fleets` and `Leon-Heavy-Industries` were each
+    accidentally scanned at their workspace root instead of `working/` (no `mod_info.json` there),
+    which meant `scan_mod` still walked the whole tree including `original/`'s frozen copy and
+    reported 7 real-looking findings (`target-interface-method-missing`,
+    `configured-source-class-missing-from-jar`, `undeclared-library-dependency`,
+    `missing-mod-info`) that were actually about `original/`, not the revived `working/` copy
+    (which was in fact clean). Corrected in `In operation/CORPUS_RECHECK_2026-09-21.md` once found,
+    but nothing stopped the mistake from being made or would catch the next one.
+    **Done 2026-09-21.** `scan_mod` now raises `ValueError` when the scanned root has no
+    `mod_info.json` of its own, but a sibling `original/` directory exists AND
+    `working/mod_info.json` exists - the exact, specific shape of this repo's own workspace
+    convention (`CLAUDE.md`), naming the correct path to scan instead. Deliberately narrow: a mod
+    root that legitimately has no `original/` sibling, or a directory missing `mod_info.json` for
+    an unrelated reason, is unaffected. Tests: `tests/test_scanner.py`
+    (`WorkspaceRootGuardTests`, 4 cases: refuses correctly, scanning `working/` directly is
+    unaffected, an ordinary mod root is unaffected, a bare directory with no `working/` at all is
+    unaffected).
 
 ## Post-1.0 research and gated automation
 

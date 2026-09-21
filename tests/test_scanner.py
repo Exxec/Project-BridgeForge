@@ -1006,3 +1006,52 @@ class CompileCheckScanIntegrationTests(unittest.TestCase):
             self.assertEqual(bad_finding.evidence[-1], "... 1 more")
             other_finding = findings["data/scripts/Other.java"]
             self.assertEqual(other_finding.evidence, ["line 3: ';' expected"])
+
+
+class WorkspaceRootGuardTests(unittest.TestCase):
+    """ROADMAP P14 item 30: scan_mod must refuse a workspace root (In operation/<Mod>/, holding
+    sibling original/ and working/) rather than silently walking into the untouched original/ copy
+    and misattributing its findings to the live working/ copy - the exact mistake made by hand
+    2026-09-21 doing item 23's corpus recheck (BF-Legacy-Fleets and Leon-Heavy-Industries were both
+    scanned this way; Leon's frozen original/ produced 7 findings misreported as live).
+    """
+
+    def test_refuses_a_workspace_root_holding_original_and_working(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "original" / "SomeMod").mkdir(parents=True)
+            (root / "working").mkdir()
+            (root / "working" / "mod_info.json").write_text('{"id":"m1"}', encoding="utf-8")
+            with self.assertRaises(ValueError) as ctx:
+                scan_mod(root, TargetProfile())
+            self.assertIn("working", str(ctx.exception))
+            self.assertIn(str(root), str(ctx.exception))
+
+    def test_scanning_the_working_copy_directly_is_unaffected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "original" / "SomeMod").mkdir(parents=True)
+            (root / "working").mkdir()
+            (root / "working" / "mod_info.json").write_text('{"id":"m1"}', encoding="utf-8")
+            result = scan_mod(root / "working", TargetProfile())
+            self.assertEqual(result.input_path, (root / "working").resolve())
+
+    def test_a_mod_root_with_no_original_sibling_is_unaffected(self) -> None:
+        # A mod that isn't laid out as a workspace at all (its own mod_info.json right at the
+        # scanned root) must not be refused just because some unrelated "original" dir exists
+        # elsewhere - only the exact workspace shape (no mod_info.json here, but original/ and
+        # working/mod_info.json both present) triggers the guard.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"m1"}', encoding="utf-8")
+            result = scan_mod(root, TargetProfile())
+            self.assertEqual(result.input_path, root.resolve())
+
+    def test_a_bare_directory_missing_mod_info_with_no_working_is_unaffected(self) -> None:
+        # Must not over-trigger: original/ alone, with no working/mod_info.json, is some other
+        # directory shape entirely, not this specific workspace-root mistake.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "original").mkdir()
+            result = scan_mod(root, TargetProfile())
+            self.assertEqual(result.input_path, root.resolve())
