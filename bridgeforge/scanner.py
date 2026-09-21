@@ -4684,6 +4684,38 @@ def _skin_index(root: Path, vanilla_core: Path | None) -> dict[str, str]:
     return index
 
 
+def _skin_weapon_slot_changes(root: Path, vanilla_core: Path | None) -> dict[str, dict[str, dict]]:
+    """skinHullId -> {slot id: partial field overrides}, from each .skin's own weaponSlotChanges.
+
+    A weapon can be mounted in a slot whose type/size only the SKIN changes, not the underlying
+    .ship (ROADMAP P14 item 28: brawler_tritachyon and buffalo_pirates both false-flagged
+    `variant-weapon-slot-mismatch` because the fit check compared against the base hull's raw slot,
+    never applying the skin's own override - verified directly against real .skin files, e.g.
+    `"weaponSlotChanges": {"WS 001": {"type": "ENERGY"}}`, which overlays only the given fields onto
+    that slot, the same "mod entries replace/extend core entries at a shared key" pattern the
+    engine's JSON merging uses elsewhere).
+    """
+    index: dict[str, dict[str, dict]] = {}
+    for base in (vanilla_core, root):
+        if base is None or not base.is_dir():
+            continue
+        for path in base.rglob("*.skin"):
+            data = _load_lenient_json_file(path)
+            if not isinstance(data, dict):
+                continue
+            skin_id = data.get("skinHullId")
+            changes = data.get("weaponSlotChanges")
+            if isinstance(skin_id, str) and skin_id.strip() and isinstance(changes, dict):
+                per_slot = {
+                    slot_id: fields
+                    for slot_id, fields in changes.items()
+                    if isinstance(slot_id, str) and isinstance(fields, dict)
+                }
+                if per_slot:
+                    index[skin_id.strip()] = per_slot
+    return index
+
+
 def _resolve_hull_id(hull_id: str, skins: dict[str, str]) -> str:
     """Chase a skin's baseHullId chain to the underlying hull id (cycle-safe)."""
     seen: set[str] = set()
@@ -4903,6 +4935,7 @@ def _scan_variant_validity(root: Path, result: ScanResult, vanilla_core: Path | 
 
     ship_files = _ship_file_index(root, vanilla_core)
     skins = _skin_index(root, vanilla_core)
+    skin_slot_changes = _skin_weapon_slot_changes(root, vanilla_core)
     ship_data = _csv_id_index(
         root / "data" / "hulls" / "ship_data.csv",
         (vanilla_core / "data" / "hulls" / "ship_data.csv") if vanilla_core else None,
@@ -4975,6 +5008,24 @@ def _scan_variant_validity(root: Path, result: ScanResult, vanilla_core: Path | 
         for slot in ship_json.get("weaponSlots") or []:
             if isinstance(slot, dict) and isinstance(slot.get("id"), str):
                 slot_by_id[slot["id"]] = slot
+
+        # Apply each skin's own weaponSlotChanges along the same baseHullId chain _resolve_hull_id
+        # just walked, so a skin can retype/resize a slot the base .ship never touched (P14 item 28)
+        # before the weapon-fit check below reads slot_by_id. Collected outermost-first, then applied
+        # in reverse (most-specific-skin-last) so a skin closer to raw_hull_id wins over one further
+        # down the chain on the rare case both touch the same slot field.
+        chain_id = raw_hull_id.strip()
+        seen_chain: set[str] = set()
+        chain_skin_ids: list[str] = []
+        while chain_id in skin_slot_changes and chain_id not in seen_chain:
+            seen_chain.add(chain_id)
+            chain_skin_ids.append(chain_id)
+            chain_id = skins.get(chain_id, chain_id)
+        for skin_id in reversed(chain_skin_ids):
+            for slot_id, overrides in skin_slot_changes[skin_id].items():
+                base_slot = slot_by_id.get(slot_id)
+                if base_slot is not None:
+                    slot_by_id[slot_id] = {**base_slot, **overrides}
 
         weapon_op_total = 0.0
         weapon_groups = data.get("weaponGroups") if isinstance(data.get("weaponGroups"), list) else []

@@ -610,6 +610,12 @@ Progression, each stage feeding the next:
     reference-rig registration (found 2026-09-20 registering Rebal's 0.9a rig). Should treat a
     missing `enabled_mods.json` as PASS when the mods folder is otherwise empty of workspaces, or as
     SKIP with an explanation, rather than FAIL.
+    **Done 2026-09-21.** A missing `enabled_mods.json` now checks whether `mods/` holds any mod
+    workspaces at all (`_mods_by_id`); PASS when it doesn't (a fresh install/reference rig with
+    nothing enabled yet), FAIL only when workspaces exist with nothing declared enabled. Verified
+    against the real 0.9a reference rig registered for E11 (was FAIL, now PASS). Tests:
+    `tests/test_rig_doctor.py` (`test_pass_when_missing_file_but_no_mod_workspaces_exist`,
+    `test_fail_when_missing_file_and_mod_workspaces_exist`).
 23. **Full corpus recheck before live testing (owner-requested, 2026-09-20).** Every mod that has
     any revival work recorded - a claimed status (`READY_FOR_LIVE_TEST`, `READY_WITH_REVIEW_ITEMS`,
     `IN_PROGRESS`) in `In operation/STATUS.md`'s board, or its own `reports/REVIVAL_REPORT.md` - gets
@@ -728,6 +734,17 @@ Progression, each stage feeding the next:
     slot-by-id table used for the fit check from the skin's overridden values when a `.skin` applies,
     not the base `.ship`'s raw `weaponSlots`, mirroring how `_resolve_hull_id` already chases the
     `baseHullId` chain for the hull id itself.
+    **Done 2026-09-21.** New `_skin_weapon_slot_changes` indexes each `.skin`'s own
+    `weaponSlotChanges` (verified against real files, e.g. `{"WS 001": {"type": "ENERGY"}}`,
+    overlaying only the given fields); `_scan_variant_validity` now applies a variant's full
+    skin-chain of overrides (closest-to-`hullId` last, so the most specific skin wins) onto
+    `slot_by_id` before the fit check runs. Verified on real data both ways: Rebal's
+    `brawler_tritachyon_Standard` false positive is now gone, and the fix also correctly *surfaced*
+    a genuine mismatch it had been hiding (`falcon_p_Strike`: the skin retypes two slots to
+    `MISSILE`, and the variant mounts a `BALLISTIC` weapon there) - confirmed not a rebuild artifact
+    by checking the skin's own `weaponSlotChanges` directly. Tests:
+    `tests/test_rc8_variant_and_asset_checks.py` (`test_skin_slot_override_resolves_a_false_positive`,
+    `test_skin_slot_override_can_also_reveal_a_real_mismatch`).
 
 ## Post-1.0 research and gated automation
 

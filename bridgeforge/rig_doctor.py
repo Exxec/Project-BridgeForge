@@ -152,6 +152,18 @@ def _check_enabled_mods_resolve(runtime_dir: Path, target_base_game_version: str
     mods_dir = runtime_dir / "mods"
     enabled_path = mods_dir / "enabled_mods.json"
     if not enabled_path.is_file():
+        # A freshly registered reference rig (P10) has no mods enabled yet, so this file
+        # legitimately does not exist - that is not a configuration problem (found 2026-09-20/21
+        # registering Rebal's 0.9a reference rig, ROADMAP P14 item 22). Only treat the missing file
+        # as a real FAIL when the mods folder actually holds mod workspaces with nothing declaring
+        # them enabled, which is the situation this check exists to catch.
+        if not (mods_dir.is_dir() and _mods_by_id(mods_dir)):
+            return _check(
+                "enabled_mods_resolve",
+                "PASS",
+                f"{enabled_path} not found, but {mods_dir} holds no mod workspaces either - a fresh "
+                "install/reference rig with nothing enabled yet, not a configuration problem.",
+            )
         return _check("enabled_mods_resolve", "FAIL", f"{enabled_path} not found.")
     data = _load_lenient_json_file(enabled_path)
     enabled = data.get("enabledMods") if isinstance(data, dict) else None

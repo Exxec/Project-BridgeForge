@@ -232,6 +232,64 @@ class VariantWeaponSlotMismatchTests(unittest.TestCase):
             result = scan_mod(root)
             self.assertEqual(len(_findings(result, "variant-weapon-slot-mismatch")), 1)
 
+    def test_skin_slot_override_resolves_a_false_positive(self) -> None:
+        """P14 item 28, found 2026-09-20 on Rebal's brawler_tritachyon: a mismatch check comparing
+        against the base .ship's raw slot type, when the actual mounting hull is a .skin that
+        retypes that exact slot, produces a false positive the skin's own data already resolves."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "data" / "hulls" / "ship_data.csv", SHIP_DATA_HEADER + _ship_data_row("base_hull", 100, 0))
+            _write(root / "data" / "weapons" / "weapon_data.csv", WEAPON_DATA_HEADER + _weapon_data_row("laser", "5"))
+            _write_json(root / "data" / "weapons" / "laser.wpn", {"id": "laser", "type": "ENERGY", "size": "SMALL"})
+            _write_json(
+                root / "data" / "hulls" / "base_hull.ship",
+                _basic_ship_json("base_hull", slots=[{"id": "WS 001", "type": "BALLISTIC", "size": "SMALL"}]),
+            )
+            _write_json(
+                root / "data" / "hulls" / "skins" / "skin_hull.skin",
+                {
+                    "baseHullId": "base_hull",
+                    "skinHullId": "skin_hull",
+                    "weaponSlotChanges": {"WS 001": {"type": "ENERGY"}},
+                },
+            )
+            _write_json(
+                root / "data" / "variants" / "demo_variant.variant",
+                _basic_variant("skin_hull", "demo_variant", weapon_groups=[{"weapons": {"WS 001": "laser"}}]),
+            )
+            result = scan_mod(root)
+            self.assertEqual(_findings(result, "variant-weapon-slot-mismatch"), [])
+
+    def test_skin_slot_override_can_also_reveal_a_real_mismatch(self) -> None:
+        """The fix must not just clear false positives -- it must also surface a genuine mismatch
+        that only exists because of the skin's own override (found on Rebal's falcon_p: the base
+        hull's slot was more permissive than the skin's retyped one)."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "data" / "hulls" / "ship_data.csv", SHIP_DATA_HEADER + _ship_data_row("base_hull", 100, 0))
+            _write(root / "data" / "weapons" / "weapon_data.csv", WEAPON_DATA_HEADER + _weapon_data_row("cannon", "5"))
+            _write_json(root / "data" / "weapons" / "cannon.wpn", {"id": "cannon", "type": "BALLISTIC", "size": "SMALL"})
+            _write_json(
+                root / "data" / "hulls" / "base_hull.ship",
+                _basic_ship_json("base_hull", slots=[{"id": "WS 001", "type": "HYBRID", "size": "SMALL"}]),
+            )
+            _write_json(
+                root / "data" / "hulls" / "skins" / "skin_hull.skin",
+                {
+                    "baseHullId": "base_hull",
+                    "skinHullId": "skin_hull",
+                    "weaponSlotChanges": {"WS 001": {"type": "MISSILE"}},
+                },
+            )
+            _write_json(
+                root / "data" / "variants" / "demo_variant.variant",
+                _basic_variant("skin_hull", "demo_variant", weapon_groups=[{"weapons": {"WS 001": "cannon"}}]),
+            )
+            result = scan_mod(root)
+            hits = _findings(result, "variant-weapon-slot-mismatch")
+            self.assertEqual(len(hits), 1)
+            self.assertIn("slot-type:MISSILE", hits[0].evidence)
+
     def test_hybrid_slot_accepts_ballistic_and_energy(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

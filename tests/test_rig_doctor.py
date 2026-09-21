@@ -248,6 +248,38 @@ class EnabledModsResolveCheckTests(unittest.TestCase):
             check = next(c for c in result["checks"] if c["name"] == "enabled_mods_resolve")
             self.assertEqual(check["status"], "PASS")
 
+    def test_pass_when_missing_file_but_no_mod_workspaces_exist(self) -> None:
+        """A freshly registered P10 reference rig has no mods enabled yet, so enabled_mods.json
+        legitimately does not exist - that is not a configuration problem (ROADMAP P14 item 22,
+        found 2026-09-20/21 registering a real 0.9a reference rig)."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rig = _make_isolated_rig(root)
+            if rig is None:
+                self.skipTest("Could not create an NTFS junction in this environment.")
+            (rig / "mods").mkdir(exist_ok=True)
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+                result = rig_doctor(rig)
+            check = next(c for c in result["checks"] if c["name"] == "enabled_mods_resolve")
+            self.assertEqual(check["status"], "PASS")
+            self.assertIn("no mod workspaces", check["detail"])
+
+    def test_fail_when_missing_file_and_mod_workspaces_exist(self) -> None:
+        """The missing-file leniency above must not swallow the real problem: a mods folder that
+        does hold workspaces but nothing declares any of them enabled."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rig = _make_isolated_rig(root)
+            if rig is None:
+                self.skipTest("Could not create an NTFS junction in this environment.")
+            mods_dir = rig / "mods"
+            _make_mod(mods_dir, "Known", "known_id")
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+                result = rig_doctor(rig)
+            check = next(c for c in result["checks"] if c["name"] == "enabled_mods_resolve")
+            self.assertEqual(check["status"], "FAIL")
+            self.assertIn("not found", check["detail"])
+
     def test_lenient_mod_info_with_hash_comments_and_unquoted_keys(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
