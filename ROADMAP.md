@@ -669,6 +669,28 @@ Progression, each stage feeding the next:
     before the variants stage (by far the largest remaining batch, ~308 files) would make that stage
     cheaper and more reliable rather than a fourth from-scratch reimplementation - worth doing
     whenever item 19 is picked up, even though it isn't gating any stage strictly.
+25. **"Same path as vanilla" is not proof of jar-shadowing - a real verification gap, found by the
+    coordinator's own mistake.** Item 14 guards the failure mode of treating a jar-shadowed loose
+    script as live and editing it for nothing (Thule). This is the *inverse* failure, found
+    2026-09-21: treating a loose script as safely-droppable *because* it shares a path with a
+    vanilla file, without ever confirming a jar actually backs that path. E11's stage 1 moved 50 of
+    Rebal's `data/**.java` files (47 hullmod scripts, 3 shipsystem-stats scripts) on exactly that
+    reasoning - "present at the same relative path under RC8's own `starsector-core/data`... jar
+    wins" - but the check that produced that claim only tested path existence
+    (`(vanilla_core / rel).is_file()`), never jar membership. A direct, unrestricted search of every
+    jar in `starsector-core` (including `starfarer_obf.jar`) for any of the 50 class names found
+    **zero matches for all 50** - none were jar-shadowed; all 50 were live, in-game-effective code
+    that RC8's own file-replacement rule (mods override core at a shared path - Starsector Wiki,
+    "Miscellaneous modding tidbits") would have run in place of vanilla's current loose scripts.
+    Recorded as `In operation/ESCALATIONS.md` E12; course B (port the 50 files properly using
+    E11-style diffing rather than accept the drop) chosen 2026-09-21.
+    Fix: the same helper `loose-script-shadowed-by-jar` already uses internally (real jar-class-file
+    parsing, `_iter_jar_class_files`/`_parse_class_file`) should be the *only* sanctioned way to
+    claim a loose script is jar-shadowed anywhere in this codebase - in a scan finding, a fixer
+    guard (item 14), or a one-off investigation script written for a specific mod. A `rg
+    "\.is_file\(\)"` audit of every ad hoc "is this shadowed" check written during a live
+    investigation (not just the scanner's own checks, which item 24 already covers) would catch the
+    next instance of this same shortcut before it produces a wrong claim that reaches the owner.
 
 ## Post-1.0 research and gated automation
 
