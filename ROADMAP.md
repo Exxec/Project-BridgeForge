@@ -619,6 +619,17 @@ Progression, each stage feeding the next:
     each time otherwise. A `bridgeforge diff-data <file_a> <file_b>` command should load both through
     `_load_lenient_json_file` and report added/removed/changed keys by value, recursing into nested
     dicts and lists, with formatting/key-order differences producing no output at all.
+    **Done 2026-09-21.** New `bridgeforge/diff_data.py` (`diff_data`), wired as
+    `bridgeforge diff-data <file_a> <file_b> [--json]`. Loads both files through
+    `_load_lenient_json_file` and recurses: a dict diffs key by key (added/removed/changed at that
+    key's own path, e.g. `weaponSlots.WS001.arc`); a list diffs by index only when both lists are
+    the same length (no reliable way to align differently-sized lists without knowing the data's
+    own identity field, which varies per file class - a length mismatch is one whole-value
+    "changed" entry instead); everything else compares by value. Verified on real data: a
+    formatting/key-order-only pair (comments, trailing commas, reordered keys) reports IDENTICAL,
+    and Rebal's real `amblaster.wpn` against RC8 vanilla's real counterpart reports exactly 5 true
+    field differences (2 sound/animation fields, a barrel mode, a hardpoint offset, one removed
+    field) with zero formatting noise. Tests: `tests/test_diff_data.py`.
 20. **`vanilla-path-shadowing` should report the true file count, not a folder rollup.** E3's original
     estimate for Rebal ("~79 files") was a per-folder finding count; the real number, counted
     directly, is 642 - an 8x understatement that shaped this item's scoping for a full session before
