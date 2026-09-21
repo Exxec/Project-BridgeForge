@@ -486,6 +486,27 @@ Progression, each stage feeding the next:
    - a scanner check for the removed call.
 
    It is proposed per mod, never auto-applied, because fleet composition changes. Six queued mods need it (ESCALATIONS E6).
+   **Done 2026-09-14/15 (found already complete 2026-09-21 - this item was simply never marked).**
+   `REMOVED_API_CALLS[0]` in `scanner.py` detects `(Global.)getSector(API)?().createFleet(...)`
+   (javap-confirmed absent from RC8's `SectorAPI`) as `removed-api-call` (MANUAL). The fixer
+   (`fixers._rewrite_create_fleet_span`, keyed off that same table entry) rewrites the call to
+   `bf.legacyfleets.LegacyFleets.createFleet(...)`, a real, complete FleetFactoryV3-based
+   implementation in RevenantLib (`In operation/RevenantLib/working/src/bf/legacyfleets/
+   LegacyFleets.java`) - not a stub or a per-mod proposal, but a genuinely shared library
+   solution: it re-reads a faction's own `fleetCompositions` from its `.faction` file at runtime
+   (the same schema RC8's own `player.faction` still ships), builds a fleet from that composition
+   via `FleetFactoryV3`/`Global.getFactory().createFleetMember`, and falls back to RC8's own
+   `FleetFactoryV3.createFleet(FleetParamsV3)` generator when a composition is missing or empty -
+   never returns null, matching old callers that use the result unguarded. (This overshoots "never
+   auto-applied, because fleet composition changes" - the fixer *is* auto-appliable here because
+   the port is a runtime library call reading the mod's own real composition data, not a
+   hand-authored guess at one; a per-mod scaffold was the more conservative original framing but
+   turned out to be unnecessary once the composition data was proven readable from the `.faction`
+   file directly.) Confirmed in real, current use: `Antediluvians`, `Batavia`, `Cobalt-Arms`,
+   `Gekelonians`, `Independant-Mining-Faction` and `Qualljom` all currently call
+   `bf.legacyfleets.LegacyFleets.createFleet(...)` in their live `working/` copies - exactly the
+   "six queued mods" this item named. Tests: `tests/test_fixers.py` (createFleet rewrite cases,
+   including a commented-out call left untouched).
 6. **Carrier-bay fixer.** Apply the approved `carrier-bays-proposal` counts, adding the `fighter bays` column where the file predates it, with per-hull approval (`--hull ID=N`).
    **Done 2026-09-15.** `fix <mod> --finding carrier-bays-proposal --hull ID=N [--hull ID=N ...] --apply` (`bridgeforge/fixers.py` `_fix_carrier_bays_proposal`). `--hull` is repeatable and required; an id with no ship_data.csv row is refused, and a count must be 0-6 (vanilla's own maximum, the Astral, read from RC8's own `ship_data.csv`). The column is added, blank for untouched hulls, the same way `wing-data-missing-role-desc-column` adds `role desc`, if the file predates it. `_scan_carrier_bays_proposal` no longer proposes a hull whose `fighter bays` is already set, so a partial approval correctly narrows what's still proposed. Tests: `tests/test_fixers.py` (`CarrierBaysProposalFixerTests`, 12 cases incl. CLI wiring), `tests/test_batch_lessons.py` (already-set hulls are skipped).
 7. **Jar class rebuild for missing interface methods.** For classes compiled into a jar (AI-War), patch just those classes from source after a class-by-class diff, following the Arkgneisis precedent.
