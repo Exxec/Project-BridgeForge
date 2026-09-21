@@ -25,28 +25,34 @@ from .substitutes import DEFAULT_PROVIDER_INDEX_DIR, KINDS, Provider, load_provi
 SCHEMA_VERSION = 1
 
 
-def _mod_ids_with_revival_work(repo_root: Path) -> list[tuple[str, Path]]:
+def _mod_ids_with_revival_work(repo_root: Path, require_report: bool = True) -> list[tuple[str, Path]]:
     board = project_board(repo_root)
-    return [(row["folder"], Path(row["working"])) for row in board["mods"] if row["working"] and row["evidence"]["report"]]
+    return [(row["folder"], Path(row["working"])) for row in board["mods"] if row["working"] and (row["evidence"]["report"] or not require_report)]
 
 
 def _covers_any(provider: Provider, kind: str, needed_id: str) -> bool:
     return needed_id in provider.provides.get(kind, set())
 
 
-def build_dependency_graph(repo_root: Path, vanilla_core: Path | None = None, provider_index_dir: Path = DEFAULT_PROVIDER_INDEX_DIR) -> dict:
+def build_dependency_graph(repo_root: Path, vanilla_core: Path | None = None, provider_index_dir: Path = DEFAULT_PROVIDER_INDEX_DIR, require_report: bool = True) -> dict:
     """For every mod with real revival work recorded, find what it still needs from elsewhere.
 
     "Needs" comes from `content-reference-unresolved`/`source-import-unresolved` findings
     (`required_from_scan`). A need already covered by a live, currently-visible provider (the
     default `<repo>/In operation` + rig mods roots) is not a blocker - only a need with NO live
     coverage is checked against the cached provider index for an unrevived candidate.
+
+    `require_report=False` (ROADMAP P14 item 8 triage pass) widens the dependent side to every
+    working/ copy, report or not - the Ironclads intake queue's own cross-dependencies (many
+    add-ons of the same now-dead base mod) are exactly the kind of unblocking signal this whole
+    command exists to surface, and they've never had a revival pass, so they'd otherwise never
+    appear on either side of the graph.
     """
     repo = repo_root.expanduser().resolve()
     vanilla_root = vanilla_core.expanduser().resolve() if vanilla_core is not None else None
     if vanilla_root is not None and not vanilla_root.is_dir():
         vanilla_root = None
-    mods = _mod_ids_with_revival_work(repo)
+    mods = _mod_ids_with_revival_work(repo, require_report)
     live_providers = provider_index([repo / "In operation", repo / "In operation" / "_rig" / "mods"])
     cached_providers = {provider.mod_id: provider for provider in load_provider_index(provider_index_dir)}
 

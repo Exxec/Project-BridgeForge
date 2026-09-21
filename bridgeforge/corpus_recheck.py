@@ -27,9 +27,9 @@ from .scanner import scan_mod
 SCHEMA_VERSION = 1
 
 
-def _qualifying_mods(repo_root: Path) -> list[dict[str, object]]:
+def _qualifying_mods(repo_root: Path, require_report: bool = True) -> list[dict[str, object]]:
     board = project_board(repo_root)
-    return [row for row in board["mods"] if row["working"] and row["evidence"]["report"]]
+    return [row for row in board["mods"] if row["working"] and (row["evidence"]["report"] or not require_report)]
 
 
 def _recheck_one(name: str, working: Path, vanilla_core: Path | None, declared_status: str | None, declared_status_confidence: str | None) -> dict[str, object]:
@@ -61,19 +61,27 @@ def _recheck_one(name: str, working: Path, vanilla_core: Path | None, declared_s
     }
 
 
-def corpus_recheck(repo_root: Path, vanilla_core: Path | None = None) -> dict[str, object]:
+def corpus_recheck(repo_root: Path, vanilla_core: Path | None = None, require_report: bool = True) -> dict[str, object]:
     """Re-scan every mod with real revival work recorded under `repo_root`'s `In operation/`.
 
     See the module docstring for scope and the finding/compile-signal split. `vanilla_core` is
     optional (matching `scan`'s own default), but every vanilla-dependent check - which is most of
     them - returns UNKNOWN without it, and no compile signal is produced at all.
+
+    `require_report=False` (ROADMAP P14 item 8 triage pass) widens scope to every mod with a
+    `working/mod_info.json`, report or not - the Ironclads intake queue's own 265 workspaces have
+    never had a revival pass (no `REVIVAL_REPORT.md`), but share the identical `working/` layout,
+    so the same scan/compile-check machinery applies unchanged. The `REGRESSION` status check below
+    still only fires for a mod with a declared ready status, so intake-only mods (which have none)
+    never trigger it - this widening only adds coverage, it never changes what counts as a
+    regression.
     """
     repo = repo_root.expanduser().resolve()
     vanilla_root = vanilla_core.expanduser().resolve() if vanilla_core is not None else None
     if vanilla_root is not None and not vanilla_root.is_dir():
         vanilla_root = None
     mods = []
-    for row in sorted(_qualifying_mods(repo), key=lambda r: r["folder"]):
+    for row in sorted(_qualifying_mods(repo, require_report), key=lambda r: r["folder"]):
         mods.append(_recheck_one(
             row["folder"], Path(row["working"]), vanilla_root,
             row.get("declared_completion_status"), row.get("declared_completion_status_confidence"),

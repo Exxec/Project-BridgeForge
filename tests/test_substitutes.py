@@ -332,6 +332,34 @@ class DependencyGraphTests(unittest.TestCase):
         self.assertIn("ModA", result["unresolved_by_mod"])
         self.assertNotIn("ModC", result["unresolved_by_mod"])  # its need has no cached coverer at all
 
+    def test_include_intake_widens_the_dependent_side_to_report_less_mods(self) -> None:
+        """ROADMAP P14 item 8 triage pass: the Ironclads intake queue's own cross-dependencies are
+        exactly the unblocking signal this command exists to surface, and it has no reports yet."""
+        from bridgeforge.dependency_graph import build_dependency_graph
+        from bridgeforge.substitutes import update_provider_index
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            base = root / "In operation" / "IntakeAddon"
+            working = base / "working"
+            _write(working / "mod_info.json", json.dumps({"id": "intakeaddon", "name": "IntakeAddon"}))
+            _write(working / "data" / "variants" / "x.variant", json.dumps({"variantId": "x", "hullId": "lasher", "hullMods": ["missing_thing"], "wings": []}))
+            # No reports/REVIVAL_REPORT.md - this is exactly the intake-queue shape.
+
+            provider_root = root / "elsewhere"
+            _provider(provider_root, "coverer", "0.98a-RC8", "X,missing_thing\n", "")
+            cache_dir = root / "cache"
+            update_provider_index([provider_root / "mods"], cache_dir)
+            import shutil
+            shutil.rmtree(provider_root)
+
+            default_scope = build_dependency_graph(root, vanilla_core=_core(root), provider_index_dir=cache_dir)
+            self.assertEqual(default_scope["ranked_providers"], [])
+
+            widened = build_dependency_graph(root, vanilla_core=_core(root), provider_index_dir=cache_dir, require_report=False)
+        self.assertEqual(len(widened["ranked_providers"]), 1)
+        self.assertEqual(widened["ranked_providers"][0]["unblocks"], ["IntakeAddon"])
+
     def test_a_need_with_no_cached_coverage_anywhere_is_not_a_ranked_blocker(self) -> None:
         from bridgeforge.dependency_graph import build_dependency_graph
 

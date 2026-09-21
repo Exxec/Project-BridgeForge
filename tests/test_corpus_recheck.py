@@ -42,6 +42,21 @@ class CorpusRecheckTests(unittest.TestCase):
             self.assertEqual(result["mod_count"], 1)
             self.assertEqual(result["mods"][0]["mod"], "HasReport")
 
+    def test_include_intake_widens_scope_to_report_less_mods(self) -> None:
+        """ROADMAP P14 item 8 triage pass: the Ironclads intake queue has no REVIVAL_REPORT.md yet,
+        but shares the identical working/ layout every other mod uses."""
+        with resolved_temp_dir() as root:
+            _mod(root, "HasReport", "READY_FOR_LIVE_TEST\n")
+            base_no_report = root / "In operation" / "NoReport"
+            (base_no_report / "working").mkdir(parents=True)
+            (base_no_report / "working" / "mod_info.json").write_text('{"id":"noreport"}', encoding="utf-8")
+            result = corpus_recheck(root, require_report=False)
+            self.assertEqual(result["mod_count"], 2)
+            names = {m["mod"] for m in result["mods"]}
+            self.assertEqual(names, {"HasReport", "NoReport"})
+            no_report_mod = next(m for m in result["mods"] if m["mod"] == "NoReport")
+            self.assertIsNone(no_report_mod["declared_completion_status"])
+
     def test_finding_counts_and_declared_status_are_reported(self) -> None:
         with resolved_temp_dir() as root:
             _mod(root, "Fixture", "**READY_WITH_REVIEW_ITEMS** — looks fine.\n", {

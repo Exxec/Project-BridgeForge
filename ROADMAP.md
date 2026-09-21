@@ -417,7 +417,16 @@ Starting point:
    items 6/7/8 specifically, per the coordinator's own prior framing the owner was replying to).
 6. Provider index and dependency graph (items 2–3). **Done 2026-09-21.**
 7. Licence-aware revival (item 9). **Done 2026-09-21.**
-8. The Ironclads queue, last.
+8. The Ironclads queue, last. **Triage pass started 2026-09-21** (owner-directed scope, in
+   preference to picking specific mods to revive or holding off): `corpus-recheck`/`dependency-graph`
+   both gained a `--include-intake` flag widening their existing scope from "mods with a
+   REVIVAL_REPORT.md" to "every mod with a `working/` copy" - the Ironclads queue's 265 workspaces
+   share the identical layout, so no new discovery logic was needed, only a filter toggle. Full
+   real corpus-wide compile-check results and a fresh roll-up (superseding the static, pre-this
+   -session `In operation/QUEUE_IRONCLADS_2026-09-14.md`) land in `In
+   operation/IRONCLADS_TRIAGE_2026-09-21.md` once the run completes. Tests: `tests/test_corpus_recheck.py`
+   (`test_include_intake_widens_scope_to_report_less_mods`), `tests/test_substitutes.py`
+   (`test_include_intake_widens_the_dependent_side_to_report_less_mods`).
 
 Items 1 and 3 share a Java-toolchain module and are built together (task A9).
 

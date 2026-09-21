@@ -703,6 +703,7 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_recheck_cmd.add_argument("--repo-root", type=Path, default=Path("."), help="repo root holding In operation/ (default: cwd)")
     corpus_recheck_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core; without it, most checks return UNKNOWN and no compile signal is produced")
     corpus_recheck_cmd.add_argument("--write-markdown", type=Path, help="also write a roll-up table to this path")
+    corpus_recheck_cmd.add_argument("--include-intake", action="store_true", help="also include mods with a working/ copy but no REVIVAL_REPORT.md yet (ROADMAP P14 item 8: the Ironclads intake queue)")
     corpus_recheck_cmd.add_argument("--json", action="store_true")
     provider_index_update_cmd = subcommands.add_parser("provider-index-update", help="recompute every visible provider and cache it to bridgeforge-state/provider-index/ (ROADMAP P14 item 6/2), so a lookup is instant and still works for a mod that isn't currently installed anywhere live")
     provider_index_update_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
@@ -712,6 +713,7 @@ def build_parser() -> argparse.ArgumentParser:
     dependency_graph_cmd.add_argument("--repo-root", type=Path, default=Path("."), help="repo root holding In operation/ (default: cwd)")
     dependency_graph_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla content isn't counted as missing")
     dependency_graph_cmd.add_argument("--provider-index", type=Path, help="cached provider index directory written by provider-index-update (default: <repo>/bridgeforge-state/provider-index)")
+    dependency_graph_cmd.add_argument("--include-intake", action="store_true", help="also check mods with a working/ copy but no REVIVAL_REPORT.md yet (ROADMAP P14 item 8: the Ironclads intake queue)")
     dependency_graph_cmd.add_argument("--json", action="store_true")
     archive_index_cmd = subcommands.add_parser("archive-index", help="build/update a one-time content index of a mod-archive folder (ROADMAP P14 item 18): filenames always, text-file content via sqlite3 FTS5")
     archive_index_cmd.add_argument("root", type=Path, help="folder to search recursively for *.zip archives (e.g. Downloads)")
@@ -1043,7 +1045,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "corpus-recheck":
         from .corpus_recheck import corpus_recheck, render_markdown
-        result = corpus_recheck(args.repo_root, args.vanilla_core)
+        result = corpus_recheck(args.repo_root, args.vanilla_core, require_report=not args.include_intake)
         if args.write_markdown:
             args.write_markdown.parent.mkdir(parents=True, exist_ok=True)
             args.write_markdown.write_text(render_markdown(result), encoding="utf-8")
@@ -1076,7 +1078,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "dependency-graph":
         from .dependency_graph import build_dependency_graph
         from .substitutes import DEFAULT_PROVIDER_INDEX_DIR
-        result = build_dependency_graph(args.repo_root, args.vanilla_core, args.provider_index or DEFAULT_PROVIDER_INDEX_DIR)
+        result = build_dependency_graph(args.repo_root, args.vanilla_core, args.provider_index or DEFAULT_PROVIDER_INDEX_DIR, require_report=not args.include_intake)
         if args.json:
             print(json.dumps(result, indent=2))
         else:
