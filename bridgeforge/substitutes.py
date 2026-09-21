@@ -42,6 +42,7 @@ class Provider:
     game_version: str
     provides: dict[str, set[str]] = field(default_factory=lambda: {kind: set() for kind in KINDS})
     total_conversion: bool = False
+    version: str = ""  # ROADMAP P14 item 6/2: the mod's own declared version, for the persistent provider-index cache
 
 
 def _csv_ids(path: Path) -> set[str]:
@@ -59,6 +60,7 @@ def provider_for(folder: Path) -> Provider | None:
         return None
     provider = Provider(str(info["id"]), str(info.get("name") or info["id"]), str(folder), str(info.get("gameVersion") or ""))
     provider.total_conversion = bool(info.get("totalConversion"))
+    provider.version = str(info.get("version") or "")
     data = folder / "data"
     provider.provides["hullmod"] |= _csv_ids(data / "hullmods" / "hull_mods.csv")
     provider.provides["weapon"] |= _csv_ids(data / "weapons" / "weapon_data.csv")
@@ -101,6 +103,58 @@ def provider_index(roots: list[Path], exclude: Path | None = None) -> list[Provi
             provider = provider_for(folder)
             if provider is not None:
                 providers.append(provider)
+    return providers
+
+
+# ROADMAP P14 item 6/2: a persistent corpus artefact, so a provider lookup is instant and still
+# works for a mod that isn't currently installed/enabled anywhere live - one JSON file per mod,
+# matching novelty.py's own bridgeforge-state/corpus-fingerprints/ convention exactly.
+DEFAULT_PROVIDER_INDEX_DIR = REPO_ROOT / "bridgeforge-state" / "provider-index"
+
+
+def _serialize_provider(provider: Provider) -> dict:
+    return {
+        "schema_version": SCHEMA_VERSION, "mod_id": provider.mod_id, "name": provider.name,
+        "path": provider.path, "game_version": provider.game_version, "version": provider.version,
+        "total_conversion": provider.total_conversion,
+        "provides": {kind: sorted(ids) for kind, ids in provider.provides.items()},
+    }
+
+
+def _deserialize_provider(data: dict) -> Provider:
+    provider = Provider(str(data["mod_id"]), str(data.get("name") or data["mod_id"]), str(data.get("path") or ""), str(data.get("game_version") or ""))
+    provider.version = str(data.get("version") or "")
+    provider.total_conversion = bool(data.get("total_conversion"))
+    provides = data.get("provides") or {}
+    provider.provides = {kind: set(provides.get(kind) or []) for kind in KINDS}
+    return provider
+
+
+def update_provider_index(roots: list[Path], output_dir: Path = DEFAULT_PROVIDER_INDEX_DIR, exclude: Path | None = None) -> dict:
+    """Recompute every visible provider under `roots` and cache it as one JSON file per mod id."""
+    providers = provider_index(roots, exclude)
+    output_dir = Path(output_dir).expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for provider in providers:
+        safe_name = re.sub(r"[^\w.-]", "_", provider.mod_id) or "unnamed"
+        (output_dir / f"{safe_name}.json").write_text(json.dumps(_serialize_provider(provider), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {
+        "schema_version": SCHEMA_VERSION, "mode": "provider-index-update", "status": "OK",
+        "output_dir": str(output_dir), "provider_count": len(providers),
+        "mod_ids": sorted(p.mod_id for p in providers),
+    }
+
+
+def load_provider_index(index_dir: Path = DEFAULT_PROVIDER_INDEX_DIR) -> list[Provider]:
+    """Read back the cache `update_provider_index` wrote - works even when none of these mods are
+    currently installed anywhere live, since nothing here re-reads the mod folders themselves."""
+    index_dir = Path(index_dir).expanduser().resolve()
+    providers = []
+    for path in sorted(index_dir.glob("*.json")) if index_dir.is_dir() else []:
+        try:
+            providers.append(_deserialize_provider(json.loads(path.read_text(encoding="utf-8"))))
+        except (OSError, json.JSONDecodeError, KeyError):
+            continue
     return providers
 
 

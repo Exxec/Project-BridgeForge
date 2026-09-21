@@ -703,6 +703,15 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_recheck_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core; without it, most checks return UNKNOWN and no compile signal is produced")
     corpus_recheck_cmd.add_argument("--write-markdown", type=Path, help="also write a roll-up table to this path")
     corpus_recheck_cmd.add_argument("--json", action="store_true")
+    provider_index_update_cmd = subcommands.add_parser("provider-index-update", help="recompute every visible provider and cache it to bridgeforge-state/provider-index/ (ROADMAP P14 item 6/2), so a lookup is instant and still works for a mod that isn't currently installed anywhere live")
+    provider_index_update_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
+    provider_index_update_cmd.add_argument("--output", type=Path, help="cache directory (default: <repo>/bridgeforge-state/provider-index)")
+    provider_index_update_cmd.add_argument("--json", action="store_true")
+    dependency_graph_cmd = subcommands.add_parser("dependency-graph", help="which mods with revival work recorded need which missing content, and which unrevived provider would unblock the most of them (ROADMAP P14 item 6/3)")
+    dependency_graph_cmd.add_argument("--repo-root", type=Path, default=Path("."), help="repo root holding In operation/ (default: cwd)")
+    dependency_graph_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla content isn't counted as missing")
+    dependency_graph_cmd.add_argument("--provider-index", type=Path, help="cached provider index directory written by provider-index-update (default: <repo>/bridgeforge-state/provider-index)")
+    dependency_graph_cmd.add_argument("--json", action="store_true")
     archive_index_cmd = subcommands.add_parser("archive-index", help="build/update a one-time content index of a mod-archive folder (ROADMAP P14 item 18): filenames always, text-file content via sqlite3 FTS5")
     archive_index_cmd.add_argument("root", type=Path, help="folder to search recursively for *.zip archives (e.g. Downloads)")
     archive_index_cmd.add_argument("--output", required=True, type=Path, help="sqlite3 database path to write/update")
@@ -1053,6 +1062,27 @@ def main(argv: list[str] | None = None) -> int:
             if args.write_markdown:
                 print(f"Roll-up written: {args.write_markdown}")
         return 1 if result["status"] == "REGRESSION" else 0
+    if args.command == "provider-index-update":
+        from .substitutes import DEFAULT_PROVIDER_INDEX_DIR, update_provider_index
+        roots = args.providers or None
+        from .java_toolchain import DEFAULT_PROVIDER_ROOTS
+        result = update_provider_index(roots or list(DEFAULT_PROVIDER_ROOTS), args.output or DEFAULT_PROVIDER_INDEX_DIR)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"{result['provider_count']} provider(s) cached to {result['output_dir']}")
+        return 0
+    if args.command == "dependency-graph":
+        from .dependency_graph import build_dependency_graph
+        from .substitutes import DEFAULT_PROVIDER_INDEX_DIR
+        result = build_dependency_graph(args.repo_root, args.vanilla_core, args.provider_index or DEFAULT_PROVIDER_INDEX_DIR)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"{result['mod_count']} mod(s) checked; {len(result['unresolved_by_mod'])} with an unresolved need; {len(result['ranked_providers'])} candidate provider(s) ranked by unblocking value")
+            for row in result["ranked_providers"]:
+                print(f"  {row['provider_mod_id']} ({row['provider_name']}, {row['provider_game_version']}) unblocks {row['unblocks_count']}: {', '.join(row['unblocks'])}")
+        return 0
     if args.command == "archive-index":
         from .archive_index import build_index
         try:

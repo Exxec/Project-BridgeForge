@@ -410,9 +410,12 @@ Starting point:
 1. Loose-script compile check (item 11). **Done 2026-09-15** (wired into `scan`/`scan_mod`; the standalone `compile-check` command was task A9).
 2. Carrier-bay fixer (item 6). **Done 2026-09-15.**
 3. Jar rebuild command (item 7). **Done 2026-09-14/15 (task A9).**
-4. Fold-in workflow (item 10), then fold FX Core into RevenantLib.
-5. Strip/vendor planner (item 4), with Rebal phase 2.
-6. Provider index and dependency graph (items 2–3).
+4. Fold-in workflow (item 10), then fold FX Core into RevenantLib. **Done 2026-09-20** (tooling
+   task A12; FX Core fold task A13).
+5. Strip/vendor planner (item 4), with Rebal phase 2. **Still open** - skipped ahead of in this
+   order at the owner's explicit direction (2026-09-21: "start item 18 then P14 items", read as
+   items 6/7/8 specifically, per the coordinator's own prior framing the owner was replying to).
+6. Provider index and dependency graph (items 2–3). **Done 2026-09-21.**
 7. Licence-aware revival (item 9).
 8. The Ironclads queue, last.
 
@@ -425,7 +428,40 @@ Progression, each stage feeding the next:
    - Scanner checks: `content-reference-unresolved`, `source-import-unresolved`, `legacy-vanilla-class-import`, `library-import-unused-in-jar`, `console-command-optional`, `carrier-bays-proposal`.
    - Fixers: `target-interface-method-missing`, `wing-data-missing-role-desc-column`.
 2. **Provider index as a corpus artefact.** Store each visible mod's "provides" set beside the novelty fingerprints (`bridgeforge-state/`, gitignored), so a lookup is instant and works when the provider isn't installed. Record game version and mod version.
+    **Done 2026-09-21.** `Provider` gained a `version` field (was tracking `game_version` only).
+    New `substitutes.update_provider_index`/`load_provider_index`, wired as `bridgeforge
+    provider-index-update [--providers] [--output]`: one JSON file per mod id under
+    `bridgeforge-state/provider-index/` (default), matching `novelty.py`'s own
+    `corpus-fingerprints/` convention exactly (same directory shape, same `glob("*.json")` load).
+    `load_provider_index` reads the cache back into real `Provider` objects with no dependency on
+    the mod folder still existing - verified with a test that deletes the source folder entirely
+    after caching and confirms the loaded provider is unaffected. Verified against the real repo:
+    317 real providers cached from `<repo>/In operation` + its rig's mods in one run. Tests:
+    `tests/test_substitutes.py` (`ProviderIndexCacheTests`, 4 cases: round-trip incl. version,
+    survives the source folder's deletion, empty/missing cache dir, a changed provider's cache
+    entry is overwritten on a second run).
 3. **Dependency graph across the queue.** Build a graph of which queued mods need which missing mods, and order revival by unblocking value. As of 2026-09-14: FX Core (10 MANUAL) unblocks FX Example and part of Rebal; AI Overhaul (12 MANUAL) the rest of Rebal. EZ Damage is already revived (r1). Show it in `board`.
+    **Done 2026-09-21.** New `bridgeforge/dependency_graph.py` (`build_dependency_graph`), wired as
+    `bridgeforge dependency-graph [--repo-root] [--vanilla-core] [--provider-index]`. For every mod
+    with real revival work recorded (via `project_board`, same discovery `corpus-recheck` uses), a
+    scan's `content-reference-unresolved`/`source-import-unresolved` findings name what it needs
+    (`substitutes.required_from_scan`); a need already covered by a live, currently-installed
+    provider is not a blocker, but a need with no live coverage is checked against item 2's cached
+    provider index for an unrevived candidate - crediting a provider even when it isn't installed
+    anywhere live right now, which is exactly item 2's own reason for existing. Ranked by how many
+    dependent mods each candidate provider would unblock.
+    **Scope note:** deliberately its own command, not folded into `board` - `board`'s one-mod-per-row
+    shape doesn't naturally hold a cross-mod graph, and the roadmap text's "show it in board" is
+    served by this command's own readable summary output instead.
+    Verified against the real corpus: the exact case this whole item's intro paragraph was written
+    from (Communist Clouds needing `vayra_red_army`/`vayra_*` wings from Vayra's Sector) is real and
+    confirmed present, and correctly does NOT appear as unresolved, because `Vayra-Merged` is a
+    live, currently-installed provider in the real corpus - exactly the "not a blocker, already
+    covered" case working as designed, confirmed by checking `provider_index` directly names
+    `vayramerged`/`vayrasector` as covering `vayra_red_army`. Tests: `tests/test_substitutes.py`
+    (`DependencyGraphTests`, 3 cases: an uninstalled cached provider is credited and ranked by
+    unblock count, a need with no cached coverage anywhere is never a ranked blocker, CLI wiring
+    for both new commands together).
 4. **Strip and vendor plans.** For STRIP_FROM_MOD, generate the exact edit list: which variant, `.ship` and faction lines lose which ids, plus proposed vanilla substitutes of the same slot type and size. Also generate the matching PROPOSED expected changes, so approval goes through `expect` as usual. Where the licence allows, offer vendoring as an alternative: copy the one missing piece (for example Rebal's `shields_formshield` into Explorer Society) instead of reviving a heavy provider.
 5. **Spawn-point fleet port kit.** RC8 keeps `BaseSpawnPoint` and `addSpawnPoint`, but not `SectorAPI.createFleet(faction, fleetType)`, which 0.6 spawners use to build fleets from old faction fleet definitions. The kit is:
    - a helper that builds the equivalent fleet with FleetFactoryV3, following Zorg18 r1's spawner;

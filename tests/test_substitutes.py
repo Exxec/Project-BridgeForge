@@ -139,5 +139,159 @@ class SubstituteTests(unittest.TestCase):
         self.assertIn("data.scripts.fx_Particle", provider.provides["class"])
 
 
+class ProviderIndexCacheTests(unittest.TestCase):
+    """ROADMAP P14 item 6/2: a persistent corpus artefact, so a provider lookup is instant and
+    still works for a mod that isn't currently installed/visible anywhere live.
+    """
+
+    def test_round_trips_through_the_cache_including_version_fields(self) -> None:
+        from bridgeforge.substitutes import load_provider_index, update_provider_index
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _provider(root, "newsector", "0.98a-RC8", "Red,old_red_army\n", "old_yak_wing,v\n")
+            mod_info = root / "mods" / "newsector" / "mod_info.json"
+            info = json.loads(mod_info.read_text(encoding="utf-8"))
+            info["version"] = "1.2.3+bf.4"
+            mod_info.write_text(json.dumps(info), encoding="utf-8")
+            cache_dir = root / "cache"
+
+            summary = update_provider_index([root / "mods"], cache_dir)
+            self.assertEqual(summary["provider_count"], 1)
+            self.assertEqual(summary["mod_ids"], ["newsector"])
+            self.assertTrue((cache_dir / "newsector.json").is_file())
+
+            loaded = load_provider_index(cache_dir)
+        self.assertEqual(len(loaded), 1)
+        provider = loaded[0]
+        self.assertEqual(provider.mod_id, "newsector")
+        self.assertEqual(provider.version, "1.2.3+bf.4")
+        self.assertEqual(provider.game_version, "0.98a-RC8")
+        self.assertEqual(provider.provides["hullmod"], {"old_red_army"})
+        self.assertEqual(provider.provides["wing"], {"old_yak_wing"})
+
+    def test_loaded_cache_works_when_the_provider_folder_no_longer_exists(self) -> None:
+        from bridgeforge.substitutes import load_provider_index, update_provider_index
+        import shutil
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _provider(root, "gone", "0.98a-RC8", "Red,old_red_army\n", "")
+            cache_dir = root / "cache"
+            update_provider_index([root / "mods"], cache_dir)
+            shutil.rmtree(root / "mods")  # the provider is no longer visible anywhere live
+
+            loaded = load_provider_index(cache_dir)
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0].provides["hullmod"], {"old_red_army"})
+
+    def test_load_from_an_empty_or_missing_directory_returns_nothing(self) -> None:
+        from bridgeforge.substitutes import load_provider_index
+
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(load_provider_index(Path(directory) / "does-not-exist"), [])
+
+    def test_a_second_update_overwrites_a_changed_providers_cache_entry(self) -> None:
+        from bridgeforge.substitutes import load_provider_index, update_provider_index
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _provider(root, "growing", "0.98a-RC8", "Red,old_red_army\n", "")
+            cache_dir = root / "cache"
+            update_provider_index([root / "mods"], cache_dir)
+
+            hull_csv = root / "mods" / "growing" / "data" / "hullmods" / "hull_mods.csv"
+            hull_csv.write_text(hull_csv.read_text(encoding="utf-8") + "Blue,new_blue_mod\n", encoding="utf-8")
+            update_provider_index([root / "mods"], cache_dir)
+
+            loaded = load_provider_index(cache_dir)
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0].provides["hullmod"], {"old_red_army", "new_blue_mod"})
+
+
+class DependencyGraphTests(unittest.TestCase):
+    """ROADMAP P14 item 6/3: which mods with revival work recorded need which missing content,
+    and which unrevived provider (from the cache) would unblock the most of them.
+    """
+
+    def _revival_mod(self, root: Path, folder: str, needs_hullmod: str) -> Path:
+        base = root / "In operation" / folder
+        working = base / "working"
+        _write(working / "mod_info.json", json.dumps({"id": folder.lower(), "name": folder}))
+        _write(working / "data" / "variants" / "x.variant", json.dumps({"variantId": "x", "hullId": "lasher", "hullMods": [needs_hullmod], "wings": []}))
+        (base / "reports").mkdir()
+        (base / "reports" / "REVIVAL_REPORT.md").write_text("IN_PROGRESS\n", encoding="utf-8")
+        return working
+
+    def test_an_uninstalled_cached_provider_is_credited_and_ranked(self) -> None:
+        from bridgeforge.dependency_graph import build_dependency_graph
+        from bridgeforge.substitutes import update_provider_index
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._revival_mod(root, "ModA", "missing_thing")
+            self._revival_mod(root, "ModB", "missing_thing")
+            self._revival_mod(root, "ModC", "some_other_thing")
+
+            # The provider that covers "missing_thing" is indexed once, then removed - matching
+            # an Ironclads-queue mod that was scanned once but isn't installed in the live rig.
+            provider_root = root / "elsewhere"
+            _provider(provider_root, "coverer", "0.98a-RC8", "X,missing_thing\n", "")
+            cache_dir = root / "cache"
+            update_provider_index([provider_root / "mods"], cache_dir)
+            import shutil
+            shutil.rmtree(provider_root)
+
+            result = build_dependency_graph(root, vanilla_core=_core(root), provider_index_dir=cache_dir)
+        self.assertEqual(result["mod_count"], 3)
+        self.assertEqual(len(result["ranked_providers"]), 1)
+        top = result["ranked_providers"][0]
+        self.assertEqual(top["provider_mod_id"], "coverer")
+        self.assertEqual(top["unblocks_count"], 2)
+        self.assertEqual(top["unblocks"], ["ModA", "ModB"])
+        self.assertEqual(top["covers"]["hullmod"], ["missing_thing"])
+        self.assertIn("ModA", result["unresolved_by_mod"])
+        self.assertNotIn("ModC", result["unresolved_by_mod"])  # its need has no cached coverer at all
+
+    def test_a_need_with_no_cached_coverage_anywhere_is_not_a_ranked_blocker(self) -> None:
+        from bridgeforge.dependency_graph import build_dependency_graph
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._revival_mod(root, "ModA", "truly_nowhere")
+            result = build_dependency_graph(root, vanilla_core=_core(root), provider_index_dir=root / "empty-cache")
+        self.assertEqual(result["ranked_providers"], [])
+        self.assertEqual(result["unresolved_by_mod"], {})
+
+    def test_cli_provider_index_update_and_dependency_graph(self) -> None:
+        import contextlib
+        import io
+
+        from bridgeforge.cli import main
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._revival_mod(root, "ModA", "missing_thing")
+            provider_root = root / "elsewhere" / "mods"
+            _provider(root / "elsewhere", "coverer", "0.98a-RC8", "X,missing_thing\n", "")
+            cache_dir = root / "cache"
+
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                exit_code = main(["provider-index-update", "--providers", str(provider_root), "--output", str(cache_dir), "--json"])
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(json.loads(out.getvalue())["provider_count"], 1)
+
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                exit_code = main([
+                    "dependency-graph", "--repo-root", str(root), "--vanilla-core", str(_core(root)),
+                    "--provider-index", str(cache_dir), "--json",
+                ])
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(out.getvalue())
+            self.assertEqual(payload["ranked_providers"][0]["provider_mod_id"], "coverer")
+
+
 if __name__ == "__main__":
     unittest.main()
