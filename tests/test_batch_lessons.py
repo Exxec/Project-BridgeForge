@@ -140,6 +140,20 @@ class MagicLibAttributionTests(unittest.TestCase):
         self.assertTrue(any(item["library"] == "MagicLib" for item in result.library_usage))
         self.assertTrue(_ids(result, "external-mod-api-import"))
 
+    def test_a_declared_dependency_is_safe_not_manual(self) -> None:
+        # Arkgneisis, 2026-09-21: mod_info.json declares MagicLib as a hard dependency ("Requires
+        # MagicLib" in its own description) - Starsector itself refuses to enable the mod without
+        # it, so direct API use needs no compatibility shim, unlike an undeclared/optional use.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory), dependencies=[{"id": "MagicLib", "name": "MagicLib"}])
+            (mod / "data" / "scripts").mkdir(parents=True)
+            (mod / "data" / "scripts" / "Plugin.java").write_text("package data.scripts;\nimport data.scripts.util.MagicRender;\npublic class Plugin {}\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual(_ids(result, "external-mod-api-import"), [])
+        declared = _ids(result, "external-mod-api-import-declared")
+        self.assertEqual(len(declared), 1)
+        self.assertEqual(declared[0].classification, "SAFE")
+
 
 class SourceImportUnresolvedTests(unittest.TestCase):
     def test_another_mods_classes_are_flagged_and_own_classes_are_not(self) -> None:

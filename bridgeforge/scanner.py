@@ -1364,13 +1364,31 @@ def _scan_source_build_dependencies(root: Path, result: ScanResult, import_locat
             evidence = [dependency, *imports]
             if first_line is not None:
                 evidence.append(f"line:{first_line}")
+            if _mod_info_declares_dependency(result, dependency):
+                # A declared dependency in mod_info.json is hard-required: Starsector itself refuses
+                # to enable this mod without it, so direct API use needs no shim or optionality
+                # guard - this isn't a "might not be there at runtime" risk at all. Real case
+                # (Arkgneisis, found 2026-09-21): mod_info.json declares MagicLib, and the mod's own
+                # description says "Requires MagicLib" - flagging this MANUAL asked for work (a
+                # compatibility shim) that would be actively wrong to add.
+                result.add(
+                    id="external-mod-api-import-declared",
+                    category="dependencies",
+                    severity="info",
+                    classification="SAFE",
+                    confidence="DETERMINISTIC",
+                    explanation=f"Source imports {dependency}'s API directly, and mod_info.json declares {dependency} as a dependency - Starsector refuses to enable this mod without it, so no compatibility shim or optionality guard is needed.",
+                    file=first_file,
+                    evidence=evidence,
+                )
+                continue
             result.add(
                 id="external-mod-api-import",
                 category="dependencies",
                 severity="high",
                 classification="MANUAL",
                 confidence="DETERMINISTIC",
-                explanation=f"Source imports {dependency}'s API directly. Compile and runtime compatibility require that optional mod, or an explicit source-level compatibility shim/removal.",
+                explanation=f"Source imports {dependency}'s API directly, but mod_info.json does not declare {dependency} as a dependency. Compile and runtime compatibility require that optional mod, or an explicit source-level compatibility shim/removal.",
                 file=first_file,
                 evidence=evidence,
             )
@@ -2405,7 +2423,10 @@ def _dependency_compatibility_context(result: ScanResult) -> None:
         normalized.update(re.sub(r"[^a-z0-9]", "", value.lower()) for value in (dependency_id, dependency_name) if value)
     direct_apis: list[dict[str, object]] = []
     for finding in result.findings:
-        if finding.id != "external-mod-api-import" or not finding.evidence:
+        # external-mod-api-import-declared (SAFE): the same direct-API-usage evidence, just for a
+        # dependency mod_info.json already declares - still real for a consumer reasoning about
+        # cross-mod integration, so both ids are harvested here.
+        if finding.id not in ("external-mod-api-import", "external-mod-api-import-declared") or not finding.evidence:
             continue
         dependency = finding.evidence[0]
         key = re.sub(r"[^a-z0-9]", "", dependency.lower())

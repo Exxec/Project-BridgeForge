@@ -1263,6 +1263,31 @@ Progression, each stage feeding the next:
     `tests/test_fixers.py` (`FactionTraitWeightLegacyPersonalityIdFixerTests`) - apply-rename-merge-
     and-rescan-clean, refuse-on-an-existing-merge-target-entry, refuse-when-nothing-to-fix. Full
     suite: 1083 tests, OK (skipped=1). `docs-index` regenerated.
+38. **`external-mod-api-import` fired MANUAL for direct use of an external mod's API even when that
+    mod is declared as a hard dependency in `mod_info.json`.** Found triaging Arkgneisis, the
+    smallest remaining corpus straggler (1 MANUAL finding, otherwise clean): it directly uses
+    MagicLib's `data.scripts.util.Magic*` API throughout, and `mod_info.json` declares MagicLib
+    (the mod's own description literally says "Requires MagicLib"). A declared dependency is
+    hard-required - Starsector itself refuses to enable the mod without it - so this isn't a
+    "might not be there at runtime" compatibility risk at all; the check's own explanation text
+    ("Compile and runtime compatibility require that optional mod...") only makes sense for an
+    *undeclared* use. **Done 2026-09-21.** When `mod_info.json` already declares the dependency
+    (`_mod_info_declares_dependency`, the same helper `revenantlib-fold-conflict` uses), the finding
+    is now `external-mod-api-import-declared` (SAFE) instead of `external-mod-api-import` (MANUAL) -
+    a new id, not a classification change on the same id, since three real consumers
+    (`cross_mod.py`, `integration_scenarios.py`, `library_api.py`) read
+    `migration_context["dependency_compatibility"]["direct_api_dependencies"]` and need to keep
+    seeing *every* direct external-API use, declared or not, to reason about cross-mod integration -
+    `_dependency_compatibility_context` was updated to harvest both ids so none of the three lost
+    data. Applying it to the corpus found the fix generalizes correctly: Arkgneisis's MagicLib use
+    is now SAFE (0 MANUAL remaining); Vayra-Merged and Void-Tec each also had a MagicLib
+    `external-mod-api-import` reclassified to SAFE, while their real, separate MANUAL findings
+    (Vayra's `Console Commands` use, genuinely unregistered in `commands.csv`; Void-Tec's
+    `Industrial Evolution` use, genuinely undeclared) correctly stayed MANUAL - confirmed neither
+    mod declares those two dependencies. Tests: `tests/test_batch_lessons.py`
+    (`test_a_declared_dependency_is_safe_not_manual`); the existing `ConsoleCommandOptionalTests`/
+    `MagicLibAttributionTests` fixtures declare no dependency, so none of them changed behavior.
+    Full suite: 1084 tests, OK (skipped=1). `docs-index` regenerated.
 
 ## Post-1.0 research and gated automation
 
