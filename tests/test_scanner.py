@@ -774,6 +774,35 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             findings = {item.id for item in result.findings}
             self.assertIn("mission-local-variant-hull-missing", findings)
 
+    def test_unresolved_content_references_exposes_the_full_file_list_in_migration_context(self) -> None:
+        """`content-reference-unresolved`'s evidence collapses to counts and truncates at 25 -- a
+        human-readable summary. ROADMAP P14 item 4 (the strip/vendor planner) needs the exact file
+        list per id, which the scan already computes and previously threw away. Exposed via
+        `migration_context["unresolved_content_references"]`, the same pattern other checks use."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core = root.parent / "core"
+            for base in (root, core):
+                (base / "data" / "hullmods").mkdir(parents=True, exist_ok=True)
+                (base / "data" / "hulls").mkdir(parents=True, exist_ok=True)
+                (base / "data" / "weapons").mkdir(parents=True, exist_ok=True)
+                (base / "data" / "hullmods" / "hull_mods.csv").write_text("name,id,tier\nDummy,dummy_hullmod,1\n", encoding="utf-8")
+                (base / "data" / "hulls" / "wing_data.csv").write_text("name,id,tier\nDummy,dummy_wing,1\n", encoding="utf-8")
+                (base / "data" / "weapons" / "weapon_data.csv").write_text("name,id,tier\nDummy,dummy_weapon,1\n", encoding="utf-8")
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            (root / "data" / "hulls" / "fixture_hull.ship").write_text('{"hullId":"fixture_hull"}', encoding="utf-8")
+            (root / "data" / "variants").mkdir(parents=True)
+            (root / "data" / "variants" / "a.variant").write_text(
+                '{"hullId":"fixture_hull","hullMods":["other_missing_mod"]}', encoding="utf-8"
+            )
+            (root / "data" / "variants" / "b.variant").write_text(
+                '{"hullId":"fixture_hull","hullMods":["other_missing_mod"]}', encoding="utf-8"
+            )
+            result = scan_mod(root, vanilla_core=core)
+            ctx = result.migration_context.get("unresolved_content_references", {})
+            self.assertIn("hullmod", ctx)
+            self.assertEqual(ctx["hullmod"].get("other_missing_mod"), sorted(["data/variants/a.variant", "data/variants/b.variant"]))
+
 
     def test_scanner_reports_wrapper_directory_layout_without_retargeting_input(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

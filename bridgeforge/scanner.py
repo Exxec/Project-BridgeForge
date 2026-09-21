@@ -4860,6 +4860,12 @@ def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_
     unresolved = [(kind, ident, files) for kind, table in missing.items() for ident, files in sorted(table.items())]
     if not unresolved:
         return
+    # The finding's evidence collapses this to counts and truncates at 25 (a human-readable
+    # summary). The full per-id file list survives here for callers that need the exact edit list
+    # (ROADMAP P14 item 4, the strip/vendor planner): which .variant/.ship/.skin loses which id.
+    result.migration_context["unresolved_content_references"] = {
+        kind: {ident: sorted(files) for ident, files in table.items()} for kind, table in missing.items() if table
+    }
     prefixes = Counter(ident.split("_", 1)[0] + "_" for _kind, ident, _files in unresolved if "_" in ident)
     prefix_note = [f"common prefix: {prefix} ({count} ids)" for prefix, count in prefixes.most_common(3) if count > 1]
     declares = bool(result.metadata.get("dependencies") or result.metadata.get("requiredDependencies"))
