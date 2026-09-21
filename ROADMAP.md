@@ -714,6 +714,20 @@ Progression, each stage feeding the next:
     grep every mod's `scratch/MOVES.log` for a "shadow"/"jar" rationale, and for each one, run item
     26's `verify-shadow` against the actual jar set that reasoning named, before trusting the move
     was correct.
+28. **`_scan_variant_validity` doesn't resolve a `.skin`'s own slot-type overrides before checking
+    weapon/slot fit - a scanner gap distinct from BF-SKIN-01.** Found 2026-09-20 during E11 stage 5
+    on Rebal: `brawler_tritachyon` and `buffalo_pirates` both showed `variant-weapon-slot-mismatch`,
+    but both are false positives - each skin's own `weaponSlotChanges` overrides the base hull's slot
+    type to match the weapon actually mounted (verified directly: `brawler_tritachyon.skin` retypes
+    WS 001/002 to ENERGY, matching `ionbeam`/`gravitonbeam`; `buffalo_pirates.skin` retypes WS 001 to
+    BALLISTIC, matching `vulcan`). BF-SKIN-01 (item 17) fixed `hullId` resolution through a skin's
+    `baseHullId` chain; this is a different field entirely - a skin's slot-type/size overrides, which
+    `_scan_variant_validity` never applies before comparing a mounted weapon against the base hull's
+    unmodified slot type. Exact location: `bridgeforge/scanner.py:4972-4977` per the investigating
+    task's citation (re-verify the line number before fixing, code has moved since). Fix: build the
+    slot-by-id table used for the fit check from the skin's overridden values when a `.skin` applies,
+    not the base `.ship`'s raw `weaponSlots`, mirroring how `_resolve_hull_id` already chases the
+    `baseHullId` chain for the hull id itself.
 
 ## Post-1.0 research and gated automation
 
