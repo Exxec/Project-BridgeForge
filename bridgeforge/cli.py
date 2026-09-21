@@ -697,6 +697,13 @@ def build_parser() -> argparse.ArgumentParser:
     compile_check_cmd.add_argument("--jdk", type=Path, help="JDK home (default: this repo's rig JDK, else JAVA_HOME, else PATH)")
     compile_check_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search for declared dependencies; repeatable (default: <repo>/In operation and its rig's mods)")
     compile_check_cmd.add_argument("--json", action="store_true")
+    rebuild_from_reference_cmd = subcommands.add_parser("rebuild-from-reference", help="overlay a mod's own genuine changes (vs. a historical reference rig's vanilla copy) onto current RC8 vanilla, for old mods that ship modified copies of vanilla files under vanilla's own paths")
+    rebuild_from_reference_cmd.add_argument("mod", type=Path, help="mod working copy")
+    rebuild_from_reference_cmd.add_argument("--reference-core", required=True, type=Path, help="a registered reference rig's read-only starsector-core (the historical vanilla version the mod's file was originally built against)")
+    rebuild_from_reference_cmd.add_argument("--current-core", required=True, type=Path, help="the current RC8 read-only starsector-core")
+    rebuild_from_reference_cmd.add_argument("--glob", default="**/*", help="glob (relative to the mod) scoping which files to consider, e.g. 'data/hullmods/**/*.java' or '**/*.wpn' (default: every file)")
+    rebuild_from_reference_cmd.add_argument("--apply", type=Path, dest="output", help="write every REBUILT/CONFLICT file's rebuilt content under this output directory (never the mod's own working copy); omit for a read-only report")
+    rebuild_from_reference_cmd.add_argument("--json", action="store_true")
     diff_data_cmd = subcommands.add_parser("diff-data", help="value-diff two org.json-dialect files field by field, not a line diff (formatting/key-order differences produce no output)")
     diff_data_cmd.add_argument("file_a", type=Path)
     diff_data_cmd.add_argument("file_b", type=Path)
@@ -1007,6 +1014,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Scanned {len(result.files)} files; found {len(result.findings)} findings.")
         print(f"Report: {report}")
         print(f"Manifest: {manifest}")
+        return 0
+    if args.command == "rebuild-from-reference":
+        from .rebuild_from_reference import rebuild_from_reference
+        result = rebuild_from_reference(args.mod, args.reference_core, args.current_core, args.glob, args.output)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            counts = result["counts"]
+            print(f"{result['status']}: {len(result['files'])} file(s) with a counterpart in both vanilla copies - {counts['REBUILT']} rebuilt, {counts['CONFLICT']} with a conflict, {counts['NO_GENUINE_CHANGES']} unchanged from the reference")
+            for entry in result["files"]:
+                if entry["status"] == "NO_GENUINE_CHANGES":
+                    continue
+                print(f"  {entry['status']} {entry['file']} ({len(entry['changes_applied'])} change(s) applied, {len(entry['conflicts'])} conflict(s))")
+                for conflict in entry["conflicts"]:
+                    print(f"    CONFLICT {conflict['path']}: {conflict.get('note', '')}")
+                if args.output and "written_to" in entry:
+                    print(f"    written: {entry['written_to']}")
         return 0
     if args.command == "diff-data":
         from .diff_data import diff_data

@@ -652,6 +652,21 @@ Progression, each stage feeding the next:
     unique to it in the Ironclads queue) - worth a `rebuild-from-reference` command once item 19's
     value-diff primitive exists, parameterized by file class (`.wpn`/`.ship`/`.variant`/etc.) so a
     large mod can be rebuilt in reviewable stages rather than one pass across hundreds of files.
+    **Done 2026-09-21.** New `bridgeforge/rebuild_from_reference.py` (`rebuild_from_reference`),
+    wired as `bridgeforge rebuild-from-reference <mod> --reference-core <rig> --current-core <RC8>
+    [--glob <pattern>] [--apply <output-dir>] [--json]`. For every file the mod shares a relative
+    path with in both vanilla copies, diffs mod-vs-reference with item 19's `_diff_values` to find
+    only the mod's own genuine authored changes, then overlays just those changes onto a copy of
+    the current file (added/changed keys set, removed keys deleted - a removal already absent from
+    current is a no-op, not a conflict). Where current vanilla itself diverges from the reference on
+    a path the mod also touched, the mod's value still wins but the conflict is surfaced by path
+    with all three values, never silently resolved. Read-only by default; `--apply` writes rebuilt
+    files under a separate output directory, never the mod's own working copy. `--glob` scopes a
+    large mod's rebuild into reviewable stages, per this item's own spec. Verified against real
+    data: Rebal's actual registered 0.9a reference rig and RC8's own real `starsector-core` -
+    82 real `.wpn` files, 76 REBUILT cleanly and 5 genuine CONFLICTs correctly surfaced (e.g.
+    `hammer.wpn`'s `fireSoundTwo`, `hil.wpn`'s `width` - real fields RC8 changed independently
+    since the reference version). Tests: `tests/test_rebuild_from_reference.py`.
 22. **`rig-doctor`'s `enabled_mods_resolve` check FAILs on every freshly registered reference rig.**
     A brand-new historical install has no mods enabled yet, so `mods/enabled_mods.json` doesn't
     exist - correct and harmless, but it prints as FAIL rather than PASS/SKIP, noise on every P10
