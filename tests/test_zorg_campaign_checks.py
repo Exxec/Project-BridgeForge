@@ -185,5 +185,54 @@ class SystemLookupGuardTests(unittest.TestCase):
         self.assertEqual(by_system["corvus"].severity, "medium")
 
 
+class FactionTraitWeightLegacyPersonalityIdTests(unittest.TestCase):
+    """Real case, 2026-09-21: zorg.faction's traits.captain block weights 0.6-era personality ids
+    (cowardly/suicidal/fearless) alongside RC8's real ones - the same crash class as
+    personality-id-unknown, reached through faction-level random officer generation."""
+
+    def test_legacy_ids_in_a_traits_role_block_are_manual(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "world" / "factions" / "zorg.faction").write_text(
+                json.dumps({"id": "zorg", "traits": {"captain": {
+                    "cowardly": 1, "cautious": 1, "steady": 1, "aggressive": 1, "suicidal": 1, "fearless": 1,
+                }}}),
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile())
+        findings = _ids(result, "faction-trait-weight-legacy-personality-id")
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].classification, "MANUAL")
+        self.assertEqual(
+            findings[0].evidence,
+            ["role:captain", "personality:cowardly", "personality:fearless", "personality:suicidal"],
+        )
+
+    def test_only_valid_ids_is_quiet(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "world" / "factions" / "zorg.faction").write_text(
+                json.dumps({"id": "zorg", "traits": {"captain": {
+                    "timid": 1, "cautious": 1, "steady": 1, "aggressive": 1, "reckless": 1,
+                }}}),
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual(_ids(result, "faction-trait-weight-legacy-personality-id"), [])
+
+    def test_a_legacy_id_the_mod_itself_declares_is_not_flagged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "characters").mkdir(parents=True)
+            with (mod / "data" / "characters" / "personalities.csv").open("w", encoding="utf-8", newline="") as handle:
+                csv.writer(handle).writerows([["id"], ["suicidal"]])
+            (mod / "data" / "world" / "factions" / "zorg.faction").write_text(
+                json.dumps({"id": "zorg", "traits": {"captain": {"suicidal": 1, "cautious": 1}}}),
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual(_ids(result, "faction-trait-weight-legacy-personality-id"), [])
+
+
 if __name__ == "__main__":
     unittest.main()

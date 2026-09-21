@@ -1215,12 +1215,36 @@ Progression, each stage feeding the next:
     LazyLib dependency, interface-drift and import fixes) gained the formal `READY_FOR_LIVE_TEST`
     status line it was missing - `revival-report-draft --apply`'s own output was superseded by this
     (moved to `scratch/`, logged) once the real report was found, rather than shipping a generic
-    duplicate alongside real revival history. Zorg18 was left alone: its own
-    `reports/REVIVAL_REPORT.md` has two genuine open owner-decision items (an unresolved "Omega
-    Escort greetings" reference the owner needs to clarify, and a stale-looking bullet about
-    `engine_styles.json` trimming that contradicts the same report's own "Fixed" text above it) -
-    not something to resolve by drafting over it. Full suite: 1077 tests, OK (skipped=1).
-    `docs-index` regenerated.
+    duplicate alongside real revival history. Zorg18's own `reports/REVIVAL_REPORT.md` was left
+    alone rather than drafted over (see item 36: it needed a hand read, not a mechanical draft, and
+    turned up a real bug of its own). Full suite: 1077 tests, OK (skipped=1). `docs-index`
+    regenerated.
+36. **Reading Zorg18's own `REVIVAL_REPORT.md` by hand (item 35 refused to draft over it) surfaced
+    two things worth fixing: a stale bullet, and a real bug its own author had flagged and
+    deferred.** The report's "Open items" list still said `engine_styles.json` trimming needed an
+    owner decision, even though the same report's own text above it already said that trim was
+    "Fixed" - just never updated after. More importantly, its very last bullet ("noted in passing,
+    not part of O5 and not changed... flagged for a future pass") named a real, live, unfixed
+    defect: `zorg.faction`'s `traits.captain` block weights `cowardly`/`suicidal`/`fearless`
+    (0.6-era ids, `LEGACY_PERSONALITY_IDS`) for random officer generation, alongside RC8's real
+    ones. **Done 2026-09-21.** Verified `"traits"` is not dead legacy content before treating it as
+    a bug (`Never infer dead code`): no vanilla faction file populates the key, but RC8's own
+    `Faction`/`SpecStore` classes reference the string `"traits"` in their constant pool (javap),
+    so it is read. An officer drawn with one of these ids gets a null personality and crashes the
+    game on deploy - the same class as `personality-id-unknown` (SK13-1d), just reached through
+    faction-level generation instead of a hard-coded `setPersonality()` call. New scanner check
+    `faction-trait-weight-legacy-personality-id` (MANUAL), generic for any mod's `.faction` `traits`
+    block, not just Zorg's. Fixed Zorg's own file: `cowardly`→`timid` (weight unchanged); `suicidal`
+    and `fearless` both map to `reckless`, so their weights were merged (`1 + 1 = 2`) rather than
+    left as a silently-colliding duplicate JSON key - a fixer would have had to get that merge right
+    too, so this one instance was fixed by hand rather than building a generic rewrite fixer for a
+    single known case. Verified: the file still parses, rescan is unchanged (10 SAFE, 9 REVIEW, 0
+    MANUAL). Zorg18's report gained a formal `READY_WITH_REVIEW_ITEMS` status (its one remaining
+    open item, "Omega Escort greetings," is a genuine non-blocking owner question, not a defect).
+    Tests: `tests/test_zorg_campaign_checks.py` (`FactionTraitWeightLegacyPersonalityIdTests`) -
+    legacy ids flagged, valid ids quiet, and a mod-declared legacy id (via
+    `data/characters/personalities.csv`) correctly not flagged. Full suite: 1080 tests, OK
+    (skipped=1). `docs-index` regenerated.
 
 ## Post-1.0 research and gated automation
 

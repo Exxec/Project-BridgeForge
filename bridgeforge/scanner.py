@@ -1049,6 +1049,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_rules_firebest_populate_options(root, result)
     _scan_hullmod_instance_state(root, result)
     _scan_personality_ids(root, result)
+    _scan_faction_trait_weight_legacy_personality_ids(root, result)
     _scan_bare_market_fleet_source(root, result)
     _scan_legacy_event_report(root, result)
     _scan_non_english_text(root, result)
@@ -3515,6 +3516,57 @@ def _scan_personality_ids(root: Path, result: ScanResult) -> None:
         unknown = sorted({match.group(1) for match in _SOURCE_SET_PERSONALITY.finditer(text) if match.group(1) not in valid})
         if unknown:
             result.add(id="personality-id-unknown", category="scripts", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=explanation, file=_relative(root, source), evidence=[f"personality:{value}" for value in unknown])
+
+
+def _scan_faction_trait_weight_legacy_personality_ids(root: Path, result: ScanResult) -> None:
+    """A `.faction`'s `traits.<role>` block weights personality ids for random officer generation.
+
+    Real case (Zorg18, found 2026-09-21 investigating a report's own "flagged for a future pass"
+    note): `zorg.faction`'s `traits.captain` weights `cowardly`/`suicidal`/`fearless` (0.6-era ids,
+    `LEGACY_PERSONALITY_IDS`) alongside the four real RC8 ones - the exact same crash class as
+    `personality-id-unknown` (SK13-1d: an officer drawn with an unrecognized id gets a null
+    personality, Fatal dialog on deploy), just reached through faction-level random generation
+    instead of a hard-coded `setPersonality()` call. `"traits"` is not dead legacy content: no
+    vanilla faction file uses the key (checked directly), but RC8's own `Faction`/`SpecStore`
+    classes reference the string `"traits"` in their constant pool (javap, 2026-09-21) - it is read,
+    just never populated by any vanilla faction.
+    """
+    faction_dir = root / "data" / "world" / "factions"
+    if not faction_dir.is_dir():
+        return
+    valid = VANILLA_PERSONALITY_IDS | _mod_personality_ids(root)
+    explanation = (
+        "This faction's traits block weights a personality id that Starsector 0.98a does not define "
+        "(only timid, cautious, steady, aggressive and reckless exist, plus any this mod adds in "
+        "data/characters/personalities.csv). An officer randomly generated with this id gets a null "
+        "personality, and the game crashes with a Fatal dialog when that officer's ship deploys - the "
+        "same crash class as personality-id-unknown, reached through faction generation instead of a "
+        "hard-coded setPersonality() call. Rename the key (suggested: "
+        + ", ".join(f"{old}->{new}" for old, new in LEGACY_PERSONALITY_IDS.items()) + ")."
+    )
+    for path in sorted(faction_dir.glob("*.faction")):
+        data = _load_lenient_json_file(path)
+        if not isinstance(data, dict):
+            continue
+        traits = data.get("traits")
+        if not isinstance(traits, dict):
+            continue
+        relative = _relative(root, path)
+        for role_name, block in sorted(traits.items()):
+            if not isinstance(block, dict):
+                continue
+            unknown = sorted(key for key in block if key in LEGACY_PERSONALITY_IDS and key not in valid)
+            if unknown:
+                result.add(
+                    id="faction-trait-weight-legacy-personality-id",
+                    category="factions",
+                    severity="high",
+                    classification="MANUAL",
+                    confidence="DETERMINISTIC",
+                    explanation=explanation,
+                    file=relative,
+                    evidence=[f"role:{role_name}", *(f"personality:{value}" for value in unknown)],
+                )
 
 
 # RC8's FleetFactoryV3 multiplies fleet size by the source market's Stats.COMBAT_FLEET_SIZE_MULT.
