@@ -600,6 +600,45 @@ Progression, each stage feeding the next:
     reference-rig registration (found 2026-09-20 registering Rebal's 0.9a rig). Should treat a
     missing `enabled_mods.json` as PASS when the mods folder is otherwise empty of workspaces, or as
     SKIP with an explanation, rather than FAIL.
+23. **Full corpus recheck before live testing (owner-requested, 2026-09-20).** Every mod that has
+    any revival work recorded - a claimed status (`READY_FOR_LIVE_TEST`, `READY_WITH_REVIEW_ITEMS`,
+    `IN_PROGRESS`) in `In operation/STATUS.md`'s board, or its own `reports/REVIVAL_REPORT.md` - gets
+    re-scanned with everything fixed this session, before any of it reaches an owner live-test
+    session. **Scope excludes:** the 264-mod Ironclads lowest-priority intake queue (scanned and
+    fingerprinted at intake, but "none is revived or in the rig" per `STATUS.md` - nothing to
+    recheck yet, that's item 8's job later) and duplicate mods (the 14 older-version duplicates
+    already excluded at intake, plus any workspace that is a strict duplicate/superseded copy of
+    another mod already on the recheck list - e.g. an older jar variant or a second intake of the
+    same underlying mod under a different name; identify these explicitly as the first step rather
+    than assuming the obvious ones are the only ones).
+
+    **Why now, not earlier:** several of this session's fixes change what a scan/compile-check
+    actually reports, so mods checked before they landed may have stale or wrong numbers:
+    - Item 13 (`650f5903`) - compile-check no longer misattributes jar-embedded-source errors to the
+      wrong mod, and no longer inflates one error into hundreds of spurious detail lines. Any mod
+      whose compile-check was run before this fix, especially one with a dependency that bundles
+      `.java` sources beside its classes, should be re-checked.
+    - BF-SKIN-01 (`da13ce1a`) - `mission-local-variant-hull-missing` (and its sibling weapon check)
+      no longer false-flags content that resolves through a `.skin` chain. Any mod with mission
+      variants and skins should be re-checked for the same false positive Leon-Heavy-Industries had.
+    - The undeclared-library pattern (EZFaction, Maelstrom, Leon-Heavy-Industries this session) - a
+      mod using LazyLib/MagicLib/GraphicsLib without declaring it is not rare; a corpus-wide
+      `compile-check` sweep is the cheapest way to find every remaining instance at once, now that
+      item 13 makes the error counts trustworthy.
+    - Item 12 (cross-mod loose-script shadowing, still open) and item 17 (auditing every "known ids"
+      builder for the same blind spot BF-SKIN-01 exposed) should land before or during this sweep,
+      not after, so the recheck benefits from them rather than needing a second pass.
+
+    **Procedure:** (1) enumerate the recheck list and the excluded-duplicates list explicitly, write
+    both down before scanning anything; (2) run `scan --compile-check` against each mod with the
+    RC8 core and every declared dependency resolvable as a provider; (3) diff each mod's new finding
+    set against its last recorded one - flag any *new* MANUAL as a regression needing explanation,
+    and any finding that *disappeared* only because of a tooling fix as a confirmation, not silently
+    accepted; (4) record results in each mod's own `REVIVAL_REPORT.md` plus one corpus-level roll-up
+    table (mod, before count, after count, new issues, status change) so the owner sees the whole
+    picture in one place; (5) update `STATUS.md`'s board with any status changes. A mod that comes
+    out of this with new MANUAL findings does not proceed to live testing until they're resolved or
+    explicitly accepted by the owner.
 
 ## Post-1.0 research and gated automation
 
