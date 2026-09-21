@@ -43,6 +43,20 @@
       "successor": "Folded into RevenantLib (id revenantlib). Original: $$ Starsector FX CORE $$ by xenoargh, version 9.1a+bf.1, gameVersion 0.98a-RC8.",
       "action": "Declare revenantlib instead of xxx_ss_FX_mod_core. Never enable xxx_ss_FX_mod_core alongside revenantlib: folding keeps its ids and class names unchanged, so both loaded together would double-register them (bridgeforge fix --finding revenantlib-fold-conflict resolves that if it already happened).",
       "evidence": "bridgeforge fold C:\\Users\\exxec\\Documents\\Project BridgeForge\\In operation\\Xenoargh-FX-Core\\working C:\\Users\\exxec\\Documents\\Project BridgeForge\\In operation\\RevenantLib, copied byte-for-byte; see C:\\Users\\exxec\\Documents\\Project BridgeForge\\In operation\\RevenantLib\\reports\\PROVENANCE.md."
+    },
+    {
+      "match": "thruster_fighter_sm",
+      "kind": "removed-vanilla-content",
+      "successor": "A DECORATIVE/SMALL fighter-engine-glow weapon that vanilla itself no longer defines in RC8 (checked directly: absent from starsector-core's own data/weapons/weapon_data.csv and data/weapons/). Vendored from Vacuum into RevenantLib (id revenantlib): RevenantLib's own data/weapons/thruster_fighter_sm.wpn and weapon_data.csv row resolve it (confirmed on disk 2026-09-21).",
+      "action": "Declare revenantlib; no code change needed, the id resolves from RevenantLib's own files.",
+      "evidence": "In operation/RevenantLib/reports/PROVENANCE.md, 'Origin: Vacuum' section (full traced closure: the .wpn spec, the weapon_data.csv row, and its everyFrameEffect script, each with a SHA-256); confirmed absent from the real RC8 install's own weapon_data.csv/data/weapons directly, 2026-09-21."
+    },
+    {
+      "match": "shields_formshield",
+      "kind": "removed-vanilla-content",
+      "successor": "A hull mod (\"(SHL) Form Shield\") that vanilla itself no longer defines in RC8 (checked directly: absent from starsector-core's own data/hullmods/hull_mods.csv). Vendored from Xenoargh-Rebal into RevenantLib (id revenantlib): RevenantLib's own data/hullmods/hull_mods.csv row and xenoargh.shared.hullmods.FormShield script resolve it (confirmed on disk 2026-09-21).",
+      "action": "Declare revenantlib; no code change needed, the id resolves from RevenantLib's own files.",
+      "evidence": "In operation/RevenantLib/reports/PROVENANCE.md, 'Origin: Xenoargh-Rebal' section (full traced closure: the hull_mods.csv row, FormShield.java, and the sprite, each with a SHA-256); confirmed absent from the real RC8 install's own hull_mods.csv directly, 2026-09-21."
     }
   ]
 }

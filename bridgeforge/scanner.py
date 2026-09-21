@@ -5091,14 +5091,35 @@ def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_
     prefixes = Counter(ident.split("_", 1)[0] + "_" for _kind, ident, _files in unresolved if "_" in ident)
     prefix_note = [f"common prefix: {prefix} ({count} ids)" for prefix, count in prefixes.most_common(3) if count > 1]
     declares = bool(result.metadata.get("dependencies") or result.metadata.get("requiredDependencies"))
+    # ROADMAP P14 item 8: "defined nowhere" becomes "removed in a historical vanilla version; use
+    # X" when the id is a known, catalogued removal (dependency_successors.json's own
+    # removed-vanilla-content entries - the same catalogue dependency-substitutes already reads,
+    # so a plain scan gets the same evidence a person running dependency-substitutes separately
+    # would have had to look up by hand otherwise). Local import: substitutes.py imports from
+    # scanner.py, so a module-level import here would be circular.
+    from .substitutes import load_successors
+
+    known_removed = {entry.get("match"): entry for entry in load_successors() if entry.get("kind") == "removed-vanilla-content"}
+
+    def describe(kind: str, ident: str, files: set[str]) -> str:
+        base = f"{kind}:{ident} ({len(files)} file(s))"
+        entry = known_removed.get(ident)
+        if entry is not None:
+            base += f" [removed-vanilla-content, not just missing: {entry.get('successor', '')}]"
+        return base
+
+    any_known = any(ident in known_removed for _kind, ident, _files in unresolved)
+    explanation = "The mod's hulls, skins or variants use hull mods, wings, weapons or hulls that neither the mod nor vanilla defines. They must come from another mod, which then has to be installed (and declared in mod_info.json), or the specs fail to load." + (" The mod declares dependencies that may provide them; confirm." if declares else " The mod declares no dependency.")
+    if any_known:
+        explanation += " At least one of these ids is a known vanilla-content removal with a catalogued successor (see the evidence below, and `dependency_successors.json`) - this is not just 'defined nowhere'."
     result.add(
         id="content-reference-unresolved",
         category="dependencies",
         severity="high",
         classification="REVIEW" if declares else "MANUAL",
         confidence="HIGH",
-        explanation="The mod's hulls, skins or variants use hull mods, wings, weapons or hulls that neither the mod nor vanilla defines. They must come from another mod, which then has to be installed (and declared in mod_info.json), or the specs fail to load." + (" The mod declares dependencies that may provide them; confirm." if declares else " The mod declares no dependency."),
-        evidence=prefix_note + [f"{kind}:{ident} ({len(files)} file(s))" for kind, ident, files in unresolved[:25]] + ([f"... {len(unresolved) - 25} more"] if len(unresolved) > 25 else []),
+        explanation=explanation,
+        evidence=prefix_note + [describe(kind, ident, files) for kind, ident, files in unresolved[:25]] + ([f"... {len(unresolved) - 25} more"] if len(unresolved) > 25 else []),
     )
 
 

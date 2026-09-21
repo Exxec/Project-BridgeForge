@@ -803,6 +803,34 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             self.assertIn("hullmod", ctx)
             self.assertEqual(ctx["hullmod"].get("other_missing_mod"), sorted(["data/variants/a.variant", "data/variants/b.variant"]))
 
+    def test_a_known_removed_vanilla_content_id_gets_its_catalogued_successor_in_the_evidence(self) -> None:
+        """ROADMAP P14 item 8: "defined nowhere" becomes "removed in a historical vanilla version;
+        use X" when the id is a known, catalogued removal (`dependency_successors.json`'s own
+        `removed-vanilla-content` entries) - real cases: `thruster_fighter_sm`/`shields_formshield`,
+        both vanilla-content ids RC8 itself no longer defines, vendored into RevenantLib.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core = root.parent / "core2"
+            for base in (root, core):
+                (base / "data" / "hullmods").mkdir(parents=True, exist_ok=True)
+                (base / "data" / "hulls").mkdir(parents=True, exist_ok=True)
+                (base / "data" / "weapons").mkdir(parents=True, exist_ok=True)
+                (base / "data" / "hullmods" / "hull_mods.csv").write_text("name,id\nDummy,dummy_hullmod\n", encoding="utf-8")
+                (base / "data" / "hulls" / "wing_data.csv").write_text("name,id\nDummy,dummy_wing\n", encoding="utf-8")
+                (base / "data" / "weapons" / "weapon_data.csv").write_text("name,id\nDummy,dummy_weapon\n", encoding="utf-8")
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            (root / "data" / "hulls" / "x.ship").write_text(
+                json.dumps({"hullId": "x", "hullSize": "FIGHTER", "builtInWeapons": {"WS1": "thruster_fighter_sm"}}),
+                encoding="utf-8",
+            )
+            result = scan_mod(root, vanilla_core=core)
+            finding = next(f for f in result.findings if f.id == "content-reference-unresolved")
+            self.assertIn("not just 'defined nowhere'", finding.explanation)
+            matching_evidence = [item for item in finding.evidence if "thruster_fighter_sm" in item]
+            self.assertEqual(len(matching_evidence), 1)
+            self.assertIn("removed-vanilla-content", matching_evidence[0])
+            self.assertIn("RevenantLib", matching_evidence[0])
 
     def test_scanner_reports_wrapper_directory_layout_without_retargeting_input(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

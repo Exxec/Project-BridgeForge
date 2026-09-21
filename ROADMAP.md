@@ -561,6 +561,22 @@ Progression, each stage feeding the next:
 7. **Jar class rebuild for missing interface methods.** For classes compiled into a jar (AI-War), patch just those classes from source after a class-by-class diff, following the Arkgneisis precedent.
    **Done 2026-09-14/15 (task A9).** `rebuild-jar <mod> --sources DIR --jar JAR` (`bridgeforge/rebuild_jar.py`, sharing `java_toolchain` with the compile check below): rebuilds from source, packages a jar keeping the original manifest/resources, and diffs it against the original class-by-class and member-by-member, normalizing known compiler-only differences (class-file version bump, `synchronized`-only change, Lombok lock fields, synthetic `access$`/`lambda$` members). PASS/REVIEW/FAIL, with `--install` moving the previous jar to `scratch/moved-<date>/` and installing only on PASS.
 8. **Removed-vanilla-content catalogue.** Record ids and classes vanilla dropped between versions (the `thruster_fighter_sm` / `shields_formshield` kind), with evidence and successors, so "defined nowhere" becomes "removed in 0.9x; use X".
+    **Done 2026-09-21.** `dependency_successors.json` already had the right shape (`match`/`kind`/
+    `successor`/`action`/`evidence`) and was already consulted by `dependency-substitutes`, but a
+    plain `scan` never read it - `content-reference-unresolved`'s own finding just said "defined
+    nowhere" regardless. Added two real, directly-verified `removed-vanilla-content` entries
+    (`thruster_fighter_sm`, `shields_formshield`: confirmed absent from the real RC8 install's own
+    `weapon_data.csv`/`hull_mods.csv` directly, confirmed present and resolvable in RevenantLib's
+    own files directly - not taken on faith from `PROVENANCE.md`'s own claims, both independently
+    re-checked). `_scan_unresolved_content_references` now consults this same catalogue (local
+    import to avoid a `scanner`<->`substitutes` cycle) and enriches the matched id's evidence line
+    with the successor text plus a note in the finding's own explanation - "defined nowhere"
+    genuinely becomes "removed-vanilla-content, not just missing: <successor>", read directly off
+    a plain scan, no separate `dependency-substitutes` run needed. Neither real id currently
+    triggers this in the live corpus (both `Xenoargh-ExplorerSociety` and other real consumers
+    already vendored `thruster_fighter_sm` locally or declare `revenantlib`) - verified with a
+    hermetic synthetic case instead, using the real catalogue text. Tests: `tests/test_scanner.py`
+    (`test_a_known_removed_vanilla_content_id_gets_its_catalogued_successor_in_the_evidence`).
 9. **Licence-aware revival of dependencies.** Before REVIVE_DEPENDENCY, check `release_policy.json` so a revived library is marked local-only when its licence doesn't allow redistribution.
     **Done 2026-09-21.** New `substitutes._licence_note`/`strategy(..., policy_path=...)`: any
     provider `strategy()` recommends reviving (the `revive`/`heavy` lists) gets its
