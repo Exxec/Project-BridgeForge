@@ -755,6 +755,19 @@ Progression, each stage feeding the next:
     grep every mod's `scratch/MOVES.log` for a "shadow"/"jar" rationale, and for each one, run item
     26's `verify-shadow` against the actual jar set that reasoning named, before trusting the move
     was correct.
+    **Done 2026-09-21 (standalone, ahead of item 23).** `grep -riE "shadow|jar"` across all 299
+    `scratch/MOVES.log` files currently in `In operation/`. Filtered out mod-name false positives
+    (e.g. "Shadowyards") and ordinary jar-supersession/rebuild entries (AI-War, Omega-Trauma,
+    RevenantLib, Xenoargh-AI-Overhaul, Xenoargh-FX-Core/Example, Zorg18 - version swaps, not
+    shadowing claims). Two real "moved because shadowed" decisions found:
+    Maelstrom-Interstellar-Imperium-Unofficial-Expansion's `II_TitanBombardment.java`/
+    `II_TitanPlugin.java` (task A14/E8) and Xenoargh-Rebal's 50-file move (E12, already caught and
+    course-B'd - not re-litigated here). Re-verified the Imperium expansion's claim independently
+    with item 26's `verify-shadow` against the base mod's real `II.jar`
+    (`...\Interstellar Imperium-2.6.9\jars\II.jar`): both report SHADOWED, confirming the original
+    claim (which was itself backed by real `javap`/`compile-check` evidence, not a path guess - the
+    correct pattern this whole item exists to enforce). No further wrong moves found. Item 23's
+    procedure should still re-run this grep as new moves accumulate.
 28. **`_scan_variant_validity` doesn't resolve a `.skin`'s own slot-type overrides before checking
     weapon/slot fit - a scanner gap distinct from BF-SKIN-01.** Found 2026-09-20 during E11 stage 5
     on Rebal: `brawler_tritachyon` and `buffalo_pirates` both showed `variant-weapon-slot-mismatch`,
