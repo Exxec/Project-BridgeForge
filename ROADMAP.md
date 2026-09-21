@@ -548,6 +548,19 @@ Progression, each stage feeding the next:
     field and flag REVIEW/MANUAL (severity depends on whether fields are missing vs. actively
     different) naming exactly which fields would be lost mod-wide. A mod's own file that only adds
     new ids (like `ZORG_TECH` alongside the trimmed file) triggers nothing.
+    **Done 2026-09-21.** New `_scan_preset_whole_entry_replace`, covering the four files with
+    confirmed uniform top-level-id-to-dict structure (`engine_styles.json`, `hull_styles.json`,
+    `custom_entities.json`, `planets.json`). `sounds.json` is deliberately excluded: its top-level
+    keys are categories, not entry ids, its per-category values are often lists, and this check
+    does not guess at unverified merge granularity - a documented gap, not an oversight.
+    `preset-whole-entry-replace-loses-vanilla-fields` (MANUAL, missing fields) and
+    `preset-whole-entry-replace-changes-vanilla-fields` (REVIEW, only differing values) are two
+    separate literal finding ids (not a single id chosen by a ternary), since
+    `tests/test_bug_class_registry.py` greps scanner.py for a literal `id="..."` per documented
+    check. Verified the check produces no false positive on Zorg18's current, already-hand-fixed
+    working copy (`scan --vanilla-core` finds 0 preset-whole-entry findings there now). Recorded as
+    `docs/BUG_CLASSES.md` BF-PRESET-01. Tests: `tests/test_release_hygiene_checks.py`
+    (`PresetWholeEntryReplaceTests`).
 16. **New fixer: `undeclared-library-dependency` (declare the missing dependency automatically).**
     The scanner already detects a mod using a known library's package (LazyLib, MagicLib,
     GraphicsLib) without declaring it (`source-library-dependency-undeclared` /

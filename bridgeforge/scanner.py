@@ -5455,6 +5455,61 @@ def _scan_asset_reference_missing(root: Path, result: ScanResult, vanilla_core: 
                 _report_asset_reference_missing(result, root, vanilla_core, relative, "sounds.json:file", candidate)
 
 
+# ROADMAP P14 item 15: engine_styles.json, hull_styles.json, custom_entities.json and planets.json
+# are merged by whole-entry replace, not a per-field merge (Starsector wiki: "any mod added
+# entries with keys ... the same as core game entries will see the mod entries replace the core
+# game entries"). Found on Zorg18 (2026-09-20): engine_styles.json redefined vanilla's LOW_TECH/
+# MIDLINE/HIGH_TECH as an older, incomplete copy - missing a contrailCampaignColor key vanilla's
+# current file has - silently stripping that colour from every LOW_TECH/MIDLINE/HIGH_TECH-styled
+# ship in the player's entire game (vanilla and every other enabled mod) while enabled.
+# sounds.json is deliberately excluded here: its top-level keys are categories (music/etc.), not
+# entry ids, and its per-category values are often lists rather than dicts - the id-keyed,
+# dict-valued whole-entry-replace semantics confirmed for the other four files have not been
+# verified for sounds.json's nested structure, and this check does not guess.
+PRESET_WHOLE_ENTRY_REPLACE_FILES = (
+    "data/config/engine_styles.json",
+    "data/config/hull_styles.json",
+    "data/config/custom_entities.json",
+    "data/config/planets.json",
+)
+
+
+def _scan_preset_whole_entry_replace(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """A mod redefining a vanilla id in one of these files replaces it whole-game, not per-field."""
+    if vanilla_core is None:
+        return
+    for relative in PRESET_WHOLE_ENTRY_REPLACE_FILES:
+        mod_data = _load_lenient_json_file(root / relative)
+        if not isinstance(mod_data, dict) or not mod_data:
+            continue
+        vanilla_data = _load_lenient_json_file(vanilla_core / relative)
+        if not isinstance(vanilla_data, dict) or not vanilla_data:
+            continue
+        for entry_id, mod_entry in sorted(mod_data.items()):
+            if not isinstance(entry_id, str) or not isinstance(mod_entry, dict):
+                continue
+            vanilla_entry = vanilla_data.get(entry_id)
+            if not isinstance(vanilla_entry, dict) or mod_entry == vanilla_entry:
+                continue
+            missing = sorted(set(vanilla_entry) - set(mod_entry))
+            changed = sorted(key for key in set(vanilla_entry) & set(mod_entry) if vanilla_entry[key] != mod_entry[key])
+            if not missing and not changed:
+                continue
+            evidence = [f"id:{entry_id}"] + [f"missing:{key}" for key in missing] + [f"changed:{key}" for key in changed]
+            explanation = (
+                f"'{entry_id}' also exists in vanilla's own {relative}. The game merges this file by whole-entry "
+                f"replace, not a per-field merge (Starsector wiki), so this mod's copy silently overrides vanilla's "
+                "for every ship/entity using this id, in vanilla AND every other enabled mod, for as long as this "
+                "mod is enabled - not just this mod's own content."
+                + (f" Field(s) present in vanilla's entry but missing from this mod's copy are lost entirely: {', '.join(missing)}." if missing else "")
+                + (f" Field(s) present in both with a different value: {', '.join(changed)}." if changed else "")
+            )
+            if missing:
+                result.add(id="preset-whole-entry-replace-loses-vanilla-fields", category="assets", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=explanation, file=relative, evidence=evidence)
+            else:
+                result.add(id="preset-whole-entry-replace-changes-vanilla-fields", category="assets", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation=explanation, file=relative, evidence=evidence)
+
+
 def _drop_vanilla_registered_weapon_specs(result: ScanResult, vanilla_core: Path | None) -> None:
     """A local .wpn whose id vanilla's weapon_data.csv registers is an override, not unregistered.
 
@@ -5589,6 +5644,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_carrier_bays_proposal(root, result, vanilla_root)
     _scan_description_missing(root, result, vanilla_root)
     _scan_asset_reference_missing(root, result, vanilla_root)
+    _scan_preset_whole_entry_replace(root, result, vanilla_root)
     if compile_check:
         _scan_compile_check(root, result, vanilla_root)
     return result

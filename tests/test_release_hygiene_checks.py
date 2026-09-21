@@ -159,5 +159,119 @@ class DesignTypeColorTests(unittest.TestCase):
         self.assertEqual(_ids(without_vanilla, "design-type-color-unused")[0].evidence, ["Common", "黑岩"])
 
 
+class PresetWholeEntryReplaceTests(unittest.TestCase):
+    """ROADMAP P14 item 15: engine_styles.json/hull_styles.json/custom_entities.json/planets.json
+    are merged by whole-entry replace, not a per-field merge. Found on Zorg18 (2026-09-20):
+    engine_styles.json redefined vanilla's LOW_TECH as an older, incomplete copy missing a
+    contrailCampaignColor key vanilla's current file has, silently stripping that colour from
+    every LOW_TECH-styled ship in the player's entire game while the mod is enabled.
+    """
+
+    def _vanilla_engine_styles(self, core: Path) -> None:
+        (core / "data" / "config").mkdir(parents=True, exist_ok=True)
+        (core / "data" / "config" / "engine_styles.json").write_text(
+            json.dumps({
+                "LOW_TECH": {"engineColor": [255, 125, 45, 200], "contrailCampaignColor": [90, 90, 90, 100], "type": "SMOKE"},
+                "MIDLINE": {"engineColor": [200, 200, 255, 255], "type": "GLOW"},
+            }),
+            encoding="utf-8",
+        )
+
+    def test_missing_field_is_manual_and_names_the_lost_field(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = _mod(root)
+            core = root / "core"
+            self._vanilla_engine_styles(core)
+            (mod / "data" / "config").mkdir(parents=True)
+            (mod / "data" / "config" / "engine_styles.json").write_text(
+                json.dumps({"LOW_TECH": {"engineColor": [255, 125, 45, 200], "type": "SMOKE"}}),
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile(), core)
+        findings = _ids(result, "preset-whole-entry-replace-loses-vanilla-fields")
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].classification, "MANUAL")
+        self.assertIn("id:LOW_TECH", findings[0].evidence)
+        self.assertIn("missing:contrailCampaignColor", findings[0].evidence)
+        self.assertEqual(_ids(result, "preset-whole-entry-replace-changes-vanilla-fields"), [])
+
+    def test_changed_field_with_no_missing_field_is_review_not_manual(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = _mod(root)
+            core = root / "core"
+            self._vanilla_engine_styles(core)
+            (mod / "data" / "config").mkdir(parents=True)
+            (mod / "data" / "config" / "engine_styles.json").write_text(
+                json.dumps({"LOW_TECH": {"engineColor": [1, 1, 1, 255], "contrailCampaignColor": [90, 90, 90, 100], "type": "SMOKE"}}),
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile(), core)
+        findings = _ids(result, "preset-whole-entry-replace-changes-vanilla-fields")
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].classification, "REVIEW")
+        self.assertIn("changed:engineColor", findings[0].evidence)
+        self.assertEqual(_ids(result, "preset-whole-entry-replace-loses-vanilla-fields"), [])
+
+    def test_new_id_alongside_vanilla_triggers_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = _mod(root)
+            core = root / "core"
+            self._vanilla_engine_styles(core)
+            (mod / "data" / "config").mkdir(parents=True)
+            (mod / "data" / "config" / "engine_styles.json").write_text(
+                json.dumps({"ZORG_TECH": {"engineColor": [9, 9, 9, 255], "type": "GLOW"}}),
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile(), core)
+        self.assertEqual(_ids(result, "preset-whole-entry-replace-loses-vanilla-fields"), [])
+        self.assertEqual(_ids(result, "preset-whole-entry-replace-changes-vanilla-fields"), [])
+
+    def test_identical_copy_of_vanilla_entry_triggers_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = _mod(root)
+            core = root / "core"
+            self._vanilla_engine_styles(core)
+            (mod / "data" / "config").mkdir(parents=True)
+            (mod / "data" / "config" / "engine_styles.json").write_text(
+                json.dumps({"LOW_TECH": {"engineColor": [255, 125, 45, 200], "contrailCampaignColor": [90, 90, 90, 100], "type": "SMOKE"}}),
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile(), core)
+        self.assertEqual(_ids(result, "preset-whole-entry-replace-loses-vanilla-fields"), [])
+        self.assertEqual(_ids(result, "preset-whole-entry-replace-changes-vanilla-fields"), [])
+
+    def test_no_vanilla_core_means_no_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = _mod(root)
+            (mod / "data" / "config").mkdir(parents=True)
+            (mod / "data" / "config" / "engine_styles.json").write_text(
+                json.dumps({"LOW_TECH": {"engineColor": [255, 125, 45, 200], "type": "SMOKE"}}),
+                encoding="utf-8",
+            )
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual(_ids(result, "preset-whole-entry-replace-loses-vanilla-fields"), [])
+        self.assertEqual(_ids(result, "preset-whole-entry-replace-changes-vanilla-fields"), [])
+
+    def test_sounds_json_is_deliberately_not_checked(self) -> None:
+        # sounds.json's top-level keys are categories, not entry ids, and category values are
+        # often lists - unverified merge granularity, so this check does not guess at it.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = _mod(root)
+            core = root / "core"
+            (core / "data" / "config").mkdir(parents=True)
+            (core / "data" / "config" / "sounds.json").write_text(json.dumps({"music": {"music_none": []}}), encoding="utf-8")
+            (mod / "data" / "config").mkdir(parents=True)
+            (mod / "data" / "config" / "sounds.json").write_text(json.dumps({"music": {"music_none": ["x"]}}), encoding="utf-8")
+            result = scan_mod(mod, TargetProfile(), core)
+        self.assertEqual(_ids(result, "preset-whole-entry-replace-loses-vanilla-fields"), [])
+        self.assertEqual(_ids(result, "preset-whole-entry-replace-changes-vanilla-fields"), [])
+
+
 if __name__ == "__main__":
     unittest.main()
