@@ -1470,6 +1470,40 @@ LOOSE_SCRIPT_JANINO_PATTERNS = (
 )
 
 
+def mod_jar_class_names(root: Path) -> set[str]:
+    """Every fully-qualified class name compiled into one of this mod's own jars.
+
+    Factored out of `_scan_loose_script_janino_risk` (ROADMAP P14 items 14/25/26) so "is this loose
+    script actually jar-shadowed" has exactly one real implementation - real jar-class-file parsing
+    via `_iter_jar_class_files`/`_parse_class_file` - reachable outside a full scan. E12 found a
+    `Path.is_file()` path-existence check trusted as proof of jar-shadowing at least once (Rebal's
+    50 `.java` files, none of which were actually jar-shadowed); this is the function any future
+    "is this shadowed" claim should call instead of reimplementing the check.
+    """
+    jar_classes: set[str] = set()
+    for _jar, _member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is not None and info.this_class:
+            jar_classes.add(info.this_class.replace("/", "."))
+    return jar_classes
+
+
+def loose_script_jar_shadowed_class(root: Path, source: Path) -> str | None:
+    """The fully-qualified class name `source` shares with one of this mod's own jars, or None.
+
+    `source` may be absolute or relative to `root`. Only the mod's OWN jars are checked (matching
+    `loose-script-shadowed-by-jar`'s existing scope) - a dependency's jar shadowing a mod's own
+    override is the separate, still-open item 12/25 gap, not this one.
+    """
+    try:
+        relative = source.relative_to(root) if source.is_absolute() else source
+    except ValueError:
+        return None
+    class_name = ".".join(relative.with_suffix("").parts)
+    jar_classes = mod_jar_class_names(root)
+    return class_name if class_name in jar_classes else None
+
+
 def _scan_loose_script_janino_risk(root: Path, result: ScanResult) -> None:
     """Loose .java under data/ is compiled at runtime by Janino, which ignores generics (live bug PRB-MISSION-02).
 
@@ -1481,11 +1515,7 @@ def _scan_loose_script_janino_risk(root: Path, result: ScanResult) -> None:
     and logs "already loaded (perhaps from jar file) ... skipping compilation". Mirfak Parcel Service
     ships both, so those are reported once as shadowed instead of as Janino risks.
     """
-    jar_classes = set()
-    for _jar, _member, data in _iter_jar_class_files(root):
-        info = _parse_class_file(data)
-        if info is not None and info.this_class:
-            jar_classes.add(info.this_class.replace("/", "."))
+    jar_classes = mod_jar_class_names(root)
     shadowed: list[str] = []
     for source in sorted((root / "data").rglob("*.java")) if (root / "data").is_dir() else []:
         if ".".join(source.relative_to(root).with_suffix("").parts) in jar_classes:

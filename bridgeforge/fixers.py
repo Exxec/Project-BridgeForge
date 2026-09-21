@@ -1395,11 +1395,46 @@ def compute_fix(mod_dir: Path, finding_id: str, options: dict | None = None) -> 
     root = Path(mod_dir).expanduser().resolve()
     if not root.is_dir():
         raise FixerError(f"{root} is not an existing directory.")
+    options = options or {}
     handler = _FIXER_FUNCS[finding_id]
-    changes = [change for change in handler(root, options or {}) if change.changed]
+    changes = [change for change in handler(root, options) if change.changed]
     if not changes:
         raise FixerError(f"No change was computed for finding '{finding_id}'.")
+    if not options.get("allow_shadowed_edit"):
+        _refuse_shadowed_edits(root, changes)
     return FixPlan(finding_id=finding_id, mod_root=root, changes=changes)
+
+
+def _refuse_shadowed_edits(root: Path, changes: list[FileChange]) -> None:
+    """Refuse a plan that edits a loose script one of this mod's own jars already shadows (ROADMAP
+    P14 item 14). `loose-script-shadowed-by-jar` already says editing such a file has no effect - the
+    game loads the jar class and never compiles the loose one - but nothing previously stopped a
+    fixer writing the edit anyway. Found 2026-09-20: a task converted six `setPersonality(...)` calls
+    in Thule-Legacy's `MissionDefinition.java` with a full evidence trail, and it changed nothing
+    in-game, because `ThuleLegacy.jar` shipped that exact class. Pass `allow_shadowed_edit: True` in
+    `compute_fix`'s `options` only when the jar is also being rebuilt from the patched source in the
+    same pass (as this exact case was, once caught) - otherwise the edit is dead on arrival.
+    """
+    from .scanner import loose_script_jar_shadowed_class
+
+    for change in changes:
+        if change.path.suffix.lower() != ".java":
+            continue
+        try:
+            relative = change.path.relative_to(root)
+        except ValueError:
+            continue
+        if "data" not in relative.parts:
+            continue
+        shadowing_class = loose_script_jar_shadowed_class(root, change.path)
+        if shadowing_class is not None:
+            raise FixerError(
+                f"{change.path} is shadowed by a class already compiled into one of this mod's own jars "
+                f"({shadowing_class}): the game loads the jar's class and never compiles this loose script, "
+                "so editing it has no effect. Rebuild the jar from the patched source (or strip the class "
+                "so the loose script compiles), or pass allow_shadowed_edit=True if that is already planned "
+                "as part of this same fix."
+            )
 
 
 def unified_diff_for_change(change: FileChange) -> str:

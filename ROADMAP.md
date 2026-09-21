@@ -523,6 +523,15 @@ Progression, each stage feeding the next:
     jar from patched source, or strip the class so the loose script compiles. Pairs with item 12
     (the same detection across mods) and the `loose-script-jar-precedence` rule. Needs a regression
     test with a mod whose jar shadows a file a fixer would otherwise edit.
+    **Done 2026-09-21.** `compute_fix` now calls a new `_refuse_shadowed_edits` before returning a
+    plan, for every `.java` change under `data/`. The real jar-parsing logic
+    (`_iter_jar_class_files`/`_parse_class_file`) was factored out of the scanner's own
+    `loose-script-shadowed-by-jar` check into two reusable functions -
+    `scanner.mod_jar_class_names`/`scanner.loose_script_jar_shadowed_class` - so this is the same
+    detection, not a second implementation of it (also lays groundwork for item 26's `verify-shadow`
+    command). An explicit `allow_shadowed_edit` option (CLI: `fix --allow-shadowed-edit`) overrides
+    the refusal for the case this session actually hit - rebuilding the jar from patched source in
+    the same pass. Tests: `tests/test_fixers.py` (`RefuseShadowedEditTests`).
 15. **New check: a mod's preset entry can silently downgrade vanilla for the whole game, mod-wide.**
     `engine_styles.json`, `hull_styles.json`, `custom_entities.json`, `sounds.json` and
     `planets.json` are merged by **whole-entry replace, not a per-field merge** (Starsector's own

@@ -706,6 +706,7 @@ apply a SAFE, mechanical fixer for one supported finding id (dry-run diff by def
 | `--from-vanilla-id` FROM_VANILLA_ID | - | required for procgen-planet-row-missing/procgen-star-row-missing |
 | `--faction-file` FACTION_FILE | - | required for faction-known-lists-missing |
 | `--hull` ID=N | repeatable | repeatable; required for carrier-bays-proposal, e.g. --hull my_carrier=4 (0-6, vanilla's own maximum) |
+| `--allow-shadowed-edit` | - | override the refusal to edit a loose script one of this mod's own jars already shadows (the edit has no effect unless the jar is also being rebuilt from the patched source) |
 
 ## prepare-test
 

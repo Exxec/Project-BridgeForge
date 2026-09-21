@@ -9,6 +9,7 @@ from unittest import mock
 from bridgeforge.cli import main
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix, unified_diff_for_change
 from bridgeforge.scanner import scan_mod
+from tests.save_fixtures import build_class_file, write_jar
 
 
 def _write(path: Path, text: str) -> None:
@@ -1091,6 +1092,60 @@ class RevenantlibFoldConflictFixerTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
             self.assertEqual(mod_info["dependencies"], [{"id": "revenantlib", "name": "RevenantLib"}])
+
+
+class RefuseShadowedEditTests(unittest.TestCase):
+    """ROADMAP P14 item 14: a fixer must refuse to edit a loose script one of this mod's own jars
+    already shadows - editing it has no effect (the game loads the jar's class), confirmed live on
+    Thule-Legacy 2026-09-20: a task converted six setPersonality() calls with a full evidence trail
+    and changed nothing in-game, because ThuleLegacy.jar shipped that exact class.
+    """
+
+    MOD = "package data.hullmods;\npublic class Tow implements HullModEffect {\n    public void init() {}\n}\n"
+
+    def test_refuses_when_the_mods_own_jar_shadows_the_edited_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+            _write(root / "data" / "hullmods" / "Tow.java", self.MOD)
+            write_jar(root / "jars" / "fixture.jar", {"data/hullmods/Tow.class": build_class_file("data/hullmods/Tow")})
+            self.assertEqual(len(_findings(scan_mod(root), "target-interface-method-missing")), 1)
+            with self.assertRaises(FixerError) as ctx:
+                compute_fix(root, "target-interface-method-missing")
+            self.assertIn("shadowed", str(ctx.exception))
+            self.assertIn("data.hullmods.Tow", str(ctx.exception))
+            # Refused before any write - the loose source is untouched.
+            self.assertEqual((root / "data" / "hullmods" / "Tow.java").read_text(encoding="utf-8"), self.MOD)
+
+    def test_allow_shadowed_edit_overrides_the_refusal(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+            _write(root / "data" / "hullmods" / "Tow.java", self.MOD)
+            write_jar(root / "jars" / "fixture.jar", {"data/hullmods/Tow.class": build_class_file("data/hullmods/Tow")})
+            plan = compute_fix(root, "target-interface-method-missing", {"allow_shadowed_edit": True})
+            apply_fix(plan)
+            self.assertIn("showInRefitScreenModPickerFor", (root / "data" / "hullmods" / "Tow.java").read_text(encoding="utf-8"))
+
+    def test_no_jar_present_is_not_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+            _write(root / "data" / "hullmods" / "Tow.java", self.MOD)
+            plan = compute_fix(root, "target-interface-method-missing")
+            apply_fix(plan)
+            self.assertIn("showInRefitScreenModPickerFor", (root / "data" / "hullmods" / "Tow.java").read_text(encoding="utf-8"))
+
+    def test_cli_surfaces_the_refusal_and_the_override_flag_clears_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+            _write(root / "data" / "hullmods" / "Tow.java", self.MOD)
+            write_jar(root / "jars" / "fixture.jar", {"data/hullmods/Tow.class": build_class_file("data/hullmods/Tow")})
+            exit_code = main(["fix", str(root), "--finding", "target-interface-method-missing", "--apply"])
+            self.assertEqual(exit_code, 2)
+            exit_code = main(["fix", str(root), "--finding", "target-interface-method-missing", "--apply", "--allow-shadowed-edit"])
+            self.assertEqual(exit_code, 0)
 
 
 class UndeclaredLibraryDependencyFixerTests(unittest.TestCase):
