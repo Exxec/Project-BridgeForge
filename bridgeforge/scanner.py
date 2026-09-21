@@ -1321,6 +1321,11 @@ def _scan_source_build_dependencies(root: Path, result: ScanResult, import_locat
     )
     if foreign:
         declared = bool(result.metadata.get("dependencies") or result.metadata.get("requiredDependencies"))
+        # The finding's own evidence is capped at 20 (a human-readable summary); the full list
+        # survives here for the same reason unresolved_content_references does (ROADMAP P14 item
+        # 4/substitutes.required_from_scan) - a mod with more than 20 unresolved imports would
+        # otherwise silently understate what dependency-substitutes/the strip planner see as needed.
+        result.migration_context["unresolved_foreign_class_imports"] = foreign
         result.add(
             id="source-import-unresolved",
             category="dependencies",
@@ -5097,6 +5102,45 @@ def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_
     )
 
 
+def _resolve_variant_hull_and_slots(raw_hull_id: str, ship_files: dict[str, dict], skins: dict[str, str], skin_slot_changes: dict[str, dict[str, dict]]) -> tuple[str | None, dict | None, dict[str, dict] | None]:
+    """(resolved_hull_id, ship_json, slot_by_id) for a variant's raw hullId, with a `.skin`'s own
+    `weaponSlotChanges` applied over the base `.ship`'s `weaponSlots` (ROADMAP P14 item 28).
+
+    Extracted from `_scan_variant_validity` (ROADMAP P14 item 4's strip/vendor planner needs the
+    exact same slot-by-id resolution to propose a vanilla substitute "of the same slot type and
+    size" - reusing this, not a second implementation). Returns `(None, None, None)` when the hull
+    can't be resolved to a real `.ship` file; the caller decides what that means for its own case.
+    """
+    raw_hull_id = raw_hull_id.strip()
+    if not raw_hull_id:
+        return None, None, None
+    resolved_hull_id = _resolve_hull_id(raw_hull_id, skins)
+    ship_json = ship_files.get(resolved_hull_id)
+    if ship_json is None:
+        return None, None, None
+    slot_by_id: dict[str, dict] = {}
+    for slot in ship_json.get("weaponSlots") or []:
+        if isinstance(slot, dict) and isinstance(slot.get("id"), str):
+            slot_by_id[slot["id"]] = slot
+    # Apply each skin's own weaponSlotChanges along the same baseHullId chain _resolve_hull_id just
+    # walked, so a skin can retype/resize a slot the base .ship never touched. Collected
+    # outermost-first, then applied in reverse (most-specific-skin-last) so a skin closer to
+    # raw_hull_id wins over one further down the chain on the rare case both touch the same slot.
+    chain_id = raw_hull_id
+    seen_chain: set[str] = set()
+    chain_skin_ids: list[str] = []
+    while chain_id in skin_slot_changes and chain_id not in seen_chain:
+        seen_chain.add(chain_id)
+        chain_skin_ids.append(chain_id)
+        chain_id = skins.get(chain_id, chain_id)
+    for skin_id in reversed(chain_skin_ids):
+        for slot_id, overrides in skin_slot_changes[skin_id].items():
+            base_slot = slot_by_id.get(slot_id)
+            if base_slot is not None:
+                slot_by_id[slot_id] = {**base_slot, **overrides}
+    return resolved_hull_id, ship_json, slot_by_id
+
+
 def _scan_variant_validity(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
     """Cross-check .variant files against their resolved hull's bays, OP budget, and slot rules.
 
@@ -5140,9 +5184,8 @@ def _scan_variant_validity(root: Path, result: ScanResult, vanilla_core: Path | 
         raw_hull_id = data.get("hullId")
         if not isinstance(raw_hull_id, str) or not raw_hull_id.strip():
             continue
-        resolved_hull_id = _resolve_hull_id(raw_hull_id.strip(), skins)
-        ship_json = ship_files.get(resolved_hull_id)
-        row = ship_data.get(resolved_hull_id)
+        resolved_hull_id, ship_json, slot_by_id = _resolve_variant_hull_and_slots(raw_hull_id, ship_files, skins, skin_slot_changes)
+        row = ship_data.get(resolved_hull_id) if resolved_hull_id else None
         if ship_json is None or row is None:
             continue  # Unresolvable hull: UNKNOWN, handled elsewhere; no finding fabricated here.
         if str(ship_json.get("hullSize") or "").strip().upper() == "FIGHTER":
@@ -5181,28 +5224,6 @@ def _scan_variant_validity(root: Path, result: ScanResult, vanilla_core: Path | 
 
         built_in_weapon_slots = ship_json.get("builtInWeapons")
         built_in_weapon_slot_ids = set(built_in_weapon_slots.keys()) if isinstance(built_in_weapon_slots, dict) else set()
-        slot_by_id: dict[str, dict] = {}
-        for slot in ship_json.get("weaponSlots") or []:
-            if isinstance(slot, dict) and isinstance(slot.get("id"), str):
-                slot_by_id[slot["id"]] = slot
-
-        # Apply each skin's own weaponSlotChanges along the same baseHullId chain _resolve_hull_id
-        # just walked, so a skin can retype/resize a slot the base .ship never touched (P14 item 28)
-        # before the weapon-fit check below reads slot_by_id. Collected outermost-first, then applied
-        # in reverse (most-specific-skin-last) so a skin closer to raw_hull_id wins over one further
-        # down the chain on the rare case both touch the same slot field.
-        chain_id = raw_hull_id.strip()
-        seen_chain: set[str] = set()
-        chain_skin_ids: list[str] = []
-        while chain_id in skin_slot_changes and chain_id not in seen_chain:
-            seen_chain.add(chain_id)
-            chain_skin_ids.append(chain_id)
-            chain_id = skins.get(chain_id, chain_id)
-        for skin_id in reversed(chain_skin_ids):
-            for slot_id, overrides in skin_slot_changes[skin_id].items():
-                base_slot = slot_by_id.get(slot_id)
-                if base_slot is not None:
-                    slot_by_id[slot_id] = {**base_slot, **overrides}
 
         weapon_op_total = 0.0
         weapon_groups = data.get("weaponGroups") if isinstance(data.get("weaponGroups"), list) else []

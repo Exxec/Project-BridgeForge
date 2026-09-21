@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.substitutes import Provider, dependency_substitutes, provider_for, rank, strategy
+from bridgeforge.substitutes import Provider, dependency_substitutes, provider_for, rank, required_from_scan, strategy
 
 
 def _write(path: Path, text: str) -> None:
@@ -137,6 +137,49 @@ class SubstituteTests(unittest.TestCase):
                 archive.writestr("data/scripts/fx_Particle.class", b"\xca\xfe\xba\xbe")
             provider = provider_for(mod)
         self.assertIn("data.scripts.fx_Particle", provider.provides["class"])
+
+
+class RequiredFromScanTruncationTests(unittest.TestCase):
+    """`content-reference-unresolved`/`source-import-unresolved`'s own evidence lines are capped
+    (25/20 ids) for human readability, which used to be the only thing `required_from_scan` read -
+    a mod with more ids than that would silently understate what dependency-substitutes/the strip
+    planner see as needed. Fixed by preferring the full, untruncated data both checks now also
+    store in `migration_context`.
+    """
+
+    def test_more_than_25_unresolved_content_ids_are_all_returned(self) -> None:
+        from bridgeforge.scanner import scan_mod
+        from bridgeforge.models import TargetProfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core = root / "core"
+            _write(core / "data" / "hullmods" / "hull_mods.csv", "name,id\nArmor,heavyarmor\n")
+            _write(core / "data" / "hulls" / "wing_data.csv", "id,variant\ntalon_wing,t\n")
+            _write(core / "data" / "hulls" / "lasher.ship", json.dumps({"hullId": "lasher", "hullSize": "FRIGATE"}))
+            _write(core / "data" / "weapons" / "weapon_data.csv", "name,id\nLight MG,lightmg\n")
+            mod = root / "mod"
+            _write(mod / "mod_info.json", json.dumps({"id": "many", "name": "Many", "gameVersion": "0.98a-RC8"}))
+            for i in range(30):
+                _write(mod / "data" / "variants" / f"v{i}.variant", json.dumps({"variantId": f"v{i}", "hullId": "lasher", "hullMods": [f"missing_{i}"], "wings": []}))
+            result = scan_mod(mod, TargetProfile(), core)
+            needed, files = required_from_scan(result)
+        self.assertEqual(len(needed["hullmod"]), 30)
+        self.assertEqual(files["missing_15"], 1)
+
+    def test_more_than_20_unresolved_imports_are_all_returned(self) -> None:
+        from bridgeforge.scanner import scan_mod
+        from bridgeforge.models import TargetProfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = root / "mod"
+            _write(mod / "mod_info.json", json.dumps({"id": "many", "name": "Many"}))
+            for i in range(25):
+                _write(mod / "src" / f"Uses{i}.java", f"package data.scripts;\nimport data.scripts.other.Foreign{i};\nclass Uses{i} {{ Foreign{i} f; }}\n")
+            result = scan_mod(mod, TargetProfile())
+            needed, _files = required_from_scan(result)
+        self.assertEqual(len(needed["class"]), 25)
 
 
 class LicenceAwareRevivalTests(unittest.TestCase):

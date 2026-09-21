@@ -1079,6 +1079,23 @@ Progression, each stage feeding the next:
     Tests: `tests/test_corpus_recheck.py` (report-presence filtering, finding/status reporting,
     regression detection with and without a declared-ready status, one mod's scan failure not
     crashing the rest, markdown rendering, CLI JSON/markdown/exit-code).
+33. **`substitutes.required_from_scan` read only `content-reference-unresolved`'s/`source-import
+    -unresolved`'s own evidence lines, which are capped for human readability (25 ids total, 20
+    imports) - a mod with more distinct unresolved ids than that would silently feed an incomplete
+    `needed` set into `cover()`/`strategy()`, understating what `dependency-substitutes` (and
+    item 4's strip/vendor planner, built on the same function) actually recommends.** Found
+    2026-09-21 while building item 4: not yet biting any real mod in the corpus (the largest real
+    count found, Communist Clouds, is 6), but several real Ironclads-queue mods already have 25+
+    instances of a *different* finding kind, so the same shape is plausible there.
+    **Done 2026-09-21.** `_scan_unresolved_content_references` already stored the full,
+    untruncated per-kind per-id file list in `migration_context["unresolved_content_references"]`
+    for exactly this reason (a comment left there when item 4 was first scoped, 2026-09-20/21) -
+    `required_from_scan` just never read it. `source-import-unresolved` gained the same:
+    `migration_context["unresolved_foreign_class_imports"]` now carries the full list. Both are
+    now `required_from_scan`'s preferred source, falling back to the capped evidence lines only for
+    a `result` that doesn't carry `migration_context` (e.g. reconstructed from a saved report).
+    Tests: `tests/test_substitutes.py` (`RequiredFromScanTruncationTests`, 30 hullmod ids and 25
+    imports, both confirmed fully returned).
 
 ## Post-1.0 research and gated automation
 

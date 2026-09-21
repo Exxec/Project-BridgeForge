@@ -252,6 +252,7 @@ Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_j
 | `_removed_api_call_spans` | `(matcher, text: str) -> list[tuple[int, int]]` | - |
 | `_report_asset_reference_missing` | `(result: ScanResult, root: Path, vanilla_core: Path \| None, file: str, field: str, candidate: str) -> None` | - |
 | `_resolve_hull_id` | `(hull_id: str, skins: dict[str, str]) -> str` | Chase a skin's baseHullId chain to the underlying hull id (cycle-safe). |
+| `_resolve_variant_hull_and_slots` | `(raw_hull_id: str, ship_files: dict[str, dict], skins: dict[str, str], skin_slot_changes: dict[str, dict[str, dict]]) -> tuple[str \| None, dict \| None, dict[str, dict] \| None]` | (resolved_hull_id, ship_json, slot_by_id) for a variant's raw hullId, with a `.skin`'s own `weaponSlotChanges` applied over the base `.ship`'s `weaponSlots` (ROADMAP P14 item 28). |
 | `_ship_file_index` | `(root: Path, vanilla_core: Path \| None) -> dict[str, dict]` | hullId -> parsed .ship data, vanilla first so a mod's own hull of the same id wins. |
 | `_single_quote_json_finding` | `(result: ScanResult, category: str, file: str) -> None` | - |
 | `_skin_index` | `(root: Path, vanilla_core: Path \| None) -> dict[str, str]` | skinHullId -> baseHullId, from .skin files in the mod and vanilla. |

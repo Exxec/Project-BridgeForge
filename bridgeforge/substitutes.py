@@ -162,21 +162,49 @@ _EVIDENCE = re.compile(r"^(hullmod|wing|weapon|hull):(\S+) \((\d+) file")
 
 
 def required_from_scan(result) -> tuple[dict[str, set[str]], dict[str, int]]:
-    """({kind: ids needed from other mods}, {id: files referencing it}) from a scan's findings."""
+    """({kind: ids needed from other mods}, {id: files referencing it}) from a scan's findings.
+
+    `content-reference-unresolved`'s own evidence line is a human-readable summary, capped at 25
+    ids total (across all four kinds combined) - a mod with more than 25 distinct unresolved ids
+    would have silently fed an incomplete `needed` set into `cover()`/`strategy()` here, understating
+    what actually needs a provider. `result.migration_context["unresolved_content_references"]`
+    already carries the full, untruncated per-kind per-id file list for exactly this reason (see
+    `scanner._scan_unresolved_content_references`'s own comment); preferred here when present, with
+    the evidence-based extraction kept as a fallback for a `result` that doesn't carry it (e.g. one
+    reconstructed from a saved report rather than a live `scan_mod` call).
+    """
     needed: dict[str, set[str]] = {kind: set() for kind in KINDS}
     files: dict[str, int] = {}
-    for finding in result.findings:
-        if finding.id == "content-reference-unresolved":
-            for item in finding.evidence:
-                match = _EVIDENCE.match(item)
-                if match:
-                    needed[match.group(1)].add(match.group(2))
-                    files[match.group(2)] = int(match.group(3))
-        elif finding.id == "source-import-unresolved":
-            for item in finding.evidence:
-                if item.startswith("data.") and " " not in item:
-                    needed["class"].add(item)
-                    files[item] = files.get(item, 0) + 1
+    context = getattr(result, "migration_context", None) or {}
+    unresolved_context = context.get("unresolved_content_references")
+    if isinstance(unresolved_context, dict):
+        for kind, table in unresolved_context.items():
+            if kind not in needed or not isinstance(table, dict):
+                continue
+            for ident, file_list in table.items():
+                needed[kind].add(ident)
+                files[ident] = len(file_list) if isinstance(file_list, list) else 1
+    else:
+        for finding in result.findings:
+            if finding.id == "content-reference-unresolved":
+                for item in finding.evidence:
+                    match = _EVIDENCE.match(item)
+                    if match:
+                        needed[match.group(1)].add(match.group(2))
+                        files[match.group(2)] = int(match.group(3))
+    unresolved_imports = context.get("unresolved_foreign_class_imports")
+    if isinstance(unresolved_imports, list):
+        for item in unresolved_imports:
+            if isinstance(item, str):
+                needed["class"].add(item)
+                files[item] = files.get(item, 0) + 1
+    else:
+        for finding in result.findings:
+            if finding.id == "source-import-unresolved":
+                for item in finding.evidence:
+                    if item.startswith("data.") and " " not in item:
+                        needed["class"].add(item)
+                        files[item] = files.get(item, 0) + 1
     return needed, files
 
 
@@ -284,6 +312,33 @@ def _licence_note(mod_id: str, policy_path: Path | None) -> str:
     return f" [licence: local-only, not for release distribution{f' - {reason}' if reason else ''}]"
 
 
+def classify_chosen_providers(chosen: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
+    """(current, revive, heavy): `chosen` split by whether it targets 0.98a already, is a
+    revivable workspace here (<= REVIVABLE_MANUAL findings), or is too large/unscanned to revive
+    for this. Shared by `strategy()`'s own reasoning and ROADMAP P14 item 4's strip/vendor planner,
+    which needs the exact same "hard" id set `strategy()` already computes to decide what a
+    STRIP_FROM_MOD recommendation actually strips.
+    """
+    def revivable(item: dict) -> bool:
+        state = item.get("workspace")
+        return bool(state) and state.get("manual_findings") is not None and state["manual_findings"] <= REVIVABLE_MANUAL
+
+    current = [item for item in chosen if item["targets_0.98a"]]
+    revive = [item for item in chosen if not item["targets_0.98a"] and revivable(item)]
+    heavy = [item for item in chosen if not item["targets_0.98a"] and not revivable(item)]
+    return current, revive, heavy
+
+
+def hard_to_cover_ids(chosen: list[dict], uncovered: set[str]) -> set[str]:
+    """id keys (`"kind:ident"`) with no practical provider: genuinely uncovered, or covered only
+    by a `heavy` (too-large-to-revive, unscanned, or not-a-workspace-here) provider.
+    """
+    current, revive, heavy = classify_chosen_providers(chosen)
+    hard = set(uncovered) | {key for item in heavy for key in item.get("covers", [])}
+    hard -= {key for item in current + revive for key in item.get("covers", [])}
+    return hard
+
+
 def strategy(needed: dict[str, set[str]], files: dict[str, int], chosen: list[dict], uncovered: set[str], policy_path: Path | None = None) -> tuple[str, str]:
     """Recommended course, with its reason. `chosen` is the provider set cover (each with
     'name', 'targets_0.98a' and optional 'workspace' state); `uncovered` what no provider has.
@@ -297,16 +352,8 @@ def strategy(needed: dict[str, set[str]], files: dict[str, int], chosen: list[di
             return "STRIP_FROM_MOD", f"Only {references} id(s)/class(es) in {touched} place(s) lean on it and no visible mod provides any: removing or substituting them is smaller than reviving a dependency (owner approval, behaviour change)."
         return "ESCALATE", f"No visible mod provides any of the {references} needed id(s)/class(es), used in {touched} place(s): revive the dependency (if its licence allows) or rebuild the mod without it. Owner decision."
 
-    def revivable(item: dict) -> bool:
-        state = item.get("workspace")
-        return bool(state) and state.get("manual_findings") is not None and state["manual_findings"] <= REVIVABLE_MANUAL
-
-    current = [item for item in chosen if item["targets_0.98a"]]
-    revive = [item for item in chosen if not item["targets_0.98a"] and revivable(item)]
-    heavy = [item for item in chosen if not item["targets_0.98a"] and not revivable(item)]
-    # Ids only a heavy (or unscanned, or not-a-workspace) provider has count as unprovided.
-    hard = set(uncovered) | {key for item in heavy for key in item.get("covers", [])}
-    hard -= {key for item in current + revive for key in item.get("covers", [])}
+    current, revive, heavy = classify_chosen_providers(chosen)
+    hard = hard_to_cover_ids(chosen, uncovered)
     hard_places = sum(files.get(key.split(":", 1)[1], 1) for key in hard)
 
     def describe(items: list[dict]) -> str:
