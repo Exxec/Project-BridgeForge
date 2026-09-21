@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .models import TargetProfile
 from .report import write_artifacts
-from .scanner import scan_mod
+from .scanner import scan_mod, verify_shadow
 from .baseline import finding_baseline_key, load_baseline_keys, split_by_baseline
 from .dossier import DEFAULT_CONTEXT_LINES, DEFAULT_MAX_KB, DossierError, write_dossier
 from .migrate import apply_plan, build_plan
@@ -697,6 +697,11 @@ def build_parser() -> argparse.ArgumentParser:
     compile_check_cmd.add_argument("--jdk", type=Path, help="JDK home (default: this repo's rig JDK, else JAVA_HOME, else PATH)")
     compile_check_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search for declared dependencies; repeatable (default: <repo>/In operation and its rig's mods)")
     compile_check_cmd.add_argument("--json", action="store_true")
+    verify_shadow_cmd = subcommands.add_parser("verify-shadow", help="does a jar (or a directory of jars) actually supply a compiled class for this loose script? Real jar-class-file parsing, not a path-existence guess")
+    verify_shadow_cmd.add_argument("script", type=Path, help="loose .java script to check, absolute or relative to --root")
+    verify_shadow_cmd.add_argument("--against", required=True, type=Path, help="a single jar file, or a directory searched recursively for jars (e.g. a starsector-core install or a mods folder)")
+    verify_shadow_cmd.add_argument("--root", type=Path, help="root the script's class name is derived relative to (default: cwd)")
+    verify_shadow_cmd.add_argument("--json", action="store_true")
     rebuild_jar_cmd = subcommands.add_parser("rebuild-jar", help="rebuild a mod's jar from its sources and compare it with the original: class/method/field added or removed, forbidden sandbox references")
     rebuild_jar_cmd.add_argument("mod", type=Path, help="mod workspace (holding working/) or the working copy itself")
     rebuild_jar_cmd.add_argument("--sources", required=True, help="sources directory, relative to the workspace or the working copy (e.g. working/data/scripts)")
@@ -999,6 +1004,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Report: {report}")
         print(f"Manifest: {manifest}")
         return 0
+    if args.command == "verify-shadow":
+        result = verify_shadow(args.script, args.against, args.root)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            if result["status"] == "ERROR":
+                print(f"verify-shadow: {result['error']}")
+            elif result["status"] == "SHADOWED":
+                print(f"SHADOWED: {result['class_name']} is supplied by: {', '.join(result['shadowing_jars'])}")
+            else:
+                print(f"NOT_SHADOWED: {result['class_name']} is not compiled into any jar under {result['against']}")
+        return 2 if result["status"] == "ERROR" else 0
     if args.command == "corpus-audit":
         try:
             report = audit_directories(args.mod_directories, TargetProfile(args.target_starsector, args.target_java), args.continue_on_error, args.max_files_per_mod, args.max_jars_per_mod)

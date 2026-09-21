@@ -1504,6 +1504,82 @@ def loose_script_jar_shadowed_class(root: Path, source: Path) -> str | None:
     return class_name if class_name in jar_classes else None
 
 
+def _iter_class_files_in(target: Path):
+    """Yield (jar_path, member_name, class_bytes) for readable .class members under `target`.
+
+    `target` may be a single jar file, or a directory searched recursively for jars (e.g. a
+    starsector-core install, a rig's mods folder, or a dependency mod's own directory). Unlike
+    `_iter_jar_class_files`, this does not consult a mod's own `mod_info.json` "jars" list - the
+    caller names the jar set explicitly, which is the whole point of `verify_shadow` (ROADMAP P14
+    item 26): a direct answer for an arbitrary jar-or-core-dir, not just "this mod's loaded jars."
+    """
+    jars = [target] if target.is_file() else sorted(target.rglob("*.jar"))
+    for jar in jars:
+        try:
+            with zipfile.ZipFile(jar) as archive:
+                entries = archive.infolist()
+                if len(entries) > MAX_JAR_ENTRIES:
+                    continue
+                for item in entries:
+                    if not item.filename.endswith(".class"):
+                        continue
+                    member = PurePosixPath(item.filename.replace("\\", "/"))
+                    if member.is_absolute() or ".." in member.parts:
+                        continue
+                    try:
+                        with archive.open(item) as class_file:
+                            data = class_file.read()
+                    except (OSError, zipfile.BadZipFile, KeyError):
+                        continue
+                    yield jar, item.filename.replace("\\", "/"), data
+        except (OSError, zipfile.BadZipFile):
+            continue
+
+
+def verify_shadow(script: Path, against: Path, root: Path | None = None) -> dict:
+    """Does `against` (a jar, or a directory of jars) actually supply a compiled class for `script`?
+
+    The direct, callable answer to the question ROADMAP P14 item 25 found being reimplemented as a
+    `Path.is_file()` path-existence guess (E12: 50 of Rebal's loose `.java` files were dropped as
+    "jar-shadowed" on exactly that reasoning; a real jar search found zero of them actually were).
+    Reuses the same real class-file parsing `loose-script-shadowed-by-jar` and
+    `loose_script_jar_shadowed_class` use - never a second, path-only implementation.
+
+    `script` may be absolute or relative to `root` (default: cwd). The fully-qualified class name is
+    derived from `script`'s path relative to `root` (e.g. `data/hullmods/Foo.java` under a mod root,
+    or `data/hullmods/Foo.java` under a vanilla `starsector-core`, both yield `data.hullmods.Foo`).
+    """
+    if root is None:
+        root = Path.cwd()
+    root = root.resolve()
+    script = script if script.is_absolute() else (root / script)
+    script = script.resolve()
+    try:
+        relative = script.relative_to(root)
+    except ValueError:
+        return {
+            "schema_version": 1,
+            "mode": "verify-shadow",
+            "status": "ERROR",
+            "error": f"{script} is not under root {root}",
+        }
+    class_name = ".".join(relative.with_suffix("").parts)
+    shadowing_jars: set[str] = set()
+    for jar, _member, data in _iter_class_files_in(against):
+        info = _parse_class_file(data)
+        if info is not None and info.this_class and info.this_class.replace("/", ".") == class_name:
+            shadowing_jars.add(str(jar))
+    return {
+        "schema_version": 1,
+        "mode": "verify-shadow",
+        "status": "SHADOWED" if shadowing_jars else "NOT_SHADOWED",
+        "script": str(relative).replace("\\", "/"),
+        "class_name": class_name,
+        "against": str(against),
+        "shadowing_jars": sorted(shadowing_jars),
+    }
+
+
 def _scan_loose_script_janino_risk(root: Path, result: ScanResult) -> None:
     """Loose .java under data/ is compiled at runtime by Janino, which ignores generics (live bug PRB-MISSION-02).
 

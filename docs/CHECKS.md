@@ -215,6 +215,7 @@ Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_j
 | `_infer_environment` | `(result: ScanResult) -> None` | - |
 | `_is_external_dependency_class` | `(fqn: str) -> bool` | True when a FQN matches a known third-party library/mod API package we cannot see the jar for. |
 | `_is_mission_source` | `(root: Path, path: Path) -> bool` | - |
+| `_iter_class_files_in` | `(target: Path)` | Yield (jar_path, member_name, class_bytes) for readable .class members under `target`. |
 | `_iter_jar_class_files` | `(root: Path)` | Yield (jar_path, member_name, class_bytes) for readable .class members of the mod's loaded jars. |
 | `_java_for_major` | `(major: int) -> str` | - |
 | `_java_number_suffix_json_finding` | `(result: ScanResult, category: str, file: str) -> None` | - |

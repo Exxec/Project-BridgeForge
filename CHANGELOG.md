@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **New command `verify-shadow`: a direct, callable answer to "does this jar set actually supply a compiled class for this loose script?" (ROADMAP P14 item 26).** `bridgeforge verify-shadow <script> --against <jar-or-dir> [--root <root>]` reuses the same real class-file parsing item 14's fixer guard already uses, rather than the `Path.is_file()` path-existence guess that led E12 to wrongly conclude 50 of Rebal's loose `.java` files were jar-shadowed when none were. `--against` can be a single jar or any directory searched recursively for jars, so it answers against an arbitrary jar set, not just a mod's own declared jars.
 - **Six more roadmap P14 items landed (2026-09-21), several finding a real bug along the way.**
   - `result.migration_context["unresolved_content_references"]` and `["vanilla_path_shadowing_total_files"]`: the exact per-id file list and a whole-mod grand total for content-reference/vanilla-shadow findings, not just a folder-rollup count — the gap that let Rebal's real ~642-file shadowed scope go uncaught as "~79" for a whole session (items 5's foundation, 20).
   - `campaign-fleet-reference-missing` now resolves a hull literal through a `.skin` chain before flagging it, the same fix BF-SKIN-01 made for mission variants — a second real instance of the same blind spot (item 17).

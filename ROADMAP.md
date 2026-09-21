@@ -733,6 +733,17 @@ Progression, each stage feeding the next:
     implementation of it), and print which jar (if any) supplies the class. Every future "is this
     safe to drop" claim - in a task brief, an investigation script, a fixer - should call this
     instead of writing a path check.
+    **Done 2026-09-21.** `bridgeforge verify-shadow <script> --against <jar-or-dir> [--root <root>]`
+    (new `scanner.verify_shadow`/`scanner._iter_class_files_in`, reusing `_parse_class_file` - the
+    same real class-file parsing `mod_jar_class_names`/`loose_script_jar_shadowed_class` (item 14)
+    and the scanner's own `loose-script-shadowed-by-jar` check use, no second implementation).
+    `--against` takes a single jar or a directory searched recursively for jars, so it answers
+    against an arbitrary jar set, not just a mod's own declared jars. Verified against both real
+    E12 outcomes: `FrontShieldEmitter.java` against RC8's real `starsector-core` reports
+    NOT_SHADOWED (matching the real, corrected finding), and Thule-Legacy's
+    `thule_mission_operation_n/MissionDefinition.java` against its own working copy reports
+    SHADOWED, naming `ThuleLegacy.jar` (matching item 14's real live bug). Tests:
+    `tests/test_verify_shadow.py`.
 27. **The full corpus recheck (item 23) should include an audit of every "moved because shadowed"
     decision made before item 25 was found, not just a fresh scan.** E12 (2026-09-20/21) found that
     a `Path.is_file()` path-existence check had been trusted as proof of jar-shadowing at least once
