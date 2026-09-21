@@ -523,6 +523,52 @@ Progression, each stage feeding the next:
     jar from patched source, or strip the class so the loose script compiles. Pairs with item 12
     (the same detection across mods) and the `loose-script-jar-precedence` rule. Needs a regression
     test with a mod whose jar shadows a file a fixer would otherwise edit.
+15. **New check: a mod's preset entry can silently downgrade vanilla for the whole game, mod-wide.**
+    `engine_styles.json`, `hull_styles.json`, `custom_entities.json`, `sounds.json` and
+    `planets.json` are merged by **whole-entry replace, not a per-field merge** (Starsector's own
+    wiki: "any mod added entries with keys ... the same as core game entries will see the mod
+    entries replace the core game entries"). Found 2026-09-20 on Zorg18: `engine_styles.json`
+    redefined vanilla's `LOW_TECH`/`MIDLINE`/`HIGH_TECH` as an older, incomplete copy of each
+    (missing a `contrailCampaignColor` key vanilla's current file has, from being copy-pasted as a
+    template and never trimmed). The prior pass had called this "byte-for-byte identical, harmless"
+    without actually diffing field-by-field against vanilla — it wasn't, and the mod was silently
+    stripping that colour from every LOW_TECH/MIDLINE/HIGH_TECH-styled ship in the player's entire
+    game (vanilla and every other enabled mod) while enabled. Fixed by hand this time; needs a
+    scanner check so it isn't missed again: for each of the five preset files, if a mod redefines a
+    top-level id that also exists in vanilla's own copy of that file, diff the two dicts field by
+    field and flag REVIEW/MANUAL (severity depends on whether fields are missing vs. actively
+    different) naming exactly which fields would be lost mod-wide. A mod's own file that only adds
+    new ids (like `ZORG_TECH` alongside the trimmed file) triggers nothing.
+16. **New fixer: `undeclared-library-dependency` (declare the missing dependency automatically).**
+    The scanner already detects a mod using a known library's package (LazyLib, MagicLib,
+    GraphicsLib) without declaring it (`source-library-dependency-undeclared` /
+    `undeclared-library-dependency`), but nothing applies the fix - it was hand-edited into
+    `mod_info.json` three times this session (EZFaction, Maelstrom, Leon-Heavy-Industries), each a
+    one-line `{"id": ..., "name": ...}` addition to `dependencies` using the exact id/name pairs
+    `LIBRARY_PACKAGES` already maps package prefixes to. A fixer following `_add_revenantlib_dependency`'s
+    existing pattern (dependencies-array insertion, both-shapes "already declared" check, `.bak`
+    backup) would make this mechanical instead of manual, which matters most across the Ironclads
+    queue's 264 mods, where this exact defect class is common in mods that age from before
+    dependencies were declared explicitly.
+17. **Audit every scanner "known ids" set for the same missing-skin-chain blind spot BF-SKIN-01
+    exposed.** `mission-local-variant-hull-missing` built its known-hulls set from `*.ship` files
+    only and never chased a `.skin`'s `baseHullId` chain, false-flagging real content on
+    Leon-Heavy-Industries (fixed 2026-09-20, `docs/BUG_CLASSES.md` BF-SKIN-01). That was found by
+    accident, not by a systematic check - `_scan_variant_validity` already resolved skins correctly
+    while its sibling didn't. Worth a deliberate pass over every scanner function that builds a
+    hull/weapon/wing "known ids" set (`_declared_spec_ids` callers, mission and campaign fleet
+    reference checks, carrier-bay/OP-budget checks) to confirm each one that should resolve through
+    `.skin` chains actually does, rather than finding the next instance the same way this one was
+    found.
+18. **Downloads-wide research needs an index, not a live `grep -r` with a short timeout.** While
+    investigating O2.2 (2026-09-20), a `timeout 60 grep -rl "shieldbypass" "Downloads"` returned zero
+    matches - a false negative caused purely by the timeout, not by the string's absence: the file
+    was there (`Ship and Weapon Pack/data/hullmods/hull_mods.csv`), found immediately once searched
+    directly. The Ironclads archive is large enough that an unindexed live grep across all of
+    Downloads is not reliable evidence of absence. Item 8 (Ironclads queue tooling) should build a
+    one-time content index (filenames plus a grep-able concatenation or a small sqlite FTS table) of
+    the whole Downloads archive once, rather than repeated ad hoc greps with a timeout that can
+    silently fail before reaching the relevant file.
 
 ## Post-1.0 research and gated automation
 
