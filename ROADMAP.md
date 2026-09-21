@@ -610,6 +610,26 @@ Progression, each stage feeding the next:
     one-time content index (filenames plus a grep-able concatenation or a small sqlite FTS table) of
     the whole Downloads archive once, rather than repeated ad hoc greps with a timeout that can
     silently fail before reaching the relevant file.
+    **Done 2026-09-21.** New `bridgeforge/archive_index.py` (`build_index`, `search_index`), wired
+    as `bridgeforge archive-index <root> --output <index.db>` and `bridgeforge archive-search
+    <index.db> <query> [--filenames]`. A small sqlite3 database (stdlib only; this Python build's
+    sqlite3 ships FTS5) indexes every `*.zip` under `root`: every member's path/size always (a fast
+    filename index), and the text content of small, source/data-shaped members only
+    (`TEXT_EXTENSIONS`: `.java`/`.json`/`.csv`/`.wpn`/`.ship`/`.variant`/`.skin`/`.system`/
+    `.faction`/etc., capped at 5MB/file) via an FTS5 table - binary assets are indexed by filename
+    only, never read as content. Incremental: an archive whose size and mtime haven't changed since
+    the last run is skipped, so re-running as the archive folder grows stays cheap. A corrupt or
+    password-protected member never aborts the run - it's recorded and skipped, found by the very
+    first real run hitting a `RuntimeError` from a password-protected entry (`zipfile`'s own
+    exception type for that case, easy to miss).
+    Verified against the real, full Downloads archive (214 real `*.zip` files, including the nested
+    `Ironclads mega archive/` subfolder, 212 indexed cleanly and 2 genuine non-zip files correctly
+    reported as errors, not crashes): `archive-search ... "shieldbypass"` reproduces the exact real
+    case this item was written from, finding `Ship and Weapon Pack/data/hullmods/hull_mods.csv`
+    (and 49 other real matches across the archive) that the original `timeout 60 grep -rl` missed
+    entirely. Tests: `tests/test_archive_index.py` (8 cases: filename+content indexing, binary
+    content never indexed, incremental skip/reindex, corrupt-archive handling, size-cap behavior,
+    the real password-protected-member regression, search-before-build, CLI).
 19. **New command: value-diff two org.json-dialect files, not a line diff.** Found 2026-09-20
     building E11's data-only rebuild plan for Rebal: diffing a mod's file against a real historical
     vanilla reference showed the two use different key order and formatting (pretty-printed vs.

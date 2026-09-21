@@ -703,6 +703,16 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_recheck_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core; without it, most checks return UNKNOWN and no compile signal is produced")
     corpus_recheck_cmd.add_argument("--write-markdown", type=Path, help="also write a roll-up table to this path")
     corpus_recheck_cmd.add_argument("--json", action="store_true")
+    archive_index_cmd = subcommands.add_parser("archive-index", help="build/update a one-time content index of a mod-archive folder (ROADMAP P14 item 18): filenames always, text-file content via sqlite3 FTS5")
+    archive_index_cmd.add_argument("root", type=Path, help="folder to search recursively for *.zip archives (e.g. Downloads)")
+    archive_index_cmd.add_argument("--output", required=True, type=Path, help="sqlite3 database path to write/update")
+    archive_index_cmd.add_argument("--json", action="store_true")
+    archive_search_cmd = subcommands.add_parser("archive-search", help="query a previously built archive-index database")
+    archive_search_cmd.add_argument("index", type=Path, help="the sqlite3 database written by archive-index")
+    archive_search_cmd.add_argument("query", help="FTS5 MATCH query (content mode) or a substring (filename mode)")
+    archive_search_cmd.add_argument("--filenames", action="store_true", help="search member filenames instead of file content")
+    archive_search_cmd.add_argument("--limit", type=int, default=50)
+    archive_search_cmd.add_argument("--json", action="store_true")
     rebuild_from_reference_cmd = subcommands.add_parser("rebuild-from-reference", help="overlay a mod's own genuine changes (vs. a historical reference rig's vanilla copy) onto current RC8 vanilla, for old mods that ship modified copies of vanilla files under vanilla's own paths")
     rebuild_from_reference_cmd.add_argument("mod", type=Path, help="mod working copy")
     rebuild_from_reference_cmd.add_argument("--reference-core", required=True, type=Path, help="a registered reference rig's read-only starsector-core (the historical vanilla version the mod's file was originally built against)")
@@ -1043,6 +1053,38 @@ def main(argv: list[str] | None = None) -> int:
             if args.write_markdown:
                 print(f"Roll-up written: {args.write_markdown}")
         return 1 if result["status"] == "REGRESSION" else 0
+    if args.command == "archive-index":
+        from .archive_index import build_index
+        try:
+            result = build_index(args.root, args.output)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"{result['archive_count']} archive(s): {result['counts']['INDEXED']} indexed, {result['counts']['UNCHANGED']} unchanged, {result['counts']['ERROR']} error(s)")
+            for error in result["errors"]:
+                print(f"  ERROR {error['archive']}: {error['error']}")
+            print(f"Index: {result['index_path']}")
+        return 0
+    if args.command == "archive-search":
+        from .archive_index import search_index
+        try:
+            result = search_index(args.index, args.query, "filename" if args.filenames else "content", args.limit)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"{result['match_count']} match(es) for {result['query']!r} ({result['search_mode']}):")
+            for match in result["matches"]:
+                if "snippet" in match:
+                    print(f"  {match['archive']}!{match['member']}: {match['snippet']}")
+                else:
+                    print(f"  {match['archive']}!{match['member']} ({match['size_bytes']} bytes)")
+        return 0
     if args.command == "rebuild-from-reference":
         from .rebuild_from_reference import rebuild_from_reference
         result = rebuild_from_reference(args.mod, args.reference_core, args.current_core, args.glob, args.output)
