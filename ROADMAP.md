@@ -427,6 +427,15 @@ Starting point:
    operation/IRONCLADS_TRIAGE_2026-09-21.md` once the run completes. Tests: `tests/test_corpus_recheck.py`
    (`test_include_intake_widens_scope_to_report_less_mods`), `tests/test_substitutes.py`
    (`test_include_intake_widens_the_dependent_side_to_report_less_mods`).
+   **Triage pass completed 2026-09-21.** 305 mods checked (0 scan errors). 157 (51%) already have
+   0 MANUAL findings under every check landed this session - the original queue's cheapest-first
+   ordering is still valid and now current. 148 have at least 1 MANUAL finding, 49 fail
+   compile-check. Most common finding: `undeclared-library-dependency` (74 mods) - the item-16
+   fixer already handles this mechanically, the single highest-leverage next step if/when revival
+   work starts on this queue. Full detail: `In operation/IRONCLADS_TRIAGE_2026-09-21.md`. This
+   pass is triage only, per the owner's explicit choice - no mod in the queue was fixed or revived.
+   The bulk revival work itself (picking mods, reviving them one at a time) remains open; this
+   roadmap item stays open until that work is actually done, not just made tractable.
 
 Items 1 and 3 share a Java-toolchain module and are built together (task A9).
 
