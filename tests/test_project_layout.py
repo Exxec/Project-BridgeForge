@@ -195,6 +195,51 @@ class BoardTests(unittest.TestCase):
             self.assertEqual(row["declared_completion_status"], "READY_FOR_LIVE_TEST")
             self.assertEqual(row["evidence"]["report"], str(reports / "REVIVAL_REPORT.md"))
 
+    def test_exact_status_is_confidently_marked(self):
+        with resolved_temp_dir() as root:
+            base, _ = _mod(root)
+            (base / "reports/REVIVAL_REPORT.md").write_text("READY_FOR_LIVE_TEST\n", encoding="utf-8")
+            row = project_board(root)["mods"][0]
+            self.assertEqual(row["declared_completion_status"], "READY_FOR_LIVE_TEST")
+            self.assertEqual(row["declared_completion_status_confidence"], "EXACT")
+
+    def test_best_effort_status_resolves_an_inline_bold_status_with_trailing_prose(self) -> None:
+        """ROADMAP P14 item 31: most real REVIVAL_REPORT.md files write the status inline with a
+        trailing em-dash explanation on the same line, which the strict single-final-line pattern
+        never matches. Found 2026-09-21 doing item 23's corpus recheck by hand: only 9 of 40 real
+        reports resolved a status this way."""
+        with resolved_temp_dir() as root:
+            base, _ = _mod(root)
+            (base / "reports/REVIVAL_REPORT.md").write_text(
+                "# Report\n\n## Status\n\n**READY_WITH_REVIEW_ITEMS** — 0 MANUAL findings, compile-check PASS.\n",
+                encoding="utf-8",
+            )
+            row = project_board(root)["mods"][0]
+            self.assertEqual(row["declared_completion_status"], "READY_WITH_REVIEW_ITEMS")
+            self.assertEqual(row["declared_completion_status_confidence"], "BEST_EFFORT")
+            self.assertEqual(row["stage"], "REPORT_DECLARED_READY_WITH_REVIEW_ITEMS_BEST_EFFORT")
+            self.assertTrue(any("best-effort status" in w for w in row["warnings"]))
+
+    def test_best_effort_status_takes_the_last_bold_marker_not_the_first(self) -> None:
+        with resolved_temp_dir() as root:
+            base, _ = _mod(root)
+            (base / "reports/REVIVAL_REPORT.md").write_text(
+                "## 2026-09-14\n\n**READY_FOR_LIVE_TEST** — first pass.\n\n"
+                "## 2026-09-21\n\n**READY_WITH_REVIEW_ITEMS** — a later, more complete pass.\n",
+                encoding="utf-8",
+            )
+            row = project_board(root)["mods"][0]
+            self.assertEqual(row["declared_completion_status"], "READY_WITH_REVIEW_ITEMS")
+            self.assertEqual(row["declared_completion_status_confidence"], "BEST_EFFORT")
+
+    def test_no_bold_status_marker_anywhere_leaves_status_unresolved(self) -> None:
+        with resolved_temp_dir() as root:
+            base, _ = _mod(root)
+            (base / "reports/REVIVAL_REPORT.md").write_text("# Report\n\nNothing conclusive yet.\n", encoding="utf-8")
+            row = project_board(root)["mods"][0]
+            self.assertIsNone(row["declared_completion_status"])
+            self.assertIsNone(row["declared_completion_status_confidence"])
+
     def test_intake_marker_and_later_plan_are_not_silently_ignored(self):
         with resolved_temp_dir() as root:
             result = intake_archive(_archive(root), root)
@@ -214,6 +259,7 @@ class BoardTests(unittest.TestCase):
             info.write_text('{"name":"Fixture [BF r2]","version":"1+bf.3"}', encoding="utf-8")
             row = project_board(root)["mods"][0]
             self.assertIsNone(row["declared_completion_status"])
+            self.assertIsNone(row["declared_completion_status_confidence"])  # neither status is bold-marked, so the best-effort fallback doesn't match either
             self.assertIsNone(row["open_risks"])
             self.assertIsNone(row["last_test"])
             self.assertIsNone(row["build_tag"])

@@ -7,13 +7,32 @@ import re
 
 from .boot_test import _is_link
 from .intake import operation_root
-from .revival_audit import _completion_statuses
+from .revival_audit import COMPLETION_STATUSES, _completion_statuses
 from .scanner import _load_lenient_json_file
 
 
 NON_RELEASE_FOLDERS = {"original", "working", "reports", "builds", "scratch", "workspace"}
 ROOT_FILES = {"README.md", "STATUS.md", "LIVE_TEST_INSTRUCTIONS.md", "OFFLINE_VALIDATION_GUIDE.md", "bf-test.ps1",
               "STATUS.generated.md", "STATUS.generated.json"}
+
+# ROADMAP P14 item 31: audit_revival's COMPLETION_STATUS_PATTERN (used by _completion_statuses)
+# correctly demands a bare, standalone status line as a release-readiness gate - that strict
+# format is deliberate there. But most real REVIVAL_REPORT.md files write the status inline with
+# a trailing em-dash explanation on the same line (e.g. "**READY_WITH_REVIEW_ITEMS** — 0 MANUAL
+# findings..."), which never matches that strict pattern at all - found 2026-09-21 doing item 23's
+# corpus recheck by hand: only 9 of 40 real reports resolved a clean status this way, so the
+# recheck list had to be built from raw REVIVAL_REPORT.md file discovery instead of this board.
+# This lenient pattern is `board`'s own best-effort fallback for "what does this report currently
+# claim", not a replacement for the strict gate - never used by `audit_revival`/`release`.
+_BEST_EFFORT_STATUS_LINE = re.compile(
+    rf"\*\*({'|'.join(sorted((*COMPLETION_STATUSES, 'IN_PROGRESS'), key=len, reverse=True))})\*\*"
+)
+
+
+def _best_effort_last_status(report_text: str) -> str | None:
+    """The last bold status marker anywhere in the report, or None. See module note above."""
+    matches = _BEST_EFFORT_STATUS_LINE.findall(report_text)
+    return matches[-1] if matches else None
 
 
 def layout_findings(repo_root: Path, working_copies: dict[str, Path] | None = None) -> list[dict[str, str]]:
@@ -83,18 +102,27 @@ def _row(area: str, folder: Path, working: Path | None) -> dict[str, object]:
     if area == "Done":
         stage = "RELEASE_PRESENT_NOT_VERIFIED" if working is not None else "LAYOUT_INCOMPLETE"
     declared_status = None
+    declared_status_confidence = None
     report = evidence_path("REVIVAL_REPORT.md")
     if report is not None and report.is_file() and not _is_link(report):
         try:
-            statuses, final = _completion_statuses(report.read_text(encoding="utf-8"))
+            report_text = report.read_text(encoding="utf-8")
+            statuses, final = _completion_statuses(report_text)
             if len(statuses) == 1 and final:
                 declared_status = statuses[0]
+                declared_status_confidence = "EXACT"
                 if working is not None:
                     stage = "REPORT_DECLARED_" + declared_status
                 else:
                     warnings.append("report exists without a convention-layout active copy")
             else:
                 warnings.append("REVIVAL_REPORT has no single final completion status")
+                best_effort = _best_effort_last_status(report_text)
+                if best_effort is not None and working is not None:
+                    declared_status = best_effort
+                    declared_status_confidence = "BEST_EFFORT"
+                    stage = "REPORT_DECLARED_" + declared_status + "_BEST_EFFORT"
+                    warnings.append(f"best-effort status from the last bold status marker in the report (not a clean single-final-status line): {best_effort}")
         except (OSError, ValueError) as exc:
             warnings.append(f"report unreadable: {exc}")
     elif working is not None and evidence_path("REVIVAL_PLAN.md") is not None:
@@ -135,7 +163,8 @@ def _row(area: str, folder: Path, working: Path | None) -> dict[str, object]:
         warnings.append("folder-level report is not independently bound to this release")
     return {"area": area, "folder": folder.name, "mod_id": metadata.get("id"),
             "working": str(working) if working is not None else None, "stage": stage,
-            "declared_completion_status": declared_status, "build_tag": build_tag,
+            "declared_completion_status": declared_status,
+            "declared_completion_status_confidence": declared_status_confidence, "build_tag": build_tag,
             "last_test": last_test, "open_risks": open_risks, "warnings": warnings,
             "evidence": {"report": str(report) if report is not None else None,
                          "risks": str(risk_path) if risk_path is not None else None,

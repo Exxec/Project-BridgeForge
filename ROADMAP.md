@@ -896,6 +896,28 @@ Progression, each stage feeding the next:
     (`WorkspaceRootGuardTests`, 4 cases: refuses correctly, scanning `working/` directly is
     unaffected, an ordinary mod root is unaffected, a bare directory with no `working/` at all is
     unaffected).
+31. **`board`'s status parser resolves a clean status for almost no real report, because the
+    strict single-final-line pattern `audit_revival` correctly demands for release gating is the
+    wrong bar for `board`'s own best-effort "what does this report currently claim" read.** Found
+    2026-09-21 doing item 23's corpus recheck by hand: only 9 of 40 real `REVIVAL_REPORT.md` files
+    resolved a status this way, because most write it inline with a trailing em-dash explanation on
+    the same line (`**READY_WITH_REVIEW_ITEMS** — 0 MANUAL findings...`), which never matches
+    `COMPLETION_STATUS_PATTERN`'s "the whole line is just the status" requirement. The strict
+    pattern is the right bar for `audit_revival`/`release` (a release-readiness gate should demand
+    a clean, unambiguous final line) - it should not change. `board` needs its own, separate,
+    genuinely best-effort fallback.
+    **Done 2026-09-21.** New `project_board._best_effort_last_status`: finds every `**STATUS**`
+    bold marker anywhere in the report (not requiring a standalone line) and takes the last one
+    (most recent, matching how a person reads these reports top-to-bottom). Used only as a
+    fallback when the strict `_completion_statuses` doesn't resolve a single final status; each
+    row now also carries `declared_completion_status_confidence` (`"EXACT"` or `"BEST_EFFORT"`,
+    `None` when nothing resolves at all), and `stage` gets a `_BEST_EFFORT` suffix so a consumer
+    can tell the two apart rather than trusting a best-effort read as confidently as a clean one.
+    Verified against the real corpus: resolution went from 9/40 to 32/40 mods (23 more resolved via
+    the new fallback; 8 remain genuinely unresolved, no bold status marker present at all).
+    Deliberately never used by `audit_revival`/`release` - the strict release gate is unchanged.
+    Tests: `tests/test_project_layout.py` (`BoardTests`, 4 new cases plus a confidence assertion
+    added to the existing malformed-evidence test).
 
 ## Post-1.0 research and gated automation
 
