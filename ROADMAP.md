@@ -569,6 +569,37 @@ Progression, each stage feeding the next:
     one-time content index (filenames plus a grep-able concatenation or a small sqlite FTS table) of
     the whole Downloads archive once, rather than repeated ad hoc greps with a timeout that can
     silently fail before reaching the relevant file.
+19. **New command: value-diff two org.json-dialect files, not a line diff.** Found 2026-09-20
+    building E11's data-only rebuild plan for Rebal: diffing a mod's file against a real historical
+    vanilla reference showed the two use different key order and formatting (pretty-printed vs.
+    commented blocks), so a plain text diff is swamped by noise and hides the one genuine semantic
+    change actually present. Every future data-only rebuild (Rebal is very unlikely to be the only
+    mod in the Ironclads queue built this way) needs the same field-level comparison, done by hand
+    each time otherwise. A `bridgeforge diff-data <file_a> <file_b>` command should load both through
+    `_load_lenient_json_file` and report added/removed/changed keys by value, recursing into nested
+    dicts and lists, with formatting/key-order differences producing no output at all.
+20. **`vanilla-path-shadowing` should report the true file count, not a folder rollup.** E3's original
+    estimate for Rebal ("~79 files") was a per-folder finding count; the real number, counted
+    directly, is 642 - an 8x understatement that shaped this item's scoping for a full session before
+    being caught. Whatever scanner logic rolls this finding up by folder should also emit (in
+    `migration_context`, and ideally in the finding's own evidence line) the true total file count
+    across every shadowed folder, so the next mod with this pattern doesn't need an agent to
+    rediscover the same gap between "findings" and "files."
+21. **Generalize E11's rebuild-from-a-reference-rig method into a command.** Built by hand this
+    session (enumerate a mod's files that share a path with a reference rig's vanilla copy; for each,
+    value-diff the mod's file against the reference AND against current RC8 vanilla; keep fields RC8
+    added since the reference version untouched, overlay only the mod's genuine changes onto a fresh
+    copy of the current vanilla file). This is generally useful for any old mod that ships modified
+    copies of vanilla files under vanilla's own paths (Rebal's actual defect class, and likely not
+    unique to it in the Ironclads queue) - worth a `rebuild-from-reference` command once item 19's
+    value-diff primitive exists, parameterized by file class (`.wpn`/`.ship`/`.variant`/etc.) so a
+    large mod can be rebuilt in reviewable stages rather than one pass across hundreds of files.
+22. **`rig-doctor`'s `enabled_mods_resolve` check FAILs on every freshly registered reference rig.**
+    A brand-new historical install has no mods enabled yet, so `mods/enabled_mods.json` doesn't
+    exist - correct and harmless, but it prints as FAIL rather than PASS/SKIP, noise on every P10
+    reference-rig registration (found 2026-09-20 registering Rebal's 0.9a rig). Should treat a
+    missing `enabled_mods.json` as PASS when the mods folder is otherwise empty of workspaces, or as
+    SKIP with an explanation, rather than FAIL.
 
 ## Post-1.0 research and gated automation
 
