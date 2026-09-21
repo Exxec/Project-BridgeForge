@@ -918,6 +918,25 @@ Progression, each stage feeding the next:
     Deliberately never used by `audit_revival`/`release` - the strict release gate is unchanged.
     Tests: `tests/test_project_layout.py` (`BoardTests`, 4 new cases plus a confidence assertion
     added to the existing malformed-evidence test).
+32. **Generalize item 23's full corpus recheck into a reusable command, not a throwaway script.**
+    Item 23 was done entirely by hand with an ad hoc Python driver written for that one session -
+    exactly the kind of mechanical, well-specified, repeatable task that should be a real command
+    the next agent (or the same one, next time) can just run, per the owner's own "make it
+    easier/quicker for you" instruction (2026-09-21).
+    **Done 2026-09-21.** New `bridgeforge/corpus_recheck.py` (`corpus_recheck`, `render_markdown`),
+    wired as `bridgeforge corpus-recheck [--repo-root] [--vanilla-core] [--write-markdown] [--json]`.
+    Mod discovery reuses `project_board`'s own tested layout logic (a mod qualifies when it has a
+    `working/mod_info.json` AND a `REVIVAL_REPORT.md`) rather than re-deriving it by hand - verified
+    this produces the exact same 40-mod list item 23 built manually. Uses the corrected item-23
+    procedure (`scan_mod(..., compile_check=False)` for the finding set, the standalone
+    `compile_loose_scripts` for the compile signal - see item 29) rather than the roadmap text's
+    literal `scan --compile-check`. Flags a `REGRESSION` when a mod with a declared ready status
+    (`READY`/`READY_FOR_LIVE_TEST`/`READY_WITH_REVIEW_ITEMS`, via item 31's now-much-more-complete
+    status resolution) now carries any MANUAL finding - exit code 1, so it's script-usable as a
+    live-test gate. `--write-markdown` emits the same roll-up table format item 23 wrote by hand.
+    Tests: `tests/test_corpus_recheck.py` (report-presence filtering, finding/status reporting,
+    regression detection with and without a declared-ready status, one mod's scan failure not
+    crashing the rest, markdown rendering, CLI JSON/markdown/exit-code).
 
 ## Post-1.0 research and gated automation
 

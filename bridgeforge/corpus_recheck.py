@@ -1,0 +1,124 @@
+"""Re-scan every mod with real revival work recorded (ROADMAP P14 item 32).
+
+Generalizes item 23's full corpus recheck (2026-09-21, done by hand with a throwaway script) into
+a reusable command. Mod discovery reuses `project_board`'s own tested layout logic rather than
+re-deriving it: a mod qualifies when it has a `working/mod_info.json` AND a `REVIVAL_REPORT.md`
+(real revival work recorded) - this naturally excludes the Ironclads intake queue (no `working/`
+copy exists for any of it yet) and non-canonical copies (`scratch/`, `builds/`, `_rig/mods/`,
+anything starting with `_`) without special-casing them.
+
+Uses the corrected item-23 procedure, not the literal roadmap text: `scan_mod(...,
+compile_check=False)` for the finding set, plus the standalone `compile_loose_scripts` (which
+defaults `provider_roots` the same way the `compile-check` CLI command does) for the compile
+signal - `scan --compile-check`'s own code path could not resolve a declared dependency at all
+before item 29's fix, and even after it, calling the two separately keeps this module decoupled
+from a full scan's slower compile-check integration.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from .compile_check import compile_loose_scripts
+from .models import TargetProfile
+from .project_board import project_board
+from .scanner import scan_mod
+
+SCHEMA_VERSION = 1
+
+
+def _qualifying_mods(repo_root: Path) -> list[dict[str, object]]:
+    board = project_board(repo_root)
+    return [row for row in board["mods"] if row["working"] and row["evidence"]["report"]]
+
+
+def _recheck_one(name: str, working: Path, vanilla_core: Path | None, declared_status: str | None, declared_status_confidence: str | None) -> dict[str, object]:
+    try:
+        result = scan_mod(Path(working), TargetProfile(), vanilla_core, compile_check=False)
+    except ValueError as exc:
+        return {"mod": name, "error": str(exc)}
+    by_classification: dict[str, int] = {}
+    for finding in result.findings:
+        by_classification[finding.classification] = by_classification.get(finding.classification, 0) + 1
+    manual_ids = sorted({finding.id for finding in result.findings if finding.classification == "MANUAL"})
+    compile_status = None
+    compile_errors = None
+    if vanilla_core is not None:
+        compile_result = compile_loose_scripts(Path(working), vanilla_core=vanilla_core)
+        compile_status = compile_result.get("status")
+        compile_errors = compile_result.get("error_count")
+    return {
+        "mod": name,
+        "working": str(working),
+        "files": len(result.files),
+        "findings_total": len(result.findings),
+        "by_classification": by_classification,
+        "manual_ids": manual_ids,
+        "compile_status": compile_status,
+        "compile_errors": compile_errors,
+        "declared_completion_status": declared_status,
+        "declared_completion_status_confidence": declared_status_confidence,
+    }
+
+
+def corpus_recheck(repo_root: Path, vanilla_core: Path | None = None) -> dict[str, object]:
+    """Re-scan every mod with real revival work recorded under `repo_root`'s `In operation/`.
+
+    See the module docstring for scope and the finding/compile-signal split. `vanilla_core` is
+    optional (matching `scan`'s own default), but every vanilla-dependent check - which is most of
+    them - returns UNKNOWN without it, and no compile signal is produced at all.
+    """
+    repo = repo_root.expanduser().resolve()
+    vanilla_root = vanilla_core.expanduser().resolve() if vanilla_core is not None else None
+    if vanilla_root is not None and not vanilla_root.is_dir():
+        vanilla_root = None
+    mods = []
+    for row in sorted(_qualifying_mods(repo), key=lambda r: r["folder"]):
+        mods.append(_recheck_one(
+            row["folder"], Path(row["working"]), vanilla_root,
+            row.get("declared_completion_status"), row.get("declared_completion_status_confidence"),
+        ))
+    regressions = [
+        m for m in mods
+        if "error" not in m and m["declared_completion_status"] in ("READY", "READY_FOR_LIVE_TEST", "READY_WITH_REVIEW_ITEMS")
+        and m["by_classification"].get("MANUAL", 0) > 0
+    ]
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "mode": "corpus-recheck",
+        "status": "REGRESSION" if regressions else "OK",
+        "repo_root": str(repo),
+        "vanilla_core": str(vanilla_root) if vanilla_root is not None else None,
+        "mod_count": len(mods),
+        "regressions": [m["mod"] for m in regressions],
+        "mods": mods,
+    }
+
+
+def render_markdown(recheck: dict[str, object]) -> str:
+    """A roll-up table matching item 23's own hand-written format, for `--write-markdown`."""
+    lines = [
+        "# Corpus recheck",
+        "",
+        f"{recheck['mod_count']} mod(s) with real revival work recorded, under `{recheck['repo_root']}`.",
+        "",
+    ]
+    if recheck["regressions"]:
+        lines.append(f"**Regression: {len(recheck['regressions'])} mod(s) with a declared ready status now carry a MANUAL finding:** " + ", ".join(f"`{m}`" for m in recheck["regressions"]))
+        lines.append("")
+    lines.append("| Mod | Files | MANUAL | REVIEW | Compile | Errs | Declared status | MANUAL finding ids |")
+    lines.append("| --- | ---: | ---: | ---: | --- | ---: | --- | --- |")
+    for mod in recheck["mods"]:
+        if "error" in mod:
+            lines.append(f"| {mod['mod']} | — | — | — | ERROR | — | — | {mod['error']} |")
+            continue
+        manual = mod["by_classification"].get("MANUAL", 0)
+        review = mod["by_classification"].get("REVIEW", 0)
+        compile_status = mod["compile_status"] or "—"
+        compile_errors = mod["compile_errors"] if mod["compile_errors"] is not None else "—"
+        declared = mod["declared_completion_status"] or "—"
+        if mod["declared_completion_status_confidence"] == "BEST_EFFORT":
+            declared += " (best-effort)"
+        ids = ", ".join(mod["manual_ids"]) or "—"
+        lines.append(f"| {mod['mod']} | {mod['files']} | {manual} | {review} | {compile_status} | {compile_errors} | {declared} | {ids} |")
+    return "\n".join(lines) + "\n"

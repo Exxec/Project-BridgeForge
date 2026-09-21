@@ -698,6 +698,11 @@ def build_parser() -> argparse.ArgumentParser:
     compile_check_cmd.add_argument("--jdk", type=Path, help="JDK home (default: this repo's rig JDK, else JAVA_HOME, else PATH)")
     compile_check_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search for declared dependencies; repeatable (default: <repo>/In operation and its rig's mods)")
     compile_check_cmd.add_argument("--json", action="store_true")
+    corpus_recheck_cmd = subcommands.add_parser("corpus-recheck", help="re-scan every mod with real revival work recorded (ROADMAP P14 item 32): finding counts, compile signal and declared status in one roll-up")
+    corpus_recheck_cmd.add_argument("--repo-root", type=Path, default=Path("."), help="repo root holding In operation/ (default: cwd)")
+    corpus_recheck_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core; without it, most checks return UNKNOWN and no compile signal is produced")
+    corpus_recheck_cmd.add_argument("--write-markdown", type=Path, help="also write a roll-up table to this path")
+    corpus_recheck_cmd.add_argument("--json", action="store_true")
     rebuild_from_reference_cmd = subcommands.add_parser("rebuild-from-reference", help="overlay a mod's own genuine changes (vs. a historical reference rig's vanilla copy) onto current RC8 vanilla, for old mods that ship modified copies of vanilla files under vanilla's own paths")
     rebuild_from_reference_cmd.add_argument("mod", type=Path, help="mod working copy")
     rebuild_from_reference_cmd.add_argument("--reference-core", required=True, type=Path, help="a registered reference rig's read-only starsector-core (the historical vanilla version the mod's file was originally built against)")
@@ -1016,6 +1021,28 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Report: {report}")
         print(f"Manifest: {manifest}")
         return 0
+    if args.command == "corpus-recheck":
+        from .corpus_recheck import corpus_recheck, render_markdown
+        result = corpus_recheck(args.repo_root, args.vanilla_core)
+        if args.write_markdown:
+            args.write_markdown.parent.mkdir(parents=True, exist_ok=True)
+            args.write_markdown.write_text(render_markdown(result), encoding="utf-8")
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"{result['status']}: {result['mod_count']} mod(s) with real revival work recorded")
+            if result["regressions"]:
+                print(f"  REGRESSION: {', '.join(result['regressions'])}")
+            for mod in result["mods"]:
+                if "error" in mod:
+                    print(f"  ERROR {mod['mod']}: {mod['error']}")
+                    continue
+                manual = mod["by_classification"].get("MANUAL", 0)
+                if manual:
+                    print(f"  {mod['mod']}: {manual} MANUAL ({', '.join(mod['manual_ids'])})")
+            if args.write_markdown:
+                print(f"Roll-up written: {args.write_markdown}")
+        return 1 if result["status"] == "REGRESSION" else 0
     if args.command == "rebuild-from-reference":
         from .rebuild_from_reference import rebuild_from_reference
         result = rebuild_from_reference(args.mod, args.reference_core, args.current_core, args.glob, args.output)
