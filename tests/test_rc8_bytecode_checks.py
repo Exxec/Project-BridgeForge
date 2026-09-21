@@ -487,6 +487,38 @@ class VanillaPathShadowingJavaExtensionTests(unittest.TestCase):
             self.assertEqual(len(findings), 1)
             self.assertEqual(findings[0].classification, "REVIEW")
 
+    def test_migration_context_carries_the_true_total_across_every_folder(self) -> None:
+        """A per-folder rollup's own count:N is easy to undercount from by summing *findings*
+        instead of files (P14 item 20 - E3's original ~79-file estimate for Rebal was really 642,
+        an 8x miss found only by a direct recount). One grand total across every shadowed folder,
+        independent of how the >VANILLA_SHADOW_GROUP_THRESHOLD grouping split the findings, belongs
+        in migration_context so the next investigation doesn't need to re-add finding evidence by
+        hand."""
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
+            root = Path(mod_dir)
+            vanilla = Path(vanilla_dir)
+            # Two separate folders, each under the grouping threshold on its own, so this also
+            # confirms the total sums across multiple `vanilla-path-shadowing` findings, not just
+            # counts one.
+            for i in range(2):
+                _write(root / "data" / "hullmods" / f"Mod{i}.java", f"class Mod{i} {{ int a = 2; }}")
+                _write(vanilla / "data" / "hullmods" / f"Mod{i}.java", f"class Mod{i} {{ int a = 1; }}")
+            for i in range(3):
+                _write(root / "data" / "weapons" / f"Wpn{i}.java", f"class Wpn{i} {{ int a = 2; }}")
+                _write(vanilla / "data" / "weapons" / f"Wpn{i}.java", f"class Wpn{i} {{ int a = 1; }}")
+            result = scan_mod(root, vanilla_core=vanilla)
+            self.assertEqual(result.migration_context.get("vanilla_path_shadowing_total_files"), 5)
+
+    def test_migration_context_has_no_total_when_nothing_shadows(self) -> None:
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
+            root = Path(mod_dir)
+            vanilla = Path(vanilla_dir)
+            same_text = "class LevelupPluginImpl { int a = 1; }"
+            _write(root / "data" / "scripts" / "plugins" / "LevelupPluginImpl.java", same_text)
+            _write(vanilla / "data" / "scripts" / "plugins" / "LevelupPluginImpl.java", same_text)
+            result = scan_mod(root, vanilla_core=vanilla)
+            self.assertNotIn("vanilla_path_shadowing_total_files", result.migration_context)
+
 
 if __name__ == "__main__":
     unittest.main()

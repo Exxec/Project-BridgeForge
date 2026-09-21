@@ -37,6 +37,7 @@ SUPPORTED_FINDINGS = (
     "removed-api-call",
     "carrier-bays-proposal",
     "revenantlib-fold-conflict",
+    "undeclared-library-dependency",
 )
 
 
@@ -664,6 +665,104 @@ def _fix_revenantlib_fold_conflict(root: Path, options: dict) -> list[FileChange
 
 
 # ---------------------------------------------------------------------------
+# Fixer: undeclared-library-dependency (roadmap P14 item 16)
+# ---------------------------------------------------------------------------
+
+
+def _add_dependency_entry(text: str, dependency_id: str, name: str) -> str:
+    """Insert `{"id":"<id>","name":"<name>"}` into `dependencies`, creating the array if absent.
+
+    Generalizes `_add_revenantlib_dependency`'s insertion logic (kept separate above since it also
+    carries revenantlib-specific "already declared" checks and round-trip verification); this one
+    assumes the caller has already confirmed the id isn't declared and just needs the array edit.
+    """
+    entry = '{"id":' + json.dumps(dependency_id) + ',"name":' + json.dumps(name) + "}"
+    match = _DEPENDENCIES_ARRAY_PATTERN.search(text)
+    if match is not None:
+        insert_at = match.end()  # just after the array's '['
+        needs_comma = not text[insert_at:].lstrip().startswith("]")
+        return text[:insert_at] + entry + ("," if needs_comma else "") + text[insert_at:]
+    brace_index = text.find("{")
+    if brace_index == -1:
+        raise FixerError("mod_info.json has no '{' to insert dependencies after.")
+    insertion = '"dependencies":[' + entry + "],"
+    return text[: brace_index + 1] + insertion + text[brace_index + 1 :]
+
+
+def _fix_undeclared_library_dependency(root: Path, options: dict) -> list[FileChange]:
+    """Resolve `undeclared-library-dependency`: declare the library findings already identified
+    the mod actually reaches by package (LazyLib/MagicLib/GraphicsLib/LunaLib/Nexerelin), using the
+    exact id `scanner.LIBRARY_DEPENDENCY_IDS` maps to. Declaring a library the mod already imports
+    is safe regardless of whether the finding is MANUAL (unguarded) or REVIEW (an isModEnabled guard
+    found, suggesting an optional integration) - Starsector's dependency mechanism has no separate
+    "optional" shape, so a real integration wants the dependency present either way, and it never
+    makes the undeclared-crash failure mode worse.
+
+    Hand-verified this session, twice: `scanner.LIBRARY_DEPENDENCY_IDS` had the wrong case for two
+    libraries (`magiclib`/`shaderlib` instead of the real `MagicLib`/`shaderLib`, found by reading
+    those libraries' own installed `mod_info.json`, corroborated by `revival_audit.py`'s already-
+    correct copy of the same table) - fixed there before this fixer was built on top of it, so a
+    written dependency actually matches what the game expects, not just what the scanner's own
+    case-insensitive comparison would have accepted.
+    """
+    from .scanner import LIBRARY_DEPENDENCY_IDS, scan_mod
+
+    findings = [f for f in scan_mod(root).findings if f.id == "undeclared-library-dependency"]
+    if not findings:
+        raise FixerError("No undeclared-library-dependency finding for this mod.")
+
+    to_add: dict[str, str] = {}  # dependency_id -> library display name
+    for finding in findings:
+        library = next((item.split(":", 1)[1] for item in finding.evidence if item.startswith("library:")), None)
+        dependency_id = next((item.split(":", 1)[1] for item in finding.evidence if item.startswith("dependency-id:")), None)
+        if not library or not dependency_id:
+            continue
+        # Trust LIBRARY_DEPENDENCY_IDS as the source of truth for the id to write, not the
+        # finding's own copy of it, so a corrected table takes effect without needing a fresh scan.
+        to_add[LIBRARY_DEPENDENCY_IDS.get(library, dependency_id)] = library
+
+    path = root / "mod_info.json"
+    if not path.is_file():
+        raise FixerError(f"No mod_info.json found at {path}.")
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    data = _load_lenient_json_file(path)
+    if not isinstance(data, dict):
+        raise FixerError(f"{path} could not be parsed as JSON.")
+    dependencies = data.get("dependencies")
+    if dependencies is not None and not isinstance(dependencies, list):
+        raise FixerError(f"{path} 'dependencies' is not a JSON array; add the dependency by hand.")
+    already_declared = {
+        str((item.get("id") if isinstance(item, dict) else item) or "").strip().lower()
+        for item in (dependencies or [])
+    }
+
+    added: list[str] = []
+    for dependency_id, library in sorted(to_add.items()):
+        if dependency_id.strip().lower() in already_declared:
+            continue
+        text = _add_dependency_entry(text, dependency_id, library)
+        already_declared.add(dependency_id.strip().lower())
+        added.append(dependency_id)
+    if not added:
+        raise FixerError(f"{path} already declares every library this mod's undeclared-library-dependency findings name.")
+
+    try:
+        parsed, _tolerances = _parse_json(text)
+    except json.JSONDecodeError as exc:
+        raise FixerError(f"Edited {path} failed to re-parse: {exc}") from exc
+    new_ids = {
+        str((item.get("id") if isinstance(item, dict) else item) or "").strip().lower()
+        for item in ((parsed.get("dependencies") or []) if isinstance(parsed, dict) else [])
+    }
+    missing = [dep_id for dep_id in added if dep_id.strip().lower() not in new_ids]
+    if missing:
+        raise FixerError(f"Edited {path} did not round-trip {', '.join(missing)} as expected.")
+
+    return [FileChange(path=path, before=raw, after=_encode(text, had_bom))]
+
+
+# ---------------------------------------------------------------------------
 # Fixer: wing-data-missing-role-desc-column
 # ---------------------------------------------------------------------------
 
@@ -1285,6 +1384,7 @@ _FIXER_FUNCS = {
     "mod-info-triage-banner": _fix_mod_info_triage_banner,
     "carrier-bays-proposal": _fix_carrier_bays_proposal,
     "revenantlib-fold-conflict": _fix_revenantlib_fold_conflict,
+    "undeclared-library-dependency": _fix_undeclared_library_dependency,
 }
 
 

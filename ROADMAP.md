@@ -550,6 +550,15 @@ Progression, each stage feeding the next:
     backup) would make this mechanical instead of manual, which matters most across the Ironclads
     queue's 264 mods, where this exact defect class is common in mods that age from before
     dependencies were declared explicitly.
+    **Done 2026-09-21.** New `_fix_undeclared_library_dependency`, following
+    `_add_revenantlib_dependency`'s pattern via a new generalized `_add_dependency_entry` helper.
+    Found and fixed a real bug while building it: `scanner.LIBRARY_DEPENDENCY_IDS` had the wrong
+    case for two libraries (`magiclib`/`shaderlib` instead of the real `MagicLib`/`shaderLib`) -
+    found by reading those libraries' own installed `mod_info.json` directly, corroborated by
+    `revival_audit.py`'s already-correct copy of the same table. The scanner's own detection was
+    unaffected (its comparison is case-insensitive), but a fixer writing the wrong case would have
+    produced a dependency declaration that may not actually resolve in-game - fixed before the fixer
+    was built on top of it. Tests: `tests/test_fixers.py` (`UndeclaredLibraryDependencyFixerTests`).
 17. **Audit every scanner "known ids" set for the same missing-skin-chain blind spot BF-SKIN-01
     exposed.** `mission-local-variant-hull-missing` built its known-hulls set from `*.ship` files
     only and never chased a `.skin`'s `baseHullId` chain, false-flagging real content on
@@ -595,6 +604,12 @@ Progression, each stage feeding the next:
     `migration_context`, and ideally in the finding's own evidence line) the true total file count
     across every shadowed folder, so the next mod with this pattern doesn't need an agent to
     rediscover the same gap between "findings" and "files."
+    **Done 2026-09-21.** `result.migration_context["vanilla_path_shadowing_total_files"]` now carries
+    one grand total across every shadowed folder in the mod, independent of how many findings the
+    `>VANILLA_SHADOW_GROUP_THRESHOLD` grouping produced. Verified against Rebal's real, still-partial
+    rebuild state. Tests: `tests/test_rc8_bytecode_checks.py`
+    (`test_migration_context_carries_the_true_total_across_every_folder`, and a negative case
+    confirming the key is absent when nothing shadows).
 21. **Generalize E11's rebuild-from-a-reference-rig method into a command.** Built by hand this
     session (enumerate a mod's files that share a path with a reference rig's vanilla copy; for each,
     value-diff the mod's file against the reference AND against current RC8 vanilla; keep fields RC8

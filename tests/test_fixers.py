@@ -1093,6 +1093,58 @@ class RevenantlibFoldConflictFixerTests(unittest.TestCase):
             self.assertEqual(mod_info["dependencies"], [{"id": "revenantlib", "name": "RevenantLib"}])
 
 
+class UndeclaredLibraryDependencyFixerTests(unittest.TestCase):
+    """undeclared-library-dependency (roadmap P14 item 16): a mod that reaches a known library's
+    package without declaring it in mod_info.json - hand-applied three times this session
+    (EZFaction, Maelstrom, Leon-Heavy-Industries) before this fixer existed.
+    """
+
+    def _mod_with_graphicslib_import(self, root: Path, mod_info: dict | None = None) -> None:
+        _write(root / "mod_info.json", json.dumps(mod_info or {"id": "flowergod"}))
+        _write(
+            root / "src" / "FlowerGodPlugin.java",
+            "package fg;\nimport org.dark.shaders.light.LightAPI;\nclass FlowerGodPlugin { LightAPI l; }",
+        )
+
+    def test_declares_the_missing_library_with_the_real_corrected_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod_with_graphicslib_import(root)
+            self.assertEqual(len(_findings(scan_mod(root), "undeclared-library-dependency")), 1)
+            plan = compute_fix(root, "undeclared-library-dependency")
+            applied = apply_fix(plan)
+            self.assertTrue(Path(applied[0]["backup"]).name.endswith(".pre-bf-fix-undeclared-library-dependency.bak"))
+            mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+            # The real, corrected id (mixed-case, matching GraphicsLib's own mod_info.json) - not
+            # the lowercase "shaderlib" the table had before this session's casing fix.
+            self.assertEqual(mod_info["dependencies"], [{"id": "shaderLib", "name": "GraphicsLib"}])
+            self.assertEqual(_findings(scan_mod(root), "undeclared-library-dependency"), [])
+
+    def test_already_declared_with_the_bare_string_shape_is_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod_with_graphicslib_import(root, {"id": "flowergod", "dependencies": ["shaderLib"]})
+            self.assertEqual(_findings(scan_mod(root), "undeclared-library-dependency"), [])
+            with self.assertRaises(FixerError):
+                compute_fix(root, "undeclared-library-dependency")
+
+    def test_no_finding_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", json.dumps({"id": "clean"}))
+            with self.assertRaises(FixerError):
+                compute_fix(root, "undeclared-library-dependency")
+
+    def test_cli_fix_apply_end_to_end(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod_with_graphicslib_import(root)
+            exit_code = main(["fix", str(root), "--finding", "undeclared-library-dependency", "--apply", "--json"])
+            self.assertEqual(exit_code, 0)
+            mod_info = json.loads((root / "mod_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(mod_info["dependencies"], [{"id": "shaderLib", "name": "GraphicsLib"}])
+
+
 class UnsupportedFindingTests(unittest.TestCase):
     def test_unsupported_finding_lists_supported_ids(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

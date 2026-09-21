@@ -190,9 +190,9 @@ BUNDLED_LIBRARY_PACKAGE_PREFIXES = {
     "LWJGL": ("org/lwjgl/",),
 }
 LIBRARY_DEPENDENCY_IDS = {
-    "GraphicsLib": "shaderlib",
+    "GraphicsLib": "shaderLib",
     "LazyLib": "lw_lazylib",
-    "MagicLib": "magiclib",
+    "MagicLib": "MagicLib",
     "LunaLib": "lunalib",
     "Nexerelin": "nexerelin",
 }
@@ -3012,6 +3012,14 @@ def _scan_vanilla_path_shadowing(root: Path, result: ScanResult, vanilla_core: P
         if mod_bytes == vanilla_bytes:
             continue
         shadowed.setdefault(_relative(root, path.parent), []).append((path, vanilla_path))
+    # A per-folder rollup's own `count:N` evidence is easy to undercount from: E3's original "~79
+    # files" estimate for Rebal counted *findings*, not the sum of every folder's own count - the
+    # real number was 642 (P14 item 20). One grand total, independent of how many findings the
+    # >VANILLA_SHADOW_GROUP_THRESHOLD grouping produces, is exposed here so a future investigation
+    # doesn't need to re-add every finding's evidence by hand to learn the true scope.
+    total_shadowed_files = sum(len(files) for files in shadowed.values())
+    if total_shadowed_files:
+        result.migration_context["vanilla_path_shadowing_total_files"] = total_shadowed_files
     severity = "low" if total_conversion else "critical"
     classification = "REVIEW" if total_conversion else "MANUAL"
     for folder, files in sorted(shadowed.items()):
