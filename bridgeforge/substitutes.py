@@ -268,9 +268,28 @@ def _workspace_state(ops: Path, mod_id: str) -> dict | None:
     return None
 
 
-def strategy(needed: dict[str, set[str]], files: dict[str, int], chosen: list[dict], uncovered: set[str]) -> tuple[str, str]:
+def _licence_note(mod_id: str, policy_path: Path | None) -> str:
+    """ROADMAP P14 item 7/9: before recommending REVIVE_DEPENDENCY, check `release_policy.json` so
+    a revived library that can't be redistributed is flagged right where the recommendation is
+    made, not discovered later at `release` time. Read-only; never changes the recommended verdict
+    itself - licence status is a distribution constraint on the *outcome*, not a reason to prefer a
+    different strategy (STRIP_FROM_MOD/ESCALATE would need their own owner judgement regardless).
+    """
+    from .release import DEFAULT_POLICY_PATH, _licence_gate
+
+    gate = _licence_gate(mod_id, None, policy_path or DEFAULT_POLICY_PATH)
+    if not gate["local_only"]:
+        return ""
+    reason = gate.get("reason")
+    return f" [licence: local-only, not for release distribution{f' - {reason}' if reason else ''}]"
+
+
+def strategy(needed: dict[str, set[str]], files: dict[str, int], chosen: list[dict], uncovered: set[str], policy_path: Path | None = None) -> tuple[str, str]:
     """Recommended course, with its reason. `chosen` is the provider set cover (each with
-    'name', 'targets_0.98a' and optional 'workspace' state); `uncovered` what no provider has."""
+    'name', 'targets_0.98a' and optional 'workspace' state); `uncovered` what no provider has.
+    `policy_path` (default: the bundled `release_policy.json`) drives the licence note on any
+    provider this recommends reviving - see `_licence_note`.
+    """
     references = sum(len(ids) for ids in needed.values())
     touched = sum(files.values())
     if not chosen:
@@ -295,6 +314,7 @@ def strategy(needed: dict[str, set[str]], files: dict[str, int], chosen: list[di
             f"{item['name']} ({item['game_version'] or 'no version'}"
             + (f", workspace {item['workspace']['workspace']}: {item['workspace'].get('manual_findings')} MANUAL" if item.get("workspace") else ", not a workspace here")
             + ")"
+            + (_licence_note(item["mod_id"], policy_path) if item.get("mod_id") else "")
             for item in items
         )
 
@@ -315,7 +335,7 @@ def strategy(needed: dict[str, set[str]], files: dict[str, int], chosen: list[di
     return "ESCALATE", f"{len(hard)} id(s)/class(es) in {hard_places} place(s) have no practical provider: {left}{heavy_note}. Other ids: {'; '.join(plan) or 'none'}. Revive, remap, or rebuild without it. Owner decision."
 
 
-def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla_core: Path | None = None, ops: Path | None = None) -> dict:
+def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla_core: Path | None = None, ops: Path | None = None, policy_path: Path | None = None) -> dict:
     from .models import TargetProfile
     from .scanner import scan_mod
 
@@ -341,7 +361,7 @@ def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla
             item["workspace"] = _workspace_state(ops_dir, provider.mod_id)
         chosen.append(item)
     if any(needed.values()):
-        course, reason = strategy(needed, files, chosen, uncovered)
+        course, reason = strategy(needed, files, chosen, uncovered, policy_path)
     elif missing_declared:
         course, reason = "ESCALATE", f"Declared dependencies not found among visible mods: {', '.join(missing_declared)}. Install them or check the ids."
     else:

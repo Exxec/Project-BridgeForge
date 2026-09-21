@@ -416,7 +416,7 @@ Starting point:
    order at the owner's explicit direction (2026-09-21: "start item 18 then P14 items", read as
    items 6/7/8 specifically, per the coordinator's own prior framing the owner was replying to).
 6. Provider index and dependency graph (items 2–3). **Done 2026-09-21.**
-7. Licence-aware revival (item 9).
+7. Licence-aware revival (item 9). **Done 2026-09-21.**
 8. The Ironclads queue, last.
 
 Items 1 and 3 share a Java-toolchain module and are built together (task A9).
@@ -474,6 +474,25 @@ Progression, each stage feeding the next:
    **Done 2026-09-14/15 (task A9).** `rebuild-jar <mod> --sources DIR --jar JAR` (`bridgeforge/rebuild_jar.py`, sharing `java_toolchain` with the compile check below): rebuilds from source, packages a jar keeping the original manifest/resources, and diffs it against the original class-by-class and member-by-member, normalizing known compiler-only differences (class-file version bump, `synchronized`-only change, Lombok lock fields, synthetic `access$`/`lambda$` members). PASS/REVIEW/FAIL, with `--install` moving the previous jar to `scratch/moved-<date>/` and installing only on PASS.
 8. **Removed-vanilla-content catalogue.** Record ids and classes vanilla dropped between versions (the `thruster_fighter_sm` / `shields_formshield` kind), with evidence and successors, so "defined nowhere" becomes "removed in 0.9x; use X".
 9. **Licence-aware revival of dependencies.** Before REVIVE_DEPENDENCY, check `release_policy.json` so a revived library is marked local-only when its licence doesn't allow redistribution.
+    **Done 2026-09-21.** New `substitutes._licence_note`/`strategy(..., policy_path=...)`: any
+    provider `strategy()` recommends reviving (the `revive`/`heavy` lists) gets its
+    `release_policy.json` entry checked via `release._licence_gate` (the exact same function
+    `release` itself uses - one licence check, not two), and a local-only provider's recommendation
+    text gets a `[licence: local-only, not for release distribution - <reason>]` note appended right
+    where the recommendation is made, not discovered later at `release` time. Read-only; never
+    changes the recommended verdict itself, since licence status is a distribution constraint on
+    the outcome, not a reason to prefer a different strategy. `dependency_substitutes(...,
+    policy_path=...)` and a new `dependency-substitutes --policy` CLI flag thread a custom policy
+    path through (default: the bundled `release_policy.json`, same default `release` itself uses).
+    Verified against the real bundled policy: `xxx_ss_FX_mod_core` (Xenoargh's FX Core, genuinely
+    local-only per its real entry) produces the real licence note text unprompted. The one live mod
+    that used to need FX Core revived (`Xenoargh-FX-Example`) now resolves to `SWAP` instead of
+    `REVIVE_DEPENDENCY`, because this session's own earlier fold-in work already folded FX Core into
+    RevenantLib - confirmed there is currently no live `REVIVE_DEPENDENCY`+local-only case left in
+    the corpus to demonstrate end-to-end, which is itself a sign the fold-in work did its job; the
+    licence-check path itself is fully covered by direct tests against the real policy file and a
+    full `dependency_substitutes()` integration test with a custom policy and a real workspace
+    layout. Tests: `tests/test_substitutes.py` (`LicenceAwareRevivalTests`, 5 cases).
 11. **Loose-script compile check.** Removed APIs keep turning up one method at a time: `SectorAPI.createFleet`, then `SectorAPI.addMessage` (RC8 moved it to `CampaignUIAPI`), found only by task A5's compile check of Cobalt-Arms and Independant-Mining-Faction. When the rig JDK is available, compile every loose `data/**.java` against the core jars plus the declared dependencies' jars, and report each javac error as a MANUAL finding with its file and line. That catches every removed or changed API in one pass; per-method `removed-api-call` entries then serve only as fixer rules.
     **Done 2026-09-15.** The standalone `compile-check <mod>` command (task A9) is now also reachable from a plain scan: `scan_mod(..., compile_check=True)` and `scan --compile-check` call `bridgeforge.compile_check.compile_loose_scripts` when `--vanilla-core` is given, emitting `loose-script-compile-error` (MANUAL, grouped one finding per failing file, up to 5 errors' line/message/symbol as evidence) or `loose-script-compile-unavailable` (UNKNOWN, no JDK or no core). Off by default so a plain scan stays fast and hermetic. Real cases (2026-09-15): Renis-Imperium, AI-War, Argamede-Union and EZFaction were each marked ready by every other check and failed only this one. Janino version check: RC8 ships Janino 2.7.8 (`starsector-core/janino.jar` manifest); its own changelog dates the diamond operator/try-with-resources/multi-catch/lambdas all to the 3.0.x line, well after 2.7.8, so `janino_gap_warnings` keeps flagging every construct it already flagged. Tests: `tests/test_scanner.py` (`CompileCheckScanIntegrationTests`).
 10. **Fold-in workflow (owner policy 2026-09-14).** Discontinued library-like mods are folded into RevenantLib (`revenantlib`), per `docs/DEPENDENCY_STRATEGY.md`. The workflow has four parts:

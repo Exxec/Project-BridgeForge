@@ -139,6 +139,85 @@ class SubstituteTests(unittest.TestCase):
         self.assertIn("data.scripts.fx_Particle", provider.provides["class"])
 
 
+class LicenceAwareRevivalTests(unittest.TestCase):
+    """ROADMAP P14 item 7/9: before recommending REVIVE_DEPENDENCY, check `release_policy.json` so
+    a revived library that can't be redistributed is flagged right where the recommendation is
+    made, not discovered later at `release` time.
+    """
+
+    def _policy(self, root: Path, mod_id: str, local_only: bool, reason: str = "") -> Path:
+        path = root / "policy.json"
+        path.write_text(json.dumps({"schema_version": 1, "mods": {mod_id: {"local_only": local_only, "reason": reason}}}), encoding="utf-8")
+        return path
+
+    def test_a_local_only_provider_is_flagged_in_the_revive_recommendation(self) -> None:
+        from bridgeforge.substitutes import strategy
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            policy = self._policy(root, "fxcore", True, "Xenoargh: no licence text, author unresponsive.")
+            needed = {"class": {"data.scripts.fx_Particle"}}
+            chosen = [{"mod_id": "fxcore", "name": "FX Core", "game_version": "0.91a", "targets_0.98a": False, "workspace": {"workspace": "Xenoargh-FX-Core", "manual_findings": 10}}]
+            course, reason = strategy(needed, {"data.scripts.fx_Particle": 1}, chosen, set(), policy)
+        self.assertEqual(course, "REVIVE_DEPENDENCY")
+        self.assertIn("licence: local-only", reason)
+        self.assertIn("Xenoargh: no licence text", reason)
+
+    def test_a_redistributable_provider_gets_no_licence_note(self) -> None:
+        from bridgeforge.substitutes import strategy
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            policy = self._policy(root, "fxcore", False)
+            needed = {"class": {"data.scripts.fx_Particle"}}
+            chosen = [{"mod_id": "fxcore", "name": "FX Core", "game_version": "0.91a", "targets_0.98a": False, "workspace": {"workspace": "Xenoargh-FX-Core", "manual_findings": 10}}]
+            course, reason = strategy(needed, {"data.scripts.fx_Particle": 1}, chosen, set(), policy)
+        self.assertEqual(course, "REVIVE_DEPENDENCY")
+        self.assertNotIn("licence", reason)
+
+    def test_an_unlisted_mod_defaults_to_no_note(self) -> None:
+        from bridgeforge.substitutes import strategy
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            policy = self._policy(root, "some-other-mod", True)
+            needed = {"class": {"data.scripts.fx_Particle"}}
+            chosen = [{"mod_id": "fxcore", "name": "FX Core", "game_version": "0.91a", "targets_0.98a": False, "workspace": {"workspace": "Xenoargh-FX-Core", "manual_findings": 10}}]
+            course, reason = strategy(needed, {"data.scripts.fx_Particle": 1}, chosen, set(), policy)
+        self.assertEqual(course, "REVIVE_DEPENDENCY")
+        self.assertNotIn("licence", reason)
+
+    def test_real_bundled_policy_flags_a_known_local_only_mod(self) -> None:
+        from bridgeforge.substitutes import _licence_note
+
+        note = _licence_note("xxx_ss_FX_mod_core", None)
+        self.assertIn("licence: local-only", note)
+        self.assertIn("Xenoargh", note)
+
+    def test_dependency_substitutes_threads_the_custom_policy_path_through(self) -> None:
+        # A workspace-backed revivable provider needs a real scan report on disk to compute
+        # manual_findings (see _workspace_state); construct that real layout so this exercises
+        # dependency_substitutes end to end, not just strategy() directly.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _provider(root, "oldsector_provider", "0.9.1a", "Red,old_red_army\n", "old_yak_wing,v\n")
+            info_path = root / "mods" / "oldsector_provider" / "mod_info.json"
+            info = json.loads(info_path.read_text(encoding="utf-8"))
+            info["id"] = "oldsector"
+            info_path.write_text(json.dumps(info), encoding="utf-8")
+
+            ops = root / "ops"
+            base = ops / "OldSector"
+            _write(base / "working" / "mod_info.json", json.dumps({"id": "oldsector", "name": "OldSector"}))
+            scan_dir = base / "reports" / "scan-1"
+            _write(scan_dir / "bridgeforge.compat.json", json.dumps({"findings": [{"classification": "REVIEW"}]}))
+
+            policy = self._policy(root, "oldsector", True, "No redistribution licence found.")
+            report = dependency_substitutes(_addon(root), [root / "mods"], vanilla_core=_core(root), ops=ops, policy_path=policy)
+        self.assertEqual(report["strategy"], "REVIVE_DEPENDENCY")
+        self.assertIn("licence: local-only", report["reason"])
+
+
 class ProviderIndexCacheTests(unittest.TestCase):
     """ROADMAP P14 item 6/2: a persistent corpus artefact, so a provider lookup is instant and
     still works for a mod that isn't currently installed/visible anywhere live.

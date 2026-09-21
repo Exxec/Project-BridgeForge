@@ -687,6 +687,7 @@ def build_parser() -> argparse.ArgumentParser:
     subs_cmd.add_argument("mod", type=Path, help="mod working copy")
     subs_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
     subs_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla content isn't counted as missing")
+    subs_cmd.add_argument("--policy", type=Path, help="licence policy JSON (default: bundled release_policy.json); flags a REVIVE_DEPENDENCY recommendation as local-only when its licence doesn't allow redistribution")
     subs_cmd.add_argument("--json", action="store_true")
     preset_cmd = subcommands.add_parser("preset-check", help="check bf-test.ps1 presets against the rig's installed mods: own mod and declared dependencies enabled, enabled ids installed, no undeclared libraries")
     preset_cmd.add_argument("script", type=Path, help="path to bf-test.ps1")
@@ -861,7 +862,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "dependency-substitutes":
         from .substitutes import REPO_ROOT, dependency_substitutes
         roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
-        result = dependency_substitutes(args.mod, roots, vanilla_core=args.vanilla_core)
+        result = dependency_substitutes(args.mod, roots, vanilla_core=args.vanilla_core, policy_path=args.policy)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0

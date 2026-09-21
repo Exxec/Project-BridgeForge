@@ -1372,6 +1372,7 @@ rank visible mods that could replace a missing or discontinued dependency (EXACT
 | `mod` | - | mod working copy |
 | `--providers` PROVIDERS | repeatable | mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods) |
 | `--vanilla-core` VANILLA_CORE | - | read-only starsector-core, so vanilla content isn't counted as missing |
+| `--policy` POLICY | - | licence policy JSON (default: bundled release_policy.json); flags a REVIVE_DEPENDENCY recommendation as local-only when its licence doesn't allow redistribution |
 | `--json` | - | - |
 
 ## preset-check
