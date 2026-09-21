@@ -5708,6 +5708,36 @@ def _scan_compile_check(root: Path, result: ScanResult, vanilla_core: Path | Non
         )
 
 
+def _scan_working_copy_tool_debris(root: Path, result: ScanResult) -> None:
+    """A `scratch/` folder belongs beside `working/`/`original/` (this project's own workspace
+    layout - see CLAUDE.md), never inside the mod itself.
+
+    Real case (Leon-Heavy-Industries, found 2026-09-21 building `revival-report-draft`): a refused
+    `scan --output <path inside working/>/scratch` command's stderr/stdout redirection landed at
+    `working/scratch/` anyway (the shell creates the redirect target before the refused command even
+    runs), and only surfaced later as an opaque `unverified-json-syntax` UNKNOWN finding on the
+    resulting empty `scan_before.json` - never as what it actually was: tool debris inside the mod's
+    own copy that a release built straight from `working/` would ship. No real Starsector mod ships
+    a folder literally named `scratch`, so this is safe and generic for any mod root, not just a
+    revival workspace's `working/`.
+    """
+    if (root / "scratch").is_dir():
+        result.add(
+            id="working-copy-tool-debris",
+            category="workspace",
+            severity="medium",
+            classification="MANUAL",
+            confidence="DETERMINISTIC",
+            explanation=(
+                "This mod's own root holds a 'scratch' folder. In this project's workspace layout, scratch/ "
+                "is a sibling of working/ and original/, never inside the mod itself - a release built from "
+                "this copy would ship it. Move its contents to the workspace-root scratch/ folder (never "
+                "delete, log the move in scratch/MOVES.log) and remove this one."
+            ),
+            file="scratch",
+        )
+
+
 def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core: Path | None = None, compile_check: bool = False, provider_roots: list[Path] | None = None) -> ScanResult:
     root = input_path.expanduser().resolve()
     if not root.is_dir():
@@ -5727,6 +5757,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     for path in sorted(root.rglob("*")):
         if path.is_file():
             result.files.append({"path": _relative(root, path), "size_bytes": path.stat().st_size})
+    _scan_working_copy_tool_debris(root, result)
     _scan_metadata(root, result)
     _scan_mod_info_jar_missing(root, result)
     _scan_jars(root, result)

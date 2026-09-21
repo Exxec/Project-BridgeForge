@@ -1083,3 +1083,30 @@ class WorkspaceRootGuardTests(unittest.TestCase):
             (root / "original").mkdir()
             result = scan_mod(root, TargetProfile())
             self.assertEqual(result.input_path, root.resolve())
+
+
+class WorkingCopyToolDebrisTests(unittest.TestCase):
+    """A `scratch/` folder is this project's own workspace-root sibling of working/original/, never
+    something a mod itself should contain - real case (Leon-Heavy-Industries, found 2026-09-21
+    building revival-report-draft): a refused `scan --output` command's stderr/stdout redirection
+    landed inside working/scratch/ anyway, and would ship in a release built from that copy.
+    """
+
+    def test_a_scratch_folder_inside_the_scanned_root_is_flagged_manual(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"m1"}', encoding="utf-8")
+            (root / "scratch").mkdir()
+            (root / "scratch" / "debris.txt").write_text("leftover", encoding="utf-8")
+            result = scan_mod(root, TargetProfile())
+            findings = [f for f in result.findings if f.id == "working-copy-tool-debris"]
+            self.assertEqual(len(findings), 1)
+            self.assertEqual(findings[0].classification, "MANUAL")
+            self.assertEqual(findings[0].file, "scratch")
+
+    def test_no_scratch_folder_is_unaffected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"m1"}', encoding="utf-8")
+            result = scan_mod(root, TargetProfile())
+            self.assertEqual([f for f in result.findings if f.id == "working-copy-tool-debris"], [])

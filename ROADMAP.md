@@ -1182,6 +1182,45 @@ Progression, each stage feeding the next:
     personality ids, refuse-when-only-jar-bundled, with a minimal hand-built class file carrying
     `setPersonality`/`suicidal` in its constant pool). Full suite: 1070 tests, OK (skipped=1).
     `docs-index` regenerated (`docs/CHECKS.md`, `docs/COMMANDS.md`).
+35. **Getting the real corpus's stragglers across the finish line (aside from live testing) kept
+    hitting the same friction: a mod that's genuinely clean (0 MANUAL, compile PASS) still needed
+    a hand-authored `REVIVAL_REPORT.md`/`REVIVAL_PLAN.md` pair before `board`/`corpus-recheck`
+    could resolve a declared completion status at all.** Found 2026-09-21 triaging the corpus by
+    hand (Zorg18, Leon-Heavy-Industries: both clean, neither had a resolvable declared status).
+    **Done 2026-09-21.** New command `revival-report-draft`: computes (dry-run) or writes
+    (`--apply`) a `REVIVAL_REPORT.md`/`REVIVAL_PLAN.md` pair straight from real scan + compile-check
+    evidence - refuses outright (never fabricates a PASS) if any MANUAL finding or a compile FAIL
+    exists. SAVE COMPATIBILITY CHECK and LIVE STARSECTOR TEST are never mechanically checkable, so
+    they're always recorded as not performed and the drafted status is always `READY_FOR_LIVE_TEST`,
+    matching the existing convention for a mod in this exact shape across the real corpus.
+    `--apply` refuses to overwrite an existing report/plan without `--force`, so it can never
+    silently clobber hand-authored history. Tests: `tests/test_revival_report_draft.py`
+    (blocked-without-vanilla-core, blocked-on-a-MANUAL-finding, a full OK draft, write-then-refuse-
+    then-force, and a check that the drafted pair actually satisfies `revival_audit.audit_revival`'s
+    own structural read - not just that it looks like a report).
+
+    Applying it to the real corpus found a second real bug: **Leon-Heavy-Industries' `working/`
+    copy itself held a stray `scratch/` folder** (three files: the stderr/stdout/empty-json debris
+    of an earlier, correctly-refused `scan --output <path inside working/>` attempt - the shell
+    creates a redirect target before the refused command even runs). This only ever surfaced as an
+    opaque `unverified-json-syntax` UNKNOWN finding on the resulting 0-byte JSON file, never as
+    what it actually was - and a release built straight from that `working/` copy would have
+    shipped it. New scanner check `working-copy-tool-debris` (MANUAL) flags any mod root holding a
+    top-level `scratch/` folder - safe and generic for any mod (this project's own workspace
+    convention keeps `scratch/` as a sibling of `working/`/`original/`, and no real Starsector mod
+    ships a folder literally named `scratch`). Tests: `tests/test_scanner.py`
+    (`WorkingCopyToolDebrisTests`). Confirmed no other mod in the corpus currently has this shape.
+    The debris itself was moved to Leon-Heavy-Industries' own `scratch/` (never deleted, logged in
+    its `MOVES.log`), and its real, existing hand-authored `reports/REVIVAL_REPORT.md` (2026-09-20:
+    LazyLib dependency, interface-drift and import fixes) gained the formal `READY_FOR_LIVE_TEST`
+    status line it was missing - `revival-report-draft --apply`'s own output was superseded by this
+    (moved to `scratch/`, logged) once the real report was found, rather than shipping a generic
+    duplicate alongside real revival history. Zorg18 was left alone: its own
+    `reports/REVIVAL_REPORT.md` has two genuine open owner-decision items (an unresolved "Omega
+    Escort greetings" reference the owner needs to clarify, and a stale-looking bullet about
+    `engine_styles.json` trimming that contradicts the same report's own "Fixed" text above it) -
+    not something to resolve by drafting over it. Full suite: 1077 tests, OK (skipped=1).
+    `docs-index` regenerated.
 
 ## Post-1.0 research and gated automation
 

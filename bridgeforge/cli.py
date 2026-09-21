@@ -722,6 +722,13 @@ def build_parser() -> argparse.ArgumentParser:
     vendor_copy_cmd.add_argument("--policy", type=Path, help="licence policy JSON (default: bundled release_policy.json)")
     vendor_copy_cmd.add_argument("--apply", action="store_true", help="actually write the files (default: dry-run plan only)")
     vendor_copy_cmd.add_argument("--json", action="store_true")
+    revival_report_draft_cmd = subcommands.add_parser("revival-report-draft", help="draft REVIVAL_REPORT.md/REVIVAL_PLAN.md from real scan+compile evidence for a mod with 0 MANUAL findings and a clean compile (ROADMAP P14 item 35); refuses otherwise")
+    revival_report_draft_cmd.add_argument("mod", type=Path, help="mod working copy")
+    revival_report_draft_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core; required to establish a compile signal")
+    revival_report_draft_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search for a declared dependency; repeatable")
+    revival_report_draft_cmd.add_argument("--apply", action="store_true", help="write reports/REVIVAL_REPORT.md and REVIVAL_PLAN.md (default: print the draft only)")
+    revival_report_draft_cmd.add_argument("--force", action="store_true", help="with --apply, overwrite an existing report/plan")
+    revival_report_draft_cmd.add_argument("--json", action="store_true")
     provider_index_update_cmd = subcommands.add_parser("provider-index-update", help="recompute every visible provider and cache it to bridgeforge-state/provider-index/ (ROADMAP P14 item 6/2), so a lookup is instant and still works for a mod that isn't currently installed anywhere live")
     provider_index_update_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
     provider_index_update_cmd.add_argument("--output", type=Path, help="cache directory (default: <repo>/bridgeforge-state/provider-index)")
@@ -1118,6 +1125,31 @@ def main(argv: list[str] | None = None) -> int:
             if result.get("note"):
                 print(f"  note: {result['note']}")
         return 0 if result["status"] in ("PLANNED", "APPLIED") else 1
+    if args.command == "revival-report-draft":
+        from .revival_report_draft import draft_revival_report, write_revival_report_draft
+        providers = args.providers or None
+        if args.apply:
+            result = write_revival_report_draft(args.mod, args.vanilla_core, providers, args.force)
+        else:
+            result = draft_revival_report(args.mod, args.vanilla_core, providers)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(result["status"])
+            if result["status"] == "BLOCKED":
+                for reason in result["blocking"]:
+                    print(f"  {reason}")
+            elif result["status"] == "REFUSED":
+                print(f"  {result['reason']}")
+                for path in result["existing"]:
+                    print(f"  exists: {path}")
+            elif result["status"] == "WRITTEN":
+                print(f"  {result['report_path']}")
+                print(f"  {result['plan_path']}")
+            elif result["status"] == "OK":
+                print(result["report_text"])
+                print(result["plan_text"])
+        return 0 if result["status"] in ("OK", "WRITTEN") else 1
     if args.command == "provider-index-update":
         from .substitutes import DEFAULT_PROVIDER_INDEX_DIR, update_provider_index
         roots = args.providers or None
