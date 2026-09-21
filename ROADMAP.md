@@ -649,6 +649,26 @@ Progression, each stage feeding the next:
     picture in one place; (5) update `STATUS.md`'s board with any status changes. A mod that comes
     out of this with new MANUAL findings does not proceed to live testing until they're resolved or
     explicitly accepted by the owner.
+24. **A scanner self-check for the id-resolution blind spot item 17 found by hand.** Item 17 was a
+    manual audit: read every function that builds a "known ids" set and reason about whether it
+    should chase a `.skin`'s `baseHullId` chain. That worked, but it doesn't stop a *third* instance
+    from being found the same way - by accident, in whatever mod happens to trip it next. A small
+    dev-facing check (run as part of the test suite or `docs-index`, not shipped as a mod finding)
+    should enumerate every call site that builds a hull-id set from `_declared_spec_ids(...,
+    "*.ship", ...)` or `_ship_file_index(...)`, and either assert each one also consults
+    `_skin_index`/`_resolve_hull_id` (or is on a documented exemption list, with the exemption's
+    reasoning inline - `_scan_carrier_bays_proposal`/`_scan_description_missing` iterate
+    `ship_data.csv`'s own base-hull rows, which are never skin ids, so they're exempt on principle,
+    not by oversight). New code that builds a fourth such set without the resolution (or an
+    exemption) then fails this check immediately, at review time, instead of waiting for the next
+    mod to expose it in production.
+
+    **Note on item 19 (the `diff-data` command):** every stage of E11's Rebal rebuild (weapons done,
+    hulls in progress, variants and shipsystems/skins still ahead) has needed the same
+    value-diff-not-line-diff logic reimplemented by hand in that stage's brief. Building item 19
+    before the variants stage (by far the largest remaining batch, ~308 files) would make that stage
+    cheaper and more reliable rather than a fourth from-scratch reimplementation - worth doing
+    whenever item 19 is picked up, even though it isn't gating any stage strictly.
 
 ## Post-1.0 research and gated automation
 
