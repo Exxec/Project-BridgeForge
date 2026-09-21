@@ -13,6 +13,7 @@ from .build_tag import _NAME_PATTERN, _find_top_level_key, _string_literal_to_te
 from .scanner import (
     DESIGN_TYPE_CSV_TARGETS,
     FACTION_SPECIAL_ROLE_KEYS,
+    LEGACY_PERSONALITY_IDS,
     MOD_INFO_TRIAGE_BANNER_PATTERN,
     REMOVED_API_CALLS,
     _blank_java_comments,
@@ -21,6 +22,7 @@ from .scanner import (
     _read_csv_rows,
     _relative,
     _removed_api_call_spans,
+    _SOURCE_SET_PERSONALITY,
     _wing_ids_set,
 )
 
@@ -38,6 +40,8 @@ SUPPORTED_FINDINGS = (
     "carrier-bays-proposal",
     "revenantlib-fold-conflict",
     "undeclared-library-dependency",
+    "rules-firebest-populate-options",
+    "personality-id-unknown",
 )
 
 
@@ -1367,6 +1371,71 @@ def _fix_mod_info_triage_banner(root: Path, options: dict) -> list[FileChange]:
 
 
 # ---------------------------------------------------------------------------
+# Fixer: rules-firebest-populate-options
+# ---------------------------------------------------------------------------
+
+_FIREBEST_POPULATE_OPTIONS_PATTERN = re.compile(r"\bFireBest(\s+)PopulateOptions\b")
+
+
+def _fix_rules_firebest_populate_options(root: Path, options: dict) -> list[FileChange]:
+    """FireBest PopulateOptions -> FireAll PopulateOptions in rules.csv (live bug VAC-DIALOG-01).
+
+    FireBest runs only the single best-scoring rule; PopulateOptions menus are built by many rules
+    together (trade, comm directory, Leave...), so FireBest leaves the player in a dialog with no way
+    out. Vanilla's own rules.csv uses FireAll PopulateOptions everywhere (462 times) and FireBest never,
+    so the rewrite is a literal keyword swap - same column, same surrounding whitespace.
+    """
+    path = root / "data" / "campaign" / "rules.csv"
+    if not path.is_file():
+        raise FixerError(f"No rules.csv found at {path}.")
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    new_text, count = _FIREBEST_POPULATE_OPTIONS_PATTERN.subn(r"FireAll\1PopulateOptions", text)
+    if count == 0:
+        raise FixerError(f"{path} has no 'FireBest PopulateOptions' to fix.")
+    return [FileChange(path=path, before=raw, after=_encode(new_text, had_bom))]
+
+
+# ---------------------------------------------------------------------------
+# Fixer: personality-id-unknown (loose scripts only)
+# ---------------------------------------------------------------------------
+
+
+def _fix_personality_id_unknown(root: Path, options: dict) -> list[FileChange]:
+    """cowardly/suicidal/fearless -> timid/reckless/reckless in setPersonality(...) (loose scripts only).
+
+    RC8 dropped these 0.6-era personality ids (bridgeforge.scanner.LEGACY_PERSONALITY_IDS); an unknown
+    id leaves the officer's personality null and Ship.getPersonality() NPEs on deploy - a Fatal dialog on
+    the first affected ship (live run SK13-1d, SEEKER's missions). The mapping is the same one-to-one
+    table the scanner's own finding explanation already suggests. A jar's bundled source needs the jar
+    rebuilt, so a match found only there is refused rather than silently skipped.
+    """
+    from .scanner import scan_mod
+
+    files = sorted({f.file for f in scan_mod(root).findings if f.id == "personality-id-unknown" and f.file})
+    loose = [rel for rel in files if "!" not in rel]
+    if not loose:
+        detail = f" (jar sources need a rebuild: {', '.join(files[:5])})" if files else ""
+        raise FixerError(f"No loose script has an unknown legacy personality id{detail}.")
+
+    def _rewrite(match: re.Match) -> str:
+        new = LEGACY_PERSONALITY_IDS.get(match.group(1))
+        return f'setPersonality("{new}")' if new else match.group(0)
+
+    changes: list[FileChange] = []
+    for rel in loose:
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        new_text = _SOURCE_SET_PERSONALITY.sub(_rewrite, text)
+        if new_text != text:
+            changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    if not changes:
+        raise FixerError("The flagged loose scripts could not be rewritten mechanically; fix them by hand.")
+    return changes
+
+
+# ---------------------------------------------------------------------------
 # Dispatch, diffing, backup/apply
 # ---------------------------------------------------------------------------
 
@@ -1385,6 +1454,8 @@ _FIXER_FUNCS = {
     "carrier-bays-proposal": _fix_carrier_bays_proposal,
     "revenantlib-fold-conflict": _fix_revenantlib_fold_conflict,
     "undeclared-library-dependency": _fix_undeclared_library_dependency,
+    "rules-firebest-populate-options": _fix_rules_firebest_populate_options,
+    "personality-id-unknown": _fix_personality_id_unknown,
 }
 
 

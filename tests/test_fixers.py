@@ -9,7 +9,7 @@ from unittest import mock
 from bridgeforge.cli import main
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix, unified_diff_for_change
 from bridgeforge.scanner import scan_mod
-from tests.save_fixtures import build_class_file, write_jar
+from tests.save_fixtures import _class_entry, _u2, _utf8_entry, build_class_file, write_jar
 
 
 def _write(path: Path, text: str) -> None:
@@ -19,6 +19,37 @@ def _write(path: Path, text: str) -> None:
 
 def _findings(result, finding_id: str):
     return [item for item in result.findings if item.id == finding_id]
+
+
+def _class_file_with_personality_call(this_class: str, personality: str) -> bytes:
+    """A minimal class file whose constant pool carries setPersonality(...) plus a string literal."""
+    pool: list[bytes] = []
+
+    def add_utf8(text: str) -> int:
+        pool.append(_utf8_entry(text))
+        return len(pool)
+
+    def add_class(name_index: int) -> int:
+        pool.append(_class_entry(name_index))
+        return len(pool)
+
+    def add_string(utf8_index: int) -> int:
+        pool.append(b"\x08" + _u2(utf8_index))
+        return len(pool)
+
+    this_idx = add_class(add_utf8(this_class))
+    super_idx = add_class(add_utf8("java/lang/Object"))
+    add_utf8("setPersonality")
+    add_string(add_utf8(personality))
+
+    constant_pool_count = len(pool) + 1
+    data = b"\xca\xfe\xba\xbe" + _u2(0) + _u2(52) + _u2(constant_pool_count)
+    data += b"".join(pool)
+    data += _u2(0x0021)
+    data += _u2(this_idx)
+    data += _u2(super_idx)
+    data += _u2(0) + _u2(0) + _u2(0) + _u2(0)
+    return data
 
 
 class WingDataMissingRoleDescTests(unittest.TestCase):
@@ -56,6 +87,90 @@ class WingDataMissingRoleDescTests(unittest.TestCase):
             self._mod(root, 'id,variant\nwing_a,"two\nlines"\n')
             with self.assertRaises(FixerError):
                 compute_fix(root, "wing-data-missing-role-desc-column")
+
+
+class RulesFireBestPopulateOptionsFixerTests(unittest.TestCase):
+    """VAC-DIALOG-01: FireBest PopulateOptions -> FireAll PopulateOptions, same column."""
+
+    def _mod(self, root: Path, rules_csv: str) -> Path:
+        _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+        _write(root / "data" / "campaign" / "rules.csv", rules_csv)
+        return root / "data" / "campaign" / "rules.csv"
+
+    def test_apply_swaps_firebest_for_fireall_and_rescan_is_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(
+                root,
+                "id,trigger,command,conditions\n"
+                "vac_after_bounty,BAR_EVENT,FireBest PopulateOptions,\n"
+                "vac_leave,BAR_EVENT,FireAll PopulateOptions,\n",
+            )
+            self.assertEqual(len(_findings(scan_mod(root), "rules-firebest-populate-options")), 1)
+            applied = apply_fix(compute_fix(root, "rules-firebest-populate-options"))
+            self.assertTrue(Path(applied[0]["backup"]).is_file())
+            text = path.read_text(encoding="utf-8")
+            self.assertEqual(text.count("FireAll PopulateOptions"), 2)
+            self.assertNotIn("FireBest", text)
+            self.assertEqual(_findings(scan_mod(root), "rules-firebest-populate-options"), [])
+
+    def test_refuses_when_no_firebest_populate_options_present(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, "id,trigger,command\nvac_leave,BAR_EVENT,FireAll PopulateOptions\n")
+            with self.assertRaises(FixerError):
+                compute_fix(root, "rules-firebest-populate-options")
+
+
+class PersonalityIdUnknownFixerTests(unittest.TestCase):
+    """SK13-1d: setPersonality("suicidal"/"cowardly"/"fearless") -> RC8's own valid ids."""
+
+    def _mod(self, root: Path, source: str) -> Path:
+        _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+        path = root / "data" / "scripts" / "FixtureMission.java"
+        _write(path, source)
+        return path
+
+    def test_apply_rewrites_each_legacy_id_to_its_rc8_replacement_and_rescan_is_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(
+                root,
+                "class FixtureMission {\n"
+                "  void go(PersonAPI p) {\n"
+                '    p.setPersonality("cowardly");\n'
+                '    p.setPersonality("suicidal");\n'
+                '    p.setPersonality("fearless");\n'
+                "  }\n"
+                "}\n",
+            )
+            self.assertEqual(len(_findings(scan_mod(root), "personality-id-unknown")), 1)
+            applied = apply_fix(compute_fix(root, "personality-id-unknown"))
+            self.assertTrue(Path(applied[0]["backup"]).is_file())
+            text = path.read_text(encoding="utf-8")
+            self.assertIn('setPersonality("timid")', text)
+            self.assertEqual(text.count('setPersonality("reckless")'), 2)
+            self.assertNotIn("cowardly", text)
+            self.assertNotIn("suicidal", text)
+            self.assertNotIn("fearless", text)
+            self.assertEqual(_findings(scan_mod(root), "personality-id-unknown"), [])
+
+    def test_refuses_when_only_a_jar_bundled_source_has_the_legacy_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+            class_file = _class_file_with_personality_call("FixtureScript", "suicidal")
+            write_jar(root / "jars" / "fixture.jar", {"FixtureScript.class": class_file})
+            self.assertEqual(len(_findings(scan_mod(root), "personality-id-unknown")), 1)
+            with self.assertRaises(FixerError):
+                compute_fix(root, "personality-id-unknown")
+
+    def test_refuses_when_no_unknown_personality_id_present(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, 'class X { void go(PersonAPI p) { p.setPersonality("reckless"); } }\n')
+            with self.assertRaises(FixerError):
+                compute_fix(root, "personality-id-unknown")
 
 
 class AssaultRoleIsValidTests(unittest.TestCase):

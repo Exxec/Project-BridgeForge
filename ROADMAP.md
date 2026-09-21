@@ -1161,6 +1161,27 @@ Progression, each stage feeding the next:
     a `result` that doesn't carry `migration_context` (e.g. reconstructed from a saved report).
     Tests: `tests/test_substitutes.py` (`RequiredFromScanTruncationTests`, 30 hullmod ids and 25
     imports, both confirmed fully returned).
+34. **Fixer coverage gap: 38 MANUAL findings exist in `scanner.py`, but `fixers.SUPPORTED_FINDINGS`
+    only mechanically fixed 13 of them.** Found 2026-09-21 while auditing BridgeForge and
+    RevenantLib together for further gaps (both already very clean individually - RevenantLib
+    `compile-check` PASS/0 errors, `rebuild-jar` 0 drift, `scan_mod` only 4 low-severity findings;
+    checking the tool's own coverage instead). Most of the 34 uncovered MANUAL ids genuinely need a
+    human decision (a missing/invalid mod_info.json, an unresolved content reference with no known
+    successor, `orbit-period-zero`'s literal argument, `fighter-wing-role-invalid`'s tactical
+    role) and stay MANUAL by design. Two were real, narrow, deterministic gaps with a single
+    correct rewrite already spelled out in their own scanner explanation text:
+    **Done 2026-09-21.** Added `rules-firebest-populate-options` (VAC-DIALOG-01: `FireBest
+    PopulateOptions` -> `FireAll PopulateOptions` in rules.csv, a literal keyword swap - vanilla's
+    own rules.csv uses `FireAll PopulateOptions` 462 times and `FireBest` never) and
+    `personality-id-unknown` (SK13-1d: `setPersonality("cowardly"/"suicidal"/"fearless")` -> RC8's
+    own `timid`/`reckless`/`reckless`, using the scanner's own `LEGACY_PERSONALITY_IDS` mapping,
+    loose scripts only - a match found only in a jar's bundled source is refused, same convention
+    as `target-interface-method-missing`/`removed-api-call`). Tests:
+    `tests/test_fixers.py` (`RulesFireBestPopulateOptionsFixerTests`,
+    `PersonalityIdUnknownFixerTests` - apply-and-rescan-clean, refuse-when-absent, and for
+    personality ids, refuse-when-only-jar-bundled, with a minimal hand-built class file carrying
+    `setPersonality`/`suicidal` in its constant pool). Full suite: 1070 tests, OK (skipped=1).
+    `docs-index` regenerated (`docs/CHECKS.md`, `docs/COMMANDS.md`).
 
 ## Post-1.0 research and gated automation
 
