@@ -1,6 +1,13 @@
 # Changelog
 
 ## Unreleased
+- **Six more roadmap P14 items landed (2026-09-21), several finding a real bug along the way.**
+  - `result.migration_context["unresolved_content_references"]` and `["vanilla_path_shadowing_total_files"]`: the exact per-id file list and a whole-mod grand total for content-reference/vanilla-shadow findings, not just a folder-rollup count — the gap that let Rebal's real ~642-file shadowed scope go uncaught as "~79" for a whole session (items 5's foundation, 20).
+  - `campaign-fleet-reference-missing` now resolves a hull literal through a `.skin` chain before flagging it, the same fix BF-SKIN-01 made for mission variants — a second real instance of the same blind spot (item 17).
+  - `_scan_variant_validity` now applies a `.skin`'s own `weaponSlotChanges` before checking weapon/slot fit, not just the base `.ship`'s raw slots — fixed a false positive (Rebal's `brawler_tritachyon`) and, on the same real data, correctly *revealed* a genuine mismatch it had been hiding (`falcon_p_Strike` mounts a ballistic weapon in a slot the skin retypes to missile-only) (item 28).
+  - New fixer `undeclared-library-dependency`: declares a library (LazyLib/MagicLib/GraphicsLib/LunaLib/Nexerelin) a mod already reaches by package, hand-applied three times earlier this session before this existed. Found and fixed a real bug while building it: `scanner.LIBRARY_DEPENDENCY_IDS` had the wrong case for two libraries (`magiclib`/`shaderlib` instead of the real `MagicLib`/`shaderLib`), confirmed by reading those libraries' own installed `mod_info.json` (item 16).
+  - `compute_fix` now refuses to plan an edit to a loose script one of the mod's own jars already shadows — the edit would have no effect, exactly what happened on Thule-Legacy's `MissionDefinition.java` this session (six `setPersonality()` edits, zero in-game effect). New `fix --allow-shadowed-edit` overrides it when the jar is also being rebuilt in the same pass. The real jar-parsing logic was factored out of the scanner's own `loose-script-shadowed-by-jar` check into `scanner.mod_jar_class_names`/`loose_script_jar_shadowed_class` so this reuses it rather than reimplementing it (item 14).
+  - `rig-doctor`'s `enabled_mods_resolve` no longer FAILs a freshly registered P10 reference rig just because it has no mods enabled yet (item 22).
 - Fixed: `mission-local-variant-hull-missing` (and its sibling weapon check) now resolves a variant's hullId through any `.skin` chain before flagging it missing, matching `_scan_variant_validity`. Found on Leon-Heavy-Industries: 4 real, campaign-wired pirate-raider missions were false-flagged (BF-SKIN-01).
 
 - **Xenoargh FX Core folded into RevenantLib (ROADMAP P14 item 10, task A13, owner decision `In operation/ESCALATIONS.md` E9 course A: 2026-09-20).**
@@ -274,8 +281,6 @@
   - The mission now ships all four files every vanilla mission has.
   - A new scanner check, `mission-required-file-missing`, flags any listed mission missing a required file or its declared icon.
 - `rig-doctor` no longer compares the revived working copies with a historical reference rig. It had suggested a `prepare-test --sync` that would overwrite the original mod there. By default it now compares only the mods installed in the rig being checked (Vacuum has its own rig), and explicit `--working` entries are still always checked.
-
-No changes yet.
 
 ## 0.2.0 — 2026-09-12
 
