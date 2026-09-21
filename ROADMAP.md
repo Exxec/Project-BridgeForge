@@ -692,6 +692,14 @@ Progression, each stage feeding the next:
     not by oversight). New code that builds a fourth such set without the resolution (or an
     exemption) then fails this check immediately, at review time, instead of waiting for the next
     mod to expose it in production.
+    **Done 2026-09-21.** `tests/test_skin_chain_resolution_audit.py`: an AST walk over
+    `bridgeforge/scanner.py` finds every function calling `_declared_spec_ids(..., "*.ship", ...)`
+    or `_ship_file_index(...)`, and asserts each either references `_skin_index`/`_resolve_hull_id`
+    in its own body or is on a written `EXEMPT_SKIN_CHAIN_RESOLUTION` list (currently
+    `_scan_carrier_bays_proposal`/`_scan_description_missing`, matching item 17's own findings).
+    Verified the check actually catches a regression (a synthetic offending function was flagged,
+    then discarded) rather than rubber-stamping. Runs as part of the normal test suite, not a
+    shipped scan finding, per this item's own spec.
 
     **Note on item 19 (the `diff-data` command):** every stage of E11's Rebal rebuild (weapons done,
     hulls in progress, variants and shipsystems/skins still ahead) has needed the same
