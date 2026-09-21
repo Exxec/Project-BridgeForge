@@ -42,6 +42,7 @@ SUPPORTED_FINDINGS = (
     "undeclared-library-dependency",
     "rules-firebest-populate-options",
     "personality-id-unknown",
+    "faction-trait-weight-legacy-personality-id",
 )
 
 
@@ -1436,6 +1437,132 @@ def _fix_personality_id_unknown(root: Path, options: dict) -> list[FileChange]:
 
 
 # ---------------------------------------------------------------------------
+# Fixer: faction-trait-weight-legacy-personality-id
+# ---------------------------------------------------------------------------
+
+_TRAITS_KEY_PATTERN = re.compile(r"['\"]traits['\"]\s*:")
+_PERSONALITY_KEY_VALUE_PATTERN = re.compile(r"(?P<quote>['\"])(?P<key>[A-Za-z_][A-Za-z0-9_]*)(?P=quote)\s*:\s*(?P<value>-?\d+(?:\.\d+)?)\s*(?P<comma>,?)")
+
+
+def _matching_close_brace(text: str, depths: list[int], open_index: int) -> int:
+    """Index of the `}` that closes the `{` at `open_index` (see `build_tag._structural_depths`)."""
+    target_depth = depths[open_index] + 1
+    for i in range(open_index + 1, len(text)):
+        if text[i] == "}" and depths[i] == target_depth:
+            return i
+    raise ValueError(f"no matching close brace for the '{{' at offset {open_index}")
+
+
+def _format_weight_sum(values: list[str]) -> str:
+    if all(re.fullmatch(r"-?\d+", value) for value in values):
+        return str(sum(int(value) for value in values))
+    return f"{sum(float(value) for value in values):g}"
+
+
+def _rewrite_faction_traits_role_block(block_text: str) -> str:
+    """One `traits.<role>` object's interior text: legacy ids renamed/merged to their RC8 id.
+
+    Multiple legacy ids can map to the same target (`suicidal`/`fearless` both -> `reckless`); their
+    weights are summed rather than left as a silently-colliding duplicate JSON key. Refuses (rather
+    than guess a merge order) if the target id already has its own explicit entry in the block - not
+    seen in the real corpus, but safer than assuming which value should win.
+    """
+    by_key: dict[str, re.Match] = {}
+    for match in _PERSONALITY_KEY_VALUE_PATTERN.finditer(block_text):
+        by_key.setdefault(match.group("key"), match)
+    legacy = {key: match for key, match in by_key.items() if key in LEGACY_PERSONALITY_IDS}
+    if not legacy:
+        return block_text
+    targets: dict[str, list[re.Match]] = {}
+    for key, match in legacy.items():
+        targets.setdefault(LEGACY_PERSONALITY_IDS[key], []).append(match)
+    for target in targets:
+        if target in by_key and target not in LEGACY_PERSONALITY_IDS:
+            raise FixerError(f"traits block already has an explicit '{target}' entry alongside a legacy id that maps to it; merge by hand.")
+
+    first_start_target = {min(matches, key=lambda m: m.start()).start(): target for target, matches in targets.items()}
+    removals = sorted((match for matches in targets.values() for match in matches), key=lambda m: m.start())
+
+    pieces = []
+    cursor = 0
+    for match in removals:
+        pieces.append(block_text[cursor:match.start()])
+        if match.start() in first_start_target:
+            target = first_start_target[match.start()]
+            weight = _format_weight_sum([m.group("value") for m in targets[target]])
+            quote = match.group("quote")
+            pieces.append(f"{quote}{target}{quote}:{weight}{match.group('comma')}")
+        cursor = match.end()
+    pieces.append(block_text[cursor:])
+    return "".join(pieces)
+
+
+def _fix_faction_trait_weight_legacy_personality_id(root: Path, options: dict) -> list[FileChange]:
+    """Rename/merge 0.6-era personality ids (`LEGACY_PERSONALITY_IDS`) in every `.faction`'s
+    `traits.<role>` weight block, surgically - only the flagged key/value text is touched, the rest
+    of the file (comments, trailing commas, key order) survives untouched.
+    """
+    faction_dir = root / "data" / "world" / "factions"
+    if not faction_dir.is_dir():
+        raise FixerError(f"No {faction_dir} directory.")
+    changes: list[FileChange] = []
+    for path in sorted(faction_dir.glob("*.faction")):
+        data = _load_lenient_json_file(path)
+        if not isinstance(data, dict):
+            continue
+        traits = data.get("traits")
+        if not isinstance(traits, dict):
+            continue
+        legacy_roles = sorted(
+            role for role, block in traits.items()
+            if isinstance(block, dict) and any(key in LEGACY_PERSONALITY_IDS for key in block)
+        )
+        if not legacy_roles:
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        depths = _structural_depths(text)
+        traits_match = _TRAITS_KEY_PATTERN.search(text)
+        if traits_match is None:
+            raise FixerError(f"{path}: could not locate a 'traits' key to anchor the edit.")
+        traits_open = text.index("{", traits_match.end())
+        traits_close = _matching_close_brace(text, depths, traits_open)
+
+        spans: list[tuple[int, int, str]] = []
+        for role in legacy_roles:
+            role_match = re.search(rf"['\"]{re.escape(role)}['\"]\s*:\s*\{{", text[traits_open:traits_close])
+            if role_match is None:
+                raise FixerError(f"{path}: could not locate role '{role}' text inside 'traits'.")
+            role_open = traits_open + role_match.end() - 1
+            role_close = _matching_close_brace(text, depths, role_open)
+            spans.append((role_open + 1, role_close, _rewrite_faction_traits_role_block(text[role_open + 1:role_close])))
+
+        pieces = []
+        cursor = 0
+        for start, end, new_block in sorted(spans):
+            pieces.append(text[cursor:start])
+            pieces.append(new_block)
+            cursor = end
+        pieces.append(text[cursor:])
+        new_text = "".join(pieces)
+
+        try:
+            parsed, _tolerances = _parse_json(new_text)
+        except json.JSONDecodeError as exc:
+            raise FixerError(f"Edited {path} failed to re-parse: {exc}") from exc
+        new_traits = parsed.get("traits") if isinstance(parsed, dict) else None
+        if not isinstance(new_traits, dict) or any(
+            isinstance(new_traits.get(role), dict) and any(key in LEGACY_PERSONALITY_IDS for key in new_traits[role])
+            for role in legacy_roles
+        ):
+            raise FixerError(f"Edited {path} still has a legacy personality id in its traits block.")
+        changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    if not changes:
+        raise FixerError("No .faction file has a legacy personality id in its traits block.")
+    return changes
+
+
+# ---------------------------------------------------------------------------
 # Dispatch, diffing, backup/apply
 # ---------------------------------------------------------------------------
 
@@ -1456,6 +1583,7 @@ _FIXER_FUNCS = {
     "undeclared-library-dependency": _fix_undeclared_library_dependency,
     "rules-firebest-populate-options": _fix_rules_firebest_populate_options,
     "personality-id-unknown": _fix_personality_id_unknown,
+    "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
 }
 
 

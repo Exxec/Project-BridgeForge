@@ -8,7 +8,7 @@ from unittest import mock
 
 from bridgeforge.cli import main
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix, unified_diff_for_change
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scanner import _load_lenient_json_file, scan_mod
 from tests.save_fixtures import _class_entry, _u2, _utf8_entry, build_class_file, write_jar
 
 
@@ -171,6 +171,58 @@ class PersonalityIdUnknownFixerTests(unittest.TestCase):
             self._mod(root, 'class X { void go(PersonAPI p) { p.setPersonality("reckless"); } }\n')
             with self.assertRaises(FixerError):
                 compute_fix(root, "personality-id-unknown")
+
+
+class FactionTraitWeightLegacyPersonalityIdFixerTests(unittest.TestCase):
+    """SK13-1d, reached through faction-level generation: cowardly/suicidal/fearless in a
+    traits.<role> weight block -> RC8's own ids, merging suicidal+fearless's weights into reckless
+    rather than leaving a silently-colliding duplicate JSON key."""
+
+    def _mod(self, root: Path, faction_text: str) -> Path:
+        _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+        path = root / "data" / "world" / "factions" / "fixture.faction"
+        _write(path, faction_text)
+        return path
+
+    def test_apply_renames_and_merges_and_rescan_is_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(
+                root,
+                '{"id":"fixture","traits":{"admiral":{},"captain":{\n'
+                '\t"cowardly":1,\n\t"cautious":1,\n\t"steady":1,\n\t"aggressive":1,\n\t"suicidal":1,\n\t"fearless":1,\n'
+                "}}}\n",
+            )
+            self.assertEqual(len(_findings(scan_mod(root), "faction-trait-weight-legacy-personality-id")), 1)
+            applied = apply_fix(compute_fix(root, "faction-trait-weight-legacy-personality-id"))
+            self.assertTrue(Path(applied[0]["backup"]).is_file())
+            text = path.read_text(encoding="utf-8")
+            self.assertIn('"timid":1', text)
+            self.assertIn('"reckless":2', text)
+            self.assertNotIn("cowardly", text)
+            self.assertNotIn("suicidal", text)
+            self.assertNotIn("fearless", text)
+            self.assertEqual(_findings(scan_mod(root), "faction-trait-weight-legacy-personality-id"), [])
+            # everything else (admiral's empty block, key order, formatting) survives untouched
+            data = _load_lenient_json_file(root / "data" / "world" / "factions" / "fixture.faction")
+            self.assertEqual(data["traits"]["admiral"], {})
+
+    def test_refuses_when_the_merge_target_already_has_its_own_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(
+                root,
+                '{"id":"fixture","traits":{"captain":{"cowardly":1,"timid":3,"cautious":1}}}\n',
+            )
+            with self.assertRaises(FixerError):
+                compute_fix(root, "faction-trait-weight-legacy-personality-id")
+
+    def test_refuses_when_no_legacy_id_present(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, '{"id":"fixture","traits":{"captain":{"timid":1,"reckless":1}}}\n')
+            with self.assertRaises(FixerError):
+                compute_fix(root, "faction-trait-weight-legacy-personality-id")
 
 
 class AssaultRoleIsValidTests(unittest.TestCase):

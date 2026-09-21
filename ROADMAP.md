@@ -1245,6 +1245,24 @@ Progression, each stage feeding the next:
     legacy ids flagged, valid ids quiet, and a mod-declared legacy id (via
     `data/characters/personalities.csv`) correctly not flagged. Full suite: 1080 tests, OK
     (skipped=1). `docs-index` regenerated.
+37. **Item 36's "fix Zorg's one instance by hand, it's not worth a generic fixer" call turned out
+    wrong within the hour: a corpus-wide check for the same shape found the identical bug, byte-
+    for-byte identical `cowardly`/`suicidal`/`fearless`-weight-1 pattern, in 8 more mods (10
+    `.faction` files total across Antediluvians x3, Batavia, Cobalt-Arms, Firestorm-Federation,
+    Gekelonians, Independant-Mining-Faction, Qualljom, Renis-Imperium) - clearly a shared template
+    lineage, not one mod's one-off mistake.** **Done 2026-09-21.** Built the fixer after all:
+    `faction-trait-weight-legacy-personality-id`, a surgical text-level rename/merge (reuses
+    `build_tag._structural_depths` to find each `traits.<role>` object's exact text span without a
+    full JSON round-trip, so comments/formatting/key order survive) that renames `cowardly`->
+    `timid` and merges `suicidal`+`fearless`'s weights into one `reckless` entry (refuses rather
+    than guess if the merge target already has its own explicit entry - not seen in the real
+    corpus, but safer than assuming which value should win). Verified against a real copy of
+    Batavia's own file before trusting it on the corpus (minimal 4-line diff, rescan 0 MANUAL).
+    Applied for real to all 8 affected mods (`fix --apply`, one dry-run review each first); each
+    got a short note appended to its own `REVIVAL_REPORT.md` recording the fix. Tests:
+    `tests/test_fixers.py` (`FactionTraitWeightLegacyPersonalityIdFixerTests`) - apply-rename-merge-
+    and-rescan-clean, refuse-on-an-existing-merge-target-entry, refuse-when-nothing-to-fix. Full
+    suite: 1083 tests, OK (skipped=1). `docs-index` regenerated.
 
 ## Post-1.0 research and gated automation
 
