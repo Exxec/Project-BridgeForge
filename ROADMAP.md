@@ -718,6 +718,23 @@ Progression, each stage feeding the next:
     picture in one place; (5) update `STATUS.md`'s board with any status changes. A mod that comes
     out of this with new MANUAL findings does not proceed to live testing until they're resolved or
     explicitly accepted by the owner.
+    **Done 2026-09-21.** Recheck list built from every real `REVIVAL_REPORT.md` under a mod's
+    canonical `working/` tree (40 mods; `board --json`'s own status parser only resolves 9 of them
+    cleanly, so it couldn't be used alone). Ran `scan_mod(..., compile_check=False)` for the finding
+    set plus the standalone `compile_loose_scripts` for the compile signal, since `scan
+    --compile-check` itself (`scanner._scan_compile_check`) calls `compile_loose_scripts` with no
+    `provider_roots` at all and cannot resolve a declared dependency the way the standalone command
+    does by default - a real gap between the roadmap text and the actual code, worked around rather
+    than followed literally. Result: all 9 mods with a clean declared ready status are still 0
+    MANUAL/compile PASS - no regression in anything currently claimed ready. Real finding: item 15's
+    new check (this session's own work) found 6 previously-unknown, real mod-wide preset-override
+    bugs (verified by hand against two of them); `Antediluvians`/`Batavia`/`Renis-Imperium`/`Vacuum`/
+    `Xenoargh-EZFaction` downgraded to `IN_PROGRESS`, `Xenoargh-FX-Example` to
+    `READY_WITH_REVIEW_ITEMS` pending an owner call on whether its custom colors are intentional.
+    `Firestorm-Federation` (a real `initStar` signature-drift compile bug) and `Scion-Collective`
+    (already-flagged `CrewXPLevel`) got their first full pass; neither was previously claimed ready.
+    Full roll-up, every report update and the STATUS.md board entry: `In
+    operation/CORPUS_RECHECK_2026-09-21.md` (gitignored, per this repo's workspace convention).
 24. **A scanner self-check for the id-resolution blind spot item 17 found by hand.** Item 17 was a
     manual audit: read every function that builds a "known ids" set and reason about whether it
     should chase a `.skin`'s `baseHullId` chain. That worked, but it doesn't stop a *third* instance
