@@ -1428,6 +1428,25 @@ Progression, each stage feeding the next:
       collide. Now keyed by mod identity, with a regression test.
     - Tests: `tests/test_vanilla_script_shadow_repointable.py` (5),
       `tests/test_vanilla_script_shadow_collisions.py` (6).
+    - **Known limitation, recorded deliberately (see E14 stage 3):** the collision check matches on a
+      shared *file path*. Acting on `vanilla-script-shadow-repointable` removes the shared path but
+      leaves both mods overriding the same CSV **row id**, which is last-loaded-wins too — so the
+      check would then call the pair clean while they still conflict. Item 43 closes this.
+
+43. **Proposed (not built): `replace`-array hygiene and cross-mod row-id collisions.** The honest
+    completion of item 42; full rationale in `In operation/ESCALATIONS.md` E14 stage 3 and E15. All
+    mechanical, no owner decision needed.
+    - `replace-entry-ignored` — a `replace` entry ending in `settings.json`. RC8's `ModManager`
+      silently drops those (bytecode-verified), so the declaration never takes effect and the author
+      is never told. Deterministic, no false positives.
+    - `replace-entry-stale` — a `replace` entry naming a file the mod does not ship (**Rebal: 17**).
+      Same family as the stale `jars` entry from items 39/40.
+    - `settings-json-override-breadth` — REVIEW context reporting how many vanilla settings keys a
+      mod's `settings.json` overrides. Rebal's 53-of-616 is a deliberate tuning set; a few hundred
+      would be a stale wholesale copy silently reverting current tuning. Blast radius, not a verdict.
+    - **Cross-mod CSV row-id collisions** — extend `vanilla_script_shadow_collisions` so two mods
+      overriding the same `hull_mods.csv`/`ship_systems.csv` row id are caught the same way a shared
+      file path is. This is the one that keeps the tooling honest after E14 stage 1.
 
 ## Post-1.0 research and gated automation
 
