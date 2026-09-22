@@ -125,17 +125,21 @@ def compile_loose_scripts(root: Path, vanilla_core: Path | None = None, jdk: Pat
 
     # A loose script with the same class name as one already compiled into the mod's own jar never
     # actually gets Janino-compiled by the game (it loads the jar's class and skips the loose copy --
-    # see scanner.loose_script_jar_shadowed_class / the loose-script-shadowed-by-jar finding), so an
+    # see scanner.mod_jar_class_names / the loose-script-shadowed-by-jar finding), so an
     # error in it here is not a real launch blocker. Real case (Thule-Legacy, 2026-09-22): its
     # TLPlugin.java references Nexerelin's package, an intentionally undeclared soft dependency (an
     # isModEnabled guard gates the only call), so it never compiles clean without declaring Nexerelin
     # hard-required -- but the shipped jar's own, unrelated TLPlugin.class is what the game actually
     # loads, so this was reporting a compile-check FAIL for a script that can't block the game.
-    from .scanner import loose_script_jar_shadowed_class
+    from .scanner import mod_jar_class_names
 
     mod_source_paths = {str(source) for source in sources}
+    # mod_jar_class_names re-reads every jar; call it once for the whole mod, not once per source
+    # (a per-source call here made compile-check quadratic in loose-script count on a big mod).
+    jar_classes = mod_jar_class_names(root)
     shadowed_source_paths = {
-        str(source) for source in sources if loose_script_jar_shadowed_class(root, source) is not None
+        str(source) for source in sources
+        if ".".join(source.relative_to(root).with_suffix("").parts) in jar_classes
     }
     all_mod_errors = [error for error in run.errors if error["file"] in mod_source_paths]
     mod_errors = [error for error in all_mod_errors if error["file"] not in shadowed_source_paths]
