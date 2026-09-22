@@ -225,6 +225,72 @@ class FactionTraitWeightLegacyPersonalityIdFixerTests(unittest.TestCase):
                 compute_fix(root, "faction-trait-weight-legacy-personality-id")
 
 
+class ShipRolesWingIdFixerTests(unittest.TestCase):
+    """0.98a's shipRoles only resolves variant ids; a wing id there is fatal at load. The fixer
+    renames each flagged key to the wing's own wing_data.csv 'variant' column value."""
+
+    def _mod(self, root: Path, faction_text: str, wing_data_text: str) -> Path:
+        _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
+        path = root / "data" / "world" / "factions" / "fixture.faction"
+        _write(path, faction_text)
+        _write(root / "data" / "hulls" / "wing_data.csv", wing_data_text)
+        return path
+
+    def test_apply_renames_to_the_variant_id_and_rescan_is_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(
+                root,
+                '{"id":"fixture","shipRoles":{"interceptor":{\n\t"fx_wing":10,\n\t"fallback":{"fighter":1}\n}}}\n',
+                "id,variant,role\nfx_wing,fx_wing_standard,INTERCEPTOR\n",
+            )
+            self.assertEqual(len(_findings(scan_mod(root), "shiproles-wing-id")), 1)
+            applied = apply_fix(compute_fix(root, "shiproles-wing-id"))
+            self.assertTrue(Path(applied[0]["backup"]).is_file())
+            text = path.read_text(encoding="utf-8")
+            self.assertIn('"fx_wing_standard":10', text)
+            self.assertNotIn("fx_wing\"", text)
+            self.assertEqual(_findings(scan_mod(root), "shiproles-wing-id"), [])
+            data = _load_lenient_json_file(root / "data" / "world" / "factions" / "fixture.faction")
+            self.assertEqual(data["shipRoles"]["interceptor"]["fallback"], {"fighter": 1})
+
+    def test_two_roles_sharing_the_same_wing_id_both_rename(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(
+                root,
+                '{"id":"fixture","shipRoles":{"interceptor":{"fx_wing":10},"escortSmall":{"fx_wing":8}}}\n',
+                "id,variant,role\nfx_wing,fx_wing_standard,INTERCEPTOR\n",
+            )
+            self.assertEqual(len(_findings(scan_mod(root), "shiproles-wing-id")), 2)
+            apply_fix(compute_fix(root, "shiproles-wing-id"))
+            text = path.read_text(encoding="utf-8")
+            self.assertEqual(text.count('"fx_wing_standard"'), 2)
+            self.assertEqual(_findings(scan_mod(root), "shiproles-wing-id"), [])
+
+    def test_refuses_when_the_wing_has_no_variant_column_value(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(
+                root,
+                '{"id":"fixture","shipRoles":{"interceptor":{"fx_wing":10}}}\n',
+                "id,variant,role\nfx_wing,,INTERCEPTOR\n",
+            )
+            with self.assertRaises(FixerError):
+                compute_fix(root, "shiproles-wing-id")
+
+    def test_refuses_when_no_wing_id_present(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(
+                root,
+                '{"id":"fixture","shipRoles":{"interceptor":{"fx_wing_standard":10}}}\n',
+                "id,variant,role\nfx_wing,fx_wing_standard,INTERCEPTOR\n",
+            )
+            with self.assertRaises(FixerError):
+                compute_fix(root, "shiproles-wing-id")
+
+
 class AssaultRoleIsValidTests(unittest.TestCase):
     """RC8's WingRole enum still has ASSAULT (javap, 2026-09-14); the old rewrite to FIGHTER is retired."""
 
@@ -382,14 +448,16 @@ class TargetInterfaceMethodMissingTests(unittest.TestCase):
             _write(root / "data" / "shipsystems" / "scripts" / "Old.java", self.SYSTEM)
             _write(root / "data" / "scripts" / "Hit.java", self.HIT)
             _write(root / "data" / "hullmods" / "Tow.java", self.MOD)
-            self.assertEqual(len(_findings(scan_mod(root), "target-interface-method-missing")), 7)
+            self.assertEqual(len(_findings(scan_mod(root), "target-interface-method-missing")), 8)
             apply_fix(compute_fix(root, "target-interface-method-missing"))
             system = (root / "data" / "shipsystems" / "scripts" / "Old.java").read_text(encoding="utf-8")
             self.assertIn("return 2f;", system)  # an existing override is kept
             self.assertEqual(system.count("getActiveOverride"), 1)
             self.assertIn("public int getUsesOverride(com.fs.starfarer.api.combat.ShipAPI ship) { return -1; }", system)
             self.assertIn("com.fs.starfarer.api.combat.listeners.ApplyDamageResultAPI damageResult, CombatEngineAPI engine)", (root / "data" / "scripts" / "Hit.java").read_text(encoding="utf-8"))
-            self.assertIn("showInRefitScreenModPickerFor", (root / "data" / "hullmods" / "Tow.java").read_text(encoding="utf-8"))
+            tow = (root / "data" / "hullmods" / "Tow.java").read_text(encoding="utf-8")
+            self.assertIn("showInRefitScreenModPickerFor", tow)
+            self.assertIn("isSModEffectAPenalty() { return false; }", tow)
             self.assertEqual(_findings(scan_mod(root), "target-interface-method-missing"), [])
 
     def test_jar_sources_are_refused(self) -> None:
@@ -1276,7 +1344,7 @@ class RefuseShadowedEditTests(unittest.TestCase):
             _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
             _write(root / "data" / "hullmods" / "Tow.java", self.MOD)
             write_jar(root / "jars" / "fixture.jar", {"data/hullmods/Tow.class": build_class_file("data/hullmods/Tow")})
-            self.assertEqual(len(_findings(scan_mod(root), "target-interface-method-missing")), 1)
+            self.assertEqual(len(_findings(scan_mod(root), "target-interface-method-missing")), 2)
             with self.assertRaises(FixerError) as ctx:
                 compute_fix(root, "target-interface-method-missing")
             self.assertIn("shadowed", str(ctx.exception))

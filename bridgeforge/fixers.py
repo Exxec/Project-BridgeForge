@@ -23,6 +23,7 @@ from .scanner import (
     _relative,
     _removed_api_call_spans,
     _SOURCE_SET_PERSONALITY,
+    _wing_id_variant_map,
     _wing_ids_set,
 )
 
@@ -43,6 +44,7 @@ SUPPORTED_FINDINGS = (
     "rules-firebest-populate-options",
     "personality-id-unknown",
     "faction-trait-weight-legacy-personality-id",
+    "shiproles-wing-id",
 )
 
 
@@ -238,7 +240,13 @@ _SHIP_SYSTEM_DEFAULTS = (
     ("getUsesOverride", "public int getUsesOverride(com.fs.starfarer.api.combat.ShipAPI ship) { return -1; }"),
     ("getDisplayNameOverride", "public String getDisplayNameOverride(com.fs.starfarer.api.plugins.ShipSystemStatsScript.State state, float effectLevel) { return null; }"),
 )
-_REFIT_PICKER_DEFAULT = "public boolean showInRefitScreenModPickerFor(com.fs.starfarer.api.combat.ShipAPI ship) { return true; }"
+# RC8 defaults for HullModEffect, read from starfarer.api.jar/BaseHullMod with javap (2026-09-14,
+# 2026-09-22): showInRefitScreenModPickerFor defaults to visible; isSModEffectAPenalty defaults to
+# false (an S-mod of this hullmod is a bonus, not a penalty).
+_HULL_MOD_EFFECT_DEFAULTS = (
+    ("showInRefitScreenModPickerFor", "public boolean showInRefitScreenModPickerFor(com.fs.starfarer.api.combat.ShipAPI ship) { return true; }"),
+    ("isSModEffectAPenalty", "public boolean isSModEffectAPenalty() { return false; }"),
+)
 
 
 def _insert_before_class_end(text: str, members: list[str], note: str) -> str:
@@ -255,7 +263,7 @@ def _fix_target_interface_method_missing(root: Path, options: dict) -> list[File
 
     - ShipSystemStatsScript: add the six *Override methods with BaseShipSystemScript's defaults.
     - OnHitEffectPlugin.onHit: insert the ApplyDamageResultAPI parameter before CombatEngineAPI.
-    - HullModEffect: add showInRefitScreenModPickerFor returning BaseHullMod's default.
+    - HullModEffect: add showInRefitScreenModPickerFor/isSModEffectAPenalty, BaseHullMod's defaults.
     Bodies are untouched. Classes compiled into a jar need the jar rebuilt, so those are refused.
     """
     from .scanner import scan_mod
@@ -281,8 +289,9 @@ def _fix_target_interface_method_missing(root: Path, options: dict) -> list[File
                 new,
                 count=1,
             )
-        if re.search(r"\bimplements\s+(?:[^{]*?\b)?HullModEffect\b", new) and not re.search(r"\bshowInRefitScreenModPickerFor\s*\(", new):
-            new = _insert_before_class_end(new, [_REFIT_PICKER_DEFAULT], "RC8 HullModEffect method, BaseHullMod default")
+        if re.search(r"\bimplements\s+(?:[^{]*?\b)?HullModEffect\b", new):
+            missing = [stub for name, stub in _HULL_MOD_EFFECT_DEFAULTS if not re.search(rf"\b{name}\s*\(", new)]
+            new = _insert_before_class_end(new, missing, "RC8 HullModEffect method(s), BaseHullMod defaults")
         if new != text:
             changes.append(FileChange(path=path, before=raw, after=_encode(new, had_bom)))
     if not changes:
@@ -1437,11 +1446,13 @@ def _fix_personality_id_unknown(root: Path, options: dict) -> list[FileChange]:
 
 
 # ---------------------------------------------------------------------------
-# Fixer: faction-trait-weight-legacy-personality-id
+# Shared: surgically rename/merge keys inside one JSON sub-object's interior text (a `.faction`'s
+# `traits.<role>` or `shipRoles.<role>` block - both are flat `"id": <number>` maps).
 # ---------------------------------------------------------------------------
 
 _TRAITS_KEY_PATTERN = re.compile(r"['\"]traits['\"]\s*:")
-_PERSONALITY_KEY_VALUE_PATTERN = re.compile(r"(?P<quote>['\"])(?P<key>[A-Za-z_][A-Za-z0-9_]*)(?P=quote)\s*:\s*(?P<value>-?\d+(?:\.\d+)?)\s*(?P<comma>,?)")
+_SHIP_ROLES_KEY_PATTERN = re.compile(r"['\"]shipRoles['\"]\s*:")
+_ID_WEIGHT_KEY_VALUE_PATTERN = re.compile(r"(?P<quote>['\"])(?P<key>[A-Za-z_][A-Za-z0-9_]*)(?P=quote)\s*:\s*(?P<value>-?\d+(?:\.\d+)?)\s*(?P<comma>,?)")
 
 
 def _matching_close_brace(text: str, depths: list[int], open_index: int) -> int:
@@ -1459,26 +1470,27 @@ def _format_weight_sum(values: list[str]) -> str:
     return f"{sum(float(value) for value in values):g}"
 
 
-def _rewrite_faction_traits_role_block(block_text: str) -> str:
-    """One `traits.<role>` object's interior text: legacy ids renamed/merged to their RC8 id.
+def _rewrite_id_weight_object(block_text: str, rename: dict[str, str]) -> str:
+    """One `"id": <number>` sub-object's interior text: keys in `rename` renamed/merged to their
+    `rename[key]` target.
 
-    Multiple legacy ids can map to the same target (`suicidal`/`fearless` both -> `reckless`); their
-    weights are summed rather than left as a silently-colliding duplicate JSON key. Refuses (rather
-    than guess a merge order) if the target id already has its own explicit entry in the block - not
-    seen in the real corpus, but safer than assuming which value should win.
+    Multiple old keys can map to the same target (e.g. `suicidal`/`fearless` both -> `reckless`);
+    their weights are summed rather than left as a silently-colliding duplicate JSON key. Refuses
+    (rather than guess a merge order) if the target key already has its own explicit entry in the
+    block that `rename` doesn't itself account for.
     """
     by_key: dict[str, re.Match] = {}
-    for match in _PERSONALITY_KEY_VALUE_PATTERN.finditer(block_text):
+    for match in _ID_WEIGHT_KEY_VALUE_PATTERN.finditer(block_text):
         by_key.setdefault(match.group("key"), match)
-    legacy = {key: match for key, match in by_key.items() if key in LEGACY_PERSONALITY_IDS}
-    if not legacy:
+    renaming = {key: match for key, match in by_key.items() if key in rename}
+    if not renaming:
         return block_text
     targets: dict[str, list[re.Match]] = {}
-    for key, match in legacy.items():
-        targets.setdefault(LEGACY_PERSONALITY_IDS[key], []).append(match)
+    for key, match in renaming.items():
+        targets.setdefault(rename[key], []).append(match)
     for target in targets:
-        if target in by_key and target not in LEGACY_PERSONALITY_IDS:
-            raise FixerError(f"traits block already has an explicit '{target}' entry alongside a legacy id that maps to it; merge by hand.")
+        if target in by_key and target not in rename:
+            raise FixerError(f"block already has an explicit '{target}' entry alongside a key that renames to it; merge by hand.")
 
     first_start_target = {min(matches, key=lambda m: m.start()).start(): target for target, matches in targets.items()}
     removals = sorted((match for matches in targets.values() for match in matches), key=lambda m: m.start())
@@ -1495,6 +1507,11 @@ def _rewrite_faction_traits_role_block(block_text: str) -> str:
         cursor = match.end()
     pieces.append(block_text[cursor:])
     return "".join(pieces)
+
+
+# ---------------------------------------------------------------------------
+# Fixer: faction-trait-weight-legacy-personality-id
+# ---------------------------------------------------------------------------
 
 
 def _fix_faction_trait_weight_legacy_personality_id(root: Path, options: dict) -> list[FileChange]:
@@ -1535,7 +1552,7 @@ def _fix_faction_trait_weight_legacy_personality_id(root: Path, options: dict) -
                 raise FixerError(f"{path}: could not locate role '{role}' text inside 'traits'.")
             role_open = traits_open + role_match.end() - 1
             role_close = _matching_close_brace(text, depths, role_open)
-            spans.append((role_open + 1, role_close, _rewrite_faction_traits_role_block(text[role_open + 1:role_close])))
+            spans.append((role_open + 1, role_close, _rewrite_id_weight_object(text[role_open + 1:role_close], LEGACY_PERSONALITY_IDS)))
 
         pieces = []
         cursor = 0
@@ -1563,6 +1580,101 @@ def _fix_faction_trait_weight_legacy_personality_id(root: Path, options: dict) -
 
 
 # ---------------------------------------------------------------------------
+# Fixer: shiproles-wing-id
+# ---------------------------------------------------------------------------
+
+
+def _fix_shiproles_wing_id(root: Path, options: dict) -> list[FileChange]:
+    """Rename a `shipRoles.<role>` fighter-wing id to the variant id 0.98a actually resolves,
+    surgically - only the flagged key/value text is touched.
+
+    0.98a's `shipRoles` only resolves variant ids (the pre-0.8a convention read a wing id instead,
+    which is fatal at load rather than ignored). The correct replacement is that wing's own
+    `variant` column in `data/hulls/wing_data.csv` - the same file/column the scanner's own
+    `shiproles-wing-id` check reads to decide a key "looks like a fighter wing id" in the first
+    place, so the fixer and the check agree on what counts as a wing id.
+    """
+    faction_dir = root / "data" / "world" / "factions"
+    if not faction_dir.is_dir():
+        raise FixerError(f"No {faction_dir} directory.")
+    wing_variants = _wing_id_variant_map(root / "data" / "hulls" / "wing_data.csv")
+    vanilla_core = options.get("vanilla_core")
+    if vanilla_core:
+        wing_variants = {**_wing_id_variant_map(Path(vanilla_core) / "data" / "hulls" / "wing_data.csv"), **wing_variants}
+    wing_ids = _wing_ids_set(root / "data" / "hulls" / "wing_data.csv")
+    if vanilla_core:
+        wing_ids |= _wing_ids_set(Path(vanilla_core) / "data" / "hulls" / "wing_data.csv")
+
+    changes: list[FileChange] = []
+    for path in sorted(faction_dir.glob("*.faction")):
+        data = _load_lenient_json_file(path)
+        if not isinstance(data, dict):
+            continue
+        ship_roles = data.get("shipRoles")
+        if not isinstance(ship_roles, dict):
+            continue
+
+        def is_wing_key(key: str) -> bool:
+            return key not in FACTION_SPECIAL_ROLE_KEYS and (key.endswith("_wing") or key in wing_ids)
+
+        affected_roles = sorted(
+            role for role, block in ship_roles.items()
+            if isinstance(block, dict) and any(is_wing_key(key) for key in block)
+        )
+        if not affected_roles:
+            continue
+        unresolved = sorted({
+            key for role in affected_roles for key in ship_roles[role]
+            if is_wing_key(key) and key not in wing_variants
+        })
+        if unresolved:
+            raise FixerError(f"{path}: no 'variant' column for wing id(s) {', '.join(unresolved)} in wing_data.csv; fix by hand.")
+
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        depths = _structural_depths(text)
+        ship_roles_match = _SHIP_ROLES_KEY_PATTERN.search(text)
+        if ship_roles_match is None:
+            raise FixerError(f"{path}: could not locate a 'shipRoles' key to anchor the edit.")
+        ship_roles_open = text.index("{", ship_roles_match.end())
+        ship_roles_close = _matching_close_brace(text, depths, ship_roles_open)
+
+        spans: list[tuple[int, int, str]] = []
+        for role in affected_roles:
+            role_match = re.search(rf"['\"]{re.escape(role)}['\"]\s*:\s*\{{", text[ship_roles_open:ship_roles_close])
+            if role_match is None:
+                raise FixerError(f"{path}: could not locate role '{role}' text inside 'shipRoles'.")
+            role_open = ship_roles_open + role_match.end() - 1
+            role_close = _matching_close_brace(text, depths, role_open)
+            rename = {key: wing_variants[key] for key in ship_roles[role] if is_wing_key(key)}
+            spans.append((role_open + 1, role_close, _rewrite_id_weight_object(text[role_open + 1:role_close], rename)))
+
+        pieces = []
+        cursor = 0
+        for start, end, new_block in sorted(spans):
+            pieces.append(text[cursor:start])
+            pieces.append(new_block)
+            cursor = end
+        pieces.append(text[cursor:])
+        new_text = "".join(pieces)
+
+        try:
+            parsed, _tolerances = _parse_json(new_text)
+        except json.JSONDecodeError as exc:
+            raise FixerError(f"Edited {path} failed to re-parse: {exc}") from exc
+        new_ship_roles = parsed.get("shipRoles") if isinstance(parsed, dict) else None
+        if not isinstance(new_ship_roles, dict) or any(
+            isinstance(new_ship_roles.get(role), dict) and any(is_wing_key(key) for key in new_ship_roles[role])
+            for role in affected_roles
+        ):
+            raise FixerError(f"Edited {path} still has a wing id in its shipRoles block.")
+        changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    if not changes:
+        raise FixerError("No .faction file has a fighter-wing id in its shipRoles block.")
+    return changes
+
+
+# ---------------------------------------------------------------------------
 # Dispatch, diffing, backup/apply
 # ---------------------------------------------------------------------------
 
@@ -1584,6 +1696,7 @@ _FIXER_FUNCS = {
     "rules-firebest-populate-options": _fix_rules_firebest_populate_options,
     "personality-id-unknown": _fix_personality_id_unknown,
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
+    "shiproles-wing-id": _fix_shiproles_wing_id,
 }
 
 

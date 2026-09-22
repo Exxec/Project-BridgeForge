@@ -151,6 +151,13 @@ TARGET_INTERFACE_CONTRACTS = {
         "signature": "boolean showInRefitScreenModPickerFor(ShipAPI)",
         "suggestion": "Prefer extending the target BaseHullMod where behavior permits; otherwise establish picker visibility explicitly and run the full compile for all remaining obligations.",
     },
+    "HullModEffect.isSModEffectAPenalty": {
+        "interface": "HullModEffect",
+        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?HullModEffect\b"),
+        "method": re.compile(r"\bboolean\s+isSModEffectAPenalty\s*\(\s*\)"),
+        "signature": "boolean isSModEffectAPenalty()",
+        "suggestion": "Vanilla's own BaseHullMod returns false (an S-mod of this hullmod is a bonus, not a penalty; javap-verified, 2026-09-22). Prefer extending the target BaseHullMod where behavior permits; otherwise establish this explicitly.",
+    },
 }
 MEMORY_SELF_STORE_PATTERN = re.compile(
     r"(?:\b\w*(?:memory|mem)\w*\s*|\.getMemoryWithoutUpdate\(\)\s*)\.set\s*\(\s*[^,]+\s*,\s*this\b",
@@ -2525,6 +2532,21 @@ def _wing_ids_set(path: Path) -> set[str]:
         if wing_id and not wing_id.startswith("#"):
             ids.add(wing_id)
     return ids
+
+
+def _wing_id_variant_map(path: Path) -> dict[str, str]:
+    """wing_data.csv's own `id` -> `variant` columns: the correct `shipRoles` replacement for a
+    wing id (`shiproles-wing-id`'s fixer)."""
+    rows = _read_csv_rows(path)
+    if not rows:
+        return {}
+    mapping: dict[str, str] = {}
+    for row in rows:
+        wing_id = (row.get("id") or "").strip()
+        variant_id = (row.get("variant") or "").strip()
+        if wing_id and variant_id and not wing_id.startswith("#"):
+            mapping[wing_id] = variant_id
+    return mapping
 
 
 def _is_mission_source(root: Path, path: Path) -> bool:

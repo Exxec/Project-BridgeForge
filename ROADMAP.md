@@ -1288,6 +1288,41 @@ Progression, each stage feeding the next:
     (`test_a_declared_dependency_is_safe_not_manual`); the existing `ConsoleCommandOptionalTests`/
     `MagicLibAttributionTests` fixtures declare no dependency, so none of them changed behavior.
     Full suite: 1084 tests, OK (skipped=1). `docs-index` regenerated.
+39. **New fixer for `shiproles-wing-id`, applied to Scion-Collective and Firestorm-Federation (the
+    same shape found in both the same day).** 0.98a's `shipRoles` only resolves variant ids; the
+    pre-0.8a convention of a fighter-wing id there is fatal at load, not ignored. The correct
+    replacement is that wing's own `variant` column in `data/hulls/wing_data.csv` - the same
+    file/column the scanner's own check already reads to decide a key "looks like a wing id," so
+    the fixer and the check agree on what counts as one. Implementation reuses (refactored, not
+    duplicated) the same surgical rename/merge machinery item 37 built for
+    `faction-trait-weight-legacy-personality-id` - both are "rename/merge keys in a `.faction`'s
+    flat `id: <number>` sub-object," now shared as `_rewrite_id_weight_object(block_text, rename)`.
+    Applied for real to both mods (`fix --apply`, dry-run reviewed first) plus their other
+    fixer-supported MANUAL findings (`wing-data-missing-role-desc-column`,
+    `undeclared-library-dependency`), taking Scion-Collective and Firestorm-Federation both to 0
+    MANUAL. Tests: `tests/test_fixers.py` (`ShipRolesWingIdFixerTests`) - apply-and-rescan-clean, two
+    roles sharing one wing id both rename, refuse-when-the-wing-has-no-variant-column-value,
+    refuse-when-nothing-to-fix.
+
+    Fixing Firestorm-Federation's own `target-interface-method-missing` (the existing
+    `showInRefitScreenModPickerFor` fixer) surfaced a real compile blocker beyond that one method:
+    RC8's `HullModEffect` interface gained `isSModEffectAPenalty()` and `getTooltipWidth()` too
+    (javap-confirmed against `starfarer.api.jar`) since whatever version this mod's own
+    `data/hullmods/BaseHullMod.java` was written against - each discovered one at a time as the
+    compiler hit it, since it `implements HullModEffect` directly rather than extending RC8's real
+    `BaseHullMod`. Added `isSModEffectAPenalty` as a new `TARGET_INTERFACE_CONTRACTS` entry and
+    fixer default (`false`, matching vanilla's own `BaseHullMod`, javap-verified) for the general
+    case. For Firestorm-Federation itself, root-caused instead: every other hullmod in the mod
+    already extends its own `data.hullmods.BaseHullMod`, so changed that one file to extend RC8's
+    `com.fs.starfarer.api.combat.BaseHullMod` instead of implementing the raw interface - it now
+    inherits every current and future default automatically, matching the scanner's own existing
+    suggestion text ("prefer extending the target BaseHullMod"). Also fixed on the same mod, found
+    working down its finding list: `mod-info-jar-missing` (a stale `"jars"` entry - the mod has only
+    ever shipped loose scripts, confirmed against the untouched `original/` archive too) and
+    `invalid-csv` (`data/lights/Firestorm_light_data.csv`, 0 bytes, confirmed genuinely dead - its
+    only reference is entirely commented out in source - moved to `scratch/`, logged). Tests:
+    `tests/test_revival_lessons.py` (extended `HullModEffect` assertion). Full suite: 1088 tests, OK
+    (skipped=1). `docs-index` regenerated.
 
 ## Post-1.0 research and gated automation
 

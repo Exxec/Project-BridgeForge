@@ -103,6 +103,7 @@ class RevivalLessonsScannerTests(unittest.TestCase):
             self.assertIn(("ShipSystemStatsScript", "float getActiveOverride(ShipAPI)"), missing)
             self.assertNotIn(("ShipSystemStatsScript", "float getRegenOverride(ShipAPI)"), missing)
             self.assertIn(("HullModEffect", "boolean showInRefitScreenModPickerFor(ShipAPI)"), missing)
+            self.assertIn(("HullModEffect", "boolean isSModEffectAPenalty()"), missing)
 
     def test_current_on_hit_signature_satisfies_target_contract(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
