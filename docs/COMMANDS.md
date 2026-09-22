@@ -444,6 +444,7 @@ build a read-only dependency, class, and campaign-ID graph for explicit mod dire
 | `--target-java` TARGET_JAVA | default 17 | - |
 | `--output` OUTPUT | - | - |
 | `--alias` DIRECTORY_NAME=MOD_ID | repeatable | explicit identity for a selected non-standard metadata layout; repeatable |
+| `--vanilla-core` VANILLA_CORE | - | read-only starsector-core; enables vanilla_script_shadow_collisions (two mods shipping a modified copy of the same vanilla script, where load order silently picks a winner) |
 
 ## campaign-identity-inventory
 

@@ -1058,6 +1058,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_personality_ids(root, result)
     _scan_faction_trait_weight_legacy_personality_ids(root, result)
     _scan_removed_market_condition_ids(root, result)
+    _scan_vanilla_script_shadow_repointable(root, result, vanilla_core)
     _scan_bare_market_fleet_source(root, result)
     _scan_legacy_event_report(root, result)
     _scan_non_english_text(root, result)
@@ -3611,6 +3612,83 @@ def _scan_faction_trait_weight_legacy_personality_ids(root: Path, result: ScanRe
                     file=relative,
                     evidence=[f"role:{role_name}", *(f"personality:{value}" for value in unknown)],
                 )
+
+
+# A mod that ships a modified copy of a vanilla *script* at vanilla's own path (Rebal's 47 hullmod
+# scripts) usually doesn't have to. Starsector resolves a hullmod/shipsystem script by the class
+# name in a CSV row's `script` column (or a `.system` file's `statsScript` key), and those CSVs
+# merge by row id - so a mod that already ships the row can rename its own class and repoint the
+# row at it, leaving vanilla's file untouched. Same behaviour, no shadow, and it survives the next
+# vanilla update instead of silently reverting it. Found designing Rebal's rebuild (2026-09-22);
+# corpus-wide prevalence before building this: 9 mods shadow a vanilla .java, 3 of them (49
+# instances - Rebal 47, Mountain-and-Sea 1, Shielded-Holds-For-All 1) are repointable this way.
+_REPOINTABLE_SCRIPT_CSVS = (
+    ("data/hullmods/hull_mods.csv", "script"),
+    ("data/shipsystems/ship_systems.csv", "script"),
+)
+
+
+def _mod_declared_script_rows(root: Path) -> dict[str, str]:
+    """simple class name -> the mod's own row/file that names it (CSV `script`, `.system` statsScript)."""
+    declared: dict[str, str] = {}
+    for relative, column in _REPOINTABLE_SCRIPT_CSVS:
+        path = root / relative
+        if not path.is_file():
+            continue
+        try:
+            with path.open(encoding="utf-8-sig", errors="replace", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    script = (row.get(column) or "").strip()
+                    if not script:
+                        continue
+                    row_id = (row.get("id") or "").strip() or "?"
+                    declared.setdefault(script.rsplit(".", 1)[-1], f"{relative} id={row_id}")
+        except OSError:
+            continue
+    for path in sorted((root / "data" / "shipsystems").glob("*.system")):
+        data = _load_lenient_json_file(path)
+        if not isinstance(data, dict):
+            continue
+        script = data.get("statsScript")
+        if isinstance(script, str) and script.strip():
+            declared.setdefault(script.strip().rsplit(".", 1)[-1], f"{_relative(root, path)} statsScript")
+    return declared
+
+
+def _scan_vanilla_script_shadow_repointable(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """A vanilla-path .java shadow the mod could repoint via its own CSV row instead (see above)."""
+    if vanilla_core is None:
+        return
+    core = Path(vanilla_core)
+    declared = _mod_declared_script_rows(root)
+    if not declared:
+        return
+    for path in sorted(root.rglob("*.java")):
+        relative = path.relative_to(root)
+        if any(part in NON_MOD_JAR_DIRS or part.startswith("src-decompiled") for part in relative.parts):
+            continue
+        if not (core / relative).is_file():
+            continue
+        where = declared.get(path.stem)
+        if where is None:
+            continue
+        result.add(
+            id="vanilla-script-shadow-repointable",
+            category="assets",
+            severity="medium",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=(
+                "This mod replaces a vanilla script at vanilla's own path, but it does not have to: the mod already "
+                "ships the row that names the class, and those CSVs merge by row id. Rename this class (e.g. "
+                f"{path.stem} -> <ModPrefix>_{path.stem}) and repoint that row at the new name; vanilla's own file is "
+                "then left intact, the behaviour is identical, and the override survives the next vanilla update "
+                "instead of silently reverting it. Shipping the shadow keeps a copy of vanilla's script frozen at the "
+                "version it was forked from."
+            ),
+            file=_relative(root, path),
+            evidence=[f"declared-in:{where}", f"vanilla-path:{(core / relative).as_posix()}"],
+        )
 
 
 # RC8's Conditions class (0.9a+ colony/economy overhaul) dropped these four 0.8-era market

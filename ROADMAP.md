@@ -1385,6 +1385,50 @@ Progression, each stage feeding the next:
     on the classpath, never in `dependencies_missing`/status gating) would close this honestly if it
     keeps recurring.
 
+42. **Design pass on the two parked mods (Xenoargh-Rebal, Maelstrom II Unofficial Expansion), plus
+    two new checks for the vanilla-script-shadow pattern it found.** Both were carrying
+    owner-approved multi-stage escalation threads; picked those up rather than restarting. Full
+    briefs: `In operation/ESCALATIONS.md` E13 (new) and E8 addendum 3.
+    - **Maelstrom: the "42 compile errors" were never real.** E8 course B's deliverables are all
+      present and compile clean; every error resolved against base Interstellar Imperium, which the
+      expansion correctly declares but which is installed only in the **real** Starsector install,
+      not under any default provider root. `compile-check --providers "<real install>/mods"` gives
+      **PASS, 0 errors**. Worth generalizing: a mod depending on a base mod we do not host reports a
+      false FAIL under default providers.
+    - **Rebal: `"replace"` in mod_info.json is a live RC8 mechanism**, not legacy metadata -
+      `ModManager` holds it as a string literal beside `modPlugin`/`jars`/`dependencies` and feeds it
+      to `ModSpec.getFullOverrides()`, **skipping any entry ending in `settings.json`** (bytecode-
+      verified). Rebal declares 648 entries against 759 actual shadows: 128 undeclared, 17 stale. The
+      merge-semantics files were checked rather than assumed and are **fine** - the preset JSONs are
+      purely additive (BF-PRESET-01 does not apply), and `settings.json`'s 53 targeted keys over
+      vanilla's 616 are *correct* as a merge, with the nested `plugins` object deep-merging key-by-key
+      (verified empirically: MagicLib/GraphicsLib/LunaLib/Console Commands/AI Tweaks all ship only
+      their own plugins there, and Nexerelin deliberately overrides exactly the two vanilla keys it
+      replaces).
+    - **A runtime spec-delta library was considered and ruled out:** `ShipHullSpecAPI` has getters
+      but **no setters** for hitpoints/armor/flux/OP/bays, and the RC8 sandbox bans reflection, so
+      base stats cannot be rewritten at runtime and spec-file replacement is unavoidable.
+    - **New scanner check `vanilla-script-shadow-repointable` (REVIEW).** A mod replacing a vanilla
+      *script* at vanilla's path usually need not: the class is resolved by a CSV row's `script`
+      column (or a `.system` `statsScript` key) and those CSVs merge by row id, so renaming the class
+      and repointing the mod's own row gives identical behaviour with no shadow - and survives the
+      next vanilla update instead of silently reverting it. Prevalence before building: 9 mods shadow
+      a vanilla `.java`, **49 instances across 3 are repointable** (Rebal 47, Mountain-and-Sea 1,
+      Shielded-Holds-For-All 1). Fires on all 50 of Rebal's.
+    - **New cross-mod check `vanilla_script_shadow_collisions`** (`cross-mod-analyze --vanilla-core`).
+      Two mods shadowing the *same* vanilla script is a conflict, not duplication - load order picks a
+      winner silently. **Rebal and Better-Deserving-Smods collide on 22 hullmod scripts**; 25 of 72
+      shadowed vanilla scripts corpus-wide have more than one owner. Reports `resolution`:
+      `REPOINT_TO_SHARED_LIBRARY` when every owner already ships a row (the RevenantLib fold-in case)
+      or `NEEDS_ROW_BEFORE_REPOINTING` when one path-shadows only - which is the real Rebal/BDS state,
+      since BDS ships no rows.
+    - Caught a real bug in my own first cut of the cross-mod check: it keyed owners by
+      `directory.name`, and **every working copy in this repo is named `working`**, so both mods
+      collapsed into one owner and it reported zero collisions against a pair I had already proven
+      collide. Now keyed by mod identity, with a regression test.
+    - Tests: `tests/test_vanilla_script_shadow_repointable.py` (5),
+      `tests/test_vanilla_script_shadow_collisions.py` (6).
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit

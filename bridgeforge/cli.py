@@ -230,6 +230,7 @@ def build_parser() -> argparse.ArgumentParser:
     cross_mod.add_argument("--target-java", type=int, default=17)
     cross_mod.add_argument("--output", type=Path)
     cross_mod.add_argument("--alias", action="append", default=[], metavar="DIRECTORY_NAME=MOD_ID", help="explicit identity for a selected non-standard metadata layout; repeatable")
+    cross_mod.add_argument("--vanilla-core", type=Path, help="read-only starsector-core; enables vanilla_script_shadow_collisions (two mods shipping a modified copy of the same vanilla script, where load order silently picks a winner)")
     identity_inventory = subcommands.add_parser("campaign-identity-inventory", help="inventory source-defined campaign IDs from explicit mod directories")
     identity_inventory.add_argument("mod_directories", type=Path, nargs="+")
     identity_inventory.add_argument("--target-starsector", default="0.98.x")
@@ -1267,7 +1268,7 @@ def main(argv: list[str] | None = None) -> int:
                 if not separator or not directory_name or not mod_id or directory_name in aliases:
                     raise ValueError("Each --alias must be a unique DIRECTORY_NAME=MOD_ID pair.")
                 aliases[directory_name] = mod_id
-            result = analyze_mod_set(args.mod_directories, TargetProfile(args.target_starsector, args.target_java), aliases)
+            result = analyze_mod_set(args.mod_directories, TargetProfile(args.target_starsector, args.target_java), aliases, args.vanilla_core)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

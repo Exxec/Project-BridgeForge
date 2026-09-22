@@ -5,7 +5,19 @@ from collections import defaultdict
 from pathlib import Path
 
 from .models import TargetProfile
-from .scanner import scan_mod
+from .scanner import _mod_declared_script_rows, scan_mod
+
+
+def _vanilla_script_shadows(directory: Path, vanilla_core: Path) -> dict[str, str | None]:
+    """vanilla-relative .java path -> the mod's own row that names the class, or None if undeclared."""
+    declared = _mod_declared_script_rows(directory)
+    shadows: dict[str, str | None] = {}
+    for path in sorted(directory.rglob("*.java")):
+        relative = path.relative_to(directory)
+        if not (vanilla_core / relative).is_file():
+            continue
+        shadows[relative.as_posix()] = declared.get(path.stem)
+    return shadows
 
 
 def _normalize(value: object) -> str:
@@ -23,7 +35,7 @@ def _dependency_ids(metadata: dict) -> list[str]:
     return sorted(dict.fromkeys(values), key=str.casefold)
 
 
-def analyze_mod_set(mod_directories: list[Path], target: TargetProfile, aliases: dict[str, str] | None = None) -> dict:
+def analyze_mod_set(mod_directories: list[Path], target: TargetProfile, aliases: dict[str, str] | None = None, vanilla_core: Path | None = None) -> dict:
     """Create a deterministic, read-only ownership/dependency graph.
 
     Only the explicitly provided mods participate. Absence from this graph is
@@ -103,10 +115,48 @@ def analyze_mod_set(mod_directories: list[Path], target: TargetProfile, aliases:
         {"kind": kind, "id": identifier, "owners": sorted(set(owners), key=str.casefold)}
         for (kind, identifier), owners in sorted(identifier_owners.items()) if len(set(owners)) > 1
     ]
+    # Two mods shipping a modified copy of the SAME vanilla script at vanilla's own path is a direct
+    # conflict, not just duplication: both land at one path, load order picks a winner, and the
+    # loser's changes vanish silently. Real case (2026-09-22): Xenoargh-Rebal and
+    # Better-Deserving-Smods collide on 25 vanilla hullmod scripts. When every colliding mod also
+    # declares the class in its own merge-by-row CSV (see scanner's
+    # vanilla-script-shadow-repointable), the collision is resolvable without either mod shadowing
+    # vanilla at all: host one reconciled implementation in a shared library (RevenantLib, per the
+    # fold-in policy) and repoint each mod's own row at it. `resolution` records which case it is.
+    shadow_collisions: list[dict[str, object]] = []
+    if vanilla_core is not None:
+        core = Path(vanilla_core).expanduser().resolve()
+        shadow_owners: dict[str, dict[str, str | None]] = defaultdict(dict)
+        for directory, shadow_result in scans:
+            # NOT directory.name: in this repo's layout every working copy is literally named
+            # "working", so keying by it collapses every mod into one owner and the check silently
+            # finds nothing (caught against the real Rebal/Better-Deserving-Smods pair, 2026-09-22).
+            owner = (
+                aliases.get(directory.name)
+                or str(shadow_result.metadata.get("id") or "").strip()
+                or directory.parent.name
+                or directory.name
+            )
+            for relative, declared_in in _vanilla_script_shadows(directory, core).items():
+                shadow_owners[relative][owner] = declared_in
+        for relative, owners in sorted(shadow_owners.items()):
+            if len(owners) < 2:
+                continue
+            undeclared = sorted(name for name, declared in owners.items() if declared is None)
+            shadow_collisions.append({
+                "path": relative,
+                "owners": sorted(owners, key=str.casefold),
+                "declared_by": {name: declared for name, declared in sorted(owners.items()) if declared},
+                "undeclared_owners": undeclared,
+                "resolution": "REPOINT_TO_SHARED_LIBRARY" if not undeclared else "NEEDS_ROW_BEFORE_REPOINTING",
+            })
+
     return {
         "schema_version": 1,
         "mode": "READ_ONLY_CROSS_MOD_ANALYSIS",
         "mod_count": len(nodes),
+        "vanilla_script_shadow_collisions": shadow_collisions,
+        "vanilla_script_shadow_collisions_checked": vanilla_core is not None,
         "duplicate_input_count": len(requested) - len(directories),
         "explicit_aliases": dict(sorted(aliases.items(), key=lambda item: item[0].casefold())),
         "mods": nodes,
