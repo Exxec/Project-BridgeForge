@@ -1059,6 +1059,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_faction_trait_weight_legacy_personality_ids(root, result)
     _scan_removed_market_condition_ids(root, result)
     _scan_vanilla_script_shadow_repointable(root, result, vanilla_core)
+    _scan_replace_array(root, result, vanilla_core)
     _scan_bare_market_fleet_source(root, result)
     _scan_legacy_event_report(root, result)
     _scan_non_english_text(root, result)
@@ -3217,6 +3218,7 @@ def _scan_vanilla_path_shadowing(root: Path, result: ScanResult, vanilla_core: P
     mod_info = _load_lenient_json_file(root / "mod_info.json")
     total_conversion = isinstance(mod_info, dict) and mod_info.get("totalConversion") is True
     shadowed: dict[str, list[tuple[Path, Path]]] = {}
+    identical: list[str] = []
     for path in data_root.rglob("*"):
         if not path.is_file() or path.suffix.lower() not in SHADOW_PATH_EXTENSIONS:
             continue
@@ -3230,8 +3232,29 @@ def _scan_vanilla_path_shadowing(root: Path, result: ScanResult, vanilla_core: P
         except OSError:
             continue
         if mod_bytes == vanilla_bytes:
+            # Byte-identical: not a shadow in any meaningful sense, it overrides vanilla with
+            # vanilla. Collected here (this loop already has both files' bytes, so it is free)
+            # rather than in a second walk. Real case: Rebal shipped 14 such .java copies that
+            # looked like hullmod overrides and changed nothing (E14 stage 0, 2026-09-22).
+            identical.append(_relative(root, path))
             continue
         shadowed.setdefault(_relative(root, path.parent), []).append((path, vanilla_path))
+    if identical:
+        result.migration_context["vanilla_identical_copies"] = identical
+        result.add(
+            id="vanilla-file-identical-copy",
+            category="assets",
+            severity="low",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=(
+                "These files are byte-identical to the vanilla file at the same data-relative path, so they "
+                "override vanilla with vanilla and change nothing. A script copy is the misleading case: it "
+                "looks like the mod customises that hullmod/system and it does not. Dropping them is safe and "
+                "removes a file that would otherwise silently freeze vanilla's version if vanilla later changes it."
+            ),
+            evidence=[f"count:{len(identical)}", *identical[:25]],
+        )
     # A per-folder rollup's own `count:N` evidence is easy to undercount from: E3's original "~79
     # files" estimate for Rebal counted *findings*, not the sum of every folder's own count - the
     # real number was 642 (P14 item 20). One grand total, independent of how many findings the
@@ -3655,6 +3678,88 @@ def _mod_declared_script_rows(root: Path) -> dict[str, str]:
     return declared
 
 
+# mod_info.json's "replace" array is live in RC8: ModManager reads it with optJSONArray("replace")
+# into ModSpec.getFullOverrides() ("do not merge this file, replace it wholesale"), and **silently
+# drops any entry ending in settings.json** - so settings.json always merges and can never be fully
+# replaced by any mod (bytecode-verified against starfarer_obf.jar, 2026-09-22; see ESCALATIONS E13
+# Finding 1 / E15). Both facts are invisible to a mod author: a declaration that does nothing, and
+# a file that cannot be made authoritative however it is declared.
+_REPLACE_IGNORED_SUFFIX = "settings.json"
+
+
+def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """`replace` entries RC8 ignores or that name a file the mod does not ship, plus settings breadth."""
+    mod_info = _load_lenient_json_file(root / "mod_info.json")
+    if not isinstance(mod_info, dict):
+        return
+    entries = mod_info.get("replace")
+    normalized: list[str] = []
+    if isinstance(entries, list):
+        normalized = [item.replace("\\", "/").lstrip("/") for item in entries if isinstance(item, str) and item.strip()]
+    ignored = sorted({item for item in normalized if item.endswith(_REPLACE_IGNORED_SUFFIX)})
+    if ignored:
+        result.add(
+            id="replace-entry-ignored",
+            category="metadata",
+            severity="medium",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=(
+                "mod_info.json's \"replace\" array lists a settings.json, but RC8's own mod loader skips exactly "
+                "those entries (ModManager drops any entry ending in settings.json before building the mod's "
+                "full-override set, javap-verified). The declaration has no effect and never will: settings.json "
+                "always merges key-by-key, so vanilla keys this mod does not name survive, and a key cannot be "
+                "removed this way. Apply anything merge cannot express at runtime instead - SettingsAPI has "
+                "setFloat/setBoolean, and getSettingsJSON() for the rest."
+            ),
+            file="mod_info.json",
+            evidence=ignored,
+        )
+    stale = sorted({item for item in normalized if not (root / item).is_file()})
+    if stale:
+        result.add(
+            id="replace-entry-stale",
+            category="metadata",
+            severity="low",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=(
+                "mod_info.json's \"replace\" array names files this mod does not ship. Each entry is dead "
+                "metadata: it declares a full override of a file that is not there, so nothing is overridden. "
+                "Usually left behind when content was dropped or renamed. Harmless at runtime, but it makes the "
+                "declared override set untrustworthy as a record of what the mod actually replaces."
+            ),
+            file="mod_info.json",
+            evidence=[f"count:{len(stale)}", *stale[:25]],
+        )
+    if vanilla_core is None:
+        return
+    mod_settings = _load_lenient_json_file(root / "data" / "config" / "settings.json")
+    vanilla_settings = _load_lenient_json_file(Path(vanilla_core) / "data" / "config" / "settings.json")
+    if not isinstance(mod_settings, dict) or not isinstance(vanilla_settings, dict):
+        return
+    overridden = sorted(key for key in mod_settings if key in vanilla_settings and mod_settings[key] != vanilla_settings[key])
+    if not overridden:
+        return
+    result.add(
+        id="settings-json-override-breadth",
+        category="metadata",
+        severity="medium" if len(overridden) > 100 else "low",
+        classification="REVIEW",
+        confidence="DETERMINISTIC",
+        explanation=(
+            f"This mod's data/config/settings.json changes {len(overridden)} of vanilla's {len(vanilla_settings)} "
+            "settings keys. settings.json always merges (it cannot be fully replaced), so each of these silently "
+            "wins over the current game's value for every mod and the base game alike. A small, deliberate tuning "
+            "set is normal; a large one usually means a near-complete copy of an older settings.json, which "
+            "reverts the game's own tuning across four versions with no error. Review the list, not the count - "
+            "this is blast radius, not a verdict."
+        ),
+        file="data/config/settings.json",
+        evidence=[f"overridden:{len(overridden)}", f"vanilla-keys:{len(vanilla_settings)}", *overridden[:25]],
+    )
+
+
 def _scan_vanilla_script_shadow_repointable(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
     """A vanilla-path .java shadow the mod could repoint via its own CSV row instead (see above)."""
     if vanilla_core is None:
@@ -3667,7 +3772,17 @@ def _scan_vanilla_script_shadow_repointable(root: Path, result: ScanResult, vani
         relative = path.relative_to(root)
         if any(part in NON_MOD_JAR_DIRS or part.startswith("src-decompiled") for part in relative.parts):
             continue
-        if not (core / relative).is_file():
+        vanilla_path = core / relative
+        if not vanilla_path.is_file():
+            continue
+        try:
+            if path.read_bytes() == vanilla_path.read_bytes():
+                # Identical to vanilla: nothing to repoint, the file simply does nothing.
+                # `vanilla-file-identical-copy` reports it, and the fix there is to drop it, not
+                # rename it. Without this the check told Rebal to repoint 14 no-op copies
+                # (found executing E14 stage 0, 2026-09-22).
+                continue
+        except OSError:
             continue
         where = declared.get(path.stem)
         if where is None:

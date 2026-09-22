@@ -1433,20 +1433,43 @@ Progression, each stage feeding the next:
       leaves both mods overriding the same CSV **row id**, which is last-loaded-wins too — so the
       check would then call the pair clean while they still conflict. Item 43 closes this.
 
-43. **Proposed (not built): `replace`-array hygiene and cross-mod row-id collisions.** The honest
-    completion of item 42; full rationale in `In operation/ESCALATIONS.md` E14 stage 3 and E15. All
-    mechanical, no owner decision needed.
-    - `replace-entry-ignored` — a `replace` entry ending in `settings.json`. RC8's `ModManager`
-      silently drops those (bytecode-verified), so the declaration never takes effect and the author
-      is never told. Deterministic, no false positives.
-    - `replace-entry-stale` — a `replace` entry naming a file the mod does not ship (**Rebal: 17**).
-      Same family as the stale `jars` entry from items 39/40.
-    - `settings-json-override-breadth` — REVIEW context reporting how many vanilla settings keys a
-      mod's `settings.json` overrides. Rebal's 53-of-616 is a deliberate tuning set; a few hundred
-      would be a stale wholesale copy silently reverting current tuning. Blast radius, not a verdict.
-    - **Cross-mod CSV row-id collisions** — extend `vanilla_script_shadow_collisions` so two mods
-      overriding the same `hull_mods.csv`/`ship_systems.csv` row id are caught the same way a shared
-      file path is. This is the one that keeps the tooling honest after E14 stage 1.
+43. **`replace`-array hygiene, identical-copy detection, and cross-mod row-id collisions (built).**
+    The honest completion of item 42; full rationale in `In operation/ESCALATIONS.md` E14 and E15.
+    Also executed **E14 stage 0** on the real corpus.
+    - `replace-entry-ignored` (REVIEW) — a `replace` entry ending in `settings.json`. RC8's
+      `ModManager` silently drops exactly those before building the full-override set
+      (bytecode-verified), so the declaration never takes effect and the author is never told.
+    - `replace-entry-stale` (REVIEW) — a `replace` entry naming a file the mod does not ship
+      (**Rebal: 5**; an earlier by-hand estimate of 17 counted declared-vs-*shadowing* rather than
+      declared-vs-*shipped*, which is the meaningful comparison). Same family as items 39/40's stale
+      `jars` entry.
+    - `settings-json-override-breadth` (REVIEW) — how many vanilla settings keys a mod's
+      `settings.json` overrides (**Rebal: 29 of 616**, a deliberate tuning set). Since settings.json
+      can only ever merge, each overridden key silently wins over the current game's value; a few
+      hundred would mean a stale wholesale copy reverting the game's own tuning. Blast radius, not a
+      verdict.
+    - `vanilla-file-identical-copy` (REVIEW) — a file byte-identical to vanilla's at the same path.
+      It overrides vanilla with vanilla and changes nothing; a *script* copy is the misleading case,
+      since it looks like the mod customises that hullmod and does not. Corpus-wide: **613 across 13
+      mods** (Valhalla-Starworks 232, Rebal 205). Collected inside the existing shadow walk, which
+      already has both files' bytes, rather than a second pass — deliberately, after item 42's own
+      O(n²) lesson. Scoped to `data/`; redundant `graphics/` copies are release bloat and belong to
+      the packaging tooling that already walks everything.
+    - **Cross-mod `merge_table_row_collisions`** — two mods shipping a row with the same id in
+      `hull_mods.csv`/`ship_systems.csv`. Merge-by-row is last-loaded-wins, so this is item 42's
+      defect one layer up, and it is exactly what a path collision *becomes* once both mods repoint
+      off vanilla's path (E14 stage 1). Reports `same_script`, which is false for a real conflict and
+      true once both point at one shared implementation — the resolved end state.
+    - **Fixed a real defect in item 42's own `vanilla-script-shadow-repointable`:** it did not skip
+      files byte-identical to vanilla, so it advised *repointing* 14 no-op copies when the correct
+      advice is to drop them. Found by executing stage 0; pinned with a regression test.
+    - **E14 stage 0 executed:** moved Rebal's 14 byte-identical hullmod copies to `scratch/` (logged;
+      never deleted), having first verified vanilla provides every one of those classes at the same
+      path and that Rebal's own `hull_mods.csv` row for each still resolves. Verified effect:
+      `vanilla-script-shadow-repointable` 50 → 36, and the Rebal↔Better-Deserving-Smods path
+      collisions **22 → 15**, exactly as E14 predicted. `vanilla-path-shadowing`'s own count is
+      unchanged at 64/427 because it already skipped byte-identical files — the cleanup removed
+      files that check never counted.
 
 ## Post-1.0 research and gated automation
 

@@ -1,11 +1,36 @@
 from __future__ import annotations
 
+import csv
 import re
 from collections import defaultdict
 from pathlib import Path
 
 from .models import TargetProfile
 from .scanner import _mod_declared_script_rows, scan_mod
+
+
+def _merge_table_rows(directory: Path) -> dict[tuple[str, str], str]:
+    """(csv path, row id) -> that row's `script` value, for the merge-by-row tables mods override.
+
+    These CSVs merge by row id, so two mods shipping a row with the same id are last-loaded-wins -
+    the same defect as two mods shadowing one file path, one layer up. It is what a path collision
+    BECOMES once both mods stop shadowing vanilla and repoint their own rows instead
+    (ESCALATIONS E14 stage 3), so the file-path check alone would call such a pair clean.
+    """
+    rows: dict[tuple[str, str], str] = {}
+    for relative in ("data/hullmods/hull_mods.csv", "data/shipsystems/ship_systems.csv"):
+        path = directory / relative
+        if not path.is_file():
+            continue
+        try:
+            with path.open(encoding="utf-8-sig", errors="replace", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    row_id = (row.get("id") or "").strip()
+                    if row_id:
+                        rows[(relative, row_id)] = (row.get("script") or "").strip()
+        except OSError:
+            continue
+    return rows
 
 
 def _vanilla_script_shadows(directory: Path, vanilla_core: Path) -> dict[str, str | None]:
@@ -151,12 +176,37 @@ def analyze_mod_set(mod_directories: list[Path], target: TargetProfile, aliases:
                 "resolution": "REPOINT_TO_SHARED_LIBRARY" if not undeclared else "NEEDS_ROW_BEFORE_REPOINTING",
             })
 
+    row_owners: dict[tuple[str, str], dict[str, str]] = defaultdict(dict)
+    for directory, row_result in scans:
+        owner = (
+            aliases.get(directory.name)
+            or str(row_result.metadata.get("id") or "").strip()
+            or directory.parent.name
+            or directory.name
+        )
+        for key, script in _merge_table_rows(directory).items():
+            row_owners[key][owner] = script
+    row_collisions = [
+        {
+            "table": table,
+            "row_id": row_id,
+            "owners": sorted(owners, key=str.casefold),
+            "scripts": {name: script for name, script in sorted(owners.items()) if script},
+            "same_script": len({script for script in owners.values() if script}) == 1,
+        }
+        for (table, row_id), owners in sorted(row_owners.items()) if len(owners) > 1
+    ]
+
     return {
         "schema_version": 1,
         "mode": "READ_ONLY_CROSS_MOD_ANALYSIS",
         "mod_count": len(nodes),
         "vanilla_script_shadow_collisions": shadow_collisions,
         "vanilla_script_shadow_collisions_checked": vanilla_core is not None,
+        # Same defect one layer up, and what a path collision becomes after repointing: two mods
+        # shipping a row with the same id in a merge-by-row table. `same_script` true means they
+        # already agree (e.g. both point at one shared library class) and it is not a conflict.
+        "merge_table_row_collisions": row_collisions,
         "duplicate_input_count": len(requested) - len(directories),
         "explicit_aliases": dict(sorted(aliases.items(), key=lambda item: item[0].casefold())),
         "mods": nodes,

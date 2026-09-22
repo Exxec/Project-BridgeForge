@@ -120,5 +120,61 @@ class VanillaScriptShadowCollisionTests(unittest.TestCase):
         self.assertEqual(report["vanilla_script_shadow_collisions"], [])
 
 
+class MergeTableRowCollisionTests(unittest.TestCase):
+    """E14 stage 3: what a file-path collision BECOMES once both mods repoint off vanilla's path.
+
+    Both mods still override the same hull_mods.csv row id, and merge-by-row is last-loaded-wins
+    too - so the path check alone would call the pair clean while they still conflict.
+    """
+
+    def _pair(self, base: Path, script_a: str, script_b: str) -> list[Path]:
+        mods = []
+        for name, mod_id, script in (("Alpha", "alpha", script_a), ("Beta", "beta", script_b)):
+            mod = base / name / "working"
+            (mod / "data" / "hullmods").mkdir(parents=True, exist_ok=True)
+            (mod / "mod_info.json").write_text(
+                json.dumps({"id": mod_id, "name": name, "version": "1", "gameVersion": "0.98a-RC8"}), encoding="utf-8"
+            )
+            with (mod / "data" / "hullmods" / "hull_mods.csv").open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["name", "id", "script"])
+                writer.writerow(["Blast Doors", "blast_doors", script])
+            mods.append(mod)
+        return mods
+
+    def test_two_mods_overriding_one_row_id_collide_even_with_no_shared_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            a, b = self._pair(base, "data.hullmods.Alpha_BlastDoors", "data.hullmods.Beta_BlastDoors")
+            report = analyze_mod_set([a, b], TargetProfile())
+        self.assertEqual(report["vanilla_script_shadow_collisions"], [])  # no shared path at all
+        collisions = report["merge_table_row_collisions"]
+        self.assertEqual(len(collisions), 1)
+        self.assertEqual(collisions[0]["row_id"], "blast_doors")
+        self.assertEqual(collisions[0]["owners"], ["alpha", "beta"])
+        self.assertFalse(collisions[0]["same_script"])
+
+    def test_both_pointing_at_one_shared_class_is_not_a_conflict(self) -> None:
+        """The resolved end state: one reconciled implementation both mods share."""
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            a, b = self._pair(base, "bf.hullmods.BlastDoors", "bf.hullmods.BlastDoors")
+            report = analyze_mod_set([a, b], TargetProfile())
+        collisions = report["merge_table_row_collisions"]
+        self.assertEqual(len(collisions), 1)
+        self.assertTrue(collisions[0]["same_script"])
+
+    def test_distinct_row_ids_do_not_collide(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            a, b = self._pair(base, "data.hullmods.A", "data.hullmods.B")
+            with (b / "data" / "hullmods" / "hull_mods.csv").open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["name", "id", "script"])
+                writer.writerow(["Other", "other_mod", "data.hullmods.B"])
+            report = analyze_mod_set([a, b], TargetProfile())
+        self.assertEqual(report["merge_table_row_collisions"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
