@@ -79,6 +79,48 @@ class CorpusRecheckTests(unittest.TestCase):
             self.assertEqual(result["status"], "REGRESSION")
             self.assertIn("Broken", result["regressions"])
 
+    def test_a_mods_own_baseline_suppresses_its_accepted_findings(self) -> None:
+        """A reviewed, deliberately accepted finding must stop reporting as a REGRESSION forever.
+
+        Real case (owner call 2026-09-22): Xenoargh-FX-Example's preset overrides are intentional
+        custom content. `scan --write-baseline` already produced the file and `scan --baseline`
+        already honoured it; corpus-recheck was the one consumer that did not, so baselining a mod
+        had no effect on the signal it was meant to quiet.
+        """
+        with resolved_temp_dir() as root:
+            working = _mod(root, "Accepted", "READY_FOR_LIVE_TEST\n", {
+                "mod_info.json": '{"id":"accepted","name":"Accepted","jars":["jars/missing.jar"]}',
+            })
+            before = corpus_recheck(root)
+            self.assertEqual(before["status"], "REGRESSION")
+            accepted = [f for m in before["mods"] for f in m["manual_ids"]]
+            self.assertTrue(accepted, "fixture must produce a MANUAL finding to baseline")
+
+            (working / "reports").mkdir(parents=True, exist_ok=True)
+            (working / "reports" / "baseline-test.json").write_text(
+                json.dumps({"findings": ["mod-info-jar-missing|mod_info.json|jars/missing.jar"]}), encoding="utf-8"
+            )
+            after = corpus_recheck(root)
+        self.assertEqual(after["status"], "OK")
+        self.assertEqual(after["regressions"], [])
+        mod = after["mods"][0]
+        self.assertEqual(mod["by_classification"].get("MANUAL", 0), 0)
+        self.assertEqual(mod["baselined_findings"], 1)
+        self.assertTrue(str(mod["baseline"]).endswith("baseline-test.json"))
+
+    def test_an_unreadable_baseline_is_ignored_rather_than_crashing_the_sweep(self) -> None:
+        with resolved_temp_dir() as root:
+            working = _mod(root, "BadBaseline", "READY_FOR_LIVE_TEST\n", {
+                "mod_info.json": '{"id":"badbaseline","name":"BadBaseline","jars":["jars/missing.jar"]}',
+            })
+            (working / "reports").mkdir(parents=True, exist_ok=True)
+            (working / "reports" / "baseline-broken.json").write_text("{not json", encoding="utf-8")
+            result = corpus_recheck(root)
+        # The finding still counts; a corrupt baseline must never silently hide a real regression.
+        self.assertEqual(result["status"], "REGRESSION")
+        self.assertEqual(result["mods"][0]["baselined_findings"], 0)
+        self.assertIsNone(result["mods"][0]["baseline"])
+
     def test_no_regression_when_an_in_progress_mod_carries_a_manual_finding(self) -> None:
         with resolved_temp_dir() as root:
             _mod(root, "Wip", "still IN_PROGRESS, not claiming ready\n", {

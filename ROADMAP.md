@@ -1521,6 +1521,33 @@ Progression, each stage feeding the next:
     - Declared `ESCALATION_REQUIRED` (E14): the rebuild onto RC8-current source and the repointing
       are both real work, and the Rebal collision needs owner decisions.
 
+46. **`corpus-recheck` now honours a mod's own accepted-findings baseline, plus four owner decisions
+    recorded.** The baseline mechanism already existed on both ends — `scan --write-baseline` writes
+    the file and `scan --baseline` reads it — but **`corpus-recheck` was the one consumer that
+    ignored it**, so baselining a mod had no effect on the signal it was meant to quiet: the mod kept
+    reporting as a `REGRESSION` on every sweep, forever. `_recheck_one` now picks up
+    `working/reports/baseline*.json` and filters through `split_by_baseline`, reporting
+    `baselined_findings` and the `baseline` path so the suppression is visible rather than silent. A
+    corrupt or unreadable baseline is ignored and the findings still count — a broken file must never
+    hide a real regression. Found executing the owner's "baseline Xenoargh-FX-Example" instruction:
+    writing the baseline appeared to work (`scan --baseline` reported 0 new findings) while the
+    recheck would have gone on flagging it. Verified on the real mod: 19 findings baselined, MANUAL
+    3 → 0. Tests: `tests/test_corpus_recheck.py` (+2, including the corrupt-baseline guard).
+    - **Owner decisions recorded 2026-09-22** in `In operation/ESCALATIONS.md` and the mods' reports:
+      **E14 course A** — Rebal and Better-Deserving-Smods are listed as **incompatible** rather than
+      reconciled, so the 8 contested hullmods and ~16 contested numbers are moot; **E12** — Rebal's
+      `SafetyOverrides` and `StabilizedShieldEmitter` divergences **preserve the author's behaviour**
+      and are not to be "corrected" later; **BDS's two orphaned `*Old.java` files** verified
+      unreachable across every reference domain and moved to `scratch/`; **live testing** deferred
+      until the corpus is RC8-compatible and relatively done.
+    - **New E16** answers the owner's question about Maelstrom's unmounted Titan content with a
+      concrete verdict: wiring `ii_titan_w2` would be a **regression, not a completion**. It declares
+      the same `ii_titan_missile` spec base II's handler keys on, and base II zeroes the firing tube
+      on the first shot — so the 3-ammo weapon fires **once**, where the ship's three separate 1-ammo
+      tubes fire **three** times. It would also return 320 OP (3 × 160 collapsing to 1 × 160). Making
+      it work needs scope B2's fork of base II's launch pipeline, already declined. Abandoned intent,
+      not unfinished wiring.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit

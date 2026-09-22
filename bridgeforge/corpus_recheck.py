@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .baseline import load_baseline_keys, split_by_baseline
 from .compile_check import compile_loose_scripts
 from .models import TargetProfile
 from .project_board import project_board
@@ -32,15 +33,43 @@ def _qualifying_mods(repo_root: Path, require_report: bool = True) -> list[dict[
     return [row for row in board["mods"] if row["working"] and (row["evidence"]["report"] or not require_report)]
 
 
+def _mod_baseline_path(working: Path) -> Path | None:
+    """The mod's own accepted-findings baseline, if it keeps one under reports/.
+
+    A mod whose findings are reviewed and deliberately accepted (Xenoargh-FX-Example's preset
+    overrides are intentional custom content, owner call 2026-09-22) otherwise keeps reporting as a
+    REGRESSION on every recheck forever. `scan --write-baseline` already produces the file and
+    `scan --baseline` already honours it; without this, the recheck was the one consumer that did
+    not, so baselining a mod had no effect on the signal it was meant to quiet.
+    """
+    reports = Path(working) / "reports"
+    if not reports.is_dir():
+        return None
+    candidates = sorted(reports.glob("baseline*.json"))
+    return candidates[-1] if candidates else None
+
+
 def _recheck_one(name: str, working: Path, vanilla_core: Path | None, declared_status: str | None, declared_status_confidence: str | None) -> dict[str, object]:
     try:
         result = scan_mod(Path(working), TargetProfile(), vanilla_core, compile_check=False)
     except ValueError as exc:
         return {"mod": name, "error": str(exc)}
+    findings = result.findings
+    baseline_path = _mod_baseline_path(Path(working))
+    baselined_count = 0
+    if baseline_path is not None:
+        try:
+            keys = load_baseline_keys(baseline_path)
+        except (OSError, ValueError):
+            baseline_path = None
+        else:
+            kept, _resolved = split_by_baseline(findings, keys)
+            baselined_count = len(findings) - len(kept)
+            findings = kept
     by_classification: dict[str, int] = {}
-    for finding in result.findings:
+    for finding in findings:
         by_classification[finding.classification] = by_classification.get(finding.classification, 0) + 1
-    manual_ids = sorted({finding.id for finding in result.findings if finding.classification == "MANUAL"})
+    manual_ids = sorted({finding.id for finding in findings if finding.classification == "MANUAL"})
     compile_status = None
     compile_errors = None
     if vanilla_core is not None:
@@ -51,7 +80,9 @@ def _recheck_one(name: str, working: Path, vanilla_core: Path | None, declared_s
         "mod": name,
         "working": str(working),
         "files": len(result.files),
-        "findings_total": len(result.findings),
+        "findings_total": len(findings),
+        "baselined_findings": baselined_count,
+        "baseline": str(baseline_path) if baseline_path is not None else None,
         "by_classification": by_classification,
         "manual_ids": manual_ids,
         "compile_status": compile_status,
