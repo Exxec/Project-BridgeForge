@@ -1324,6 +1324,19 @@ Progression, each stage feeding the next:
     `tests/test_revival_lessons.py` (extended `HullModEffect` assertion). Full suite: 1088 tests, OK
     (skipped=1). `docs-index` regenerated.
 
+40. **Corpus-wide check on `mod-info-jar-missing` prevalence before deciding on a fixer (the
+    prevalence-check discipline item 37 established after getting the call wrong once).** Scanned
+    every mod on the board; only two instances exist total - Firestorm-Federation (already fixed by
+    hand in item 39) and Covert-Cargoliners (`"jars":["jars/example.jar"]`). Two instances doesn't
+    justify a generic fixer, so Covert-Cargoliners was fixed by hand the same way: `jars/example.jar`
+    is unedited mod_info.json template boilerplate (never present in `working/` or the untouched
+    `original/` archive), and the mod ships zero `.java` files, so there was never a jar to build.
+    Removed the `"jars"` key. This was also this mod's first full revival pass (no prior
+    `REVIVAL_REPORT.md`): drafted one via `revival-report-draft --apply` off the post-fix scan (0
+    MANUAL, 6 REVIEW, `compile-check` PASS on 0 loose scripts) and prefixed it with the fix note.
+    `READY_FOR_LIVE_TEST`. Full suite: 1088 tests, OK (skipped=1), no code change so nothing to
+    regenerate in `docs-index`.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit
