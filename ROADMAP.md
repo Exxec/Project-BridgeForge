@@ -1471,6 +1471,29 @@ Progression, each stage feeding the next:
       unchanged at 64/427 because it already skipped byte-identical files — the cleanup removed
       files that check never counted.
 
+44. **Maelstrom Interstellar Imperium Unofficial Expansion closed out: E8 resolved,
+    `READY_WITH_REVIEW_ITEMS`.** Its long-standing "compile FAIL, 42 errors" was a classpath
+    artifact, not a defect — base Interstellar Imperium is installed only in the real game install,
+    outside both default provider roots, so `--providers "<real install>/mods"` gives PASS with 0
+    errors. E8 course B's deliverables were already built; this pass verified and reported them.
+    - **Row-id drift check, the one genuinely open risk: clean.** E8 addendum 2 enumerated the
+      expansion's rules.csv overrides against base II **2.5.2**, but 2.6.9 is installed. rules.csv
+      merges by row id, so a drifted id fails silently and leaves the base row in play. All **8** ids
+      exist verbatim in 2.6.9; every base row referencing `II_TitanStrike` is covered. Delegated the
+      lookup to an `Explore` subagent and re-verified the result independently before recording it.
+    - **New caveat found:** base 2.6.9 still uses `II_TitanStrikeAvailable` in further rows the
+      expansion does not override, so both condition classes coexist and must stay consistent.
+    - **A real latent launch blocker, fixed.** The three new `IIUE_` scripts honour E8 deliverable 4
+      (Janino-only syntax), but pre-existing `imperiumVectorThruster.java` used a typed for-each over
+      `List<ShipEngineAPI>` — which Janino 2.7.8 cannot compile, a Fatal before the main menu.
+      Confirmed genuinely exposed rather than assumed: `II.jar` does **not** supply that class (unlike
+      the two Titan scripts, which it does), and it is live via `everyFrameEffect`. Rewritten as a raw
+      `Iterator` with an explicit cast. This is exactly the case `loose-script-janino-risk` exists for,
+      and the first time in this corpus it caught a live, unshadowed one.
+    - Scope fork recorded as **B1**, inferred from what is absent (no `IIUE_TitanPlugin`, no `iiue_`
+      projectile spec — both required by B2). `ii_titan_w2`/`deco2`/`deco3` remain specced but mounted
+      by no hull or variant, left as the author's unfinished intent rather than wired silently.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit
