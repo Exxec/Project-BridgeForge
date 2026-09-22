@@ -123,8 +123,23 @@ def compile_loose_scripts(root: Path, vanilla_core: Path | None = None, jdk: Pat
     with tempfile.TemporaryDirectory(prefix="bf-compile-check-") as tmp:
         run = run_javac(jdk_info.javac, classpath_result.classpath(), sources + companions, Path(tmp) / "classes")
 
+    # A loose script with the same class name as one already compiled into the mod's own jar never
+    # actually gets Janino-compiled by the game (it loads the jar's class and skips the loose copy --
+    # see scanner.loose_script_jar_shadowed_class / the loose-script-shadowed-by-jar finding), so an
+    # error in it here is not a real launch blocker. Real case (Thule-Legacy, 2026-09-22): its
+    # TLPlugin.java references Nexerelin's package, an intentionally undeclared soft dependency (an
+    # isModEnabled guard gates the only call), so it never compiles clean without declaring Nexerelin
+    # hard-required -- but the shipped jar's own, unrelated TLPlugin.class is what the game actually
+    # loads, so this was reporting a compile-check FAIL for a script that can't block the game.
+    from .scanner import loose_script_jar_shadowed_class
+
     mod_source_paths = {str(source) for source in sources}
-    mod_errors = [error for error in run.errors if error["file"] in mod_source_paths]
+    shadowed_source_paths = {
+        str(source) for source in sources if loose_script_jar_shadowed_class(root, source) is not None
+    }
+    all_mod_errors = [error for error in run.errors if error["file"] in mod_source_paths]
+    mod_errors = [error for error in all_mod_errors if error["file"] not in shadowed_source_paths]
+    shadowed_errors = [error for error in all_mod_errors if error["file"] in shadowed_source_paths]
     vanilla_errors = [error for error in run.errors if error["file"] not in mod_source_paths]
     error_counts = Counter(str(error["kind"]) for error in mod_errors)
     return {
@@ -135,6 +150,9 @@ def compile_loose_scripts(root: Path, vanilla_core: Path | None = None, jdk: Pat
         "error_count": len(mod_errors),
         "error_counts_by_kind": dict(error_counts),
         "javac_returncode": run.returncode,
+        # Errors in a jar-shadowed loose script: real evidence the source is stale/RC8-incompatible,
+        # but never a launch blocker (see the comment above) - not counted in status/error_count.
+        "jar_shadowed_errors": shadowed_errors,
         # Should normally be empty: these are RC8's own loose scripts, compiled only so the mod's
         # scripts can resolve symbols from them (see vanilla_loose_scripts()). A non-empty list here
         # is a red flag about the reference --vanilla-core/classpath, not about the mod.

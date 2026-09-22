@@ -1337,6 +1337,54 @@ Progression, each stage feeding the next:
     `READY_FOR_LIVE_TEST`. Full suite: 1088 tests, OK (skipped=1), no code change so nothing to
     regenerate in `docs-index`.
 
+41. **Thule-Legacy triage: 37 MANUAL -> 0, `compile-check` FAIL (65 errors) -> PASS (ROADMAP P14
+    "review all" sweep).** LazyLib is a real hard dependency (`TLPlugin.onApplicationLoad` itself
+    throws if it's missing) - declared. Nexerelin is a real, deliberately soft one (its only call is
+    guarded by `isModEnabled`, short-circuiting before `SectorManager` ever resolves) - left
+    undeclared, matching real corpus precedent (`docs/RECREATION_PLAN_FLUX_VACUUM.md`, "Nexerelin
+    optional, never declared as required"); verified `TLPlugin.java` still compiles clean with a
+    one-off `javac` that puts Nexerelin's real jar on the classpath without declaring it. The
+    existing `target-interface-method-missing` fixer (with `--allow-shadowed-edit`, since all 18 of
+    this mod's loose scripts are jar-shadowed) handled RC8's six new `ShipSystemStatsScript`
+    `*Override` methods and `OnHitEffectPlugin.onHit`'s new parameter across 6 files. Hand-fixed:
+    `FakeEntity implements CombatEntityAPI` directly and was missing 8 RC8 methods (only mod in the
+    corpus doing this, not worth a generic fixer); `AddMarketplace.java`'s
+    `setBaseSmugglingStabilityValue` (removed outright, was called with a no-op `0`) and
+    `EconomyAPI.addMarket` (gained a `boolean` param, `true` per 6+ real corpus precedents).
+    **New scanner check `removed-market-condition-id`**, a genuine corpus-wide gap: RC8's colony
+    overhaul turned four 0.8-era `Conditions` ids into buildable `Industries`
+    (`MILITARY_BASE`->`MILITARYBASE`, `ORBITAL_STATION`->`ORBITALSTATION`, `TRADE_CENTER`->
+    `COMMERCE`, `HEADQUARTERS`->`HIGHCOMMAND`) - a different API (`addIndustry`, not `addCondition`).
+    Real precedent for the exact mapping already existed (Exigency's `Avesta.java`); also live (not
+    commented out) in 3 Tore-Up-Plenty files, noted for that mod's own future pass. No generic fixer
+    (each mod's market-helper shape differs too much); hand-fixed Thule-Legacy by extending its own
+    `AddMarketplace` helper with a second `industries` list, matching Exigency's real shape.
+    **Jar rebuild done surgically, not via a whole-tree `rebuild-jar --install`:** the whole tree
+    compiled clean, but its own comparison flagged 5 classes the source has that the shipped jar
+    doesn't (2 apparently-orphaned, unwired dev hullmods; 1 currently-loose script that would become
+    newly, harmlessly shadowed; 1 genuinely-wired mission that should ship but doesn't yet) - rather
+    than resolve four separate judgment calls as a side effect, recompiled and byte-replaced only the
+    9 already-shipped classes the RC8 fixes actually touched (`rebuild_jar._package_jar` used
+    directly, same precedent as FlowerGod/Arkgneisis): 18 classes before and after, 0 added/removed,
+    0 forbidden sandbox references, every method change matches an intended fix. Original jar backed
+    up to the mod's own `scratch/jar-patch-2026-09-22-thule-rc8-compat/`, logged in `scratch/
+    MOVES.log`.
+    **New tooling fix:** `compile_loose_scripts` now separates `jar_shadowed_errors` (a jar-shadowed
+    loose script's compile errors, which can never block the game) from the blocking `errors`/
+    `status` - found because Thule-Legacy's unedited, correctly-jar-shadowed `TLPlugin.java` was
+    reporting a `compile-check` FAIL it could never actually cause in game (Nexerelin intentionally
+    undeclared). `compile-check`'s CLI prints the jar-shadowed count as an informational line.
+    Verified: rescan 0 MANUAL (was 37), `compile-check` PASS (was FAIL, 65 errors; the 2 remaining
+    are the correctly-informational `TLPlugin.java` ones). `READY_WITH_REVIEW_ITEMS`, `EXACT`.
+    Tests: `tests/test_removed_market_condition_ids.py`. Full suite: 1091 tests, OK (skipped=1).
+    `docs-index` regenerated.
+    **Follow-up tooling idea (not built this pass):** `compile-check`/`rebuild-jar` can only put a
+    dependency's jar on the classpath if it's *declared* - there's no way to verify a genuinely
+    optional/soft-integration code path (guarded by `isModEnabled`) compiles without forcing that
+    declaration, which would change real player-facing behavior. A `--optional-providers` flag (put
+    on the classpath, never in `dependencies_missing`/status gating) would close this honestly if it
+    keeps recurring.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit

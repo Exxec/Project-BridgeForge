@@ -1057,6 +1057,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_hullmod_instance_state(root, result)
     _scan_personality_ids(root, result)
     _scan_faction_trait_weight_legacy_personality_ids(root, result)
+    _scan_removed_market_condition_ids(root, result)
     _scan_bare_market_fleet_source(root, result)
     _scan_legacy_event_report(root, result)
     _scan_non_english_text(root, result)
@@ -3610,6 +3611,57 @@ def _scan_faction_trait_weight_legacy_personality_ids(root: Path, result: ScanRe
                     file=relative,
                     evidence=[f"role:{role_name}", *(f"personality:{value}" for value in unknown)],
                 )
+
+
+# RC8's Conditions class (0.9a+ colony/economy overhaul) dropped these four 0.8-era market
+# "conditions" outright - they are now buildable Industries instead, a materially different API
+# (MarketAPI.addIndustry(String) vs. addCondition(String), different mechanics: an industry can be
+# damaged/disrupted and often wants an AI core). javap of RC8 starfarer.api.jar confirms Conditions
+# has no MILITARY_BASE/ORBITAL_STATION/TRADE_CENTER/HEADQUARTERS. Real, working precedent for this
+# exact mapping: Exigency's Avesta.java (`In operation/Exigency/working/src-extracted/.../Avesta.java`)
+# already ported HEADQUARTERS->HIGHCOMMAND and TRADE_CENTER->COMMERCE via a second addIndustry list
+# alongside addMarketplace's existing conditions list. Found 2026-09-22 auditing Thule-Legacy's
+# TLHeimdallSystem.java (ROADMAP P14 item 41); also present, live (not commented out), in
+# Tore-Up-Plenty's CorvusScrapyard.java/TUP_Iota.java/TUP_Qat.java.
+REMOVED_MARKET_CONDITION_IDS = {
+    "MILITARY_BASE": "MILITARYBASE",
+    "ORBITAL_STATION": "ORBITALSTATION",
+    "TRADE_CENTER": "COMMERCE",
+    "HEADQUARTERS": "HIGHCOMMAND",
+}
+_CONDITIONS_FIELD_REF = re.compile(r"\bConditions\s*\.\s*(" + "|".join(REMOVED_MARKET_CONDITION_IDS) + r")\b")
+
+
+def _scan_removed_market_condition_ids(root: Path, result: ScanResult) -> None:
+    """A loose script references a 0.8-era Conditions id that RC8 moved to Industries (see above)."""
+    explanation = (
+        "RC8's Conditions class no longer defines this id - the 0.9a+ colony overhaul turned it into "
+        "a buildable Industry instead (a different API: MarketAPI.addIndustry(String), not "
+        "addCondition(String); an industry can be damaged/disrupted and may want an AI core, unlike a "
+        "static condition). Suggested id (real precedent, Exigency's Avesta.java): "
+        + ", ".join(f"Conditions.{old}->Industries.{new}" for old, new in REMOVED_MARKET_CONDITION_IDS.items())
+        + ". This reference will not compile as a Conditions field (missing-symbol), so it also blocks the "
+        "mod's loose scripts from loading."
+    )
+    for source in sorted(root.rglob("*.java")):
+        if any(part in NON_MOD_JAR_DIRS or part.startswith("src-decompiled") for part in source.relative_to(root).parts):
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        found = sorted({match.group(1) for match in _CONDITIONS_FIELD_REF.finditer(text)})
+        if found:
+            result.add(
+                id="removed-market-condition-id",
+                category="scripts",
+                severity="high",
+                classification="MANUAL",
+                confidence="DETERMINISTIC",
+                explanation=explanation,
+                file=_relative(root, source),
+                evidence=[f"condition:{value}" for value in found],
+            )
 
 
 # RC8's FleetFactoryV3 multiplies fleet size by the source market's Stats.COMBAT_FLEET_SIZE_MULT.

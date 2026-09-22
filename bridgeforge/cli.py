@@ -2473,6 +2473,11 @@ def main(argv: list[str] | None = None) -> int:
             missing = (result.get("classpath") or {}).get("dependencies_missing") or []
             if missing:
                 print(f"  dependency jars not found: {', '.join(missing)}")
+            shadowed = result.get("jar_shadowed_errors") or []
+            if shadowed:
+                mod_root = Path(args.mod).expanduser().resolve()
+                shadowed_files = sorted({str(Path(error["file"]).relative_to(mod_root)).replace("\\", "/") for error in shadowed})
+                print(f"  {len(shadowed)} error(s) in {len(shadowed_files)} jar-shadowed loose script(s) not counted above (the game loads the jar's class instead): {', '.join(shadowed_files[:5])}")
             for warning in result.get("janino_gap_warnings", [])[:10]:
                 print(f"  WARNING javac-vs-Janino gap in {warning['file']}: {', '.join(warning['java8plus_syntax'])}")
         return 0 if result["status"] == "PASS" else 1
