@@ -1494,6 +1494,33 @@ Progression, each stage feeding the next:
       projectile spec — both required by B2). `ii_titan_w2`/`deco2`/`deco3` remain specced but mounted
       by no hull or variant, left as the author's unfinished intent rather than wired silently.
 
+45. **Better-Deserving-Smods first revival pass, and a 0.95.1a reference rig registered.** BDS had no
+    report and had never been triaged; it is the other half of E14's collision with Xenoargh-Rebal.
+    Findings **12 → 4**; `compile-check` PASS (0 errors, 50 loose scripts — 2023 code compiles clean
+    on RC8, no API drift at all).
+    - **Fixed 7 Janino launch blockers (10 instances).** BDS ships no jar, and **no core jar supplies
+      any `data/hullmods` class** (checked across every jar in `starsector-core`), so all 50 loose
+      scripts are Janino-compiled at startup. 10 typed for-eaches over generic collections rewritten
+      as raw `Iterator` with explicit casts. Every one was over a real collection, never an array —
+      an array for-each is fine under Janino and has no `.iterator()`, so rewriting one would have
+      broken it. Second mod in two days where `loose-script-janino-risk` caught a live, unshadowed
+      blocker (Maelstrom was the first).
+    - Fixed `gameVersion` 0.95.1a-RC6 → 0.98a-RC8; without it the launcher unchecks the mod entirely.
+    - **Owner installed 0.95.1a mid-pass; registered it as a reference rig** (`rig-create`), joining
+      0.62a/0.7.2a/0.8.1a/0.9a. **This is the highest-value reference in the set by a wide margin:
+      255 of the corpus's mods declare a 0.95.x base version** (176 × 0.95.1a, 76 × 0.95a), against
+      40 already on 0.98a.
+    - **The real defect, now measured exactly rather than inferred: BDS silently reverts 260 lines of
+      vanilla's own post-0.95.1a hullmod changes**, across 28 overrides, while deliberately removing
+      only 10. It is overwhelmingly *additive* — imports, a guarded S-mod block, and a new
+      `addPostDescriptionSection` method per hullmod — which is why its intent is recoverable at all.
+      A first pass using the 0.9a rig as a proxy reported 255/1; that was **not** a looser bound as
+      claimed but an under-count, because it silently skipped files with no 0.9a counterpart. The
+      same-era measurement supersedes it — a concrete argument for era-matched references over
+      near-miss proxies.
+    - Declared `ESCALATION_REQUIRED` (E14): the rebuild onto RC8-current source and the repointing
+      are both real work, and the Rebal collision needs owner decisions.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit
