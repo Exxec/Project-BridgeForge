@@ -735,6 +735,12 @@ Progression, each stage feeding the next:
     not by oversight). New code that builds a fourth such set without the resolution (or an
     exemption) then fails this check immediately, at review time, instead of waiting for the next
     mod to expose it in production.
+    **Done 2026-09-24.** `tests/test_hull_id_resolution_audit.py` parses every module in `bridgeforge/`
+    and fails if a function builds hull ids from `_ship_file_index(...)` or `_declared_spec_ids(...,
+    "*.ship", ...)` without also calling `_skin_index`/`_resolve_hull_id`, unless it is in `EXEMPT` with
+    its reason (`_scan_carrier_bays_proposal`, `_scan_description_missing`: ship_data.csv base-hull
+    rows). A stale exemption also fails. Current state: four skin-aware builders (plus
+    `content_diff.content_ids`), two exempt, none unresolved.
 
     **Note on item 19 (the `diff-data` command):** every stage of E11's Rebal rebuild (weapons done,
     hulls in progress, variants and shipsystems/skins still ahead) has needed the same

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Tests: a self-check (ROADMAP P14 item 24) fails the suite when new code builds a hull-id set from `.ship` files without resolving `.skin` ids (the BF-SKIN-01 blind spot), unless it is an explained exemption.
 - **New scanner checks `preset-entry-drops-vanilla-fields` (MANUAL) and `preset-entry-overrides-vanilla` (REVIEW) (ROADMAP P14 item 15).** A mod's `engine_styles`/`hull_styles`/`custom_entities`/`sounds`/`planets.json` entry with a vanilla id replaces vanilla's whole entry game-wide; the scan now names every vanilla field such an entry drops or changes (Zorg18's `contrailCampaignColor`).
 - **New `verify-shadow` command (ROADMAP P14 item 26).** Answers "does this jar set really compile the class this loose script defines?" by parsing class files, never by path existence (E12), naming the supplying jar and listing any jar it could not read.
 - **New `content-diff` command and `scan --removed-content` (ROADMAP P14 item 8).** Catalogues the content ids an older install defined that RC8 dropped, with same-named RC8 candidates; the scan then reports unresolved references vanilla removed as `content-reference-removed-in-vanilla` instead of a missing dependency.
