@@ -74,7 +74,7 @@ class BuildTests(unittest.TestCase):
             (source / "src").mkdir(parents=True)
             (source / "src" / "Example.java").write_text("class Example { MissingType x; }", encoding="utf-8")
             workspace = create_workspace(source, root / "workspace")
-            create_build_profile(workspace, TargetProfile("0.98a-RC8", 17), Path(javac).parent.parent, [], [])
+            create_build_profile(workspace, TargetProfile("0.98a-RC8", 17), Path(javac).resolve().parent.parent, [], [])
             result = run_compile(workspace)
             self.assertFalse(result["success"])
             self.assertTrue(any(item["kind"] == "missing-symbol" for item in result["diagnostics"]))
@@ -161,7 +161,7 @@ class BuildTests(unittest.TestCase):
             with zipfile.ZipFile(real_jar, "w") as archive:
                 archive.writestr("marker.txt", "lazylib")
             registry = {"lw_lazylib": LibraryRegistryEntry("lw_lazylib", str(real_jar))}
-            profile = create_build_profile(workspace, TargetProfile("0.98", 17), Path(javac).parent.parent, [], [], registry)
+            profile = create_build_profile(workspace, TargetProfile("0.98", 17), Path(javac).resolve().parent.parent, [], [], registry)
             self.assertEqual(profile.compile_validation["status"], "AVAILABLE")
             self.assertIn(str(real_jar.resolve()), profile.dependency_jars)
 
@@ -181,7 +181,7 @@ class BuildTests(unittest.TestCase):
             with zipfile.ZipFile(real_jar, "w") as archive:
                 archive.writestr("marker.txt", "lazylib")
             registry = {"lw_lazylib": LibraryRegistryEntry("lw_lazylib", str(real_jar))}
-            profile = create_build_profile(workspace, TargetProfile("0.98", 17), Path(javac).parent.parent, [], [real_jar], registry)
+            profile = create_build_profile(workspace, TargetProfile("0.98", 17), Path(javac).resolve().parent.parent, [], [real_jar], registry)
             self.assertEqual(profile.dependency_jars, [str(real_jar.resolve())])
 
 

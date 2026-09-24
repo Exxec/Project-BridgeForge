@@ -945,7 +945,7 @@ preserve a ZIP and create a fresh convention-layout assessment copy
 | Argument | Notes | Help |
 |---|---|---|
 | `archive` | - | - |
-| `--repo-root` REPO_ROOT | default C:\Users\exxec\Documents\Project BridgeForge | - |
+| `--repo-root` REPO_ROOT | default current directory | - |
 | `--name` NAME | - | portable mod folder name (default: sanitized metadata id) |
 | `--selected-root` SELECTED_ROOT | - | exact ZIP mod-root candidate when ambiguous |
 | `--archaeology` | - | also collect static D0 discovery evidence |
@@ -957,7 +957,7 @@ read-only declared-evidence status board; missing evidence remains unknown
 
 | Argument | Notes | Help |
 |---|---|---|
-| `--repo-root` REPO_ROOT | default C:\Users\exxec\Documents\Project BridgeForge | - |
+| `--repo-root` REPO_ROOT | default current directory | - |
 | `--write` | - | write STATUS.generated.json/.md; never replaces manual STATUS.md |
 | `--json` | - | - |
 
@@ -968,7 +968,7 @@ stage/audit a release and retain prior builds; dry-run by default
 | Argument | Notes | Help |
 |---|---|---|
 | `mod` | - | folder name under In operation (not a source path) |
-| `--repo-root` REPO_ROOT | default C:\Users\exxec\Documents\Project BridgeForge | - |
+| `--repo-root` REPO_ROOT | default current directory | - |
 | `--original` ORIGINAL | required | - |
 | `--baseline` BASELINE | required | - |
 | `--behavior-diff` BEHAVIOR_DIFF | required | - |

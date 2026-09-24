@@ -5446,7 +5446,11 @@ def _scan_compile_check(root: Path, result: ScanResult, vanilla_core: Path | Non
         try:
             rel = _relative(root, Path(file_path))
         except ValueError:
-            rel = file_path
+            # javac echoes paths as given; an alias of root (Windows 8.3 name, symlink) only matches once resolved.
+            try:
+                rel = _relative(root, Path(file_path).resolve())
+            except ValueError:
+                rel = file_path
         evidence = [_format_compile_error(error) for error in errors[:5]]
         if len(errors) > 5:
             evidence.append(f"... {len(errors) - 5} more")

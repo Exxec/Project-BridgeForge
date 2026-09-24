@@ -32,10 +32,10 @@ class PipelineTests(unittest.TestCase):
             (source / "src" / "Example.java").write_text("class Example {}", encoding="utf-8")
             workspace = create_workspace(source, root / "workspace")
             missing = root / "missing-lazylib.jar"
-            profile = create_build_profile(workspace, TargetProfile("0.98", 17), Path(javac).parent.parent, [], [missing])
+            profile = create_build_profile(workspace, TargetProfile("0.98", 17), Path(javac).resolve().parent.parent, [], [missing])
             self.assertEqual(profile.compile_validation["status"], "UNAVAILABLE")
             self.assertEqual(profile.compile_validation["findings"][0]["id"], "compile-validation-unavailable")
-            result = run_pipeline(workspace, TargetProfile("0.98", 17), jdk=Path(javac).parent.parent, dependency_jars=[missing], compile_requested=True)
+            result = run_pipeline(workspace, TargetProfile("0.98", 17), jdk=Path(javac).resolve().parent.parent, dependency_jars=[missing], compile_requested=True)
             self.assertEqual(result["compile_status"], "UNAVAILABLE")
             self.assertIsNone(result["compile"])
             self.assertEqual(result["compile_validation"]["findings"][0]["jar"], str(missing.resolve()))
