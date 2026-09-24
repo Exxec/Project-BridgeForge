@@ -66,6 +66,17 @@ python -m bridgeforge dossier "<mod_dir>" --vanilla-core $core --output .\dossie
 
 Classifications: **MANUAL** means likely broken, act on it. **REVIEW** needs judgment. **UNKNOWN** means BridgeForge can't tell. **SAFE** is informational or has a mechanical fix.
 
+**"Defined nowhere"? content-diff.** If `content-reference-unresolved` lists ids no dependency explains,
+check whether vanilla itself dropped them:
+
+```powershell
+python -m bridgeforge content-diff "<old install>\starsector-core" $core --output "In operation\_reference\removed-content-0.9a-to-rc8.json"
+python -m bridgeforge scan "<mod_dir>" --vanilla-core $core --removed-content "In operation\_reference\removed-content-0.9a-to-rc8.json" --output "<reports>"
+```
+
+Ids vanilla removed then appear as `content-reference-removed-in-vanilla`, each with any RC8 id of the
+same display name (a lead, not a confirmed rename). RevenantLib may already carry the old content.
+
 ## 1b. Which API changed? api-diff
 
 ```powershell

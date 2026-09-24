@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **New `content-diff` command and `scan --removed-content` (ROADMAP P14 item 8).** Catalogues the content ids an older install defined that RC8 dropped, with same-named RC8 candidates; the scan then reports unresolved references vanilla removed as `content-reference-removed-in-vanilla` instead of a missing dependency.
 - **New `corpus-index build|search` (ROADMAP P14 item 18).** Index a large mod archive once (inside zips too) and search file contents or paths in milliseconds; each result states what the index could not read, so an empty result is real evidence of absence.
 - **New `rebuild-from-reference` command (ROADMAP P14 item 21).** Ports a mod's edited copies of vanilla `.ship`/`.wpn`/`.variant`/`.skin`/`.system` files to RC8 with a three-way merge (reference vanilla, mod, RC8): RC8's changes kept, the mod's edits applied, overlaps reported as conflicts, unedited copies flagged for removal. Writes only clean merges, to a separate folder; `--class` stages a large mod.
 - **New `diff-data` command (ROADMAP P14 item 19).** Compares two data files (JSON dialect or CSV) by value, so key/row/column order, comments, trailing commas and `10` vs `10.0` never count; lists slots by id and reports a reordered list once. The primitive item 21's rebuild-from-reference needs.

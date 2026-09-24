@@ -103,6 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--baseline", type=Path, help="only report findings not present in this baseline file, plus a count of previously accepted findings that are now resolved")
     scan.add_argument("--write-baseline", type=Path, help="write the current scan's finding keys to this file as an accepted baseline")
     scan.add_argument("--compile-check", action="store_true", help="also javac-compile loose scripts against RC8 (needs --vanilla-core); opt-in, off by default so scans stay fast and hermetic")
+    scan.add_argument("--removed-content", type=Path, help="catalogue from `content-diff`: report unresolved ids that the older vanilla defined (content-reference-removed-in-vanilla), with same-named RC8 candidates")
     bytecode = subcommands.add_parser("bytecode-inspect", help="inspect class/JAR symbolic references without rewriting")
     bytecode.add_argument("input", type=Path, nargs="+")
     bytecode.add_argument("--output", type=Path)
@@ -722,6 +723,11 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_search_cmd.add_argument("--names", action="store_true", help="match file paths only")
     corpus_search_cmd.add_argument("--limit", type=int, default=50)
     corpus_search_cmd.add_argument("--json", action="store_true")
+    content_diff_cmd = subcommands.add_parser("content-diff", help="list hull/variant/weapon/wing/hullmod/shipsystem ids an older install defined that RC8 no longer does, with same-named RC8 candidates; feed the catalogue to `scan --removed-content`")
+    content_diff_cmd.add_argument("reference_core", type=Path, help="starsector-core of the older install (read-only)")
+    content_diff_cmd.add_argument("vanilla_core", type=Path, help="RC8 starsector-core (read-only)")
+    content_diff_cmd.add_argument("--output", type=Path, help="write the JSON catalogue here")
+    content_diff_cmd.add_argument("--json", action="store_true")
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
@@ -1000,7 +1006,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "scan":
         try:
             result = scan_mod(args.mod_directory, TargetProfile(args.target_starsector, args.target_java), args.vanilla_core, compile_check=args.compile_check)
-        except ValueError as exc:
+            if args.removed_content:
+                from .content_diff import annotate_removed_content
+                annotate_removed_content(result, json.loads(args.removed_content.read_text(encoding="utf-8")))
+        except (ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         try:
@@ -2362,6 +2371,30 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Coverage: {result['text_files_searched']} text files searched, {result['files_listed']} files listed by name"
               + (f"; NOT searched: {not_searched}" if not_searched else "; nothing skipped"))
         return 0 if args.corpus_index_command == "build" or result["content_hits"] or result["name_hits"] else 1
+    if args.command == "content-diff":
+        from .content_diff import ContentDiffError, diff_content
+        try:
+            result = diff_content(args.reference_core, args.vanilla_core)
+            if args.output:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except (ContentDiffError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            for kind, count in result["counts"].items():
+                print(f"{kind}: {count['reference']} -> {count['rc8']} ({count['removed']} removed, {count['added']} added)")
+            for kind, entries in result["removed"].items():
+                for entry in entries[:30]:
+                    leads = entry["same_name_in_rc8"]
+                    print(f"  - {kind}:{entry['id']}" + (f" ({entry['name']})" if entry.get("name") else "") + (f" -> same name in RC8: {', '.join(leads)}" if leads else ""))
+                if len(entries) > 30:
+                    print(f"  ... {len(entries) - 30} more {kind} ids (see --output/--json)")
+            if args.output:
+                print(f"Written: {args.output}")
+        return 0
     if args.command == "api-diff":
         import zipfile
         from .api_diff import ApiDiffError, diff_api_jars

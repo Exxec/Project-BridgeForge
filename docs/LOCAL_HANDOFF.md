@@ -36,6 +36,14 @@ lines. Check that `SectorAPI.addMessage` lists `CampaignUIAPI.addMessage` as a c
 `SectorAPI.createFleet` has none; if not, the catalogue logic needs a fix. Every removal it
 finds that the scanner does not flag yet is a candidate check or fixer.
 
+### 2b. Build the removed-content catalogue (ROADMAP P14 item 8)
+```powershell
+python -m bridgeforge content-diff "<0.9a reference rig>\starsector-core" $core --output "In operation\_reference\removed-content-0.9a-to-rc8.json"
+```
+Done when `weapon:thruster_fighter_sm` and `hullmod:shields_formshield` appear as removed (the two
+cases this item was written for). Then rescan Vacuum's and Rebal's originals with
+`--removed-content` and check both show up as `content-reference-removed-in-vanilla`.
+
 ### 3. Confirm `revenantlib_contract` on the real rig (ROADMAP P14 item 30)
 ```powershell
 python -m bridgeforge rig-doctor $rig --real-install "C:\Program Files (x86)\Fractal Softworks\Starsector"
