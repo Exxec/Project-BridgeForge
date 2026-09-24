@@ -261,7 +261,36 @@ def strategy(needed: dict[str, set[str]], files: dict[str, int], chosen: list[di
     return "ESCALATE", f"{len(hard)} id(s)/class(es) in {hard_places} place(s) have no practical provider: {left}{heavy_note}. Other ids: {'; '.join(plan) or 'none'}. Revive, remap, or rebuild without it. Owner decision."
 
 
-def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla_core: Path | None = None, ops: Path | None = None) -> dict:
+def revival_licence(mod_id: str | None, name: str | None, policy_path: Path | None = None) -> dict[str, object]:
+    """What release_policy.json says about publishing a mod we would revive (ROADMAP P14 item 9).
+
+    LOCAL_ONLY: a revival may be used here but not published, so a mod that needs it cannot ship with
+    it. RELEASABLE: an explicit decision allows publishing. UNRECORDED: no entry; the policy's default
+    would treat it as releasable, but no one has checked the licence, so record a decision first.
+    """
+    from .release import _load_policy, policy_entry
+
+    entry = policy_entry(_load_policy(policy_path), mod_id, name)
+    if entry is None:
+        return {"decision": "UNRECORDED", "reason": "no entry in release_policy.json: check the licence and record a decision before reviving"}
+    return {"decision": "LOCAL_ONLY" if entry.get("local_only") else "RELEASABLE", "reason": entry.get("reason")}
+
+
+def _licence_notes(chosen: list[dict]) -> list[str]:
+    notes = []
+    for item in chosen:
+        licence = item.get("licence")
+        if not licence or licence["decision"] == "RELEASABLE":
+            continue
+        if licence["decision"] == "LOCAL_ONLY":
+            notes.append(f"{item['name']} is local-only under release_policy.json: a revival works here but cannot be published, so this mod cannot ship with it ({licence['reason']})")
+        else:
+            notes.append(f"{item['name']} has no licence decision in release_policy.json: record one before reviving it")
+    return notes
+
+
+def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla_core: Path | None = None, ops: Path | None = None,
+                           policy_path: Path | None = None) -> dict:
     from .models import TargetProfile
     from .scanner import scan_mod
 
@@ -285,6 +314,7 @@ def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla
         item = {"mod_id": provider.mod_id, "name": provider.name, "game_version": provider.game_version, "targets_0.98a": _current(provider), "covers": sorted(hits)}
         if not item["targets_0.98a"]:
             item["workspace"] = _workspace_state(ops_dir, provider.mod_id)
+            item["licence"] = revival_licence(provider.mod_id, provider.name, policy_path)
         chosen.append(item)
     if any(needed.values()):
         course, reason = strategy(needed, files, chosen, uncovered)
@@ -302,4 +332,5 @@ def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla
         "candidates": candidates[:10],
         "successors": successors,
         "strategy": course, "reason": reason,
+        "licence_notes": _licence_notes(chosen) if course in ("REVIVE_DEPENDENCY", "ESCALATE", "STRIP_FROM_MOD") else [],
     }

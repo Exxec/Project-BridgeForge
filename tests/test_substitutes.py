@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.substitutes import Provider, dependency_substitutes, provider_for, rank, strategy
+from bridgeforge.substitutes import Provider, dependency_substitutes, provider_for, rank, revival_licence, strategy
 
 
 def _write(path: Path, text: str) -> None:
@@ -36,6 +36,45 @@ def _provider(root: Path, name: str, game_version: str, hullmods: str, wings: st
     _write(mod / "data" / "hullmods" / "hull_mods.csv", "name,id\n" + hullmods)
     _write(mod / "data" / "hulls" / "wing_data.csv", "id,variant\n" + wings)
     return mod
+
+
+class RevivalLicenceTests(unittest.TestCase):
+    """ROADMAP P14 item 9: a dependency we would revive carries its release_policy.json decision."""
+
+    def _policy(self, root: Path, mods: dict) -> Path:
+        path = root / "policy.json"
+        path.write_text(json.dumps({"schema_version": 1, "mods": mods, "default": {"local_only": False, "reason": None}}), encoding="utf-8")
+        return path
+
+    def test_decisions_by_id_or_name_and_unrecorded_is_not_releasable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            policy = self._policy(Path(directory), {"oldsector": {"local_only": True, "reason": "no licence"}, "Open Lib": {"local_only": False, "reason": "MIT"}})
+            self.assertEqual(revival_licence("OLDSECTOR", None, policy), {"decision": "LOCAL_ONLY", "reason": "no licence"})
+            self.assertEqual(revival_licence("openlib", "Open Lib", policy), {"decision": "RELEASABLE", "reason": "MIT"})
+            self.assertEqual(revival_licence("unknown", "Unknown", policy)["decision"], "UNRECORDED")
+
+    def test_revive_candidates_carry_their_licence_and_notes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _provider(root, "oldsector", "0.9a", "Red,old_red_army\n", "old_yak_wing,v\n")
+            local = self._policy(root, {"oldsector": {"local_only": True, "reason": "author unreachable"}})
+            report = dependency_substitutes(_addon(root), [root / "mods"], vanilla_core=_core(root), ops=root / "none", policy_path=local)
+            self.assertEqual(report["provider_set"][0]["licence"], {"decision": "LOCAL_ONLY", "reason": "author unreachable"})
+            self.assertEqual(len(report["licence_notes"]), 1)
+            self.assertIn("cannot be published", report["licence_notes"][0])
+            unrecorded = dependency_substitutes(_addon(root), [root / "mods"], vanilla_core=_core(root), ops=root / "none", policy_path=self._policy(root, {}))
+            self.assertIn("no licence decision", unrecorded["licence_notes"][0])
+            releasable = self._policy(root, {"oldsector": {"local_only": False, "reason": "permission on file"}})
+            clean = dependency_substitutes(_addon(root), [root / "mods"], vanilla_core=_core(root), ops=root / "none", policy_path=releasable)
+            self.assertEqual(clean["licence_notes"], [])
+
+    def test_current_providers_need_no_licence_lookup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _provider(root, "newsector", "0.98a-RC8", "Red,old_red_army\n", "old_yak_wing,v\n")
+            report = dependency_substitutes(_addon(root), [root / "mods"], vanilla_core=_core(root), ops=root / "none")
+        self.assertNotIn("licence", report["provider_set"][0])
+        self.assertEqual(report["licence_notes"], [])
 
 
 class SubstituteTests(unittest.TestCase):

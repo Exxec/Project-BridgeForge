@@ -888,6 +888,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  in no visible mod: {', '.join(result['uncovered'])}")
         for entry in result["successors"]:
             print(f"  known successor for {entry['match']}: {entry['successor']} [{entry.get('evidence', '')}]")
+        for note in result.get("licence_notes") or []:
+            print(f"  LICENCE: {note}")
         return 0
     if args.command == "preset-check":
         from .preset_check import check_presets
