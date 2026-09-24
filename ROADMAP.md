@@ -427,6 +427,13 @@ Progression, each stage feeding the next:
 2. **Provider index as a corpus artefact.** Store each visible mod's "provides" set beside the novelty fingerprints (`bridgeforge-state/`, gitignored), so a lookup is instant and works when the provider isn't installed. Record game version and mod version.
 3. **Dependency graph across the queue.** Build a graph of which queued mods need which missing mods, and order revival by unblocking value. As of 2026-09-14: FX Core (10 MANUAL) unblocks FX Example and part of Rebal; AI Overhaul (12 MANUAL) the rest of Rebal. EZ Damage is already revived (r1). Show it in `board`.
 4. **Strip and vendor plans.** For STRIP_FROM_MOD, generate the exact edit list: which variant, `.ship` and faction lines lose which ids, plus proposed vanilla substitutes of the same slot type and size. Also generate the matching PROPOSED expected changes, so approval goes through `expect` as usual. Where the licence allows, offer vendoring as an alternative: copy the one missing piece (for example Rebal's `shields_formshield` into Explorer Society) instead of reviving a heavy provider.
+   **First slice done 2026-09-24: the edit list.** `strip-plan MOD --vanilla-core CORE [--id kind:id]`
+   (`bridgeforge/strip_plan.py`) runs the normal scan and, for every id in its
+   `unresolved_content_references`, lists each place it sits: hull-mod and wing lists, each variant weapon
+   slot and built-in weapon (with vanilla weapons of the slot's type and size, mount overrides
+   included, as substitutes), and `.faction` known-lists; a variant or skin on an unresolved hull is
+   listed for deletion. Edits nothing. Still open: the PROPOSED expected changes, and the vendoring
+   alternative. Tests: `tests/test_strip_plan.py`.
 5. **Spawn-point fleet port kit.** RC8 keeps `BaseSpawnPoint` and `addSpawnPoint`, but not `SectorAPI.createFleet(faction, fleetType)`, which 0.6 spawners use to build fleets from old faction fleet definitions. The kit is:
    - a helper that builds the equivalent fleet with FleetFactoryV3, following Zorg18 r1's spawner;
    - a scanner check for the removed call.

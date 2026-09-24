@@ -77,6 +77,15 @@ python -m bridgeforge scan "<mod_dir>" --vanilla-core $core --removed-content "I
 Ids vanilla removed then appear as `content-reference-removed-in-vanilla`, each with any RC8 id of the
 same display name (a lead, not a confirmed rename). RevenantLib may already carry the old content.
 
+**Stripping content nothing provides? strip-plan.** When `dependency-substitutes` says STRIP_FROM_MOD:
+
+```powershell
+python -m bridgeforge strip-plan "<mod_dir>" --vanilla-core $core [--id weapon:vayra_gun]
+```
+
+Lists each file and field every unresolved id sits in, and for an emptied weapon slot the vanilla
+weapons of the same type and size. Nothing is edited; make the changes in the working copy yourself.
+
 ## 1b. Which API changed? api-diff
 
 ```powershell
