@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 from bridgeforge.cli import main
-from bridgeforge.fixers import FixerError, apply_fix, compute_fix, unified_diff_for_change
+from bridgeforge.fixers import FixerError, apply_fix, compute_fix
 from bridgeforge.scanner import scan_mod
 from tests.save_fixtures import build_class_file, write_jar
 
@@ -786,7 +786,7 @@ class ModInfoGameVersionInexactTests(unittest.TestCase):
             before = path.read_bytes()
             plan = compute_fix(root, "mod-info-game-version-inexact", {"target_game_version": "0.98a"})
             self.assertEqual(path.read_bytes(), before)
-            before_scan = scan_mod(root, vanilla_core=None)
+            scan_mod(root, vanilla_core=None)
             applied = apply_fix(plan)
             self.assertTrue(Path(applied[0]["backup"]).is_file())
             data = json.loads(path.read_text(encoding="utf-8"))

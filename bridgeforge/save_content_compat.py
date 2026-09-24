@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from .save_compat import ModClassIndex, _mod_id, _resolve_save_path, check_save_compat
+from .save_compat import _mod_id, _resolve_save_path, check_save_compat
 from .save_reader import iter_elements
 
 """Save/build **data id** compatibility check (roadmap P3b-E) and removal safety (P3b-I).

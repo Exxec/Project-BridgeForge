@@ -17,3 +17,12 @@ include = ["bridgeforge*"]
 
 [tool.setuptools.package-data]
 bridgeforge = ["release_policy.json", "dependency_successors.json", "vanilla_loose_scripts_rc8.json","java/*.java", "java-tools/bytecode/lib/*.jar", "rules/*.json", "packs/*/*.json", "compat_sets/*.json", "scenarios/*.json", "probe_profiles/*.txt"]
+
+[tool.ruff]
+target-version = "py310"
+extend-exclude = ["probe-mod"]
+
+[tool.ruff.lint]
+# Pyflakes (unused/undefined names) plus syntax errors.
+# One-line compound statements are house style, so the E7xx family stays off.
+select = ["E9", "F"]
