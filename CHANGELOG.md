@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **New finding `loose-script-shadowed-by-dependency-jar` (ROADMAP P14 item 12).** `compile-check` and `scan --compile-check` now detect a loose script whose class a declared dependency's jar already compiles: the game never compiles it, so the mod's edit does nothing. Its javac errors no longer fail the compile check.
 - Tests: a self-check (ROADMAP P14 item 24) fails the suite when new code builds a hull-id set from `.ship` files without resolving `.skin` ids (the BF-SKIN-01 blind spot), unless it is an explained exemption.
 - **New scanner checks `preset-entry-drops-vanilla-fields` (MANUAL) and `preset-entry-overrides-vanilla` (REVIEW) (ROADMAP P14 item 15).** A mod's `engine_styles`/`hull_styles`/`custom_entities`/`sounds`/`planets.json` entry with a vanilla id replaces vanilla's whole entry game-wide; the scan now names every vanilla field such an entry drops or changes (Zorg18's `contrailCampaignColor`).
 - **New `verify-shadow` command (ROADMAP P14 item 26).** Answers "does this jar set really compile the class this loose script defines?" by parsing class files, never by path existence (E12), naming the supplying jar and listing any jar it could not read.

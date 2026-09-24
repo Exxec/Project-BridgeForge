@@ -5514,6 +5514,17 @@ def _scan_compile_check(root: Path, result: ScanResult, vanilla_core: Path | Non
             explanation=str(outcome.get("reason") or "No JDK was available to compile-check this mod's loose scripts."),
         )
         return
+    for entry in outcome.get("shadowed_by_dependency") or []:
+        result.add(
+            id="loose-script-shadowed-by-dependency-jar",
+            category="scripts",
+            severity="high",
+            classification="MANUAL",
+            confidence="DETERMINISTIC",
+            explanation=f"A declared dependency ({entry['dependency']}) already compiles this class into its jar. All mod jars share one classloader, so the game loads the dependency's class and never compiles this loose file: whatever this file changes has no effect in game. Port the change another way (a differently named class the mod registers itself) or drop the file.",
+            file=str(entry["file"]),
+            evidence=[f"class:{entry['class']}", f"supplied by:{entry['supplied_by']}"],
+        )
     if outcome["status"] != "FAIL":
         return
     errors_by_file: dict[str, list[dict[str, object]]] = {}

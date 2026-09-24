@@ -55,6 +55,13 @@ as E12 did for Rebal. Also check that `verify-shadow ... --against $core` report
 `NOT checked: ...starfarer_obf.jar: more than 10000 entries` line; if it does, the entry limit
 needs raising for trusted game jars.
 
+### 2d. Confirm dependency-jar shadowing on Maelstrom (ROADMAP P14 item 12)
+```powershell
+python -m bridgeforge compile-check "In operation\<Maelstrom workspace>\working" --vanilla-core $core --json
+```
+Done when `shadowed_by_dependency` lists the two Titan scripts E8 found, supplied by base
+Interstellar Imperium's `II.jar`.
+
 ### 3. Confirm `revenantlib_contract` on the real rig (ROADMAP P14 item 30)
 ```powershell
 python -m bridgeforge rig-doctor $rig --real-install "C:\Program Files (x86)\Fractal Softworks\Starsector"

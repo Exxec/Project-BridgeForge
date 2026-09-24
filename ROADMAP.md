@@ -498,6 +498,14 @@ Progression, each stage feeding the next:
     Titan scripts are shadowed by base Interstellar Imperium's `II.jar`. Needs the provider jars that
     `compile_check`/`substitutes.provider_index` already assemble, plus a new finding
     (`loose-script-shadowed-by-dependency-jar`, MANUAL: the edit has no effect) and a scanner test.
+    **Done 2026-09-24 (Maelstrom rerun is local).** `compile_check.dependency_shadowed_scripts` walks every
+    declared dependency's jars (the ones `assemble_classpath` already found) with the shared class-file
+    loop and `verify-shadow`'s class-name rule. `compile-check` lists matches as `shadowed_by_dependency`
+    and moves their javac errors to `shadowed_file_errors` (the game never compiles those files, so
+    they cannot fail a load); `scan --compile-check` reports each as
+    `loose-script-shadowed-by-dependency-jar` (MANUAL). Not yet done: `loose-script-janino-risk` still
+    fires on such a file in a plain scan, which has no provider jars. Tests: `tests/test_compile_check.py`
+    (a real javac run with a stand-in II.jar; the scan finding).
 
 13. **compile-check: two javac-integration bugs (found by task A14, 2026-09-20).**
     - `compile_check` does not pass `-sourcepath ""`, so when a dependency jar bundles `.java`
