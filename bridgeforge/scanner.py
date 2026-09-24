@@ -3516,11 +3516,23 @@ def _loaded_mod_jars(root: Path) -> list[Path]:
 
 def _iter_jar_class_files(root: Path):
     """Yield (jar_path, member_name, class_bytes) for readable .class members of the mod's loaded jars."""
-    for jar in _loaded_mod_jars(root):
+    yield from iter_class_files_in_jars(_loaded_mod_jars(root))
+
+
+def iter_class_files_in_jars(jars, unreadable: list[str] | None = None):
+    """Yield (jar_path, member_name, class_bytes) for readable .class members of the given jars.
+
+    The one jar-walking loop behind `mod_jar_class_names` and `verify-shadow` (ROADMAP P14 item 26).
+    A jar that cannot be opened or exceeds MAX_JAR_ENTRIES is skipped; pass `unreadable` to learn
+    which, so a "not shadowed" answer can say what it did not look inside.
+    """
+    for jar in jars:
         try:
             with zipfile.ZipFile(jar) as archive:
                 entries = archive.infolist()
                 if len(entries) > MAX_JAR_ENTRIES:
+                    if unreadable is not None:
+                        unreadable.append(f"{jar}: more than {MAX_JAR_ENTRIES} entries")
                     continue
                 for item in entries:
                     if not item.filename.endswith(".class"):
@@ -3534,7 +3546,9 @@ def _iter_jar_class_files(root: Path):
                     except (OSError, zipfile.BadZipFile, KeyError):
                         continue
                     yield jar, item.filename.replace("\\", "/"), data
-        except (OSError, zipfile.BadZipFile):
+        except (OSError, zipfile.BadZipFile) as exc:
+            if unreadable is not None:
+                unreadable.append(f"{jar}: {exc}")
             continue
 
 

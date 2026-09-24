@@ -728,6 +728,10 @@ def build_parser() -> argparse.ArgumentParser:
     content_diff_cmd.add_argument("vanilla_core", type=Path, help="RC8 starsector-core (read-only)")
     content_diff_cmd.add_argument("--output", type=Path, help="write the JSON catalogue here")
     content_diff_cmd.add_argument("--json", action="store_true")
+    verify_shadow_cmd = subcommands.add_parser("verify-shadow", help="does a jar set really compile the class a loose script defines? Parses class files (never a path check); use before dropping or editing a script as 'jar-shadowed'")
+    verify_shadow_cmd.add_argument("scripts", type=Path, nargs="+", help="loose .java file(s)")
+    verify_shadow_cmd.add_argument("--against", type=Path, action="append", required=True, help="a jar, a mod folder (its declared jars) or any folder (every jar under it, e.g. starsector-core); repeatable")
+    verify_shadow_cmd.add_argument("--json", action="store_true")
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
@@ -2394,6 +2398,24 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"  ... {len(entries) - 30} more {kind} ids (see --output/--json)")
             if args.output:
                 print(f"Written: {args.output}")
+        return 0
+    if args.command == "verify-shadow":
+        from .verify_shadow import VerifyShadowError, verify_shadow
+        try:
+            result = verify_shadow(args.scripts, args.against)
+        except (VerifyShadowError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            for entry in result["results"]:
+                print(f"{entry['status']}: {entry['script']} (class {entry['class']}, from {entry['class_from']})")
+                for owner in entry["supplied_by"]:
+                    print(f"    supplied by {owner}")
+            print(f"Checked {result['classes_checked']} classes in {result['jars_checked']} jar(s).")
+            for problem in result["unreadable_jars"]:
+                print(f"  NOT checked: {problem}")
         return 0
     if args.command == "api-diff":
         import zipfile

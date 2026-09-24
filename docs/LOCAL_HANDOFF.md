@@ -44,6 +44,17 @@ Done when `weapon:thruster_fighter_sm` and `hullmod:shields_formshield` appear a
 cases this item was written for). Then rescan Vacuum's and Rebal's originals with
 `--removed-content` and check both show up as `content-reference-removed-in-vanilla`.
 
+### 2c. Audit past "moved because shadowed" decisions (ROADMAP P14 item 27)
+For every mod workspace, find moves justified by shadowing and re-check each with the real test:
+```powershell
+Select-String -Path "In operation\*\scratch\MOVES.log" -Pattern "shadow|jar" 
+python -m bridgeforge verify-shadow "<the moved .java, from scratch/moved-*/>" --against "<the jar or core the log names>" --against $core
+```
+Done when every such move is either SHADOWED (the move stands) or listed as a mistake to restore,
+as E12 did for Rebal. Also check that `verify-shadow ... --against $core` reports no
+`NOT checked: ...starfarer_obf.jar: more than 10000 entries` line; if it does, the entry limit
+needs raising for trusted game jars.
+
 ### 3. Confirm `revenantlib_contract` on the real rig (ROADMAP P14 item 30)
 ```powershell
 python -m bridgeforge rig-doctor $rig --real-install "C:\Program Files (x86)\Fractal Softworks\Starsector"

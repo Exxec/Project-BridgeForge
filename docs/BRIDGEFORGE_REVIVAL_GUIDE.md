@@ -127,6 +127,16 @@ python -m bridgeforge corpus-index search FormShield --names                    
 Every result ends with a `Coverage:` line. Anything listed under `NOT searched` (for example `.7z`
 archives) was not looked inside, so "No hits" only covers the rest.
 
+**Is this loose script really jar-shadowed? verify-shadow.** Never decide from "the same path exists
+in vanilla" (E12). Ask the jars:
+
+```powershell
+python -m bridgeforge verify-shadow "<mod_dir>\data\hullmods\Armor.java" --against "<mod_dir>" --against $core
+```
+
+`SHADOWED` names the jar that supplies the class (the loose file is never compiled); `NOT_SHADOWED`
+means the loose file is live code.
+
 ## 2. Fix the mechanical things: fix
 
 ```powershell

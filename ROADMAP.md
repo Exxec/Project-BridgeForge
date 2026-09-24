@@ -770,6 +770,16 @@ Progression, each stage feeding the next:
     implementation of it), and print which jar (if any) supplies the class. Every future "is this
     safe to drop" claim - in a task brief, an investigation script, a fixer - should call this
     instead of writing a path check.
+    **Done 2026-09-24.** `verify-shadow SCRIPT... --against PATH [--against PATH]`
+    (`bridgeforge/verify_shadow.py`). The class is the script's declared `package` plus file name (else
+    its path below the mod root); `--against` takes a jar, a mod folder (its declared jars only, as the
+    game loads them) or any folder (every jar under it, e.g. a `starsector-core` including
+    `starfarer_obf.jar`). Per script: SHADOWED with the jar and member that supply the class, or
+    NOT_SHADOWED; every jar it could not read (corrupt, or over `MAX_JAR_ENTRIES`) is listed so the
+    answer states its coverage. The jar-walking loop is now one function,
+    `scanner.iter_class_files_in_jars`, shared with `loose-script-shadowed-by-jar`. Tests:
+    `tests/test_verify_shadow.py` (including E12's same-path-but-no-jar case). The item 27 audit of
+    past moves uses it; see `docs/LOCAL_HANDOFF.md`.
 27. **The full corpus recheck (item 23) should include an audit of every "moved because shadowed"
     decision made before item 25 was found, not just a fresh scan.** E12 (2026-09-20/21) found that
     a `Path.is_file()` path-existence check had been trusted as proof of jar-shadowing at least once
