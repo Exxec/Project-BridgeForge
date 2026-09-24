@@ -5,7 +5,23 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.substitutes import Provider, dependency_substitutes, provider_for, rank, revival_licence, strategy
+import io
+import shutil
+from contextlib import redirect_stdout
+
+from bridgeforge.cli import main
+from bridgeforge.substitutes import (
+    Provider,
+    dependency_graph,
+    dependency_substitutes,
+    load_provider_index,
+    provider_for,
+    provider_index,
+    rank,
+    revival_licence,
+    save_provider_index,
+    strategy,
+)
 
 
 def _write(path: Path, text: str) -> None:
@@ -36,6 +52,67 @@ def _provider(root: Path, name: str, game_version: str, hullmods: str, wings: st
     _write(mod / "data" / "hullmods" / "hull_mods.csv", "name,id\n" + hullmods)
     _write(mod / "data" / "hulls" / "wing_data.csv", "id,variant\n" + wings)
     return mod
+
+
+class ProviderIndexTests(unittest.TestCase):
+    """ROADMAP P14 items 2-3: the provider index as an artefact, and the queue-wide dependency graph."""
+
+    def test_index_round_trip_keeps_ids_and_versions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _provider(root, "oldsector", "0.9a", "Red,old_red_army\n", "old_yak_wing,v\n")
+            info = root / "mods" / "oldsector" / "mod_info.json"
+            info.write_text(json.dumps({"id": "oldsector", "name": "Old Sector", "gameVersion": "0.9a", "version": {"major": 1, "minor": 2, "patch": 3}}), encoding="utf-8")
+            summary = save_provider_index(provider_index([root / "mods"]), root / "state" / "index.json", [root / "mods"])
+            loaded = load_provider_index(root / "state" / "index.json")
+        self.assertEqual(summary["providers"], 1)
+        self.assertEqual((loaded[0].mod_id, loaded[0].version, loaded[0].game_version), ("oldsector", "1.2.3", "0.9a"))
+        self.assertEqual(loaded[0].provides["hullmod"], {"old_red_army"})
+
+    def test_an_indexed_provider_still_counts_after_its_folder_is_gone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _provider(root, "newsector", "0.98a-RC8", "Red,old_red_army\n", "old_yak_wing,v\n")
+            save_provider_index(provider_index([root / "mods"]), root / "index.json", [root / "mods"])
+            shutil.rmtree(root / "mods" / "newsector")
+            without = dependency_substitutes(_addon(root), [root / "mods"], vanilla_core=_core(root), ops=root / "none")
+            with_index = dependency_substitutes(_addon(root), [root / "mods"], vanilla_core=_core(root), ops=root / "none", index_path=root / "index.json")
+            bad = root / "bad.json"
+            bad.write_text("{}", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_provider_index(bad)
+        self.assertEqual(without["strategy"], "STRIP_FROM_MOD")
+        self.assertEqual(with_index["strategy"], "SWAP")
+
+    def _queue(self, root: Path) -> Path:
+        queue = root / "In operation"
+        for name, hullmod in (("AddonA", "old_red_army"), ("AddonB", "old_red_army"), ("AddonC", "rare_mod")):
+            working = queue / name / "working"
+            _write(working / "mod_info.json", json.dumps({"id": name.lower(), "name": name, "gameVersion": "0.98a-RC8"}))
+            _write(working / "data" / "variants" / "x.variant", json.dumps({"variantId": "x", "hullId": "lasher", "hullMods": [hullmod]}))
+        _provider(root, "oldsector", "0.9a", "Red,old_red_army\n", "")
+        _provider(root, "raresector", "0.9a", "Rare,rare_mod\n", "")
+        return queue
+
+    def test_graph_orders_revivals_by_how_many_queued_mods_they_unblock(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            graph = dependency_graph(self._queue(root), [root / "mods"], vanilla_core=_core(root))
+        self.assertEqual(graph["queued_mods"], 3)
+        self.assertEqual([(e["mod_id"], e["unblocks"]) for e in graph["revival_order"]],
+                         [("oldsector", ["AddonA", "AddonB"]), ("raresector", ["AddonC"])])
+        self.assertEqual(graph["unprovided"], [])
+
+    def test_graph_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            queue = self._queue(root)
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["dependency-graph", "--queue", str(queue), "--providers", str(root / "mods"), "--vanilla-core", str(_core(root))])
+        self.assertEqual(code, 0)
+        self.assertIn("1. revive oldsector (0.9a, not a workspace here", out.getvalue())
+        self.assertIn("unblocks 2: AddonA, AddonB", out.getvalue())
 
 
 class RevivalLicenceTests(unittest.TestCase):

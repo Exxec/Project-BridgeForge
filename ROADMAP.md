@@ -425,7 +425,17 @@ Progression, each stage feeding the next:
    - Scanner checks: `content-reference-unresolved`, `source-import-unresolved`, `legacy-vanilla-class-import`, `library-import-unused-in-jar`, `console-command-optional`, `carrier-bays-proposal`.
    - Fixers: `target-interface-method-missing`, `wing-data-missing-role-desc-column`.
 2. **Provider index as a corpus artefact.** Store each visible mod's "provides" set beside the novelty fingerprints (`bridgeforge-state/`, gitignored), so a lookup is instant and works when the provider isn't installed. Record game version and mod version.
+   **Done 2026-09-24.** `provider-index build [--providers ...] [--output F]` saves every visible mod's
+   provides sets (hull mods, weapons, wings, hulls, classes) with game and mod version (a
+   `{"major":..}` version object is flattened) to `bridgeforge-state/provider-index.json`;
+   `dependency-substitutes --provider-index F` also considers indexed mods that are not visible live
+   (a live folder wins on the same id). Tests: `tests/test_substitutes.py` (`ProviderIndexTests`).
 3. **Dependency graph across the queue.** Build a graph of which queued mods need which missing mods, and order revival by unblocking value. As of 2026-09-14: FX Core (10 MANUAL) unblocks FX Example and part of Rebal; AI Overhaul (12 MANUAL) the rest of Rebal. EZ Damage is already revived (r1). Show it in `board`.
+   **Done 2026-09-24 (except the `board` view).** `dependency-graph [--queue DIR] [--providers ...]
+   [--provider-index F]` runs `dependency-substitutes` on every `<queue>/*/working` workspace and ranks
+   the non-current providers the plans use by how many queued mods each unblocks (ties: fewer MANUAL
+   findings first), with each one's workspace state and licence decision, plus the mods that need ids
+   no visible or indexed mod provides. Still open: showing it in `board`. Tests: `ProviderIndexTests`.
 4. **Strip and vendor plans.** For STRIP_FROM_MOD, generate the exact edit list: which variant, `.ship` and faction lines lose which ids, plus proposed vanilla substitutes of the same slot type and size. Also generate the matching PROPOSED expected changes, so approval goes through `expect` as usual. Where the licence allows, offer vendoring as an alternative: copy the one missing piece (for example Rebal's `shields_formshield` into Explorer Society) instead of reviving a heavy provider.
    **First slice done 2026-09-24: the edit list.** `strip-plan MOD --vanilla-core CORE [--id kind:id]`
    (`bridgeforge/strip_plan.py`) runs the normal scan and, for every id in its

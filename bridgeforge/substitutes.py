@@ -42,6 +42,7 @@ class Provider:
     game_version: str
     provides: dict[str, set[str]] = field(default_factory=lambda: {kind: set() for kind in KINDS})
     total_conversion: bool = False
+    version: str = ""
 
 
 def _csv_ids(path: Path) -> set[str]:
@@ -59,6 +60,9 @@ def provider_for(folder: Path) -> Provider | None:
         return None
     provider = Provider(str(info["id"]), str(info.get("name") or info["id"]), str(folder), str(info.get("gameVersion") or ""))
     provider.total_conversion = bool(info.get("totalConversion"))
+    version = info.get("version")
+    # Some mods declare {"major":..,"minor":..,"patch":..} instead of a string.
+    provider.version = ".".join(str(version.get(part, "")) for part in ("major", "minor", "patch")).strip(".") if isinstance(version, dict) else str(version or "")
     data = folder / "data"
     provider.provides["hullmod"] |= _csv_ids(data / "hullmods" / "hull_mods.csv")
     provider.provides["weapon"] |= _csv_ids(data / "weapons" / "weapon_data.csv")
@@ -102,6 +106,49 @@ def provider_index(roots: list[Path], exclude: Path | None = None) -> list[Provi
             if provider is not None:
                 providers.append(provider)
     return providers
+
+
+INDEX_SCHEMA_VERSION = 1
+
+
+def save_provider_index(providers: list[Provider], path: Path, roots: list[Path]) -> dict:
+    """Write the providers' "provides" sets as a corpus artefact (ROADMAP P14 item 2)."""
+    payload = {
+        "schema_version": INDEX_SCHEMA_VERSION, "mode": "PROVIDER_INDEX", "roots": [str(Path(root).resolve()) for root in roots],
+        "providers": [{
+            "mod_id": p.mod_id, "name": p.name, "path": p.path, "game_version": p.game_version, "version": p.version,
+            "total_conversion": p.total_conversion, "provides": {kind: sorted(p.provides[kind]) for kind in KINDS},
+        } for p in sorted(providers, key=lambda item: (item.mod_id, item.path))],
+    }
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"output": str(path), "providers": len(payload["providers"]),
+            "ids": sum(len(ids) for entry in payload["providers"] for ids in entry["provides"].values())}
+
+
+def load_provider_index(path: Path) -> list[Provider]:
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or data.get("schema_version") != INDEX_SCHEMA_VERSION or not isinstance(data.get("providers"), list):
+        raise ValueError(f"{path} is not a schema-{INDEX_SCHEMA_VERSION} provider index.")
+    providers = []
+    for entry in data["providers"]:
+        provider = Provider(entry["mod_id"], entry["name"], entry["path"], entry.get("game_version", ""),
+                            total_conversion=bool(entry.get("total_conversion")), version=entry.get("version", ""))
+        for kind in KINDS:
+            provider.provides[kind] = set(entry.get("provides", {}).get(kind, []))
+        providers.append(provider)
+    return providers
+
+
+def merged_providers(roots: list[Path], index_path: Path | None, exclude: Path | None = None) -> list[Provider]:
+    """Live providers from `roots`, plus indexed ones for mods not visible live (live wins on the same id)."""
+    live = provider_index(roots, exclude=exclude)
+    if index_path is None:
+        return live
+    seen = {provider.mod_id for provider in live}
+    excluded = str(Path(exclude).resolve()) if exclude is not None else None
+    return live + [p for p in load_provider_index(index_path) if p.mod_id not in seen and p.path != excluded]
 
 
 _EVIDENCE = re.compile(r"^(hullmod|wing|weapon|hull):(\S+) \((\d+) file")
@@ -290,7 +337,7 @@ def _licence_notes(chosen: list[dict]) -> list[str]:
 
 
 def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla_core: Path | None = None, ops: Path | None = None,
-                           policy_path: Path | None = None) -> dict:
+                           policy_path: Path | None = None, index_path: Path | None = None) -> dict:
     from .models import TargetProfile
     from .scanner import scan_mod
 
@@ -298,7 +345,7 @@ def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla
     result = scan_mod(mod_dir, TargetProfile(), vanilla_core)
     needed, files = required_from_scan(result)
     declared = [str(item.get("id")) for item in (result.metadata.get("dependencies") or []) if isinstance(item, dict) and item.get("id")]
-    providers = provider_index(provider_roots, exclude=mod_dir)
+    providers = merged_providers(provider_roots, index_path, exclude=mod_dir)
     provided_ids = {provider.mod_id for provider in providers}
     missing_declared = [dep for dep in declared if dep not in provided_ids]
     # A total conversion can't run beside another mod unless that mod is its add-on (declares it).
@@ -311,7 +358,8 @@ def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla
     chosen_providers, uncovered = cover(needed, providers, preferred=set(declared))
     chosen = []
     for provider, hits in chosen_providers:
-        item = {"mod_id": provider.mod_id, "name": provider.name, "game_version": provider.game_version, "targets_0.98a": _current(provider), "covers": sorted(hits)}
+        item = {"mod_id": provider.mod_id, "name": provider.name, "game_version": provider.game_version, "version": provider.version,
+                "targets_0.98a": _current(provider), "covers": sorted(hits)}
         if not item["targets_0.98a"]:
             item["workspace"] = _workspace_state(ops_dir, provider.mod_id)
             item["licence"] = revival_licence(provider.mod_id, provider.name, policy_path)
@@ -333,4 +381,36 @@ def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla
         "successors": successors,
         "strategy": course, "reason": reason,
         "licence_notes": _licence_notes(chosen) if course in ("REVIVE_DEPENDENCY", "ESCALATE", "STRIP_FROM_MOD") else [],
+    }
+
+
+def dependency_graph(queue_root: Path, provider_roots: list[Path], *, vanilla_core: Path | None = None,
+                     index_path: Path | None = None, policy_path: Path | None = None) -> dict:
+    """Which queued mods need which non-current providers, ordered by unblocking value (ROADMAP P14 item 3).
+
+    Runs dependency_substitutes on every queued workspace (`<queue>/*/working` with a mod_info.json).
+    A provider counts when the plan uses it and it does not target 0.98a: reviving it is work that
+    unblocks every queued mod that needs it. Mods needing ids no visible or indexed mod provides are
+    listed separately.
+    """
+    queue_root = Path(queue_root).expanduser().resolve()
+    workspaces = sorted(info.parent for info in queue_root.glob("*/working/mod_info.json"))
+    needs: dict[str, dict] = {}
+    mods = []
+    for working in workspaces:
+        report = dependency_substitutes(working, provider_roots, vanilla_core=vanilla_core, ops=queue_root,
+                                        policy_path=policy_path, index_path=index_path)
+        name = working.parent.name
+        blockers = [item for item in report["provider_set"] if not item["targets_0.98a"]]
+        for item in blockers:
+            entry = needs.setdefault(item["mod_id"], {"mod_id": item["mod_id"], "name": item["name"], "game_version": item["game_version"],
+                                                       "workspace": item.get("workspace"), "licence": item.get("licence"), "unblocks": []})
+            entry["unblocks"].append(name)
+        mods.append({"workspace": name, "mod_id": report["mod_id"], "strategy": report["strategy"],
+                     "needs_revival_of": [item["mod_id"] for item in blockers], "unprovided": report["uncovered"]})
+    order = sorted(needs.values(), key=lambda entry: (-len(entry["unblocks"]), (entry.get("workspace") or {}).get("manual_findings") or 10**6, entry["mod_id"]))
+    return {
+        "schema_version": SCHEMA_VERSION, "mode": "DEPENDENCY_GRAPH", "queue": str(queue_root), "queued_mods": len(mods),
+        "revival_order": order, "mods": mods,
+        "unprovided": [{"workspace": mod["workspace"], "ids": mod["unprovided"]} for mod in mods if mod["unprovided"]],
     }
