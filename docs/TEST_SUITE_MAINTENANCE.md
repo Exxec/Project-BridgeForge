@@ -19,7 +19,7 @@ The split is hygiene only and does not block reliability or product work.
 ## Hermetic suite runner
 
 Run `python -m bridgeforge.test_guard` from the checkout root. CI uses this runner
-on all six Windows/Linux and Python-version combinations. It compares git status,
+on every Windows/Linux and Python-version combination in the CI matrix. It compares git status,
 hashes tracked and non-ignored untracked files (including pre-existing dirty files),
 and inventories/hashes the ignored `probe-mod/releases/bridgeforge-probe` tree
 before and after unittest. Changed inputs fail the run even when tests pass.
@@ -27,7 +27,8 @@ This is an end-state guard, not a filesystem access sandbox: temporary writes th
 are restored, other ignored build outputs, and writes outside the checkout are
 not detected. No files are restored automatically.
 
-Use `tests.support.resolved_temp_dir()` for new path-sensitive fixtures; it yields
+Use `tests.support.resolved_temp_dir()` for new path-sensitive fixtures and
+`tests.support.link_dir()` for a rig junction (a symlink off Windows); the former yields
 a resolved `Path` so Windows runner 8.3 aliases do not change comparisons.
 
 Managed-sandbox diagnostics (2026-09-12): four boot cleanup tests and two real
