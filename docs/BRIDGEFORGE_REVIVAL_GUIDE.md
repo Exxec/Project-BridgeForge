@@ -65,6 +65,21 @@ python -m bridgeforge dossier "<mod_dir>" --vanilla-core $core --output .\dossie
 
 Classifications: **MANUAL** means likely broken, act on it. **REVIEW** needs judgment. **UNKNOWN** means BridgeForge can't tell. **SAFE** is informational or has a mechanical fix.
 
+## 1b. Which API changed? api-diff
+
+```powershell
+python -m bridgeforge api-diff "<old install>\starsector-core" $core --output "In operation\_reference\api-diff-0.9a-to-rc8.json"
+python -m bridgeforge compile-check "<mod_dir>" --vanilla-core $core --api-diff "In operation\_reference\api-diff-0.9a-to-rc8.json"
+```
+
+`api-diff` compares two `starfarer.api.jar`s (a jar, or the `starsector-core` folder holding one) once,
+and lists every public class, method and field the newer one removed or changed. For each removed method
+it names the new overloads in the same class and other classes that now declare the same name and
+signature (the `SectorAPI.addMessage` -> `CampaignUIAPI.addMessage` kind). With `--api-diff`,
+`compile-check` prints those leads under each javac error they explain (`API CHANGE ...`). They are
+leads to verify, not rewrites. The catalogue holds only API names; keep the game jars themselves out of
+the repository.
+
 ## 2. Fix the mechanical things: fix
 
 ```powershell

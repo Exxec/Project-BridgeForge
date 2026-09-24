@@ -769,6 +769,20 @@ Progression, each stage feeding the next:
     by checking the skin's own `weaponSlotChanges` directly. Tests:
     `tests/test_rc8_variant_and_asset_checks.py` (`test_skin_slot_override_resolves_a_false_positive`,
     `test_skin_slot_override_can_also_reveal_a_real_mismatch`).
+29. **API drift catalogue: stop finding removed APIs one compile error at a time.** Item 11's
+    compile check finds each removed call (`SectorAPI.createFleet`, then `SectorAPI.addMessage`) only
+    as a bare "cannot find symbol". Compare an old install's `starfarer.api.jar` with RC8's once and
+    say where each removed member went.
+    **Done 2026-09-24.** New `api-diff OLD NEW [--output FILE]` (`bridgeforge/api_diff.py`, reusing
+    `rebuild_jar`'s class-file parser): public/protected classes, methods and fields removed or
+    changed; per removed method, the same-named overloads left in its class and other classes that
+    declare the same name and descriptor; per removed class, same-named classes in another package.
+    `compile-check --api-diff FILE` attaches those leads to matching javac errors (`api_changes`) and
+    prints them. `DEFAULT_JAVAC_ARGS` gained `-Xdiags:verbose`: javac's default simplified
+    diagnostics report a call to a method whose only overload changed as a bare "incompatible types"
+    naming neither method nor class (verified with javac 21). Leads only, never a rewrite. Next: run
+    it on the 0.9a reference rig's jar vs RC8 and keep the catalogue under `In operation/`. Tests:
+    `tests/test_api_diff.py` (old/new API jars compiled by real javac; real javac errors annotated).
 
 ## Post-1.0 research and gated automation
 

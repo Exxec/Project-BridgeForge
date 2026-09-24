@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- **New `api-diff` command (ROADMAP P14 item 29): where did a removed API go?** Compares two `starfarer.api.jar`s and catalogues every public class, method and field removed or changed, with same-named candidates (a moved method, a changed overload, a class in a new package). `compile-check --api-diff FILE` prints those leads under the javac errors they explain. javac now runs with `-Xdiags:verbose` so a changed single-overload call names its method and class.
+- Fixed: `rebuild-jar` accepts backslash `--jar`/`--sources` paths on POSIX; the compile-check scan finding keeps a relative file key when javac reports the mod root through an alias (Windows 8.3 short name, symlink); `docs/COMMANDS.md` no longer embeds the generating machine's path for `--repo-root`.
+- Tooling: ruff lint, `uv.lock` sync check, coverage floor and Python 3.13 in CI; Dependabot for GitHub Actions; rig-safety tests now also run on POSIX (directory symlink in place of a junction).
 - Fixed: `mission-local-variant-hull-missing` (and its sibling weapon check) now resolves a variant's hullId through any `.skin` chain before flagging it missing, matching `_scan_variant_validity`. Found on Leon-Heavy-Industries: 4 real, campaign-wired pirate-raider missions were false-flagged (BF-SKIN-01).
 
 - **Xenoargh FX Core folded into RevenantLib (ROADMAP P14 item 10, task A13, owner decision `In operation/ESCALATIONS.md` E9 course A: 2026-09-20).**
