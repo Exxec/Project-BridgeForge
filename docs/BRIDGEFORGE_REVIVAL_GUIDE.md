@@ -92,6 +92,18 @@ Compares by value: key, row and column order, comments, trailing commas and `10`
 show up. `~` changed, `+` only in the second file, `-` only in the first, `^` the same list values in
 another order. Exit code 1 means they differ.
 
+**Many shadowed vanilla files? rebuild-from-reference.** When a mod ships edited copies of vanilla
+files (the `vanilla-path-shadowing` finding) and you have the install it was made for:
+
+```powershell
+python -m bridgeforge rebuild-from-reference "<mod_dir>" --reference-core "<old install>\starsector-core" --vanilla-core $core --class wpn --output "In operation\<Mod>\scratch\rebuilt-wpn"
+```
+
+Per file: **MERGED** (RC8's version plus the mod's edits, written to `--output`), **CONFLICT** (the mod
+and RC8 changed the same value; RC8's is kept and the path listed for you to decide),
+**UNCHANGED_COPY** (the mod never edited it: delete it from the mod). Review the merged files with
+`diff-data`, then copy them into the working copy yourself. Repeat per `--class`.
+
 ## 2. Fix the mechanical things: fix
 
 ```powershell

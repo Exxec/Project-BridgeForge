@@ -636,6 +636,17 @@ Progression, each stage feeding the next:
     unique to it in the Ironclads queue) - worth a `rebuild-from-reference` command once item 19's
     value-diff primitive exists, parameterized by file class (`.wpn`/`.ship`/`.variant`/etc.) so a
     large mod can be rebuilt in reviewable stages rather than one pass across hundreds of files.
+    **Done 2026-09-24 (live validation on Rebal pending).** `rebuild-from-reference MOD --reference-core
+    REF --vanilla-core RC8 [--class wpn ...] [--output DIR]` (`bridgeforge/rebuild_reference.py`,
+    built on item 19's value comparison): for every `.ship`/`.wpn`/`.variant`/`.skin`/`.system` the mod
+    ships at a vanilla path present in both cores, a three-way merge per value. RC8's changes and
+    additions stay, the mod's edits (including additions and removals) apply on top, slot lists merge
+    by `id`, and a value both sides changed keeps RC8's and is reported as a CONFLICT. A copy the mod
+    never edited is UNCHANGED_COPY (drop it). Also lists files vanilla removed in RC8 (now the mod's
+    own content) and shadows with no reference copy. Only MERGED files are written, as strict JSON,
+    under `--output`, which may not overlap any input; exit 1 on any conflict. CSVs are out of scope:
+    the game merges CSV rows by id rather than replacing the file. Tests:
+    `tests/test_rebuild_reference.py`; Rebal run in `docs/LOCAL_HANDOFF.md`.
 22. **`rig-doctor`'s `enabled_mods_resolve` check FAILs on every freshly registered reference rig.**
     A brand-new historical install has no mods enabled yet, so `mods/enabled_mods.json` doesn't
     exist - correct and harmless, but it prints as FAIL rather than PASS/SKIP, noise on every P10

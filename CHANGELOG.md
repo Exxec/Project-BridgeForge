@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **New `rebuild-from-reference` command (ROADMAP P14 item 21).** Ports a mod's edited copies of vanilla `.ship`/`.wpn`/`.variant`/`.skin`/`.system` files to RC8 with a three-way merge (reference vanilla, mod, RC8): RC8's changes kept, the mod's edits applied, overlaps reported as conflicts, unedited copies flagged for removal. Writes only clean merges, to a separate folder; `--class` stages a large mod.
 - **New `diff-data` command (ROADMAP P14 item 19).** Compares two data files (JSON dialect or CSV) by value, so key/row/column order, comments, trailing commas and `10` vs `10.0` never count; lists slots by id and reports a reordered list once. The primitive item 21's rebuild-from-reference needs.
 - `docs/LOCAL_HANDOFF.md`: work cloud sessions built but could not finish without the game, a rig or Windows.
 - **Probe 0.2.2: `content-ids` campaign check (ROADMAP P14 item 31).** The game itself resolves every variant and wing id the mod defines, and builds each of the mod's own ship variants as a fleet member (resolving hull, weapons and hull mods); failures name the id and the game's error. `probe-config` writes the new `content_variants`/`content_wings` keys. Rebuild with `build-probe-mod --install-release` before the next rig run.

@@ -702,6 +702,13 @@ def build_parser() -> argparse.ArgumentParser:
     diff_data_cmd.add_argument("a", type=Path, help="first file (e.g. the mod's copy)")
     diff_data_cmd.add_argument("b", type=Path, help="second file (e.g. vanilla's or a reference install's)")
     diff_data_cmd.add_argument("--json", action="store_true")
+    rebuild_ref_cmd = subcommands.add_parser("rebuild-from-reference", help="port a mod's edited copies of vanilla files (.ship/.wpn/.variant/.skin/.system) to RC8: three-way merge of the reference install's vanilla file, the mod's copy and RC8's file; RC8's changes kept, only the mod's edits applied, overlaps reported as conflicts")
+    rebuild_ref_cmd.add_argument("mod", type=Path, help="mod folder (holding data/)")
+    rebuild_ref_cmd.add_argument("--reference-core", type=Path, required=True, help="starsector-core of the install the mod was made for (read-only)")
+    rebuild_ref_cmd.add_argument("--vanilla-core", type=Path, required=True, help="RC8 starsector-core (read-only)")
+    rebuild_ref_cmd.add_argument("--class", dest="file_classes", action="append", help="limit to one file class, e.g. --class wpn; repeatable (default: all), so a large mod can be rebuilt in reviewable stages")
+    rebuild_ref_cmd.add_argument("--output", type=Path, help="write MERGED files here, mirroring data/ paths (never into the mod or either core)")
+    rebuild_ref_cmd.add_argument("--json", action="store_true")
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
@@ -2289,6 +2296,29 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     print(f"~ {change['path']}: {json.dumps(change['a'], ensure_ascii=False)} -> {json.dumps(change['b'], ensure_ascii=False)}")
         return 0 if result["identical"] else 1
+    if args.command == "rebuild-from-reference":
+        from .rebuild_reference import RebuildReferenceError, rebuild_from_reference
+        try:
+            result = rebuild_from_reference(args.mod, args.reference_core, args.vanilla_core, args.file_classes, args.output)
+        except (RebuildReferenceError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            counts = ", ".join(f"{status} {count}" for status, count in sorted(result["counts"].items())) or "no shadowed files"
+            print(f"REBUILD_FROM_REFERENCE ({', '.join(result['file_classes'])}): {counts}")
+            for entry in result["files"]:
+                if entry["status"] == "CONFLICT":
+                    print(f"  CONFLICT {entry['file']}: " + "; ".join(c["path"] for c in entry["conflicts"][:5])
+                          + (f" (+{len(entry['conflicts']) - 5} more)" if len(entry["conflicts"]) > 5 else ""))
+                elif entry["status"] == "UNPARSEABLE":
+                    print(f"  UNPARSEABLE {entry['file']}")
+            for name in result["vanilla_removed_in_rc8"]:
+                print(f"  vanilla removed in RC8 (now the mod's own content): {name}")
+            if result["output"]:
+                print(f"MERGED files written under: {result['output']}")
+        return 1 if result["counts"].get("CONFLICT") or result["counts"].get("UNPARSEABLE") else 0
     if args.command == "api-diff":
         import zipfile
         from .api_diff import ApiDiffError, diff_api_jars

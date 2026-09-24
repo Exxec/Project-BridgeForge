@@ -48,12 +48,20 @@ Run it on a few of Rebal's shadowed vanilla files against the 0.9a reference cop
 RC8's copy. Done when the output matches what E11's hand-built rebuild plan found for those files.
 That result is the input item 21 (`rebuild-from-reference`) needs.
 
-### 5. RevenantLib line endings
+### 5. Try `rebuild-from-reference` on Rebal (ROADMAP P14 item 21)
+```powershell
+python -m bridgeforge rebuild-from-reference "In operation\Xenoargh-Rebal\working" --reference-core "<0.9a reference rig>\starsector-core" --vanilla-core $core --class wpn --output "In operation\Xenoargh-Rebal\scratch\rebuilt-wpn"
+```
+Done when, for the files E11 rebuilt by hand, the MERGED output matches E11's result (compare with
+`diff-data`), and every CONFLICT is a genuine both-sides edit. Then repeat for `ship`, `variant`,
+`skin`, `system`. If a file class needs different merge rules, record it in item 21.
+
+### 6. RevenantLib line endings
 Merge `claude/confident-archimedes-e2qv1v` in `Exxec/RevenantLib` (`.gitattributes`
 `original/** -text`; all 24 `PROVENANCE.md` hashes match on a fresh clone). Afterwards,
 `git status` in your local RevenantLib copy should be clean.
 
-### 6. Local-only tooling the repo cannot carry
+### 7. Local-only tooling the repo cannot carry
 - `.githooks/pre-commit` is gitignored: add `ruff check .` so lint failures stop before CI.
 - `AGENTS.md` is gitignored: keep it consistent with `CLAUDE.md` (the committed copy cloud
   sessions read).
