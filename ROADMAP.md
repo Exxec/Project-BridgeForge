@@ -795,6 +795,28 @@ Progression, each stage feeding the next:
     `Exxec/RevenantLib` 1.2.0+bf.1: PASS, 11 classes, no drift. Tests: `tests/test_revenantlib_contract.py`
     (stand-in builds compiled by real javac; the fixer's rewritten calls have the contract's arity),
     `tests/test_rig_doctor.py` (`RevenantLibContractCheckTests`).
+31. **Probe: have the game itself resolve every id the mod defines.** The scanner infers whether
+    variants and wings resolve (and has had false positives, items 17 and 28); nothing asked the game.
+    `probe-config` already passed hull and variant ids, but no campaign check used them.
+    **Done 2026-09-24 (source; live run pending).** `probe-config` writes `content_variants`
+    (`ship`: variants of the mod's own deployable hulls; `other`: fighter, module, wreck and non-mod
+    hulls) and `content_wings` (`wing_data.csv` ids). Probe 0.2.2's `content-ids` campaign check runs
+    once per session: `doesVariantExist` for every variant, `createFleetMember(SHIP, id)` for `ship`
+    variants (which also resolves hull, weapons and hull mods), `getFighterWingSpec` for wings; each
+    failure is a FAIL line naming the id and the game's exception, plus one summary line. API evidence:
+    RevenantLib 1.2.0+bf.1's RC8 jar references `doesVariantExist`/`getFighterWingSpec`;
+    `createFleetMember` is `ProbeSetup`'s live-run call. Hull/weapon/hull-mod lookups and a check that
+    the built member's hull is not a substitute (PRB-FIGHTER-01's Nebula) need `javap` evidence first.
+    **Needs:** `build-probe-mod --install-release` against RC8 (the committed jar predates this source;
+    a stale rig shows `BF-PROBE|0.2.1|` lines), then one live run. Tests: `tests/test_probe_config.py`
+    (`ContentIdsConfigTests`, `ProbeVersionTests`).
+32. **`probe-config` deployed a variant by its file name, not its declared `variantId`.** Found by
+    reading code while building item 31: `_variant_by_hull` read `"id"`, which `.variant` files do not
+    declare (the scanner reads `"variantId"` everywhere, and `_declared_spec_ids` records that file
+    names often differ from ids), so it always fell back to the file stem. A mod whose file name
+    differs from its variant id got a variant the game does not know.
+    **Done 2026-09-24.** `variantId` first, then `id`, then the file stem. Test:
+    `tests/test_probe_config.py` (`test_probe_deploys_the_declared_variant_id_not_the_file_name`).
 
 ## Post-1.0 research and gated automation
 

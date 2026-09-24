@@ -28,6 +28,11 @@ public final class ProbeConfig {
     public float combatSeconds = 60f;
     public int combatCapPerSide = 12;
     public final List<String> setups = new ArrayList<String>();
+    // Every variant/wing id the mod defines (ROADMAP P14 item 31). "ship" variants are built as SHIP
+    // fleet members; "other" variants (fighter/module/wreck or non-mod hulls) only get an existence check.
+    public final List<String> contentShipVariants = new ArrayList<String>();
+    public final List<String> contentOtherVariants = new ArrayList<String>();
+    public final List<String> contentWings = new ArrayList<String>();
 
     public static ProbeConfig load() throws Exception {
         ProbeConfig config = new ProbeConfig();
@@ -73,6 +78,13 @@ public final class ProbeConfig {
         config.combatSeconds = (float) root.optDouble("combat_seconds", 60.0);
         config.combatCapPerSide = root.optInt("combat_cap_per_side", 12);
 
+        JSONObject contentVariants = root.optJSONObject("content_variants");
+        if (contentVariants != null) {
+            addAll(contentVariants.optJSONArray("ship"), config.contentShipVariants);
+            addAll(contentVariants.optJSONArray("other"), config.contentOtherVariants);
+        }
+        addAll(root.optJSONArray("content_wings"), config.contentWings);
+
         JSONArray setups = root.optJSONArray("setups");
         if (setups != null) {
             for (int i = 0; i < setups.length(); i++) {
@@ -80,5 +92,14 @@ public final class ProbeConfig {
             }
         }
         return config;
+    }
+
+    private static void addAll(JSONArray array, List<String> into) throws Exception {
+        if (array == null) {
+            return;
+        }
+        for (int i = 0; i < array.length(); i++) {
+            into.add(array.getString(i));
+        }
     }
 }

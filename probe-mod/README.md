@@ -83,6 +83,14 @@ main `README.md` / `docs/REVIVAL_ASSURANCE_PLAN.md` for the full command).
 - Fleet presence: `LocationAPI.getFleets()` across `SectorAPI.getAllLocations()`,
   `CampaignFleetAPI.getFaction()`.
 - Faction known lists: `FactionAPI.getKnownShips()/getKnownWeapons()/getKnownFighters()`.
+- Content ids (`content-ids`, probe 0.2.2): `SettingsAPI.doesVariantExist(String)` (boolean) and
+  `SettingsAPI.getFighterWingSpec(String)`, both called from RevenantLib 1.2.0+bf.1's RC8-built jar
+  (constant-pool Methodrefs, read 2026-09-24; the latter null-checked there, and also wrapped in
+  try/catch here in case a missing id throws); `Global.getFactory().createFleetMember(
+  FleetMemberType.SHIP, String)`, as `ProbeSetup` already calls it. Building the member resolves the variant's hull,
+  weapons and hull mods, so no hull/weapon/hull-mod lookup method is relied on. The ids come from
+  `probe-config`'s `content_variants` (`ship`: built; `other`: fighter/module/wreck or non-mod hulls,
+  existence only) and `content_wings`.
 - Tracked entities: `SectorAPI.getEntityById(String)`, `SectorEntityToken.getLocation()`
   (`org.lwjgl.util.vector.Vector2f`).
 - Combat probe: `MissionDefinitionAPI.addToFleet(FleetSide, String variantId, FleetMemberType,

@@ -148,7 +148,7 @@ python -m bridgeforge probe-config "<mod_dir>" --runtime $rig --install [--track
 Then:
 
 1. Enable `bridgeforge_probe` together with the mod under test and launch the rig (e.g. `boot-test … --keep-mods`, then start the game yourself).
-2. **New Game.** Wait about 1 in-game day. The campaign probe checks rings and orbits, faction known lists, market stock, fleet presence, custom planet specs and tracked entity positions. It re-runs every few in-game days.
+2. **New Game.** Wait about 1 in-game day. The campaign probe checks rings and orbits, faction known lists, market stock, fleet presence, custom planet specs and tracked entity positions. It re-runs every few in-game days. Once per session it also asks the game to resolve every variant and wing id the mod defines, and builds each of the mod's own ship variants as a fleet member (`content-ids`); a FAIL there names the id and the game's own error.
 3. **Missions → BridgeForge Probe: Combat.** The mod's ships fight under AI. It logs every ship deployed and flags any captain with no personality.
 4. Run `log-triage` (§7) and check its **probe** section.
 
