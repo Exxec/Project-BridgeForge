@@ -63,6 +63,16 @@ class ChecksIndexTests(unittest.TestCase):
             committed = (REPO / "docs" / name).read_text(encoding="utf-8").splitlines()
             self.assertEqual(committed, text.splitlines(), f"docs/{name} is stale: run `python -m bridgeforge docs-index`")
 
+    def test_path_defaults_render_the_same_on_every_os(self) -> None:
+        import argparse
+        from pathlib import PureWindowsPath
+
+        from bridgeforge.checks_index import _argument_rows
+
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--db", default=PureWindowsPath("bridgeforge-state") / "corpus-index.sqlite")
+        self.assertIn("default bridgeforge-state/corpus-index.sqlite", "\n".join(_argument_rows(parser)))
+
     def test_commands_index_covers_nested_subcommands(self) -> None:
         text = build_commands_index()
         for heading in ("## scan", "## compat-set install", "## expect approve", "## docs-index", "## preset-check"):

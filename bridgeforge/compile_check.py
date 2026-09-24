@@ -62,6 +62,33 @@ def discover_loose_scripts(root: Path) -> list[Path]:
     return sorted(path for path in data_dir.rglob("*.java") if "disabled_files" not in path.relative_to(root).parts)
 
 
+def dependency_shadowed_scripts(root: Path, sources: list[Path], dependency_jars: dict[str, list[str]]) -> list[dict[str, object]]:
+    """Loose scripts whose class a declared dependency's jar already compiles (ROADMAP P14 item 12).
+
+    All mod jars share one classloader, so the game loads the dependency's class and skips the loose
+    file ("already loaded (perhaps from jar file) ... skipping compilation"): the mod's edit does
+    nothing. Found on Maelstrom Interstellar Imperium Unofficial Expansion (E8, 2026-09-20), whose two
+    Titan scripts base Interstellar Imperium's II.jar shadows. Uses the same class-file walk and
+    class-name rule as `verify-shadow`; the mod's own jars are `loose-script-shadowed-by-jar`'s job.
+    """
+    from .scanner import _parse_class_file, iter_class_files_in_jars
+    from .verify_shadow import script_class_name
+
+    owners: dict[str, tuple[str, str]] = {}
+    for dependency, jars in sorted(dependency_jars.items()):
+        for jar, member, data in iter_class_files_in_jars([Path(jar) for jar in jars]):
+            info = _parse_class_file(data)
+            if info is not None and info.this_class:
+                owners.setdefault(info.this_class.replace("/", "."), (dependency, f"{jar}!{member}"))
+    shadowed = []
+    for source in sources:
+        class_name, _derived = script_class_name(source)
+        if class_name in owners:
+            dependency, supplied_by = owners[class_name]
+            shadowed.append({"file": source.relative_to(root).as_posix(), "class": class_name, "dependency": dependency, "supplied_by": supplied_by})
+    return shadowed
+
+
 def vanilla_loose_scripts(vanilla_core: Path) -> list[Path]:
     """RC8's own loose data/**.java scripts (e.g. BaseSpawnPoint, hullmods -- ~116 in RC8).
 
@@ -124,7 +151,12 @@ def compile_loose_scripts(root: Path, vanilla_core: Path | None = None, jdk: Pat
         run = run_javac(jdk_info.javac, classpath_result.classpath(), sources + companions, Path(tmp) / "classes")
 
     mod_source_paths = {str(source) for source in sources}
-    mod_errors = [error for error in run.errors if error["file"] in mod_source_paths]
+    shadowed = dependency_shadowed_scripts(root, sources, classpath_result.dependency_jars)
+    shadowed_files = {entry["file"] for entry in shadowed}
+    shadowed_paths = {str(source) for source in sources if source.relative_to(root).as_posix() in shadowed_files}
+    # The game never compiles a dependency-shadowed script, so its javac errors cannot fail a load.
+    shadowed_errors = [error for error in run.errors if error["file"] in shadowed_paths]
+    mod_errors = [error for error in run.errors if error["file"] in mod_source_paths and error not in shadowed_errors]
     vanilla_errors = [error for error in run.errors if error["file"] not in mod_source_paths]
     error_counts = Counter(str(error["kind"]) for error in mod_errors)
     return {
@@ -135,6 +167,8 @@ def compile_loose_scripts(root: Path, vanilla_core: Path | None = None, jdk: Pat
         "error_count": len(mod_errors),
         "error_counts_by_kind": dict(error_counts),
         "javac_returncode": run.returncode,
+        "shadowed_by_dependency": shadowed,
+        "shadowed_file_errors": shadowed_errors,
         # Should normally be empty: these are RC8's own loose scripts, compiled only so the mod's
         # scripts can resolve symbols from them (see vanilla_loose_scripts()). A non-empty list here
         # is a red flag about the reference --vanilla-core/classpath, not about the mod.

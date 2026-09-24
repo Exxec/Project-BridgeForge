@@ -103,6 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--baseline", type=Path, help="only report findings not present in this baseline file, plus a count of previously accepted findings that are now resolved")
     scan.add_argument("--write-baseline", type=Path, help="write the current scan's finding keys to this file as an accepted baseline")
     scan.add_argument("--compile-check", action="store_true", help="also javac-compile loose scripts against RC8 (needs --vanilla-core); opt-in, off by default so scans stay fast and hermetic")
+    scan.add_argument("--removed-content", type=Path, help="catalogue from `content-diff`: report unresolved ids that the older vanilla defined (content-reference-removed-in-vanilla), with same-named RC8 candidates")
     bytecode = subcommands.add_parser("bytecode-inspect", help="inspect class/JAR symbolic references without rewriting")
     bytecode.add_argument("input", type=Path, nargs="+")
     bytecode.add_argument("--output", type=Path)
@@ -698,6 +699,44 @@ def build_parser() -> argparse.ArgumentParser:
     compile_check_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search for declared dependencies; repeatable (default: <repo>/In operation and its rig's mods)")
     compile_check_cmd.add_argument("--api-diff", type=Path, help="catalogue written by `api-diff`: attach removed/moved-API leads to matching javac errors")
     compile_check_cmd.add_argument("--json", action="store_true")
+    diff_data_cmd = subcommands.add_parser("diff-data", help="compare two Starsector data files (JSON dialect or CSV) by value: key/row/column order, comments and formatting never count; exit 1 when they differ")
+    diff_data_cmd.add_argument("a", type=Path, help="first file (e.g. the mod's copy)")
+    diff_data_cmd.add_argument("b", type=Path, help="second file (e.g. vanilla's or a reference install's)")
+    diff_data_cmd.add_argument("--json", action="store_true")
+    rebuild_ref_cmd = subcommands.add_parser("rebuild-from-reference", help="port a mod's edited copies of vanilla files (.ship/.wpn/.variant/.skin/.system) to RC8: three-way merge of the reference install's vanilla file, the mod's copy and RC8's file; RC8's changes kept, only the mod's edits applied, overlaps reported as conflicts")
+    rebuild_ref_cmd.add_argument("mod", type=Path, help="mod folder (holding data/)")
+    rebuild_ref_cmd.add_argument("--reference-core", type=Path, required=True, help="starsector-core of the install the mod was made for (read-only)")
+    rebuild_ref_cmd.add_argument("--vanilla-core", type=Path, required=True, help="RC8 starsector-core (read-only)")
+    rebuild_ref_cmd.add_argument("--class", dest="file_classes", action="append", help="limit to one file class, e.g. --class wpn; repeatable (default: all), so a large mod can be rebuilt in reviewable stages")
+    rebuild_ref_cmd.add_argument("--output", type=Path, help="write MERGED files here, mirroring data/ paths (never into the mod or either core)")
+    rebuild_ref_cmd.add_argument("--json", action="store_true")
+    corpus_index_cmd = subcommands.add_parser("corpus-index", help="index a large mod archive once (inside .zip files too) and search it like grep in milliseconds; reports what it could not read so \"no hits\" means something")
+    corpus_index_sub = corpus_index_cmd.add_subparsers(dest="corpus_index_command", required=True)
+    corpus_build_cmd = corpus_index_sub.add_parser("build", help="index (or refresh) every file under ROOT; unchanged files are skipped on re-runs")
+    corpus_build_cmd.add_argument("root", type=Path, help="folder to index, e.g. Downloads")
+    corpus_build_cmd.add_argument("--db", type=Path, default=Path("bridgeforge-state") / "corpus-index.sqlite", help="index file (default: bridgeforge-state/corpus-index.sqlite)")
+    corpus_build_cmd.add_argument("--max-bytes", type=int, default=4 * 1024 * 1024, help="skip (and report) text files larger than this")
+    corpus_build_cmd.add_argument("--json", action="store_true")
+    corpus_search_cmd = corpus_index_sub.add_parser("search", help="find files whose content (3+ characters, case-insensitive) or path contains TEXT")
+    corpus_search_cmd.add_argument("text")
+    corpus_search_cmd.add_argument("--db", type=Path, default=Path("bridgeforge-state") / "corpus-index.sqlite")
+    corpus_search_cmd.add_argument("--names", action="store_true", help="match file paths only")
+    corpus_search_cmd.add_argument("--limit", type=int, default=50)
+    corpus_search_cmd.add_argument("--json", action="store_true")
+    content_diff_cmd = subcommands.add_parser("content-diff", help="list hull/variant/weapon/wing/hullmod/shipsystem ids an older install defined that RC8 no longer does, with same-named RC8 candidates; feed the catalogue to `scan --removed-content`")
+    content_diff_cmd.add_argument("reference_core", type=Path, help="starsector-core of the older install (read-only)")
+    content_diff_cmd.add_argument("vanilla_core", type=Path, help="RC8 starsector-core (read-only)")
+    content_diff_cmd.add_argument("--output", type=Path, help="write the JSON catalogue here")
+    content_diff_cmd.add_argument("--json", action="store_true")
+    verify_shadow_cmd = subcommands.add_parser("verify-shadow", help="does a jar set really compile the class a loose script defines? Parses class files (never a path check); use before dropping or editing a script as 'jar-shadowed'")
+    verify_shadow_cmd.add_argument("scripts", type=Path, nargs="+", help="loose .java file(s)")
+    verify_shadow_cmd.add_argument("--against", type=Path, action="append", required=True, help="a jar, a mod folder (its declared jars) or any folder (every jar under it, e.g. starsector-core); repeatable")
+    verify_shadow_cmd.add_argument("--json", action="store_true")
+    strip_plan_cmd = subcommands.add_parser("strip-plan", help="the exact edit list for stripping unresolved content (content-reference-unresolved): every file and field each id sits in, with vanilla weapons that fit an emptied slot; edits nothing")
+    strip_plan_cmd.add_argument("mod", type=Path, help="mod working copy")
+    strip_plan_cmd.add_argument("--vanilla-core", type=Path, required=True, help="RC8 starsector-core (read-only)")
+    strip_plan_cmd.add_argument("--id", dest="only", action="append", help="limit to one id, as kind:id (e.g. weapon:vayra_gun); repeatable")
+    strip_plan_cmd.add_argument("--json", action="store_true")
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
@@ -976,7 +1015,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "scan":
         try:
             result = scan_mod(args.mod_directory, TargetProfile(args.target_starsector, args.target_java), args.vanilla_core, compile_check=args.compile_check)
-        except ValueError as exc:
+            if args.removed_content:
+                from .content_diff import annotate_removed_content
+                annotate_removed_content(result, json.loads(args.removed_content.read_text(encoding="utf-8")))
+        except (ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         try:
@@ -2263,6 +2305,144 @@ def main(argv: list[str] | None = None) -> int:
             for name in stale["classes_without_source"]:
                 print(f"  FAIL class in the jar without source: {name}")
         return 0 if result["status"] == "PASS" else 1
+    if args.command == "diff-data":
+        from .data_diff import DataDiffError, diff_data
+        try:
+            result = diff_data(args.a, args.b)
+        except DataDiffError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            if result["identical"]:
+                print(f"IDENTICAL ({result['kind']}): no value differences")
+            for change in result["changes"]:
+                if change["change"] == "added":
+                    print(f"+ {change['path']}: {json.dumps(change['b'], ensure_ascii=False)}")
+                elif change["change"] == "removed":
+                    print(f"- {change['path']}: {json.dumps(change['a'], ensure_ascii=False)}")
+                elif change["change"] == "reordered":
+                    print(f"^ {change['path']}: same values, other order: {json.dumps(change['a'], ensure_ascii=False)} -> {json.dumps(change['b'], ensure_ascii=False)}")
+                else:
+                    print(f"~ {change['path']}: {json.dumps(change['a'], ensure_ascii=False)} -> {json.dumps(change['b'], ensure_ascii=False)}")
+        return 0 if result["identical"] else 1
+    if args.command == "rebuild-from-reference":
+        from .rebuild_reference import RebuildReferenceError, rebuild_from_reference
+        try:
+            result = rebuild_from_reference(args.mod, args.reference_core, args.vanilla_core, args.file_classes, args.output)
+        except (RebuildReferenceError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            counts = ", ".join(f"{status} {count}" for status, count in sorted(result["counts"].items())) or "no shadowed files"
+            print(f"REBUILD_FROM_REFERENCE ({', '.join(result['file_classes'])}): {counts}")
+            for entry in result["files"]:
+                if entry["status"] == "CONFLICT":
+                    print(f"  CONFLICT {entry['file']}: " + "; ".join(c["path"] for c in entry["conflicts"][:5])
+                          + (f" (+{len(entry['conflicts']) - 5} more)" if len(entry["conflicts"]) > 5 else ""))
+                elif entry["status"] == "UNPARSEABLE":
+                    print(f"  UNPARSEABLE {entry['file']}")
+            for name in result["vanilla_removed_in_rc8"]:
+                print(f"  vanilla removed in RC8 (now the mod's own content): {name}")
+            if result["output"]:
+                print(f"MERGED files written under: {result['output']}")
+        return 1 if result["counts"].get("CONFLICT") or result["counts"].get("UNPARSEABLE") else 0
+    if args.command == "corpus-index":
+        from .corpus_index import CorpusIndexError, build_index, search_index
+        try:
+            if args.corpus_index_command == "build":
+                result = build_index(args.root, args.db, args.max_bytes)
+            else:
+                result = search_index(args.db, args.text, args.limit, args.names)
+        except CorpusIndexError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0 if args.corpus_index_command == "build" or result["content_hits"] or result["name_hits"] else 1
+        if args.corpus_index_command == "build":
+            print(f"Indexed {result['root']} -> {result['db']}: {result['reindexed']} read, {result['unchanged']} unchanged, {result['forgotten']} gone")
+        else:
+            for hit in result["content_hits"]:
+                print(f"{hit['location']} ({hit['line_count']} matching line(s))")
+                for line in hit["lines"]:
+                    print(f"    {line}")
+            for name in result["name_hits"]:
+                print(f"name: {name}")
+            if not result["content_hits"] and not result["name_hits"]:
+                print(f"No hits for {args.text!r}.")
+            if len(result["content_hits"]) >= result["limit"] or len(result["name_hits"]) >= result["limit"]:
+                print(f"(stopped at --limit {result['limit']})")
+        not_searched = ", ".join(f"{count} {reason}" for reason, count in result["not_searched"].items())
+        print(f"Coverage: {result['text_files_searched']} text files searched, {result['files_listed']} files listed by name"
+              + (f"; NOT searched: {not_searched}" if not_searched else "; nothing skipped"))
+        return 0 if args.corpus_index_command == "build" or result["content_hits"] or result["name_hits"] else 1
+    if args.command == "content-diff":
+        from .content_diff import ContentDiffError, diff_content
+        try:
+            result = diff_content(args.reference_core, args.vanilla_core)
+            if args.output:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except (ContentDiffError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            for kind, count in result["counts"].items():
+                print(f"{kind}: {count['reference']} -> {count['rc8']} ({count['removed']} removed, {count['added']} added)")
+            for kind, entries in result["removed"].items():
+                for entry in entries[:30]:
+                    leads = entry["same_name_in_rc8"]
+                    print(f"  - {kind}:{entry['id']}" + (f" ({entry['name']})" if entry.get("name") else "") + (f" -> same name in RC8: {', '.join(leads)}" if leads else ""))
+                if len(entries) > 30:
+                    print(f"  ... {len(entries) - 30} more {kind} ids (see --output/--json)")
+            if args.output:
+                print(f"Written: {args.output}")
+        return 0
+    if args.command == "verify-shadow":
+        from .verify_shadow import VerifyShadowError, verify_shadow
+        try:
+            result = verify_shadow(args.scripts, args.against)
+        except (VerifyShadowError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            for entry in result["results"]:
+                print(f"{entry['status']}: {entry['script']} (class {entry['class']}, from {entry['class_from']})")
+                for owner in entry["supplied_by"]:
+                    print(f"    supplied by {owner}")
+            print(f"Checked {result['classes_checked']} classes in {result['jars_checked']} jar(s).")
+            for problem in result["unreadable_jars"]:
+                print(f"  NOT checked: {problem}")
+        return 0
+    if args.command == "strip-plan":
+        from .strip_plan import StripPlanError, strip_plan
+        try:
+            result = strip_plan(args.mod, args.vanilla_core, args.only)
+        except (StripPlanError, ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            if not result["edits"]:
+                print("Nothing to strip: no unresolved content references" + (" match --id." if args.only else "."))
+            for edit in result["edits"]:
+                print(f"{edit['file']}: {edit['action']} -- {edit['kind']}:{edit['id']}")
+                substitutes = edit.get("substitutes")
+                if substitutes and substitutes.get("candidates"):
+                    more = substitutes["candidate_count"] - len(substitutes["candidates"])
+                    print(f"    vanilla {substitutes['slot']} options: {', '.join(substitutes['candidates'])}" + (f" (+{more} more)" if more > 0 else ""))
+                elif substitutes:
+                    print(f"    {substitutes.get('note') or 'no vanilla weapon fits ' + str(substitutes['slot'])}")
+        return 0
     if args.command == "api-diff":
         import zipfile
         from .api_diff import ApiDiffError, diff_api_jars

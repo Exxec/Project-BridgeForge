@@ -66,6 +66,26 @@ python -m bridgeforge dossier "<mod_dir>" --vanilla-core $core --output .\dossie
 
 Classifications: **MANUAL** means likely broken, act on it. **REVIEW** needs judgment. **UNKNOWN** means BridgeForge can't tell. **SAFE** is informational or has a mechanical fix.
 
+**"Defined nowhere"? content-diff.** If `content-reference-unresolved` lists ids no dependency explains,
+check whether vanilla itself dropped them:
+
+```powershell
+python -m bridgeforge content-diff "<old install>\starsector-core" $core --output "In operation\_reference\removed-content-0.9a-to-rc8.json"
+python -m bridgeforge scan "<mod_dir>" --vanilla-core $core --removed-content "In operation\_reference\removed-content-0.9a-to-rc8.json" --output "<reports>"
+```
+
+Ids vanilla removed then appear as `content-reference-removed-in-vanilla`, each with any RC8 id of the
+same display name (a lead, not a confirmed rename). RevenantLib may already carry the old content.
+
+**Stripping content nothing provides? strip-plan.** When `dependency-substitutes` says STRIP_FROM_MOD:
+
+```powershell
+python -m bridgeforge strip-plan "<mod_dir>" --vanilla-core $core [--id weapon:vayra_gun]
+```
+
+Lists each file and field every unresolved id sits in, and for an emptied weapon slot the vanilla
+weapons of the same type and size. Nothing is edited; make the changes in the working copy yourself.
+
 ## 1b. Which API changed? api-diff
 
 ```powershell
@@ -80,6 +100,51 @@ signature (the `SectorAPI.addMessage` -> `CampaignUIAPI.addMessage` kind). With 
 `compile-check` prints those leads under each javac error they explain (`API CHANGE ...`). They are
 leads to verify, not rewrites. The catalogue holds only API names; keep the game jars themselves out of
 the repository.
+
+## 1c. What did the mod actually change? diff-data
+
+```powershell
+python -m bridgeforge diff-data "<mod_dir>\data\weapons\lightmg.wpn" "$core\data\weapons\lightmg.wpn"
+python -m bridgeforge diff-data "<mod_dir>\data\weapons\weapon_data.csv" "$core\data\weapons\weapon_data.csv"
+```
+
+Compares by value: key, row and column order, comments, trailing commas and `10` vs `10.0` never
+show up. `~` changed, `+` only in the second file, `-` only in the first, `^` the same list values in
+another order. Exit code 1 means they differ.
+
+**Many shadowed vanilla files? rebuild-from-reference.** When a mod ships edited copies of vanilla
+files (the `vanilla-path-shadowing` finding) and you have the install it was made for:
+
+```powershell
+python -m bridgeforge rebuild-from-reference "<mod_dir>" --reference-core "<old install>\starsector-core" --vanilla-core $core --class wpn --output "In operation\<Mod>\scratch\rebuilt-wpn"
+```
+
+Per file: **MERGED** (RC8's version plus the mod's edits, written to `--output`), **CONFLICT** (the mod
+and RC8 changed the same value; RC8's is kept and the path listed for you to decide),
+**UNCHANGED_COPY** (the mod never edited it: delete it from the mod). Review the merged files with
+`diff-data`, then copy them into the working copy yourself. Repeat per `--class`.
+
+**Where else is this id used? corpus-index.** Index your Downloads (or any mod archive) once, then
+search it instead of running `grep` with a timeout:
+
+```powershell
+python -m bridgeforge corpus-index build "C:\Users\exxec\Downloads"          # first run reads everything; later runs only changes
+python -m bridgeforge corpus-index search shieldbypass                          # content, case-insensitive, 3+ characters
+python -m bridgeforge corpus-index search FormShield --names                    # file paths only
+```
+
+Every result ends with a `Coverage:` line. Anything listed under `NOT searched` (for example `.7z`
+archives) was not looked inside, so "No hits" only covers the rest.
+
+**Is this loose script really jar-shadowed? verify-shadow.** Never decide from "the same path exists
+in vanilla" (E12). Ask the jars:
+
+```powershell
+python -m bridgeforge verify-shadow "<mod_dir>\data\hullmods\Armor.java" --against "<mod_dir>" --against $core
+```
+
+`SHADOWED` names the jar that supplies the class (the loose file is never compiled); `NOT_SHADOWED`
+means the loose file is live code.
 
 ## 2. Fix the mechanical things: fix
 
@@ -148,7 +213,7 @@ python -m bridgeforge probe-config "<mod_dir>" --runtime $rig --install [--track
 Then:
 
 1. Enable `bridgeforge_probe` together with the mod under test and launch the rig (e.g. `boot-test … --keep-mods`, then start the game yourself).
-2. **New Game.** Wait about 1 in-game day. The campaign probe checks rings and orbits, faction known lists, market stock, fleet presence, custom planet specs and tracked entity positions. It re-runs every few in-game days.
+2. **New Game.** Wait about 1 in-game day. The campaign probe checks rings and orbits, faction known lists, market stock, fleet presence, custom planet specs and tracked entity positions. It re-runs every few in-game days. Once per session it also asks the game to resolve every variant and wing id the mod defines, and builds each of the mod's own ship variants as a fleet member (`content-ids`); a FAIL there names the id and the game's own error.
 3. **Missions → BridgeForge Probe: Combat.** The mod's ships fight under AI. It logs every ship deployed and flags any captain with no personality.
 4. Run `log-triage` (§7) and check its **probe** section.
 

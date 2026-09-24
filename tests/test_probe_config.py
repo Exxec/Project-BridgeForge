@@ -3,11 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.support import link_dir
-
-
 from bridgeforge.cli import main
 from bridgeforge.probe_config import ProbeConfigError, build_probe_config, write_probe_config
+from tests.support import link_dir, resolved_temp_dir
 
 
 def _make_fixture_mod(root: Path) -> Path:
@@ -60,6 +58,55 @@ class ProbeConfigBuildTests(unittest.TestCase):
             (mod / "mod_info.json").write_text("{}", encoding="utf-8")
             with self.assertRaises(ProbeConfigError):
                 build_probe_config(mod)
+
+
+class ContentIdsConfigTests(unittest.TestCase):
+    """ROADMAP P14 items 31-32: every variant/wing id the mod defines, keyed by the declared id."""
+
+    def _mod(self, root: Path) -> Path:
+        mod = _make_fixture_mod(root)
+        variants = mod / "data" / "variants"
+        (variants / "fighters").mkdir()
+        # A file name that differs from the declared variantId, the way real mods ship them.
+        (variants / "hull2_file.variant").write_text('{"hullId":"fx_hull2","variantId":"fx_hull2_Assault"}', encoding="utf-8")
+        (variants / "fighters" / "fx_fighter1_wing.variant").write_text('{"hullId":"fx_fighter1","variantId":"fx_fighter1_Wing"}', encoding="utf-8")
+        (variants / "module.variant").write_text('{"hullId":"fx_module1","variantId":"fx_module1_Std"}', encoding="utf-8")
+        (variants / "vanilla_skin.variant").write_text('{"hullId":"onslaught","variantId":"fx_onslaught_Elite"}', encoding="utf-8")
+        (variants / "broken.variant").write_text("{not json", encoding="utf-8")
+        (mod / "data" / "hulls" / "wing_data.csv").write_text("id,variant\nfx_fighter1_wing,fx_fighter1_Wing\n,\n", encoding="utf-8")
+        return mod
+
+    def test_variants_split_by_what_the_probe_may_build_and_wings_listed(self) -> None:
+        with resolved_temp_dir() as root:
+            config = build_probe_config(self._mod(root))
+        self.assertEqual(config["content_variants"]["ship"], ["fx_hull1_Standard", "fx_hull2_Assault"])
+        self.assertEqual(config["content_variants"]["other"], ["fx_fighter1_Wing", "fx_module1_Std", "fx_onslaught_Elite"])
+        self.assertEqual(config["content_wings"], ["fx_fighter1_wing"])
+
+    def test_probe_deploys_the_declared_variant_id_not_the_file_name(self) -> None:
+        with resolved_temp_dir() as root:
+            config = build_probe_config(self._mod(root))
+        self.assertEqual(config["variants"]["fx_hull2"], "fx_hull2_Assault")
+        self.assertIn("fx_hull2", config["hulls"])
+
+    def test_mod_without_variants_or_wings_gives_empty_lists(self) -> None:
+        with resolved_temp_dir() as root:
+            mod = root / "bare"
+            mod.mkdir()
+            (mod / "mod_info.json").write_text('{"id":"bare"}', encoding="utf-8")
+            config = build_probe_config(mod)
+        self.assertEqual(config["content_variants"], {"ship": [], "other": []})
+        self.assertEqual(config["content_wings"], [])
+
+
+class ProbeVersionTests(unittest.TestCase):
+    def test_probe_log_version_matches_mod_info(self) -> None:
+        # The version in each BF-PROBE line comes from ProbeLog.VERSION inside the jar; if it lags
+        # mod_info.json after a source change, the rig is running a stale build.
+        probe = Path(__file__).resolve().parent.parent / "probe-mod"
+        declared = json.loads((probe / "mod_info.json").read_text(encoding="utf-8"))["version"]
+        source = (probe / "src" / "com" / "bridgeforge" / "probe" / "ProbeLog.java").read_text(encoding="utf-8")
+        self.assertIn(f'public static final String VERSION = "{declared}";', source)
 
 
 class ProbeConfigRigTests(unittest.TestCase):

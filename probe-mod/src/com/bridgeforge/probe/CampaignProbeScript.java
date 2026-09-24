@@ -15,6 +15,8 @@ import com.fs.starfarer.api.campaign.StarSystemAPI;
 import com.fs.starfarer.api.campaign.SubmarketPlugin;
 import com.fs.starfarer.api.campaign.econ.MarketAPI;
 import com.fs.starfarer.api.campaign.econ.SubmarketAPI;
+import com.fs.starfarer.api.fleet.FleetMemberAPI;
+import com.fs.starfarer.api.fleet.FleetMemberType;
 import com.fs.starfarer.api.impl.campaign.ids.Submarkets;
 
 import java.util.Arrays;
@@ -55,6 +57,8 @@ public class CampaignProbeScript implements EveryFrameScript {
     private long startTimestamp = 0L;
     private long lastRunTimestamp = 0L;
     private boolean firstRunDone = false;
+    // content-ids builds every mod variant once; repeating it each interval adds nothing.
+    private boolean contentIdsChecked = false;
 
     @Override
     public boolean isDone() {
@@ -183,6 +187,11 @@ public class CampaignProbeScript implements EveryFrameScript {
         runCheck("planet-specs", new Runnable() {
             public void run() {
                 checkPlanetSpecs();
+            }
+        });
+        runCheck("content-ids", new Runnable() {
+            public void run() {
+                checkContentIds();
             }
         });
         ProbeLog.end("campaign");
@@ -379,6 +388,68 @@ public class CampaignProbeScript implements EveryFrameScript {
             org.lwjgl.util.vector.Vector2f loc = entity.getLocation();
             ProbeLog.emit("tracked-entities", ProbeLog.STATUS_INFO, entityId,
                     "x=" + loc.x + " y=" + loc.y);
+        }
+    }
+
+    // ---- the mod's own variant and wing ids (ROADMAP P14 item 31) ---------------------
+    //
+    // Runtime ground truth for what the scanner can only infer: does the game itself resolve every
+    // variant and wing id the mod defines? API evidence (RC8): SettingsAPI.doesVariantExist(String)
+    // and getFighterWingSpec(String) are both called by RevenantLib 1.2.0+bf.1's RC8-built jar
+    // (constant-pool Methodrefs, read 2026-09-24); Global.getFactory().createFleetMember(SHIP, id) is
+    // ProbeSetup's own, live-run call. Building the member also resolves the variant's hull, weapons
+    // and hull mods, so no separate hull/weapon/hullmod lookup (unverified API) is needed.
+
+    private void checkContentIds() {
+        if (contentIdsChecked) {
+            return;
+        }
+        contentIdsChecked = true;
+        int failed = 0;
+        for (String variantId : config.contentShipVariants) {
+            failed += reportContent("variant", variantId, variantProblem(variantId, true));
+        }
+        for (String variantId : config.contentOtherVariants) {
+            failed += reportContent("variant", variantId, variantProblem(variantId, false));
+        }
+        for (String wingId : config.contentWings) {
+            failed += reportContent("wing", wingId, wingProblem(wingId));
+        }
+        int total = config.contentShipVariants.size() + config.contentOtherVariants.size() + config.contentWings.size();
+        ProbeLog.emit("content-ids", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "all-content",
+                "checked=" + total + " failed=" + failed + " ship-variants built=" + config.contentShipVariants.size());
+    }
+
+    private static int reportContent(String kind, String id, String problem) {
+        if (problem == null) {
+            return 0;
+        }
+        ProbeLog.emit("content-ids", ProbeLog.STATUS_FAIL, kind + ":" + id, problem);
+        return 1;
+    }
+
+    private static String variantProblem(String variantId, boolean build) {
+        try {
+            if (!Global.getSettings().doesVariantExist(variantId)) {
+                return "doesVariantExist=false";
+            }
+            if (build) {
+                FleetMemberAPI member = Global.getFactory().createFleetMember(FleetMemberType.SHIP, variantId);
+                if (member == null) {
+                    return "createFleetMember(SHIP) returned null";
+                }
+            }
+            return null;
+        } catch (Throwable t) {
+            return t.getClass().getName() + ": " + t.getMessage();
+        }
+    }
+
+    private static String wingProblem(String wingId) {
+        try {
+            return Global.getSettings().getFighterWingSpec(wingId) == null ? "getFighterWingSpec=null" : null;
+        } catch (Throwable t) {
+            return t.getClass().getName() + ": " + t.getMessage();
         }
     }
 

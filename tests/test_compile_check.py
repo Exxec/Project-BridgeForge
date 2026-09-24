@@ -169,5 +169,51 @@ class CompileLooseScriptsEndToEndTests(unittest.TestCase):
             self.assertIn("not_installed_anywhere", result["classpath"]["dependencies_missing"])
 
 
+    def test_script_a_dependency_jar_already_compiles_is_reported_and_its_errors_set_aside(self) -> None:
+        # E8 (2026-09-20): Maelstrom's Titan scripts were shadowed by base Interstellar Imperium's II.jar.
+        from tests.save_fixtures import build_class_file, write_jar
+
+        with resolved_temp_dir() as root:
+            providers = root / "mods"
+            base = providers / "Interstellar Imperium"
+            base.mkdir(parents=True)
+            (base / "mod_info.json").write_text('{"id":"Imperium","name":"II","jars":["jars/II.jar"]}', encoding="utf-8")
+            write_jar(base / "jars" / "II.jar", {"data/scripts/Titan.class": build_class_file("data/scripts/Titan")})
+            mod = self._mod(root)
+            (mod / "mod_info.json").write_text('{"id":"m1","dependencies":[{"id":"Imperium"}]}', encoding="utf-8")
+            (mod / "data" / "scripts" / "Titan.java").write_text(
+                "package data.scripts;\npublic class Titan { void f() { undefinedThing(); } }", encoding="utf-8")
+            (mod / "data" / "scripts" / "Own.java").write_text("package data.scripts;\npublic class Own {}", encoding="utf-8")
+            result = compile_loose_scripts(mod, provider_roots=[providers])
+        self.assertEqual(result["status"], "PASS", result["errors"])
+        self.assertEqual(result["error_count"], 0)
+        self.assertEqual(len(result["shadowed_file_errors"]), 1)
+        self.assertEqual([(e["file"], e["class"], e["dependency"]) for e in result["shadowed_by_dependency"]],
+                         [("data/scripts/Titan.java", "data.scripts.Titan", "Imperium")])
+        self.assertTrue(result["shadowed_by_dependency"][0]["supplied_by"].endswith("II.jar!data/scripts/Titan.class"))
+
+
+class DependencyShadowScanFindingTests(unittest.TestCase):
+    def test_scan_reports_loose_script_shadowed_by_dependency_jar(self) -> None:
+        from unittest.mock import patch
+
+        from bridgeforge.models import TargetProfile
+        from bridgeforge.scanner import scan_mod
+
+        outcome = {"status": "PASS", "errors": [], "shadowed_by_dependency": [
+            {"file": "data/scripts/Titan.java", "class": "data.scripts.Titan", "dependency": "Imperium", "supplied_by": "II.jar!data/scripts/Titan.class"}]}
+        with resolved_temp_dir() as root:
+            mod, core = root / "mod", root / "core"
+            (mod / "data" / "scripts").mkdir(parents=True)
+            core.mkdir()
+            (mod / "mod_info.json").write_text('{"id":"m1","name":"M","gameVersion":"0.98a"}', encoding="utf-8")
+            with patch("bridgeforge.compile_check.compile_loose_scripts", return_value=outcome):
+                result = scan_mod(mod, TargetProfile("0.98a-RC8", 17), core, compile_check=True)
+        finding = next(f for f in result.findings if f.id == "loose-script-shadowed-by-dependency-jar")
+        self.assertEqual((finding.classification, finding.file), ("MANUAL", "data/scripts/Titan.java"))
+        self.assertIn("Imperium", finding.explanation)
+        self.assertEqual(finding.evidence, ["class:data.scripts.Titan", "supplied by:II.jar!data/scripts/Titan.class"])
+
+
 if __name__ == "__main__":
     unittest.main()
