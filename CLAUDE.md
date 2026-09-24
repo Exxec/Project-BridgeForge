@@ -18,6 +18,12 @@ BridgeForge is an offline, evidence-first toolkit for reviving legacy Starsector
 - Never commit Fractal Softworks game files (jars, art, data). The probe's mission icon is
   copied in locally for that reason (see `.gitignore`).
 
+## Work that needs a local machine
+
+Anything that needs the game install, a test rig, Windows or `In operation/` cannot be finished
+in a cloud session. Build and test what you can, then add an entry to `docs/LOCAL_HANDOFF.md`
+(what to run, what "done" looks like, which roadmap item) and say so in the roadmap entry.
+
 ## Layout
 
 - `bridgeforge/` the package; `cli.py` wires every subcommand; `scanner.py` holds the checks
@@ -25,8 +31,8 @@ BridgeForge is an offline, evidence-first toolkit for reviving legacy Starsector
 - `tests/` unittest suite; `tests/support.py` has `resolved_temp_dir()` and `link_dir()`.
 - `probe-mod/` the in-game probe (Java, public API only); built by `build-probe-mod`.
 - Gitignored and local-only: `In operation/`, `Done/`, `AGENTS.md`, `tools/*.ps1` (except
-  `bf-test.ps1`), `.githooks/`. RevenantLib's source lives in `In operation/`, so it is not in
-  this repo.
+  `bf-test.ps1`), `.githooks/`. RevenantLib is a separate private repo, `Exxec/RevenantLib`
+  (`working/`, `original/`, `reports/`); `revenantlib-check` verifies it provides what the fixers call.
 
 ## Checks before committing
 

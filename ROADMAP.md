@@ -606,6 +606,14 @@ Progression, each stage feeding the next:
     each time otherwise. A `bridgeforge diff-data <file_a> <file_b>` command should load both through
     `_load_lenient_json_file` and report added/removed/changed keys by value, recursing into nested
     dicts and lists, with formatting/key-order differences producing no output at all.
+    **Done 2026-09-24.** `diff-data A B [--json]` (`bridgeforge/data_diff.py`): JSON-dialect files load
+    through `_load_lenient_json_file` and compare by key; lists of objects with unique `"id"`s
+    (weapon/engine slots) by id; other lists by index, or by content for scalar lists of different
+    length; the same scalars in another order are one `reordered` change (order matters for
+    `turretOffsets`, not for `tags`, and the file cannot say which). CSVs compare rows by `id` (else
+    the first column) and cells by column name, skipping `#` and empty-key rows. Numbers compare by
+    value (`10` = `10.0`). Exit 0 identical, 1 different, 2 unreadable. Validation on Rebal's real
+    files is in `docs/LOCAL_HANDOFF.md`. Tests: `tests/test_data_diff.py`.
 20. **`vanilla-path-shadowing` should report the true file count, not a folder rollup.** E3's original
     estimate for Rebal ("~79 files") was a per-folder finding count; the real number, counted
     directly, is 642 - an 8x understatement that shaped this item's scoping for a full session before
@@ -808,7 +816,8 @@ Progression, each stage feeding the next:
     `createFleetMember` is `ProbeSetup`'s live-run call. Hull/weapon/hull-mod lookups and a check that
     the built member's hull is not a substitute (PRB-FIGHTER-01's Nebula) need `javap` evidence first.
     **Needs:** `build-probe-mod --install-release` against RC8 (the committed jar predates this source;
-    a stale rig shows `BF-PROBE|0.2.1|` lines), then one live run. Tests: `tests/test_probe_config.py`
+    a stale rig shows `BF-PROBE|0.2.1|` lines), then one live run; steps in `docs/LOCAL_HANDOFF.md`.
+    Tests: `tests/test_probe_config.py`
     (`ContentIdsConfigTests`, `ProbeVersionTests`).
 32. **`probe-config` deployed a variant by its file name, not its declared `variantId`.** Found by
     reading code while building item 31: `_variant_by_hull` read `"id"`, which `.variant` files do not

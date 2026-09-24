@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- **New `diff-data` command (ROADMAP P14 item 19).** Compares two data files (JSON dialect or CSV) by value, so key/row/column order, comments, trailing commas and `10` vs `10.0` never count; lists slots by id and reports a reordered list once. The primitive item 21's rebuild-from-reference needs.
+- `docs/LOCAL_HANDOFF.md`: work cloud sessions built but could not finish without the game, a rig or Windows.
 - **Probe 0.2.2: `content-ids` campaign check (ROADMAP P14 item 31).** The game itself resolves every variant and wing id the mod defines, and builds each of the mod's own ship variants as a fleet member (resolving hull, weapons and hull mods); failures name the id and the game's error. `probe-config` writes the new `content_variants`/`content_wings` keys. Rebuild with `build-probe-mod --install-release` before the next rig run.
 - Fixed: `probe-config` picked each hull's variant by file name instead of the declared `variantId` (ROADMAP P14 item 32).
 - **New `revenantlib-check` command and `rig-doctor` check `revenantlib_contract` (ROADMAP P14 item 30).** Pins the three `bf.*` methods `fix --finding removed-api-call` rewrites calls to and verifies a RevenantLib jar provides them with the exact signatures, plus that its jar and `src/` agree class for class. RevenantLib 1.2.0+bf.1 passes.

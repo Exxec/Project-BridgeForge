@@ -81,6 +81,17 @@ signature (the `SectorAPI.addMessage` -> `CampaignUIAPI.addMessage` kind). With 
 leads to verify, not rewrites. The catalogue holds only API names; keep the game jars themselves out of
 the repository.
 
+## 1c. What did the mod actually change? diff-data
+
+```powershell
+python -m bridgeforge diff-data "<mod_dir>\data\weapons\lightmg.wpn" "$core\data\weapons\lightmg.wpn"
+python -m bridgeforge diff-data "<mod_dir>\data\weapons\weapon_data.csv" "$core\data\weapons\weapon_data.csv"
+```
+
+Compares by value: key, row and column order, comments, trailing commas and `10` vs `10.0` never
+show up. `~` changed, `+` only in the second file, `-` only in the first, `^` the same list values in
+another order. Exit code 1 means they differ.
+
 ## 2. Fix the mechanical things: fix
 
 ```powershell

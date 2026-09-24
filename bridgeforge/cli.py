@@ -698,6 +698,10 @@ def build_parser() -> argparse.ArgumentParser:
     compile_check_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search for declared dependencies; repeatable (default: <repo>/In operation and its rig's mods)")
     compile_check_cmd.add_argument("--api-diff", type=Path, help="catalogue written by `api-diff`: attach removed/moved-API leads to matching javac errors")
     compile_check_cmd.add_argument("--json", action="store_true")
+    diff_data_cmd = subcommands.add_parser("diff-data", help="compare two Starsector data files (JSON dialect or CSV) by value: key/row/column order, comments and formatting never count; exit 1 when they differ")
+    diff_data_cmd.add_argument("a", type=Path, help="first file (e.g. the mod's copy)")
+    diff_data_cmd.add_argument("b", type=Path, help="second file (e.g. vanilla's or a reference install's)")
+    diff_data_cmd.add_argument("--json", action="store_true")
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
@@ -2263,6 +2267,28 @@ def main(argv: list[str] | None = None) -> int:
             for name in stale["classes_without_source"]:
                 print(f"  FAIL class in the jar without source: {name}")
         return 0 if result["status"] == "PASS" else 1
+    if args.command == "diff-data":
+        from .data_diff import DataDiffError, diff_data
+        try:
+            result = diff_data(args.a, args.b)
+        except DataDiffError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            if result["identical"]:
+                print(f"IDENTICAL ({result['kind']}): no value differences")
+            for change in result["changes"]:
+                if change["change"] == "added":
+                    print(f"+ {change['path']}: {json.dumps(change['b'], ensure_ascii=False)}")
+                elif change["change"] == "removed":
+                    print(f"- {change['path']}: {json.dumps(change['a'], ensure_ascii=False)}")
+                elif change["change"] == "reordered":
+                    print(f"^ {change['path']}: same values, other order: {json.dumps(change['a'], ensure_ascii=False)} -> {json.dumps(change['b'], ensure_ascii=False)}")
+                else:
+                    print(f"~ {change['path']}: {json.dumps(change['a'], ensure_ascii=False)} -> {json.dumps(change['b'], ensure_ascii=False)}")
+        return 0 if result["identical"] else 1
     if args.command == "api-diff":
         import zipfile
         from .api_diff import ApiDiffError, diff_api_jars
