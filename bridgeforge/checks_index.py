@@ -20,7 +20,7 @@ import ast
 import json
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePath
 
 SCHEMA_VERSION = 1
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -295,6 +295,8 @@ def _argument_rows(parser: argparse.ArgumentParser) -> list[str]:
         if action.default not in (None, False, argparse.SUPPRESS, []) and action.option_strings:
             # A Path.cwd() default is resolved when the parser is built; name it, not this machine's path.
             default = "current directory" if action.default == Path.cwd() else action.default
+            if isinstance(default, PurePath):
+                default = default.as_posix()  # one spelling on every OS, so the committed index matches Windows CI
             notes.append(f"default {default}")
         help_text = " ".join((action.help or "").split())
         rows.append(f"| {_cell(name)} | {_cell('; '.join(notes)) or '-'} | {_cell(help_text) or '-'} |")
