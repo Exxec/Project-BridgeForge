@@ -709,6 +709,19 @@ def build_parser() -> argparse.ArgumentParser:
     rebuild_ref_cmd.add_argument("--class", dest="file_classes", action="append", help="limit to one file class, e.g. --class wpn; repeatable (default: all), so a large mod can be rebuilt in reviewable stages")
     rebuild_ref_cmd.add_argument("--output", type=Path, help="write MERGED files here, mirroring data/ paths (never into the mod or either core)")
     rebuild_ref_cmd.add_argument("--json", action="store_true")
+    corpus_index_cmd = subcommands.add_parser("corpus-index", help="index a large mod archive once (inside .zip files too) and search it like grep in milliseconds; reports what it could not read so \"no hits\" means something")
+    corpus_index_sub = corpus_index_cmd.add_subparsers(dest="corpus_index_command", required=True)
+    corpus_build_cmd = corpus_index_sub.add_parser("build", help="index (or refresh) every file under ROOT; unchanged files are skipped on re-runs")
+    corpus_build_cmd.add_argument("root", type=Path, help="folder to index, e.g. Downloads")
+    corpus_build_cmd.add_argument("--db", type=Path, default=Path("bridgeforge-state") / "corpus-index.sqlite", help="index file (default: bridgeforge-state/corpus-index.sqlite)")
+    corpus_build_cmd.add_argument("--max-bytes", type=int, default=4 * 1024 * 1024, help="skip (and report) text files larger than this")
+    corpus_build_cmd.add_argument("--json", action="store_true")
+    corpus_search_cmd = corpus_index_sub.add_parser("search", help="find files whose content (3+ characters, case-insensitive) or path contains TEXT")
+    corpus_search_cmd.add_argument("text")
+    corpus_search_cmd.add_argument("--db", type=Path, default=Path("bridgeforge-state") / "corpus-index.sqlite")
+    corpus_search_cmd.add_argument("--names", action="store_true", help="match file paths only")
+    corpus_search_cmd.add_argument("--limit", type=int, default=50)
+    corpus_search_cmd.add_argument("--json", action="store_true")
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
@@ -2319,6 +2332,36 @@ def main(argv: list[str] | None = None) -> int:
             if result["output"]:
                 print(f"MERGED files written under: {result['output']}")
         return 1 if result["counts"].get("CONFLICT") or result["counts"].get("UNPARSEABLE") else 0
+    if args.command == "corpus-index":
+        from .corpus_index import CorpusIndexError, build_index, search_index
+        try:
+            if args.corpus_index_command == "build":
+                result = build_index(args.root, args.db, args.max_bytes)
+            else:
+                result = search_index(args.db, args.text, args.limit, args.names)
+        except CorpusIndexError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0 if args.corpus_index_command == "build" or result["content_hits"] or result["name_hits"] else 1
+        if args.corpus_index_command == "build":
+            print(f"Indexed {result['root']} -> {result['db']}: {result['reindexed']} read, {result['unchanged']} unchanged, {result['forgotten']} gone")
+        else:
+            for hit in result["content_hits"]:
+                print(f"{hit['location']} ({hit['line_count']} matching line(s))")
+                for line in hit["lines"]:
+                    print(f"    {line}")
+            for name in result["name_hits"]:
+                print(f"name: {name}")
+            if not result["content_hits"] and not result["name_hits"]:
+                print(f"No hits for {args.text!r}.")
+            if len(result["content_hits"]) >= result["limit"] or len(result["name_hits"]) >= result["limit"]:
+                print(f"(stopped at --limit {result['limit']})")
+        not_searched = ", ".join(f"{count} {reason}" for reason, count in result["not_searched"].items())
+        print(f"Coverage: {result['text_files_searched']} text files searched, {result['files_listed']} files listed by name"
+              + (f"; NOT searched: {not_searched}" if not_searched else "; nothing skipped"))
+        return 0 if args.corpus_index_command == "build" or result["content_hits"] or result["name_hits"] else 1
     if args.command == "api-diff":
         import zipfile
         from .api_diff import ApiDiffError, diff_api_jars

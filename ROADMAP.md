@@ -597,6 +597,16 @@ Progression, each stage feeding the next:
     one-time content index (filenames plus a grep-able concatenation or a small sqlite FTS table) of
     the whole Downloads archive once, rather than repeated ad hoc greps with a timeout that can
     silently fail before reaching the relevant file.
+    **Done 2026-09-24 (the real Downloads index is built locally).** `corpus-index build ROOT [--db F]`
+    (`bridgeforge/corpus_index.py`) walks a folder once, inside `.zip`/`.jar` files too, and stores
+    text-like files in an SQLite FTS5 table with the trigram tokenizer (any 3+ character substring,
+    case-insensitive; CP-1252 bytes decoded). Re-runs re-read only files whose size or mtime changed
+    and forget deleted ones. `corpus-index search TEXT` prints each hit (`archive.zip!member` inside
+    archives) with its matching lines, plus path matches; `--names` searches paths only. Every
+    build and search reports what was NOT searched (other archive formats, zips inside zips,
+    oversized or binary files), so "no hits" states its own coverage. Default index:
+    `bridgeforge-state/corpus-index.sqlite` (gitignored). Tests: `tests/test_corpus_index.py`,
+    including the 2026-09-20 `shieldbypass` case.
 19. **New command: value-diff two org.json-dialect files, not a line diff.** Found 2026-09-20
     building E11's data-only rebuild plan for Rebal: diffing a mod's file against a real historical
     vanilla reference showed the two use different key order and formatting (pretty-printed vs.

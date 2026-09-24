@@ -56,12 +56,22 @@ Done when, for the files E11 rebuilt by hand, the MERGED output matches E11's re
 `diff-data`), and every CONFLICT is a genuine both-sides edit. Then repeat for `ship`, `variant`,
 `skin`, `system`. If a file class needs different merge rules, record it in item 21.
 
-### 6. RevenantLib line endings
+### 6. Build the Downloads index (ROADMAP P14 item 18)
+```powershell
+python -m bridgeforge corpus-index build "C:\Users\exxec\Downloads"
+python -m bridgeforge corpus-index search shieldbypass
+```
+Done when the search finds `Ship and Weapon Pack/data/hullmods/hull_mods.csv` (the 2026-09-20
+false negative). Note the build time and index size in item 18, and check the `NOT searched` line:
+if many mods sit in `.7z`/`.rar` archives, reading them needs a new dependency, so decide whether to
+add one or extract them once.
+
+### 7. RevenantLib line endings
 Merge `claude/confident-archimedes-e2qv1v` in `Exxec/RevenantLib` (`.gitattributes`
 `original/** -text`; all 24 `PROVENANCE.md` hashes match on a fresh clone). Afterwards,
 `git status` in your local RevenantLib copy should be clean.
 
-### 7. Local-only tooling the repo cannot carry
+### 8. Local-only tooling the repo cannot carry
 - `.githooks/pre-commit` is gitignored: add `ruff check .` so lint failures stop before CI.
 - `AGENTS.md` is gitignored: keep it consistent with `CLAUDE.md` (the committed copy cloud
   sessions read).

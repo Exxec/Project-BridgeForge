@@ -104,6 +104,18 @@ and RC8 changed the same value; RC8's is kept and the path listed for you to dec
 **UNCHANGED_COPY** (the mod never edited it: delete it from the mod). Review the merged files with
 `diff-data`, then copy them into the working copy yourself. Repeat per `--class`.
 
+**Where else is this id used? corpus-index.** Index your Downloads (or any mod archive) once, then
+search it instead of running `grep` with a timeout:
+
+```powershell
+python -m bridgeforge corpus-index build "C:\Users\exxec\Downloads"          # first run reads everything; later runs only changes
+python -m bridgeforge corpus-index search shieldbypass                          # content, case-insensitive, 3+ characters
+python -m bridgeforge corpus-index search FormShield --names                    # file paths only
+```
+
+Every result ends with a `Coverage:` line. Anything listed under `NOT searched` (for example `.7z`
+archives) was not looked inside, so "No hits" only covers the rest.
+
 ## 2. Fix the mechanical things: fix
 
 ```powershell
