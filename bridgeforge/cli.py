@@ -703,6 +703,9 @@ def build_parser() -> argparse.ArgumentParser:
     api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("--output", type=Path, help="write the JSON catalogue here (for compile-check --api-diff)")
     api_diff_cmd.add_argument("--json", action="store_true")
+    revenantlib_cmd = subcommands.add_parser("revenantlib-check", help="check a RevenantLib jar provides every bf.* method BridgeForge's fixers rewrite calls to, and (given the mod folder) that no source file lacks a compiled class")
+    revenantlib_cmd.add_argument("path", type=Path, help="RevenantLib.jar, the RevenantLib mod folder, or a repo root holding working/")
+    revenantlib_cmd.add_argument("--json", action="store_true")
     rebuild_jar_cmd = subcommands.add_parser("rebuild-jar", help="rebuild a mod's jar from its sources and compare it with the original: class/method/field added or removed, forbidden sandbox references")
     rebuild_jar_cmd.add_argument("mod", type=Path, help="mod workspace (holding working/) or the working copy itself")
     rebuild_jar_cmd.add_argument("--sources", required=True, help="sources directory, relative to the workspace or the working copy (e.g. working/data/scripts)")
@@ -2237,6 +2240,28 @@ def main(argv: list[str] | None = None) -> int:
                     leads = hint.get("same_signature_elsewhere") or hint.get("same_name_in_class") or hint.get("same_name_elsewhere") or []
                     print(f"  API CHANGE {Path(str(error['file'])).name}:{error['line']}: {hint.get('removed') or hint.get('removed_class')} removed"
                           + (f"; candidates: {', '.join(leads)}" if leads else "; no same-named candidate"))
+        return 0 if result["status"] == "PASS" else 1
+    if args.command == "revenantlib-check":
+        from .revenantlib_contract import RevenantLibCheckError, check_revenantlib
+        import zipfile
+        try:
+            result = check_revenantlib(args.path)
+        except (RevenantLibCheckError, OSError, zipfile.BadZipFile) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"{result['status']}: {result['jar']}")
+            for entry in result["contract"]:
+                print(f"  {entry['status']} {entry['call']}" + (f" -- {entry['detail']}" if entry.get("detail") else ""))
+            stale = result["jar_vs_source"]
+            if not stale["checked"]:
+                print("  jar vs source: not checked (no src/ beside the jar)")
+            for name in stale["sources_without_class"]:
+                print(f"  FAIL source without a compiled class in the jar: {name}.java")
+            for name in stale["classes_without_source"]:
+                print(f"  FAIL class in the jar without source: {name}")
         return 0 if result["status"] == "PASS" else 1
     if args.command == "api-diff":
         import zipfile

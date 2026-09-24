@@ -8,8 +8,9 @@ from pathlib import Path
 from unittest import mock
 
 from bridgeforge.probe_mod_build import RELEASE_RELATIVE
-from tests.support import link_dir
+from tests.support import link_dir, resolved_temp_dir
 from bridgeforge.rig_doctor import (
+    _check_revenantlib_contract,
     _check_path_locks,
     default_working_copies,
     rig_doctor,
@@ -530,6 +531,47 @@ class DefaultWorkingCopiesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             found = default_working_copies(Path(directory))
             self.assertEqual(found, {})
+
+
+class RevenantLibContractCheckTests(unittest.TestCase):
+    def _rig_with_revenantlib(self, root: Path, jar_bytes: bytes) -> Path:
+        mod = root / "rig" / "mods" / "RevenantLib"
+        (mod / "jars").mkdir(parents=True)
+        (mod / "mod_info.json").write_text('{"id": "revenantlib", "jars": ["jars/RevenantLib.jar"]}', encoding="utf-8")
+        (mod / "jars" / "RevenantLib.jar").write_bytes(jar_bytes)
+        return root / "rig"
+
+    def test_pass_when_not_installed(self):
+        with resolved_temp_dir() as root:
+            (root / "rig" / "mods").mkdir(parents=True)
+            result = _check_revenantlib_contract(root / "rig")
+        self.assertEqual(result["status"], "PASS")
+        self.assertIn("not installed", result["detail"])
+
+    def test_fail_names_each_broken_call_and_stale_source(self):
+        report = {"contract": [
+            {"call": "bf.legacyfleets.LegacyFleets.createFleet(String, String)", "status": "PASS"},
+            {"call": "bf.legacyworld.LegacyWorld.addPlanet(...)", "status": "FAIL", "detail": "method missing"}],
+            "jar_vs_source": {"checked": True, "sources_without_class": ["bf/legacyworld/NewHelper"], "classes_without_source": []}}
+        with resolved_temp_dir() as root:
+            rig = self._rig_with_revenantlib(root, b"PK")
+            with mock.patch("bridgeforge.revenantlib_contract.check_revenantlib", return_value=report):
+                result = _check_revenantlib_contract(rig)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertIn("bf.legacyworld.LegacyWorld.addPlanet(...): method missing", result["detail"])
+        self.assertIn("bf/legacyworld/NewHelper.java has no compiled class", result["detail"])
+        self.assertNotIn("createFleet", result["detail"])
+
+    def test_pass_and_unreadable_jar(self):
+        ok = {"contract": [{"call": "x", "status": "PASS"}] * 3,
+              "jar_vs_source": {"checked": False, "sources_without_class": [], "classes_without_source": []}}
+        with resolved_temp_dir() as root:
+            rig = self._rig_with_revenantlib(root, b"not a zip")
+            with mock.patch("bridgeforge.revenantlib_contract.check_revenantlib", return_value=ok):
+                self.assertEqual(_check_revenantlib_contract(rig)["status"], "PASS")
+            broken = _check_revenantlib_contract(rig)
+        self.assertEqual(broken["status"], "FAIL")
+        self.assertIn("RevenantLib", broken["detail"])
 
 
 if __name__ == "__main__":

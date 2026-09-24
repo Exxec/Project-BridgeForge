@@ -783,6 +783,18 @@ Progression, each stage feeding the next:
     naming neither method nor class (verified with javac 21). Leads only, never a rewrite. Next: run
     it on the 0.9a reference rig's jar vs RC8 and keep the catalogue under `In operation/`. Tests:
     `tests/test_api_diff.py` (old/new API jars compiled by real javac; real javac errors annotated).
+30. **Pin the RevenantLib methods the fixers call.** `removed-api-call` rewrites 0.6 calls into
+    `bf.legacyfleets.LegacyFleets.createFleet` and `bf.legacyworld.LegacyWorld.addPlanet`/
+    `addOrbitalStation`. A RevenantLib build that renamed or re-signatured one would leave every
+    rewritten mod compiling in BridgeForge's tests and failing in the game.
+    **Done 2026-09-24.** `bridgeforge/revenantlib_contract.py` pins the three methods' descriptors (read
+    from RevenantLib 1.2.0+bf.1's jar) and `revenantlib-check PATH` checks a jar, mod folder or repo
+    root against them (present, `public static`, exact descriptor) and, where `src/` exists, that every
+    source file has a top-level class in the jar and vice versa. `rig-doctor` runs it as
+    `revenantlib_contract` on RC8 rigs where RevenantLib is installed. Checked against the real
+    `Exxec/RevenantLib` 1.2.0+bf.1: PASS, 11 classes, no drift. Tests: `tests/test_revenantlib_contract.py`
+    (stand-in builds compiled by real javac; the fixer's rewritten calls have the contract's arity),
+    `tests/test_rig_doctor.py` (`RevenantLibContractCheckTests`).
 
 ## Post-1.0 research and gated automation
 

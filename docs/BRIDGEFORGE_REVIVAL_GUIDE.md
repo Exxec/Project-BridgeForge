@@ -37,6 +37,7 @@ Checks, each with its fix command:
 - every enabled mod resolves, with its dependencies and a matching base `gameVersion`
 - every known working copy matches its rig copy (`--working ID=PATH` adds more)
 - your real install's saves haven't changed since the recorded baseline
+- if RevenantLib is installed, it still provides every `bf.*` method `fix --finding removed-api-call` rewrites calls to (`revenantlib-check` runs the same check on any RevenantLib folder or jar, and also catches a jar missing a class for one of its source files)
 
 Exit code 1 means a FAIL: fix it before testing.
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from pathlib import Path
 
 from .boot_test import _is_link, _running_java_under
@@ -218,6 +219,27 @@ def _check_enabled_mods_resolve(runtime_dir: Path, target_base_game_version: str
     return _check("enabled_mods_resolve", status, " | ".join(parts))
 
 
+def _check_revenantlib_contract(runtime_dir: Path) -> dict[str, object]:
+    """The rig's RevenantLib must still provide every bf.* method the removed-api-call fixer emits."""
+    from .revenantlib_contract import RevenantLibCheckError, check_revenantlib
+
+    folder = _mods_by_id(runtime_dir / "mods").get("revenantlib")
+    if folder is None:
+        return _check("revenantlib_contract", "PASS", "RevenantLib is not installed in this rig; nothing to check.")
+    try:
+        result = check_revenantlib(folder)
+    except (RevenantLibCheckError, OSError, zipfile.BadZipFile) as exc:
+        return _check("revenantlib_contract", "FAIL", f"{folder}: {exc}")
+    problems = [f"{entry['call']}: {entry['detail']}" for entry in result["contract"] if entry["status"] != "PASS"]
+    stale = result["jar_vs_source"]
+    problems += [f"{name}.java has no compiled class in the jar" for name in stale["sources_without_class"]]
+    problems += [f"{name} in the jar has no source" for name in stale["classes_without_source"]]
+    if problems:
+        return _check("revenantlib_contract", "FAIL", f"{folder}: " + "; ".join(problems)
+                      + " -- mods rewritten by `fix --finding removed-api-call` would fail to load; rebuild or reinstall RevenantLib.")
+    return _check("revenantlib_contract", "PASS", f"{folder}: all {len(result['contract'])} bf.* methods the fixers call are present.")
+
+
 def _check_working_copy_drift(runtime_dir: Path, working_copies: dict[str, Path]) -> dict[str, object]:
     if not working_copies:
         return _check("working_copy_drift", "SKIPPED", "No working_copies provided.")
@@ -369,6 +391,7 @@ def rig_doctor(
             _check_path_locks(runtime_dir),
             _check_probe_installed(runtime_dir, repo_root),
             _check_enabled_mods_resolve(runtime_dir),
+            _check_revenantlib_contract(runtime_dir),
             _check_working_copy_drift(runtime_dir, working_copies or {}),
             _check_real_install_saves_untouched(repo_root, real_install, saves_baseline, write_saves_baseline),
         ]
