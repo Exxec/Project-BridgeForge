@@ -1512,6 +1512,9 @@ the exact edit list for stripping unresolved content (content-reference-unresolv
 | `mod` | - | mod working copy |
 | `--vanilla-core` VANILLA_CORE | required | RC8 starsector-core (read-only) |
 | `--id` ONLY | repeatable | limit to one id, as kind:id (e.g. weapon:vayra_gun); repeatable |
+| `--expected` EXPECTED | - | also add PROPOSED expected changes (static layer) for the files the plan deletes to this expected-changes.json |
+| `--build` BUILD | - | build tag the strip lands in (required with --expected), e.g. r3 |
+| `--link` LINK | repeatable | risk=ID, hyp=ID or test=ID breadcrumb for the expected changes; at least one is required with --expected |
 | `--json` | - | - |
 
 ## api-diff

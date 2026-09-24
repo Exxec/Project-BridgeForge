@@ -748,6 +748,9 @@ def build_parser() -> argparse.ArgumentParser:
     strip_plan_cmd.add_argument("mod", type=Path, help="mod working copy")
     strip_plan_cmd.add_argument("--vanilla-core", type=Path, required=True, help="RC8 starsector-core (read-only)")
     strip_plan_cmd.add_argument("--id", dest="only", action="append", help="limit to one id, as kind:id (e.g. weapon:vayra_gun); repeatable")
+    strip_plan_cmd.add_argument("--expected", type=Path, help="also add PROPOSED expected changes (static layer) for the files the plan deletes to this expected-changes.json")
+    strip_plan_cmd.add_argument("--build", help="build tag the strip lands in (required with --expected), e.g. r3")
+    strip_plan_cmd.add_argument("--link", action="append", default=[], help="risk=ID, hyp=ID or test=ID breadcrumb for the expected changes; at least one is required with --expected")
     strip_plan_cmd.add_argument("--json", action="store_true")
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
@@ -2468,6 +2471,17 @@ def main(argv: list[str] | None = None) -> int:
         from .strip_plan import StripPlanError, strip_plan
         try:
             result = strip_plan(args.mod, args.vanilla_core, args.only)
+            if args.expected:
+                from .strip_plan import propose_expected_changes
+                if not args.build:
+                    raise StripPlanError("--expected needs --build")
+                links: dict[str, list[str]] = {}
+                for item in args.link:
+                    kind, separator, linked = item.partition("=")
+                    if not separator or kind not in {"risk", "hyp", "test", "bug_class"} or not linked:
+                        raise StripPlanError(f"--link expects risk|hyp|test|bug_class=ID, got {item!r}")
+                    links.setdefault(kind, []).append(linked)
+                result["expected_changes_added"] = propose_expected_changes(result, args.expected, build=args.build, links=links)
         except (StripPlanError, ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -2484,6 +2498,8 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"    vanilla {substitutes['slot']} options: {', '.join(substitutes['candidates'])}" + (f" (+{more} more)" if more > 0 else ""))
                 elif substitutes:
                     print(f"    {substitutes.get('note') or 'no vanilla weapon fits ' + str(substitutes['slot'])}")
+            if result.get("expected_changes_added") is not None:
+                print(f"PROPOSED expected changes added to {args.expected}: {', '.join(result['expected_changes_added']) or 'none (no file deletions)'}")
         return 0
     if args.command == "api-diff":
         import zipfile

@@ -442,8 +442,13 @@ Progression, each stage feeding the next:
    `unresolved_content_references`, lists each place it sits: hull-mod and wing lists, each variant weapon
    slot and built-in weapon (with vanilla weapons of the slot's type and size, mount overrides
    included, as substitutes), and `.faction` known-lists; a variant or skin on an unresolved hull is
-   listed for deletion. Edits nothing. Still open: the PROPOSED expected changes, and the vendoring
-   alternative. Tests: `tests/test_strip_plan.py`.
+   listed for deletion. Edits nothing. Tests: `tests/test_strip_plan.py`.
+   **Second slice done 2026-09-24: expected changes.** `strip-plan ... --expected FILE --build rN --link
+   risk=|hyp=|test=ID` adds a PROPOSED static-layer entry per file the plan deletes (`static.data`,
+   subject = the file's path, field `present`, `removed`), numbered after the file's existing
+   `EXP-<MOD>-nnn` ids; `expect check` accepts them and they match the delta `behavior-diff` produces for
+   the deleted file. An id removed inside a file changes nothing any baseline layer records, so it gets
+   no entry rather than a matcher that could never fire. Still open: the vendoring alternative.
 5. **Spawn-point fleet port kit.** RC8 keeps `BaseSpawnPoint` and `addSpawnPoint`, but not `SectorAPI.createFleet(faction, fleetType)`, which 0.6 spawners use to build fleets from old faction fleet definitions. The kit is:
    - a helper that builds the equivalent fleet with FleetFactoryV3, following Zorg18 r1's spawner;
    - a scanner check for the removed call.

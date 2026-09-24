@@ -7,11 +7,15 @@ built-in weapon, a faction known-list) and, for a weapon slot, the vanilla weapo
 slot type and size. A variant or skin whose own hull is unresolved cannot be stripped piecemeal, so
 it is listed for deletion instead.
 
-Nothing is edited: this is the reviewable plan, and choosing a substitute is a design decision.
-Not yet here (item 4's later slices): generating the matching PROPOSED expected changes, and vendoring.
+Nothing in the mod is edited: this is the reviewable plan, and choosing a substitute is a design decision.
+`propose_expected_changes` adds PROPOSED entries for the files the plan deletes (static layer,
+`static.data` removed), so approval goes through `expect`. Removing an id inside a file is not observed
+by any baseline layer yet, so those edits get no entry rather than a matcher that could never fire.
+Not yet here: the vendoring alternative (item 4).
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from .models import TargetProfile
@@ -124,3 +128,39 @@ def strip_plan(mod_dir: Path, vanilla_core: Path, only: list[str] | None = None)
         "planned": sorted(by_id), "edits": edits, "edit_count_by_id": by_id,
         "note": "A plan only: nothing was edited. Substitutes fit the slot's type and size; picking one (or leaving the slot empty) is a design decision.",
     }
+
+
+def propose_expected_changes(plan: dict, expected_path: Path, *, build: str, links: dict[str, list[str]], mod_id: str | None = None) -> list[str]:
+    """Add a PROPOSED static-layer expected change for each file the plan deletes; return the new ids."""
+    from .behavior_discovery import add_expected_change
+    from .scanner import _load_lenient_json_file
+
+    if not any(links.get(kind) for kind in ("risk", "hyp", "test")):
+        raise StripPlanError("expected changes need at least one --link risk=|hyp=|test= id (expect check requires it)")
+    if mod_id is None:
+        info = _load_lenient_json_file(Path(plan["mod"]) / "mod_info.json")
+        mod_id = info.get("id") if isinstance(info, dict) else None
+    if not mod_id:
+        raise StripPlanError("the mod's mod_info.json has no id")
+    existing = _load_lenient_json_file(expected_path) if Path(expected_path).is_file() else None
+    ids = [str(item.get("id")) for item in (existing or {}).get("changes", []) if isinstance(item, dict)] if isinstance(existing, dict) else []
+    prefixes = sorted({m.group(1) for m in (re.fullmatch(r"EXP-([A-Za-z0-9]+)-(\d+)", i) for i in ids) if m})
+    prefix = prefixes[0] if prefixes else (re.sub(r"[^A-Za-z0-9]", "", mod_id).upper()[:8] or "MOD")
+    number = max([int(m.group(1)) for m in (re.fullmatch(rf"EXP-{re.escape(prefix)}-(\d+)", i) for i in ids) if m] + [0])
+    added = []
+    deletions = {}
+    for edit in plan["edits"]:
+        if edit["action"].startswith("delete this"):
+            deletions.setdefault(edit["file"], edit)
+    for relative, edit in sorted(deletions.items()):
+        number += 1
+        change_id = f"EXP-{prefix}-{number:03d}"
+        add_expected_change(
+            Path(expected_path), mod_id=mod_id, change_id=change_id, build=build, layer="static",
+            summary=f"Remove {relative}",
+            why=f"Its {edit['kind']} '{edit['id']}' is defined by no installed mod or vanilla (content-reference-unresolved), so nothing in the file can load; stripped per strip-plan.",
+            match={"observation": "static.data", "subject": relative, "field": "present", "change": "removed"},
+            links={kind: list(values) for kind, values in links.items() if values}, proposed_by="strip-plan",
+        )
+        added.append(change_id)
+    return added
