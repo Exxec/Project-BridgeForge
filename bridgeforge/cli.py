@@ -696,7 +696,16 @@ def build_parser() -> argparse.ArgumentParser:
     compile_check_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, put on the compile classpath")
     compile_check_cmd.add_argument("--jdk", type=Path, help="JDK home (default: this repo's rig JDK, else JAVA_HOME, else PATH)")
     compile_check_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search for declared dependencies; repeatable (default: <repo>/In operation and its rig's mods)")
+    compile_check_cmd.add_argument("--api-diff", type=Path, help="catalogue written by `api-diff`: attach removed/moved-API leads to matching javac errors")
     compile_check_cmd.add_argument("--json", action="store_true")
+    api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
+    api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
+    api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
+    api_diff_cmd.add_argument("--output", type=Path, help="write the JSON catalogue here (for compile-check --api-diff)")
+    api_diff_cmd.add_argument("--json", action="store_true")
+    revenantlib_cmd = subcommands.add_parser("revenantlib-check", help="check a RevenantLib jar provides every bf.* method BridgeForge's fixers rewrite calls to, and (given the mod folder) that no source file lacks a compiled class")
+    revenantlib_cmd.add_argument("path", type=Path, help="RevenantLib.jar, the RevenantLib mod folder, or a repo root holding working/")
+    revenantlib_cmd.add_argument("--json", action="store_true")
     rebuild_jar_cmd = subcommands.add_parser("rebuild-jar", help="rebuild a mod's jar from its sources and compare it with the original: class/method/field added or removed, forbidden sandbox references")
     rebuild_jar_cmd.add_argument("mod", type=Path, help="mod workspace (holding working/) or the working copy itself")
     rebuild_jar_cmd.add_argument("--sources", required=True, help="sources directory, relative to the workspace or the working copy (e.g. working/data/scripts)")
@@ -2207,7 +2216,10 @@ def main(argv: list[str] | None = None) -> int:
         from .compile_check import compile_loose_scripts
         try:
             result = compile_loose_scripts(args.mod, vanilla_core=args.vanilla_core, jdk=args.jdk, provider_roots=args.providers)
-        except ValueError as exc:
+            if args.api_diff:
+                from .api_diff import annotate_errors
+                result["api_diff_annotated"] = annotate_errors(result.get("errors", []), json.loads(args.api_diff.read_text(encoding="utf-8")))
+        except (ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         if args.json:
@@ -2223,7 +2235,59 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  dependency jars not found: {', '.join(missing)}")
             for warning in result.get("janino_gap_warnings", [])[:10]:
                 print(f"  WARNING javac-vs-Janino gap in {warning['file']}: {', '.join(warning['java8plus_syntax'])}")
+            for error in [e for e in result.get("errors", []) if e.get("api_changes")][:20]:
+                for hint in error["api_changes"]:
+                    leads = hint.get("same_signature_elsewhere") or hint.get("same_name_in_class") or hint.get("same_name_elsewhere") or []
+                    print(f"  API CHANGE {Path(str(error['file'])).name}:{error['line']}: {hint.get('removed') or hint.get('removed_class')} removed"
+                          + (f"; candidates: {', '.join(leads)}" if leads else "; no same-named candidate"))
         return 0 if result["status"] == "PASS" else 1
+    if args.command == "revenantlib-check":
+        from .revenantlib_contract import RevenantLibCheckError, check_revenantlib
+        import zipfile
+        try:
+            result = check_revenantlib(args.path)
+        except (RevenantLibCheckError, OSError, zipfile.BadZipFile) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"{result['status']}: {result['jar']}")
+            for entry in result["contract"]:
+                print(f"  {entry['status']} {entry['call']}" + (f" -- {entry['detail']}" if entry.get("detail") else ""))
+            stale = result["jar_vs_source"]
+            if not stale["checked"]:
+                print("  jar vs source: not checked (no src/ beside the jar)")
+            for name in stale["sources_without_class"]:
+                print(f"  FAIL source without a compiled class in the jar: {name}.java")
+            for name in stale["classes_without_source"]:
+                print(f"  FAIL class in the jar without source: {name}")
+        return 0 if result["status"] == "PASS" else 1
+    if args.command == "api-diff":
+        import zipfile
+        from .api_diff import ApiDiffError, diff_api_jars
+        try:
+            result = diff_api_jars(args.old, args.new)
+            if args.output:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except (ApiDiffError, OSError, zipfile.BadZipFile) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            summary = result["summary"]
+            print(f"API_DIFF: {result['old']['classes']} -> {result['new']['classes']} classes; "
+                  f"{summary['classes_removed']} removed, {summary['classes_added']} added, {summary['classes_changed']} changed; "
+                  f"{summary['methods_removed']} methods and {summary['fields_removed']} fields removed")
+            for dotted, entry in list(result["changed_classes"].items())[:40]:
+                for method in entry["methods_removed"]:
+                    leads = method["same_signature_elsewhere"] or method["same_name_in_class"]
+                    print(f"  - {dotted.rsplit('.', 1)[-1]}.{method['signature'].split(' ', 1)[-1]}" + (f"  -> {', '.join(leads)}" if leads else ""))
+            if args.output:
+                print(f"Written: {args.output}")
+        return 0
     if args.command == "rebuild-jar":
         from .rebuild_jar import RebuildJarError, rebuild_jar
         try:

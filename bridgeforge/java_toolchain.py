@@ -196,8 +196,13 @@ _DETAIL_LINE = re.compile(r"^\s+(symbol|location):\s*(.*)$")
 # to recompile them, reporting errors for libraries the mod under test never declared. Every
 # caller passes its sources explicitly (compile_check and rebuild_jar both rglob the whole
 # tree), so nothing relies on implicit source lookup.
+# `-Xdiags:verbose` (2026-09-24): javac's default "simplified" diagnostics turn a call to a method
+# whose only overload changed parameter types into a bare "incompatible types" naming neither method
+# nor class; verbose mode reports "method getDays in interface SectorAPI cannot be applied", which
+# `api_diff.annotate_errors` can match against a removed signature.
 DEFAULT_JAVAC_ARGS = (
     "--release", "17", "-proc:none", "-nowarn", "-encoding", "UTF-8", "-Xmaxerrs", "10000", "-sourcepath", "",
+    "-Xdiags:verbose",
 )
 
 
@@ -259,7 +264,7 @@ class JavacRun:
 def run_javac(javac: Path, classpath: str, sources: list[Path], out_dir: Path, extra_args: list[str] | None = None) -> JavacRun:
     """Compile `sources` with javac, using an @argument file so Windows path spaces/length never bite.
 
-    Applies DEFAULT_JAVAC_ARGS (`--release 17 -proc:none -nowarn -encoding UTF-8 -Xmaxerrs 10000`);
+    Applies DEFAULT_JAVAC_ARGS (`--release 17 -proc:none -nowarn -encoding UTF-8 -Xmaxerrs 10000 -sourcepath "" -Xdiags:verbose`);
     `extra_args`, if given, are appended after them.
     """
     out_dir = Path(out_dir)

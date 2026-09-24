@@ -65,8 +65,13 @@ def _resolve_workspace(mod: Path) -> tuple[Path, Path]:
     raise RebuildJarError(f"{mod} is neither a mod workspace (holding working/) nor a working copy itself.")
 
 
+def _cli_path(arg: str) -> Path:
+    # The documented workflow types Windows paths; accept backslash separators on POSIX too.
+    return Path(arg.replace("\\", "/"))
+
+
 def _resolve_sources_dir(workspace: Path, working: Path, sources_arg: str) -> Path:
-    given = Path(sources_arg)
+    given = _cli_path(sources_arg)
     if given.is_absolute():
         if given.is_dir():
             return given
@@ -87,7 +92,7 @@ def _resolve_original_jar(workspace: Path, working: Path, jar_arg: str) -> tuple
     no original/ snapshot. Returns (resolved path, posix-style path relative to whichever base
     matched) -- the second value is reused to compute the working-copy install destination.
     """
-    given = Path(jar_arg)
+    given = _cli_path(jar_arg)
     if given.is_absolute():
         if given.is_file():
             return given, given.name

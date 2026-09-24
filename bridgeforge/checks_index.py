@@ -293,7 +293,9 @@ def _argument_rows(parser: argparse.ArgumentParser) -> list[str]:
         if action.choices and not isinstance(action.choices, dict):
             notes.append("one of " + ", ".join(str(choice) for choice in action.choices))
         if action.default not in (None, False, argparse.SUPPRESS, []) and action.option_strings:
-            notes.append(f"default {action.default}")
+            # A Path.cwd() default is resolved when the parser is built; name it, not this machine's path.
+            default = "current directory" if action.default == Path.cwd() else action.default
+            notes.append(f"default {default}")
         help_text = " ".join((action.help or "").split())
         rows.append(f"| {_cell(name)} | {_cell('; '.join(notes)) or '-'} | {_cell(help_text) or '-'} |")
     return rows

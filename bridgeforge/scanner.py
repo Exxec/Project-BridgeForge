@@ -1937,7 +1937,7 @@ def _scan_wing_roles(root: Path, result: ScanResult) -> None:
     try:
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
             rows = list(csv.DictReader(handle))
-    except (OSError, UnicodeDecodeError, csv.Error) as exc:
+    except (OSError, UnicodeDecodeError, csv.Error):
         return
     # RC8's com.fs.starfarer.api.loading.WingRole enum (javap, 2026-09-14): BOMBER, FIGHTER, INTERCEPTOR,
     # ASSAULT, SUPPORT. ASSAULT was wrongly treated as removed; Vacuum's ASSAULT wings load live (VAC-R003).
@@ -5446,7 +5446,11 @@ def _scan_compile_check(root: Path, result: ScanResult, vanilla_core: Path | Non
         try:
             rel = _relative(root, Path(file_path))
         except ValueError:
-            rel = file_path
+            # javac echoes paths as given; an alias of root (Windows 8.3 name, symlink) only matches once resolved.
+            try:
+                rel = _relative(root, Path(file_path).resolve())
+            except ValueError:
+                rel = file_path
         evidence = [_format_compile_error(error) for error in errors[:5]]
         if len(errors) > 5:
             evidence.append(f"... {len(errors) - 5} more")
