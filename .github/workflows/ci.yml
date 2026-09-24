@@ -33,8 +33,6 @@ jobs:
   coverage:
     name: Coverage (ubuntu / Python 3.12)
     runs-on: ubuntu-latest
-    env:
-      COVERAGE_FILE: ${{ runner.temp }}/.coverage
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -49,8 +47,12 @@ jobs:
       - name: Install Bridgeforge and coverage
         run: python -m pip install . coverage
       - name: Run unit tests under coverage
+        env:
+          COVERAGE_FILE: ${{ runner.temp }}/.coverage
         run: python -m bridgeforge.test_guard -- python -m coverage run -m unittest discover -s tests
       - name: Report (fails below the pyproject floor)
+        env:
+          COVERAGE_FILE: ${{ runner.temp }}/.coverage
         run: |
           python -m coverage report --sort=cover --format=markdown >> "$GITHUB_STEP_SUMMARY"
           python -m coverage report --format=total
