@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **New scanner checks `preset-entry-drops-vanilla-fields` (MANUAL) and `preset-entry-overrides-vanilla` (REVIEW) (ROADMAP P14 item 15).** A mod's `engine_styles`/`hull_styles`/`custom_entities`/`sounds`/`planets.json` entry with a vanilla id replaces vanilla's whole entry game-wide; the scan now names every vanilla field such an entry drops or changes (Zorg18's `contrailCampaignColor`).
 - **New `verify-shadow` command (ROADMAP P14 item 26).** Answers "does this jar set really compile the class this loose script defines?" by parsing class files, never by path existence (E12), naming the supplying jar and listing any jar it could not read.
 - **New `content-diff` command and `scan --removed-content` (ROADMAP P14 item 8).** Catalogues the content ids an older install defined that RC8 dropped, with same-named RC8 candidates; the scan then reports unresolved references vanilla removed as `content-reference-removed-in-vanilla` instead of a missing dependency.
 - **New `corpus-index build|search` (ROADMAP P14 item 18).** Index a large mod archive once (inside zips too) and search file contents or paths in milliseconds; each result states what the index could not read, so an empty result is real evidence of absence.

@@ -3018,6 +3018,69 @@ def _scan_mod_info_game_version(result: ScanResult) -> None:
 VANILLA_SHADOW_GROUP_THRESHOLD = 5
 
 
+# Files whose entries the game merges by whole-entry replace, not per field (ROADMAP P14 item 15;
+# Starsector wiki: "any mod added entries with keys ... the same as core game entries will see the mod
+# entries replace the core game entries"). planets.json and sounds.json are read from data/config by
+# the checks above; the other three are the files item 15 names (Zorg18's was engine_styles.json).
+PRESET_MERGE_FILES = ("engine_styles.json", "hull_styles.json", "custom_entities.json", "sounds.json", "planets.json")
+
+
+def _scan_preset_entry_overrides(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """A mod entry keyed like a vanilla entry replaces it for the whole game, every mod included.
+
+    Zorg18 redefined vanilla's LOW_TECH/MIDLINE/HIGH_TECH engine styles with an old copy missing
+    `contrailCampaignColor` (2026-09-20), stripping it from every ship of those styles while enabled.
+    Missing fields are MANUAL; only different values are REVIEW (the override may be intended, but it
+    still applies game-wide). Identical entries and mod-only ids report nothing.
+    """
+    if vanilla_core is None:
+        return
+    from .data_diff import _diff  # data_diff imports this module
+
+    for name in PRESET_MERGE_FILES:
+        mod_path, vanilla_path = root / "data" / "config" / name, vanilla_core / "data" / "config" / name
+        if not (mod_path.is_file() and vanilla_path.is_file()):
+            continue
+        mod_data, vanilla_data = _load_lenient_json_file(mod_path), _load_lenient_json_file(vanilla_path)
+        if not (isinstance(mod_data, dict) and isinstance(vanilla_data, dict)):
+            continue
+        dropped: list[str] = []
+        changed: list[str] = []
+        for key in sorted(set(mod_data) & set(vanilla_data)):
+            changes: list[dict] = []
+            _diff(vanilla_data[key], mod_data[key], "", changes)
+            lost = [c["path"] or "<whole entry>" for c in changes if c["change"] == "removed"]
+            differ = [c["path"] or "<value>" for c in changes if c["change"] in ("changed", "reordered")]
+            if lost:
+                dropped.append(f"{key}: loses {', '.join(lost[:10])}" + (f" (+{len(lost) - 10} more)" if len(lost) > 10 else "")
+                               + (f"; also changes {', '.join(differ[:5])}" if differ else ""))
+            elif differ:
+                changed.append(f"{key}: changes {', '.join(differ[:10])}" + (f" (+{len(differ) - 10} more)" if len(differ) > 10 else ""))
+        relative = _relative(root, mod_path)
+        if dropped:
+            result.add(
+                id="preset-entry-drops-vanilla-fields",
+                category="assets",
+                severity="high",
+                classification="MANUAL",
+                confidence="DETERMINISTIC",
+                explanation=f"{name} entries replace vanilla's entry of the same id whole, for the entire game (every other mod too). These entries redefine vanilla ids without fields vanilla's current copy has, so those fields are lost game-wide while this mod is enabled; usually an old copy used as a template. Remove the entries or bring them up to date with vanilla.",
+                file=relative,
+                evidence=dropped[:25] + ([f"... {len(dropped) - 25} more"] if len(dropped) > 25 else []),
+            )
+        if changed:
+            result.add(
+                id="preset-entry-overrides-vanilla",
+                category="assets",
+                severity="medium",
+                classification="REVIEW",
+                confidence="DETERMINISTIC",
+                explanation=f"{name} entries replace vanilla's entry of the same id whole, for the entire game. These redefine vanilla ids with different values; confirm the mod means to change them for every ship/entity in the game, not only its own.",
+                file=relative,
+                evidence=changed[:25] + ([f"... {len(changed) - 25} more"] if len(changed) > 25 else []),
+            )
+
+
 def _scan_vanilla_path_shadowing(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
     if vanilla_core is None:
         return
@@ -5512,6 +5575,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_black_hole_flag(root, result)
     _scan_mod_info_game_version(result)
     _scan_vanilla_path_shadowing(root, result, vanilla_root)
+    _scan_preset_entry_overrides(root, result, vanilla_root)
     _drop_vanilla_registered_weapon_specs(result, vanilla_root)
     _scan_script_sandbox_forbidden_api(root, result)
     _scan_bundled_library_classes(root, result)

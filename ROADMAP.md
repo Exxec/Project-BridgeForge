@@ -556,6 +556,12 @@ Progression, each stage feeding the next:
     field and flag REVIEW/MANUAL (severity depends on whether fields are missing vs. actively
     different) naming exactly which fields would be lost mod-wide. A mod's own file that only adds
     new ids (like `ZORG_TECH` alongside the trimmed file) triggers nothing.
+    **Done 2026-09-24.** `_scan_preset_entry_overrides` (needs `--vanilla-core`): for `engine_styles.json`,
+    `hull_styles.json`, `custom_entities.json`, `sounds.json` and `planets.json` under `data/config/`, every
+    top-level id the mod shares with vanilla's copy is compared by value (item 19's comparison).
+    Fields vanilla has and the mod's entry lacks: `preset-entry-drops-vanilla-fields` (MANUAL, names each
+    lost field); only different values: `preset-entry-overrides-vanilla` (REVIEW). Identical entries and
+    mod-only ids report nothing. Bug class ZORG-PRESET-01. Tests: `tests/test_preset_entry_overrides.py`.
 16. **New fixer: `undeclared-library-dependency` (declare the missing dependency automatically).**
     The scanner already detects a mod using a known library's package (LazyLib, MagicLib,
     GraphicsLib) without declaring it (`source-library-dependency-undeclared` /
