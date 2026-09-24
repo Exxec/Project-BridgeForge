@@ -5,6 +5,9 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
 Project BridgeForge.code-workspace
 docs/PERFORMANCE_WORKBENCH_DESIGN.md
 

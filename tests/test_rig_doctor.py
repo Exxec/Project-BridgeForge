@@ -7,12 +7,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-try:
-    import _winapi
-except ImportError:  # pragma: no cover - non-Windows
-    _winapi = None
-
 from bridgeforge.probe_mod_build import RELEASE_RELATIVE
+from tests.support import link_dir
 from bridgeforge.rig_doctor import (
     _check_path_locks,
     default_working_copies,
@@ -37,12 +33,10 @@ def _make_mod(mods_dir: Path, folder_name: str, mod_id: str, **extra) -> Path:
 
 
 def _junction(target: Path, link: Path) -> bool:
-    """Create an NTFS junction; True on success, False if this environment can't do it."""
-    if _winapi is None:
-        return False
+    """Link like a rig's starsector-core; True on success, False if this environment can't."""
     link.parent.mkdir(parents=True, exist_ok=True)
     try:
-        _winapi.CreateJunction(str(target), str(link))
+        link_dir(target, link)
     except OSError:
         return False
     return True

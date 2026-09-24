@@ -5,10 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-try:
-    import _winapi
-except ImportError:  # pragma: no cover - non-Windows
-    _winapi = None
+from tests.support import link_dir
+
 
 from bridgeforge.cli import main
 from bridgeforge.compat_sets import (
@@ -63,14 +61,12 @@ def _make_source_mod(root: Path, mod_id: str, folder_name: str, game_version: st
 
 
 def _make_rig(root: Path) -> Path | None:
-    if _winapi is None:
-        return None
     core_real = root / "core_real"
     core_real.mkdir()
     rig = root / "rig"
     (rig / "mods").mkdir(parents=True)
     try:
-        _winapi.CreateJunction(str(core_real), str(rig / "starsector-core"))
+        link_dir(core_real, rig / "starsector-core")
     except OSError:
         return None
     return rig

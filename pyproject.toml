@@ -26,3 +26,12 @@ extend-exclude = ["probe-mod"]
 # Pyflakes (unused/undefined names) plus syntax errors.
 # One-line compound statements are house style, so the E7xx family stays off.
 select = ["E9", "F"]
+
+[tool.coverage.run]
+branch = true
+source = ["bridgeforge"]
+
+[tool.coverage.report]
+# A ratchet, not a target: raise it when coverage rises, never lower it to land a change.
+fail_under = 78
+skip_empty = true

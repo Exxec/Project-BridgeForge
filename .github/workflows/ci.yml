@@ -30,6 +30,31 @@ jobs:
       - name: Check uv.lock matches pyproject.toml
         run: uv lock --check
 
+  coverage:
+    name: Coverage (ubuntu / Python 3.12)
+    runs-on: ubuntu-latest
+    env:
+      COVERAGE_FILE: ${{ runner.temp }}/.coverage
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install Bridgeforge and coverage
+        run: python -m pip install . coverage
+      - name: Run unit tests under coverage
+        run: python -m bridgeforge.test_guard -- python -m coverage run -m unittest discover -s tests
+      - name: Report (fails below the pyproject floor)
+        run: |
+          python -m coverage report --sort=cover --format=markdown >> "$GITHUB_STEP_SUMMARY"
+          python -m coverage report --format=total
+
   test:
     name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
@@ -37,7 +62,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
