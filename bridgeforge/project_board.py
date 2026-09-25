@@ -13,7 +13,7 @@ from .scanner import _load_lenient_json_file
 
 NON_RELEASE_FOLDERS = {"original", "working", "reports", "builds", "scratch", "workspace"}
 ROOT_FILES = {"README.md", "STATUS.md", "LIVE_TEST_INSTRUCTIONS.md", "OFFLINE_VALIDATION_GUIDE.md", "bf-test.ps1",
-              "STATUS.generated.md", "STATUS.generated.json"}
+              "STATUS.generated.md", "STATUS.generated.json", "DEPENDENCY_GRAPH.json", "DEPENDENCY_GRAPH.md"}
 
 
 def layout_findings(repo_root: Path, working_copies: dict[str, Path] | None = None) -> list[dict[str, str]]:
@@ -123,6 +123,19 @@ def _row(area: str, folder: Path, working: Path | None) -> dict[str, object]:
                                          for key in ("test_id", "status", "build")):
         warnings.append("last-test requires nonempty test_id/status/build; last test unknown")
         last_test = None
+    dependencies = None
+    dependency_path = evidence_path("dependencies.json")
+    dependency_document = _object(dependency_path, warnings)
+    if dependency_document is not None:
+        blockers = [item.get("mod_id") for item in dependency_document.get("provider_set") or []
+                    if isinstance(item, dict) and not item.get("targets_0.98a")]
+        dependencies = {"strategy": dependency_document.get("strategy"), "needs_revival_of": blockers,
+                        "unprovided": len(dependency_document.get("uncovered") or []),
+                        "recorded": str(dependency_document.get("generated_at") or "unknown")[:10]}
+        # Evidence, not a live answer: say so when the mod was rescanned after it was recorded.
+        scans = sorted((folder / "reports").glob("scan-*/bridgeforge.compat.json"), key=lambda path: path.stat().st_mtime)
+        if scans and dependency_path is not None and scans[-1].stat().st_mtime > dependency_path.stat().st_mtime:
+            warnings.append("rescanned since dependencies.json was recorded; rerun dependency-substitutes --write")
     name = metadata.get("name")
     version = metadata.get("version")
     tags = re.findall(r"\[BF r(\d+)\]", str(name)) + re.findall(r"\+bf\.(\d+)", str(version))
@@ -136,8 +149,9 @@ def _row(area: str, folder: Path, working: Path | None) -> dict[str, object]:
     return {"area": area, "folder": folder.name, "mod_id": metadata.get("id"),
             "working": str(working) if working is not None else None, "stage": stage,
             "declared_completion_status": declared_status, "build_tag": build_tag,
-            "last_test": last_test, "open_risks": open_risks, "warnings": warnings,
+            "last_test": last_test, "open_risks": open_risks, "dependencies": dependencies, "warnings": warnings,
             "evidence": {"report": str(report) if report is not None else None,
+                         "dependencies": str(dependency_path) if dependency_path is not None else None,
                          "risks": str(risk_path) if risk_path is not None else None,
                          "last_test": str(test_path) if test_path is not None else None}}
 
@@ -162,7 +176,17 @@ def project_board(repo_root: Path) -> dict[str, object]:
                         rows.append({**_row(area, folder, working), "release_folder": working.name})
                 else:
                     rows.append(_row(area, folder, None))
+    graph = None
+    graph_path = operation / "DEPENDENCY_GRAPH.json"
+    if graph_path.is_file() and not _is_link(graph_path):
+        document = _object(graph_path, [])
+        if document is not None and isinstance(document.get("revival_order"), list):
+            graph = {"generated_at": document.get("generated_at"), "queued_mods": document.get("queued_mods"),
+                     "revival_order": [{"name": entry.get("name"), "unblocks": entry.get("unblocks") or [],
+                                        "licence": (entry.get("licence") or {}).get("decision")}
+                                       for entry in document["revival_order"] if isinstance(entry, dict)]}
     return {"schema_version": 1, "mode": "PROJECT_BOARD", "repo_root": str(repo), "mods": rows,
+            "dependency_graph": graph,
             "layout_findings": layout_findings(repo),
             "note": "Declared evidence only, not release/live validation. Missing risks/test evidence is unknown."}
 
@@ -171,8 +195,8 @@ def render_board(board: dict[str, object]) -> str:
     def cell(value):
         return str(value if value is not None else "unknown").replace("|", "\\|").replace("\n", " ").replace("\r", " ")
     lines = ["# BridgeForge generated status board", "", str(board["note"]), "",
-             "| Area / mod | Stage | Build | Last declared test | Open risks |",
-             "|---|---|---|---|---|"]
+             "| Area / mod | Stage | Build | Last declared test | Open risks | Dependencies |",
+             "|---|---|---|---|---|---|"]
     warnings = []
     for row in board["mods"]:
         test = row["last_test"]
@@ -180,9 +204,22 @@ def render_board(board: dict[str, object]) -> str:
         label = row["area"] + " / " + row["folder"]
         if row.get("release_folder"):
             label += " / " + row["release_folder"]
-        lines.append("| " + " | ".join(cell(value) for value in (label, row["stage"], row["build_tag"], test_label, row["open_risks"])) + " |")
+        deps = row.get("dependencies")
+        deps_label = None
+        if deps:
+            deps_label = str(deps["strategy"]) + (f": revive {', '.join(map(str, deps['needs_revival_of']))}" if deps["needs_revival_of"] else "") \
+                + (f"; {deps['unprovided']} unprovided" if deps["unprovided"] else "") + f" (as of {deps['recorded']})"
+        lines.append("| " + " | ".join(cell(value) for value in (label, row["stage"], row["build_tag"], test_label, row["open_risks"], deps_label)) + " |")
         for warning in row["warnings"]:
             warnings.append(f"- {cell(label)}: {cell(warning)}")
+    graph = board.get("dependency_graph")
+    if graph:
+        lines.extend(["", f"## Revival order (dependency-graph, as of {cell(str(graph.get('generated_at'))[:10])})", ""])
+        lines.extend(f"{number}. {cell(entry['name'])}: unblocks {len(entry['unblocks'])} ({cell(', '.join(entry['unblocks']))})"
+                     + (f", licence {cell(entry['licence'])}" if entry.get("licence") else "")
+                     for number, entry in enumerate(graph["revival_order"], 1))
+        if not graph["revival_order"]:
+            lines.append("Nothing queued needs an old dependency revived.")
     if warnings:
         lines.extend(["", "## Evidence warnings", "", *warnings])
     lines.extend(["", "## Layout findings", ""])

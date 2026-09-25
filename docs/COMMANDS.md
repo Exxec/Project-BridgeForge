@@ -1378,6 +1378,7 @@ rank visible mods that could replace a missing or discontinued dependency (EXACT
 | `mod` | - | mod working copy |
 | `--providers` PROVIDERS | repeatable | mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods) |
 | `--vanilla-core` VANILLA_CORE | - | read-only starsector-core, so vanilla content isn't counted as missing |
+| `--write` | - | also record the result in <workspace>/reports/dependencies.json, which `board` shows |
 | `--provider-index` PROVIDER_INDEX | - | saved `provider-index build` output: also consider mods it lists that are not visible live |
 | `--json` | - | - |
 
@@ -1406,6 +1407,7 @@ across every queued workspace, which non-current mods need reviving and how many
 | `--providers` PROVIDERS | repeatable | as for dependency-substitutes; repeatable |
 | `--vanilla-core` VANILLA_CORE | - | - |
 | `--provider-index` PROVIDER_INDEX | - | - |
+| `--write` | - | write <queue>/DEPENDENCY_GRAPH.json and .md, and each mod's reports/dependencies.json, all of which `board` shows |
 | `--json` | - | - |
 
 ## preset-check

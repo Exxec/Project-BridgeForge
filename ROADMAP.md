@@ -435,7 +435,14 @@ Progression, each stage feeding the next:
    [--provider-index F]` runs `dependency-substitutes` on every `<queue>/*/working` workspace and ranks
    the non-current providers the plans use by how many queued mods each unblocks (ties: fewer MANUAL
    findings first), with each one's workspace state and licence decision, plus the mods that need ids
-   no visible or indexed mod provides. Still open: showing it in `board`. Tests: `ProviderIndexTests`.
+   no visible or indexed mod provides. Tests: `ProviderIndexTests`.
+   **Board view done 2026-09-25 (owner decision: recorded evidence, options A and C).** `dependency-graph
+   --write` records `In operation/DEPENDENCY_GRAPH.json`/`.md` and each workspace's
+   `reports/dependencies.json`; `dependency-substitutes --write` records one mod's. `board` stays
+   scan-free: a Dependencies column per mod (strategy, what to revive, unprovided count, date recorded)
+   and a "Revival order" section with the graph's date, a warning when a mod was rescanned after its
+   dependencies were recorded, and the two graph files are known queue-root files, not strays. Tests:
+   `tests/test_substitutes.py` (`DependencyEvidenceOnBoardTests`).
 4. **Strip and vendor plans.** For STRIP_FROM_MOD, generate the exact edit list: which variant, `.ship` and faction lines lose which ids, plus proposed vanilla substitutes of the same slot type and size. Also generate the matching PROPOSED expected changes, so approval goes through `expect` as usual. Where the licence allows, offer vendoring as an alternative: copy the one missing piece (for example Rebal's `shields_formshield` into Explorer Society) instead of reviving a heavy provider.
    **First slice done 2026-09-24: the edit list.** `strip-plan MOD --vanilla-core CORE [--id kind:id]`
    (`bridgeforge/strip_plan.py`) runs the normal scan and, for every id in its

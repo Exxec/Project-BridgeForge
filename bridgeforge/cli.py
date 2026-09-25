@@ -687,6 +687,7 @@ def build_parser() -> argparse.ArgumentParser:
     subs_cmd.add_argument("mod", type=Path, help="mod working copy")
     subs_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
     subs_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla content isn't counted as missing")
+    subs_cmd.add_argument("--write", action="store_true", help="also record the result in <workspace>/reports/dependencies.json, which `board` shows")
     subs_cmd.add_argument("--provider-index", type=Path, help="saved `provider-index build` output: also consider mods it lists that are not visible live")
     provider_index_cmd = subcommands.add_parser("provider-index", help="save what every visible mod defines (hull mods, weapons, wings, hulls, classes, with game and mod version) as a corpus artefact, so provider lookups work without the mods installed")
     provider_index_sub = provider_index_cmd.add_subparsers(dest="provider_index_command", required=True)
@@ -698,6 +699,7 @@ def build_parser() -> argparse.ArgumentParser:
     graph_cmd.add_argument("--providers", type=Path, action="append", default=[], help="as for dependency-substitutes; repeatable")
     graph_cmd.add_argument("--vanilla-core", type=Path)
     graph_cmd.add_argument("--provider-index", type=Path)
+    graph_cmd.add_argument("--write", action="store_true", help="write <queue>/DEPENDENCY_GRAPH.json and .md, and each mod's reports/dependencies.json, all of which `board` shows")
     graph_cmd.add_argument("--json", action="store_true")
     subs_cmd.add_argument("--json", action="store_true")
     preset_cmd = subcommands.add_parser("preset-check", help="check bf-test.ps1 presets against the rig's installed mods: own mod and declared dependencies enabled, enabled ids installed, no undeclared libraries")
@@ -890,6 +892,13 @@ def main(argv: list[str] | None = None) -> int:
         from .substitutes import REPO_ROOT, dependency_substitutes
         roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
         result = dependency_substitutes(args.mod, roots, vanilla_core=args.vanilla_core, index_path=args.provider_index)
+        if args.write:
+            from .substitutes import write_dependency_report
+            try:
+                print(f"Recorded: {write_dependency_report(result, args.mod)}", file=sys.stderr)
+            except ValueError as exc:
+                print(f"bridgeforge: {exc}", file=sys.stderr)
+                return 2
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
@@ -923,7 +932,11 @@ def main(argv: list[str] | None = None) -> int:
         queue = args.queue or REPO_ROOT / "In operation"
         roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
         try:
-            result = dependency_graph(queue, roots, vanilla_core=args.vanilla_core, index_path=args.provider_index)
+            result = dependency_graph(queue, roots, vanilla_core=args.vanilla_core, index_path=args.provider_index, write_reports=args.write)
+            if args.write:
+                from .substitutes import write_dependency_graph
+                for written in write_dependency_graph(result, queue):
+                    print(f"Written: {written}", file=sys.stderr)
         except (ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
