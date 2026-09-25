@@ -102,10 +102,15 @@ Done when the search finds `Ship and Weapon Pack/data/hullmods/hull_mods.csv` (t
 false negative). Note the build time and index size in item 18, and check the `NOT searched` line:
 `.7z` is read with the extra; `.rar` is not, so extract any `.rar` mods once if they matter.
 
-### 7. RevenantLib line endings
-Merge `claude/confident-archimedes-e2qv1v` in `Exxec/RevenantLib` (`.gitattributes`
-`original/** -text`; all 24 `PROVENANCE.md` hashes match on a fresh clone). Afterwards,
-`git status` in your local RevenantLib copy should be clean.
+### 7. RevenantLib: first scripted jar build and the move log
+The `.gitattributes` line-ending fix is merged. After merging `Exxec/RevenantLib` PR 2:
+- `python tools/build_jar.py --game-core "<Starsector>/starsector-core" --lazylib "<mods>/LazyLib/jars/LazyLib.jar"`
+  (read-only against the install; writes `scratch/RevenantLib.built.jar`). Done when it compiles with
+  0 errors and the comparison shows 0 added and 0 removed. `changed` classes are fine if your javac
+  differs from the one that built the committed jar; if so, run it again with `--install` and commit the
+  jar, so later builds compare byte for byte.
+- Copy `scratch/MOVES.log` entries into `reports/MOVES.md` (the tracked log from 2026-09-25).
+- `python tools/check.py` should print three PASS lines. (ROADMAP P14 item 36.)
 
 ### 8. Local-only tooling the repo cannot carry
 - `.githooks/pre-commit` is gitignored: add `ruff check .` so lint failures stop before CI.

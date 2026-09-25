@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .scanner import _base_game_version, _load_lenient_json_file
+from .revival_audit import _completion_statuses
 
 SCHEMA_VERSION = 1
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -241,17 +242,24 @@ def cover(needed: dict[str, set[str]], providers: list[Provider], preferred: set
     return chosen, remaining
 
 
+def _declared_status(workspace: Path, working: Path) -> str | None:
+    """The report's final completion status, read as `board`/`promote` read it (2026-09-25: this used to
+    take the report's last line verbatim and look only in working/reports/, so RevenantLib's status read
+    as a sentence about FX Example)."""
+    for report in (workspace / "reports" / "REVIVAL_REPORT.md", working / "reports" / "REVIVAL_REPORT.md"):
+        if report.is_file():
+            statuses, final = _completion_statuses(report.read_text(encoding="utf-8", errors="replace"))
+            return statuses[0] if len(statuses) == 1 and final else None
+    return None
+
+
 def _workspace_state(ops: Path, mod_id: str) -> dict | None:
     """Revival state of a dependency that is itself a workspace here (REVIVAL_REPORT status, MANUAL count)."""
     for info in list(ops.glob("*/working/mod_info.json")):
         data = _load_lenient_json_file(info)
         if isinstance(data, dict) and data.get("id") == mod_id:
             workspace = info.parent.parent
-            report = info.parent / "reports" / "REVIVAL_REPORT.md"
-            status = None
-            if report.is_file():
-                lines = [line.strip("* ") for line in report.read_text(encoding="utf-8").splitlines() if line.strip()]
-                status = lines[-1] if lines else None
+            status = _declared_status(workspace, info.parent)
             scans = sorted((workspace / "reports").glob("scan-*/bridgeforge.compat.json"), key=lambda p: p.stat().st_mtime)
             manual = None
             if scans:
