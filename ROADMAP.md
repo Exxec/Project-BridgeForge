@@ -448,7 +448,21 @@ Progression, each stage feeding the next:
    subject = the file's path, field `present`, `removed`), numbered after the file's existing
    `EXP-<MOD>-nnn` ids; `expect check` accepts them and they match the delta `behavior-diff` produces for
    the deleted file. An id removed inside a file changes nothing any baseline layer records, so it gets
-   no entry rather than a matcher that could never fire. Still open: the vendoring alternative.
+   no entry rather than a matcher that could never fire.
+   **Third slice done 2026-09-25: `vendor-plan` (owner decision 2026-09-25: plan-only, destination
+   RevenantLib, which collects content from mods whose authors have vanished).** `vendor-plan PROVIDER --id
+   kind:id [--target REVENANTLIB] [--vanilla-core CORE]` (`bridgeforge/vendor_plan.py`) follows the
+   references the game follows: CSV rows and their `script`/`sprite` columns, `descriptions.csv`, spec
+   files and their asset paths and class names, `numFrames` animation frames, projectile specs, variant ->
+   hull -> built-ins, wing -> variant, `system id` -> ship system, Java imports, same-package classes and
+   string literals, compiled classes' constant-pool and descriptor references (a jar class whose source
+   ships under `src/` is taken as source). Vanilla-provided references are skipped. Other provider code
+   or data that mentions a closure id is SUSPECT (the FormShieldPlugin case); variants/ships/skins/factions
+   that use an id are listed as users, not parts; Java comments do not count. Also: MISSING references,
+   ids and files RevenantLib already has (identical or different bytes), and the licence decision.
+   Copies nothing. Checked on real data: for RevenantLib's own `shields_formshield` and
+   `thruster_fighter_sm` it reproduces the hand-traced closures in its PROVENANCE.md file for file. Tests:
+   `tests/test_vendor_plan.py`.
 5. **Spawn-point fleet port kit.** RC8 keeps `BaseSpawnPoint` and `addSpawnPoint`, but not `SectorAPI.createFleet(faction, fleetType)`, which 0.6 spawners use to build fleets from old faction fleet definitions. The kit is:
    - a helper that builds the equivalent fleet with FleetFactoryV3, following Zorg18 r1's spawner;
    - a scanner check for the removed call.

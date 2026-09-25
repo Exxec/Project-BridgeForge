@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **New `vendor-plan` command (ROADMAP P14 item 4, last slice).** Traces the closure of one piece of an abandoned mod for folding into RevenantLib: files and rows to include, SUSPECT files that mention it but nothing references, missing references, what RevenantLib already has, and the licence decision. Copies nothing. Reproduces RevenantLib's two hand-traced closures exactly.
 - `strip-plan --expected FILE --build rN --link ...` adds PROPOSED expected changes for the files a strip deletes, ready for `expect approve` (ROADMAP P14 item 4, second slice).
 - **New `provider-index build` and `dependency-graph` (ROADMAP P14 items 2-3).** Save what every visible mod provides so lookups work without the mods installed (`dependency-substitutes --provider-index`), and rank queue-wide which old dependencies to revive first by how many queued mods each unblocks.
 - **`dependency-substitutes` is licence-aware (ROADMAP P14 item 9).** Each dependency it would have you revive shows its `release_policy.json` decision (LOCAL_ONLY, RELEASABLE, or UNRECORDED when no one has checked), with a `LICENCE:` note on what that means for shipping.

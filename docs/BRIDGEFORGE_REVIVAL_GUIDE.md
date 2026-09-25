@@ -86,6 +86,16 @@ python -m bridgeforge strip-plan "<mod_dir>" --vanilla-core $core [--id weapon:v
 Lists each file and field every unresolved id sits in, and for an emptied weapon slot the vanilla
 weapons of the same type and size. Nothing is edited; make the changes in the working copy yourself.
 
+**Only one piece of a big abandoned mod is needed? vendor-plan.** Instead of reviving the whole provider:
+
+```powershell
+python -m bridgeforge vendor-plan "In operation\Xenoargh-Rebal" --id hullmod:shields_formshield --vanilla-core $core
+```
+
+`INCLUDE` lines are the piece's closure (rows, specs, sprites, animation frames, classes as source).
+Decide every `SUSPECT` (code that mentions the piece but nothing references: it may implement its effect)
+and every `MISSING`, then fold the result into RevenantLib by hand and record it in its PROVENANCE.md.
+
 ## 1b. Which API changed? api-diff
 
 ```powershell

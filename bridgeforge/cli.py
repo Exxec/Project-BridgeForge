@@ -752,6 +752,12 @@ def build_parser() -> argparse.ArgumentParser:
     strip_plan_cmd.add_argument("--build", help="build tag the strip lands in (required with --expected), e.g. r3")
     strip_plan_cmd.add_argument("--link", action="append", default=[], help="risk=ID, hyp=ID or test=ID breadcrumb for the expected changes; at least one is required with --expected")
     strip_plan_cmd.add_argument("--json", action="store_true")
+    vendor_cmd = subcommands.add_parser("vendor-plan", help="trace the closure of one piece of an abandoned mod (hull mod, weapon, wing, hull, variant, ship system) for folding into RevenantLib: files to include, SUSPECT files that mention it but nothing references, what is missing, licence; copies nothing")
+    vendor_cmd.add_argument("provider", type=Path, help="the mod that defines the piece (mod folder or workspace)")
+    vendor_cmd.add_argument("--id", dest="ids", action="append", required=True, help="kind:id, e.g. hullmod:shields_formshield; repeatable")
+    vendor_cmd.add_argument("--target", type=Path, help="RevenantLib folder or workspace, to report ids it already has and file collisions (default: <repo>/In operation/RevenantLib when present)")
+    vendor_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so references vanilla provides are not traced")
+    vendor_cmd.add_argument("--json", action="store_true")
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
@@ -2500,6 +2506,19 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"    {substitutes.get('note') or 'no vanilla weapon fits ' + str(substitutes['slot'])}")
             if result.get("expected_changes_added") is not None:
                 print(f"PROPOSED expected changes added to {args.expected}: {', '.join(result['expected_changes_added']) or 'none (no file deletions)'}")
+        return 0
+    if args.command == "vendor-plan":
+        from .substitutes import REPO_ROOT
+        from .vendor_plan import VendorPlanError, dumps, render, vendor_plan
+        target = args.target
+        if target is None and (REPO_ROOT / "In operation" / "RevenantLib").is_dir():
+            target = REPO_ROOT / "In operation" / "RevenantLib"
+        try:
+            plan = vendor_plan(args.provider, args.ids, target=target, vanilla_core=args.vanilla_core)
+        except (VendorPlanError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(dumps(plan) if args.json else render(plan))
         return 0
     if args.command == "api-diff":
         import zipfile
