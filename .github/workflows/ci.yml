@@ -44,8 +44,8 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - name: Install Bridgeforge and coverage
-        run: python -m pip install . coverage
+      - name: Install Bridgeforge (with the optional archive reader) and coverage
+        run: python -m pip install ".[archives]" coverage
       - name: Run unit tests under coverage
         env:
           COVERAGE_FILE: ${{ runner.temp }}/.coverage

@@ -8,4 +8,4 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
 fi
 
 python3 -m pip install --quiet --disable-pip-version-check --root-user-action=ignore \
-  "psutil>=5.9" ruff coverage
+  "psutil>=5.9" "py7zr>=1.0" ruff coverage

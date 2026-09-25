@@ -40,6 +40,16 @@ def script_class_name(script: Path) -> tuple[str, str]:
     return script.stem, "file name only (no package line and no mod root)"
 
 
+# The entry cap guards against zip bombs in mod jars. The game's own jars (starfarer_obf.jar is
+# large) are trusted input, so jars sitting directly in a starsector-core folder get a far higher cap
+# (owner decision 2026-09-25) instead of being reported as not checked.
+TRUSTED_GAME_JAR_MAX_ENTRIES = 250_000
+
+
+def _is_game_core(folder: Path) -> bool:
+    return (folder / "starfarer.api.jar").is_file()
+
+
 def _jars(target: Path) -> list[Path]:
     if target.is_file():
         return [target]
@@ -58,10 +68,13 @@ def verify_shadow(scripts: list[Path], against: list[Path]) -> dict:
         if not path.exists():
             raise VerifyShadowError(f"--against {path} does not exist.")
     jars = sorted({jar for target in against for jar in _jars(target)})
+    trusted = [jar for jar in jars if _is_game_core(jar.parent)]
     unreadable: list[str] = []
     owners: dict[str, list[str]] = {}
     class_count = 0
-    for jar, member, data in iter_class_files_in_jars(jars, unreadable):
+    walks = [iter_class_files_in_jars([jar for jar in jars if jar not in trusted], unreadable),
+             iter_class_files_in_jars(trusted, unreadable, max_entries=TRUSTED_GAME_JAR_MAX_ENTRIES)]
+    for jar, member, data in (item for walk in walks for item in walk):
         info = _parse_class_file(data)
         if info is not None and info.this_class:
             class_count += 1

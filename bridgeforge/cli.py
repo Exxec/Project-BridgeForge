@@ -687,6 +687,7 @@ def build_parser() -> argparse.ArgumentParser:
     subs_cmd.add_argument("mod", type=Path, help="mod working copy")
     subs_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
     subs_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla content isn't counted as missing")
+    subs_cmd.add_argument("--write", action="store_true", help="also record the result in <workspace>/reports/dependencies.json, which `board` shows")
     subs_cmd.add_argument("--provider-index", type=Path, help="saved `provider-index build` output: also consider mods it lists that are not visible live")
     provider_index_cmd = subcommands.add_parser("provider-index", help="save what every visible mod defines (hull mods, weapons, wings, hulls, classes, with game and mod version) as a corpus artefact, so provider lookups work without the mods installed")
     provider_index_sub = provider_index_cmd.add_subparsers(dest="provider_index_command", required=True)
@@ -698,6 +699,7 @@ def build_parser() -> argparse.ArgumentParser:
     graph_cmd.add_argument("--providers", type=Path, action="append", default=[], help="as for dependency-substitutes; repeatable")
     graph_cmd.add_argument("--vanilla-core", type=Path)
     graph_cmd.add_argument("--provider-index", type=Path)
+    graph_cmd.add_argument("--write", action="store_true", help="write <queue>/DEPENDENCY_GRAPH.json and .md, and each mod's reports/dependencies.json, all of which `board` shows")
     graph_cmd.add_argument("--json", action="store_true")
     subs_cmd.add_argument("--json", action="store_true")
     preset_cmd = subcommands.add_parser("preset-check", help="check bf-test.ps1 presets against the rig's installed mods: own mod and declared dependencies enabled, enabled ids installed, no undeclared libraries")
@@ -752,6 +754,25 @@ def build_parser() -> argparse.ArgumentParser:
     strip_plan_cmd.add_argument("--build", help="build tag the strip lands in (required with --expected), e.g. r3")
     strip_plan_cmd.add_argument("--link", action="append", default=[], help="risk=ID, hyp=ID or test=ID breadcrumb for the expected changes; at least one is required with --expected")
     strip_plan_cmd.add_argument("--json", action="store_true")
+    vendor_cmd = subcommands.add_parser("vendor-plan", help="trace the closure of one piece of an abandoned mod (hull mod, weapon, wing, hull, variant, ship system) for folding into RevenantLib: files to include, SUSPECT files that mention it but nothing references, what is missing, licence; copies nothing")
+    vendor_cmd.add_argument("provider", type=Path, help="the mod that defines the piece (mod folder or workspace)")
+    vendor_cmd.add_argument("--id", dest="ids", action="append", required=True, help="kind:id, e.g. hullmod:shields_formshield; repeatable")
+    vendor_cmd.add_argument("--target", type=Path, help="RevenantLib folder or workspace, to report ids it already has and file collisions (default: <repo>/In operation/RevenantLib when present)")
+    vendor_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so references vanilla provides are not traced")
+    vendor_cmd.add_argument("--json", action="store_true")
+    policy_cmd = subcommands.add_parser("release-policy", help="show or record a mod's publishing decision in release_policy.json (read by the release gate and dependency-substitutes)")
+    policy_sub = policy_cmd.add_subparsers(dest="policy_command", required=True)
+    policy_show = policy_sub.add_parser("show", help="the recorded decision for a mod id or name")
+    policy_show.add_argument("mod")
+    policy_set = policy_sub.add_parser("set", help="record a decision (updates an existing entry in place)")
+    policy_set.add_argument("mod")
+    policy_choice = policy_set.add_mutually_exclusive_group(required=True)
+    policy_choice.add_argument("--local-only", action="store_true", help="may be used locally, not published")
+    policy_choice.add_argument("--releasable", action="store_true", help="may be published")
+    policy_set.add_argument("--reason", required=True, help="the evidence the decision rests on (licence file, forum post, owner decision and date)")
+    policy_set.add_argument("--on", help="decision date (default: today)")
+    for command in (policy_show, policy_set):
+        command.add_argument("--policy", type=Path, help=argparse.SUPPRESS)
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
@@ -884,6 +905,13 @@ def main(argv: list[str] | None = None) -> int:
         from .substitutes import REPO_ROOT, dependency_substitutes
         roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
         result = dependency_substitutes(args.mod, roots, vanilla_core=args.vanilla_core, index_path=args.provider_index)
+        if args.write:
+            from .substitutes import write_dependency_report
+            try:
+                print(f"Recorded: {write_dependency_report(result, args.mod)}", file=sys.stderr)
+            except ValueError as exc:
+                print(f"bridgeforge: {exc}", file=sys.stderr)
+                return 2
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
@@ -917,7 +945,11 @@ def main(argv: list[str] | None = None) -> int:
         queue = args.queue or REPO_ROOT / "In operation"
         roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
         try:
-            result = dependency_graph(queue, roots, vanilla_core=args.vanilla_core, index_path=args.provider_index)
+            result = dependency_graph(queue, roots, vanilla_core=args.vanilla_core, index_path=args.provider_index, write_reports=args.write)
+            if args.write:
+                from .substitutes import write_dependency_graph
+                for written in write_dependency_graph(result, queue):
+                    print(f"Written: {written}", file=sys.stderr)
         except (ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -2500,6 +2532,34 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"    {substitutes.get('note') or 'no vanilla weapon fits ' + str(substitutes['slot'])}")
             if result.get("expected_changes_added") is not None:
                 print(f"PROPOSED expected changes added to {args.expected}: {', '.join(result['expected_changes_added']) or 'none (no file deletions)'}")
+        return 0
+    if args.command == "vendor-plan":
+        from .substitutes import REPO_ROOT
+        from .vendor_plan import VendorPlanError, dumps, render, vendor_plan
+        target = args.target
+        if target is None and (REPO_ROOT / "In operation" / "RevenantLib").is_dir():
+            target = REPO_ROOT / "In operation" / "RevenantLib"
+        try:
+            plan = vendor_plan(args.provider, args.ids, target=target, vanilla_core=args.vanilla_core)
+        except (VendorPlanError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(dumps(plan) if args.json else render(plan))
+        return 0
+    if args.command == "release-policy":
+        from .release import ReleaseError as PolicyError, record_policy_decision  # alias: a bare ReleaseError here would shadow main()'s
+        from .substitutes import revival_licence
+        try:
+            if args.policy_command == "show":
+                decision = revival_licence(args.mod, args.mod, args.policy)
+                print(f"{args.mod}: {decision['decision']}" + (f" ({decision['reason']})" if decision.get("reason") else ""))
+            else:
+                result = record_policy_decision(args.mod, local_only=args.local_only, reason=args.reason, on=args.on, policy_path=args.policy)
+                verb = "updated" if result["previous"] else "recorded"
+                print(f"{verb} {result['mod']}: {'LOCAL_ONLY' if result['current']['local_only'] else 'RELEASABLE'} in {result['file']}")
+        except PolicyError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
         return 0
     if args.command == "api-diff":
         import zipfile

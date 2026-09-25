@@ -115,6 +115,55 @@ class ProviderIndexTests(unittest.TestCase):
         self.assertIn("unblocks 2: AddonA, AddonB", out.getvalue())
 
 
+class DependencyEvidenceOnBoardTests(unittest.TestCase):
+    """Owner decision 2026-09-25: the graph (A) and per-mod results (C) are recorded evidence board reads."""
+
+    def test_graph_write_records_queue_and_per_mod_evidence_and_board_shows_both(self) -> None:
+        import os
+        from datetime import datetime, timezone
+
+        from bridgeforge.project_board import project_board, render_board
+        from bridgeforge.substitutes import write_dependency_graph
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            queue = ProviderIndexTests()._queue(root)
+            now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
+            graph = dependency_graph(queue, [root / "mods"], vanilla_core=_core(root), write_reports=True, now=now)
+            written = write_dependency_graph(graph, queue, now=now)
+            recorded = json.loads((queue / "AddonA" / "reports" / "dependencies.json").read_text(encoding="utf-8"))
+            markdown = (queue / "DEPENDENCY_GRAPH.md").read_text(encoding="utf-8")
+            board = project_board(root)
+            rendered = render_board(board)
+            # A later scan makes AddonA's recorded dependencies stale.
+            scan = queue / "AddonA" / "reports" / "scan-2" / "bridgeforge.compat.json"
+            scan.parent.mkdir(parents=True)
+            scan.write_text("{}", encoding="utf-8")
+            later = (queue / "AddonA" / "reports" / "dependencies.json").stat().st_mtime + 10
+            os.utime(scan, (later, later))
+            stale = next(row for row in project_board(root)["mods"] if row["folder"] == "AddonA")
+        self.assertEqual([Path(path).name for path in written], ["DEPENDENCY_GRAPH.json", "DEPENDENCY_GRAPH.md"])
+        self.assertEqual((recorded["generated_at"], recorded["strategy"]), ("2026-09-25T12:00:00+00:00", "STRIP_FROM_MOD"))
+        self.assertIn("| 1 | oldsector | 0.9a | 2: AddonA, AddonB |", markdown)
+        row = next(row for row in board["mods"] if row["folder"] == "AddonA")
+        self.assertEqual(row["dependencies"], {"strategy": "STRIP_FROM_MOD", "needs_revival_of": ["oldsector"], "unprovided": 0, "recorded": "2026-09-25"})
+        self.assertIn("STRIP_FROM_MOD: revive oldsector (as of 2026-09-25)", rendered)
+        self.assertIn("## Revival order (dependency-graph, as of 2026-09-25)", rendered)
+        self.assertIn("1. oldsector: unblocks 2 (AddonA, AddonB)", rendered)
+        self.assertNotIn("root-stray", json.dumps(board["layout_findings"]))  # the graph files are expected at the queue root
+        self.assertIn("rescanned since dependencies.json was recorded; rerun dependency-substitutes --write", stale["warnings"])
+
+    def test_per_mod_write_needs_the_convention_layout(self) -> None:
+        from bridgeforge.substitutes import write_dependency_report
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaises(ValueError):
+                write_dependency_report({"strategy": "SWAP"}, root / "not-working")
+            path = write_dependency_report({"strategy": "SWAP"}, root / "Mod" / "working")
+            self.assertEqual(path, (root / "Mod" / "reports" / "dependencies.json").resolve())
+
+
 class RevivalLicenceTests(unittest.TestCase):
     """ROADMAP P14 item 9: a dependency we would revive carries its release_policy.json decision."""
 

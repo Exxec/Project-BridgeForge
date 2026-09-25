@@ -3582,7 +3582,7 @@ def _iter_jar_class_files(root: Path):
     yield from iter_class_files_in_jars(_loaded_mod_jars(root))
 
 
-def iter_class_files_in_jars(jars, unreadable: list[str] | None = None):
+def iter_class_files_in_jars(jars, unreadable: list[str] | None = None, max_entries: int = MAX_JAR_ENTRIES):
     """Yield (jar_path, member_name, class_bytes) for readable .class members of the given jars.
 
     The one jar-walking loop behind `mod_jar_class_names` and `verify-shadow` (ROADMAP P14 item 26).
@@ -3593,9 +3593,9 @@ def iter_class_files_in_jars(jars, unreadable: list[str] | None = None):
         try:
             with zipfile.ZipFile(jar) as archive:
                 entries = archive.infolist()
-                if len(entries) > MAX_JAR_ENTRIES:
+                if len(entries) > max_entries:
                     if unreadable is not None:
-                        unreadable.append(f"{jar}: more than {MAX_JAR_ENTRIES} entries")
+                        unreadable.append(f"{jar}: more than {max_entries} entries")
                     continue
                 for item in entries:
                     if not item.filename.endswith(".class"):

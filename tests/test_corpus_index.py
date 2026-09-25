@@ -58,12 +58,15 @@ class CorpusIndexTests(unittest.TestCase):
         self.assertEqual([h["location"] for h in accent["content_hits"]], ["cp1252.csv"])
 
     def test_every_unsearched_file_is_reported(self):
-        with resolved_temp_dir() as root:
+        from unittest.mock import patch
+
+        with resolved_temp_dir() as root, patch.dict("sys.modules", {"py7zr": None}):  # as without the optional reader
             downloads, db = _archive(root), root / "index.sqlite"
             result = build_index(downloads, db, max_bytes=100)
             names = search_index(db, "lightmg.png", names_only=True)
         self.assertEqual(result["not_searched"], {
-            ".7z archives are not read": 1, "archive inside an archive": 1, "binary content": 1, "larger than 100 bytes": 1})
+            ".7z archives are not read (pip install bridgeforge[archives] to read them)": 1, "archive inside an archive": 1,
+            "binary content": 1, "larger than 100 bytes": 1})
         self.assertEqual(names["name_hits"], ["Rebal.zip!Rebal/graphics/lightmg.png"])
 
     def test_rebuild_reads_only_changes_and_forgets_deleted_files(self):
@@ -100,7 +103,9 @@ class CorpusIndexTests(unittest.TestCase):
                 search_index(root / "missing.sqlite", "abc")
 
     def test_cli_prints_hits_and_coverage(self):
-        with resolved_temp_dir() as root:
+        from unittest.mock import patch
+
+        with resolved_temp_dir() as root, patch.dict("sys.modules", {"py7zr": None}):
             downloads, db = _archive(root), root / "index.sqlite"
             out = io.StringIO()
             with redirect_stdout(out):
@@ -112,7 +117,47 @@ class CorpusIndexTests(unittest.TestCase):
         text = out.getvalue()
         self.assertIn("Ship and Weapon Pack/data/hullmods/hull_mods.csv (1 matching line(s))", text)
         self.assertIn("No hits for 'nowhere_to_be_found'.", text)
-        self.assertIn("NOT searched: 1 .7z archives are not read", text)
+        self.assertIn("NOT searched: 1 .7z archives are not read (pip install bridgeforge[archives] to read them)", text)
+
+
+def _py7zr_available() -> bool:
+    try:
+        import py7zr  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+@unittest.skipUnless(_trigram_available() and _py7zr_available(), "needs FTS5 trigram and the optional py7zr reader")
+class SevenZipTests(unittest.TestCase):
+    def test_7z_members_are_indexed_like_zip_members(self):
+        import py7zr
+
+        with resolved_temp_dir() as root:
+            downloads = root / "Downloads"
+            downloads.mkdir()
+            with py7zr.SevenZipFile(downloads / "Old Mod.7z", "w") as archive:
+                archive.writestr("name,id\nShield Bypass,shieldbypass\n", "Old Mod/data/hullmods/hull_mods.csv")
+                archive.writestr(b"\x89PNG", "Old Mod/graphics/x.png")
+                archive.writestr("x" * 500, "Old Mod/data/big.json")
+                archive.writestr(b"PK", "Old Mod/inner.zip")
+            _write(downloads / "broken.7z", b"7z\xbc\xaf\x27\x1c garbage")
+            db = root / "index.sqlite"
+            result = build_index(downloads, db, max_bytes=100)
+            hits = search_index(db, "shieldbypass")
+            names = search_index(db, "x.png", names_only=True)
+        self.assertEqual([h["location"] for h in hits["content_hits"]], ["Old Mod.7z!Old Mod/data/hullmods/hull_mods.csv"])
+        self.assertEqual(names["name_hits"], ["Old Mod.7z!Old Mod/graphics/x.png"])
+        self.assertEqual(result["not_searched"]["archive inside an archive"], 1)
+        self.assertEqual(result["not_searched"]["larger than 100 bytes"], 1)
+        self.assertEqual(sum(count for reason, count in result["not_searched"].items() if reason.startswith("unreadable")), 1)
+
+    def test_unsafe_member_paths_are_refused(self):
+        from bridgeforge.corpus_index import _safe_member
+
+        self.assertTrue(_safe_member("Mod/data/x.csv"))
+        for bad in ("../evil.csv", "/abs/x.csv", "Mod/../../x.csv", "C:/x.csv", "\\server\\x.csv"):
+            self.assertFalse(_safe_member(bad), bad)
 
 
 if __name__ == "__main__":

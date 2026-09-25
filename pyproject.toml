@@ -9,6 +9,10 @@ description = "Offline compatibility scanner for legacy Starsector mods"
 requires-python = ">=3.10"
 dependencies = ["psutil>=5.9"]
 
+[project.optional-dependencies]
+# corpus-index reads .7z archives when this is installed; without it they are reported as not read.
+archives = ["py7zr>=1.0"]
+
 [project.scripts]
 bridgeforge = "bridgeforge.cli:main"
 

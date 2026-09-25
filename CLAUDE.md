@@ -43,6 +43,9 @@ python -m bridgeforge docs-index          # after adding a check or CLI option; 
 uv lock --check                           # after touching pyproject dependencies
 ```
 
+Optional extra: `pip install ".[archives]"` (py7zr) lets `corpus-index` read `.7z`; tests needing it skip
+without it. The web-session hook installs it.
+
 CI (`.github/workflows/ci.yml`) runs all of these, plus the tests on Windows and Ubuntu with
 Python 3.10–3.13 and a coverage floor (`[tool.coverage.report] fail_under` in pyproject; raise
 it when coverage rises, never lower it).
