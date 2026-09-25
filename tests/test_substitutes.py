@@ -306,3 +306,26 @@ class SubstituteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WorkspaceStatusTests(unittest.TestCase):
+    """A provider workspace's status is its report's final completion status, wherever the report sits."""
+
+    def _state(self, report_path: str, text: str):
+        from bridgeforge.substitutes import _workspace_state
+
+        with tempfile.TemporaryDirectory() as directory:
+            ops = Path(directory)
+            _write(ops / "RevenantLib/working/mod_info.json", '{"id": "revenantlib"}')
+            _write(ops / "RevenantLib" / report_path, text)
+            return _workspace_state(ops, "revenantlib")
+
+    def test_top_level_reports_folder_is_read_first(self) -> None:
+        # RevenantLib's layout since 2026-09-25: reports/REVIVAL_REPORT.md beside PROVENANCE.md.
+        self.assertEqual(self._state("reports/REVIVAL_REPORT.md", "## Status\n\n**READY_WITH_REVIEW_ITEMS**\n")["status"], "READY_WITH_REVIEW_ITEMS")
+        self.assertEqual(self._state("working/reports/REVIVAL_REPORT.md", "READY\n")["status"], "READY")
+
+    def test_a_trailing_note_is_not_a_status(self) -> None:
+        # Before 2026-09-25 the last line was taken verbatim: RevenantLib's "status" was a sentence about FX Example.
+        state = self._state("reports/REVIVAL_REPORT.md", "**READY_WITH_REVIEW_ITEMS** - notes\n\nFX Example still compile-checks PASS.\n")
+        self.assertIsNone(state["status"])

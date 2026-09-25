@@ -955,6 +955,15 @@ Progression, each stage feeding the next:
     --reason TEXT [--on DATE]` (`release.record_policy_decision`): a reason is required, the date is kept as
     `recorded_on`, an existing entry is updated in place under its own key, and the rest of the file is
     byte-for-byte unchanged. Tests: `tests/test_release.py` (`ReleasePolicyRecordTests`).
+36. **`dependency-graph` read a provider workspace's status wrongly.** Found 2026-09-25 while reviewing
+    RevenantLib: `substitutes._workspace_state` looked only in `working/reports/REVIVAL_REPORT.md` and took
+    the report's last non-empty line as the status, so RevenantLib's "status" was a sentence about FX
+    Example. **Done 2026-09-25.** `_declared_status` reads `<workspace>/reports/` first, then
+    `working/reports/` (the order `board` and `promote` use), and returns the single final completion status
+    via `revival_audit._completion_statuses`, or none. RevenantLib's report was moved to `reports/` and now
+    ends on its status (`Exxec/RevenantLib` PR 2, which also adds that repo's offline checks, CI and
+    `tools/build_jar.py`; its first real build is in `docs/LOCAL_HANDOFF.md` item 7). Tests:
+    `tests/test_substitutes.py` (`WorkspaceStatusTests`).
 
 ## Post-1.0 research and gated automation
 
