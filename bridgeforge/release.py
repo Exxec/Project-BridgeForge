@@ -54,13 +54,19 @@ def _load_policy(policy_path: Path | None) -> dict[str, object]:
     return policy
 
 
-def _policy_for_mod(policy: dict[str, object], mod_id: str | None, mod_name: str | None) -> dict[str, object]:
+def policy_entry(policy: dict[str, object], mod_id: str | None, mod_name: str | None) -> dict[str, object] | None:
+    """The mod's own release_policy.json entry (matched by id or name, case-insensitively), or None."""
     mods = policy.get("mods") or {}
     needles = [needle.lower() for needle in (mod_id, mod_name) if needle]
     for key, entry in mods.items():
         if str(key).lower() in needles:
             return entry
-    return policy.get("default") or {"local_only": False, "reason": None}
+    return None
+
+
+def _policy_for_mod(policy: dict[str, object], mod_id: str | None, mod_name: str | None) -> dict[str, object]:
+    entry = policy_entry(policy, mod_id, mod_name)
+    return entry if entry is not None else (policy.get("default") or {"local_only": False, "reason": None})
 
 
 def _licence_gate(mod_id: str | None, mod_name: str | None, policy_path: Path | None) -> dict[str, object]:

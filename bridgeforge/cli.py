@@ -687,6 +687,18 @@ def build_parser() -> argparse.ArgumentParser:
     subs_cmd.add_argument("mod", type=Path, help="mod working copy")
     subs_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
     subs_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla content isn't counted as missing")
+    subs_cmd.add_argument("--provider-index", type=Path, help="saved `provider-index build` output: also consider mods it lists that are not visible live")
+    provider_index_cmd = subcommands.add_parser("provider-index", help="save what every visible mod defines (hull mods, weapons, wings, hulls, classes, with game and mod version) as a corpus artefact, so provider lookups work without the mods installed")
+    provider_index_sub = provider_index_cmd.add_subparsers(dest="provider_index_command", required=True)
+    provider_index_build = provider_index_sub.add_parser("build", help="index the --providers folders")
+    provider_index_build.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree; repeatable (default: <repo>/In operation and its rig's mods)")
+    provider_index_build.add_argument("--output", type=Path, default=Path("bridgeforge-state") / "provider-index.json")
+    graph_cmd = subcommands.add_parser("dependency-graph", help="across every queued workspace, which non-current mods need reviving and how many queued mods each would unblock (revival order)")
+    graph_cmd.add_argument("--queue", type=Path, help="folder of workspaces (<name>/working); default <repo>/In operation")
+    graph_cmd.add_argument("--providers", type=Path, action="append", default=[], help="as for dependency-substitutes; repeatable")
+    graph_cmd.add_argument("--vanilla-core", type=Path)
+    graph_cmd.add_argument("--provider-index", type=Path)
+    graph_cmd.add_argument("--json", action="store_true")
     subs_cmd.add_argument("--json", action="store_true")
     preset_cmd = subcommands.add_parser("preset-check", help="check bf-test.ps1 presets against the rig's installed mods: own mod and declared dependencies enabled, enabled ids installed, no undeclared libraries")
     preset_cmd.add_argument("script", type=Path, help="path to bf-test.ps1")
@@ -736,6 +748,9 @@ def build_parser() -> argparse.ArgumentParser:
     strip_plan_cmd.add_argument("mod", type=Path, help="mod working copy")
     strip_plan_cmd.add_argument("--vanilla-core", type=Path, required=True, help="RC8 starsector-core (read-only)")
     strip_plan_cmd.add_argument("--id", dest="only", action="append", help="limit to one id, as kind:id (e.g. weapon:vayra_gun); repeatable")
+    strip_plan_cmd.add_argument("--expected", type=Path, help="also add PROPOSED expected changes (static layer) for the files the plan deletes to this expected-changes.json")
+    strip_plan_cmd.add_argument("--build", help="build tag the strip lands in (required with --expected), e.g. r3")
+    strip_plan_cmd.add_argument("--link", action="append", default=[], help="risk=ID, hyp=ID or test=ID breadcrumb for the expected changes; at least one is required with --expected")
     strip_plan_cmd.add_argument("--json", action="store_true")
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
@@ -868,7 +883,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "dependency-substitutes":
         from .substitutes import REPO_ROOT, dependency_substitutes
         roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
-        result = dependency_substitutes(args.mod, roots, vanilla_core=args.vanilla_core)
+        result = dependency_substitutes(args.mod, roots, vanilla_core=args.vanilla_core, index_path=args.provider_index)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
@@ -888,6 +903,36 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  in no visible mod: {', '.join(result['uncovered'])}")
         for entry in result["successors"]:
             print(f"  known successor for {entry['match']}: {entry['successor']} [{entry.get('evidence', '')}]")
+        for note in result.get("licence_notes") or []:
+            print(f"  LICENCE: {note}")
+        return 0
+    if args.command == "provider-index":
+        from .substitutes import REPO_ROOT, provider_index, save_provider_index
+        roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
+        summary = save_provider_index(provider_index(roots), args.output, roots)
+        print(f"Provider index: {summary['providers']} mods, {summary['ids']} ids -> {summary['output']}")
+        return 0
+    if args.command == "dependency-graph":
+        from .substitutes import REPO_ROOT, dependency_graph
+        queue = args.queue or REPO_ROOT / "In operation"
+        roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
+        try:
+            result = dependency_graph(queue, roots, vanilla_core=args.vanilla_core, index_path=args.provider_index)
+        except (ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        print(f"{result['queued_mods']} queued mod(s) in {result['queue']}")
+        for rank_number, entry in enumerate(result["revival_order"], 1):
+            state = entry.get("workspace") or {}
+            licence = (entry.get("licence") or {}).get("decision")
+            print(f"{rank_number}. revive {entry['name']} ({entry['game_version'] or 'no version'}"
+                  + (f", workspace {state['workspace']}: {state.get('manual_findings')} MANUAL" if state else ", not a workspace here")
+                  + (f", licence {licence}" if licence else "") + f"): unblocks {len(entry['unblocks'])}: {', '.join(entry['unblocks'])}")
+        for entry in result["unprovided"]:
+            print(f"   {entry['workspace']}: no provider for {', '.join(entry['ids'][:6])}{' ...' if len(entry['ids']) > 6 else ''}")
         return 0
     if args.command == "preset-check":
         from .preset_check import check_presets
@@ -2426,6 +2471,17 @@ def main(argv: list[str] | None = None) -> int:
         from .strip_plan import StripPlanError, strip_plan
         try:
             result = strip_plan(args.mod, args.vanilla_core, args.only)
+            if args.expected:
+                from .strip_plan import propose_expected_changes
+                if not args.build:
+                    raise StripPlanError("--expected needs --build")
+                links: dict[str, list[str]] = {}
+                for item in args.link:
+                    kind, separator, linked = item.partition("=")
+                    if not separator or kind not in {"risk", "hyp", "test", "bug_class"} or not linked:
+                        raise StripPlanError(f"--link expects risk|hyp|test|bug_class=ID, got {item!r}")
+                    links.setdefault(kind, []).append(linked)
+                result["expected_changes_added"] = propose_expected_changes(result, args.expected, build=args.build, links=links)
         except (StripPlanError, ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -2442,6 +2498,8 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"    vanilla {substitutes['slot']} options: {', '.join(substitutes['candidates'])}" + (f" (+{more} more)" if more > 0 else ""))
                 elif substitutes:
                     print(f"    {substitutes.get('note') or 'no vanilla weapon fits ' + str(substitutes['slot'])}")
+            if result.get("expected_changes_added") is not None:
+                print(f"PROPOSED expected changes added to {args.expected}: {', '.join(result['expected_changes_added']) or 'none (no file deletions)'}")
         return 0
     if args.command == "api-diff":
         import zipfile

@@ -425,15 +425,30 @@ Progression, each stage feeding the next:
    - Scanner checks: `content-reference-unresolved`, `source-import-unresolved`, `legacy-vanilla-class-import`, `library-import-unused-in-jar`, `console-command-optional`, `carrier-bays-proposal`.
    - Fixers: `target-interface-method-missing`, `wing-data-missing-role-desc-column`.
 2. **Provider index as a corpus artefact.** Store each visible mod's "provides" set beside the novelty fingerprints (`bridgeforge-state/`, gitignored), so a lookup is instant and works when the provider isn't installed. Record game version and mod version.
+   **Done 2026-09-24.** `provider-index build [--providers ...] [--output F]` saves every visible mod's
+   provides sets (hull mods, weapons, wings, hulls, classes) with game and mod version (a
+   `{"major":..}` version object is flattened) to `bridgeforge-state/provider-index.json`;
+   `dependency-substitutes --provider-index F` also considers indexed mods that are not visible live
+   (a live folder wins on the same id). Tests: `tests/test_substitutes.py` (`ProviderIndexTests`).
 3. **Dependency graph across the queue.** Build a graph of which queued mods need which missing mods, and order revival by unblocking value. As of 2026-09-14: FX Core (10 MANUAL) unblocks FX Example and part of Rebal; AI Overhaul (12 MANUAL) the rest of Rebal. EZ Damage is already revived (r1). Show it in `board`.
+   **Done 2026-09-24 (except the `board` view).** `dependency-graph [--queue DIR] [--providers ...]
+   [--provider-index F]` runs `dependency-substitutes` on every `<queue>/*/working` workspace and ranks
+   the non-current providers the plans use by how many queued mods each unblocks (ties: fewer MANUAL
+   findings first), with each one's workspace state and licence decision, plus the mods that need ids
+   no visible or indexed mod provides. Still open: showing it in `board`. Tests: `ProviderIndexTests`.
 4. **Strip and vendor plans.** For STRIP_FROM_MOD, generate the exact edit list: which variant, `.ship` and faction lines lose which ids, plus proposed vanilla substitutes of the same slot type and size. Also generate the matching PROPOSED expected changes, so approval goes through `expect` as usual. Where the licence allows, offer vendoring as an alternative: copy the one missing piece (for example Rebal's `shields_formshield` into Explorer Society) instead of reviving a heavy provider.
    **First slice done 2026-09-24: the edit list.** `strip-plan MOD --vanilla-core CORE [--id kind:id]`
    (`bridgeforge/strip_plan.py`) runs the normal scan and, for every id in its
    `unresolved_content_references`, lists each place it sits: hull-mod and wing lists, each variant weapon
    slot and built-in weapon (with vanilla weapons of the slot's type and size, mount overrides
    included, as substitutes), and `.faction` known-lists; a variant or skin on an unresolved hull is
-   listed for deletion. Edits nothing. Still open: the PROPOSED expected changes, and the vendoring
-   alternative. Tests: `tests/test_strip_plan.py`.
+   listed for deletion. Edits nothing. Tests: `tests/test_strip_plan.py`.
+   **Second slice done 2026-09-24: expected changes.** `strip-plan ... --expected FILE --build rN --link
+   risk=|hyp=|test=ID` adds a PROPOSED static-layer entry per file the plan deletes (`static.data`,
+   subject = the file's path, field `present`, `removed`), numbered after the file's existing
+   `EXP-<MOD>-nnn` ids; `expect check` accepts them and they match the delta `behavior-diff` produces for
+   the deleted file. An id removed inside a file changes nothing any baseline layer records, so it gets
+   no entry rather than a matcher that could never fire. Still open: the vendoring alternative.
 5. **Spawn-point fleet port kit.** RC8 keeps `BaseSpawnPoint` and `addSpawnPoint`, but not `SectorAPI.createFleet(faction, fleetType)`, which 0.6 spawners use to build fleets from old faction fleet definitions. The kit is:
    - a helper that builds the equivalent fleet with FleetFactoryV3, following Zorg18 r1's spawner;
    - a scanner check for the removed call.
@@ -453,6 +468,13 @@ Progression, each stage feeding the next:
    vanilla" rather than a missing dependency. Removed Java classes are item 29's `api-diff`. Tests:
    `tests/test_content_diff.py`; the 0.9a-to-RC8 run is in `docs/LOCAL_HANDOFF.md`.
 9. **Licence-aware revival of dependencies.** Before REVIVE_DEPENDENCY, check `release_policy.json` so a revived library is marked local-only when its licence doesn't allow redistribution.
+   **Done 2026-09-24.** `dependency-substitutes` now attaches `licence` to every provider it would have you
+   revive (one not targeting 0.98a): LOCAL_ONLY or RELEASABLE from that mod's own `release_policy.json`
+   entry (matched by id or name via the new `release.policy_entry`, which the release gate also uses),
+   or UNRECORDED when there is no entry. The policy's `default` would call an unlisted mod releasable,
+   but no licence has been checked, so a decision must be recorded first. `licence_notes` (printed as
+   `LICENCE:` lines) spell out the consequence: a local-only revival works here but a mod needing it
+   cannot ship with it. Tests: `tests/test_substitutes.py` (`RevivalLicenceTests`).
 11. **Loose-script compile check.** Removed APIs keep turning up one method at a time: `SectorAPI.createFleet`, then `SectorAPI.addMessage` (RC8 moved it to `CampaignUIAPI`), found only by task A5's compile check of Cobalt-Arms and Independant-Mining-Faction. When the rig JDK is available, compile every loose `data/**.java` against the core jars plus the declared dependencies' jars, and report each javac error as a MANUAL finding with its file and line. That catches every removed or changed API in one pass; per-method `removed-api-call` entries then serve only as fixer rules.
     **Done 2026-09-15.** The standalone `compile-check <mod>` command (task A9) is now also reachable from a plain scan: `scan_mod(..., compile_check=True)` and `scan --compile-check` call `bridgeforge.compile_check.compile_loose_scripts` when `--vanilla-core` is given, emitting `loose-script-compile-error` (MANUAL, grouped one finding per failing file, up to 5 errors' line/message/symbol as evidence) or `loose-script-compile-unavailable` (UNKNOWN, no JDK or no core). Off by default so a plain scan stays fast and hermetic. Real cases (2026-09-15): Renis-Imperium, AI-War, Argamede-Union and EZFaction were each marked ready by every other check and failed only this one. Janino version check: RC8 ships Janino 2.7.8 (`starsector-core/janino.jar` manifest); its own changelog dates the diamond operator/try-with-resources/multi-catch/lambdas all to the 3.0.x line, well after 2.7.8, so `janino_gap_warnings` keeps flagging every construct it already flagged. Tests: `tests/test_scanner.py` (`CompileCheckScanIntegrationTests`).
 10. **Fold-in workflow (owner policy 2026-09-14).** Discontinued library-like mods are folded into RevenantLib (`revenantlib`), per `docs/DEPENDENCY_STRATEGY.md`. The workflow has four parts:

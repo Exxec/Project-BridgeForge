@@ -62,6 +62,15 @@ python -m bridgeforge compile-check "In operation\<Maelstrom workspace>\working"
 Done when `shadowed_by_dependency` lists the two Titan scripts E8 found, supplied by base
 Interstellar Imperium's `II.jar`.
 
+### 2e. Build the provider index and the queue's revival order (ROADMAP P14 items 2-3)
+```powershell
+python -m bridgeforge provider-index build --providers "In operation" --providers "In operation\_rig\mods" --providers "C:\Users\exxec\Downloads\<extracted mods>"
+python -m bridgeforge dependency-graph --vanilla-core $core --provider-index bridgeforge-state\provider-index.json
+```
+Done when the graph's first entries match the roadmap's 2026-09-14 reading (FX Core unblocks FX
+Example and part of Rebal; AI Overhaul the rest of Rebal). Every `licence UNRECORDED` entry needs a
+`release_policy.json` decision before that mod is revived.
+
 ### 3. Confirm `revenantlib_contract` on the real rig (ROADMAP P14 item 30)
 ```powershell
 python -m bridgeforge rig-doctor $rig --real-install "C:\Program Files (x86)\Fractal Softworks\Starsector"

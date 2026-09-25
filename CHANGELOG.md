@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- `strip-plan --expected FILE --build rN --link ...` adds PROPOSED expected changes for the files a strip deletes, ready for `expect approve` (ROADMAP P14 item 4, second slice).
+- **New `provider-index build` and `dependency-graph` (ROADMAP P14 items 2-3).** Save what every visible mod provides so lookups work without the mods installed (`dependency-substitutes --provider-index`), and rank queue-wide which old dependencies to revive first by how many queued mods each unblocks.
+- **`dependency-substitutes` is licence-aware (ROADMAP P14 item 9).** Each dependency it would have you revive shows its `release_policy.json` decision (LOCAL_ONLY, RELEASABLE, or UNRECORDED when no one has checked), with a `LICENCE:` note on what that means for shipping.
 - **New `strip-plan` command (ROADMAP P14 item 4, first slice).** For content a mod uses but nothing defines, lists every file and field each id sits in (variant slots, hull-mod and wing lists, built-in weapons, faction known-lists), with vanilla weapons that fit each emptied slot. Edits nothing.
 - **New finding `loose-script-shadowed-by-dependency-jar` (ROADMAP P14 item 12).** `compile-check` and `scan --compile-check` now detect a loose script whose class a declared dependency's jar already compiles: the game never compiles it, so the mod's edit does nothing. Its javac errors no longer fail the compile check.
 - Tests: a self-check (ROADMAP P14 item 24) fails the suite when new code builds a hull-id set from `.ship` files without resolving `.skin` ids (the BF-SKIN-01 blind spot), unless it is an explained exemption.
