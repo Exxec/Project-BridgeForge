@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- `verify-shadow` reads the game's own large jars (a higher entry cap for jars in a `starsector-core`; mod jars keep the zip-bomb cap).
+- `corpus-index` reads `.7z` archives with the optional `bridgeforge[archives]` extra (`py7zr`), with the same safety checks as zips.
+- New `release-policy show|set` records a mod's publishing decision (reason required, date kept).
 - **`board` shows dependency evidence (ROADMAP P14 item 3).** `dependency-graph --write` and `dependency-substitutes --write` record their results; `board` shows each mod's dependency strategy and the queue's revival order with the dates they were recorded, and warns when a mod was rescanned since.
 - **New `vendor-plan` command (ROADMAP P14 item 4, last slice).** Traces the closure of one piece of an abandoned mod for folding into RevenantLib: files and rows to include, SUSPECT files that mention it but nothing references, missing references, what RevenantLib already has, and the licence decision. Copies nothing. Reproduces RevenantLib's two hand-traced closures exactly.
 - `strip-plan --expected FILE --build rN --link ...` adds PROPOSED expected changes for the files a strip deletes, ready for `expect approve` (ROADMAP P14 item 4, second slice).

@@ -51,9 +51,8 @@ Select-String -Path "In operation\*\scratch\MOVES.log" -Pattern "shadow|jar"
 python -m bridgeforge verify-shadow "<the moved .java, from scratch/moved-*/>" --against "<the jar or core the log names>" --against $core
 ```
 Done when every such move is either SHADOWED (the move stands) or listed as a mistake to restore,
-as E12 did for Rebal. Also check that `verify-shadow ... --against $core` reports no
-`NOT checked: ...starfarer_obf.jar: more than 10000 entries` line; if it does, the entry limit
-needs raising for trusted game jars.
+as E12 did for Rebal. (Game-core jars are read up to 250,000 entries since item 33, so
+`starfarer_obf.jar` should be checked; a `NOT checked` line for it would mean even that is too low.)
 
 ### 2d. Confirm dependency-jar shadowing on Maelstrom (ROADMAP P14 item 12)
 ```powershell
@@ -70,7 +69,8 @@ python -m bridgeforge board --write
 ```
 Done when the graph's first entries match the roadmap's 2026-09-14 reading (FX Core unblocks FX
 Example and part of Rebal; AI Overhaul the rest of Rebal). Every `licence UNRECORDED` entry needs a
-`release_policy.json` decision before that mod is revived.
+`release_policy.json` decision before that mod is revived: `python -m bridgeforge release-policy set <mod id>
+--local-only|--releasable --reason "..."`.
 
 ### 3. Confirm `revenantlib_contract` on the real rig (ROADMAP P14 item 30)
 ```powershell
@@ -94,13 +94,13 @@ Done when, for the files E11 rebuilt by hand, the MERGED output matches E11's re
 
 ### 6. Build the Downloads index (ROADMAP P14 item 18)
 ```powershell
+python -m pip install -e ".[archives]"          # once: lets the index read .7z archives (item 34)
 python -m bridgeforge corpus-index build "C:\Users\exxec\Downloads"
 python -m bridgeforge corpus-index search shieldbypass
 ```
 Done when the search finds `Ship and Weapon Pack/data/hullmods/hull_mods.csv` (the 2026-09-20
 false negative). Note the build time and index size in item 18, and check the `NOT searched` line:
-if many mods sit in `.7z`/`.rar` archives, reading them needs a new dependency, so decide whether to
-add one or extract them once.
+`.7z` is read with the extra; `.rar` is not, so extract any `.rar` mods once if they matter.
 
 ### 7. RevenantLib line endings
 Merge `claude/confident-archimedes-e2qv1v` in `Exxec/RevenantLib` (`.gitattributes`

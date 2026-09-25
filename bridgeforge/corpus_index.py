@@ -26,6 +26,8 @@ TEXT_SUFFIXES = frozenset({
     ".csv", ".json", ".ship", ".wpn", ".variant", ".skin", ".faction", ".system", ".proj", ".java",
     ".txt", ".md", ".ini", ".xml", ".log", ".properties", ".kt", ".groovy", ".cfg", ".data", ".shader", ".frag", ".vert",
 })
+# Never read. .7z is read when the optional py7zr is installed (see _index_7z); it stays listed here so a
+# .7z nested inside another archive is still reported rather than silently ignored.
 UNINDEXED_ARCHIVES = frozenset({".7z", ".rar", ".tar", ".gz", ".bz2", ".xz"})
 ZIP_SUFFIXES = frozenset({".zip", ".jar"})
 
@@ -97,6 +99,56 @@ def _index_zip(connection, source: str, data: bytes, max_bytes: int) -> None:
                 connection.execute("INSERT OR REPLACE INTO files VALUES (?, ?, ?)", (location, source, info.file_size))
 
 
+def _safe_member(name: str) -> bool:
+    parts = Path(name.replace("\\", "/")).parts
+    return bool(parts) and not name.startswith(("/", "\\")) and ".." not in parts and ":" not in parts[0]
+
+
+def _index_7z(connection, source: str, path: Path, max_bytes: int) -> None:
+    """Index a .7z with the optional py7zr reader (`pip install bridgeforge[archives]`, owner decision 2026-09-25).
+
+    py7zr 1.x has no in-memory read, so the text members worth indexing (after the same size, nesting
+    and path-safety checks as zips) are extracted to a temporary folder, read, and discarded.
+    """
+    try:
+        import py7zr
+    except ImportError:
+        connection.execute("INSERT OR REPLACE INTO skipped VALUES (?, ?, ?)", (source, source, ".7z archives are not read (pip install bridgeforge[archives] to read them)"))
+        return
+    import tempfile
+
+    with py7zr.SevenZipFile(path, "r") as archive:
+        if archive.needs_password():
+            connection.execute("INSERT OR REPLACE INTO skipped VALUES (?, ?, ?)", (source, source, "encrypted .7z"))
+            return
+        wanted = []
+        for info in archive.list():
+            if info.is_directory:
+                continue
+            member = info.filename.replace("\\", "/")
+            location = f"{source}!{member}"
+            suffix = Path(member).suffix.lower()
+            if not _safe_member(member):
+                connection.execute("INSERT OR REPLACE INTO skipped VALUES (?, ?, ?)", (location, source, "unsafe member path"))
+            elif suffix in ZIP_SUFFIXES or suffix in UNINDEXED_ARCHIVES:
+                connection.execute("INSERT OR REPLACE INTO skipped VALUES (?, ?, ?)", (location, source, "archive inside an archive"))
+            elif suffix in TEXT_SUFFIXES and (info.uncompressed or 0) > max_bytes:
+                connection.execute("INSERT OR REPLACE INTO skipped VALUES (?, ?, ?)", (location, source, f"larger than {max_bytes} bytes"))
+            elif suffix in TEXT_SUFFIXES:
+                wanted.append(info.filename)
+            else:
+                connection.execute("INSERT OR REPLACE INTO files VALUES (?, ?, ?)", (location, source, info.uncompressed or 0))
+        if not wanted:
+            return
+        archive.reset()
+        with tempfile.TemporaryDirectory(prefix="bf-7z-") as scratch:
+            archive.extract(path=scratch, targets=wanted)
+            for name in wanted:
+                extracted = Path(scratch) / name
+                if extracted.is_file():
+                    _add_text(connection, source, f"{source}!{name.replace(chr(92), '/')}", extracted.read_bytes(), max_bytes)
+
+
 def build_index(root: Path, db: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> dict:
     root = Path(root).expanduser().resolve()
     if not root.is_dir():
@@ -130,13 +182,15 @@ def build_index(root: Path, db: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> dic
                 try:
                     if suffix in ZIP_SUFFIXES:
                         _index_zip(connection, source, path.read_bytes(), max_bytes)
+                    elif suffix == ".7z":
+                        _index_7z(connection, source, path, max_bytes)
                     elif suffix in UNINDEXED_ARCHIVES:
                         connection.execute("INSERT OR REPLACE INTO skipped VALUES (?, ?, ?)", (source, source, f"{suffix} archives are not read"))
                     elif suffix in TEXT_SUFFIXES:
                         _add_text(connection, source, source, path.read_bytes(), max_bytes)
                     else:
                         connection.execute("INSERT OR REPLACE INTO files VALUES (?, ?, ?)", (source, source, stat.st_size))
-                except (OSError, zipfile.BadZipFile, RuntimeError, NotImplementedError) as exc:
+                except Exception as exc:  # any unreadable archive (bad zip, corrupt or unsupported 7z) is reported, never fatal
                     connection.execute("INSERT OR REPLACE INTO skipped VALUES (?, ?, ?)", (source, source, f"unreadable: {exc}"))
                 connection.execute("INSERT INTO sources VALUES (?, ?, ?)", (source, stat.st_size, stat.st_mtime_ns))
                 stats["reindexed"] += 1

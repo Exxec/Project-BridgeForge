@@ -935,6 +935,26 @@ Progression, each stage feeding the next:
     differs from its variant id got a variant the game does not know.
     **Done 2026-09-24.** `variantId` first, then `id`, then the file stem. Test:
     `tests/test_probe_config.py` (`test_probe_deploys_the_declared_variant_id_not_the_file_name`).
+33. **`verify-shadow` must be able to read the game's own large jars (owner decision 2026-09-25).**
+    `MAX_JAR_ENTRIES` (10,000) guards against zip bombs in mod jars, but `starfarer_obf.jar` may exceed
+    it, which would leave the most important jar unchecked.
+    **Done 2026-09-25.** `scanner.iter_class_files_in_jars` takes `max_entries`; `verify-shadow` reads jars
+    sitting directly in a folder holding `starfarer.api.jar` with `TRUSTED_GAME_JAR_MAX_ENTRIES` (250,000),
+    and mod jars with the usual cap, still reporting any jar it skips. Test: `tests/test_verify_shadow.py`
+    (`GameJarEntryLimitTests`).
+34. **`corpus-index` reads `.7z` archives when the optional reader is installed (owner decision 2026-09-25).**
+    **Done 2026-09-25.** New extra `bridgeforge[archives]` (`py7zr>=1.0`; the core keeps one dependency).
+    Members get the same size, nesting and path-safety checks as zip members (absolute paths, `..`, drive
+    letters refused); encrypted archives are reported. py7zr 1.x has no in-memory read, so the wanted text
+    members are extracted to a temporary folder and discarded. Without the extra, `.7z` stays reported as
+    not read with an install hint; `.rar`/`.tar`/`.gz` stay unread. CI's coverage job and the web-session
+    hook install the extra. Tests: `tests/test_corpus_index.py` (`SevenZipTests`).
+35. **Record publishing decisions with a command, not by hand-editing JSON (owner decision 2026-09-25).**
+    Every `licence UNRECORDED` from `dependency-substitutes`/`dependency-graph` needs a decision.
+    **Done 2026-09-25.** `release-policy show MOD` and `release-policy set MOD --local-only|--releasable
+    --reason TEXT [--on DATE]` (`release.record_policy_decision`): a reason is required, the date is kept as
+    `recorded_on`, an existing entry is updated in place under its own key, and the rest of the file is
+    byte-for-byte unchanged. Tests: `tests/test_release.py` (`ReleasePolicyRecordTests`).
 
 ## Post-1.0 research and gated automation
 

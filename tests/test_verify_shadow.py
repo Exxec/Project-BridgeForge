@@ -85,5 +85,28 @@ class VerifyShadowTests(unittest.TestCase):
         self.assertIn("NOT checked:", out.getvalue())
 
 
+class GameJarEntryLimitTests(unittest.TestCase):
+    def test_game_core_jars_get_a_higher_entry_cap_than_mod_jars(self):
+        from unittest.mock import patch
+
+        import bridgeforge.scanner as scanner_module
+
+        with resolved_temp_dir() as root:
+            mod, core = _mod(root), _core(root)
+            # Both jars hold 6 entries. The default (mod) cap is lowered to 3 to stand in for the real
+            # 10,000; the game-core jar must still be read under its trusted cap, the mod jar must not.
+            write_jar(core / "starfarer_obf.jar", {f"x/C{n}.class": build_class_file(f"x/C{n}") for n in range(5)}
+                      | {"data/shipsystems/NoPackage.class": build_class_file("data/shipsystems/NoPackage")})
+            write_jar(mod / "jars" / "rebal.jar", {f"y/D{n}.class": build_class_file(f"y/D{n}") for n in range(5)}
+                      | {"data/scripts/Owned.class": build_class_file("data/scripts/Owned")})
+            with patch.object(scanner_module, "MAX_JAR_ENTRIES", 3), \
+                 patch("bridgeforge.scanner.iter_class_files_in_jars.__defaults__", (None, 3)):
+                result = verify_shadow([mod / "data/scripts/Owned.java", mod / "data/shipsystems/NoPackage.java"], [mod, core])
+        owned, no_package = result["results"]
+        self.assertEqual(no_package["status"], "SHADOWED")   # the 6-entry game jar was still read
+        self.assertEqual(owned["status"], "NOT_SHADOWED")    # the 6-entry mod jar was over the mod cap...
+        self.assertTrue(any("rebal.jar: more than 3 entries" in item for item in result["unreadable_jars"]))  # ...and said so
+
+
 if __name__ == "__main__":
     unittest.main()

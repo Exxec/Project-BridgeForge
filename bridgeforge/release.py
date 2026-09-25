@@ -69,6 +69,26 @@ def _policy_for_mod(policy: dict[str, object], mod_id: str | None, mod_name: str
     return entry if entry is not None else (policy.get("default") or {"local_only": False, "reason": None})
 
 
+def record_policy_decision(mod_id: str, *, local_only: bool, reason: str, on: str | None = None,
+                           policy_path: Path | None = None) -> dict[str, object]:
+    """Record one mod's publishing decision in release_policy.json (the file the release gate and
+    dependency-substitutes read). An existing entry, matched case-insensitively, keeps its key."""
+    from datetime import date
+
+    if not mod_id.strip():
+        raise ReleaseError("a mod id is required")
+    if not reason or not reason.strip():
+        raise ReleaseError("a reason is required: record the evidence the decision rests on")
+    path = Path(policy_path).expanduser().resolve() if policy_path is not None else DEFAULT_POLICY_PATH
+    policy = _load_policy(path)
+    mods = policy.setdefault("mods", {})
+    key = next((existing for existing in mods if str(existing).lower() == mod_id.lower()), mod_id)
+    previous = mods.get(key)
+    mods[key] = {"local_only": bool(local_only), "reason": reason.strip(), "recorded_on": on or date.today().isoformat()}
+    path.write_text(json.dumps(policy, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"mod": key, "previous": previous, "current": mods[key], "file": str(path)}
+
+
 def _licence_gate(mod_id: str | None, mod_name: str | None, policy_path: Path | None) -> dict[str, object]:
     policy = _load_policy(policy_path)
     entry = _policy_for_mod(policy, mod_id, mod_name)

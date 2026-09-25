@@ -760,6 +760,19 @@ def build_parser() -> argparse.ArgumentParser:
     vendor_cmd.add_argument("--target", type=Path, help="RevenantLib folder or workspace, to report ids it already has and file collisions (default: <repo>/In operation/RevenantLib when present)")
     vendor_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so references vanilla provides are not traced")
     vendor_cmd.add_argument("--json", action="store_true")
+    policy_cmd = subcommands.add_parser("release-policy", help="show or record a mod's publishing decision in release_policy.json (read by the release gate and dependency-substitutes)")
+    policy_sub = policy_cmd.add_subparsers(dest="policy_command", required=True)
+    policy_show = policy_sub.add_parser("show", help="the recorded decision for a mod id or name")
+    policy_show.add_argument("mod")
+    policy_set = policy_sub.add_parser("set", help="record a decision (updates an existing entry in place)")
+    policy_set.add_argument("mod")
+    policy_choice = policy_set.add_mutually_exclusive_group(required=True)
+    policy_choice.add_argument("--local-only", action="store_true", help="may be used locally, not published")
+    policy_choice.add_argument("--releasable", action="store_true", help="may be published")
+    policy_set.add_argument("--reason", required=True, help="the evidence the decision rests on (licence file, forum post, owner decision and date)")
+    policy_set.add_argument("--on", help="decision date (default: today)")
+    for command in (policy_show, policy_set):
+        command.add_argument("--policy", type=Path, help=argparse.SUPPRESS)
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
@@ -2532,6 +2545,21 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(dumps(plan) if args.json else render(plan))
+        return 0
+    if args.command == "release-policy":
+        from .release import ReleaseError as PolicyError, record_policy_decision  # alias: a bare ReleaseError here would shadow main()'s
+        from .substitutes import revival_licence
+        try:
+            if args.policy_command == "show":
+                decision = revival_licence(args.mod, args.mod, args.policy)
+                print(f"{args.mod}: {decision['decision']}" + (f" ({decision['reason']})" if decision.get("reason") else ""))
+            else:
+                result = record_policy_decision(args.mod, local_only=args.local_only, reason=args.reason, on=args.on, policy_path=args.policy)
+                verb = "updated" if result["previous"] else "recorded"
+                print(f"{verb} {result['mod']}: {'LOCAL_ONLY' if result['current']['local_only'] else 'RELEASABLE'} in {result['file']}")
+        except PolicyError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
         return 0
     if args.command == "api-diff":
         import zipfile
