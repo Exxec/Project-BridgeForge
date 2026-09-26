@@ -26,6 +26,7 @@ SCHEMA_VERSION = 1
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HELPER_MODULE = "scanner.py"
 UNTESTED_BASELINE = Path("tests") / "untested_checks_baseline.json"
+NOT_COVERAGE = {"test_checks_index", "test_finding_stats"}
 
 
 @dataclass
@@ -205,8 +206,10 @@ def gather(repo_root: Path = REPO_ROOT) -> Catalogue:
                 merged.severities |= item.severities
                 merged.where |= item.where
                 merged.explanation = merged.explanation or item.explanation
-    # The generated docs and this index's own tests don't count as coverage.
-    test_texts = {path.stem: path.read_text(encoding="utf-8", errors="replace") for path in sorted((repo_root / "tests").glob("test_*.py")) if path.stem != "test_checks_index"}
+    # The generated docs and this index's own tests don't count as coverage, nor do finding-stats'
+    # tests, which name ids only as fake stored-scan data (no check runs).
+    test_texts = {path.stem: path.read_text(encoding="utf-8", errors="replace") for path in sorted((repo_root / "tests").glob("test_*.py"))
+                  if path.stem not in NOT_COVERAGE}
     tests = {key: _tests_naming(key, test_texts) for key in list(checks) + list(issues)}
     registry = repo_root / "docs" / "BUG_CLASSES.md"
     links = bug_class_links(registry.read_text(encoding="utf-8")) if registry.is_file() else {}

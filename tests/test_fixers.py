@@ -1211,3 +1211,73 @@ class UnsupportedFindingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CsvFullwidthNumberFixerTests(unittest.TestCase):
+    def test_rewrites_reported_cells_and_keeps_prose_and_quoting(self) -> None:
+        from bridgeforge.fixers import apply_fix, compute_fix
+        from bridgeforge.scanner import scan_mod
+
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            (mod / "data" / "hulls").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "x"}', encoding="utf-8")
+            csv_path = mod / "data" / "hulls" / "ship_data.csv"
+            csv_path.write_bytes(b"\xef\xbb\xbf" + 'name,id,hitpoints,max speed,designation\r\nA,fx_a,１５００,"0。5",护卫舰，快速\r\nB,fx_b,1500,50,"3，000 tons"\r\n'.encode("utf-8"))
+            apply_fix(compute_fix(mod, "csv-fullwidth-number"))
+            after = csv_path.read_bytes()
+            remaining = [f for f in scan_mod(mod).findings if f.id == "csv-fullwidth-number"]
+            with self.assertRaises(FixerError):
+                compute_fix(mod, "csv-fullwidth-number")  # nothing left to do
+        self.assertEqual(after, b"\xef\xbb\xbf" + 'name,id,hitpoints,max speed,designation\r\nA,fx_a,1500,"0.5",护卫舰，快速\r\nB,fx_b,1500,50,"3，000 tons"\r\n'.encode("utf-8"))
+        self.assertEqual(remaining, [])
+
+
+class ShipDataFighterBaysColumnFixerTests(unittest.TestCase):
+    def test_adds_a_blank_column_and_refuses_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            _write(mod / "mod_info.json", '{"id": "x"}')
+            (mod / "data/hulls").mkdir(parents=True)
+            (mod / "data/hulls/ship_data.csv").write_bytes(b"name,id,hitpoints\r\nA,old_a,1500\r\n\r\nB,old_b,900\r\n")  # bytes: write_text would double \r on Windows
+            apply_fix(compute_fix(mod, "ship-data-missing-fighter-bays-column"))
+            after = (mod / "data/hulls/ship_data.csv").read_bytes().decode("utf-8")
+            remaining = _findings(scan_mod(mod), "ship-data-missing-fighter-bays-column")
+            with self.assertRaises(FixerError):
+                compute_fix(mod, "ship-data-missing-fighter-bays-column")
+        self.assertEqual(after, "name,id,hitpoints,fighter bays\r\nA,old_a,1500,\r\n\r\nB,old_b,900,\r\n")
+        self.assertEqual(remaining, [])
+
+
+class CustomUiButtonPressedFixerTests(unittest.TestCase):
+    def test_adds_a_no_op_to_each_block_that_lacks_it(self) -> None:
+        source = (
+            "package data.scripts;\n"
+            "import com.fs.starfarer.api.campaign.CustomUIPanelPlugin;\n"
+            "public class Panel implements CustomUIPanelPlugin {\n"
+            "    public void render(float alpha) {}\n"
+            "    Object other = new CustomUIPanelPlugin() {\n"
+            "        public void buttonPressed(Object id) { }\n"
+            "    };\n"
+            "    Object third = new CustomUIPanelPlugin() {\n"
+            "        public void advance(float amount) { if (amount > 0) { } }\n"
+            "    };\n"
+            "}\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            _write(mod / "mod_info.json", '{"id": "x"}')
+            _write(mod / "data/scripts/Panel.java", source)
+            _write(mod / "src/x/Jar.java", "class Jar implements CustomUIPanelPlugin { }\n")
+            apply_fix(compute_fix(mod, "missing-custom-ui-button-pressed-callback"))
+            after = (mod / "data/scripts/Panel.java").read_text(encoding="utf-8")
+            loose_left = [f for f in _findings(scan_mod(mod), "missing-custom-ui-button-pressed-callback") if f.file.startswith("data/")]
+            _write(mod / "data/scripts/Broken.java", "class Broken implements CustomUIPanelPlugin {\n  void f() {\n")
+            with self.assertRaises(FixerError):
+                compute_fix(mod, "missing-custom-ui-button-pressed-callback")
+        # Only the third block: the scanner's brace walk counts the outer class as covered by the
+        # buttonPressed its nested anonymous class declares, and the fixer follows the scanner.
+        self.assertEqual(after.count("public void buttonPressed(Object buttonId) {}"), 1)
+        self.assertIn("        public void buttonPressed(Object buttonId) {}\n    };\n}", after)
+        self.assertIn("public void buttonPressed(Object id) { }", after)                 # the existing one is untouched
+        self.assertEqual(loose_left, [])

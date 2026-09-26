@@ -702,6 +702,12 @@ def build_parser() -> argparse.ArgumentParser:
     graph_cmd.add_argument("--write", action="store_true", help="write <queue>/DEPENDENCY_GRAPH.json and .md, and each mod's reports/dependencies.json, all of which `board` shows")
     graph_cmd.add_argument("--json", action="store_true")
     subs_cmd.add_argument("--json", action="store_true")
+    stats_cmd = subcommands.add_parser("finding-stats", help="count findings across workspaces by automation tier: how many mods could be revived unattended, and which finding ids to automate next (roadmap P15 item 1)")
+    stats_cmd.add_argument("roots", type=Path, nargs="*", help="queue folders or single workspaces; default <repo>/In operation")
+    stats_cmd.add_argument("--scan", action="store_true", help="scan each <ws>/working afresh instead of reading its latest stored scan")
+    stats_cmd.add_argument("--vanilla-core", type=Path, help="with --scan: also compile-check loose scripts")
+    stats_cmd.add_argument("--write", type=Path, metavar="DIR", help="write FINDING_STATS.json and FINDING_STATS.md into DIR")
+    stats_cmd.add_argument("--json", action="store_true")
     preset_cmd = subcommands.add_parser("preset-check", help="check bf-test.ps1 presets against the rig's installed mods: own mod and declared dependencies enabled, enabled ids installed, no undeclared libraries")
     preset_cmd.add_argument("script", type=Path, help="path to bf-test.ps1")
     preset_cmd.add_argument("--rig-mods", type=Path, help="rig mods folder (default: <script folder>/_rig/mods)")
@@ -773,6 +779,32 @@ def build_parser() -> argparse.ArgumentParser:
     policy_set.add_argument("--on", help="decision date (default: today)")
     for command in (policy_show, policy_set):
         command.add_argument("--policy", type=Path, help=argparse.SUPPRESS)
+    revive_cmd = subcommands.add_parser("revive", help="run the mechanical part of a revival unattended (scan, permitted fixers, rescan, until nothing changes) and write escalation packets for the rest (roadmap P15 item 2)")
+    revive_cmd.add_argument("workspace", type=Path, help="a workspace folder holding working/mod_info.json")
+    revive_cmd.add_argument("--apply", action="store_true", help="write fixes into working/ (default: dry run; reports and packets are still written)")
+    revive_cmd.add_argument("--approve", action="append", default=[], metavar="FINDING_ID", help="approve this fixer for this run even though its findings are not all SAFE; repeatable")
+    revive_cmd.add_argument("--policy", type=Path, help="standing fixer approvals (default: AUTOMATION_POLICY.json in the workspace's parent folder)")
+    revive_cmd.add_argument("--vanilla-core", type=Path, help="RC8 starsector-core: enables the loose-script compile check and the fixers that compare against vanilla")
+    revive_cmd.add_argument("--target", default="0.98a-RC8", help="target game version for mod_info.json (default: 0.98a-RC8)")
+    revive_cmd.add_argument("--max-rounds", type=int, default=5)
+    revive_cmd.add_argument("--json", action="store_true")
+    esc_cmd = subcommands.add_parser("escalation", help="list, show, verify or run the escalation packets revive wrote (roadmap P15 item 3)")
+    esc_sub = esc_cmd.add_subparsers(dest="escalation_command", required=True)
+    esc_list = esc_sub.add_parser("list", help="the workspace's packets")
+    esc_show = esc_sub.add_parser("show", help="print a packet as its agent prompt or owner question")
+    esc_verify = esc_sub.add_parser("verify", help="rescan and say whether the packet's finding is gone with no new actionable findings")
+    esc_verify.add_argument("--working", type=Path, help="check this copy instead of <workspace>/working (an agent's sandbox)")
+    esc_run = esc_sub.add_parser("run", help="run an AI agent on a packet in a throwaway copy; only a verified result is kept")
+    esc_run.add_argument("--agent", required=True, help='the agent command; it gets the packet on stdin and BF_PACKET/BF_PROMPT/BF_NOTE/BF_WORKING in its environment, e.g. "claude -p --permission-mode acceptEdits"')
+    esc_run.add_argument("--apply", action="store_true", help="copy a verified result into working/ (backups kept)")
+    esc_run.add_argument("--retries", type=int, default=1, help="re-runs after a failed attempt, with the failure appended (default 1)")
+    esc_run.add_argument("--timeout", type=int, default=1800, help="seconds per attempt")
+    for command in (esc_list, esc_show, esc_verify, esc_run):
+        command.add_argument("workspace", type=Path)
+        command.add_argument("--json", action="store_true")
+    for command in (esc_show, esc_verify, esc_run):
+        command.add_argument("packet", nargs="?" if command is esc_run else None, help="packet id (see `escalation list`)")
+    esc_run.add_argument("--all", action="store_true", help="run every agent packet in turn")
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
@@ -939,6 +971,21 @@ def main(argv: list[str] | None = None) -> int:
         roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
         summary = save_provider_index(provider_index(roots), args.output, roots)
         print(f"Provider index: {summary['providers']} mods, {summary['ids']} ids -> {summary['output']}")
+        return 0
+    if args.command == "finding-stats":
+        from .finding_stats import FindingStatsError, finding_stats, render
+        from .substitutes import REPO_ROOT
+        try:
+            stats = finding_stats(args.roots or [REPO_ROOT / "In operation"], scan=args.scan, vanilla_core=args.vanilla_core)
+        except (FindingStatsError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.write:
+            args.write.mkdir(parents=True, exist_ok=True)
+            (args.write / "FINDING_STATS.json").write_text(json.dumps(stats, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            (args.write / "FINDING_STATS.md").write_text(render(stats), encoding="utf-8")
+            print(f"Written: {args.write / 'FINDING_STATS.md'}", file=sys.stderr)
+        print(json.dumps(stats, indent=2, ensure_ascii=False) if args.json else render(stats), end="\n" if args.json else "")
         return 0
     if args.command == "dependency-graph":
         from .substitutes import REPO_ROOT, dependency_graph
@@ -2546,6 +2593,50 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(dumps(plan) if args.json else render(plan))
         return 0
+    if args.command == "revive":
+        from .revive import ReviveError, render as render_revive, revive
+        try:
+            result = revive(args.workspace, target=args.target, vanilla_core=args.vanilla_core, policy_path=args.policy,
+                            approve=args.approve, apply=args.apply, max_rounds=args.max_rounds)
+        except (ReviveError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else render_revive(result), end="\n" if args.json else "")
+        return 0
+    if args.command == "escalation":
+        from .escalation import EscalationError, list_packets, load_packet, run_packet, verify
+        from .revive import render_packet
+        try:
+            if args.escalation_command == "list":
+                packets = list_packets(args.workspace)
+                if args.json:
+                    print(json.dumps(packets, indent=2, ensure_ascii=False))
+                for packet in [] if args.json else packets:
+                    print(f"{packet['id']}  {packet['kind']:5}  {packet['tier']:10}  {packet.get('file') or '(mod-wide)'}")
+                return 0
+            if args.escalation_command == "show":
+                packet = load_packet(args.workspace, args.packet)
+                print(json.dumps(packet, indent=2, ensure_ascii=False) if args.json else render_packet(packet), end="\n" if args.json else "")
+                return 0
+            if args.escalation_command == "verify":
+                packet = load_packet(args.workspace, args.packet)
+                working = args.working or Path(packet["workspace"]) / "working"
+                result = verify(packet, working.expanduser().resolve())
+                print(json.dumps(result, indent=2) if args.json else f"{result['status']}: {args.packet}" + "".join(f"\n  {r}" for r in result["reasons"]))
+                return 0 if result["status"] == "PASS" else 1
+            names = [p["id"] for p in list_packets(args.workspace) if p["kind"] == "agent"] if args.all else [args.packet]
+            if not names or names == [None]:
+                raise EscalationError("Name a packet, or pass --all.")
+            results = [run_packet(args.workspace, name, args.agent, apply=args.apply, retries=args.retries, timeout=args.timeout) for name in names]
+        except (EscalationError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(results, indent=2, ensure_ascii=False))
+        for result in [] if args.json else results:
+            last = result["attempts"][-1]
+            print(f"{result['outcome']}: {result['packet']} after {len(result['attempts'])} attempt(s)" + "".join(f"\n  {r}" for r in last["reasons"]))
+        return 0 if all(r["outcome"] in ("VERIFIED", "APPLIED") for r in results) else 1
     if args.command == "release-policy":
         from .release import ReleaseError as PolicyError, record_policy_decision  # alias: a bare ReleaseError here would shadow main()'s
         from .substitutes import revival_licence

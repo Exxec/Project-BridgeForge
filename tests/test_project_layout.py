@@ -259,6 +259,14 @@ class BoardTests(unittest.TestCase):
             self.assertEqual(_check_layout(root, mapping)["status"], "WARN")
             self.assertEqual(_tree_sha256(root), before)
 
+    def test_finding_stats_and_automation_policy_are_known_queue_files(self):
+        with resolved_temp_dir() as root:
+            _base, working = _mod(root)
+            for name in ("FINDING_STATS.json", "FINDING_STATS.md", "AUTOMATION_POLICY.json"):
+                (root / "In operation" / name).write_text("{}", encoding="utf-8")
+            findings = layout_findings(root, {"fixture": working})
+        self.assertNotIn("root-stray", {item["code"] for item in findings})
+
     def test_markdown_rows_remain_contiguous_and_cells_escape_pipes(self):
         with resolved_temp_dir() as root:
             for folder in ("One", "Two"):

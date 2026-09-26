@@ -5,6 +5,36 @@ Cloud sessions have no Starsector install, no test rig, no Windows, and no acces
 local session can pick it up. Each entry says what to run, what "done" looks like, and which
 roadmap item it closes. Delete an entry once it is done (the roadmap keeps the history).
 
+## From 2026-09-26
+
+### P1. Measure the queue: `finding-stats` (ROADMAP P15 item 1)
+```
+python -m bridgeforge finding-stats "In operation" --scan --vanilla-core "<RC8>/starsector-core" --write "In operation"
+```
+(`--scan` rescans every `working/`; drop it to use each workspace's latest stored scan, which is
+faster but may be stale.) Add the Ironclads queue folder as a second root if it lives elsewhere.
+Done when `In operation/FINDING_STATS.md` exists. Paste its top table and the first 20 rows of "What
+to automate next" into a cloud session: those rows decide the next fixers. Any id listed under "Not
+in automation_tiers.json" means a check was added without a tier; the test suite should have caught
+that, so report it.
+
+### P2. First real `revive` and agent run (ROADMAP P15 items 2-3)
+Pick a small mod with few findings (a data-only one from P1's `auto` or `mechanical` bucket):
+```
+python -m bridgeforge revive "In operation/<Mod>" --vanilla-core "<RC8>/starsector-core"            # dry run
+python -m bridgeforge revive "In operation/<Mod>" --vanilla-core "<RC8>/starsector-core" --apply
+python -m bridgeforge escalation list "In operation/<Mod>"
+python -m bridgeforge escalation run "In operation/<Mod>" <packet> --agent "claude -p --permission-mode acceptEdits --allowedTools Read,Edit,Write,Grep,Glob"
+```
+Done when one agent packet ends VERIFIED (then rerun with `--apply`) and the mod passes the usual
+probe run. Record in ROADMAP P15 how long the agent took, whether the packet had enough context,
+and anything it had to go looking for; that decides what packets carry next. If you decide some
+fixers should always apply (e.g. `mod-info-game-version-inexact` for RC8), record them once in
+`In operation/AUTOMATION_POLICY.json`:
+```json
+{"approved_fixers": {"mod-info-game-version-inexact": {"reason": "every revival targets RC8", "recorded_on": "2026-09-26"}}}
+```
+
 ## From 2026-09-24
 
 ### 1. Rebuild the probe jar, then one live run of `content-ids` (ROADMAP P14 item 31)

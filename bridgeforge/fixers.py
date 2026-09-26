@@ -13,12 +13,16 @@ from .build_tag import _NAME_PATTERN, _find_top_level_key, _string_literal_to_te
 from .scanner import (
     DESIGN_TYPE_CSV_TARGETS,
     FACTION_SPECIAL_ROLE_KEYS,
+    CUSTOM_UI_PLUGIN_PATTERN,
     MOD_INFO_TRIAGE_BANNER_PATTERN,
+    _FULLWIDTH_NUMBER_CHARS,
+    _NUMBER_CELL,
     REMOVED_API_CALLS,
     _blank_java_comments,
     _load_lenient_json_file,
     _parse_json,
     _read_csv_rows,
+    _read_csv_rows_lenient,
     _relative,
     _removed_api_call_spans,
     _wing_ids_set,
@@ -38,6 +42,9 @@ SUPPORTED_FINDINGS = (
     "carrier-bays-proposal",
     "revenantlib-fold-conflict",
     "undeclared-library-dependency",
+    "csv-fullwidth-number",
+    "ship-data-missing-fighter-bays-column",
+    "missing-custom-ui-button-pressed-callback",
 )
 
 
@@ -846,7 +853,24 @@ def _fix_carrier_bays_proposal(root: Path, options: dict) -> list[FileChange]:
     than an invented 0. Every --hull id must already exist as a ship_data.csv row (comment/blank-id
     rows don't count); an id this file has no row for is refused rather than silently skipped.
     """
-    assignments = _parse_hull_bay_assignments(options.get("hulls") or [])
+    return _carrier_bays_edit(root, _parse_hull_bay_assignments(options.get("hulls") or []))
+
+
+def _fix_ship_data_missing_fighter_bays_column(root: Path, options: dict) -> list[FileChange]:
+    """Add RC8's 'fighter bays' column to a pre-0.8a ship_data.csv, blank for every hull (P15, 2026-09-26).
+
+    Behaviour-neutral: a hull without the column already loads with 0 bays, and a blank cell reads the
+    same, so this only makes the schema current. Carriers still need their counts from
+    `carrier-bays-proposal` (--hull ID=N), which is an owner decision.
+    """
+    path = root / "data" / "hulls" / "ship_data.csv"
+    header = next(csv.reader(io.StringIO(_decode(path.read_bytes())[0])), []) if path.is_file() else []
+    if "fighter bays" in [cell.strip().lower() for cell in header]:
+        raise FixerError(f"{path} already has a 'fighter bays' column.")
+    return _carrier_bays_edit(root, {})
+
+
+def _carrier_bays_edit(root: Path, assignments: dict[str, int]) -> list[FileChange]:
     path = root / "data" / "hulls" / "ship_data.csv"
     if not path.is_file():
         raise FixerError(f"No ship_data.csv found at {path}.")
@@ -1366,6 +1390,94 @@ def _fix_mod_info_triage_banner(root: Path, options: dict) -> list[FileChange]:
     return [FileChange(path=path, before=raw, after=_encode(new_text, had_bom))]
 
 
+def _fullwidth_cells(path: Path) -> dict[str, str]:
+    """{raw cell: ASCII number} for every cell the scanner's csv-fullwidth-number check reports."""
+    import unicodedata
+
+    cells: dict[str, str] = {}
+    for row in _read_csv_rows_lenient(path) or []:
+        for value in row.values():
+            if isinstance(value, str) and _FULLWIDTH_NUMBER_CHARS.search(value):
+                normalised = unicodedata.normalize("NFKC", value.replace("。", ".")).strip()
+                if _NUMBER_CELL.fullmatch(normalised):
+                    cells[value] = normalised
+    return cells
+
+
+def _fix_csv_fullwidth_number(root: Path, options: dict) -> list[FileChange]:
+    """Rewrite full-width numeric CSV cells ('１５００', '0。5') as the ASCII number they spell (P15, 2026-09-26).
+
+    Only whole cells the scanner reports are touched, keeping their quoting; prose with Chinese
+    punctuation is left alone because it doesn't normalise to a plain number. The value is the one
+    the author wrote, so this is behaviour-neutral: the loader couldn't parse the original.
+    """
+    data = root / "data"
+    changes: list[FileChange] = []
+    for path in sorted(data.rglob("*.csv")) if data.is_dir() else []:
+        cells = _fullwidth_cells(path)
+        if not cells:
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        new = text
+        for value, number in cells.items():
+            cell = re.compile(rf'(^|,)(")?{re.escape(value)}(?(2)")(?=,|\r|\n|$)', re.M)
+            new = cell.sub(lambda m, number=number: m.group(1) + (m.group(2) or "") + number + (m.group(2) or ""), new)
+            if cell.search(new) or new.count("\n") != text.count("\n"):
+                raise FixerError(f"{path}: the full-width cell {value!r} could not be rewritten in place; fix it by hand.")
+        if new == text:
+            raise FixerError(f"{path}: the full-width cells sit inside multi-line or unusual quoting; fix them by hand.")
+        changes.append(FileChange(path=path, before=raw, after=_encode(new, had_bom)))
+    if not changes:
+        raise FixerError("No CSV under data/ has a full-width numeric cell.")
+    return changes
+
+
+def _fix_missing_custom_ui_button_pressed_callback(root: Path, options: dict) -> list[FileChange]:
+    """Add a no-op `buttonPressed(Object)` to CustomUIPanelPlugin blocks that lack it (P15, 2026-09-26).
+
+    RC8's CustomUIPanelPlugin declares buttonPressed(Object) (the scanner's evidence), so an
+    implementation without it fails to compile and the panel never opens. A panel with no buttons
+    never receives the call, so an empty body keeps behaviour; a panel that has buttons needed a
+    handler the old API didn't have, and the live test says whether it matters. Each block is found
+    with the scanner's own brace-aware walk; an unbalanced block is refused. Loose data/ scripts
+    only: jar sources need the jar rebuilt.
+    """
+    from .scanner import scan_mod
+
+    files = sorted({f.file for f in scan_mod(root).findings if f.id == "missing-custom-ui-button-pressed-callback" and f.file})
+    loose = [rel for rel in files if rel.startswith("data/")]
+    if not loose:
+        raise FixerError("No loose data/ script lacks buttonPressed(Object)" + (f" (jar sources need a rebuild: {', '.join(files[:5])})" if files else "") + ".")
+    changes = []
+    for rel in loose:
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        inserts = []
+        for match in CUSTOM_UI_PLUGIN_PATTERN.finditer(text):
+            opening = match.end() - 1 if text[match.end() - 1] == "{" else text.find("{", match.end())
+            depth, closing = 0, -1
+            for index in range(max(opening, 0), len(text)) if opening >= 0 else ():
+                depth += {"{": 1, "}": -1}.get(text[index], 0)
+                if depth == 0 and text[index] == "}":
+                    closing = index
+                    break
+            if closing < 0:
+                raise FixerError(f"{path}: a CustomUIPanelPlugin block has unbalanced braces; add buttonPressed(Object) by hand.")
+            if not re.search(r"\bbuttonPressed\s*\(", text[opening:closing]):
+                line_start = text.rfind("\n", 0, closing) + 1
+                indent = re.match(r"[ \t]*", text[line_start:]).group(0)
+                inserts.append((closing, f"{indent}    // Required by the 0.98a CustomUIPanelPlugin interface; added by BridgeForge as a no-op (the old API had no button callback).\n"
+                                         f"{indent}    public void buttonPressed(Object buttonId) {{}}\n{indent}"))
+        new = text
+        for position, snippet in sorted(inserts, reverse=True):
+            before = new[:position].rstrip(" \t")
+            new = before + ("" if before.endswith("\n") else "\n") + snippet + new[position:]
+        changes.append(FileChange(path=path, before=raw, after=_encode(new, had_bom)))
+    return changes
+
+
 # ---------------------------------------------------------------------------
 # Dispatch, diffing, backup/apply
 # ---------------------------------------------------------------------------
@@ -1385,6 +1497,9 @@ _FIXER_FUNCS = {
     "carrier-bays-proposal": _fix_carrier_bays_proposal,
     "revenantlib-fold-conflict": _fix_revenantlib_fold_conflict,
     "undeclared-library-dependency": _fix_undeclared_library_dependency,
+    "csv-fullwidth-number": _fix_csv_fullwidth_number,
+    "ship-data-missing-fighter-bays-column": _fix_ship_data_missing_fighter_bays_column,
+    "missing-custom-ui-button-pressed-callback": _fix_missing_custom_ui_button_pressed_callback,
 }
 
 

@@ -13,7 +13,8 @@ from .scanner import _load_lenient_json_file
 
 NON_RELEASE_FOLDERS = {"original", "working", "reports", "builds", "scratch", "workspace"}
 ROOT_FILES = {"README.md", "STATUS.md", "LIVE_TEST_INSTRUCTIONS.md", "OFFLINE_VALIDATION_GUIDE.md", "bf-test.ps1",
-              "STATUS.generated.md", "STATUS.generated.json", "DEPENDENCY_GRAPH.json", "DEPENDENCY_GRAPH.md"}
+              "STATUS.generated.md", "STATUS.generated.json", "DEPENDENCY_GRAPH.json", "DEPENDENCY_GRAPH.md",
+              "FINDING_STATS.json", "FINDING_STATS.md", "AUTOMATION_POLICY.json"}  # P15: finding-stats --write, revive approvals
 
 
 def layout_findings(repo_root: Path, working_copies: dict[str, Path] | None = None) -> list[dict[str, str]]:
