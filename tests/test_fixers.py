@@ -1238,7 +1238,8 @@ class ShipDataFighterBaysColumnFixerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             mod = Path(directory)
             _write(mod / "mod_info.json", '{"id": "x"}')
-            _write(mod / "data/hulls/ship_data.csv", "name,id,hitpoints\r\nA,old_a,1500\r\n\r\nB,old_b,900\r\n")
+            (mod / "data/hulls").mkdir(parents=True)
+            (mod / "data/hulls/ship_data.csv").write_bytes(b"name,id,hitpoints\r\nA,old_a,1500\r\n\r\nB,old_b,900\r\n")  # bytes: write_text would double \r on Windows
             apply_fix(compute_fix(mod, "ship-data-missing-fighter-bays-column"))
             after = (mod / "data/hulls/ship_data.csv").read_bytes().decode("utf-8")
             remaining = _findings(scan_mod(mod), "ship-data-missing-fighter-bays-column")
