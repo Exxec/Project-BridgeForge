@@ -177,6 +177,46 @@ Only SAFE, mechanical fixes are supported. Any other id is refused, with the lis
 
 Anything else (REVIEW or MANUAL) needs a human or agent decision. Use the dossier.
 
+## 2b. Let it run: revive, escalation packets and finding-stats
+
+`revive` does the mechanical part of a revival in one go and hands you (or an AI agent) only
+what is left:
+
+```
+bridgeforge revive "In operation/MyMod" --vanilla-core "<RC8>/starsector-core"          # dry run
+bridgeforge revive "In operation/MyMod" --vanilla-core "<RC8>/starsector-core" --apply  # write fixes
+```
+
+It scans, applies every fixer it may, rescans, and repeats until nothing changes. A fixer runs
+unattended only when all its findings are SAFE. Approve others per run with `--approve ID`, or
+once for every mod in `In operation/AUTOMATION_POLICY.json`. What remains is in
+`reports/escalations/`, with a summary in `reports/revive/REVIVE.md`:
+
+- **agent packets** hold a finding a program can't fix yet. Each is a complete prompt: evidence,
+  the only files that may change, a numbered excerpt, rules, and the check that decides "done".
+- **owner packets** hold a decision (a dependency, a missing value, a fixer awaiting approval
+  with its diff).
+
+```
+bridgeforge escalation list "In operation/MyMod"
+bridgeforge escalation show "In operation/MyMod" <packet>
+bridgeforge escalation run  "In operation/MyMod" <packet> --agent "claude -p --permission-mode acceptEdits"
+bridgeforge escalation run  "In operation/MyMod" --all --agent "..." --apply
+```
+
+The agent works in a copy under `scratch/escalations/`. BridgeForge rejects edits outside the
+packet's files, rescans the copy, and keeps the change only if the finding is gone and nothing new
+appeared. Kept changes are REVIEW: they still need the live test. Every attempt is logged in
+`reports/escalations/ledger.jsonl`.
+
+`finding-stats` looks across the whole queue. It shows how many mods could run unattended, which
+finding would unlock the most mods if it had a fixer, and which fixes agents keep making (write
+those as fixers next):
+
+```
+bridgeforge finding-stats "In operation" --write "In operation"
+```
+
 ## 3. Build numbers: build-tag
 
 ```powershell

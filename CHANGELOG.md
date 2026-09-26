@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- **Unattended revival with verified AI escalation (ROADMAP P15).**
+  - `finding-stats` counts findings across workspaces by automation tier: how many mods could be revived unattended today, which finding id would unlock the most mods if automated, and which fixes AI has repeatedly made that should become fixers.
+  - `revive` loops scan, permitted fixers and rescan until nothing changes, then writes escalation packets: self-contained prompts for an AI agent (evidence, allowed files, numbered excerpt, rules, the check that decides "done") and questions for the owner (with the dry-run diff of any fixer awaiting approval). Standing approvals live in the queue's `AUTOMATION_POLICY.json`.
+  - `escalation run` runs any agent command on a packet in a throwaway copy and keeps the result only if BridgeForge's own rescan verifies it; edits outside the packet are rejected; every attempt is logged. `escalation list|show|verify` cover the rest.
+  - New fixers: `csv-fullwidth-number`, `ship-data-missing-fighter-bays-column`, `missing-custom-ui-button-pressed-callback`.
 - `verify-shadow` reads the game's own large jars (a higher entry cap for jars in a `starsector-core`; mod jars keep the zip-bomb cap).
 - `corpus-index` reads `.7z` archives with the optional `bridgeforge[archives]` extra (`py7zr`), with the same safety checks as zips.
 - New `release-policy show|set` records a mod's publishing decision (reason required, date kept).

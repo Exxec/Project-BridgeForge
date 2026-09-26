@@ -965,6 +965,45 @@ Progression, each stage feeding the next:
     `tools/build_jar.py`; its first real build is in `docs/LOCAL_HANDOFF.md` item 7). Tests:
     `tests/test_substitutes.py` (`WorkspaceStatusTests`).
 
+## P15: Unattended revival with verified AI escalation (planned 2026-09-26)
+
+Owner goal (2026-09-26): not to remove AI from revivals but to reduce what reaches it and make what
+does reach it easier, so the output has fewer bugs. The mechanical majority runs unattended; each
+remaining problem goes to an AI agent as a self-contained packet; BridgeForge, not the agent, decides
+whether the result passed; recurring agent fixes become deterministic fixers.
+
+1. **Measure the ceiling: `finding-stats`.** **Done 2026-09-26.** `bridgeforge/automation_tiers.json`
+   places every scan finding id in one tier (none, auto, mechanical, input, decision, inspect, code);
+   a test fails when a new check has no tier, and an `auto` id must name a real fixer.
+   `finding-stats [ROOT...] [--scan] [--write DIR]` groups workspaces by their hardest tier, reports
+   how many could run unattended now and with every `mechanical` finding fixed, ranks finding ids by
+   how many mods each is the only blocker for (`unlocks`), and lists ids AI agents have fixed and
+   BridgeForge verified 3+ times across 2+ mods (fixer candidates). The real queue run is local
+   (`docs/LOCAL_HANDOFF.md`). Tests: `tests/test_finding_stats.py`.
+2. **Orchestrator and escalation packets: `revive`.** **Done 2026-09-26.** Scan (with the compile check
+   given `--vanilla-core`), apply permitted fixers, rescan, until a round changes nothing; dry run
+   unless `--apply`. A fixer is applied unattended only when all its findings are SAFE; anything
+   else needs `--approve ID` or a standing approval in the queue's `AUTOMATION_POLICY.json` (decide
+   once, apply to every mod); MANUAL/UNKNOWN are never fixed without one. The rest becomes packets in
+   `<ws>/reports/escalations/`: agent packets (code/mechanical/inspect; one per finding and file,
+   with evidence, the allowed files, a numbered excerpt around the lines the evidence names, a hint
+   for the finding family, rules, and the verify command) and owner packets (decisions, inputs, and
+   fixers awaiting approval with their dry-run diff). Tests: `tests/test_revive.py` (`ReviveTests`).
+3. **Agent runner with re-verification: `escalation run`.** **Done 2026-09-26.** Runs any agent command
+   in a throwaway copy with the packet on stdin; rejects edits outside the packet's files; requires
+   the agent's note; rescans (and compile-checks) the copy and passes only if the finding is gone and
+   no new actionable finding appeared; retries a failure with BridgeForge's reasons appended; copies a
+   verified result back only with `--apply` (backups kept), labelled REVIEW. `escalation
+   list|show|verify` cover the rest. Tests: `tests/test_revive.py` (`EscalationRunTests`, with a
+   scripted stand-in agent).
+4. **Ledger and fixer promotion.** **Started 2026-09-26.** Every fixer application and agent attempt
+   is appended to `<ws>/reports/escalations/ledger.jsonl`; `finding-stats` turns it into the fixer
+   candidate list. Three `mechanical` ids became fixers now (safe, deterministic, common in pre-0.8a
+   mods): `csv-fullwidth-number` (SAFE, so unattended), `ship-data-missing-fighter-bays-column` (blank
+   column, reusing the carrier-bays edit) and `missing-custom-ui-button-pressed-callback` (no-op
+   callback in loose scripts). Tests: `tests/test_fixers.py`. **Next:** write fixers for the top
+   `unlocks` ids from the first local `finding-stats` run, and for whatever the ledger promotes.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit
