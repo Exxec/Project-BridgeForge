@@ -108,7 +108,11 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
     if packet["kind"] != "agent":
         raise EscalationError(f"{packet_name} is an owner packet ({packet['tier']}): it needs a decision, not an agent.")
     working = workspace / "working"
-    command = shlex.split(agent) if isinstance(agent, str) else list(agent)
+    if isinstance(agent, str):
+        # Windows parses its own command lines (backslashed paths); POSIX needs the split.
+        command = [agent] if os.name == "nt" and agent.strip() else shlex.split(agent)
+    else:
+        command = list(agent)
     if not command:
         raise EscalationError("No agent command given.")
     attempts, feedback = [], ""
@@ -125,7 +129,7 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
         env = {**os.environ, "BF_PACKET": str(packets_dir(workspace) / f"{packet['id']}.json"), "BF_PROMPT": str(attempt_dir / "PROMPT.md"),
                "BF_NOTE": str(note), "BF_WORKING": str(sandbox)}
         try:
-            completed = subprocess.run(command, cwd=sandbox, input=prompt, env=env, capture_output=True, text=True, timeout=timeout, check=False)
+            completed = subprocess.run(command[0] if os.name == "nt" and isinstance(agent, str) else command, cwd=sandbox, input=prompt, env=env, capture_output=True, text=True, timeout=timeout, check=False)
             agent_rc, agent_tail = completed.returncode, (completed.stdout + completed.stderr)[-4000:]
         except subprocess.TimeoutExpired:
             agent_rc, agent_tail = None, f"agent timed out after {timeout}s"
