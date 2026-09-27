@@ -5506,6 +5506,14 @@ def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_
 
     any_known = any(ident in known_removed for _kind, ident, _files in unresolved)
     explanation = "The mod's hulls, skins or variants use hull mods, wings, weapons or hulls that neither the mod nor vanilla defines. They must come from another mod, which then has to be installed (and declared in mod_info.json), or the specs fail to load." + (" The mod declares dependencies that may provide them; confirm." if declares else " The mod declares no dependency.")
+    # Live RC8 evidence (P15 item 18, 2026-09-27): a variant naming a missing weapon stopped the game at
+    # New Game with "Fatal: Weapon spec [...] not found!" (PRB-CID-FAIL-20260927); a missing hull mod was
+    # dropped without a log line and the built variant no longer listed it (CID-FAIL2-20260927).
+    kinds = {kind for kind, _ident, _files in unresolved}
+    if "weapon" in kinds:
+        explanation += " A missing weapon in a variant stops RC8 with a Fatal dialog at New Game (live run, 2026-09-27)."
+    if "hullmod" in kinds:
+        explanation += " A missing hull mod in a variant is dropped silently by RC8, so the ship loses its effect with no error (live run, 2026-09-27)."
     if any_known:
         explanation += " At least one of these ids is a known vanilla-content removal with a catalogued successor (see the evidence below, and `dependency_successors.json`) - this is not just 'defined nowhere'."
     result.add(

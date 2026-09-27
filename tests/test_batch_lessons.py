@@ -396,6 +396,9 @@ class UnresolvedContentTests(unittest.TestCase):
         self.assertIn("hullmod:vayra_red_army (1 file(s))", hits[0].evidence)
         self.assertIn("wing:vayra_yak_wing (1 file(s))", hits[0].evidence)
         self.assertIn("weapon:vayra_kashtan (1 file(s))", hits[0].evidence)
+        # Live RC8 consequences (P15 item 18): a missing weapon is a New Game fatal, a missing hull mod is dropped.
+        self.assertIn("stops RC8 with a Fatal dialog at New Game", hits[0].explanation)
+        self.assertIn("dropped silently by RC8", hits[0].explanation)
 
     def test_a_declared_dependency_may_provide_them(self) -> None:
         self.assertEqual(self._scan([{"id": "vayrasector"}])[0].classification, "REVIEW")

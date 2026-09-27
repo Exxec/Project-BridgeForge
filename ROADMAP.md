@@ -1989,7 +1989,19 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     - **Probe 0.2.3 (2026-09-27):** after building each ship variant, `content-ids` now looks up every hull
       mod, fitted weapon, wing and module (to depth 3) through `SettingsAPI.getHullModSpec`/`getWeaponSpec`/
       `getFighterWingSpec` (ShipVariantAPI methods javap-confirmed 2026-09-27), naming the first id with no
-      spec. Building alone may carry or drop an unknown id quietly. Live runs pending (handoff G1).
+      spec. Building alone may carry or drop an unknown id quietly.
+    - **CID-OK-20260927** (SEEKER + probe 0.2.3): `content-ids|OK|all-content|checked=40 failed=0
+      ship-variants built=15`, FATAL=0, MOD-ERROR=0, 2 saves. **The check works on real content.**
+    - **CID-FAIL2-20260927** (SEEKER copy with `"hullMods": ["bf_nonexistent_hullmod"]` in
+      `ART_dimention_manipulator.variant`; the copy's id and path are in the log, so it loaded): the probe
+      reported OK, and the game log never mentions the id. RC8 drops an unknown hull mod from a variant at
+      load, silently, so the built variant no longer lists it and no runtime check can see it. Together with
+      PRB-CID-FAIL: a missing weapon in a variant is a New Game fatal, a missing hull mod is silent loss of
+      its effect. The static scanner catches both (`content-reference-unresolved` flagged
+      `hullmod:bf_nonexistent_hullmod`); its explanation now states both consequences (test:
+      `tests/test_batch_lessons.py` `UnresolvedContentTests`). The probe's `content-ids` therefore
+      confirms clean content (and catches variants that do not exist or fail to build) but is not a detector
+      for these two cases. No dialog appeared in either run, so the dialog-text capture is still unexercised.
 
 ## Post-1.0 research and gated automation
 
