@@ -2009,6 +2009,8 @@ whether the result passed; recurring agent fixes become deterministic fixers.
       `tests/test_probe_config.py`. The config already keeps fighter/module variants out of the SHIP list,
       so this is a safety net; a SEEKER run on 0.2.4 checks it raises no false failure. The broken-SEEKER
       rig fixture and its preset were removed.
+      **CID-HULL-20260927** (SEEKER, probe 0.2.4): `content-ids|OK|all-content|checked=40 failed=0 ship-variants
+      built=15`, FATAL=0, MOD-ERROR=0, 1 save: the hull check raises no false failure.
 
 ## Post-1.0 research and gated automation
 
