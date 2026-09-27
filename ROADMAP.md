@@ -2076,6 +2076,36 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     Found on the way (added to item 20): the `claude` CLI was not on PATH on this machine (the VS Code
     extension ships `claude.exe` under `.vscode/extensions/anthropic.claude-code-*/resources/native-binary/`), and
     `escalation run --apply` re-runs the agent instead of applying the attempt already verified and reviewed.
+22. **Recommended next work: gap coverage, fixers, RevenantLib (proposed 2026-09-27, not started).** Ranked by
+    mods helped per unit of work, from the 2026-09-27 queue counts and live runs.
+    1. **Compile loose scripts with the game's own Janino, offline.** `loose-script-janino-risk` is HEURISTIC
+       (a typed for-each pattern; 125 occurrences in 48 mods, the only blocker for 5), while `compile-check`
+       uses javac, which accepts what Janino rejects. RC8 ships `janino.jar` and `commons-compiler.jar`, and
+       `build-probe-mod` already compiles the probe mission with them. Running every mod's loose scripts through
+       Janino turns the risk into a DETERMINISTIC pass/fail, catches Janino-only failures the pattern misses, and
+       gives agent fixes (item 21) a ground-truth check.
+    2. **A fixer for typed for-each loops.** The rewrite is mechanical: BDS had 10 done by hand (item 45) and the
+       agent did 9 identically (item 21). When the loop variable's collection is a local or field declared with a
+       generic type in the same file, rewriting to a raw `Iterator` plus cast is deterministic; anything else
+       stays with the agent. Verified by (1). Moves most of the 48 mods' occurrences out of the `code` tier.
+    3. **Split `content-reference-unresolved` by consequence.** Live runs proved a missing weapon in a variant is
+       a New Game fatal and a missing hull mod is silent (item 18). A missing weapon should be MANUAL/high even
+       when the mod declares dependencies; a missing hull mod can stay REVIEW. Needs a quick live check for
+       missing wings and hulls before classifying those.
+    4. **Batch-revive the `auto` bucket** (51 mods on 2026-09-27, before item 19's fix): `revive --apply
+       --draft-report` over each, dry run first, with `finding-stats` before and after. Uses item 12's progress
+       rule. The biggest single jump in finished mods for the least owner time.
+    5. **RevenantLib bridge candidates from the queue.** Only three `bf.*` bridges exist. Run `compile-check
+       --api-diff` over every queued mod's `original/` against the 0.8.1a and 0.95.1a catalogues and rank the
+       removed methods by how many mods call them; the top ones with a clean RC8 equivalent become new
+       RevenantLib bridges and `removed-api-call` fixer rules. Each needs javap evidence for the replacement.
+    6. **Keep the `Done/RevenantLib` snapshot honest.** `revenantlib-check` could compare the snapshot's jar with
+       the live `working/` jar and say when the snapshot is stale.
+    7. **A special-item check in the probe.** Yunru's mod works through a `special_items.csv` plugin class; the
+       probe checks ships, weapons and wings but not items. Resolving each mod special item's spec and plugin
+       class at runtime would cover item mods (needs javap evidence for the SettingsAPI item-spec methods).
+    8. **Settings list merge test** (item 19's held rule) and **dialog-capture confirmation** (item 18):
+       each one short rig run.
 
 ## Post-1.0 research and gated automation
 

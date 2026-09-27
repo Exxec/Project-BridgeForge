@@ -24,6 +24,7 @@ $ProbeId = "bridgeforge_probe"
 $Presets = @{
     "exigency"     = @{ Folder = "Exigency"; Mods = @("lw_lazylib", "lunalib", "shaderLib", "exigency"); Setups = @("rep:exipirated=FRIENDLY", "credits:500000"); Track = @("exipirated_avesta") }
     "exigency-nex" = @{ Folder = "Exigency"; Mods = @("lw_lazylib", "MagicLib", "lunalib", "shaderLib", "nexerelin", "exigency"); Setups = @("rep:exipirated=FRIENDLY"); Track = @("exipirated_avesta") }
+    "yunru-unpack" = @{ Folder = "Yunru-s-Unpack-Blueprints"; Mods = @("lw_lazylib", "lw_console", "unpackblueprints"); Setups = @(); Track = @() }  # Console Commands only to spawn a blueprint package for the test
     "seeker"       = @{ Folder = "SEEKER"; Mods = @("lw_lazylib", "lw_console", "SEEKER"); Setups = @("credits:500000", "ship:ART_dimention_manipulator:1", "spawn-fleet:pirates:120"); Track = @() }
     "seeker-sk13"  = @{ Folder = "SEEKER"; Mods = @("lw_lazylib", "MagicLib", "lunalib", "lw_console", "aitweaks", "SEEKER"); Setups = @("credits:500000", "ship:ART_dimention_manipulator:1", "spawn-fleet:pirates:120"); Track = @() }
     "flux"         = @{ Folder = "Flu-X-0.98a"; Mods = @("lw_lazylib", "MagicLib", "infected"); Setups = @(); Track = @() }
