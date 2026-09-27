@@ -1853,6 +1853,54 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     (`must_stay_local_only`, a `LICENCE:` line); into a releasable target it is still refused. Used by
     both `vendor-copy` and `vendor-copy --plan`. Tests: `tests/test_vendor_copy.py`,
     `tests/test_vendor_plan.py`.
+12. **Long runs print progress and resume from a checkpoint (owner rule 2026-09-27).** The first local
+    `finding-stats --scan` ran 43m50s over 305 workspaces with no output until the end, and
+    `dependency-graph --write` and `corpus-index build C:\Users\exxec\Downloads` ran over 1.5 hours
+    each without a line; an interrupted run lost everything (`corpus-index build` held the whole
+    archive in one SQLite transaction). **Done 2026-09-27.** `bridgeforge/progress.py`: `Checkpoint`
+    (append-only `*.partial.jsonl`, header names the inputs; same header resumes, any other restarts, a
+    torn last line is ignored) and `report` (`[12/305] Mod: detail (38.2s)` on stderr). Applied to
+    `finding-stats` (`--write DIR` with `--scan`), `dependency-graph --write`, `corpus-recheck` (both
+    checkpoint in `In operation/`, known root files for `board`), each with `--quiet` and `--restart`;
+    `corpus-index build` now commits per source, so a rerun skips what an interrupted one indexed, and
+    prints each file it reads. `progress.LONG_RUNNING_COMMANDS` lists them and
+    `tests/test_progress.py` fails if one stops offering `--quiet`; rule recorded in `CLAUDE.md`.
+    Tests: `tests/test_progress.py`, `tests/test_finding_stats.py`, `tests/test_substitutes.py`,
+    `tests/test_corpus_recheck.py`, `tests/test_corpus_index.py` (each with an interrupted-run case).
+13. **First local pass over `docs/LOCAL_HANDOFF.md` after the merge (2026-09-27).**
+    - **P1 done:** `In operation/FINDING_STATS.md`, 305 workspaces. Unattended now 43 (14%), 50 with
+      mechanical fixers; hardest tier `code` 168, `decision` 67, `auto` 41. Top unlocks:
+      `settings-json-override-breadth` (decision, 14), `shippable-work-file` (mechanical, 7),
+      `loose-script-janino-risk` (code, 5), `vanilla-path-shadowing` (decision, 5). No unclassified ids.
+    - **G2:** catalogues written to `In operation/_reference/` for 0.8.1a, 0.9a and 0.95.1a to RC8.
+      The handoff's expectations were partly wrong: 0.9a's `SectorAPI` already lacks `addMessage` and
+      `createFleet(String, String)` (removed between 0.8.1a and 0.9, checked in each install's
+      `starfarer.api.zip`); against 0.8.1a, `compile-check` on Batavia's `original/` prints `API CHANGE`
+      lines with `CampaignUIAPI.addMessage` as a candidate and none for `createFleet`, as expected.
+      `weapon:thruster_fighter_sm` and `hullmod:shields_formshield` occur in no vanilla data from 0.6.2a
+      to 0.95.1a (grep of every install's `data/`): they are mod ids, not removed vanilla content.
+      Noise worth fixing: `compile-check` lists every same-named overload for one call site (four
+      `addMessage` lines per call) instead of matching the argument count.
+    - **R2:** the BDS command cannot run as written (`--class hullmod` is not a class; the 260-line
+      figure came from `.java`, which neither version merges). Rebal `.wpn` from `original/` against
+      0.9a: MERGED 81, UNCHANGED_COPY 1, 0 conflicts, against the removed local version's 76 rebuilt and
+      5 conflicts over the same 82 files. Not a bug: `hammer.wpn` `fireSoundTwo` and `hil.wpn` `width`
+      equal the 0.9a value in Rebal, so only RC8 changed them and the three-way merge takes RC8's.
+    - **R4:** DME's `strip-plan` lists exactly its one uncovered id (`hull:istl_mystere`).
+      `vendor-copy --plan` for Rebal's `shields_formshield` into RevenantLib stops at a CONFLICT:
+      RevenantLib's `hull_mods.csv` already carries a different `shields_formshield` row (9 SUSPECT
+      shield scripts held back as designed).
+    - **G1:** probe jar rebuilt against RC8 (17 classes, release copy 0.2.2); `tests/test_probe_mod_build.py`
+      ran on this machine. javap (RC8 `starfarer.api.jar`, 2026-09-27) confirms `SettingsAPI.getHullSpec`,
+      `getWeaponSpec`, `getHullModSpec` and `FleetMemberAPI.getHullSpec()`/`getHullId()` for the
+      proposed direct lookups and substituted-hull check. Live `content-ids` run still pending.
+    - **G3:** `revenantlib-check` PASS for the three `bf.*` methods; `rig-doctor` has nothing to check
+      because RevenantLib is not installed in the rig.
+    - **G4 done:** `tools/build_jar.py` rebuilt RevenantLib byte-identically (0 added/removed/changed,
+      11 identical), `tools/check.py` three PASS; `scratch/MOVES.log` copied into `reports/MOVES.md`
+      on RevenantLib branch `local-handoff-moves-log`.
+    - Local tooling: `.githooks/pre-commit` runs `ruff check .` and the hooks are installed
+      (`core.hooksPath` had been unset); `AGENTS.md` synced with `CLAUDE.md`.
 
 ## Post-1.0 research and gated automation
 

@@ -11,24 +11,17 @@ shadowing audit (P14 item 27, done locally in `0183ab3`) and the Maelstrom depen
 version each (P15 item 5: `diff-data`, `rebuild-from-reference`, `corpus-index`, `provider-index
 build`, `dependency-graph`, `strip-plan`); the kept versions have not yet run on real data, so those
 runs are repeated below (R1-R4). In the commands, `$core` is the RC8 `starsector-core` and `$rig`
-the test rig.
+the test rig; reference installs sit beside RC8 under `C:\Program Files (x86)\Fractal Softworks\`
+(`Starsector8.1`, `Starsector9a`, `Starsector9.5.1a`, ...).
+
+Updated 2026-09-27 after the first local pass (ROADMAP P15 item 13): P1, R2, G4 and the local
+tooling entries are done and removed; G2's content expectation and R2's BDS command were wrong.
+Every long command now prints `[n/total]` progress and resumes if interrupted (P15 item 12).
 
 ## 1. Measure and try the unattended pipeline (ROADMAP P15)
 
-### P1. Measure the queue: `finding-stats` (P15 item 1)
-```powershell
-python -m bridgeforge finding-stats "In operation" --scan --vanilla-core $core --write "In operation"
-```
-(`--scan` rescans every `working/`; drop it to use each workspace's latest stored scan, which is
-faster but may be stale.) Add the Ironclads queue folder as a second root if it lives elsewhere.
-Findings a mod's baseline accepts (`working/reports/baseline*.json`) are left out. Done when
-`In operation/FINDING_STATS.md` exists. Paste its top table and the first 20 rows of "What to automate
-next" into a cloud session: those rows decide the next fixers. An id under "Not in
-automation_tiers.json" means a check was added without a tier; the test suite should have caught
-that, so report it.
-
 ### P2. First real `revive` and agent run (P15 items 2-3, 8-9)
-Pick a small mod with few findings (from P1's `auto` or `mechanical` bucket):
+Pick a small mod from `In operation/FINDING_STATS.md` (P1 done 2026-09-27: 41 mods in the `auto` bucket):
 ```powershell
 python -m bridgeforge revive "In operation\<Mod>" --vanilla-core $core                                   # dry run
 python -m bridgeforge revive "In operation\<Mod>" --vanilla-core $core --apply --draft-report
@@ -58,16 +51,6 @@ still loads through `--provider-index`.) Done when `In operation\DEPENDENCY_GRAP
 top entries match the local run's ranking. Every `licence UNRECORDED` entry needs a decision before
 that mod is revived: `python -m bridgeforge release-policy set <mod id> --local-only|--releasable --reason "..."`.
 
-### R2. `diff-data` and `rebuild-from-reference` on the files the local runs used (P14 items 19, 21)
-Repeat the local item 19/21/45 runs (Rebal, Better-Deserving-Smods) with the kept commands:
-```powershell
-python -m bridgeforge diff-data "<mod copy of a vanilla file>" "<0.9a or 0.95.1a reference copy>"
-python -m bridgeforge rebuild-from-reference "In operation\Better-Deserving-Smods\working" --reference-core "<0.95.1a rig>\starsector-core" --vanilla-core $core --class hullmod --output "In operation\Better-Deserving-Smods\scratch\rebuilt"
-```
-Done when the results agree with the local runs recorded in items 19, 21 and 45 (BDS: 260 reverted
-lines, 10 deliberate removals). Any disagreement is a bug in the kept version: record it in P15 with
-the file names.
-
 ### R3. Rebuild the Downloads index (P14 item 18)
 ```powershell
 python -m pip install -e ".[archives]"          # once: lets the index read .7z archives
@@ -84,8 +67,10 @@ python -m bridgeforge strip-plan "In operation\<a STRIP_FROM_MOD mod>\working" -
 python -m bridgeforge vendor-plan "In operation\<provider>" --id hullmod:<id> --json > plan.json
 python -m bridgeforge vendor-copy --plan plan.json --to "In operation\RevenantLib"
 ```
-Done when the strip plan's edits match what the local `strip-plan` listed for the same mod, and the
-`vendor-copy --plan` dry run lists the same files as `vendor-plan`. A local-only provider such as
+Strip plan checked 2026-09-27 on DME (one id, as its dependencies.json says). Still open: the
+`vendor-copy --plan` dry run of Rebal's `shields_formshield` into RevenantLib stops at a CONFLICT,
+because RevenantLib's `hull_mods.csv` already has a different `shields_formshield` row. Decide which
+row is right (diff them), then rerun; done when the dry run lists the same files as `vendor-plan`. A local-only provider such as
 Rebal may be vendored into RevenantLib because RevenantLib is local-only too (owner decision
 2026-09-27, P15 item 11); the output then prints a `LICENCE:` line, and RevenantLib must stay
 local-only while it holds that content. Into a releasable mod it is still refused.
@@ -93,8 +78,7 @@ local-only while it holds that content. Into a releasable mod it is still refuse
 ## 3. Needs the game
 
 ### G1. Rebuild the probe jar, then one live run of `content-ids` (P14 item 49)
-The probe's source is 0.2.2 but the committed `probe-mod/jars/bridgeforge-probe.jar` may still be
-0.2.1: it can only be built against RC8's `starfarer.api.jar`.
+Jar rebuilt and committed 2026-09-27 (0.2.2); only the live run is left.
 ```powershell
 python -m bridgeforge build-probe-mod --jdk "In operation\_rig\jdk-25.0.4.1+1" --core $core --install-release
 python -m bridgeforge.test_guard     # tests/test_probe_mod_build.py runs only on a machine with the rig
@@ -105,42 +89,23 @@ Then New Game, wait a day, and run `log-triage`. Done when the log shows
 deliberately broken variant id (a copy of a mod with one weapon id misspelled in a `.variant`)
 shows a `content-ids|FAIL|variant:<id>|...` line naming the game's error. Record both in item 49,
 then commit the rebuilt jar and release copy.
-- Worth adding if `javap` confirms the methods (not verified from the cloud): direct
+- javap confirmed 2026-09-27 (`SettingsAPI.getHullSpec/getWeaponSpec/getHullModSpec`,
+  `FleetMemberAPI.getHullSpec()/getHullId()`), so these can be built from the cloud: direct
   hull/weapon/hull-mod lookups, and a check that a built fleet member's hull is the variant's own
   hull rather than a substitute (the PRB-FIGHTER-01 Nebula). Candidates to look for:
   `javap -cp starfarer.api.jar com.fs.starfarer.api.SettingsAPI | findstr /i "HullSpec WeaponSpec HullModSpec"`
   and `javap -cp starfarer.api.jar com.fs.starfarer.api.fleet.FleetMemberAPI | findstr /i Hull`.
 
-### G2. API-drift and removed-content catalogues (P14 items 47, 8)
-```powershell
-python -m bridgeforge api-diff "<0.9a reference rig>\starsector-core" $core --output "In operation\_reference\api-diff-0.9a-to-rc8.json"
-python -m bridgeforge compile-check "<a queued mod>" --vanilla-core $core --api-diff "In operation\_reference\api-diff-0.9a-to-rc8.json"
-python -m bridgeforge content-diff "<0.9a reference rig>\starsector-core" $core --output "In operation\_reference\removed-content-0.9a-to-rc8.json"
-```
-Done when `compile-check` shows `API CHANGE` lines for at least one queued mod, `SectorAPI.addMessage`
-lists `CampaignUIAPI.addMessage` as a candidate while `SectorAPI.createFleet` has none, and the
-content catalogue lists `weapon:thruster_fighter_sm` and `hullmod:shields_formshield` as removed.
-Every removal the scanner does not flag yet is a candidate check or fixer. A 0.95.1a-to-RC8 pair is
-worth building too, since 255 corpus mods declare a 0.95.x base (item 45).
+### G2. Removed-content catalogue follow-up (P14 items 47, 8)
+Catalogues for 0.8.1a, 0.9a and 0.95.1a to RC8 are in `In operation\_reference\` (2026-09-27), and
+the API check passed against 0.8.1a (P15 item 13). Left: review each `removed-content-*.json` for
+removals the scanner does not flag yet (candidate checks or fixers). The old expectation that
+`weapon:thruster_fighter_sm` and `hullmod:shields_formshield` appear was wrong: they are mod ids.
 
 ### G3. Confirm `revenantlib_contract` on the real rig (P14 item 48)
 ```powershell
 python -m bridgeforge rig-doctor $rig --real-install "C:\Program Files (x86)\Fractal Softworks\Starsector"
 python -m bridgeforge revenantlib-check "In operation\RevenantLib"
 ```
-Done when both show the three `bf.*` methods as PASS.
-
-### G4. RevenantLib: first scripted jar build and the move log
-In the `Exxec/RevenantLib` checkout:
-- `python tools/build_jar.py --game-core "<Starsector>/starsector-core" --lazylib "<mods>/LazyLib/jars/LazyLib.jar"`
-  (read-only against the install; writes `scratch/RevenantLib.built.jar`). Done when it compiles with
-  0 errors and the comparison shows 0 added and 0 removed. `changed` classes are fine if your javac
-  differs from the one that built the committed jar; if so, run it again with `--install` and commit the
-  jar, so later builds compare byte for byte.
-- Copy `scratch/MOVES.log` entries into `reports/MOVES.md` (the tracked log since 2026-09-25).
-- `python tools/check.py` should print three PASS lines.
-
-## 4. Local-only tooling the repo cannot carry
-- `.githooks/pre-commit` is gitignored: add `ruff check .` so lint failures stop before CI.
-- `AGENTS.md` is gitignored: keep it consistent with `CLAUDE.md` (the committed copy cloud
-  sessions read).
+`revenantlib-check` PASS 2026-09-27; `rig-doctor` has nothing to check until RevenantLib is installed in
+the rig (`prepare-test`). Done when `rig-doctor` shows `revenantlib_contract` PASS.
