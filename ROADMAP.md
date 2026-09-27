@@ -2292,6 +2292,17 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        for GRP-1..3; make it `probe-group report --record`).
     10. **RevenantLib:** removed-API use sits in jars, not loose scripts (item 22.5 ranking): run the ranking on jar
         bytecode before adding bridges; keep `revenantlib-check --snapshot` in the release checklist.
+    11. **Author updates as ground truth (2026-09-27).** 10 finished mods had a newer author release for 0.98a in the
+        0.98 modpack (all marked SUPERSEDED; 5 had already passed their group probe run). Scanning each old version and
+        the author's new one: `mod-info-game-version-inexact` disappeared in all 10 (the only change these authors
+        needed that BridgeForge tracks, and exactly what revive applied), `library-import-unused-in-jar` in 1.
+        `non-strict-json-trailing-comma` (10/10) and `json-hash-comment` (8/10) stay in the authors' working 0.98a
+        releases, confirming their tier `none`. In the authors' own releases: Flux Reticle 1.4.0 and Variants-Lib 0.5.6
+        use LunaLib behind a guard without declaring it (REVIEW: the D-MOD-Services pattern; `isModEnabled`-guarded use
+        should be classed optional/SAFE so it stops needing an owner decision); Hexagonal Shieldidgeridoos 1.3.1 calls
+        LazyLib (`FastTrig`) without declaring it (MANUAL, a real undeclared dependency the modpack hides). Action: run
+        this old-vs-author comparison for every future supersession and fold the per-check outcome into item 28.4's
+        precision numbers.
 
 ## Post-1.0 research and gated automation
 
