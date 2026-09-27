@@ -65,13 +65,14 @@ deliberate copy of `shields_formshield` (see its PROVENANCE.md), so nothing is l
 ### G1. Live `content-ids` checks (P14 item 49, P15 item 18)
 First runs 2026-09-27: the probe loads (CC-1, but ClearCommands has no content, `checked=0`), and a
 variant naming a missing weapon is a hard RC8 new-game fatal the probe never sees. Still to do:
-1. Known-good with content: `.	oolsf-test.ps1 probe seeker`, `launch CID-OK-<date>`, New Game, one day,
+1. Known-good with content (rig prepared 2026-09-27 with probe 0.2.3): `.	oolsf-test.ps1 probe seeker`, `launch CID-OK-<date>`, New Game, one day,
    quit, `triage`. Done when `content-ids|OK|all-content|checked=N failed=0` with N > 0.
-2. Expected FAIL with a breakage RC8 tolerates: edit the rig's `SEEKER-bf-broken-contentid` copy to restore
-   `ART_dimention_leftGun` and instead add an unknown hull mod id to one variant's `hullMods`; run it the same
-   way. Done when a `content-ids|FAIL|variant:...` line names it (if RC8 fatals on that too, record it and
-   pick another). Also confirm `<TESTID>.windows.txt` now carries `dialog:` lines for any error dialog.
-3. Then build the direct hull/weapon/hull-mod lookups and the fleet-member hull check (javap-confirmed
+2. Expected FAIL with a breakage RC8 tolerates (prepared 2026-09-27): the rig's `SEEKER-bf-broken-contentid`
+   now has the weapon id restored and `"hullMods": ["bf_nonexistent_hullmod"]` in
+   `ART_dimention_manipulator.variant`. `.	oolsf-test.ps1 probe seeker-broken-contentid`, `launch
+   CID-FAIL2-<date>`, New Game, one day, quit, `triage`. Done when `content-ids|FAIL|variant:ART_dimention_manipulator|hull mod
+   [bf_nonexistent_hullmod] has no spec`. If RC8 fatals instead, triage now shows the dialog text as FATAL.
+3. Direct hull-mod/weapon/wing lookups are built (probe 0.2.3, 2026-09-27). Still to build: the fleet-member hull check (javap-confirmed
    2026-09-27: `SettingsAPI.getHullSpec/getWeaponSpec/getHullModSpec`, `FleetMemberAPI.getHullSpec()/getHullId()`).
 
 ### G2. Removed-content catalogue follow-up (P14 items 47, 8)

@@ -1986,6 +1986,10 @@ whether the result passed; recurring agent fixes become deterministic fixers.
       matches a FATAL pattern as FATAL with its source line. The watcher compiles (`bf-test.ps1
       selftest`); reading a real dialog is confirmed on the next rig run. Tests:
       `tests/test_log_triage.py` (`DialogFatalTests`).
+    - **Probe 0.2.3 (2026-09-27):** after building each ship variant, `content-ids` now looks up every hull
+      mod, fitted weapon, wing and module (to depth 3) through `SettingsAPI.getHullModSpec`/`getWeaponSpec`/
+      `getFighterWingSpec` (ShipVariantAPI methods javap-confirmed 2026-09-27), naming the first id with no
+      spec. Building alone may carry or drop an unknown id quietly. Live runs pending (handoff G1).
 
 ## Post-1.0 research and gated automation
 
