@@ -184,3 +184,34 @@ def render(stats: dict) -> str:
         lines += ["", f"## Not counted ({len(stats['unscanned'])})", ""]
         lines += [f"- {row['workspace']}: {row['reason']}" for row in stats["unscanned"]]
     return "\n".join(lines) + "\n"
+
+
+def delta(previous: dict, current: dict) -> dict:
+    """What moved between two runs (P15 item 20.3): unattended counts, mods whose bucket changed, and finding
+    ids whose occurrence count changed, so the effect of a new fixer or check fix is measured, not recomputed."""
+    before = {m["workspace"]: m["bucket"] for m in previous.get("mods", [])}
+    after = {m["workspace"]: m["bucket"] for m in current.get("mods", [])}
+    moved = sorted((name, before[name], after[name]) for name in before.keys() & after.keys() if before[name] != after[name])
+    old_ids = {r["id"]: r["occurrences"] for r in previous.get("by_finding", [])}
+    new_ids = {r["id"]: r["occurrences"] for r in current.get("by_finding", [])}
+    changed = sorted(((i, old_ids.get(i, 0), new_ids.get(i, 0)) for i in old_ids.keys() | new_ids.keys()
+                      if old_ids.get(i, 0) != new_ids.get(i, 0)), key=lambda row: -abs(row[2] - row[1]))
+    return {"unattended": (previous.get("unattended_now"), current.get("unattended_now")),
+            "moved": [{"workspace": n, "from": a, "to": b} for n, a, b in moved],
+            "added": sorted(after.keys() - before.keys()), "removed": sorted(before.keys() - after.keys()),
+            "finding_changes": [{"id": i, "from": a, "to": b} for i, a, b in changed]}
+
+
+def render_delta(change: dict) -> str:
+    was, now = change["unattended"]
+    lines = ["", "## Since the last run", "", f"Unattended now: {was} -> {now}", ""]
+    if change["moved"]:
+        lines += ["| Mod | From | To |", "|---|---|---|"] + [f"| {m['workspace']} | {m['from']} | {m['to']} |" for m in change["moved"][:60]]
+        lines.append("")
+    if change["added"] or change["removed"]:
+        lines.append(f"New workspaces: {', '.join(change['added']) or 'none'}; gone: {', '.join(change['removed']) or 'none'}")
+        lines.append("")
+    if change["finding_changes"]:
+        lines += ["| Finding id | Occurrences before | After |", "|---|---|---|"] + [
+            f"| `{c['id']}` | {c['from']} | {c['to']} |" for c in change["finding_changes"][:25]]
+    return "\n".join(lines) + "\n"

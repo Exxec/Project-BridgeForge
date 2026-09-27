@@ -1106,8 +1106,16 @@ def main(argv: list[str] | None = None) -> int:
             checkpoint.unlink()  # the run finished; FINDING_STATS.json now holds every record
         if args.write:
             args.write.mkdir(parents=True, exist_ok=True)
-            (args.write / "FINDING_STATS.json").write_text(json.dumps(stats, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-            (args.write / "FINDING_STATS.md").write_text(render(stats), encoding="utf-8")
+            from .finding_stats import delta, render_delta
+            previous_path = args.write / "FINDING_STATS.json"
+            try:
+                previous = json.loads(previous_path.read_text(encoding="utf-8")) if previous_path.is_file() else None
+            except (OSError, json.JSONDecodeError):
+                previous = None  # an unreadable earlier run just means no comparison
+            if previous is not None:
+                previous_path.replace(args.write / "FINDING_STATS.previous.json")
+            previous_path.write_text(json.dumps(stats, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            (args.write / "FINDING_STATS.md").write_text(render(stats) + (render_delta(delta(previous, stats)) if previous else ""), encoding="utf-8")
             print(f"Written: {args.write / 'FINDING_STATS.md'}", file=sys.stderr)
         print(json.dumps(stats, indent=2, ensure_ascii=False) if args.json else render(stats), end="\n" if args.json else "")
         return 0
