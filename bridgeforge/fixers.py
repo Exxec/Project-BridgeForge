@@ -56,6 +56,7 @@ SUPPORTED_FINDINGS = (
     "shippable-work-file",
     "data-file-not-utf8",
     "fleet-type-name-missing",
+    "procgen-mod-body-leak",
 )
 
 
@@ -2003,7 +2004,40 @@ def _fix_fleet_type_name_missing(root: Path, options: dict) -> list[FileChange]:
     return changes
 
 
+def _fix_procgen_mod_body_leak(root: Path, options: dict) -> list[FileChange]:
+    """Zero the procgen weight of each type `procgen-mod-body-leak` names (P15 item 25): the Zorg18 r3 fix as a
+    fixer. Only the frequency fields of that type's row change; the row stays so nothing else loses the type."""
+    by_file: dict[str, set[str]] = {}
+    for finding in _findings_of(root, options, "procgen-mod-body-leak"):
+        type_id = next((e.split(":", 1)[1] for e in finding.evidence if e.startswith("type:")), None)
+        if type_id and finding.file:
+            by_file.setdefault(finding.file, set()).add(type_id)
+    columns = {"star_gen_data.csv": ("freqYOUNG", "freqAVERAGE", "freqOLD"), "planet_gen_data.csv": ("frequency",)}
+    changes = []
+    for relative, types in sorted(by_file.items()):
+        path = root / relative
+        if not path.is_file():
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        newline = "\r\n" if "\r\n" in text else "\n"
+        lines = text.split(newline)
+        header = next(csv.reader([lines[0]]))
+        wanted = [header.index(c) for c in columns.get(path.name, ()) if c in header]
+        for number, line in enumerate(lines[1:], 1):
+            fields = next(csv.reader([line]), [])
+            if fields and fields[0].strip() in types:
+                spans = _line_field_spans(line)
+                for index in sorted(wanted, reverse=True):
+                    if index < len(spans):
+                        start, end, _raw = spans[index]
+                        line = line[:start] + "0" + line[end:]
+                lines[number] = line
+        changes.append(FileChange(path=path, before=raw, after=_encode(newline.join(lines), had_bom)))
+    return changes
+
 _FIXER_FUNCS = {
+    "procgen-mod-body-leak": _fix_procgen_mod_body_leak,
     "fleet-type-name-missing": _fix_fleet_type_name_missing,
     "data-file-not-utf8": _fix_data_file_not_utf8,
     "shippable-work-file": _fix_shippable_work_file,

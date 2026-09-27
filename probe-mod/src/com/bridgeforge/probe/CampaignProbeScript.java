@@ -198,6 +198,11 @@ public class CampaignProbeScript implements EveryFrameScript {
                 checkContentIds();
             }
         });
+        runCheck("campaign-layout", new Runnable() {
+            public void run() {
+                checkCampaignLayout();
+            }
+        });
         ProbeLog.end("campaign");
     }
 
@@ -555,6 +560,64 @@ public class CampaignProbeScript implements EveryFrameScript {
     }
 
     // ---- custom planet/star spec lookups ---------------------------------------------
+
+    // P15 item 25 (0.2.6). Zorg18 (2026-09-27): its artificial star, meant for Zorg Zeta, also appeared in random
+    // systems through procgen weights. Every system the mod creates must exist; a mod body type with no procgen
+    // weight must stay in those systems (FAIL otherwise), and one with a weight is reported with where it went.
+    // API (javap, RC8 starfarer.api.jar, 2026-09-27): SectorAPI.getStarSystem(String)/getStarSystems(),
+    // LocationAPI.getPlanets(), PlanetAPI.getTypeId(), StarSystemAPI.getBaseName().
+    private void checkCampaignLayout() {
+        if (config.modSystems.isEmpty() && config.modBodyTypes.isEmpty()) {
+            return;
+        }
+        int missing = 0;
+        for (String name : config.modSystems) {
+            if (Global.getSector().getStarSystem(name) == null) {
+                ProbeLog.emit("campaign-layout", ProbeLog.STATUS_FAIL, "system:" + name, "the mod creates this system but it is not in the sector");
+                missing++;
+            }
+        }
+        Set<String> own = new HashSet<String>(config.modSystems);
+        java.util.Map<String, List<String>> elsewhere = new java.util.LinkedHashMap<String, List<String>>();
+        java.util.Map<String, Integer> total = new java.util.LinkedHashMap<String, Integer>();
+        for (StarSystemAPI system : Global.getSector().getStarSystems()) {
+            for (PlanetAPI planet : system.getPlanets()) {
+                String type = planet.getTypeId();
+                if (type == null || !config.modBodyTypes.containsKey(type)) {
+                    continue;
+                }
+                Integer count = total.get(type);
+                total.put(type, count == null ? 1 : count + 1);
+                if (!own.contains(system.getBaseName())) {
+                    List<String> where = elsewhere.get(type);
+                    if (where == null) {
+                        where = new java.util.ArrayList<String>();
+                        elsewhere.put(type, where);
+                    }
+                    if (!where.contains(system.getBaseName())) {
+                        where.add(system.getBaseName());
+                    }
+                }
+            }
+        }
+        int leaked = 0;
+        for (String type : config.modBodyTypes.keySet()) {
+            List<String> where = elsewhere.get(type);
+            if (where == null || where.isEmpty() || own.isEmpty()) {
+                continue;
+            }
+            float weight = config.modBodyTypes.get(type);
+            String listed = where.size() > 8 ? where.subList(0, 8) + " ..." : where.toString();
+            ProbeLog.emit("campaign-layout", weight > 0 ? ProbeLog.STATUS_WARN : ProbeLog.STATUS_FAIL, "type:" + type,
+                    "in " + where.size() + " system(s) the mod did not create" + (weight > 0 ? " (procgen weight " + weight + ")" : " (no procgen weight: should not happen)") + ": " + listed);
+            if (weight <= 0) {
+                leaked++;
+            }
+        }
+        ProbeLog.emit("campaign-layout", missing + leaked == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "mod-systems",
+                "systems expected=" + config.modSystems.size() + " missing=" + missing + "; mod body types=" + config.modBodyTypes.size()
+                        + " counts=" + total);
+    }
 
     private void checkPlanetSpecs() {
         // Planet types are keyed by PlanetSpecAPI.getPlanetType() and listed by getAllPlanetSpecs().

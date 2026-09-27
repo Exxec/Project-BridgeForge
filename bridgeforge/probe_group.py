@@ -127,7 +127,7 @@ def merge_configs(configs: list[dict]) -> dict:
         "campaign_interval_days": min((c["campaign_interval_days"] for c in configs), default=5.0),
         "combat_seconds": max((c["combat_seconds"] for c in configs), default=60.0),
         "combat_cap_per_side": max((c["combat_cap_per_side"] for c in configs), default=12),
-        "group_members": {},
+        "group_members": {}, "mod_systems": [], "mod_body_types": {},
     }
     for c in configs:
         for key in ("hulls", "track_entities", "factions", "content_special_items", "content_wings", "hulls_skipped_no_variant"):
@@ -136,6 +136,8 @@ def merge_configs(configs: list[dict]) -> dict:
             merged["content_variants"][kind] = sorted(set(merged["content_variants"][kind]) | set(c["content_variants"][kind]))
         merged["variants"].update(c.get("variants") or {})
         merged["content_ship_hulls"].update(c.get("content_ship_hulls") or {})
+        merged["mod_systems"] = sorted(set(merged["mod_systems"]) | set(c.get("mod_systems") or []))
+        merged["mod_body_types"].update(c.get("mod_body_types") or {})
         merged["group_members"][c["target_mod_id"]] = {
             "hulls": sorted(c["hulls"]), "variants": sorted(set(c["content_variants"]["ship"]) | set(c["content_variants"]["other"])),
             "wings": sorted(c["content_wings"]), "items": sorted(c["content_special_items"]), "factions": sorted(c["factions"])}

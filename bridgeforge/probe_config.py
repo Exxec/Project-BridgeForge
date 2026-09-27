@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .boot_test import _is_link
 from .build_tag import _find_mod_info
+from .campaign_layout import mod_body_types, mod_created_systems
 from .probe_mod_build import RELEASE_RELATIVE
 from .scanner import _load_lenient_json_file, _read_csv_rows, _wing_ids_set
 
@@ -449,6 +450,8 @@ def build_probe_config(
         "content_variants": _content_variants(mod_root, hulls),
         "content_ship_hulls": _content_ship_hulls(mod_root, hulls),
         "content_special_items": _content_special_items(mod_root),
+        "mod_systems": mod_created_systems(mod_root),
+        "mod_body_types": {t: f["procgen_weight"] for t, f in mod_body_types(mod_root).items()},
         "content_wings": sorted(_wing_ids_set(mod_root / "data" / "hulls" / "wing_data.csv")),
         "campaign_interval_days": campaign_interval_days,
         "combat_seconds": combat_seconds,

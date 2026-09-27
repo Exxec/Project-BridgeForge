@@ -2219,6 +2219,19 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     crash no member owns: rerun that group's members alone) or INCOMPLETE (content-ids never ran). On the queue:
     **63 mods in 8 groups** of up to 8; SOTF-Addon-SPARKLE and UAF-Skills wait for dependencies the rig lacks
     (Secrets of the Frontier, UAF). Tests: `tests/test_probe_group.py`.
+25. **Campaign-layer check: the mod's systems exist, and its unique bodies stay in them (owner request, 2026-09-27).**
+    From Zorg18's artificial star appearing in random systems (item 20.18). **Done 2026-09-27.**
+    `bridgeforge/campaign_layout.py` finds the systems a mod creates (`createStarSystem("...")` in loose or jar
+    sources, and in jar bytecode an `ldc`/`ldc_w` String immediately before the call, which finds ZorgGen's
+    "Zorg Zeta") and the mod's own `planets.json` types with their procgen weight. Static check
+    `procgen-mod-body-leak` (REVIEW, tier `auto`): a type the mod places by id that also has a procgen weight;
+    its fixer zeroes that type's frequencies only (on a copy of Zorg's original it reproduces the hand-made r3
+    fix exactly). Probe 0.2.6 `campaign-layout`: FAIL for a created system missing from the sector, FAIL for a
+    zero-weight mod type found in a system the mod did not create, WARN listing where a weighted one went, and an
+    OK summary with per-type counts (javap 2026-09-27: `SectorAPI.getStarSystem/getStarSystems`,
+    `LocationAPI.getPlanets`, `PlanetAPI.getTypeId`, `StarSystemAPI.getBaseName`). `probe-group` merges both
+    fields. Installed in the rig for the Zorg r3 new-game check. Tests: `tests/test_campaign_layout.py`
+    (including a compiled-jar case).
 
 ## Post-1.0 research and gated automation
 

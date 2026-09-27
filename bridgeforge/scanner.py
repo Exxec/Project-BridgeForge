@@ -1066,6 +1066,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_vanilla_script_shadow_repointable(root, result, vanilla_core)
     _scan_replace_array(root, result, vanilla_core)
     _scan_fleet_type_names(root, result, vanilla_core)
+    _scan_procgen_mod_body_leak(root, result)
     _scan_bare_market_fleet_source(root, result)
     _scan_legacy_event_report(root, result)
     _scan_non_english_text(root, result)
@@ -3763,6 +3764,34 @@ def _scan_fleet_type_names(root: Path, result: ScanResult, vanilla_core: Path | 
             explanation=f"Fleets are created with type \"{fleet_type}\" for faction \"{faction_id}\", but neither the faction file's fleetTypeNames nor default_fleet_type_names.json names it, so every encounter shows \"no name for type [{fleet_type}]\". Add a fleetTypeNames entry to the faction file.",
             file=f"data/world/factions/{faction_id}.faction",
             evidence=[f"type:{fleet_type}", f"faction:{faction_id}", *sorted(set(files))[:5]],
+        )
+
+
+def _scan_procgen_mod_body_leak(root: Path, result: ScanResult) -> None:
+    """A star/planet type the mod places itself by id that also has a procgen weight (P15 item 25).
+
+    Zorg18 (2026-09-27): `star_zorg` carried vanilla `star_yellow`'s weights (40/35/30) and `zorg_planet` weight 10,
+    so the artificial star meant for Zorg Zeta also appeared in random systems (owner saw one in Johannam). A
+    type the mod places by id and also weights in `star_gen_data.csv`/`planet_gen_data.csv` spawns in both
+    places; REVIEW because a planet pack may want that.
+    """
+    from .campaign_layout import mod_body_types, mod_placed_types
+
+    types = mod_body_types(root)
+    weighted = {t for t, facts in types.items() if facts["procgen_weight"] > 0}
+    if not weighted:
+        return
+    placed = mod_placed_types(root, weighted)
+    for type_id in sorted(placed):
+        result.add(
+            id="procgen-mod-body-leak",
+            category="campaign",
+            severity="medium",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation=f"The mod places \"{type_id}\" itself by id and also gives it a procedural-generation weight ({types[type_id]['procgen_weight']:g}), so it also appears in random systems of every new sector. If it is meant to be unique to the mod's own system, set its frequency to 0.",
+            file="data/campaign/procgen/" + ("star_gen_data.csv" if types[type_id]["star"] else "planet_gen_data.csv"),
+            evidence=[f"type:{type_id}", f"weight:{types[type_id]['procgen_weight']:g}"],
         )
 
 
