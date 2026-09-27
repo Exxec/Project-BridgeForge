@@ -2090,6 +2090,11 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         not yet applied. **Check to add:** a mod's procgen row for a star or planet type that the mod's own code places
         by id (e.g. `addStarSystem`/`initStar` with that type) and whose texture is mod-specific, with a
         non-zero frequency, is REVIEW ("will also appear in random systems"); a fixer can zero the frequency.
+        **Zorg r3 applied 2026-09-27 (owner):** `star_zorg` weights 40/35/30 -> 0 and `zorg_planet` 10 -> 0; and, from
+        a mock-up of three options, the star's glow switched from Zorg's opaque tiled `zorg_halo02.png` to vanilla's
+        soft `graphics/fx/star_halo.png` tinted `[40,255,120,150]` (`planets.json`, `star_zorg` only). Build
+        `[BF r3]` / `V18+bf.3`; `Done/Zorg18` and the rig copy updated (drift 0). New-game check pending: the save
+        should hold exactly one `star_zorg` and no `zorg_planet` outside Zorg Zeta.
     17. **Triage across relaunches.** `bf-test launch` redirects only the session it starts; a player relaunch
         (ZG-7's save/quit/load) goes only to the game's `starsector.log`. `triage` should also read the rig's
         `starsector.log` lines after the launch time, so a multi-session test is triaged whole.
