@@ -2147,6 +2147,18 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        `CargoStackAPI.getPlugin`). Yunru's mod: 9 items. Test: `tests/test_probe_config.py`.
     8. **Settings list merge test** (item 19's held rule) and **dialog-capture confirmation** (item 18):
        each one short rig run.
+23. **Batch revive of the unattended bucket (2026-09-27, P15 item 22.4).** `finding-stats` after items 12-19:
+    65 of 304 mods unattended (21%, from 43 in the morning). Dry run of `revive` over all 65: 58 needed only
+    the standing approvals (`AUTOMATION_POLICY.json`), 7 needed another fixer, no errors. Applied with
+    `--apply --draft-report`: **58 of 58 reached UNATTENDED_DONE** (Jackundor's Advanced Arms after the
+    work-file fixer fix in item 20.16). Of the 7, reviewed by hand: Combat-Radar, Simulator-Overhaul and
+    Transfer-All-Items call `org/lazywizard/lazylib` in their jars, so LazyLib was declared (approved per run);
+    Unconventional-Armaments dropped only empty trailing CSV fields; Anex-Weapons' fixer refused (non-empty
+    extra fields): 9 `descriptions.csv` quotes began `- "...` unquoted, so commas split them across columns;
+    each `text2` was rejoined and quoted (backup kept); all five UNATTENDED_DONE. D-MOD-Services and
+    Fuel-Siphoning left open: their LunaLib use is behind `isModEnabled("lunalib")` in the mod plugin, an
+    optional settings integration, so declaring LunaLib would force it on every player (owner to confirm).
+    **UNATTENDED_DONE now: 63 queued mods** (plus ClearCommands archived). Each still needs its probe run.
 
 ## Post-1.0 research and gated automation
 
