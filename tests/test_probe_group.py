@@ -11,12 +11,12 @@ from tests.support import link_dir, resolved_temp_dir
 
 
 def _workspace(queue: Path, name: str, mod_id: str, hull: str, *, deps: list[str] | None = None,
-               status: str = "READY_FOR_LIVE_TEST", tc: bool = False) -> Path:
+               status: str = "READY_FOR_LIVE_TEST", tc: bool = False, game_version: str = "0.98a-RC8") -> Path:
     working = queue / name / "working"
     (working / "data" / "hulls").mkdir(parents=True)
     (working / "data" / "variants").mkdir(parents=True)
     (working / "reports").mkdir()
-    info = {"id": mod_id, "dependencies": [{"id": d} for d in deps or []]}
+    info = {"id": mod_id, "gameVersion": game_version, "dependencies": [{"id": d} for d in deps or []]}
     if tc:
         info["totalConversion"] = "true"
     (working / "mod_info.json").write_text(json.dumps(info), encoding="utf-8")
@@ -45,10 +45,16 @@ class PlanTests(unittest.TestCase):
             _workspace(queue, "D", "mod_d", "hull_d", deps=["missing_lib"])  # dependency not in the rig
             _workspace(queue, "E", "mod_e", "hull_e", status="ESCALATED")   # not finished: not a candidate
             _workspace(queue, "T", "mod_t", "hull_t", tc=True)               # total conversion: alone
+            _workspace(queue, "V", "mod_v", "hull_v", game_version="0.95.1a-RC6")  # launcher would refuse it
+            stale = _workspace(queue, "S", "mod_s", "hull_s").parent            # report says ready, revive disagrees
+            (stale / "reports" / "revive").mkdir(parents=True)
+            (stale / "reports" / "revive" / "REVIVE.json").write_text('{"status": "ESCALATED"}', encoding="utf-8")
             plan = plan_groups(queue, _rig(root, "lw_lazylib"), size=8)
         groups = [[m["workspace"] for m in g["members"]] for g in plan["groups"]]
         self.assertEqual(groups, [["A", "C"], ["B"], ["T"]])
-        self.assertEqual(plan["unplaced"], [{"workspace": "D", "reason": "dependencies not in the rig: missing_lib"}])
+        self.assertEqual(plan["unplaced"][0], {"workspace": "D", "reason": "dependencies not in the rig: missing_lib"})
+        self.assertEqual(plan["unplaced"][1]["workspace"], "V")
+        self.assertIn("gameVersion 0.95.1a-RC6", plan["unplaced"][1]["reason"])
 
     def test_group_size_is_respected(self) -> None:
         with resolved_temp_dir() as root:
