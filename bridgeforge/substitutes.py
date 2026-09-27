@@ -500,7 +500,8 @@ def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla
 
 
 def dependency_graph(queue_root: Path, provider_roots: list[Path], *, vanilla_core: Path | None = None,
-                     index_path: Path | None = None, policy_path: Path | None = None, write_reports: bool = False, now=None) -> dict:
+                     index_path: Path | None = None, policy_path: Path | None = None, write_reports: bool = False, now=None,
+                     checkpoint: Path | None = None, progress=None) -> dict:
     """Which queued mods need which non-current providers, ordered by unblocking value (ROADMAP P14 item 3).
 
     Runs dependency_substitutes on every queued workspace (`<queue>/*/working` with a mod_info.json).
@@ -512,11 +513,36 @@ def dependency_graph(queue_root: Path, provider_roots: list[Path], *, vanilla_co
     workspaces = sorted(info.parent for info in queue_root.glob("*/working/mod_info.json"))
     needs: dict[str, dict] = {}
     mods = []
-    for working in workspaces:
-        report = dependency_substitutes(working, provider_roots, vanilla_core=vanilla_core, ops=queue_root,
-                                        policy_path=policy_path, index_path=index_path)
-        if write_reports:
-            write_dependency_report(report, working, now)
+    import time
+
+    from .progress import Checkpoint
+
+    def _stamp(path: Path | None) -> list | None:
+        return [str(path), path.stat().st_mtime_ns] if path and path.exists() else None
+
+    header = {"checkpoint": SCHEMA_VERSION, "queue": str(queue_root), "providers": [str(Path(r).resolve()) for r in provider_roots],
+              "vanilla_core": str(vanilla_core) if vanilla_core else None, "index": _stamp(index_path),
+              "policy": _stamp(policy_path), "write_reports": write_reports}
+    saved = Checkpoint(checkpoint, header)
+    try:
+        results = []
+        for number, working in enumerate(workspaces, 1):
+            started = time.monotonic()
+            report = saved.get(working.parent.name)
+            resumed = report is not None
+            if report is None:
+                report = dependency_substitutes(working, provider_roots, vanilla_core=vanilla_core, ops=queue_root,
+                                                policy_path=policy_path, index_path=index_path)
+                if write_reports:
+                    write_dependency_report(report, working, now)
+                report = {key: report[key] for key in ("mod_id", "strategy", "provider_set", "uncovered")}
+                saved.add(working.parent.name, report)
+            if progress:
+                progress(number, len(workspaces), working.parent.name, report, None if resumed else time.monotonic() - started)
+            results.append((working, report))
+    finally:
+        saved.close()
+    for working, report in results:
         name = working.parent.name
         blockers = [item for item in report["provider_set"] if not item["targets_0.98a"]]
         for item in blockers:

@@ -125,6 +125,49 @@ class FindingStatsTests(unittest.TestCase):
         self.assertEqual(stored["mods"][0]["bucket"], "none")
         self.assertTrue(fresh["mods"][0]["source"].startswith("scanned "))
 
+    def test_checkpoint_resumes_an_interrupted_run(self):
+        from unittest import mock
+
+        import bridgeforge.finding_stats as fs
+
+        class Stop(Exception):
+            pass
+
+        def stop_after_two(done, total, record, seconds, resumed):
+            if done == 2:
+                raise Stop
+
+        with resolved_temp_dir() as root:
+            queue = self._queue(root)
+            checkpoint = root / "out" / fs.CHECKPOINT_NAME
+            whole = finding_stats([queue])
+            with self.assertRaises(Stop):
+                finding_stats([queue], checkpoint=checkpoint, progress=stop_after_two)
+            self.assertEqual(len(checkpoint.read_text(encoding="utf-8").splitlines()), 3)  # header + 2 records
+            with open(checkpoint, "a", encoding="utf-8") as handle:
+                handle.write('{"workspace": "cut sh')  # a line an interrupted write left behind
+            seen = []
+            with mock.patch.object(fs, "_workspace_record", wraps=fs._workspace_record) as scanned:
+                resumed = finding_stats([queue], checkpoint=checkpoint, progress=lambda *a: seen.append(a[4]))
+            self.assertEqual(scanned.call_count, whole["workspaces"] - 2)
+            self.assertEqual(seen[:2], [True, True])
+            self.assertEqual({k: v for k, v in resumed.items() if k != "note"}, {k: v for k, v in whole.items() if k != "note"})
+            # Different options: the old checkpoint is ignored and rewritten.
+            with mock.patch.object(fs, "_workspace_record", wraps=fs._workspace_record) as scanned:
+                finding_stats([queue], scan=True, checkpoint=checkpoint)
+            self.assertEqual(scanned.call_count, whole["workspaces"])
+
+    def test_cli_scan_prints_progress_and_clears_checkpoint(self):
+        with resolved_temp_dir() as root:
+            queue = self._queue(root)
+            err = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(err):
+                self.assertEqual(main(["finding-stats", str(queue), "--scan", "--write", str(root / "out")]), 0)
+            self.assertFalse((root / "out" / "FINDING_STATS.partial.jsonl").exists())
+            self.assertTrue((root / "out" / "FINDING_STATS.md").is_file())
+        self.assertIn("[1/6] Almost:", err.getvalue())
+        self.assertIn("[6/6] Unscanned:", err.getvalue())
+
     def test_cli(self):
         with resolved_temp_dir() as root:
             queue = self._queue(root)

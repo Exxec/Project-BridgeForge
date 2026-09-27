@@ -18,6 +18,31 @@ BridgeForge is an offline, evidence-first toolkit for reviving legacy Starsector
 - Never commit Fractal Softworks game files (jars, art, data). The probe's mission icon is
   copied in locally for that reason (see `.gitignore`).
 
+## Long-running commands (rule since 2026-09-27)
+
+Every command that walks a whole queue, corpus or archive must (1) print one progress line per item
+as it finishes (`[12/305] Mod: detail (38.2s)`, via `bridgeforge/progress.py`'s `report`), with
+`--quiet` to turn it off, and (2) append each finished item to a checkpoint (`progress.Checkpoint`,
+a `*.partial.jsonl` whose header names the inputs) so an interrupted run resumes instead of starting
+over, deleting it once the full result is written. List the command in
+`progress.LONG_RUNNING_COMMANDS`; `tests/test_progress.py` enforces it. Found when `finding-stats
+--scan` ran 44 minutes silent over 305 workspaces, with `dependency-graph` and `corpus-index build`
+the same. When running such a command from a session, run it in the background and read its
+progress rather than waiting blind.
+
+## Things learned the hard way
+
+- Measure "before" states on a mod's `original/`, not `working/`: working copies are already
+  fixed, so `compile-check` or `rebuild-from-reference` there shows nothing. `original/` usually nests
+  the mod one folder down (`original/<Mod Name>/`).
+- `rebuild-from-reference` merges only `.ship`/`.wpn`/`.variant`/`.skin`/`.system` JSON, not `.java`
+  or CSV. It reports a CONFLICT only where the mod and RC8 both changed a value; a value only RC8
+  changed takes RC8's.
+- Reference installs sit beside RC8 in `C:\Program Files (x86)\Fractal Softworks\`: `Starsector62`,
+  `Starsector7.2`, `Starsector8.1`, `Starsector9a` (0.9a, 2018-11), `Starsector9.0` (0.91a,
+  2019-05), `Starsector9.5.1a`. `SectorAPI.addMessage`/`createFleet(String, String)` were removed
+  between 0.8.1a and 0.9, so API-drift checks for them need the 0.8.1a reference.
+
 ## Work that needs a local machine
 
 Anything that needs the game install, a test rig, Windows or `In operation/` cannot be finished

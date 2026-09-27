@@ -149,7 +149,12 @@ def _index_7z(connection, source: str, path: Path, max_bytes: int) -> None:
                     _add_text(connection, source, f"{source}!{name.replace(chr(92), '/')}", extracted.read_bytes(), max_bytes)
 
 
-def build_index(root: Path, db: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> dict:
+def build_index(root: Path, db: Path, max_bytes: int = DEFAULT_MAX_BYTES, progress=None) -> dict:
+    """Index `root` into `db`. Each source is committed as soon as it is indexed, so an interrupted
+    build keeps its work and the next run skips everything already indexed (unchanged size and mtime).
+    `progress(done, total, source, status, seconds)` is called after each file ("indexed" or "unchanged")."""
+    import time
+
     root = Path(root).expanduser().resolve()
     if not root.is_dir():
         raise CorpusIndexError(f"{root} is not a folder.")
@@ -160,43 +165,49 @@ def build_index(root: Path, db: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> dic
     connection = _connect(db)
     stats = {"reindexed": 0, "unchanged": 0, "forgotten": 0}
     try:
-        with connection:
-            previous_root = connection.execute("SELECT value FROM meta WHERE key = 'root'").fetchone()
-            if previous_root and previous_root[0] != str(root):
-                raise CorpusIndexError(f"{db} indexes {previous_root[0]}, not {root}; use another --db.")
-            connection.execute("INSERT OR REPLACE INTO meta VALUES ('root', ?)", (str(root),))
-            connection.execute("INSERT OR REPLACE INTO meta VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
-            known = {row[0]: (row[1], row[2]) for row in connection.execute("SELECT path, size, mtime_ns FROM sources")}
-            seen: set[str] = set()
-            for path in sorted(root.rglob("*")):
-                if not path.is_file() or path.is_symlink():
-                    continue
-                source = path.relative_to(root).as_posix()
-                seen.add(source)
-                stat = path.stat()
-                if known.get(source) == (stat.st_size, stat.st_mtime_ns):
-                    stats["unchanged"] += 1
-                    continue
-                _forget(connection, source)
-                suffix = path.suffix.lower()
-                try:
-                    if suffix in ZIP_SUFFIXES:
-                        _index_zip(connection, source, path.read_bytes(), max_bytes)
-                    elif suffix == ".7z":
-                        _index_7z(connection, source, path, max_bytes)
-                    elif suffix in UNINDEXED_ARCHIVES:
-                        connection.execute("INSERT OR REPLACE INTO skipped VALUES (?, ?, ?)", (source, source, f"{suffix} archives are not read"))
-                    elif suffix in TEXT_SUFFIXES:
-                        _add_text(connection, source, source, path.read_bytes(), max_bytes)
-                    else:
-                        connection.execute("INSERT OR REPLACE INTO files VALUES (?, ?, ?)", (source, source, stat.st_size))
-                except Exception as exc:  # any unreadable archive (bad zip, corrupt or unsupported 7z) is reported, never fatal
-                    connection.execute("INSERT OR REPLACE INTO skipped VALUES (?, ?, ?)", (source, source, f"unreadable: {exc}"))
-                connection.execute("INSERT INTO sources VALUES (?, ?, ?)", (source, stat.st_size, stat.st_mtime_ns))
-                stats["reindexed"] += 1
-            for source in set(known) - seen:
-                _forget(connection, source)
-                stats["forgotten"] += 1
+        previous_root = connection.execute("SELECT value FROM meta WHERE key = 'root'").fetchone()
+        if previous_root and previous_root[0] != str(root):
+            raise CorpusIndexError(f"{db} indexes {previous_root[0]}, not {root}; use another --db.")
+        connection.execute("INSERT OR REPLACE INTO meta VALUES ('root', ?)", (str(root),))
+        connection.execute("INSERT OR REPLACE INTO meta VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
+        connection.commit()
+        known = {row[0]: (row[1], row[2]) for row in connection.execute("SELECT path, size, mtime_ns FROM sources")}
+        seen: set[str] = set()
+        paths = [p for p in sorted(root.rglob("*")) if p.is_file() and not p.is_symlink()]
+        for done, path in enumerate(paths, 1):
+            started = time.monotonic()
+            source = path.relative_to(root).as_posix()
+            seen.add(source)
+            stat = path.stat()
+            if known.get(source) == (stat.st_size, stat.st_mtime_ns):
+                stats["unchanged"] += 1
+                if progress:
+                    progress(done, len(paths), source, "unchanged", 0.0)
+                continue
+            _forget(connection, source)
+            suffix = path.suffix.lower()
+            try:
+                if suffix in ZIP_SUFFIXES:
+                    _index_zip(connection, source, path.read_bytes(), max_bytes)
+                elif suffix == ".7z":
+                    _index_7z(connection, source, path, max_bytes)
+                elif suffix in UNINDEXED_ARCHIVES:
+                    connection.execute("INSERT OR REPLACE INTO skipped VALUES (?, ?, ?)", (source, source, f"{suffix} archives are not read"))
+                elif suffix in TEXT_SUFFIXES:
+                    _add_text(connection, source, source, path.read_bytes(), max_bytes)
+                else:
+                    connection.execute("INSERT OR REPLACE INTO files VALUES (?, ?, ?)", (source, source, stat.st_size))
+            except Exception as exc:  # any unreadable archive (bad zip, corrupt or unsupported 7z) is reported, never fatal
+                connection.execute("INSERT OR REPLACE INTO skipped VALUES (?, ?, ?)", (source, source, f"unreadable: {exc}"))
+            connection.execute("INSERT INTO sources VALUES (?, ?, ?)", (source, stat.st_size, stat.st_mtime_ns))
+            connection.commit()  # one source at a time: an interrupted build resumes from here
+            stats["reindexed"] += 1
+            if progress:
+                progress(done, len(paths), source, "indexed", time.monotonic() - started)
+        for source in set(known) - seen:
+            _forget(connection, source)
+            stats["forgotten"] += 1
+        connection.commit()
         return {**_coverage(connection), **stats, "db": str(db), "root": str(root)}
     finally:
         connection.close()
