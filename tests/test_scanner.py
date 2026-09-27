@@ -20,6 +20,7 @@ from bridgeforge.lineage import analyze_release_lineage
 from bridgeforge.archive_intake import inspect_zip_archive, stage_zip_archive
 from bridgeforge.library_api import check_dependency_apis, inventory_library_api, match_library_imports
 from bridgeforge.cli import main
+from tests.support import resolved_temp_dir
 
 
 
@@ -1021,8 +1022,9 @@ class WorkspaceRootGuardTests(unittest.TestCase):
     """
 
     def test_refuses_a_workspace_root_holding_original_and_working(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+        # resolved_temp_dir: scan_mod reports the resolved path, which on Windows runners is the long
+        # form of the 8.3 temp alias (runneradmin, not RUNNER~1).
+        with resolved_temp_dir() as root:
             (root / "original" / "SomeMod").mkdir(parents=True)
             (root / "working").mkdir()
             (root / "working" / "mod_info.json").write_text('{"id":"m1"}', encoding="utf-8")

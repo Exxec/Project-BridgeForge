@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.substitutes import Provider, dependency_substitutes, provider_for, rank, required_from_scan, strategy
+from bridgeforge.substitutes import required_from_scan
 import io
 import shutil
 from contextlib import redirect_stdout

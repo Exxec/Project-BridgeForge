@@ -7,12 +7,9 @@ from pathlib import Path
 from unittest import mock
 
 from bridgeforge.cli import main
-from bridgeforge.fixers import FixerError, apply_fix, compute_fix, unified_diff_for_change
+from bridgeforge.fixers import FixerError, apply_fix, compute_fix
 from bridgeforge.scanner import _load_lenient_json_file, scan_mod
 from tests.save_fixtures import _class_entry, _u2, _utf8_entry, build_class_file, write_jar
-from bridgeforge.fixers import FixerError, apply_fix, compute_fix
-from bridgeforge.scanner import scan_mod
-from tests.save_fixtures import build_class_file, write_jar
 
 
 def _write(path: Path, text: str) -> None:
