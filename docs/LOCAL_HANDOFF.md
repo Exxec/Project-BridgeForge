@@ -63,7 +63,11 @@ deliberate copy of `shields_formshield` (see its PROVENANCE.md), so nothing is l
 ## 3. Needs the game
 
 ### G1. Rebuild the probe jar, then one live run of `content-ids` (P14 item 49)
-Jar rebuilt and committed 2026-09-27 (0.2.2); only the live run is left.
+Jar rebuilt and committed 2026-09-27 (0.2.2); only the live run is left. Prepared 2026-09-27: the rig
+holds the 0.2.2 probe, ClearCommands (UNATTENDED_DONE, first probe run), and
+`SEEKER-bf-broken-contentid` (mod id `SEEKER_bfbroken`, `ART_dimention_manipulator.variant` slot
+`B_weapon1` misspelled as `ART_dimention_leftGun_BFTYPO`). Presets: `toolsf-test.ps1 probe clearcommands`
+(known-good run) and `probe seeker-broken-contentid` (expected FAIL); never enable SEEKER and the broken copy together.
 ```powershell
 python -m bridgeforge build-probe-mod --jdk "In operation\_rig\jdk-25.0.4.1+1" --core $core --install-release
 python -m bridgeforge.test_guard     # tests/test_probe_mod_build.py runs only on a machine with the rig
