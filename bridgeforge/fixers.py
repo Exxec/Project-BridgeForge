@@ -54,6 +54,7 @@ SUPPORTED_FINDINGS = (
     "ship-data-missing-fighter-bays-column",
     "missing-custom-ui-button-pressed-callback",
     "shippable-work-file",
+    "data-file-not-utf8",
 )
 
 
@@ -1862,7 +1863,65 @@ def _referencing_bytes(root: Path, skip: set[str]) -> bytes:
     return b"\n".join(parts)
 
 
+# CP-1252's typographic bytes: curly quotes, en/em dash, ellipsis, no-break space. Mac Roman reads the
+# same bytes as accented letters (0x92 = í, 0x93 = ì) and Shift-JIS/GBK need two high bytes, so an
+# isolated one of these between ASCII bytes has one plausible reading. Surveyed 2026-09-27 over the
+# queue's 44 non-UTF-8 data files: 30 meet this; the rest carry Mac Roman (DME's 0xD5 for ’), Shift-JIS
+# (Stinger-Shipyards' 0x81 0x66) or accented letters, whose encoding a person must name.
+_CP1252_TYPOGRAPHY = frozenset({0x85, 0x91, 0x92, 0x93, 0x94, 0x96, 0x97, 0xA0})
+
+
+def _invalid_utf8_offsets(raw: bytes) -> list[int]:
+    offsets, start = [], 0
+    while start < len(raw):
+        try:
+            raw[start:].decode("utf-8")
+            break
+        except UnicodeDecodeError as exc:
+            offsets.append(start + exc.start)
+            start += exc.start + 1
+    return offsets
+
+
+def _fix_data_file_not_utf8(root: Path, options: dict) -> list[FileChange]:
+    """Re-encode data files whose only non-UTF-8 bytes are isolated CP-1252 punctuation (P15 item 15).
+
+    Valid UTF-8 already in the file is kept byte for byte; each invalid byte becomes its CP-1252
+    character in UTF-8. A file with any other invalid byte is refused with the bytes it holds, because
+    its real encoding (Mac Roman, Shift-JIS, GBK, CP-1252 letters) cannot be told from the bytes alone.
+    """
+    from .scanner import _PLAYER_TEXT_SUFFIXES
+
+    data = root / "data"
+    paths = [root / "mod_info.json"] + ([p for p in data.rglob("*") if p.suffix.lower() in _PLAYER_TEXT_SUFFIXES] if data.is_dir() else [])
+    changes, refused = [], []
+    for path in sorted(p for p in paths if p.is_file()):
+        raw = path.read_bytes()
+        offsets = _invalid_utf8_offsets(raw)
+        if not offsets:
+            continue
+        invalid = set(offsets)
+
+        def plain(index: int) -> bool:
+            return index < 0 or index >= len(raw) or raw[index] < 0x80 or index in invalid
+
+        if not all(raw[i] in _CP1252_TYPOGRAPHY and plain(i - 1) and plain(i + 1) for i in offsets):
+            odd = sorted({f"0x{raw[i]:02x}" for i in offsets if raw[i] not in _CP1252_TYPOGRAPHY})
+            refused.append(f"{path.relative_to(root).as_posix()} ({', '.join(odd) or 'adjacent high bytes'})")
+            continue
+        out, last = bytearray(), 0
+        for i in offsets:
+            out += raw[last:i] + bytes([raw[i]]).decode("cp1252").encode("utf-8")
+            last = i + 1
+        out += raw[last:]
+        changes.append(FileChange(path=path, before=raw, after=bytes(out)))
+    if not changes and refused:
+        raise FixerError("No file has only CP-1252 punctuation outside UTF-8; name the real encoding by hand for: " + "; ".join(refused))
+    return changes
+
+
 _FIXER_FUNCS = {
+    "data-file-not-utf8": _fix_data_file_not_utf8,
     "shippable-work-file": _fix_shippable_work_file,
     "wing-role-assault-removed": _fix_wing_role_assault_removed,
     "mod-info-game-version-inexact": _fix_mod_info_game_version_inexact,

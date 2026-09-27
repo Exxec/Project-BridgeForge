@@ -35,7 +35,7 @@
     "csv-missing-design-type-column": "input",
     "csv-row-extra-columns": "auto",
     "data-class-reference-missing": "decision",
-    "data-file-not-utf8": "mechanical",
+    "data-file-not-utf8": "auto",
     "declared-dependencies": "none",
     "declared-library-unreferenced": "decision",
     "description-missing": "input",

@@ -1648,3 +1648,47 @@ class ShippableWorkFileFixerTests(unittest.TestCase):
                 compute_fix(mod, "shippable-work-file")
         self.assertIn("new binary file (500 bytes)", diffs[0])
         self.assertIn("removed (500 bytes)", diffs[1])
+
+
+class DataFileNotUtf8FixerTests(unittest.TestCase):
+    """P15 item 15: only isolated CP-1252 punctuation is re-encoded; anything else needs a person."""
+
+    def test_reencodes_cp1252_punctuation_and_keeps_existing_utf8(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            _write(mod / "mod_info.json", '{"id": "x"}')
+            (mod / "data/strings").mkdir(parents=True)
+            path = mod / "data/strings/descriptions.csv"
+            path.write_bytes(b'id,text\r\na,"it\x92s \x93fine\x94 \x96 caf\xc3\xa9"\r\n')  # CP-1252 quotes + real UTF-8
+            self.assertTrue(_findings(scan_mod(mod), "data-file-not-utf8"))
+            apply_fix(compute_fix(mod, "data-file-not-utf8"))
+            after = path.read_bytes()
+            remaining = _findings(scan_mod(mod), "data-file-not-utf8")
+        self.assertEqual(after.decode("utf-8"), 'id,text\r\na,"it’s “fine” – café"\r\n')
+        self.assertEqual(remaining, [])
+
+    def test_refuses_mac_roman_shift_jis_and_accented_letters(self) -> None:
+        cases = {
+            "mac_roman.csv": b"id,text\na,the station\xd5s hull\n",  # Mac Roman 0xD5 = right quote
+            "shift_jis.csv": b"id,text\na,the ship\x81fs hull\n",    # Shift-JIS 0x81 0x66
+            "letters.csv": b"id,text\na,Myst\xe9re\n",               # CP-1252 e-acute or Mac Roman E-grave
+        }
+        for name, raw in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                mod = Path(directory)
+                _write(mod / "mod_info.json", '{"id": "x"}')
+                (mod / "data/strings").mkdir(parents=True)
+                (mod / "data/strings" / name).write_bytes(raw)
+                with self.assertRaises(FixerError) as caught:
+                    compute_fix(mod, "data-file-not-utf8")
+                self.assertIn(name, str(caught.exception))
+
+    def test_a_mixed_mod_fixes_what_it_can_and_leaves_the_rest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            _write(mod / "mod_info.json", '{"id": "x"}')
+            (mod / "data/strings").mkdir(parents=True)
+            (mod / "data/strings/a.csv").write_bytes(b"id,t\na,it\x92s\n")
+            (mod / "data/strings/b.csv").write_bytes(b"id,t\na,Myst\xe9re\n")
+            plan = compute_fix(mod, "data-file-not-utf8")
+        self.assertEqual([c.path.name for c in plan.changes], ["a.csv"])

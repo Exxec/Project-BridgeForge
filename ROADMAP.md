@@ -1929,6 +1929,19 @@ whether the result passed; recurring agent fixes become deterministic fixers.
       SCY-Nation-Utility), none from a fixer. Tests: `tests/test_rc8_bytecode_checks.py`
       (`test_declared_library_used_only_by_jar_bytecode_is_not_unreferenced`; the finding leaves
       `untested_checks_baseline.json`).
+15. **`data-file-not-utf8` fixer for the one encoding the bytes prove (2026-09-27).** P1: 34 mods,
+    `mechanical`. A survey of the queue's 44 non-UTF-8 data files showed the check's "decodes as"
+    guess is not evidence: DME's descriptions use Mac Roman (0xD5 for ’), Stinger-Shipyards
+    Shift-JIS (0x81 0x66), Union-Rail-Systems and Faction-Relationships-Uniquified are UTF-8 with stray
+    bytes, and GB18030 decodes almost anything. **Done 2026-09-27.** `_fix_data_file_not_utf8`
+    re-encodes a file only when every invalid byte is isolated CP-1252 typography (0x85, 0x91-0x94,
+    0x96, 0x97, 0xA0: bytes Mac Roman reads as letters and GBK/Shift-JIS cannot use alone), keeping
+    valid UTF-8 already present byte for byte; any other file is refused with the bytes it holds, for a
+    person to name its encoding. Tier `mechanical` -> `auto` (still REVIEW, so revive asks for
+    approval). Dry run over the queue: 30 files in 27 mods converted; 14 refused (Another-Random-SWP
+    0xB0, DME/DME-dev, Epta-Consortium, Faction-Relationships-Uniquified, TDB-Maelstrom, MAGNETAR 0x99,
+    Stinger-Shipyards, Thule-Legacy, part of ICE). Tests: `tests/test_fixers.py`
+    (`DataFileNotUtf8FixerTests`).
 
 ## Post-1.0 research and gated automation
 
