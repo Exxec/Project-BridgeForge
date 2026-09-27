@@ -14,7 +14,7 @@
       {
         "check": "setup",
         "status": "OK",
-        "subject_pattern": "^ship:ART_dimention_manipulator$",
+        "subject_pattern": "^ship:ART_dimention_manipulator(?::1)?$",
         "min_count": 1
       },
       {

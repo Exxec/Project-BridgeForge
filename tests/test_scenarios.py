@@ -151,6 +151,20 @@ class ScenarioCheckTests(unittest.TestCase):
             result = scenario_check("betelgeuse-damaged", log)
             self.assertEqual(result["status"], "PASS", result)
 
+    def test_betelgeuse_damaged_accepts_explicit_one_ship_setup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            log = self._write_log(
+                Path(directory),
+                [
+                    "BF-PROBE|0.2.1|setup|OK|ship:ART_dimention_manipulator:1|variant=ART_dimention_manipulator count=1",
+                    "BF-PROBE|0.2.1|setup|OK|spawn-fleet:pirates:120|faction=pirates requestedFP=120.0 actualFP=123.0 members=12",
+                    "BF-PROBE|0.2.1|probe|INFO|combat|START",
+                    "BF-PROBE|0.2.1|probe|INFO|combat|END",
+                ],
+            )
+            result = scenario_check("betelgeuse-damaged", log)
+            self.assertEqual(result["status"], "PASS", result)
+
     def test_nex_corvus_fails_on_duplicate_tasserus(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             log = self._write_log(

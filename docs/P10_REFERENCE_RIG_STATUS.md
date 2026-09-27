@@ -93,8 +93,46 @@ for `lazylib_settings.json`, `shaderSettings.json`, and the version descriptors.
 
 ## Setup and live work remaining
 
-No historical game has yet been launched and no original behavior has yet been
-observed.
+The 0.7.2a historical game was launched on 2026-09-24. Its first save was
+vanilla because the mods were not selected in the launcher; its descriptor
+records no enabled mods and it contains no Exigency state. On the next launch,
+the game found and enabled original Exigency 0.7.2, LazyLib 2.1, and ShaderLib
+Beta 1.2.1, then failed during texture/resource loading with
+`java.lang.OutOfMemoryError` from LWJGL direct-buffer allocation. The bundled
+Java 7 is 32-bit and its default heap is 1024 MB. The full log is preserved at
+`In operation/Exigency/reports/reference-0.7.2a-fatal-2026-09-24.log`.
+No original Exigency campaign behavior has yet been observed.
+
+The retry helper under `In operation/Exigency/scratch/` launches this
+same game with the already installed 64-bit Java 7 from the 0.8.1a reference
+install and the game's existing 64-bit native libraries. It verifies the
+0.7.2a API hash and leaves the original mod and game files unchanged. Its
+first invocation was interrupted by PowerShell interpreting a harmless Java
+preferences warning on stderr as an exception. The helper now redirects
+stderr separately; a local smoke check opened the 0.7.2a launcher with
+Java 1.7.0_79 (64-bit). It was stopped before Play and is not a modded-game
+pass. A
+successful session must still record this runtime substitution in the D2
+baseline's provenance.
+
+The first user-driven 64-bit run reached the title menu, but the menu did not
+render while its controls remained active. The invisible selection loaded the
+earlier vanilla Alpha save, as shown by the log's `Loading ..\\saves/save_Alpha...`
+line. Original Exigency then threw a null pointer in `Tasserus.getExiHome`
+because that save contains no Tasserus. This does not establish a new-game
+failure. The first save-path override was ineffective; the game still opened
+its original `..\\saves` folder. A byte-preserving workspace copy of core and
+mods now sits under Exigency `scratch/reference-rig-0.7.2a/`, with an empty
+sibling `saves` folder. All 5,567 payload files excluding the changing game
+log matched their source SHA-256 hashes. The next attempt must also resolve or
+work around the invisible title menu. The owner changed Windows to 60 Hz and
+the last original-install log confirms that rate, but title controls appeared
+briefly then vanished while background animation continued. No title-screen
+exception was logged. The isolated copy reproduced the disappearing title
+controls with all three original mods enabled; its saves folder stayed empty
+and the log had no new exception. Follow-up title checks were stable with no
+mods, ShaderLib alone, and LazyLib alone; LazyLib plus ShaderLib reproduced the
+flicker without Exigency enabled. The exact rendering mechanism is unresolved.
 
 1. Run Exigency 0.7.2a, save after the Avesta movement/market/known-list
    scenario, and import it with `save-baseline`.
@@ -136,4 +174,4 @@ observed.
 
 ## State
 
-`READY_FOR_0_7_2A_LIVE_REFERENCE_RUN`
+`READY_FOR_0_7_2A_64_BIT_LIVE_RETRY`

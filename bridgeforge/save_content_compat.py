@@ -30,7 +30,9 @@ Two confirmed shapes, both from `save_TrangThisbe_*/campaign.xml` (a SEEKER save
 Each category is read from a fixed, confirmed file layout under `<mod_dir>/data/`:
   - hull ids: filename stems of `hulls/*.ship` (cross-checked against `.ship`'s own `"hullId"`
     field, e.g. `ART_armor.ship` declares `"hullId": "ART_armor"` -- filename stem is used
-    directly rather than parsing every `.ship` file, since they agree).
+    directly rather than parsing every `.ship` file, since they agree), plus the declared
+    `skinHullId` of `hulls/**/*.skin` files. A skin creates a real hull id even though it has no
+    matching `.ship` file (Flu-X uses these in its knownShips and market fleet members).
   - variant and wing ids: filename stems of `variants/*.variant` (wings are stored as variant
     files too; this module does not try to tell a wing variant from a ship variant, since both
     share one id namespace in `FMmbr`-style references).
@@ -107,12 +109,33 @@ def _faction_ids(directory: Path) -> set[str]:
     return ids
 
 
+def _skin_hull_ids(directory: Path) -> set[str]:
+    if not directory.is_dir():
+        return set()
+    from .scanner import _load_lenient_json_file
+
+    ids: set[str] = set()
+    for path in directory.rglob("*.skin"):
+        if not path.is_file():
+            continue
+        try:
+            data = _load_lenient_json_file(path)
+        except (ValueError, OSError):
+            continue
+        if isinstance(data, dict) and isinstance(data.get("skinHullId"), str):
+            skin_id = data["skinHullId"].strip()
+            if skin_id:
+                ids.add(skin_id)
+    return ids
+
+
 def collect_mod_id_universe(mod_dir: Path) -> dict[str, set[str]]:
     """A mod's declared ids, grouped by category. See module docstring for the file layout."""
     mod_dir = Path(mod_dir).expanduser().resolve()
     universe: dict[str, set[str]] = {}
     for category, (sub1, sub2, suffix) in _CATEGORY_DIRS.items():
         universe[category] = _stems(mod_dir / sub1 / sub2, suffix)
+    universe["hull"].update(_skin_hull_ids(mod_dir / "data" / "hulls"))
     # Wing ids are the `id` column of wing_data.csv (e.g. exigency_azata_wing), not variant file
     # stems; using variants flagged every knownFighters entry as missing (PRB-2, 2026-09-13).
     universe["wing"] = _csv_ids(mod_dir / "data" / "hulls" / "wing_data.csv")
@@ -194,6 +217,14 @@ def check_save_content(save: Path, mod_dir: Path, *, vanilla_core: Path | None =
         if token in mod_all:
             entry = present.setdefault(
                 token, {"category": _categorize(token, universe), "occurrences": 0, "sample_path": sample_path}
+            )
+            entry["occurrences"] += 1
+            continue
+        # Starsector can save a market ship under its generated <hull>_Hull variant id.
+        # The variant has no file, but the base hull is present and the game rebuilds it.
+        if sample_path.endswith("/FMmbr") and token.endswith("_Hull") and token[:-5] in universe["hull"]:
+            entry = present.setdefault(
+                token, {"category": "generated_variant", "occurrences": 0, "sample_path": sample_path}
             )
             entry["occurrences"] += 1
             continue

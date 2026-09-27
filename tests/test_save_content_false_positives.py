@@ -33,6 +33,53 @@ def _save(root: Path) -> Path:
 
 
 class SaveContentFalsePositiveTests(unittest.TestCase):
+    def test_skin_hull_ids_back_known_ships_and_generated_market_variants(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = _mod(root / "mod")
+            skins = mod / "data" / "hulls" / "skins"
+            skins.mkdir()
+            skin = skins / "skin-file-name.skin"
+            skin.write_text(
+                '{"baseHullId":"hound","skinHullId":"fx_hound","builtInMods":[livinghull]}',
+                encoding="utf-8",
+            )
+            save = _save(root)
+            (save / "campaign.xml").write_text(
+                '<CampaignEngine><knownShips><st>fx_hound</st></knownShips>'
+                '<market><FMmbr sid="fx_hound_Hull"/></market></CampaignEngine>',
+                encoding="utf-8",
+            )
+            result = check_save_content(save, mod)
+            self.assertEqual(result["status"], "LOADS")
+            self.assertEqual(result["missing"], [])
+            self.assertEqual(
+                {entry["id"]: entry["category"] for entry in result["present"]["ids"]},
+                {"fx_hound": "hull", "fx_hound_Hull": "generated_variant"},
+            )
+            skin.unlink()
+            self.assertEqual(
+                {entry["id"] for entry in check_save_content(save, mod)["missing"]},
+                {"fx_hound", "fx_hound_Hull"},
+            )
+
+    def test_generated_market_variant_uses_its_existing_base_hull(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = _mod(root / "mod")
+            (mod / "data" / "hulls" / "fx_frigate.ship").write_text('{"hullId":"fx_frigate"}', encoding="utf-8")
+            save = _save(root)
+            (save / "campaign.xml").write_text(
+                '<CampaignEngine><market><FMmbr sid="fx_frigate_Hull"/></market></CampaignEngine>',
+                encoding="utf-8",
+            )
+            result = check_save_content(save, mod)
+            self.assertEqual(result["status"], "LOADS")
+            self.assertEqual(result["missing"], [])
+            self.assertEqual(result["present"]["ids"][0]["category"], "generated_variant")
+            (mod / "data" / "hulls" / "fx_frigate.ship").unlink()
+            self.assertEqual(check_save_content(save, mod)["status"], "WILL_FAIL")
+
     def test_only_a_genuinely_missing_wing_in_a_known_list_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
