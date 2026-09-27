@@ -144,7 +144,7 @@
     "security-manager": "code",
     "settings-json-override-breadth": "decision",
     "ship-data-missing-fighter-bays-column": "auto",
-    "shippable-work-file": "mechanical",
+    "shippable-work-file": "auto",
     "shiproles-obsolete-fighter-role": "decision",
     "shiproles-wing-id": "auto",
     "source-ast-unavailable": "inspect",

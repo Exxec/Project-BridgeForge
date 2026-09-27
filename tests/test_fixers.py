@@ -1591,3 +1591,60 @@ class SuppliedFindingsTests(unittest.TestCase):
                     compute_fix(mod, "missing-custom-ui-button-pressed-callback", {"scan_findings": []})
         self.assertEqual([c.after for c in as_objects.changes], [c.after for c in scanned.changes])
         self.assertEqual([c.after for c in as_dicts.changes], [c.after for c in scanned.changes])
+
+
+class ShippableWorkFileFixerTests(unittest.TestCase):
+    """P15 item 14: move editor/work files out of the shipped tree, keeping any the mod names."""
+
+    def test_moves_unreferenced_work_files_to_scratch_and_keeps_referenced_ones(self) -> None:
+        import zipfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "Mod"
+            mod = workspace / "working"
+            _write(mod / "mod_info.json", '{"id": "x", "jars": ["jars/x.jar"]}')
+            (mod / "graphics/ships").mkdir(parents=True)
+            (mod / "graphics/ships/hull.psd").write_bytes(b"8BPS\x00\x01binary")
+            _write(mod / "data/config/notes.old", "old notes")
+            _write(mod / "data/config/settings.json", '{"intro": "graphics/ships/intro.log"}')
+            _write(mod / "graphics/ships/intro.log", "the settings file names me")
+            (mod / "jars").mkdir()
+            with zipfile.ZipFile(mod / "jars/x.jar", "w") as jar:
+                jar.writestr("data/Plugin.class", b"\xca\xfe\xba\xbe loads sounds/pack.zip")
+            (mod / "sounds").mkdir()
+            (mod / "sounds/pack.zip").write_bytes(b"PK\x05\x06" + b"\x00" * 18)
+            self.assertTrue(_findings(scan_mod(mod), "shippable-work-file"))
+            plan = compute_fix(mod, "shippable-work-file")
+            applied = apply_fix(plan)
+            moved = workspace / "scratch" / "work-files"
+            psd = (moved / "graphics/ships/hull.psd").read_bytes()
+            old_moved = (moved / "data/config/notes.old").is_file()
+            kept = [(mod / p).is_file() for p in ("graphics/ships/intro.log", "sounds/pack.zip")]
+            gone = [(mod / p).exists() for p in ("graphics/ships/hull.psd", "data/config/notes.old")]
+            backups = [entry["backup"] for entry in applied if entry.get("removed")]
+            remaining = _findings(scan_mod(mod), "shippable-work-file")
+            with self.assertRaises(FixerError):
+                compute_fix(mod, "shippable-work-file")  # only referenced files left
+        self.assertEqual(psd, b"8BPS\x00\x01binary")
+        self.assertTrue(old_moved)
+        self.assertEqual(kept, [True, True])
+        self.assertEqual(gone, [False, False])
+        self.assertEqual(backups, [None, None])  # the moved copy is the backup
+        self.assertEqual(sorted(remaining[0].evidence), ["graphics/ships/intro.log", "sounds/pack.zip"])
+
+    def test_refuses_to_overwrite_an_earlier_move_and_shows_binary_moves_briefly(self) -> None:
+        from bridgeforge.fixers import unified_diff_for_change
+
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "loose"
+            _write(mod / "mod_info.json", '{"id": "x"}')
+            (mod / "graphics").mkdir()
+            (mod / "graphics/a.psd").write_bytes(b"8BPS\x00" * 100)
+            plan = compute_fix(mod, "shippable-work-file")
+            diffs = [unified_diff_for_change(change) for change in plan.changes]
+            (Path(directory) / "loose.work-files" / "graphics").mkdir(parents=True)
+            (Path(directory) / "loose.work-files" / "graphics" / "a.psd").write_bytes(b"earlier")
+            with self.assertRaises(FixerError):
+                compute_fix(mod, "shippable-work-file")
+        self.assertIn("new binary file (500 bytes)", diffs[0])
+        self.assertIn("removed (500 bytes)", diffs[1])

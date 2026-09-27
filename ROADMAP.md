@@ -1901,6 +1901,34 @@ whether the result passed; recurring agent fixes become deterministic fixers.
       on RevenantLib branch `local-handoff-moves-log`.
     - Local tooling: `.githooks/pre-commit` runs `ruff check .` and the hooks are installed
       (`core.hooksPath` had been unset); `AGENTS.md` synced with `CLAUDE.md`.
+    - **R1 done:** `In operation/DEPENDENCY_GRAPH.md`, 305 queued mods. First: Unofficial New Game Plus
+      (unblocks 6), Scy Nation (4), YunruCore, Outer Rim Alliance (3 each). All 20 ranked providers show
+      `licence UNRECORDED`: each needs `release-policy set` before it is revived.
+14. **`shippable-work-file` fixer, and the first UNATTENDED_DONE revive (2026-09-27).** P1 ranked it the
+    top `mechanical` id (the only blocker for 7 mods). **Done 2026-09-27.** `_fix_shippable_work_file`
+    moves each listed file to `<workspace>/scratch/work-files/<same path>` (`<root>.work-files/` for a
+    bare mod folder) and leaves any file whose name appears in the mod's data, loose scripts,
+    `mod_info.json` or jar members, per the check's own caveat that a mod could read one; it refuses
+    to overwrite an earlier move. `FileChange.removed` lets a plan delete a file (a move's new copy is
+    its backup, a bare removal keeps the `.bak`), and diffs show removals and binary files as one line.
+    Tier `mechanical` -> `auto`. Dry run on the 7 mods moved only source archives, `.url` shortcuts,
+    `~`/`.old` backups and a Krita file. Tests: `tests/test_fixers.py` (`ShippableWorkFileFixerTests`).
+    - **P2, first real `revive`:** ClearCommands, with `--approve` for its three REVIEW `auto` fixers
+      (no standing `AUTOMATION_POLICY.json` yet: the owner's call). The run found two bugs, both fixed:
+      `revive` crashed labelling a change outside `working/` (now `../scratch/...`, removals marked);
+      and **`undeclared-library-dependency` declared LazyLib for a mod that only uses Console
+      Commands**, because `BUNDLED_LIBRARY_PACKAGE_PREFIXES` mapped all of `org/lazywizard/` to LazyLib.
+      Every class in LazyLib 3.0.0's two jars is under `org/lazywizard/lazylib/`, and Console Commands
+      4.0.9 (`lw_console`) is all `org/lazywizard/console/` (208 classes), so LazyLib now has the narrow
+      prefix and Console Commands its own entry. A bytecode-only Console Commands user whose classes
+      are all registered in `data/console/commands.csv` gets the existing `console-command-optional`
+      (SAFE) instead of a dependency. `declared-library-unreferenced` now also honours jar bytecode use.
+      ClearCommands' `mod_info.json` was restored from the fixer's own backup and revive then reached
+      **UNATTENDED_DONE** (report drafted; the probe run is the remaining manual step). Of the 85
+      workspaces declaring `lw_lazylib`, 3 now show it unused (MAGNETAR, Persean-Chronicles,
+      SCY-Nation-Utility), none from a fixer. Tests: `tests/test_rc8_bytecode_checks.py`
+      (`test_declared_library_used_only_by_jar_bytecode_is_not_unreferenced`; the finding leaves
+      `untested_checks_baseline.json`).
 
 ## Post-1.0 research and gated automation
 

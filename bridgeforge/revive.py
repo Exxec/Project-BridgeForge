@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import time
 from dataclasses import asdict
@@ -125,7 +126,9 @@ def _try_fixers(working: Path, findings: list[dict], *, target: str, vanilla_cor
                 pending.append({"finding": finding_id, "state": "FIXER_REFUSED", "reason": str(exc), "classifications": classifications})
                 continue
             diff = "".join(unified_diff_for_change(change) for change in plan.changes)
-            files = sorted(str(change.path.relative_to(working).as_posix()) for change in plan.changes)
+            # A move (shippable-work-file) writes outside working/: label it relative to working.
+            files = sorted(Path(os.path.relpath(change.path, working)).as_posix() + (" (removed)" if change.removed else "")
+                           for change in plan.changes)
             if permitted and apply:
                 apply_fix(plan)
                 applied.append({"finding": finding_id, "files": files, "why": "all SAFE" if unattended else "approved"})

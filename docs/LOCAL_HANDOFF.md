@@ -21,7 +21,8 @@ Every long command now prints `[n/total]` progress and resumes if interrupted (P
 ## 1. Measure and try the unattended pipeline (ROADMAP P15)
 
 ### P2. First real `revive` and agent run (P15 items 2-3, 8-9)
-Pick a small mod from `In operation/FINDING_STATS.md` (P1 done 2026-09-27: 41 mods in the `auto` bucket):
+ClearCommands reached UNATTENDED_DONE 2026-09-27 (P15 item 14): give it the usual probe run. For the agent
+half, pick a mod with a `code` packet from `In operation/FINDING_STATS.md`:
 ```powershell
 python -m bridgeforge revive "In operation\<Mod>" --vanilla-core $core                                   # dry run
 python -m bridgeforge revive "In operation\<Mod>" --vanilla-core $core --apply --draft-report
@@ -40,16 +41,10 @@ vendor, strip) matches what you would decide by hand. Fixers you want applied ev
 
 ## 2. Re-run with the kept commands (P15 item 5)
 
-### R1. Provider index and revival order (P14 items 2-3)
-```powershell
-python -m bridgeforge provider-index build --providers "In operation" --providers "In operation\_rig\mods"
-python -m bridgeforge dependency-graph --vanilla-core $core --provider-index bridgeforge-state\provider-index.json --write
-python -m bridgeforge board --write
-```
-(A folder cache written by the removed `provider-index-update`, `bridgeforge-state\provider-index\`,
-still loads through `--provider-index`.) Done when `In operation\DEPENDENCY_GRAPH.md` exists and its
-top entries match the local run's ranking. Every `licence UNRECORDED` entry needs a decision before
-that mod is revived: `python -m bridgeforge release-policy set <mod id> --local-only|--releasable --reason "..."`.
+### R1. Licence decisions for the revival order (P14 items 2-3)
+`In operation\DEPENDENCY_GRAPH.md` rebuilt 2026-09-27 (P15 item 13). Every ranked provider shows
+`licence UNRECORDED`; decide each before reviving it:
+`python -m bridgeforge release-policy set <mod id> --local-only|--releasable --reason "..."`.
 
 ### R3. Rebuild the Downloads index (P14 item 18)
 ```powershell

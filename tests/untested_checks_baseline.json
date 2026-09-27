@@ -3,7 +3,6 @@
   "untested": [
     "ashlib-version-marker-unreadable",
     "declared-dependencies",
-    "declared-library-unreferenced",
     "graphicslib-version-marker-unreadable",
     "invalid-csv",
     "invalid-mod-info",
