@@ -15,8 +15,9 @@ loses which id), or proposes a real vanilla substitute. This module does both:
   `shields_formshield` into Explorer Society). Scoped to hullmods only - a CSV row plus its
   declared script class is a single, well-defined unit to copy; a weapon/wing/hull involves sprite
   and balance data this command has no reliable way to locate or validate, so those kinds are
-  refused outright rather than copied incompletely. A licence gate (`release._licence_gate`, the
-  same one `release`/item 7 use) blocks vendoring from a local-only source. `--apply` is required
+  refused outright rather than copied incompletely. A licence gate (`release.vendoring_licence`, built on the gate
+  `release`/item 7 use) blocks vendoring from a local-only source unless the target is itself
+  local-only (RevenantLib, owner decision 2026-09-27). `--apply` is required
   to actually write; the default is a dry-run plan, matching `fold`'s own convention.
 
 Read-only except `propose_expected_changes` (only ever adds PROPOSED entries to an expected-changes
@@ -107,11 +108,11 @@ def vendor_copy(kind: str, ident: str, from_provider: Path, to_mod: Path, policy
     provider_info = _load_lenient_json_file(from_provider / "mod_info.json")
     provider_id = provider_info.get("id") if isinstance(provider_info, dict) else None
     provider_name = provider_info.get("name") if isinstance(provider_info, dict) else None
-    from .release import DEFAULT_POLICY_PATH, _licence_gate
+    from .release import DEFAULT_POLICY_PATH, vendoring_licence
 
-    gate = _licence_gate(provider_id, provider_name, policy_path or DEFAULT_POLICY_PATH)
-    if gate["local_only"]:
-        return {"schema_version": SCHEMA_VERSION, "mode": "vendor-copy", "status": "REFUSED", "reason": f"{provider_name or provider_id} is local-only per release_policy.json: {gate.get('reason')}"}
+    licence = vendoring_licence(provider_id, provider_name, to_mod, policy_path or DEFAULT_POLICY_PATH)
+    if not licence["allowed"]:
+        return {"schema_version": SCHEMA_VERSION, "mode": "vendor-copy", "status": "REFUSED", "reason": licence["reason"]}
 
     source_csv = from_provider / "data" / "hullmods" / "hull_mods.csv"
     rows = _read_csv_rows_lenient(source_csv) or []
@@ -150,6 +151,7 @@ def vendor_copy(kind: str, ident: str, from_provider: Path, to_mod: Path, policy
         "kind": kind, "id": ident, "from_provider": str(from_provider), "to_mod": str(to_mod),
         "csv_row": row, "files": [entry["relative"] for entry in copy_plan],
         "script_not_vendored": script_class if missing_script else None,
+        "must_stay_local_only": licence["must_stay_local_only"], "licence_note": licence["reason"],
         "note": (f"'{script_class}' is not a loose file under {from_provider} (jar-only or missing) - the CSV row can still be copied, but the script itself needs a separate manual port." if missing_script else None),
     }
     if not apply:

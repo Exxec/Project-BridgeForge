@@ -96,6 +96,31 @@ def _licence_gate(mod_id: str | None, mod_name: str | None, policy_path: Path | 
     return {"status": "FAIL" if local_only else "PASS", "local_only": local_only, "reason": entry.get("reason")}
 
 
+def vendoring_licence(source_id: str | None, source_name: str | None, target_root: Path, policy_path: Path | None) -> dict[str, object]:
+    """May content from `source` be copied into the mod at `target_root` (`vendor-copy`)?
+
+    A releasable source always may. A local-only source may go only into a target that is itself
+    local-only, so the content can never ship: RevenantLib holds content salvaged from mods whose
+    authors are gone, and is local-only itself (owner decision 2026-09-27). The target must then stay
+    local-only for as long as it holds that content, which `must_stay_local_only` records.
+    """
+    source = _licence_gate(source_id, source_name, policy_path)
+    if not source["local_only"]:
+        return {"allowed": True, "must_stay_local_only": False, "reason": None}
+    root = Path(target_root).expanduser().resolve()
+    info_path = root / "mod_info.json" if (root / "mod_info.json").is_file() else root / "working" / "mod_info.json"
+    info = _load_lenient_json_file(info_path) if info_path.is_file() else None
+    target_id = info.get("id") if isinstance(info, dict) else None
+    target_name = info.get("name") if isinstance(info, dict) else None
+    target = _licence_gate(target_id, target_name, policy_path)
+    label = source_name or source_id
+    if target["local_only"]:
+        return {"allowed": True, "must_stay_local_only": True,
+                "reason": f"{label} is local-only, and so is {target_name or target_id}; it must stay local-only while it holds this content"}
+    return {"allowed": False, "must_stay_local_only": False,
+            "reason": f"{label} is local-only per release_policy.json ({source.get('reason')}); it may only be vendored into a local-only target such as RevenantLib"}
+
+
 # ---------------------------------------------------------------------------
 # Gates
 # ---------------------------------------------------------------------------
