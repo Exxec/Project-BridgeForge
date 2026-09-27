@@ -2072,7 +2072,8 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     raw `Iterator` with a `(String)` cast plus `import java.util.Iterator`; otherwise only whitespace (trailing
     blanks, 5 trailing empty lines) and CRLF -> LF. The reviewed attempt was copied into `working/` by hand
     (backup `*.pre-bf-agent-loose-script-janino-risk.bak`), then `escalation verify` PASS, `compile-check` PASS
-    (0 errors in 1 loose script), `revive` UNATTENDED_DONE with the report drafted. Probe run pending.
+    (0 errors in 1 loose script), `revive` UNATTENDED_DONE with the report drafted. **Live YUB-1-20260927:**
+    FATAL=0, MOD-ERROR=0, the rewritten script loaded in RC8, and the owner ran tooltip, unpack and learn paths.
     Found on the way (added to item 20): the `claude` CLI was not on PATH on this machine (the VS Code
     extension ships `claude.exe` under `.vscode/extensions/anthropic.claude-code-*/resources/native-binary/`), and
     `escalation run --apply` re-runs the agent instead of applying the attempt already verified and reviewed.
@@ -2084,7 +2085,18 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        `build-probe-mod` already compiles the probe mission with them. Running every mod's loose scripts through
        Janino turns the risk into a DETERMINISTIC pass/fail, catches Janino-only failures the pattern misses, and
        gives agent fixes (item 21) a ground-truth check.
-    2. **A fixer for typed for-each loops.** The rewrite is mechanical: BDS had 10 done by hand (item 45) and the
+       **Done 2026-09-27.** `compile_check.janino_compile` runs every loose script javac accepted (and no jar
+       shadows) through RC8's own `janino.jar` 2.7.8 via `bridgeforge/java/JaninoCheck.java` (now many classes and
+       source roots per JVM, a fresh loader per class; the mod and vanilla core are the source roots, javac's
+       classpath the parent). `compile-check` prints the result and FAILs on a Janino rejection; the scanner's
+       compile step removes a file's `loose-script-janino-risk` once Janino accepts it and adds MANUAL
+       `loose-script-janino-compile-error` when Janino rejects it. **Finding:** Janino 2.7.8 accepts a typed
+       for-each over `List<String>` whose element calls a String method; it rejects lambdas and a method call on
+       a generic-typed value (`e.getValue().size()` on a `Map.Entry<String, List<String>>`), because it erases
+       generics to Object. Yunru's Unpack Blueprints' **original** compiles: item 21's rewrite was harmless but
+       not needed, and the risk pattern over-reports. Tests: `tests/test_janino_compile.py` (pure outcome tests,
+       plus a real-Janino test that runs only where the RC8 install is present).
+    2. **(Revised by 1's finding: the loop itself compiles; the failing construct is a call on an erased generic value, which needs a cast of the right type. Held until the queue survey shows how common real failures are.)** **A fixer for typed for-each loops.** The rewrite is mechanical: BDS had 10 done by hand (item 45) and the
        agent did 9 identically (item 21). When the loop variable's collection is a local or field declared with a
        generic type in the same file, rewriting to a raw `Iterator` plus cast is deterministic; anything else
        stays with the agent. Verified by (1). Moves most of the 48 mods' occurrences out of the `code` tier.

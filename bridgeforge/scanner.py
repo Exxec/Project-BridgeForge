@@ -6118,7 +6118,8 @@ def _scan_compile_check(root: Path, result: ScanResult, vanilla_core: Path | Non
             file=str(entry["file"]),
             evidence=[f"class:{entry['class']}", f"supplied by:{entry['supplied_by']}"],
         )
-    if outcome["status"] != "FAIL":
+    _apply_janino_outcome(root, result, outcome.get("janino") or {})
+    if not outcome.get("errors"):
         return
     errors_by_file: dict[str, list[dict[str, object]]] = {}
     for error in outcome["errors"]:
@@ -6144,6 +6145,37 @@ def _scan_compile_check(root: Path, result: ScanResult, vanilla_core: Path | Non
             explanation=f"javac rejects this loose script against RC8 ({len(errors)} error(s)); the game's own class loader would fail the same way at startup.",
             file=rel,
             evidence=evidence,
+        )
+
+
+def _apply_janino_outcome(root: Path, result: ScanResult, janino: dict) -> None:
+    """Replace the `loose-script-janino-risk` guess with RC8's own Janino (ROADMAP P15 item 22.1).
+
+    Evidence (2026-09-27, compile_check.janino_compile on RC8's janino.jar 2.7.8): a typed for-each
+    over `List<String>` whose element calls a String method compiles; a lambda fails ("Unexpected
+    token"), and so does calling a method on a generic-typed value (`e.getValue().size()` on a
+    `Map.Entry<String, List<String>>`: "A method named size is not declared"), because Janino erases
+    generics to Object. Yunru's Unpack Blueprints' original, flagged for 9 typed loops, compiles.
+    So a file Janino accepted drops its risk finding, and a file it rejected gets a MANUAL error.
+    """
+    if janino.get("status") not in ("PASS", "FAIL"):
+        return
+    failures = janino.get("failures") or {}
+    checked_ok = set()
+    if janino.get("checked"):
+        risky = {f.file for f in result.findings if f.id == "loose-script-janino-risk"}
+        checked_ok = {path for path in risky if path not in failures}
+    result.findings[:] = [f for f in result.findings if not (f.id == "loose-script-janino-risk" and f.file in checked_ok)]
+    for rel, message in sorted(failures.items()):
+        result.add(
+            id="loose-script-janino-compile-error",
+            category="build",
+            severity="critical",
+            classification="MANUAL",
+            confidence="DETERMINISTIC",
+            explanation="RC8's own runtime compiler (Janino 2.7.8, run offline on the game's janino.jar) rejects this loose script, so the game shows a Fatal dialog before the main menu. javac accepts it. Janino erases generics to Object and has no lambdas: cast values whose type comes from generics before calling their methods, and replace lambdas with anonymous classes.",
+            file=rel,
+            evidence=[message[:400]],
         )
 
 

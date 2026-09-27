@@ -99,6 +99,7 @@
     "loose-script-compile-error": "code",
     "loose-script-compile-unavailable": "inspect",
     "loose-script-janino-risk": "code",
+    "loose-script-janino-compile-error": "code",
     "loose-script-shadowed-by-dependency-jar": "decision",
     "loose-script-shadowed-by-jar": "none",
     "magiclib-activator-lifecycle": "code",

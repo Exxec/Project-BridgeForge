@@ -2581,6 +2581,13 @@ def main(argv: list[str] | None = None) -> int:
                 mod_root = Path(args.mod).expanduser().resolve()
                 shadowed_files = sorted({str(Path(error["file"]).relative_to(mod_root)).replace("\\", "/") for error in shadowed})
                 print(f"  {len(shadowed)} error(s) in {len(shadowed_files)} jar-shadowed loose script(s) not counted above (the game loads the jar's class instead): {', '.join(shadowed_files[:5])}")
+            janino = result.get("janino") or {}
+            if janino.get("status") in ("PASS", "FAIL"):
+                print(f"  Janino (RC8's runtime compiler): {janino['status']} ({janino.get('checked', 0)} script(s) compiled)")
+                for rel, message in sorted((janino.get("failures") or {}).items()):
+                    print(f"  JANINO FAIL {rel}: {message[:300]}")
+            elif janino.get("reason"):
+                print(f"  Janino not run: {janino['reason']}")
             for warning in result.get("janino_gap_warnings", [])[:10]:
                 print(f"  WARNING javac-vs-Janino gap in {warning['file']}: {', '.join(warning['java8plus_syntax'])}")
             for error in [e for e in result.get("errors", []) if e.get("api_changes")][:20]:
