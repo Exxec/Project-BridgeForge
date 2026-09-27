@@ -2,6 +2,9 @@ package com.bridgeforge.probe;
 
 import com.fs.starfarer.api.EveryFrameScript;
 import com.fs.starfarer.api.Global;
+import com.fs.starfarer.api.campaign.CargoAPI;
+import com.fs.starfarer.api.campaign.CargoStackAPI;
+import com.fs.starfarer.api.campaign.SpecialItemData;
 import com.fs.starfarer.api.campaign.CampaignClockAPI;
 import com.fs.starfarer.api.campaign.CampaignFleetAPI;
 import com.fs.starfarer.api.campaign.FactionAPI;
@@ -420,7 +423,11 @@ public class CampaignProbeScript implements EveryFrameScript {
         for (String wingId : config.contentWings) {
             failed += reportContent("wing", wingId, wingProblem(wingId));
         }
-        int total = config.contentShipVariants.size() + config.contentOtherVariants.size() + config.contentWings.size();
+        for (String itemId : config.contentSpecialItems) {
+            failed += reportContent("item", itemId, specialItemProblem(itemId));
+        }
+        int total = config.contentShipVariants.size() + config.contentOtherVariants.size() + config.contentWings.size()
+                + config.contentSpecialItems.size();
         ProbeLog.emit("content-ids", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "all-content",
                 "checked=" + total + " failed=" + failed + " ship-variants built=" + config.contentShipVariants.size());
     }
@@ -512,6 +519,30 @@ public class CampaignProbeScript implements EveryFrameScript {
             return "hullmod".equals(kind) ? Global.getSettings().getHullModSpec(id) != null : Global.getSettings().getWeaponSpec(id) != null;
         } catch (Throwable t) {
             return false;
+        }
+    }
+
+    // P15 item 22.7: a special item works through its plugin class (Yunru's Unpack Blueprints). Build a
+    // cargo stack of it in a throwaway cargo, which instantiates the plugin as real cargo does
+    // (javap, RC8 starfarer.api.jar, 2026-09-27: SettingsAPI.getSpecialItemSpec, FactoryAPI.createCargo,
+    // CargoAPI.addSpecial/getStacksCopy, CargoStackAPI.getPlugin).
+    private static String specialItemProblem(String itemId) {
+        try {
+            if (Global.getSettings().getSpecialItemSpec(itemId) == null) {
+                return "getSpecialItemSpec=null";
+            }
+            CargoAPI cargo = Global.getFactory().createCargo(true);
+            cargo.addSpecial(new SpecialItemData(itemId, null), 1);
+            List<CargoStackAPI> stacks = cargo.getStacksCopy();
+            if (stacks.isEmpty()) {
+                return "addSpecial produced no cargo stack";
+            }
+            if (stacks.get(0).getPlugin() == null) {
+                return "no plugin instance for the item";
+            }
+            return null;
+        } catch (Throwable t) {
+            return t.getClass().getName() + ": " + t.getMessage();
         }
     }
 

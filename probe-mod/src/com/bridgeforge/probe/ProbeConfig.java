@@ -34,6 +34,8 @@ public final class ProbeConfig {
     public final List<String> contentOtherVariants = new ArrayList<String>();
     public final List<String> contentWings = new ArrayList<String>();
     // variant id -> the hullId its .variant file names, for the "ship" variants (0.2.4).
+    // Special item ids from data/campaign/special_items.csv (0.2.5).
+    public final List<String> contentSpecialItems = new ArrayList<String>();
     public final Map<String, String> contentShipHulls = new LinkedHashMap<String, String>();
 
     public static ProbeConfig load() throws Exception {
@@ -86,6 +88,7 @@ public final class ProbeConfig {
             addAll(contentVariants.optJSONArray("other"), config.contentOtherVariants);
         }
         addAll(root.optJSONArray("content_wings"), config.contentWings);
+        addAll(root.optJSONArray("content_special_items"), config.contentSpecialItems);
         JSONObject shipHulls = root.optJSONObject("content_ship_hulls");
         if (shipHulls != null) {
             JSONArray names = shipHulls.names();
