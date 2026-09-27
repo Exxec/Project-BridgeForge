@@ -2083,6 +2083,13 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         `createEmptyFleet(faction, "<type>", ...)` (source or bytecode string constant) whose faction file has no
         `fleetTypeNames` entry for that type, and no vanilla default. Cosmetic but visible in every encounter;
         the fix is a data entry, so it can be a fixer that proposes the name from the type string.
+    18. **Zorg18 follow-up (owner, 2026-09-27, after archiving):** Zorg's artificial star and hive planet appear in
+        random systems (seen in Johannam). `star_gen_data.csv` gives `star_zorg` vanilla `star_yellow`'s weights
+        (40/35/30) and `planet_gen_data.csv` gives `zorg_planet` weight 10; the original has the same rows. Fix is
+        setting those frequencies to 0 (ZorgGen places the star itself); recorded in `Done/Zorg18/ARCHIVE_NOTE.md`,
+        not yet applied. **Check to add:** a mod's procgen row for a star or planet type that the mod's own code places
+        by id (e.g. `addStarSystem`/`initStar` with that type) and whose texture is mod-specific, with a
+        non-zero frequency, is REVIEW ("will also appear in random systems"); a fixer can zero the frequency.
     17. **Triage across relaunches.** `bf-test launch` redirects only the session it starts; a player relaunch
         (ZG-7's save/quit/load) goes only to the game's `starsector.log`. `triage` should also read the rig's
         `starsector.log` lines after the launch time, so a multi-session test is triaged whole.
