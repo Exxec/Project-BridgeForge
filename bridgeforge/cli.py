@@ -44,7 +44,7 @@ from .bytecode_diff import diff_bytecode
 from .bytecode_rules import apply_bytecode_class, apply_bytecode_jar, plan_bytecode
 from .pack_candidate import create_migration_pack_candidate
 from .log_triage import triage_log
-from .copy_drift import compare_copies
+from .copy_drift import compare_copies, sync_copies
 from .jar_audit import audit_jar
 from .build_tag import apply_build_tag, BuildTagError, DEFAULT_LABEL
 from .translation import TranslationError, apply_translation, check_translation, export_project_go_tm, export_translation, prefill_from_record, prefill_from_reference
@@ -314,6 +314,8 @@ def build_parser() -> argparse.ArgumentParser:
     copy_drift = subcommands.add_parser("copy-drift", help="hash-compare a mod working copy against its deployed/test-rig copy")
     copy_drift.add_argument("working_copy", type=Path)
     copy_drift.add_argument("deployed_copy", type=Path)
+    copy_drift.add_argument("--sync", action="store_true", help="copy missing/different files working -> deployed (test rigs only; never the reverse)")
+    copy_drift.add_argument("--prune", action="store_true", help="with --sync: move deployed-only files to <rig>/pruned/<date>/<mod>/")
     copy_drift.add_argument("--json", action="store_true")
     jar_audit = subcommands.add_parser("jar-audit", help="compare a rebuilt mod jar with its original for bundled libraries, removed classes, and reflection use")
     jar_audit.add_argument("rebuilt", type=Path)
@@ -2014,6 +2016,24 @@ def main(argv: list[str] | None = None) -> int:
             print(result["caveat"])
         return 0 if not result["fatal"] else 1
     if args.command == "copy-drift":
+        if args.prune and not args.sync:
+            print("bridgeforge: --prune needs --sync.", file=sys.stderr)
+            return 2
+        if args.sync:
+            try:
+                synced = sync_copies(args.working_copy, args.deployed_copy, prune=args.prune)
+            except ValueError as exc:
+                print(f"bridgeforge: {exc}", file=sys.stderr)
+                return 2
+            if args.json:
+                print(json.dumps(synced, indent=2, sort_keys=True))
+                return 0 if synced["status"] == "PASS" else 1
+            for item in synced["copied"]:
+                print(f"COPIED {item}")
+            for item in synced["pruned"]:
+                print(f"PRUNED {item} -> {synced['pruned_to']}")
+            for item in synced["extra_kept"]:
+                print(f"EXTRA-KEPT {item} (use --prune to move it out)")
         try:
             result = compare_copies(args.working_copy, args.deployed_copy)
         except ValueError as exc:

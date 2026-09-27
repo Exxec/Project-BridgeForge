@@ -3,6 +3,7 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import re
+import shutil
 from pathlib import Path
 
 INCLUDED_DIRS = ("data", "jars", "graphics", "sounds")  # always included; any other top-level folder is too (below)
@@ -131,3 +132,40 @@ def compare_copies(working_copy: Path, deployed_copy: Path) -> dict[str, object]
         "drift_count": drift_count,
         "status": "PASS" if drift_count == 0 else "DRIFT",
     }
+
+
+def sync_copies(working_copy: Path, deployed_copy: Path, prune: bool = False, today: str | None = None) -> dict[str, object]:
+    """Make a rig copy match its working copy: copy missing and different files working -> deployed.
+
+    Never copies deployed -> working. With `prune`, files only the deployed copy has are moved (not
+    deleted) to `<rig>/pruned/<date>/<mod>/`. Refuses unless the deployed copy sits in `<rig>/mods/` of a
+    rig whose starsector-core is a junction/symlink, so the real install is never written to.
+    """
+    from datetime import date
+
+    from .probe_config import _is_link
+
+    before = compare_copies(working_copy, deployed_copy)
+    working_root, deployed_root = Path(before["working_root"]), Path(before["deployed_root"])
+    rig = deployed_root.parent.parent
+    if deployed_root.parent.name.lower() != "mods" or not _is_link(rig / "starsector-core"):
+        raise ValueError(f"{deployed_root} is not in <rig>/mods/ of a rig whose starsector-core is a junction/symlink; "
+                         "copy-drift --sync only writes into a test rig.")
+    copied: list[str] = []
+    for relative in [*before["missing_in_deployed"], *[item["path"] for item in before["different"]]]:
+        destination = deployed_root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(working_root / relative, destination)
+        copied.append(relative)
+    moved: list[str] = []
+    pruned_to = rig / "pruned" / (today or date.today().isoformat()) / deployed_root.name
+    if prune:
+        for relative in before["extra_in_deployed"]:
+            destination = pruned_to / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(deployed_root / relative), str(destination))
+            moved.append(relative)
+    after = compare_copies(working_copy, deployed_copy)
+    return {"schema_version": 1, "mode": "COPY_DRIFT_SYNC", "working_root": str(working_root), "deployed_root": str(deployed_root),
+            "copied": copied, "pruned": moved, "pruned_to": str(pruned_to) if moved else None,
+            "extra_kept": [] if prune else before["extra_in_deployed"], "drift_after": after["drift_count"], "status": after["status"]}

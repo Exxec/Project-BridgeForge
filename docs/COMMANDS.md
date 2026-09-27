@@ -652,6 +652,8 @@ hash-compare a mod working copy against its deployed/test-rig copy
 |---|---|---|
 | `working_copy` | - | - |
 | `deployed_copy` | - | - |
+| `--sync` | - | copy missing/different files working -> deployed (test rigs only; never the reverse) |
+| `--prune` | - | with --sync: move deployed-only files to <rig>/pruned/<date>/<mod>/ |
 | `--json` | - | - |
 
 ## jar-audit
