@@ -20,7 +20,7 @@ import sqlite3
 import zipfile
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # 2: content_rows maps each content rowid to its source (2026-09-27)
 DEFAULT_MAX_BYTES = 4 * 1024 * 1024
 TEXT_SUFFIXES = frozenset({
     ".csv", ".json", ".ship", ".wpn", ".variant", ".skin", ".faction", ".system", ".proj", ".java",
@@ -48,6 +48,10 @@ def _connect(db: Path) -> sqlite3.Connection:
         CREATE TABLE IF NOT EXISTS files (location TEXT PRIMARY KEY, source TEXT, size INTEGER);
         CREATE TABLE IF NOT EXISTS skipped (location TEXT PRIMARY KEY, source TEXT, reason TEXT);
         CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+        CREATE TABLE IF NOT EXISTS content_rows (row INTEGER PRIMARY KEY, source TEXT);
+        CREATE INDEX IF NOT EXISTS content_rows_source ON content_rows(source);
+        CREATE INDEX IF NOT EXISTS files_source ON files(source);
+        CREATE INDEX IF NOT EXISTS skipped_source ON skipped(source);
     """)
     return connection
 
@@ -62,7 +66,11 @@ def _decode(data: bytes) -> str | None:
 
 
 def _forget(connection: sqlite3.Connection, source: str) -> None:
-    connection.execute("DELETE FROM content WHERE location IN (SELECT location FROM files WHERE source = ?)", (source,))
+    # Delete by rowid through content_rows: `location` is UNINDEXED in the FTS table, so the old
+    # `WHERE location IN (...)` scanned the whole index for every file, and R3's first Downloads build
+    # (42 GB) slowed to a crawl as the index grew: 18 GB read in 15 s at 1.3 GB, 11 h in (2026-09-27).
+    connection.execute("DELETE FROM content WHERE rowid IN (SELECT row FROM content_rows WHERE source = ?)", (source,))
+    connection.execute("DELETE FROM content_rows WHERE source = ?", (source,))
     connection.execute("DELETE FROM files WHERE source = ?", (source,))
     connection.execute("DELETE FROM skipped WHERE source = ?", (source,))
     connection.execute("DELETE FROM sources WHERE path = ?", (source,))
@@ -76,7 +84,8 @@ def _add_text(connection, source: str, location: str, data: bytes, max_bytes: in
     if text is None:
         connection.execute("INSERT OR REPLACE INTO skipped VALUES (?, ?, ?)", (location, source, "binary content"))
         return
-    connection.execute("INSERT INTO content VALUES (?, ?)", (location, text))
+    row = connection.execute("INSERT INTO content VALUES (?, ?)", (location, text)).lastrowid
+    connection.execute("INSERT INTO content_rows VALUES (?, ?)", (row, source))
     connection.execute("INSERT OR REPLACE INTO files VALUES (?, ?, ?)", (location, source, len(data)))
 
 
@@ -168,6 +177,9 @@ def build_index(root: Path, db: Path, max_bytes: int = DEFAULT_MAX_BYTES, progre
         previous_root = connection.execute("SELECT value FROM meta WHERE key = 'root'").fetchone()
         if previous_root and previous_root[0] != str(root):
             raise CorpusIndexError(f"{db} indexes {previous_root[0]}, not {root}; use another --db.")
+        previous_schema = connection.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
+        if previous_schema and int(previous_schema[0]) < SCHEMA_VERSION and connection.execute("SELECT 1 FROM content LIMIT 1").fetchone():
+            raise CorpusIndexError(f"{db} was built by an older corpus-index (schema {previous_schema[0]}) that cannot be updated quickly; delete it or use another --db and build again.")
         connection.execute("INSERT OR REPLACE INTO meta VALUES ('root', ?)", (str(root),))
         connection.execute("INSERT OR REPLACE INTO meta VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
         connection.commit()
@@ -184,7 +196,8 @@ def build_index(root: Path, db: Path, max_bytes: int = DEFAULT_MAX_BYTES, progre
                 if progress:
                     progress(done, len(paths), source, "unchanged", 0.0)
                 continue
-            _forget(connection, source)
+            if source in known:  # a new file has nothing to forget
+                _forget(connection, source)
             suffix = path.suffix.lower()
             try:
                 if suffix in ZIP_SUFFIXES:

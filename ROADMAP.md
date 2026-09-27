@@ -2232,6 +2232,14 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     `LocationAPI.getPlanets`, `PlanetAPI.getTypeId`, `StarSystemAPI.getBaseName`). `probe-group` merges both
     fields. Installed in the rig for the Zorg r3 new-game check. Tests: `tests/test_campaign_layout.py`
     (including a compiled-jar case).
+26. **`corpus-index build` was quadratic (R3, 2026-09-27).** R3's first Downloads build (42 GB) ran 11 hours; a
+    psutil sample showed 18 GB read in 15 s and 2.3 s of CPU, all re-reading its own 1.3 GB index. `_forget` deleted
+    content with `WHERE location IN (...)`, but `location` is UNINDEXED in the FTS5 table, so every file, even a new
+    one with nothing to delete, scanned the whole index. **Done 2026-09-27.** Schema 2: `content_rows` maps each
+    content rowid to its source (indexed), `_forget` deletes by rowid, new files skip `_forget`, and `files`/`skipped`
+    are indexed by source; an older-schema index with content is refused rather than slowly updated. Benchmark on
+    the rig's mods: a steady ~130 files/s, 32,000 files in under 4 minutes with no slowdown. Test:
+    `tests/test_corpus_index.py`. R3 must be stopped and rebuilt into a fresh index.
 
 ## Post-1.0 research and gated automation
 

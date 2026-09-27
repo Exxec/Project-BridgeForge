@@ -43,15 +43,14 @@ vendor, strip) matches what you would decide by hand. Fixers you want applied ev
 
 ## 2. Re-run with the kept commands (P15 item 5)
 
-### R3. Rebuild the Downloads index (P14 item 18)
+### R3. Rebuild the Downloads index (P14 item 18, P15 item 26)
+The 2026-09-27 run used the old, quadratic indexer (11 hours, not finished). Stop it (PID 75768, or any
+`python -m bridgeforge corpus-index build`), delete `bridgeforge-state\corpus-index.sqlite*`, then:
 ```powershell
-python -m pip install -e ".[archives]"          # once: lets the index read .7z archives
 python -m bridgeforge corpus-index build "C:\Users\exxec\Downloads"
 python -m bridgeforge corpus-index search shieldbypass
 ```
-The local `archive-index` database is not readable by `corpus-index`. Done when the search finds
-`Ship and Weapon Pack/data/hullmods/hull_mods.csv` (the 2026-09-20 false negative). Note the build
-time and index size in item 18, and check the `NOT searched` line (`.rar` is not read).
+It now prints `[n/total]` and saves per file. Done when the search finds `Ship and Weapon Pack/data/hullmods/hull_mods.csv`.
 
 ### R4. `strip-plan` and `vendor-copy --plan` on a real case (P14 item 4, P15 item 7)
 ```powershell
