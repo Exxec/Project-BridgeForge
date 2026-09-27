@@ -55,6 +55,8 @@ SUPPORTED_FINDINGS = (
     "missing-custom-ui-button-pressed-callback",
     "shippable-work-file",
     "data-file-not-utf8",
+    "fleet-type-name-missing",
+    "procgen-mod-body-leak",
 )
 
 
@@ -1848,8 +1850,13 @@ def _referencing_bytes(root: Path, skip: set[str]) -> bytes:
     import zipfile
 
     parts = []
+    from .copy_drift import _is_excluded
+
     for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.relative_to(root).as_posix() in skip:
+        relative = path.relative_to(root).as_posix()
+        # IDE/VCS folders (.idea, .git, src*...) never ship and the game never reads them; a mention there
+        # is not a runtime reference (Jackundor's .idea/libraries/data.xml named its backup zips, 2026-09-27).
+        if not path.is_file() or relative in skip or _is_excluded(relative):
             continue
         suffix = path.suffix.lower()
         try:
@@ -1958,7 +1965,80 @@ def _reencode_invalid(raw: bytes, offsets: list[int], encoding: str, relative: s
     return bytes(out + raw[last:])
 
 
+def _fix_fleet_type_name_missing(root: Path, options: dict) -> list[FileChange]:
+    """Add a `fleetTypeNames` entry per unnamed fleet type (P15 item 20.15), title-casing the type as Zorg18's
+    hand fix did ("Zeta AI raid" -> "Zeta AI Raid"). Text insertion, so comments and formatting survive;
+    `options["names"]` ({type: name}) overrides the proposed name. The check needs the vanilla core, so a
+    fresh scan here passes `options["vanilla_core"]`."""
+    if options.get("scan_findings") is None:
+        from .scanner import scan_mod
+
+        vanilla = options.get("vanilla_core")
+        findings = [f for f in scan_mod(root, vanilla_core=Path(vanilla) if vanilla else None).findings if f.id == "fleet-type-name-missing"]
+    else:
+        findings = _findings_of(root, options, "fleet-type-name-missing")
+    by_file: dict[str, list[str]] = {}
+    for finding in findings:
+        fleet_type = next((e.split(":", 1)[1] for e in finding.evidence if e.startswith("type:")), None)
+        if fleet_type and finding.file:
+            by_file.setdefault(finding.file, []).append(fleet_type)
+    names = options.get("names") or {}
+    changes = []
+    for relative, types in sorted(by_file.items()):
+        path = root / relative
+        if not path.is_file():
+            continue  # a vanilla faction's type: the name belongs in the mod's own default_fleet_type_names.json
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        newline = "\r\n" if "\r\n" in text else "\n"
+        entries = "".join(
+            newline + "\t\t" + json.dumps(t) + ":" + json.dumps(names.get(t) or " ".join(w[:1].upper() + w[1:] for w in t.split(" "))) + ","
+            for t in sorted(set(types)))
+        match = re.search(r'"fleetTypeNames"\s*:\s*\{', text)
+        if match:
+            text = text[:match.end()] + entries + text[match.end():]
+        else:
+            brace = text.index("{")
+            text = text[:brace + 1] + newline + '\t"fleetTypeNames":{' + entries + newline + "\t}," + text[brace + 1:]
+        changes.append(FileChange(path=path, before=raw, after=_encode(text, had_bom)))
+    return changes
+
+
+def _fix_procgen_mod_body_leak(root: Path, options: dict) -> list[FileChange]:
+    """Zero the procgen weight of each type `procgen-mod-body-leak` names (P15 item 25): the Zorg18 r3 fix as a
+    fixer. Only the frequency fields of that type's row change; the row stays so nothing else loses the type."""
+    by_file: dict[str, set[str]] = {}
+    for finding in _findings_of(root, options, "procgen-mod-body-leak"):
+        type_id = next((e.split(":", 1)[1] for e in finding.evidence if e.startswith("type:")), None)
+        if type_id and finding.file:
+            by_file.setdefault(finding.file, set()).add(type_id)
+    columns = {"star_gen_data.csv": ("freqYOUNG", "freqAVERAGE", "freqOLD"), "planet_gen_data.csv": ("frequency",)}
+    changes = []
+    for relative, types in sorted(by_file.items()):
+        path = root / relative
+        if not path.is_file():
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        newline = "\r\n" if "\r\n" in text else "\n"
+        lines = text.split(newline)
+        header = next(csv.reader([lines[0]]))
+        wanted = [header.index(c) for c in columns.get(path.name, ()) if c in header]
+        for number, line in enumerate(lines[1:], 1):
+            fields = next(csv.reader([line]), [])
+            if fields and fields[0].strip() in types:
+                spans = _line_field_spans(line)
+                for index in sorted(wanted, reverse=True):
+                    if index < len(spans):
+                        start, end, _raw = spans[index]
+                        line = line[:start] + "0" + line[end:]
+                lines[number] = line
+        changes.append(FileChange(path=path, before=raw, after=_encode(newline.join(lines), had_bom)))
+    return changes
+
 _FIXER_FUNCS = {
+    "procgen-mod-body-leak": _fix_procgen_mod_body_leak,
+    "fleet-type-name-missing": _fix_fleet_type_name_missing,
     "data-file-not-utf8": _fix_data_file_not_utf8,
     "shippable-work-file": _fix_shippable_work_file,
     "wing-role-assault-removed": _fix_wing_role_assault_removed,

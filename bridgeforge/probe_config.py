@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .boot_test import _is_link
 from .build_tag import _find_mod_info
+from .campaign_layout import mod_body_types, mod_created_systems
 from .probe_mod_build import RELEASE_RELATIVE
 from .scanner import _load_lenient_json_file, _read_csv_rows, _wing_ids_set
 
@@ -349,6 +350,20 @@ def _content_variants(mod_root: Path, deployable_hulls: list[str]) -> dict[str, 
     return {"ship": sorted(ship), "other": sorted(other - ship)}
 
 
+def _content_special_items(mod_root: Path) -> list[str]:
+    """Special item ids the mod defines in data/campaign/special_items.csv (P15 item 22.7): the probe
+    looks each spec up and builds a cargo stack of it, which instantiates the item's plugin class."""
+    import csv
+    import io
+
+    path = mod_root / "data" / "campaign" / "special_items.csv"
+    if not path.is_file():
+        return []
+    rows = csv.DictReader(io.StringIO(path.read_text(encoding="utf-8-sig", errors="replace")))
+    ids = {(row.get("id") or "").strip() for row in rows}
+    return sorted(item for item in ids if item and not item.startswith("#"))
+
+
 def _content_ship_hulls(mod_root: Path, deployable_hulls: list[str]) -> dict[str, str]:
     """{variant id: hullId the .variant names} for the variants the probe builds as SHIPs, so it can
     report a built member whose hull differs (the game substituting a default hull: PRB-FIGHTER-01's
@@ -434,6 +449,9 @@ def build_probe_config(
         "factions": _mod_faction_ids(mod_root),
         "content_variants": _content_variants(mod_root, hulls),
         "content_ship_hulls": _content_ship_hulls(mod_root, hulls),
+        "content_special_items": _content_special_items(mod_root),
+        "mod_systems": mod_created_systems(mod_root),
+        "mod_body_types": {t: f["procgen_weight"] for t, f in mod_body_types(mod_root).items()},
         "content_wings": sorted(_wing_ids_set(mod_root / "data" / "hulls" / "wing_data.csv")),
         "campaign_interval_days": campaign_interval_days,
         "combat_seconds": combat_seconds,

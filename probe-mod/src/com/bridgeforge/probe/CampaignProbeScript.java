@@ -2,6 +2,9 @@ package com.bridgeforge.probe;
 
 import com.fs.starfarer.api.EveryFrameScript;
 import com.fs.starfarer.api.Global;
+import com.fs.starfarer.api.campaign.CargoAPI;
+import com.fs.starfarer.api.campaign.CargoStackAPI;
+import com.fs.starfarer.api.campaign.SpecialItemData;
 import com.fs.starfarer.api.campaign.CampaignClockAPI;
 import com.fs.starfarer.api.campaign.CampaignFleetAPI;
 import com.fs.starfarer.api.campaign.FactionAPI;
@@ -193,6 +196,11 @@ public class CampaignProbeScript implements EveryFrameScript {
         runCheck("content-ids", new Runnable() {
             public void run() {
                 checkContentIds();
+            }
+        });
+        runCheck("campaign-layout", new Runnable() {
+            public void run() {
+                checkCampaignLayout();
             }
         });
         ProbeLog.end("campaign");
@@ -420,7 +428,11 @@ public class CampaignProbeScript implements EveryFrameScript {
         for (String wingId : config.contentWings) {
             failed += reportContent("wing", wingId, wingProblem(wingId));
         }
-        int total = config.contentShipVariants.size() + config.contentOtherVariants.size() + config.contentWings.size();
+        for (String itemId : config.contentSpecialItems) {
+            failed += reportContent("item", itemId, specialItemProblem(itemId));
+        }
+        int total = config.contentShipVariants.size() + config.contentOtherVariants.size() + config.contentWings.size()
+                + config.contentSpecialItems.size();
         ProbeLog.emit("content-ids", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "all-content",
                 "checked=" + total + " failed=" + failed + " ship-variants built=" + config.contentShipVariants.size());
     }
@@ -515,6 +527,30 @@ public class CampaignProbeScript implements EveryFrameScript {
         }
     }
 
+    // P15 item 22.7: a special item works through its plugin class (Yunru's Unpack Blueprints). Build a
+    // cargo stack of it in a throwaway cargo, which instantiates the plugin as real cargo does
+    // (javap, RC8 starfarer.api.jar, 2026-09-27: SettingsAPI.getSpecialItemSpec, FactoryAPI.createCargo,
+    // CargoAPI.addSpecial/getStacksCopy, CargoStackAPI.getPlugin).
+    private static String specialItemProblem(String itemId) {
+        try {
+            if (Global.getSettings().getSpecialItemSpec(itemId) == null) {
+                return "getSpecialItemSpec=null";
+            }
+            CargoAPI cargo = Global.getFactory().createCargo(true);
+            cargo.addSpecial(new SpecialItemData(itemId, null), 1);
+            List<CargoStackAPI> stacks = cargo.getStacksCopy();
+            if (stacks.isEmpty()) {
+                return "addSpecial produced no cargo stack";
+            }
+            if (stacks.get(0).getPlugin() == null) {
+                return "no plugin instance for the item";
+            }
+            return null;
+        } catch (Throwable t) {
+            return t.getClass().getName() + ": " + t.getMessage();
+        }
+    }
+
     private static String wingProblem(String wingId) {
         try {
             return Global.getSettings().getFighterWingSpec(wingId) == null ? "getFighterWingSpec=null" : null;
@@ -524,6 +560,64 @@ public class CampaignProbeScript implements EveryFrameScript {
     }
 
     // ---- custom planet/star spec lookups ---------------------------------------------
+
+    // P15 item 25 (0.2.6). Zorg18 (2026-09-27): its artificial star, meant for Zorg Zeta, also appeared in random
+    // systems through procgen weights. Every system the mod creates must exist; a mod body type with no procgen
+    // weight must stay in those systems (FAIL otherwise), and one with a weight is reported with where it went.
+    // API (javap, RC8 starfarer.api.jar, 2026-09-27): SectorAPI.getStarSystem(String)/getStarSystems(),
+    // LocationAPI.getPlanets(), PlanetAPI.getTypeId(), StarSystemAPI.getBaseName().
+    private void checkCampaignLayout() {
+        if (config.modSystems.isEmpty() && config.modBodyTypes.isEmpty()) {
+            return;
+        }
+        int missing = 0;
+        for (String name : config.modSystems) {
+            if (Global.getSector().getStarSystem(name) == null) {
+                ProbeLog.emit("campaign-layout", ProbeLog.STATUS_FAIL, "system:" + name, "the mod creates this system but it is not in the sector");
+                missing++;
+            }
+        }
+        Set<String> own = new HashSet<String>(config.modSystems);
+        java.util.Map<String, List<String>> elsewhere = new java.util.LinkedHashMap<String, List<String>>();
+        java.util.Map<String, Integer> total = new java.util.LinkedHashMap<String, Integer>();
+        for (StarSystemAPI system : Global.getSector().getStarSystems()) {
+            for (PlanetAPI planet : system.getPlanets()) {
+                String type = planet.getTypeId();
+                if (type == null || !config.modBodyTypes.containsKey(type)) {
+                    continue;
+                }
+                Integer count = total.get(type);
+                total.put(type, count == null ? 1 : count + 1);
+                if (!own.contains(system.getBaseName())) {
+                    List<String> where = elsewhere.get(type);
+                    if (where == null) {
+                        where = new java.util.ArrayList<String>();
+                        elsewhere.put(type, where);
+                    }
+                    if (!where.contains(system.getBaseName())) {
+                        where.add(system.getBaseName());
+                    }
+                }
+            }
+        }
+        int leaked = 0;
+        for (String type : config.modBodyTypes.keySet()) {
+            List<String> where = elsewhere.get(type);
+            if (where == null || where.isEmpty() || own.isEmpty()) {
+                continue;
+            }
+            float weight = config.modBodyTypes.get(type);
+            String listed = where.size() > 8 ? where.subList(0, 8) + " ..." : where.toString();
+            ProbeLog.emit("campaign-layout", weight > 0 ? ProbeLog.STATUS_WARN : ProbeLog.STATUS_FAIL, "type:" + type,
+                    "in " + where.size() + " system(s) the mod did not create" + (weight > 0 ? " (procgen weight " + weight + ")" : " (no procgen weight: should not happen)") + ": " + listed);
+            if (weight <= 0) {
+                leaked++;
+            }
+        }
+        ProbeLog.emit("campaign-layout", missing + leaked == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "mod-systems",
+                "systems expected=" + config.modSystems.size() + " missing=" + missing + "; mod body types=" + config.modBodyTypes.size()
+                        + " counts=" + total);
+    }
 
     private void checkPlanetSpecs() {
         // Planet types are keyed by PlanetSpecAPI.getPlanetType() and listed by getAllPlanetSpecs().

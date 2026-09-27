@@ -145,6 +145,16 @@
       "local_only": true,
       "reason": "author (SirHartley) unreachable; no licence file shipped, so all rights reserved by default. Owner decision 2026-09-27: revived for the local archive only, with a note, not published",
       "recorded_on": "2026-09-27"
+    },
+    "zorg": {
+      "local_only": true,
+      "reason": "no licence file and no author named in the mod (it came from a modpack, 'V7 of the modpack'); all rights reserved by default. Owner decision 2026-09-27: revived and live-validated for the local archive only, not published",
+      "recorded_on": "2026-09-27"
+    },
+    "ArkLeg_dev": {
+      "local_only": true,
+      "reason": "author unreachable and mod abandoned (owner, 2026-09-27); no licence on record, so all rights reserved by default. Revived for the local archive only, not published",
+      "recorded_on": "2026-09-27"
     }
   },
   "default": {

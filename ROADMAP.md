@@ -2011,6 +2011,235 @@ whether the result passed; recurring agent fixes become deterministic fixers.
       rig fixture and its preset were removed.
       **CID-HULL-20260927** (SEEKER, probe 0.2.4): `content-ids|OK|all-content|checked=40 failed=0 ship-variants
       built=15`, FATAL=0, MOD-ERROR=0, 1 save: the hull check raises no false failure.
+19. **`settings-json-override-breadth` counted additions as overrides (2026-09-27).** P1 ranked it the finding
+    that alone blocks the most mods (14). It compared whole top-level keys, so a mod that only adds an entry
+    inside `plugins`, `graphics` or `designTypeColors` counted as overriding vanilla's whole block. settings.json
+    merges objects key by key: SEEKER, Exigency and Flu-X all add entries this way and played normally in the
+    2026-09-24 live runs. **Done 2026-09-27.** `_settings_value_changes` compares nested objects value by
+    value and ignores pure additions; lists and scalars still count when they differ (list merging is not
+    evidenced). 10 of the 14 clear (Anex-Weapons, Aryas-Nightingale-Ships, Fleet-Action-History,
+    Hexagonal-Shieldidgeridoos, Kazeron-Navarchy, KIND-STRANGER-Automatic-Orders, RevenantLib,
+    Ship-Direction-Marker, Variants-Lib, Xenoargh-FX-Core). Tests: `tests/test_replace_array_and_identical_copies.py`
+    (`test_entries_only_added_inside_vanilla_objects_are_not_overrides`).
+    - **Held rule (owner, 2026-09-27; applies once testing clears it):** accept a small, deliberate set of real
+      value changes (up to about 25 values), recorded per mod with the exact keys in a baseline so any later
+      change shows; always review a large set (over 100 usually means a stale copy of an old settings.json).
+      Covers RemnantPad and S-TechPad (24 UI colours each, a UI theme) and Combat-Misc-Utils (`forceNoVBO`).
+    - **Test first:** Blue-Friend-Balls sets `ruleCommandPackages` to its own package only. If a list value
+      replaces vanilla's list rather than adding to it, vanilla's five rule-command packages are lost and much
+      campaign dialogue could break. One rig run with it enabled (new game, talk to a market, open a bar) settles
+      how lists merge; until then it stays blocked.
+20. **Enhancements found in the 2026-09-27 local session (proposed, not started).** Most useful first.
+    1. **`archive` command for local-only mods.** Archiving ClearCommands and RevenantLib into `Done/` was
+       done by hand: shipped files via `copy_drift._collect`, a zip, `original/`, `workspace/` reports and an
+       `ARCHIVE_NOTE.md`. `release` cannot do it: its licence gate always blocks a local-only mod, and its
+       behaviour gate wants D-series evidence even when nothing that runs changed. An `archive` command should
+       build that layout, write the note from the release policy and revival report, and waive the behaviour
+       gate only when the jar is byte-identical and the changes are metadata (with that proof in the note).
+       **Done 2026-09-27.** `bridgeforge archive WORKSPACE [--done DIR]` (`bridgeforge/archive.py`): refuses without a
+       licence decision or when the archive exists; builds `<Folder>/`, `<Folder>-<version>.zip`, `original/`,
+       `workspace/` and `ARCHIVE_NOTE.md` from the mod's own data (author, licence decision and reason, the report's
+       final status, shipped files changed or added versus `original/`, and whether every jar is byte-identical);
+       never deletes the workspace. Trial on Combat-Radar: 1 file changed (`mod_info.json`), jars identical. Test:
+       `tests/test_archive.py`.
+    2. **Test list merging in settings.json** (item 19's held rule), then write the fixer or baseline helper for it.
+    3. **`finding-stats` deltas.** Keep the previous run and report what moved between runs (mods that changed
+       bucket, ids that disappeared), so the effect of new fixers and check fixes is measured, not recomputed by hand.
+       **Done 2026-09-27.** `finding-stats --write` keeps the previous run as `FINDING_STATS.previous.json` and appends
+       "Since the last run" to `FINDING_STATS.md` (unattended count, mods that changed bucket, finding ids whose
+       occurrences changed). Test: `tests/test_finding_stats.py`.
+    4. **Persist named encodings.** `fix --encoding FILE=ENC` decisions live only in the fixed files; record them in
+       the workspace (REVIVAL_PLAN.md or a small JSON) so a re-copy from `original/` can reapply them, and let
+       `revive` read them.
+    5. **`revive` should keep a fixer's partial refusals.** When `data-file-not-utf8` converts some files and
+       refuses others, the refused list is dropped because the plan has changes; surface it as a pending item.
+    6. **`vendor-copy` should recognise an equivalent vendored row.** RevenantLib's `shields_formshield` row
+       differs from Rebal's only by the newer column layout and the repackaged script, yet reports CONFLICT; compare
+       values column by column and treat a known script repackaging (PROVENANCE.md) as equal.
+    7. **`prepare-test` first copy.** It refuses a rig folder that does not exist yet, so the first copy had to be
+       made by hand; let it create the folder and do the initial sync.
+    8. **One library table.** `revival_audit._LIBRARY_DEPENDENCY_IDS` duplicates `scanner.LIBRARY_DEPENDENCY_IDS`
+       and already lacks the Console Commands entry item 14 added; derive one from the other.
+    9. **Check `undeclared-library-dependency` on real data** before adding it to the standing approvals; it
+       declared the wrong library once (item 14).
+    10. **Confirm dialog-text capture live** (item 18): the first run that shows an error dialog should put a
+        `dialog:` line in `<TESTID>.windows.txt` and a FATAL in triage.
+    11. **Faction-Relationships-Uniquified's lone 0x9D byte** (item 17): the tail of a broken UTF-8 `”`; a person
+        decides the replacement.
+    12. **`escalation apply <packet>`**: copy an attempt already VERIFIED (and reviewed) into `working/` with a
+        backup, instead of `run --apply` re-running the agent and producing an unreviewed edit (item 21).
+        **Done 2026-09-27.** `escalation apply WORKSPACE PACKET [--attempt N]` (`escalation.apply_verified`): the
+        newest VERIFIED attempt from the ledger, refused when the packet's files changed since the packet or the
+        attempt touched other files, re-verified, copied back with backups, ledger `APPLIED` with
+        `applied_without_rerun`. Test: `tests/test_revive.py`.
+    13. **Agent command discovery:** when `claude` is not on PATH, find the VS Code extension's `claude.exe` (item 21)
+        or say where to look, instead of failing with WinError 2.
+    14. **Keep line endings in agent edits:** the agent turned CRLF into LF; `escalation verify` could normalise
+        back to the file's original endings so diffs show only real changes.
+    15. **Done 2026-09-27: `fleet-type-name-missing`** (REVIEW; source literals in loose scripts and jar sources,
+        against the faction file and vanilla's/the mod's `default_fleet_type_names.json`; test
+        `tests/test_fleet_type_names.py`), tier `auto` with fixer `fleet-type-name-missing` (title-cased names inserted as
+        text, `--names` overrides). Original note: **Check: fleet type with no name.** Zorg18's live run showed "no name for type [Zeta AI raid]": a
+        `createEmptyFleet(faction, "<type>", ...)` (source or bytecode string constant) whose faction file has no
+        `fleetTypeNames` entry for that type, and no vanilla default. Cosmetic but visible in every encounter;
+        the fix is a data entry, so it can be a fixer that proposes the name from the type string.
+    18. **Zorg18 follow-up (owner, 2026-09-27, after archiving):** Zorg's artificial star and hive planet appear in
+        random systems (seen in Johannam). `star_gen_data.csv` gives `star_zorg` vanilla `star_yellow`'s weights
+        (40/35/30) and `planet_gen_data.csv` gives `zorg_planet` weight 10; the original has the same rows. Fix is
+        setting those frequencies to 0 (ZorgGen places the star itself); recorded in `Done/Zorg18/ARCHIVE_NOTE.md`,
+        not yet applied. **Check to add:** a mod's procgen row for a star or planet type that the mod's own code places
+        by id (e.g. `addStarSystem`/`initStar` with that type) and whose texture is mod-specific, with a
+        non-zero frequency, is REVIEW ("will also appear in random systems"); a fixer can zero the frequency.
+        **Zorg r3 applied 2026-09-27 (owner):** `star_zorg` weights 40/35/30 -> 0 and `zorg_planet` 10 -> 0; and, from
+        a mock-up of three options, the star's glow switched from Zorg's opaque tiled `zorg_halo02.png` to vanilla's
+        soft `graphics/fx/star_halo.png` tinted `[40,255,120,150]` (`planets.json`, `star_zorg` only). Build
+        `[BF r3]` / `V18+bf.3`; `Done/Zorg18` and the rig copy updated (drift 0). New-game check pending: the save
+        should hold exactly one `star_zorg` and no `zorg_planet` outside Zorg Zeta.
+    17. **Triage across relaunches.** `bf-test launch` redirects only the session it starts; a player relaunch
+        (ZG-7's save/quit/load) goes only to the game's `starsector.log`. `triage` should also read the rig's
+        `starsector.log` lines after the launch time, so a multi-session test is triaged whole.
+    16. **`shippable-work-file` references (done 2026-09-27):** mentions inside IDE/VCS folders (`.idea`, `.git`,
+        `src*`) no longer count as runtime references; Jackundor's `.idea/libraries/data.xml` had kept two
+        backup zips in the mod. Test: `tests/test_fixers.py`.
+21. **First agent escalation run: Yunru's Unpack Blueprints reaches UNATTENDED_DONE (2026-09-27, P15 items 2-3, 8-9).**
+    `revive --apply` applied the standing `mod-info-game-version-inexact` approval and left one `code` packet
+    (`loose-script-janino-risk`: 9 typed for-each loops in `data/scripts/UnpackBlueprints.java`).
+    `escalation run` with `claude -p --permission-mode acceptEdits --allowedTools Read,Edit,Write,Grep,Glob`
+    (Claude Code 2.1.283) returned **VERIFIED after 1 attempt in 61 s**. The packet was enough: the agent
+    needed nothing beyond its excerpt, allowed file and hint. The diff, read in full: all 9 loops rewritten as a
+    raw `Iterator` with a `(String)` cast plus `import java.util.Iterator`; otherwise only whitespace (trailing
+    blanks, 5 trailing empty lines) and CRLF -> LF. The reviewed attempt was copied into `working/` by hand
+    (backup `*.pre-bf-agent-loose-script-janino-risk.bak`), then `escalation verify` PASS, `compile-check` PASS
+    (0 errors in 1 loose script), `revive` UNATTENDED_DONE with the report drafted. **Live YUB-1-20260927:**
+    FATAL=0, MOD-ERROR=0, the rewritten script loaded in RC8, and the owner ran tooltip, unpack and learn paths.
+    Found on the way (added to item 20): the `claude` CLI was not on PATH on this machine (the VS Code
+    extension ships `claude.exe` under `.vscode/extensions/anthropic.claude-code-*/resources/native-binary/`), and
+    `escalation run --apply` re-runs the agent instead of applying the attempt already verified and reviewed.
+22. **Recommended next work: gap coverage, fixers, RevenantLib (proposed 2026-09-27, not started).** Ranked by
+    mods helped per unit of work, from the 2026-09-27 queue counts and live runs.
+    1. **Compile loose scripts with the game's own Janino, offline.** `loose-script-janino-risk` is HEURISTIC
+       (a typed for-each pattern; 125 occurrences in 48 mods, the only blocker for 5), while `compile-check`
+       uses javac, which accepts what Janino rejects. RC8 ships `janino.jar` and `commons-compiler.jar`, and
+       `build-probe-mod` already compiles the probe mission with them. Running every mod's loose scripts through
+       Janino turns the risk into a DETERMINISTIC pass/fail, catches Janino-only failures the pattern misses, and
+       gives agent fixes (item 21) a ground-truth check.
+       **Done 2026-09-27.** `compile_check.janino_compile` runs every loose script javac accepted (and no jar
+       shadows) through RC8's own `janino.jar` 2.7.8 via `bridgeforge/java/JaninoCheck.java` (now many classes and
+       source roots per JVM, a fresh loader per class; the mod and vanilla core are the source roots, javac's
+       classpath the parent). `compile-check` prints the result and FAILs on a Janino rejection; the scanner's
+       compile step removes a file's `loose-script-janino-risk` once Janino accepts it and adds MANUAL
+       `loose-script-janino-compile-error` when Janino rejects it. **Finding:** Janino 2.7.8 accepts a typed
+       for-each over `List<String>` whose element calls a String method; it rejects lambdas and a method call on
+       a generic-typed value (`e.getValue().size()` on a `Map.Entry<String, List<String>>`), because it erases
+       generics to Object. Yunru's Unpack Blueprints' **original** compiles: item 21's rewrite was harmless but
+       not needed, and the risk pattern over-reports. Tests: `tests/test_janino_compile.py` (pure outcome tests,
+       plus a real-Janino test that runs only where the RC8 install is present).
+       **Queue survey (2026-09-27, the 48 mods `loose-script-janino-risk` flagged, 124 files):** under RC8's Janino
+       run as the game runs it, **47 mods compile clean**; the one rejection is Bird's Collection of Trinkets and
+       Rarities' `bc_flarePrimaryAI.java`, which imports LazyLib the mod never declares (javac never reached it: it
+       stopped at a syntax error in `BcZeroFluxJets.java`). No rejection involved a typed for-each. Harness fixes
+       found on the way, each confirmed on a real mod: class names come from the file's `package` line, with the
+       matching source root (Content-Unlocking-Missions, Bricky-Construction keep packages that differ from
+       their folders); a failure inside a script another file loads is blamed on that file, and dropped when
+       javac already rejected it (Hiver-Swarm); only Janino's own exceptions count, so a static initializer that
+       calls game code offline is not a failure (Adjusted-Sector); and the harness JVM runs with `-noverify` as
+       the game does (RC8 `vmparams`, the rig's `run-java25.bat`), since the verifier otherwise rejects Janino
+       bytecode the game loads (DNEEP, Osiris-Alliance).
+    2. **Dropped 2026-09-27 on evidence:** the queue survey in 1 found no Janino rejection of a typed for-each, so
+       there is nothing for a loop fixer to fix. Superseded text: **A fixer for typed for-each loops.** The rewrite is mechanical: BDS had 10 done by hand (item 45) and the
+       agent did 9 identically (item 21). When the loop variable's collection is a local or field declared with a
+       generic type in the same file, rewriting to a raw `Iterator` plus cast is deterministic; anything else
+       stays with the agent. Verified by (1). Moves most of the 48 mods' occurrences out of the `code` tier.
+    3. **Split `content-reference-unresolved` by consequence.** Live runs proved a missing weapon in a variant is
+       a New Game fatal and a missing hull mod is silent (item 18). A missing weapon should be MANUAL/high even
+       when the mod declares dependencies; a missing hull mod can stay REVIEW. Needs a quick live check for
+       missing wings and hulls before classifying those.
+       **Done 2026-09-27** (severity; classification unchanged): `critical` when a weapon is missing, `medium`
+       when only hull mods are, `high` otherwise. Tests: `tests/test_batch_lessons.py` (`UnresolvedContentTests`).
+    4. **Batch-revive the `auto` bucket** (51 mods on 2026-09-27, before item 19's fix): `revive --apply
+       --draft-report` over each, dry run first, with `finding-stats` before and after. Uses item 12's progress
+       rule. The biggest single jump in finished mods for the least owner time.
+    5. **RevenantLib bridge candidates from the queue.** Only three `bf.*` bridges exist. Run `compile-check
+       --api-diff` over every queued mod's `original/` against the 0.8.1a and 0.95.1a catalogues and rank the
+       removed methods by how many mods call them; the top ones with a clean RC8 equivalent become new
+       RevenantLib bridges and `removed-api-call` fixer rules. Each needs javap evidence for the replacement.
+       **Run 2026-09-27 (loose scripts):** `compile-check` + the 0.8.1a->RC8 catalogue over the `original/` of all
+       294 queued workspaces (242 PASS, 52 FAIL). Only **10 mods** call a removed API from loose scripts. Top:
+       `SectorAPI.createFleet(String, String)` (6 mods, 17 sites; RevenantLib already bridges it) and
+       `SectorAPI.addMessage(String)` (5 mods, 10 sites; the `removed-api-call` fixer already rewrites it to
+       `CampaignUIAPI`); everything else is one mod each (`CommodityOnMarketAPI.getSupply()`,
+       `MarketDemandAPI.getNonConsumingDemand()`, removed `Conditions`/`Skills`/`Stats` ids). **No new bridge is
+       justified by loose scripts.** Follow-up: the same ranking over jar bytecode (method/field references
+       resolved against RC8's `starfarer.api.jar`, the "bytecode linkage" method), since most large mods ship jars.
+    6. **Keep the `Done/RevenantLib` snapshot honest.** `revenantlib-check` could compare the snapshot's jar with
+       the live `working/` jar and say when the snapshot is stale.
+       **Done 2026-09-27.** `revenantlib-check PATH --snapshot Done/RevenantLib/RevenantLib` compares the checked mod
+       folder with the archive (`copy_drift`) and prints `snapshot CURRENT` or `STALE` with the differing files.
+       Today's snapshot: CURRENT. Test: `tests/test_revenantlib_contract.py`.
+    7. **A special-item check in the probe.** Yunru's mod works through a `special_items.csv` plugin class; the
+       probe checks ships, weapons and wings but not items. Resolving each mod special item's spec and plugin
+       class at runtime would cover item mods (needs javap evidence for the SettingsAPI item-spec methods).
+       **Done 2026-09-27 (probe 0.2.5, live run pending).** `probe-config` lists `special_items.csv` ids
+       (`content_special_items`); `content-ids` looks each spec up and adds it to a throwaway cargo, then checks the
+       stack's plugin exists, which instantiates the plugin class as real cargo does (javap 2026-09-27:
+       `SettingsAPI.getSpecialItemSpec`, `FactoryAPI.createCargo`, `CargoAPI.addSpecial`/`getStacksCopy`,
+       `CargoStackAPI.getPlugin`). Yunru's mod: 9 items. Test: `tests/test_probe_config.py`.
+    8. **Settings list merge test** (item 19's held rule) and **dialog-capture confirmation** (item 18):
+       each one short rig run.
+23. **Batch revive of the unattended bucket (2026-09-27, P15 item 22.4).** `finding-stats` after items 12-19:
+    65 of 304 mods unattended (21%, from 43 in the morning). Dry run of `revive` over all 65: 58 needed only
+    the standing approvals (`AUTOMATION_POLICY.json`), 7 needed another fixer, no errors. Applied with
+    `--apply --draft-report`: **58 of 58 reached UNATTENDED_DONE** (Jackundor's Advanced Arms after the
+    work-file fixer fix in item 20.16). Of the 7, reviewed by hand: Combat-Radar, Simulator-Overhaul and
+    Transfer-All-Items call `org/lazywizard/lazylib` in their jars, so LazyLib was declared (approved per run);
+    Unconventional-Armaments dropped only empty trailing CSV fields; Anex-Weapons' fixer refused (non-empty
+    extra fields): 9 `descriptions.csv` quotes began `- "...` unquoted, so commas split them across columns;
+    each `text2` was rejoined and quoted (backup kept); all five UNATTENDED_DONE. D-MOD-Services and
+    Fuel-Siphoning left open: their LunaLib use is behind `isModEnabled("lunalib")` in the mod plugin, an
+    optional settings integration, so declaring LunaLib would force it on every player (owner to confirm).
+    **UNATTENDED_DONE now: 63 queued mods** (plus ClearCommands archived). Each still needs its probe run.
+    Later the same day: D-MOD-Services and Fuel-Siphoning accepted LunaLib as optional (owner; baselined), so
+    66 at UNATTENDED_DONE. **Zorg18 live-validated** (ZG-1..ZG-7, owner, all successful; probe 0.2.5 content-ids
+    checked=19 failed=0, all 11 hulls deployed). Live findings fixed: `zorg.faction` had no `fleetTypeNames`
+    ("no name for type [Zeta AI raid]"). Explained, unchanged: Unimatrix has no dialog in the original either;
+    the oversized fighter shields are the Trapezoid "Generator" wing's own 200 radius; Askonia raids ran (2 in
+    the save). Found on the way: `bf-test launch` captures only the session it starts; a relaunch logs only to
+    the game's `starsector.log` (roadmap item 20).
+24. **Probe several finished mods per live session (2026-09-27).** 66 mods reached UNATTENDED_DONE and each
+    still needs a probe run; one mod per session is the bottleneck. **Done 2026-09-27.** `bridgeforge
+    probe-group` (`bridgeforge/probe_group.py`). The probe (0.2.5) reads a config of lists and maps and never
+    uses the target id for a check, so a group is probed by merging members' `build_probe_config` output (a
+    `group_members` map keeps each member's ids). `plan` groups workspaces whose report ends
+    `READY_FOR_LIVE_TEST` so no two members share a mod id or content id (hull, variant, wing, special item),
+    every declared dependency is installed in the rig, and a total conversion goes alone; it writes
+    `In operation/PROBE_GROUPS.json`. `install N` copies or syncs members into the rig (shipped files only),
+    writes the merged config and rig marker, installs the probe, and sets enabled_mods.json to the members,
+    their dependencies and the probe (rig-only guard as probe-config). `report LOG` gives each member PASS,
+    FAIL (probe FAIL lines matched by the id they name; crashes by log-triage's jar attribution), UNCLEAR (a
+    crash no member owns: rerun that group's members alone) or INCOMPLETE (content-ids never ran). On the queue:
+    **63 mods in 8 groups** of up to 8; SOTF-Addon-SPARKLE and UAF-Skills wait for dependencies the rig lacks
+    (Secrets of the Frontier, UAF). Tests: `tests/test_probe_group.py`.
+25. **Campaign-layer check: the mod's systems exist, and its unique bodies stay in them (owner request, 2026-09-27).**
+    From Zorg18's artificial star appearing in random systems (item 20.18). **Done 2026-09-27.**
+    `bridgeforge/campaign_layout.py` finds the systems a mod creates (`createStarSystem("...")` in loose or jar
+    sources, and in jar bytecode an `ldc`/`ldc_w` String immediately before the call, which finds ZorgGen's
+    "Zorg Zeta") and the mod's own `planets.json` types with their procgen weight. Static check
+    `procgen-mod-body-leak` (REVIEW, tier `auto`): a type the mod places by id that also has a procgen weight;
+    its fixer zeroes that type's frequencies only (on a copy of Zorg's original it reproduces the hand-made r3
+    fix exactly). Probe 0.2.6 `campaign-layout`: FAIL for a created system missing from the sector, FAIL for a
+    zero-weight mod type found in a system the mod did not create, WARN listing where a weighted one went, and an
+    OK summary with per-type counts (javap 2026-09-27: `SectorAPI.getStarSystem/getStarSystems`,
+    `LocationAPI.getPlanets`, `PlanetAPI.getTypeId`, `StarSystemAPI.getBaseName`). `probe-group` merges both
+    fields. Installed in the rig for the Zorg r3 new-game check. Tests: `tests/test_campaign_layout.py`
+    (including a compiled-jar case).
+26. **`corpus-index build` was quadratic (R3, 2026-09-27).** R3's first Downloads build (42 GB) ran 11 hours; a
+    psutil sample showed 18 GB read in 15 s and 2.3 s of CPU, all re-reading its own 1.3 GB index. `_forget` deleted
+    content with `WHERE location IN (...)`, but `location` is UNINDEXED in the FTS5 table, so every file, even a new
+    one with nothing to delete, scanned the whole index. **Done 2026-09-27.** Schema 2: `content_rows` maps each
+    content rowid to its source (indexed), `_forget` deletes by rowid, new files skip `_forget`, and `files`/`skipped`
+    are indexed by source; an older-schema index with content is refused rather than slowly updated. Benchmark on
+    the rig's mods: a steady ~130 files/s, 32,000 files in under 4 minutes with no slowdown. Test:
+    `tests/test_corpus_index.py`. R3 must be stopped and rebuilt into a fresh index.
 
 ## Post-1.0 research and gated automation
 

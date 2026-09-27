@@ -116,6 +116,18 @@ class CorpusIndexTests(unittest.TestCase):
         self.assertIn("[1/6] indexed ", err.getvalue())
         self.assertIn("[6/6] ... unchanged files skipped", err.getvalue())
 
+    def test_an_index_from_the_old_schema_is_refused_not_slowly_updated(self):
+        # 2026-09-27: schema 1 deleted by an unindexed column, a full scan per file; schema 2 maps rows to sources.
+        with resolved_temp_dir() as root:
+            downloads, db = _archive(root), root / "index.sqlite"
+            build_index(downloads, db)
+            connection = sqlite3.connect(str(db))
+            with connection:
+                connection.execute("UPDATE meta SET value = '1' WHERE key = 'schema_version'")
+            connection.close()
+            with self.assertRaises(CorpusIndexError):
+                build_index(downloads, db)
+
     def test_guards(self):
         with resolved_temp_dir() as root:
             downloads = _archive(root)

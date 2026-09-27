@@ -22,7 +22,9 @@ Every long command now prints `[n/total]` progress and resumes if interrupted (P
 
 ### P2. First real `revive` and agent run (P15 items 2-3, 8-9)
 ClearCommands reached UNATTENDED_DONE, passed its probe run and is archived in `Done/ClearCommands`
-(local-only, 2026-09-27). For the agent half, pick a mod with a `code` packet from `In operation/FINDING_STATS.md`:
+(local-only, 2026-09-27). For the agent half: done 2026-09-27 on Yunru's Unpack Blueprints (P15 item 21, VERIFIED in 61 s). Give it the probe run;
+for more agent runs, pick a mod with a `code` packet from `In operation/FINDING_STATS.md`. The command below
+needs `claude` on PATH; otherwise pass the VS Code extension's `claude.exe` path:
 ```powershell
 python -m bridgeforge revive "In operation\<Mod>" --vanilla-core $core                                   # dry run
 python -m bridgeforge revive "In operation\<Mod>" --vanilla-core $core --apply --draft-report
@@ -41,15 +43,14 @@ vendor, strip) matches what you would decide by hand. Fixers you want applied ev
 
 ## 2. Re-run with the kept commands (P15 item 5)
 
-### R3. Rebuild the Downloads index (P14 item 18)
+### R3. Rebuild the Downloads index (P14 item 18, P15 item 26)
+The 2026-09-27 run used the old, quadratic indexer (11 hours, not finished). Stop it (PID 75768, or any
+`python -m bridgeforge corpus-index build`), delete `bridgeforge-state\corpus-index.sqlite*`, then:
 ```powershell
-python -m pip install -e ".[archives]"          # once: lets the index read .7z archives
 python -m bridgeforge corpus-index build "C:\Users\exxec\Downloads"
 python -m bridgeforge corpus-index search shieldbypass
 ```
-The local `archive-index` database is not readable by `corpus-index`. Done when the search finds
-`Ship and Weapon Pack/data/hullmods/hull_mods.csv` (the 2026-09-20 false negative). Note the build
-time and index size in item 18, and check the `NOT searched` line (`.rar` is not read).
+It now prints `[n/total]` and saves per file. Done when the search finds `Ship and Weapon Pack/data/hullmods/hull_mods.csv`.
 
 ### R4. `strip-plan` and `vendor-copy --plan` on a real case (P14 item 4, P15 item 7)
 ```powershell
@@ -59,6 +60,17 @@ python -m bridgeforge vendor-copy --plan plan.json --to "In operation\RevenantLi
 ```
 Done 2026-09-27 (P15 items 13, 17): the strip plan matches, and the vendor conflict is RevenantLib's own
 deliberate copy of `shields_formshield` (see its PROVENANCE.md), so nothing is left here.
+
+### G0. Probe the 63 finished mods in 8 group sessions (P15 item 24)
+The plan is in `In operation\PROBE_GROUPS.json` (rebuild with `python -m bridgeforge probe-group plan`). Per group N:
+```powershell
+python -m bridgeforge probe-group install N
+.\tools\bf-test.ps1 launch GRP-N-<date>
+# New Game, wait one in-game day, open Missions -> BridgeForge Probe: Combat briefly, quit
+python -m bridgeforge probe-group report "In operation\_rig\logs\GRP-N-<date>.stdout.log"
+```
+Done when every member reads PASS. FAIL names the mod and id; UNCLEAR means a crash no member's jar owns, so
+run that group's members alone with `bf-test.ps1 probe <folder>`. Record each PASS in the mod's report.
 
 ## 3. Needs the game
 

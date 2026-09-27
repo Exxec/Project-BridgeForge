@@ -1065,6 +1065,8 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_removed_market_condition_ids(root, result)
     _scan_vanilla_script_shadow_repointable(root, result, vanilla_core)
     _scan_replace_array(root, result, vanilla_core)
+    _scan_fleet_type_names(root, result, vanilla_core)
+    _scan_procgen_mod_body_leak(root, result)
     _scan_bare_market_fleet_source(root, result)
     _scan_legacy_event_report(root, result)
     _scan_non_english_text(root, result)
@@ -3714,6 +3716,85 @@ def _mod_declared_script_rows(root: Path) -> dict[str, str]:
 _REPLACE_IGNORED_SUFFIX = "settings.json"
 
 
+_CREATE_EMPTY_FLEET = re.compile(r'createEmptyFleet\(\s*"([^"]+)"\s*,\s*"([^"]+)"')
+
+
+def _fleet_type_names(path: Path) -> set[str]:
+    data = _load_lenient_json_file(path)
+    if not isinstance(data, dict):
+        return set()
+    names = data.get("fleetTypeNames", data)  # a .faction nests them; default_fleet_type_names.json is the map itself
+    return set(names) if isinstance(names, dict) else set()
+
+
+def _scan_fleet_type_names(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """A fleet created with a type its faction has no display name for (P15 item 20.15).
+
+    Zorg18's live run (2026-09-27): encounters read "Zorg Hive no name for type [Zeta AI raid]" because
+    `createEmptyFleet("zorg", "Zeta AI raid", null)` named a type absent from `zorg.faction`'s
+    `fleetTypeNames`. Names come from the faction file, then `data/world/factions/default_fleet_type_names.json`
+    (vanilla's, and a mod's own). Source literals only (loose scripts and jar sources); needs the vanilla core.
+    """
+    if vanilla_core is None:
+        return
+    factions_dir = Path(vanilla_core) / "data" / "world" / "factions"
+    defaults = _fleet_type_names(factions_dir / "default_fleet_type_names.json") | _fleet_type_names(root / "data" / "world" / "factions" / "default_fleet_type_names.json")
+    missing: dict[tuple[str, str], list[str]] = {}
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        for faction_id, fleet_type in _CREATE_EMPTY_FLEET.findall(text):
+            faction_file = root / "data" / "world" / "factions" / f"{faction_id}.faction"
+            if not faction_file.is_file():
+                faction_file = factions_dir / f"{faction_id}.faction"
+            if fleet_type in defaults or fleet_type in _fleet_type_names(faction_file):
+                continue
+            missing.setdefault((faction_id, fleet_type), []).append(_relative(root, source))
+    for (faction_id, fleet_type), files in sorted(missing.items()):
+        result.add(
+            id="fleet-type-name-missing",
+            category="campaign",
+            severity="low",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=f"Fleets are created with type \"{fleet_type}\" for faction \"{faction_id}\", but neither the faction file's fleetTypeNames nor default_fleet_type_names.json names it, so every encounter shows \"no name for type [{fleet_type}]\". Add a fleetTypeNames entry to the faction file.",
+            file=f"data/world/factions/{faction_id}.faction",
+            evidence=[f"type:{fleet_type}", f"faction:{faction_id}", *sorted(set(files))[:5]],
+        )
+
+
+def _scan_procgen_mod_body_leak(root: Path, result: ScanResult) -> None:
+    """A star/planet type the mod places itself by id that also has a procgen weight (P15 item 25).
+
+    Zorg18 (2026-09-27): `star_zorg` carried vanilla `star_yellow`'s weights (40/35/30) and `zorg_planet` weight 10,
+    so the artificial star meant for Zorg Zeta also appeared in random systems (owner saw one in Johannam). A
+    type the mod places by id and also weights in `star_gen_data.csv`/`planet_gen_data.csv` spawns in both
+    places; REVIEW because a planet pack may want that.
+    """
+    from .campaign_layout import mod_body_types, mod_placed_types
+
+    types = mod_body_types(root)
+    weighted = {t for t, facts in types.items() if facts["procgen_weight"] > 0}
+    if not weighted:
+        return
+    placed = mod_placed_types(root, weighted)
+    for type_id in sorted(placed):
+        result.add(
+            id="procgen-mod-body-leak",
+            category="campaign",
+            severity="medium",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation=f"The mod places \"{type_id}\" itself by id and also gives it a procedural-generation weight ({types[type_id]['procgen_weight']:g}), so it also appears in random systems of every new sector. If it is meant to be unique to the mod's own system, set its frequency to 0.",
+            file="data/campaign/procgen/" + ("star_gen_data.csv" if types[type_id]["star"] else "planet_gen_data.csv"),
+            evidence=[f"type:{type_id}", f"weight:{types[type_id]['procgen_weight']:g}"],
+        )
+
+
 def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
     """`replace` entries RC8 ignores or that name a file the mod does not ship, plus settings breadth."""
     mod_info = _load_lenient_json_file(root / "mod_info.json")
@@ -3765,7 +3846,7 @@ def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | Non
     vanilla_settings = _load_lenient_json_file(Path(vanilla_core) / "data" / "config" / "settings.json")
     if not isinstance(mod_settings, dict) or not isinstance(vanilla_settings, dict):
         return
-    overridden = sorted(key for key in mod_settings if key in vanilla_settings and mod_settings[key] != vanilla_settings[key])
+    overridden = sorted(_settings_value_changes(mod_settings, vanilla_settings))
     if not overridden:
         return
     result.add(
@@ -3775,8 +3856,8 @@ def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | Non
         classification="REVIEW",
         confidence="DETERMINISTIC",
         explanation=(
-            f"This mod's data/config/settings.json changes {len(overridden)} of vanilla's {len(vanilla_settings)} "
-            "settings keys. settings.json always merges (it cannot be fully replaced), so each of these silently "
+            f"This mod's data/config/settings.json changes {len(overridden)} value(s) vanilla already sets "
+            f"(vanilla has {len(vanilla_settings)} top-level keys; entries a mod only adds are not counted). settings.json always merges (it cannot be fully replaced), so each of these silently "
             "wins over the current game's value for every mod and the base game alike. A small, deliberate tuning "
             "set is normal; a large one usually means a near-complete copy of an older settings.json, which "
             "reverts the game's own tuning across four versions with no error. Review the list, not the count - "
@@ -3785,6 +3866,26 @@ def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | Non
         file="data/config/settings.json",
         evidence=[f"overridden:{len(overridden)}", f"vanilla-keys:{len(vanilla_settings)}", *overridden[:25]],
     )
+
+
+def _settings_value_changes(mod: dict, vanilla: dict, prefix: str = "") -> list[str]:
+    """Dotted paths where the mod's settings.json changes a value vanilla already has.
+
+    settings.json merges objects key by key, so an entry a mod only adds inside `plugins`, `graphics` or
+    `designTypeColors` leaves vanilla's own entries alone: SEEKER, Exigency and Flu-X all do this and ran
+    normally on the RC8 rig (live runs 2026-09-24). Comparing whole top-level keys counted those additions
+    as overriding the whole block (14 mods blocked, 9 by additions alone; 2026-09-27). Lists and scalars
+    still count as a change when they differ: how a list merges is not evidenced."""
+    changes: list[str] = []
+    for key, value in mod.items():
+        if key not in vanilla:
+            continue
+        path = f"{prefix}{key}"
+        if isinstance(value, dict) and isinstance(vanilla[key], dict):
+            changes.extend(_settings_value_changes(value, vanilla[key], path + "."))
+        elif value != vanilla[key]:
+            changes.append(path)
+    return changes
 
 
 def _scan_vanilla_script_shadow_repointable(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
@@ -5519,7 +5620,9 @@ def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_
     result.add(
         id="content-reference-unresolved",
         category="dependencies",
-        severity="high",
+        # Severity from the live consequence (P15 item 22.3): weapon -> New Game fatal; hull mods alone ->
+        # dropped silently; wings/hulls not yet observed live, so they keep "high".
+        severity="critical" if "weapon" in kinds else ("medium" if kinds == {"hullmod"} else "high"),
         classification="REVIEW" if declares else "MANUAL",
         confidence="HIGH",
         explanation=explanation,
@@ -6098,7 +6201,8 @@ def _scan_compile_check(root: Path, result: ScanResult, vanilla_core: Path | Non
             file=str(entry["file"]),
             evidence=[f"class:{entry['class']}", f"supplied by:{entry['supplied_by']}"],
         )
-    if outcome["status"] != "FAIL":
+    _apply_janino_outcome(root, result, outcome.get("janino") or {})
+    if not outcome.get("errors"):
         return
     errors_by_file: dict[str, list[dict[str, object]]] = {}
     for error in outcome["errors"]:
@@ -6124,6 +6228,37 @@ def _scan_compile_check(root: Path, result: ScanResult, vanilla_core: Path | Non
             explanation=f"javac rejects this loose script against RC8 ({len(errors)} error(s)); the game's own class loader would fail the same way at startup.",
             file=rel,
             evidence=evidence,
+        )
+
+
+def _apply_janino_outcome(root: Path, result: ScanResult, janino: dict) -> None:
+    """Replace the `loose-script-janino-risk` guess with RC8's own Janino (ROADMAP P15 item 22.1).
+
+    Evidence (2026-09-27, compile_check.janino_compile on RC8's janino.jar 2.7.8): a typed for-each
+    over `List<String>` whose element calls a String method compiles; a lambda fails ("Unexpected
+    token"), and so does calling a method on a generic-typed value (`e.getValue().size()` on a
+    `Map.Entry<String, List<String>>`: "A method named size is not declared"), because Janino erases
+    generics to Object. Yunru's Unpack Blueprints' original, flagged for 9 typed loops, compiles.
+    So a file Janino accepted drops its risk finding, and a file it rejected gets a MANUAL error.
+    """
+    if janino.get("status") not in ("PASS", "FAIL"):
+        return
+    failures = janino.get("failures") or {}
+    checked_ok = set()
+    if janino.get("checked"):
+        risky = {f.file for f in result.findings if f.id == "loose-script-janino-risk"}
+        checked_ok = {path for path in risky if path not in failures}
+    result.findings[:] = [f for f in result.findings if not (f.id == "loose-script-janino-risk" and f.file in checked_ok)]
+    for rel, message in sorted(failures.items()):
+        result.add(
+            id="loose-script-janino-compile-error",
+            category="build",
+            severity="critical",
+            classification="MANUAL",
+            confidence="DETERMINISTIC",
+            explanation="RC8's own runtime compiler (Janino 2.7.8, run offline on the game's janino.jar) rejects this loose script, so the game shows a Fatal dialog before the main menu. javac accepts it. Janino erases generics to Object and has no lambdas: cast values whose type comes from generics before calling their methods, and replace lambdas with anonymous classes.",
+            file=rel,
+            evidence=[message[:400]],
         )
 
 

@@ -34,6 +34,11 @@ public final class ProbeConfig {
     public final List<String> contentOtherVariants = new ArrayList<String>();
     public final List<String> contentWings = new ArrayList<String>();
     // variant id -> the hullId its .variant file names, for the "ship" variants (0.2.4).
+    // Special item ids from data/campaign/special_items.csv (0.2.5).
+    public final List<String> contentSpecialItems = new ArrayList<String>();
+    // Star systems the mod creates, and its own planets.json types with their procgen weight (0.2.6).
+    public final List<String> modSystems = new ArrayList<String>();
+    public final Map<String, Float> modBodyTypes = new LinkedHashMap<String, Float>();
     public final Map<String, String> contentShipHulls = new LinkedHashMap<String, String>();
 
     public static ProbeConfig load() throws Exception {
@@ -86,6 +91,16 @@ public final class ProbeConfig {
             addAll(contentVariants.optJSONArray("other"), config.contentOtherVariants);
         }
         addAll(root.optJSONArray("content_wings"), config.contentWings);
+        addAll(root.optJSONArray("content_special_items"), config.contentSpecialItems);
+        addAll(root.optJSONArray("mod_systems"), config.modSystems);
+        JSONObject bodyTypes = root.optJSONObject("mod_body_types");
+        if (bodyTypes != null) {
+            JSONArray typeNames = bodyTypes.names();
+            for (int i = 0; typeNames != null && i < typeNames.length(); i++) {
+                String type = typeNames.getString(i);
+                config.modBodyTypes.put(type, (float) bodyTypes.optDouble(type, 0.0));
+            }
+        }
         JSONObject shipHulls = root.optJSONObject("content_ship_hulls");
         if (shipHulls != null) {
             JSONArray names = shipHulls.names();

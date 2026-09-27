@@ -168,6 +168,22 @@ class FindingStatsTests(unittest.TestCase):
         self.assertIn("[1/6] Almost:", err.getvalue())
         self.assertIn("[6/6] Unscanned:", err.getvalue())
 
+    def test_a_second_write_reports_what_moved_since_the_last_run(self):
+        # P15 item 20.3: measure the effect of a fixer instead of recomputing it by hand.
+        with resolved_temp_dir() as root:
+            queue = self._queue(root)
+            out = root / "out"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                main(["finding-stats", str(queue), "--write", str(out)])
+                (queue / "Almost" / "reports" / "scan-1" / "bridgeforge.compat.json").write_text(
+                    json.dumps({"findings": [{"id": "json-hash-comment", "classification": "REVIEW", "file": "data/x"}]}), encoding="utf-8")
+                main(["finding-stats", str(queue), "--write", str(out)])
+            text = (out / "FINDING_STATS.md").read_text(encoding="utf-8")
+            kept = (out / "FINDING_STATS.previous.json").is_file()
+        self.assertIn("## Since the last run", text)
+        self.assertIn("| Almost | mechanical | none |", text)
+        self.assertTrue(kept)
+
     def test_cli(self):
         with resolved_temp_dir() as root:
             queue = self._queue(root)
