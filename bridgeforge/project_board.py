@@ -15,7 +15,8 @@ NON_RELEASE_FOLDERS = {"original", "working", "reports", "builds", "scratch", "w
 ROOT_FILES = {"README.md", "STATUS.md", "LIVE_TEST_INSTRUCTIONS.md", "OFFLINE_VALIDATION_GUIDE.md", "bf-test.ps1",
               "STATUS.generated.md", "STATUS.generated.json", "DEPENDENCY_GRAPH.json", "DEPENDENCY_GRAPH.md",
               "FINDING_STATS.json", "FINDING_STATS.md", "AUTOMATION_POLICY.json",  # P15: finding-stats --write, revive approvals
-              "FINDING_STATS.partial.jsonl", "DEPENDENCY_GRAPH.partial.jsonl", "CORPUS_RECHECK.partial.jsonl"}  # checkpoints of an unfinished run (progress.py)
+              "FINDING_STATS.partial.jsonl", "DEPENDENCY_GRAPH.partial.jsonl", "CORPUS_RECHECK.partial.jsonl",
+              "PROBE_GROUPS.json"}  # checkpoints of an unfinished run (progress.py); probe-group plan (P15 item 24)
 
 # ROADMAP P14 item 31: audit_revival's COMPLETION_STATUS_PATTERN (used by _completion_statuses)
 # correctly demands a bare, standalone status line as a release-readiness gate - that strict

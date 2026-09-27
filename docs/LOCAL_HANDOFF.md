@@ -62,6 +62,17 @@ python -m bridgeforge vendor-copy --plan plan.json --to "In operation\RevenantLi
 Done 2026-09-27 (P15 items 13, 17): the strip plan matches, and the vendor conflict is RevenantLib's own
 deliberate copy of `shields_formshield` (see its PROVENANCE.md), so nothing is left here.
 
+### G0. Probe the 63 finished mods in 8 group sessions (P15 item 24)
+The plan is in `In operation\PROBE_GROUPS.json` (rebuild with `python -m bridgeforge probe-group plan`). Per group N:
+```powershell
+python -m bridgeforge probe-group install N
+.	oolsf-test.ps1 launch GRP-N-<date>
+# New Game, wait one in-game day, open Missions -> BridgeForge Probe: Combat briefly, quit
+python -m bridgeforge probe-group report "In operation\_rig\logs\GRP-N-<date>.stdout.log"
+```
+Done when every member reads PASS. FAIL names the mod and id; UNCLEAR means a crash no member's jar owns, so
+run that group's members alone with `bf-test.ps1 probe <folder>`. Record each PASS in the mod's report.
+
 ## 3. Needs the game
 
 ### G1. Probe follow-ups (P14 item 49, P15 item 18)

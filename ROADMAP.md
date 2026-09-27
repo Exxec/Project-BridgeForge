@@ -2169,6 +2169,20 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     the oversized fighter shields are the Trapezoid "Generator" wing's own 200 radius; Askonia raids ran (2 in
     the save). Found on the way: `bf-test launch` captures only the session it starts; a relaunch logs only to
     the game's `starsector.log` (roadmap item 20).
+24. **Probe several finished mods per live session (2026-09-27).** 66 mods reached UNATTENDED_DONE and each
+    still needs a probe run; one mod per session is the bottleneck. **Done 2026-09-27.** `bridgeforge
+    probe-group` (`bridgeforge/probe_group.py`). The probe (0.2.5) reads a config of lists and maps and never
+    uses the target id for a check, so a group is probed by merging members' `build_probe_config` output (a
+    `group_members` map keeps each member's ids). `plan` groups workspaces whose report ends
+    `READY_FOR_LIVE_TEST` so no two members share a mod id or content id (hull, variant, wing, special item),
+    every declared dependency is installed in the rig, and a total conversion goes alone; it writes
+    `In operation/PROBE_GROUPS.json`. `install N` copies or syncs members into the rig (shipped files only),
+    writes the merged config and rig marker, installs the probe, and sets enabled_mods.json to the members,
+    their dependencies and the probe (rig-only guard as probe-config). `report LOG` gives each member PASS,
+    FAIL (probe FAIL lines matched by the id they name; crashes by log-triage's jar attribution), UNCLEAR (a
+    crash no member owns: rerun that group's members alone) or INCOMPLETE (content-ids never ran). On the queue:
+    **63 mods in 8 groups** of up to 8; SOTF-Addon-SPARKLE and UAF-Skills wait for dependencies the rig lacks
+    (Secrets of the Frontier, UAF). Tests: `tests/test_probe_group.py`.
 
 ## Post-1.0 research and gated automation
 

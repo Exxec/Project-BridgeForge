@@ -717,6 +717,25 @@ def build_parser() -> argparse.ArgumentParser:
     stats_cmd.add_argument("--restart", action="store_true", help="with --write: ignore an earlier run's FINDING_STATS.partial.jsonl and scan everything again")
     stats_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     stats_cmd.add_argument("--json", action="store_true")
+    group_cmd = subcommands.add_parser("probe-group", help="probe several finished mods in one live session: plan compatible groups, install one into the rig, report per mod (ROADMAP P15 item 24)")
+    group_sub = group_cmd.add_subparsers(dest="probe_group_command", required=True)
+    group_plan = group_sub.add_parser("plan", help="group READY_FOR_LIVE_TEST workspaces that share no mod or content id and whose dependencies are in the rig")
+    group_plan.add_argument("--queue", type=Path, help="default: <repo>/In operation")
+    group_plan.add_argument("--rig", type=Path, help="default: <queue>/_rig")
+    group_plan.add_argument("--size", type=int, default=8, help="most mods per group (default 8)")
+    group_plan.add_argument("--write", type=Path, help="save the plan as JSON (default: <queue>/PROBE_GROUPS.json)")
+    group_plan.add_argument("--json", action="store_true")
+    group_install = group_sub.add_parser("install", help="copy/sync one group's mods into the rig, write the merged probe config, set enabled_mods.json")
+    group_install.add_argument("group", type=int)
+    group_install.add_argument("--plan", type=Path, help="default: <queue>/PROBE_GROUPS.json")
+    group_install.add_argument("--queue", type=Path)
+    group_install.add_argument("--rig", type=Path)
+    group_install.add_argument("--json", action="store_true")
+    group_report_cmd = group_sub.add_parser("report", help="per-mod verdicts for a group's run log")
+    group_report_cmd.add_argument("log", type=Path, help="the run's stdout log (bf-test launch) or the rig's starsector.log")
+    group_report_cmd.add_argument("--rig", type=Path)
+    group_report_cmd.add_argument("--queue", type=Path)
+    group_report_cmd.add_argument("--json", action="store_true")
     preset_cmd = subcommands.add_parser("preset-check", help="check bf-test.ps1 presets against the rig's installed mods: own mod and declared dependencies enabled, enabled ids installed, no undeclared libraries")
     preset_cmd.add_argument("script", type=Path, help="path to bf-test.ps1")
     preset_cmd.add_argument("--rig-mods", type=Path, help="rig mods folder (default: <script folder>/_rig/mods)")
@@ -1015,6 +1034,49 @@ def main(argv: list[str] | None = None) -> int:
         roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
         summary = save_provider_index(provider_index(roots), args.output, roots)
         print(f"Provider index: {summary['providers']} mods, {summary['ids']} ids -> {summary['output']}")
+        return 0
+    if args.command == "probe-group":
+        from .probe_group import ProbeGroupError, group_report, install_group, plan_groups
+        from .probe_config import CONFIG_FILE
+        from .substitutes import REPO_ROOT
+        queue = (args.queue or REPO_ROOT / "In operation").expanduser().resolve()
+        rig = (args.rig or queue / "_rig").expanduser().resolve()
+        try:
+            if args.probe_group_command == "plan":
+                result = plan_groups(queue, rig, size=args.size)
+                target = args.write or queue / "PROBE_GROUPS.json"
+                target.write_text(json.dumps(result, indent=2), encoding="utf-8")
+                if not args.json:
+                    for group in result["groups"]:
+                        print(f"Group {group['group']} ({len(group['members'])} mod(s)): " + ", ".join(m["workspace"] for m in group["members"]))
+                    for item in result["unplaced"]:
+                        print(f"Not grouped: {item['workspace']} - {item['reason']}")
+                    print(f"Plan written: {target}. Next: bridgeforge probe-group install <N>, then bf-test.ps1 launch <TESTID>.")
+            elif args.probe_group_command == "install":
+                plan = json.loads((args.plan or queue / "PROBE_GROUPS.json").read_text(encoding="utf-8"))
+                result = install_group(plan, args.group, queue, rig)
+                if not args.json:
+                    print(f"Group {result['group']} installed: {', '.join(result['members'])}")
+                    for item in result["copied"]:
+                        print(f"  {item['workspace']}: {item['action']}")
+                    print(f"  enabled_mods.json -> {result['enabled_mods']}")
+                    print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
+            else:
+                config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
+                result = group_report(args.log, config, mods_dir=rig / "mods")
+                if not args.json:
+                    print(f"FATAL={result['fatal']} MOD-ERROR={result['mod_errors']}; content-ids ran: {result['content_ids_ran']}")
+                    for mod_id, verdict in sorted(result["members"].items()):
+                        print(f"  {verdict['verdict']:<10} {mod_id}")
+                        for item in verdict["failures"] + verdict["crashes"]:
+                            print(f"      {item}")
+                    for item in result["unattributed"]:
+                        print(f"  (group) {item}")
+        except (ProbeGroupError, ProbeConfigError, OSError, ValueError, StopIteration) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0
     if args.command == "finding-stats":
         from .finding_stats import CHECKPOINT_NAME, FindingStatsError, finding_stats, render
