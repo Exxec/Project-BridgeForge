@@ -140,6 +140,11 @@
       "local_only": true,
       "reason": "no licence file shipped, so all rights reserved by default (checked 2026-09-27); owner: revive locally, do not publish without the author's permission",
       "recorded_on": "2026-09-27"
+    },
+    "clearCommands": {
+      "local_only": true,
+      "reason": "author (SirHartley) unreachable; no licence file shipped, so all rights reserved by default. Owner decision 2026-09-27: revived for the local archive only, with a note, not published",
+      "recorded_on": "2026-09-27"
     }
   },
   "default": {
