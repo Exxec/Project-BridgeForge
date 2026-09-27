@@ -21,8 +21,8 @@ Every long command now prints `[n/total]` progress and resumes if interrupted (P
 ## 1. Measure and try the unattended pipeline (ROADMAP P15)
 
 ### P2. First real `revive` and agent run (P15 items 2-3, 8-9)
-ClearCommands reached UNATTENDED_DONE 2026-09-27 (P15 item 14): give it the usual probe run. For the agent
-half, pick a mod with a `code` packet from `In operation/FINDING_STATS.md`:
+ClearCommands reached UNATTENDED_DONE, passed its probe run and is archived in `Done/ClearCommands`
+(local-only, 2026-09-27). For the agent half, pick a mod with a `code` packet from `In operation/FINDING_STATS.md`:
 ```powershell
 python -m bridgeforge revive "In operation\<Mod>" --vanilla-core $core                                   # dry run
 python -m bridgeforge revive "In operation\<Mod>" --vanilla-core $core --apply --draft-report
