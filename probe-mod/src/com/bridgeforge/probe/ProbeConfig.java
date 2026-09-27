@@ -28,7 +28,7 @@ public final class ProbeConfig {
     public float combatSeconds = 60f;
     public int combatCapPerSide = 12;
     public final List<String> setups = new ArrayList<String>();
-    // Every variant/wing id the mod defines (ROADMAP P14 item 31). "ship" variants are built as SHIP
+    // Every variant/wing id the mod defines (ROADMAP P14 item 49). "ship" variants are built as SHIP
     // fleet members; "other" variants (fighter/module/wreck or non-mod hulls) only get an existence check.
     public final List<String> contentShipVariants = new ArrayList<String>();
     public final List<String> contentOtherVariants = new ArrayList<String>();

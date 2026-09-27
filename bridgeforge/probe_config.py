@@ -317,7 +317,7 @@ def _variant_by_hull(mod_root: Path, hulls: list[str]) -> dict[str, str]:
             continue
         hull_id = data.get("hullId")
         # Starsector registers a variant under its declared "variantId", not the file name; "id" and
-        # the file stem are fallbacks only (ROADMAP P14 item 32).
+        # the file stem are fallbacks only (ROADMAP P14 item 50).
         variant_id = data.get("variantId") or data.get("id") or path.stem
         if not isinstance(hull_id, str) or hull_id not in wanted or hull_id in by_hull:
             continue
@@ -327,7 +327,7 @@ def _variant_by_hull(mod_root: Path, hulls: list[str]) -> dict[str, str]:
 
 
 def _content_variants(mod_root: Path, deployable_hulls: list[str]) -> dict[str, list[str]]:
-    """Every variant id the mod defines, split by what the probe may do with it (ROADMAP P14 item 31).
+    """Every variant id the mod defines, split by what the probe may do with it (ROADMAP P14 item 49).
 
     `ship`: the variant's hullId is one of the mod's own deployable hulls, so the probe also builds it
     as a SHIP fleet member. `other`: fighter, module and wreck hulls, and hulls the mod does not define
