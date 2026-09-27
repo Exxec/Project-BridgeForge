@@ -82,6 +82,8 @@ class ContentIdsConfigTests(unittest.TestCase):
         self.assertEqual(config["content_variants"]["ship"], ["fx_hull1_Standard", "fx_hull2_Assault"])
         self.assertEqual(config["content_variants"]["other"], ["fx_fighter1_Wing", "fx_module1_Std", "fx_onslaught_Elite"])
         self.assertEqual(config["content_wings"], ["fx_fighter1_wing"])
+        # Probe 0.2.4 compares each built SHIP's hull with the one its .variant names (PRB-FIGHTER-01).
+        self.assertEqual(config["content_ship_hulls"], {"fx_hull1_Standard": "fx_hull1", "fx_hull2_Assault": "fx_hull2"})
 
     def test_probe_deploys_the_declared_variant_id_not_the_file_name(self) -> None:
         with resolved_temp_dir() as root:
@@ -97,6 +99,7 @@ class ContentIdsConfigTests(unittest.TestCase):
             config = build_probe_config(mod)
         self.assertEqual(config["content_variants"], {"ship": [], "other": []})
         self.assertEqual(config["content_wings"], [])
+        self.assertEqual(config["content_ship_hulls"], {})
 
 
 class ProbeVersionTests(unittest.TestCase):

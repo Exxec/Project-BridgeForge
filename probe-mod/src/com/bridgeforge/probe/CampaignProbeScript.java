@@ -408,7 +408,11 @@ public class CampaignProbeScript implements EveryFrameScript {
         contentIdsChecked = true;
         int failed = 0;
         for (String variantId : config.contentShipVariants) {
-            failed += reportContent("variant", variantId, variantProblem(variantId, true));
+            String problem = variantProblem(variantId, true);
+            if (problem == null) {
+                problem = hullProblem(variantId, config.contentShipHulls.get(variantId));
+            }
+            failed += reportContent("variant", variantId, problem);
         }
         for (String variantId : config.contentOtherVariants) {
             failed += reportContent("variant", variantId, variantProblem(variantId, false));
@@ -481,6 +485,26 @@ public class CampaignProbeScript implements EveryFrameScript {
             }
         }
         return null;
+    }
+
+    // PRB-FIGHTER-01 (live run PRB-1b, 2026-09-13): a variant built as a SHIP came out as a vanilla Nebula,
+    // because the game substitutes a default hull. Compare the built member's hull with the hullId the
+    // .variant names (FleetMemberAPI.getHullId(), ShipHullSpecAPI.getBaseHullId(); javap 2026-09-27).
+    private static String hullProblem(String variantId, String expectedHull) {
+        if (expectedHull == null) {
+            return null;
+        }
+        try {
+            FleetMemberAPI member = Global.getFactory().createFleetMember(FleetMemberType.SHIP, variantId);
+            String built = member.getHullId();
+            String base = member.getHullSpec() == null ? null : member.getHullSpec().getBaseHullId();
+            if (expectedHull.equals(built) || expectedHull.equals(base)) {
+                return null;
+            }
+            return "built as hull [" + built + "] but the variant names [" + expectedHull + "] (substituted hull)";
+        } catch (Throwable t) {
+            return t.getClass().getName() + ": " + t.getMessage();
+        }
     }
 
     private static boolean resolves(String kind, String id) {

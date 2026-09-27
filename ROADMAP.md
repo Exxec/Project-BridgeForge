@@ -2002,6 +2002,13 @@ whether the result passed; recurring agent fixes become deterministic fixers.
       `tests/test_batch_lessons.py` `UnresolvedContentTests`). The probe's `content-ids` therefore
       confirms clean content (and catches variants that do not exist or fail to build) but is not a detector
       for these two cases. No dialog appeared in either run, so the dialog-text capture is still unexercised.
+    - **Probe 0.2.4 (2026-09-27): substituted-hull check.** `probe-config` writes `content_ship_hulls`
+      ({variant id: the hullId its `.variant` names}) for the variants built as SHIPs, and `content-ids`
+      FAILs a variant whose built member's hull (`FleetMemberAPI.getHullId()`, or the spec's
+      `getBaseHullId()` for D-hulls/skins) differs: the PRB-FIGHTER-01 Nebula substitution. Config test:
+      `tests/test_probe_config.py`. The config already keeps fighter/module variants out of the SHIP list,
+      so this is a safety net; a SEEKER run on 0.2.4 checks it raises no false failure. The broken-SEEKER
+      rig fixture and its preset were removed.
 
 ## Post-1.0 research and gated automation
 

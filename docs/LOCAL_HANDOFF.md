@@ -68,9 +68,9 @@ New Game fatal and a missing hull mod is dropped silently, so neither reaches th
 both). Left:
 1. Confirm the window watcher records dialog text: next time any run shows an error dialog, check that
    `<TESTID>.windows.txt` has a `dialog:` line and triage lists it as FATAL.
-2. Build the fleet-member hull check (a built member whose hull is not the variant's own, the
-   PRB-FIGHTER-01 Nebula; `FleetMemberAPI.getHullId()`/`getHullSpec()` javap-confirmed 2026-09-27).
-3. The rig's `SEEKER-bf-broken-contentid` copy is a test fixture; remove it when no longer needed.
+2. Hull check built (probe 0.2.4). The rig is set up (`probe seeker` done 2026-09-27): `.	oolsf-test.ps1 launch
+   CID-HULL-<date>`, New Game, one day, quit, `triage`. Done when `content-ids|OK|all-content|checked=40 failed=0`
+   again on 0.2.4 (no false "substituted hull" failures).
 
 ### G2. Removed-content catalogue follow-up (P14 items 47, 8)
 Catalogues for 0.8.1a, 0.9a and 0.95.1a to RC8 are in `In operation\_reference\` (2026-09-27), and

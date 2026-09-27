@@ -26,7 +26,6 @@ $Presets = @{
     "exigency-nex" = @{ Folder = "Exigency"; Mods = @("lw_lazylib", "MagicLib", "lunalib", "shaderLib", "nexerelin", "exigency"); Setups = @("rep:exipirated=FRIENDLY"); Track = @("exipirated_avesta") }
     "clearcommands" = @{ Folder = "ClearCommands"; Mods = @("lw_lazylib", "lw_console", "clearCommands"); Setups = @(); Track = @() }
     "seeker"       = @{ Folder = "SEEKER"; Mods = @("lw_lazylib", "lw_console", "SEEKER"); Setups = @("credits:500000", "ship:ART_dimention_manipulator:1", "spawn-fleet:pirates:120"); Track = @() }
-    "seeker-broken-contentid" = @{ Folder = "SEEKER-bf-broken-contentid"; Mods = @("lw_lazylib", "lw_console", "SEEKER_bfbroken"); Setups = @("ship:ART_dimention_manipulator:1"); Track = @() }  # P14 item 49: one weapon id misspelled in ART_dimention_manipulator.variant
     "seeker-sk13"  = @{ Folder = "SEEKER"; Mods = @("lw_lazylib", "MagicLib", "lunalib", "lw_console", "aitweaks", "SEEKER"); Setups = @("credits:500000", "ship:ART_dimention_manipulator:1", "spawn-fleet:pirates:120"); Track = @() }
     "flux"         = @{ Folder = "Flu-X-0.98a"; Mods = @("lw_lazylib", "MagicLib", "infected"); Setups = @(); Track = @() }
     "arkgneisis"   = @{ Folder = "Legacy-of-Arkgneisis-0.98a"; Mods = @("lw_lazylib", "MagicLib", "lunalib", "shaderLib", "ArkLeg_dev"); Setups = @("credits:500000"); Track = @() }
