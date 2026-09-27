@@ -18,6 +18,21 @@ import org.codehaus.janino.JavaSourceClassLoader;
  * Exits 3 when any class failed.
  */
 public class JaninoCheck {
+    // Janino's own compile/parse/scan exceptions anywhere in the cause chain; anything else (an
+    // initializer's NullPointerException, a VerifyError) is not a compile error.
+    private static Throwable compileError(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            String name = t.getClass().getName();
+            if (name.startsWith("org.codehaus.commons.compiler.") || name.startsWith("org.codehaus.janino.")) {
+                return t;
+            }
+            if (t.getCause() == t) {
+                break;
+            }
+        }
+        return null;
+    }
+
     public static void main(String[] args) throws Exception {
         String[] parts = args[2].split(File.pathSeparator);
         URL[] urls = new URL[parts.length];
@@ -38,7 +53,13 @@ public class JaninoCheck {
                 loader.loadClass(className);
                 System.out.println("JANINO_OK " + className);
             } catch (Throwable e) {
-                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                Throwable cause = compileError(e);
+                if (cause == null) {
+                    // Compiled, then failed outside Janino (a static initializer calling game code that
+                    // does not exist offline, e.g. Global.getSettings() == null): not a compile error.
+                    System.out.println("JANINO_OK " + className + " (initializer not run offline: " + e.getClass().getName() + ")");
+                    continue;
+                }
                 String message = String.valueOf(cause.getMessage()).replace('\r', ' ').replace('\n', ' ');
                 System.out.println("JANINO_FAIL " + className + " :: " + message);
                 failed = true;

@@ -399,6 +399,17 @@ class UnresolvedContentTests(unittest.TestCase):
         # Live RC8 consequences (P15 item 18): a missing weapon is a New Game fatal, a missing hull mod is dropped.
         self.assertIn("stops RC8 with a Fatal dialog at New Game", hits[0].explanation)
         self.assertIn("dropped silently by RC8", hits[0].explanation)
+        self.assertEqual(hits[0].severity, "critical")  # a missing weapon is a New Game fatal
+
+    def test_only_missing_hull_mods_is_medium_severity(self) -> None:
+        # RC8 drops an unknown hull mod silently (live CID-FAIL2-20260927): lost effect, no crash.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = _mod(root, dependencies=[])
+            (mod / "data" / "variants").mkdir(parents=True)
+            (mod / "data" / "variants" / "x.variant").write_text(json.dumps({"variantId": "x", "hullId": "lasher", "hullMods": ["vayra_red_army"]}), encoding="utf-8")
+            hits = _ids(scan_mod(mod, TargetProfile(), self._core(root)), "content-reference-unresolved")
+        self.assertEqual(hits[0].severity, "medium")
 
     def test_a_declared_dependency_may_provide_them(self) -> None:
         self.assertEqual(self._scan([{"id": "vayrasector"}])[0].classification, "REVIEW")

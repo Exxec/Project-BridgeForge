@@ -122,14 +122,34 @@ _JANINO_JARS = ("janino.jar", "commons-compiler.jar")
 _JANINO_HARNESS = Path(__file__).with_name("java") / "JaninoCheck.java"
 
 
+def _declared_class(source: Path, root: Path) -> tuple[str, Path]:
+    """(class name, source root) from the file's own `package` line, as the game resolves it.
+    Content-Unlocking-Missions keeps `package com.fs.starfarer.api.impl.campaign.rulecmd;` scripts under
+    data/com/fs/...; a path-derived name ("data.com.fs....") made Janino report a false mismatch."""
+    try:
+        text = source.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    match = re.search(r"(?m)^\s*package\s+([\w.]+)\s*;", _blank_comments(text))
+    if match:
+        package = match.group(1)
+        parts = package.split(".")
+        folder = source.parent
+        if tuple(folder.parts[-len(parts):]) == tuple(parts):
+            return f"{package}.{source.stem}", folder.parents[len(parts) - 1]
+        return f"{package}.{source.stem}", root
+    return ".".join(source.relative_to(root).with_suffix("").parts), root
+
+
 def janino_compile(jdk_javac: Path, vanilla_core: Path | None, root: Path, sources: list[Path], classpath: str, work_dir: Path,
-                   timeout: int = 600) -> dict[str, object]:
+                   timeout: int = 600, skipped: set[str] | None = None) -> dict[str, object]:
     """Compile loose scripts with RC8's own Janino (ROADMAP P15 item 22.1): the ground truth the
     `loose-script-janino-risk` pattern only guesses at. Source roots are the mod and the vanilla core
     (vanilla loose scripts resolve as the game's do); the parent classpath is javac's. Returns
     {"status": PASS|FAIL|UNAVAILABLE, "failures": {relative file: message}, "checked": n}."""
     import subprocess
 
+    skipped = skipped or set()
     if vanilla_core is None:
         return {"status": "UNAVAILABLE", "reason": "no --vanilla-core, so no janino.jar", "failures": {}, "checked": 0}
     jars = [Path(vanilla_core) / name for name in _JANINO_JARS]
@@ -141,22 +161,44 @@ def janino_compile(jdk_javac: Path, vanilla_core: Path | None, root: Path, sourc
     harness = run_javac(jdk_javac, janino_cp, [_JANINO_HARNESS], work_dir / "janino-harness")
     if harness.returncode != 0:
         return {"status": "UNAVAILABLE", "reason": "could not compile the Janino harness", "failures": {}, "checked": 0}
-    by_class = {".".join(source.relative_to(root).with_suffix("").parts): source.relative_to(root).as_posix() for source in sources}
+    by_class: dict[str, str] = {}
+    roots: list[str] = [str(root), str(vanilla_core)]
+    for source in sources:
+        class_name, source_root = _declared_class(source, root)
+        by_class[class_name] = source.relative_to(root).as_posix()
+        if str(source_root) not in roots:
+            roots.append(str(source_root))
     java = jdk_javac.with_name("java.exe" if jdk_javac.suffix.lower() == ".exe" else "java")
     completed = subprocess.run(
-        [str(java), "-cp", os.pathsep.join([janino_cp, str(work_dir / "janino-harness")]), "JaninoCheck",
-         os.pathsep.join([str(root), str(vanilla_core)]), ",".join(by_class), classpath],
+        # -noverify as the game runs (RC8 vmparams and the rig's run-java25.bat, read 2026-09-27): without it
+        # the JVM verifier rejects Janino bytecode the game loads fine (DNEEP, Osiris-Alliance VerifyError).
+        [str(java), "-noverify", "-cp", os.pathsep.join([janino_cp, str(work_dir / "janino-harness")]), "JaninoCheck",
+         os.pathsep.join(roots), ",".join(by_class), classpath],
         capture_output=True, text=True, check=False, timeout=timeout,
     )
     failures: dict[str, str] = {}
     seen = 0
     for line in completed.stdout.splitlines():
-        if line.startswith("JANINO_OK "):
+        if line.startswith("JANINO_OK"):
             seen += 1
         elif line.startswith("JANINO_FAIL "):
             seen += 1
             name, _, message = line[len("JANINO_FAIL "):].partition(" :: ")
-            failures[by_class.get(name, name)] = message.strip()
+            own = by_class.get(name, name)
+            # Janino compiles referenced loose classes on demand, so a failure can sit in another file
+            # (Hiver-Swarm, 2026-09-27: HIVER_gen failed inside a sibling that needs undeclared LazyLib).
+            # Blame the file the message names; drop it when javac already rejected that file.
+            named = re.search(r"File '([^']+)'", message)
+            if named:
+                try:
+                    other = Path(named.group(1)).resolve().relative_to(root).as_posix()
+                except ValueError:
+                    other = own
+                if other != own:
+                    if other in skipped:
+                        continue
+                    own = other
+            failures[own] = message.strip()
     if seen < len(by_class):
         return {"status": "UNAVAILABLE", "reason": ("Janino harness stopped early: " + completed.stderr.strip())[:400], "failures": failures, "checked": seen}
     return {"status": "FAIL" if failures else "PASS", "failures": failures, "checked": seen}
@@ -202,7 +244,9 @@ def compile_loose_scripts(root: Path, vanilla_core: Path | None = None, jdk: Pat
         _shadow = _jar_names(root)
         janino_sources = [source for source in sources if str(source) not in javac_failed
                           and ".".join(source.relative_to(root).with_suffix("").parts) not in _shadow]
-        janino = janino_compile(jdk_info.javac, vanilla_core, root, janino_sources, classpath_result.classpath(), Path(tmp))
+        rejected = {Path(p).resolve().relative_to(root).as_posix() for p in javac_failed if Path(p).resolve().is_relative_to(root)}
+        janino = janino_compile(jdk_info.javac, vanilla_core, root, janino_sources, classpath_result.classpath(), Path(tmp),
+                                skipped=rejected)
 
     # A loose script with the same class name as one already compiled into the mod's own jar never
     # actually gets Janino-compiled by the game (it loads the jar's class and skips the loose copy --

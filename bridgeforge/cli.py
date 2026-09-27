@@ -851,6 +851,7 @@ def build_parser() -> argparse.ArgumentParser:
     api_diff_cmd.add_argument("--json", action="store_true")
     revenantlib_cmd = subcommands.add_parser("revenantlib-check", help="check a RevenantLib jar provides every bf.* method BridgeForge's fixers rewrite calls to, and (given the mod folder) that no source file lacks a compiled class")
     revenantlib_cmd.add_argument("path", type=Path, help="RevenantLib.jar, the RevenantLib mod folder, or a repo root holding working/")
+    revenantlib_cmd.add_argument("--snapshot", type=Path, help="an archived copy (e.g. Done/RevenantLib/RevenantLib): report whether it still matches the checked mod folder")
     revenantlib_cmd.add_argument("--json", action="store_true")
     rebuild_jar_cmd = subcommands.add_parser("rebuild-jar", help="rebuild a mod's jar from its sources and compare it with the original: class/method/field added or removed, forbidden sandbox references")
     rebuild_jar_cmd.add_argument("mod", type=Path, help="mod workspace (holding working/) or the working copy itself")
@@ -2601,7 +2602,13 @@ def main(argv: list[str] | None = None) -> int:
         import zipfile
         try:
             result = check_revenantlib(args.path)
-        except (RevenantLibCheckError, OSError, zipfile.BadZipFile) as exc:
+            if args.snapshot is not None:
+                # The checked jar lives at <mod>/jars/RevenantLib.jar; compare that mod folder with the archive.
+                drift = compare_copies(Path(result["jar"]).parent.parent, args.snapshot)
+                result["snapshot"] = {"path": str(args.snapshot), "status": "CURRENT" if drift["status"] == "PASS" else "STALE",
+                                      "drift_count": drift["drift_count"], "different": [d["path"] for d in drift["different"]],
+                                      "missing_in_snapshot": drift["missing_in_deployed"], "extra_in_snapshot": drift["extra_in_deployed"]}
+        except (RevenantLibCheckError, OSError, zipfile.BadZipFile, ValueError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         if args.json:
@@ -2617,6 +2624,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  FAIL source without a compiled class in the jar: {name}.java")
             for name in stale["classes_without_source"]:
                 print(f"  FAIL class in the jar without source: {name}")
+            snapshot = result.get("snapshot")
+            if snapshot:
+                print(f"  snapshot {snapshot['status']}: {snapshot['path']}" + (f" ({snapshot['drift_count']} file(s) differ: {', '.join((snapshot['different'] + snapshot['missing_in_snapshot'] + snapshot['extra_in_snapshot'])[:5])}) - refresh the archive" if snapshot["status"] == "STALE" else ""))
         return 0 if result["status"] == "PASS" else 1
     if args.command == "diff-data":
         from .data_diff import DataDiffError, diff_data

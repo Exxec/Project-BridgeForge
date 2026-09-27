@@ -1726,6 +1726,7 @@ check a RevenantLib jar provides every bf.* method BridgeForge's fixers rewrite 
 | Argument | Notes | Help |
 |---|---|---|
 | `path` | - | RevenantLib.jar, the RevenantLib mod folder, or a repo root holding working/ |
+| `--snapshot` SNAPSHOT | - | an archived copy (e.g. Done/RevenantLib/RevenantLib): report whether it still matches the checked mod folder |
 | `--json` | - | - |
 
 ## rebuild-jar

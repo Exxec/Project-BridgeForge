@@ -149,6 +149,25 @@ class RevenantLibJarTests(unittest.TestCase):
         self.assertIn("FAIL bf.legacyworld.LegacyWorld.addPlanet(", stdout.getvalue())
 
 
+    def test_snapshot_is_current_until_the_live_copy_changes(self):
+        # P15 item 22.6: Done/RevenantLib is a dated snapshot of a library still in development.
+        import shutil
+
+        with resolved_temp_dir() as root:
+            self._build(root, self.SOURCES)
+            snapshot = root / "Done" / "RevenantLib"
+            shutil.copytree(root / "working", snapshot, ignore=shutil.ignore_patterns("src"))
+            out = io.StringIO()
+            with redirect_stdout(out):
+                main(["revenantlib-check", str(root), "--snapshot", str(snapshot)])
+            (root / "working" / "mod_info.json").write_text(json.dumps({"id": "revenantlib", "version": "1.3", "jars": ["jars/RevenantLib.jar"]}), encoding="utf-8")
+            stale = io.StringIO()
+            with redirect_stdout(stale):
+                main(["revenantlib-check", str(root), "--snapshot", str(snapshot)])
+        self.assertIn("snapshot CURRENT", out.getvalue())
+        self.assertIn("snapshot STALE", stale.getvalue())
+        self.assertIn("mod_info.json", stale.getvalue())
+
 class LocateTests(unittest.TestCase):
     def test_folder_must_declare_exactly_one_existing_jar(self):
         with resolved_temp_dir() as root:

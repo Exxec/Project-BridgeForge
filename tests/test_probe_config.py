@@ -85,6 +85,16 @@ class ContentIdsConfigTests(unittest.TestCase):
         # Probe 0.2.4 compares each built SHIP's hull with the one its .variant names (PRB-FIGHTER-01).
         self.assertEqual(config["content_ship_hulls"], {"fx_hull1_Standard": "fx_hull1", "fx_hull2_Assault": "fx_hull2"})
 
+    def test_special_items_are_listed_for_the_probe(self) -> None:
+        # P15 item 22.7: Yunru's Unpack Blueprints works through special_items.csv plugin classes.
+        with resolved_temp_dir() as root:
+            mod = self._mod(root)
+            (mod / "data" / "campaign").mkdir(parents=True, exist_ok=True)
+            (mod / "data" / "campaign" / "special_items.csv").write_text(
+                "\ufeffname,id,plugin\nPack,fx_pack,data.scripts.Unpack\n#Old,#old_pack,x\n,,\nKit,fx_kit,\n", encoding="utf-8")
+            config = build_probe_config(mod)
+        self.assertEqual(config["content_special_items"], ["fx_kit", "fx_pack"])
+
     def test_probe_deploys_the_declared_variant_id_not_the_file_name(self) -> None:
         with resolved_temp_dir() as root:
             config = build_probe_config(self._mod(root))
@@ -100,6 +110,7 @@ class ContentIdsConfigTests(unittest.TestCase):
         self.assertEqual(config["content_variants"], {"ship": [], "other": []})
         self.assertEqual(config["content_wings"], [])
         self.assertEqual(config["content_ship_hulls"], {})
+        self.assertEqual(config["content_special_items"], [])
 
 
 class ProbeVersionTests(unittest.TestCase):

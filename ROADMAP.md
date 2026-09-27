@@ -2096,7 +2096,19 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        generics to Object. Yunru's Unpack Blueprints' **original** compiles: item 21's rewrite was harmless but
        not needed, and the risk pattern over-reports. Tests: `tests/test_janino_compile.py` (pure outcome tests,
        plus a real-Janino test that runs only where the RC8 install is present).
-    2. **(Revised by 1's finding: the loop itself compiles; the failing construct is a call on an erased generic value, which needs a cast of the right type. Held until the queue survey shows how common real failures are.)** **A fixer for typed for-each loops.** The rewrite is mechanical: BDS had 10 done by hand (item 45) and the
+       **Queue survey (2026-09-27, the 48 mods `loose-script-janino-risk` flagged, 124 files):** under RC8's Janino
+       run as the game runs it, **47 mods compile clean**; the one rejection is Bird's Collection of Trinkets and
+       Rarities' `bc_flarePrimaryAI.java`, which imports LazyLib the mod never declares (javac never reached it: it
+       stopped at a syntax error in `BcZeroFluxJets.java`). No rejection involved a typed for-each. Harness fixes
+       found on the way, each confirmed on a real mod: class names come from the file's `package` line, with the
+       matching source root (Content-Unlocking-Missions, Bricky-Construction keep packages that differ from
+       their folders); a failure inside a script another file loads is blamed on that file, and dropped when
+       javac already rejected it (Hiver-Swarm); only Janino's own exceptions count, so a static initializer that
+       calls game code offline is not a failure (Adjusted-Sector); and the harness JVM runs with `-noverify` as
+       the game does (RC8 `vmparams`, the rig's `run-java25.bat`), since the verifier otherwise rejects Janino
+       bytecode the game loads (DNEEP, Osiris-Alliance).
+    2. **Dropped 2026-09-27 on evidence:** the queue survey in 1 found no Janino rejection of a typed for-each, so
+       there is nothing for a loop fixer to fix. Superseded text: **A fixer for typed for-each loops.** The rewrite is mechanical: BDS had 10 done by hand (item 45) and the
        agent did 9 identically (item 21). When the loop variable's collection is a local or field declared with a
        generic type in the same file, rewriting to a raw `Iterator` plus cast is deterministic; anything else
        stays with the agent. Verified by (1). Moves most of the 48 mods' occurrences out of the `code` tier.
@@ -2104,6 +2116,8 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        a New Game fatal and a missing hull mod is silent (item 18). A missing weapon should be MANUAL/high even
        when the mod declares dependencies; a missing hull mod can stay REVIEW. Needs a quick live check for
        missing wings and hulls before classifying those.
+       **Done 2026-09-27** (severity; classification unchanged): `critical` when a weapon is missing, `medium`
+       when only hull mods are, `high` otherwise. Tests: `tests/test_batch_lessons.py` (`UnresolvedContentTests`).
     4. **Batch-revive the `auto` bucket** (51 mods on 2026-09-27, before item 19's fix): `revive --apply
        --draft-report` over each, dry run first, with `finding-stats` before and after. Uses item 12's progress
        rule. The biggest single jump in finished mods for the least owner time.
@@ -2113,9 +2127,17 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        RevenantLib bridges and `removed-api-call` fixer rules. Each needs javap evidence for the replacement.
     6. **Keep the `Done/RevenantLib` snapshot honest.** `revenantlib-check` could compare the snapshot's jar with
        the live `working/` jar and say when the snapshot is stale.
+       **Done 2026-09-27.** `revenantlib-check PATH --snapshot Done/RevenantLib/RevenantLib` compares the checked mod
+       folder with the archive (`copy_drift`) and prints `snapshot CURRENT` or `STALE` with the differing files.
+       Today's snapshot: CURRENT. Test: `tests/test_revenantlib_contract.py`.
     7. **A special-item check in the probe.** Yunru's mod works through a `special_items.csv` plugin class; the
        probe checks ships, weapons and wings but not items. Resolving each mod special item's spec and plugin
        class at runtime would cover item mods (needs javap evidence for the SettingsAPI item-spec methods).
+       **Done 2026-09-27 (probe 0.2.5, live run pending).** `probe-config` lists `special_items.csv` ids
+       (`content_special_items`); `content-ids` looks each spec up and adds it to a throwaway cargo, then checks the
+       stack's plugin exists, which instantiates the plugin class as real cargo does (javap 2026-09-27:
+       `SettingsAPI.getSpecialItemSpec`, `FactoryAPI.createCargo`, `CargoAPI.addSpecial`/`getStacksCopy`,
+       `CargoStackAPI.getPlugin`). Yunru's mod: 9 items. Test: `tests/test_probe_config.py`.
     8. **Settings list merge test** (item 19's held rule) and **dialog-capture confirmation** (item 18):
        each one short rig run.
 

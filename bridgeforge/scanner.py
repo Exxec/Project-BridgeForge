@@ -5539,7 +5539,9 @@ def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_
     result.add(
         id="content-reference-unresolved",
         category="dependencies",
-        severity="high",
+        # Severity from the live consequence (P15 item 22.3): weapon -> New Game fatal; hull mods alone ->
+        # dropped silently; wings/hulls not yet observed live, so they keep "high".
+        severity="critical" if "weapon" in kinds else ("medium" if kinds == {"hullmod"} else "high"),
         classification="REVIEW" if declares else "MANUAL",
         confidence="HIGH",
         explanation=explanation,
