@@ -192,7 +192,10 @@ BUNDLED_LIBRARY_PACKAGE_PREFIXES = {
     # Only lazylib: org/lazywizard/console/ is Console Commands (lw_console). The wider prefix made
     # revive declare LazyLib for ClearCommands, whose jar only calls Console Commands (2026-09-27;
     # every class in LazyLib 3.0.0's LazyLib.jar and LazyLib-Kotlin.jar sits under org/lazywizard/lazylib).
-    "LazyLib": ("org/lazywizard/lazylib/",),
+    # kotlin/ and kotlinx/ too: LazyLib ships the Kotlin runtime (mod_info "jars": jars/internal/Kotlin-Runtime.jar,
+    # which holds kotlin/jvm/internal/Intrinsics; LazyLib 3.0.0, read 2026-09-27). A Kotlin mod that does not
+    # declare LazyLib crashes with NoClassDefFoundError: kotlin/jvm/internal/Intrinsics (Automatic Orders, GRP-4).
+    "LazyLib": ("org/lazywizard/lazylib/", "kotlin/", "kotlinx/"),
     "Console Commands": ("org/lazywizard/console/",),
     "MagicLib": ("org/magiclib/", "data/scripts/util/Magic"),
     "LunaLib": ("lunalib/",),
@@ -832,6 +835,8 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
                             for library, prefixes in LIBRARY_PACKAGES.items():
                                 if any(prefix.replace(".", "/").encode() in class_bytes for prefix in prefixes):
                                     result.bytecode_library_references.add(library)
+                            if b"Lkotlin/" in class_bytes or b"kotlin/jvm/" in class_bytes:
+                                result.bytecode_library_references.add("LazyLib")  # the Kotlin runtime is LazyLib's
                             if b"java/lang/UnsupportedOperationException" in class_bytes:
                                 result.add(
                                     id="bytecode-runtime-placeholder-reference",
@@ -5225,7 +5230,8 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                 evidence=[f"library:{library}", *import_only[:5]],
             )
             continue
-        dotted_needles = [prefix.replace("/", ".").rstrip(".") for prefix in prefixes]
+        # Kotlin is compiled, never a .java import: matching the word "kotlin" in Java text would be noise.
+        dotted_needles = [prefix.replace("/", ".").rstrip(".") for prefix in prefixes if not prefix.startswith("kotlin")]
         source_hits: list[str] = []
         guarded = False
         for source in sorted(root.rglob("*.java")):

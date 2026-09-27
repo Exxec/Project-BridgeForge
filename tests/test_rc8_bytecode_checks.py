@@ -452,6 +452,21 @@ class UndeclaredLibraryDependencyTests(unittest.TestCase):
             self.assertEqual(len(findings), 1)
             self.assertEqual(findings[0].classification, "MANUAL")
 
+    def test_kotlin_bytecode_needs_lazylib_which_ships_the_kotlin_runtime(self) -> None:
+        # GRP-4 (2026-09-27): Automatic Orders (Kotlin) crashed with NoClassDefFoundError: kotlin/jvm/internal/Intrinsics;
+        # LazyLib's jars/internal/Kotlin-Runtime.jar provides it. Declared, the same mod is quiet and not "unreferenced".
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            class_bytes = build_class_file("fx/Plugin", extra_class_refs=("kotlin/jvm/internal/Intrinsics",))
+            write_jar(root / "jars" / "fixture.jar", {"fx/Plugin.class": class_bytes})
+            _write(root / "mod_info.json", '{"id":"fixture","jars":["jars/fixture.jar"]}')
+            undeclared = [f for f in _findings(scan_mod(root), "undeclared-library-dependency") if "library:LazyLib" in f.evidence]
+            _write(root / "mod_info.json", '{"id":"fixture","jars":["jars/fixture.jar"],"dependencies":[{"id":"lw_lazylib","name":"LazyLib"}]}')
+            declared = scan_mod(root)
+        self.assertEqual(len(undeclared), 1)
+        self.assertEqual([f for f in _findings(declared, "undeclared-library-dependency") if "library:LazyLib" in f.evidence], [])
+        self.assertEqual(_findings(declared, "declared-library-unreferenced"), [])
+
     def test_declared_library_used_only_by_jar_bytecode_is_not_unreferenced(self) -> None:
         # ClearCommands (2026-09-27): once revive declared the LazyLib its jar calls, the scan called
         # the declaration unreferenced. Bytecode use counts; a declaration nothing uses still fires.
