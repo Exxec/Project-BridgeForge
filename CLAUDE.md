@@ -43,6 +43,15 @@ progress rather than waiting blind.
   2019-05), `Starsector9.5.1a`. `SectorAPI.addMessage`/`createFleet(String, String)` were removed
   between 0.8.1a and 0.9, so API-drift checks for them need the 0.8.1a reference.
 
+- Judge loose scripts with RC8's own Janino (`compile-check` runs it; 2026-09-27), not by pattern: Janino 2.7.8
+  accepts a typed for-each over `List<String>`, but rejects lambdas and a method call on a generic-typed value
+  (erased to Object). The game runs with `-noverify`, so the harness does too. 47 of 48 mods the old pattern
+  flagged compile clean.
+- RC8 content behaviour, live-proven 2026-09-27: a variant naming a missing weapon is a Fatal dialog at New
+  Game; a missing hull mod in a variant is dropped silently. A Fatal dialog never reaches the redirected log:
+  `bf-test.ps1` records dialog text in `<TESTID>.windows.txt`, and `log-triage` reads it.
+- `bf-test launch` logs only the session it starts; a player relaunch logs only to the rig's `starsector.log`.
+
 ## Work that needs a local machine
 
 Anything that needs the game install, a test rig, Windows or `In operation/` cannot be finished
