@@ -1949,6 +1949,24 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     with that parameter count (generics nest), falling back to every lead when none match. Batavia now
     prints one line per call. Tests: `tests/test_api_diff.py`
     (`test_only_overloads_with_the_calls_argument_count_are_listed`).
+17. **Standing fixer approvals, named encodings, and the formshield conflict explained (2026-09-27).**
+    - Owner asked for standing approvals: `In operation/AUTOMATION_POLICY.json` (local) approves
+      `mod-info-game-version-inexact`, `shippable-work-file`, `data-file-not-utf8` and
+      `csv-fullwidth-number`; revive loads it (checked on Aivon-Republic). Other `auto` fixers
+      (`undeclared-library-dependency`, `csv-row-extra-columns`, `removed-api-call`, ...) still need
+      `--approve` per run until each is checked on real data.
+    - **Done 2026-09-27.** `fix --finding data-file-not-utf8 --encoding FILE=ENC` re-encodes a refused
+      file from an encoding a person named (cp1252, mac_roman, shift_jis, gbk, gb18030, latin-1); only the
+      invalid bytes are decoded (a two-byte lead takes its trail byte), and a byte that does not decode
+      is refused. Applied to 13 of item 15's 14 refused files after reading each byte in context:
+      CP-1252 (Another-Random-SWP `360°`, DME/DME-dev `.ship` `Mysteré`, Epta-Consortium `Pérola`, ICE
+      `Steinmüller`/`Caitlín`, TDB-Maelstrom `Dà húndàn`, MAGNETAR `™`, Thule-Legacy `Bifröst`/`Brünhilde`),
+      Mac Roman (DME/DME-dev descriptions: `it’s`, `Mystère`, `Émile`), Shift-JIS (Stinger-Shipyards
+      `ship’s`). Left for the owner: Faction-Relationships-Uniquified's lone 0x9D, the tail of a broken
+      UTF-8 `”`. Tests: `tests/test_fixers.py` (`DataFileNamedEncodingTests`).
+    - R4's vendor conflict is not a decision: RevenantLib vendored `shields_formshield` from Rebal on
+      purpose (`reports/PROVENANCE.md`), in RC8's column layout with the script repackaged to
+      `xenoargh.shared.hullmods.FormShield`; name, costs, text and sprite are identical.
 
 ## Post-1.0 research and gated automation
 

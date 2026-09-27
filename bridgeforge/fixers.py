@@ -1895,6 +1895,10 @@ def _fix_data_file_not_utf8(root: Path, options: dict) -> list[FileChange]:
     data = root / "data"
     paths = [root / "mod_info.json"] + ([p for p in data.rglob("*") if p.suffix.lower() in _PLAYER_TEXT_SUFFIXES] if data.is_dir() else [])
     changes, refused = [], []
+    named_encodings = dict(options.get("encodings") or {})
+    for relative, encoding in named_encodings.items():
+        if encoding not in _NAMEABLE_ENCODINGS:
+            raise FixerError(f"{relative}: encoding {encoding!r} is not one of {', '.join(sorted(_NAMEABLE_ENCODINGS))}.")
     for path in sorted(p for p in paths if p.is_file()):
         raw = path.read_bytes()
         offsets = _invalid_utf8_offsets(raw)
@@ -1905,6 +1909,11 @@ def _fix_data_file_not_utf8(root: Path, options: dict) -> list[FileChange]:
         def plain(index: int) -> bool:
             return index < 0 or index >= len(raw) or raw[index] < 0x80 or index in invalid
 
+        relative = path.relative_to(root).as_posix()
+        named = named_encodings.pop(relative, None)
+        if named is not None:
+            changes.append(FileChange(path=path, before=raw, after=_reencode_invalid(raw, offsets, named, relative)))
+            continue
         if not all(raw[i] in _CP1252_TYPOGRAPHY and plain(i - 1) and plain(i + 1) for i in offsets):
             odd = sorted({f"0x{raw[i]:02x}" for i in offsets if raw[i] not in _CP1252_TYPOGRAPHY})
             refused.append(f"{path.relative_to(root).as_posix()} ({', '.join(odd) or 'adjacent high bytes'})")
@@ -1915,9 +1924,38 @@ def _fix_data_file_not_utf8(root: Path, options: dict) -> list[FileChange]:
             last = i + 1
         out += raw[last:]
         changes.append(FileChange(path=path, before=raw, after=bytes(out)))
+    if named_encodings:
+        raise FixerError(f"No invalid UTF-8 to re-encode in: {', '.join(sorted(named_encodings))}.")
     if not changes and refused:
-        raise FixerError("No file has only CP-1252 punctuation outside UTF-8; name the real encoding by hand for: " + "; ".join(refused))
+        raise FixerError("No file has only CP-1252 punctuation outside UTF-8; name the real encoding by hand for: " + "; ".join(refused)
+                         + " (fix --encoding FILE=ENCODING)")
     return changes
+
+
+# Encodings a person may name for data-file-not-utf8 (`fix --encoding FILE=ENC`), each seen in the queue
+# 2026-09-27: CP-1252 letters (Thule-Legacy, Epta-Consortium), Mac Roman (DME), Shift-JIS (Stinger-Shipyards).
+_NAMEABLE_ENCODINGS = frozenset({"cp1252", "mac_roman", "shift_jis", "gbk", "gb18030", "latin-1"})
+
+
+def _reencode_invalid(raw: bytes, offsets: list[int], encoding: str, relative: str) -> bytes:
+    """Decode only the invalid bytes (a lead byte takes its trail byte with it in a two-byte encoding)
+    with the encoding a person named; bytes that are already valid UTF-8 stay as they are."""
+    out, last = bytearray(), 0
+    for i in offsets:
+        if i < last:
+            continue  # consumed as a trail byte
+        for width in (1, 2):
+            try:
+                text = raw[i:i + width].decode(encoding)
+            except UnicodeDecodeError:
+                continue
+            if len(text) == 1:
+                break
+        else:
+            raise FixerError(f"{relative}: byte 0x{raw[i]:02x} at offset {i} does not decode as {encoding}.")
+        out += raw[last:i] + text.encode("utf-8")
+        last = i + width
+    return bytes(out + raw[last:])
 
 
 _FIXER_FUNCS = {

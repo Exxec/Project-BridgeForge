@@ -1692,3 +1692,26 @@ class DataFileNotUtf8FixerTests(unittest.TestCase):
             (mod / "data/strings/b.csv").write_bytes(b"id,t\na,Myst\xe9re\n")
             plan = compute_fix(mod, "data-file-not-utf8")
         self.assertEqual([c.path.name for c in plan.changes], ["a.csv"])
+
+
+class DataFileNamedEncodingTests(unittest.TestCase):
+    """A person names a refused file's encoding with `fix --encoding FILE=ENC` (2026-09-27 survey)."""
+
+    def test_mac_roman_and_shift_jis_named_by_a_person(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            _write(mod / "mod_info.json", '{"id": "x"}')
+            (mod / "data/strings").mkdir(parents=True)
+            (mod / "data/strings/mac.csv").write_bytes(b"id,t\na,it\xd5s Myst\x8fre\n")
+            (mod / "data/strings/sjis.csv").write_bytes(b"id,t\na,the ship\x81fs hull \xc3\xa9\n")
+            code = main(["fix", str(mod), "--finding", "data-file-not-utf8", "--apply",
+                         "--encoding", "data/strings/mac.csv=mac_roman", "--encoding", "data/strings/sjis.csv=shift_jis"])
+            mac = (mod / "data/strings/mac.csv").read_bytes().decode("utf-8")
+            sjis = (mod / "data/strings/sjis.csv").read_bytes().decode("utf-8")
+            with self.assertRaises(FixerError):
+                compute_fix(mod, "data-file-not-utf8", {"encodings": {"data/strings/mac.csv": "ebcdic"}})
+            with self.assertRaises(FixerError):  # nothing left to re-encode in a named file
+                compute_fix(mod, "data-file-not-utf8", {"encodings": {"data/strings/mac.csv": "cp1252"}})
+        self.assertEqual(code, 0)
+        self.assertEqual(mac, "id,t\na,it’s Mystère\n")
+        self.assertEqual(sjis, "id,t\na,the ship’s hull é\n")

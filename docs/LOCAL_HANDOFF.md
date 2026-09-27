@@ -62,13 +62,8 @@ python -m bridgeforge strip-plan "In operation\<a STRIP_FROM_MOD mod>\working" -
 python -m bridgeforge vendor-plan "In operation\<provider>" --id hullmod:<id> --json > plan.json
 python -m bridgeforge vendor-copy --plan plan.json --to "In operation\RevenantLib"
 ```
-Strip plan checked 2026-09-27 on DME (one id, as its dependencies.json says). Still open: the
-`vendor-copy --plan` dry run of Rebal's `shields_formshield` into RevenantLib stops at a CONFLICT,
-because RevenantLib's `hull_mods.csv` already has a different `shields_formshield` row. Decide which
-row is right (diff them), then rerun; done when the dry run lists the same files as `vendor-plan`. A local-only provider such as
-Rebal may be vendored into RevenantLib because RevenantLib is local-only too (owner decision
-2026-09-27, P15 item 11); the output then prints a `LICENCE:` line, and RevenantLib must stay
-local-only while it holds that content. Into a releasable mod it is still refused.
+Done 2026-09-27 (P15 items 13, 17): the strip plan matches, and the vendor conflict is RevenantLib's own
+deliberate copy of `shields_formshield` (see its PROVENANCE.md), so nothing is left here.
 
 ## 3. Needs the game
 

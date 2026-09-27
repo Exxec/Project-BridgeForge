@@ -736,6 +736,7 @@ apply a SAFE, mechanical fixer for one supported finding id (dry-run diff by def
 | `--from-vanilla-id` FROM_VANILLA_ID | - | required for procgen-planet-row-missing/procgen-star-row-missing |
 | `--faction-file` FACTION_FILE | - | required for faction-known-lists-missing |
 | `--hull` ID=N | repeatable | repeatable; required for carrier-bays-proposal, e.g. --hull my_carrier=4 (0-6, vanilla's own maximum) |
+| `--encoding` FILE=ENC | repeatable | repeatable; for data-file-not-utf8: re-encode FILE (relative to the mod) from ENC (cp1252, mac_roman, shift_jis, gbk, gb18030, latin-1) when a person has read it and named the encoding |
 | `--allow-shadowed-edit` | - | override the refusal to edit a loose script one of this mod's own jars, or a declared dependency's jar, already shadows (the edit has no effect unless the jar is also being rebuilt from the patched source) |
 | `--providers` PROVIDERS | repeatable | mods folder, mod folder or In operation tree to search for declared dependencies, for the dependency-jar shadow check (default: <repo>/In operation and its rig's mods) |
 
