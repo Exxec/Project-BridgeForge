@@ -2259,6 +2259,39 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     inherited the first attempt's Fatal dialog, making every member UNCLEAR); the dialog capture itself is now
     **confirmed live** (item 18): it recorded that first attempt's Fatal text and triage counted it.
     Probe groups so far: GRP-1, GRP-2, GRP-3 all PASS, 24 mods `LIVE_VALIDATED`.
+28. **Lessons from the 2026-09-27 live session, as actions (proposed, not started).** Most valuable first.
+    1. **Find the upstream original before reviving.** Zorg18 was revived from a modpack copy that had already
+       disabled two features (allocator convoys, assimilation); the author's own V18 was in the Ironclads archive all
+       along. With the Downloads index working (item 26), `revive`/`intake` should search the corpus for other copies of
+       the same mod id, rank them (author release over modpack copy, by version and file dates) and report files and
+       scripts the chosen copy lacks. r4 plan: `In operation/Zorg18/working/reports/REVIVAL_PLAN_R4.md`.
+    2. **One source of truth for status.** Covert-Cargoliners' report said READY_FOR_LIVE_TEST while revive said
+       ESCALATED. `board`/`finding-stats` should flag any workspace whose report status disagrees with its latest
+       `REVIVE.json`, and `revive --draft-report` should replace a stale final status line, not append after it.
+    3. **Allowlists of mod paths are wrong by default.** The shared copy step's fixed folder list dropped `sun_fr/`
+       (item 27). Audit other allowlists (release hygiene, scanner inventories, `_collect` root-file globs) for the same
+       assumption; prefer "everything except known tool output".
+    4. **Validate heuristic checks against ground truth before they drive work.** `loose-script-janino-risk` was wrong
+       for 47 of 48 mods once Janino itself was run (item 22.1), yet it had sent Yunru to an agent. Every HEURISTIC
+       check should carry a measured precision from a sample, and checks under a threshold should not create agent
+       packets.
+    5. **Fixers can look like bug fixes and still be wrong for a mod.** `procgen-mod-body-leak` fits Zorg but not
+       planet packs (Galaxy Tigers, Nightcross). A fixer with any such intent question stays out of standing
+       approvals, and its finding should say what intent it assumes.
+    6. **Derive library tables from the libraries' own jars.** `org/lazywizard/` was mapped wholesale to LazyLib,
+       declaring the wrong dependency (item 14). Build the package-to-mod-id table from the real LazyLib, Console
+       Commands, MagicLib, LunaLib and GraphicsLib jars in the rig (and RevenantLib's own), and merge
+       `revival_audit`'s duplicate table into it.
+    7. **Scale tests for long runs.** `corpus-index` was quadratic (item 26) and only a 42 GB run showed it. Add a
+       test that times N vs 4N files and fails if the ratio is far from linear, for `corpus-index`, `finding-stats`
+       and `probe-group plan`.
+    8. **Archives must carry the jar source.** r3's `ZorgFleetSpawner` source survived only in `artifacts/`. `archive`
+       should copy `working/src*` (and `jars/src*`) into `workspace/`, never into the shipped folder.
+    9. **Live tooling:** every live session writes its own window log (done), triage folds in relaunched sessions from the
+       rig's `starsector.log` (item 20.17), and groups record a per-mod verdict straight into each report (done by hand
+       for GRP-1..3; make it `probe-group report --record`).
+    10. **RevenantLib:** removed-API use sits in jars, not loose scripts (item 22.5 ranking): run the ranking on jar
+        bytecode before adding bridges; keep `revenantlib-check --snapshot` in the release checklist.
 
 ## Post-1.0 research and gated automation
 
