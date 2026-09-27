@@ -1803,6 +1803,29 @@ whether the result passed; recurring agent fixes become deterministic fixers.
    `escalation verify` and `finding-stats` now honour the mod's accepted-findings baseline
    (`working/reports/baseline*.json`) as `corpus-recheck` does since item 46, sharing
    `baseline.mod_baseline_path`. Tests: `tests/test_finding_stats.py`, `tests/test_revive.py`.
+7. **`vendor-copy --plan`: copy a whole `vendor-plan` closure.** **Done 2026-09-27.** `vendor-copy` copied
+   one hull mod; `vendor-plan` traces any piece (weapon, wing, hull, variant, ship system) but copied
+   nothing. `vendor-copy --plan FILE --to DIR [--apply] [--allow-partial]` (`vendor_plan.copy_plan`)
+   copies exactly what a plan lists, files byte for byte and CSV rows appended under the target's own
+   header, and re-checks it first: the provider must still hold every file and row (else STALE), the
+   licence gate is re-read (the one `vendor-copy` and `release` use), a differing target file or row
+   is a CONFLICT and nothing is written, identical ones are skipped, and a plan with MISSING or SUSPECT
+   entries or compiled-only classes is INCOMPLETE unless `--allow-partial`. Every copied file's
+   SHA-256 is returned for PROVENANCE.md. Tests: `tests/test_vendor_plan.py` (`VendorCopyPlanTests`).
+8. **`revive --draft-report`.** **Done 2026-09-27.** When a run ends UNATTENDED_DONE, `revive` calls
+   `revival-report-draft`, so the mod reaches the live test with REVIVAL_REPORT.md/REVIVAL_PLAN.md
+   drafted (written only with `--apply`, never over an existing report; any other status records
+   NOT_DRAFTED). The drafter now honours the mod's baseline too: accepted findings no longer block it
+   and are listed in the report's own "Accepted by baseline" section. Tests: `tests/test_revive.py`,
+   `tests/test_revival_report_draft.py` (`DraftHonoursBaselineTests`).
+9. **Missing-content packets carry the options.** **Done 2026-09-27.** `content-reference-unresolved`
+   and `content-reference-removed-in-vanilla` owner packets now hold, computed once per run and only
+   when such a packet exists: `dependency-substitutes`' strategy, reason, provider set and licence
+   notes; a `vendor-plan` summary for up to two providers that cover the ids (files, rows,
+   compiled-only classes, SUSPECT/MISSING) with the commands to reproduce and copy it; and
+   `strip-plan`'s edit count per id with vanilla slot substitutes (needs `--vanilla-core`). Providers
+   default to the workspace's queue folder and its `_rig/mods` (`--providers`, `--provider-index`).
+   A part that cannot be computed is a note, never a failed run. Tests: `tests/test_revive.py`.
 
 ## Post-1.0 research and gated automation
 

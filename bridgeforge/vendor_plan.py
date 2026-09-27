@@ -357,3 +357,119 @@ def render(plan: dict) -> str:
 
 def dumps(plan: dict) -> str:
     return json.dumps(plan, indent=2, ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
+# Copying a plan (`vendor-copy --plan`, ROADMAP P15 item 7)
+# ---------------------------------------------------------------------------
+
+_CSV_ROW = re.compile(r"^(?P<table>.+?\.csv) \[(?P<id>.+)\]$")
+
+
+def _sha256(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _append_rows(table: Path, header: list[str], rows: list[dict[str, str]]) -> list[str]:
+    """Append rows to a CSV under its own header (creating it with `header` if absent); returns the
+    source columns the target header has no room for."""
+    import csv
+    import io
+
+    existing_header = next(csv.reader(io.StringIO(table.read_text(encoding="utf-8-sig"))), []) if table.is_file() else []
+    columns = existing_header or header
+    table.parent.mkdir(parents=True, exist_ok=True)
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=columns, extrasaction="ignore", lineterminator="\n")
+    if not existing_header:
+        writer.writeheader()
+    for row in rows:
+        writer.writerow({column: row.get(column, "") for column in columns})
+    prefix = ""
+    if table.is_file():
+        raw = table.read_bytes()
+        prefix = "" if not raw or raw.endswith(b"\n") else "\n"  # never glue a row onto the last line
+    with table.open("a", encoding="utf-8", newline="") as handle:
+        handle.write(prefix + buffer.getvalue())
+    return sorted({column for row in rows for column in row} - set(columns) - {None})
+
+
+def copy_plan(plan: dict, to_mod: Path, *, apply: bool = False, allow_partial: bool = False, policy_path: Path | None = None) -> dict:
+    """Copy exactly what a `vendor-plan` lists into `to_mod`: files byte for byte, CSV rows appended.
+
+    The plan is re-checked against the provider as it is now, never trusted: every listed file and
+    row must still exist (else STALE), and the licence gate is re-read from release_policy.json
+    (the same gate `vendor-copy` and `release` use). A plan with MISSING or SUSPECT entries or
+    compiled-only classes is INCOMPLETE unless `allow_partial`; what was left out is reported. A
+    target file or row that differs is a CONFLICT and nothing is written; identical ones are
+    skipped. Dry run unless `apply`. Each copied file's SHA-256 is returned for PROVENANCE.md.
+    """
+    from .release import DEFAULT_POLICY_PATH, _licence_gate
+
+    base = {"schema_version": SCHEMA_VERSION, "mode": "VENDOR_COPY_PLAN", "requested": plan.get("requested"), "apply": apply}
+    if plan.get("mode") != "VENDOR_PLAN" or plan.get("schema_version") != SCHEMA_VERSION:
+        return {**base, "status": "REFUSED", "reason": "not a schema-1 vendor-plan (run `vendor-plan --json` and pass that file)"}
+    provider = Path(plan["provider"])
+    target = _mod_root(to_mod)
+    info = _load_lenient_json_file(provider / "mod_info.json") if provider.is_dir() else None
+    if not isinstance(info, dict):
+        return {**base, "status": "STALE", "reason": f"the plan's provider {provider} is no longer a mod folder"}
+    gate = _licence_gate(info.get("id"), info.get("name"), policy_path or DEFAULT_POLICY_PATH)
+    if gate["local_only"]:
+        return {**base, "status": "REFUSED", "reason": f"{info.get('name') or info.get('id')} is local-only per release_policy.json: {gate.get('reason')}"}
+    left_out = ([f"MISSING {item}" for item in plan.get("missing", [])]
+                + [f"SUSPECT {entry['path']}" for entry in plan.get("suspects", [])]
+                + [f"COMPILED ONLY {entry['path']}" for entry in plan.get("include", []) if entry["what"] == "jar-class"])
+    if left_out and not allow_partial:
+        return {**base, "status": "INCOMPLETE", "left_out": left_out,
+                "reason": "resolve every MISSING and SUSPECT entry and find source for compiled-only classes, or pass --allow-partial to copy the rest"}
+
+    files, rows_by_table, stale, conflicts, skipped = [], {}, [], [], []
+    for entry in plan.get("include", []):
+        if entry["what"] == "file":
+            source, destination = provider / entry["path"], target / entry["path"]
+            if not source.is_file():
+                stale.append(entry["path"])
+            elif destination.is_file():
+                (skipped if destination.read_bytes() == source.read_bytes() else conflicts).append(entry["path"])
+            else:
+                files.append(entry["path"])
+        elif entry["what"] == "csv-row":
+            match = _CSV_ROW.match(entry["path"])
+            if match is None:
+                stale.append(entry["path"])
+                continue
+            table, ident = match["table"], match["id"]
+            source_rows = [row for row in _read_csv_rows_lenient(provider / table) or [] if (row.get("id") or "").strip() == ident]
+            target_rows = [row for row in _read_csv_rows_lenient(target / table) or [] if (row.get("id") or "").strip() == ident]
+            if not source_rows:
+                stale.append(entry["path"])
+            elif target_rows:
+                same = all(any(all((t.get(k) or "") == (s.get(k) or "") for k in set(s) & set(t) if k) for t in target_rows) for s in source_rows)
+                (skipped if same else conflicts).append(entry["path"])
+            else:
+                rows_by_table.setdefault(table, []).extend(source_rows)
+    if stale:
+        return {**base, "status": "STALE", "stale": stale, "reason": "the provider changed since the plan was made; run vendor-plan again"}
+    if conflicts:
+        return {**base, "status": "CONFLICT", "conflicts": conflicts, "reason": f"{target} already has different content for these; nothing was written"}
+    result = {**base, "status": "APPLIED" if apply else "PLANNED", "provider": str(provider), "to_mod": str(target),
+              "files": files, "rows": {table: [row.get("id") for row in rows] for table, rows in rows_by_table.items()},
+              "skipped_identical": skipped, "left_out": left_out,
+              "provenance": [{"path": name, "sha256": _sha256(provider / name)} for name in files],
+              "note": "Record the provenance (source path, licence status, SHA-256 per file) in the target's PROVENANCE.md, as every RevenantLib fold does."}
+    if apply:
+        dropped = {}
+        for name in files:
+            (target / name).parent.mkdir(parents=True, exist_ok=True)
+            (target / name).write_bytes((provider / name).read_bytes())
+        for table, rows in rows_by_table.items():
+            header = list(next(iter(_read_csv_rows_lenient(provider / table) or [{}])).keys())
+            lost = _append_rows(target / table, header, rows)
+            if lost:
+                dropped[table] = lost
+        if dropped:
+            result["dropped_csv_columns"] = dropped
+    return result

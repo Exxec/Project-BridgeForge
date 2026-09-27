@@ -195,7 +195,24 @@ once for every mod in `In operation/AUTOMATION_POLICY.json`. What remains is in
 - **agent packets** hold a finding a program can't fix yet. Each is a complete prompt: evidence,
   the only files that may change, a numbered excerpt, rules, and the check that decides "done".
 - **owner packets** hold a decision (a dependency, a missing value, a fixer awaiting approval
-  with its diff).
+  with its diff). A packet for missing content also lists the three ways out, computed for you:
+  swap or revive a provider, copy just the piece (`vendor-plan`, then `vendor-copy --plan`), or
+  strip the references (with vanilla weapons that fit each emptied slot).
+
+When `revive` leaves nothing to do, `--draft-report` (with `--apply` and `--vanilla-core`) drafts
+the mod's REVIVAL_REPORT.md and REVIVAL_PLAN.md so it goes straight to the live test.
+
+To copy a piece of an abandoned mod into RevenantLib:
+
+```
+bridgeforge vendor-plan "In operation/OldMod" --id weapon:old_gun --json > plan.json
+bridgeforge vendor-copy --plan plan.json --to "In operation/RevenantLib"            # dry run
+bridgeforge vendor-copy --plan plan.json --to "In operation/RevenantLib" --apply
+```
+
+It refuses a stale plan, a conflict with what the target already has, or a plan with open
+SUSPECT/MISSING entries (`--allow-partial` to copy the rest), and prints each file's SHA-256 for
+PROVENANCE.md.
 
 ```
 bridgeforge escalation list "In operation/MyMod"

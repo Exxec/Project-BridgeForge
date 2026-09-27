@@ -133,6 +133,88 @@ def _try_fixers(working: Path, findings: list[dict], *, target: str, vanilla_cor
     return applied, pending
 
 
+CONTENT_FINDINGS = ("content-reference-unresolved", "content-reference-removed-in-vanilla")
+MAX_VENDOR_PROVIDERS = 2
+
+
+def content_options(working: Path, *, vanilla_core: Path | None, provider_roots: list[Path], index_path: Path | None = None) -> dict:
+    """The three ways out of missing content, computed once for a decision packet (P15 item 9):
+    swap or revive a provider (`dependency-substitutes`), copy just the piece (`vendor-plan`, then
+    `vendor-copy --plan`), or strip the references (`strip-plan`). Advisory only: each part that
+    cannot be computed says why instead of failing the run.
+    """
+    from .strip_plan import StripPlanError, strip_plan
+    from .substitutes import dependency_substitutes
+    from .vendor_plan import KINDS, VendorPlanError, vendor_plan
+
+    options: dict = {"notes": []}
+    try:
+        subs = dependency_substitutes(working, provider_roots, vanilla_core=vanilla_core, index_path=index_path)
+    except (OSError, ValueError) as exc:
+        options["notes"].append(f"dependency-substitutes failed: {exc}")
+        subs = None
+    if subs is not None:
+        options["substitutes"] = {key: subs[key] for key in ("strategy", "reason", "needed", "uncovered", "licence_notes")}
+        options["substitutes"]["providers"] = [{key: item.get(key) for key in ("mod_id", "name", "game_version", "targets_0.98a", "covers")} | {
+            "licence": (item.get("licence") or {}).get("decision")} for item in subs["provider_set"]]
+        paths = {row["mod_id"]: row["path"] for row in subs["candidates"]}
+        vendor = []
+        for item in subs["provider_set"][:MAX_VENDOR_PROVIDERS]:
+            ids = [key for key in item["covers"] if key.split(":", 1)[0] in KINDS]
+            path = paths.get(item["mod_id"])
+            if not ids or not path or not Path(path).is_dir():
+                continue
+            try:
+                plan = vendor_plan(Path(path), ids, vanilla_core=vanilla_core)
+            except (OSError, VendorPlanError) as exc:
+                options["notes"].append(f"vendor-plan for {item['mod_id']} failed: {exc}")
+                continue
+            id_args = " ".join(f"--id {key}" for key in ids)
+            vendor.append({"provider": item["mod_id"], "ids": ids, "licence": plan["licence"]["decision"],
+                           "files": sum(1 for e in plan["include"] if e["what"] == "file"),
+                           "csv_rows": sum(1 for e in plan["include"] if e["what"] == "csv-row"),
+                           "compiled_only": sum(1 for e in plan["include"] if e["what"] == "jar-class"),
+                           "suspects": [e["path"] for e in plan["suspects"]], "missing": plan["missing"],
+                           "commands": [f'bridgeforge vendor-plan "{path}" {id_args} --json > vendor-plan.json',
+                                        'bridgeforge vendor-copy --plan vendor-plan.json --to <target> [--apply]']})
+        options["vendor"] = vendor
+    if vanilla_core is None:
+        options["notes"].append("strip-plan needs --vanilla-core (it proposes vanilla substitutes for emptied slots)")
+    else:
+        try:
+            strip = strip_plan(working, vanilla_core)
+        except (OSError, StripPlanError) as exc:
+            options["notes"].append(f"strip-plan failed: {exc}")
+        else:
+            options["strip"] = {"edit_count_by_id": strip["edit_count_by_id"],
+                                "substitutes": {f"{edit['kind']}:{edit['id']}": edit["substitutes"]["candidates"][:3]
+                                                for edit in strip["edits"] if (edit.get("substitutes") or {}).get("candidates")}}
+    return options
+
+
+def _render_options(options: dict) -> list[str]:
+    lines = ["", "## Options (computed by BridgeForge)", ""]
+    subs = options.get("substitutes")
+    if subs:
+        lines.append(f"- **Recommended strategy: {subs['strategy']}.** {subs['reason']}")
+        for item in subs["providers"]:
+            lines.append(f"  - provider {item['name']} ({item['game_version'] or 'no version'}"
+                         + (", current" if item["targets_0.98a"] else f", licence {item['licence'] or 'n/a'}") + f"): {', '.join(item['covers'][:8])}")
+        lines += [f"  - {note}" for note in subs["licence_notes"]]
+    for plan in options.get("vendor", []):
+        lines.append(f"- **Vendor from {plan['provider']}** ({plan['licence']}): {plan['files']} file(s), {plan['csv_rows']} CSV row(s)"
+                     + (f", {plan['compiled_only']} compiled-only class(es)" if plan["compiled_only"] else "")
+                     + (f"; resolve {len(plan['suspects'])} SUSPECT and {len(plan['missing'])} MISSING first" if plan["suspects"] or plan["missing"] else ""))
+        lines += [f"  - `{command}`" for command in plan["commands"]]
+    strip = options.get("strip")
+    if strip:
+        lines.append("- **Strip instead:** " + ", ".join(f"{ident} ({count} edit(s))" for ident, count in sorted(strip["edit_count_by_id"].items())))
+        for ident, subs_for in sorted(strip["substitutes"].items()):
+            lines.append(f"  - {ident}: vanilla fits {', '.join(map(str, subs_for))}")
+    lines += [f"- note: {note}" for note in options.get("notes", [])]
+    return lines
+
+
 def _excerpt(path: Path, evidence: list[str]) -> str:
     try:
         lines = path.read_text(encoding="utf-8-sig", errors="replace").splitlines()
@@ -157,7 +239,8 @@ def _sha256(path: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
-def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dict], *, vanilla_core: Path | None, now=None) -> list[dict]:
+def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dict], *, vanilla_core: Path | None, now=None,
+                  options_for=None) -> list[dict]:
     working = workspace / "working"
     baseline = sorted({"|".join(finding_key(f)) for f in findings})
     packets = []
@@ -185,6 +268,7 @@ def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dic
             "hint": HINTS.get(finding_id), "fixer": fix,
             "verify": f'bridgeforge escalation verify "{workspace}" {packet_id(finding_id, file)}',
             "excerpts": {name: _excerpt(working / name, [e for f in group for e in f.get("evidence") or []]) for name in files} if kind == "agent" else {},
+            "options": options_for() if options_for is not None and finding_id in CONTENT_FINDINGS else None,
         }
         packets.append(packet)
     return packets
@@ -212,6 +296,8 @@ def render_packet(packet: dict) -> str:
                   "", "```diff", fix["diff"].rstrip(), "```"]
     elif fix and fix["state"] == "FIXER_REFUSED":
         lines += ["", "## Fixer refused", "", fix["reason"]]
+    if packet.get("options"):
+        lines += _render_options(packet["options"])
     if packet["kind"] == "agent":
         lines += ["", "## Files you may change", ""] + [f"- `{name}`" for name in packet["allowed_files"]]
         for name, excerpt in packet["excerpts"].items():
@@ -245,7 +331,8 @@ def append_ledger(workspace: Path, entry: dict, now=None) -> None:
 
 
 def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path | None = None, policy_path: Path | None = None,
-           approve: list[str] | None = None, apply: bool = False, max_rounds: int = 5, write: bool = True, now=None) -> dict:
+           approve: list[str] | None = None, apply: bool = False, max_rounds: int = 5, write: bool = True,
+           draft_report: bool = False, providers: list[Path] | None = None, provider_index: Path | None = None, now=None) -> dict:
     workspace = Path(workspace).expanduser().resolve()
     working = workspace / "working"
     if not (working / "mod_info.json").is_file():
@@ -267,7 +354,15 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
             break
         findings = _scan(working, vanilla_core)
     remaining_tiers = [tier_for(f["id"]) for f in findings]
-    packets = build_packets(workspace, findings, pending, vanilla_core=vanilla_core, now=now)
+    roots = providers if providers else [workspace.parent, workspace.parent / "_rig" / "mods"]
+    cache: dict = {}
+
+    def options_for() -> dict:  # once per run, and only if a missing-content packet needs it
+        if "value" not in cache:
+            cache["value"] = content_options(working, vanilla_core=vanilla_core, provider_roots=roots, index_path=provider_index)
+        return cache["value"]
+
+    packets = build_packets(workspace, findings, pending, vanilla_core=vanilla_core, now=now, options_for=options_for)
     hardest = bucket(remaining_tiers)
     if hardest in ("none",):
         status = "UNATTENDED_DONE"
@@ -283,6 +378,8 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
         "packets": [{"id": p["id"], "kind": p["kind"], "tier": p["tier"], "finding": p["finding"], "file": p["file"]} for p in packets],
         "next": "Live test (the probe) after UNATTENDED_DONE; `bridgeforge escalation run` for agent packets; owner packets need a decision.",
     }
+    if draft_report:
+        result["report_draft"] = _draft_report(working, vanilla_core, status, write=write and apply)
     if write:
         from .report import write_artifacts
         from .scanner import scan_mod
@@ -300,6 +397,22 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
     return result
 
 
+def _draft_report(working: Path, vanilla_core: Path | None, status: str, *, write: bool) -> dict:
+    """`revival-report-draft` for a mod revive finished with nothing left to do (P15 item 8).
+
+    Only after UNATTENDED_DONE: any other status still has work in it. The drafter re-checks for
+    itself (MANUAL findings, a compile PASS against --vanilla-core) and says BLOCKED rather than
+    fabricate a pass. It writes working/reports/REVIVAL_REPORT.md and REVIVAL_PLAN.md only with
+    --apply, and never over an existing report.
+    """
+    from .revival_report_draft import draft_revival_report, write_revival_report_draft
+
+    if status != "UNATTENDED_DONE":
+        return {"status": "NOT_DRAFTED", "reason": f"revive ended {status}; a report is drafted only when nothing is left to do"}
+    draft = write_revival_report_draft(working, vanilla_core) if write else draft_revival_report(working, vanilla_core)
+    return {key: value for key, value in draft.items() if key not in ("report_text", "plan_text")}
+
+
 def render(result: dict) -> str:
     lines = [f"# Revive: {Path(result['workspace']).name}", "", f"Status: **{result['status']}** (hardest remaining tier: {result['hardest_tier']})",
              f"Findings: {result['findings_before']} -> {result['findings_after']}; compile check: {'yes' if result['compile_checked'] else 'no (pass --vanilla-core)'}; "
@@ -312,5 +425,10 @@ def render(result: dict) -> str:
         lines += ["", f"## For an AI agent ({len(agent)})", ""] + [f"- {p['id']} ({p['tier']}): `{p['file']}`" for p in agent]
     if owner:
         lines += ["", f"## For the owner ({len(owner)})", ""] + [f"- {p['id']} ({p['tier']})" for p in owner]
+    draft = result.get("report_draft")
+    if draft:
+        lines += ["", f"Report draft: {draft['status']}"]
+        lines += [f"- {item}" for item in draft.get("blocking", [])]
+        lines += [f"- {draft[key]}" for key in ("reason", "report_path", "plan_path") if draft.get(key)]
     lines += ["", result["next"]]
     return "\n".join(lines) + "\n"
