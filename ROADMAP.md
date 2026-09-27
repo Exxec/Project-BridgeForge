@@ -1942,6 +1942,13 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     0xB0, DME/DME-dev, Epta-Consortium, Faction-Relationships-Uniquified, TDB-Maelstrom, MAGNETAR 0x99,
     Stinger-Shipyards, Thule-Legacy, part of ICE). Tests: `tests/test_fixers.py`
     (`DataFileNotUtf8FixerTests`).
+16. **`compile-check --api-diff` lists only overloads the failing call could mean (2026-09-27).** On
+    Batavia's `original/` against the 0.8.1a catalogue, every `addMessage` call printed all four
+    removed `SectorAPI.addMessage` overloads. **Done 2026-09-27.** `api_diff._same_arity` reads the
+    argument list javac prints (`symbol: method addMessage(String)`) and keeps the removed overloads
+    with that parameter count (generics nest), falling back to every lead when none match. Batavia now
+    prints one line per call. Tests: `tests/test_api_diff.py`
+    (`test_only_overloads_with_the_calls_argument_count_are_listed`).
 
 ## Post-1.0 research and gated automation
 
