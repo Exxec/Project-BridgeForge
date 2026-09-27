@@ -41,11 +41,6 @@ vendor, strip) matches what you would decide by hand. Fixers you want applied ev
 
 ## 2. Re-run with the kept commands (P15 item 5)
 
-### R1. Licence decisions for the revival order (P14 items 2-3)
-`In operation\DEPENDENCY_GRAPH.md` rebuilt 2026-09-27 (P15 item 13). Every ranked provider shows
-`licence UNRECORDED`; decide each before reviving it:
-`python -m bridgeforge release-policy set <mod id> --local-only|--releasable --reason "..."`.
-
 ### R3. Rebuild the Downloads index (P14 item 18)
 ```powershell
 python -m pip install -e ".[archives]"          # once: lets the index read .7z archives

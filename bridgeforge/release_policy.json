@@ -40,6 +40,106 @@
     "revenantlib": {
       "local_only": true,
       "reason": "Holds folded Xenoargh content with no licence on record (see the Xenoargh entries). Owner decision 2026-09-14: private until the owner confirms the original authors are fully abandoned and can simply be credited under Starsector's forum policy. A separate GitHub repo for it would be private until then."
+    },
+    "ungp": {
+      "local_only": true,
+      "reason": "shipped license.txt: 'DO NOT copy entirely. All rights reserved.' (read 2026-09-27); owner: local use only",
+      "recorded_on": "2026-09-27"
+    },
+    "prv": {
+      "local_only": true,
+      "reason": "shipped license.txt says all rights reserved (read 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "prvExtra": {
+      "local_only": true,
+      "reason": "shipped license.txt says all rights reserved (read 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "Templars": {
+      "local_only": true,
+      "reason": "shipped license.txt: 'All Rights Reserved, Copyright 2016-2020 Magehand LLC.' (read 2026-09-27); owner: local use only",
+      "recorded_on": "2026-09-27"
+    },
+    "ApproLight": {
+      "local_only": true,
+      "reason": "shipped license.txt says all rights reserved (read 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "pearson_exotronics": {
+      "local_only": true,
+      "reason": "shipped license.txt: CC BY-NC-ND 4.0; NoDerivatives rules out publishing a modified copy (read 2026-09-27); owner: local use only",
+      "recorded_on": "2026-09-27"
+    },
+    "vayrasector": {
+      "local_only": true,
+      "reason": "shipped license.txt holds no licence terms, so all rights reserved by default (read 2026-09-27); owner: local use only",
+      "recorded_on": "2026-09-27"
+    },
+    "SCY": {
+      "local_only": true,
+      "reason": "no licence file shipped, so all rights reserved by default (checked 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "yunrucore": {
+      "local_only": true,
+      "reason": "no licence file shipped, so all rights reserved by default (checked 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "ORA": {
+      "local_only": true,
+      "reason": "no licence file shipped, so all rights reserved by default (checked 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "ARSWP": {
+      "local_only": true,
+      "reason": "no licence file shipped, so all rights reserved by default (checked 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "Neutrino": {
+      "local_only": true,
+      "reason": "no licence file shipped, so all rights reserved by default (checked 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "pbc": {
+      "local_only": true,
+      "reason": "no licence file shipped, so all rights reserved by default (checked 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "athena_dreadnaughty_mk2": {
+      "local_only": true,
+      "reason": "no licence file shipped, so all rights reserved by default (checked 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "mag_protect": {
+      "local_only": true,
+      "reason": "no licence file shipped, so all rights reserved by default (checked 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "THI": {
+      "local_only": true,
+      "reason": "no licence file shipped, so all rights reserved by default (checked 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "Sylphon_RnD": {
+      "local_only": true,
+      "reason": "no licence file shipped, so all rights reserved by default (checked 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "TraverserDesignBureau": {
+      "local_only": true,
+      "reason": "no licence file shipped, so all rights reserved by default (checked 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "istl_dam": {
+      "local_only": true,
+      "reason": "no licence file shipped, so all rights reserved by default (checked 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
+    },
+    "dronelib": {
+      "local_only": true,
+      "reason": "no licence file shipped, so all rights reserved by default (checked 2026-09-27); owner: revive locally, do not publish without the author's permission",
+      "recorded_on": "2026-09-27"
     }
   },
   "default": {
