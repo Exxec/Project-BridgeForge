@@ -16,10 +16,10 @@ def _workspace(root: Path) -> Path:
     ws = root / "In operation" / "Radar"
     original = ws / "original" / "Radar 3.0"
     (original / "jars").mkdir(parents=True)
-    (original / "mod_info.json").write_text('{"id": "lw_radar", "name": "Radar", "author": "LazyWizard", "version": "3.0", "gameVersion": "0.9a"}', encoding="utf-8")
+    (original / "mod_info.json").write_text('{"id": "bf_fixture_radar", "name": "Radar", "author": "LazyWizard", "version": "3.0", "gameVersion": "0.9a"}', encoding="utf-8")
     (original / "jars" / "radar.jar").write_bytes(b"PK\x05\x06" + b"\x00" * 18)
     shutil.copytree(original, ws / "working")
-    (ws / "working" / "mod_info.json").write_text('{"id": "lw_radar", "name": "Radar", "author": "LazyWizard", "version": "3.0", "gameVersion": "0.98a-RC8", "jars": ["jars/radar.jar"]}', encoding="utf-8")
+    (ws / "working" / "mod_info.json").write_text('{"id": "bf_fixture_radar", "name": "Radar", "author": "LazyWizard", "version": "3.0", "gameVersion": "0.98a-RC8", "jars": ["jars/radar.jar"]}', encoding="utf-8")
     (ws / "working" / "reports").mkdir()
     (ws / "working" / "reports" / "REVIVAL_REPORT.md").write_text("# Report\n\nREADY_FOR_LIVE_TEST\n", encoding="utf-8")
     (ws / "working" / "mod_info.json.pre-bf-fix-x.bak").write_text("backup", encoding="utf-8")
@@ -27,6 +27,13 @@ def _workspace(root: Path) -> Path:
 
 
 class ArchiveTests(unittest.TestCase):
+    def test_object_versions_are_written_as_dotted_text(self) -> None:
+        from bridgeforge.archive import _version_text
+
+        self.assertEqual(_version_text({"major": "0", "minor": "2", "patch": "4"}), "0.2.4")
+        self.assertEqual(_version_text("1.0.e"), "1.0.e")
+        self.assertEqual(_version_text(None), "unversioned")
+
     def test_archives_the_layout_and_writes_an_evidence_based_note(self) -> None:
         with resolved_temp_dir() as root:
             ws = _workspace(root)
@@ -34,7 +41,7 @@ class ArchiveTests(unittest.TestCase):
             shutil.copy2(REPO_POLICY, policy)
             with self.assertRaises(ArchiveError):
                 archive_mod(ws, root / "Done", policy_path=policy)  # no licence decision yet
-            record_policy_decision("lw_radar", local_only=True, reason="author unreachable", policy_path=policy)
+            record_policy_decision("bf_fixture_radar", local_only=True, reason="author unreachable", policy_path=policy)
             result = archive_mod(ws, root / "Done", policy_path=policy, today="2026-09-27")
             target = root / "Done" / "Radar"
             note = (target / "ARCHIVE_NOTE.md").read_text(encoding="utf-8")

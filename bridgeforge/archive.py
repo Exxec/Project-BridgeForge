@@ -31,6 +31,14 @@ class ArchiveError(ValueError):
     """Raised for a missing workspace, no licence decision, or an archive that already exists."""
 
 
+def _version_text(version: object) -> str:
+    """mod_info `version` as text: a string, or the {"major","minor","patch"} object some mods use (Anex Weapons)."""
+    if isinstance(version, dict):
+        parts = [str(version.get(key)) for key in ("major", "minor", "patch") if version.get(key) not in (None, "")]
+        return ".".join(parts) or "unversioned"
+    return str(version or "unversioned")
+
+
 def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -55,7 +63,7 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
     if not (working / "mod_info.json").is_file():
         raise ArchiveError(f"{workspace} has no working/mod_info.json.")
     info = _load_lenient_json_file(working / "mod_info.json") or {}
-    mod_id, name, version = info.get("id"), str(info.get("name") or workspace.name), str(info.get("version") or "unversioned")
+    mod_id, name, version = info.get("id"), str(info.get("name") or workspace.name), _version_text(info.get("version"))
     licence = revival_licence(mod_id, name, policy_path)
     if licence.get("decision") not in ("LOCAL_ONLY", "RELEASABLE"):
         raise ArchiveError(f"no licence decision for {mod_id}: record one first (bridgeforge release-policy set {mod_id} --local-only|--releasable --reason ...).")
