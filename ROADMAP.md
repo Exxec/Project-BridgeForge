@@ -1967,6 +1967,25 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     - R4's vendor conflict is not a decision: RevenantLib vendored `shields_formshield` from Rebal on
       purpose (`reports/PROVENANCE.md`), in RC8's column layout with the script repackaged to
       `xenoargh.shared.hullmods.FormShield`; name, costs, text and sprite are identical.
+18. **First live `content-ids` runs, and Fatal dialogs now reach triage (2026-09-27, P14 item 49).**
+    - **CC-1-20260927** (ClearCommands + probe 0.2.2): FATAL=0, MOD-ERROR=0, save written; the probe's
+      campaign checks ran and logged `content-ids|OK|all-content|checked=0 failed=0`. ClearCommands has
+      no content, so this proves the probe loads but not the check: a content mod's run is still needed.
+    - **PRB-CID-FAIL-20260927** (SEEKER copy, `ART_dimention_manipulator.variant` slot `B_weapon1` =
+      `ART_dimention_leftGun_BFTYPO`): RC8 itself stopped the game with the dialog "Fatal: Weapon spec
+      [ART_dimention_leftGun_BFTYPO] not found!" while generating the new sector. The probe never armed
+      (no `BF-PROBE` line; CC-1 logs `campaign-armed` at the same stage). So a variant naming a missing
+      weapon is a hard new-game fatal on RC8 that the probe can never report; `content-ids` is for ids
+      the game tolerates. The expected-FAIL test must use a softer breakage (to choose from what RC8
+      skips with a WARN, e.g. an unknown hull mod in a variant; verify in a run before relying on it).
+    - **Triage said FATAL=0 for that run**, because a Fatal dialog never reaches the redirected log;
+      only the window watcher's screenshot showed it. **Done 2026-09-27.** `bf-test.ps1`'s watcher reads
+      each game dialog's text (child controls via `EnumChildWindows`; helper type renamed `BfWin2` so an
+      open session does not reuse the old one) into `<TESTID>.windows.txt` as `dialog: '<title>' text:
+      '<text>'`, and `log-triage` reads that file beside `<TESTID>.stdout.log`, counting a dialog that
+      matches a FATAL pattern as FATAL with its source line. The watcher compiles (`bf-test.ps1
+      selftest`); reading a real dialog is confirmed on the next rig run. Tests:
+      `tests/test_log_triage.py` (`DialogFatalTests`).
 
 ## Post-1.0 research and gated automation
 

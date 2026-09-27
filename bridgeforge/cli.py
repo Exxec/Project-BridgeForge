@@ -1904,7 +1904,8 @@ def main(argv: list[str] | None = None) -> int:
             milestones = result["milestones"]
             print(f"Main menu reached: {milestones['main_menu_reached']}; campaign loads: {len(milestones['campaign_loads'])}; finished-saving events: {milestones['finished_saving_count']}; mission variant preloads (startup, not play): {len(milestones['mission_variant_preloads'])}")
             for event in result["fatal"]:
-                print(f"FATAL line {event['line']} [{event['matched_rule']}]: {event['message']}")
+                where = f"line {event['line']}" if event.get("line") is not None else event.get("source", "dialog")
+                print(f"FATAL {where} [{event['matched_rule']}]: {event['message']}")
                 if event.get("top_mod_frame"):
                     print(f"  top mod frame: {event['top_mod_frame']}")
             for event in result["mod_errors"]:

@@ -62,28 +62,17 @@ deliberate copy of `shields_formshield` (see its PROVENANCE.md), so nothing is l
 
 ## 3. Needs the game
 
-### G1. Rebuild the probe jar, then one live run of `content-ids` (P14 item 49)
-Jar rebuilt and committed 2026-09-27 (0.2.2); only the live run is left. Prepared 2026-09-27: the rig
-holds the 0.2.2 probe, ClearCommands (UNATTENDED_DONE, first probe run), and
-`SEEKER-bf-broken-contentid` (mod id `SEEKER_bfbroken`, `ART_dimention_manipulator.variant` slot
-`B_weapon1` misspelled as `ART_dimention_leftGun_BFTYPO`). Presets: `toolsf-test.ps1 probe clearcommands`
-(known-good run) and `probe seeker-broken-contentid` (expected FAIL); never enable SEEKER and the broken copy together.
-```powershell
-python -m bridgeforge build-probe-mod --jdk "In operation\_rig\jdk-25.0.4.1+1" --core $core --install-release
-python -m bridgeforge.test_guard     # tests/test_probe_mod_build.py runs only on a machine with the rig
-python -m bridgeforge probe-config "<mod_dir>" --runtime $rig --install
-```
-Then New Game, wait a day, and run `log-triage`. Done when the log shows
-`BF-PROBE|0.2.2|content-ids|OK|all-content|checked=N failed=0 ...` for a known-good mod, and a
-deliberately broken variant id (a copy of a mod with one weapon id misspelled in a `.variant`)
-shows a `content-ids|FAIL|variant:<id>|...` line naming the game's error. Record both in item 49,
-then commit the rebuilt jar and release copy.
-- javap confirmed 2026-09-27 (`SettingsAPI.getHullSpec/getWeaponSpec/getHullModSpec`,
-  `FleetMemberAPI.getHullSpec()/getHullId()`), so these can be built from the cloud: direct
-  hull/weapon/hull-mod lookups, and a check that a built fleet member's hull is the variant's own
-  hull rather than a substitute (the PRB-FIGHTER-01 Nebula). Candidates to look for:
-  `javap -cp starfarer.api.jar com.fs.starfarer.api.SettingsAPI | findstr /i "HullSpec WeaponSpec HullModSpec"`
-  and `javap -cp starfarer.api.jar com.fs.starfarer.api.fleet.FleetMemberAPI | findstr /i Hull`.
+### G1. Live `content-ids` checks (P14 item 49, P15 item 18)
+First runs 2026-09-27: the probe loads (CC-1, but ClearCommands has no content, `checked=0`), and a
+variant naming a missing weapon is a hard RC8 new-game fatal the probe never sees. Still to do:
+1. Known-good with content: `.	oolsf-test.ps1 probe seeker`, `launch CID-OK-<date>`, New Game, one day,
+   quit, `triage`. Done when `content-ids|OK|all-content|checked=N failed=0` with N > 0.
+2. Expected FAIL with a breakage RC8 tolerates: edit the rig's `SEEKER-bf-broken-contentid` copy to restore
+   `ART_dimention_leftGun` and instead add an unknown hull mod id to one variant's `hullMods`; run it the same
+   way. Done when a `content-ids|FAIL|variant:...` line names it (if RC8 fatals on that too, record it and
+   pick another). Also confirm `<TESTID>.windows.txt` now carries `dialog:` lines for any error dialog.
+3. Then build the direct hull/weapon/hull-mod lookups and the fleet-member hull check (javap-confirmed
+   2026-09-27: `SettingsAPI.getHullSpec/getWeaponSpec/getHullModSpec`, `FleetMemberAPI.getHullSpec()/getHullId()`).
 
 ### G2. Removed-content catalogue follow-up (P14 items 47, 8)
 Catalogues for 0.8.1a, 0.9a and 0.95.1a to RC8 are in `In operation\_reference\` (2026-09-27), and
