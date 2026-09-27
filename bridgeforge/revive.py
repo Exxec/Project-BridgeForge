@@ -77,9 +77,14 @@ def load_policy(path: Path | None) -> dict:
 
 
 def _scan(working: Path, vanilla_core: Path | None) -> list[dict]:
+    """Scan findings minus the ones the mod's own baseline accepts (working/reports/baseline*.json):
+    an accepted finding is never fixed, packeted or counted against the mod."""
+    from .baseline import finding_dict_baseline_key, mod_baseline_keys
     from .scanner import scan_mod
 
-    return [asdict(f) for f in scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None).findings]
+    accepted = mod_baseline_keys(working)
+    findings = [asdict(f) for f in scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None).findings]
+    return [f for f in findings if finding_dict_baseline_key(f) not in accepted]
 
 
 def finding_key(finding: dict) -> tuple[str, str]:

@@ -24,3 +24,35 @@ def split_by_baseline(findings: list[Finding], baseline_keys: set[str]) -> tuple
     new_findings = [finding for finding in findings if finding_baseline_key(finding) not in baseline_keys]
     resolved_count = len(baseline_keys - current_keys)
     return new_findings, resolved_count
+
+
+def mod_baseline_path(working: Path) -> Path | None:
+    """The mod's own accepted-findings baseline (`working/reports/baseline*.json`), if it keeps one.
+
+    A mod whose findings are reviewed and deliberately accepted (Xenoargh-FX-Example's preset
+    overrides are intentional custom content, owner call 2026-09-22) otherwise keeps reporting them
+    forever. `scan --write-baseline` produces the file; `scan --baseline`, `corpus-recheck`, `revive`
+    and `finding-stats` honour it.
+    """
+    reports = Path(working) / "reports"
+    if not reports.is_dir():
+        return None
+    candidates = sorted(reports.glob("baseline*.json"))
+    return candidates[-1] if candidates else None
+
+
+def mod_baseline_keys(working: Path) -> set[str]:
+    """Accepted finding keys for a working copy; empty when it keeps no (readable) baseline."""
+    path = mod_baseline_path(working)
+    if path is None:
+        return set()
+    try:
+        return load_baseline_keys(path)
+    except (OSError, ValueError):
+        return set()
+
+
+def finding_dict_baseline_key(finding: dict) -> str:
+    """`finding_baseline_key` for a finding already turned into a dict (scan JSON, asdict)."""
+    evidence = finding.get("evidence") or []
+    return f"{finding.get('id')}|{finding.get('file') or ''}|{evidence[0] if evidence else ''}"

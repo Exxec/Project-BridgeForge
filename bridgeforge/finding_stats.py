@@ -10,6 +10,8 @@ It answers three questions with counts, not guesses:
 - Which single finding id, if automated, would make the most mods fully automatic (`unlocks`)?
 - Which ids has AI already fixed and BridgeForge verified several times (from each workspace's
   `reports/escalations/ledger.jsonl`)? Those are the next fixers to write, so the AI stops seeing them.
+Findings a mod's own baseline accepts (`working/reports/baseline*.json`, from `scan
+--write-baseline`) are left out and counted as `accepted_by_baseline`, as `corpus-recheck` does.
 Read-only.
 """
 from __future__ import annotations
@@ -19,6 +21,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from .automation import ACTIONABLE, TIER_ORDER, bucket, tier_descriptions, tier_for
+from .baseline import finding_dict_baseline_key, mod_baseline_keys
 
 SCHEMA_VERSION = 1
 PROMOTE_AFTER = 3  # verified AI fixes of one finding id, across at least two mods
@@ -92,6 +95,9 @@ def finding_stats(roots: list[Path], *, scan: bool = False, vanilla_core: Path |
         if findings is None:
             unscanned.append({"workspace": workspace.name, "reason": source})
             continue
+        accepted_keys = mod_baseline_keys(workspace / "working")
+        accepted = sum(1 for f in findings if finding_dict_baseline_key(f) in accepted_keys)
+        findings = [f for f in findings if finding_dict_baseline_key(f) not in accepted_keys]
         ids = Counter(f.get("id", "?") for f in findings)
         for finding_id, count in ids.items():
             occurrences[finding_id] += count
@@ -100,7 +106,7 @@ def finding_stats(roots: list[Path], *, scan: bool = False, vanilla_core: Path |
         blocking = sorted(i for i, t in tiers.items() if t not in ("none", "auto"))
         mods.append({"workspace": workspace.name, "source": source, "bucket": bucket(list(tiers.values())),
                      "projected_bucket": bucket(["auto" if t == "mechanical" else t for t in tiers.values()]),
-                     "blocking": blocking, "tiers": dict(Counter(tiers[i] for i in ids.elements()))})
+                     "blocking": blocking, "accepted_by_baseline": accepted, "tiers": dict(Counter(tiers[i] for i in ids.elements()))})
     unlocks = Counter(mod["blocking"][0] for mod in mods if len(mod["blocking"]) == 1)
     by_id = [{"id": finding_id, "tier": tier_for(finding_id), "occurrences": occurrences[finding_id],
               "mods": len(mods_with[finding_id]), "unlocks": unlocks.get(finding_id, 0)}

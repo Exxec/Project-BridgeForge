@@ -102,6 +102,19 @@ class ReviveTests(unittest.TestCase):
         for expected in ("## Files you may change", f"- `{SETTINGS}`", '    2    "colors": [255,,0],', "## Rules", "$BF_NOTE", "escalation verify", "## Done means"):
             self.assertIn(expected, text)
 
+    def test_findings_the_mod_baseline_accepts_are_not_packeted(self):
+        # scan --write-baseline's file (working/reports/baseline*.json), as corpus-recheck honours it.
+        with resolved_temp_dir() as root:
+            workspace = _workspace(root)
+            first = revive(workspace)
+            accepted = [f"{p['finding']}|{p['file']}|" for p in first["packets"] if p["id"] == AGENT_PACKET]
+            (workspace / "working" / "reports").mkdir()
+            (workspace / "working" / "reports" / "baseline.json").write_text(json.dumps({"findings": accepted}), encoding="utf-8")
+            second = revive(workspace)
+        self.assertEqual(accepted, ["json-empty-array-element|data/config/settings.json|"])
+        self.assertIn(AGENT_PACKET, [p["id"] for p in first["packets"]])
+        self.assertNotIn(AGENT_PACKET, [p["id"] for p in second["packets"]])
+
     def test_refuses_a_non_workspace(self):
         with resolved_temp_dir() as root:
             with self.assertRaises(ReviveError):

@@ -1570,50 +1570,6 @@ def _iter_class_files_in(target: Path):
             continue
 
 
-def verify_shadow(script: Path, against: Path, root: Path | None = None) -> dict:
-    """Does `against` (a jar, or a directory of jars) actually supply a compiled class for `script`?
-
-    The direct, callable answer to the question ROADMAP P14 item 25 found being reimplemented as a
-    `Path.is_file()` path-existence guess (E12: 50 of Rebal's loose `.java` files were dropped as
-    "jar-shadowed" on exactly that reasoning; a real jar search found zero of them actually were).
-    Reuses the same real class-file parsing `loose-script-shadowed-by-jar` and
-    `loose_script_jar_shadowed_class` use - never a second, path-only implementation.
-
-    `script` may be absolute or relative to `root` (default: cwd). The fully-qualified class name is
-    derived from `script`'s path relative to `root` (e.g. `data/hullmods/Foo.java` under a mod root,
-    or `data/hullmods/Foo.java` under a vanilla `starsector-core`, both yield `data.hullmods.Foo`).
-    """
-    if root is None:
-        root = Path.cwd()
-    root = root.resolve()
-    script = script if script.is_absolute() else (root / script)
-    script = script.resolve()
-    try:
-        relative = script.relative_to(root)
-    except ValueError:
-        return {
-            "schema_version": 1,
-            "mode": "verify-shadow",
-            "status": "ERROR",
-            "error": f"{script} is not under root {root}",
-        }
-    class_name = ".".join(relative.with_suffix("").parts)
-    shadowing_jars: set[str] = set()
-    for jar, _member, data in _iter_class_files_in(against):
-        info = _parse_class_file(data)
-        if info is not None and info.this_class and info.this_class.replace("/", ".") == class_name:
-            shadowing_jars.add(str(jar))
-    return {
-        "schema_version": 1,
-        "mode": "verify-shadow",
-        "status": "SHADOWED" if shadowing_jars else "NOT_SHADOWED",
-        "script": str(relative).replace("\\", "/"),
-        "class_name": class_name,
-        "against": str(against),
-        "shadowing_jars": sorted(shadowing_jars),
-    }
-
-
 def _dependency_jar_class_names(root: Path, provider_roots: list[Path] | None = None) -> dict[str, str]:
     """{fully-qualified class name: provider mod name} for every class in a declared dependency's
     own jars (ROADMAP P14 item 12). Only declared dependencies are checked - an undeclared mod

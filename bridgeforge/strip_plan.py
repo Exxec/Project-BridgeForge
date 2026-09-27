@@ -4,16 +4,12 @@
 reason - nothing generates the actual edit list (which `.variant`/`.ship`/`.skin`/`.faction` line
 loses which id), or proposes a real vanilla substitute. This module does both:
 
-- `strip_plan`: for every "hard" id (`substitutes.hard_to_cover_ids` - genuinely uncovered, or
-  covered only by a provider too large to revive), the exact file+field reference list, plus - for
-  weapons only - real vanilla substitute candidates "of the same slot type and size" (reusing the
-  scanner's own slot-fit logic, `_weapon_slot_type_compatible`/`_override_fits`/
-  `WEAPON_SLOT_SIZE_RANK` - never a second implementation, never an invented match). Hullmods/wings
-  have no comparable "slot type and size" concept to substitute on, so those entries propose
-  removal only, honestly.
-- `write_expected_changes`: turns a strip plan into real `expect` PROPOSED entries
-  (`behavior_discovery.add_expected_change`), so approval goes through the existing D4/D5 mechanism
-  rather than a new one.
+- `strip_plan`: for every content id the mod uses and nothing defines (optionally one `--id kind:id`),
+  every file and field it sits in (variant slots, hull-mod and wing lists, built-in weapons, faction
+  known-lists), with vanilla weapons that fit each emptied slot, using the scanner's own slot-fit
+  logic. Hullmods and wings have no slot to substitute into, so those entries propose removal only.
+- `propose_expected_changes`: adds a PROPOSED static-layer expected change per file the plan
+  deletes, so approval goes through the existing `expect approve` mechanism rather than a new one.
 - `vendor_copy`: "where the licence allows, offer vendoring as an alternative: copy the one missing
   piece... instead of reviving a heavy provider" (the item's own example: Rebal's
   `shields_formshield` into Explorer Society). Scoped to hullmods only - a CSV row plus its
@@ -23,7 +19,7 @@ loses which id), or proposes a real vanilla substitute. This module does both:
   same one `release`/item 7 use) blocks vendoring from a local-only source. `--apply` is required
   to actually write; the default is a dry-run plan, matching `fold`'s own convention.
 
-Read-only except `write_expected_changes` (only ever adds PROPOSED entries to an expected-changes
+Read-only except `propose_expected_changes` (only ever adds PROPOSED entries to an expected-changes
 file) and `vendor_copy --apply` (only ever adds new files to the target mod, never touches the
 source). Applying a strip (removing an id from a file) is a separate, deliberate step a person
 takes after reviewing the plan, not this module's job.
@@ -41,219 +37,20 @@ from .scanner import (
     WEAPON_SLOT_SIZE_RANK,
     WEAPON_SLOT_SKIP_TYPES,
     _load_lenient_json_file,
-    _override_fits,
     _read_csv_rows_lenient,
     _relative,
     _resolve_hull_id,
-    _resolve_variant_hull_and_slots,
     _skin_index,
-    _skin_weapon_slot_changes,
     _ship_file_index,
     _weapon_slot_type_compatible,
     _wpn_type_size_index,
     scan_mod,
-)
-from .java_toolchain import declared_dependencies
-from .substitutes import (
-    cover,
-    hard_to_cover_ids,
-    provider_index,
-    rank,
-    required_from_scan,
 )
 
 SCHEMA_VERSION = 1
 
 _HULLMOD_FIELDS = ("hullMods", "permaMods", "sMods", "builtInMods", "removeBuiltInMods")
 _WING_FIELDS = ("wings", "builtInWings")
-
-
-def find_content_references(root: Path, kind: str, ident: str) -> list[dict]:
-    """Every `.variant`/`.ship`/`.skin`/`.faction` file+field that references `ident` as `kind`.
-
-    Reads every candidate file itself rather than trusting a scanner finding's evidence (which is
-    id-only, capped, and never names the field) - this is the actual edit list item 4 asks for.
-    """
-    refs: list[dict] = []
-    data = root / "data"
-    if not data.is_dir():
-        return refs
-    for path in sorted(data.rglob("*")):
-        suffix = path.suffix.lower()
-        if suffix not in (".variant", ".ship", ".skin", ".faction"):
-            continue
-        spec = _load_lenient_json_file(path)
-        if not isinstance(spec, dict):
-            continue
-        relative = _relative(root, path)
-        if kind == "hullmod":
-            for field in _HULLMOD_FIELDS:
-                if ident in (spec.get(field) or []):
-                    refs.append({"file": relative, "field": field})
-            known = spec.get("knownHullMods")
-            if suffix == ".faction" and isinstance(known, dict) and ident in (known.get("hullMods") or []):
-                refs.append({"file": relative, "field": "knownHullMods.hullMods"})
-        elif kind == "wing":
-            for field in _WING_FIELDS:
-                if ident in (spec.get(field) or []):
-                    refs.append({"file": relative, "field": field})
-            known = spec.get("knownFighters")
-            if suffix == ".faction" and isinstance(known, dict) and ident in (known.get("fighters") or []):
-                refs.append({"file": relative, "field": "knownFighters.fighters"})
-        elif kind == "weapon":
-            for group in spec.get("weaponGroups") or []:
-                if isinstance(group, dict) and isinstance(group.get("weapons"), dict):
-                    for slot_id, weapon_id in group["weapons"].items():
-                        if weapon_id == ident:
-                            refs.append({"file": relative, "field": f"weaponGroups.weapons.{slot_id}", "slot_id": slot_id, "hull_id": spec.get("hullId") if suffix == ".variant" else None})
-            built_in = spec.get("builtInWeapons")
-            if isinstance(built_in, dict):
-                for slot_id, weapon_id in built_in.items():
-                    if weapon_id == ident:
-                        refs.append({"file": relative, "field": f"builtInWeapons.{slot_id}", "slot_id": slot_id, "hull_id": spec.get("hullId") if suffix == ".ship" else None})
-            known = spec.get("knownWeapons")
-            if suffix == ".faction" and isinstance(known, dict) and ident in (known.get("weapons") or []):
-                refs.append({"file": relative, "field": "knownWeapons.weapons"})
-        elif kind == "hull":
-            if suffix == ".variant" and spec.get("hullId") == ident:
-                refs.append({"file": relative, "field": "hullId"})
-            if suffix == ".skin" and spec.get("baseHullId") == ident:
-                refs.append({"file": relative, "field": "baseHullId"})
-    return refs
-
-
-def _weapon_fits_slot(slot_type: str, slot_size: str, weapon_spec: dict) -> bool:
-    weapon_type = weapon_spec.get("type", "")
-    weapon_size = weapon_spec.get("size", "")
-    if WEAPON_SLOT_SIZE_RANK.get(weapon_size, 0) > WEAPON_SLOT_SIZE_RANK.get(slot_size, 0):
-        return False
-    return bool(weapon_type) and (
-        _weapon_slot_type_compatible(slot_type, weapon_type)
-        or _override_fits(slot_type, weapon_spec.get("mount_override", ""))
-    )
-
-
-def weapon_substitute_candidates(vanilla_core: Path, slot_type: str, slot_size: str, exclude_id: str | None = None) -> list[str]:
-    """Real vanilla-only weapon ids that fit a slot of this type/size - never an invented match."""
-    if not slot_type or not slot_size or vanilla_core is None:
-        return []
-    vanilla_weapons = _wpn_type_size_index(vanilla_core, None)  # root=vanilla_core, vanilla_core=None: vanilla-only
-    return sorted(
-        weapon_id for weapon_id, spec in vanilla_weapons.items()
-        if weapon_id != exclude_id and _weapon_fits_slot(slot_type, slot_size, spec)
-    )
-
-
-def _slot_type_size_for_reference(root: Path, vanilla_core: Path | None, hull_id: str | None, slot_id: str | None) -> tuple[str, str]:
-    if not hull_id or not slot_id or vanilla_core is None:
-        return "", ""
-    ship_files = _ship_file_index(root, vanilla_core)
-    skins = _skin_index(root, vanilla_core)
-    skin_slot_changes = _skin_weapon_slot_changes(root, vanilla_core)
-    _resolved, _ship_json, slot_by_id = _resolve_variant_hull_and_slots(hull_id, ship_files, skins, skin_slot_changes)
-    if not slot_by_id:
-        return "", ""
-    slot = slot_by_id.get(slot_id)
-    if slot is None:
-        return "", ""
-    return str(slot.get("type") or "").strip().upper(), str(slot.get("size") or "").strip().upper()
-
-
-def strip_plan(mod_dir: Path, provider_roots: list[Path] | None = None, vanilla_core: Path | None = None, ops: Path | None = None, policy_path: Path | None = None) -> dict:
-    """The exact edit list for a STRIP_FROM_MOD recommendation: every hard id, every file/field
-    that references it, and - for weapons - real vanilla substitute candidates.
-    """
-    mod_dir = Path(mod_dir).expanduser().resolve()
-    from .java_toolchain import DEFAULT_PROVIDER_ROOTS
-
-    roots = provider_roots or list(DEFAULT_PROVIDER_ROOTS)
-    result = scan_mod(mod_dir, TargetProfile(), vanilla_core)
-    needed, files_count = required_from_scan(result)
-    declared = declared_dependencies(mod_dir)
-    providers = provider_index(roots, exclude=mod_dir)
-    ranked = rank(needed, providers)
-    chosen_providers, uncovered = cover(needed, providers, preferred=set(declared))
-    chosen = []
-    for provider, hits in chosen_providers:
-        item = {"mod_id": provider.mod_id, "name": provider.name, "game_version": provider.game_version, "targets_0.98a": provider.game_version.startswith("0.98"), "covers": sorted(hits)}
-        chosen.append(item)
-    # classify_chosen_providers needs each item's own workspace state for `revive` vs `heavy`;
-    # reuse the same lookup dependency_substitutes does rather than a second implementation.
-    from .substitutes import REPO_ROOT, _workspace_state
-    ops_dir = Path(ops) if ops else REPO_ROOT / "In operation"
-    for item in chosen:
-        if not item["targets_0.98a"]:
-            item["workspace"] = _workspace_state(ops_dir, item["mod_id"])
-    hard = hard_to_cover_ids(chosen, uncovered)
-
-    entries = []
-    for key in sorted(hard):
-        kind, ident = key.split(":", 1)
-        refs = find_content_references(mod_dir, kind, ident)
-        substitutes: list[dict] = []
-        if kind == "weapon":
-            seen_slots: set[tuple[str, str]] = set()
-            for ref in refs:
-                slot_type, slot_size = _slot_type_size_for_reference(mod_dir, vanilla_core, ref.get("hull_id"), ref.get("slot_id"))
-                if not slot_type or (slot_type, slot_size) in seen_slots:
-                    continue
-                seen_slots.add((slot_type, slot_size))
-                candidates = weapon_substitute_candidates(vanilla_core, slot_type, slot_size, exclude_id=ident)
-                if candidates:
-                    substitutes.append({"slot_type": slot_type, "slot_size": slot_size, "candidates": candidates})
-        entries.append({
-            "kind": kind, "id": ident,
-            "references": refs,
-            "substitute_candidates": substitutes,
-            "action": "substitute" if substitutes else "strip",
-        })
-
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "mode": "strip-plan",
-        "status": "OK",
-        "mod": str(mod_dir),
-        "hard_id_count": len(hard),
-        "entries": entries,
-        "candidates_considered": len(ranked),
-    }
-
-
-def write_expected_changes(plan: dict, expected_path: Path, mod_id: str, build: str, proposed_by: str = "strip-plan") -> list[dict]:
-    """Record every strip-plan entry as a real `expect` PROPOSED entry (behavior_discovery's own
-    mechanism - see its own `add_expected_change`), so approval goes through `expect` as usual.
-    One entry per id, numbered EXP-<MOD>-9xx to keep this planner's entries visually distinct from
-    hand-authored ones without colliding with them (never guessed at whether a lower number is free).
-    """
-    import re
-
-    from .behavior_discovery import DiscoveryError, add_expected_change
-
-    written = []
-    base = 900
-    # EXP-<MOD>-nnn requires MOD to be alphanumeric only (behavior_discovery's own id pattern);
-    # a real mod_id often has underscores/mixed shapes ("xxx_ss_FX_mod_core"), so strip anything
-    # else rather than let every real mod fail this with an opaque regex error.
-    safe_mod_id = re.sub(r"[^A-Za-z0-9]", "", mod_id).upper() or "MOD"
-    for offset, entry in enumerate(plan["entries"]):
-        change_id = f"EXP-{safe_mod_id}-{base + offset}"
-        file_list = ", ".join(sorted({ref["file"] for ref in entry["references"]})) or "no file found"
-        if entry["action"] == "substitute":
-            candidate_note = "; ".join(f"{sub['slot_type']}/{sub['slot_size']}: {', '.join(sub['candidates'][:5])}" for sub in entry["substitute_candidates"])
-            summary = f"Strip {entry['kind']} '{entry['id']}' (no visible provider) from {file_list}, substituting a vanilla weapon of the same slot type/size: {candidate_note}"
-        else:
-            summary = f"Strip {entry['kind']} '{entry['id']}' (no visible provider) from {file_list}; no vanilla substitute of the same shape exists"
-        try:
-            result = add_expected_change(
-                expected_path, mod_id=mod_id, change_id=change_id, build=build, layer="static",
-                summary=summary, why="ROADMAP P14 item 4 strip plan: no visible provider covers this id.",
-                match={"change": "removed", "kind": entry["kind"], "id": entry["id"]},
-                proposed_by=proposed_by,
-            )
-        except DiscoveryError as exc:
-            result = {"status": "ERROR", "id": change_id, "error": str(exc)}
-        written.append(result)
-    return written
 
 
 _VENDOR_SUPPORTED_KINDS = {"hullmod"}
@@ -406,7 +203,7 @@ def _substitutes(slot: dict | None, vanilla_weapons: dict[str, dict[str, str]]) 
     return {"slot": f"{slot_type} {slot_size}", "candidates": fits[:MAX_SUBSTITUTES], "candidate_count": len(fits)}
 
 
-def strip_plan_github(mod_dir: Path, vanilla_core: Path, only: list[str] | None = None) -> dict:
+def strip_plan(mod_dir: Path, vanilla_core: Path, only: list[str] | None = None) -> dict:
     mod_dir, vanilla_core = Path(mod_dir).expanduser().resolve(), Path(vanilla_core).expanduser().resolve()
     if not (mod_dir / "mod_info.json").is_file():
         raise StripPlanError(f"{mod_dir} has no mod_info.json.")
