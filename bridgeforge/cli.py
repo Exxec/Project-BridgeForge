@@ -717,6 +717,11 @@ def build_parser() -> argparse.ArgumentParser:
     stats_cmd.add_argument("--restart", action="store_true", help="with --write: ignore an earlier run's FINDING_STATS.partial.jsonl and scan everything again")
     stats_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     stats_cmd.add_argument("--json", action="store_true")
+    archive_cmd = subcommands.add_parser("archive", help="package a finished revival into Done/<Mod>/: mod folder, zip, original, reports and an archive note (needs a licence decision; never deletes the workspace)")
+    archive_cmd.add_argument("workspace", type=Path)
+    archive_cmd.add_argument("--done", type=Path, help="default: <repo>/Done")
+    archive_cmd.add_argument("--policy", type=Path)
+    archive_cmd.add_argument("--json", action="store_true")
     group_cmd = subcommands.add_parser("probe-group", help="probe several finished mods in one live session: plan compatible groups, install one into the rig, report per mod (ROADMAP P15 item 24)")
     group_sub = group_cmd.add_subparsers(dest="probe_group_command", required=True)
     group_plan = group_sub.add_parser("plan", help="group READY_FOR_LIVE_TEST workspaces that share no mod or content id and whose dependencies are in the rig")
@@ -1036,6 +1041,21 @@ def main(argv: list[str] | None = None) -> int:
         roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
         summary = save_provider_index(provider_index(roots), args.output, roots)
         print(f"Provider index: {summary['providers']} mods, {summary['ids']} ids -> {summary['output']}")
+        return 0
+    if args.command == "archive":
+        from .archive import ArchiveError, archive_mod
+        from .substitutes import REPO_ROOT
+        try:
+            result = archive_mod(args.workspace, args.done or REPO_ROOT / "Done", policy_path=args.policy)
+        except (ArchiveError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"Archived: {result['archive']} ({result['files']} files, {result['licence']}, status {result['status']})")
+            print(f"  {len(result['changed'])} file(s) changed, {len(result['added'])} added vs original; jars identical: {result['jars_identical']}")
+            print(f"  Note: {result['note']}. The workspace is untouched; remove it yourself once the archive is checked.")
         return 0
     if args.command == "probe-group":
         from .probe_group import ProbeGroupError, group_report, install_group, plan_groups

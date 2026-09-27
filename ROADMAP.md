@@ -2036,6 +2036,12 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        behaviour gate wants D-series evidence even when nothing that runs changed. An `archive` command should
        build that layout, write the note from the release policy and revival report, and waive the behaviour
        gate only when the jar is byte-identical and the changes are metadata (with that proof in the note).
+       **Done 2026-09-27.** `bridgeforge archive WORKSPACE [--done DIR]` (`bridgeforge/archive.py`): refuses without a
+       licence decision or when the archive exists; builds `<Folder>/`, `<Folder>-<version>.zip`, `original/`,
+       `workspace/` and `ARCHIVE_NOTE.md` from the mod's own data (author, licence decision and reason, the report's
+       final status, shipped files changed or added versus `original/`, and whether every jar is byte-identical);
+       never deletes the workspace. Trial on Combat-Radar: 1 file changed (`mod_info.json`), jars identical. Test:
+       `tests/test_archive.py`.
     2. **Test list merging in settings.json** (item 19's held rule), then write the fixer or baseline helper for it.
     3. **`finding-stats` deltas.** Keep the previous run and report what moved between runs (mods that changed
        bucket, ids that disappeared), so the effect of new fixers and check fixes is measured, not recomputed by hand.
