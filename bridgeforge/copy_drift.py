@@ -11,10 +11,12 @@ INCLUDED_DIRS = ("data", "jars", "graphics", "sounds")  # always included; any o
 # INCLUDED_DIRS list left that folder out, so the rig copy crashed at startup with "Error loading
 # [sun_fr/graphics/half.png]" (GRP-3, 2026-09-27), and release/archive would have shipped it broken.
 EXCLUDED_TOP_DIRS = ("scratch", "out", "build", "disabled_files", "bin", "gradle", "meta-inf", "production", "test")  # tool and build folders
-INCLUDED_ROOT_FILE_GLOBS = ("*.csv", "*.ini", "*.jar", "*.json", "*.properties", "*.version")
+# Every root file ships: mods load arbitrary names from the root (Transfer All Items reads
+# "transfer_all_items_settings.json.default"; the old *.json-style allowlist dropped it, GRP-7 Fatal 2026-09-27).
+INCLUDED_ROOT_FILE_GLOBS = ("*",)
 # OS and VCS litter never ships: the game ignores it and it only bloats or confuses a release.
 EXCLUDE_DIR_NAME_GLOBS = ("reports", "src*", "__MACOSX", ".git", ".svn", ".idea", ".vscode")
-EXCLUDE_FILE_NAME_GLOBS = ("*.bak", "*.pre-*", "*orig-backup*", "src.zip", "Thumbs.db", "desktop.ini", ".DS_Store")
+EXCLUDE_FILE_NAME_GLOBS = ("*.bak", "*.iml", "*.pre-*", "*orig-backup*", "src.zip", "Thumbs.db", "desktop.ini", ".DS_Store")
 
 
 def _is_excluded(relative_posix_path: str) -> bool:

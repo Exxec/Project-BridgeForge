@@ -101,3 +101,15 @@ class CustomTopFolderTests(unittest.TestCase):
                 (mod / relative).write_text("x", encoding="utf-8")
             files = sorted(_collect(mod))
         self.assertEqual(files, ["data/config/settings.json", "mod_info.json", "sun_fr/graphics/half.png"])
+
+    def test_every_root_file_ships_except_backups(self) -> None:
+        # GRP-7 (2026-09-27): Transfer All Items loads "transfer_all_items_settings.json.default" from its root;
+        # the old *.json-style allowlist dropped it and the game stopped with a Fatal at startup.
+        from bridgeforge.copy_drift import _collect
+
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            for name in ("mod_info.json", "transfer_all_items_settings.json.default", "readme.txt", "old.bak", "Thumbs.db"):
+                (mod / name).write_text("x", encoding="utf-8")
+            files = sorted(_collect(mod))
+        self.assertEqual(files, ["mod_info.json", "readme.txt", "transfer_all_items_settings.json.default"])
