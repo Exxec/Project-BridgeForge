@@ -2095,6 +2095,8 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         soft `graphics/fx/star_halo.png` tinted `[40,255,120,150]` (`planets.json`, `star_zorg` only). Build
         `[BF r3]` / `V18+bf.3`; `Done/Zorg18` and the rig copy updated (drift 0). New-game check pending: the save
         should hold exactly one `star_zorg` and no `zorg_planet` outside Zorg Zeta.
+        **Validated 2026-09-27 (ZG-R3-20260927):** probe 0.2.6 `campaign-layout|OK` with `star_zorg=1, zorg_planet=2`, no
+        WARN/FAIL for either type (first live use of the check); owner confirmed the star; FATAL=0, MOD-ERROR=0.
     17. **Triage across relaunches.** `bf-test launch` redirects only the session it starts; a player relaunch
         (ZG-7's save/quit/load) goes only to the game's `starsector.log`. `triage` should also read the rig's
         `starsector.log` lines after the launch time, so a multi-session test is triaged whole.
