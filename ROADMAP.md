@@ -2067,7 +2067,10 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         or say where to look, instead of failing with WinError 2.
     14. **Keep line endings in agent edits:** the agent turned CRLF into LF; `escalation verify` could normalise
         back to the file's original endings so diffs show only real changes.
-    15. **Check: fleet type with no name.** Zorg18's live run showed "no name for type [Zeta AI raid]": a
+    15. **Done 2026-09-27: `fleet-type-name-missing`** (REVIEW; source literals in loose scripts and jar sources,
+        against the faction file and vanilla's/the mod's `default_fleet_type_names.json`; test
+        `tests/test_fleet_type_names.py`), tier `auto` with fixer `fleet-type-name-missing` (title-cased names inserted as
+        text, `--names` overrides). Original note: **Check: fleet type with no name.** Zorg18's live run showed "no name for type [Zeta AI raid]": a
         `createEmptyFleet(faction, "<type>", ...)` (source or bytecode string constant) whose faction file has no
         `fleetTypeNames` entry for that type, and no vanilla default. Cosmetic but visible in every encounter;
         the fix is a data entry, so it can be a fixer that proposes the name from the type string.
@@ -2139,6 +2142,14 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        --api-diff` over every queued mod's `original/` against the 0.8.1a and 0.95.1a catalogues and rank the
        removed methods by how many mods call them; the top ones with a clean RC8 equivalent become new
        RevenantLib bridges and `removed-api-call` fixer rules. Each needs javap evidence for the replacement.
+       **Run 2026-09-27 (loose scripts):** `compile-check` + the 0.8.1a->RC8 catalogue over the `original/` of all
+       294 queued workspaces (242 PASS, 52 FAIL). Only **10 mods** call a removed API from loose scripts. Top:
+       `SectorAPI.createFleet(String, String)` (6 mods, 17 sites; RevenantLib already bridges it) and
+       `SectorAPI.addMessage(String)` (5 mods, 10 sites; the `removed-api-call` fixer already rewrites it to
+       `CampaignUIAPI`); everything else is one mod each (`CommodityOnMarketAPI.getSupply()`,
+       `MarketDemandAPI.getNonConsumingDemand()`, removed `Conditions`/`Skills`/`Stats` ids). **No new bridge is
+       justified by loose scripts.** Follow-up: the same ranking over jar bytecode (method/field references
+       resolved against RC8's `starfarer.api.jar`, the "bytecode linkage" method), since most large mods ship jars.
     6. **Keep the `Done/RevenantLib` snapshot honest.** `revenantlib-check` could compare the snapshot's jar with
        the live `working/` jar and say when the snapshot is stale.
        **Done 2026-09-27.** `revenantlib-check PATH --snapshot Done/RevenantLib/RevenantLib` compares the checked mod

@@ -1065,6 +1065,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_removed_market_condition_ids(root, result)
     _scan_vanilla_script_shadow_repointable(root, result, vanilla_core)
     _scan_replace_array(root, result, vanilla_core)
+    _scan_fleet_type_names(root, result, vanilla_core)
     _scan_bare_market_fleet_source(root, result)
     _scan_legacy_event_report(root, result)
     _scan_non_english_text(root, result)
@@ -3712,6 +3713,57 @@ def _mod_declared_script_rows(root: Path) -> dict[str, str]:
 # Finding 1 / E15). Both facts are invisible to a mod author: a declaration that does nothing, and
 # a file that cannot be made authoritative however it is declared.
 _REPLACE_IGNORED_SUFFIX = "settings.json"
+
+
+_CREATE_EMPTY_FLEET = re.compile(r'createEmptyFleet\(\s*"([^"]+)"\s*,\s*"([^"]+)"')
+
+
+def _fleet_type_names(path: Path) -> set[str]:
+    data = _load_lenient_json_file(path)
+    if not isinstance(data, dict):
+        return set()
+    names = data.get("fleetTypeNames", data)  # a .faction nests them; default_fleet_type_names.json is the map itself
+    return set(names) if isinstance(names, dict) else set()
+
+
+def _scan_fleet_type_names(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """A fleet created with a type its faction has no display name for (P15 item 20.15).
+
+    Zorg18's live run (2026-09-27): encounters read "Zorg Hive no name for type [Zeta AI raid]" because
+    `createEmptyFleet("zorg", "Zeta AI raid", null)` named a type absent from `zorg.faction`'s
+    `fleetTypeNames`. Names come from the faction file, then `data/world/factions/default_fleet_type_names.json`
+    (vanilla's, and a mod's own). Source literals only (loose scripts and jar sources); needs the vanilla core.
+    """
+    if vanilla_core is None:
+        return
+    factions_dir = Path(vanilla_core) / "data" / "world" / "factions"
+    defaults = _fleet_type_names(factions_dir / "default_fleet_type_names.json") | _fleet_type_names(root / "data" / "world" / "factions" / "default_fleet_type_names.json")
+    missing: dict[tuple[str, str], list[str]] = {}
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        for faction_id, fleet_type in _CREATE_EMPTY_FLEET.findall(text):
+            faction_file = root / "data" / "world" / "factions" / f"{faction_id}.faction"
+            if not faction_file.is_file():
+                faction_file = factions_dir / f"{faction_id}.faction"
+            if fleet_type in defaults or fleet_type in _fleet_type_names(faction_file):
+                continue
+            missing.setdefault((faction_id, fleet_type), []).append(_relative(root, source))
+    for (faction_id, fleet_type), files in sorted(missing.items()):
+        result.add(
+            id="fleet-type-name-missing",
+            category="campaign",
+            severity="low",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=f"Fleets are created with type \"{fleet_type}\" for faction \"{faction_id}\", but neither the faction file's fleetTypeNames nor default_fleet_type_names.json names it, so every encounter shows \"no name for type [{fleet_type}]\". Add a fleetTypeNames entry to the faction file.",
+            file=f"data/world/factions/{faction_id}.faction",
+            evidence=[f"type:{fleet_type}", f"faction:{faction_id}", *sorted(set(files))[:5]],
+        )
 
 
 def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:

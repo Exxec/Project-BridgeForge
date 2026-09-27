@@ -55,6 +55,7 @@ SUPPORTED_FINDINGS = (
     "missing-custom-ui-button-pressed-callback",
     "shippable-work-file",
     "data-file-not-utf8",
+    "fleet-type-name-missing",
 )
 
 
@@ -1963,7 +1964,47 @@ def _reencode_invalid(raw: bytes, offsets: list[int], encoding: str, relative: s
     return bytes(out + raw[last:])
 
 
+def _fix_fleet_type_name_missing(root: Path, options: dict) -> list[FileChange]:
+    """Add a `fleetTypeNames` entry per unnamed fleet type (P15 item 20.15), title-casing the type as Zorg18's
+    hand fix did ("Zeta AI raid" -> "Zeta AI Raid"). Text insertion, so comments and formatting survive;
+    `options["names"]` ({type: name}) overrides the proposed name. The check needs the vanilla core, so a
+    fresh scan here passes `options["vanilla_core"]`."""
+    if options.get("scan_findings") is None:
+        from .scanner import scan_mod
+
+        vanilla = options.get("vanilla_core")
+        findings = [f for f in scan_mod(root, vanilla_core=Path(vanilla) if vanilla else None).findings if f.id == "fleet-type-name-missing"]
+    else:
+        findings = _findings_of(root, options, "fleet-type-name-missing")
+    by_file: dict[str, list[str]] = {}
+    for finding in findings:
+        fleet_type = next((e.split(":", 1)[1] for e in finding.evidence if e.startswith("type:")), None)
+        if fleet_type and finding.file:
+            by_file.setdefault(finding.file, []).append(fleet_type)
+    names = options.get("names") or {}
+    changes = []
+    for relative, types in sorted(by_file.items()):
+        path = root / relative
+        if not path.is_file():
+            continue  # a vanilla faction's type: the name belongs in the mod's own default_fleet_type_names.json
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        newline = "\r\n" if "\r\n" in text else "\n"
+        entries = "".join(
+            newline + "\t\t" + json.dumps(t) + ":" + json.dumps(names.get(t) or " ".join(w[:1].upper() + w[1:] for w in t.split(" "))) + ","
+            for t in sorted(set(types)))
+        match = re.search(r'"fleetTypeNames"\s*:\s*\{', text)
+        if match:
+            text = text[:match.end()] + entries + text[match.end():]
+        else:
+            brace = text.index("{")
+            text = text[:brace + 1] + newline + '\t"fleetTypeNames":{' + entries + newline + "\t}," + text[brace + 1:]
+        changes.append(FileChange(path=path, before=raw, after=_encode(text, had_bom)))
+    return changes
+
+
 _FIXER_FUNCS = {
+    "fleet-type-name-missing": _fix_fleet_type_name_missing,
     "data-file-not-utf8": _fix_data_file_not_utf8,
     "shippable-work-file": _fix_shippable_work_file,
     "wing-role-assault-removed": _fix_wing_role_assault_removed,
