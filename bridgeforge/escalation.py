@@ -168,3 +168,59 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
     return {"schema_version": SCHEMA_VERSION, "mode": "ESCALATION_RUN", "packet": packet["id"], "outcome": final["outcome"],
             "applied": final["outcome"] == "APPLIED", "attempts": attempts,
             "note": "Verified agent changes are REVIEW: they cleared the finding and the scan (and compile check, if any), not a live test."}
+
+
+def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = None, now=None) -> dict:
+    """Copy an attempt already VERIFIED into `working/` without re-running the agent (P15 item 20.12).
+
+    `run --apply` re-runs the agent and applies whatever the new attempt produces, which nobody has
+    reviewed (item 21: Yunru's reviewed attempt had to be copied by hand). This takes the newest attempt the
+    ledger records as VERIFIED (or `attempt`), refuses when the packet's files changed since the packet or
+    the attempt touched files outside it, re-verifies the attempt's copy, and copies back with backups.
+    """
+    import json
+
+    workspace = Path(workspace).expanduser().resolve()
+    packet = load_packet(workspace, packet_name)
+    ledger = workspace / "reports" / "escalations" / "ledger.jsonl"
+    verified = []
+    if ledger.is_file():
+        for line in ledger.read_text(encoding="utf-8").splitlines():
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if entry.get("packet") == packet["id"] and entry.get("outcome") == "VERIFIED":
+                verified.append(int(entry.get("attempt") or 0))
+    if attempt is None:
+        if not verified:
+            raise EscalationError(f"{packet['id']} has no VERIFIED attempt in the ledger; run it first.")
+        attempt = max(verified)
+    elif attempt not in verified:
+        raise EscalationError(f"attempt {attempt} of {packet['id']} is not recorded as VERIFIED.")
+    sandbox = workspace / "scratch" / "escalations" / packet["id"] / f"attempt-{attempt}" / "working"
+    if not sandbox.is_dir():
+        raise EscalationError(f"{sandbox} is gone; run the packet again.")
+    working = workspace / "working"
+    stale = sorted(name for name, digest in (packet.get("file_sha256") or {}).items()
+                   if working.joinpath(name).is_file() and digest and hashlib.sha256(working.joinpath(name).read_bytes()).hexdigest() != digest)
+    if stale:
+        raise EscalationError("working/ changed since the packet was made (" + ", ".join(stale) + "); run the packet again.")
+    changed = changed_files(working, sandbox)
+    outside = [name for name in changed if name not in packet["allowed_files"]]
+    if outside:
+        raise EscalationError("the attempt changed files outside the packet: " + ", ".join(outside))
+    if not changed:
+        raise EscalationError("the attempt matches working/ already; nothing to apply.")
+    check = verify(packet, sandbox)
+    if check["status"] != "PASS":
+        raise EscalationError("the attempt no longer verifies: " + "; ".join(check["reasons"]))
+    written = _copy_back(packet, sandbox, working, changed)
+    note = sandbox.parent / "NOTE.md"
+    if note.is_file():
+        shutil.copyfile(note, packets_dir(workspace) / f"{packet['id']}.NOTE.txt")
+    append_ledger(workspace, {"packet": packet["id"], "finding": packet["finding"], "file": packet.get("file"), "tier": packet["tier"],
+                              "runner": "agent", "attempt": attempt, "outcome": "APPLIED", "reasons": [], "changed": changed,
+                              "classification": "REVIEW", "applied_without_rerun": True}, now)
+    return {"schema_version": SCHEMA_VERSION, "mode": "ESCALATION_APPLY", "packet": packet["id"], "attempt": attempt,
+            "written": written, "verify": check}

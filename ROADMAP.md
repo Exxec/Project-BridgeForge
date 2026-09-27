@@ -2059,6 +2059,10 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         decides the replacement.
     12. **`escalation apply <packet>`**: copy an attempt already VERIFIED (and reviewed) into `working/` with a
         backup, instead of `run --apply` re-running the agent and producing an unreviewed edit (item 21).
+        **Done 2026-09-27.** `escalation apply WORKSPACE PACKET [--attempt N]` (`escalation.apply_verified`): the
+        newest VERIFIED attempt from the ledger, refused when the packet's files changed since the packet or the
+        attempt touched other files, re-verified, copied back with backups, ledger `APPLIED` with
+        `applied_without_rerun`. Test: `tests/test_revive.py`.
     13. **Agent command discovery:** when `claude` is not on PATH, find the VS Code extension's `claude.exe` (item 21)
         or say where to look, instead of failing with WinError 2.
     14. **Keep line endings in agent edits:** the agent turned CRLF into LF; `escalation verify` could normalise

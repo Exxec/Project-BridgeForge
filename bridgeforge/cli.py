@@ -857,10 +857,12 @@ def build_parser() -> argparse.ArgumentParser:
     esc_run.add_argument("--apply", action="store_true", help="copy a verified result into working/ (backups kept)")
     esc_run.add_argument("--retries", type=int, default=1, help="re-runs after a failed attempt, with the failure appended (default 1)")
     esc_run.add_argument("--timeout", type=int, default=1800, help="seconds per attempt")
-    for command in (esc_list, esc_show, esc_verify, esc_run):
+    esc_apply = esc_sub.add_parser("apply", help="copy an attempt already VERIFIED (and reviewed) into working/, without re-running the agent")
+    esc_apply.add_argument("--attempt", type=int, help="which attempt (default: the newest VERIFIED one)")
+    for command in (esc_list, esc_show, esc_verify, esc_run, esc_apply):
         command.add_argument("workspace", type=Path)
         command.add_argument("--json", action="store_true")
-    for command in (esc_show, esc_verify, esc_run):
+    for command in (esc_show, esc_verify, esc_run, esc_apply):
         command.add_argument("packet", nargs="?" if command is esc_run else None, help="packet id (see `escalation list`)")
     esc_run.add_argument("--all", action="store_true", help="run every agent packet in turn")
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
@@ -2892,6 +2894,16 @@ def main(argv: list[str] | None = None) -> int:
                 result = verify(packet, working.expanduser().resolve())
                 print(json.dumps(result, indent=2) if args.json else f"{result['status']}: {args.packet}" + "".join(f"\n  {r}" for r in result["reasons"]))
                 return 0 if result["status"] == "PASS" else 1
+            if args.escalation_command == "apply":
+                from .escalation import apply_verified
+                result = apply_verified(args.workspace, args.packet, attempt=args.attempt)
+                if args.json:
+                    print(json.dumps(result, indent=2, ensure_ascii=False))
+                else:
+                    print(f"APPLIED: {result['packet']} attempt {result['attempt']} (verified again first)")
+                    for item in result["written"]:
+                        print(f"  {item['path']}" + (f" (backup {item['backup']})" if item.get("backup") else ""))
+                return 0
             names = [p["id"] for p in list_packets(args.workspace) if p["kind"] == "agent"] if args.all else [args.packet]
             if not names or names == [None]:
                 raise EscalationError("Name a packet, or pass --all.")

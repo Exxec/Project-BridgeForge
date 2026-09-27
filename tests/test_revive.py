@@ -222,6 +222,26 @@ class EscalationRunTests(unittest.TestCase):
         self.assertEqual([(e["outcome"], e["classification"]) for e in ledger], [("VERIFIED", "REVIEW"), ("APPLIED", "REVIEW")])
         self.assertIn("--working", prompt)  # the agent verifies its own sandbox, not the real copy
 
+    def test_apply_copies_the_reviewed_verified_attempt_without_rerunning(self):
+        # P15 item 20.12: run --apply re-runs the agent; apply takes the attempt already verified.
+        from bridgeforge.escalation import apply_verified
+
+        with resolved_temp_dir() as root:
+            workspace = _workspace(root)
+            revive(workspace)
+            with self.assertRaises(EscalationError):
+                apply_verified(workspace, AGENT_PACKET)  # nothing verified yet
+            run_packet(workspace, AGENT_PACKET, _agent(root, AGENT_FIX))
+            result = apply_verified(workspace, AGENT_PACKET)
+            settings = (workspace / "working" / SETTINGS).read_text(encoding="utf-8")
+            ledger = [json.loads(line) for line in (workspace / "reports" / "escalations" / "ledger.jsonl").read_text(encoding="utf-8").splitlines()]
+            with self.assertRaises(EscalationError):
+                apply_verified(workspace, AGENT_PACKET)  # working/ now differs from the packet: stale
+        self.assertEqual(result["attempt"], 1)
+        self.assertIn("[255,0]", settings)
+        self.assertEqual([e["outcome"] for e in ledger][-1], "APPLIED")
+        self.assertTrue(ledger[-1]["applied_without_rerun"])
+
     def test_edits_outside_the_packet_are_rejected(self):
         body = AGENT_FIX + "Path('mod_info.json').write_text('{}', encoding='utf-8')\n"
         with resolved_temp_dir() as root:
