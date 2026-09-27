@@ -400,13 +400,13 @@ def copy_plan(plan: dict, to_mod: Path, *, apply: bool = False, allow_partial: b
     """Copy exactly what a `vendor-plan` lists into `to_mod`: files byte for byte, CSV rows appended.
 
     The plan is re-checked against the provider as it is now, never trusted: every listed file and
-    row must still exist (else STALE), and the licence gate is re-read from release_policy.json
-    (the same gate `vendor-copy` and `release` use). A plan with MISSING or SUSPECT entries or
+    row must still exist (else STALE), and the licence is re-read from release_policy.json (a
+    local-only provider only into a local-only target, `release.vendoring_licence`). A plan with MISSING or SUSPECT entries or
     compiled-only classes is INCOMPLETE unless `allow_partial`; what was left out is reported. A
     target file or row that differs is a CONFLICT and nothing is written; identical ones are
     skipped. Dry run unless `apply`. Each copied file's SHA-256 is returned for PROVENANCE.md.
     """
-    from .release import DEFAULT_POLICY_PATH, _licence_gate
+    from .release import DEFAULT_POLICY_PATH, vendoring_licence
 
     base = {"schema_version": SCHEMA_VERSION, "mode": "VENDOR_COPY_PLAN", "requested": plan.get("requested"), "apply": apply}
     if plan.get("mode") != "VENDOR_PLAN" or plan.get("schema_version") != SCHEMA_VERSION:
@@ -416,9 +416,9 @@ def copy_plan(plan: dict, to_mod: Path, *, apply: bool = False, allow_partial: b
     info = _load_lenient_json_file(provider / "mod_info.json") if provider.is_dir() else None
     if not isinstance(info, dict):
         return {**base, "status": "STALE", "reason": f"the plan's provider {provider} is no longer a mod folder"}
-    gate = _licence_gate(info.get("id"), info.get("name"), policy_path or DEFAULT_POLICY_PATH)
-    if gate["local_only"]:
-        return {**base, "status": "REFUSED", "reason": f"{info.get('name') or info.get('id')} is local-only per release_policy.json: {gate.get('reason')}"}
+    licence = vendoring_licence(info.get("id"), info.get("name"), target, policy_path or DEFAULT_POLICY_PATH)
+    if not licence["allowed"]:
+        return {**base, "status": "REFUSED", "reason": licence["reason"]}
     left_out = ([f"MISSING {item}" for item in plan.get("missing", [])]
                 + [f"SUSPECT {entry['path']}" for entry in plan.get("suspects", [])]
                 + [f"COMPILED ONLY {entry['path']}" for entry in plan.get("include", []) if entry["what"] == "jar-class"])
@@ -458,6 +458,7 @@ def copy_plan(plan: dict, to_mod: Path, *, apply: bool = False, allow_partial: b
     result = {**base, "status": "APPLIED" if apply else "PLANNED", "provider": str(provider), "to_mod": str(target),
               "files": files, "rows": {table: [row.get("id") for row in rows] for table, rows in rows_by_table.items()},
               "skipped_identical": skipped, "left_out": left_out,
+              "must_stay_local_only": licence["must_stay_local_only"], "licence_note": licence["reason"],
               "provenance": [{"path": name, "sha256": _sha256(provider / name)} for name in files],
               "note": "Record the provenance (source path, licence status, SHA-256 per file) in the target's PROVENANCE.md, as every RevenantLib fold does."}
     if apply:

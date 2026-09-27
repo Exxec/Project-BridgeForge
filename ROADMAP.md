@@ -1845,6 +1845,14 @@ whether the result passed; recurring agent fixes become deterministic fixers.
       a large mod could cost six full scans. `fixers._findings_of` uses the caller's findings when given
       (`options["scan_findings"]`, which `revive` passes) and scans only otherwise; `fix` is unchanged.
       Tests: `tests/test_fixers.py` (`SuppliedFindingsTests`, which fails if a rescan happens).
+11. **Local-only content may be vendored into a local-only target (owner decision 2026-09-27).**
+    **Done 2026-09-27.** `vendor-copy` refused every local-only provider, which blocked the case
+    RevenantLib exists for (Rebal's `shields_formshield`, P14 item 4). `release.vendoring_licence`: a
+    releasable provider always may be vendored; a local-only one only into a target that is itself
+    local-only in `release_policy.json` (RevenantLib is), and the result says so
+    (`must_stay_local_only`, a `LICENCE:` line); into a releasable target it is still refused. Used by
+    both `vendor-copy` and `vendor-copy --plan`. Tests: `tests/test_vendor_copy.py`,
+    `tests/test_vendor_plan.py`.
 
 ## Post-1.0 research and gated automation
 

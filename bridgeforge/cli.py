@@ -1253,6 +1253,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  rows: {table} [{', '.join(ids)}]")
             for item in result.get("provenance") or []:
                 print(f"  sha256 {item['sha256']}  {item['path']}")
+            if result.get("must_stay_local_only"):
+                print(f"  LICENCE: {result['licence_note']}")
         return 0 if result["status"] in ("PLANNED", "APPLIED") else 1
     if args.command == "vendor-copy":
         from .strip_plan import vendor_copy
@@ -1268,6 +1270,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  files: {', '.join(result['files'])}")
             if result.get("note"):
                 print(f"  note: {result['note']}")
+            if result.get("must_stay_local_only"):
+                print(f"  LICENCE: {result['licence_note']}")
         return 0 if result["status"] in ("PLANNED", "APPLIED") else 1
     if args.command == "revival-report-draft":
         from .revival_report_draft import draft_revival_report, write_revival_report_draft

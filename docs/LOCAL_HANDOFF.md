@@ -85,10 +85,10 @@ python -m bridgeforge vendor-plan "In operation\<provider>" --id hullmod:<id> --
 python -m bridgeforge vendor-copy --plan plan.json --to "In operation\RevenantLib"
 ```
 Done when the strip plan's edits match what the local `strip-plan` listed for the same mod, and the
-`vendor-copy --plan` dry run lists the same files as `vendor-plan`. Note: `vendor-copy` refuses a
-local-only provider (the same licence gate `release` uses), which includes Rebal; if RevenantLib
-should be allowed to take from local-only mods because it is itself local-only, that is an owner
-decision to record in P15.
+`vendor-copy --plan` dry run lists the same files as `vendor-plan`. A local-only provider such as
+Rebal may be vendored into RevenantLib because RevenantLib is local-only too (owner decision
+2026-09-27, P15 item 11); the output then prints a `LICENCE:` line, and RevenantLib must stay
+local-only while it holds that content. Into a releasable mod it is still refused.
 
 ## 3. Needs the game
 

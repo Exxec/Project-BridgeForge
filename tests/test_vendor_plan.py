@@ -234,11 +234,21 @@ class VendorCopyPlanTests(unittest.TestCase):
             (Path(plan["provider"]) / "data/scripts/weapons/RailOnHit.java").unlink()
             stale = copy_plan(plan, target, policy_path=_open_policy(root))
             not_a_plan = copy_plan({"mode": "OTHER"}, target)
-        self.assertEqual(local_only["status"], "REFUSED")
+        self.assertEqual(local_only["status"], "REFUSED")  # into a target the policy doesn't list as local-only
         self.assertEqual((conflict["status"], conflict["conflicts"]), ("CONFLICT", ["data/weapons/rebal_rail.wpn"]))
         self.assertNotIn("rebal_rail", untouched)  # nothing is written when anything conflicts
         self.assertEqual((stale["status"], stale["stale"]), ("STALE", ["data/scripts/weapons/RailOnHit.java"]))
         self.assertEqual(not_a_plan["status"], "REFUSED")
+
+    def test_a_local_only_provider_may_go_into_local_only_revenantlib(self):
+        from bridgeforge.vendor_plan import copy_plan
+
+        with resolved_temp_dir() as root:
+            plan, target = self._plan(root, "weapon:rebal_rail")
+            policy = _write(root / "both.json", {"schema_version": 1, "mods": {
+                "@_ss_rebal_@": {"local_only": True, "reason": "no licence"}, "revenantlib": {"local_only": True, "reason": "salvage"}}})
+            result = copy_plan(plan, target.parent, policy_path=policy)
+        self.assertEqual((result["status"], result["must_stay_local_only"]), ("PLANNED", True))
 
     def test_cli(self):
         with resolved_temp_dir() as root:

@@ -141,6 +141,24 @@ class VendorCopyTests(unittest.TestCase):
         self.assertEqual(result["status"], "REFUSED")
         self.assertIn("no licence found", result["reason"])
 
+    def test_a_local_only_provider_may_go_into_a_local_only_target(self) -> None:
+        # Owner decision 2026-09-27: RevenantLib (itself local-only) may take from local-only mods.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            provider = _provider_mod(root, "no_licence_mod", "Radar,x_radar,data.hullmods.XRadar,desc\n", "data.hullmods.XRadar", "x")
+            target = root / "RevenantLib" / "working"
+            target.mkdir(parents=True)
+            (target / "mod_info.json").write_text(json.dumps({"id": "revenantlib", "name": "RevenantLib"}), encoding="utf-8")
+            policy = root / "policy.json"
+            policy.write_text(json.dumps({"schema_version": 1, "mods": {
+                "no_licence_mod": {"local_only": True, "reason": "no licence found"},
+                "revenantlib": {"local_only": True, "reason": "salvage library"}}}), encoding="utf-8")
+            into_workspace = vendor_copy("hullmod", "x_radar", provider, target.parent, policy_path=policy)
+            into_mod = vendor_copy("hullmod", "x_radar", provider, target, policy_path=policy)
+        self.assertEqual((into_workspace["status"], into_workspace["must_stay_local_only"]), ("PLANNED", True))
+        self.assertIn("must stay local-only", into_workspace["licence_note"])
+        self.assertEqual(into_mod["status"], "PLANNED")
+
     def test_a_kind_other_than_hullmod_is_refused(self) -> None:
         result = vendor_copy("weapon", "x", Path("."), Path("."))
         self.assertEqual(result["status"], "REFUSED")
