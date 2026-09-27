@@ -66,7 +66,7 @@ deliberate copy of `shields_formshield` (see its PROVENANCE.md), so nothing is l
 The plan is in `In operation\PROBE_GROUPS.json` (rebuild with `python -m bridgeforge probe-group plan`). Per group N:
 ```powershell
 python -m bridgeforge probe-group install N
-.	oolsf-test.ps1 launch GRP-N-<date>
+.\tools\bf-test.ps1 launch GRP-N-<date>
 # New Game, wait one in-game day, open Missions -> BridgeForge Probe: Combat briefly, quit
 python -m bridgeforge probe-group report "In operation\_rig\logs\GRP-N-<date>.stdout.log"
 ```
