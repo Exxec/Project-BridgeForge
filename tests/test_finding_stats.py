@@ -51,6 +51,15 @@ class TierTableTests(unittest.TestCase):
             if tier == "auto":
                 self.assertIn(finding_id, SUPPORTED_FINDINGS, f"{finding_id} is '{tier}' but has no fixer")
 
+    def test_every_fixer_is_reachable_from_revive(self):
+        # revive only runs fixers for 'auto' findings and packets 'input' ones for the owner; a fixer
+        # under any other tier is never used (found 2026-09-27: three fixers from the local history
+        # were tiered code/input/decision).
+        from bridgeforge.fixers import SUPPORTED_FINDINGS
+
+        stranded = sorted(f for f in SUPPORTED_FINDINGS if tier_for(f) not in ("auto", "input"))
+        self.assertEqual(stranded, [])
+
 
 class FindingStatsTests(unittest.TestCase):
     def _queue(self, root: Path) -> Path:
@@ -89,6 +98,18 @@ class FindingStatsTests(unittest.TestCase):
         self.assertIn("Unattended if every `mechanical` finding had a fixer: 2 (40%)", text)
         self.assertIn("`loose-script-compile-error` (code): 3 verified fixes in Almost, Java", text)
         self.assertIn("- Unscanned: no stored scan", text)
+
+    def test_findings_the_mod_baseline_accepts_do_not_count(self):
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            workspace = _workspace(queue, "Accepted", ["content-reference-unresolved", "json-hash-comment"])
+            (workspace / "working" / "reports").mkdir()
+            (workspace / "working" / "reports" / "baseline.json").write_text(
+                json.dumps({"findings": ["content-reference-unresolved|data/x|"]}), encoding="utf-8")
+            stats = finding_stats([queue])
+        mod = stats["mods"][0]
+        self.assertEqual((mod["bucket"], mod["accepted_by_baseline"]), ("none", 1))
+        self.assertEqual(stats["unattended_now"], 1)
 
     def test_latest_scan_wins_and_fresh_scan(self):
         import os

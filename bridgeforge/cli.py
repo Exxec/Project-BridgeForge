@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .models import TargetProfile
 from .report import write_artifacts
-from .scanner import scan_mod, verify_shadow
+from .scanner import scan_mod
 from .baseline import finding_baseline_key, load_baseline_keys, split_by_baseline
 from .dossier import DEFAULT_CONTEXT_LINES, DEFAULT_MAX_KB, DossierError, write_dossier
 from .migrate import apply_plan, build_plan
@@ -729,14 +729,6 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_recheck_cmd.add_argument("--write-markdown", type=Path, help="also write a roll-up table to this path")
     corpus_recheck_cmd.add_argument("--include-intake", action="store_true", help="also include mods with a working/ copy but no REVIVAL_REPORT.md yet (ROADMAP P14 item 8: the Ironclads intake queue)")
     corpus_recheck_cmd.add_argument("--json", action="store_true")
-    strip_plan_cmd = subcommands.add_parser("strip-plan-local", help="for a STRIP_FROM_MOD recommendation, the exact edit list (which file/field loses which id) and real vanilla weapon substitute candidates (ROADMAP P14 item 4)")
-    strip_plan_cmd.add_argument("mod", type=Path, help="mod working copy")
-    strip_plan_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
-    strip_plan_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla content isn't counted as missing and substitute candidates can be found")
-    strip_plan_cmd.add_argument("--ops", type=Path, help="In operation tree to check a heavy provider's own revival state (default: <repo>/In operation)")
-    strip_plan_cmd.add_argument("--write-expected", type=Path, help="also write each entry as a PROPOSED expect entry to this expected-changes file")
-    strip_plan_cmd.add_argument("--build", help="build tag for --write-expected's entries (required with --write-expected)")
-    strip_plan_cmd.add_argument("--json", action="store_true")
     vendor_copy_cmd = subcommands.add_parser("vendor-copy", help="copy one hullmod (its hull_mods.csv row and its declared script) from a provider mod into another mod, instead of reviving or declaring a dependency on the whole provider (ROADMAP P14 item 4)")
     vendor_copy_cmd.add_argument("kind", choices=["hullmod"], help="only 'hullmod' is supported (see the command's own help for why)")
     vendor_copy_cmd.add_argument("id", help="the hullmod id to vendor")
@@ -752,42 +744,6 @@ def build_parser() -> argparse.ArgumentParser:
     revival_report_draft_cmd.add_argument("--apply", action="store_true", help="write reports/REVIVAL_REPORT.md and REVIVAL_PLAN.md (default: print the draft only)")
     revival_report_draft_cmd.add_argument("--force", action="store_true", help="with --apply, overwrite an existing report/plan")
     revival_report_draft_cmd.add_argument("--json", action="store_true")
-    provider_index_update_cmd = subcommands.add_parser("provider-index-update", help="recompute every visible provider and cache it to bridgeforge-state/provider-index/ (ROADMAP P14 item 6/2), so a lookup is instant and still works for a mod that isn't currently installed anywhere live")
-    provider_index_update_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
-    provider_index_update_cmd.add_argument("--output", type=Path, help="cache directory (default: <repo>/bridgeforge-state/provider-index)")
-    provider_index_update_cmd.add_argument("--json", action="store_true")
-    dependency_graph_cmd = subcommands.add_parser("dependency-graph-local", help="which mods with revival work recorded need which missing content, and which unrevived provider would unblock the most of them (ROADMAP P14 item 6/3)")
-    dependency_graph_cmd.add_argument("--repo-root", type=Path, default=Path("."), help="repo root holding In operation/ (default: cwd)")
-    dependency_graph_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla content isn't counted as missing")
-    dependency_graph_cmd.add_argument("--provider-index", type=Path, help="cached provider index directory written by provider-index-update (default: <repo>/bridgeforge-state/provider-index)")
-    dependency_graph_cmd.add_argument("--include-intake", action="store_true", help="also check mods with a working/ copy but no REVIVAL_REPORT.md yet (ROADMAP P14 item 8: the Ironclads intake queue)")
-    dependency_graph_cmd.add_argument("--json", action="store_true")
-    archive_index_cmd = subcommands.add_parser("archive-index", help="build/update a one-time content index of a mod-archive folder (ROADMAP P14 item 18): filenames always, text-file content via sqlite3 FTS5")
-    archive_index_cmd.add_argument("root", type=Path, help="folder to search recursively for *.zip archives (e.g. Downloads)")
-    archive_index_cmd.add_argument("--output", required=True, type=Path, help="sqlite3 database path to write/update")
-    archive_index_cmd.add_argument("--json", action="store_true")
-    archive_search_cmd = subcommands.add_parser("archive-search", help="query a previously built archive-index database")
-    archive_search_cmd.add_argument("index", type=Path, help="the sqlite3 database written by archive-index")
-    archive_search_cmd.add_argument("query", help="FTS5 MATCH query (content mode) or a substring (filename mode)")
-    archive_search_cmd.add_argument("--filenames", action="store_true", help="search member filenames instead of file content")
-    archive_search_cmd.add_argument("--limit", type=int, default=50)
-    archive_search_cmd.add_argument("--json", action="store_true")
-    rebuild_from_reference_cmd = subcommands.add_parser("rebuild-from-reference-local", help="overlay a mod's own genuine changes (vs. a historical reference rig's vanilla copy) onto current RC8 vanilla, for old mods that ship modified copies of vanilla files under vanilla's own paths")
-    rebuild_from_reference_cmd.add_argument("mod", type=Path, help="mod working copy")
-    rebuild_from_reference_cmd.add_argument("--reference-core", required=True, type=Path, help="a registered reference rig's read-only starsector-core (the historical vanilla version the mod's file was originally built against)")
-    rebuild_from_reference_cmd.add_argument("--current-core", required=True, type=Path, help="the current RC8 read-only starsector-core")
-    rebuild_from_reference_cmd.add_argument("--glob", default="**/*", help="glob (relative to the mod) scoping which files to consider, e.g. 'data/hullmods/**/*.java' or '**/*.wpn' (default: every file)")
-    rebuild_from_reference_cmd.add_argument("--apply", type=Path, dest="output", help="write every REBUILT/CONFLICT file's rebuilt content under this output directory (never the mod's own working copy); omit for a read-only report")
-    rebuild_from_reference_cmd.add_argument("--json", action="store_true")
-    diff_data_cmd = subcommands.add_parser("diff-data-local", help="value-diff two org.json-dialect files field by field, not a line diff (formatting/key-order differences produce no output)")
-    diff_data_cmd.add_argument("file_a", type=Path)
-    diff_data_cmd.add_argument("file_b", type=Path)
-    diff_data_cmd.add_argument("--json", action="store_true")
-    verify_shadow_cmd = subcommands.add_parser("verify-shadow-local", help="does a jar (or a directory of jars) actually supply a compiled class for this loose script? Real jar-class-file parsing, not a path-existence guess")
-    verify_shadow_cmd.add_argument("script", type=Path, help="loose .java script to check, absolute or relative to --root")
-    verify_shadow_cmd.add_argument("--against", required=True, type=Path, help="a single jar file, or a directory searched recursively for jars (e.g. a starsector-core install or a mods folder)")
-    verify_shadow_cmd.add_argument("--root", type=Path, help="root the script's class name is derived relative to (default: cwd)")
-    verify_shadow_cmd.add_argument("--json", action="store_true")
     diff_data_cmd = subcommands.add_parser("diff-data", help="compare two Starsector data files (JSON dialect or CSV) by value: key/row/column order, comments and formatting never count; exit 1 when they differ")
     diff_data_cmd.add_argument("a", type=Path, help="first file (e.g. the mod's copy)")
     diff_data_cmd.add_argument("b", type=Path, help="second file (e.g. vanilla's or a reference install's)")
@@ -1269,30 +1225,6 @@ def main(argv: list[str] | None = None) -> int:
             if args.write_markdown:
                 print(f"Roll-up written: {args.write_markdown}")
         return 1 if result["status"] == "REGRESSION" else 0
-    if args.command == "strip-plan-local":
-        from .strip_plan import strip_plan, write_expected_changes
-        result = strip_plan(args.mod, args.providers or None, args.vanilla_core, args.ops)
-        if args.write_expected:
-            if not args.build:
-                print("bridgeforge: --write-expected requires --build", file=sys.stderr)
-                return 2
-            from .scanner import _load_lenient_json_file
-            metadata = _load_lenient_json_file(args.mod / "mod_info.json")
-            mod_id = str(metadata.get("id")) if isinstance(metadata, dict) and metadata.get("id") else args.mod.name
-            result["written_expected_changes"] = write_expected_changes(result, args.write_expected, mod_id, args.build)
-        if args.json:
-            print(json.dumps(result, indent=2))
-        else:
-            print(f"{result['hard_id_count']} hard id(s) with no visible provider, out of {result['candidates_considered']} candidate provider(s) considered")
-            for entry in result["entries"]:
-                files = ", ".join(sorted({ref["file"] for ref in entry["references"]})) or "no file found"
-                print(f"  {entry['action'].upper()} {entry['kind']} '{entry['id']}' - {files}")
-                for sub in entry["substitute_candidates"]:
-                    print(f"    substitute candidates ({sub['slot_type']}/{sub['slot_size']}): {', '.join(sub['candidates'][:8])}")
-            if args.write_expected:
-                for written in result["written_expected_changes"]:
-                    print(f"  expect: {written['status']} {written['id']}")
-        return 0
     if args.command == "vendor-copy":
         from .strip_plan import vendor_copy
         result = vendor_copy(args.kind, args.id, args.from_provider, args.to_mod, args.policy, args.apply)
@@ -1330,106 +1262,6 @@ def main(argv: list[str] | None = None) -> int:
                 print(result["report_text"])
                 print(result["plan_text"])
         return 0 if result["status"] in ("OK", "WRITTEN") else 1
-    if args.command == "provider-index-update":
-        from .substitutes import DEFAULT_PROVIDER_INDEX_DIR, update_provider_index
-        roots = args.providers or None
-        from .java_toolchain import DEFAULT_PROVIDER_ROOTS
-        result = update_provider_index(roots or list(DEFAULT_PROVIDER_ROOTS), args.output or DEFAULT_PROVIDER_INDEX_DIR)
-        if args.json:
-            print(json.dumps(result, indent=2))
-        else:
-            print(f"{result['provider_count']} provider(s) cached to {result['output_dir']}")
-        return 0
-    if args.command == "dependency-graph-local":
-        from .dependency_graph import build_dependency_graph
-        from .substitutes import DEFAULT_PROVIDER_INDEX_DIR
-        result = build_dependency_graph(args.repo_root, args.vanilla_core, args.provider_index or DEFAULT_PROVIDER_INDEX_DIR, require_report=not args.include_intake)
-        if args.json:
-            print(json.dumps(result, indent=2))
-        else:
-            print(f"{result['mod_count']} mod(s) checked; {len(result['unresolved_by_mod'])} with an unresolved need; {len(result['ranked_providers'])} candidate provider(s) ranked by unblocking value")
-            for row in result["ranked_providers"]:
-                print(f"  {row['provider_mod_id']} ({row['provider_name']}, {row['provider_game_version']}) unblocks {row['unblocks_count']}: {', '.join(row['unblocks'])}")
-        return 0
-    if args.command == "archive-index":
-        from .archive_index import build_index
-        try:
-            result = build_index(args.root, args.output)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2))
-        else:
-            print(f"{result['archive_count']} archive(s): {result['counts']['INDEXED']} indexed, {result['counts']['UNCHANGED']} unchanged, {result['counts']['ERROR']} error(s)")
-            for error in result["errors"]:
-                print(f"  ERROR {error['archive']}: {error['error']}")
-            print(f"Index: {result['index_path']}")
-        return 0
-    if args.command == "archive-search":
-        from .archive_index import search_index
-        try:
-            result = search_index(args.index, args.query, "filename" if args.filenames else "content", args.limit)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2))
-        else:
-            print(f"{result['match_count']} match(es) for {result['query']!r} ({result['search_mode']}):")
-            for match in result["matches"]:
-                if "snippet" in match:
-                    print(f"  {match['archive']}!{match['member']}: {match['snippet']}")
-                else:
-                    print(f"  {match['archive']}!{match['member']} ({match['size_bytes']} bytes)")
-        return 0
-    if args.command == "rebuild-from-reference-local":
-        from .rebuild_from_reference import rebuild_from_reference
-        result = rebuild_from_reference(args.mod, args.reference_core, args.current_core, args.glob, args.output)
-        if args.json:
-            print(json.dumps(result, indent=2))
-        else:
-            counts = result["counts"]
-            print(f"{result['status']}: {len(result['files'])} file(s) with a counterpart in both vanilla copies - {counts['REBUILT']} rebuilt, {counts['CONFLICT']} with a conflict, {counts['NO_GENUINE_CHANGES']} unchanged from the reference")
-            for entry in result["files"]:
-                if entry["status"] == "NO_GENUINE_CHANGES":
-                    continue
-                print(f"  {entry['status']} {entry['file']} ({len(entry['changes_applied'])} change(s) applied, {len(entry['conflicts'])} conflict(s))")
-                for conflict in entry["conflicts"]:
-                    print(f"    CONFLICT {conflict['path']}: {conflict.get('note', '')}")
-                if args.output and "written_to" in entry:
-                    print(f"    written: {entry['written_to']}")
-        return 0
-    if args.command == "diff-data-local":
-        from .diff_data import diff_data
-        result = diff_data(args.file_a, args.file_b)
-        if args.json:
-            print(json.dumps(result, indent=2))
-        else:
-            if result["status"] == "IDENTICAL":
-                print(f"IDENTICAL: no value differences between {result['file_a']} and {result['file_b']}")
-            else:
-                print(f"DIFFERENT: {len(result['changes'])} value difference(s) between {result['file_a']} and {result['file_b']}")
-                for change in result["changes"]:
-                    if change["kind"] == "added":
-                        print(f"  + {change['path']}: {change['b']!r}")
-                    elif change["kind"] == "removed":
-                        print(f"  - {change['path']}: {change['a']!r}")
-                    else:
-                        print(f"  ~ {change['path']}: {change['a']!r} -> {change['b']!r}")
-        return 0
-    if args.command == "verify-shadow-local":
-        result = verify_shadow(args.script, args.against, args.root)
-        if args.json:
-            print(json.dumps(result, indent=2))
-        else:
-            if result["status"] == "ERROR":
-                print(f"verify-shadow: {result['error']}")
-            elif result["status"] == "SHADOWED":
-                print(f"SHADOWED: {result['class_name']} is supplied by: {', '.join(result['shadowing_jars'])}")
-            else:
-                print(f"NOT_SHADOWED: {result['class_name']} is not compiled into any jar under {result['against']}")
-        return 2 if result["status"] == "ERROR" else 0
     if args.command == "corpus-audit":
         try:
             report = audit_directories(args.mod_directories, TargetProfile(args.target_starsector, args.target_java), args.continue_on_error, args.max_files_per_mod, args.max_jars_per_mod)
@@ -2791,9 +2623,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Written: {args.output}")
         return 0
     if args.command == "verify-shadow":
-        from .verify_shadow import VerifyShadowError, verify_shadow as verify_shadow_remote
+        from .verify_shadow import VerifyShadowError, verify_shadow
         try:
-            result = verify_shadow_remote(args.scripts, args.against)
+            result = verify_shadow(args.scripts, args.against)
         except (VerifyShadowError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -2809,9 +2641,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  NOT checked: {problem}")
         return 0
     if args.command == "strip-plan":
-        from .strip_plan import StripPlanError, strip_plan_github
+        from .strip_plan import StripPlanError, strip_plan
         try:
-            result = strip_plan_github(args.mod, args.vanilla_core, args.only)
+            result = strip_plan(args.mod, args.vanilla_core, args.only)
             if args.expected:
                 from .strip_plan import propose_expected_changes
                 if not args.build:

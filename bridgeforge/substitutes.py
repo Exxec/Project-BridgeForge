@@ -133,24 +133,10 @@ def _deserialize_provider(data: dict) -> Provider:
     return provider
 
 
-def update_provider_index(roots: list[Path], output_dir: Path = DEFAULT_PROVIDER_INDEX_DIR, exclude: Path | None = None) -> dict:
-    """Recompute every visible provider under `roots` and cache it as one JSON file per mod id."""
-    providers = provider_index(roots, exclude)
-    output_dir = Path(output_dir).expanduser().resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
-    for provider in providers:
-        safe_name = re.sub(r"[^\w.-]", "_", provider.mod_id) or "unnamed"
-        (output_dir / f"{safe_name}.json").write_text(json.dumps(_serialize_provider(provider), indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return {
-        "schema_version": SCHEMA_VERSION, "mode": "provider-index-update", "status": "OK",
-        "output_dir": str(output_dir), "provider_count": len(providers),
-        "mod_ids": sorted(p.mod_id for p in providers),
-    }
-
-
 def load_provider_index_dir(index_dir: Path = DEFAULT_PROVIDER_INDEX_DIR) -> list[Provider]:
-    """Read back the cache `update_provider_index` wrote - works even when none of these mods are
-    currently installed anywhere live, since nothing here re-reads the mod folders themselves."""
+    """Read a per-mod folder cache (one JSON file per mod, written by the local `provider-index-update`
+    before it was folded into `provider-index build` on 2026-09-27). Works even when none of these mods
+    are installed anywhere live, since nothing here re-reads the mod folders themselves."""
     index_dir = Path(index_dir).expanduser().resolve()
     providers = []
     for path in sorted(index_dir.glob("*.json")) if index_dir.is_dir() else []:

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .baseline import load_baseline_keys, split_by_baseline
+from .baseline import load_baseline_keys, mod_baseline_path as _mod_baseline_path, split_by_baseline
 from .compile_check import compile_loose_scripts
 from .models import TargetProfile
 from .project_board import project_board
@@ -31,22 +31,6 @@ SCHEMA_VERSION = 1
 def _qualifying_mods(repo_root: Path, require_report: bool = True) -> list[dict[str, object]]:
     board = project_board(repo_root)
     return [row for row in board["mods"] if row["working"] and (row["evidence"]["report"] or not require_report)]
-
-
-def _mod_baseline_path(working: Path) -> Path | None:
-    """The mod's own accepted-findings baseline, if it keeps one under reports/.
-
-    A mod whose findings are reviewed and deliberately accepted (Xenoargh-FX-Example's preset
-    overrides are intentional custom content, owner call 2026-09-22) otherwise keeps reporting as a
-    REGRESSION on every recheck forever. `scan --write-baseline` already produces the file and
-    `scan --baseline` already honours it; without this, the recheck was the one consumer that did
-    not, so baselining a mod had no effect on the signal it was meant to quiet.
-    """
-    reports = Path(working) / "reports"
-    if not reports.is_dir():
-        return None
-    candidates = sorted(reports.glob("baseline*.json"))
-    return candidates[-1] if candidates else None
 
 
 def _recheck_one(name: str, working: Path, vanilla_core: Path | None, declared_status: str | None, declared_status_confidence: str | None) -> dict[str, object]:

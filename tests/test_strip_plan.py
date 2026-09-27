@@ -1,352 +1,137 @@
 from __future__ import annotations
 
-import contextlib
 import io
 import json
-import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from bridgeforge.cli import main
-from bridgeforge.strip_plan import find_content_references, strip_plan, vendor_copy, weapon_substitute_candidates, write_expected_changes
+from bridgeforge.behavior_discovery import _change_matches, check_expected_changes
+from bridgeforge.strip_plan import StripPlanError, propose_expected_changes, strip_plan
+from tests.support import resolved_temp_dir
 
 
-def _write(path: Path, text: str) -> None:
+def _write(path: Path, data: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    path.write_text(data if isinstance(data, str) else json.dumps(data), encoding="utf-8")
 
 
 def _core(root: Path) -> Path:
     core = root / "core"
-    _write(core / "data" / "hullmods" / "hull_mods.csv", "name,id\nArmor,heavyarmor\n")
-    _write(core / "data" / "hulls" / "wing_data.csv", "id,variant\ntalon_wing,t\n")
-    _write(core / "data" / "weapons" / "weapon_data.csv", "name,id\nLight MG,lightmg\nVanilla Beam,vbeam\nBig Cannon,bigcannon\n")
-    _write(core / "data" / "weapons" / "lightmg.wpn", json.dumps({"id": "lightmg", "type": "BALLISTIC", "size": "SMALL"}))
-    _write(core / "data" / "weapons" / "vbeam.wpn", json.dumps({"id": "vbeam", "type": "ENERGY", "size": "SMALL"}))
-    _write(core / "data" / "weapons" / "bigcannon.wpn", json.dumps({"id": "bigcannon", "type": "BALLISTIC", "size": "LARGE"}))
-    _write(core / "data" / "hulls" / "lasher.ship", json.dumps({
-        "hullId": "lasher", "hullSize": "FRIGATE",
-        "weaponSlots": [{"id": "WS001", "type": "ENERGY", "size": "SMALL"}],
-    }))
+    weapons = {"lightmg": ("BALLISTIC", "SMALL", ""), "lightac": ("BALLISTIC", "SMALL", ""), "ioncannon": ("ENERGY", "SMALL", ""),
+               "heavyac": ("BALLISTIC", "MEDIUM", ""), "harpoon": ("MISSILE", "SMALL", ""), "hybridbeam": ("ENERGY", "SMALL", "HYBRID"),
+               "flare": ("DECORATIVE", "SMALL", "")}
+    _write(core / "data/weapons/weapon_data.csv", "id\n" + "".join(f"{w}\n" for w in weapons))
+    for weapon_id, (kind, size, override) in weapons.items():
+        _write(core / f"data/weapons/{weapon_id}.wpn", {"id": weapon_id, "type": kind, "size": size, **({"mountTypeOverride": override} if override else {})})
+    _write(core / "data/hullmods/hull_mods.csv", "id\nheavyarmor\n")
+    _write(core / "data/hulls/wing_data.csv", "id\ntalon_wing\n")
+    _write(core / "data/hulls/ship_data.csv", "id\nwolf\n")
+    _write(core / "data/hulls/wolf.ship", {"hullId": "wolf", "hullSize": "FRIGATE", "weaponSlots": [
+        {"id": "WS1", "type": "BALLISTIC", "size": "SMALL"}, {"id": "WS2", "type": "HYBRID", "size": "SMALL"},
+        {"id": "WS3", "type": "DECORATIVE", "size": "SMALL"}]})
     return core
 
 
-class FindContentReferencesTests(unittest.TestCase):
-    def test_finds_hullmod_field_and_file(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            _write(root / "data" / "variants" / "x.variant", json.dumps({"variantId": "x", "hullId": "lasher", "hullMods": ["gone_mod"]}))
-            refs = find_content_references(root, "hullmod", "gone_mod")
-        self.assertEqual(refs, [{"file": "data/variants/x.variant", "field": "hullMods"}])
-
-    def test_finds_faction_known_hullmods(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            _write(root / "data" / "world" / "factions" / "x.faction", json.dumps({"id": "x", "knownHullMods": {"hullMods": ["gone_mod"]}}))
-            refs = find_content_references(root, "hullmod", "gone_mod")
-        self.assertEqual(refs, [{"file": "data/world/factions/x.faction", "field": "knownHullMods.hullMods"}])
-
-    def test_finds_weapon_group_slot_and_hull(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            _write(root / "data" / "variants" / "x.variant", json.dumps({"variantId": "x", "hullId": "lasher", "weaponGroups": [{"weapons": {"WS001": "gone_wpn"}}]}))
-            refs = find_content_references(root, "weapon", "gone_wpn")
-        self.assertEqual(refs, [{"file": "data/variants/x.variant", "field": "weaponGroups.weapons.WS001", "slot_id": "WS001", "hull_id": "lasher"}])
-
-    def test_finds_hull_id_and_skin_base_hull_id(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            _write(root / "data" / "variants" / "x.variant", json.dumps({"variantId": "x", "hullId": "gone_hull"}))
-            _write(root / "data" / "hulls" / "skins" / "x.skin", json.dumps({"skinHullId": "x_skin", "baseHullId": "gone_hull"}))
-            refs = find_content_references(root, "hull", "gone_hull")
-        self.assertEqual(len(refs), 2)
-        self.assertIn({"file": "data/variants/x.variant", "field": "hullId"}, refs)
-        self.assertIn({"file": "data/hulls/skins/x.skin", "field": "baseHullId"}, refs)
-
-    def test_no_false_positive_for_an_unrelated_id(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            _write(root / "data" / "variants" / "x.variant", json.dumps({"variantId": "x", "hullId": "lasher", "hullMods": ["other_mod"]}))
-            self.assertEqual(find_content_references(root, "hullmod", "gone_mod"), [])
-
-
-class WeaponSubstituteCandidatesTests(unittest.TestCase):
-    def test_matches_by_type_and_size_only_vanilla_ids(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            core = _core(root)
-            candidates = weapon_substitute_candidates(core, "ENERGY", "SMALL")
-        self.assertEqual(candidates, ["vbeam"])
-
-    def test_a_larger_weapon_does_not_fit_a_smaller_slot(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            core = _core(root)
-            candidates = weapon_substitute_candidates(core, "BALLISTIC", "SMALL")
-        self.assertEqual(candidates, ["lightmg"])  # bigcannon (LARGE) excluded
-
-    def test_excludes_the_missing_id_itself(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            core = _core(root)
-            candidates = weapon_substitute_candidates(core, "ENERGY", "SMALL", exclude_id="vbeam")
-        self.assertEqual(candidates, [])
-
-    def test_no_vanilla_core_returns_nothing(self) -> None:
-        self.assertEqual(weapon_substitute_candidates(None, "ENERGY", "SMALL"), [])
-
-
-def _provider_mod(root: Path, mod_id: str, hullmod_row: str, script_class: str | None = None, script_body: str = "") -> Path:
-    provider = root / "provider"
-    _write(provider / "mod_info.json", json.dumps({"id": mod_id, "name": mod_id}))
-    _write(provider / "data" / "hullmods" / "hull_mods.csv", "name,id,script,desc\n" + hullmod_row)
-    if script_class:
-        script_path = provider / (script_class.replace(".", "/") + ".java")
-        _write(script_path, script_body)
-    return provider
-
-
-class VendorCopyTests(unittest.TestCase):
-    """ROADMAP P14 item 4's vendoring alternative: "copy the one missing piece... instead of
-    reviving a heavy provider." Scoped to hullmods (a CSV row plus its declared script is a single,
-    well-defined unit); a licence gate blocks a local-only source, matching item 7's own gate.
-    """
-
-    def test_dry_run_plans_without_writing(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            provider = _provider_mod(root, "provider_mod", "Radar,x_radar,data.hullmods.XRadar,desc\n", "data.hullmods.XRadar", "package data.hullmods;\nclass XRadar {}\n")
-            target = root / "target"
-            result = vendor_copy("hullmod", "x_radar", provider, target)
-        self.assertEqual(result["status"], "PLANNED")
-        self.assertEqual(result["files"], ["data/hullmods/XRadar.java"])
-        self.assertFalse((target / "data" / "hullmods" / "hull_mods.csv").exists())
-        self.assertFalse((target / "data" / "hullmods" / "XRadar.java").exists())
-
-    def test_apply_writes_the_csv_row_and_the_script(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            provider = _provider_mod(root, "provider_mod", "Radar,x_radar,data.hullmods.XRadar,desc\n", "data.hullmods.XRadar", "package data.hullmods;\nclass XRadar {}\n")
-            target = root / "target"
-            result = vendor_copy("hullmod", "x_radar", provider, target, apply=True)
-            self.assertEqual(result["status"], "APPLIED")
-            csv_text = (target / "data" / "hullmods" / "hull_mods.csv").read_text(encoding="utf-8")
-            self.assertIn("x_radar", csv_text)
-            self.assertEqual((target / "data" / "hullmods" / "XRadar.java").read_text(encoding="utf-8"), "package data.hullmods;\nclass XRadar {}\n")
-
-    def test_transitive_same_mod_script_dependency_is_also_copied(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            provider = _provider_mod(
-                root, "provider_mod", "Radar,x_radar,data.hullmods.XRadar,desc\n", "data.hullmods.XRadar",
-                "package data.hullmods;\nimport data.scripts.plugins.XRadarPlugin;\nclass XRadar { XRadarPlugin p; }\n",
-            )
-            _write(provider / "data" / "scripts" / "plugins" / "XRadarPlugin.java", "package data.scripts.plugins;\nclass XRadarPlugin {}\n")
-            target = root / "target"
-            result = vendor_copy("hullmod", "x_radar", provider, target, apply=True)
-            self.assertEqual(sorted(result["files"]), ["data/hullmods/XRadar.java", "data/scripts/plugins/XRadarPlugin.java"])
-            self.assertTrue((target / "data" / "scripts" / "plugins" / "XRadarPlugin.java").is_file())
-
-    def test_jar_only_script_is_reported_not_vendored(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            provider = _provider_mod(root, "provider_mod", "Radar,x_radar,data.hullmods.XRadar,desc\n")  # no loose script written
-            target = root / "target"
-            result = vendor_copy("hullmod", "x_radar", provider, target)
-        self.assertEqual(result["status"], "PLANNED")
-        self.assertEqual(result["files"], [])
-        self.assertEqual(result["script_not_vendored"], "data.hullmods.XRadar")
-
-    def test_id_not_found_in_source_csv(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            provider = _provider_mod(root, "provider_mod", "Radar,x_radar,data.hullmods.XRadar,desc\n")
-            result = vendor_copy("hullmod", "does_not_exist", provider, root / "target")
-        self.assertEqual(result["status"], "NOT_FOUND")
-
-    def test_target_already_declaring_the_id_is_a_conflict(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            provider = _provider_mod(root, "provider_mod", "Radar,x_radar,data.hullmods.XRadar,desc\n", "data.hullmods.XRadar", "x")
-            target = root / "target"
-            _write(target / "data" / "hullmods" / "hull_mods.csv", "name,id,script,desc\nOther,x_radar,data.hullmods.Other,d\n")
-            result = vendor_copy("hullmod", "x_radar", provider, target)
-        self.assertEqual(result["status"], "CONFLICT")
-
-    def test_different_content_already_at_the_target_script_path_is_a_conflict(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            provider = _provider_mod(root, "provider_mod", "Radar,x_radar,data.hullmods.XRadar,desc\n", "data.hullmods.XRadar", "package data.hullmods;\nclass XRadar { /* new */ }\n")
-            target = root / "target"
-            _write(target / "data" / "hullmods" / "XRadar.java", "package data.hullmods;\nclass XRadar { /* different, already here */ }\n")
-            result = vendor_copy("hullmod", "x_radar", provider, target)
-        self.assertEqual(result["status"], "CONFLICT")
-
-    def test_identical_content_already_at_the_target_script_path_is_not_a_conflict(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            body = "package data.hullmods;\nclass XRadar {}\n"
-            provider = _provider_mod(root, "provider_mod", "Radar,x_radar,data.hullmods.XRadar,desc\n", "data.hullmods.XRadar", body)
-            target = root / "target"
-            _write(target / "data" / "hullmods" / "XRadar.java", body)
-            result = vendor_copy("hullmod", "x_radar", provider, target)
-        self.assertEqual(result["status"], "PLANNED")
-
-    def test_a_local_only_provider_is_refused(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            provider = _provider_mod(root, "no_licence_mod", "Radar,x_radar,data.hullmods.XRadar,desc\n", "data.hullmods.XRadar", "x")
-            policy = root / "policy.json"
-            policy.write_text(json.dumps({"schema_version": 1, "mods": {"no_licence_mod": {"local_only": True, "reason": "no licence found"}}}), encoding="utf-8")
-            result = vendor_copy("hullmod", "x_radar", provider, root / "target", policy_path=policy)
-        self.assertEqual(result["status"], "REFUSED")
-        self.assertIn("no licence found", result["reason"])
-
-    def test_a_kind_other_than_hullmod_is_refused(self) -> None:
-        result = vendor_copy("weapon", "x", Path("."), Path("."))
-        self.assertEqual(result["status"], "REFUSED")
-
-    def test_real_shields_formshield_is_refused_because_rebal_is_local_only(self) -> None:
-        # Real corpus check: confirms the licence gate actually reads the real policy for the
-        # exact mod/id this whole item's example was written from, not just a synthetic one.
-        real_root = Path("In operation/Xenoargh-Rebal/working")
-        if not real_root.is_dir():
-            self.skipTest("real corpus not present")
-        with tempfile.TemporaryDirectory() as directory:
-            result = vendor_copy("hullmod", "shields_formshield", real_root, Path(directory) / "target")
-        self.assertEqual(result["status"], "REFUSED")
-
-    def test_cli_dry_run_and_apply(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            provider = _provider_mod(root, "provider_mod", "Radar,x_radar,data.hullmods.XRadar,desc\n", "data.hullmods.XRadar", "package data.hullmods;\nclass XRadar {}\n")
-            target = root / "target"
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                exit_code = main(["vendor-copy", "hullmod", "x_radar", str(provider), str(target), "--json"])
-            self.assertEqual(exit_code, 0)
-            self.assertEqual(json.loads(out.getvalue())["status"], "PLANNED")
-            self.assertFalse((target / "data" / "hullmods" / "hull_mods.csv").exists())
-
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                exit_code = main(["vendor-copy", "hullmod", "x_radar", str(provider), str(target), "--apply", "--json"])
-            self.assertEqual(exit_code, 0)
-            self.assertEqual(json.loads(out.getvalue())["status"], "APPLIED")
-            self.assertTrue((target / "data" / "hullmods" / "hull_mods.csv").exists())
+def _mod(root: Path) -> Path:
+    mod = root / "mod"
+    _write(mod / "mod_info.json", '{"id":"cc","name":"Communist Clouds","gameVersion":"0.98a"}')
+    _write(mod / "data/variants/wolf_Red.variant", {"hullId": "wolf", "variantId": "wolf_Red", "hullMods": ["vayra_red_army", "heavyarmor"],
+                                                     "wings": ["vayra_wing"], "weaponGroups": [{"weapons": {"WS1": "vayra_gun", "WS2": "vayra_gun", "WS3": "vayra_gun"}}]})
+    _write(mod / "data/variants/ghost_Std.variant", {"hullId": "vayra_ghost", "variantId": "ghost_Std", "weaponGroups": [{"weapons": {"WS1": "vayra_gun"}}]})
+    _write(mod / "data/hulls/skins/ghost_red.skin", {"skinHullId": "ghost_red", "baseHullId": "vayra_ghost"})
+    _write(mod / "data/world/factions/red_army.faction", {"id": "red_army", "knownShips": {"hulls": ["wolf", "vayra_ghost"]},
+                                                          "knownWeapons": {"weapons": ["vayra_gun", "lightmg"]}, "knownFighters": {"fighters": ["vayra_wing"]}})
+    return mod
 
 
 class StripPlanTests(unittest.TestCase):
-    """ROADMAP P14 item 4: the exact edit list for a STRIP_FROM_MOD recommendation, plus real
-    vanilla weapon substitute candidates "of the same slot type and size" - never a second
-    implementation of the scanner's own slot-fit logic, never an invented match.
-    """
+    def test_every_place_each_unresolved_id_sits(self):
+        with resolved_temp_dir() as root:
+            result = strip_plan(_mod(root), _core(root))
+        actions = sorted((e["file"], e["kind"], e["id"], e["action"]) for e in result["edits"])
+        self.assertEqual(actions, [
+            ("data/hulls/skins/ghost_red.skin", "hull", "vayra_ghost", "delete this skin: its baseHullId is unresolved, so nothing in it can load"),
+            ("data/variants/ghost_Std.variant", "hull", "vayra_ghost", "delete this variant: its hullId is unresolved, so nothing in it can load"),
+            ("data/variants/wolf_Red.variant", "hullmod", "vayra_red_army", "remove from hullMods"),
+            ("data/variants/wolf_Red.variant", "weapon", "vayra_gun", "empty slot WS1 (weaponGroups[0])"),
+            ("data/variants/wolf_Red.variant", "weapon", "vayra_gun", "empty slot WS2 (weaponGroups[0])"),
+            ("data/variants/wolf_Red.variant", "weapon", "vayra_gun", "empty slot WS3 (weaponGroups[0])"),
+            ("data/variants/wolf_Red.variant", "wing", "vayra_wing", "remove from wings"),
+            ("data/world/factions/red_army.faction", "hull", "vayra_ghost", "remove from knownShips.hulls"),
+            ("data/world/factions/red_army.faction", "weapon", "vayra_gun", "remove from knownWeapons.weapons"),
+            ("data/world/factions/red_army.faction", "wing", "vayra_wing", "remove from knownFighters.fighters"),
+        ])
 
-    def _addon(self, root: Path, *, hull_mods: list[str] | None = None, weapon_slot: dict[str, str] | None = None, dependencies: list[dict] | None = None) -> Path:
-        mod = root / "mod"
-        info = {"id": "addon", "name": "Addon", "gameVersion": "0.98a-RC8"}
-        if dependencies:
-            info["dependencies"] = dependencies
-        _write(mod / "mod_info.json", json.dumps(info))
-        variant = {"variantId": "x", "hullId": "lasher", "hullMods": hull_mods or [], "wings": []}
-        if weapon_slot:
-            variant["weaponGroups"] = [{"weapons": weapon_slot}]
-        _write(mod / "data" / "variants" / "x.variant", json.dumps(variant))
-        return mod
+    def test_substitutes_fit_the_slot_type_and_size(self):
+        with resolved_temp_dir() as root:
+            result = strip_plan(_mod(root), _core(root))
+        by_slot = {e["action"].split()[2]: e["substitutes"] for e in result["edits"] if e["action"].startswith("empty slot")}
+        # hybridbeam is ENERGY with mountTypeOverride HYBRID, which fits BALLISTIC slots (scanner.MOUNT_OVERRIDE_FITS).
+        self.assertEqual(by_slot["WS1"]["candidates"], ["hybridbeam", "lightac", "lightmg"])
+        self.assertEqual(by_slot["WS2"]["candidates"], ["hybridbeam", "ioncannon", "lightac", "lightmg"])
+        self.assertEqual(by_slot["WS3"]["candidates"], [])
+        self.assertIn("not a regular weapon slot", by_slot["WS3"]["note"])
 
-    def test_a_weapon_with_no_provider_proposes_a_real_vanilla_substitute(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            core = _core(root)
-            mod = self._addon(root, weapon_slot={"WS001": "missing_beam"})
-            plan = strip_plan(mod, provider_roots=[root / "no-providers"], vanilla_core=core)
-        self.assertEqual(plan["hard_id_count"], 1)
-        entry = plan["entries"][0]
-        self.assertEqual(entry["kind"], "weapon")
-        self.assertEqual(entry["id"], "missing_beam")
-        self.assertEqual(entry["action"], "substitute")
-        self.assertEqual(entry["substitute_candidates"], [{"slot_type": "ENERGY", "slot_size": "SMALL", "candidates": ["vbeam"]}])
-        self.assertEqual(entry["references"][0]["file"], "data/variants/x.variant")
+    def test_id_filter_and_errors(self):
+        with resolved_temp_dir() as root:
+            mod, core = _mod(root), _core(root)
+            only = strip_plan(mod, core, ["hullmod:vayra_red_army"])
+            self.assertEqual([(e["kind"], e["id"]) for e in only["edits"]], [("hullmod", "vayra_red_army")])
+            with self.assertRaises(StripPlanError):
+                strip_plan(root / "nope", core)
+            with self.assertRaises(StripPlanError):
+                strip_plan(mod, root / "nope")
 
-    def test_a_hullmod_with_no_provider_proposes_strip_only(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            core = _core(root)
-            mod = self._addon(root, hull_mods=["missing_hullmod"])
-            plan = strip_plan(mod, provider_roots=[root / "no-providers"], vanilla_core=core)
-        self.assertEqual(plan["hard_id_count"], 1)
-        entry = plan["entries"][0]
-        self.assertEqual(entry["kind"], "hullmod")
-        self.assertEqual(entry["action"], "strip")
-        self.assertEqual(entry["substitute_candidates"], [])
-
-    def test_a_live_provider_covering_the_id_means_zero_hard_ids(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            core = _core(root)
-            provider = root / "providers" / "base"
-            _write(provider / "mod_info.json", json.dumps({"id": "base", "name": "Base", "gameVersion": "0.98a-RC8"}))
-            _write(provider / "data" / "hullmods" / "hull_mods.csv", "name,id\nX,shared_hullmod\n")
-            mod = self._addon(root, hull_mods=["shared_hullmod"], dependencies=[{"id": "base"}])
-            plan = strip_plan(mod, provider_roots=[root / "providers"], vanilla_core=core)
-        self.assertEqual(plan["hard_id_count"], 0)
-        self.assertEqual(plan["entries"], [])
-
-    def test_write_expected_changes_produces_a_real_proposed_expect_entry(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            core = _core(root)
-            mod = self._addon(root, hull_mods=["missing_hullmod"])
-            plan = strip_plan(mod, provider_roots=[root / "no-providers"], vanilla_core=core)
-            expected_path = root / "expected.json"
-            written = write_expected_changes(plan, expected_path, mod_id="addon", build="r1")
-            self.assertEqual(len(written), 1)
-            self.assertEqual(written[0]["status"], "UPDATED")
-            payload = json.loads(expected_path.read_text(encoding="utf-8"))
-            self.assertEqual(payload["mod_id"], "addon")
-            change = payload["changes"][0]
-            self.assertEqual(change["status"], "PROPOSED")
-            self.assertEqual(change["match"], {"change": "removed", "kind": "hullmod", "id": "missing_hullmod"})
-
-    def test_write_expected_changes_sanitizes_a_mod_id_with_underscores(self) -> None:
-        # EXP-<MOD>-nnn only accepts alphanumeric MOD; a real mod_id like "xxx_ss_FX_mod_core"
-        # would otherwise fail behavior_discovery's own id pattern with an opaque error.
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            core = _core(root)
-            mod = self._addon(root, hull_mods=["missing_hullmod"])
-            plan = strip_plan(mod, provider_roots=[root / "no-providers"], vanilla_core=core)
-            expected_path = root / "expected.json"
-            written = write_expected_changes(plan, expected_path, mod_id="xxx_ss_fx_mod", build="r1")
-        self.assertEqual(written[0]["status"], "UPDATED")
-        self.assertNotIn("_", written[0]["id"])
-
-    def test_cli_reports_and_writes_expected(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            core = _core(root)
-            mod = self._addon(root, hull_mods=["missing_hullmod"])
-            expected_path = root / "expected.json"
+    def test_cli(self):
+        with resolved_temp_dir() as root:
+            mod, core = _mod(root), _core(root)
             out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                exit_code = main([
-                    "strip-plan-local", str(mod), "--vanilla-core", str(core),
-                    "--providers", str(root / "no-providers"),
-                    "--write-expected", str(expected_path), "--build", "r1", "--json",
-                ])
-            self.assertEqual(exit_code, 0)
-            payload = json.loads(out.getvalue())
-            self.assertEqual(payload["hard_id_count"], 1)
-            self.assertEqual(len(payload["written_expected_changes"]), 1)
-            self.assertTrue(expected_path.is_file())
+            with redirect_stdout(out):
+                self.assertEqual(main(["strip-plan", str(mod), "--vanilla-core", str(core), "--id", "weapon:vayra_gun"]), 0)
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["strip-plan", str(root / "nope"), "--vanilla-core", str(core)]), 2)
+        self.assertIn("data/variants/wolf_Red.variant: empty slot WS1 (weaponGroups[0]) -- weapon:vayra_gun", out.getvalue())
+        self.assertIn("    vanilla BALLISTIC SMALL options: hybridbeam, lightac, lightmg", out.getvalue())
+        # With only weapons in scope, the variant on the unresolved hull keeps its slot line but no substitutes.
+        self.assertIn("ghost_Std.variant: empty slot WS1 (weaponGroups[0]) -- weapon:vayra_gun\n    slot not found on the resolved hull", out.getvalue())
 
-    def test_cli_requires_build_with_write_expected(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            core = _core(root)
-            mod = self._addon(root, hull_mods=["missing_hullmod"])
-            exit_code = main(["strip-plan-local", str(mod), "--vanilla-core", str(core), "--write-expected", str(root / "e.json")])
-            self.assertEqual(exit_code, 2)
+
+class StripExpectedChangesTests(unittest.TestCase):
+    def test_deletions_become_proposed_changes_that_expect_accepts_and_behavior_diff_matches(self):
+        with resolved_temp_dir() as root:
+            plan = strip_plan(_mod(root), _core(root))
+            expected = root / "reports" / "expected-changes.json"
+            added = propose_expected_changes(plan, expected, build="r2", links={"risk": ["RISK-CC-001"]})
+            check = check_expected_changes(expected)
+            again = propose_expected_changes(plan, expected, build="r3", links={"test": ["CC-1"]})
+            changes = {c["id"]: c for c in check_expected_changes(expected)["changes"]}
+        self.assertEqual(added, ["EXP-CC-001", "EXP-CC-002"])
+        self.assertEqual(again, ["EXP-CC-003", "EXP-CC-004"])  # numbering continues; ids are never reused
+        self.assertEqual(check["status"], "PASS", check["errors"])
+        first = changes["EXP-CC-001"]
+        self.assertEqual((first["status"], first["layer"], first["proposed_by"]), ("PROPOSED", "static", "strip-plan"))
+        self.assertEqual(first["match"], {"observation": "static.data", "subject": "data/hulls/skins/ghost_red.skin", "field": "present", "change": "removed"})
+        deleted = {"layer": "static", "observation": "static.data", "subject": "data/hulls/skins/ghost_red.skin", "field": "present", "before": True, "after": None}
+        self.assertTrue(_change_matches(first, deleted))
+        self.assertFalse(_change_matches(first, {**deleted, "subject": "data/variants/wolf_Red.variant"}))
+
+    def test_links_are_required_and_cli_writes_the_file(self):
+        with resolved_temp_dir() as root:
+            mod, core = _mod(root), _core(root)
+            with self.assertRaises(StripPlanError):
+                propose_expected_changes(strip_plan(mod, core), root / "e.json", build="r2", links={"bug_class": ["x"]})
+            expected = root / "reports" / "expected-changes.json"
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["strip-plan", str(mod), "--vanilla-core", str(core), "--expected", str(expected), "--build", "r2", "--link", "hyp=HYP-CC-1"])
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["strip-plan", str(mod), "--vanilla-core", str(core), "--expected", str(expected)]), 2)
+            written = json.loads(expected.read_text(encoding="utf-8"))
+        self.assertEqual(code, 0)
+        self.assertEqual([c["id"] for c in written["changes"]], ["EXP-CC-001", "EXP-CC-002"])
+        self.assertIn("PROPOSED expected changes added to", out.getvalue())
 
 
 if __name__ == "__main__":

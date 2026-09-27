@@ -1784,6 +1784,25 @@ whether the result passed; recurring agent fixes become deterministic fixers.
    column, reusing the carrier-bays edit) and `missing-custom-ui-button-pressed-callback` (no-op
    callback in loose scripts). Tests: `tests/test_fixers.py`. **Next:** write fixers for the top
    `unlocks` ids from the first local `finding-stats` run, and for whatever the ledger promotes.
+5. **One command per job after the local/GitHub merge (owner decision 2026-09-27).** The 2026-09-27
+   merge kept both sides' versions of seven commands. **Done 2026-09-27.** Kept `strip-plan`,
+   `diff-data`, `verify-shadow`, `dependency-graph`, `rebuild-from-reference`, `corpus-index` and
+   `provider-index build`; removed `strip-plan-local`, `diff-data-local`, `verify-shadow-local`,
+   `dependency-graph-local`, `rebuild-from-reference-local`, `archive-index`/`archive-search` and
+   `provider-index-update` with their modules (`diff_data`, `rebuild_from_reference`,
+   `archive_index`, `dependency_graph`, `scanner.verify_shadow`). Kept both `vendor-plan` (what a
+   closure needs) and `vendor-copy` (copies a hullmod), per the owner. A provider cache the local
+   `provider-index-update` wrote (a folder, one JSON per mod) still loads through
+   `load_provider_index` and `--provider-index`. Tests: `tests/test_substitutes.py`
+   (`LegacyProviderCacheTests`), `tests/test_vendor_copy.py`, `tests/test_strip_plan.py`,
+   `tests/test_verify_shadow.py`.
+6. **Automation follows the merged fixers and baselines.** **Done 2026-09-27.** Three fixers from the
+   local history were tiered so `revive` never ran them: `rules-firebest-populate-options`,
+   `personality-id-unknown` and `shiproles-wing-id` are now `auto` (their MANUAL/REVIEW findings
+   still need approval), and a test fails when any fixer's finding is not `auto` or `input`. `revive`,
+   `escalation verify` and `finding-stats` now honour the mod's accepted-findings baseline
+   (`working/reports/baseline*.json`) as `corpus-recheck` does since item 46, sharing
+   `baseline.mod_baseline_path`. Tests: `tests/test_finding_stats.py`, `tests/test_revive.py`.
 
 ## Post-1.0 research and gated automation
 
