@@ -2067,6 +2067,9 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         `createEmptyFleet(faction, "<type>", ...)` (source or bytecode string constant) whose faction file has no
         `fleetTypeNames` entry for that type, and no vanilla default. Cosmetic but visible in every encounter;
         the fix is a data entry, so it can be a fixer that proposes the name from the type string.
+    17. **Triage across relaunches.** `bf-test launch` redirects only the session it starts; a player relaunch
+        (ZG-7's save/quit/load) goes only to the game's `starsector.log`. `triage` should also read the rig's
+        `starsector.log` lines after the launch time, so a multi-session test is triaged whole.
     16. **`shippable-work-file` references (done 2026-09-27):** mentions inside IDE/VCS folders (`.idea`, `.git`,
         `src*`) no longer count as runtime references; Jackundor's `.idea/libraries/data.xml` had kept two
         backup zips in the mod. Test: `tests/test_fixers.py`.
@@ -2159,6 +2162,13 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     Fuel-Siphoning left open: their LunaLib use is behind `isModEnabled("lunalib")` in the mod plugin, an
     optional settings integration, so declaring LunaLib would force it on every player (owner to confirm).
     **UNATTENDED_DONE now: 63 queued mods** (plus ClearCommands archived). Each still needs its probe run.
+    Later the same day: D-MOD-Services and Fuel-Siphoning accepted LunaLib as optional (owner; baselined), so
+    66 at UNATTENDED_DONE. **Zorg18 live-validated** (ZG-1..ZG-7, owner, all successful; probe 0.2.5 content-ids
+    checked=19 failed=0, all 11 hulls deployed). Live findings fixed: `zorg.faction` had no `fleetTypeNames`
+    ("no name for type [Zeta AI raid]"). Explained, unchanged: Unimatrix has no dialog in the original either;
+    the oversized fighter shields are the Trapezoid "Generator" wing's own 200 radius; Askonia raids ran (2 in
+    the save). Found on the way: `bf-test launch` captures only the session it starts; a relaunch logs only to
+    the game's `starsector.log` (roadmap item 20).
 
 ## Post-1.0 research and gated automation
 
