@@ -265,6 +265,22 @@ def _insert_before_class_end(text: str, members: list[str], note: str) -> str:
     return text[:end] + block + text[end:]
 
 
+def _findings_of(root: Path, options: dict, finding_id: str) -> list:
+    """This finding id's findings: the caller's own scan when it passes one (`options["scan_findings"]`,
+    Finding objects or their dicts, as `revive` does, so a fixer run doesn't rescan the whole mod),
+    else a fresh scan. Only the files and evidence are read, so either source gives the same edit.
+    """
+    supplied = options.get("scan_findings")
+    if supplied is None:
+        from .scanner import scan_mod
+
+        return [f for f in scan_mod(root).findings if f.id == finding_id]
+    from types import SimpleNamespace
+
+    found = [SimpleNamespace(**f) if isinstance(f, dict) else f for f in supplied]
+    return [f for f in found if f.id == finding_id]
+
+
 def _fix_target_interface_method_missing(root: Path, options: dict) -> list[FileChange]:
     """Bring loose scripts up to RC8's callback signatures (they fail to compile at load otherwise).
 
@@ -273,9 +289,8 @@ def _fix_target_interface_method_missing(root: Path, options: dict) -> list[File
     - HullModEffect: add showInRefitScreenModPickerFor/isSModEffectAPenalty, BaseHullMod's defaults.
     Bodies are untouched. Classes compiled into a jar need the jar rebuilt, so those are refused.
     """
-    from .scanner import scan_mod
 
-    files = sorted({f.file for f in scan_mod(root).findings if f.id == "target-interface-method-missing" and f.file})
+    files = sorted({f.file for f in _findings_of(root, options, "target-interface-method-missing") if f.file})
     loose = [rel for rel in files if rel.startswith("data/")]
     if not loose:
         detail = f" (jar sources need a rebuild: {', '.join(files[:5])})" if files else ""
@@ -643,9 +658,8 @@ def _fix_revenantlib_fold_conflict(root: Path, options: dict) -> list[FileChange
     the same in-memory text that ends up written (never a second, independently-read FileChange for
     the same path, which could otherwise clobber this one).
     """
-    from .scanner import scan_mod
 
-    findings = [f for f in scan_mod(root).findings if f.id == "revenantlib-fold-conflict"]
+    findings = _findings_of(root, options, "revenantlib-fold-conflict")
     if not findings:
         raise FixerError(
             "No revenantlib-fold-conflict finding for this mod: mod_info.json does not declare both "
@@ -726,9 +740,9 @@ def _fix_undeclared_library_dependency(root: Path, options: dict) -> list[FileCh
     written dependency actually matches what the game expects, not just what the scanner's own
     case-insensitive comparison would have accepted.
     """
-    from .scanner import LIBRARY_DEPENDENCY_IDS, scan_mod
+    from .scanner import LIBRARY_DEPENDENCY_IDS
 
-    findings = [f for f in scan_mod(root).findings if f.id == "undeclared-library-dependency"]
+    findings = _findings_of(root, options, "undeclared-library-dependency")
     if not findings:
         raise FixerError("No undeclared-library-dependency finding for this mod.")
 
@@ -1457,9 +1471,8 @@ def _fix_missing_custom_ui_button_pressed_callback(root: Path, options: dict) ->
     with the scanner's own brace-aware walk; an unbalanced block is refused. Loose data/ scripts
     only: jar sources need the jar rebuilt.
     """
-    from .scanner import scan_mod
 
-    files = sorted({f.file for f in scan_mod(root).findings if f.id == "missing-custom-ui-button-pressed-callback" and f.file})
+    files = sorted({f.file for f in _findings_of(root, options, "missing-custom-ui-button-pressed-callback") if f.file})
     loose = [rel for rel in files if rel.startswith("data/")]
     if not loose:
         raise FixerError("No loose data/ script lacks buttonPressed(Object)" + (f" (jar sources need a rebuild: {', '.join(files[:5])})" if files else "") + ".")
@@ -1532,9 +1545,8 @@ def _fix_personality_id_unknown(root: Path, options: dict) -> list[FileChange]:
     table the scanner's own finding explanation already suggests. A jar's bundled source needs the jar
     rebuilt, so a match found only there is refused rather than silently skipped.
     """
-    from .scanner import scan_mod
 
-    files = sorted({f.file for f in scan_mod(root).findings if f.id == "personality-id-unknown" and f.file})
+    files = sorted({f.file for f in _findings_of(root, options, "personality-id-unknown") if f.file})
     loose = [rel for rel in files if "!" not in rel]
     if not loose:
         detail = f" (jar sources need a rebuild: {', '.join(files[:5])})" if files else ""

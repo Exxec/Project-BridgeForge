@@ -1568,3 +1568,26 @@ class CustomUiButtonPressedFixerTests(unittest.TestCase):
         self.assertIn("        public void buttonPressed(Object buttonId) {}\n    };\n}", after)
         self.assertIn("public void buttonPressed(Object id) { }", after)                 # the existing one is untouched
         self.assertEqual(loose_left, [])
+
+
+class SuppliedFindingsTests(unittest.TestCase):
+    """A caller that already scanned (revive) passes its findings, so the fixer doesn't rescan."""
+
+    def test_supplied_findings_give_the_same_edit_without_a_scan(self) -> None:
+        from dataclasses import asdict
+
+        source = ("package data.scripts;\nimport com.fs.starfarer.api.campaign.CustomUIPanelPlugin;\n"
+                  "public class Panel implements CustomUIPanelPlugin {\n    public void render(float alpha) {}\n}\n")
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            _write(mod / "mod_info.json", '{"id": "x"}')
+            _write(mod / "data/scripts/Panel.java", source)
+            findings = scan_mod(mod).findings
+            scanned = compute_fix(mod, "missing-custom-ui-button-pressed-callback")
+            with mock.patch("bridgeforge.scanner.scan_mod", side_effect=AssertionError("rescanned")):
+                as_objects = compute_fix(mod, "missing-custom-ui-button-pressed-callback", {"scan_findings": findings})
+                as_dicts = compute_fix(mod, "missing-custom-ui-button-pressed-callback", {"scan_findings": [asdict(f) for f in findings]})
+                with self.assertRaises(FixerError):  # the caller's scan has none: nothing to fix, no fallback scan
+                    compute_fix(mod, "missing-custom-ui-button-pressed-callback", {"scan_findings": []})
+        self.assertEqual([c.after for c in as_objects.changes], [c.after for c in scanned.changes])
+        self.assertEqual([c.after for c in as_dicts.changes], [c.after for c in scanned.changes])

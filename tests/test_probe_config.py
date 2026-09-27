@@ -61,7 +61,7 @@ class ProbeConfigBuildTests(unittest.TestCase):
 
 
 class ContentIdsConfigTests(unittest.TestCase):
-    """ROADMAP P14 items 31-32: every variant/wing id the mod defines, keyed by the declared id."""
+    """ROADMAP P14 items 49-50: every variant/wing id the mod defines, keyed by the declared id."""
 
     def _mod(self, root: Path) -> Path:
         mod = _make_fixture_mod(root)

@@ -460,7 +460,15 @@ Progression, each stage feeding the next:
     `tests/test_substitutes.py` (`ProviderIndexCacheTests`, 4 cases: round-trip incl. version,
     survives the source folder's deletion, empty/missing cache dir, a changed provider's cache
     entry is overwritten on a second run).
+   *Cloud session (same item, built in parallel; the two were merged 2026-09-27):*
+   **Done 2026-09-24.** `provider-index build [--providers ...] [--output F]` saves every visible mod's
+   provides sets (hull mods, weapons, wings, hulls, classes) with game and mod version (a
+   `{"major":..}` version object is flattened) to `bridgeforge-state/provider-index.json`;
+   `dependency-substitutes --provider-index F` also considers indexed mods that are not visible live
+   (a live folder wins on the same id). Tests: `tests/test_substitutes.py` (`ProviderIndexTests`).
+   *2026-09-27:* one command kept, `provider-index build`; `provider-index-update` was removed, and a folder cache it wrote still loads through `--provider-index` (P15 item 5).
 3. **Dependency graph across the queue.** Build a graph of which queued mods need which missing mods, and order revival by unblocking value. As of 2026-09-14: FX Core (10 MANUAL) unblocks FX Example and part of Rebal; AI Overhaul (12 MANUAL) the rest of Rebal. EZ Damage is already revived (r1). Show it in `board`.
+   *Local history:*
     **Done 2026-09-21.** New `bridgeforge/dependency_graph.py` (`build_dependency_graph`), wired as
     `bridgeforge dependency-graph [--repo-root] [--vanilla-core] [--provider-index]`. For every mod
     with real revival work recorded (via `project_board`, same discovery `corpus-recheck` uses), a
@@ -482,7 +490,22 @@ Progression, each stage feeding the next:
     (`DependencyGraphTests`, 3 cases: an uninstalled cached provider is credited and ranked by
     unblock count, a need with no cached coverage anywhere is never a ranked blocker, CLI wiring
     for both new commands together).
+   *Cloud session (same item, built in parallel; the two were merged 2026-09-27):*
+   **Done 2026-09-24 (except the `board` view).** `dependency-graph [--queue DIR] [--providers ...]
+   [--provider-index F]` runs `dependency-substitutes` on every `<queue>/*/working` workspace and ranks
+   the non-current providers the plans use by how many queued mods each unblocks (ties: fewer MANUAL
+   findings first), with each one's workspace state and licence decision, plus the mods that need ids
+   no visible or indexed mod provides. Tests: `ProviderIndexTests`.
+   **Board view done 2026-09-25 (owner decision: recorded evidence, options A and C).** `dependency-graph
+   --write` records `In operation/DEPENDENCY_GRAPH.json`/`.md` and each workspace's
+   `reports/dependencies.json`; `dependency-substitutes --write` records one mod's. `board` stays
+   scan-free: a Dependencies column per mod (strategy, what to revive, unprovided count, date recorded)
+   and a "Revival order" section with the graph's date, a warning when a mod was rescanned after its
+   dependencies were recorded, and the two graph files are known queue-root files, not strays. Tests:
+   `tests/test_substitutes.py` (`DependencyEvidenceOnBoardTests`).
+   *2026-09-27:* one command kept, the cloud session's `dependency-graph`; the local one (`dependency_graph.py`, with `--include-intake`) was removed (P15 item 5).
 4. **Strip and vendor plans.** For STRIP_FROM_MOD, generate the exact edit list: which variant, `.ship` and faction lines lose which ids, plus proposed vanilla substitutes of the same slot type and size. Also generate the matching PROPOSED expected changes, so approval goes through `expect` as usual. Where the licence allows, offer vendoring as an alternative: copy the one missing piece (for example Rebal's `shields_formshield` into Explorer Society) instead of reviving a heavy provider.
+   *Local history:*
     **Done 2026-09-21.** New `bridgeforge/strip_plan.py`, wired as three commands:
     - `bridgeforge strip-plan <mod> [--providers] [--vanilla-core] [--ops] [--write-expected <path> --build <tag>]`
       computes `substitutes.hard_to_cover_ids` (genuinely uncovered, or covered only by a
@@ -530,25 +553,7 @@ Progression, each stage feeding the next:
     dry-run, apply, transitive same-mod dependency copying, jar-only scripts, not-found, both
     conflict shapes, identical-content is not a conflict, the licence refusal both synthetically
     and against the real Rebal case, kind restriction, and CLI wiring for both commands).
-   **Done 2026-09-24.** `provider-index build [--providers ...] [--output F]` saves every visible mod's
-   provides sets (hull mods, weapons, wings, hulls, classes) with game and mod version (a
-   `{"major":..}` version object is flattened) to `bridgeforge-state/provider-index.json`;
-   `dependency-substitutes --provider-index F` also considers indexed mods that are not visible live
-   (a live folder wins on the same id). Tests: `tests/test_substitutes.py` (`ProviderIndexTests`).
-3. **Dependency graph across the queue.** Build a graph of which queued mods need which missing mods, and order revival by unblocking value. As of 2026-09-14: FX Core (10 MANUAL) unblocks FX Example and part of Rebal; AI Overhaul (12 MANUAL) the rest of Rebal. EZ Damage is already revived (r1). Show it in `board`.
-   **Done 2026-09-24 (except the `board` view).** `dependency-graph [--queue DIR] [--providers ...]
-   [--provider-index F]` runs `dependency-substitutes` on every `<queue>/*/working` workspace and ranks
-   the non-current providers the plans use by how many queued mods each unblocks (ties: fewer MANUAL
-   findings first), with each one's workspace state and licence decision, plus the mods that need ids
-   no visible or indexed mod provides. Tests: `ProviderIndexTests`.
-   **Board view done 2026-09-25 (owner decision: recorded evidence, options A and C).** `dependency-graph
-   --write` records `In operation/DEPENDENCY_GRAPH.json`/`.md` and each workspace's
-   `reports/dependencies.json`; `dependency-substitutes --write` records one mod's. `board` stays
-   scan-free: a Dependencies column per mod (strategy, what to revive, unprovided count, date recorded)
-   and a "Revival order" section with the graph's date, a warning when a mod was rescanned after its
-   dependencies were recorded, and the two graph files are known queue-root files, not strays. Tests:
-   `tests/test_substitutes.py` (`DependencyEvidenceOnBoardTests`).
-4. **Strip and vendor plans.** For STRIP_FROM_MOD, generate the exact edit list: which variant, `.ship` and faction lines lose which ids, plus proposed vanilla substitutes of the same slot type and size. Also generate the matching PROPOSED expected changes, so approval goes through `expect` as usual. Where the licence allows, offer vendoring as an alternative: copy the one missing piece (for example Rebal's `shields_formshield` into Explorer Society) instead of reviving a heavy provider.
+   *Cloud session (same item, built in parallel; the two were merged 2026-09-27):*
    **First slice done 2026-09-24: the edit list.** `strip-plan MOD --vanilla-core CORE [--id kind:id]`
    (`bridgeforge/strip_plan.py`) runs the normal scan and, for every id in its
    `unresolved_content_references`, lists each place it sits: hull-mod and wing lists, each variant weapon
@@ -575,6 +580,7 @@ Progression, each stage feeding the next:
    Copies nothing. Checked on real data: for RevenantLib's own `shields_formshield` and
    `thruster_fighter_sm` it reproduces the hand-traced closures in its PROVENANCE.md file for file. Tests:
    `tests/test_vendor_plan.py`.
+   *2026-09-27:* kept the cloud session's `strip-plan` (with `--expected`), `vendor-plan` and the local `vendor-copy`; the local `strip-plan` (with `--providers`/`--write-expected`) was removed (P15 item 5). `vendor-copy --plan` now copies a whole `vendor-plan` closure (P15 item 7).
 5. **Spawn-point fleet port kit.** RC8 keeps `BaseSpawnPoint` and `addSpawnPoint`, but not `SectorAPI.createFleet(faction, fleetType)`, which 0.6 spawners use to build fleets from old faction fleet definitions. The kit is:
    - a helper that builds the equivalent fleet with FleetFactoryV3, following Zorg18 r1's spawner;
    - a scanner check for the removed call.
@@ -622,7 +628,17 @@ Progression, each stage feeding the next:
     already vendored `thruster_fighter_sm` locally or declare `revenantlib`) - verified with a
     hermetic synthetic case instead, using the real catalogue text. Tests: `tests/test_scanner.py`
     (`test_a_known_removed_vanilla_content_id_gets_its_catalogued_successor_in_the_evidence`).
+   *Cloud session (same item, built in parallel; the two were merged 2026-09-27):*
+   **Done 2026-09-24 (content ids; the real catalogue is built locally).** `content-diff REF_CORE RC8_CORE
+   [--output F]` (`bridgeforge/content_diff.py`, reading ids with the scanner's own indexes) lists the
+   hull (incl. skin), variant, weapon, wing, hull mod and ship system ids the older install defined and
+   RC8 does not, each with RC8-only ids of the same display name as successor leads, plus fingerprints
+   of both cores' tables. `scan --removed-content F` adds `content-reference-removed-in-vanilla`
+   (MANUAL) for unresolved references the older vanilla defined, so they read as "removed from
+   vanilla" rather than a missing dependency. Removed Java classes are item 47's `api-diff`. Tests:
+   `tests/test_content_diff.py`; the 0.9a-to-RC8 run is in `docs/LOCAL_HANDOFF.md`.
 9. **Licence-aware revival of dependencies.** Before REVIVE_DEPENDENCY, check `release_policy.json` so a revived library is marked local-only when its licence doesn't allow redistribution.
+   *Local history:*
     **Done 2026-09-21.** New `substitutes._licence_note`/`strategy(..., policy_path=...)`: any
     provider `strategy()` recommends reviving (the `revive`/`heavy` lists) gets its
     `release_policy.json` entry checked via `release._licence_gate` (the exact same function
@@ -642,15 +658,7 @@ Progression, each stage feeding the next:
     licence-check path itself is fully covered by direct tests against the real policy file and a
     full `dependency_substitutes()` integration test with a custom policy and a real workspace
     layout. Tests: `tests/test_substitutes.py` (`LicenceAwareRevivalTests`, 5 cases).
-   **Done 2026-09-24 (content ids; the real catalogue is built locally).** `content-diff REF_CORE RC8_CORE
-   [--output F]` (`bridgeforge/content_diff.py`, reading ids with the scanner's own indexes) lists the
-   hull (incl. skin), variant, weapon, wing, hull mod and ship system ids the older install defined and
-   RC8 does not, each with RC8-only ids of the same display name as successor leads, plus fingerprints
-   of both cores' tables. `scan --removed-content F` adds `content-reference-removed-in-vanilla`
-   (MANUAL) for unresolved references the older vanilla defined, so they read as "removed from
-   vanilla" rather than a missing dependency. Removed Java classes are item 29's `api-diff`. Tests:
-   `tests/test_content_diff.py`; the 0.9a-to-RC8 run is in `docs/LOCAL_HANDOFF.md`.
-9. **Licence-aware revival of dependencies.** Before REVIVE_DEPENDENCY, check `release_policy.json` so a revived library is marked local-only when its licence doesn't allow redistribution.
+   *Cloud session (same item, built in parallel; the two were merged 2026-09-27):*
    **Done 2026-09-24.** `dependency-substitutes` now attaches `licence` to every provider it would have you
    revive (one not targeting 0.98a): LOCAL_ONLY or RELEASABLE from that mod's own `release_policy.json`
    entry (matched by id or name via the new `release.policy_entry`, which the release gate also uses),
@@ -1667,7 +1675,7 @@ Progression, each stage feeding the next:
       tubes fire **three** times. It would also return 320 OP (3 × 160 collapsing to 1 × 160). Making
       it work needs scope B2's fork of base II's launch pipeline, already declined. Abandoned intent,
       not unfinished wiring.
-29. **API drift catalogue: stop finding removed APIs one compile error at a time.** Item 11's
+47. **(Numbered 29 until 2026-09-27; renumbered after the local and cloud histories merged.)** **API drift catalogue: stop finding removed APIs one compile error at a time.** Item 11's
     compile check finds each removed call (`SectorAPI.createFleet`, then `SectorAPI.addMessage`) only
     as a bare "cannot find symbol". Compare an old install's `starfarer.api.jar` with RC8's once and
     say where each removed member went.
@@ -1681,7 +1689,7 @@ Progression, each stage feeding the next:
     naming neither method nor class (verified with javac 21). Leads only, never a rewrite. Next: run
     it on the 0.9a reference rig's jar vs RC8 and keep the catalogue under `In operation/`. Tests:
     `tests/test_api_diff.py` (old/new API jars compiled by real javac; real javac errors annotated).
-30. **Pin the RevenantLib methods the fixers call.** `removed-api-call` rewrites 0.6 calls into
+48. **(Numbered 30 until 2026-09-27; renumbered after the local and cloud histories merged.)** **Pin the RevenantLib methods the fixers call.** `removed-api-call` rewrites 0.6 calls into
     `bf.legacyfleets.LegacyFleets.createFleet` and `bf.legacyworld.LegacyWorld.addPlanet`/
     `addOrbitalStation`. A RevenantLib build that renamed or re-signatured one would leave every
     rewritten mod compiling in BridgeForge's tests and failing in the game.
@@ -1693,7 +1701,7 @@ Progression, each stage feeding the next:
     `Exxec/RevenantLib` 1.2.0+bf.1: PASS, 11 classes, no drift. Tests: `tests/test_revenantlib_contract.py`
     (stand-in builds compiled by real javac; the fixer's rewritten calls have the contract's arity),
     `tests/test_rig_doctor.py` (`RevenantLibContractCheckTests`).
-31. **Probe: have the game itself resolve every id the mod defines.** The scanner infers whether
+49. **(Numbered 31 until 2026-09-27; renumbered after the local and cloud histories merged.)** **Probe: have the game itself resolve every id the mod defines.** The scanner infers whether
     variants and wings resolve (and has had false positives, items 17 and 28); nothing asked the game.
     `probe-config` already passed hull and variant ids, but no campaign check used them.
     **Done 2026-09-24 (source; live run pending).** `probe-config` writes `content_variants`
@@ -1709,34 +1717,34 @@ Progression, each stage feeding the next:
     a stale rig shows `BF-PROBE|0.2.1|` lines), then one live run; steps in `docs/LOCAL_HANDOFF.md`.
     Tests: `tests/test_probe_config.py`
     (`ContentIdsConfigTests`, `ProbeVersionTests`).
-32. **`probe-config` deployed a variant by its file name, not its declared `variantId`.** Found by
-    reading code while building item 31: `_variant_by_hull` read `"id"`, which `.variant` files do not
+50. **(Numbered 32 until 2026-09-27; renumbered after the local and cloud histories merged.)** **`probe-config` deployed a variant by its file name, not its declared `variantId`.** Found by
+    reading code while building item 49: `_variant_by_hull` read `"id"`, which `.variant` files do not
     declare (the scanner reads `"variantId"` everywhere, and `_declared_spec_ids` records that file
     names often differ from ids), so it always fell back to the file stem. A mod whose file name
     differs from its variant id got a variant the game does not know.
     **Done 2026-09-24.** `variantId` first, then `id`, then the file stem. Test:
     `tests/test_probe_config.py` (`test_probe_deploys_the_declared_variant_id_not_the_file_name`).
-33. **`verify-shadow` must be able to read the game's own large jars (owner decision 2026-09-25).**
+51. **(Numbered 33 until 2026-09-27; renumbered after the local and cloud histories merged.)** **`verify-shadow` must be able to read the game's own large jars (owner decision 2026-09-25).**
     `MAX_JAR_ENTRIES` (10,000) guards against zip bombs in mod jars, but `starfarer_obf.jar` may exceed
     it, which would leave the most important jar unchecked.
     **Done 2026-09-25.** `scanner.iter_class_files_in_jars` takes `max_entries`; `verify-shadow` reads jars
     sitting directly in a folder holding `starfarer.api.jar` with `TRUSTED_GAME_JAR_MAX_ENTRIES` (250,000),
     and mod jars with the usual cap, still reporting any jar it skips. Test: `tests/test_verify_shadow.py`
     (`GameJarEntryLimitTests`).
-34. **`corpus-index` reads `.7z` archives when the optional reader is installed (owner decision 2026-09-25).**
+52. **(Numbered 34 until 2026-09-27; renumbered after the local and cloud histories merged.)** **`corpus-index` reads `.7z` archives when the optional reader is installed (owner decision 2026-09-25).**
     **Done 2026-09-25.** New extra `bridgeforge[archives]` (`py7zr>=1.0`; the core keeps one dependency).
     Members get the same size, nesting and path-safety checks as zip members (absolute paths, `..`, drive
     letters refused); encrypted archives are reported. py7zr 1.x has no in-memory read, so the wanted text
     members are extracted to a temporary folder and discarded. Without the extra, `.7z` stays reported as
     not read with an install hint; `.rar`/`.tar`/`.gz` stay unread. CI's coverage job and the web-session
     hook install the extra. Tests: `tests/test_corpus_index.py` (`SevenZipTests`).
-35. **Record publishing decisions with a command, not by hand-editing JSON (owner decision 2026-09-25).**
+53. **(Numbered 35 until 2026-09-27; renumbered after the local and cloud histories merged.)** **Record publishing decisions with a command, not by hand-editing JSON (owner decision 2026-09-25).**
     Every `licence UNRECORDED` from `dependency-substitutes`/`dependency-graph` needs a decision.
     **Done 2026-09-25.** `release-policy show MOD` and `release-policy set MOD --local-only|--releasable
     --reason TEXT [--on DATE]` (`release.record_policy_decision`): a reason is required, the date is kept as
     `recorded_on`, an existing entry is updated in place under its own key, and the rest of the file is
     byte-for-byte unchanged. Tests: `tests/test_release.py` (`ReleasePolicyRecordTests`).
-36. **`dependency-graph` read a provider workspace's status wrongly.** Found 2026-09-25 while reviewing
+54. **(Numbered 36 until 2026-09-27; renumbered after the local and cloud histories merged.)** **`dependency-graph` read a provider workspace's status wrongly.** Found 2026-09-25 while reviewing
     RevenantLib: `substitutes._workspace_state` looked only in `working/reports/REVIVAL_REPORT.md` and took
     the report's last non-empty line as the status, so RevenantLib's "status" was a sentence about FX
     Example. **Done 2026-09-25.** `_declared_status` reads `<workspace>/reports/` first, then
@@ -1826,6 +1834,17 @@ whether the result passed; recurring agent fixes become deterministic fixers.
    `strip-plan`'s edit count per id with vanilla slot substitutes (needs `--vanilla-core`). Providers
    default to the workspace's queue folder and its `_rig/mods` (`--providers`, `--provider-index`).
    A part that cannot be computed is a note, never a failed run. Tests: `tests/test_revive.py`.
+10. **Hygiene after the merge (owner request 2026-09-27).** **Done 2026-09-27.**
+    - Roadmap: P14 items 2, 3, 4, 8 and 9 each had two copies (one per history) or a block stranded under
+      the wrong item; each is now one entry with both records labelled. This session's P14 items
+      29-36 collided with the local items of the same numbers and are now 47-54, each noting its old
+      number; code, test and changelog references to them were updated (the local 29-36 kept theirs).
+    - `docs/LOCAL_HANDOFF.md` rewritten: closed entries removed (item 27's audit, E8), and the runs the
+      local side made with since-removed command versions listed again for the kept ones (R1-R4).
+    - Speed: five fixers rescanned the whole mod to find their own findings, so one `revive` round on
+      a large mod could cost six full scans. `fixers._findings_of` uses the caller's findings when given
+      (`options["scan_findings"]`, which `revive` passes) and scans only otherwise; `fix` is unchanged.
+      Tests: `tests/test_fixers.py` (`SuppliedFindingsTests`, which fails if a rescan happens).
 
 ## Post-1.0 research and gated automation
 

@@ -97,7 +97,9 @@ def packet_id(finding_id: str, file: str) -> str:
 
 
 def _fix_options(finding_id: str, working: Path, target: str, vanilla_core: Path | None, findings: list[dict]) -> list[dict]:
-    base = {"target_game_version": target, "vanilla_core": vanilla_core}
+    # scan_findings: the fixer reuses this run's scan instead of rescanning the whole mod (the five
+    # file-list fixers each did, so one round could cost six full scans on a large mod).
+    base = {"target_game_version": target, "vanilla_core": vanilla_core, "scan_findings": findings}
     if finding_id == "faction-known-lists-missing":
         return [{**base, "faction_file": working / f["file"]} for f in findings if f.get("file")]
     return [base]

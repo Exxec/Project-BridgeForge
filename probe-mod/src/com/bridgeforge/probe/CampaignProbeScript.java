@@ -391,7 +391,7 @@ public class CampaignProbeScript implements EveryFrameScript {
         }
     }
 
-    // ---- the mod's own variant and wing ids (ROADMAP P14 item 31) ---------------------
+    // ---- the mod's own variant and wing ids (ROADMAP P14 item 49) ---------------------
     //
     // Runtime ground truth for what the scanner can only infer: does the game itself resolve every
     // variant and wing id the mod defines? API evidence (RC8): SettingsAPI.doesVariantExist(String)
