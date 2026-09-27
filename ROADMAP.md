@@ -2011,6 +2011,52 @@ whether the result passed; recurring agent fixes become deterministic fixers.
       rig fixture and its preset were removed.
       **CID-HULL-20260927** (SEEKER, probe 0.2.4): `content-ids|OK|all-content|checked=40 failed=0 ship-variants
       built=15`, FATAL=0, MOD-ERROR=0, 1 save: the hull check raises no false failure.
+19. **`settings-json-override-breadth` counted additions as overrides (2026-09-27).** P1 ranked it the finding
+    that alone blocks the most mods (14). It compared whole top-level keys, so a mod that only adds an entry
+    inside `plugins`, `graphics` or `designTypeColors` counted as overriding vanilla's whole block. settings.json
+    merges objects key by key: SEEKER, Exigency and Flu-X all add entries this way and played normally in the
+    2026-09-24 live runs. **Done 2026-09-27.** `_settings_value_changes` compares nested objects value by
+    value and ignores pure additions; lists and scalars still count when they differ (list merging is not
+    evidenced). 10 of the 14 clear (Anex-Weapons, Aryas-Nightingale-Ships, Fleet-Action-History,
+    Hexagonal-Shieldidgeridoos, Kazeron-Navarchy, KIND-STRANGER-Automatic-Orders, RevenantLib,
+    Ship-Direction-Marker, Variants-Lib, Xenoargh-FX-Core). Tests: `tests/test_replace_array_and_identical_copies.py`
+    (`test_entries_only_added_inside_vanilla_objects_are_not_overrides`).
+    - **Held rule (owner, 2026-09-27; applies once testing clears it):** accept a small, deliberate set of real
+      value changes (up to about 25 values), recorded per mod with the exact keys in a baseline so any later
+      change shows; always review a large set (over 100 usually means a stale copy of an old settings.json).
+      Covers RemnantPad and S-TechPad (24 UI colours each, a UI theme) and Combat-Misc-Utils (`forceNoVBO`).
+    - **Test first:** Blue-Friend-Balls sets `ruleCommandPackages` to its own package only. If a list value
+      replaces vanilla's list rather than adding to it, vanilla's five rule-command packages are lost and much
+      campaign dialogue could break. One rig run with it enabled (new game, talk to a market, open a bar) settles
+      how lists merge; until then it stays blocked.
+20. **Enhancements found in the 2026-09-27 local session (proposed, not started).** Most useful first.
+    1. **`archive` command for local-only mods.** Archiving ClearCommands and RevenantLib into `Done/` was
+       done by hand: shipped files via `copy_drift._collect`, a zip, `original/`, `workspace/` reports and an
+       `ARCHIVE_NOTE.md`. `release` cannot do it: its licence gate always blocks a local-only mod, and its
+       behaviour gate wants D-series evidence even when nothing that runs changed. An `archive` command should
+       build that layout, write the note from the release policy and revival report, and waive the behaviour
+       gate only when the jar is byte-identical and the changes are metadata (with that proof in the note).
+    2. **Test list merging in settings.json** (item 19's held rule), then write the fixer or baseline helper for it.
+    3. **`finding-stats` deltas.** Keep the previous run and report what moved between runs (mods that changed
+       bucket, ids that disappeared), so the effect of new fixers and check fixes is measured, not recomputed by hand.
+    4. **Persist named encodings.** `fix --encoding FILE=ENC` decisions live only in the fixed files; record them in
+       the workspace (REVIVAL_PLAN.md or a small JSON) so a re-copy from `original/` can reapply them, and let
+       `revive` read them.
+    5. **`revive` should keep a fixer's partial refusals.** When `data-file-not-utf8` converts some files and
+       refuses others, the refused list is dropped because the plan has changes; surface it as a pending item.
+    6. **`vendor-copy` should recognise an equivalent vendored row.** RevenantLib's `shields_formshield` row
+       differs from Rebal's only by the newer column layout and the repackaged script, yet reports CONFLICT; compare
+       values column by column and treat a known script repackaging (PROVENANCE.md) as equal.
+    7. **`prepare-test` first copy.** It refuses a rig folder that does not exist yet, so the first copy had to be
+       made by hand; let it create the folder and do the initial sync.
+    8. **One library table.** `revival_audit._LIBRARY_DEPENDENCY_IDS` duplicates `scanner.LIBRARY_DEPENDENCY_IDS`
+       and already lacks the Console Commands entry item 14 added; derive one from the other.
+    9. **Check `undeclared-library-dependency` on real data** before adding it to the standing approvals; it
+       declared the wrong library once (item 14).
+    10. **Confirm dialog-text capture live** (item 18): the first run that shows an error dialog should put a
+        `dialog:` line in `<TESTID>.windows.txt` and a FATAL in triage.
+    11. **Faction-Relationships-Uniquified's lone 0x9D byte** (item 17): the tail of a broken UTF-8 `”`; a person
+        decides the replacement.
 
 ## Post-1.0 research and gated automation
 

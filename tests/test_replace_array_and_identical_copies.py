@@ -19,7 +19,8 @@ from pathlib import Path
 from bridgeforge.models import TargetProfile
 from bridgeforge.scanner import scan_mod
 
-VANILLA_SETTINGS = {"xpGainMult": 1, "maxShipsInFleet": 30, "playerMaxLevel": 15, "untouched": "keep"}
+VANILLA_SETTINGS = {"xpGainMult": 1, "maxShipsInFleet": 30, "playerMaxLevel": 15, "untouched": "keep",
+                    "plugins": {"vanillaPlugin": "com.fs.Vanilla"}, "ruleCommandPackages": ["com.fs.rulecmd"]}
 
 
 def _fixture(base: Path, *, replace: list[str] | None = None, settings: dict | None = None,
@@ -89,6 +90,23 @@ class SettingsBreadthTests(unittest.TestCase):
         self.assertIn(f"vanilla-keys:{len(VANILLA_SETTINGS)}", findings[0].evidence)
         self.assertIn("xpGainMult", findings[0].evidence)
         self.assertNotIn("modOnly", findings[0].evidence)  # mod-only keys override nothing
+
+    def test_entries_only_added_inside_vanilla_objects_are_not_overrides(self) -> None:
+        # SEEKER/Exigency/Flu-X add plugins/graphics entries and ran normally (live, 2026-09-24):
+        # settings.json merges objects key by key. A changed nested value or a list still counts.
+        with tempfile.TemporaryDirectory() as directory:
+            added = dict(VANILLA_SETTINGS, plugins={**VANILLA_SETTINGS["plugins"], "myPlugin": "data.scripts.My"})
+            mod, core = _fixture(Path(directory), settings=added)
+            quiet = _ids(scan_mod(mod, TargetProfile(), core), "settings-json-override-breadth")
+        with tempfile.TemporaryDirectory() as directory:
+            changed = dict(VANILLA_SETTINGS, plugins={**VANILLA_SETTINGS["plugins"], "vanillaPlugin": "data.scripts.Other"},
+                           ruleCommandPackages=["data.campaign.rulecmd"])
+            mod, core = _fixture(Path(directory), settings=changed)
+            loud = _ids(scan_mod(mod, TargetProfile(), core), "settings-json-override-breadth")
+        self.assertEqual(quiet, [])
+        self.assertIn("overridden:2", loud[0].evidence)
+        self.assertIn("plugins.vanillaPlugin", loud[0].evidence)
+        self.assertIn("ruleCommandPackages", loud[0].evidence)
 
     def test_settings_matching_vanilla_exactly_is_quiet(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -3765,7 +3765,7 @@ def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | Non
     vanilla_settings = _load_lenient_json_file(Path(vanilla_core) / "data" / "config" / "settings.json")
     if not isinstance(mod_settings, dict) or not isinstance(vanilla_settings, dict):
         return
-    overridden = sorted(key for key in mod_settings if key in vanilla_settings and mod_settings[key] != vanilla_settings[key])
+    overridden = sorted(_settings_value_changes(mod_settings, vanilla_settings))
     if not overridden:
         return
     result.add(
@@ -3775,8 +3775,8 @@ def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | Non
         classification="REVIEW",
         confidence="DETERMINISTIC",
         explanation=(
-            f"This mod's data/config/settings.json changes {len(overridden)} of vanilla's {len(vanilla_settings)} "
-            "settings keys. settings.json always merges (it cannot be fully replaced), so each of these silently "
+            f"This mod's data/config/settings.json changes {len(overridden)} value(s) vanilla already sets "
+            f"(vanilla has {len(vanilla_settings)} top-level keys; entries a mod only adds are not counted). settings.json always merges (it cannot be fully replaced), so each of these silently "
             "wins over the current game's value for every mod and the base game alike. A small, deliberate tuning "
             "set is normal; a large one usually means a near-complete copy of an older settings.json, which "
             "reverts the game's own tuning across four versions with no error. Review the list, not the count - "
@@ -3785,6 +3785,26 @@ def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | Non
         file="data/config/settings.json",
         evidence=[f"overridden:{len(overridden)}", f"vanilla-keys:{len(vanilla_settings)}", *overridden[:25]],
     )
+
+
+def _settings_value_changes(mod: dict, vanilla: dict, prefix: str = "") -> list[str]:
+    """Dotted paths where the mod's settings.json changes a value vanilla already has.
+
+    settings.json merges objects key by key, so an entry a mod only adds inside `plugins`, `graphics` or
+    `designTypeColors` leaves vanilla's own entries alone: SEEKER, Exigency and Flu-X all do this and ran
+    normally on the RC8 rig (live runs 2026-09-24). Comparing whole top-level keys counted those additions
+    as overriding the whole block (14 mods blocked, 9 by additions alone; 2026-09-27). Lists and scalars
+    still count as a change when they differ: how a list merges is not evidenced."""
+    changes: list[str] = []
+    for key, value in mod.items():
+        if key not in vanilla:
+            continue
+        path = f"{prefix}{key}"
+        if isinstance(value, dict) and isinstance(vanilla[key], dict):
+            changes.extend(_settings_value_changes(value, vanilla[key], path + "."))
+        elif value != vanilla[key]:
+            changes.append(path)
+    return changes
 
 
 def _scan_vanilla_script_shadow_repointable(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
