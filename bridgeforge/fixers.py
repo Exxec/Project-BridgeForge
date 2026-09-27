@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import difflib
+import fnmatch
 import io
 import json
 import re
@@ -52,6 +53,8 @@ SUPPORTED_FINDINGS = (
     "csv-fullwidth-number",
     "ship-data-missing-fighter-bays-column",
     "missing-custom-ui-button-pressed-callback",
+    "shippable-work-file",
+    "data-file-not-utf8",
 )
 
 
@@ -65,10 +68,11 @@ class FileChange:
     before: bytes
     after: bytes
     existed_before: bool = True
+    removed: bool = False  # delete `path`; a plan that also writes the same bytes elsewhere is a move
 
     @property
     def changed(self) -> bool:
-        return self.before != self.after
+        return self.removed or self.before != self.after
 
 
 @dataclass
@@ -1802,7 +1806,123 @@ def _fix_shiproles_wing_id(root: Path, options: dict) -> list[FileChange]:
 # Dispatch, diffing, backup/apply
 # ---------------------------------------------------------------------------
 
+def _fix_shippable_work_file(root: Path, options: dict) -> list[FileChange]:
+    """Move editor/work files out of the shipped tree (P15 item 14, 2026-09-27).
+
+    Each file `shippable-work-file` lists moves to `<workspace>/scratch/work-files/<same path>` when
+    `root` is a workspace's `working/` (else `<root>.work-files/` beside it), so nothing is lost and
+    the release no longer carries it. A file whose name appears in the mod's own data, loose scripts,
+    `mod_info.json` or jar entries is left in place: the scanner's own caveat is that a mod could,
+    rarely, read one on purpose.
+    """
+    from .copy_drift import _collect
+    from .scanner import _WORK_FILE_GLOBS
+
+    found = sorted(relative for relative in _collect(root)
+                   if any(fnmatch.fnmatch(relative.rsplit("/", 1)[-1].lower(), pattern) for pattern in _WORK_FILE_GLOBS))
+    if not found:
+        return []
+    corpus = _referencing_bytes(root, set(found))
+    destination = root.parent / "scratch" / "work-files" if root.name == "working" else root.parent / f"{root.name}.work-files"
+    changes = []
+    for relative in found:
+        name = relative.rsplit("/", 1)[-1]
+        if name.lower().encode("utf-8") in corpus:
+            continue  # referenced by the mod itself: a person decides
+        source = root / relative
+        target = destination / relative
+        if target.exists():
+            raise FixerError(f"{target} already exists; move or remove it before rerunning this fixer.")
+        data = source.read_bytes()
+        changes.append(FileChange(path=target, before=b"", after=data, existed_before=False))
+        changes.append(FileChange(path=source, before=data, after=b"", removed=True))
+    return changes
+
+
+_REFERENCE_SUFFIXES = {".json", ".csv", ".java", ".kt", ".faction", ".ship", ".skin", ".variant", ".wpn", ".proj",
+                       ".system", ".wing", ".ini", ".txt", ".xml", ".properties"}
+
+
+def _referencing_bytes(root: Path, skip: set[str]) -> bytes:
+    """Lower-cased text of every file that could name another file at runtime, jar members included."""
+    import zipfile
+
+    parts = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.relative_to(root).as_posix() in skip:
+            continue
+        suffix = path.suffix.lower()
+        try:
+            if suffix in _REFERENCE_SUFFIXES and path.stat().st_size <= 8 * 1024 * 1024:
+                parts.append(path.read_bytes().lower())
+            elif suffix == ".jar":
+                with zipfile.ZipFile(path) as jar:
+                    parts.extend(jar.read(info).lower() for info in jar.infolist() if not info.is_dir() and info.file_size <= 8 * 1024 * 1024)
+        except (OSError, zipfile.BadZipFile):
+            continue
+    return b"\n".join(parts)
+
+
+# CP-1252's typographic bytes: curly quotes, en/em dash, ellipsis, no-break space. Mac Roman reads the
+# same bytes as accented letters (0x92 = í, 0x93 = ì) and Shift-JIS/GBK need two high bytes, so an
+# isolated one of these between ASCII bytes has one plausible reading. Surveyed 2026-09-27 over the
+# queue's 44 non-UTF-8 data files: 30 meet this; the rest carry Mac Roman (DME's 0xD5 for ’), Shift-JIS
+# (Stinger-Shipyards' 0x81 0x66) or accented letters, whose encoding a person must name.
+_CP1252_TYPOGRAPHY = frozenset({0x85, 0x91, 0x92, 0x93, 0x94, 0x96, 0x97, 0xA0})
+
+
+def _invalid_utf8_offsets(raw: bytes) -> list[int]:
+    offsets, start = [], 0
+    while start < len(raw):
+        try:
+            raw[start:].decode("utf-8")
+            break
+        except UnicodeDecodeError as exc:
+            offsets.append(start + exc.start)
+            start += exc.start + 1
+    return offsets
+
+
+def _fix_data_file_not_utf8(root: Path, options: dict) -> list[FileChange]:
+    """Re-encode data files whose only non-UTF-8 bytes are isolated CP-1252 punctuation (P15 item 15).
+
+    Valid UTF-8 already in the file is kept byte for byte; each invalid byte becomes its CP-1252
+    character in UTF-8. A file with any other invalid byte is refused with the bytes it holds, because
+    its real encoding (Mac Roman, Shift-JIS, GBK, CP-1252 letters) cannot be told from the bytes alone.
+    """
+    from .scanner import _PLAYER_TEXT_SUFFIXES
+
+    data = root / "data"
+    paths = [root / "mod_info.json"] + ([p for p in data.rglob("*") if p.suffix.lower() in _PLAYER_TEXT_SUFFIXES] if data.is_dir() else [])
+    changes, refused = [], []
+    for path in sorted(p for p in paths if p.is_file()):
+        raw = path.read_bytes()
+        offsets = _invalid_utf8_offsets(raw)
+        if not offsets:
+            continue
+        invalid = set(offsets)
+
+        def plain(index: int) -> bool:
+            return index < 0 or index >= len(raw) or raw[index] < 0x80 or index in invalid
+
+        if not all(raw[i] in _CP1252_TYPOGRAPHY and plain(i - 1) and plain(i + 1) for i in offsets):
+            odd = sorted({f"0x{raw[i]:02x}" for i in offsets if raw[i] not in _CP1252_TYPOGRAPHY})
+            refused.append(f"{path.relative_to(root).as_posix()} ({', '.join(odd) or 'adjacent high bytes'})")
+            continue
+        out, last = bytearray(), 0
+        for i in offsets:
+            out += raw[last:i] + bytes([raw[i]]).decode("cp1252").encode("utf-8")
+            last = i + 1
+        out += raw[last:]
+        changes.append(FileChange(path=path, before=raw, after=bytes(out)))
+    if not changes and refused:
+        raise FixerError("No file has only CP-1252 punctuation outside UTF-8; name the real encoding by hand for: " + "; ".join(refused))
+    return changes
+
+
 _FIXER_FUNCS = {
+    "data-file-not-utf8": _fix_data_file_not_utf8,
+    "shippable-work-file": _fix_shippable_work_file,
     "wing-role-assault-removed": _fix_wing_role_assault_removed,
     "mod-info-game-version-inexact": _fix_mod_info_game_version_inexact,
     "wing-data-missing-role-desc-column": _fix_wing_data_missing_role_desc_column,
@@ -1897,6 +2017,10 @@ def _refuse_shadowed_edits(root: Path, changes: list[FileChange], provider_roots
 
 def unified_diff_for_change(change: FileChange) -> str:
     """A unified diff for one FileChange, decoding best-effort for display only (never affects the write)."""
+    if change.removed:
+        return f"--- {change.path}\n+++ /dev/null\n@@ removed ({len(change.before)} bytes) @@\n"
+    if not change.existed_before and b"\x00" in change.after[:8192]:
+        return f"--- /dev/null\n+++ {change.path}\n@@ new binary file ({len(change.after)} bytes) @@\n"
     try:
         before_text = change.before.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -1929,8 +2053,17 @@ def _backup_path(path: Path, finding_id: str) -> Path:
 def apply_fix(plan: FixPlan) -> list[dict[str, object]]:
     """Write every planned change, keeping a `.pre-bf-fix-<id>.bak` backup per pre-existing file."""
     applied: list[dict[str, object]] = []
+    copies = {change.after for change in plan.changes if not change.existed_before and not change.removed}
     for change in plan.changes:
         backup: Path | None = None
+        if change.removed:
+            # A move's new copy is its backup; a bare removal keeps the usual .bak next to it.
+            if change.before not in copies:
+                backup = _backup_path(change.path, plan.finding_id)
+                backup.write_bytes(change.before)
+            change.path.unlink()
+            applied.append({"path": str(change.path), "backup": str(backup) if backup is not None else None, "removed": True})
+            continue
         if change.existed_before:
             backup = _backup_path(change.path, plan.finding_id)
             backup.write_bytes(change.before)

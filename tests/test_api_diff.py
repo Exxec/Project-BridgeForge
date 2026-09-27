@@ -107,6 +107,19 @@ class AnnotationWithoutJdkTests(unittest.TestCase):
         self.assertEqual(annotate_errors(errors, self.CATALOGUE), 1)
         self.assertEqual(errors[0]["api_changes"][0]["same_signature_elsewhere"], ["api.campaign.CampaignUIAPI.addMessage(String)"])
 
+    def test_only_overloads_with_the_calls_argument_count_are_listed(self):
+        # Batavia (2026-09-27): each addMessage call listed all four removed overloads.
+        overloads = [{"name": "addMessage", "signature": f"void addMessage({params})"}
+                     for params in ("String", "String, Color", "String, String, Color", "String, Map<String, List<String>>")]
+        catalogue = {"changed_classes": {"api.campaign.SectorAPI": {"methods_removed": overloads, "fields_removed": []}}}
+        def hints(call):
+            errors = [{"kind": "missing-symbol", "detail": [f"symbol: method addMessage({call})", "location: interface SectorAPI"]}]
+            annotate_errors(errors, catalogue)
+            return [h["removed"] for h in errors[0]["api_changes"]]
+        self.assertEqual(hints("String"), ["api.campaign.SectorAPI.addMessage(String)"])
+        self.assertEqual(hints("String,Color"), ["api.campaign.SectorAPI.addMessage(String, Color)",
+                                                "api.campaign.SectorAPI.addMessage(String, Map<String, List<String>>)"])
+        self.assertEqual(len(hints("")), 4)  # no overload takes none: keep every lead rather than none
 
     def test_compile_check_cli_prints_the_leads(self):
         outcome = {"status": "FAIL", "error_count": 1, "files": ["data/scripts/A.java"], "error_counts_by_kind": {"missing-symbol": 1},

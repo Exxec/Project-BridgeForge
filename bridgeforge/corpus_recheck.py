@@ -76,7 +76,8 @@ def _recheck_one(name: str, working: Path, vanilla_core: Path | None, declared_s
     }
 
 
-def corpus_recheck(repo_root: Path, vanilla_core: Path | None = None, require_report: bool = True) -> dict[str, object]:
+def corpus_recheck(repo_root: Path, vanilla_core: Path | None = None, require_report: bool = True,
+                   checkpoint: Path | None = None, progress=None) -> dict[str, object]:
     """Re-scan every mod with real revival work recorded under `repo_root`'s `In operation/`.
 
     See the module docstring for scope and the finding/compile-signal split. `vanilla_core` is
@@ -95,12 +96,28 @@ def corpus_recheck(repo_root: Path, vanilla_core: Path | None = None, require_re
     vanilla_root = vanilla_core.expanduser().resolve() if vanilla_core is not None else None
     if vanilla_root is not None and not vanilla_root.is_dir():
         vanilla_root = None
+    import time
+
+    from .progress import Checkpoint
+
     mods = []
-    for row in sorted(_qualifying_mods(repo, require_report), key=lambda r: r["folder"]):
-        mods.append(_recheck_one(
-            row["folder"], Path(row["working"]), vanilla_root,
-            row.get("declared_completion_status"), row.get("declared_completion_status_confidence"),
-        ))
+    rows = sorted(_qualifying_mods(repo, require_report), key=lambda r: r["folder"])
+    header = {"checkpoint": SCHEMA_VERSION, "repo": str(repo), "vanilla_core": str(vanilla_root) if vanilla_root else None,
+              "require_report": require_report}
+    with Checkpoint(checkpoint, header) as saved:
+        for number, row in enumerate(rows, 1):
+            started = time.monotonic()
+            result = saved.get(row["folder"])
+            resumed = result is not None
+            if result is None:
+                result = _recheck_one(
+                    row["folder"], Path(row["working"]), vanilla_root,
+                    row.get("declared_completion_status"), row.get("declared_completion_status_confidence"),
+                )
+                saved.add(row["folder"], result)
+            if progress:
+                progress(number, len(rows), result, None if resumed else time.monotonic() - started)
+            mods.append(result)
     regressions = [
         m for m in mods
         if "error" not in m and m["declared_completion_status"] in ("READY", "READY_FOR_LIVE_TEST", "READY_WITH_REVIEW_ITEMS")

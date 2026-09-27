@@ -1591,3 +1591,104 @@ class SuppliedFindingsTests(unittest.TestCase):
                     compute_fix(mod, "missing-custom-ui-button-pressed-callback", {"scan_findings": []})
         self.assertEqual([c.after for c in as_objects.changes], [c.after for c in scanned.changes])
         self.assertEqual([c.after for c in as_dicts.changes], [c.after for c in scanned.changes])
+
+
+class ShippableWorkFileFixerTests(unittest.TestCase):
+    """P15 item 14: move editor/work files out of the shipped tree, keeping any the mod names."""
+
+    def test_moves_unreferenced_work_files_to_scratch_and_keeps_referenced_ones(self) -> None:
+        import zipfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "Mod"
+            mod = workspace / "working"
+            _write(mod / "mod_info.json", '{"id": "x", "jars": ["jars/x.jar"]}')
+            (mod / "graphics/ships").mkdir(parents=True)
+            (mod / "graphics/ships/hull.psd").write_bytes(b"8BPS\x00\x01binary")
+            _write(mod / "data/config/notes.old", "old notes")
+            _write(mod / "data/config/settings.json", '{"intro": "graphics/ships/intro.log"}')
+            _write(mod / "graphics/ships/intro.log", "the settings file names me")
+            (mod / "jars").mkdir()
+            with zipfile.ZipFile(mod / "jars/x.jar", "w") as jar:
+                jar.writestr("data/Plugin.class", b"\xca\xfe\xba\xbe loads sounds/pack.zip")
+            (mod / "sounds").mkdir()
+            (mod / "sounds/pack.zip").write_bytes(b"PK\x05\x06" + b"\x00" * 18)
+            self.assertTrue(_findings(scan_mod(mod), "shippable-work-file"))
+            plan = compute_fix(mod, "shippable-work-file")
+            applied = apply_fix(plan)
+            moved = workspace / "scratch" / "work-files"
+            psd = (moved / "graphics/ships/hull.psd").read_bytes()
+            old_moved = (moved / "data/config/notes.old").is_file()
+            kept = [(mod / p).is_file() for p in ("graphics/ships/intro.log", "sounds/pack.zip")]
+            gone = [(mod / p).exists() for p in ("graphics/ships/hull.psd", "data/config/notes.old")]
+            backups = [entry["backup"] for entry in applied if entry.get("removed")]
+            remaining = _findings(scan_mod(mod), "shippable-work-file")
+            with self.assertRaises(FixerError):
+                compute_fix(mod, "shippable-work-file")  # only referenced files left
+        self.assertEqual(psd, b"8BPS\x00\x01binary")
+        self.assertTrue(old_moved)
+        self.assertEqual(kept, [True, True])
+        self.assertEqual(gone, [False, False])
+        self.assertEqual(backups, [None, None])  # the moved copy is the backup
+        self.assertEqual(sorted(remaining[0].evidence), ["graphics/ships/intro.log", "sounds/pack.zip"])
+
+    def test_refuses_to_overwrite_an_earlier_move_and_shows_binary_moves_briefly(self) -> None:
+        from bridgeforge.fixers import unified_diff_for_change
+
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "loose"
+            _write(mod / "mod_info.json", '{"id": "x"}')
+            (mod / "graphics").mkdir()
+            (mod / "graphics/a.psd").write_bytes(b"8BPS\x00" * 100)
+            plan = compute_fix(mod, "shippable-work-file")
+            diffs = [unified_diff_for_change(change) for change in plan.changes]
+            (Path(directory) / "loose.work-files" / "graphics").mkdir(parents=True)
+            (Path(directory) / "loose.work-files" / "graphics" / "a.psd").write_bytes(b"earlier")
+            with self.assertRaises(FixerError):
+                compute_fix(mod, "shippable-work-file")
+        self.assertIn("new binary file (500 bytes)", diffs[0])
+        self.assertIn("removed (500 bytes)", diffs[1])
+
+
+class DataFileNotUtf8FixerTests(unittest.TestCase):
+    """P15 item 15: only isolated CP-1252 punctuation is re-encoded; anything else needs a person."""
+
+    def test_reencodes_cp1252_punctuation_and_keeps_existing_utf8(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            _write(mod / "mod_info.json", '{"id": "x"}')
+            (mod / "data/strings").mkdir(parents=True)
+            path = mod / "data/strings/descriptions.csv"
+            path.write_bytes(b'id,text\r\na,"it\x92s \x93fine\x94 \x96 caf\xc3\xa9"\r\n')  # CP-1252 quotes + real UTF-8
+            self.assertTrue(_findings(scan_mod(mod), "data-file-not-utf8"))
+            apply_fix(compute_fix(mod, "data-file-not-utf8"))
+            after = path.read_bytes()
+            remaining = _findings(scan_mod(mod), "data-file-not-utf8")
+        self.assertEqual(after.decode("utf-8"), 'id,text\r\na,"it’s “fine” – café"\r\n')
+        self.assertEqual(remaining, [])
+
+    def test_refuses_mac_roman_shift_jis_and_accented_letters(self) -> None:
+        cases = {
+            "mac_roman.csv": b"id,text\na,the station\xd5s hull\n",  # Mac Roman 0xD5 = right quote
+            "shift_jis.csv": b"id,text\na,the ship\x81fs hull\n",    # Shift-JIS 0x81 0x66
+            "letters.csv": b"id,text\na,Myst\xe9re\n",               # CP-1252 e-acute or Mac Roman E-grave
+        }
+        for name, raw in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                mod = Path(directory)
+                _write(mod / "mod_info.json", '{"id": "x"}')
+                (mod / "data/strings").mkdir(parents=True)
+                (mod / "data/strings" / name).write_bytes(raw)
+                with self.assertRaises(FixerError) as caught:
+                    compute_fix(mod, "data-file-not-utf8")
+                self.assertIn(name, str(caught.exception))
+
+    def test_a_mixed_mod_fixes_what_it_can_and_leaves_the_rest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            _write(mod / "mod_info.json", '{"id": "x"}')
+            (mod / "data/strings").mkdir(parents=True)
+            (mod / "data/strings/a.csv").write_bytes(b"id,t\na,it\x92s\n")
+            (mod / "data/strings/b.csv").write_bytes(b"id,t\na,Myst\xe9re\n")
+            plan = compute_fix(mod, "data-file-not-utf8")
+        self.assertEqual([c.path.name for c in plan.changes], ["a.csv"])

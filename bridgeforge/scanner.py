@@ -189,7 +189,11 @@ FORBIDDEN_SANDBOX_SOURCE_PATTERN = re.compile(
 )
 BUNDLED_LIBRARY_PACKAGE_PREFIXES = {
     "GraphicsLib": ("org/dark/",),
-    "LazyLib": ("org/lazywizard/",),
+    # Only lazylib: org/lazywizard/console/ is Console Commands (lw_console). The wider prefix made
+    # revive declare LazyLib for ClearCommands, whose jar only calls Console Commands (2026-09-27;
+    # every class in LazyLib 3.0.0's LazyLib.jar and LazyLib-Kotlin.jar sits under org/lazywizard/lazylib).
+    "LazyLib": ("org/lazywizard/lazylib/",),
+    "Console Commands": ("org/lazywizard/console/",),
     "MagicLib": ("org/magiclib/", "data/scripts/util/Magic"),
     "LunaLib": ("lunalib/",),
     "Nexerelin": ("exerelin/",),
@@ -199,6 +203,7 @@ BUNDLED_LIBRARY_PACKAGE_PREFIXES = {
 LIBRARY_DEPENDENCY_IDS = {
     "GraphicsLib": "shaderLib",
     "LazyLib": "lw_lazylib",
+    "Console Commands": "lw_console",  # Console Commands 4.0.9 mod_info.json
     "MagicLib": "MagicLib",
     "LunaLib": "lunalib",
     "Nexerelin": "nexerelin",
@@ -2356,7 +2361,10 @@ def _attribute_library_usage(result: ScanResult) -> None:
         bytecode_referenced = library in result.bytecode_library_references
         if declared or bundled or imports:
             result.library_usage.append({"library": library, "declared": declared, "bundled": bundled, "imported": bool(imports), "source_called": bool(source_calls), "bytecode_referenced": bytecode_referenced, "evidence": {"imports": imports, "source_calls": source_calls}})
-            if declared and not bundled and not imports:
+            # A jar's own bytecode references count too: ClearCommands' jar calls org.lazywizard 42
+            # times with no loose source, so revive's undeclared-library-dependency fix declared
+            # LazyLib and this check then called it unreferenced (found 2026-09-27, P15 item 14).
+            if declared and not bundled and not imports and not bytecode_referenced:
                 result.add(id="declared-library-unreferenced", category="dependencies", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="A declared library has no bundled, import, or source-call evidence. Confirm whether it is required before removing or changing it.", evidence=[library])
             if imports and not declared and not bundled and not bytecode_referenced and _library_import_only(Path(result.input_path), result, [prefix.replace(".", "/") for prefix in prefixes]):
                 pass  # an unused import compiled away; reported once as library-import-unused-in-jar
@@ -5132,6 +5140,7 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
             if re.search(r"\bisModEnabled\s*\(", text):
                 guarded = True
         bytecode_hits: list[str] = []
+        referencing_classes: set[str] = set()
         if not source_hits:
             for jar, member, data in _iter_jar_class_files(root):
                 info = _parse_class_file(data)
@@ -5141,12 +5150,26 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                     relative_jar = _relative(root, jar)
                     if relative_jar not in bytecode_hits:
                         bytecode_hits.append(relative_jar)
+                    if info.this_class:
+                        referencing_classes.add(info.this_class.split("$", 1)[0].replace("/", "."))
                 # Bytecode-only mods (no source, e.g. Nightcross): a loaded class that calls
                 # isModEnabled and carries this mod id as a string literal is the same guard.
                 if "isModEnabled" in info.utf8_values and any(value.strip().lower() == dependency_id.lower() for value in info.string_constants):
                     guarded = True
         if not source_hits and not bytecode_hits:
             continue
+        if library == "Console Commands":
+            # Classes registered in data/console/commands.csv load only through Console Commands, so an
+            # addon made of them needs no declared dependency (the source-side console-command-optional rule).
+            registered = _console_command_classes(root)
+            users = set(_sources_mentioning(root, dotted_needles).values()) if source_hits else referencing_classes
+            if registered and users and users <= registered:
+                if any(f.id == "console-command-optional" for f in result.findings):
+                    continue  # already reported from the source imports
+                result.add(id="console-command-optional", category="dependencies", severity="info", classification="SAFE", confidence="HIGH",
+                           explanation="Every class that uses Console Commands' API is registered in data/console/commands.csv, which only Console Commands reads, so the classes load only when it is installed. An optional integration; no dependency needed.",
+                           evidence=sorted(users)[:10])
+                continue
         classification = "REVIEW" if guarded else "MANUAL"
         result.add(
             id="undeclared-library-dependency",

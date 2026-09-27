@@ -22,6 +22,7 @@ from pathlib import Path
 
 from .automation import ACTIONABLE, TIER_ORDER, bucket, tier_descriptions, tier_for
 from .baseline import finding_dict_baseline_key, mod_baseline_keys
+from .progress import Checkpoint
 
 SCHEMA_VERSION = 1
 PROMOTE_AFTER = 3  # verified AI fixes of one finding id, across at least two mods
@@ -81,32 +82,63 @@ def read_ledger(workspace: Path) -> list[dict]:
     return entries
 
 
-def finding_stats(roots: list[Path], *, scan: bool = False, vanilla_core: Path | None = None) -> dict:
+CHECKPOINT_NAME = "FINDING_STATS.partial.jsonl"
+
+
+def _workspace_record(workspace: Path, scan: bool, vanilla_core: Path | None) -> dict:
+    """One workspace's result: a mod row with its finding-id counts, or an `unscanned` reason."""
+    findings, source = _findings(workspace, scan, vanilla_core)
+    if findings is None:
+        return {"workspace": workspace.name, "unscanned": source}
+    accepted_keys = mod_baseline_keys(workspace / "working")
+    accepted = sum(1 for f in findings if finding_dict_baseline_key(f) in accepted_keys)
+    findings = [f for f in findings if finding_dict_baseline_key(f) not in accepted_keys]
+    ids = Counter(f.get("id", "?") for f in findings)
+    tiers = {finding_id: tier_for(finding_id) for finding_id in ids}
+    return {"workspace": workspace.name, "source": source, "bucket": bucket(list(tiers.values())),
+            "projected_bucket": bucket(["auto" if t == "mechanical" else t for t in tiers.values()]),
+            "blocking": sorted(i for i, t in tiers.items() if t not in ("none", "auto")),
+            "accepted_by_baseline": accepted, "tiers": dict(Counter(tiers[i] for i in ids.elements())),
+            "ids": dict(ids)}
+
+
+def _checkpoint_header(roots: list[Path], scan: bool, vanilla_core: Path | None) -> dict:
+    return {"checkpoint": SCHEMA_VERSION, "roots": [str(Path(r).expanduser().resolve()) for r in roots],
+            "scan": scan, "vanilla_core": str(vanilla_core) if vanilla_core else None}
+
+
+def finding_stats(roots: list[Path], *, scan: bool = False, vanilla_core: Path | None = None,
+                  checkpoint: Path | None = None, progress=None) -> dict:
+    """`checkpoint`: a JSONL file each workspace's record is appended to as it finishes, so an
+    interrupted run resumes where it stopped (same roots and options only). `progress(done, total,
+    record, seconds, resumed)` is called after each workspace."""
+    import time
+
     workspaces = discover_workspaces(roots)
     mods, unscanned = [], []
     occurrences: Counter[str] = Counter()
     mods_with: dict[str, set[str]] = defaultdict(set)
     ai_verified: dict[str, list[str]] = defaultdict(list)
-    for workspace in workspaces:
-        for entry in read_ledger(workspace):
-            if entry.get("outcome") in VERIFIED_OUTCOMES and entry.get("runner") == "agent" and entry.get("finding"):
-                ai_verified[entry["finding"]].append(workspace.name)
-        findings, source = _findings(workspace, scan, vanilla_core)
-        if findings is None:
-            unscanned.append({"workspace": workspace.name, "reason": source})
-            continue
-        accepted_keys = mod_baseline_keys(workspace / "working")
-        accepted = sum(1 for f in findings if finding_dict_baseline_key(f) in accepted_keys)
-        findings = [f for f in findings if finding_dict_baseline_key(f) not in accepted_keys]
-        ids = Counter(f.get("id", "?") for f in findings)
-        for finding_id, count in ids.items():
-            occurrences[finding_id] += count
-            mods_with[finding_id].add(workspace.name)
-        tiers = {finding_id: tier_for(finding_id) for finding_id in ids}
-        blocking = sorted(i for i, t in tiers.items() if t not in ("none", "auto"))
-        mods.append({"workspace": workspace.name, "source": source, "bucket": bucket(list(tiers.values())),
-                     "projected_bucket": bucket(["auto" if t == "mechanical" else t for t in tiers.values()]),
-                     "blocking": blocking, "accepted_by_baseline": accepted, "tiers": dict(Counter(tiers[i] for i in ids.elements()))})
+    with Checkpoint(checkpoint, _checkpoint_header(roots, scan, vanilla_core)) as saved:
+        for index, workspace in enumerate(workspaces, 1):
+            for entry in read_ledger(workspace):
+                if entry.get("outcome") in VERIFIED_OUTCOMES and entry.get("runner") == "agent" and entry.get("finding"):
+                    ai_verified[entry["finding"]].append(workspace.name)
+            started = time.monotonic()
+            record = saved.get(workspace.name)
+            resumed = record is not None
+            if record is None:
+                record = _workspace_record(workspace, scan, vanilla_core)
+                saved.add(workspace.name, record)
+            if progress:
+                progress(index, len(workspaces), record, time.monotonic() - started, resumed)
+            if "unscanned" in record:
+                unscanned.append({"workspace": record["workspace"], "reason": record["unscanned"]})
+                continue
+            for finding_id, count in record.pop("ids").items():
+                occurrences[finding_id] += count
+                mods_with[finding_id].add(workspace.name)
+            mods.append(record)
     unlocks = Counter(mod["blocking"][0] for mod in mods if len(mod["blocking"]) == 1)
     by_id = [{"id": finding_id, "tier": tier_for(finding_id), "occurrences": occurrences[finding_id],
               "mods": len(mods_with[finding_id]), "unlocks": unlocks.get(finding_id, 0)}

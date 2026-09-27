@@ -223,6 +223,33 @@ def _member_hints(changed_index, type_simple: str, member: str, kind: str) -> li
     return hints
 
 
+_CALL_ARGS = re.compile(r"^symbol:\s*method\s+[\w$]+\((?P<args>.*)\)\s*$")
+
+
+def _param_count(text: str) -> int:
+    """Top-level comma-separated items in a parameter or argument list ("" -> 0; generics nest)."""
+    depth, count = 0, 1 if text.strip() else 0
+    for char in text:
+        depth += char == "<"
+        depth -= char == ">"
+        count += char == "," and depth == 0
+    return count
+
+
+def _same_arity(hints: list[dict], detail: list[str]) -> list[dict]:
+    """Keep the removed overloads whose parameter count matches the failing call, when any does.
+
+    javac's "symbol: method addMessage(String)" line names the call's argument types; without this
+    every same-named overload was listed (four `SectorAPI.addMessage` lines per call site in
+    Batavia's compile-check, 2026-09-27)."""
+    call = next((m for m in map(_CALL_ARGS.match, detail) if m), None)
+    if call is None or len(hints) < 2:
+        return hints
+    arity = _param_count(call.group("args"))
+    matching = [h for h in hints if "(" in h.get("removed", "") and _param_count(h["removed"].split("(", 1)[1].rsplit(")", 1)[0]) == arity]
+    return matching or hints
+
+
 def annotate_errors(errors: list[dict], catalogue: dict) -> int:
     """Add an `api_changes` list to each javac error the catalogue explains; return how many got one."""
     changed_index, removed_index = _index(catalogue)
@@ -239,6 +266,8 @@ def annotate_errors(errors: list[dict], catalogue: dict) -> int:
             elif symbol and location:
                 kind = "method" if symbol.group("kind") == "method" else "field"
                 hints = _member_hints(changed_index, _strip_generics(location.group("type")), symbol.group("name"), kind)
+                if kind == "method":
+                    hints = _same_arity(hints, detail)
         elif error.get("kind") == "cannot-be-applied":
             header = _NOT_APPLICABLE.match(str(error.get("message", "")))
             if header:

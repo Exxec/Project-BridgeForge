@@ -1853,6 +1853,102 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     (`must_stay_local_only`, a `LICENCE:` line); into a releasable target it is still refused. Used by
     both `vendor-copy` and `vendor-copy --plan`. Tests: `tests/test_vendor_copy.py`,
     `tests/test_vendor_plan.py`.
+12. **Long runs print progress and resume from a checkpoint (owner rule 2026-09-27).** The first local
+    `finding-stats --scan` ran 43m50s over 305 workspaces with no output until the end, and
+    `dependency-graph --write` and `corpus-index build C:\Users\exxec\Downloads` ran over 1.5 hours
+    each without a line; an interrupted run lost everything (`corpus-index build` held the whole
+    archive in one SQLite transaction). **Done 2026-09-27.** `bridgeforge/progress.py`: `Checkpoint`
+    (append-only `*.partial.jsonl`, header names the inputs; same header resumes, any other restarts, a
+    torn last line is ignored) and `report` (`[12/305] Mod: detail (38.2s)` on stderr). Applied to
+    `finding-stats` (`--write DIR` with `--scan`), `dependency-graph --write`, `corpus-recheck` (both
+    checkpoint in `In operation/`, known root files for `board`), each with `--quiet` and `--restart`;
+    `corpus-index build` now commits per source, so a rerun skips what an interrupted one indexed, and
+    prints each file it reads. `progress.LONG_RUNNING_COMMANDS` lists them and
+    `tests/test_progress.py` fails if one stops offering `--quiet`; rule recorded in `CLAUDE.md`.
+    Tests: `tests/test_progress.py`, `tests/test_finding_stats.py`, `tests/test_substitutes.py`,
+    `tests/test_corpus_recheck.py`, `tests/test_corpus_index.py` (each with an interrupted-run case).
+13. **First local pass over `docs/LOCAL_HANDOFF.md` after the merge (2026-09-27).**
+    - **P1 done:** `In operation/FINDING_STATS.md`, 305 workspaces. Unattended now 43 (14%), 50 with
+      mechanical fixers; hardest tier `code` 168, `decision` 67, `auto` 41. Top unlocks:
+      `settings-json-override-breadth` (decision, 14), `shippable-work-file` (mechanical, 7),
+      `loose-script-janino-risk` (code, 5), `vanilla-path-shadowing` (decision, 5). No unclassified ids.
+    - **G2:** catalogues written to `In operation/_reference/` for 0.8.1a, 0.9a and 0.95.1a to RC8.
+      The handoff's expectations were partly wrong: 0.9a's `SectorAPI` already lacks `addMessage` and
+      `createFleet(String, String)` (removed between 0.8.1a and 0.9, checked in each install's
+      `starfarer.api.zip`); against 0.8.1a, `compile-check` on Batavia's `original/` prints `API CHANGE`
+      lines with `CampaignUIAPI.addMessage` as a candidate and none for `createFleet`, as expected.
+      `weapon:thruster_fighter_sm` and `hullmod:shields_formshield` occur in no vanilla data from 0.6.2a
+      to 0.95.1a (grep of every install's `data/`): they are mod ids, not removed vanilla content.
+      Noise worth fixing: `compile-check` lists every same-named overload for one call site (four
+      `addMessage` lines per call) instead of matching the argument count.
+    - **R2:** the BDS command cannot run as written (`--class hullmod` is not a class; the 260-line
+      figure came from `.java`, which neither version merges). Rebal `.wpn` from `original/` against
+      0.9a: MERGED 81, UNCHANGED_COPY 1, 0 conflicts, against the removed local version's 76 rebuilt and
+      5 conflicts over the same 82 files. Not a bug: `hammer.wpn` `fireSoundTwo` and `hil.wpn` `width`
+      equal the 0.9a value in Rebal, so only RC8 changed them and the three-way merge takes RC8's.
+    - **R4:** DME's `strip-plan` lists exactly its one uncovered id (`hull:istl_mystere`).
+      `vendor-copy --plan` for Rebal's `shields_formshield` into RevenantLib stops at a CONFLICT:
+      RevenantLib's `hull_mods.csv` already carries a different `shields_formshield` row (9 SUSPECT
+      shield scripts held back as designed).
+    - **G1:** probe jar rebuilt against RC8 (17 classes, release copy 0.2.2); `tests/test_probe_mod_build.py`
+      ran on this machine. javap (RC8 `starfarer.api.jar`, 2026-09-27) confirms `SettingsAPI.getHullSpec`,
+      `getWeaponSpec`, `getHullModSpec` and `FleetMemberAPI.getHullSpec()`/`getHullId()` for the
+      proposed direct lookups and substituted-hull check. Live `content-ids` run still pending.
+    - **G3:** `revenantlib-check` PASS for the three `bf.*` methods; `rig-doctor` has nothing to check
+      because RevenantLib is not installed in the rig.
+    - **G4 done:** `tools/build_jar.py` rebuilt RevenantLib byte-identically (0 added/removed/changed,
+      11 identical), `tools/check.py` three PASS; `scratch/MOVES.log` copied into `reports/MOVES.md`
+      on RevenantLib branch `local-handoff-moves-log`.
+    - Local tooling: `.githooks/pre-commit` runs `ruff check .` and the hooks are installed
+      (`core.hooksPath` had been unset); `AGENTS.md` synced with `CLAUDE.md`.
+    - **R1 done:** `In operation/DEPENDENCY_GRAPH.md`, 305 queued mods. First: Unofficial New Game Plus
+      (unblocks 6), Scy Nation (4), YunruCore, Outer Rim Alliance (3 each). All 20 ranked providers show
+      `licence UNRECORDED`: each needs `release-policy set` before it is revived.
+14. **`shippable-work-file` fixer, and the first UNATTENDED_DONE revive (2026-09-27).** P1 ranked it the
+    top `mechanical` id (the only blocker for 7 mods). **Done 2026-09-27.** `_fix_shippable_work_file`
+    moves each listed file to `<workspace>/scratch/work-files/<same path>` (`<root>.work-files/` for a
+    bare mod folder) and leaves any file whose name appears in the mod's data, loose scripts,
+    `mod_info.json` or jar members, per the check's own caveat that a mod could read one; it refuses
+    to overwrite an earlier move. `FileChange.removed` lets a plan delete a file (a move's new copy is
+    its backup, a bare removal keeps the `.bak`), and diffs show removals and binary files as one line.
+    Tier `mechanical` -> `auto`. Dry run on the 7 mods moved only source archives, `.url` shortcuts,
+    `~`/`.old` backups and a Krita file. Tests: `tests/test_fixers.py` (`ShippableWorkFileFixerTests`).
+    - **P2, first real `revive`:** ClearCommands, with `--approve` for its three REVIEW `auto` fixers
+      (no standing `AUTOMATION_POLICY.json` yet: the owner's call). The run found two bugs, both fixed:
+      `revive` crashed labelling a change outside `working/` (now `../scratch/...`, removals marked);
+      and **`undeclared-library-dependency` declared LazyLib for a mod that only uses Console
+      Commands**, because `BUNDLED_LIBRARY_PACKAGE_PREFIXES` mapped all of `org/lazywizard/` to LazyLib.
+      Every class in LazyLib 3.0.0's two jars is under `org/lazywizard/lazylib/`, and Console Commands
+      4.0.9 (`lw_console`) is all `org/lazywizard/console/` (208 classes), so LazyLib now has the narrow
+      prefix and Console Commands its own entry. A bytecode-only Console Commands user whose classes
+      are all registered in `data/console/commands.csv` gets the existing `console-command-optional`
+      (SAFE) instead of a dependency. `declared-library-unreferenced` now also honours jar bytecode use.
+      ClearCommands' `mod_info.json` was restored from the fixer's own backup and revive then reached
+      **UNATTENDED_DONE** (report drafted; the probe run is the remaining manual step). Of the 85
+      workspaces declaring `lw_lazylib`, 3 now show it unused (MAGNETAR, Persean-Chronicles,
+      SCY-Nation-Utility), none from a fixer. Tests: `tests/test_rc8_bytecode_checks.py`
+      (`test_declared_library_used_only_by_jar_bytecode_is_not_unreferenced`; the finding leaves
+      `untested_checks_baseline.json`).
+15. **`data-file-not-utf8` fixer for the one encoding the bytes prove (2026-09-27).** P1: 34 mods,
+    `mechanical`. A survey of the queue's 44 non-UTF-8 data files showed the check's "decodes as"
+    guess is not evidence: DME's descriptions use Mac Roman (0xD5 for ’), Stinger-Shipyards
+    Shift-JIS (0x81 0x66), Union-Rail-Systems and Faction-Relationships-Uniquified are UTF-8 with stray
+    bytes, and GB18030 decodes almost anything. **Done 2026-09-27.** `_fix_data_file_not_utf8`
+    re-encodes a file only when every invalid byte is isolated CP-1252 typography (0x85, 0x91-0x94,
+    0x96, 0x97, 0xA0: bytes Mac Roman reads as letters and GBK/Shift-JIS cannot use alone), keeping
+    valid UTF-8 already present byte for byte; any other file is refused with the bytes it holds, for a
+    person to name its encoding. Tier `mechanical` -> `auto` (still REVIEW, so revive asks for
+    approval). Dry run over the queue: 30 files in 27 mods converted; 14 refused (Another-Random-SWP
+    0xB0, DME/DME-dev, Epta-Consortium, Faction-Relationships-Uniquified, TDB-Maelstrom, MAGNETAR 0x99,
+    Stinger-Shipyards, Thule-Legacy, part of ICE). Tests: `tests/test_fixers.py`
+    (`DataFileNotUtf8FixerTests`).
+16. **`compile-check --api-diff` lists only overloads the failing call could mean (2026-09-27).** On
+    Batavia's `original/` against the 0.8.1a catalogue, every `addMessage` call printed all four
+    removed `SectorAPI.addMessage` overloads. **Done 2026-09-27.** `api_diff._same_arity` reads the
+    argument list javac prints (`symbol: method addMessage(String)`) and keeps the removed overloads
+    with that parameter count (generics nest), falling back to every lead when none match. Batavia now
+    prints one line per call. Tests: `tests/test_api_diff.py`
+    (`test_only_overloads_with_the_calls_argument_count_are_listed`).
 
 ## Post-1.0 research and gated automation
 

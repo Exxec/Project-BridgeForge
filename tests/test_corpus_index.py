@@ -87,6 +87,35 @@ class CorpusIndexTests(unittest.TestCase):
         self.assertEqual(len(new["content_hits"]), 1)
         self.assertNotIn("binary content", new["not_searched"])
 
+    def test_interrupted_build_keeps_what_it_indexed(self):
+        class Stop(Exception):
+            pass
+
+        def stop_after_three(done, total, source, status, seconds):
+            if done == 3:
+                raise Stop
+
+        with resolved_temp_dir() as root:
+            downloads, db = _archive(root), root / "index.sqlite"
+            with self.assertRaises(Stop):
+                build_index(downloads, db, progress=stop_after_three)
+            seen = []
+            resumed = build_index(downloads, db, progress=lambda *a: seen.append(a[3]))
+            hit = search_index(db, "shieldbypass")
+        self.assertEqual((resumed["unchanged"], resumed["reindexed"]), (3, 3))  # the first 3 were committed
+        self.assertEqual(seen.count("unchanged"), 3)
+        self.assertEqual(len(hit["content_hits"]), 1)
+
+    def test_cli_build_prints_progress(self):
+        with resolved_temp_dir() as root:
+            downloads, db = _archive(root), root / "index.sqlite"
+            err = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(err):
+                self.assertEqual(main(["corpus-index", "build", str(downloads), "--db", str(db)]), 0)
+                self.assertEqual(main(["corpus-index", "build", str(downloads), "--db", str(db)]), 0)
+        self.assertIn("[1/6] indexed ", err.getvalue())
+        self.assertIn("[6/6] ... unchanged files skipped", err.getvalue())
+
     def test_guards(self):
         with resolved_temp_dir() as root:
             downloads = _archive(root)

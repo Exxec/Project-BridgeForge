@@ -724,7 +724,7 @@ apply a SAFE, mechanical fixer for one supported finding id (dry-run diff by def
 | Argument | Notes | Help |
 |---|---|---|
 | `mod_dir` | - | - |
-| `--finding` ID | required | supported: mod-info-game-version-inexact, csv-row-extra-columns, csv-missing-design-type-column, procgen-planet-row-missing, procgen-star-row-missing, faction-known-lists-missing, mod-info-triage-banner, wing-data-missing-role-desc-column, target-interface-method-missing, removed-api-call, carrier-bays-proposal, revenantlib-fold-conflict, undeclared-library-dependency, rules-firebest-populate-options, personality-id-unknown, faction-trait-weight-legacy-personality-id, shiproles-wing-id, csv-fullwidth-number, ship-data-missing-fighter-bays-column, missing-custom-ui-button-pressed-callback |
+| `--finding` ID | required | supported: mod-info-game-version-inexact, csv-row-extra-columns, csv-missing-design-type-column, procgen-planet-row-missing, procgen-star-row-missing, faction-known-lists-missing, mod-info-triage-banner, wing-data-missing-role-desc-column, target-interface-method-missing, removed-api-call, carrier-bays-proposal, revenantlib-fold-conflict, undeclared-library-dependency, rules-firebest-populate-options, personality-id-unknown, faction-trait-weight-legacy-personality-id, shiproles-wing-id, csv-fullwidth-number, ship-data-missing-fighter-bays-column, missing-custom-ui-button-pressed-callback, shippable-work-file, data-file-not-utf8 |
 | `--apply` | - | write the change (default: print a dry-run diff only) |
 | `--json` | - | - |
 | `--target-game-version` TARGET_GAME_VERSION | - | required for mod-info-game-version-inexact |
@@ -1425,6 +1425,8 @@ across every queued workspace, which non-current mods need reviving and how many
 | `--vanilla-core` VANILLA_CORE | - | - |
 | `--provider-index` PROVIDER_INDEX | - | - |
 | `--write` | - | write <queue>/DEPENDENCY_GRAPH.json and .md, and each mod's reports/dependencies.json, all of which `board` shows |
+| `--restart` | - | with --write: ignore an earlier interrupted run's <queue>/DEPENDENCY_GRAPH.partial.jsonl |
+| `--quiet` | - | no per-mod progress lines on stderr |
 | `--json` | - | - |
 
 ## finding-stats
@@ -1436,7 +1438,9 @@ count findings across workspaces by automation tier: how many mods could be revi
 | `roots` | nargs * | queue folders or single workspaces; default <repo>/In operation |
 | `--scan` | - | scan each <ws>/working afresh instead of reading its latest stored scan |
 | `--vanilla-core` VANILLA_CORE | - | with --scan: also compile-check loose scripts |
-| `--write` DIR | - | write FINDING_STATS.json and FINDING_STATS.md into DIR |
+| `--write` DIR | - | write FINDING_STATS.json and FINDING_STATS.md into DIR; with --scan, each workspace's result is also appended to DIR/FINDING_STATS.partial.jsonl as it finishes, so an interrupted run resumes |
+| `--restart` | - | with --write: ignore an earlier run's FINDING_STATS.partial.jsonl and scan everything again |
+| `--quiet` | - | no per-workspace progress lines on stderr |
 | `--json` | - | - |
 
 ## preset-check
@@ -1472,6 +1476,8 @@ re-scan every mod with real revival work recorded (ROADMAP P14 item 32): finding
 | `--vanilla-core` VANILLA_CORE | - | read-only starsector-core; without it, most checks return UNKNOWN and no compile signal is produced |
 | `--write-markdown` WRITE_MARKDOWN | - | also write a roll-up table to this path |
 | `--include-intake` | - | also include mods with a working/ copy but no REVIVAL_REPORT.md yet (ROADMAP P14 item 8: the Ironclads intake queue) |
+| `--restart` | - | ignore an interrupted run's In operation/CORPUS_RECHECK.partial.jsonl and rescan everything |
+| `--quiet` | - | no per-mod progress lines on stderr |
 | `--json` | - | - |
 
 ## vendor-copy
@@ -1542,6 +1548,7 @@ index (or refresh) every file under ROOT; unchanged files are skipped on re-runs
 | `root` | - | folder to index, e.g. Downloads |
 | `--db` DB | default bridgeforge-state/corpus-index.sqlite | index file (default: bridgeforge-state/corpus-index.sqlite) |
 | `--max-bytes` MAX_BYTES | default 4194304 | skip (and report) text files larger than this |
+| `--quiet` | - | no per-file progress lines on stderr |
 | `--json` | - | - |
 
 ## corpus-index search

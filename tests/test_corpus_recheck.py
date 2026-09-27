@@ -153,6 +153,35 @@ class CorpusRecheckTests(unittest.TestCase):
             self.assertIn("Broken", markdown)
             self.assertIn("| Mod | Files |", markdown)
 
+    def test_checkpoint_resumes_an_interrupted_sweep(self) -> None:
+        from unittest import mock
+
+        import bridgeforge.corpus_recheck as recheck
+
+        class Stop(Exception):
+            pass
+
+        def stop_after_one(done, total, mod, seconds):
+            if done == 1:
+                raise Stop
+
+        with resolved_temp_dir() as root:
+            for name in ("Alpha", "Beta", "Gamma"):
+                _mod(root, name, "IN_PROGRESS\n")
+            checkpoint = root / "recheck.partial.jsonl"
+            whole = corpus_recheck(root)
+            with self.assertRaises(Stop):
+                corpus_recheck(root, checkpoint=checkpoint, progress=stop_after_one)
+            with mock.patch.object(recheck, "_recheck_one", wraps=recheck._recheck_one) as scanned:
+                resumed = corpus_recheck(root, checkpoint=checkpoint)
+            self.assertEqual(scanned.call_count, 2)
+            self.assertEqual(resumed["mods"], whole["mods"])
+            err = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+                main(["corpus-recheck", "--repo-root", str(root)])
+            self.assertFalse((root / "In operation" / "CORPUS_RECHECK.partial.jsonl").exists())
+        self.assertIn("[1/3] Alpha: ", err.getvalue())
+
     def test_cli_writes_json_and_markdown_and_returns_regression_exit_code(self) -> None:
         with resolved_temp_dir() as root:
             _mod(root, "Broken", "READY_FOR_LIVE_TEST\n", {

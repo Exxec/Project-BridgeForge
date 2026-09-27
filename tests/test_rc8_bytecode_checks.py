@@ -452,6 +452,20 @@ class UndeclaredLibraryDependencyTests(unittest.TestCase):
             self.assertEqual(len(findings), 1)
             self.assertEqual(findings[0].classification, "MANUAL")
 
+    def test_declared_library_used_only_by_jar_bytecode_is_not_unreferenced(self) -> None:
+        # ClearCommands (2026-09-27): once revive declared the LazyLib its jar calls, the scan called
+        # the declaration unreferenced. Bytecode use counts; a declaration nothing uses still fires.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture","dependencies":[{"id":"lw_lazylib","name":"LazyLib"}]}')
+            unused = scan_mod(root)
+            class_bytes = build_class_file("fx/Plugin", extra_class_refs=("org/lazywizard/lazylib/MathUtils",))
+            write_jar(root / "jars" / "fixture.jar", {"fx/Plugin.class": class_bytes})
+            _write(root / "mod_info.json", '{"id":"fixture","jars":["jars/fixture.jar"],"dependencies":[{"id":"lw_lazylib","name":"LazyLib"}]}')
+            used = scan_mod(root)
+        self.assertEqual([f.evidence for f in _findings(unused, "declared-library-unreferenced")], [["LazyLib"]])
+        self.assertEqual(_findings(used, "declared-library-unreferenced"), [])
+
 
 class VanillaPathShadowingJavaExtensionTests(unittest.TestCase):
     def test_loose_script_with_different_bytes_is_manual(self) -> None:

@@ -704,13 +704,17 @@ def build_parser() -> argparse.ArgumentParser:
     graph_cmd.add_argument("--vanilla-core", type=Path)
     graph_cmd.add_argument("--provider-index", type=Path)
     graph_cmd.add_argument("--write", action="store_true", help="write <queue>/DEPENDENCY_GRAPH.json and .md, and each mod's reports/dependencies.json, all of which `board` shows")
+    graph_cmd.add_argument("--restart", action="store_true", help="with --write: ignore an earlier interrupted run's <queue>/DEPENDENCY_GRAPH.partial.jsonl")
+    graph_cmd.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
     graph_cmd.add_argument("--json", action="store_true")
     subs_cmd.add_argument("--json", action="store_true")
     stats_cmd = subcommands.add_parser("finding-stats", help="count findings across workspaces by automation tier: how many mods could be revived unattended, and which finding ids to automate next (roadmap P15 item 1)")
     stats_cmd.add_argument("roots", type=Path, nargs="*", help="queue folders or single workspaces; default <repo>/In operation")
     stats_cmd.add_argument("--scan", action="store_true", help="scan each <ws>/working afresh instead of reading its latest stored scan")
     stats_cmd.add_argument("--vanilla-core", type=Path, help="with --scan: also compile-check loose scripts")
-    stats_cmd.add_argument("--write", type=Path, metavar="DIR", help="write FINDING_STATS.json and FINDING_STATS.md into DIR")
+    stats_cmd.add_argument("--write", type=Path, metavar="DIR", help="write FINDING_STATS.json and FINDING_STATS.md into DIR; with --scan, each workspace's result is also appended to DIR/FINDING_STATS.partial.jsonl as it finishes, so an interrupted run resumes")
+    stats_cmd.add_argument("--restart", action="store_true", help="with --write: ignore an earlier run's FINDING_STATS.partial.jsonl and scan everything again")
+    stats_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     stats_cmd.add_argument("--json", action="store_true")
     preset_cmd = subcommands.add_parser("preset-check", help="check bf-test.ps1 presets against the rig's installed mods: own mod and declared dependencies enabled, enabled ids installed, no undeclared libraries")
     preset_cmd.add_argument("script", type=Path, help="path to bf-test.ps1")
@@ -728,6 +732,8 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_recheck_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core; without it, most checks return UNKNOWN and no compile signal is produced")
     corpus_recheck_cmd.add_argument("--write-markdown", type=Path, help="also write a roll-up table to this path")
     corpus_recheck_cmd.add_argument("--include-intake", action="store_true", help="also include mods with a working/ copy but no REVIVAL_REPORT.md yet (ROADMAP P14 item 8: the Ironclads intake queue)")
+    corpus_recheck_cmd.add_argument("--restart", action="store_true", help="ignore an interrupted run's In operation/CORPUS_RECHECK.partial.jsonl and rescan everything")
+    corpus_recheck_cmd.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
     corpus_recheck_cmd.add_argument("--json", action="store_true")
     vendor_copy_cmd = subcommands.add_parser("vendor-copy", help="copy a piece of a provider mod into another mod instead of reviving or depending on the whole provider (ROADMAP P14 item 4): one hullmod by id, or with --plan everything a vendor-plan lists (P15 item 7)")
     vendor_copy_cmd.add_argument("kind", nargs="?", choices=["hullmod"], help="only 'hullmod' is supported without --plan (see the command's own help for why)")
@@ -764,6 +770,7 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_build_cmd.add_argument("root", type=Path, help="folder to index, e.g. Downloads")
     corpus_build_cmd.add_argument("--db", type=Path, default=Path("bridgeforge-state") / "corpus-index.sqlite", help="index file (default: bridgeforge-state/corpus-index.sqlite)")
     corpus_build_cmd.add_argument("--max-bytes", type=int, default=4 * 1024 * 1024, help="skip (and report) text files larger than this")
+    corpus_build_cmd.add_argument("--quiet", action="store_true", help="no per-file progress lines on stderr")
     corpus_build_cmd.add_argument("--json", action="store_true")
     corpus_search_cmd = corpus_index_sub.add_parser("search", help="find files whose content (3+ characters, case-insensitive) or path contains TEXT")
     corpus_search_cmd.add_argument("text")
@@ -1008,13 +1015,29 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Provider index: {summary['providers']} mods, {summary['ids']} ids -> {summary['output']}")
         return 0
     if args.command == "finding-stats":
-        from .finding_stats import FindingStatsError, finding_stats, render
+        from .finding_stats import CHECKPOINT_NAME, FindingStatsError, finding_stats, render
         from .substitutes import REPO_ROOT
+        checkpoint = args.write / CHECKPOINT_NAME if args.write and args.scan else None
+        if checkpoint and args.restart and checkpoint.is_file():
+            checkpoint.unlink()
+
+        def progress(done: int, total: int, record: dict, seconds: float, resumed: bool) -> None:
+            if "unscanned" in record:
+                detail = f"not scanned ({record['unscanned']})"
+            else:
+                detail = f"{sum(record['tiers'].values())} finding(s), bucket {record['bucket']}"
+                if record["blocking"]:
+                    detail += f", blocked by {', '.join(record['blocking'][:3])}" + (" ..." if len(record["blocking"]) > 3 else "")
+            print(f"[{done}/{total}] {record['workspace']}: {detail}" + (" (from checkpoint)" if resumed else f" ({seconds:.1f}s)"), file=sys.stderr, flush=True)
+
         try:
-            stats = finding_stats(args.roots or [REPO_ROOT / "In operation"], scan=args.scan, vanilla_core=args.vanilla_core)
+            stats = finding_stats(args.roots or [REPO_ROOT / "In operation"], scan=args.scan, vanilla_core=args.vanilla_core,
+                                  checkpoint=checkpoint, progress=None if args.quiet else progress)
         except (FindingStatsError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
+        if checkpoint and checkpoint.is_file():
+            checkpoint.unlink()  # the run finished; FINDING_STATS.json now holds every record
         if args.write:
             args.write.mkdir(parents=True, exist_ok=True)
             (args.write / "FINDING_STATS.json").write_text(json.dumps(stats, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -1027,11 +1050,24 @@ def main(argv: list[str] | None = None) -> int:
         queue = args.queue or REPO_ROOT / "In operation"
         roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
         try:
-            result = dependency_graph(queue, roots, vanilla_core=args.vanilla_core, index_path=args.provider_index, write_reports=args.write)
+            from .progress import report as print_progress
+            checkpoint = Path(queue) / "DEPENDENCY_GRAPH.partial.jsonl" if args.write else None
+            if checkpoint and args.restart and checkpoint.is_file():
+                checkpoint.unlink()
+
+            def graph_progress(done: int, total: int, name: str, report: dict, seconds: float | None) -> None:
+                needs = [item["mod_id"] for item in report["provider_set"] if not item["targets_0.98a"]]
+                print_progress(done, total, name, f"{report['strategy']}" + (f", needs {', '.join(needs)}" if needs else "")
+                               + (f", {len(report['uncovered'])} unprovided" if report["uncovered"] else ""), seconds)
+
+            result = dependency_graph(queue, roots, vanilla_core=args.vanilla_core, index_path=args.provider_index, write_reports=args.write,
+                                      checkpoint=checkpoint, progress=None if args.quiet else graph_progress)
             if args.write:
                 from .substitutes import write_dependency_graph
                 for written in write_dependency_graph(result, queue):
                     print(f"Written: {written}", file=sys.stderr)
+                if checkpoint.is_file():
+                    checkpoint.unlink()
         except (ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -1211,7 +1247,20 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "corpus-recheck":
         from .corpus_recheck import corpus_recheck, render_markdown
-        result = corpus_recheck(args.repo_root, args.vanilla_core, require_report=not args.include_intake)
+        from .progress import report as print_progress
+        checkpoint = args.repo_root.expanduser().resolve() / "In operation" / "CORPUS_RECHECK.partial.jsonl"
+        if args.restart and checkpoint.is_file():
+            checkpoint.unlink()
+
+        def recheck_progress(done: int, total: int, mod: dict, seconds: float | None) -> None:
+            detail = f"ERROR {mod['error']}" if "error" in mod else ", ".join(f"{count} {name}" for name, count in sorted(mod["by_classification"].items())) or "no findings"
+            print_progress(done, total, mod["mod"], detail, seconds)
+
+        result = corpus_recheck(args.repo_root, args.vanilla_core, require_report=not args.include_intake,
+                                checkpoint=checkpoint if checkpoint.parent.is_dir() else None,
+                                progress=None if args.quiet else recheck_progress)
+        if checkpoint.is_file():
+            checkpoint.unlink()  # the run finished
         if args.write_markdown:
             args.write_markdown.parent.mkdir(parents=True, exist_ok=True)
             args.write_markdown.write_text(render_markdown(result), encoding="utf-8")
@@ -2608,7 +2657,13 @@ def main(argv: list[str] | None = None) -> int:
         from .corpus_index import CorpusIndexError, build_index, search_index
         try:
             if args.corpus_index_command == "build":
-                result = build_index(args.root, args.db, args.max_bytes)
+                def corpus_progress(done: int, total: int, source: str, status: str, seconds: float) -> None:
+                    if status == "indexed":
+                        print(f"[{done}/{total}] indexed {source} ({seconds:.1f}s)", file=sys.stderr, flush=True)
+                    elif done % 500 == 0 or done == total:
+                        print(f"[{done}/{total}] ... unchanged files skipped", file=sys.stderr, flush=True)
+
+                result = build_index(args.root, args.db, args.max_bytes, progress=None if args.quiet else corpus_progress)
             else:
                 result = search_index(args.db, args.text, args.limit, args.names)
         except CorpusIndexError as exc:

@@ -8,7 +8,7 @@ from pathlib import Path
 from bridgeforge.substitutes import required_from_scan
 import io
 import shutil
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 
 from bridgeforge.cli import main
 from bridgeforge.substitutes import (
@@ -103,6 +103,40 @@ class ProviderIndexTests(unittest.TestCase):
         self.assertEqual([(e["mod_id"], e["unblocks"]) for e in graph["revival_order"]],
                          [("oldsector", ["AddonA", "AddonB"]), ("raresector", ["AddonC"])])
         self.assertEqual(graph["unprovided"], [])
+
+    def test_graph_checkpoint_resumes_and_progress_is_reported(self) -> None:
+        from unittest import mock
+
+        import bridgeforge.substitutes as subs
+
+        class Stop(Exception):
+            pass
+
+        def stop_after_one(done, total, name, report, seconds):
+            if done == 1:
+                raise Stop
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            queue, checkpoint = self._queue(root), root / "graph.partial.jsonl"
+            whole = dependency_graph(queue, [root / "mods"], vanilla_core=_core(root))
+            with self.assertRaises(Stop):
+                dependency_graph(queue, [root / "mods"], vanilla_core=_core(root), checkpoint=checkpoint, progress=stop_after_one)
+            seen = []
+            with mock.patch.object(subs, "dependency_substitutes", wraps=subs.dependency_substitutes) as computed:
+                resumed = dependency_graph(queue, [root / "mods"], vanilla_core=_core(root), checkpoint=checkpoint,
+                                           progress=lambda *a: seen.append(a[4] is None))
+            self.assertEqual(computed.call_count, 2)  # AddonA came from the checkpoint
+            self.assertEqual(seen, [True, False, False])
+            self.assertEqual(resumed["revival_order"], whole["revival_order"])
+            err = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(err):
+                code = main(["dependency-graph", "--queue", str(queue), "--providers", str(root / "mods"),
+                             "--vanilla-core", str(_core(root)), "--write"])
+            self.assertEqual(code, 0)
+            self.assertFalse((queue / "DEPENDENCY_GRAPH.partial.jsonl").exists())
+        self.assertIn("[1/3] AddonA: ", err.getvalue())
+        self.assertIn("[3/3] AddonC: STRIP_FROM_MOD, needs raresector", err.getvalue())
 
     def test_graph_cli(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
