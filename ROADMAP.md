@@ -2242,6 +2242,23 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     are indexed by source; an older-schema index with content is refused rather than slowly updated. Benchmark on
     the rig's mods: a steady ~130 files/s, 32,000 files in under 4 minutes with no slowdown. Test:
     `tests/test_corpus_index.py`. R3 must be stopped and rebuilt into a fresh index.
+    **R3 done 2026-09-27** on the fixed code: 69 min for all of Downloads (42 GB), 403,544 text files searched and
+    1,295,212 listed by name, a 6.5 GB index. `search shieldbypass` finds `Ironclads mega archive/Ship and Weapon
+    Pack/data/hullmods/hull_mods.csv` (and the 0.7.2a modpack copy): the 2026-09-20 false negative is gone. Not searched:
+    87 `.rar` archives, 1,003 nested archives, 1 BCJ2 `.7z` (py7zr cannot read it), 2 password-protected zip members.
+27. **The shared copy step dropped mod-specific top-level folders (GRP-3, 2026-09-27).** Flux Reticle crashed at
+    startup: "Error loading [sun_fr/graphics/half.png]". Its sprites live in `sun_fr/graphics/` (settings.json points
+    there), but `copy_drift._collect` (used by prepare-test, copy-drift, release, archive, probe-group) copied only
+    `data`/`graphics`/`sounds`/`jars` plus declared jars, so the rig copy, and any release or archive, lacked them.
+    **Done 2026-09-27.** Every top-level folder is copied except tool/build folders (`reports`, `scratch`, `src*`,
+    `out`, `build`, `bin`, `disabled_files`, `gradle`, `META-INF`, `production`, `test`, VCS/IDE folders). Survey: 29
+    working copies have extra folders; affected were Flux Reticle and Fuel Siphoning (`sun_fs`, group 3, resynced;
+    GRP-3 then all PASS), and later-group MnemonicSensors (`imgs`) and More-Lamp-Colour-Options (`sound`); groups 1-2
+    and the three `Done/` archives were unaffected. Test: `tests/test_copy_drift.py` (`CustomTopFolderTests`).
+    Also: `bf-test.ps1 launch` now sets aside an old `<TESTID>.windows.txt` when a test id is reused (GRP-3's retry
+    inherited the first attempt's Fatal dialog, making every member UNCLEAR); the dialog capture itself is now
+    **confirmed live** (item 18): it recorded that first attempt's Fatal text and triage counted it.
+    Probe groups so far: GRP-1, GRP-2, GRP-3 all PASS, 24 mods `LIVE_VALIDATED`.
 
 ## Post-1.0 research and gated automation
 
@@ -2409,3 +2426,12 @@ Bridgeforge modernizes legacy mods. It does not profile performance. The related
 - **V0.8:** migration-pack/plugin ecosystem, including separate library-migration and library-adoption recommendations. **Status: discoverable, validated bundled pack registry and pack-selectable planning implemented; ecosystem rules remain deliberately empty until evidence-backed mappings are added.**
 - **V0.9:** modernization-opportunity analysis; no automatic adoption. **Status: static, report-only adoption candidates implemented with explicit high behavioral risk and no automatic change path.**
 - **V1.0:** repeatable scan → diagnose → plan → apply → compile → review → validate → report pipeline. **Status: orchestration command and final workspace modernization report implemented.**
+
+## Sister repository interoperability (proposed 2026-09-27)
+
+Design and acceptance gates: [docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md](docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md). These are pending, separate from revival completion and release readiness.
+
+1. [ ] Consume versioned SPW performance evidence with hash, identity, attribution, and comparability gates; retain independent operation and no automatic performance verdict.
+2. [ ] Consume Project Go localization coverage for an exact mod-root hash; expose uncovered and unknown items without changing source or claiming complete coverage from partial extraction.
+3. [ ] Compare BridgeForge's release evidence fields with VoidSmith and Project Go as a design reference; do not create a shared runtime dependency.
+4. [ ] Consume optional SPW mod inventory with duplicate/disabled identity handling, while preserving BridgeForge's native scan.

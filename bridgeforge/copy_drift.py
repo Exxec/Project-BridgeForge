@@ -5,7 +5,12 @@ import hashlib
 import re
 from pathlib import Path
 
-INCLUDED_DIRS = ("data", "jars", "graphics", "sounds")
+INCLUDED_DIRS = ("data", "jars", "graphics", "sounds")  # always included; any other top-level folder is too (below)
+# Top-level folders that never ship. Everything else is copied: the game loads resources by path from the mod
+# root, and Flux Reticle keeps its sprites in `sun_fr/graphics/` (settings.json points there). The old fixed
+# INCLUDED_DIRS list left that folder out, so the rig copy crashed at startup with "Error loading
+# [sun_fr/graphics/half.png]" (GRP-3, 2026-09-27), and release/archive would have shipped it broken.
+EXCLUDED_TOP_DIRS = ("scratch", "out", "build", "disabled_files", "bin", "gradle", "meta-inf", "production", "test")  # tool and build folders
 INCLUDED_ROOT_FILE_GLOBS = ("*.csv", "*.ini", "*.jar", "*.json", "*.properties", "*.version")
 # OS and VCS litter never ships: the game ignores it and it only bloats or confuses a release.
 EXCLUDE_DIR_NAME_GLOBS = ("reports", "src*", "__MACOSX", ".git", ".svn", ".idea", ".vscode")
@@ -37,7 +42,10 @@ def _find_mod_root(path: Path) -> Path:
 
 def _collect(root: Path) -> dict[str, Path]:
     files: dict[str, Path] = {}
-    for name in INCLUDED_DIRS:
+    extra = sorted(child.name for child in root.iterdir() if child.is_dir() and child.name not in INCLUDED_DIRS
+                   and not child.name.startswith(".") and child.name.lower() not in EXCLUDED_TOP_DIRS
+                   and not any(fnmatch.fnmatch(child.name, pattern) for pattern in EXCLUDE_DIR_NAME_GLOBS))
+    for name in (*INCLUDED_DIRS, *extra):
         base = root / name
         if not base.is_dir():
             continue
@@ -45,7 +53,7 @@ def _collect(root: Path) -> dict[str, Path]:
             if not item.is_file():
                 continue
             relative = item.relative_to(root).as_posix()
-            if _is_excluded(relative):
+            if _is_excluded(relative) or _is_excluded(relative.split("/", 1)[-1]):
                 continue
             files[relative] = item
     for item in root.iterdir():
