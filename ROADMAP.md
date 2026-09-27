@@ -2039,6 +2039,9 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     2. **Test list merging in settings.json** (item 19's held rule), then write the fixer or baseline helper for it.
     3. **`finding-stats` deltas.** Keep the previous run and report what moved between runs (mods that changed
        bucket, ids that disappeared), so the effect of new fixers and check fixes is measured, not recomputed by hand.
+       **Done 2026-09-27.** `finding-stats --write` keeps the previous run as `FINDING_STATS.previous.json` and appends
+       "Since the last run" to `FINDING_STATS.md` (unattended count, mods that changed bucket, finding ids whose
+       occurrences changed). Test: `tests/test_finding_stats.py`.
     4. **Persist named encodings.** `fix --encoding FILE=ENC` decisions live only in the fixed files; record them in
        the workspace (REVIVAL_PLAN.md or a small JSON) so a re-copy from `original/` can reapply them, and let
        `revive` read them.
