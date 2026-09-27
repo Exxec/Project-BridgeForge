@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .scanner import _base_game_version, _load_lenient_json_file
+from .revival_audit import _completion_statuses
 
 SCHEMA_VERSION = 1
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -60,7 +61,9 @@ def provider_for(folder: Path) -> Provider | None:
         return None
     provider = Provider(str(info["id"]), str(info.get("name") or info["id"]), str(folder), str(info.get("gameVersion") or ""))
     provider.total_conversion = bool(info.get("totalConversion"))
-    provider.version = str(info.get("version") or "")
+    version = info.get("version")
+    # Some mods declare {"major":..,"minor":..,"patch":..} instead of a string.
+    provider.version = ".".join(str(version.get(part, "")) for part in ("major", "minor", "patch")).strip(".") if isinstance(version, dict) else str(version or "")
     data = folder / "data"
     provider.provides["hullmod"] |= _csv_ids(data / "hullmods" / "hull_mods.csv")
     provider.provides["weapon"] |= _csv_ids(data / "weapons" / "weapon_data.csv")
@@ -145,7 +148,7 @@ def update_provider_index(roots: list[Path], output_dir: Path = DEFAULT_PROVIDER
     }
 
 
-def load_provider_index(index_dir: Path = DEFAULT_PROVIDER_INDEX_DIR) -> list[Provider]:
+def load_provider_index_dir(index_dir: Path = DEFAULT_PROVIDER_INDEX_DIR) -> list[Provider]:
     """Read back the cache `update_provider_index` wrote - works even when none of these mods are
     currently installed anywhere live, since nothing here re-reads the mod folders themselves."""
     index_dir = Path(index_dir).expanduser().resolve()
@@ -156,6 +159,51 @@ def load_provider_index(index_dir: Path = DEFAULT_PROVIDER_INDEX_DIR) -> list[Pr
         except (OSError, json.JSONDecodeError, KeyError):
             continue
     return providers
+
+
+INDEX_SCHEMA_VERSION = 1
+
+
+def save_provider_index(providers: list[Provider], path: Path, roots: list[Path]) -> dict:
+    """Write the providers' "provides" sets as a corpus artefact (ROADMAP P14 item 2)."""
+    payload = {
+        "schema_version": INDEX_SCHEMA_VERSION, "mode": "PROVIDER_INDEX", "roots": [str(Path(root).resolve()) for root in roots],
+        "providers": [{
+            "mod_id": p.mod_id, "name": p.name, "path": p.path, "game_version": p.game_version, "version": p.version,
+            "total_conversion": p.total_conversion, "provides": {kind: sorted(p.provides[kind]) for kind in KINDS},
+        } for p in sorted(providers, key=lambda item: (item.mod_id, item.path))],
+    }
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"output": str(path), "providers": len(payload["providers"]),
+            "ids": sum(len(ids) for entry in payload["providers"] for ids in entry["provides"].values())}
+
+
+def load_provider_index(path: Path) -> list[Provider]:
+    if Path(path).is_dir() or not Path(path).exists() and Path(path).suffix.lower() != ".json":
+        return load_provider_index_dir(path)
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or data.get("schema_version") != INDEX_SCHEMA_VERSION or not isinstance(data.get("providers"), list):
+        raise ValueError(f"{path} is not a schema-{INDEX_SCHEMA_VERSION} provider index.")
+    providers = []
+    for entry in data["providers"]:
+        provider = Provider(entry["mod_id"], entry["name"], entry["path"], entry.get("game_version", ""),
+                            total_conversion=bool(entry.get("total_conversion")), version=entry.get("version", ""))
+        for kind in KINDS:
+            provider.provides[kind] = set(entry.get("provides", {}).get(kind, []))
+        providers.append(provider)
+    return providers
+
+
+def merged_providers(roots: list[Path], index_path: Path | None, exclude: Path | None = None) -> list[Provider]:
+    """Live providers from `roots`, plus indexed ones for mods not visible live (live wins on the same id)."""
+    live = provider_index(roots, exclude=exclude)
+    if index_path is None:
+        return live
+    seen = {provider.mod_id for provider in live}
+    excluded = str(Path(exclude).resolve()) if exclude is not None else None
+    return live + [p for p in load_provider_index(index_path) if p.mod_id not in seen and p.path != excluded]
 
 
 _EVIDENCE = re.compile(r"^(hullmod|wing|weapon|hull):(\S+) \((\d+) file")
@@ -276,17 +324,24 @@ def cover(needed: dict[str, set[str]], providers: list[Provider], preferred: set
     return chosen, remaining
 
 
+def _declared_status(workspace: Path, working: Path) -> str | None:
+    """The report's final completion status, read as `board`/`promote` read it (2026-09-25: this used to
+    take the report's last line verbatim and look only in working/reports/, so RevenantLib's status read
+    as a sentence about FX Example)."""
+    for report in (workspace / "reports" / "REVIVAL_REPORT.md", working / "reports" / "REVIVAL_REPORT.md"):
+        if report.is_file():
+            statuses, final = _completion_statuses(report.read_text(encoding="utf-8", errors="replace"))
+            return statuses[0] if len(statuses) == 1 and final else None
+    return None
+
+
 def _workspace_state(ops: Path, mod_id: str) -> dict | None:
     """Revival state of a dependency that is itself a workspace here (REVIVAL_REPORT status, MANUAL count)."""
     for info in list(ops.glob("*/working/mod_info.json")):
         data = _load_lenient_json_file(info)
         if isinstance(data, dict) and data.get("id") == mod_id:
             workspace = info.parent.parent
-            report = info.parent / "reports" / "REVIVAL_REPORT.md"
-            status = None
-            if report.is_file():
-                lines = [line.strip("* ") for line in report.read_text(encoding="utf-8").splitlines() if line.strip()]
-                status = lines[-1] if lines else None
+            status = _declared_status(workspace, info.parent)
             scans = sorted((workspace / "reports").glob("scan-*/bridgeforge.compat.json"), key=lambda p: p.stat().st_mtime)
             manual = None
             if scans:
@@ -382,7 +437,36 @@ def strategy(needed: dict[str, set[str]], files: dict[str, int], chosen: list[di
     return "ESCALATE", f"{len(hard)} id(s)/class(es) in {hard_places} place(s) have no practical provider: {left}{heavy_note}. Other ids: {'; '.join(plan) or 'none'}. Revive, remap, or rebuild without it. Owner decision."
 
 
-def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla_core: Path | None = None, ops: Path | None = None, policy_path: Path | None = None) -> dict:
+def revival_licence(mod_id: str | None, name: str | None, policy_path: Path | None = None) -> dict[str, object]:
+    """What release_policy.json says about publishing a mod we would revive (ROADMAP P14 item 9).
+
+    LOCAL_ONLY: a revival may be used here but not published, so a mod that needs it cannot ship with
+    it. RELEASABLE: an explicit decision allows publishing. UNRECORDED: no entry; the policy's default
+    would treat it as releasable, but no one has checked the licence, so record a decision first.
+    """
+    from .release import _load_policy, policy_entry
+
+    entry = policy_entry(_load_policy(policy_path), mod_id, name)
+    if entry is None:
+        return {"decision": "UNRECORDED", "reason": "no entry in release_policy.json: check the licence and record a decision before reviving"}
+    return {"decision": "LOCAL_ONLY" if entry.get("local_only") else "RELEASABLE", "reason": entry.get("reason")}
+
+
+def _licence_notes(chosen: list[dict]) -> list[str]:
+    notes = []
+    for item in chosen:
+        licence = item.get("licence")
+        if not licence or licence["decision"] == "RELEASABLE":
+            continue
+        if licence["decision"] == "LOCAL_ONLY":
+            notes.append(f"{item['name']} is local-only under release_policy.json: a revival works here but cannot be published, so this mod cannot ship with it ({licence['reason']})")
+        else:
+            notes.append(f"{item['name']} has no licence decision in release_policy.json: record one before reviving it")
+    return notes
+
+
+def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla_core: Path | None = None, ops: Path | None = None,
+                           policy_path: Path | None = None, index_path: Path | None = None) -> dict:
     from .models import TargetProfile
     from .scanner import scan_mod
 
@@ -390,7 +474,7 @@ def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla
     result = scan_mod(mod_dir, TargetProfile(), vanilla_core)
     needed, files = required_from_scan(result)
     declared = [str(item.get("id")) for item in (result.metadata.get("dependencies") or []) if isinstance(item, dict) and item.get("id")]
-    providers = provider_index(provider_roots, exclude=mod_dir)
+    providers = merged_providers(provider_roots, index_path, exclude=mod_dir)
     provided_ids = {provider.mod_id for provider in providers}
     missing_declared = [dep for dep in declared if dep not in provided_ids]
     # A total conversion can't run beside another mod unless that mod is its add-on (declares it).
@@ -403,9 +487,11 @@ def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla
     chosen_providers, uncovered = cover(needed, providers, preferred=set(declared))
     chosen = []
     for provider, hits in chosen_providers:
-        item = {"mod_id": provider.mod_id, "name": provider.name, "game_version": provider.game_version, "targets_0.98a": _current(provider), "covers": sorted(hits)}
+        item = {"mod_id": provider.mod_id, "name": provider.name, "game_version": provider.game_version, "version": provider.version,
+                "targets_0.98a": _current(provider), "covers": sorted(hits)}
         if not item["targets_0.98a"]:
             item["workspace"] = _workspace_state(ops_dir, provider.mod_id)
+            item["licence"] = revival_licence(provider.mod_id, provider.name, policy_path)
         chosen.append(item)
     if any(needed.values()):
         course, reason = strategy(needed, files, chosen, uncovered, policy_path)
@@ -423,4 +509,87 @@ def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla
         "candidates": candidates[:10],
         "successors": successors,
         "strategy": course, "reason": reason,
+        "licence_notes": _licence_notes(chosen) if course in ("REVIVE_DEPENDENCY", "ESCALATE", "STRIP_FROM_MOD") else [],
     }
+
+
+def dependency_graph(queue_root: Path, provider_roots: list[Path], *, vanilla_core: Path | None = None,
+                     index_path: Path | None = None, policy_path: Path | None = None, write_reports: bool = False, now=None) -> dict:
+    """Which queued mods need which non-current providers, ordered by unblocking value (ROADMAP P14 item 3).
+
+    Runs dependency_substitutes on every queued workspace (`<queue>/*/working` with a mod_info.json).
+    A provider counts when the plan uses it and it does not target 0.98a: reviving it is work that
+    unblocks every queued mod that needs it. Mods needing ids no visible or indexed mod provides are
+    listed separately.
+    """
+    queue_root = Path(queue_root).expanduser().resolve()
+    workspaces = sorted(info.parent for info in queue_root.glob("*/working/mod_info.json"))
+    needs: dict[str, dict] = {}
+    mods = []
+    for working in workspaces:
+        report = dependency_substitutes(working, provider_roots, vanilla_core=vanilla_core, ops=queue_root,
+                                        policy_path=policy_path, index_path=index_path)
+        if write_reports:
+            write_dependency_report(report, working, now)
+        name = working.parent.name
+        blockers = [item for item in report["provider_set"] if not item["targets_0.98a"]]
+        for item in blockers:
+            entry = needs.setdefault(item["mod_id"], {"mod_id": item["mod_id"], "name": item["name"], "game_version": item["game_version"],
+                                                       "workspace": item.get("workspace"), "licence": item.get("licence"), "unblocks": []})
+            entry["unblocks"].append(name)
+        mods.append({"workspace": name, "mod_id": report["mod_id"], "strategy": report["strategy"],
+                     "needs_revival_of": [item["mod_id"] for item in blockers], "unprovided": report["uncovered"]})
+    order = sorted(needs.values(), key=lambda entry: (-len(entry["unblocks"]), (entry.get("workspace") or {}).get("manual_findings") or 10**6, entry["mod_id"]))
+    return {
+        "schema_version": SCHEMA_VERSION, "mode": "DEPENDENCY_GRAPH", "queue": str(queue_root), "queued_mods": len(mods),
+        "revival_order": order, "mods": mods,
+        "unprovided": [{"workspace": mod["workspace"], "ids": mod["unprovided"]} for mod in mods if mod["unprovided"]],
+    }
+
+
+DEPENDENCY_REPORT = "dependencies.json"
+DEPENDENCY_GRAPH_NAME = "DEPENDENCY_GRAPH"
+
+
+def _timestamp(now=None) -> str:
+    from datetime import datetime, timezone
+
+    return (now or datetime.now(timezone.utc)).isoformat(timespec="seconds")
+
+
+def write_dependency_report(report: dict, working: Path, now=None) -> Path:
+    """Record one mod's dependency-substitutes result as evidence in <workspace>/reports/ (ROADMAP P14 item 3).
+
+    `board` reads it without scanning. Only the convention layout (<Mod>/working) has a reports folder.
+    """
+    working = Path(working).expanduser().resolve()
+    if working.name != "working":
+        raise ValueError(f"{working} is not a <Mod>/working copy; nowhere conventional to record dependency evidence.")
+    path = working.parent / "reports" / DEPENDENCY_REPORT
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({**report, "generated_at": _timestamp(now)}, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return path
+
+
+def render_dependency_graph(graph: dict) -> str:
+    lines = [f"# Revival order ({graph['queued_mods']} queued mods, as of {graph.get('generated_at', 'unknown')})", "",
+             "Generated by `bridgeforge dependency-graph --write`; rerun after reviving or rescanning a mod.", "",
+             "| # | Revive | Game version | Unblocks | Workspace MANUAL | Licence |", "|---|---|---|---|---|---|"]
+    for number, entry in enumerate(graph["revival_order"], 1):
+        state = entry.get("workspace") or {}
+        lines.append(f"| {number} | {entry['name']} | {entry['game_version'] or 'none'} | {len(entry['unblocks'])}: {', '.join(entry['unblocks'])} | "
+                     f"{state.get('manual_findings', 'not a workspace')} | {(entry.get('licence') or {}).get('decision', 'n/a')} |")
+    if graph["unprovided"]:
+        lines += ["", "## Needs content no visible or indexed mod provides", ""]
+        lines += [f"- {entry['workspace']}: {', '.join(entry['ids'])}" for entry in graph["unprovided"]]
+    return "\n".join(lines) + "\n"
+
+
+def write_dependency_graph(graph: dict, queue_root: Path, now=None) -> list[str]:
+    graph = {**graph, "generated_at": _timestamp(now)}
+    queue_root = Path(queue_root).expanduser().resolve()
+    outputs = [(queue_root / f"{DEPENDENCY_GRAPH_NAME}.json", json.dumps(graph, indent=2, ensure_ascii=False) + "\n"),
+               (queue_root / f"{DEPENDENCY_GRAPH_NAME}.md", render_dependency_graph(graph))]
+    for path, text in outputs:
+        path.write_text(text, encoding="utf-8")
+    return [str(path) for path, _ in outputs]

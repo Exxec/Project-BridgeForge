@@ -81,13 +81,13 @@ class DiffDataTests(unittest.TestCase):
             _write(root / "c.json", '{"x": 2}')
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
-                exit_code = main(["diff-data", str(root / "a.json"), str(root / "b.json"), "--json"])
+                exit_code = main(["diff-data-local", str(root / "a.json"), str(root / "b.json"), "--json"])
             self.assertEqual(exit_code, 0)
             self.assertEqual(json.loads(out.getvalue())["status"], "IDENTICAL")
 
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
-                exit_code = main(["diff-data", str(root / "a.json"), str(root / "c.json"), "--json"])
+                exit_code = main(["diff-data-local", str(root / "a.json"), str(root / "c.json"), "--json"])
             self.assertEqual(exit_code, 0)
             payload = json.loads(out.getvalue())
             self.assertEqual(payload["status"], "DIFFERENT")

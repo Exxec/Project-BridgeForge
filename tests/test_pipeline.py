@@ -1,45 +1,21 @@
 ﻿import json
-import io
 import tempfile
 import unittest
-import warnings
-import zipfile
 import shutil
 import subprocess
-from contextlib import redirect_stderr
-from unittest.mock import patch
 from pathlib import Path
 
-from bridgeforge import __version__, scanner
-from bridgeforge.bytecode import inspect_bytecode, rewrite_class
-from bridgeforge.bytecode_diff import diff_bytecode
-from bridgeforge.bytecode_rules import apply_bytecode_class, apply_bytecode_jar, load_bytecode_rules, plan_bytecode
-from bridgeforge.scanner import scan_mod
-from bridgeforge.report import write_artifacts
-from bridgeforge.migrate import apply_plan, build_plan, load_rules
+from bridgeforge.migrate import build_plan
 from bridgeforge.models import TargetProfile
-from bridgeforge.workspace import create_workspace, rollback, workspace_paths
-from bridgeforge.build import compile_feedback, create_build_profile, package_compiled_jar, resolve_registered_dependency_jars, run_compile
-from bridgeforge.library_registry import LibraryRegistryEntry, load_library_registry
+from bridgeforge.workspace import create_workspace, workspace_paths
+from bridgeforge.build import create_build_profile
 from bridgeforge.review import create_review_bundle
 from bridgeforge.validate import validate_workspace
-from bridgeforge.save_risk import analyze_save_risk
 from bridgeforge.pipeline import run_pipeline
-from bridgeforge.packs import BRIDGEFORGE_VERSION, MigrationPack, compatible, discover_packs, resolve_pack_rule_paths
 from bridgeforge.opportunities import analyze_opportunities
 from bridgeforge.doctor import doctor
-from bridgeforge.conflicts import detect_conflicts
-from bridgeforge.provenance import write_provenance
-from bridgeforge.corpus import compare_corpus
 from bridgeforge.evaluation import evaluate_releases
 from bridgeforge.runtime import create_runtime_profile, run_runtime_smoke
-from bridgeforge.fixtures import discover_compatibility_fixtures, discover_corpus_baselines
-from bridgeforge.interface import export_patch, inspect_workspace
-from bridgeforge.corpus_audit import audit_directories
-from bridgeforge.corpus_audit import write_corpus_audit
-from bridgeforge.archive_intake import inspect_zip_archive, stage_zip_archive
-from bridgeforge.library_api import inventory_library_api, match_library_imports
-from bridgeforge.cli import main
 
 
 
@@ -56,10 +32,10 @@ class PipelineTests(unittest.TestCase):
             (source / "src" / "Example.java").write_text("class Example {}", encoding="utf-8")
             workspace = create_workspace(source, root / "workspace")
             missing = root / "missing-lazylib.jar"
-            profile = create_build_profile(workspace, TargetProfile("0.98", 17), Path(javac).parent.parent, [], [missing])
+            profile = create_build_profile(workspace, TargetProfile("0.98", 17), Path(javac).resolve().parent.parent, [], [missing])
             self.assertEqual(profile.compile_validation["status"], "UNAVAILABLE")
             self.assertEqual(profile.compile_validation["findings"][0]["id"], "compile-validation-unavailable")
-            result = run_pipeline(workspace, TargetProfile("0.98", 17), jdk=Path(javac).parent.parent, dependency_jars=[missing], compile_requested=True)
+            result = run_pipeline(workspace, TargetProfile("0.98", 17), jdk=Path(javac).resolve().parent.parent, dependency_jars=[missing], compile_requested=True)
             self.assertEqual(result["compile_status"], "UNAVAILABLE")
             self.assertIsNone(result["compile"])
             self.assertEqual(result["compile_validation"]["findings"][0]["jar"], str(missing.resolve()))

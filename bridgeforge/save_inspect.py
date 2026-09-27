@@ -5,13 +5,11 @@ from pathlib import Path
 
 from .save_compat import ModClassIndex, _package_of, _resolve_save_path
 from .save_reader import (
-    SaveReadError,
     campaign_xml_path,
     coerce_scalar,
     iter_elements,
     parse_build_tag,
     parse_descriptor,
-    resolve_save_dir,
 )
 
 """Read-only save inspection (roadmap P3b-A/F/G/H): tracked state, diffs, script-duplication

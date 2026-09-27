@@ -7,11 +7,8 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.prepare_test import PrepareTestError, prepare_test
+from tests.support import link_dir
 
-try:
-    import _winapi
-except ImportError:  # pragma: no cover - non-Windows (the junction test then skips)
-    _winapi = None
 
 
 def _write(path: Path, text: str) -> None:
@@ -105,8 +102,8 @@ class PrepareTestJunctionTests(unittest.TestCase):
             _make_mod(working)
             junction = base / "rig_junction"
             try:
-                _winapi.CreateJunction(str(working), str(junction))
-            except (OSError, AttributeError):
+                link_dir(working, junction)
+            except OSError:
                 self.skipTest("Directory junctions are not supported in this environment.")
             try:
                 result = prepare_test(working, junction)

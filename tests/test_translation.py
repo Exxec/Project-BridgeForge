@@ -1,7 +1,6 @@
 """Translation export / prefill / apply / check (plan B for the 2026-09-13 Chinese intake)."""
 
 import json
-import os
 import stat
 import struct
 import tempfile
@@ -253,7 +252,7 @@ class ApplyTests(unittest.TestCase):
                 result = apply_translation(root, doc, out_dir=Path(directory) / "out")
                 self.assertEqual(result["status"], "OK", result)
                 self.assertIn("fx_frigate", (Path(directory) / "out" / "data" / "hulls" / "ship_data.csv").read_text(encoding="utf-8"))
-                self.assertFalse(os.access(source, os.W_OK))  # the source keeps its attribute
+                self.assertFalse(source.stat().st_mode & stat.S_IWRITE)  # the source keeps its attribute
             finally:
                 for path in Path(directory).rglob("*"):
                     if path.is_file():

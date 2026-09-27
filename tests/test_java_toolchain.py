@@ -308,6 +308,9 @@ class JarEmbeddedSourceDiagnosticTests(unittest.TestCase):
         self.assertIn("-sourcepath", args)
         self.assertEqual(args[args.index("-sourcepath") + 1], "")
 
+    def test_verbose_diagnostics_name_the_method_for_api_diff(self) -> None:
+        self.assertIn("-Xdiags:verbose", DEFAULT_JAVAC_ARGS)
+
 
 if __name__ == "__main__":
     unittest.main()

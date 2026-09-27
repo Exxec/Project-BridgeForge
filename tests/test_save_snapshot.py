@@ -3,28 +3,22 @@ import tempfile
 import unittest
 from pathlib import Path
 
-try:
-    import _winapi
-except ImportError:  # pragma: no cover - non-Windows
-    _winapi = None
-
 from bridgeforge.save_snapshot import (
     SaveSnapshotError,
     snapshot_list,
     snapshot_restore,
     snapshot_tag,
 )
+from tests.support import link_dir
 
 
 def _make_rig(root: Path) -> Path | None:
-    if _winapi is None:
-        return None
     core_real = root / "core_real"
     core_real.mkdir()
     rig = root / "rig"
     rig.mkdir()
     try:
-        _winapi.CreateJunction(str(core_real), str(rig / "starsector-core"))
+        link_dir(core_real, rig / "starsector-core")
     except OSError:
         return None
     return rig

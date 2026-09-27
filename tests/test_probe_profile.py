@@ -2,6 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.support import link_dir
+
 from bridgeforge.probe_config import (
     DEFAULT_PROFILE_APPLY,
     PROFILE_DIR,
@@ -13,10 +15,6 @@ from bridgeforge.probe_config import (
     write_probe_config,
 )
 
-try:
-    import _winapi
-except ImportError:  # pragma: no cover - non-Windows
-    _winapi = None
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
@@ -31,14 +29,12 @@ def _make_fixture_mod(root: Path) -> Path:
 
 
 def _make_rig(root: Path) -> Path | None:
-    if _winapi is None:
-        return None
     core_real = root / "core_real"
     core_real.mkdir()
     rig = root / "rig"
     rig.mkdir()
     try:
-        _winapi.CreateJunction(str(core_real), str(rig / "starsector-core"))
+        link_dir(core_real, rig / "starsector-core")
     except OSError:
         return None
     return rig

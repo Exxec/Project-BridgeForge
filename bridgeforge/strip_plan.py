@@ -37,11 +37,14 @@ from pathlib import Path
 
 from .models import TargetProfile
 from .scanner import (
+    MOUNT_OVERRIDE_FITS,
     WEAPON_SLOT_SIZE_RANK,
+    WEAPON_SLOT_SKIP_TYPES,
     _load_lenient_json_file,
     _override_fits,
     _read_csv_rows_lenient,
     _relative,
+    _resolve_hull_id,
     _resolve_variant_hull_and_slots,
     _skin_index,
     _skin_weapon_slot_changes,
@@ -370,3 +373,137 @@ def vendor_copy(kind: str, ident: str, from_provider: Path, to_mod: Path, policy
             writer.writeheader()
         writer.writerow({column: row.get(column, "") for column in write_fieldnames})
     return result
+
+
+SCHEMA_VERSION = 1
+MAX_SUBSTITUTES = 8
+_LIST_KEYS = {
+    "hullmod": ("hullMods", "permaMods", "sMods", "builtInMods", "removeBuiltInMods"),
+    "wing": ("wings", "builtInWings"),
+}
+# .faction known-list layout, as `fix --finding faction-known-lists-missing` writes it.
+_FACTION_LISTS = {"hull": ("knownShips", "hulls"), "weapon": ("knownWeapons", "weapons"), "wing": ("knownFighters", "fighters")}
+_MOUNTABLE = {"BALLISTIC", "ENERGY", "MISSILE"}
+
+
+class StripPlanError(ValueError):
+    """Raised for a missing mod folder or vanilla core."""
+
+
+def _substitutes(slot: dict | None, vanilla_weapons: dict[str, dict[str, str]]) -> dict:
+    if not isinstance(slot, dict):
+        return {"slot": None, "candidates": [], "note": "slot not found on the resolved hull; no substitute proposed"}
+    slot_type = str(slot.get("type") or "").strip().upper()
+    slot_size = str(slot.get("size") or "").strip().upper()
+    if slot_type in WEAPON_SLOT_SKIP_TYPES or slot_size not in WEAPON_SLOT_SIZE_RANK:
+        return {"slot": f"{slot_type} {slot_size}", "candidates": [], "note": "not a regular weapon slot; no substitute proposed"}
+    fits = sorted(
+        weapon_id for weapon_id, spec in vanilla_weapons.items()
+        if spec.get("size") == slot_size and (
+            (spec.get("type") in _MOUNTABLE and _weapon_slot_type_compatible(slot_type, spec["type"]))
+            or slot_type in MOUNT_OVERRIDE_FITS.get(spec.get("mount_override", ""), set()))
+    )
+    return {"slot": f"{slot_type} {slot_size}", "candidates": fits[:MAX_SUBSTITUTES], "candidate_count": len(fits)}
+
+
+def strip_plan_github(mod_dir: Path, vanilla_core: Path, only: list[str] | None = None) -> dict:
+    mod_dir, vanilla_core = Path(mod_dir).expanduser().resolve(), Path(vanilla_core).expanduser().resolve()
+    if not (mod_dir / "mod_info.json").is_file():
+        raise StripPlanError(f"{mod_dir} has no mod_info.json.")
+    if not (vanilla_core / "data").is_dir():
+        raise StripPlanError(f"{vanilla_core} has no data/ folder; pass a starsector-core folder.")
+    scan = scan_mod(mod_dir, TargetProfile(), vanilla_core)
+    unresolved: dict[str, dict[str, list[str]]] = scan.migration_context.get("unresolved_content_references") or {}
+    wanted = {tuple(item.split(":", 1)) for item in only or [] if ":" in item}
+    targets = {kind: set(ids) for kind, ids in unresolved.items()}
+    if wanted:
+        targets = {kind: {ident for ident in ids if (kind, ident) in wanted} for kind, ids in targets.items()}
+    ships, skins = _ship_file_index(mod_dir, vanilla_core), _skin_index(mod_dir, vanilla_core)
+    vanilla_weapons = _wpn_type_size_index(vanilla_core, None)
+
+    edits: list[dict] = []
+    files = sorted({path for kind, ids in unresolved.items() for ident, paths in ids.items() if ident in targets.get(kind, set()) for path in paths})
+    factions = mod_dir / "data" / "world" / "factions"
+    files += sorted(path.relative_to(mod_dir).as_posix() for path in factions.glob("*.faction")) if factions.is_dir() else []
+    for relative in files:
+        spec = _load_lenient_json_file(mod_dir / relative)
+        if not isinstance(spec, dict):
+            continue
+        suffix = Path(relative).suffix.lower()
+        if suffix == ".faction":
+            for kind, (outer, inner) in _FACTION_LISTS.items():
+                block = spec.get(outer)
+                for ident in (block.get(inner) or []) if isinstance(block, dict) else []:
+                    if ident in targets.get(kind, set()):
+                        edits.append({"file": relative, "kind": kind, "id": ident, "action": f"remove from {outer}.{inner}"})
+            continue
+        hull_key = "hullId" if suffix == ".variant" else "baseHullId" if suffix == ".skin" else None
+        if hull_key and spec.get(hull_key) in targets.get("hull", set()):
+            edits.append({"file": relative, "kind": "hull", "id": spec[hull_key],
+                          "action": f"delete this {suffix[1:]}: its {hull_key} is unresolved, so nothing in it can load"})
+            continue
+        for kind, keys in _LIST_KEYS.items():
+            for key in keys:
+                for ident in spec.get(key) or []:
+                    if ident in targets.get(kind, set()):
+                        edits.append({"file": relative, "kind": kind, "id": ident, "action": f"remove from {key}"})
+        own_hull = spec.get("hullId") if suffix == ".variant" else spec.get("skinHullId") if suffix == ".skin" else spec.get("hullId")
+        hull_spec = ships.get(_resolve_hull_id(own_hull, skins)) if isinstance(own_hull, str) else None
+        if suffix == ".ship":
+            hull_spec = spec
+        slots = {slot["id"]: slot for slot in (hull_spec or {}).get("weaponSlots") or [] if isinstance(slot, dict) and isinstance(slot.get("id"), str)}
+        for index, group in enumerate(spec.get("weaponGroups") or []):
+            for slot_id, ident in (group.get("weapons") or {}).items() if isinstance(group, dict) and isinstance(group.get("weapons"), dict) else []:
+                if ident in targets.get("weapon", set()):
+                    edits.append({"file": relative, "kind": "weapon", "id": ident, "action": f"empty slot {slot_id} (weaponGroups[{index}])",
+                                  "substitutes": _substitutes(slots.get(slot_id), vanilla_weapons)})
+        for slot_id, ident in (spec.get("builtInWeapons") or {}).items() if isinstance(spec.get("builtInWeapons"), dict) else []:
+            if ident in targets.get("weapon", set()):
+                edits.append({"file": relative, "kind": "weapon", "id": ident, "action": f"remove built-in weapon at {slot_id}",
+                              "substitutes": _substitutes(slots.get(slot_id), vanilla_weapons)})
+
+    by_id: dict[str, int] = {}
+    for edit in edits:
+        by_id[f"{edit['kind']}:{edit['id']}"] = by_id.get(f"{edit['kind']}:{edit['id']}", 0) + 1
+    return {
+        "schema_version": SCHEMA_VERSION, "mode": "STRIP_PLAN", "mod": str(mod_dir), "vanilla_core": str(vanilla_core),
+        "unresolved": {kind: sorted(ids) for kind, ids in unresolved.items()},
+        "planned": sorted(by_id), "edits": edits, "edit_count_by_id": by_id,
+        "note": "A plan only: nothing was edited. Substitutes fit the slot's type and size; picking one (or leaving the slot empty) is a design decision.",
+    }
+
+
+def propose_expected_changes(plan: dict, expected_path: Path, *, build: str, links: dict[str, list[str]], mod_id: str | None = None) -> list[str]:
+    """Add a PROPOSED static-layer expected change for each file the plan deletes; return the new ids."""
+    from .behavior_discovery import add_expected_change
+    from .scanner import _load_lenient_json_file
+
+    if not any(links.get(kind) for kind in ("risk", "hyp", "test")):
+        raise StripPlanError("expected changes need at least one --link risk=|hyp=|test= id (expect check requires it)")
+    if mod_id is None:
+        info = _load_lenient_json_file(Path(plan["mod"]) / "mod_info.json")
+        mod_id = info.get("id") if isinstance(info, dict) else None
+    if not mod_id:
+        raise StripPlanError("the mod's mod_info.json has no id")
+    existing = _load_lenient_json_file(expected_path) if Path(expected_path).is_file() else None
+    ids = [str(item.get("id")) for item in (existing or {}).get("changes", []) if isinstance(item, dict)] if isinstance(existing, dict) else []
+    prefixes = sorted({m.group(1) for m in (re.fullmatch(r"EXP-([A-Za-z0-9]+)-(\d+)", i) for i in ids) if m})
+    prefix = prefixes[0] if prefixes else (re.sub(r"[^A-Za-z0-9]", "", mod_id).upper()[:8] or "MOD")
+    number = max([int(m.group(1)) for m in (re.fullmatch(rf"EXP-{re.escape(prefix)}-(\d+)", i) for i in ids) if m] + [0])
+    added = []
+    deletions = {}
+    for edit in plan["edits"]:
+        if edit["action"].startswith("delete this"):
+            deletions.setdefault(edit["file"], edit)
+    for relative, edit in sorted(deletions.items()):
+        number += 1
+        change_id = f"EXP-{prefix}-{number:03d}"
+        add_expected_change(
+            Path(expected_path), mod_id=mod_id, change_id=change_id, build=build, layer="static",
+            summary=f"Remove {relative}",
+            why=f"Its {edit['kind']} '{edit['id']}' is defined by no installed mod or vanilla (content-reference-unresolved), so nothing in the file can load; stripped per strip-plan.",
+            match={"observation": "static.data", "subject": relative, "field": "present", "change": "removed"},
+            links={kind: list(values) for kind, values in links.items() if values}, proposed_by="strip-plan",
+        )
+        added.append(change_id)
+    return added

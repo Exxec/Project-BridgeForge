@@ -6,13 +6,11 @@ import unittest
 import zipfile
 from pathlib import Path
 
+from tests.support import link_dir
+
 from bridgeforge.log_triage import class_owner_index
 from bridgeforge.probe_config import PROFILE_FILE, parse_profile, write_probe_config
 
-try:
-    import _winapi
-except ImportError:  # pragma: no cover - non-Windows
-    _winapi = None
 
 
 def _mod_with_jar(mods: Path, folder: str, mod_id: str, classes: list[str]) -> None:
@@ -52,13 +50,11 @@ class OwnerIndexPackageFallbackTests(unittest.TestCase):
 
 
 def _make_rig(root: Path) -> Path | None:
-    if _winapi is None:
-        return None
     (root / "core_real").mkdir()
     rig = root / "rig"
     rig.mkdir()
     try:
-        _winapi.CreateJunction(str(root / "core_real"), str(rig / "starsector-core"))
+        link_dir(root / "core_real", rig / "starsector-core")
     except OSError:
         return None
     return rig

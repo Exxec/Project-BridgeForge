@@ -89,3 +89,11 @@ Known root entrypoint/generated files, SWEEP Markdown and reserved `_` directori
 are ignored. No auto-move/delete or exhaustive filesystem/reference audit is implied.
 
 Promotion, Vacuum's safe move and v0.2.0 release hygiene remain the next P12 tranche.
+
+## Dependency evidence on the board (2026-09-25)
+
+`board` also reads recorded dependency evidence, never scanning for it: each workspace's
+`reports/dependencies.json` (from `dependency-substitutes --write`, or `dependency-graph --write`)
+fills a Dependencies column, and `In operation/DEPENDENCY_GRAPH.json` (from `dependency-graph --write`)
+adds a "Revival order" section. Both show the date they were recorded; a mod rescanned since its
+dependencies were recorded gets an evidence warning.

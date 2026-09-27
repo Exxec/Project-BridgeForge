@@ -9,6 +9,10 @@ description = "Offline compatibility scanner for legacy Starsector mods"
 requires-python = ">=3.10"
 dependencies = ["psutil>=5.9"]
 
+[project.optional-dependencies]
+# corpus-index reads .7z archives when this is installed; without it they are reported as not read.
+archives = ["py7zr>=1.0"]
+
 [project.scripts]
 bridgeforge = "bridgeforge.cli:main"
 
@@ -16,4 +20,22 @@ bridgeforge = "bridgeforge.cli:main"
 include = ["bridgeforge*"]
 
 [tool.setuptools.package-data]
-bridgeforge = ["release_policy.json", "dependency_successors.json", "vanilla_loose_scripts_rc8.json","java/*.java", "java-tools/bytecode/lib/*.jar", "rules/*.json", "packs/*/*.json", "compat_sets/*.json", "scenarios/*.json", "probe_profiles/*.txt"]
+bridgeforge = ["release_policy.json", "dependency_successors.json", "automation_tiers.json", "vanilla_loose_scripts_rc8.json","java/*.java", "java-tools/bytecode/lib/*.jar", "rules/*.json", "packs/*/*.json", "compat_sets/*.json", "scenarios/*.json", "probe_profiles/*.txt"]
+
+[tool.ruff]
+target-version = "py310"
+extend-exclude = ["probe-mod"]
+
+[tool.ruff.lint]
+# Pyflakes (unused/undefined names) plus syntax errors.
+# One-line compound statements are house style, so the E7xx family stays off.
+select = ["E9", "F"]
+
+[tool.coverage.run]
+branch = true
+source = ["bridgeforge"]
+
+[tool.coverage.report]
+# A ratchet, not a target: raise it when coverage rises, never lower it to land a change.
+fail_under = 80
+skip_empty = true

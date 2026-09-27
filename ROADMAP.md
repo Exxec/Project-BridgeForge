@@ -530,6 +530,51 @@ Progression, each stage feeding the next:
     dry-run, apply, transitive same-mod dependency copying, jar-only scripts, not-found, both
     conflict shapes, identical-content is not a conflict, the licence refusal both synthetically
     and against the real Rebal case, kind restriction, and CLI wiring for both commands).
+   **Done 2026-09-24.** `provider-index build [--providers ...] [--output F]` saves every visible mod's
+   provides sets (hull mods, weapons, wings, hulls, classes) with game and mod version (a
+   `{"major":..}` version object is flattened) to `bridgeforge-state/provider-index.json`;
+   `dependency-substitutes --provider-index F` also considers indexed mods that are not visible live
+   (a live folder wins on the same id). Tests: `tests/test_substitutes.py` (`ProviderIndexTests`).
+3. **Dependency graph across the queue.** Build a graph of which queued mods need which missing mods, and order revival by unblocking value. As of 2026-09-14: FX Core (10 MANUAL) unblocks FX Example and part of Rebal; AI Overhaul (12 MANUAL) the rest of Rebal. EZ Damage is already revived (r1). Show it in `board`.
+   **Done 2026-09-24 (except the `board` view).** `dependency-graph [--queue DIR] [--providers ...]
+   [--provider-index F]` runs `dependency-substitutes` on every `<queue>/*/working` workspace and ranks
+   the non-current providers the plans use by how many queued mods each unblocks (ties: fewer MANUAL
+   findings first), with each one's workspace state and licence decision, plus the mods that need ids
+   no visible or indexed mod provides. Tests: `ProviderIndexTests`.
+   **Board view done 2026-09-25 (owner decision: recorded evidence, options A and C).** `dependency-graph
+   --write` records `In operation/DEPENDENCY_GRAPH.json`/`.md` and each workspace's
+   `reports/dependencies.json`; `dependency-substitutes --write` records one mod's. `board` stays
+   scan-free: a Dependencies column per mod (strategy, what to revive, unprovided count, date recorded)
+   and a "Revival order" section with the graph's date, a warning when a mod was rescanned after its
+   dependencies were recorded, and the two graph files are known queue-root files, not strays. Tests:
+   `tests/test_substitutes.py` (`DependencyEvidenceOnBoardTests`).
+4. **Strip and vendor plans.** For STRIP_FROM_MOD, generate the exact edit list: which variant, `.ship` and faction lines lose which ids, plus proposed vanilla substitutes of the same slot type and size. Also generate the matching PROPOSED expected changes, so approval goes through `expect` as usual. Where the licence allows, offer vendoring as an alternative: copy the one missing piece (for example Rebal's `shields_formshield` into Explorer Society) instead of reviving a heavy provider.
+   **First slice done 2026-09-24: the edit list.** `strip-plan MOD --vanilla-core CORE [--id kind:id]`
+   (`bridgeforge/strip_plan.py`) runs the normal scan and, for every id in its
+   `unresolved_content_references`, lists each place it sits: hull-mod and wing lists, each variant weapon
+   slot and built-in weapon (with vanilla weapons of the slot's type and size, mount overrides
+   included, as substitutes), and `.faction` known-lists; a variant or skin on an unresolved hull is
+   listed for deletion. Edits nothing. Tests: `tests/test_strip_plan.py`.
+   **Second slice done 2026-09-24: expected changes.** `strip-plan ... --expected FILE --build rN --link
+   risk=|hyp=|test=ID` adds a PROPOSED static-layer entry per file the plan deletes (`static.data`,
+   subject = the file's path, field `present`, `removed`), numbered after the file's existing
+   `EXP-<MOD>-nnn` ids; `expect check` accepts them and they match the delta `behavior-diff` produces for
+   the deleted file. An id removed inside a file changes nothing any baseline layer records, so it gets
+   no entry rather than a matcher that could never fire.
+   **Third slice done 2026-09-25: `vendor-plan` (owner decision 2026-09-25: plan-only, destination
+   RevenantLib, which collects content from mods whose authors have vanished).** `vendor-plan PROVIDER --id
+   kind:id [--target REVENANTLIB] [--vanilla-core CORE]` (`bridgeforge/vendor_plan.py`) follows the
+   references the game follows: CSV rows and their `script`/`sprite` columns, `descriptions.csv`, spec
+   files and their asset paths and class names, `numFrames` animation frames, projectile specs, variant ->
+   hull -> built-ins, wing -> variant, `system id` -> ship system, Java imports, same-package classes and
+   string literals, compiled classes' constant-pool and descriptor references (a jar class whose source
+   ships under `src/` is taken as source). Vanilla-provided references are skipped. Other provider code
+   or data that mentions a closure id is SUSPECT (the FormShieldPlugin case); variants/ships/skins/factions
+   that use an id are listed as users, not parts; Java comments do not count. Also: MISSING references,
+   ids and files RevenantLib already has (identical or different bytes), and the licence decision.
+   Copies nothing. Checked on real data: for RevenantLib's own `shields_formshield` and
+   `thruster_fighter_sm` it reproduces the hand-traced closures in its PROVENANCE.md file for file. Tests:
+   `tests/test_vendor_plan.py`.
 5. **Spawn-point fleet port kit.** RC8 keeps `BaseSpawnPoint` and `addSpawnPoint`, but not `SectorAPI.createFleet(faction, fleetType)`, which 0.6 spawners use to build fleets from old faction fleet definitions. The kit is:
    - a helper that builds the equivalent fleet with FleetFactoryV3, following Zorg18 r1's spawner;
    - a scanner check for the removed call.
@@ -597,6 +642,22 @@ Progression, each stage feeding the next:
     licence-check path itself is fully covered by direct tests against the real policy file and a
     full `dependency_substitutes()` integration test with a custom policy and a real workspace
     layout. Tests: `tests/test_substitutes.py` (`LicenceAwareRevivalTests`, 5 cases).
+   **Done 2026-09-24 (content ids; the real catalogue is built locally).** `content-diff REF_CORE RC8_CORE
+   [--output F]` (`bridgeforge/content_diff.py`, reading ids with the scanner's own indexes) lists the
+   hull (incl. skin), variant, weapon, wing, hull mod and ship system ids the older install defined and
+   RC8 does not, each with RC8-only ids of the same display name as successor leads, plus fingerprints
+   of both cores' tables. `scan --removed-content F` adds `content-reference-removed-in-vanilla`
+   (MANUAL) for unresolved references the older vanilla defined, so they read as "removed from
+   vanilla" rather than a missing dependency. Removed Java classes are item 29's `api-diff`. Tests:
+   `tests/test_content_diff.py`; the 0.9a-to-RC8 run is in `docs/LOCAL_HANDOFF.md`.
+9. **Licence-aware revival of dependencies.** Before REVIVE_DEPENDENCY, check `release_policy.json` so a revived library is marked local-only when its licence doesn't allow redistribution.
+   **Done 2026-09-24.** `dependency-substitutes` now attaches `licence` to every provider it would have you
+   revive (one not targeting 0.98a): LOCAL_ONLY or RELEASABLE from that mod's own `release_policy.json`
+   entry (matched by id or name via the new `release.policy_entry`, which the release gate also uses),
+   or UNRECORDED when there is no entry. The policy's `default` would call an unlisted mod releasable,
+   but no licence has been checked, so a decision must be recorded first. `licence_notes` (printed as
+   `LICENCE:` lines) spell out the consequence: a local-only revival works here but a mod needing it
+   cannot ship with it. Tests: `tests/test_substitutes.py` (`RevivalLicenceTests`).
 11. **Loose-script compile check.** Removed APIs keep turning up one method at a time: `SectorAPI.createFleet`, then `SectorAPI.addMessage` (RC8 moved it to `CampaignUIAPI`), found only by task A5's compile check of Cobalt-Arms and Independant-Mining-Faction. When the rig JDK is available, compile every loose `data/**.java` against the core jars plus the declared dependencies' jars, and report each javac error as a MANUAL finding with its file and line. That catches every removed or changed API in one pass; per-method `removed-api-call` entries then serve only as fixer rules.
     **Done 2026-09-15.** The standalone `compile-check <mod>` command (task A9) is now also reachable from a plain scan: `scan_mod(..., compile_check=True)` and `scan --compile-check` call `bridgeforge.compile_check.compile_loose_scripts` when `--vanilla-core` is given, emitting `loose-script-compile-error` (MANUAL, grouped one finding per failing file, up to 5 errors' line/message/symbol as evidence) or `loose-script-compile-unavailable` (UNKNOWN, no JDK or no core). Off by default so a plain scan stays fast and hermetic. Real cases (2026-09-15): Renis-Imperium, AI-War, Argamede-Union and EZFaction were each marked ready by every other check and failed only this one. Janino version check: RC8 ships Janino 2.7.8 (`starsector-core/janino.jar` manifest); its own changelog dates the diamond operator/try-with-resources/multi-catch/lambdas all to the 3.0.x line, well after 2.7.8, so `janino_gap_warnings` keeps flagging every construct it already flagged. Tests: `tests/test_scanner.py` (`CompileCheckScanIntegrationTests`).
 10. **Fold-in workflow (owner policy 2026-09-14).** Discontinued library-like mods are folded into RevenantLib (`revenantlib`), per `docs/DEPENDENCY_STRATEGY.md`. The workflow has four parts:
@@ -677,6 +738,14 @@ Progression, each stage feeding the next:
     nothing when `provider_roots` isn't supplied. Tests: `tests/test_intake_scanner_fixes.py`
     (`CrossModLooseScriptShadowTests`, 3 cases), `tests/test_fixers.py`
     (`RefuseCrossModShadowedEditTests`, 3 cases).
+    **Done 2026-09-24 (Maelstrom rerun is local).** `compile_check.dependency_shadowed_scripts` walks every
+    declared dependency's jars (the ones `assemble_classpath` already found) with the shared class-file
+    loop and `verify-shadow`'s class-name rule. `compile-check` lists matches as `shadowed_by_dependency`
+    and moves their javac errors to `shadowed_file_errors` (the game never compiles those files, so
+    they cannot fail a load); `scan --compile-check` reports each as
+    `loose-script-shadowed-by-dependency-jar` (MANUAL). Not yet done: `loose-script-janino-risk` still
+    fires on such a file in a plain scan, which has no provider jars. Tests: `tests/test_compile_check.py`
+    (a real javac run with a stand-in II.jar; the scan finding).
 
 13. **compile-check: two javac-integration bugs (found by task A14, 2026-09-20).**
     - `compile_check` does not pass `-sourcepath ""`, so when a dependency jar bundles `.java`
@@ -748,6 +817,12 @@ Progression, each stage feeding the next:
     working copy (`scan --vanilla-core` finds 0 preset-whole-entry findings there now). Recorded as
     `docs/BUG_CLASSES.md` BF-PRESET-01. Tests: `tests/test_release_hygiene_checks.py`
     (`PresetWholeEntryReplaceTests`).
+    **Done 2026-09-24.** `_scan_preset_entry_overrides` (needs `--vanilla-core`): for `engine_styles.json`,
+    `hull_styles.json`, `custom_entities.json`, `sounds.json` and `planets.json` under `data/config/`, every
+    top-level id the mod shares with vanilla's copy is compared by value (item 19's comparison).
+    Fields vanilla has and the mod's entry lacks: `preset-entry-drops-vanilla-fields` (MANUAL, names each
+    lost field); only different values: `preset-entry-overrides-vanilla` (REVIEW). Identical entries and
+    mod-only ids report nothing. Bug class ZORG-PRESET-01. Tests: `tests/test_preset_entry_overrides.py`.
 16. **New fixer: `undeclared-library-dependency` (declare the missing dependency automatically).**
     The scanner already detects a mod using a known library's package (LazyLib, MagicLib,
     GraphicsLib) without declaring it (`source-library-dependency-undeclared` /
@@ -817,6 +892,16 @@ Progression, each stage feeding the next:
     entirely. Tests: `tests/test_archive_index.py` (8 cases: filename+content indexing, binary
     content never indexed, incremental skip/reindex, corrupt-archive handling, size-cap behavior,
     the real password-protected-member regression, search-before-build, CLI).
+    **Done 2026-09-24 (the real Downloads index is built locally).** `corpus-index build ROOT [--db F]`
+    (`bridgeforge/corpus_index.py`) walks a folder once, inside `.zip`/`.jar` files too, and stores
+    text-like files in an SQLite FTS5 table with the trigram tokenizer (any 3+ character substring,
+    case-insensitive; CP-1252 bytes decoded). Re-runs re-read only files whose size or mtime changed
+    and forget deleted ones. `corpus-index search TEXT` prints each hit (`archive.zip!member` inside
+    archives) with its matching lines, plus path matches; `--names` searches paths only. Every
+    build and search reports what was NOT searched (other archive formats, zips inside zips,
+    oversized or binary files), so "no hits" states its own coverage. Default index:
+    `bridgeforge-state/corpus-index.sqlite` (gitignored). Tests: `tests/test_corpus_index.py`,
+    including the 2026-09-20 `shieldbypass` case.
 19. **New command: value-diff two org.json-dialect files, not a line diff.** Found 2026-09-20
     building E11's data-only rebuild plan for Rebal: diffing a mod's file against a real historical
     vanilla reference showed the two use different key order and formatting (pretty-printed vs.
@@ -837,6 +922,14 @@ Progression, each stage feeding the next:
     and Rebal's real `amblaster.wpn` against RC8 vanilla's real counterpart reports exactly 5 true
     field differences (2 sound/animation fields, a barrel mode, a hardpoint offset, one removed
     field) with zero formatting noise. Tests: `tests/test_diff_data.py`.
+    **Done 2026-09-24.** `diff-data A B [--json]` (`bridgeforge/data_diff.py`): JSON-dialect files load
+    through `_load_lenient_json_file` and compare by key; lists of objects with unique `"id"`s
+    (weapon/engine slots) by id; other lists by index, or by content for scalar lists of different
+    length; the same scalars in another order are one `reordered` change (order matters for
+    `turretOffsets`, not for `tags`, and the file cannot say which). CSVs compare rows by `id` (else
+    the first column) and cells by column name, skipping `#` and empty-key rows. Numbers compare by
+    value (`10` = `10.0`). Exit 0 identical, 1 different, 2 unreadable. Validation on Rebal's real
+    files is in `docs/LOCAL_HANDOFF.md`. Tests: `tests/test_data_diff.py`.
 20. **`vanilla-path-shadowing` should report the true file count, not a folder rollup.** E3's original
     estimate for Rebal ("~79 files") was a per-folder finding count; the real number, counted
     directly, is 642 - an 8x understatement that shaped this item's scoping for a full session before
@@ -874,6 +967,17 @@ Progression, each stage feeding the next:
     82 real `.wpn` files, 76 REBUILT cleanly and 5 genuine CONFLICTs correctly surfaced (e.g.
     `hammer.wpn`'s `fireSoundTwo`, `hil.wpn`'s `width` - real fields RC8 changed independently
     since the reference version). Tests: `tests/test_rebuild_from_reference.py`.
+    **Done 2026-09-24 (live validation on Rebal pending).** `rebuild-from-reference MOD --reference-core
+    REF --vanilla-core RC8 [--class wpn ...] [--output DIR]` (`bridgeforge/rebuild_reference.py`,
+    built on item 19's value comparison): for every `.ship`/`.wpn`/`.variant`/`.skin`/`.system` the mod
+    ships at a vanilla path present in both cores, a three-way merge per value. RC8's changes and
+    additions stay, the mod's edits (including additions and removals) apply on top, slot lists merge
+    by `id`, and a value both sides changed keeps RC8's and is reported as a CONFLICT. A copy the mod
+    never edited is UNCHANGED_COPY (drop it). Also lists files vanilla removed in RC8 (now the mod's
+    own content) and shadows with no reference copy. Only MERGED files are written, as strict JSON,
+    under `--output`, which may not overlap any input; exit 1 on any conflict. CSVs are out of scope:
+    the game merges CSV rows by id rather than replacing the file. Tests:
+    `tests/test_rebuild_reference.py`; Rebal run in `docs/LOCAL_HANDOFF.md`.
 22. **`rig-doctor`'s `enabled_mods_resolve` check FAILs on every freshly registered reference rig.**
     A brand-new historical install has no mods enabled yet, so `mods/enabled_mods.json` doesn't
     exist - correct and harmless, but it prints as FAIL rather than PASS/SKIP, noise on every P10
@@ -963,6 +1067,12 @@ Progression, each stage feeding the next:
     Verified the check actually catches a regression (a synthetic offending function was flagged,
     then discarded) rather than rubber-stamping. Runs as part of the normal test suite, not a
     shipped scan finding, per this item's own spec.
+    **Done 2026-09-24.** `tests/test_hull_id_resolution_audit.py` parses every module in `bridgeforge/`
+    and fails if a function builds hull ids from `_ship_file_index(...)` or `_declared_spec_ids(...,
+    "*.ship", ...)` without also calling `_skin_index`/`_resolve_hull_id`, unless it is in `EXEMPT` with
+    its reason (`_scan_carrier_bays_proposal`, `_scan_description_missing`: ship_data.csv base-hull
+    rows). A stale exemption also fails. Current state: four skin-aware builders (plus
+    `content_diff.content_ids`), two exempt, none unresolved.
 
     **Note on item 19 (the `diff-data` command):** every stage of E11's Rebal rebuild (weapons done,
     hulls in progress, variants and shipsystems/skins still ahead) has needed the same
@@ -1015,6 +1125,16 @@ Progression, each stage feeding the next:
     `thule_mission_operation_n/MissionDefinition.java` against its own working copy reports
     SHADOWED, naming `ThuleLegacy.jar` (matching item 14's real live bug). Tests:
     `tests/test_verify_shadow.py`.
+    **Done 2026-09-24.** `verify-shadow SCRIPT... --against PATH [--against PATH]`
+    (`bridgeforge/verify_shadow.py`). The class is the script's declared `package` plus file name (else
+    its path below the mod root); `--against` takes a jar, a mod folder (its declared jars only, as the
+    game loads them) or any folder (every jar under it, e.g. a `starsector-core` including
+    `starfarer_obf.jar`). Per script: SHADOWED with the jar and member that supply the class, or
+    NOT_SHADOWED; every jar it could not read (corrupt, or over `MAX_JAR_ENTRIES`) is listed so the
+    answer states its coverage. The jar-walking loop is now one function,
+    `scanner.iter_class_files_in_jars`, shared with `loose-script-shadowed-by-jar`. Tests:
+    `tests/test_verify_shadow.py` (including E12's same-path-but-no-jar case). The item 27 audit of
+    past moves uses it; see `docs/LOCAL_HANDOFF.md`.
 27. **The full corpus recheck (item 23) should include an audit of every "moved because shadowed"
     decision made before item 25 was found, not just a fresh scan.** E12 (2026-09-20/21) found that
     a `Path.is_file()` path-existence check had been trusted as proof of jar-shadowing at least once
@@ -1547,6 +1667,123 @@ Progression, each stage feeding the next:
       tubes fire **three** times. It would also return 320 OP (3 × 160 collapsing to 1 × 160). Making
       it work needs scope B2's fork of base II's launch pipeline, already declined. Abandoned intent,
       not unfinished wiring.
+29. **API drift catalogue: stop finding removed APIs one compile error at a time.** Item 11's
+    compile check finds each removed call (`SectorAPI.createFleet`, then `SectorAPI.addMessage`) only
+    as a bare "cannot find symbol". Compare an old install's `starfarer.api.jar` with RC8's once and
+    say where each removed member went.
+    **Done 2026-09-24.** New `api-diff OLD NEW [--output FILE]` (`bridgeforge/api_diff.py`, reusing
+    `rebuild_jar`'s class-file parser): public/protected classes, methods and fields removed or
+    changed; per removed method, the same-named overloads left in its class and other classes that
+    declare the same name and descriptor; per removed class, same-named classes in another package.
+    `compile-check --api-diff FILE` attaches those leads to matching javac errors (`api_changes`) and
+    prints them. `DEFAULT_JAVAC_ARGS` gained `-Xdiags:verbose`: javac's default simplified
+    diagnostics report a call to a method whose only overload changed as a bare "incompatible types"
+    naming neither method nor class (verified with javac 21). Leads only, never a rewrite. Next: run
+    it on the 0.9a reference rig's jar vs RC8 and keep the catalogue under `In operation/`. Tests:
+    `tests/test_api_diff.py` (old/new API jars compiled by real javac; real javac errors annotated).
+30. **Pin the RevenantLib methods the fixers call.** `removed-api-call` rewrites 0.6 calls into
+    `bf.legacyfleets.LegacyFleets.createFleet` and `bf.legacyworld.LegacyWorld.addPlanet`/
+    `addOrbitalStation`. A RevenantLib build that renamed or re-signatured one would leave every
+    rewritten mod compiling in BridgeForge's tests and failing in the game.
+    **Done 2026-09-24.** `bridgeforge/revenantlib_contract.py` pins the three methods' descriptors (read
+    from RevenantLib 1.2.0+bf.1's jar) and `revenantlib-check PATH` checks a jar, mod folder or repo
+    root against them (present, `public static`, exact descriptor) and, where `src/` exists, that every
+    source file has a top-level class in the jar and vice versa. `rig-doctor` runs it as
+    `revenantlib_contract` on RC8 rigs where RevenantLib is installed. Checked against the real
+    `Exxec/RevenantLib` 1.2.0+bf.1: PASS, 11 classes, no drift. Tests: `tests/test_revenantlib_contract.py`
+    (stand-in builds compiled by real javac; the fixer's rewritten calls have the contract's arity),
+    `tests/test_rig_doctor.py` (`RevenantLibContractCheckTests`).
+31. **Probe: have the game itself resolve every id the mod defines.** The scanner infers whether
+    variants and wings resolve (and has had false positives, items 17 and 28); nothing asked the game.
+    `probe-config` already passed hull and variant ids, but no campaign check used them.
+    **Done 2026-09-24 (source; live run pending).** `probe-config` writes `content_variants`
+    (`ship`: variants of the mod's own deployable hulls; `other`: fighter, module, wreck and non-mod
+    hulls) and `content_wings` (`wing_data.csv` ids). Probe 0.2.2's `content-ids` campaign check runs
+    once per session: `doesVariantExist` for every variant, `createFleetMember(SHIP, id)` for `ship`
+    variants (which also resolves hull, weapons and hull mods), `getFighterWingSpec` for wings; each
+    failure is a FAIL line naming the id and the game's exception, plus one summary line. API evidence:
+    RevenantLib 1.2.0+bf.1's RC8 jar references `doesVariantExist`/`getFighterWingSpec`;
+    `createFleetMember` is `ProbeSetup`'s live-run call. Hull/weapon/hull-mod lookups and a check that
+    the built member's hull is not a substitute (PRB-FIGHTER-01's Nebula) need `javap` evidence first.
+    **Needs:** `build-probe-mod --install-release` against RC8 (the committed jar predates this source;
+    a stale rig shows `BF-PROBE|0.2.1|` lines), then one live run; steps in `docs/LOCAL_HANDOFF.md`.
+    Tests: `tests/test_probe_config.py`
+    (`ContentIdsConfigTests`, `ProbeVersionTests`).
+32. **`probe-config` deployed a variant by its file name, not its declared `variantId`.** Found by
+    reading code while building item 31: `_variant_by_hull` read `"id"`, which `.variant` files do not
+    declare (the scanner reads `"variantId"` everywhere, and `_declared_spec_ids` records that file
+    names often differ from ids), so it always fell back to the file stem. A mod whose file name
+    differs from its variant id got a variant the game does not know.
+    **Done 2026-09-24.** `variantId` first, then `id`, then the file stem. Test:
+    `tests/test_probe_config.py` (`test_probe_deploys_the_declared_variant_id_not_the_file_name`).
+33. **`verify-shadow` must be able to read the game's own large jars (owner decision 2026-09-25).**
+    `MAX_JAR_ENTRIES` (10,000) guards against zip bombs in mod jars, but `starfarer_obf.jar` may exceed
+    it, which would leave the most important jar unchecked.
+    **Done 2026-09-25.** `scanner.iter_class_files_in_jars` takes `max_entries`; `verify-shadow` reads jars
+    sitting directly in a folder holding `starfarer.api.jar` with `TRUSTED_GAME_JAR_MAX_ENTRIES` (250,000),
+    and mod jars with the usual cap, still reporting any jar it skips. Test: `tests/test_verify_shadow.py`
+    (`GameJarEntryLimitTests`).
+34. **`corpus-index` reads `.7z` archives when the optional reader is installed (owner decision 2026-09-25).**
+    **Done 2026-09-25.** New extra `bridgeforge[archives]` (`py7zr>=1.0`; the core keeps one dependency).
+    Members get the same size, nesting and path-safety checks as zip members (absolute paths, `..`, drive
+    letters refused); encrypted archives are reported. py7zr 1.x has no in-memory read, so the wanted text
+    members are extracted to a temporary folder and discarded. Without the extra, `.7z` stays reported as
+    not read with an install hint; `.rar`/`.tar`/`.gz` stay unread. CI's coverage job and the web-session
+    hook install the extra. Tests: `tests/test_corpus_index.py` (`SevenZipTests`).
+35. **Record publishing decisions with a command, not by hand-editing JSON (owner decision 2026-09-25).**
+    Every `licence UNRECORDED` from `dependency-substitutes`/`dependency-graph` needs a decision.
+    **Done 2026-09-25.** `release-policy show MOD` and `release-policy set MOD --local-only|--releasable
+    --reason TEXT [--on DATE]` (`release.record_policy_decision`): a reason is required, the date is kept as
+    `recorded_on`, an existing entry is updated in place under its own key, and the rest of the file is
+    byte-for-byte unchanged. Tests: `tests/test_release.py` (`ReleasePolicyRecordTests`).
+36. **`dependency-graph` read a provider workspace's status wrongly.** Found 2026-09-25 while reviewing
+    RevenantLib: `substitutes._workspace_state` looked only in `working/reports/REVIVAL_REPORT.md` and took
+    the report's last non-empty line as the status, so RevenantLib's "status" was a sentence about FX
+    Example. **Done 2026-09-25.** `_declared_status` reads `<workspace>/reports/` first, then
+    `working/reports/` (the order `board` and `promote` use), and returns the single final completion status
+    via `revival_audit._completion_statuses`, or none. RevenantLib's report was moved to `reports/` and now
+    ends on its status (`Exxec/RevenantLib` PR 2, which also adds that repo's offline checks, CI and
+    `tools/build_jar.py`; its first real build is in `docs/LOCAL_HANDOFF.md` item 7). Tests:
+    `tests/test_substitutes.py` (`WorkspaceStatusTests`).
+
+## P15: Unattended revival with verified AI escalation (planned 2026-09-26)
+
+Owner goal (2026-09-26): not to remove AI from revivals but to reduce what reaches it and make what
+does reach it easier, so the output has fewer bugs. The mechanical majority runs unattended; each
+remaining problem goes to an AI agent as a self-contained packet; BridgeForge, not the agent, decides
+whether the result passed; recurring agent fixes become deterministic fixers.
+
+1. **Measure the ceiling: `finding-stats`.** **Done 2026-09-26.** `bridgeforge/automation_tiers.json`
+   places every scan finding id in one tier (none, auto, mechanical, input, decision, inspect, code);
+   a test fails when a new check has no tier, and an `auto` id must name a real fixer.
+   `finding-stats [ROOT...] [--scan] [--write DIR]` groups workspaces by their hardest tier, reports
+   how many could run unattended now and with every `mechanical` finding fixed, ranks finding ids by
+   how many mods each is the only blocker for (`unlocks`), and lists ids AI agents have fixed and
+   BridgeForge verified 3+ times across 2+ mods (fixer candidates). The real queue run is local
+   (`docs/LOCAL_HANDOFF.md`). Tests: `tests/test_finding_stats.py`.
+2. **Orchestrator and escalation packets: `revive`.** **Done 2026-09-26.** Scan (with the compile check
+   given `--vanilla-core`), apply permitted fixers, rescan, until a round changes nothing; dry run
+   unless `--apply`. A fixer is applied unattended only when all its findings are SAFE; anything
+   else needs `--approve ID` or a standing approval in the queue's `AUTOMATION_POLICY.json` (decide
+   once, apply to every mod); MANUAL/UNKNOWN are never fixed without one. The rest becomes packets in
+   `<ws>/reports/escalations/`: agent packets (code/mechanical/inspect; one per finding and file,
+   with evidence, the allowed files, a numbered excerpt around the lines the evidence names, a hint
+   for the finding family, rules, and the verify command) and owner packets (decisions, inputs, and
+   fixers awaiting approval with their dry-run diff). Tests: `tests/test_revive.py` (`ReviveTests`).
+3. **Agent runner with re-verification: `escalation run`.** **Done 2026-09-26.** Runs any agent command
+   in a throwaway copy with the packet on stdin; rejects edits outside the packet's files; requires
+   the agent's note; rescans (and compile-checks) the copy and passes only if the finding is gone and
+   no new actionable finding appeared; retries a failure with BridgeForge's reasons appended; copies a
+   verified result back only with `--apply` (backups kept), labelled REVIEW. `escalation
+   list|show|verify` cover the rest. Tests: `tests/test_revive.py` (`EscalationRunTests`, with a
+   scripted stand-in agent).
+4. **Ledger and fixer promotion.** **Started 2026-09-26.** Every fixer application and agent attempt
+   is appended to `<ws>/reports/escalations/ledger.jsonl`; `finding-stats` turns it into the fixer
+   candidate list. Three `mechanical` ids became fixers now (safe, deterministic, common in pre-0.8a
+   mods): `csv-fullwidth-number` (SAFE, so unattended), `ship-data-missing-fighter-bays-column` (blank
+   column, reusing the carrier-bays edit) and `missing-custom-ui-button-pressed-callback` (no-op
+   callback in loose scripts). Tests: `tests/test_fixers.py`. **Next:** write fixers for the top
+   `unlocks` ids from the first local `finding-stats` run, and for whatever the ledger promotes.
 
 ## Post-1.0 research and gated automation
 

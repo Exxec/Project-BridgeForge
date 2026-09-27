@@ -7,6 +7,7 @@ import zipfile
 from pathlib import Path
 
 from bridgeforge.build_tag import apply_build_tag
+from bridgeforge.cli import main
 from bridgeforge.release import release_mod
 
 
@@ -214,6 +215,49 @@ class ReleaseGateTests(unittest.TestCase):
             self.assertIn("jars/fixture.jar", names)
             self.assertNotIn("jars/fixture_old.jar", names)
             self.assertFalse((Path(result["release_dir"]) / "jars" / "fixture_old.jar").exists())
+
+
+class ReleasePolicyRecordTests(unittest.TestCase):
+    def _policy(self, root: Path) -> Path:
+        path = root / "policy.json"
+        path.write_text(json.dumps({"schema_version": 1, "mods": {"ExiGency": {"local_only": True, "reason": "old"}},
+                                    "default": {"local_only": False, "reason": None}}, indent=2) + "\n", encoding="utf-8")
+        return path
+
+    def test_record_updates_in_place_or_adds_and_requires_a_reason(self):
+        from bridgeforge.release import ReleaseError, record_policy_decision
+        from bridgeforge.substitutes import revival_licence
+
+        with tempfile.TemporaryDirectory() as directory:
+            policy = self._policy(Path(directory))
+            updated = record_policy_decision("exigency", local_only=False, reason="permission 2026-09-25", on="2026-09-25", policy_path=policy)
+            added = record_policy_decision("oldsector", local_only=True, reason="author vanished; no licence", on="2026-09-25", policy_path=policy)
+            with self.assertRaises(ReleaseError):
+                record_policy_decision("x", local_only=True, reason="  ", policy_path=policy)
+            data = json.loads(policy.read_text(encoding="utf-8"))
+            self.assertEqual(revival_licence("oldsector", None, policy)["decision"], "LOCAL_ONLY")
+        self.assertEqual(updated["mod"], "ExiGency")  # the existing key's spelling is kept
+        self.assertEqual(updated["previous"], {"local_only": True, "reason": "old"})
+        self.assertIsNone(added["previous"])
+        self.assertEqual(data["mods"]["ExiGency"], {"local_only": False, "reason": "permission 2026-09-25", "recorded_on": "2026-09-25"})
+        self.assertEqual(sorted(data["mods"]), ["ExiGency", "oldsector"])
+
+    def test_cli_show_and_set(self):
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+
+        with tempfile.TemporaryDirectory() as directory:
+            policy = self._policy(Path(directory))
+            out = io.StringIO()
+            with redirect_stdout(out):
+                self.assertEqual(main(["release-policy", "set", "oldsector", "--local-only", "--reason", "vanished", "--policy", str(policy)]), 0)
+                self.assertEqual(main(["release-policy", "show", "oldsector", "--policy", str(policy)]), 0)
+                self.assertEqual(main(["release-policy", "show", "nobody", "--policy", str(policy)]), 0)
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["release-policy", "set", "x", "--releasable", "--reason", "", "--policy", str(policy)]), 2)
+        self.assertIn("recorded oldsector: LOCAL_ONLY", out.getvalue())
+        self.assertIn("oldsector: LOCAL_ONLY (vanished)", out.getvalue())
+        self.assertIn("nobody: UNRECORDED", out.getvalue())
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from pathlib import Path
 from .boot_test import _is_link
 from .build_tag import _find_mod_info
 from .probe_mod_build import RELEASE_RELATIVE
-from .scanner import _load_lenient_json_file, _read_csv_rows
+from .scanner import _load_lenient_json_file, _read_csv_rows, _wing_ids_set
 
 DEFAULT_CAMPAIGN_INTERVAL_DAYS = 5.0
 DEFAULT_COMBAT_SECONDS = 60.0
@@ -305,7 +305,7 @@ def _wreck_pieces(mod_root: Path) -> list[str]:
 
 
 def _variant_by_hull(mod_root: Path, hulls: list[str]) -> dict[str, str]:
-    """Pick one variant id per hull from data/variants/*.variant (first match wins, sorted for determinism)."""
+    """Pick one variant id per hull from data/variants/**.variant (first match wins, sorted for determinism)."""
     variants_root = mod_root / "data" / "variants"
     by_hull: dict[str, str] = {}
     if not variants_root.is_dir():
@@ -316,12 +316,37 @@ def _variant_by_hull(mod_root: Path, hulls: list[str]) -> dict[str, str]:
         if not isinstance(data, dict):
             continue
         hull_id = data.get("hullId")
-        variant_id = data.get("id") or path.stem
+        # Starsector registers a variant under its declared "variantId", not the file name; "id" and
+        # the file stem are fallbacks only (ROADMAP P14 item 32).
+        variant_id = data.get("variantId") or data.get("id") or path.stem
         if not isinstance(hull_id, str) or hull_id not in wanted or hull_id in by_hull:
             continue
         if isinstance(variant_id, str) and variant_id:
             by_hull[hull_id] = variant_id
     return by_hull
+
+
+def _content_variants(mod_root: Path, deployable_hulls: list[str]) -> dict[str, list[str]]:
+    """Every variant id the mod defines, split by what the probe may do with it (ROADMAP P14 item 31).
+
+    `ship`: the variant's hullId is one of the mod's own deployable hulls, so the probe also builds it
+    as a SHIP fleet member. `other`: fighter, module and wreck hulls, and hulls the mod does not define
+    (a vanilla hull or a skin), which only get an existence check -- building a fighter variant as a
+    SHIP made the game substitute a vanilla Nebula (PRB-FIGHTER-01).
+    """
+    variants_root = mod_root / "data" / "variants"
+    ship: set[str] = set()
+    other: set[str] = set()
+    if variants_root.is_dir():
+        deployable = set(deployable_hulls)
+        for path in sorted(variants_root.rglob("*.variant")):
+            data = _load_lenient_json_file(path)
+            if not isinstance(data, dict):
+                continue
+            variant_id = data.get("variantId") or data.get("id") or path.stem
+            if isinstance(variant_id, str) and variant_id:
+                (ship if data.get("hullId") in deployable else other).add(variant_id)
+    return {"ship": sorted(ship), "other": sorted(other - ship)}
 
 
 def _mod_root(mod_dir: Path) -> Path:
@@ -389,6 +414,8 @@ def build_probe_config(
         "variants": variants,
         "track_entities": sorted(set(track_entities or [])),
         "factions": _mod_faction_ids(mod_root),
+        "content_variants": _content_variants(mod_root, hulls),
+        "content_wings": sorted(_wing_ids_set(mod_root / "data" / "hulls" / "wing_data.csv")),
         "campaign_interval_days": campaign_interval_days,
         "combat_seconds": combat_seconds,
         "combat_cap_per_side": combat_cap_per_side,

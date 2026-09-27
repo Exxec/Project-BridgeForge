@@ -19,7 +19,6 @@ from .scanner import (
     _load_lenient_json_file,
     _read_csv_rows,
     _registered_csv_ids,
-    _relative,
     _wing_ids_set,
     scan_mod,
 )

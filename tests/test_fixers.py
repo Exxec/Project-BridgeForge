@@ -10,6 +10,9 @@ from bridgeforge.cli import main
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix, unified_diff_for_change
 from bridgeforge.scanner import _load_lenient_json_file, scan_mod
 from tests.save_fixtures import _class_entry, _u2, _utf8_entry, build_class_file, write_jar
+from bridgeforge.fixers import FixerError, apply_fix, compute_fix
+from bridgeforge.scanner import scan_mod
+from tests.save_fixtures import build_class_file, write_jar
 
 
 def _write(path: Path, text: str) -> None:
@@ -62,7 +65,7 @@ class WingDataMissingRoleDescTests(unittest.TestCase):
 
     def test_apply_appends_a_blank_column_padding_short_rows_then_rescan_clean(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             path = self._mod(root, "id,variant,tags,op cost\nwing_a,a_Wing,,4\n#note,x\nwing_b,b_Wing\n")
             self.assertEqual(len(_findings(scan_mod(root), "wing-data-missing-role-desc-column")), 1)
             applied = apply_fix(compute_fix(root, "wing-data-missing-role-desc-column"))
@@ -73,14 +76,14 @@ class WingDataMissingRoleDescTests(unittest.TestCase):
     def test_comma_only_padding_rows_are_not_mistaken_for_multiline_fields(self) -> None:
         # Cobalt Arms pads wing_data.csv with rows of bare commas; the fixer wrongly refused it.
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             path = self._mod(root, "id,variant,role,,number\nwing_a,a,ASSAULT,,\n,,,,\n,,,,26\n")
             apply_fix(compute_fix(root, "wing-data-missing-role-desc-column"))
             self.assertEqual(path.read_text(encoding="utf-8"), "id,variant,role,,number,role desc\nwing_a,a,ASSAULT,,,\n,,,,,\n,,,,26,\n")
 
     def test_refuses_when_present_or_rows_span_lines(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root, "id,role desc\nwing_a,x\n")
             with self.assertRaises(FixerError):
                 compute_fix(root, "wing-data-missing-role-desc-column")
@@ -296,7 +299,7 @@ class AssaultRoleIsValidTests(unittest.TestCase):
 
     def test_assault_wings_raise_nothing_and_have_no_rewrite_fixer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
             _write(root / "data" / "hulls" / "wing_data.csv", "id,role,role desc,op cost\nwing_a,ASSAULT,desc,4\n")
             result = scan_mod(root)
@@ -317,7 +320,7 @@ class CarrierBaysProposalFixerTests(unittest.TestCase):
 
     def test_pre08_hangar_schema_adds_column_blank_for_untouched_hulls(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             path = self._mod(
                 root,
                 "name,id,designation,system id,hangar,hints\nBig,big,Carrier,,6,\nSmall,small,Frigate,,,\n",
@@ -335,7 +338,7 @@ class CarrierBaysProposalFixerTests(unittest.TestCase):
 
     def test_existing_fighter_bays_column_is_overwritten_for_the_approved_hull_only(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             path = self._mod(
                 root,
                 "name,id,designation,fighter bays,hints\nBig,big,Carrier,,\nSmall,small,Frigate,,\n",
@@ -348,7 +351,7 @@ class CarrierBaysProposalFixerTests(unittest.TestCase):
 
     def test_multiple_hulls_in_one_run(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             path = self._mod(
                 root,
                 "name,id,designation,hangar\nBig,big,Carrier,6\nMed,med,Cruiser,3\nSmall,small,Frigate,\n",
@@ -361,7 +364,7 @@ class CarrierBaysProposalFixerTests(unittest.TestCase):
 
     def test_only_the_approved_hull_stops_being_proposed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(
                 root,
                 "name,id,designation,hangar\nBig,big,Carrier,6\nMed,med,Cruiser,3\n",
@@ -375,7 +378,7 @@ class CarrierBaysProposalFixerTests(unittest.TestCase):
 
     def test_refuses_unknown_hull_id(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
             with self.assertRaises(FixerError):
                 compute_fix(root, "carrier-bays-proposal", {"hulls": ["ghost=2"]})
@@ -383,35 +386,35 @@ class CarrierBaysProposalFixerTests(unittest.TestCase):
     def test_refuses_a_value_above_vanillas_own_maximum(self) -> None:
         # RC8's own ship_data.csv maximum is 6 (the Astral); see fixers._MAX_FIGHTER_BAYS.
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
             with self.assertRaises(FixerError):
                 compute_fix(root, "carrier-bays-proposal", {"hulls": ["big=7"]})
 
     def test_refuses_a_negative_value(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
             with self.assertRaises(FixerError):
                 compute_fix(root, "carrier-bays-proposal", {"hulls": ["big=-1"]})
 
     def test_zero_is_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             path = self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
             apply_fix(compute_fix(root, "carrier-bays-proposal", {"hulls": ["big=0"]}))
             self.assertIn("Big,big,Carrier,6,0\n", path.read_text(encoding="utf-8"))
 
     def test_requires_at_least_one_hull(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
             with self.assertRaises(FixerError):
                 compute_fix(root, "carrier-bays-proposal", {})
 
     def test_malformed_hull_assignment_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
             with self.assertRaises(FixerError):
                 compute_fix(root, "carrier-bays-proposal", {"hulls": ["big"]})  # no '='
@@ -420,7 +423,7 @@ class CarrierBaysProposalFixerTests(unittest.TestCase):
 
     def test_cli_apply_and_resolved_status(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
             exit_code = main(["fix", str(root), "--finding", "carrier-bays-proposal", "--hull", "big=4", "--apply", "--json"])
             self.assertEqual(exit_code, 0)  # the finding is fully resolved (one hull, now fixed)
@@ -428,7 +431,7 @@ class CarrierBaysProposalFixerTests(unittest.TestCase):
 
     def test_cli_dry_run_does_not_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             path = self._mod(root, "name,id,designation,hangar\nBig,big,Carrier,6\n")
             original = path.read_text(encoding="utf-8")
             exit_code = main(["fix", str(root), "--finding", "carrier-bays-proposal", "--hull", "big=4"])
@@ -443,7 +446,7 @@ class TargetInterfaceMethodMissingTests(unittest.TestCase):
 
     def test_loose_scripts_gain_rc8_members_without_touching_bodies_then_rescan_clean(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
             _write(root / "data" / "shipsystems" / "scripts" / "Old.java", self.SYSTEM)
             _write(root / "data" / "scripts" / "Hit.java", self.HIT)
@@ -462,7 +465,7 @@ class TargetInterfaceMethodMissingTests(unittest.TestCase):
 
     def test_jar_sources_are_refused(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
             _write(root / "jars" / "src" / "data" / "scripts" / "Hit.java", self.HIT)
             with self.assertRaises(FixerError) as caught:
@@ -502,7 +505,7 @@ class RemovedApiCallTests(unittest.TestCase):
 
     def test_rewrites_both_receiver_forms_leaves_comments_alone_adds_dependency_once_then_rescan_clean(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root)
             before_scan = scan_mod(root)
             self.assertEqual(len(_findings(before_scan, "removed-api-call")), 1)
@@ -535,7 +538,7 @@ class RemovedApiCallTests(unittest.TestCase):
 
     def test_existing_dependencies_array_gets_the_entry_prepended_once(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(
                 root,
                 '{\n\t"id":"fixture",\n\t"dependencies": [\n\t\t{"id": "lw_lazylib", "name": "LazyLib"}\n\t]\n}\n',
@@ -549,7 +552,7 @@ class RemovedApiCallTests(unittest.TestCase):
 
     def test_dependency_already_present_is_not_duplicated_and_only_source_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root, '{"id":"fixture","dependencies":[{"id":"revenantlib","name":"RevenantLib"}]}')
             plan = compute_fix(root, "removed-api-call")
             changed = {change.path.relative_to(root).as_posix() for change in plan.changes}
@@ -560,7 +563,7 @@ class RemovedApiCallTests(unittest.TestCase):
 
     def test_disabled_files_are_never_touched_or_counted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             _write(root / "data" / "scripts" / "world" / "disabled_files" / "Old.java", self.SPAWN_SRC)
             with self.assertRaises(FixerError):
@@ -568,7 +571,7 @@ class RemovedApiCallTests(unittest.TestCase):
 
     def test_jar_sources_are_refused(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             _write(root / "jars" / "src" / "data" / "scripts" / "world" / "Spawn.java", self.SPAWN_SRC)
             with self.assertRaises(FixerError) as caught:
@@ -577,14 +580,14 @@ class RemovedApiCallTests(unittest.TestCase):
 
     def test_refuses_when_no_removed_call_is_present(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             with self.assertRaises(FixerError):
                 compute_fix(root, "removed-api-call")
 
     def test_refuses_when_dependencies_is_not_an_array(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root, '{"id":"fixture","dependencies":"oops"}')
             with self.assertRaises(FixerError):
                 compute_fix(root, "removed-api-call")
@@ -592,7 +595,7 @@ class RemovedApiCallTests(unittest.TestCase):
     def test_global_getsectorapi_create_fleet_receiver_is_also_rewritten(self) -> None:
         # E6, 2026-09-14: javap confirms Global.getSectorAPI() returns SectorAPI too.
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             _write(
                 root / "data" / "scripts" / "world" / "Spawn.java",
@@ -640,7 +643,7 @@ class AddMessageRewriteTests(unittest.TestCase):
 
     def test_inserts_getcampaignui_before_addmessage_keeping_receiver_and_does_not_add_dependency(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             path = self._mod(root)
             before_scan = scan_mod(root)
             self.assertEqual(len(_findings(before_scan, "removed-api-call")), 1)
@@ -668,7 +671,7 @@ class AddMessageRewriteTests(unittest.TestCase):
 
     def test_create_fleet_and_add_message_together_rewrite_both_and_add_dependency_once(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             _write(
                 root / "data" / "scripts" / "world" / "Convoy.java",
@@ -699,7 +702,7 @@ class CrewXPLevelRewriteTests(unittest.TestCase):
 
     def test_addcrew_leading_crewxplevel_argument_is_dropped_import_removed_then_rescan_clean(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             path = root / "data" / "scripts" / "world" / "Convoy.java"
             _write(
@@ -728,7 +731,7 @@ class CrewXPLevelRewriteTests(unittest.TestCase):
 
     def test_addtofleet_trailing_crewxplevel_argument_is_dropped_both_overload_shapes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             path = root / "data" / "missions" / "m" / "MissionDefinition.java"
             _write(
@@ -750,7 +753,7 @@ class CrewXPLevelRewriteTests(unittest.TestCase):
 
     def test_addmessage_and_crewxplevel_in_the_same_file_are_both_rewritten_no_dependency_added(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             path = root / "data" / "scripts" / "world" / "Convoy.java"
             _write(
@@ -804,7 +807,7 @@ class CrewXPLevelTypeDeclarationRefusalTests(unittest.TestCase):
 
     def test_refused_when_it_is_the_only_removed_api_call_match(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             path = root / "data" / "missions" / "m" / "MissionDefinition.java"
             _write(path, self._WRAPPER_SHAPE)
@@ -823,7 +826,7 @@ class CrewXPLevelTypeDeclarationRefusalTests(unittest.TestCase):
         # The refusal is per-file: a second, unrelated loose script with a plain (non-wrapper)
         # CrewXPLevel call site still gets its mechanical rewrite.
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             refused_path = root / "data" / "missions" / "m" / "MissionDefinition.java"
             _write(refused_path, self._WRAPPER_SHAPE)
@@ -854,7 +857,7 @@ class CrewXPLevelTypeDeclarationRefusalTests(unittest.TestCase):
 
     def test_dotted_type_qualifier_also_counts_as_a_declaration(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             path = root / "data" / "scripts" / "world" / "Convoy.java"
             _write(
@@ -876,7 +879,7 @@ class LegacyWorldRewriteTests(unittest.TestCase):
 
     def test_seven_argument_addplanet_is_rewritten_receiver_becomes_first_argument(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             path = root / "data" / "scripts" / "world" / "Gen.java"
             _write(
@@ -908,7 +911,7 @@ class LegacyWorldRewriteTests(unittest.TestCase):
 
     def test_six_argument_addorbitalstation_is_rewritten_and_adds_dependency(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             path = root / "data" / "scripts" / "world" / "Gen.java"
             _write(
@@ -932,7 +935,7 @@ class LegacyWorldRewriteTests(unittest.TestCase):
 
     def test_rc8_eight_argument_id_first_addplanet_is_never_flagged(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             _write(
                 root / "data" / "scripts" / "world" / "Gen.java",
@@ -948,7 +951,7 @@ class LegacyWorldRewriteTests(unittest.TestCase):
 
     def test_missiondefinitionapi_addplanet_five_and_six_argument_forms_are_never_flagged(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             _write(
                 root / "data" / "missions" / "m" / "MissionDefinition.java",
@@ -965,7 +968,7 @@ class LegacyWorldRewriteTests(unittest.TestCase):
 
     def test_addplanet_and_addorbitalstation_together_add_the_dependency_only_once(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             _write(
                 root / "data" / "scripts" / "world" / "Gen.java",
@@ -985,7 +988,7 @@ class LegacyWorldRewriteTests(unittest.TestCase):
         # addOrbitalStation(` - without an explicit guard the scanner's own receiver.addOrbitalStation(
         # pattern would re-match its own fixer's output forever.
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture"}')
             _write(
                 root / "data" / "scripts" / "world" / "Gen.java",
@@ -1008,20 +1011,20 @@ class ModInfoGameVersionInexactTests(unittest.TestCase):
 
     def test_requires_target_game_version(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root)
             with self.assertRaises(FixerError):
                 compute_fix(root, "mod-info-game-version-inexact")
 
     def test_dry_run_byte_identical_then_apply_and_rescan(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root)
             path = root / "mod_info.json"
             before = path.read_bytes()
             plan = compute_fix(root, "mod-info-game-version-inexact", {"target_game_version": "0.98a"})
             self.assertEqual(path.read_bytes(), before)
-            before_scan = scan_mod(root, vanilla_core=None)
+            scan_mod(root, vanilla_core=None)
             applied = apply_fix(plan)
             self.assertTrue(Path(applied[0]["backup"]).is_file())
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -1032,7 +1035,7 @@ class ModInfoGameVersionInexactTests(unittest.TestCase):
 class CsvRowExtraColumnsTests(unittest.TestCase):
     def test_drops_trailing_empty_extras_and_rescans_clean(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture"}')
             _write(
                 root / "data" / "strings" / "descriptions.csv",
@@ -1051,7 +1054,7 @@ class CsvRowExtraColumnsTests(unittest.TestCase):
 
     def test_refuses_when_extra_field_non_empty(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(
                 root / "data" / "strings" / "descriptions.csv",
                 "id,text\nrow1,hello,unexpected\n",
@@ -1069,14 +1072,14 @@ class CsvMissingDesignTypeColumnTests(unittest.TestCase):
 
     def test_requires_all_options(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root)
             with self.assertRaises(FixerError):
                 compute_fix(root, "csv-missing-design-type-column")
 
     def test_apply_adds_column_and_settings_color_then_rescan_clean(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root)
             options = {"design_type": "FF", "id_prefixes": ["ff_"], "design_color": "10,20,30"}
             plan = compute_fix(root, "csv-missing-design-type-column", options)
@@ -1095,7 +1098,7 @@ class CsvMissingDesignTypeColumnTests(unittest.TestCase):
 
     def test_existing_settings_designtypecolors_key_left_alone(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod(root)
             _write(root / "data" / "config" / "settings.json", '{"designTypeColors":{"Other":[1,2,3,255]}}')
             options = {"design_type": "FF", "id_prefixes": ["ff_"], "design_color": "10,20,30"}
@@ -1118,7 +1121,7 @@ class ProcgenRowMissingTests(unittest.TestCase):
 
     def test_requires_options(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             with self.assertRaises(FixerError):
                 compute_fix(root, "procgen-planet-row-missing")
 
@@ -1156,7 +1159,7 @@ class ProcgenRowMissingTests(unittest.TestCase):
 class FactionKnownListsMissingTests(unittest.TestCase):
     def test_requires_options(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             with self.assertRaises(FixerError):
                 compute_fix(root, "faction-known-lists-missing")
 
@@ -1204,7 +1207,7 @@ class FactionKnownListsMissingTests(unittest.TestCase):
 class ModInfoTriageBannerTests(unittest.TestCase):
     def test_apply_removes_leading_banner_and_rescan_clean(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture","name":"(BROEKN MAYBE) Fixture Mod"}')
             path = root / "mod_info.json"
             before = path.read_bytes()
@@ -1220,7 +1223,7 @@ class ModInfoTriageBannerTests(unittest.TestCase):
 
     def test_refuses_when_no_leading_banner(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture","name":"Clean Mod Name"}')
             with self.assertRaises(FixerError):
                 compute_fix(root, "mod-info-triage-banner")
@@ -1244,7 +1247,7 @@ class RevenantlibFoldConflictFixerTests(unittest.TestCase):
 
     def test_removes_the_redundant_original_entry_leaves_revenantlib_then_rescan_clean(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", json.dumps({
                 "id": "dependent", "name": "Dependent", "gameVersion": "0.98a",
                 "dependencies": [{"id": "revenantlib", "name": "RevenantLib"}, {"id": "oldlib", "name": "OldLib"}],
@@ -1261,7 +1264,7 @@ class RevenantlibFoldConflictFixerTests(unittest.TestCase):
 
     def test_multiple_conflicting_entries_are_all_removed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", json.dumps({
                 "id": "dependent",
                 "dependencies": [
@@ -1277,7 +1280,7 @@ class RevenantlibFoldConflictFixerTests(unittest.TestCase):
 
     def test_bare_string_dependency_entries_are_removed_too(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", json.dumps({"id": "dependent", "dependencies": ["revenantlib", "oldlib"]}))
             with self._patch():
                 apply_fix(compute_fix(root, "revenantlib-fold-conflict"))
@@ -1286,7 +1289,7 @@ class RevenantlibFoldConflictFixerTests(unittest.TestCase):
 
     def test_comments_and_other_keys_are_left_untouched(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             text = (
                 "{\n"
                 "\t# a leading comment\n"
@@ -1309,7 +1312,7 @@ class RevenantlibFoldConflictFixerTests(unittest.TestCase):
 
     def test_refuses_when_no_conflict_finding_is_present(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", json.dumps({"id": "dependent", "dependencies": [{"id": "revenantlib", "name": "RevenantLib"}]}))
             with self._patch():
                 with self.assertRaises(FixerError):
@@ -1317,7 +1320,7 @@ class RevenantlibFoldConflictFixerTests(unittest.TestCase):
 
     def test_cli_fix_apply_end_to_end(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", json.dumps({
                 "id": "dependent",
                 "dependencies": [{"id": "revenantlib", "name": "RevenantLib"}, {"id": "oldlib", "name": "OldLib"}],
@@ -1340,7 +1343,7 @@ class RefuseShadowedEditTests(unittest.TestCase):
 
     def test_refuses_when_the_mods_own_jar_shadows_the_edited_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
             _write(root / "data" / "hullmods" / "Tow.java", self.MOD)
             write_jar(root / "jars" / "fixture.jar", {"data/hullmods/Tow.class": build_class_file("data/hullmods/Tow")})
@@ -1354,7 +1357,7 @@ class RefuseShadowedEditTests(unittest.TestCase):
 
     def test_allow_shadowed_edit_overrides_the_refusal(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
             _write(root / "data" / "hullmods" / "Tow.java", self.MOD)
             write_jar(root / "jars" / "fixture.jar", {"data/hullmods/Tow.class": build_class_file("data/hullmods/Tow")})
@@ -1364,7 +1367,7 @@ class RefuseShadowedEditTests(unittest.TestCase):
 
     def test_no_jar_present_is_not_refused(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
             _write(root / "data" / "hullmods" / "Tow.java", self.MOD)
             plan = compute_fix(root, "target-interface-method-missing")
@@ -1373,7 +1376,7 @@ class RefuseShadowedEditTests(unittest.TestCase):
 
     def test_cli_surfaces_the_refusal_and_the_override_flag_clears_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
             _write(root / "data" / "hullmods" / "Tow.java", self.MOD)
             write_jar(root / "jars" / "fixture.jar", {"data/hullmods/Tow.class": build_class_file("data/hullmods/Tow")})
@@ -1450,7 +1453,7 @@ class UndeclaredLibraryDependencyFixerTests(unittest.TestCase):
 
     def test_declares_the_missing_library_with_the_real_corrected_id(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod_with_graphicslib_import(root)
             self.assertEqual(len(_findings(scan_mod(root), "undeclared-library-dependency")), 1)
             plan = compute_fix(root, "undeclared-library-dependency")
@@ -1464,7 +1467,7 @@ class UndeclaredLibraryDependencyFixerTests(unittest.TestCase):
 
     def test_already_declared_with_the_bare_string_shape_is_left_alone(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod_with_graphicslib_import(root, {"id": "flowergod", "dependencies": ["shaderLib"]})
             self.assertEqual(_findings(scan_mod(root), "undeclared-library-dependency"), [])
             with self.assertRaises(FixerError):
@@ -1472,14 +1475,14 @@ class UndeclaredLibraryDependencyFixerTests(unittest.TestCase):
 
     def test_no_finding_raises(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             _write(root / "mod_info.json", json.dumps({"id": "clean"}))
             with self.assertRaises(FixerError):
                 compute_fix(root, "undeclared-library-dependency")
 
     def test_cli_fix_apply_end_to_end(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             self._mod_with_graphicslib_import(root)
             exit_code = main(["fix", str(root), "--finding", "undeclared-library-dependency", "--apply", "--json"])
             self.assertEqual(exit_code, 0)
@@ -1490,7 +1493,7 @@ class UndeclaredLibraryDependencyFixerTests(unittest.TestCase):
 class UnsupportedFindingTests(unittest.TestCase):
     def test_unsupported_finding_lists_supported_ids(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             with self.assertRaises(FixerError) as ctx:
                 compute_fix(root, "not-a-real-finding")
             self.assertIn("wing-data-missing-role-desc-column", str(ctx.exception))
@@ -1498,3 +1501,73 @@ class UnsupportedFindingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CsvFullwidthNumberFixerTests(unittest.TestCase):
+    def test_rewrites_reported_cells_and_keeps_prose_and_quoting(self) -> None:
+        from bridgeforge.fixers import apply_fix, compute_fix
+        from bridgeforge.scanner import scan_mod
+
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            (mod / "data" / "hulls").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "x"}', encoding="utf-8")
+            csv_path = mod / "data" / "hulls" / "ship_data.csv"
+            csv_path.write_bytes(b"\xef\xbb\xbf" + 'name,id,hitpoints,max speed,designation\r\nA,fx_a,１５００,"0。5",护卫舰，快速\r\nB,fx_b,1500,50,"3，000 tons"\r\n'.encode("utf-8"))
+            apply_fix(compute_fix(mod, "csv-fullwidth-number"))
+            after = csv_path.read_bytes()
+            remaining = [f for f in scan_mod(mod).findings if f.id == "csv-fullwidth-number"]
+            with self.assertRaises(FixerError):
+                compute_fix(mod, "csv-fullwidth-number")  # nothing left to do
+        self.assertEqual(after, b"\xef\xbb\xbf" + 'name,id,hitpoints,max speed,designation\r\nA,fx_a,1500,"0.5",护卫舰，快速\r\nB,fx_b,1500,50,"3，000 tons"\r\n'.encode("utf-8"))
+        self.assertEqual(remaining, [])
+
+
+class ShipDataFighterBaysColumnFixerTests(unittest.TestCase):
+    def test_adds_a_blank_column_and_refuses_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            _write(mod / "mod_info.json", '{"id": "x"}')
+            (mod / "data/hulls").mkdir(parents=True)
+            (mod / "data/hulls/ship_data.csv").write_bytes(b"name,id,hitpoints\r\nA,old_a,1500\r\n\r\nB,old_b,900\r\n")  # bytes: write_text would double \r on Windows
+            apply_fix(compute_fix(mod, "ship-data-missing-fighter-bays-column"))
+            after = (mod / "data/hulls/ship_data.csv").read_bytes().decode("utf-8")
+            remaining = _findings(scan_mod(mod), "ship-data-missing-fighter-bays-column")
+            with self.assertRaises(FixerError):
+                compute_fix(mod, "ship-data-missing-fighter-bays-column")
+        self.assertEqual(after, "name,id,hitpoints,fighter bays\r\nA,old_a,1500,\r\n\r\nB,old_b,900,\r\n")
+        self.assertEqual(remaining, [])
+
+
+class CustomUiButtonPressedFixerTests(unittest.TestCase):
+    def test_adds_a_no_op_to_each_block_that_lacks_it(self) -> None:
+        source = (
+            "package data.scripts;\n"
+            "import com.fs.starfarer.api.campaign.CustomUIPanelPlugin;\n"
+            "public class Panel implements CustomUIPanelPlugin {\n"
+            "    public void render(float alpha) {}\n"
+            "    Object other = new CustomUIPanelPlugin() {\n"
+            "        public void buttonPressed(Object id) { }\n"
+            "    };\n"
+            "    Object third = new CustomUIPanelPlugin() {\n"
+            "        public void advance(float amount) { if (amount > 0) { } }\n"
+            "    };\n"
+            "}\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            _write(mod / "mod_info.json", '{"id": "x"}')
+            _write(mod / "data/scripts/Panel.java", source)
+            _write(mod / "src/x/Jar.java", "class Jar implements CustomUIPanelPlugin { }\n")
+            apply_fix(compute_fix(mod, "missing-custom-ui-button-pressed-callback"))
+            after = (mod / "data/scripts/Panel.java").read_text(encoding="utf-8")
+            loose_left = [f for f in _findings(scan_mod(mod), "missing-custom-ui-button-pressed-callback") if f.file.startswith("data/")]
+            _write(mod / "data/scripts/Broken.java", "class Broken implements CustomUIPanelPlugin {\n  void f() {\n")
+            with self.assertRaises(FixerError):
+                compute_fix(mod, "missing-custom-ui-button-pressed-callback")
+        # Only the third block: the scanner's brace walk counts the outer class as covered by the
+        # buttonPressed its nested anonymous class declares, and the fixer follows the scanner.
+        self.assertEqual(after.count("public void buttonPressed(Object buttonId) {}"), 1)
+        self.assertIn("        public void buttonPressed(Object buttonId) {}\n    };\n}", after)
+        self.assertIn("public void buttonPressed(Object id) { }", after)                 # the existing one is untouched
+        self.assertEqual(loose_left, [])

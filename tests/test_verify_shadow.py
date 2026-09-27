@@ -77,7 +77,7 @@ class VerifyShadowTests(unittest.TestCase):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 exit_code = main([
-                    "verify-shadow", "data/hullmods/Foo.java",
+                    "verify-shadow-local", "data/hullmods/Foo.java",
                     "--against", str(against), "--root", str(root), "--json",
                 ])
             self.assertEqual(exit_code, 0)
@@ -86,7 +86,7 @@ class VerifyShadowTests(unittest.TestCase):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 exit_code = main([
-                    "verify-shadow", "data/hullmods/Bar.java",
+                    "verify-shadow-local", "data/hullmods/Bar.java",
                     "--against", str(against), "--root", str(root), "--json",
                 ])
             self.assertEqual(exit_code, 0)

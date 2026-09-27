@@ -9,7 +9,7 @@ from bridgeforge.build_tag import apply_build_tag
 from bridgeforge.cli import main
 from bridgeforge.promote import promote_mod
 from bridgeforge.project_board import project_board
-from bridgeforge.release import DEFAULT_POLICY_PATH, ReleaseError, _load_policy, _release_basename, _licence_gate
+from bridgeforge.release import ReleaseError, _load_policy, _release_basename, _licence_gate
 from bridgeforge.revival_audit import REQUIRED_VALIDATIONS
 from bridgeforge.archive_intake import _tree_sha256
 from tests.support import resolved_temp_dir
@@ -62,7 +62,7 @@ class PromotionTests(unittest.TestCase):
     def test_prior_release_and_reports_are_retained_unrelated_contents_stay(self):
         with resolved_temp_dir() as root:
             folder, options = fixture(root)
-            first = promote_mod("Fixture", root, apply=True, **options)
+            promote_mod("Fixture", root, apply=True, **options)
             target = root / "Done/Fixture"
             old_release = target / "fixture_mod-1.0+bf.1"
             old_hash = _tree_sha256(old_release)

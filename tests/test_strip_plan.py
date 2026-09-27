@@ -330,7 +330,7 @@ class StripPlanTests(unittest.TestCase):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 exit_code = main([
-                    "strip-plan", str(mod), "--vanilla-core", str(core),
+                    "strip-plan-local", str(mod), "--vanilla-core", str(core),
                     "--providers", str(root / "no-providers"),
                     "--write-expected", str(expected_path), "--build", "r1", "--json",
                 ])
@@ -345,7 +345,7 @@ class StripPlanTests(unittest.TestCase):
             root = Path(directory)
             core = _core(root)
             mod = self._addon(root, hull_mods=["missing_hullmod"])
-            exit_code = main(["strip-plan", str(mod), "--vanilla-core", str(core), "--write-expected", str(root / "e.json")])
+            exit_code = main(["strip-plan-local", str(mod), "--vanilla-core", str(core), "--write-expected", str(root / "e.json")])
             self.assertEqual(exit_code, 2)
 
 

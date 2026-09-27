@@ -20,12 +20,13 @@ import ast
 import json
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePath
 
 SCHEMA_VERSION = 1
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HELPER_MODULE = "scanner.py"
 UNTESTED_BASELINE = Path("tests") / "untested_checks_baseline.json"
+NOT_COVERAGE = {"test_checks_index", "test_finding_stats"}
 
 
 @dataclass
@@ -205,8 +206,10 @@ def gather(repo_root: Path = REPO_ROOT) -> Catalogue:
                 merged.severities |= item.severities
                 merged.where |= item.where
                 merged.explanation = merged.explanation or item.explanation
-    # The generated docs and this index's own tests don't count as coverage.
-    test_texts = {path.stem: path.read_text(encoding="utf-8", errors="replace") for path in sorted((repo_root / "tests").glob("test_*.py")) if path.stem != "test_checks_index"}
+    # The generated docs and this index's own tests don't count as coverage, nor do finding-stats'
+    # tests, which name ids only as fake stored-scan data (no check runs).
+    test_texts = {path.stem: path.read_text(encoding="utf-8", errors="replace") for path in sorted((repo_root / "tests").glob("test_*.py"))
+                  if path.stem not in NOT_COVERAGE}
     tests = {key: _tests_naming(key, test_texts) for key in list(checks) + list(issues)}
     registry = repo_root / "docs" / "BUG_CLASSES.md"
     links = bug_class_links(registry.read_text(encoding="utf-8")) if registry.is_file() else {}
@@ -293,7 +296,11 @@ def _argument_rows(parser: argparse.ArgumentParser) -> list[str]:
         if action.choices and not isinstance(action.choices, dict):
             notes.append("one of " + ", ".join(str(choice) for choice in action.choices))
         if action.default not in (None, False, argparse.SUPPRESS, []) and action.option_strings:
-            notes.append(f"default {action.default}")
+            # A Path.cwd() default is resolved when the parser is built; name it, not this machine's path.
+            default = "current directory" if action.default == Path.cwd() else action.default
+            if isinstance(default, PurePath):
+                default = default.as_posix()  # one spelling on every OS, so the committed index matches Windows CI
+            notes.append(f"default {default}")
         help_text = " ".join((action.help or "").split())
         rows.append(f"| {_cell(name)} | {_cell('; '.join(notes)) or '-'} | {_cell(help_text) or '-'} |")
     return rows

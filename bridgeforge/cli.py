@@ -104,6 +104,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--write-baseline", type=Path, help="write the current scan's finding keys to this file as an accepted baseline")
     scan.add_argument("--compile-check", action="store_true", help="also javac-compile loose scripts against RC8 (needs --vanilla-core); opt-in, off by default so scans stay fast and hermetic")
     scan.add_argument("--providers", type=Path, action="append", default=[], help="with --compile-check: mods folder, mod folder or In operation tree to search for declared dependencies; repeatable (default: <repo>/In operation and its rig's mods, same as the standalone compile-check command)")
+    scan.add_argument("--removed-content", type=Path, help="catalogue from `content-diff`: report unresolved ids that the older vanilla defined (content-reference-removed-in-vanilla), with same-named RC8 candidates")
     bytecode = subcommands.add_parser("bytecode-inspect", help="inspect class/JAR symbolic references without rewriting")
     bytecode.add_argument("input", type=Path, nargs="+")
     bytecode.add_argument("--output", type=Path)
@@ -690,7 +691,27 @@ def build_parser() -> argparse.ArgumentParser:
     subs_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
     subs_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla content isn't counted as missing")
     subs_cmd.add_argument("--policy", type=Path, help="licence policy JSON (default: bundled release_policy.json); flags a REVIVE_DEPENDENCY recommendation as local-only when its licence doesn't allow redistribution")
+    subs_cmd.add_argument("--write", action="store_true", help="also record the result in <workspace>/reports/dependencies.json, which `board` shows")
+    subs_cmd.add_argument("--provider-index", type=Path, help="saved `provider-index build` output: also consider mods it lists that are not visible live")
+    provider_index_cmd = subcommands.add_parser("provider-index", help="save what every visible mod defines (hull mods, weapons, wings, hulls, classes, with game and mod version) as a corpus artefact, so provider lookups work without the mods installed")
+    provider_index_sub = provider_index_cmd.add_subparsers(dest="provider_index_command", required=True)
+    provider_index_build = provider_index_sub.add_parser("build", help="index the --providers folders")
+    provider_index_build.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree; repeatable (default: <repo>/In operation and its rig's mods)")
+    provider_index_build.add_argument("--output", type=Path, default=Path("bridgeforge-state") / "provider-index.json")
+    graph_cmd = subcommands.add_parser("dependency-graph", help="across every queued workspace, which non-current mods need reviving and how many queued mods each would unblock (revival order)")
+    graph_cmd.add_argument("--queue", type=Path, help="folder of workspaces (<name>/working); default <repo>/In operation")
+    graph_cmd.add_argument("--providers", type=Path, action="append", default=[], help="as for dependency-substitutes; repeatable")
+    graph_cmd.add_argument("--vanilla-core", type=Path)
+    graph_cmd.add_argument("--provider-index", type=Path)
+    graph_cmd.add_argument("--write", action="store_true", help="write <queue>/DEPENDENCY_GRAPH.json and .md, and each mod's reports/dependencies.json, all of which `board` shows")
+    graph_cmd.add_argument("--json", action="store_true")
     subs_cmd.add_argument("--json", action="store_true")
+    stats_cmd = subcommands.add_parser("finding-stats", help="count findings across workspaces by automation tier: how many mods could be revived unattended, and which finding ids to automate next (roadmap P15 item 1)")
+    stats_cmd.add_argument("roots", type=Path, nargs="*", help="queue folders or single workspaces; default <repo>/In operation")
+    stats_cmd.add_argument("--scan", action="store_true", help="scan each <ws>/working afresh instead of reading its latest stored scan")
+    stats_cmd.add_argument("--vanilla-core", type=Path, help="with --scan: also compile-check loose scripts")
+    stats_cmd.add_argument("--write", type=Path, metavar="DIR", help="write FINDING_STATS.json and FINDING_STATS.md into DIR")
+    stats_cmd.add_argument("--json", action="store_true")
     preset_cmd = subcommands.add_parser("preset-check", help="check bf-test.ps1 presets against the rig's installed mods: own mod and declared dependencies enabled, enabled ids installed, no undeclared libraries")
     preset_cmd.add_argument("script", type=Path, help="path to bf-test.ps1")
     preset_cmd.add_argument("--rig-mods", type=Path, help="rig mods folder (default: <script folder>/_rig/mods)")
@@ -700,6 +721,7 @@ def build_parser() -> argparse.ArgumentParser:
     compile_check_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, put on the compile classpath")
     compile_check_cmd.add_argument("--jdk", type=Path, help="JDK home (default: this repo's rig JDK, else JAVA_HOME, else PATH)")
     compile_check_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search for declared dependencies; repeatable (default: <repo>/In operation and its rig's mods)")
+    compile_check_cmd.add_argument("--api-diff", type=Path, help="catalogue written by `api-diff`: attach removed/moved-API leads to matching javac errors")
     compile_check_cmd.add_argument("--json", action="store_true")
     corpus_recheck_cmd = subcommands.add_parser("corpus-recheck", help="re-scan every mod with real revival work recorded (ROADMAP P14 item 32): finding counts, compile signal and declared status in one roll-up")
     corpus_recheck_cmd.add_argument("--repo-root", type=Path, default=Path("."), help="repo root holding In operation/ (default: cwd)")
@@ -707,7 +729,7 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_recheck_cmd.add_argument("--write-markdown", type=Path, help="also write a roll-up table to this path")
     corpus_recheck_cmd.add_argument("--include-intake", action="store_true", help="also include mods with a working/ copy but no REVIVAL_REPORT.md yet (ROADMAP P14 item 8: the Ironclads intake queue)")
     corpus_recheck_cmd.add_argument("--json", action="store_true")
-    strip_plan_cmd = subcommands.add_parser("strip-plan", help="for a STRIP_FROM_MOD recommendation, the exact edit list (which file/field loses which id) and real vanilla weapon substitute candidates (ROADMAP P14 item 4)")
+    strip_plan_cmd = subcommands.add_parser("strip-plan-local", help="for a STRIP_FROM_MOD recommendation, the exact edit list (which file/field loses which id) and real vanilla weapon substitute candidates (ROADMAP P14 item 4)")
     strip_plan_cmd.add_argument("mod", type=Path, help="mod working copy")
     strip_plan_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
     strip_plan_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla content isn't counted as missing and substitute candidates can be found")
@@ -734,7 +756,7 @@ def build_parser() -> argparse.ArgumentParser:
     provider_index_update_cmd.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search; repeatable (default: <repo>/In operation and its rig's mods)")
     provider_index_update_cmd.add_argument("--output", type=Path, help="cache directory (default: <repo>/bridgeforge-state/provider-index)")
     provider_index_update_cmd.add_argument("--json", action="store_true")
-    dependency_graph_cmd = subcommands.add_parser("dependency-graph", help="which mods with revival work recorded need which missing content, and which unrevived provider would unblock the most of them (ROADMAP P14 item 6/3)")
+    dependency_graph_cmd = subcommands.add_parser("dependency-graph-local", help="which mods with revival work recorded need which missing content, and which unrevived provider would unblock the most of them (ROADMAP P14 item 6/3)")
     dependency_graph_cmd.add_argument("--repo-root", type=Path, default=Path("."), help="repo root holding In operation/ (default: cwd)")
     dependency_graph_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla content isn't counted as missing")
     dependency_graph_cmd.add_argument("--provider-index", type=Path, help="cached provider index directory written by provider-index-update (default: <repo>/bridgeforge-state/provider-index)")
@@ -750,22 +772,116 @@ def build_parser() -> argparse.ArgumentParser:
     archive_search_cmd.add_argument("--filenames", action="store_true", help="search member filenames instead of file content")
     archive_search_cmd.add_argument("--limit", type=int, default=50)
     archive_search_cmd.add_argument("--json", action="store_true")
-    rebuild_from_reference_cmd = subcommands.add_parser("rebuild-from-reference", help="overlay a mod's own genuine changes (vs. a historical reference rig's vanilla copy) onto current RC8 vanilla, for old mods that ship modified copies of vanilla files under vanilla's own paths")
+    rebuild_from_reference_cmd = subcommands.add_parser("rebuild-from-reference-local", help="overlay a mod's own genuine changes (vs. a historical reference rig's vanilla copy) onto current RC8 vanilla, for old mods that ship modified copies of vanilla files under vanilla's own paths")
     rebuild_from_reference_cmd.add_argument("mod", type=Path, help="mod working copy")
     rebuild_from_reference_cmd.add_argument("--reference-core", required=True, type=Path, help="a registered reference rig's read-only starsector-core (the historical vanilla version the mod's file was originally built against)")
     rebuild_from_reference_cmd.add_argument("--current-core", required=True, type=Path, help="the current RC8 read-only starsector-core")
     rebuild_from_reference_cmd.add_argument("--glob", default="**/*", help="glob (relative to the mod) scoping which files to consider, e.g. 'data/hullmods/**/*.java' or '**/*.wpn' (default: every file)")
     rebuild_from_reference_cmd.add_argument("--apply", type=Path, dest="output", help="write every REBUILT/CONFLICT file's rebuilt content under this output directory (never the mod's own working copy); omit for a read-only report")
     rebuild_from_reference_cmd.add_argument("--json", action="store_true")
-    diff_data_cmd = subcommands.add_parser("diff-data", help="value-diff two org.json-dialect files field by field, not a line diff (formatting/key-order differences produce no output)")
+    diff_data_cmd = subcommands.add_parser("diff-data-local", help="value-diff two org.json-dialect files field by field, not a line diff (formatting/key-order differences produce no output)")
     diff_data_cmd.add_argument("file_a", type=Path)
     diff_data_cmd.add_argument("file_b", type=Path)
     diff_data_cmd.add_argument("--json", action="store_true")
-    verify_shadow_cmd = subcommands.add_parser("verify-shadow", help="does a jar (or a directory of jars) actually supply a compiled class for this loose script? Real jar-class-file parsing, not a path-existence guess")
+    verify_shadow_cmd = subcommands.add_parser("verify-shadow-local", help="does a jar (or a directory of jars) actually supply a compiled class for this loose script? Real jar-class-file parsing, not a path-existence guess")
     verify_shadow_cmd.add_argument("script", type=Path, help="loose .java script to check, absolute or relative to --root")
     verify_shadow_cmd.add_argument("--against", required=True, type=Path, help="a single jar file, or a directory searched recursively for jars (e.g. a starsector-core install or a mods folder)")
     verify_shadow_cmd.add_argument("--root", type=Path, help="root the script's class name is derived relative to (default: cwd)")
     verify_shadow_cmd.add_argument("--json", action="store_true")
+    diff_data_cmd = subcommands.add_parser("diff-data", help="compare two Starsector data files (JSON dialect or CSV) by value: key/row/column order, comments and formatting never count; exit 1 when they differ")
+    diff_data_cmd.add_argument("a", type=Path, help="first file (e.g. the mod's copy)")
+    diff_data_cmd.add_argument("b", type=Path, help="second file (e.g. vanilla's or a reference install's)")
+    diff_data_cmd.add_argument("--json", action="store_true")
+    rebuild_ref_cmd = subcommands.add_parser("rebuild-from-reference", help="port a mod's edited copies of vanilla files (.ship/.wpn/.variant/.skin/.system) to RC8: three-way merge of the reference install's vanilla file, the mod's copy and RC8's file; RC8's changes kept, only the mod's edits applied, overlaps reported as conflicts")
+    rebuild_ref_cmd.add_argument("mod", type=Path, help="mod folder (holding data/)")
+    rebuild_ref_cmd.add_argument("--reference-core", type=Path, required=True, help="starsector-core of the install the mod was made for (read-only)")
+    rebuild_ref_cmd.add_argument("--vanilla-core", type=Path, required=True, help="RC8 starsector-core (read-only)")
+    rebuild_ref_cmd.add_argument("--class", dest="file_classes", action="append", help="limit to one file class, e.g. --class wpn; repeatable (default: all), so a large mod can be rebuilt in reviewable stages")
+    rebuild_ref_cmd.add_argument("--output", type=Path, help="write MERGED files here, mirroring data/ paths (never into the mod or either core)")
+    rebuild_ref_cmd.add_argument("--json", action="store_true")
+    corpus_index_cmd = subcommands.add_parser("corpus-index", help="index a large mod archive once (inside .zip files too) and search it like grep in milliseconds; reports what it could not read so \"no hits\" means something")
+    corpus_index_sub = corpus_index_cmd.add_subparsers(dest="corpus_index_command", required=True)
+    corpus_build_cmd = corpus_index_sub.add_parser("build", help="index (or refresh) every file under ROOT; unchanged files are skipped on re-runs")
+    corpus_build_cmd.add_argument("root", type=Path, help="folder to index, e.g. Downloads")
+    corpus_build_cmd.add_argument("--db", type=Path, default=Path("bridgeforge-state") / "corpus-index.sqlite", help="index file (default: bridgeforge-state/corpus-index.sqlite)")
+    corpus_build_cmd.add_argument("--max-bytes", type=int, default=4 * 1024 * 1024, help="skip (and report) text files larger than this")
+    corpus_build_cmd.add_argument("--json", action="store_true")
+    corpus_search_cmd = corpus_index_sub.add_parser("search", help="find files whose content (3+ characters, case-insensitive) or path contains TEXT")
+    corpus_search_cmd.add_argument("text")
+    corpus_search_cmd.add_argument("--db", type=Path, default=Path("bridgeforge-state") / "corpus-index.sqlite")
+    corpus_search_cmd.add_argument("--names", action="store_true", help="match file paths only")
+    corpus_search_cmd.add_argument("--limit", type=int, default=50)
+    corpus_search_cmd.add_argument("--json", action="store_true")
+    content_diff_cmd = subcommands.add_parser("content-diff", help="list hull/variant/weapon/wing/hullmod/shipsystem ids an older install defined that RC8 no longer does, with same-named RC8 candidates; feed the catalogue to `scan --removed-content`")
+    content_diff_cmd.add_argument("reference_core", type=Path, help="starsector-core of the older install (read-only)")
+    content_diff_cmd.add_argument("vanilla_core", type=Path, help="RC8 starsector-core (read-only)")
+    content_diff_cmd.add_argument("--output", type=Path, help="write the JSON catalogue here")
+    content_diff_cmd.add_argument("--json", action="store_true")
+    verify_shadow_cmd = subcommands.add_parser("verify-shadow", help="does a jar set really compile the class a loose script defines? Parses class files (never a path check); use before dropping or editing a script as 'jar-shadowed'")
+    verify_shadow_cmd.add_argument("scripts", type=Path, nargs="+", help="loose .java file(s)")
+    verify_shadow_cmd.add_argument("--against", type=Path, action="append", required=True, help="a jar, a mod folder (its declared jars) or any folder (every jar under it, e.g. starsector-core); repeatable")
+    verify_shadow_cmd.add_argument("--json", action="store_true")
+    strip_plan_cmd = subcommands.add_parser("strip-plan", help="the exact edit list for stripping unresolved content (content-reference-unresolved): every file and field each id sits in, with vanilla weapons that fit an emptied slot; edits nothing")
+    strip_plan_cmd.add_argument("mod", type=Path, help="mod working copy")
+    strip_plan_cmd.add_argument("--vanilla-core", type=Path, required=True, help="RC8 starsector-core (read-only)")
+    strip_plan_cmd.add_argument("--id", dest="only", action="append", help="limit to one id, as kind:id (e.g. weapon:vayra_gun); repeatable")
+    strip_plan_cmd.add_argument("--expected", type=Path, help="also add PROPOSED expected changes (static layer) for the files the plan deletes to this expected-changes.json")
+    strip_plan_cmd.add_argument("--build", help="build tag the strip lands in (required with --expected), e.g. r3")
+    strip_plan_cmd.add_argument("--link", action="append", default=[], help="risk=ID, hyp=ID or test=ID breadcrumb for the expected changes; at least one is required with --expected")
+    strip_plan_cmd.add_argument("--json", action="store_true")
+    vendor_cmd = subcommands.add_parser("vendor-plan", help="trace the closure of one piece of an abandoned mod (hull mod, weapon, wing, hull, variant, ship system) for folding into RevenantLib: files to include, SUSPECT files that mention it but nothing references, what is missing, licence; copies nothing")
+    vendor_cmd.add_argument("provider", type=Path, help="the mod that defines the piece (mod folder or workspace)")
+    vendor_cmd.add_argument("--id", dest="ids", action="append", required=True, help="kind:id, e.g. hullmod:shields_formshield; repeatable")
+    vendor_cmd.add_argument("--target", type=Path, help="RevenantLib folder or workspace, to report ids it already has and file collisions (default: <repo>/In operation/RevenantLib when present)")
+    vendor_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so references vanilla provides are not traced")
+    vendor_cmd.add_argument("--json", action="store_true")
+    policy_cmd = subcommands.add_parser("release-policy", help="show or record a mod's publishing decision in release_policy.json (read by the release gate and dependency-substitutes)")
+    policy_sub = policy_cmd.add_subparsers(dest="policy_command", required=True)
+    policy_show = policy_sub.add_parser("show", help="the recorded decision for a mod id or name")
+    policy_show.add_argument("mod")
+    policy_set = policy_sub.add_parser("set", help="record a decision (updates an existing entry in place)")
+    policy_set.add_argument("mod")
+    policy_choice = policy_set.add_mutually_exclusive_group(required=True)
+    policy_choice.add_argument("--local-only", action="store_true", help="may be used locally, not published")
+    policy_choice.add_argument("--releasable", action="store_true", help="may be published")
+    policy_set.add_argument("--reason", required=True, help="the evidence the decision rests on (licence file, forum post, owner decision and date)")
+    policy_set.add_argument("--on", help="decision date (default: today)")
+    for command in (policy_show, policy_set):
+        command.add_argument("--policy", type=Path, help=argparse.SUPPRESS)
+    revive_cmd = subcommands.add_parser("revive", help="run the mechanical part of a revival unattended (scan, permitted fixers, rescan, until nothing changes) and write escalation packets for the rest (roadmap P15 item 2)")
+    revive_cmd.add_argument("workspace", type=Path, help="a workspace folder holding working/mod_info.json")
+    revive_cmd.add_argument("--apply", action="store_true", help="write fixes into working/ (default: dry run; reports and packets are still written)")
+    revive_cmd.add_argument("--approve", action="append", default=[], metavar="FINDING_ID", help="approve this fixer for this run even though its findings are not all SAFE; repeatable")
+    revive_cmd.add_argument("--policy", type=Path, help="standing fixer approvals (default: AUTOMATION_POLICY.json in the workspace's parent folder)")
+    revive_cmd.add_argument("--vanilla-core", type=Path, help="RC8 starsector-core: enables the loose-script compile check and the fixers that compare against vanilla")
+    revive_cmd.add_argument("--target", default="0.98a-RC8", help="target game version for mod_info.json (default: 0.98a-RC8)")
+    revive_cmd.add_argument("--max-rounds", type=int, default=5)
+    revive_cmd.add_argument("--json", action="store_true")
+    esc_cmd = subcommands.add_parser("escalation", help="list, show, verify or run the escalation packets revive wrote (roadmap P15 item 3)")
+    esc_sub = esc_cmd.add_subparsers(dest="escalation_command", required=True)
+    esc_list = esc_sub.add_parser("list", help="the workspace's packets")
+    esc_show = esc_sub.add_parser("show", help="print a packet as its agent prompt or owner question")
+    esc_verify = esc_sub.add_parser("verify", help="rescan and say whether the packet's finding is gone with no new actionable findings")
+    esc_verify.add_argument("--working", type=Path, help="check this copy instead of <workspace>/working (an agent's sandbox)")
+    esc_run = esc_sub.add_parser("run", help="run an AI agent on a packet in a throwaway copy; only a verified result is kept")
+    esc_run.add_argument("--agent", required=True, help='the agent command; it gets the packet on stdin and BF_PACKET/BF_PROMPT/BF_NOTE/BF_WORKING in its environment, e.g. "claude -p --permission-mode acceptEdits"')
+    esc_run.add_argument("--apply", action="store_true", help="copy a verified result into working/ (backups kept)")
+    esc_run.add_argument("--retries", type=int, default=1, help="re-runs after a failed attempt, with the failure appended (default 1)")
+    esc_run.add_argument("--timeout", type=int, default=1800, help="seconds per attempt")
+    for command in (esc_list, esc_show, esc_verify, esc_run):
+        command.add_argument("workspace", type=Path)
+        command.add_argument("--json", action="store_true")
+    for command in (esc_show, esc_verify, esc_run):
+        command.add_argument("packet", nargs="?" if command is esc_run else None, help="packet id (see `escalation list`)")
+    esc_run.add_argument("--all", action="store_true", help="run every agent packet in turn")
+    api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
+    api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
+    api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
+    api_diff_cmd.add_argument("--output", type=Path, help="write the JSON catalogue here (for compile-check --api-diff)")
+    api_diff_cmd.add_argument("--json", action="store_true")
+    revenantlib_cmd = subcommands.add_parser("revenantlib-check", help="check a RevenantLib jar provides every bf.* method BridgeForge's fixers rewrite calls to, and (given the mod folder) that no source file lacks a compiled class")
+    revenantlib_cmd.add_argument("path", type=Path, help="RevenantLib.jar, the RevenantLib mod folder, or a repo root holding working/")
+    revenantlib_cmd.add_argument("--json", action="store_true")
     rebuild_jar_cmd = subcommands.add_parser("rebuild-jar", help="rebuild a mod's jar from its sources and compare it with the original: class/method/field added or removed, forbidden sandbox references")
     rebuild_jar_cmd.add_argument("mod", type=Path, help="mod workspace (holding working/) or the working copy itself")
     rebuild_jar_cmd.add_argument("--sources", required=True, help="sources directory, relative to the workspace or the working copy (e.g. working/data/scripts)")
@@ -821,6 +937,10 @@ def _reconfigure_streams_for_pipes(streams=None) -> list:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if argv and argv[0] == "dependency-graph" and "--repo-root" in argv:
+        argv = ["dependency-graph-local", *argv[1:]]
+    if argv and argv[0] == "rebuild-from-reference" and "--current-core" in argv:
+        argv = ["rebuild-from-reference-local", *argv[1:]]
     _reconfigure_streams_for_pipes()
     args = build_parser().parse_args(argv)
     if args.command == "docs-index":
@@ -889,7 +1009,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "dependency-substitutes":
         from .substitutes import REPO_ROOT, dependency_substitutes
         roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
-        result = dependency_substitutes(args.mod, roots, vanilla_core=args.vanilla_core, policy_path=args.policy)
+        result = dependency_substitutes(args.mod, roots, vanilla_core=args.vanilla_core, policy_path=args.policy, index_path=args.provider_index)
+        if args.write:
+            from .substitutes import write_dependency_report
+            try:
+                print(f"Recorded: {write_dependency_report(result, args.mod)}", file=sys.stderr)
+            except ValueError as exc:
+                print(f"bridgeforge: {exc}", file=sys.stderr)
+                return 2
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
@@ -909,6 +1036,55 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  in no visible mod: {', '.join(result['uncovered'])}")
         for entry in result["successors"]:
             print(f"  known successor for {entry['match']}: {entry['successor']} [{entry.get('evidence', '')}]")
+        for note in result.get("licence_notes") or []:
+            print(f"  LICENCE: {note}")
+        return 0
+    if args.command == "provider-index":
+        from .substitutes import REPO_ROOT, provider_index, save_provider_index
+        roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
+        summary = save_provider_index(provider_index(roots), args.output, roots)
+        print(f"Provider index: {summary['providers']} mods, {summary['ids']} ids -> {summary['output']}")
+        return 0
+    if args.command == "finding-stats":
+        from .finding_stats import FindingStatsError, finding_stats, render
+        from .substitutes import REPO_ROOT
+        try:
+            stats = finding_stats(args.roots or [REPO_ROOT / "In operation"], scan=args.scan, vanilla_core=args.vanilla_core)
+        except (FindingStatsError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.write:
+            args.write.mkdir(parents=True, exist_ok=True)
+            (args.write / "FINDING_STATS.json").write_text(json.dumps(stats, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            (args.write / "FINDING_STATS.md").write_text(render(stats), encoding="utf-8")
+            print(f"Written: {args.write / 'FINDING_STATS.md'}", file=sys.stderr)
+        print(json.dumps(stats, indent=2, ensure_ascii=False) if args.json else render(stats), end="\n" if args.json else "")
+        return 0
+    if args.command == "dependency-graph":
+        from .substitutes import REPO_ROOT, dependency_graph
+        queue = args.queue or REPO_ROOT / "In operation"
+        roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
+        try:
+            result = dependency_graph(queue, roots, vanilla_core=args.vanilla_core, index_path=args.provider_index, write_reports=args.write)
+            if args.write:
+                from .substitutes import write_dependency_graph
+                for written in write_dependency_graph(result, queue):
+                    print(f"Written: {written}", file=sys.stderr)
+        except (ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        print(f"{result['queued_mods']} queued mod(s) in {result['queue']}")
+        for rank_number, entry in enumerate(result["revival_order"], 1):
+            state = entry.get("workspace") or {}
+            licence = (entry.get("licence") or {}).get("decision")
+            print(f"{rank_number}. revive {entry['name']} ({entry['game_version'] or 'no version'}"
+                  + (f", workspace {state['workspace']}: {state.get('manual_findings')} MANUAL" if state else ", not a workspace here")
+                  + (f", licence {licence}" if licence else "") + f"): unblocks {len(entry['unblocks'])}: {', '.join(entry['unblocks'])}")
+        for entry in result["unprovided"]:
+            print(f"   {entry['workspace']}: no provider for {', '.join(entry['ids'][:6])}{' ...' if len(entry['ids']) > 6 else ''}")
         return 0
     if args.command == "preset-check":
         from .preset_check import check_presets
@@ -1036,7 +1212,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "scan":
         try:
             result = scan_mod(args.mod_directory, TargetProfile(args.target_starsector, args.target_java), args.vanilla_core, compile_check=args.compile_check, provider_roots=args.providers or None)
-        except ValueError as exc:
+            if args.removed_content:
+                from .content_diff import annotate_removed_content
+                annotate_removed_content(result, json.loads(args.removed_content.read_text(encoding="utf-8")))
+        except (ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         try:
@@ -1090,7 +1269,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.write_markdown:
                 print(f"Roll-up written: {args.write_markdown}")
         return 1 if result["status"] == "REGRESSION" else 0
-    if args.command == "strip-plan":
+    if args.command == "strip-plan-local":
         from .strip_plan import strip_plan, write_expected_changes
         result = strip_plan(args.mod, args.providers or None, args.vanilla_core, args.ops)
         if args.write_expected:
@@ -1161,7 +1340,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"{result['provider_count']} provider(s) cached to {result['output_dir']}")
         return 0
-    if args.command == "dependency-graph":
+    if args.command == "dependency-graph-local":
         from .dependency_graph import build_dependency_graph
         from .substitutes import DEFAULT_PROVIDER_INDEX_DIR
         result = build_dependency_graph(args.repo_root, args.vanilla_core, args.provider_index or DEFAULT_PROVIDER_INDEX_DIR, require_report=not args.include_intake)
@@ -1204,7 +1383,7 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     print(f"  {match['archive']}!{match['member']} ({match['size_bytes']} bytes)")
         return 0
-    if args.command == "rebuild-from-reference":
+    if args.command == "rebuild-from-reference-local":
         from .rebuild_from_reference import rebuild_from_reference
         result = rebuild_from_reference(args.mod, args.reference_core, args.current_core, args.glob, args.output)
         if args.json:
@@ -1221,7 +1400,7 @@ def main(argv: list[str] | None = None) -> int:
                 if args.output and "written_to" in entry:
                     print(f"    written: {entry['written_to']}")
         return 0
-    if args.command == "diff-data":
+    if args.command == "diff-data-local":
         from .diff_data import diff_data
         result = diff_data(args.file_a, args.file_b)
         if args.json:
@@ -1239,7 +1418,7 @@ def main(argv: list[str] | None = None) -> int:
                     else:
                         print(f"  ~ {change['path']}: {change['a']!r} -> {change['b']!r}")
         return 0
-    if args.command == "verify-shadow":
+    if args.command == "verify-shadow-local":
         result = verify_shadow(args.script, args.against, args.root)
         if args.json:
             print(json.dumps(result, indent=2))
@@ -2460,7 +2639,10 @@ def main(argv: list[str] | None = None) -> int:
         from .compile_check import compile_loose_scripts
         try:
             result = compile_loose_scripts(args.mod, vanilla_core=args.vanilla_core, jdk=args.jdk, provider_roots=args.providers)
-        except ValueError as exc:
+            if args.api_diff:
+                from .api_diff import annotate_errors
+                result["api_diff_annotated"] = annotate_errors(result.get("errors", []), json.loads(args.api_diff.read_text(encoding="utf-8")))
+        except (ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         if args.json:
@@ -2481,7 +2663,282 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  {len(shadowed)} error(s) in {len(shadowed_files)} jar-shadowed loose script(s) not counted above (the game loads the jar's class instead): {', '.join(shadowed_files[:5])}")
             for warning in result.get("janino_gap_warnings", [])[:10]:
                 print(f"  WARNING javac-vs-Janino gap in {warning['file']}: {', '.join(warning['java8plus_syntax'])}")
+            for error in [e for e in result.get("errors", []) if e.get("api_changes")][:20]:
+                for hint in error["api_changes"]:
+                    leads = hint.get("same_signature_elsewhere") or hint.get("same_name_in_class") or hint.get("same_name_elsewhere") or []
+                    print(f"  API CHANGE {Path(str(error['file'])).name}:{error['line']}: {hint.get('removed') or hint.get('removed_class')} removed"
+                          + (f"; candidates: {', '.join(leads)}" if leads else "; no same-named candidate"))
         return 0 if result["status"] == "PASS" else 1
+    if args.command == "revenantlib-check":
+        from .revenantlib_contract import RevenantLibCheckError, check_revenantlib
+        import zipfile
+        try:
+            result = check_revenantlib(args.path)
+        except (RevenantLibCheckError, OSError, zipfile.BadZipFile) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"{result['status']}: {result['jar']}")
+            for entry in result["contract"]:
+                print(f"  {entry['status']} {entry['call']}" + (f" -- {entry['detail']}" if entry.get("detail") else ""))
+            stale = result["jar_vs_source"]
+            if not stale["checked"]:
+                print("  jar vs source: not checked (no src/ beside the jar)")
+            for name in stale["sources_without_class"]:
+                print(f"  FAIL source without a compiled class in the jar: {name}.java")
+            for name in stale["classes_without_source"]:
+                print(f"  FAIL class in the jar without source: {name}")
+        return 0 if result["status"] == "PASS" else 1
+    if args.command == "diff-data":
+        from .data_diff import DataDiffError, diff_data
+        try:
+            result = diff_data(args.a, args.b)
+        except DataDiffError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            if result["identical"]:
+                print(f"IDENTICAL ({result['kind']}): no value differences")
+            for change in result["changes"]:
+                if change["change"] == "added":
+                    print(f"+ {change['path']}: {json.dumps(change['b'], ensure_ascii=False)}")
+                elif change["change"] == "removed":
+                    print(f"- {change['path']}: {json.dumps(change['a'], ensure_ascii=False)}")
+                elif change["change"] == "reordered":
+                    print(f"^ {change['path']}: same values, other order: {json.dumps(change['a'], ensure_ascii=False)} -> {json.dumps(change['b'], ensure_ascii=False)}")
+                else:
+                    print(f"~ {change['path']}: {json.dumps(change['a'], ensure_ascii=False)} -> {json.dumps(change['b'], ensure_ascii=False)}")
+        return 0 if result["identical"] else 1
+    if args.command == "rebuild-from-reference":
+        from .rebuild_reference import RebuildReferenceError, rebuild_from_reference
+        try:
+            result = rebuild_from_reference(args.mod, args.reference_core, args.vanilla_core, args.file_classes, args.output)
+        except (RebuildReferenceError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            counts = ", ".join(f"{status} {count}" for status, count in sorted(result["counts"].items())) or "no shadowed files"
+            print(f"REBUILD_FROM_REFERENCE ({', '.join(result['file_classes'])}): {counts}")
+            for entry in result["files"]:
+                if entry["status"] == "CONFLICT":
+                    print(f"  CONFLICT {entry['file']}: " + "; ".join(c["path"] for c in entry["conflicts"][:5])
+                          + (f" (+{len(entry['conflicts']) - 5} more)" if len(entry["conflicts"]) > 5 else ""))
+                elif entry["status"] == "UNPARSEABLE":
+                    print(f"  UNPARSEABLE {entry['file']}")
+            for name in result["vanilla_removed_in_rc8"]:
+                print(f"  vanilla removed in RC8 (now the mod's own content): {name}")
+            if result["output"]:
+                print(f"MERGED files written under: {result['output']}")
+        return 1 if result["counts"].get("CONFLICT") or result["counts"].get("UNPARSEABLE") else 0
+    if args.command == "corpus-index":
+        from .corpus_index import CorpusIndexError, build_index, search_index
+        try:
+            if args.corpus_index_command == "build":
+                result = build_index(args.root, args.db, args.max_bytes)
+            else:
+                result = search_index(args.db, args.text, args.limit, args.names)
+        except CorpusIndexError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0 if args.corpus_index_command == "build" or result["content_hits"] or result["name_hits"] else 1
+        if args.corpus_index_command == "build":
+            print(f"Indexed {result['root']} -> {result['db']}: {result['reindexed']} read, {result['unchanged']} unchanged, {result['forgotten']} gone")
+        else:
+            for hit in result["content_hits"]:
+                print(f"{hit['location']} ({hit['line_count']} matching line(s))")
+                for line in hit["lines"]:
+                    print(f"    {line}")
+            for name in result["name_hits"]:
+                print(f"name: {name}")
+            if not result["content_hits"] and not result["name_hits"]:
+                print(f"No hits for {args.text!r}.")
+            if len(result["content_hits"]) >= result["limit"] or len(result["name_hits"]) >= result["limit"]:
+                print(f"(stopped at --limit {result['limit']})")
+        not_searched = ", ".join(f"{count} {reason}" for reason, count in result["not_searched"].items())
+        print(f"Coverage: {result['text_files_searched']} text files searched, {result['files_listed']} files listed by name"
+              + (f"; NOT searched: {not_searched}" if not_searched else "; nothing skipped"))
+        return 0 if args.corpus_index_command == "build" or result["content_hits"] or result["name_hits"] else 1
+    if args.command == "content-diff":
+        from .content_diff import ContentDiffError, diff_content
+        try:
+            result = diff_content(args.reference_core, args.vanilla_core)
+            if args.output:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except (ContentDiffError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            for kind, count in result["counts"].items():
+                print(f"{kind}: {count['reference']} -> {count['rc8']} ({count['removed']} removed, {count['added']} added)")
+            for kind, entries in result["removed"].items():
+                for entry in entries[:30]:
+                    leads = entry["same_name_in_rc8"]
+                    print(f"  - {kind}:{entry['id']}" + (f" ({entry['name']})" if entry.get("name") else "") + (f" -> same name in RC8: {', '.join(leads)}" if leads else ""))
+                if len(entries) > 30:
+                    print(f"  ... {len(entries) - 30} more {kind} ids (see --output/--json)")
+            if args.output:
+                print(f"Written: {args.output}")
+        return 0
+    if args.command == "verify-shadow":
+        from .verify_shadow import VerifyShadowError, verify_shadow as verify_shadow_remote
+        try:
+            result = verify_shadow_remote(args.scripts, args.against)
+        except (VerifyShadowError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            for entry in result["results"]:
+                print(f"{entry['status']}: {entry['script']} (class {entry['class']}, from {entry['class_from']})")
+                for owner in entry["supplied_by"]:
+                    print(f"    supplied by {owner}")
+            print(f"Checked {result['classes_checked']} classes in {result['jars_checked']} jar(s).")
+            for problem in result["unreadable_jars"]:
+                print(f"  NOT checked: {problem}")
+        return 0
+    if args.command == "strip-plan":
+        from .strip_plan import StripPlanError, strip_plan_github
+        try:
+            result = strip_plan_github(args.mod, args.vanilla_core, args.only)
+            if args.expected:
+                from .strip_plan import propose_expected_changes
+                if not args.build:
+                    raise StripPlanError("--expected needs --build")
+                links: dict[str, list[str]] = {}
+                for item in args.link:
+                    kind, separator, linked = item.partition("=")
+                    if not separator or kind not in {"risk", "hyp", "test", "bug_class"} or not linked:
+                        raise StripPlanError(f"--link expects risk|hyp|test|bug_class=ID, got {item!r}")
+                    links.setdefault(kind, []).append(linked)
+                result["expected_changes_added"] = propose_expected_changes(result, args.expected, build=args.build, links=links)
+        except (StripPlanError, ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            if not result["edits"]:
+                print("Nothing to strip: no unresolved content references" + (" match --id." if args.only else "."))
+            for edit in result["edits"]:
+                print(f"{edit['file']}: {edit['action']} -- {edit['kind']}:{edit['id']}")
+                substitutes = edit.get("substitutes")
+                if substitutes and substitutes.get("candidates"):
+                    more = substitutes["candidate_count"] - len(substitutes["candidates"])
+                    print(f"    vanilla {substitutes['slot']} options: {', '.join(substitutes['candidates'])}" + (f" (+{more} more)" if more > 0 else ""))
+                elif substitutes:
+                    print(f"    {substitutes.get('note') or 'no vanilla weapon fits ' + str(substitutes['slot'])}")
+            if result.get("expected_changes_added") is not None:
+                print(f"PROPOSED expected changes added to {args.expected}: {', '.join(result['expected_changes_added']) or 'none (no file deletions)'}")
+        return 0
+    if args.command == "vendor-plan":
+        from .substitutes import REPO_ROOT
+        from .vendor_plan import VendorPlanError, dumps, render, vendor_plan
+        target = args.target
+        if target is None and (REPO_ROOT / "In operation" / "RevenantLib").is_dir():
+            target = REPO_ROOT / "In operation" / "RevenantLib"
+        try:
+            plan = vendor_plan(args.provider, args.ids, target=target, vanilla_core=args.vanilla_core)
+        except (VendorPlanError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(dumps(plan) if args.json else render(plan))
+        return 0
+    if args.command == "revive":
+        from .revive import ReviveError, render as render_revive, revive
+        try:
+            result = revive(args.workspace, target=args.target, vanilla_core=args.vanilla_core, policy_path=args.policy,
+                            approve=args.approve, apply=args.apply, max_rounds=args.max_rounds)
+        except (ReviveError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else render_revive(result), end="\n" if args.json else "")
+        return 0
+    if args.command == "escalation":
+        from .escalation import EscalationError, list_packets, load_packet, run_packet, verify
+        from .revive import render_packet
+        try:
+            if args.escalation_command == "list":
+                packets = list_packets(args.workspace)
+                if args.json:
+                    print(json.dumps(packets, indent=2, ensure_ascii=False))
+                for packet in [] if args.json else packets:
+                    print(f"{packet['id']}  {packet['kind']:5}  {packet['tier']:10}  {packet.get('file') or '(mod-wide)'}")
+                return 0
+            if args.escalation_command == "show":
+                packet = load_packet(args.workspace, args.packet)
+                print(json.dumps(packet, indent=2, ensure_ascii=False) if args.json else render_packet(packet), end="\n" if args.json else "")
+                return 0
+            if args.escalation_command == "verify":
+                packet = load_packet(args.workspace, args.packet)
+                working = args.working or Path(packet["workspace"]) / "working"
+                result = verify(packet, working.expanduser().resolve())
+                print(json.dumps(result, indent=2) if args.json else f"{result['status']}: {args.packet}" + "".join(f"\n  {r}" for r in result["reasons"]))
+                return 0 if result["status"] == "PASS" else 1
+            names = [p["id"] for p in list_packets(args.workspace) if p["kind"] == "agent"] if args.all else [args.packet]
+            if not names or names == [None]:
+                raise EscalationError("Name a packet, or pass --all.")
+            results = [run_packet(args.workspace, name, args.agent, apply=args.apply, retries=args.retries, timeout=args.timeout) for name in names]
+        except (EscalationError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(results, indent=2, ensure_ascii=False))
+        for result in [] if args.json else results:
+            last = result["attempts"][-1]
+            print(f"{result['outcome']}: {result['packet']} after {len(result['attempts'])} attempt(s)" + "".join(f"\n  {r}" for r in last["reasons"]))
+        return 0 if all(r["outcome"] in ("VERIFIED", "APPLIED") for r in results) else 1
+    if args.command == "release-policy":
+        from .release import ReleaseError as PolicyError, record_policy_decision  # alias: a bare ReleaseError here would shadow main()'s
+        from .substitutes import revival_licence
+        try:
+            if args.policy_command == "show":
+                decision = revival_licence(args.mod, args.mod, args.policy)
+                print(f"{args.mod}: {decision['decision']}" + (f" ({decision['reason']})" if decision.get("reason") else ""))
+            else:
+                result = record_policy_decision(args.mod, local_only=args.local_only, reason=args.reason, on=args.on, policy_path=args.policy)
+                verb = "updated" if result["previous"] else "recorded"
+                print(f"{verb} {result['mod']}: {'LOCAL_ONLY' if result['current']['local_only'] else 'RELEASABLE'} in {result['file']}")
+        except PolicyError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        return 0
+    if args.command == "api-diff":
+        import zipfile
+        from .api_diff import ApiDiffError, diff_api_jars
+        try:
+            result = diff_api_jars(args.old, args.new)
+            if args.output:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except (ApiDiffError, OSError, zipfile.BadZipFile) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            summary = result["summary"]
+            print(f"API_DIFF: {result['old']['classes']} -> {result['new']['classes']} classes; "
+                  f"{summary['classes_removed']} removed, {summary['classes_added']} added, {summary['classes_changed']} changed; "
+                  f"{summary['methods_removed']} methods and {summary['fields_removed']} fields removed")
+            for dotted, entry in list(result["changed_classes"].items())[:40]:
+                for method in entry["methods_removed"]:
+                    leads = method["same_signature_elsewhere"] or method["same_name_in_class"]
+                    print(f"  - {dotted.rsplit('.', 1)[-1]}.{method['signature'].split(' ', 1)[-1]}" + (f"  -> {', '.join(leads)}" if leads else ""))
+            if args.output:
+                print(f"Written: {args.output}")
+        return 0
     if args.command == "rebuild-jar":
         from .rebuild_jar import RebuildJarError, rebuild_jar
         try:
