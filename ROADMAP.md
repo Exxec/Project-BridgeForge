@@ -2057,6 +2057,25 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         `dialog:` line in `<TESTID>.windows.txt` and a FATAL in triage.
     11. **Faction-Relationships-Uniquified's lone 0x9D byte** (item 17): the tail of a broken UTF-8 `”`; a person
         decides the replacement.
+    12. **`escalation apply <packet>`**: copy an attempt already VERIFIED (and reviewed) into `working/` with a
+        backup, instead of `run --apply` re-running the agent and producing an unreviewed edit (item 21).
+    13. **Agent command discovery:** when `claude` is not on PATH, find the VS Code extension's `claude.exe` (item 21)
+        or say where to look, instead of failing with WinError 2.
+    14. **Keep line endings in agent edits:** the agent turned CRLF into LF; `escalation verify` could normalise
+        back to the file's original endings so diffs show only real changes.
+21. **First agent escalation run: Yunru's Unpack Blueprints reaches UNATTENDED_DONE (2026-09-27, P15 items 2-3, 8-9).**
+    `revive --apply` applied the standing `mod-info-game-version-inexact` approval and left one `code` packet
+    (`loose-script-janino-risk`: 9 typed for-each loops in `data/scripts/UnpackBlueprints.java`).
+    `escalation run` with `claude -p --permission-mode acceptEdits --allowedTools Read,Edit,Write,Grep,Glob`
+    (Claude Code 2.1.283) returned **VERIFIED after 1 attempt in 61 s**. The packet was enough: the agent
+    needed nothing beyond its excerpt, allowed file and hint. The diff, read in full: all 9 loops rewritten as a
+    raw `Iterator` with a `(String)` cast plus `import java.util.Iterator`; otherwise only whitespace (trailing
+    blanks, 5 trailing empty lines) and CRLF -> LF. The reviewed attempt was copied into `working/` by hand
+    (backup `*.pre-bf-agent-loose-script-janino-risk.bak`), then `escalation verify` PASS, `compile-check` PASS
+    (0 errors in 1 loose script), `revive` UNATTENDED_DONE with the report drafted. Probe run pending.
+    Found on the way (added to item 20): the `claude` CLI was not on PATH on this machine (the VS Code
+    extension ships `claude.exe` under `.vscode/extensions/anthropic.claude-code-*/resources/native-binary/`), and
+    `escalation run --apply` re-runs the agent instead of applying the attempt already verified and reviewed.
 
 ## Post-1.0 research and gated automation
 

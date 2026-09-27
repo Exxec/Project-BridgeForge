@@ -22,7 +22,9 @@ Every long command now prints `[n/total]` progress and resumes if interrupted (P
 
 ### P2. First real `revive` and agent run (P15 items 2-3, 8-9)
 ClearCommands reached UNATTENDED_DONE, passed its probe run and is archived in `Done/ClearCommands`
-(local-only, 2026-09-27). For the agent half, pick a mod with a `code` packet from `In operation/FINDING_STATS.md`:
+(local-only, 2026-09-27). For the agent half: done 2026-09-27 on Yunru's Unpack Blueprints (P15 item 21, VERIFIED in 61 s). Give it the probe run;
+for more agent runs, pick a mod with a `code` packet from `In operation/FINDING_STATS.md`. The command below
+needs `claude` on PATH; otherwise pass the VS Code extension's `claude.exe` path:
 ```powershell
 python -m bridgeforge revive "In operation\<Mod>" --vanilla-core $core                                   # dry run
 python -m bridgeforge revive "In operation\<Mod>" --vanilla-core $core --apply --draft-report
