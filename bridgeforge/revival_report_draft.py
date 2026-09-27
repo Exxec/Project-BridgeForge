@@ -27,6 +27,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+from .baseline import finding_baseline_key, mod_baseline_keys
 from .compile_check import compile_loose_scripts
 from .models import TargetProfile
 from .scanner import _load_lenient_json_file, scan_mod
@@ -46,13 +47,18 @@ def draft_revival_report(mod_dir: Path, vanilla_core: Path | None = None, provid
         raise ValueError(f"{root} is not an existing directory.")
 
     result = scan_mod(root, TargetProfile(), vanilla_core, compile_check=False)
+    # Findings the mod's own baseline accepts (working/reports/baseline*.json) don't block the draft,
+    # as corpus-recheck and revive treat them; the report lists them in their own section instead.
+    accepted_keys = mod_baseline_keys(root)
+    accepted = [finding for finding in result.findings if finding_baseline_key(finding) in accepted_keys]
+    findings = [finding for finding in result.findings if finding_baseline_key(finding) not in accepted_keys]
     by_classification: dict[str, int] = {}
-    for finding in result.findings:
+    for finding in findings:
         by_classification[finding.classification] = by_classification.get(finding.classification, 0) + 1
 
     blocking = sorted(
         f"{finding.id} (`{finding.file}`)" if finding.file else finding.id
-        for finding in result.findings
+        for finding in findings
         if finding.classification == "MANUAL"
     )
 
@@ -66,7 +72,7 @@ def draft_revival_report(mod_dir: Path, vanilla_core: Path | None = None, provid
 
     base = {
         "schema_version": SCHEMA_VERSION, "mode": "REVIVAL_REPORT_DRAFT", "mod": str(root),
-        "findings_total": len(result.findings), "by_classification": by_classification,
+        "findings_total": len(findings), "by_classification": by_classification, "accepted_by_baseline": len(accepted),
     }
     if blocking:
         return {**base, "status": "BLOCKED", "blocking": blocking}
@@ -107,12 +113,15 @@ def draft_revival_report(mod_dir: Path, vanilla_core: Path | None = None, provid
         "## Review items (non-blocking)",
         "",
     ]
-    review_findings = [finding for finding in result.findings if finding.classification == "REVIEW"]
+    review_findings = [finding for finding in findings if finding.classification == "REVIEW"]
     if review_findings:
         for finding in review_findings:
             report_lines.append(f"- [{finding.id}] `{finding.file or ''}` — {finding.explanation}")
     else:
         report_lines.append("(none)")
+    if accepted:
+        report_lines += ["", "## Accepted by baseline (reviewed earlier, not re-reviewed here)", ""]
+        report_lines += [f"- [{finding.id}] `{finding.file or ''}` ({finding.classification}) — {finding.explanation}" for finding in accepted]
     report_lines += ["", "READY_FOR_LIVE_TEST"]
     report_text = "\n".join(report_lines) + "\n"
 

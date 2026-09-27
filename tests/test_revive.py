@@ -43,6 +43,34 @@ AGENT_FIX = (  # the stand-in agent's fix: drop the empty element, and write the
 )
 
 
+def _addon_with_missing_content(root: Path) -> tuple[Path, Path]:
+    """An add-on whose variant uses a hull mod and weapon only an old sibling mod in the queue defines."""
+    def w(path, data):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(data if isinstance(data, str) else json.dumps(data), encoding="utf-8")
+        return path
+
+    queue = root / "In operation"
+    addon = queue / "Addon" / "working"
+    w(addon / "mod_info.json", {"id": "addon", "name": "Addon", "version": "1", "gameVersion": "0.98a-RC8"})
+    w(addon / "data/variants/lasher_addon.variant", {"variantId": "lasher_addon", "hullId": "lasher", "hullMods": ["old_armor"],
+                                                    "weaponGroups": [{"weapons": {"WS1": "old_gun"}}]})
+    prov = queue / "OldProvider" / "working"
+    w(prov / "mod_info.json", {"id": "oldprov", "name": "Old Provider", "version": "2", "gameVersion": "0.9a"})
+    w(prov / "data/hullmods/hull_mods.csv", "name,id,script\nOld Armor,old_armor,data.hullmods.OldArmor\n")
+    w(prov / "data/hullmods/OldArmor.java", "package data.hullmods;\npublic class OldArmor {}\n")
+    w(prov / "data/weapons/weapon_data.csv", "name,id\nOld Gun,old_gun\n")
+    w(prov / "data/weapons/old_gun.wpn", {"id": "old_gun", "type": "ENERGY", "size": "SMALL"})
+    core = root / "core"
+    w(core / "data/hullmods/hull_mods.csv", "name,id\nArmor,heavyarmor\n")
+    w(core / "data/hulls/ship_data.csv", "name,id\nLasher,lasher\n")
+    w(core / "data/hulls/wing_data.csv", "id\ntalon_wing\n")
+    w(core / "data/hulls/lasher.ship", {"hullId": "lasher", "hullSize": "FRIGATE", "weaponSlots": [{"id": "WS1", "type": "ENERGY", "size": "SMALL"}]})
+    w(core / "data/weapons/weapon_data.csv", "name,id\nVanilla Beam,vbeam\n")
+    w(core / "data/weapons/vbeam.wpn", {"id": "vbeam", "type": "ENERGY", "size": "SMALL"})
+    return queue / "Addon", core
+
+
 class ReviveTests(unittest.TestCase):
     def test_dry_run_changes_nothing_but_writes_packets(self):
         with resolved_temp_dir() as root:
@@ -114,6 +142,57 @@ class ReviveTests(unittest.TestCase):
         self.assertEqual(accepted, ["json-empty-array-element|data/config/settings.json|"])
         self.assertIn(AGENT_PACKET, [p["id"] for p in first["packets"]])
         self.assertNotIn(AGENT_PACKET, [p["id"] for p in second["packets"]])
+
+    def test_draft_report_only_when_nothing_is_left(self):
+        with resolved_temp_dir() as root:
+            core = root / "core"
+            core.mkdir()
+            escalated = revive(_workspace(root), vanilla_core=core, draft_report=True)
+            clean = root / "In operation" / "Clean"
+            (clean / "working").mkdir(parents=True)
+            (clean / "working" / "mod_info.json").write_text(json.dumps({"id": "clean", "name": "Clean", "version": "1", "gameVersion": "0.98a-RC8"}), encoding="utf-8")
+            dry = revive(clean, vanilla_core=core, draft_report=True)
+            no_file = (clean / "working" / "reports" / "REVIVAL_REPORT.md").exists()
+            applied = revive(clean, vanilla_core=core, draft_report=True, apply=True)
+            report = (clean / "working" / "reports" / "REVIVAL_REPORT.md").read_text(encoding="utf-8")
+            again = revive(clean, vanilla_core=core, draft_report=True, apply=True)
+            summary = (clean / "reports" / "revive" / "REVIVE.md").read_text(encoding="utf-8")
+        self.assertEqual(escalated["report_draft"]["status"], "NOT_DRAFTED")
+        self.assertEqual((dry["status"], dry["report_draft"]["status"]), ("UNATTENDED_DONE", "OK"))
+        self.assertFalse(no_file)  # a dry run writes no report
+        self.assertEqual(applied["report_draft"]["status"], "WRITTEN")
+        self.assertTrue(report.rstrip().endswith("READY_FOR_LIVE_TEST"))
+        self.assertEqual(again["report_draft"]["status"], "REFUSED")  # never over an existing report
+        self.assertIn("Report draft: REFUSED", summary)
+
+    def test_missing_content_packets_carry_all_three_options(self):
+        with resolved_temp_dir() as root:
+            workspace, core = _addon_with_missing_content(root)
+            result = revive(workspace, vanilla_core=core)
+            packet = load_packet(workspace, "content-reference-unresolved--mod")
+            text = render_packet(packet)
+        self.assertEqual([p["id"] for p in result["packets"]], ["content-reference-unresolved--mod"])
+        options = packet["options"]
+        self.assertEqual(options["substitutes"]["strategy"], "STRIP_FROM_MOD")
+        self.assertEqual(options["substitutes"]["providers"][0]["mod_id"], "oldprov")  # found in the workspace's own queue
+        self.assertEqual([(v["provider"], v["files"], v["csv_rows"]) for v in options["vendor"]], [("oldprov", 2, 2)])
+        self.assertEqual(options["strip"]["substitutes"], {"weapon:old_gun": ["vbeam"]})
+        for expected in ("## Options (computed by BridgeForge)", "Recommended strategy: STRIP_FROM_MOD", "vendor-copy --plan vendor-plan.json",
+                         "weapon:old_gun: vanilla fits vbeam"):
+            self.assertIn(expected, text)
+
+    def test_options_are_computed_only_for_missing_content(self):
+        from unittest.mock import patch
+
+        with resolved_temp_dir() as root, patch("bridgeforge.revive.content_options") as options:
+            revive(_workspace(root))  # no missing-content finding here
+            self.assertFalse(options.called)
+            workspace, core = _addon_with_missing_content(root)
+            options.return_value = {"notes": ["stubbed"]}
+            result = revive(workspace, vanilla_core=core)
+            self.assertEqual(options.call_count, 1)  # once per run, however many packets use it
+            self.assertEqual(load_packet(workspace, "content-reference-unresolved--mod")["options"], {"notes": ["stubbed"]})
+        self.assertEqual(len(result["packets"]), 1)
 
     def test_refuses_a_non_workspace(self):
         with resolved_temp_dir() as root:

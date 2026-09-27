@@ -729,11 +729,14 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_recheck_cmd.add_argument("--write-markdown", type=Path, help="also write a roll-up table to this path")
     corpus_recheck_cmd.add_argument("--include-intake", action="store_true", help="also include mods with a working/ copy but no REVIVAL_REPORT.md yet (ROADMAP P14 item 8: the Ironclads intake queue)")
     corpus_recheck_cmd.add_argument("--json", action="store_true")
-    vendor_copy_cmd = subcommands.add_parser("vendor-copy", help="copy one hullmod (its hull_mods.csv row and its declared script) from a provider mod into another mod, instead of reviving or declaring a dependency on the whole provider (ROADMAP P14 item 4)")
-    vendor_copy_cmd.add_argument("kind", choices=["hullmod"], help="only 'hullmod' is supported (see the command's own help for why)")
-    vendor_copy_cmd.add_argument("id", help="the hullmod id to vendor")
-    vendor_copy_cmd.add_argument("from_provider", type=Path, help="the mod folder to copy from")
-    vendor_copy_cmd.add_argument("to_mod", type=Path, help="the mod folder to copy into")
+    vendor_copy_cmd = subcommands.add_parser("vendor-copy", help="copy a piece of a provider mod into another mod instead of reviving or depending on the whole provider (ROADMAP P14 item 4): one hullmod by id, or with --plan everything a vendor-plan lists (P15 item 7)")
+    vendor_copy_cmd.add_argument("kind", nargs="?", choices=["hullmod"], help="only 'hullmod' is supported without --plan (see the command's own help for why)")
+    vendor_copy_cmd.add_argument("id", nargs="?", help="the hullmod id to vendor")
+    vendor_copy_cmd.add_argument("from_provider", nargs="?", type=Path, help="the mod folder to copy from")
+    vendor_copy_cmd.add_argument("to_mod", nargs="?", type=Path, help="the mod folder to copy into")
+    vendor_copy_cmd.add_argument("--plan", type=Path, help="a `vendor-plan --json` file: copy its whole closure (files and CSV rows), re-checked against the provider; any kind vendor-plan traces")
+    vendor_copy_cmd.add_argument("--to", type=Path, help="with --plan: the mod folder or workspace to copy into")
+    vendor_copy_cmd.add_argument("--allow-partial", action="store_true", help="with --plan: copy even though the plan has MISSING/SUSPECT entries or compiled-only classes (they are reported, not copied)")
     vendor_copy_cmd.add_argument("--policy", type=Path, help="licence policy JSON (default: bundled release_policy.json)")
     vendor_copy_cmd.add_argument("--apply", action="store_true", help="actually write the files (default: dry-run plan only)")
     vendor_copy_cmd.add_argument("--json", action="store_true")
@@ -812,6 +815,9 @@ def build_parser() -> argparse.ArgumentParser:
     revive_cmd.add_argument("--vanilla-core", type=Path, help="RC8 starsector-core: enables the loose-script compile check and the fixers that compare against vanilla")
     revive_cmd.add_argument("--target", default="0.98a-RC8", help="target game version for mod_info.json (default: 0.98a-RC8)")
     revive_cmd.add_argument("--max-rounds", type=int, default=5)
+    revive_cmd.add_argument("--providers", type=Path, action="append", default=[], help="where to look for mods that provide missing content, for the options in missing-content packets (default: the workspace's queue folder and its _rig/mods); repeatable")
+    revive_cmd.add_argument("--provider-index", type=Path, help="saved `provider-index build` output, as for dependency-substitutes")
+    revive_cmd.add_argument("--draft-report", action="store_true", help="when the run ends UNATTENDED_DONE, draft REVIVAL_REPORT.md/REVIVAL_PLAN.md with revival-report-draft (written only with --apply, never over an existing report; needs --vanilla-core for its compile check)")
     revive_cmd.add_argument("--json", action="store_true")
     esc_cmd = subcommands.add_parser("escalation", help="list, show, verify or run the escalation packets revive wrote (roadmap P15 item 3)")
     esc_sub = esc_cmd.add_subparsers(dest="escalation_command", required=True)
@@ -1225,8 +1231,34 @@ def main(argv: list[str] | None = None) -> int:
             if args.write_markdown:
                 print(f"Roll-up written: {args.write_markdown}")
         return 1 if result["status"] == "REGRESSION" else 0
+    if args.command == "vendor-copy" and args.plan is not None:
+        from .vendor_plan import VendorPlanError, copy_plan
+        if args.to is None or any(value is not None for value in (args.kind, args.id, args.from_provider, args.to_mod)):
+            print("bridgeforge: with --plan, give only --to (the mod to copy into), no positional arguments", file=sys.stderr)
+            return 2
+        try:
+            result = copy_plan(json.loads(args.plan.read_text(encoding="utf-8")), args.to, apply=args.apply,
+                               allow_partial=args.allow_partial, policy_path=args.policy)
+        except (VendorPlanError, OSError, json.JSONDecodeError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"{result['status']}" + (f": {result['reason']}" if result.get("reason") else ""))
+            for label in ("files", "skipped_identical", "conflicts", "stale", "left_out"):
+                for item in result.get(label) or []:
+                    print(f"  {label.replace('_', ' ')}: {item}")
+            for table, ids in (result.get("rows") or {}).items():
+                print(f"  rows: {table} [{', '.join(ids)}]")
+            for item in result.get("provenance") or []:
+                print(f"  sha256 {item['sha256']}  {item['path']}")
+        return 0 if result["status"] in ("PLANNED", "APPLIED") else 1
     if args.command == "vendor-copy":
         from .strip_plan import vendor_copy
+        if None in (args.kind, args.id, args.from_provider, args.to_mod):
+            print("bridgeforge: vendor-copy needs KIND ID FROM_PROVIDER TO_MOD, or --plan FILE --to DIR", file=sys.stderr)
+            return 2
         result = vendor_copy(args.kind, args.id, args.from_provider, args.to_mod, args.policy, args.apply)
         if args.json:
             print(json.dumps(result, indent=2))
@@ -2691,7 +2723,8 @@ def main(argv: list[str] | None = None) -> int:
         from .revive import ReviveError, render as render_revive, revive
         try:
             result = revive(args.workspace, target=args.target, vanilla_core=args.vanilla_core, policy_path=args.policy,
-                            approve=args.approve, apply=args.apply, max_rounds=args.max_rounds)
+                            approve=args.approve, apply=args.apply, max_rounds=args.max_rounds, draft_report=args.draft_report,
+                            providers=args.providers, provider_index=args.provider_index)
         except (ReviveError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

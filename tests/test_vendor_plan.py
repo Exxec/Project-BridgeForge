@@ -171,5 +171,90 @@ class VendorPlanJarTests(unittest.TestCase):
         self.assertEqual([s["path"] for s in plan["suspects"]], ["rebal.jar!data/scripts/Watcher.class"])
 
 
+def _open_policy(root: Path, local_only: bool = False) -> Path:
+    return _write(root / "policy.json", {"schema_version": 1, "mods": {"@_ss_rebal_@": {"local_only": local_only, "reason": "test"}}})
+
+
+class VendorCopyPlanTests(unittest.TestCase):
+    """`vendor-copy --plan` (ROADMAP P15 item 7): copy exactly what a vendor-plan lists, re-checked."""
+
+    def _plan(self, root: Path, ident: str = "variant:lasher_Rebal") -> tuple[dict, Path]:
+        from bridgeforge.vendor_plan import vendor_plan
+
+        target = root / "RevenantLib" / "working"
+        _write(target / "mod_info.json", {"id": "revenantlib"})
+        _write(target / "data/weapons/weapon_data.csv", "name,id,extra\nOld Gun,old_gun,x")  # no trailing newline on purpose
+        return vendor_plan(_rebal(root), [ident], vanilla_core=_vanilla(root)), target
+
+    def test_copies_files_and_rows_with_provenance(self):
+        from bridgeforge.vendor_plan import copy_plan
+
+        with resolved_temp_dir() as root:
+            plan, target = self._plan(root, "weapon:rebal_rail")
+            dry = copy_plan(plan, target.parent, policy_path=_open_policy(root))
+            nothing_yet = (target / "data/weapons/rebal_rail.wpn").exists()
+            done = copy_plan(plan, target.parent, apply=True, policy_path=_open_policy(root))
+            weapon_csv = (target / "data/weapons/weapon_data.csv").read_text(encoding="utf-8")
+            copied = sorted(p.relative_to(target).as_posix() for p in target.rglob("*") if p.is_file())
+            again = copy_plan(plan, target.parent, policy_path=_open_policy(root))
+        self.assertEqual(dry["status"], "PLANNED")
+        self.assertFalse(nothing_yet)
+        self.assertEqual(done["status"], "APPLIED")
+        self.assertIn("data/weapons/rebal_rail.wpn", copied)
+        self.assertIn("data/scripts/weapons/RailOnHit.java", copied)
+        self.assertEqual(weapon_csv, "name,id,extra\nOld Gun,old_gun,x\nRail,rebal_rail,\n")  # appended under the target's own header
+        self.assertEqual({entry["path"] for entry in done["provenance"]}, set(done["files"]))
+        self.assertTrue(all(len(entry["sha256"]) == 64 for entry in done["provenance"]))
+        self.assertEqual(again["status"], "PLANNED")  # a second run finds everything identical
+        self.assertEqual(again["files"], [])
+        self.assertIn("data/weapons/weapon_data.csv [rebal_rail]", again["skipped_identical"])
+
+    def test_incomplete_plans_are_refused_unless_partial_is_allowed(self):
+        from bridgeforge.vendor_plan import copy_plan
+
+        with resolved_temp_dir() as root:
+            plan, target = self._plan(root)  # the variant's ghost_wing is MISSING
+            refused = copy_plan(plan, target, policy_path=_open_policy(root))
+            partial = copy_plan(plan, target, allow_partial=True, policy_path=_open_policy(root))
+        self.assertEqual(refused["status"], "INCOMPLETE")
+        self.assertTrue(any(item.startswith("MISSING wing:ghost_wing") for item in refused["left_out"]))
+        self.assertEqual(partial["status"], "PLANNED")
+        self.assertIn("data/variants/lasher_Rebal.variant", partial["files"])
+
+    def test_conflicts_stale_plans_and_licence_are_refused(self):
+        from bridgeforge.vendor_plan import copy_plan
+
+        with resolved_temp_dir() as root:
+            plan, target = self._plan(root, "weapon:rebal_rail")
+            local_only = copy_plan(plan, target, policy_path=_open_policy(root, local_only=True))
+            _write(target / "data/weapons/rebal_rail.wpn", {"id": "rebal_rail", "different": True})
+            conflict = copy_plan(plan, target, apply=True, policy_path=_open_policy(root))
+            untouched = (target / "data/weapons/weapon_data.csv").read_text(encoding="utf-8")
+            (target / "data/weapons/rebal_rail.wpn").unlink()
+            (Path(plan["provider"]) / "data/scripts/weapons/RailOnHit.java").unlink()
+            stale = copy_plan(plan, target, policy_path=_open_policy(root))
+            not_a_plan = copy_plan({"mode": "OTHER"}, target)
+        self.assertEqual(local_only["status"], "REFUSED")
+        self.assertEqual((conflict["status"], conflict["conflicts"]), ("CONFLICT", ["data/weapons/rebal_rail.wpn"]))
+        self.assertNotIn("rebal_rail", untouched)  # nothing is written when anything conflicts
+        self.assertEqual((stale["status"], stale["stale"]), ("STALE", ["data/scripts/weapons/RailOnHit.java"]))
+        self.assertEqual(not_a_plan["status"], "REFUSED")
+
+    def test_cli(self):
+        with resolved_temp_dir() as root:
+            plan, target = self._plan(root, "weapon:rebal_rail")
+            plan_file = _write(root / "plan.json", plan)
+            policy = _open_policy(root)
+            out = io.StringIO()
+            with redirect_stdout(out), redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["vendor-copy", "--plan", str(plan_file), "--to", str(target), "--policy", str(policy), "--apply"]), 0)
+                self.assertEqual(main(["vendor-copy", "--plan", str(plan_file)]), 2)  # --to is required
+                self.assertEqual(main(["vendor-copy", "hullmod", "x", "--plan", str(plan_file), "--to", str(target)]), 2)
+                self.assertEqual(main(["vendor-copy", "hullmod"]), 2)
+        self.assertIn("APPLIED", out.getvalue())
+        self.assertIn("rows: data/weapons/weapon_data.csv [rebal_rail]", out.getvalue())
+        self.assertIn("sha256 ", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

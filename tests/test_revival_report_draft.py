@@ -19,6 +19,31 @@ def _clean_mod(root: Path) -> Path:
     return root
 
 
+class DraftHonoursBaselineTests(unittest.TestCase):
+    def test_a_manual_finding_the_baseline_accepts_is_listed_not_blocking(self) -> None:
+        import json
+
+        from bridgeforge.baseline import finding_baseline_key
+        from bridgeforge.models import TargetProfile
+        from bridgeforge.scanner import scan_mod
+
+        with resolved_temp_dir() as root:
+            vanilla_core = root / "vanilla-core"
+            vanilla_core.mkdir()
+            mod_dir = _clean_mod(root / "Fixture")
+            (mod_dir / "data" / "weapons" / "weapon_data.csv").write_text("id,name\nfixture_gun,Fixture Gun,extra,more\n", encoding="utf-8")
+            manual = [f for f in scan_mod(mod_dir, TargetProfile()).findings if f.classification == "MANUAL"]
+            blocked = draft_revival_report(mod_dir, vanilla_core=vanilla_core)
+            (mod_dir / "reports").mkdir()
+            (mod_dir / "reports" / "baseline.json").write_text(json.dumps({"findings": [finding_baseline_key(f) for f in manual]}), encoding="utf-8")
+            accepted = draft_revival_report(mod_dir, vanilla_core=vanilla_core)
+        self.assertTrue(manual)
+        self.assertEqual(blocked["status"], "BLOCKED")
+        self.assertEqual((accepted["status"], accepted["accepted_by_baseline"]), ("OK", len(manual)))
+        self.assertIn("## Accepted by baseline", accepted["report_text"])
+        self.assertIn(f"[{manual[0].id}]", accepted["report_text"])
+
+
 class DraftRevivalReportTests(unittest.TestCase):
     """A clean mod (0 MANUAL, compile PASS) can skip hand-authoring REVIVAL_REPORT.md/PLAN.md."""
 
