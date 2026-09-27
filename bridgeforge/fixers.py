@@ -1848,8 +1848,13 @@ def _referencing_bytes(root: Path, skip: set[str]) -> bytes:
     import zipfile
 
     parts = []
+    from .copy_drift import _is_excluded
+
     for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.relative_to(root).as_posix() in skip:
+        relative = path.relative_to(root).as_posix()
+        # IDE/VCS folders (.idea, .git, src*...) never ship and the game never reads them; a mention there
+        # is not a runtime reference (Jackundor's .idea/libraries/data.xml named its backup zips, 2026-09-27).
+        if not path.is_file() or relative in skip or _is_excluded(relative):
             continue
         suffix = path.suffix.lower()
         try:

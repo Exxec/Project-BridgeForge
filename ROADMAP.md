@@ -2063,6 +2063,13 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         or say where to look, instead of failing with WinError 2.
     14. **Keep line endings in agent edits:** the agent turned CRLF into LF; `escalation verify` could normalise
         back to the file's original endings so diffs show only real changes.
+    15. **Check: fleet type with no name.** Zorg18's live run showed "no name for type [Zeta AI raid]": a
+        `createEmptyFleet(faction, "<type>", ...)` (source or bytecode string constant) whose faction file has no
+        `fleetTypeNames` entry for that type, and no vanilla default. Cosmetic but visible in every encounter;
+        the fix is a data entry, so it can be a fixer that proposes the name from the type string.
+    16. **`shippable-work-file` references (done 2026-09-27):** mentions inside IDE/VCS folders (`.idea`, `.git`,
+        `src*`) no longer count as runtime references; Jackundor's `.idea/libraries/data.xml` had kept two
+        backup zips in the mod. Test: `tests/test_fixers.py`.
 21. **First agent escalation run: Yunru's Unpack Blueprints reaches UNATTENDED_DONE (2026-09-27, P15 items 2-3, 8-9).**
     `revive --apply` applied the standing `mod-info-game-version-inexact` approval and left one `code` packet
     (`loose-script-janino-risk`: 9 typed for-each loops in `data/scripts/UnpackBlueprints.java`).

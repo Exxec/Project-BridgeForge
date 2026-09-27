@@ -1613,6 +1613,8 @@ class ShippableWorkFileFixerTests(unittest.TestCase):
                 jar.writestr("data/Plugin.class", b"\xca\xfe\xba\xbe loads sounds/pack.zip")
             (mod / "sounds").mkdir()
             (mod / "sounds/pack.zip").write_bytes(b"PK\x05\x06" + b"\x00" * 18)
+            # An IDE file naming a work file is not a runtime reference (Jackundor's .idea, 2026-09-27).
+            _write(mod / ".idea/libraries/data.xml", '<root url="jar://$PROJECT_DIR$/graphics/ships/hull.psd" />')
             self.assertTrue(_findings(scan_mod(mod), "shippable-work-file"))
             plan = compute_fix(mod, "shippable-work-file")
             applied = apply_fix(plan)
