@@ -349,6 +349,24 @@ def _content_variants(mod_root: Path, deployable_hulls: list[str]) -> dict[str, 
     return {"ship": sorted(ship), "other": sorted(other - ship)}
 
 
+def _content_ship_hulls(mod_root: Path, deployable_hulls: list[str]) -> dict[str, str]:
+    """{variant id: hullId the .variant names} for the variants the probe builds as SHIPs, so it can
+    report a built member whose hull differs (the game substituting a default hull: PRB-FIGHTER-01's
+    Nebula). Same selection as `_content_variants`' "ship" list."""
+    found: dict[str, str] = {}
+    variants_root = mod_root / "data" / "variants"
+    if variants_root.is_dir():
+        deployable = set(deployable_hulls)
+        for path in sorted(variants_root.rglob("*.variant")):
+            data = _load_lenient_json_file(path)
+            if not isinstance(data, dict) or data.get("hullId") not in deployable:
+                continue
+            variant_id = data.get("variantId") or data.get("id") or path.stem
+            if isinstance(variant_id, str) and variant_id:
+                found[variant_id] = data["hullId"]
+    return found
+
+
 def _mod_root(mod_dir: Path) -> Path:
     return _find_mod_info(mod_dir).parent
 
@@ -415,6 +433,7 @@ def build_probe_config(
         "track_entities": sorted(set(track_entities or [])),
         "factions": _mod_faction_ids(mod_root),
         "content_variants": _content_variants(mod_root, hulls),
+        "content_ship_hulls": _content_ship_hulls(mod_root, hulls),
         "content_wings": sorted(_wing_ids_set(mod_root / "data" / "hulls" / "wing_data.csv")),
         "campaign_interval_days": campaign_interval_days,
         "combat_seconds": combat_seconds,

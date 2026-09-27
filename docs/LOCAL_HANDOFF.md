@@ -21,8 +21,8 @@ Every long command now prints `[n/total]` progress and resumes if interrupted (P
 ## 1. Measure and try the unattended pipeline (ROADMAP P15)
 
 ### P2. First real `revive` and agent run (P15 items 2-3, 8-9)
-ClearCommands reached UNATTENDED_DONE 2026-09-27 (P15 item 14): give it the usual probe run. For the agent
-half, pick a mod with a `code` packet from `In operation/FINDING_STATS.md`:
+ClearCommands reached UNATTENDED_DONE, passed its probe run and is archived in `Done/ClearCommands`
+(local-only, 2026-09-27). For the agent half, pick a mod with a `code` packet from `In operation/FINDING_STATS.md`:
 ```powershell
 python -m bridgeforge revive "In operation\<Mod>" --vanilla-core $core                                   # dry run
 python -m bridgeforge revive "In operation\<Mod>" --vanilla-core $core --apply --draft-report
@@ -41,11 +41,6 @@ vendor, strip) matches what you would decide by hand. Fixers you want applied ev
 
 ## 2. Re-run with the kept commands (P15 item 5)
 
-### R1. Licence decisions for the revival order (P14 items 2-3)
-`In operation\DEPENDENCY_GRAPH.md` rebuilt 2026-09-27 (P15 item 13). Every ranked provider shows
-`licence UNRECORDED`; decide each before reviving it:
-`python -m bridgeforge release-policy set <mod id> --local-only|--releasable --reason "..."`.
-
 ### R3. Rebuild the Downloads index (P14 item 18)
 ```powershell
 python -m pip install -e ".[archives]"          # once: lets the index read .7z archives
@@ -62,34 +57,18 @@ python -m bridgeforge strip-plan "In operation\<a STRIP_FROM_MOD mod>\working" -
 python -m bridgeforge vendor-plan "In operation\<provider>" --id hullmod:<id> --json > plan.json
 python -m bridgeforge vendor-copy --plan plan.json --to "In operation\RevenantLib"
 ```
-Strip plan checked 2026-09-27 on DME (one id, as its dependencies.json says). Still open: the
-`vendor-copy --plan` dry run of Rebal's `shields_formshield` into RevenantLib stops at a CONFLICT,
-because RevenantLib's `hull_mods.csv` already has a different `shields_formshield` row. Decide which
-row is right (diff them), then rerun; done when the dry run lists the same files as `vendor-plan`. A local-only provider such as
-Rebal may be vendored into RevenantLib because RevenantLib is local-only too (owner decision
-2026-09-27, P15 item 11); the output then prints a `LICENCE:` line, and RevenantLib must stay
-local-only while it holds that content. Into a releasable mod it is still refused.
+Done 2026-09-27 (P15 items 13, 17): the strip plan matches, and the vendor conflict is RevenantLib's own
+deliberate copy of `shields_formshield` (see its PROVENANCE.md), so nothing is left here.
 
 ## 3. Needs the game
 
-### G1. Rebuild the probe jar, then one live run of `content-ids` (P14 item 49)
-Jar rebuilt and committed 2026-09-27 (0.2.2); only the live run is left.
-```powershell
-python -m bridgeforge build-probe-mod --jdk "In operation\_rig\jdk-25.0.4.1+1" --core $core --install-release
-python -m bridgeforge.test_guard     # tests/test_probe_mod_build.py runs only on a machine with the rig
-python -m bridgeforge probe-config "<mod_dir>" --runtime $rig --install
-```
-Then New Game, wait a day, and run `log-triage`. Done when the log shows
-`BF-PROBE|0.2.2|content-ids|OK|all-content|checked=N failed=0 ...` for a known-good mod, and a
-deliberately broken variant id (a copy of a mod with one weapon id misspelled in a `.variant`)
-shows a `content-ids|FAIL|variant:<id>|...` line naming the game's error. Record both in item 49,
-then commit the rebuilt jar and release copy.
-- javap confirmed 2026-09-27 (`SettingsAPI.getHullSpec/getWeaponSpec/getHullModSpec`,
-  `FleetMemberAPI.getHullSpec()/getHullId()`), so these can be built from the cloud: direct
-  hull/weapon/hull-mod lookups, and a check that a built fleet member's hull is the variant's own
-  hull rather than a substitute (the PRB-FIGHTER-01 Nebula). Candidates to look for:
-  `javap -cp starfarer.api.jar com.fs.starfarer.api.SettingsAPI | findstr /i "HullSpec WeaponSpec HullModSpec"`
-  and `javap -cp starfarer.api.jar com.fs.starfarer.api.fleet.FleetMemberAPI | findstr /i Hull`.
+### G1. Probe follow-ups (P14 item 49, P15 item 18)
+`content-ids` passed on SEEKER 2026-09-27 (checked=40, failed=0); a missing weapon in a variant is an RC8
+New Game fatal and a missing hull mod is dropped silently, so neither reaches the probe (the scanner flags
+both). Left:
+1. Confirm the window watcher records dialog text: next time any run shows an error dialog, check that
+   `<TESTID>.windows.txt` has a `dialog:` line and triage lists it as FATAL.
+2. Hull check done: CID-HULL-20260927 passed on probe 0.2.4 (checked=40, failed=0).
 
 ### G2. Removed-content catalogue follow-up (P14 items 47, 8)
 Catalogues for 0.8.1a, 0.9a and 0.95.1a to RC8 are in `In operation\_reference\` (2026-09-27), and

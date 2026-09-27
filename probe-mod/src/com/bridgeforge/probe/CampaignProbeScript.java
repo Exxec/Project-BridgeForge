@@ -17,6 +17,7 @@ import com.fs.starfarer.api.campaign.econ.MarketAPI;
 import com.fs.starfarer.api.campaign.econ.SubmarketAPI;
 import com.fs.starfarer.api.fleet.FleetMemberAPI;
 import com.fs.starfarer.api.fleet.FleetMemberType;
+import com.fs.starfarer.api.combat.ShipVariantAPI;
 import com.fs.starfarer.api.impl.campaign.ids.Submarkets;
 
 import java.util.Arrays;
@@ -398,7 +399,7 @@ public class CampaignProbeScript implements EveryFrameScript {
     // and getFighterWingSpec(String) are both called by RevenantLib 1.2.0+bf.1's RC8-built jar
     // (constant-pool Methodrefs, read 2026-09-24); Global.getFactory().createFleetMember(SHIP, id) is
     // ProbeSetup's own, live-run call. Building the member also resolves the variant's hull, weapons
-    // and hull mods, so no separate hull/weapon/hullmod lookup (unverified API) is needed.
+    // and hull mods; fittedProblem then looks each fitted id up directly (0.2.3).
 
     private void checkContentIds() {
         if (contentIdsChecked) {
@@ -407,7 +408,11 @@ public class CampaignProbeScript implements EveryFrameScript {
         contentIdsChecked = true;
         int failed = 0;
         for (String variantId : config.contentShipVariants) {
-            failed += reportContent("variant", variantId, variantProblem(variantId, true));
+            String problem = variantProblem(variantId, true);
+            if (problem == null) {
+                problem = hullProblem(variantId, config.contentShipHulls.get(variantId));
+            }
+            failed += reportContent("variant", variantId, problem);
         }
         for (String variantId : config.contentOtherVariants) {
             failed += reportContent("variant", variantId, variantProblem(variantId, false));
@@ -438,10 +443,75 @@ public class CampaignProbeScript implements EveryFrameScript {
                 if (member == null) {
                     return "createFleetMember(SHIP) returned null";
                 }
+                return fittedProblem(member.getVariant(), "", 0);
             }
             return null;
         } catch (Throwable t) {
             return t.getClass().getName() + ": " + t.getMessage();
+        }
+    }
+
+    // Building a member does not prove every id it lists resolves: a live run showed a variant naming a
+    // missing weapon is a hard new-game fatal, but other ids may be carried or dropped quietly. Look each
+    // one up directly (javap, RC8 starfarer.api.jar, 2026-09-27: ShipVariantAPI.getHullMods/
+    // getFittedWeaponSlots/getWeaponId/getWings/getModuleSlots/getModuleVariant; SettingsAPI.getHullModSpec/
+    // getWeaponSpec). A lookup that throws counts as missing. Modules are checked to a depth of 3.
+    private static String fittedProblem(ShipVariantAPI variant, String where, int depth) {
+        if (variant == null) {
+            return where.isEmpty() ? "built member has no variant" : where + "no variant";
+        }
+        for (String modId : variant.getHullMods()) {
+            if (!resolves("hullmod", modId)) {
+                return where + "hull mod [" + modId + "] has no spec";
+            }
+        }
+        for (String slot : variant.getFittedWeaponSlots()) {
+            String weaponId = variant.getWeaponId(slot);
+            if (weaponId != null && !resolves("weapon", weaponId)) {
+                return where + "weapon [" + weaponId + "] in slot " + slot + " has no spec";
+            }
+        }
+        for (String wingId : variant.getWings()) {
+            if (wingId != null && wingProblem(wingId) != null) {
+                return where + "wing [" + wingId + "] has no spec";
+            }
+        }
+        if (depth < 3) {
+            for (String slot : variant.getModuleSlots()) {
+                String problem = fittedProblem(variant.getModuleVariant(slot), where + "module " + slot + ": ", depth + 1);
+                if (problem != null) {
+                    return problem;
+                }
+            }
+        }
+        return null;
+    }
+
+    // PRB-FIGHTER-01 (live run PRB-1b, 2026-09-13): a variant built as a SHIP came out as a vanilla Nebula,
+    // because the game substitutes a default hull. Compare the built member's hull with the hullId the
+    // .variant names (FleetMemberAPI.getHullId(), ShipHullSpecAPI.getBaseHullId(); javap 2026-09-27).
+    private static String hullProblem(String variantId, String expectedHull) {
+        if (expectedHull == null) {
+            return null;
+        }
+        try {
+            FleetMemberAPI member = Global.getFactory().createFleetMember(FleetMemberType.SHIP, variantId);
+            String built = member.getHullId();
+            String base = member.getHullSpec() == null ? null : member.getHullSpec().getBaseHullId();
+            if (expectedHull.equals(built) || expectedHull.equals(base)) {
+                return null;
+            }
+            return "built as hull [" + built + "] but the variant names [" + expectedHull + "] (substituted hull)";
+        } catch (Throwable t) {
+            return t.getClass().getName() + ": " + t.getMessage();
+        }
+    }
+
+    private static boolean resolves(String kind, String id) {
+        try {
+            return "hullmod".equals(kind) ? Global.getSettings().getHullModSpec(id) != null : Global.getSettings().getWeaponSpec(id) != null;
+        } catch (Throwable t) {
+            return false;
         }
     }
 

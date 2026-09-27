@@ -1949,6 +1949,68 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     with that parameter count (generics nest), falling back to every lead when none match. Batavia now
     prints one line per call. Tests: `tests/test_api_diff.py`
     (`test_only_overloads_with_the_calls_argument_count_are_listed`).
+17. **Standing fixer approvals, named encodings, and the formshield conflict explained (2026-09-27).**
+    - Owner asked for standing approvals: `In operation/AUTOMATION_POLICY.json` (local) approves
+      `mod-info-game-version-inexact`, `shippable-work-file`, `data-file-not-utf8` and
+      `csv-fullwidth-number`; revive loads it (checked on Aivon-Republic). Other `auto` fixers
+      (`undeclared-library-dependency`, `csv-row-extra-columns`, `removed-api-call`, ...) still need
+      `--approve` per run until each is checked on real data.
+    - **Done 2026-09-27.** `fix --finding data-file-not-utf8 --encoding FILE=ENC` re-encodes a refused
+      file from an encoding a person named (cp1252, mac_roman, shift_jis, gbk, gb18030, latin-1); only the
+      invalid bytes are decoded (a two-byte lead takes its trail byte), and a byte that does not decode
+      is refused. Applied to 13 of item 15's 14 refused files after reading each byte in context:
+      CP-1252 (Another-Random-SWP `360°`, DME/DME-dev `.ship` `Mysteré`, Epta-Consortium `Pérola`, ICE
+      `Steinmüller`/`Caitlín`, TDB-Maelstrom `Dà húndàn`, MAGNETAR `™`, Thule-Legacy `Bifröst`/`Brünhilde`),
+      Mac Roman (DME/DME-dev descriptions: `it’s`, `Mystère`, `Émile`), Shift-JIS (Stinger-Shipyards
+      `ship’s`). Left for the owner: Faction-Relationships-Uniquified's lone 0x9D, the tail of a broken
+      UTF-8 `”`. Tests: `tests/test_fixers.py` (`DataFileNamedEncodingTests`).
+    - R4's vendor conflict is not a decision: RevenantLib vendored `shields_formshield` from Rebal on
+      purpose (`reports/PROVENANCE.md`), in RC8's column layout with the script repackaged to
+      `xenoargh.shared.hullmods.FormShield`; name, costs, text and sprite are identical.
+18. **First live `content-ids` runs, and Fatal dialogs now reach triage (2026-09-27, P14 item 49).**
+    - **CC-1-20260927** (ClearCommands + probe 0.2.2): FATAL=0, MOD-ERROR=0, save written; the probe's
+      campaign checks ran and logged `content-ids|OK|all-content|checked=0 failed=0`. ClearCommands has
+      no content, so this proves the probe loads but not the check: a content mod's run is still needed.
+    - **PRB-CID-FAIL-20260927** (SEEKER copy, `ART_dimention_manipulator.variant` slot `B_weapon1` =
+      `ART_dimention_leftGun_BFTYPO`): RC8 itself stopped the game with the dialog "Fatal: Weapon spec
+      [ART_dimention_leftGun_BFTYPO] not found!" while generating the new sector. The probe never armed
+      (no `BF-PROBE` line; CC-1 logs `campaign-armed` at the same stage). So a variant naming a missing
+      weapon is a hard new-game fatal on RC8 that the probe can never report; `content-ids` is for ids
+      the game tolerates. The expected-FAIL test must use a softer breakage (to choose from what RC8
+      skips with a WARN, e.g. an unknown hull mod in a variant; verify in a run before relying on it).
+    - **Triage said FATAL=0 for that run**, because a Fatal dialog never reaches the redirected log;
+      only the window watcher's screenshot showed it. **Done 2026-09-27.** `bf-test.ps1`'s watcher reads
+      each game dialog's text (child controls via `EnumChildWindows`; helper type renamed `BfWin2` so an
+      open session does not reuse the old one) into `<TESTID>.windows.txt` as `dialog: '<title>' text:
+      '<text>'`, and `log-triage` reads that file beside `<TESTID>.stdout.log`, counting a dialog that
+      matches a FATAL pattern as FATAL with its source line. The watcher compiles (`bf-test.ps1
+      selftest`); reading a real dialog is confirmed on the next rig run. Tests:
+      `tests/test_log_triage.py` (`DialogFatalTests`).
+    - **Probe 0.2.3 (2026-09-27):** after building each ship variant, `content-ids` now looks up every hull
+      mod, fitted weapon, wing and module (to depth 3) through `SettingsAPI.getHullModSpec`/`getWeaponSpec`/
+      `getFighterWingSpec` (ShipVariantAPI methods javap-confirmed 2026-09-27), naming the first id with no
+      spec. Building alone may carry or drop an unknown id quietly.
+    - **CID-OK-20260927** (SEEKER + probe 0.2.3): `content-ids|OK|all-content|checked=40 failed=0
+      ship-variants built=15`, FATAL=0, MOD-ERROR=0, 2 saves. **The check works on real content.**
+    - **CID-FAIL2-20260927** (SEEKER copy with `"hullMods": ["bf_nonexistent_hullmod"]` in
+      `ART_dimention_manipulator.variant`; the copy's id and path are in the log, so it loaded): the probe
+      reported OK, and the game log never mentions the id. RC8 drops an unknown hull mod from a variant at
+      load, silently, so the built variant no longer lists it and no runtime check can see it. Together with
+      PRB-CID-FAIL: a missing weapon in a variant is a New Game fatal, a missing hull mod is silent loss of
+      its effect. The static scanner catches both (`content-reference-unresolved` flagged
+      `hullmod:bf_nonexistent_hullmod`); its explanation now states both consequences (test:
+      `tests/test_batch_lessons.py` `UnresolvedContentTests`). The probe's `content-ids` therefore
+      confirms clean content (and catches variants that do not exist or fail to build) but is not a detector
+      for these two cases. No dialog appeared in either run, so the dialog-text capture is still unexercised.
+    - **Probe 0.2.4 (2026-09-27): substituted-hull check.** `probe-config` writes `content_ship_hulls`
+      ({variant id: the hullId its `.variant` names}) for the variants built as SHIPs, and `content-ids`
+      FAILs a variant whose built member's hull (`FleetMemberAPI.getHullId()`, or the spec's
+      `getBaseHullId()` for D-hulls/skins) differs: the PRB-FIGHTER-01 Nebula substitution. Config test:
+      `tests/test_probe_config.py`. The config already keeps fighter/module variants out of the SHIP list,
+      so this is a safety net; a SEEKER run on 0.2.4 checks it raises no false failure. The broken-SEEKER
+      rig fixture and its preset were removed.
+      **CID-HULL-20260927** (SEEKER, probe 0.2.4): `content-ids|OK|all-content|checked=40 failed=0 ship-variants
+      built=15`, FATAL=0, MOD-ERROR=0, 1 save: the hull check raises no false failure.
 
 ## Post-1.0 research and gated automation
 

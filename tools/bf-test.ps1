@@ -69,19 +69,32 @@ function Invoke-Triage([string]$TestId, [string]$Prefix) {
 }
 
 function Initialize-WindowTools {
-    if ("BfWin" -as [type]) { return }
+    if ("BfWin2" -as [type]) { return }
     Add-Type -AssemblyName System.Windows.Forms, System.Drawing
     Add-Type -TypeDefinition @"
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
-public static class BfWin {
+public static class BfWin2 {
     private delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumProc callback, IntPtr lParam);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int max);
+    [DllImport("user32.dll")] private static extern bool EnumChildWindows(IntPtr parent, EnumProc callback, IntPtr lParam);
+    // A message box's text sits in child Static controls; Starsector's "Fatal: ..." dialog is one.
+    public static string ChildText(long handle) {
+        List<string> parts = new List<string>();
+        EnumChildWindows(new IntPtr(handle), delegate (IntPtr child, IntPtr lParam) {
+            StringBuilder text = new StringBuilder(2048);
+            GetWindowText(child, text, 2048);
+            string value = text.ToString().Trim();
+            if (value.Length > 0 && value != "OK") parts.Add(value);
+            return true;
+        }, IntPtr.Zero);
+        return String.Join(" ", parts.ToArray()).Replace((char)13, (char)32).Replace((char)10, (char)32);
+    }
     public static List<string> VisibleWindows(uint pid) {
         List<string> found = new List<string>();
         EnumWindows(delegate (IntPtr hWnd, IntPtr lParam) {
@@ -189,11 +202,17 @@ switch ($Command) {
                     if ($menuReached) { Write-Host "Main menu reached." }
                 }
                 foreach ($proc in $java) {
-                    foreach ($entry in [BfWin]::VisibleWindows([uint32]$proc.Id)) {
+                    foreach ($entry in [BfWin2]::VisibleWindows([uint32]$proc.Id)) {
                         if ($seen.ContainsKey($entry)) { continue }
                         $seen[$entry] = $true
                         $title = $entry.Split("|", 2)[1]
                         Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} window: '{1}'" -f (Get-Date), $title)
+                        $dialogText = [BfWin2]::ChildText([long]$entry.Split("|", 2)[0])
+                        if ($dialogText) {
+                            # log-triage reads these lines: a Fatal dialog never reaches the game log.
+                            Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} dialog: '{1}' text: '{2}'" -f (Get-Date), $title, $dialogText)
+                            Write-Host "Dialog text: $dialogText"
+                        }
                         # A second window, or one titled like an error, is almost always Starsector's Fatal dialog.
                         if (($seen.Count -gt 1 -or $title -match "error|fatal|exception") -and $shots -lt 10) {
                             Start-Sleep -Milliseconds 800
@@ -276,7 +295,7 @@ switch ($Command) {
     "selftest" {
         # Compiles the window watcher and lists this PowerShell's own windows; launches nothing, saves no screenshot.
         Initialize-WindowTools
-        $mine = [BfWin]::VisibleWindows([uint32]$PID)
+        $mine = [BfWin2]::VisibleWindows([uint32]$PID)
         Write-Host "Window watcher OK ($($mine.Count) visible window(s) for this process). Rig java running: $([bool](Get-RigJava))"
     }
     "report" {

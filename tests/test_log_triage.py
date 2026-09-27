@@ -1,7 +1,9 @@
+import io
 import json
 import tempfile
 import unittest
 import zipfile
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from bridgeforge.log_triage import class_owner_index, triage_log
@@ -18,6 +20,30 @@ def _write_mod(mods_dir: Path, mod_id: str, name: str, jar_name: str, class_entr
     with zipfile.ZipFile(mod_dir / jar_name, "w") as archive:
         for entry in class_entries:
             archive.writestr(entry, b"")
+
+
+class DialogFatalTests(unittest.TestCase):
+    """PRB-CID-FAIL-20260927: the Fatal dialog never reached the log and triage said FATAL=0."""
+
+    def test_dialog_text_beside_the_log_counts_as_fatal(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "PRB-X.stdout.log"
+            log.write_text("5 [Thread-2] INFO  com.fs.starfarer.StarfarerLauncher  - Starting\n", encoding="utf-8")
+            clean = triage_log(log)
+            (Path(directory) / "PRB-X.windows.txt").write_text(
+                "09:40:12 window: 'Starsector 0.98a-RC8'\n"
+                "09:40:48 dialog: 'Starsector 0.98a-RC8' text: 'Fatal: Weapon spec [ART_dimention_leftGun_BFTYPO] not found! Check starsector.log for more info.'\n"
+                "09:40:50 dialog: 'Launcher' text: 'Play Options'\n", encoding="utf-8")
+            result = triage_log(log)
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["log-triage", str(log)])
+        self.assertEqual(clean["counts"]["FATAL"], 0)
+        self.assertEqual(result["counts"]["FATAL"], 1)
+        self.assertIn("BFTYPO", result["fatal"][0]["message"])
+        self.assertEqual(result["fatal"][0]["source"], "PRB-X.windows.txt:2")
+        self.assertEqual(code, 1)
+        self.assertIn("FATAL PRB-X.windows.txt:2 [Fatal error dialog (on-screen dialog)]", out.getvalue())
 
 
 class LogTriageTests(unittest.TestCase):

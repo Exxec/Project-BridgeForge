@@ -346,6 +346,35 @@ def _summarize_attribution(entries: list[dict[str, object]]) -> dict[str, object
     }
 
 
+# A Fatal dialog never reaches the redirected log (PRB-CID-FAIL-20260927: "Fatal: Weapon spec
+# [ART_dimention_leftGun_BFTYPO] not found!" appeared only on screen and triage said FATAL=0). bf-test.ps1's
+# window watcher writes each dialog's text to <TESTID>.windows.txt as "HH:mm:ss dialog: '<title>' text: '<text>'".
+_DIALOG_LINE = re.compile(r"^\S+ dialog: '(?P<title>.*?)' text: '(?P<text>.*)'$")
+
+
+def _windows_log_for(path: Path) -> Path | None:
+    name = path.name
+    for suffix in (".stdout.log", ".log"):
+        if name.endswith(suffix):
+            candidate = path.with_name(name[: -len(suffix)] + ".windows.txt")
+            return candidate if candidate.is_file() else None
+    return None
+
+
+def _dialog_fatals(windows_log: Path) -> list[dict[str, object]]:
+    fatals = []
+    for number, line in enumerate(windows_log.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+        match = _DIALOG_LINE.match(line.strip())
+        if not match:
+            continue
+        text = match.group("text")
+        rule = next((name for name, pattern in FATAL_PATTERNS if pattern.search(text)), None)
+        if rule:
+            fatals.append({"line": None, "level": "DIALOG", "logger": windows_log.name, "message": text,
+                           "matched_rule": f"{rule} (on-screen dialog)", "source": f"{windows_log.name}:{number}"})
+    return fatals
+
+
 def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: Path | None = None, all_mods: bool = False) -> dict[str, object]:
     """Classify a Starsector log into FATAL / MOD-ERROR / KNOWN-NOISE / OTHER without modifying it.
 
@@ -371,6 +400,9 @@ def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: 
         if owner_index is not None and category in ("FATAL", "MOD-ERROR", "OTHER"):
             entry.update(_attribute_event(event, owner_index))
         classified[category].append(entry)
+    windows_log = _windows_log_for(path)
+    if windows_log is not None:
+        classified["FATAL"].extend(_dialog_fatals(windows_log))
     result = {
         "schema_version": 1,
         "mode": "READ_ONLY_LOG_TRIAGE",
