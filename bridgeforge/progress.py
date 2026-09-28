@@ -86,4 +86,5 @@ LONG_RUNNING_COMMANDS = (
     ("corpus-recheck",),
     ("corpus-index", "build"),
     ("supersession",),
+    ("escalation", "queue"),
 )

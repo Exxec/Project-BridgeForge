@@ -1,0 +1,79 @@
+"""`bridgeforge escalation queue`: what the escalated mods across a queue are waiting on (2026-09-27).
+
+After the first batch revive, 227 of 235 mods came back ESCALATED. Deciding one mod at a time hides that a
+few findings block most of them (description-missing 123 mods, undeclared-library-dependency 98, ...), and
+that a decision on one finding id can clear every mod it is the only blocker for. This groups every ESCALATED
+workspace's packets by finding and tier, counts the mods each blocks and the mods it alone blocks, and writes
+ESCALATIONS_BY_FINDING.json/.md into the queue. Read-only apart from those two files and its checkpoint.
+"""
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+
+from .progress import Checkpoint, report
+
+SCHEMA_VERSION = 1
+RESULT_JSON = "ESCALATIONS_BY_FINDING.json"
+RESULT_MD = "ESCALATIONS_BY_FINDING.md"
+CHECKPOINT_FILE = "ESCALATIONS_BY_FINDING.partial.jsonl"
+
+
+def _workspace_packets(workspace: Path) -> dict | None:
+    revive = workspace / "reports" / "revive" / "REVIVE.json"
+    if not revive.is_file():
+        return None
+    data = json.loads(revive.read_text(encoding="utf-8"))
+    if data.get("status") != "ESCALATED":
+        return {"status": data.get("status"), "blockers": []}
+    blockers = sorted({(p.get("finding"), p.get("tier"), p.get("kind")) for p in data.get("packets") or [] if p.get("finding")})
+    return {"status": "ESCALATED", "blockers": [list(b) for b in blockers]}
+
+
+def summarize_queue(queue: Path, quiet: bool = False) -> dict:
+    queue = Path(queue).expanduser().resolve()
+    workspaces = sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_") and (p / "reports" / "revive" / "REVIVE.json").is_file())
+    header = {"schema_version": SCHEMA_VERSION, "queue": str(queue),
+              "revive_mtimes": {w.name: (w / "reports" / "revive" / "REVIVE.json").stat().st_mtime for w in workspaces}}
+    by_finding: dict[tuple, dict] = {}
+    escalated = 0
+    with Checkpoint(queue / CHECKPOINT_FILE, header) as checkpoint:
+        for number, workspace in enumerate(workspaces, 1):
+            started = time.perf_counter()
+            cached = checkpoint.get(workspace.name)
+            record = cached if cached is not None else _workspace_packets(workspace)
+            if cached is None:
+                checkpoint.add(workspace.name, record)
+            if not quiet:
+                detail = f"{len(record['blockers'])} blocker(s)" if record["status"] == "ESCALATED" else record["status"] or "?"
+                report(number, len(workspaces), workspace.name, detail, None if cached is not None else time.perf_counter() - started)
+            if record["status"] != "ESCALATED":
+                continue
+            escalated += 1
+            ids = {b[0] for b in record["blockers"]}
+            for finding, tier, kind in record["blockers"]:
+                entry = by_finding.setdefault((finding, tier, kind), {"finding": finding, "tier": tier, "kind": kind, "mods": [], "only_blocker": []})
+                entry["mods"].append(workspace.name)
+                if len(ids) == 1:
+                    entry["only_blocker"].append(workspace.name)
+        rows = sorted(by_finding.values(), key=lambda e: (-len(e["only_blocker"]), -len(e["mods"]), e["finding"]))
+        result = {"schema_version": SCHEMA_VERSION, "mode": "ESCALATION_QUEUE", "queue": str(queue), "escalated": escalated, "findings": rows,
+                  "result_json": str(queue / RESULT_JSON), "result_md": str(queue / RESULT_MD)}
+        (queue / RESULT_JSON).write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+        (queue / RESULT_MD).write_text(render(result), encoding="utf-8")
+        checkpoint.finish()
+    return result
+
+
+def render(result: dict) -> str:
+    lines = [f"# What the escalated mods are waiting on ({result['escalated']} mods)", "",
+             "One decision on a finding id can clear every mod it is the only blocker for. Sorted by that, then by mods blocked.", "",
+             "| Finding | Tier | Kind | Mods blocked | Only blocker for |", "|---|---|---|---|---|"]
+    for row in result["findings"]:
+        lines.append(f"| `{row['finding']}` | {row['tier']} | {row['kind']} | {len(row['mods'])} | {len(row['only_blocker'])} |")
+    lines += ["", "## Mods one decision would clear", ""]
+    for row in result["findings"]:
+        if row["only_blocker"]:
+            lines.append(f"- `{row['finding']}`: " + ", ".join(row["only_blocker"]))
+    return "\n".join(lines) + "\n"

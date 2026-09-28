@@ -872,6 +872,10 @@ def build_parser() -> argparse.ArgumentParser:
     esc_run.add_argument("--timeout", type=int, default=1800, help="seconds per attempt")
     esc_apply = esc_sub.add_parser("apply", help="copy an attempt already VERIFIED (and reviewed) into working/, without re-running the agent")
     esc_apply.add_argument("--attempt", type=int, help="which attempt (default: the newest VERIFIED one)")
+    esc_queue = esc_sub.add_parser("queue", help="across a queue: which findings block the ESCALATED mods, and which mods one decision would clear; writes ESCALATIONS_BY_FINDING.md")
+    esc_queue.add_argument("queue", type=Path)
+    esc_queue.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
+    esc_queue.add_argument("--json", action="store_true")
     for command in (esc_list, esc_show, esc_verify, esc_run, esc_apply):
         command.add_argument("workspace", type=Path)
         command.add_argument("--json", action="store_true")
@@ -2948,6 +2952,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else render_revive(result), end="\n" if args.json else "")
+        return 0
+    if args.command == "escalation" and args.escalation_command == "queue":
+        from .escalation_queue import summarize_queue
+        result = summarize_queue(args.queue, quiet=args.quiet)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            for row in result["findings"][:15]:
+                print(f"{len(row['only_blocker']):4} only / {len(row['mods']):4} mods  {row['finding']} ({row['tier']}, {row['kind']})")
+            print(f"Escalated mods: {result['escalated']}. Written: {result['result_md']}")
         return 0
     if args.command == "escalation":
         from .escalation import EscalationError, list_packets, load_packet, run_packet, verify
