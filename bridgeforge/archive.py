@@ -82,6 +82,14 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
             archive.write(folder / relative, f"{workspace.name}/{relative}")
     if (workspace / "original").is_dir():
         shutil.copytree(workspace / "original", target / "original")
+    # A copy of the mod with only the author's original descriptions, kept when BridgeForge wrote missing ones
+    # (owner request 2026-09-28); archived beside the revival with its own zip.
+    alt = workspace / "alt-original-descriptions" / workspace.name
+    if alt.is_dir():
+        shutil.copytree(alt, target / "alt-original-descriptions" / workspace.name)
+        with zipfile.ZipFile(target / f"{workspace.name}-{safe_version}-original-descriptions.zip", "w", zipfile.ZIP_DEFLATED) as archive:
+            for item in sorted(p for p in alt.rglob("*") if p.is_file()):
+                archive.write(item, f"{workspace.name}/{item.relative_to(alt).as_posix()}")
     kept = target / "workspace"
     kept.mkdir()
     for source_dir in (working / "reports", workspace / "reports"):

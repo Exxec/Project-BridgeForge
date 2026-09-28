@@ -59,6 +59,21 @@ class ArchiveTests(unittest.TestCase):
         self.assertIn("READY_FOR_LIVE_TEST", note)
         self.assertTrue(still_there)
 
+    def test_an_original_descriptions_copy_is_archived_with_its_own_zip(self) -> None:
+        # Owner request 2026-09-28: keep a copy without BridgeForge-written descriptions beside the revival.
+        with resolved_temp_dir() as root:
+            ws = _workspace(root)
+            alt = ws / "alt-original-descriptions" / "Radar"
+            shutil.copytree(ws / "original" / "Radar 3.0", alt)
+            policy = root / "policy.json"
+            shutil.copy2(REPO_POLICY, policy)
+            record_policy_decision("bf_fixture_radar", local_only=True, reason="author unreachable", policy_path=policy)
+            archive_mod(ws, root / "Done", policy_path=policy, today="2026-09-28")
+            target = root / "Done" / "Radar"
+            layout = sorted(p.name for p in target.iterdir())
+            kept = (target / "alt-original-descriptions" / "Radar" / "mod_info.json").is_file()
+        self.assertIn("Radar-3.0-original-descriptions.zip", layout)
+        self.assertTrue(kept)
 
 if __name__ == "__main__":
     unittest.main()
