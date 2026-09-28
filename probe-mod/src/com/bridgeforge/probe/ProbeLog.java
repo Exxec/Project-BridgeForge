@@ -15,12 +15,15 @@ import org.json.JSONObject;
  */
 public final class ProbeLog {
 
-    public static final String VERSION = "0.2.10";
+    public static final String VERSION = "0.2.11";
 
     public static final String STATUS_OK = "OK";
     public static final String STATUS_FAIL = "FAIL";
     public static final String STATUS_WARN = "WARN";
     public static final String STATUS_INFO = "INFO";
+
+    // Well under the game's 1 MB limit for a text file in saves/common.
+    private static final int REPORT_CAP_CHARS = 256 * 1024;
 
     private ProbeLog() {
     }
@@ -63,8 +66,15 @@ public final class ProbeLog {
                 }
             }
             String updated = existing + entry.toString() + "\n";
+            if (updated.length() > REPORT_CAP_CHARS) {
+                // 0.2.11: the game refuses a common file over 1 MB (EXI08-VANILLA, 2026-09-28: a Fatal once the
+                // report reached 1048798 chars). Keep the newest half, starting at a whole line.
+                int cut = updated.indexOf('\n', updated.length() - REPORT_CAP_CHARS / 2);
+                updated = cut < 0 ? entry.toString() + "\n" : updated.substring(cut + 1);
+            }
             Global.getSettings().writeTextFileToCommon(ProbeFiles.REPORT, updated);
-        } catch (JSONException | java.io.IOException reportFailure) {
+        } catch (Throwable reportFailure) {
+            // A report the game refuses must never take the game down with it.
             try {
                 Global.getLogger(ProbeLog.class).warn("BF-PROBE report append failed: " + reportFailure);
             } catch (Throwable ignored) {
