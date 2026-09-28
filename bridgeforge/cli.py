@@ -738,6 +738,9 @@ def build_parser() -> argparse.ArgumentParser:
     group_plan.add_argument("--rig", type=Path, help="default: <queue>/_rig")
     group_plan.add_argument("--size", type=int, default=8, help="most mods per group (default 8)")
     group_plan.add_argument("--write", type=Path, help="save the plan as JSON (default: <queue>/PROBE_GROUPS.json)")
+    group_plan.add_argument("--exclude", action="append", default=[], metavar="WORKSPACE", help="leave this workspace out; repeatable")
+    group_plan.add_argument("--solo", action="append", default=[], metavar="WORKSPACE", help="give this workspace a group of its own; repeatable")
+    group_plan.add_argument("--no-auto-solo", action="store_true", help="also group large campaign mods (by default a mod that creates systems and has 60+ content ids runs alone)")
     group_plan.add_argument("--json", action="store_true")
     group_install = group_sub.add_parser("install", help="copy/sync one group's mods into the rig, write the merged probe config, set enabled_mods.json")
     group_install.add_argument("group", type=int)
@@ -745,6 +748,12 @@ def build_parser() -> argparse.ArgumentParser:
     group_install.add_argument("--queue", type=Path)
     group_install.add_argument("--rig", type=Path)
     group_install.add_argument("--json", action="store_true")
+    group_record = group_sub.add_parser("record", help="after a run: mark PASS members LIVE_VALIDATED; with --archive also record the standing local-only licence, archive into Done/ and copy each zip to Done/'s top")
+    group_record.add_argument("test_id", help="the bf-test.ps1 test id; reads <rig>/logs/<TESTID>.stdout.log")
+    group_record.add_argument("--archive", action="store_true")
+    group_record.add_argument("--queue", type=Path)
+    group_record.add_argument("--rig", type=Path)
+    group_record.add_argument("--json", action="store_true")
     group_report_cmd = group_sub.add_parser("report", help="per-mod verdicts for a group's run log")
     group_report_cmd.add_argument("log", type=Path, help="the run's stdout log (bf-test launch) or the rig's starsector.log")
     group_report_cmd.add_argument("--rig", type=Path)
@@ -1078,7 +1087,7 @@ def main(argv: list[str] | None = None) -> int:
         rig = (args.rig or queue / "_rig").expanduser().resolve()
         try:
             if args.probe_group_command == "plan":
-                result = plan_groups(queue, rig, size=args.size)
+                result = plan_groups(queue, rig, size=args.size, exclude=set(args.exclude), solo=set(args.solo), auto_solo=not args.no_auto_solo)
                 target = args.write or queue / "PROBE_GROUPS.json"
                 target.write_text(json.dumps(result, indent=2), encoding="utf-8")
                 if not args.json:
@@ -1096,6 +1105,16 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"  {item['workspace']}: {item['action']}")
                     print(f"  enabled_mods.json -> {result['enabled_mods']}")
                     print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
+            elif args.probe_group_command == "record":
+                from .probe_group import record_group
+                config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
+                result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive)
+                if not args.json:
+                    print(f"Recorded LIVE_VALIDATED ({result['probe_version']}): {', '.join(result['recorded']) or 'none'}")
+                    if args.archive:
+                        print(f"Archived to Done/: {', '.join(result['archived']) or 'none'}")
+                    for item in result["skipped"]:
+                        print(f"  not recorded: {item['mod_id']} ({item['verdict']}) {item.get('archive', '')}")
             else:
                 config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
                 result = group_report(args.log, config, mods_dir=rig / "mods")

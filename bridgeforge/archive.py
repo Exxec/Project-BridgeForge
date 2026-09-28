@@ -24,7 +24,6 @@ from .copy_drift import _collect
 from .scanner import _load_lenient_json_file
 
 SCHEMA_VERSION = 1
-_STATUS_LINE = re.compile(r"^[A-Z][A-Z_]+$")
 
 
 class ArchiveError(ValueError):
@@ -49,10 +48,9 @@ def _original_root(workspace: Path) -> Path | None:
 
 
 def _final_status(report: Path) -> str | None:
-    if not report.is_file():
-        return None
-    statuses = [line.strip() for line in report.read_text(encoding="utf-8", errors="replace").splitlines() if _STATUS_LINE.match(line.strip())]
-    return statuses[-1] if statuses else None
+    from .report_status import report_status
+
+    return report_status(report)
 
 
 def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = None, today: str | None = None) -> dict:

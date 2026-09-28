@@ -182,6 +182,74 @@ class InstallTests(unittest.TestCase):
             plan = plan_groups(queue, _rig(root))
         self.assertEqual([m["workspace"] for g in plan["groups"] for m in g["members"]], ["A"])
 
+    def test_record_marks_passes_and_archives_them(self) -> None:
+        # ROADMAP P15 31.1: one command replaces the per-group record script and archive loop.
+        import shutil
+
+        from bridgeforge.probe_group import record_group
+        with resolved_temp_dir() as root:
+            queue = root / "In operation"
+            a = _workspace(queue, "A", "mod_a", "hull_a")
+            b = _workspace(queue, "B", "mod_b", "hull_b")
+            merged = merge_configs([build_probe_config(a), build_probe_config(b)])
+            rig = _rig(root)
+            (rig / "logs").mkdir(parents=True)
+            (rig / "logs" / "GRP-T.stdout.log").write_text("5 [main] INFO  com.fs.starfarer.StarfarerLauncher  - Starting" + chr(10) + ""
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|content-ids|FAIL|variant:hull_b_Std|broken" + chr(10) + ""
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|content-ids|FAIL|all-content|checked=2 failed=1" + chr(10) + "", encoding="utf-8")
+            policy = root / "policy.json"
+            shutil.copy2(Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json", policy)
+            result = record_group(rig / "logs" / "GRP-T.stdout.log", merged, queue, rig, test_id="GRP-T", archive=True,
+                                  done_dir=root / "Done", policy_path=policy, today="2026-09-28")
+            report_a = (a / "reports" / "REVIVAL_REPORT.md").read_text(encoding="utf-8")
+            report_b = (b / "reports" / "REVIVAL_REPORT.md").read_text(encoding="utf-8")
+            top_zip = sorted(p.name for p in (root / "Done").glob("*.zip"))
+        self.assertEqual((result["recorded"], result["archived"], result["probe_version"]), (["A"], ["A"], "0.2.9"))
+        self.assertTrue(report_a.rstrip().endswith("LIVE_VALIDATED"))
+        self.assertNotIn("LIVE_VALIDATED", report_b)
+        self.assertEqual(len(top_zip), 1)
+
+    def test_exclude_solo_and_large_campaign_mods_run_alone(self) -> None:
+        # ROADMAP P15 31.3: large campaign mods (systems + 60 content ids) and --solo get their own group.
+        from unittest import mock
+
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            for name in ("A", "B", "C", "D"):
+                _workspace(queue, name, f"mod_{name.lower()}", f"hull_{name.lower()}")
+            rig = _rig(root)
+            real_member = __import__("bridgeforge.probe_group", fromlist=["_member"])._member
+
+            def member(workspace):
+                found = real_member(workspace)
+                if workspace.name == "C":
+                    found["content"] = [f"id{i}" for i in range(60)]
+                    found["config"]["mod_systems"] = ["C Prime"]
+                return found
+
+            with mock.patch("bridgeforge.probe_group._member", side_effect=member):
+                plan = plan_groups(queue, rig, exclude={"D"}, solo={"B"})
+                grouped = plan_groups(queue, rig, exclude={"D"}, auto_solo=False)
+        names = [[m["workspace"] for m in g["members"]] for g in plan["groups"]]
+        self.assertEqual(names, [["A"], ["B"], ["C"]])
+        self.assertEqual([[m["workspace"] for m in g["members"]] for g in grouped["groups"]], [["A", "B", "C"]])
+
+    def test_install_says_close_the_game_when_the_probe_jar_is_in_use(self) -> None:
+        # ROADMAP P15 31.9: WinError 32 midway through an install, 2026-09-28.
+        from unittest import mock
+
+        from bridgeforge.probe_group import ProbeGroupError, _refuse_running_game
+        with resolved_temp_dir() as root:
+            jar = root / "mods" / "bridgeforge-probe" / "jars" / "bridgeforge-probe.jar"
+            jar.parent.mkdir(parents=True)
+            jar.write_bytes(b"jar")
+            _refuse_running_game(root)  # free: passes and leaves the jar in place
+            self.assertTrue(jar.is_file())
+            with mock.patch("pathlib.Path.replace", side_effect=PermissionError(32, "in use")):
+                with self.assertRaises(ProbeGroupError) as caught:
+                    _refuse_running_game(root)
+        self.assertIn("close Starsector", str(caught.exception))
+
     def test_install_refuses_a_non_isolated_rig(self) -> None:
         from bridgeforge.probe_config import ProbeConfigError
 
