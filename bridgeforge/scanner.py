@@ -3490,6 +3490,119 @@ def _looks_like_constant(name: str) -> bool:
     return bool(re.fullmatch(r"[A-Z][A-Z0-9_]*", name))
 
 
+# Bytes each opcode's operands take (JVM spec, chapter 6); -1: variable (tableswitch/lookupswitch/wide).
+_OPERAND_BYTES = [0] * 256
+for _op in (0x10, 0x12, 0x15, 0x16, 0x17, 0x18, 0x19, 0x36, 0x37, 0x38, 0x39, 0x3A, 0xA9, 0xBC):
+    _OPERAND_BYTES[_op] = 1
+for _op in (0x11, 0x13, 0x14, 0x84, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xBB, 0xBD, 0xC0, 0xC1, 0xC6, 0xC7) + tuple(range(0x99, 0xA9)):
+    _OPERAND_BYTES[_op] = 2
+for _op in (0xC5,):
+    _OPERAND_BYTES[_op] = 3
+for _op in (0xB9, 0xBA, 0xC8, 0xC9):
+    _OPERAND_BYTES[_op] = 4
+for _op in (0xAA, 0xAB, 0xC4):
+    _OPERAND_BYTES[_op] = -1
+
+
+def _instance_fields_written_outside_constructors(data: bytes) -> set[tuple[str, str]] | None:
+    """(owner class, field name) for every putfield in a method other than <init>.
+
+    A hull mod field written only in its constructor is set once per object (configuration such as
+    RogueSynth's flavourText/rarity), not per-ship state; only writes elsewhere can leak between ships.
+    None when the class file cannot be walked (the caller then keeps the declaration-only rule).
+    """
+    import struct
+
+    try:
+        pos = 8
+        count = struct.unpack_from(">H", data, pos)[0]
+        pos += 2
+        utf8, classes, name_types, fieldrefs = {}, {}, {}, {}
+        index = 1
+        while index < count:
+            tag = data[pos]
+            pos += 1
+            if tag == 1:
+                length = struct.unpack_from(">H", data, pos)[0]
+                utf8[index] = data[pos + 2:pos + 2 + length].decode("utf-8", errors="replace")
+                pos += 2 + length
+            elif tag in (3, 4):
+                pos += 4
+            elif tag in (5, 6):
+                pos += 8
+                index += 1
+            elif tag in (7, 8, 16, 19, 20):
+                if tag == 7:
+                    classes[index] = struct.unpack_from(">H", data, pos)[0]
+                pos += 2
+            elif tag in (9, 10, 11, 12, 17, 18):
+                a, b = struct.unpack_from(">HH", data, pos)
+                if tag == 9:
+                    fieldrefs[index] = (a, b)
+                elif tag == 12:
+                    name_types[index] = (a, b)
+                pos += 4
+            elif tag == 15:
+                pos += 3
+            else:
+                return None
+            index += 1
+        pos += 6  # access_flags, this_class, super_class
+        pos += 2 + 2 * struct.unpack_from(">H", data, pos)[0]
+
+        def skip_attributes(p: int) -> int:
+            n = struct.unpack_from(">H", data, p)[0]
+            p += 2
+            for _ in range(n):
+                p += 6 + struct.unpack_from(">I", data, p + 2)[0]
+            return p
+
+        n_fields = struct.unpack_from(">H", data, pos)[0]
+        pos += 2
+        for _ in range(n_fields):
+            pos = skip_attributes(pos + 6)
+        n_methods = struct.unpack_from(">H", data, pos)[0]
+        pos += 2
+        written: set[tuple[str, str]] = set()
+        for _ in range(n_methods):
+            name = utf8.get(struct.unpack_from(">H", data, pos + 2)[0], "")
+            pos += 6
+            n_attrs = struct.unpack_from(">H", data, pos)[0]
+            pos += 2
+            for _ in range(n_attrs):
+                attr_name = utf8.get(struct.unpack_from(">H", data, pos)[0], "")
+                attr_len = struct.unpack_from(">I", data, pos + 2)[0]
+                body = pos + 6
+                if attr_name == "Code" and name != "<init>":
+                    code_len = struct.unpack_from(">I", data, body + 4)[0]
+                    start = body + 8
+                    i = 0
+                    while i < code_len:
+                        op = data[start + i]
+                        if op == 0xB5:
+                            ref = fieldrefs.get(struct.unpack_from(">H", data, start + i + 1)[0])
+                            if ref and ref[1] in name_types:
+                                written.add((utf8.get(classes.get(ref[0], -1), ""), utf8.get(name_types[ref[1]][0], "")))
+                        size = _OPERAND_BYTES[op]
+                        if size >= 0:
+                            i += 1 + size
+                        elif op == 0xC4:  # wide
+                            i += 6 if data[start + i + 1] == 0x84 else 4
+                        else:
+                            pad = (4 - ((i + 1) % 4)) % 4
+                            j = i + 1 + pad
+                            if op == 0xAA:
+                                low, high = struct.unpack_from(">ii", data, start + j + 4)
+                                i = j + 12 + 4 * (high - low + 1)
+                            else:
+                                pairs = struct.unpack_from(">i", data, start + j + 4)[0]
+                                i = j + 8 + 8 * pairs
+                pos = body + attr_len
+        return written
+    except (IndexError, struct.error):
+        return None
+
+
 def _scan_hullmod_instance_state(root: Path, result: ScanResult) -> None:
     """Hull mods are single shared instances: mutable instance fields leak state between ships (SEEKER-DEATH-01).
 
@@ -3505,13 +3618,41 @@ def _scan_hullmod_instance_state(root: Path, result: ScanResult) -> None:
         "never reset per ship. SEEKER's ART_organicHull did this and also re-ran its death effect every frame "
         "on a wreck, spawning debris until the game crawled. Keep per-ship state in ship.getCustomData()."
     )
+    # A field written only in <init> is set once per object (configuration), not per-ship state. Writes are
+    # collected across every jar class, because a subclass writing an inherited field names itself as the owner
+    # (RogueSynth, 2026-09-27: RS_BaseVariantHullmod's 11 flagged fields are all constructor-only).
+    classes: list[tuple[Path, str, _ClassFileInfo]] = []
+    writes: set[tuple[str, str]] = set()
+    walk_failed = False
     for jar, member, data in _iter_jar_class_files(root):
         info = _parse_class_file(data)
-        if info is None or info.super_class not in _HULLMOD_BASES:
+        if info is None:
             continue
+        found = _instance_fields_written_outside_constructors(data)
+        if found is None:
+            walk_failed = True
+        else:
+            writes |= found
+        classes.append((jar, member, info))
+    supers = {info.this_class: info.super_class for _jar, _member, info in classes}
+
+    def descends_from(name: str, ancestor: str) -> bool:
+        for _ in range(20):
+            if name == ancestor:
+                return True
+            name = supers.get(name, "")
+            if not name:
+                return False
+        return False
+
+    for jar, member, info in classes:
+        if info.super_class not in _HULLMOD_BASES:
+            continue
+        written_names = {name for owner, name in writes if descends_from(owner, info.this_class)}
         mutable = sorted(
             name for name, descriptor, is_static, is_final in info.fields
             if not is_static and not is_final and not _looks_like_constant(name) and not descriptor.startswith("Ljava/util/")
+            and (walk_failed or name in written_names)
         )
         if mutable:
             result.add(id="hullmod-instance-state", category="scripts", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation=explanation, file=f"{_relative(root, jar)}!{member}", evidence=[f"field:{name}" for name in mutable[:12]])

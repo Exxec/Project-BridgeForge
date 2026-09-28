@@ -236,6 +236,7 @@ Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_j
 | `_hash_comment_json_finding` | `(result: ScanResult, category: str, file: str) -> None` | - |
 | `_hull_hints` | `(row: dict[str, str]) -> set[str]` | - |
 | `_infer_environment` | `(result: ScanResult) -> None` | - |
+| `_instance_fields_written_outside_constructors` | `(data: bytes) -> set[tuple[str, str]] \| None` | (owner class, field name) for every putfield in a method other than <init>. |
 | `_is_external_dependency_class` | `(fqn: str) -> bool` | True when a FQN matches a known third-party library/mod API package we cannot see the jar for. |
 | `_is_mission_source` | `(root: Path, path: Path) -> bool` | - |
 | `_iter_class_files_in` | `(target: Path)` | Yield (jar_path, member_name, class_bytes) for readable .class members under `target`. |
