@@ -47,6 +47,30 @@ class SupersessionTests(unittest.TestCase):
         self.assertEqual(written["counts"]["SUPERSEDED"], 1)
         self.assertFalse(checkpoint_left)
 
+    def test_corpus_index_mods_count_and_our_revival_builds_do_not(self) -> None:
+        # ROADMAP P15 31.11: the Downloads archive (a corpus-index database) as a reference.
+        import sqlite3
+        import zipfile
+
+        with resolved_temp_dir() as root:
+            queue, downloads = root / "queue", root / "Downloads"
+            _workspace(queue, "Pack", "pack", "1.0")
+            _workspace(queue, "Void", "void", "0.2.2")
+            _mod(downloads / "Modpack" / "mods" / "Pack", "pack", "2.0", "0.98")
+            with zipfile.ZipFile(downloads / "Void-revival.zip", "w") as archive:
+                archive.writestr("Void/mod_info.json", json.dumps({"id": "void", "version": "0.2.2-0.98a-revival-r13", "gameVersion": "0.98a"}))
+            db = root / "index.sqlite"
+            connection = sqlite3.connect(db)
+            with connection:
+                connection.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
+                connection.execute("CREATE TABLE files (location TEXT PRIMARY KEY, source TEXT, size INTEGER)")
+                connection.execute("INSERT INTO meta VALUES ('root', ?)", (str(downloads),))
+                connection.execute("INSERT INTO files VALUES (?, ?, 1)", ("Modpack/mods/Pack/mod_info.json", "Modpack/mods/Pack/mod_info.json"))
+                connection.execute("INSERT INTO files VALUES (?, ?, 1)", ("Void-revival.zip!Void/mod_info.json", "Void-revival.zip"))
+            connection.close()
+            result = find_superseded(queue, [], quiet=True, corpus_index=db)
+        verdicts = {m["workspace"]: m["verdict"] for m in result["mods"]}
+        self.assertEqual(verdicts, {"Pack": "SUPERSEDED", "Void": "NO_MATCH"})
 
 if __name__ == "__main__":
     unittest.main()

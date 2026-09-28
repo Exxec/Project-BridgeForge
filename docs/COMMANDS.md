@@ -1469,7 +1469,8 @@ find queued mods whose author has released a newer version (in the real install'
 | Argument | Notes | Help |
 |---|---|---|
 | `queue` | - | the queue folder (In operation) |
-| `--against` DIR | required; repeatable | a folder of mods to compare with; repeatable |
+| `--against` DIR | repeatable | a folder of mods to compare with; repeatable |
+| `--corpus-index` CORPUS_INDEX | - | also compare with every mod_info.json a corpus-index database lists (the Downloads archive) |
 | `--quiet` | - | no per-workspace progress lines on stderr |
 | `--json` | - | - |
 

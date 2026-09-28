@@ -723,7 +723,8 @@ def build_parser() -> argparse.ArgumentParser:
     stats_cmd.add_argument("--json", action="store_true")
     sup_cmd = subcommands.add_parser("supersession", help="find queued mods whose author has released a newer version (in the real install's mods/ or a modpack); read-only")
     sup_cmd.add_argument("queue", type=Path, help="the queue folder (In operation)")
-    sup_cmd.add_argument("--against", type=Path, action="append", required=True, metavar="DIR", help="a folder of mods to compare with; repeatable")
+    sup_cmd.add_argument("--against", type=Path, action="append", default=[], metavar="DIR", help="a folder of mods to compare with; repeatable")
+    sup_cmd.add_argument("--corpus-index", type=Path, help="also compare with every mod_info.json a corpus-index database lists (the Downloads archive)")
     sup_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     sup_cmd.add_argument("--json", action="store_true")
     archive_cmd = subcommands.add_parser("archive", help="package a finished revival into Done/<Mod>/: mod folder, zip, original, reports and an archive note (needs a licence decision; never deletes the workspace)")
@@ -1161,7 +1162,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "supersession":
         from .supersession import find_superseded
-        result = find_superseded(args.queue, args.against, quiet=args.quiet)
+        result = find_superseded(args.queue, args.against, quiet=args.quiet, corpus_index=args.corpus_index)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
