@@ -231,6 +231,7 @@ Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_j
 | `_fill_empty_array_elements` | `(text: str) -> tuple[str, bool]` | Write `null` for an empty array element, as org.json's JSONArray reads it. |
 | `_find_legacy_add_orbital_station_calls` | `(text: str) -> list[tuple[int, int]]` | (start, end) spans for every `receiver.addOrbitalStation(...)` call (whole span, any arg count). |
 | `_find_legacy_add_planet_calls` | `(text: str) -> list[tuple[int, int]]` | (start, end) spans for `receiver.addPlanet(` calls with exactly 7 top-level arguments. |
+| `_first_value_commented` | `(row: dict) -> bool` | Starsector skips a CSV row whose first column starts with '#' (Exigency 0.8.01a keeps a commented copy of the header, "#name,id,...", as row 2, which read as a hull and a weapon named "id"; 2026-09-28). |
 | `_fleet_type_names` | `(path: Path) -> set[str]` | - |
 | `_float_or` | `(value: object, default: float=0.0) -> float` | - |
 | `_format_compile_error` | `(error: dict[str, object]) -> str` | - |

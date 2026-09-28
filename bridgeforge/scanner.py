@@ -6115,6 +6115,13 @@ def _hull_hints(row: dict[str, str]) -> set[str]:
     return {token.strip().upper() for token in (row.get("hints") or "").split(",") if token.strip()}
 
 
+def _first_value_commented(row: dict) -> bool:
+    """Starsector skips a CSV row whose first column starts with '#' (Exigency 0.8.01a keeps a commented copy of the
+    header, "#name,id,...", as row 2, which read as a hull and a weapon named "id"; 2026-09-28)."""
+    first = next(iter(row.values()), "") if row else ""
+    return str(first or "").strip().startswith("#")
+
+
 def _scan_description_missing(root: Path, result: ScanResult, vanilla_core: Path | None = None) -> None:
     """A mod hull/weapon/ship-system id with no matching descriptions.csv row of the right type.
 
@@ -6144,7 +6151,7 @@ def _scan_description_missing(root: Path, result: ScanResult, vanilla_core: Path
     ship_data_path = root / "data" / "hulls" / "ship_data.csv"
     for row in _read_csv_rows(ship_data_path) or []:
         hull_id = (row.get("id") or "").strip()
-        if not hull_id or hull_id.startswith("#"):
+        if not hull_id or hull_id.startswith("#") or _first_value_commented(row):
             continue
         hints = _hull_hints(row)
         if "HIDE_IN_CODEX" in hints or "MODULE" in hints:
@@ -6168,7 +6175,7 @@ def _scan_description_missing(root: Path, result: ScanResult, vanilla_core: Path
     weapon_data_path = root / "data" / "weapons" / "weapon_data.csv"
     for row in _read_csv_rows(weapon_data_path) or []:
         weapon_id = (row.get("id") or "").strip()
-        if not weapon_id or weapon_id.startswith("#"):
+        if not weapon_id or weapon_id.startswith("#") or _first_value_commented(row):
             continue
         hints = {token.strip().upper() for token in (row.get("hints") or "").split(",") if token.strip()}
         if "SYSTEM" in hints:
@@ -6191,7 +6198,7 @@ def _scan_description_missing(root: Path, result: ScanResult, vanilla_core: Path
     ship_systems_path = root / "data" / "shipsystems" / "ship_systems.csv"
     for row in _read_csv_rows(ship_systems_path) or []:
         system_id = (row.get("id") or "").strip()
-        if not system_id or system_id.startswith("#"):
+        if _first_value_commented(row) or not system_id or system_id.startswith("#"):
             continue
         if "SHIP_SYSTEM" in described.get(system_id, set()):
             continue

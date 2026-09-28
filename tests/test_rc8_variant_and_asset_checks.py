@@ -326,6 +326,15 @@ class VariantWeaponSlotMismatchTests(unittest.TestCase):
 
 
 class DescriptionMissingTests(unittest.TestCase):
+    def test_commented_header_copy_is_not_a_hull(self) -> None:
+        # Exigency 0.8.01a keeps "#name,id,..." as row 2; Starsector skips a row whose first column starts with '#'.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            commented = "#" + SHIP_DATA_HEADER
+            _write(root / "data" / "hulls" / "ship_data.csv", SHIP_DATA_HEADER + commented + _ship_data_row("demo_hull", 40, 0))
+            hits = _findings(scan_mod(root), "description-missing")
+            self.assertEqual([e for f in hits for e in f.evidence], ["hull:demo_hull"])
+
     def test_hull_missing_description_fires(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
