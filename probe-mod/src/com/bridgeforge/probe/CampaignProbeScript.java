@@ -625,15 +625,10 @@ public class CampaignProbeScript implements EveryFrameScript {
     // weight must stay in those systems (FAIL otherwise), and one with a weight is reported with where it went.
     // API (javap, RC8 starfarer.api.jar, 2026-09-27): SectorAPI.getStarSystem(String)/getStarSystems(),
     // LocationAPI.getPlanets(), PlanetAPI.getTypeId(), StarSystemAPI.getBaseName().
-    /** Nexerelin running a random sector (not Corvus mode), read by reflection so the probe needs no Nexerelin jar. */
+    /** A random sector (Nexerelin's non-Corvus mode) has no vanilla Corvus system. Public API only: the script sandbox
+     *  forbids reflection, so Nexerelin's SectorManager.getCorvusMode() cannot be called (0.2.10). */
     private static boolean nexerelinRandomSector() {
-        try {
-            Class<?> manager = Class.forName("exerelin.campaign.SectorManager", false, Global.getSettings().getScriptClassLoader());
-            Object corvus = manager.getMethod("getCorvusMode").invoke(null);
-            return Boolean.FALSE.equals(corvus);
-        } catch (Throwable t) {
-            return false;
-        }
+        return Global.getSector().getStarSystem("Corvus") == null;
     }
 
     private void checkCampaignLayout() {
