@@ -719,6 +719,11 @@ def build_parser() -> argparse.ArgumentParser:
     stats_cmd.add_argument("--restart", action="store_true", help="with --write: ignore an earlier run's FINDING_STATS.partial.jsonl and scan everything again")
     stats_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     stats_cmd.add_argument("--json", action="store_true")
+    sup_cmd = subcommands.add_parser("supersession", help="find queued mods whose author has released a newer version (in the real install's mods/ or a modpack); read-only")
+    sup_cmd.add_argument("queue", type=Path, help="the queue folder (In operation)")
+    sup_cmd.add_argument("--against", type=Path, action="append", required=True, metavar="DIR", help="a folder of mods to compare with; repeatable")
+    sup_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
+    sup_cmd.add_argument("--json", action="store_true")
     archive_cmd = subcommands.add_parser("archive", help="package a finished revival into Done/<Mod>/: mod folder, zip, original, reports and an archive note (needs a licence decision; never deletes the workspace)")
     archive_cmd.add_argument("workspace", type=Path)
     archive_cmd.add_argument("--done", type=Path, help="default: <repo>/Done")
@@ -1101,6 +1106,20 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0
+    if args.command == "supersession":
+        from .supersession import find_superseded
+        result = find_superseded(args.queue, args.against, quiet=args.quiet)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        for record in result["mods"]:
+            if record["verdict"] in ("SUPERSEDED", "SAME_RELEASE", "NEWER_ELSEWHERE"):
+                ref = record["reference"]
+                renamed = f" [named '{ref['name']}' there]" if ref.get("name") and ref["name"].strip().lower() != record["name"].strip().lower() else ""
+                print(f"{record['verdict']:16} {record['workspace']}: ours {record['version']}, theirs {ref['version']} ({ref['game_version'] or 'no gameVersion'}) at {ref['path']}{renamed}")
+        print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())))
+        print(f"Written: {result['result_path']}")
         return 0
     if args.command == "finding-stats":
         from .finding_stats import CHECKPOINT_NAME, FindingStatsError, finding_stats, render
