@@ -2348,6 +2348,20 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     6. **Keyboard options on the mission screen** (reroll, size, faction) are handy for manual play but not needed
        for the probe, which runs unattended.
 
+30. **Agent escalation, first queue run (2026-09-28).** Six packets on four mods whose only blockers were code
+    packets; all VERIFIED. Reviewed before applying:
+    - Doc's Needless Economic Expansion Pack: a null guard for a missing Nortia market; applied. Angry Periphery 4:
+      four `getEntityById` lookups replaced by the local variables holding those entities (ids checked); applied.
+    - Xenoargh AI Overhaul and Adjusted Sector: the agent only deleted commented-out code, which exposed scanner
+      behaviour instead. `runtime-placeholder-unsupported-operation` matched a commented-out throw: fixed (comments
+      blanked, test `test_commented_out_placeholder_throw_is_not_a_finding`). `campaign-spawn-registration-disabled`
+      is correct, but the author disabled that spawn themselves: accepted in Adjusted Sector's baseline.
+    - Result: Doc's, Angry Periphery 4, Xenoargh AI Overhaul, Adjusted Sector UNATTENDED_DONE.
+    - **Open:** `escalation apply` refuses a later packet once an earlier packet on the same mod was applied, because
+      each sandbox was copied before; the three later Angry Periphery packets were copied by hand (their own files
+      only, with backups). Fix: record every file's hash at run time and ignore files outside the packet that the
+      attempt did not change relative to its own starting copy.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit

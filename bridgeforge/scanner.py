@@ -908,7 +908,8 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
         for needle, (rule_id, explanation) in LEGACY_API_RULES.items():
             if needle in text:
                 result.add(id=rule_id, category="source-api", severity="high", classification="REVIEW", confidence="HIGH", explanation=explanation, file=relative, evidence=[needle])
-        if active_source and RUNTIME_PLACEHOLDER_PATTERN.search(text):
+        # Comments blanked: Xenoargh-AI-Overhaul's IDE stubs keep the throw commented out (2026-09-28).
+        if active_source and RUNTIME_PLACEHOLDER_PATTERN.search(_blank_java_comments(text)):
             result.add(
                 id="runtime-placeholder-unsupported-operation",
                 category="source",
