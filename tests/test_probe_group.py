@@ -154,6 +154,16 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(blocked["groups"], [])
         self.assertIn("lib_b", blocked["unplaced"][0]["reason"])
 
+    def test_a_bold_status_line_counts(self) -> None:
+        # Older hand-written reports end with **READY_FOR_LIVE_TEST** (RogueSynth, 2026-09-28).
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            working = _workspace(queue, "A", "mod_a", "hull_a")
+            report = working / "reports" / "REVIVAL_REPORT.md"
+            report.write_text("# Report" + chr(10) + chr(10) + "## Status" + chr(10) + chr(10) + "**READY_FOR_LIVE_TEST**" + chr(10), encoding="utf-8")
+            plan = plan_groups(queue, _rig(root))
+        self.assertEqual([m["workspace"] for g in plan["groups"] for m in g["members"]], ["A"])
+
     def test_install_refuses_a_non_isolated_rig(self) -> None:
         from bridgeforge.probe_config import ProbeConfigError
 

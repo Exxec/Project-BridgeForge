@@ -38,7 +38,9 @@ def _report_status(workspace: Path) -> str | None:
     report = workspace / "working" / "reports" / "REVIVAL_REPORT.md"
     if not report.is_file():
         return None
-    lines = [line.strip() for line in report.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
+    # Older hand-written reports bold the status line (**READY_FOR_LIVE_TEST**, RogueSynth and Xenoargh AI
+    # Overhaul, 2026-09-28); project_board reads that form too.
+    lines = [line.strip().strip("*").strip() for line in report.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
     statuses = [line for line in lines if _STATUS_LINE.match(line)]
     return statuses[-1] if statuses else None
 
