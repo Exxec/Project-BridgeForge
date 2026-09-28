@@ -443,6 +443,31 @@ class UndeclaredLibraryDependencyTests(unittest.TestCase):
         self.assertEqual(undeclared, [])
         self.assertEqual([item.classification for item in optional], ["SAFE"])
 
+    def test_a_presence_probe_by_class_name_is_an_optional_integration(self) -> None:
+        # Exigency 0.8.01a (2026-09-28): loadClass("data.scripts.world.ExerelinGen") decides whether Nexerelin is present.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            _write(root / "src" / "Plugin.java",
+                   "package fx;\nimport exerelin.campaign.SectorManager;\nclass Plugin { static boolean nex; static {"
+                   " try { Global.getSettings().getScriptClassLoader().loadClass(\"data.scripts.world.ExerelinGen\"); nex = true; }"
+                   " catch (ClassNotFoundException e) { nex = false; } } }")
+            result = scan_mod(root)
+        self.assertEqual([f.id for f in _findings(result, "undeclared-library-dependency")], [])
+        self.assertEqual([f.classification for f in _findings(result, "optional-library-integration")], ["SAFE"])
+
+    def test_the_fixer_does_not_declare_a_guarded_library(self) -> None:
+        # A guarded use is optional: declaring it would make the library mandatory (Exigency, 2026-09-28).
+        from bridgeforge.fixers import FixerError, compute_fix
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            _write(root / "src" / "Nex.java", "package fx;" + chr(10) + "import exerelin.api.X;" + chr(10) +
+                   "class Nex { void f() { if (Global.getSettings().isModEnabled(\"other_mod\")) { } } }")
+            with self.assertRaises(FixerError):
+                compute_fix(root, "undeclared-library-dependency", {})
+
     def test_a_guard_on_another_mod_id_stays_review(self) -> None:
         undeclared, optional = self._nex_scan('if (Global.getSettings().isModEnabled("lw_lazylib")) { }')
         self.assertEqual(optional, [])

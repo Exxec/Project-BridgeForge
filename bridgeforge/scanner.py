@@ -5395,6 +5395,42 @@ def _library_import_only(root: Path, result: ScanResult, slash_prefixes: tuple[s
     return mentioning
 
 
+# Names a mod probes for with loadClass/Class.forName to detect a library at runtime (the library is then optional).
+# Exigency 0.8.01a probes "data.scripts.world.ExerelinGen", Nexerelin's class outside its own package (2026-09-28).
+LIBRARY_PROBE_MARKERS = {
+    "Nexerelin": ("exerelin", "ExerelinGen"),
+    "Console Commands": ("lazywizard.console",),
+    "LunaLib": ("lunalib",),
+    "MagicLib": ("magiclib", "data.scripts.util.Magic", "org.magiclib"),
+    "GraphicsLib": ("dark.shaders", "org.dark."),
+    "LazyLib": ("lazywizard.lazylib",),
+}
+_PRESENCE_PROBE = re.compile(r'\b(?:loadClass|forName)\s*\(\s*"([^"]+)"')
+
+
+def _library_presence_probed(root: Path, library: str) -> bool:
+    """A source file or jar class probes for this library by class name (loadClass/Class.forName)."""
+    markers = LIBRARY_PROBE_MARKERS.get(library, ())
+    if not markers:
+        return False
+    for source in root.rglob("*.java"):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if any(any(m.lower() in name.lower() for m in markers) for name in _PRESENCE_PROBE.findall(text)):
+            return True
+    for _jar, _member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None or not ({"loadClass", "forName"} & set(info.utf8_values)):
+            continue
+        if any(any(m.lower() in value.lower() for m in markers) and "." in value for value in info.string_constants):
+            return True
+    return False
+
+
 def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
     """Code that reaches a known library's package without mod_info.json declaring that dependency."""
     for library, dependency_id in LIBRARY_DEPENDENCY_IDS.items():
@@ -5469,9 +5505,10 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                            explanation="Every class that uses Console Commands' API is registered in data/console/commands.csv, which only Console Commands reads, so the classes load only when it is installed. An optional integration; no dependency needed.",
                            evidence=sorted(users)[:10])
                 continue
-        if source_hits and every_hit_id_guarded:
+        probed = _library_presence_probed(root, library)
+        if (source_hits and every_hit_id_guarded) or probed:
             result.add(id="optional-library-integration", category="dependencies", severity="info", classification="SAFE", confidence="MEDIUM",
-                       explanation=f"Every source file that uses {library} checks isModEnabled(\"{dependency_id}\") and none throws when it is missing: an optional integration. RC8 runs with -noverify, so {library}'s classes are resolved only when that guarded code runs. No dependency needed; the mod works with or without {library}.",
+                       explanation=("The mod probes for " + library + " at runtime (loadClass/Class.forName of its classes) before using it" if probed else f"Every source file that uses {library} checks isModEnabled(\"{dependency_id}\")") + f" and none throws when it is missing: an optional integration. RC8 runs with -noverify, so {library}'s classes are resolved only when that guarded code runs. No dependency needed; the mod works with or without {library}.",
                        file="mod_info.json", evidence=[f"library:{library}", f"dependency-id:{dependency_id}", *source_hits[:5]])
             continue
         # Owner ruling 2026-09-27: an unguarded use of a known, maintained library is fixed by declaring it (the
@@ -5497,7 +5534,7 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                 )
             ),
             file="mod_info.json",
-            evidence=[f"library:{library}", f"dependency-id:{dependency_id}", *source_hits[:5], *bytecode_hits[:5]],
+            evidence=[f"library:{library}", f"dependency-id:{dependency_id}", *(["guard:present"] if guarded else []), *source_hits[:5], *bytecode_hits[:5]],
         )
 
 

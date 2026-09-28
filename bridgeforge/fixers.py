@@ -734,11 +734,12 @@ def _add_dependency_entry(text: str, dependency_id: str, name: str) -> str:
 def _fix_undeclared_library_dependency(root: Path, options: dict) -> list[FileChange]:
     """Resolve `undeclared-library-dependency`: declare the library findings already identified
     the mod actually reaches by package (LazyLib/MagicLib/GraphicsLib/LunaLib/Nexerelin), using the
-    exact id `scanner.LIBRARY_DEPENDENCY_IDS` maps to. Declaring a library the mod already imports
-    is safe regardless of whether the finding is MANUAL (unguarded) or REVIEW (an isModEnabled guard
-    found, suggesting an optional integration) - Starsector's dependency mechanism has no separate
-    "optional" shape, so a real integration wants the dependency present either way, and it never
-    makes the undeclared-crash failure mode worse.
+    exact id `scanner.LIBRARY_DEPENDENCY_IDS` maps to. Only an UNGUARDED use is declared. A guarded one
+    (`guard:present` in the evidence: an isModEnabled check or a loadClass/Class.forName probe) is an
+    optional integration and is left alone: declaring it makes the library mandatory and changes what the
+    mod does. Exigency 0.8.01a (2026-09-28) probes for Nexerelin and runs its illegal-tech event only
+    without it; this fixer declared Nexerelin, which switched the event off and forced a Nexerelin random
+    sector on every test (the old note here called declaring "safe regardless" of a guard; it was not).
 
     Hand-verified this session, twice: `scanner.LIBRARY_DEPENDENCY_IDS` had the wrong case for two
     libraries (`magiclib`/`shaderlib` instead of the real `MagicLib`/`shaderLib`, found by reading
@@ -754,6 +755,9 @@ def _fix_undeclared_library_dependency(root: Path, options: dict) -> list[FileCh
         raise FixerError("No undeclared-library-dependency finding for this mod.")
 
     to_add: dict[str, str] = {}  # dependency_id -> library display name
+    findings = [f for f in findings if "guard:present" not in (f.evidence or [])]
+    if not findings:
+        raise FixerError("Every undeclared-library-dependency finding here is guarded (an optional integration); nothing is declared.")
     for finding in findings:
         library = next((item.split(":", 1)[1] for item in finding.evidence if item.startswith("library:")), None)
         dependency_id = next((item.split(":", 1)[1] for item in finding.evidence if item.startswith("dependency-id:")), None)
