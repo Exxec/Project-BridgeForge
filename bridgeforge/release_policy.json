@@ -495,6 +495,11 @@
       "local_only": true,
       "reason": "revived for the owner's local archive (live-validated); not published without the author's permission (owner decision 2026-09-27)",
       "recorded_on": "2026-09-28"
+    },
+    "Omega_Psychasthenia": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-28); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-28"
     }
   },
   "default": {

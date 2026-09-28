@@ -94,6 +94,28 @@ class LibraryImportOnlyTests(unittest.TestCase):
         self.assertEqual(_ids(result, "source-library-dependency-undeclared"), [])
 
 
+class NexerelinCustomStartOptionalTests(unittest.TestCase):
+    def _scan(self, register: bool):
+        # SEEKER 0.6.6: its Nexerelin classes are custom starts named in data/config/exerelin/customStarts.json.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "src" / "demo").mkdir(parents=True)
+            (mod / "src" / "demo" / "MyStart.java").write_text("package demo;\nimport exerelin.campaign.customstart.CustomStart;\npublic class MyStart extends CustomStart {}\n", encoding="utf-8")
+            (mod / "data" / "config" / "exerelin").mkdir(parents=True)
+            name = "demo.MyStart" if register else "demo.Other"
+            (mod / "data" / "config" / "exerelin" / "customStarts.json").write_text('{"starts":[{"id":"s","className":"' + name + '"}]}', encoding="utf-8")
+            return scan_mod(mod, TargetProfile())
+
+    def test_classes_registered_only_as_custom_starts_are_optional(self) -> None:
+        result = self._scan(True)
+        self.assertEqual(_ids(result, "undeclared-library-dependency"), [])
+        self.assertEqual(_ids(result, "source-library-dependency-undeclared"), [])
+        self.assertTrue(any("registered:customStarts.json" in f.evidence for f in result.findings if f.id == "optional-library-integration"))
+
+    def test_an_unregistered_class_still_needs_nexerelin(self) -> None:
+        self.assertEqual(len(_ids(self._scan(False), "undeclared-library-dependency")), 1)
+
+
 class ConsoleCommandOptionalTests(unittest.TestCase):
     def test_classes_registered_only_as_console_commands_are_optional(self) -> None:
         # Bionic Alteration: its Console Commands classes are listed in data/console/commands.csv.

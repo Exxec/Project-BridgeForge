@@ -2378,6 +2378,8 @@ def _attribute_library_usage(result: ScanResult) -> None:
                 result.add(id="declared-library-unreferenced", category="dependencies", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="A declared library has no bundled, import, or source-call evidence. Confirm whether it is required before removing or changing it.", evidence=[library])
             if imports and not declared and not bundled and not bytecode_referenced and _library_import_only(Path(result.input_path), result, [prefix.replace(".", "/") for prefix in prefixes]):
                 pass  # an unused import compiled away; reported once as library-import-unused-in-jar
+            elif imports and library == "Nexerelin" and _only_nexerelin_custom_starts(Path(result.input_path), prefixes):
+                pass  # reported once as optional-library-integration (registered:customStarts.json)
             elif imports and not declared and not bundled:
                 result.add(
                     id="source-library-dependency-undeclared",
@@ -5344,6 +5346,20 @@ def _console_command_classes(root: Path) -> set[str]:
     return {(row.get("class") or "").strip() for row in rows if (row.get("class") or "").strip()}
 
 
+def _nexerelin_custom_start_classes(root: Path) -> set[str]:
+    """Classes named by "className" in data/config/exerelin/customStarts.json (loaded only by Nexerelin)."""
+    data = _load_lenient_json_file(root / "data" / "config" / "exerelin" / "customStarts.json")
+    starts = data.get("starts") if isinstance(data, dict) else None
+    return {s["className"].strip() for s in starts or [] if isinstance(s, dict) and isinstance(s.get("className"), str) and s["className"].strip()}
+
+
+def _only_nexerelin_custom_starts(root: Path, prefixes) -> bool:
+    """True when every source using these packages is a class registered in customStarts.json."""
+    registered = _nexerelin_custom_start_classes(root)
+    users = set(_sources_mentioning(root, [prefix.rstrip(".") for prefix in prefixes]).values()) if registered else set()
+    return bool(users) and users <= registered
+
+
 def _sources_mentioning(root: Path, dotted: list[str]) -> dict[str, str]:
     """{relative source path: class name} for .java files that mention any dotted package."""
     found: dict[str, str] = {}
@@ -5504,6 +5520,17 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                 result.add(id="console-command-optional", category="dependencies", severity="info", classification="SAFE", confidence="HIGH",
                            explanation="Every class that uses Console Commands' API is registered in data/console/commands.csv, which only Console Commands reads, so the classes load only when it is installed. An optional integration; no dependency needed.",
                            evidence=sorted(users)[:10])
+                continue
+        if library == "Nexerelin":
+            # Nexerelin's exerelin.campaign.customstart.CustomStartDefs loads each "className" listed in
+            # data/config/exerelin/customStarts.json (ExerelinCore.jar 0.12.2c, 2026-09-28), so classes registered
+            # only there load only with Nexerelin (SEEKER 0.6.6's six SKR_*Start classes).
+            registered = _nexerelin_custom_start_classes(root)
+            users = set(_sources_mentioning(root, dotted_needles).values()) if source_hits else referencing_classes
+            if registered and users and users <= registered:
+                result.add(id="optional-library-integration", category="dependencies", severity="info", classification="SAFE", confidence="HIGH",
+                           explanation="Every class that uses Nexerelin is a custom start registered in data/config/exerelin/customStarts.json, which only Nexerelin reads, so the classes load only when it is installed. An optional integration; no dependency needed.",
+                           file="mod_info.json", evidence=[f"library:{library}", f"dependency-id:{dependency_id}", "registered:customStarts.json", *sorted(users)[:5]])
                 continue
         probed = _library_presence_probed(root, library)
         if (source_hits and every_hit_id_guarded) or probed:
