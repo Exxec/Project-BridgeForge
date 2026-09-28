@@ -1,6 +1,26 @@
 # Changelog
 
 ## Unreleased
+
+## 0.3.0 (2026-09-27)
+
+194 commits since 0.2.0. Highlights of the last live session, then the full list:
+
+- **Live-testing loop:** `probe-group plan|install|report` probes several finished mods in one session; probe 0.2.8
+  adds campaign-layout, faction fleet generation (`faction-fleet-gen`) and a vanilla filler so every combat mission
+  has a fight. Groups 1-7 plus solo runs validated 60+ mods; `archive` packages each into `Done/`.
+- **Revival at queue scale:** `revive` batch runs, standing approvals in AUTOMATION_POLICY.json (now including
+  `undeclared-library-dependency`), `escalation queue` (what the escalated mods wait on), `supersession` (queued
+  mods with a newer release by their author), `finding-stats` deltas.
+- **New checks and fixers:** `optional-library-integration`, `settings-json-override-accepted` with a per-mod
+  baseline (owner's 25-value rule), `fleet-type-name-missing` for vanilla factions, `procgen-mod-body-leak`,
+  `loose-script-janino-compile-error` (RC8's own Janino), `variant-op-over-budget` trimming (only what RC8's costs
+  pushed over; `fix --reference-core`), S-mods no longer counted against OP.
+- **Rig and copy tooling:** the shipped copy is every root file and top-level folder (two Fatal crashes came from
+  allowlists); `copy-drift --sync/--prune` (first copy too); probe groups enable dependencies of dependencies;
+  `log-triage --last-sessions` for relaunches; named encodings persist (`NAMED_ENCODINGS.json`).
+- **Progress and resume rule** for every command that walks a whole queue (`progress.py`).
+
 - `vendor-copy` (and `--plan`) may copy from a local-only mod into a target that is itself local-only, such as RevenantLib, and says the target must stay local-only; into a releasable mod it is still refused (ROADMAP P15 item 11).
 - Hygiene (ROADMAP P15 item 10): duplicate roadmap entries from the local/cloud merge are merged and this session's P14 items 29-36 renumbered 47-54; `docs/LOCAL_HANDOFF.md` rewritten for the kept commands; `revive` no longer makes each fixer rescan the whole mod.
 - **Decisions come with their options (ROADMAP P15 items 7-9).** `vendor-copy --plan FILE --to DIR` copies everything a `vendor-plan` lists (any kind, not just hull mods), re-checked against the provider, with SHA-256s for PROVENANCE.md. `revive --draft-report` drafts REVIVAL_REPORT.md/REVIVAL_PLAN.md when a run leaves nothing to do. Missing-content packets now show the substitute strategy, a vendor plan and a strip plan side by side, with the commands to act on each. `revival-report-draft` honours the mod's accepted-findings baseline.
