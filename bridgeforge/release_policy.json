@@ -455,6 +455,46 @@
       "local_only": true,
       "reason": "revived for the owner's local archive (live-validated 2026-09-28); not published without the author's permission (owner decision 2026-09-27)",
       "recorded_on": "2026-09-28"
+    },
+    "broke": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-28"
+    },
+    "EXTRA Conditions": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-28"
+    },
+    "marineportraits": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-28"
+    },
+    "megastructures_tab": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-28"
+    },
+    "memeportraits": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-28"
+    },
+    "Missing Names Mod": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-28"
+    },
+    "dp_mnemonic_sensors": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-28"
+    },
+    "Piotrs": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-28"
     }
   },
   "default": {
