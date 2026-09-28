@@ -115,6 +115,26 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(enabled, ["lw_lazylib", "mod_a", "mod_c", "bridgeforge_probe"])
         self.assertEqual(sorted(config["group_members"]), ["mod_a", "mod_c"])
 
+    def test_dependencies_of_dependencies_are_enabled_and_a_missing_one_blocks_the_plan(self) -> None:
+        # GRP-SPARKLE (2026-09-27): SPARKLE -> Secrets of the Frontier -> LazyLib, GraphicsLib, LunaLib, MagicLib.
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            _workspace(queue, "Addon", "addon", "hull_addon", deps=["base"])
+            rig = _rig(root, "lib_a", "lib_b")
+            (rig / "mods" / "base").mkdir()
+            (rig / "mods" / "base" / "mod_info.json").write_text(
+                json.dumps({"id": "base", "dependencies": [{"id": "lib_a"}, {"id": "lib_b"}]}), encoding="utf-8")
+            core = root / "core_real"
+            core.mkdir()
+            link_dir(core, rig / "starsector-core")
+            install_group(plan_groups(queue, rig), 1, queue, rig, install_probe=False)
+            enabled = json.loads((rig / "mods" / "enabled_mods.json").read_text(encoding="utf-8"))["enabledMods"]
+            (rig / "mods" / "lib_b" / "mod_info.json").unlink()
+            blocked = plan_groups(queue, rig)
+        self.assertEqual(enabled, ["lib_a", "lib_b", "base", "addon", "bridgeforge_probe"])
+        self.assertEqual(blocked["groups"], [])
+        self.assertIn("lib_b", blocked["unplaced"][0]["reason"])
+
     def test_install_refuses_a_non_isolated_rig(self) -> None:
         from bridgeforge.probe_config import ProbeConfigError
 
