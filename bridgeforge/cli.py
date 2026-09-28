@@ -857,6 +857,23 @@ def build_parser() -> argparse.ArgumentParser:
     policy_set.add_argument("--on", help="decision date (default: today)")
     for command in (policy_show, policy_set):
         command.add_argument("--policy", type=Path, help=argparse.SUPPRESS)
+    ci_cmd = subcommands.add_parser("check-impact", help="rescan the mods whose escalation packets hold FINDING_ID and report which are now cleared, reduced or unchanged (--all: also find newly flagged mods)")
+    ci_cmd.add_argument("finding")
+    ci_cmd.add_argument("queue", type=Path)
+    ci_cmd.add_argument("--vanilla-core", type=Path)
+    ci_cmd.add_argument("--all", action="store_true", help="scan every workspace, not just those with packets for the finding")
+    ci_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
+    ci_cmd.add_argument("--json", action="store_true")
+    rq_cmd = subcommands.add_parser("revive-queue", help="run revive across a queue: all workspaces, those never revived, or those with a given last status; progress lines, resumable, writes REVIVE_QUEUE.json")
+    rq_cmd.add_argument("queue", type=Path)
+    rq_cmd.add_argument("--only-status", action="append", default=[], metavar="STATUS", help="only workspaces whose last revive status is this (e.g. ESCALATED); repeatable")
+    rq_cmd.add_argument("--never-revived", action="store_true", help="only workspaces with no REVIVE.json yet")
+    rq_cmd.add_argument("--apply", action="store_true")
+    rq_cmd.add_argument("--draft-report", action="store_true")
+    rq_cmd.add_argument("--vanilla-core", type=Path)
+    rq_cmd.add_argument("--restart", action="store_true", help="ignore an earlier run's checkpoint")
+    rq_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
+    rq_cmd.add_argument("--json", action="store_true")
     revive_cmd = subcommands.add_parser("revive", help="run the mechanical part of a revival unattended (scan, permitted fixers, rescan, until nothing changes) and write escalation packets for the rest (roadmap P15 item 2)")
     revive_cmd.add_argument("workspace", type=Path, help="a workspace folder holding working/mod_info.json")
     revive_cmd.add_argument("--apply", action="store_true", help="write fixes into working/ (default: dry run; reports and packets are still written)")
@@ -2962,6 +2979,27 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(dumps(plan) if args.json else render(plan))
+        return 0
+    if args.command == "check-impact":
+        from .check_impact import check_impact
+        result = check_impact(args.queue, args.finding, vanilla_core=args.vanilla_core, all_workspaces=args.all, quiet=args.quiet)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            for row in result["mods"]:
+                if row["verdict"] in ("CLEARED", "REDUCED", "NEW"):
+                    print(f"{row['verdict']:9} {row['workspace']} ({row['before']} -> {row['now']})")
+            print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())) + f". Written: {result['result_path']}")
+        return 0
+    if args.command == "revive-queue":
+        from .revive_queue import revive_queue
+        result = revive_queue(args.queue, only_status=set(args.only_status) or None, never_revived=args.never_revived, apply=args.apply,
+                              draft_report=args.draft_report, vanilla_core=args.vanilla_core, quiet=args.quiet, restart=args.restart)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items(), key=lambda kv: str(kv[0]))))
+            print(f"Written: {result['result_path']}")
         return 0
     if args.command == "revive":
         from .revive import ReviveError, render as render_revive, revive
