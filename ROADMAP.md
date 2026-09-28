@@ -2362,6 +2362,38 @@ whether the result passed; recurring agent fixes become deterministic fixers.
       only, with backups). Fix: record every file's hash at run time and ignore files outside the packet that the
       attempt did not change relative to its own starting copy.
 
+31. **Workflow improvements found in the 2026-09-27/28 sessions (proposed).** Most useful first; each replaces a step
+    done by hand or with a throwaway script this session.
+    1. **`probe-group record LOG [--archive]`.** After every group run a scratchpad `record_group.py` marked each PASS
+       member LIVE_VALIDATED, then a shell loop recorded the licence decision, ran `archive` and copied the zip to the
+       top of `Done/`. One command should do all of it, using the owner's standing licence reason.
+    2. **`revive --queue QUEUE [--only-status ESCALATED]`.** Two bash scripts drove the batch and re-runs, with a stamp
+       file to resume. Build it in with progress lines and a checkpoint (the long-running rule).
+    3. **`probe-group plan --solo NAME... --exclude NAME...`**, and a default that runs large campaign mods solo
+       (Exigency and the other four were grouped by default and had to be planned out inline twice).
+    4. **One report-status reader.** Four places parse a report's status differently (`probe_group`, `project_board`,
+       `archive`, the pre-push hook); a bold line and LIVE_VALIDATED each broke one of them this session.
+    5. **`descriptions` workflow:** `descriptions sheet` (the queue CSV with lore snippets, weapon type, range and role),
+       `descriptions apply MOD DRAFT.md` (append rows, keep CRLF, write BRIDGEFORGE_CREDITS.txt, build
+       alt-original-descriptions/). This session did it with a scratchpad script.
+    6. **RC8 behaviour evidence register.** Runtime facts proven from live logs this session (settings.json lists add;
+       sounds.json merges by sound id; default_fleet_type_names.json merges; RC8 ships over-budget variants) live only
+       in code comments. A `docs/RC8_BEHAVIOUR.md` (or JSON) with each fact, its evidence and date, cited by the checks
+       that rely on it, would stop re-deriving them.
+    7. **Jar-source code packets:** let `escalation run` edit `jars/src`, then `rebuild-jar` and verify the rebuilt
+       class, so code packets in compiled mods (most of the remaining `code` tier) become attemptable.
+    8. **`escalation apply` after an earlier apply** (item 30 open): record every file's hash at run time and compare
+       the attempt with its own starting copy.
+    9. **Rig guard in `probe-group install`:** check `who-locks` first and say "close the game" instead of a WinError 32.
+    10. **Scanner-change impact:** `finding-stats --check ID` to rescan only one check across the queue and report which
+        mods it clears or newly flags. This session wrote that loop by hand for each false-positive fix.
+    11. **Supersession beyond the install:** also compare against the Downloads corpus index and a modpack, and flag a
+        shared id under a different name (Cryosleeper 2 in AoTD) for review.
+    12. **Decision page:** render `ESCALATIONS_BY_FINDING` as a page the owner can rule from (one ruling per finding id,
+        recorded to AUTOMATION_POLICY or a baseline), instead of rulings typed into chat.
+    13. **Probe: report each variant that fails to build by id** (Broken Star's ballistic-in-missile-slot variant is
+        watched that way now), and count combat-filler use in the group report.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit

@@ -51,6 +51,11 @@ progress rather than waiting blind.
   Game; a missing hull mod in a variant is dropped silently. A Fatal dialog never reaches the redirected log:
   `bf-test.ps1` records dialog text in `<TESTID>.windows.txt`, and `log-triage` reads it.
 - `bf-test launch` logs only the session it starts; a player relaunch logs only to the rig's `starsector.log`.
+- Edit code with Write/Edit, not Python-in-bash heredocs: `
+`, `
+` and `\"` inside a heredoc'd Python string are
+  unescaped once by Python and land as real newlines or quotes, which broke six edits in one session. For a long
+  generated file, write it to the scratchpad with Write and run it. Git Bash's `/tmp` is not Python's `/tmp` on Windows.
 - The shipped copy is every root file and every top-level folder except tool/build folders (`copy_drift`); allowlists
   dropped `sun_fr/` (GRP-3) and a root `*.json.default` (GRP-7), both Fatal at startup. Probe groups must enable
   dependencies of dependencies (SPARKLE -> SOTF -> four libraries).
