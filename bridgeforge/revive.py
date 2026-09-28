@@ -441,7 +441,10 @@ def _draft_report(working: Path, vanilla_core: Path | None, status: str, *, writ
 
     if status != "UNATTENDED_DONE":
         return {"status": "NOT_DRAFTED", "reason": f"revive ended {status}; a report is drafted only when nothing is left to do"}
-    draft = write_revival_report_draft(working, vanilla_core) if write else draft_revival_report(working, vanilla_core)
+    rig_mods = Path(working).resolve().parent.parent / "_rig" / "mods"
+    providers = [rig_mods] if rig_mods.is_dir() else None
+    draft = (write_revival_report_draft(working, vanilla_core, providers) if write
+             else draft_revival_report(working, vanilla_core, providers))
     return {key: value for key, value in draft.items() if key not in ("report_text", "plan_text")}
 
 

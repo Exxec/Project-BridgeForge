@@ -36,6 +36,27 @@ class DependencyResolutionTests(unittest.TestCase):
         self.assertTrue(any(f.id == "data-class-reference-missing" for f in without))
         self.assertEqual([f.id for f in with_providers if f.id in ids], [])
 
+    def test_report_draft_resolves_against_providers(self) -> None:
+        # SEEKER 0.6.6 (2026-09-28): revive's scan resolved MagicLib weapon effects, but the report draft
+        # rescanned without the rig's mods and came out BLOCKED on data-class-reference-missing.
+        from bridgeforge.revival_report_draft import draft_revival_report
+
+        with resolved_temp_dir() as root:
+            providers = root / "rig" / "mods"
+            lib = providers / "Lib"
+            _write(lib / "mod_info.json", json.dumps({"id": "the_lib", "name": "The Lib", "jars": ["jars/lib.jar"]}))
+            write_jar(lib / "jars" / "lib.jar", {"data/scripts/weapons/LibThruster.class": build_class_file("data/scripts/weapons/LibThruster")})
+            mod = root / "mod"
+            _write(mod / "mod_info.json", json.dumps({"id": "user", "dependencies": [{"id": "the_lib"}]}))
+            _write(mod / "data" / "weapons" / "thruster.wpn", json.dumps({"id": "thruster", "everyFrameEffect": "data.scripts.weapons.LibThruster"}))
+            without = draft_revival_report(mod)
+            with_providers = draft_revival_report(mod, provider_roots=[providers])
+
+        def blocking(draft):
+            return [item for item in draft.get("blocking") or [] if "data-class-reference-missing" in str(item)]
+        self.assertTrue(blocking(without))
+        self.assertEqual(blocking(with_providers), [])
+
 
 if __name__ == "__main__":
     unittest.main()
