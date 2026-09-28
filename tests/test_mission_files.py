@@ -82,5 +82,12 @@ class MissionRequiredFilesTests(unittest.TestCase):
         self.assertEqual([item for item in evidence if item not in allowed], [])
 
 
+    def test_probe_mission_fills_an_empty_side_with_vanilla_ships(self) -> None:
+        # GRP-5 (2026-09-27): one mod ship and no opponent; sprite-only mods had no ships at all. ROADMAP 29.1.
+        source = (REPO_ROOT / "probe-mod" / "data" / "missions" / "bfprobe_combat" / "MissionDefinition.java").read_text(encoding="utf-8")
+        self.assertIn("fillSide(api, FleetSide.PLAYER, fillerCount(deployedB))", source)
+        self.assertIn("fillSide(api, FleetSide.ENEMY, fillerCount(deployedA))", source)
+        self.assertIn('"combat-filler"', source)
+
 if __name__ == "__main__":
     unittest.main()
