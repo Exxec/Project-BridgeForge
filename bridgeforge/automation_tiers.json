@@ -173,7 +173,7 @@
     "vanilla-path-shadowing": "decision",
     "vanilla-script-shadow-repointable": "decision",
     "variant-id-in-weapon-slot": "decision",
-    "variant-op-over-budget": "decision",
+    "variant-op-over-budget": "auto",
     "variant-weapon-slot-mismatch": "decision",
     "variant-wings-exceed-bays": "decision",
     "version-inference-blocked": "inspect",

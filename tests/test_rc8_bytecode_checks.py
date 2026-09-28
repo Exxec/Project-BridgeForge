@@ -402,7 +402,7 @@ class CsvDesignTypeColumnTests(unittest.TestCase):
 
 
 class UndeclaredLibraryDependencyTests(unittest.TestCase):
-    def test_source_reference_without_declared_dependency_is_manual(self) -> None:
+    def test_source_reference_without_declared_dependency_is_review_by_owner_ruling(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _write(root / "mod_info.json", '{"id":"flowergod"}')
@@ -412,8 +412,8 @@ class UndeclaredLibraryDependencyTests(unittest.TestCase):
             )
             result = scan_mod(root)
             findings = _findings(result, "undeclared-library-dependency")
-            manual = [item for item in findings if item.classification == "MANUAL"]
-            self.assertTrue(any("library:GraphicsLib" in item.evidence for item in manual))
+            review = [item for item in findings if item.classification == "REVIEW"]  # owner ruling 2026-09-27
+            self.assertTrue(any("library:GraphicsLib" in item.evidence for item in review))
 
     def test_declared_dependency_suppresses_finding(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -453,7 +453,7 @@ class UndeclaredLibraryDependencyTests(unittest.TestCase):
         self.assertEqual(optional, [])
         self.assertEqual([item.classification for item in undeclared], ["REVIEW"])
 
-    def test_bytecode_only_reference_without_declared_dependency_is_manual(self) -> None:
+    def test_bytecode_only_reference_without_declared_dependency_is_review_by_owner_ruling(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _write(root / "mod_info.json", '{"id":"fixture"}')
@@ -462,7 +462,7 @@ class UndeclaredLibraryDependencyTests(unittest.TestCase):
             result = scan_mod(root)
             findings = [item for item in _findings(result, "undeclared-library-dependency") if "library:LunaLib" in item.evidence]
             self.assertEqual(len(findings), 1)
-            self.assertEqual(findings[0].classification, "MANUAL")
+            self.assertEqual(findings[0].classification, "REVIEW")  # owner ruling 2026-09-27: declaring it is the fix
 
     def test_kotlin_bytecode_needs_lazylib_which_ships_the_kotlin_runtime(self) -> None:
         # GRP-4 (2026-09-27): Automatic Orders (Kotlin) crashed with NoClassDefFoundError: kotlin/jvm/internal/Intrinsics;

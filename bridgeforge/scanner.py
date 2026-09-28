@@ -5313,7 +5313,10 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                        explanation=f"Every source file that uses {library} checks isModEnabled(\"{dependency_id}\") and none throws when it is missing: an optional integration. RC8 runs with -noverify, so {library}'s classes are resolved only when that guarded code runs. No dependency needed; the mod works with or without {library}.",
                        file="mod_info.json", evidence=[f"library:{library}", f"dependency-id:{dependency_id}", *source_hits[:5]])
             continue
-        classification = "REVIEW" if guarded else "MANUAL"
+        # Owner ruling 2026-09-27: an unguarded use of a known, maintained library is fixed by declaring it (the
+        # library's own mod id, from LIBRARY_DEPENDENCY_IDS), which is deterministic, so it is REVIEW, not MANUAL,
+        # and the fixer is a standing approval in AUTOMATION_POLICY.json. Before: 88 MANUAL findings in 229 mods.
+        classification = "REVIEW"
         result.add(
             id="undeclared-library-dependency",
             category="dependencies",
