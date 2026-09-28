@@ -125,6 +125,8 @@ def _try_fixers(working: Path, findings: list[dict], *, target: str, vanilla_cor
             except FixerError as exc:
                 pending.append({"finding": finding_id, "state": "FIXER_REFUSED", "reason": str(exc), "classifications": classifications})
                 continue
+            for reason in options.get("partial_refusals") or []:
+                pending.append({"finding": finding_id, "state": "FIXER_REFUSED", "reason": reason, "classifications": classifications})
             diff = "".join(unified_diff_for_change(change) for change in plan.changes)
             # A move (shippable-work-file) writes outside working/: label it relative to working.
             files = sorted(Path(os.path.relpath(change.path, working)).as_posix() + (" (removed)" if change.removed else "")

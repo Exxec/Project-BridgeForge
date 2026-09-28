@@ -2059,6 +2059,8 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        `revive` read them.
     5. **`revive` should keep a fixer's partial refusals.** When `data-file-not-utf8` converts some files and
        refuses others, the refused list is dropped because the plan has changes; surface it as a pending item.
+       **Done 2026-09-27:** the fixer records `partial_refusals` on its options and `revive` adds them as a FIXER_REFUSED
+       pending item next to the applied part. Test: `test_partial_refusal_is_kept_as_a_pending_item`.
     6. **`vendor-copy` should recognise an equivalent vendored row.** RevenantLib's `shields_formshield` row
        differs from Rebal's only by the newer column layout and the repackaged script, yet reports CONFLICT; compare
        values column by column and treat a known script repackaging (PROVENANCE.md) as equal.

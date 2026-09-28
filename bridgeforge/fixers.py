@@ -1936,6 +1936,10 @@ def _fix_data_file_not_utf8(root: Path, options: dict) -> list[FileChange]:
     if not changes and refused:
         raise FixerError("No file has only CP-1252 punctuation outside UTF-8; name the real encoding by hand for: " + "; ".join(refused)
                          + " (fix --encoding FILE=ENCODING)")
+    if refused:
+        # Some files converted, others not: the caller (revive) reports these as still pending (ROADMAP P15 20.5).
+        options.setdefault("partial_refusals", []).append("Not converted; name the real encoding by hand for: " + "; ".join(refused)
+                                                          + " (fix --encoding FILE=ENCODING)")
     return changes
 
 

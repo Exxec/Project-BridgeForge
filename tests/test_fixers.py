@@ -1669,6 +1669,24 @@ class DataFileNotUtf8FixerTests(unittest.TestCase):
         self.assertEqual(after.decode("utf-8"), 'id,text\r\na,"it’s “fine” – café"\r\n')
         self.assertEqual(remaining, [])
 
+    def test_partial_refusal_is_kept_as_a_pending_item(self) -> None:
+        # ROADMAP P15 20.5: one file converts, another is refused; revive used to drop the refused list.
+        from bridgeforge.revive import _try_fixers
+
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            _write(mod / "mod_info.json", '{"id": "x"}')
+            (mod / "data/strings").mkdir(parents=True)
+            (mod / "data/strings/descriptions.csv").write_bytes(b'id,text\r\na,"it\x92s"\r\n')
+            (mod / "data/strings/tips.csv").write_bytes(b'id,text\r\nb,"caf\xe9 d\xe9j\xe0"\r\n')
+            findings = [{"id": f.id, "classification": f.classification, "file": f.file, "evidence": f.evidence}
+                        for f in _findings(scan_mod(mod), "data-file-not-utf8")]
+            applied, pending = _try_fixers(mod, findings, target="0.98a-RC8", vanilla_core=None, approved={"data-file-not-utf8"}, apply=True)
+        self.assertEqual([item["files"] for item in applied], [["data/strings/descriptions.csv"]])
+        refused = [item for item in pending if item["state"] == "FIXER_REFUSED"]
+        self.assertEqual(len(refused), 1)
+        self.assertIn("data/strings/tips.csv", refused[0]["reason"])
+
     def test_refuses_mac_roman_shift_jis_and_accented_letters(self) -> None:
         cases = {
             "mac_roman.csv": b"id,text\na,the station\xd5s hull\n",  # Mac Roman 0xD5 = right quote
