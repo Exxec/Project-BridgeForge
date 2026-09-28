@@ -3209,6 +3209,21 @@ def _scan_preset_entry_overrides(root: Path, result: ScanResult, vanilla_core: P
         mod_data, vanilla_data = _load_lenient_json_file(mod_path), _load_lenient_json_file(vanilla_path)
         if not (isinstance(mod_data, dict) and isinstance(vanilla_data, dict)):
             continue
+        if name == "sounds.json":
+            # sounds.json's top-level keys are categories ("music"); the entries replaced whole are one level down,
+            # and only the ids the mod names. Live evidence 2026-09-28: every Exigency session (EX-2..EX-10) loaded its
+            # sounds.json, which defines 3 of vanilla's music ids, and still played vanilla's title, Corvus campaign and
+            # neutral-encounter music. So compare "<category>.<id>" entries, not whole categories.
+            def entries(data: dict, names: dict | None = None) -> dict:
+                flat = {}
+                for key, value in data.items():
+                    inner = (names or data).get(key)
+                    if isinstance(value, dict) and isinstance(inner, dict):
+                        flat.update({f"{key}.{sub}": sub_value for sub, sub_value in value.items()})
+                    else:
+                        flat[key] = value
+                return flat
+            mod_data, vanilla_data = entries(mod_data, vanilla_data), entries(vanilla_data, mod_data)
         dropped: list[str] = []
         changed: list[str] = []
         for key in sorted(set(mod_data) & set(vanilla_data)):
