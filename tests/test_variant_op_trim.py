@@ -43,6 +43,19 @@ class VariantOpTrimTests(unittest.TestCase):
         self.assertEqual(data["hullMods"], ["big_mod", "small_mod"])
         self.assertEqual(remaining, [])
 
+    def test_s_mods_listed_in_hull_mods_cost_nothing(self) -> None:
+        # 9 queue variants list S-mods in hullMods too; they cost 0 OP. 50 weapons + big_mod (10) as an S-mod = 50.
+        with resolved_temp_dir() as root:
+            mod, core = _fixture(root, weapons=50, caps=0, vents=0, mods=["big_mod"])
+            path = mod / "data" / "variants" / "x_hull_std.variant"
+            original = path.read_text(encoding="utf-8")
+            path.write_text(original.replace('"hullMods": ["big_mod"],', '"hullMods": ["big_mod"], "sMods": ["big_mod"],'), encoding="utf-8")
+            with_s_mod = [f for f in scan_mod(mod, vanilla_core=core).findings if f.id == "variant-op-over-budget"]
+            path.write_text(original, encoding="utf-8")
+            without = [f for f in scan_mod(mod, vanilla_core=core).findings if f.id == "variant-op-over-budget"]
+        self.assertEqual(with_s_mod, [])
+        self.assertEqual(len(without), 1)
+
     def test_hull_mods_go_after_flux_and_weapons_are_never_removed(self) -> None:
         with resolved_temp_dir() as root:
             mod, core = _fixture(root, weapons=45, caps=2, vents=2, mods=["big_mod", "small_mod"])  # 45+4+13 = 62 vs 50

@@ -2102,7 +2102,7 @@ def _fix_variant_op_over_budget(root: Path, options: dict) -> list[FileChange]:
         data = _load_lenient_json_file(path) or {}
         _hull, ship_json, _slots = _resolve_variant_hull_and_slots(str(data.get("hullId") or ""), ship_files, skins, skin_slots)
         cost_column = HULL_MOD_COST_COLUMN_BY_SIZE.get(str((ship_json or {}).get("hullSize") or "").upper(), "cost_cruiser")
-        built_in = set((ship_json or {}).get("builtInMods") or [])
+        built_in = set((ship_json or {}).get("builtInMods") or []) | {m for key in ("sMods", "permaMods") for m in (data.get(key) or []) if isinstance(m, str)}
         caps, vents = int(_float_or(data.get("fluxCapacitors"))), int(_float_or(data.get("fluxVents")))
         cut_caps = min(caps, int(-(-excess // 1)))
         excess -= cut_caps

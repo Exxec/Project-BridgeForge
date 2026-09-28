@@ -5814,7 +5814,9 @@ def _scan_variant_validity(root: Path, result: ScanResult, vanilla_core: Path | 
                     continue
                 weapon_op_total += _float_or(w_row.get("OPs"))
 
-        built_in_mods = set(ship_json.get("builtInMods") or [])
+        # S-mods and permanent mods (d-mods) cost no OP; RC8 variants may list them in hullMods too (9 of 696
+        # over-budget queue variants did, 2026-09-27, e.g. brdy_stenos_event), which overcounted them.
+        built_in_mods = set(ship_json.get("builtInMods") or []) | {m for key in ("sMods", "permaMods") for m in (data.get(key) or []) if isinstance(m, str)}
         hull_size = str(ship_json.get("hullSize") or "").strip().upper()
         cost_column = HULL_MOD_COST_COLUMN_BY_SIZE.get(hull_size, "cost_cruiser")
         hull_mod_total = 0.0
