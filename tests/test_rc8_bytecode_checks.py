@@ -402,7 +402,7 @@ class CsvDesignTypeColumnTests(unittest.TestCase):
 
 
 class UndeclaredLibraryDependencyTests(unittest.TestCase):
-    def test_source_reference_without_declared_dependency_is_manual(self) -> None:
+    def test_source_reference_without_declared_dependency_is_review_by_owner_ruling(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _write(root / "mod_info.json", '{"id":"flowergod"}')
@@ -412,8 +412,8 @@ class UndeclaredLibraryDependencyTests(unittest.TestCase):
             )
             result = scan_mod(root)
             findings = _findings(result, "undeclared-library-dependency")
-            manual = [item for item in findings if item.classification == "MANUAL"]
-            self.assertTrue(any("library:GraphicsLib" in item.evidence for item in manual))
+            review = [item for item in findings if item.classification == "REVIEW"]  # owner ruling 2026-09-27
+            self.assertTrue(any("library:GraphicsLib" in item.evidence for item in review))
 
     def test_declared_dependency_suppresses_finding(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -427,21 +427,33 @@ class UndeclaredLibraryDependencyTests(unittest.TestCase):
             findings = [item for item in _findings(result, "undeclared-library-dependency") if "library:GraphicsLib" in item.evidence]
             self.assertEqual(findings, [])
 
-    def test_ismodenabled_guarded_nexerelin_reference_is_review(self) -> None:
+    def _nex_scan(self, body: str) -> tuple[list, list]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _write(root / "mod_info.json", '{"id":"fixture"}')
-            _write(
-                root / "src" / "NexIntegration.java",
-                "package fx;\nimport exerelin.api.NexerelinFactionAPI;\n"
-                "class NexIntegration { void go() { if (Global.getSettings().isModEnabled(\"nexerelin\")) { } } }",
-            )
+            _write(root / "src" / "NexIntegration.java",
+                   "package fx;\nimport exerelin.api.NexerelinFactionAPI;\nclass NexIntegration { void go() { " + body + " } }")
             result = scan_mod(root)
-            findings = [item for item in _findings(result, "undeclared-library-dependency") if "library:Nexerelin" in item.evidence]
-            self.assertEqual(len(findings), 1)
-            self.assertEqual(findings[0].classification, "REVIEW")
+        undeclared = [item for item in _findings(result, "undeclared-library-dependency") if "library:Nexerelin" in item.evidence]
+        optional = [item for item in _findings(result, "optional-library-integration") if "library:Nexerelin" in item.evidence]
+        return undeclared, optional
 
-    def test_bytecode_only_reference_without_declared_dependency_is_manual(self) -> None:
+    def test_a_use_guarded_by_its_own_library_id_is_an_optional_integration(self) -> None:
+        undeclared, optional = self._nex_scan('if (Global.getSettings().isModEnabled("nexerelin")) { }')
+        self.assertEqual(undeclared, [])
+        self.assertEqual([item.classification for item in optional], ["SAFE"])
+
+    def test_a_guard_on_another_mod_id_stays_review(self) -> None:
+        undeclared, optional = self._nex_scan('if (Global.getSettings().isModEnabled("lw_lazylib")) { }')
+        self.assertEqual(optional, [])
+        self.assertEqual([item.classification for item in undeclared], ["REVIEW"])
+
+    def test_a_fail_fast_guard_stays_review(self) -> None:
+        undeclared, optional = self._nex_scan('if (!Global.getSettings().isModEnabled("nexerelin")) { throw new RuntimeException("needs Nexerelin"); }')
+        self.assertEqual(optional, [])
+        self.assertEqual([item.classification for item in undeclared], ["REVIEW"])
+
+    def test_bytecode_only_reference_without_declared_dependency_is_review_by_owner_ruling(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _write(root / "mod_info.json", '{"id":"fixture"}')
@@ -450,7 +462,22 @@ class UndeclaredLibraryDependencyTests(unittest.TestCase):
             result = scan_mod(root)
             findings = [item for item in _findings(result, "undeclared-library-dependency") if "library:LunaLib" in item.evidence]
             self.assertEqual(len(findings), 1)
-            self.assertEqual(findings[0].classification, "MANUAL")
+            self.assertEqual(findings[0].classification, "REVIEW")  # owner ruling 2026-09-27: declaring it is the fix
+
+    def test_kotlin_bytecode_needs_lazylib_which_ships_the_kotlin_runtime(self) -> None:
+        # GRP-4 (2026-09-27): Automatic Orders (Kotlin) crashed with NoClassDefFoundError: kotlin/jvm/internal/Intrinsics;
+        # LazyLib's jars/internal/Kotlin-Runtime.jar provides it. Declared, the same mod is quiet and not "unreferenced".
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            class_bytes = build_class_file("fx/Plugin", extra_class_refs=("kotlin/jvm/internal/Intrinsics",))
+            write_jar(root / "jars" / "fixture.jar", {"fx/Plugin.class": class_bytes})
+            _write(root / "mod_info.json", '{"id":"fixture","jars":["jars/fixture.jar"]}')
+            undeclared = [f for f in _findings(scan_mod(root), "undeclared-library-dependency") if "library:LazyLib" in f.evidence]
+            _write(root / "mod_info.json", '{"id":"fixture","jars":["jars/fixture.jar"],"dependencies":[{"id":"lw_lazylib","name":"LazyLib"}]}')
+            declared = scan_mod(root)
+        self.assertEqual(len(undeclared), 1)
+        self.assertEqual([f for f in _findings(declared, "undeclared-library-dependency") if "library:LazyLib" in f.evidence], [])
+        self.assertEqual(_findings(declared, "declared-library-unreferenced"), [])
 
     def test_declared_library_used_only_by_jar_bytecode_is_not_unreferenced(self) -> None:
         # ClearCommands (2026-09-27): once revive declared the LazyLib its jar calls, the scan called

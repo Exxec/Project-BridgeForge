@@ -53,5 +53,23 @@ class FleetTypeNameTests(unittest.TestCase):
         self.assertEqual(faction["color"], [1, 2, 3, 255])
         self.assertEqual(remaining, [])
 
+    def test_fixer_names_a_vanilla_factions_type_in_the_mods_own_defaults_file(self) -> None:
+        # The Mayorate (2026-09-27): createEmptyFleet("luddic_path", "pathFleet", ...) with no faction file of its own.
+        from bridgeforge.fixers import apply_fix, compute_fix
+        from bridgeforge.scanner import _load_lenient_json_file
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod, core = root / "mod", root / "core"
+            _write(mod / "mod_info.json", '{"id": "mayorate"}')
+            _write(mod / "src" / "Raids.java", 'class R { void f() { FleetFactoryV3.createEmptyFleet("luddic_path", "pathFleet", null); } }')
+            _write(core / "data" / "world" / "factions" / "default_fleet_type_names.json", '{"patrolSmall": "Patrol"}')
+            _write(core / "data" / "world" / "factions" / "luddic_path.faction", '{"id": "luddic_path"}')
+            apply_fix(compute_fix(mod, "fleet-type-name-missing", {"vanilla_core": core}))
+            defaults = _load_lenient_json_file(mod / "data" / "world" / "factions" / "default_fleet_type_names.json")
+            remaining = [f for f in scan_mod(mod, TargetProfile(), core).findings if f.id == "fleet-type-name-missing"]
+        self.assertEqual(defaults, {"pathFleet": "Path Fleet"})
+        self.assertEqual(remaining, [])
+
 if __name__ == "__main__":
     unittest.main()

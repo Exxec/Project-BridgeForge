@@ -170,10 +170,11 @@ class BytecodeDependencyGuardTests(unittest.TestCase):
                 archive.writestr(name, data)
         return [f for f in scan_mod(root, TargetProfile()).findings if f.id == "undeclared-library-dependency" and f"library:{library}" in f.evidence]
 
-    def test_unguarded_bytecode_reference_stays_manual(self) -> None:
+    def test_unguarded_bytecode_reference_is_review_by_owner_ruling(self) -> None:
+        # Owner ruling 2026-09-27: declaring the library is the fix, so REVIEW with a standing approval.
         with tempfile.TemporaryDirectory() as directory:
             findings = self._mod(Path(directory), with_guard=False)
-        self.assertEqual([f.classification for f in findings], ["MANUAL"])
+        self.assertEqual([f.classification for f in findings], ["REVIEW"])
 
     def test_class_checking_the_mod_id_marks_it_guarded(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

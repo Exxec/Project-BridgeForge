@@ -184,6 +184,8 @@ switch ($Command) {
         if (Get-RigJava) { throw "A rig game is already running; close it first." }
         Initialize-WindowTools
         $windowLog = Join-Path $Logs "$id.windows.txt"
+        # A reused test id must not carry an earlier attempt's dialogs into this run's triage (GRP-3, 2026-09-27).
+        if (Test-Path $windowLog) { Move-Item -Force $windowLog (Join-Path $Logs ("$id.windows.{0:yyyyMMdd-HHmmss}.prev.txt" -f (Get-Date))) }
         Write-Host "Launching; log -> $out. Play, then close the game. Watching for error dialogs..."
         $wrapper = Start-Process cmd.exe -ArgumentList ('/c ""' + $bat + '" > "' + $out + '" 2> "' + $err + '""') -WindowStyle Hidden -PassThru
         $ownedProcesses = @{}

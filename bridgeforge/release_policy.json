@@ -155,6 +155,231 @@
       "local_only": true,
       "reason": "author unreachable and mod abandoned (owner, 2026-09-27); no licence on record, so all rights reserved by default. Revived for the local archive only, not published",
       "recorded_on": "2026-09-27"
+    },
+    "AcceleratedConstruction": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "anexweapons": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "Animalfarm": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "ayras_nighingale_ship": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "yunru_baird_jobs": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "battletechportraitpack": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "bf_legacy_fleets": {
+      "local_only": false,
+      "reason": "BridgeForge's own code (restores SectorAPI.createFleet from fleetCompositions), no third-party content; owner agreed 2026-09-27",
+      "recorded_on": "2026-09-27"
+    },
+    "Blockade": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "BON": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "capturecrew": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "lw_radar": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "dmodservices": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "$$$_DakkaHolics_sprites": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "degenerateportraitpack": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "hm_flagpack": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "ruddygreat_HullmodFilters": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "sun_fuel_siphoning": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "furryPortraits": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "pilot_guardian": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "hornyjailshield": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "interestingportraitspack": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "internalaffairs": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "InvisibleHand": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "jaa": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "jeffships": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "automatic-orders": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "Astra_vanillafactiondescs": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "pfe_heg": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "Powerfantasy_Portrait": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "pgr_portrait_pack": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "shuntRed": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "remnant_command_transfer": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "bruh_ship_browser": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "PT_ShipDirectionMarker": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "lw_asirb": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "yunrutechmining": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "soz_planetshield_subtle": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "thumper_thumpermod": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "transfer_all_items": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "vesships": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "unpackblueprints": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "tomboysex": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "sotf_sparkle": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission; Vow sprite is a BridgeForge recolour of SOTF art (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "bluefriendballs": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "FactionRelationshipsUniquified": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
     }
   },
   "default": {

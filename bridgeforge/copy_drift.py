@@ -3,13 +3,21 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import re
+import shutil
 from pathlib import Path
 
-INCLUDED_DIRS = ("data", "jars", "graphics", "sounds")
-INCLUDED_ROOT_FILE_GLOBS = ("*.csv", "*.ini", "*.jar", "*.json", "*.properties", "*.version")
+INCLUDED_DIRS = ("data", "jars", "graphics", "sounds")  # always included; any other top-level folder is too (below)
+# Top-level folders that never ship. Everything else is copied: the game loads resources by path from the mod
+# root, and Flux Reticle keeps its sprites in `sun_fr/graphics/` (settings.json points there). The old fixed
+# INCLUDED_DIRS list left that folder out, so the rig copy crashed at startup with "Error loading
+# [sun_fr/graphics/half.png]" (GRP-3, 2026-09-27), and release/archive would have shipped it broken.
+EXCLUDED_TOP_DIRS = ("scratch", "out", "build", "disabled_files", "bin", "gradle", "meta-inf", "production", "test")  # tool and build folders
+# Every root file ships: mods load arbitrary names from the root (Transfer All Items reads
+# "transfer_all_items_settings.json.default"; the old *.json-style allowlist dropped it, GRP-7 Fatal 2026-09-27).
+INCLUDED_ROOT_FILE_GLOBS = ("*",)
 # OS and VCS litter never ships: the game ignores it and it only bloats or confuses a release.
 EXCLUDE_DIR_NAME_GLOBS = ("reports", "src*", "__MACOSX", ".git", ".svn", ".idea", ".vscode")
-EXCLUDE_FILE_NAME_GLOBS = ("*.bak", "*.pre-*", "*orig-backup*", "src.zip", "Thumbs.db", "desktop.ini", ".DS_Store")
+EXCLUDE_FILE_NAME_GLOBS = ("*.bak", "*.iml", "*.pre-*", "*orig-backup*", "src.zip", "Thumbs.db", "desktop.ini", ".DS_Store")
 
 
 def _is_excluded(relative_posix_path: str) -> bool:
@@ -37,7 +45,10 @@ def _find_mod_root(path: Path) -> Path:
 
 def _collect(root: Path) -> dict[str, Path]:
     files: dict[str, Path] = {}
-    for name in INCLUDED_DIRS:
+    extra = sorted(child.name for child in root.iterdir() if child.is_dir() and child.name not in INCLUDED_DIRS
+                   and not child.name.startswith(".") and child.name.lower() not in EXCLUDED_TOP_DIRS
+                   and not any(fnmatch.fnmatch(child.name, pattern) for pattern in EXCLUDE_DIR_NAME_GLOBS))
+    for name in (*INCLUDED_DIRS, *extra):
         base = root / name
         if not base.is_dir():
             continue
@@ -45,7 +56,7 @@ def _collect(root: Path) -> dict[str, Path]:
             if not item.is_file():
                 continue
             relative = item.relative_to(root).as_posix()
-            if _is_excluded(relative):
+            if _is_excluded(relative) or _is_excluded(relative.split("/", 1)[-1]):
                 continue
             files[relative] = item
     for item in root.iterdir():
@@ -121,3 +132,48 @@ def compare_copies(working_copy: Path, deployed_copy: Path) -> dict[str, object]
         "drift_count": drift_count,
         "status": "PASS" if drift_count == 0 else "DRIFT",
     }
+
+
+def sync_copies(working_copy: Path, deployed_copy: Path, prune: bool = False, today: str | None = None) -> dict[str, object]:
+    """Make a rig copy match its working copy: copy missing and different files working -> deployed.
+
+    Never copies deployed -> working. With `prune`, files only the deployed copy has are moved (not
+    deleted) to `<rig>/pruned/<date>/<mod>/`. Refuses unless the deployed copy sits in `<rig>/mods/` of a
+    rig whose starsector-core is a junction/symlink, so the real install is never written to.
+    """
+    from datetime import date
+
+    from .probe_config import _is_link
+
+    deployed_path = Path(deployed_copy).expanduser()
+    if not deployed_path.exists():
+        # First copy (ROADMAP P15 item 20.7): prepare-test refused a rig folder that did not exist yet.
+        rig = deployed_path.resolve().parent.parent
+        if deployed_path.resolve().parent.name.lower() != "mods" or not _is_link(rig / "starsector-core"):
+            raise ValueError(f"{deployed_path} does not exist and is not in <rig>/mods/ of a linked rig; nothing was created.")
+        deployed_path.mkdir()
+        (deployed_path / "mod_info.json").write_bytes((_find_mod_root(Path(working_copy)) / "mod_info.json").read_bytes())
+    before = compare_copies(working_copy, deployed_copy)
+    working_root, deployed_root = Path(before["working_root"]), Path(before["deployed_root"])
+    rig = deployed_root.parent.parent
+    if deployed_root.parent.name.lower() != "mods" or not _is_link(rig / "starsector-core"):
+        raise ValueError(f"{deployed_root} is not in <rig>/mods/ of a rig whose starsector-core is a junction/symlink; "
+                         "copy-drift --sync only writes into a test rig.")
+    copied: list[str] = []
+    for relative in [*before["missing_in_deployed"], *[item["path"] for item in before["different"]]]:
+        destination = deployed_root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(working_root / relative, destination)
+        copied.append(relative)
+    moved: list[str] = []
+    pruned_to = rig / "pruned" / (today or date.today().isoformat()) / deployed_root.name
+    if prune:
+        for relative in before["extra_in_deployed"]:
+            destination = pruned_to / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(deployed_root / relative), str(destination))
+            moved.append(relative)
+    after = compare_copies(working_copy, deployed_copy)
+    return {"schema_version": 1, "mode": "COPY_DRIFT_SYNC", "working_root": str(working_root), "deployed_root": str(deployed_root),
+            "copied": copied, "pruned": moved, "pruned_to": str(pruned_to) if moved else None,
+            "extra_kept": [] if prune else before["extra_in_deployed"], "drift_after": after["drift_count"], "status": after["status"]}

@@ -11,12 +11,12 @@ from tests.support import link_dir, resolved_temp_dir
 
 
 def _workspace(queue: Path, name: str, mod_id: str, hull: str, *, deps: list[str] | None = None,
-               status: str = "READY_FOR_LIVE_TEST", tc: bool = False) -> Path:
+               status: str = "READY_FOR_LIVE_TEST", tc: bool = False, game_version: str = "0.98a-RC8") -> Path:
     working = queue / name / "working"
     (working / "data" / "hulls").mkdir(parents=True)
     (working / "data" / "variants").mkdir(parents=True)
     (working / "reports").mkdir()
-    info = {"id": mod_id, "dependencies": [{"id": d} for d in deps or []]}
+    info = {"id": mod_id, "gameVersion": game_version, "dependencies": [{"id": d} for d in deps or []]}
     if tc:
         info["totalConversion"] = "true"
     (working / "mod_info.json").write_text(json.dumps(info), encoding="utf-8")
@@ -45,10 +45,16 @@ class PlanTests(unittest.TestCase):
             _workspace(queue, "D", "mod_d", "hull_d", deps=["missing_lib"])  # dependency not in the rig
             _workspace(queue, "E", "mod_e", "hull_e", status="ESCALATED")   # not finished: not a candidate
             _workspace(queue, "T", "mod_t", "hull_t", tc=True)               # total conversion: alone
+            _workspace(queue, "V", "mod_v", "hull_v", game_version="0.95.1a-RC6")  # launcher would refuse it
+            stale = _workspace(queue, "S", "mod_s", "hull_s").parent            # report says ready, revive disagrees
+            (stale / "reports" / "revive").mkdir(parents=True)
+            (stale / "reports" / "revive" / "REVIVE.json").write_text('{"status": "ESCALATED"}', encoding="utf-8")
             plan = plan_groups(queue, _rig(root, "lw_lazylib"), size=8)
         groups = [[m["workspace"] for m in g["members"]] for g in plan["groups"]]
         self.assertEqual(groups, [["A", "C"], ["B"], ["T"]])
-        self.assertEqual(plan["unplaced"], [{"workspace": "D", "reason": "dependencies not in the rig: missing_lib"}])
+        self.assertEqual(plan["unplaced"][0], {"workspace": "D", "reason": "dependencies not in the rig: missing_lib"})
+        self.assertEqual(plan["unplaced"][1]["workspace"], "V")
+        self.assertIn("gameVersion 0.95.1a-RC6", plan["unplaced"][1]["reason"])
 
     def test_group_size_is_respected(self) -> None:
         with resolved_temp_dir() as root:
@@ -80,6 +86,25 @@ class MergeAndReportTests(unittest.TestCase):
         self.assertEqual(report["members"]["mod_b"]["verdict"], "FAIL")
         self.assertIn("hull mod [x] has no spec", report["members"]["mod_b"]["failures"][0])
 
+    def test_a_faction_fleet_generation_failure_blames_the_factions_mod(self) -> None:
+        # Probe 0.2.8 faction-fleet-gen (ROADMAP 29.2): a FAIL names the faction, and the report blames its mod.
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            a = build_probe_config(_workspace(queue, "A", "mod_a", "hull_a"))
+            working_b = _workspace(queue, "B", "mod_b", "hull_b")
+            (working_b / "data" / "world" / "factions").mkdir(parents=True)
+            (working_b / "data" / "world" / "factions" / "b_navy.faction").write_text('{"id": "b_navy"}', encoding="utf-8")
+            merged = merge_configs([a, build_probe_config(working_b)])
+            log = root / "run.stdout.log"
+            log.write_text(
+                "5 [main] INFO  com.fs.starfarer.StarfarerLauncher  - Starting\n"
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.8|content-ids|OK|all-content|checked=2 failed=0 ship-variants built=2\n"
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.8|faction-fleet-gen|FAIL|b_navy|FleetFactoryV3 built an empty patrolMedium\n",
+                encoding="utf-8")
+            report = group_report(log, merged)
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
+        self.assertEqual(report["members"]["mod_b"]["verdict"], "FAIL")
+
     def test_no_content_check_means_incomplete(self) -> None:
         with resolved_temp_dir() as root:
             a = build_probe_config(_workspace(root / "q", "A", "mod_a", "hull_a"))
@@ -108,6 +133,26 @@ class InstallTests(unittest.TestCase):
         self.assertTrue(copied)
         self.assertEqual(enabled, ["lw_lazylib", "mod_a", "mod_c", "bridgeforge_probe"])
         self.assertEqual(sorted(config["group_members"]), ["mod_a", "mod_c"])
+
+    def test_dependencies_of_dependencies_are_enabled_and_a_missing_one_blocks_the_plan(self) -> None:
+        # GRP-SPARKLE (2026-09-27): SPARKLE -> Secrets of the Frontier -> LazyLib, GraphicsLib, LunaLib, MagicLib.
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            _workspace(queue, "Addon", "addon", "hull_addon", deps=["base"])
+            rig = _rig(root, "lib_a", "lib_b")
+            (rig / "mods" / "base").mkdir()
+            (rig / "mods" / "base" / "mod_info.json").write_text(
+                json.dumps({"id": "base", "dependencies": [{"id": "lib_a"}, {"id": "lib_b"}]}), encoding="utf-8")
+            core = root / "core_real"
+            core.mkdir()
+            link_dir(core, rig / "starsector-core")
+            install_group(plan_groups(queue, rig), 1, queue, rig, install_probe=False)
+            enabled = json.loads((rig / "mods" / "enabled_mods.json").read_text(encoding="utf-8"))["enabledMods"]
+            (rig / "mods" / "lib_b" / "mod_info.json").unlink()
+            blocked = plan_groups(queue, rig)
+        self.assertEqual(enabled, ["lib_a", "lib_b", "base", "addon", "bridgeforge_probe"])
+        self.assertEqual(blocked["groups"], [])
+        self.assertIn("lib_b", blocked["unplaced"][0]["reason"])
 
     def test_install_refuses_a_non_isolated_rig(self) -> None:
         from bridgeforge.probe_config import ProbeConfigError

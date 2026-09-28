@@ -44,7 +44,7 @@ from .bytecode_diff import diff_bytecode
 from .bytecode_rules import apply_bytecode_class, apply_bytecode_jar, plan_bytecode
 from .pack_candidate import create_migration_pack_candidate
 from .log_triage import triage_log
-from .copy_drift import compare_copies
+from .copy_drift import compare_copies, sync_copies
 from .jar_audit import audit_jar
 from .build_tag import apply_build_tag, BuildTagError, DEFAULT_LABEL
 from .translation import TranslationError, apply_translation, check_translation, export_project_go_tm, export_translation, prefill_from_record, prefill_from_reference
@@ -310,10 +310,13 @@ def build_parser() -> argparse.ArgumentParser:
     log_triage.add_argument("--mod-prefix", action="append", default=[], metavar="PREFIX", help="additional mod source/package prefix to attribute errors to; repeatable")
     log_triage.add_argument("--mods-dir", type=Path, help="mods folder the log ran with: names the mod whose jar owns each crash frame (suspect/involved)")
     log_triage.add_argument("--all-mods", action="store_true", help="with --mods-dir: index every mod folder, not just enabled_mods.json (e.g. a log from a different mod list)")
+    log_triage.add_argument("--last-sessions", type=int, metavar="N", help="a rolling starsector.log: triage only its last N game sessions (a relaunch during a test logs only there)")
     log_triage.add_argument("--json", action="store_true")
     copy_drift = subcommands.add_parser("copy-drift", help="hash-compare a mod working copy against its deployed/test-rig copy")
     copy_drift.add_argument("working_copy", type=Path)
     copy_drift.add_argument("deployed_copy", type=Path)
+    copy_drift.add_argument("--sync", action="store_true", help="copy missing/different files working -> deployed (test rigs only; never the reverse)")
+    copy_drift.add_argument("--prune", action="store_true", help="with --sync: move deployed-only files to <rig>/pruned/<date>/<mod>/")
     copy_drift.add_argument("--json", action="store_true")
     jar_audit = subcommands.add_parser("jar-audit", help="compare a rebuilt mod jar with its original for bundled libraries, removed classes, and reflection use")
     jar_audit.add_argument("rebuilt", type=Path)
@@ -363,6 +366,7 @@ def build_parser() -> argparse.ArgumentParser:
     fix.add_argument("--from-vanilla-id", help="required for procgen-planet-row-missing/procgen-star-row-missing")
     fix.add_argument("--faction-file", type=Path, help="required for faction-known-lists-missing")
     fix.add_argument("--hull", action="append", default=[], metavar="ID=N", help="repeatable; required for carrier-bays-proposal, e.g. --hull my_carrier=4 (0-6, vanilla's own maximum)")
+    fix.add_argument("--reference-core", type=Path, help="variant-op-over-budget: trim only variants that fit under this older starsector-core's costs (the ones RC8 pushed over)")
     fix.add_argument("--encoding", action="append", default=[], metavar="FILE=ENC", help="repeatable; for data-file-not-utf8: re-encode FILE (relative to the mod) from ENC (cp1252, mac_roman, shift_jis, gbk, gb18030, latin-1) when a person has read it and named the encoding")
     fix.add_argument("--allow-shadowed-edit", action="store_true", help="override the refusal to edit a loose script one of this mod's own jars, or a declared dependency's jar, already shadows (the edit has no effect unless the jar is also being rebuilt from the patched source)")
     fix.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search for declared dependencies, for the dependency-jar shadow check (default: <repo>/In operation and its rig's mods)")
@@ -717,6 +721,11 @@ def build_parser() -> argparse.ArgumentParser:
     stats_cmd.add_argument("--restart", action="store_true", help="with --write: ignore an earlier run's FINDING_STATS.partial.jsonl and scan everything again")
     stats_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     stats_cmd.add_argument("--json", action="store_true")
+    sup_cmd = subcommands.add_parser("supersession", help="find queued mods whose author has released a newer version (in the real install's mods/ or a modpack); read-only")
+    sup_cmd.add_argument("queue", type=Path, help="the queue folder (In operation)")
+    sup_cmd.add_argument("--against", type=Path, action="append", required=True, metavar="DIR", help="a folder of mods to compare with; repeatable")
+    sup_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
+    sup_cmd.add_argument("--json", action="store_true")
     archive_cmd = subcommands.add_parser("archive", help="package a finished revival into Done/<Mod>/: mod folder, zip, original, reports and an archive note (needs a licence decision; never deletes the workspace)")
     archive_cmd.add_argument("workspace", type=Path)
     archive_cmd.add_argument("--done", type=Path, help="default: <repo>/Done")
@@ -864,6 +873,10 @@ def build_parser() -> argparse.ArgumentParser:
     esc_run.add_argument("--timeout", type=int, default=1800, help="seconds per attempt")
     esc_apply = esc_sub.add_parser("apply", help="copy an attempt already VERIFIED (and reviewed) into working/, without re-running the agent")
     esc_apply.add_argument("--attempt", type=int, help="which attempt (default: the newest VERIFIED one)")
+    esc_queue = esc_sub.add_parser("queue", help="across a queue: which findings block the ESCALATED mods, and which mods one decision would clear; writes ESCALATIONS_BY_FINDING.md")
+    esc_queue.add_argument("queue", type=Path)
+    esc_queue.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
+    esc_queue.add_argument("--json", action="store_true")
     for command in (esc_list, esc_show, esc_verify, esc_run, esc_apply):
         command.add_argument("workspace", type=Path)
         command.add_argument("--json", action="store_true")
@@ -1099,6 +1112,20 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0
+    if args.command == "supersession":
+        from .supersession import find_superseded
+        result = find_superseded(args.queue, args.against, quiet=args.quiet)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        for record in result["mods"]:
+            if record["verdict"] in ("SUPERSEDED", "SAME_RELEASE", "NEWER_ELSEWHERE"):
+                ref = record["reference"]
+                renamed = f" [named '{ref['name']}' there]" if ref.get("name") and ref["name"].strip().lower() != record["name"].strip().lower() else ""
+                print(f"{record['verdict']:16} {record['workspace']}: ours {record['version']}, theirs {ref['version']} ({ref['game_version'] or 'no gameVersion'}) at {ref['path']}{renamed}")
+        print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())))
+        print(f"Written: {result['result_path']}")
         return 0
     if args.command == "finding-stats":
         from .finding_stats import CHECKPOINT_NAME, FindingStatsError, finding_stats, render
@@ -1985,7 +2012,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "log-triage":
         try:
-            result = triage_log(args.log, args.mod_prefix, mods_dir=args.mods_dir, all_mods=args.all_mods)
+            result = triage_log(args.log, args.mod_prefix, mods_dir=args.mods_dir, all_mods=args.all_mods, last_sessions=args.last_sessions)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -1993,6 +2020,9 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, indent=2, sort_keys=True))
         else:
             counts = result["counts"]
+            if result.get("sessions"):
+                sessions = result["sessions"]
+                print(f"Sessions: last {sessions['found']} of the log, from line {sessions['first_line']} (line numbers below count from there)")
             print(f"FATAL={counts['FATAL']} MOD-ERROR={counts['MOD-ERROR']} KNOWN-NOISE={counts['KNOWN-NOISE']} OTHER={counts['OTHER']}")
             milestones = result["milestones"]
             print(f"Main menu reached: {milestones['main_menu_reached']}; campaign loads: {len(milestones['campaign_loads'])}; finished-saving events: {milestones['finished_saving_count']}; mission variant preloads (startup, not play): {len(milestones['mission_variant_preloads'])}")
@@ -2014,6 +2044,24 @@ def main(argv: list[str] | None = None) -> int:
             print(result["caveat"])
         return 0 if not result["fatal"] else 1
     if args.command == "copy-drift":
+        if args.prune and not args.sync:
+            print("bridgeforge: --prune needs --sync.", file=sys.stderr)
+            return 2
+        if args.sync:
+            try:
+                synced = sync_copies(args.working_copy, args.deployed_copy, prune=args.prune)
+            except ValueError as exc:
+                print(f"bridgeforge: {exc}", file=sys.stderr)
+                return 2
+            if args.json:
+                print(json.dumps(synced, indent=2, sort_keys=True))
+                return 0 if synced["status"] == "PASS" else 1
+            for item in synced["copied"]:
+                print(f"COPIED {item}")
+            for item in synced["pruned"]:
+                print(f"PRUNED {item} -> {synced['pruned_to']}")
+            for item in synced["extra_kept"]:
+                print(f"EXTRA-KEPT {item} (use --prune to move it out)")
         try:
             result = compare_copies(args.working_copy, args.deployed_copy)
         except ValueError as exc:
@@ -2174,6 +2222,7 @@ def main(argv: list[str] | None = None) -> int:
             "from_vanilla_id": args.from_vanilla_id,
             "faction_file": args.faction_file,
             "encodings": dict(item.split("=", 1) for item in (args.encoding or [])),
+            "reference_core": args.reference_core,
             "hulls": args.hull,
             "allow_shadowed_edit": args.allow_shadowed_edit,
             "provider_roots": args.providers or None,
@@ -2193,6 +2242,11 @@ def main(argv: list[str] | None = None) -> int:
                     print(diff_text or "(no textual diff; binary or empty change)")
             return 0
         applied = apply_fix(plan)
+        if plan.finding_id == "data-file-not-utf8" and options["encodings"]:
+            from .fixers import record_named_encodings
+            recorded = record_named_encodings(plan.mod_root, options["encodings"])
+            if recorded is not None and not args.json:
+                print(f"Named encodings recorded: {recorded}")
         try:
             rescan = scan_mod(plan.mod_root)
         except ValueError as exc:
@@ -2900,6 +2954,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else render_revive(result), end="\n" if args.json else "")
+        return 0
+    if args.command == "escalation" and args.escalation_command == "queue":
+        from .escalation_queue import summarize_queue
+        result = summarize_queue(args.queue, quiet=args.quiet)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            for row in result["findings"][:15]:
+                print(f"{len(row['only_blocker']):4} only / {len(row['mods']):4} mods  {row['finding']} ({row['tier']}, {row['kind']})")
+            print(f"Escalated mods: {result['escalated']}. Written: {result['result_md']}")
         return 0
     if args.command == "escalation":
         from .escalation import EscalationError, list_packets, load_packet, run_packet, verify

@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -84,17 +85,52 @@ def verify(packet: dict, working: Path) -> dict:
             "compile_checked": vanilla is not None, "changed_since_packet": stale}
 
 
+def resolve_agent_command(agent: str, home: Path | None = None) -> str:
+    """`claude ...` with no `claude` on PATH: use the VS Code extension's bundled binary (ROADMAP P15 item 20.13).
+
+    The first escalation run (2026-09-27) found `claude` missing from PATH on a machine where the extension
+    ships `~/.vscode/extensions/anthropic.claude-code-<version>/resources/native-binary/claude(.exe)`. The newest
+    extension folder wins. Any other command, or a `claude` already on PATH, is returned unchanged.
+    """
+    parts = agent.strip().split(None, 1)
+    if not parts or parts[0].lower() not in ("claude", "claude.exe") or shutil.which(parts[0]):
+        return agent
+    extensions = (home or Path.home()) / ".vscode" / "extensions"
+    binary = "claude.exe" if os.name == "nt" else "claude"
+    def version(path: Path) -> tuple[int, ...]:
+        match = re.match(r"anthropic\.claude-code-([\d.]+)", path.parents[2].name)
+        return tuple(int(n) for n in match.group(1).split(".") if n) if match else ()
+
+    found = sorted(extensions.glob(f"anthropic.claude-code-*/resources/native-binary/{binary}"), key=version) if extensions.is_dir() else []
+    if not found:
+        return agent
+    return f'"{found[-1]}"' + (f" {parts[1]}" if len(parts) > 1 else "")
+
+
+def _keep_line_endings(before: bytes, after: bytes) -> bytes:
+    """The original's CRLF endings back on an agent's LF-only text edit (ROADMAP P15 item 20.14: the agent turned
+    CRLF into LF, so every line showed as changed). Binary or undecodable content is returned unchanged."""
+    if b"\r\n" not in before or b"\r\n" in after or b"\x00" in after[:8192]:
+        return after
+    try:
+        text = after.decode("utf-8")
+    except UnicodeDecodeError:
+        return after
+    return text.replace("\n", "\r\n").encode("utf-8")
+
+
 def _copy_back(packet: dict, sandbox: Path, working: Path, changed: list[str]) -> list[dict]:
     written = []
     for name in changed:
         source, target = sandbox / name, working / name
         backup = None
+        before = target.read_bytes() if target.is_file() else b""
         if target.is_file():
             backup = target.with_name(f"{target.name}.pre-bf-escalation-{packet['id']}.bak")
             shutil.copyfile(target, backup)
         if source.is_file():
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, target)
+            target.write_bytes(_keep_line_endings(before, source.read_bytes()))
         elif target.is_file():
             target.unlink()
         written.append({"path": name, "backup": str(backup) if backup else None})
@@ -109,6 +145,7 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
         raise EscalationError(f"{packet_name} is an owner packet ({packet['tier']}): it needs a decision, not an agent.")
     working = workspace / "working"
     if isinstance(agent, str):
+        agent = resolve_agent_command(agent)
         # Windows parses its own command lines (backslashed paths); POSIX needs the split.
         command = [agent] if os.name == "nt" and agent.strip() else shlex.split(agent)
     else:

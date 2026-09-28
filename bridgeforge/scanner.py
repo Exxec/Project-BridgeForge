@@ -192,7 +192,10 @@ BUNDLED_LIBRARY_PACKAGE_PREFIXES = {
     # Only lazylib: org/lazywizard/console/ is Console Commands (lw_console). The wider prefix made
     # revive declare LazyLib for ClearCommands, whose jar only calls Console Commands (2026-09-27;
     # every class in LazyLib 3.0.0's LazyLib.jar and LazyLib-Kotlin.jar sits under org/lazywizard/lazylib).
-    "LazyLib": ("org/lazywizard/lazylib/",),
+    # kotlin/ and kotlinx/ too: LazyLib ships the Kotlin runtime (mod_info "jars": jars/internal/Kotlin-Runtime.jar,
+    # which holds kotlin/jvm/internal/Intrinsics; LazyLib 3.0.0, read 2026-09-27). A Kotlin mod that does not
+    # declare LazyLib crashes with NoClassDefFoundError: kotlin/jvm/internal/Intrinsics (Automatic Orders, GRP-4).
+    "LazyLib": ("org/lazywizard/lazylib/", "kotlin/", "kotlinx/"),
     "Console Commands": ("org/lazywizard/console/",),
     "MagicLib": ("org/magiclib/", "data/scripts/util/Magic"),
     "LunaLib": ("lunalib/",),
@@ -208,6 +211,8 @@ LIBRARY_DEPENDENCY_IDS = {
     "LunaLib": "lunalib",
     "Nexerelin": "nexerelin",
 }
+SETTINGS_ACCEPT_LIMIT = 25  # owner, 2026-09-27 (ROADMAP item 19 held rule)
+SETTINGS_BASELINE_FILE = "SETTINGS_BASELINE.json"
 DESIGN_TYPE_CSV_TARGETS = (
     ("data", "hulls", "ship_data.csv"),
     ("data", "weapons", "weapon_data.csv"),
@@ -832,6 +837,8 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
                             for library, prefixes in LIBRARY_PACKAGES.items():
                                 if any(prefix.replace(".", "/").encode() in class_bytes for prefix in prefixes):
                                     result.bytecode_library_references.add(library)
+                            if b"Lkotlin/" in class_bytes or b"kotlin/jvm/" in class_bytes:
+                                result.bytecode_library_references.add("LazyLib")  # the Kotlin runtime is LazyLib's
                             if b"java/lang/UnsupportedOperationException" in class_bytes:
                                 result.add(
                                     id="bytecode-runtime-placeholder-reference",
@@ -3849,6 +3856,27 @@ def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | Non
     overridden = sorted(_settings_value_changes(mod_settings, vanilla_settings))
     if not overridden:
         return
+    # Owner's held rule (ROADMAP item 19, 2026-09-27; cleared once list merging was settled the same day): a small,
+    # deliberate set of up to SETTINGS_ACCEPT_LIMIT changed values is accepted, recorded per mod with the exact keys
+    # in <workspace>/SETTINGS_BASELINE.json (revive writes it) so any later change shows. Larger sets stay REVIEW.
+    baseline_path = root.parent / SETTINGS_BASELINE_FILE if root.name == "working" else None
+    baseline = None
+    if baseline_path is not None and baseline_path.is_file():
+        loaded = _load_lenient_json_file(baseline_path) or {}
+        baseline = sorted(loaded.get("keys") or []) if isinstance(loaded, dict) else None
+    if len(overridden) <= SETTINGS_ACCEPT_LIMIT and (baseline is None or baseline == overridden):
+        result.add(
+            id="settings-json-override-accepted", category="metadata", severity="info", classification="SAFE", confidence="DETERMINISTIC",
+            explanation=(f"data/config/settings.json changes {len(overridden)} vanilla value(s), within the owner's accepted limit of "
+                         f"{SETTINGS_ACCEPT_LIMIT} for a deliberate tuning set. The exact keys are " + ("recorded in the workspace's "
+                         f"{SETTINGS_BASELINE_FILE}, and match." if baseline is not None else f"listed here; revive records them in {SETTINGS_BASELINE_FILE}.")),
+            file="data/config/settings.json", evidence=[f"overridden:{len(overridden)}", *overridden])
+        return
+    baseline_note = ""
+    if baseline is not None and baseline != overridden:
+        added, dropped = sorted(set(overridden) - set(baseline)), sorted(set(baseline) - set(overridden))
+        baseline_note = (f" The keys changed since {SETTINGS_BASELINE_FILE} was recorded: added {', '.join(added[:10]) or 'none'}; "
+                         f"no longer changed {', '.join(dropped[:10]) or 'none'}.")
     result.add(
         id="settings-json-override-breadth",
         category="metadata",
@@ -3862,7 +3890,7 @@ def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | Non
             "set is normal; a large one usually means a near-complete copy of an older settings.json, which "
             "reverts the game's own tuning across four versions with no error. Review the list, not the count - "
             "this is blast radius, not a verdict."
-        ),
+        ) + baseline_note,
         file="data/config/settings.json",
         evidence=[f"overridden:{len(overridden)}", f"vanilla-keys:{len(vanilla_settings)}", *overridden[:25]],
     )
@@ -5225,9 +5253,16 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                 evidence=[f"library:{library}", *import_only[:5]],
             )
             continue
-        dotted_needles = [prefix.replace("/", ".").rstrip(".") for prefix in prefixes]
+        # Kotlin is compiled, never a .java import: matching the word "kotlin" in Java text would be noise.
+        dotted_needles = [prefix.replace("/", ".").rstrip(".") for prefix in prefixes if not prefix.startswith("kotlin")]
         source_hits: list[str] = []
         guarded = False
+        # Optional integration: every referencing source checks isModEnabled("<this library's id>") and none
+        # fails fast (throws) when it is missing. RC8 runs with -noverify (CLAUDE.md), so a library class resolves
+        # only when code using it runs, which the guard prevents when the library is absent.
+        id_guard = re.compile(r'\bisModEnabled\s*\(\s*"' + re.escape(dependency_id) + r'"\s*\)', re.IGNORECASE)
+        fail_fast = re.compile(r'!\s*[\w.()\s]*isModEnabled\s*\(\s*"' + re.escape(dependency_id) + r'"\s*\)\s*\)\s*\{?\s*throw\b', re.IGNORECASE)
+        every_hit_id_guarded = True
         for source in sorted(root.rglob("*.java")):
             if "disabled_files" in source.relative_to(root).parts:
                 continue
@@ -5240,6 +5275,8 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
             source_hits.append(_relative(root, source))
             if re.search(r"\bisModEnabled\s*\(", text):
                 guarded = True
+            if not id_guard.search(text) or fail_fast.search(text):
+                every_hit_id_guarded = False
         bytecode_hits: list[str] = []
         referencing_classes: set[str] = set()
         if not source_hits:
@@ -5271,7 +5308,15 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                            explanation="Every class that uses Console Commands' API is registered in data/console/commands.csv, which only Console Commands reads, so the classes load only when it is installed. An optional integration; no dependency needed.",
                            evidence=sorted(users)[:10])
                 continue
-        classification = "REVIEW" if guarded else "MANUAL"
+        if source_hits and every_hit_id_guarded:
+            result.add(id="optional-library-integration", category="dependencies", severity="info", classification="SAFE", confidence="MEDIUM",
+                       explanation=f"Every source file that uses {library} checks isModEnabled(\"{dependency_id}\") and none throws when it is missing: an optional integration. RC8 runs with -noverify, so {library}'s classes are resolved only when that guarded code runs. No dependency needed; the mod works with or without {library}.",
+                       file="mod_info.json", evidence=[f"library:{library}", f"dependency-id:{dependency_id}", *source_hits[:5]])
+            continue
+        # Owner ruling 2026-09-27: an unguarded use of a known, maintained library is fixed by declaring it (the
+        # library's own mod id, from LIBRARY_DEPENDENCY_IDS), which is deterministic, so it is REVIEW, not MANUAL,
+        # and the fixer is a standing approval in AUTOMATION_POLICY.json. Before: 88 MANUAL findings in 229 mods.
+        classification = "REVIEW"
         result.add(
             id="undeclared-library-dependency",
             category="dependencies",
@@ -5769,7 +5814,9 @@ def _scan_variant_validity(root: Path, result: ScanResult, vanilla_core: Path | 
                     continue
                 weapon_op_total += _float_or(w_row.get("OPs"))
 
-        built_in_mods = set(ship_json.get("builtInMods") or [])
+        # S-mods and permanent mods (d-mods) cost no OP; RC8 variants may list them in hullMods too (9 of 696
+        # over-budget queue variants did, 2026-09-27, e.g. brdy_stenos_event), which overcounted them.
+        built_in_mods = set(ship_json.get("builtInMods") or []) | {m for key in ("sMods", "permaMods") for m in (data.get(key) or []) if isinstance(m, str)}
         hull_size = str(ship_json.get("hullSize") or "").strip().upper()
         cost_column = HULL_MOD_COST_COLUMN_BY_SIZE.get(hull_size, "cost_cruiser")
         hull_mod_total = 0.0

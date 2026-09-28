@@ -43,14 +43,7 @@ vendor, strip) matches what you would decide by hand. Fixers you want applied ev
 
 ## 2. Re-run with the kept commands (P15 item 5)
 
-### R3. Rebuild the Downloads index (P14 item 18, P15 item 26)
-The 2026-09-27 run used the old, quadratic indexer (11 hours, not finished). Stop it (PID 75768, or any
-`python -m bridgeforge corpus-index build`), delete `bridgeforge-state\corpus-index.sqlite*`, then:
-```powershell
-python -m bridgeforge corpus-index build "C:\Users\exxec\Downloads"
-python -m bridgeforge corpus-index search shieldbypass
-```
-It now prints `[n/total]` and saves per file. Done when the search finds `Ship and Weapon Pack/data/hullmods/hull_mods.csv`.
+### R3. Done 2026-09-27 (P15 item 26): 69 min, `shieldbypass` found. Removed.
 
 ### R4. `strip-plan` and `vendor-copy --plan` on a real case (P14 item 4, P15 item 7)
 ```powershell

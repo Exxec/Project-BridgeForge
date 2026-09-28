@@ -84,10 +84,9 @@ class SettingsBreadthTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             mod, core = _fixture(Path(directory), settings={"xpGainMult": 4, "maxShipsInFleet": 90, "modOnly": 1})
             result = scan_mod(mod, TargetProfile(), core)
-        findings = _ids(result, "settings-json-override-breadth")
+        findings = _ids(result, "settings-json-override-accepted")  # 2 values: within the owner's limit of 25
         self.assertEqual(len(findings), 1)
         self.assertIn("overridden:2", findings[0].evidence)
-        self.assertIn(f"vanilla-keys:{len(VANILLA_SETTINGS)}", findings[0].evidence)
         self.assertIn("xpGainMult", findings[0].evidence)
         self.assertNotIn("modOnly", findings[0].evidence)  # mod-only keys override nothing
 
@@ -97,16 +96,43 @@ class SettingsBreadthTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             added = dict(VANILLA_SETTINGS, plugins={**VANILLA_SETTINGS["plugins"], "myPlugin": "data.scripts.My"})
             mod, core = _fixture(Path(directory), settings=added)
-            quiet = _ids(scan_mod(mod, TargetProfile(), core), "settings-json-override-breadth")
+            found = scan_mod(mod, TargetProfile(), core)
+            quiet = _ids(found, "settings-json-override-breadth") + _ids(found, "settings-json-override-accepted")
         with tempfile.TemporaryDirectory() as directory:
             changed = dict(VANILLA_SETTINGS, plugins={**VANILLA_SETTINGS["plugins"], "vanillaPlugin": "data.scripts.Other"},
                            ruleCommandPackages=["data.campaign.rulecmd"])
             mod, core = _fixture(Path(directory), settings=changed)
-            loud = _ids(scan_mod(mod, TargetProfile(), core), "settings-json-override-breadth")
+            loud = _ids(scan_mod(mod, TargetProfile(), core), "settings-json-override-accepted")
         self.assertEqual(quiet, [])
         self.assertIn("overridden:2", loud[0].evidence)
         self.assertIn("plugins.vanillaPlugin", loud[0].evidence)
         self.assertIn("ruleCommandPackages", loud[0].evidence)
+
+    def test_owner_limit_baseline_and_a_changed_baseline(self) -> None:
+        # Owner's held rule (ROADMAP 19, 2026-09-27): up to 25 values accepted and recorded; more, or a change, is REVIEW.
+        import shutil
+
+        from bridgeforge.revive import _scan
+        from bridgeforge.scanner import SETTINGS_BASELINE_FILE
+
+        many = {f"k{i}": i + 1 for i in range(26)}
+        with tempfile.TemporaryDirectory() as directory:
+            mod, core = _fixture(Path(directory), settings=dict(VANILLA_SETTINGS, **many))
+            (core / "data" / "config" / "settings.json").write_text(json.dumps(dict(VANILLA_SETTINGS, **{k: 0 for k in many})), encoding="utf-8")
+            over = _ids(scan_mod(mod, TargetProfile(), core), "settings-json-override-breadth")
+        self.assertEqual(len(over), 1)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod, core = _fixture(root / "fixture", settings={"xpGainMult": 4})
+            working = root / "ws" / "working"
+            shutil.copytree(mod, working)
+            _scan(working, core)
+            baseline = json.loads((working.parent / SETTINGS_BASELINE_FILE).read_text(encoding="utf-8"))
+            (working / "data" / "config" / "settings.json").write_text(json.dumps({"xpGainMult": 4, "maxShipsInFleet": 90}), encoding="utf-8")
+            changed = _ids(scan_mod(working, TargetProfile(), core), "settings-json-override-breadth")
+        self.assertEqual(baseline["keys"], ["xpGainMult"])
+        self.assertEqual(len(changed), 1)
+        self.assertIn("maxShipsInFleet", changed[0].explanation)
 
     def test_settings_matching_vanilla_exactly_is_quiet(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

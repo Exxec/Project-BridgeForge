@@ -85,3 +85,31 @@ class CopyDriftTests(unittest.TestCase):
             self.assertEqual(main(["copy-drift", str(working), str(deployed)]), 0)
             (working / "data" / "scripts" / "Extra.java").write_text("class Extra {}", encoding="utf-8")
             self.assertEqual(main(["copy-drift", str(working), str(deployed), "--json"]), 1)
+
+
+class CustomTopFolderTests(unittest.TestCase):
+    def test_a_mod_specific_top_level_folder_ships_and_tool_folders_do_not(self) -> None:
+        # GRP-3 (2026-09-27): Flux Reticle's sprites live in sun_fr/graphics/; leaving them out crashed startup.
+        from bridgeforge.copy_drift import _collect
+
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            for relative in ("mod_info.json", "sun_fr/graphics/half.png", "data/config/settings.json",
+                             "scratch/old.txt", "out/production/X.class", "disabled_files/Old.java", ".git/HEAD",
+                             "src/Main.java", "reports/REVIVAL_REPORT.md", "sun_fr/graphics/half.png.bak"):
+                (mod / relative).parent.mkdir(parents=True, exist_ok=True)
+                (mod / relative).write_text("x", encoding="utf-8")
+            files = sorted(_collect(mod))
+        self.assertEqual(files, ["data/config/settings.json", "mod_info.json", "sun_fr/graphics/half.png"])
+
+    def test_every_root_file_ships_except_backups(self) -> None:
+        # GRP-7 (2026-09-27): Transfer All Items loads "transfer_all_items_settings.json.default" from its root;
+        # the old *.json-style allowlist dropped it and the game stopped with a Fatal at startup.
+        from bridgeforge.copy_drift import _collect
+
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            for name in ("mod_info.json", "transfer_all_items_settings.json.default", "readme.txt", "old.bak", "Thumbs.db"):
+                (mod / name).write_text("x", encoding="utf-8")
+            files = sorted(_collect(mod))
+        self.assertEqual(files, ["mod_info.json", "readme.txt", "transfer_all_items_settings.json.default"])

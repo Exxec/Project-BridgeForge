@@ -85,4 +85,6 @@ LONG_RUNNING_COMMANDS = (
     ("dependency-graph",),
     ("corpus-recheck",),
     ("corpus-index", "build"),
+    ("supersession",),
+    ("escalation", "queue"),
 )

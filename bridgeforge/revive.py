@@ -85,7 +85,25 @@ def _scan(working: Path, vanilla_core: Path | None) -> list[dict]:
 
     accepted = mod_baseline_keys(working)
     findings = [asdict(f) for f in scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None).findings]
+    _record_settings_baseline(working, findings)
     return [f for f in findings if finding_dict_baseline_key(f) not in accepted]
+
+
+def _record_settings_baseline(working: Path, findings: list[dict]) -> None:
+    """First acceptance of a small settings.json tuning set (owner's held rule, ROADMAP item 19): record the exact
+    keys in <workspace>/SETTINGS_BASELINE.json so a later change turns the finding back into REVIEW."""
+    from .scanner import SETTINGS_BASELINE_FILE
+
+    path = Path(working).parent / SETTINGS_BASELINE_FILE
+    if Path(working).name != "working" or path.exists():
+        return
+    for finding in findings:
+        if finding["id"] == "settings-json-override-accepted":
+            keys = [e for e in finding.get("evidence") or [] if not e.startswith("overridden:")]
+            path.write_text(json.dumps({"schema_version": 1, "keys": sorted(keys),
+                                        "rule": "owner 2026-09-27: up to 25 deliberate settings.json value changes accepted"}, indent=2) + "\n",
+                            encoding="utf-8")
+            return
 
 
 def finding_key(finding: dict) -> tuple[str, str]:
@@ -103,6 +121,10 @@ def _fix_options(finding_id: str, working: Path, target: str, vanilla_core: Path
     base = {"target_game_version": target, "vanilla_core": vanilla_core, "scan_findings": findings}
     if finding_id == "faction-known-lists-missing":
         return [{**base, "faction_file": working / f["file"]} for f in findings if f.get("file")]
+    if finding_id == "data-file-not-utf8":
+        from .fixers import pending_named_encodings
+        # A person's earlier `fix --encoding` decisions (<workspace>/NAMED_ENCODINGS.json, ROADMAP P15 20.4).
+        return [{**base, "encodings": pending_named_encodings(working)}]
     return [base]
 
 
@@ -125,6 +147,8 @@ def _try_fixers(working: Path, findings: list[dict], *, target: str, vanilla_cor
             except FixerError as exc:
                 pending.append({"finding": finding_id, "state": "FIXER_REFUSED", "reason": str(exc), "classifications": classifications})
                 continue
+            for reason in options.get("partial_refusals") or []:
+                pending.append({"finding": finding_id, "state": "FIXER_REFUSED", "reason": reason, "classifications": classifications})
             diff = "".join(unified_diff_for_change(change) for change in plan.changes)
             # A move (shippable-work-file) writes outside working/: label it relative to working.
             files = sorted(Path(os.path.relpath(change.path, working)).as_posix() + (" (removed)" if change.removed else "")

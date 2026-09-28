@@ -34,7 +34,7 @@ class PacksTests(unittest.TestCase):
         self.assertEqual(BRIDGEFORGE_VERSION, __version__)
         alpha_pack = MigrationPack("alpha", "alpha", "test", "SCAFFOLDED", None, Path("."), min_bridgeforge_version="0.1.0a1")
         final_pack = MigrationPack("final", "final", "test", "SCAFFOLDED", None, Path("."), min_bridgeforge_version="0.1.0")
-        later_pack = MigrationPack("later", "later", "test", "SCAFFOLDED", None, Path("."), min_bridgeforge_version="0.2.1")
+        later_pack = MigrationPack("later", "later", "test", "SCAFFOLDED", None, Path("."), min_bridgeforge_version="99.0.0")  # always later than the current version
         self.assertTrue(compatible(alpha_pack))
         self.assertTrue(compatible(final_pack))
         self.assertFalse(compatible(later_pack))

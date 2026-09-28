@@ -83,10 +83,45 @@ public class MissionDefinition implements MissionDefinitionPlugin {
             index++;
         }
 
+        // An empty side means no fight: GRP-5 had one mod ship and no opponent, GRP-3 and sprite-only mods none
+        // at all (2026-09-27). Fill an empty side with a small vanilla fleet so the combat plugin always sees a
+        // battle; sized to the other side, 2 to 4 ships. Idea from Legacy of Arkgneisis's own test missions
+        // (ROADMAP item 29.1). Variant ids checked in RC8 data/variants (2026-09-27).
+        if (deployedA == 0) {
+            fillSide(api, FleetSide.PLAYER, fillerCount(deployedB));
+        }
+        if (deployedB == 0) {
+            fillSide(api, FleetSide.ENEMY, fillerCount(deployedA));
+        }
+
         float width = 16000f;
         float height = 12000f;
         api.initMap(-width / 2f, width / 2f, -height / 2f, height / 2f);
 
         api.addPlugin(new BfProbeCombatPlugin(config.combatSeconds));
+    }
+
+    private static final String[] FILLER_VARIANTS = {
+            "hammerhead_Balanced", "enforcer_Assault", "lasher_CS", "wolf_CS", "sunder_CS", "eagle_Assault"
+    };
+
+    private static int fillerCount(int otherSide) {
+        return Math.max(2, Math.min(4, otherSide));
+    }
+
+    private static void fillSide(MissionDefinitionAPI api, FleetSide side, int count) {
+        int added = 0;
+        for (int i = 0; i < count; i++) {
+            String variantId = FILLER_VARIANTS[i % FILLER_VARIANTS.length];
+            try {
+                api.addToFleet(side, variantId, FleetMemberType.SHIP, "BF filler " + (i + 1), false);
+                added++;
+            } catch (Throwable t) {
+                ProbeLog.emit("combat-filler", ProbeLog.STATUS_WARN, variantId,
+                        "addToFleet threw " + t.getClass().getName() + ": " + t.getMessage());
+            }
+        }
+        ProbeLog.emit("combat-filler", ProbeLog.STATUS_INFO, String.valueOf(side),
+                added + " vanilla ship(s) added: the target mod had none for this side");
     }
 }

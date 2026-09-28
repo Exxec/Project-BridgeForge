@@ -375,7 +375,11 @@ def _dialog_fatals(windows_log: Path) -> list[dict[str, object]]:
     return fatals
 
 
-def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: Path | None = None, all_mods: bool = False) -> dict[str, object]:
+SESSION_START = "StarfarerLauncher  - Starting Starsector"
+
+
+def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: Path | None = None, all_mods: bool = False,
+               last_sessions: int | None = None) -> dict[str, object]:
     """Classify a Starsector log into FATAL / MOD-ERROR / KNOWN-NOISE / OTHER without modifying it.
 
     Pass `mods_dir` (a `mods/` directory -- the rig's own or a foreign modpack's) to additionally
@@ -388,6 +392,14 @@ def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: 
     prefixes = tuple(DEFAULT_MOD_PREFIXES) + tuple(mod_prefixes or ())
     owner_index = class_owner_index(mods_dir, enabled_only=not all_mods) if mods_dir is not None else None
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    sessions = None
+    if last_sessions:
+        # A rolling starsector.log holds every session; a player relaunch (ZG-7) is logged only there. Keep the
+        # last N sessions, each starting at the launcher's "Starting Starsector" line (ROADMAP P15 item 20.17).
+        starts = [number for number, line in enumerate(lines) if SESSION_START in line]
+        first = starts[-last_sessions] if len(starts) >= last_sessions else (starts[0] if starts else 0)
+        sessions = {"requested": last_sessions, "found": min(last_sessions, len(starts)), "first_line": first + 1}
+        lines = lines[first:]
     events, milestones, shadow_symptoms, probe_entries = _iter_events_and_milestones(lines)
     classified: dict[str, list[dict[str, object]]] = {"FATAL": [], "MOD-ERROR": [], "KNOWN-NOISE": [], "OTHER": []}
     for event in events:
@@ -421,4 +433,6 @@ def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: 
     if owner_index is not None:
         result["mods_dir"] = str(Path(mods_dir).expanduser().resolve())
         result["attribution"] = _summarize_attribution(classified["FATAL"] + classified["MOD-ERROR"] + classified["OTHER"])
+    if sessions is not None:
+        result["sessions"] = sessions  # line numbers count from sessions["first_line"]
     return result

@@ -31,6 +31,14 @@ class ArchiveError(ValueError):
     """Raised for a missing workspace, no licence decision, or an archive that already exists."""
 
 
+def _version_text(version: object) -> str:
+    """mod_info `version` as text: a string, or the {"major","minor","patch"} object some mods use (Anex Weapons)."""
+    if isinstance(version, dict):
+        parts = [str(version.get(key)) for key in ("major", "minor", "patch") if version.get(key) not in (None, "")]
+        return ".".join(parts) or "unversioned"
+    return str(version or "unversioned")
+
+
 def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -55,7 +63,7 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
     if not (working / "mod_info.json").is_file():
         raise ArchiveError(f"{workspace} has no working/mod_info.json.")
     info = _load_lenient_json_file(working / "mod_info.json") or {}
-    mod_id, name, version = info.get("id"), str(info.get("name") or workspace.name), str(info.get("version") or "unversioned")
+    mod_id, name, version = info.get("id"), str(info.get("name") or workspace.name), _version_text(info.get("version"))
     licence = revival_licence(mod_id, name, policy_path)
     if licence.get("decision") not in ("LOCAL_ONLY", "RELEASABLE"):
         raise ArchiveError(f"no licence decision for {mod_id}: record one first (bridgeforge release-policy set {mod_id} --local-only|--releasable --reason ...).")
@@ -118,7 +126,8 @@ def _render_note(info: dict, name: str, version: str, licence: dict, status: str
         lines += ["## Status: releasable", "", f"Recorded in `release_policy.json` as `RELEASABLE`: {licence.get('reason') or 'no reason recorded'}.", ""]
     lines += [f"Revival report status: **{status or 'none recorded'}** (archived {today}).", "", "## What changed from the original", ""]
     if not has_original:
-        lines.append("No `original/` copy was kept, so the changes cannot be listed here; see `workspace/REVIVAL_REPORT.md`.")
+        lines.append("`original/` holds no unpacked mod (only the download as archives, or nothing), so the changes cannot be "
+                     "listed file by file here; see `workspace/REVIVAL_REPORT.md`.")
     else:
         lines.append(f"{len(changed)} shipped file(s) changed and {len(added)} added, compared byte for byte with `original/`:")
         lines += [f"- changed: `{item}`" for item in changed[:40]] + [f"- added: `{item}`" for item in added[:20]]
@@ -128,6 +137,6 @@ def _render_note(info: dict, name: str, version: str, licence: dict, status: str
                          "revival report's scans was not required." if jars_identical else "At least one jar differs from the original: see the revival report for how it was rebuilt and tested.")
     lines += ["", "See `workspace/REVIVAL_REPORT.md` for every change with its evidence.", "", "## Contents", "",
               f"- `{folder}/` - the mod folder, ready to drop into `mods/`.", f"- `{zip_name}` - the same folder, zipped.",
-              "- `original/` - the download as received, unmodified." if has_original else "- (no `original/` was kept)",
+              "- `original/` - the download as received, unmodified.",
               "- `workspace/` - revival report, plan, baselines and the workspace's own reports.", ""]
     return "\n".join(lines)

@@ -2025,10 +2025,18 @@ whether the result passed; recurring agent fixes become deterministic fixers.
       value changes (up to about 25 values), recorded per mod with the exact keys in a baseline so any later
       change shows; always review a large set (over 100 usually means a stale copy of an old settings.json).
       Covers RemnantPad and S-TechPad (24 UI colours each, a UI theme) and Combat-Misc-Utils (`forceNoVBO`).
+      **Applied 2026-09-27** (testing cleared lists the same day): up to 25 changed values is SAFE
+      `settings-json-override-accepted`; revive records the keys in `<workspace>/SETTINGS_BASELINE.json`, and a later
+      change, or more than 25 values, is REVIEW `settings-json-override-breadth`. Test: `test_owner_limit_baseline_and_a_changed_baseline`.
     - **Test first:** Blue-Friend-Balls sets `ruleCommandPackages` to its own package only. If a list value
       replaces vanilla's list rather than adding to it, vanilla's five rule-command packages are lost and much
       campaign dialogue could break. One rig run with it enabled (new game, talk to a market, open a bar) settles
       how lists merge; until then it stays blocked.
+      **Settled 2026-09-27: lists add, they do not replace.** Ten rig mods set `ruleCommandPackages` to their own
+      package only (MagicLib, LunaLib, Console Commands, SOTF, Tahlan, SWP, IndEvo, Nightcross, Broken Star,
+      Arkgneisis); GRP-SPARKLE-20260927 ran SOTF, LunaLib and MagicLib together and New Game, which needs vanilla's
+      `rulecmd.newgame` package, worked. Blue-Friend-Balls is unblocked (its report, BFB-SET-01). Evidence covers
+      `ruleCommandPackages`; other list keys still count as overrides until shown the same way.
 20. **Enhancements found in the 2026-09-27 local session (proposed, not started).** Most useful first.
     1. **`archive` command for local-only mods.** Archiving ClearCommands and RevenantLib into `Done/` was
        done by hand: shipped files via `copy_drift._collect`, a zip, `original/`, `workspace/` reports and an
@@ -2043,6 +2051,7 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        never deletes the workspace. Trial on Combat-Radar: 1 file changed (`mod_info.json`), jars identical. Test:
        `tests/test_archive.py`.
     2. **Test list merging in settings.json** (item 19's held rule), then write the fixer or baseline helper for it.
+       **Done 2026-09-27:** lists add, they do not replace (item 19); no fixer needed for `ruleCommandPackages`.
     3. **`finding-stats` deltas.** Keep the previous run and report what moved between runs (mods that changed
        bucket, ids that disappeared), so the effect of new fixers and check fixes is measured, not recomputed by hand.
        **Done 2026-09-27.** `finding-stats --write` keeps the previous run as `FINDING_STATS.previous.json` and appends
@@ -2051,21 +2060,28 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     4. **Persist named encodings.** `fix --encoding FILE=ENC` decisions live only in the fixed files; record them in
        the workspace (REVIVAL_PLAN.md or a small JSON) so a re-copy from `original/` can reapply them, and let
        `revive` read them.
+       **Done 2026-09-27:** `fix --encoding` records each decision in `<workspace>/NAMED_ENCODINGS.json`; `revive` passes
+       the recorded encodings of files still not UTF-8 to the fixer. Test: `test_named_encodings_are_recorded_and_reapplied_by_revive`.
     5. **`revive` should keep a fixer's partial refusals.** When `data-file-not-utf8` converts some files and
        refuses others, the refused list is dropped because the plan has changes; surface it as a pending item.
+       **Done 2026-09-27:** the fixer records `partial_refusals` on its options and `revive` adds them as a FIXER_REFUSED
+       pending item next to the applied part. Test: `test_partial_refusal_is_kept_as_a_pending_item`.
     6. **`vendor-copy` should recognise an equivalent vendored row.** RevenantLib's `shields_formshield` row
        differs from Rebal's only by the newer column layout and the repackaged script, yet reports CONFLICT; compare
        values column by column and treat a known script repackaging (PROVENANCE.md) as equal.
     7. **`prepare-test` first copy.** It refuses a rig folder that does not exist yet, so the first copy had to be
        made by hand; let it create the folder and do the initial sync.
+       **Done 2026-09-27:** `copy-drift --sync` makes the first copy when `<rig>/mods/<Mod>` does not exist yet (linked rigs only). Test: `test_sync_makes_the_first_copy_when_the_rig_folder_does_not_exist`.
     8. **One library table.** `revival_audit._LIBRARY_DEPENDENCY_IDS` duplicates `scanner.LIBRARY_DEPENDENCY_IDS`
        and already lacks the Console Commands entry item 14 added; derive one from the other.
+       **Done 2026-09-27:** `revival_audit` now reads `scanner.LIBRARY_DEPENDENCY_IDS` (it lacked Console Commands).
     9. **Check `undeclared-library-dependency` on real data** before adding it to the standing approvals; it
        declared the wrong library once (item 14).
     10. **Confirm dialog-text capture live** (item 18): the first run that shows an error dialog should put a
         `dialog:` line in `<TESTID>.windows.txt` and a FATAL in triage.
     11. **Faction-Relationships-Uniquified's lone 0x9D byte** (item 17): the tail of a broken UTF-8 `”`; a person
         decides the replacement.
+       **Done 2026-09-27:** owner chose to delete it (FRU-ENC-01 in its report).
     12. **`escalation apply <packet>`**: copy an attempt already VERIFIED (and reviewed) into `working/` with a
         backup, instead of `run --apply` re-running the agent and producing an unreviewed edit (item 21).
         **Done 2026-09-27.** `escalation apply WORKSPACE PACKET [--attempt N]` (`escalation.apply_verified`): the
@@ -2074,8 +2090,11 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         `applied_without_rerun`. Test: `tests/test_revive.py`.
     13. **Agent command discovery:** when `claude` is not on PATH, find the VS Code extension's `claude.exe` (item 21)
         or say where to look, instead of failing with WinError 2.
+        **Done 2026-09-27:** `escalation.resolve_agent_command` swaps `claude` for the newest extension's
+        `resources/native-binary/claude.exe` when `claude` is not on PATH. Test: `ResolveAgentCommandTests`.
     14. **Keep line endings in agent edits:** the agent turned CRLF into LF; `escalation verify` could normalise
         back to the file's original endings so diffs show only real changes.
+       **Done 2026-09-27:** `escalation._copy_back` restores CRLF on an LF-only text edit of a CRLF file. Test: `tests/test_escalation_line_endings.py`.
     15. **Done 2026-09-27: `fleet-type-name-missing`** (REVIEW; source literals in loose scripts and jar sources,
         against the faction file and vanilla's/the mod's `default_fleet_type_names.json`; test
         `tests/test_fleet_type_names.py`), tier `auto` with fixer `fleet-type-name-missing` (title-cased names inserted as
@@ -2095,9 +2114,14 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         soft `graphics/fx/star_halo.png` tinted `[40,255,120,150]` (`planets.json`, `star_zorg` only). Build
         `[BF r3]` / `V18+bf.3`; `Done/Zorg18` and the rig copy updated (drift 0). New-game check pending: the save
         should hold exactly one `star_zorg` and no `zorg_planet` outside Zorg Zeta.
+        **Validated 2026-09-27 (ZG-R3-20260927):** probe 0.2.6 `campaign-layout|OK` with `star_zorg=1, zorg_planet=2`, no
+        WARN/FAIL for either type (first live use of the check); owner confirmed the star; FATAL=0, MOD-ERROR=0.
+       **Done 2026-09-27:** fixed in r3 (procgen weights zeroed), and r4 archived after live tests ZG4-1..4.
     17. **Triage across relaunches.** `bf-test launch` redirects only the session it starts; a player relaunch
         (ZG-7's save/quit/load) goes only to the game's `starsector.log`. `triage` should also read the rig's
         `starsector.log` lines after the launch time, so a multi-session test is triaged whole.
+        **Done 2026-09-27:** `log-triage <rig>/logs/starsector.log --last-sessions N` triages only the last N sessions
+        (each starts at the launcher's "Starting Starsector" line; the log has no dates). Test: `tests/test_log_triage_sessions.py`.
     16. **`shippable-work-file` references (done 2026-09-27):** mentions inside IDE/VCS folders (`.idea`, `.git`,
         `src*`) no longer count as runtime references; Jackundor's `.idea/libraries/data.xml` had kept two
         backup zips in the mod. Test: `tests/test_fixers.py`.
@@ -2240,6 +2264,89 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     are indexed by source; an older-schema index with content is refused rather than slowly updated. Benchmark on
     the rig's mods: a steady ~130 files/s, 32,000 files in under 4 minutes with no slowdown. Test:
     `tests/test_corpus_index.py`. R3 must be stopped and rebuilt into a fresh index.
+    **R3 done 2026-09-27** on the fixed code: 69 min for all of Downloads (42 GB), 403,544 text files searched and
+    1,295,212 listed by name, a 6.5 GB index. `search shieldbypass` finds `Ironclads mega archive/Ship and Weapon
+    Pack/data/hullmods/hull_mods.csv` (and the 0.7.2a modpack copy): the 2026-09-20 false negative is gone. Not searched:
+    87 `.rar` archives, 1,003 nested archives, 1 BCJ2 `.7z` (py7zr cannot read it), 2 password-protected zip members.
+27. **The shared copy step dropped mod-specific top-level folders (GRP-3, 2026-09-27).** Flux Reticle crashed at
+    startup: "Error loading [sun_fr/graphics/half.png]". Its sprites live in `sun_fr/graphics/` (settings.json points
+    there), but `copy_drift._collect` (used by prepare-test, copy-drift, release, archive, probe-group) copied only
+    `data`/`graphics`/`sounds`/`jars` plus declared jars, so the rig copy, and any release or archive, lacked them.
+    **Done 2026-09-27.** Every top-level folder is copied except tool/build folders (`reports`, `scratch`, `src*`,
+    `out`, `build`, `bin`, `disabled_files`, `gradle`, `META-INF`, `production`, `test`, VCS/IDE folders). Survey: 29
+    working copies have extra folders; affected were Flux Reticle and Fuel Siphoning (`sun_fs`, group 3, resynced;
+    GRP-3 then all PASS), and later-group MnemonicSensors (`imgs`) and More-Lamp-Colour-Options (`sound`); groups 1-2
+    and the three `Done/` archives were unaffected. Test: `tests/test_copy_drift.py` (`CustomTopFolderTests`).
+    Also: `bf-test.ps1 launch` now sets aside an old `<TESTID>.windows.txt` when a test id is reused (GRP-3's retry
+    inherited the first attempt's Fatal dialog, making every member UNCLEAR); the dialog capture itself is now
+    **confirmed live** (item 18): it recorded that first attempt's Fatal text and triage counted it.
+    Probe groups so far: GRP-1, GRP-2, GRP-3 all PASS, 24 mods `LIVE_VALIDATED`.
+28. **Lessons from the 2026-09-27 live session, as actions (proposed, not started).** Most valuable first.
+    1. **Find the upstream original before reviving.** Zorg18 was revived from a modpack copy that had already
+       disabled two features (allocator convoys, assimilation); the author's own V18 was in the Ironclads archive all
+       along. With the Downloads index working (item 26), `revive`/`intake` should search the corpus for other copies of
+       the same mod id, rank them (author release over modpack copy, by version and file dates) and report files and
+       scripts the chosen copy lacks. r4 plan: `In operation/Zorg18/working/reports/REVIVAL_PLAN_R4.md`.
+    2. **One source of truth for status.** Covert-Cargoliners' report said READY_FOR_LIVE_TEST while revive said
+       ESCALATED. `board`/`finding-stats` should flag any workspace whose report status disagrees with its latest
+       `REVIVE.json`, and `revive --draft-report` should replace a stale final status line, not append after it.
+    3. **Allowlists of mod paths are wrong by default.** The shared copy step's fixed folder list dropped `sun_fr/`
+       (item 27). Audit other allowlists (release hygiene, scanner inventories, `_collect` root-file globs) for the same
+       assumption; prefer "everything except known tool output".
+    4. **Validate heuristic checks against ground truth before they drive work.** `loose-script-janino-risk` was wrong
+       for 47 of 48 mods once Janino itself was run (item 22.1), yet it had sent Yunru to an agent. Every HEURISTIC
+       check should carry a measured precision from a sample, and checks under a threshold should not create agent
+       packets.
+    5. **Fixers can look like bug fixes and still be wrong for a mod.** `procgen-mod-body-leak` fits Zorg but not
+       planet packs (Galaxy Tigers, Nightcross). A fixer with any such intent question stays out of standing
+       approvals, and its finding should say what intent it assumes.
+    6. **Derive library tables from the libraries' own jars.** `org/lazywizard/` was mapped wholesale to LazyLib,
+       declaring the wrong dependency (item 14). Build the package-to-mod-id table from the real LazyLib, Console
+       Commands, MagicLib, LunaLib and GraphicsLib jars in the rig (and RevenantLib's own), and merge
+       `revival_audit`'s duplicate table into it.
+    7. **Scale tests for long runs.** `corpus-index` was quadratic (item 26) and only a 42 GB run showed it. Add a
+       test that times N vs 4N files and fails if the ratio is far from linear, for `corpus-index`, `finding-stats`
+       and `probe-group plan`.
+    8. **Archives must carry the jar source.** r3's `ZorgFleetSpawner` source survived only in `artifacts/`. `archive`
+       should copy `working/src*` (and `jars/src*`) into `workspace/`, never into the shipped folder.
+    9. **Live tooling:** every live session writes its own window log (done), triage folds in relaunched sessions from the
+       rig's `starsector.log` (item 20.17), and groups record a per-mod verdict straight into each report (done by hand
+       for GRP-1..3; make it `probe-group report --record`).
+    10. **RevenantLib:** removed-API use sits in jars, not loose scripts (item 22.5 ranking): run the ranking on jar
+        bytecode before adding bridges; keep `revenantlib-check --snapshot` in the release checklist.
+    11. **Author updates as ground truth (2026-09-27).** 10 finished mods had a newer author release for 0.98a in the
+        0.98 modpack (all marked SUPERSEDED; 5 had already passed their group probe run). Scanning each old version and
+        the author's new one: `mod-info-game-version-inexact` disappeared in all 10 (the only change these authors
+        needed that BridgeForge tracks, and exactly what revive applied), `library-import-unused-in-jar` in 1.
+        `non-strict-json-trailing-comma` (10/10) and `json-hash-comment` (8/10) stay in the authors' working 0.98a
+        releases, confirming their tier `none`. In the authors' own releases: Flux Reticle 1.4.0 and Variants-Lib 0.5.6
+        use LunaLib behind a guard without declaring it (REVIEW: the D-MOD-Services pattern; `isModEnabled`-guarded use
+        should be classed optional/SAFE so it stops needing an owner decision); Hexagonal Shieldidgeridoos 1.3.1 calls
+        LazyLib (`FastTrig`) without declaring it (MANUAL, a real undeclared dependency the modpack hides). Action: run
+        this old-vs-author comparison for every future supersession and fold the per-check outcome into item 28.4's
+        precision numbers.
+
+29. **Probe combat mission: ideas from Legacy of Arkgneisis's own test missions (2026-09-27, proposed).**
+    Owner noticed LoA ships four test missions (`loa_randtest`, `loa_stationtest`, `loa_testmission`,
+    `al_testmission`); read in `In operation/Arkgneisis/working/src/data/missions/`. Worth borrowing, most useful first:
+    1. **Always an opponent.** `loa_randtest` builds each side with `FleetFactoryV3.createFleet(FleetParamsV3)` for a
+       faction and a combat-point size. When a group has no mod ships for one side (GRP-5: one ship vs none; GRP-3:
+       none), fill it with a vanilla faction fleet of similar fleet points, so every probe mission has a fight.
+       **Done 2026-09-27 (probe 0.2.7):** an empty side gets 2-4 vanilla ships, logged `combat-filler`. Test: `test_probe_mission_fills_an_empty_side_with_vanilla_ships`.
+    2. **Faction fleets, not just variants.** Generating a mod faction's own fleets with `FleetFactoryV3` tests its
+       doctrine, known ships and autofit together, which fixed variants miss (a faction whose lists only work for
+       hand-made variants).
+       **Done 2026-09-27 (probe 0.2.8):** `faction-fleet-gen` builds one medium patrol per mod faction with `FleetFactoryV3` (never
+       spawned); an empty or throwing build is a FAIL blamed on that faction's mod. Test: `test_a_faction_fleet_generation_failure_blames_the_factions_mod`.
+    3. **Balanced sides by seed search.** It rerolls seeds and keeps the pair whose fleet points are closest, so a
+       fight is fair enough to see both sides act.
+    4. **Stations and modules.** `loa_stationtest` puts station variants (theirs and vanilla's `station1_Standard`...)
+       on one side. The probe currently skips module hulls at the cap (`loa_module_ars_big`); a station setup would
+       exercise them.
+    5. **Weaponless "blank" variants** (`loa_testmission`) separate hull loading from weapon problems when a
+       deployment fails.
+    6. **Keyboard options on the mission screen** (reroll, size, faction) are handy for manual play but not needed
+       for the probe, which runs unattended.
 
 ## Post-1.0 research and gated automation
 
@@ -2407,3 +2514,12 @@ Bridgeforge modernizes legacy mods. It does not profile performance. The related
 - **V0.8:** migration-pack/plugin ecosystem, including separate library-migration and library-adoption recommendations. **Status: discoverable, validated bundled pack registry and pack-selectable planning implemented; ecosystem rules remain deliberately empty until evidence-backed mappings are added.**
 - **V0.9:** modernization-opportunity analysis; no automatic adoption. **Status: static, report-only adoption candidates implemented with explicit high behavioral risk and no automatic change path.**
 - **V1.0:** repeatable scan → diagnose → plan → apply → compile → review → validate → report pipeline. **Status: orchestration command and final workspace modernization report implemented.**
+
+## Sister repository interoperability (proposed 2026-09-27)
+
+Design and acceptance gates: [docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md](docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md). These are pending, separate from revival completion and release readiness.
+
+1. [ ] Consume versioned SPW performance evidence with hash, identity, attribution, and comparability gates; retain independent operation and no automatic performance verdict.
+2. [ ] Consume Project Go localization coverage for an exact mod-root hash; expose uncovered and unknown items without changing source or claiming complete coverage from partial extraction.
+3. [ ] Compare BridgeForge's release evidence fields with VoidSmith and Project Go as a design reference; do not create a shared runtime dependency.
+4. [ ] Consume optional SPW mod inventory with duplicate/disabled identity handling, while preserving BridgeForge's native scan.

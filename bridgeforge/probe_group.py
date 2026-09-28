@@ -43,13 +43,26 @@ def _report_status(workspace: Path) -> str | None:
     return statuses[-1] if statuses else None
 
 
+def _latest_revive_status(workspace: Path) -> str | None:
+    result = workspace / "reports" / "revive" / "REVIVE.json"
+    if not result.is_file():
+        return None
+    try:
+        return json.loads(result.read_text(encoding="utf-8")).get("status")
+    except (OSError, ValueError):
+        return None
+
+
 def ready_workspaces(queue: Path) -> list[Path]:
-    """Workspaces whose revival report's last status line is READY_FOR_LIVE_TEST."""
+    """Workspaces whose revival report's last status line is READY_FOR_LIVE_TEST and, when `revive` has run,
+    whose latest revive result is UNATTENDED_DONE: a report status can be stale (GRP-2, 2026-09-27:
+    Covert-Cargoliners' report said READY_FOR_LIVE_TEST from an earlier pass while revive said ESCALATED)."""
     queue = Path(queue).expanduser().resolve()
     if not queue.is_dir():
         raise ProbeGroupError(f"{queue} is not a directory.")
     return [ws for ws in sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_"))
-            if (ws / "working" / "mod_info.json").is_file() and _report_status(ws) == READY_STATUS]
+            if (ws / "working" / "mod_info.json").is_file() and _report_status(ws) == READY_STATUS
+            and _latest_revive_status(ws) in (None, "UNATTENDED_DONE")]
 
 
 def _mod_info(root: Path) -> dict:
@@ -65,6 +78,36 @@ def rig_mod_ids(rig_mods: Path) -> dict[str, str]:
         if isinstance(mod_id, str) and mod_id:
             found[mod_id] = child.name
     return found
+
+
+def dependency_closure(rig_mods: Path, dependencies: list[str], installed: dict[str, str] | None = None) -> tuple[list[str], list[str]]:
+    """(every mod id needed, dependencies first; ids missing from the rig), following dependencies of dependencies.
+
+    GRP-SPARKLE (2026-09-27): SPARKLE needs Secrets of the Frontier, which needs LazyLib, GraphicsLib, LunaLib
+    and MagicLib; enabling only direct dependencies would have left the launcher reporting unmet requirements.
+    """
+    installed = rig_mod_ids(rig_mods) if installed is None else installed
+    ordered: list[str] = []
+    missing: list[str] = []
+    seen: set[str] = set()
+
+    def visit(mod_id: str) -> None:
+        if mod_id in seen:
+            return
+        seen.add(mod_id)
+        folder = installed.get(mod_id)
+        if folder is None:
+            missing.append(mod_id)
+            return
+        info = _mod_info(Path(rig_mods) / folder)
+        for dep in info.get("dependencies") or []:
+            if isinstance(dep, dict) and isinstance(dep.get("id"), str) and dep["id"]:
+                visit(dep["id"])
+        ordered.append(mod_id)
+
+    for mod_id in dependencies:
+        visit(mod_id)
+    return ordered, missing
 
 
 def _member(workspace: Path) -> dict:
@@ -90,7 +133,13 @@ def plan_groups(queue: Path, rig: Path, size: int = 8, workspaces: list[Path] | 
         except Exception as exc:  # an unreadable mod is reported, never fatal to the plan
             unplaced.append({"workspace": workspace.name, "reason": f"probe config failed: {exc}"})
             continue
-        missing = [dep for dep in member["dependencies"] if dep not in installed and dep != member["mod_id"]]
+        game_version = str(_mod_info(workspace / "working").get("gameVersion") or "")
+        if not game_version.startswith("0.98"):
+            # The launcher treats any other gameVersion as an unmet requirement and refuses to start (GRP-2,
+            # 2026-09-27: Covert-Cargoliners still said 0.95.1a-RC6 under a stale READY_FOR_LIVE_TEST report).
+            unplaced.append({"workspace": workspace.name, "reason": f"gameVersion {game_version or 'missing'} is not 0.98a: the launcher would refuse it (revive it first)"})
+            continue
+        _, missing = dependency_closure(rig / "mods", [dep for dep in member["dependencies"] if dep != member["mod_id"]], installed)
         if missing:
             unplaced.append({"workspace": workspace.name, "reason": f"dependencies not in the rig: {', '.join(missing)}"})
             continue
@@ -182,7 +231,8 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
         _install_probe_mod(rig)
     enabled = []
     for member in group["members"]:
-        for mod_id in [*member["dependencies"], member["mod_id"]]:
+        needed, _ = dependency_closure(mods_dir, [dep for dep in member["dependencies"] if dep != member["mod_id"]])
+        for mod_id in [*needed, member["mod_id"]]:
             if mod_id not in enabled:
                 enabled.append(mod_id)
     enabled.append(PROBE_MOD_ID)
