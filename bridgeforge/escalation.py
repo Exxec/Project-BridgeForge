@@ -61,6 +61,9 @@ def _tree(root: Path) -> dict[str, str]:
             for p in sorted(root.rglob("*")) if p.is_file() and ".pre-bf-" not in p.name}
 
 
+START_TREE_FILE = "START_TREE.json"
+
+
 def changed_files(before: Path, after: Path) -> list[str]:
     old, new = _tree(before), _tree(after)
     return sorted(name for name in set(old) | set(new) if old.get(name) != new.get(name))
@@ -159,6 +162,9 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
             shutil.rmtree(attempt_dir)
         sandbox = attempt_dir / "working"
         shutil.copytree(working, sandbox, ignore=shutil.ignore_patterns("*.pre-bf-*"))
+        # The sandbox's starting state, so a later apply compares the attempt with its own start, not with a
+        # working/ that other packets have changed since (ROADMAP P15 31.8, Angry Periphery 2026-09-28).
+        (attempt_dir / START_TREE_FILE).write_text(json.dumps(_tree(sandbox)), encoding="utf-8")
         shown = {**packet, "verify": f'{packet["verify"]} --working "{sandbox}"'}
         prompt = render_packet(shown).replace(str(workspace / "working"), str(sandbox)) + feedback
         (attempt_dir / "PROMPT.md").write_text(prompt, encoding="utf-8")
@@ -243,7 +249,15 @@ def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = N
                    if working.joinpath(name).is_file() and digest and hashlib.sha256(working.joinpath(name).read_bytes()).hexdigest() != digest)
     if stale:
         raise EscalationError("working/ changed since the packet was made (" + ", ".join(stale) + "); run the packet again.")
-    changed = changed_files(working, sandbox)
+    start_file = sandbox.parent / START_TREE_FILE
+    if start_file.is_file():
+        start, now_tree, current = json.loads(start_file.read_text(encoding="utf-8")), _tree(sandbox), _tree(working)
+        changed = sorted(name for name in set(start) | set(now_tree) if start.get(name) != now_tree.get(name))
+        moved_on = [name for name in changed if current.get(name) != start.get(name)]
+        if moved_on:
+            raise EscalationError("working/ changed these files since the attempt started (" + ", ".join(moved_on) + "); run the packet again.")
+    else:
+        changed = changed_files(working, sandbox)  # attempts made before START_TREE.json existed
     outside = [name for name in changed if name not in packet["allowed_files"]]
     if outside:
         raise EscalationError("the attempt changed files outside the packet: " + ", ".join(outside))

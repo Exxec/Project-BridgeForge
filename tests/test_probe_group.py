@@ -123,6 +123,18 @@ class MergeAndReportTests(unittest.TestCase):
         self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
         self.assertEqual(report["members"]["mod_b"]["verdict"], "FAIL")
 
+    def test_report_counts_combat_filler_sides(self) -> None:
+        # ROADMAP P15 31.13: say when vanilla ships stood in for a side with no mod ships.
+        with resolved_temp_dir() as root:
+            merged = merge_configs([build_probe_config(_workspace(root / "q", "A", "mod_a", "hull_a"))])
+            log = root / "run.stdout.log"
+            log.write_text("5 [main] INFO  com.fs.starfarer.StarfarerLauncher  - Starting" + chr(10) + ""
+                           "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|content-ids|OK|all-content|checked=1 failed=0" + chr(10) + ""
+                           "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|combat-filler|INFO|ENEMY|2 vanilla ship(s) added" + chr(10) + "", encoding="utf-8")
+            report = group_report(log, merged)
+        self.assertEqual(report["combat_filler_sides"], ["ENEMY"])
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
+
     def test_no_content_check_means_incomplete(self) -> None:
         with resolved_temp_dir() as root:
             a = build_probe_config(_workspace(root / "q", "A", "mod_a", "hull_a"))

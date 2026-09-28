@@ -1151,6 +1151,8 @@ def main(argv: list[str] | None = None) -> int:
                             print(f"      {item}")
                     for item in result["unattributed"]:
                         print(f"  (group) {item}")
+                    if result.get("combat_filler_sides"):
+                        print(f"  combat: vanilla filler ships stood in for side(s) {', '.join(result['combat_filler_sides'])} (the group had no mod ships there)")
         except (ProbeGroupError, ProbeConfigError, OSError, ValueError, StopIteration) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

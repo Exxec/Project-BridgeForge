@@ -290,13 +290,15 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None) -> dict:
             for item in ids.get(kind, []):
                 owner.setdefault(item, mod_id)
     verdicts = {mod_id: {"failures": [], "crashes": []} for mod_id in members}
-    unattributed, seen_content = [], False
+    unattributed, seen_content, filler_sides = [], False, []
     for line in Path(log).read_text(encoding="utf-8", errors="replace").splitlines():
         match = _PROBE_LINE.search(line)
         if not match:
             continue
         if match["check"] == "content-ids" and match["subject"] == "all-content":
             seen_content = True
+        if match["check"] == "combat-filler" and match["status"] == "INFO":
+            filler_sides.append(match["subject"])  # ROADMAP P15 31.13: vanilla ships stood in for a side
         if match["status"] != "FAIL":
             continue
         subject = match["subject"].split(":", 1)[-1].split("/", 1)[0]
@@ -319,7 +321,7 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None) -> dict:
             verdict["verdict"] = "PASS" if seen_content else "INCOMPLETE"
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_REPORT", "log": str(log),
             "content_ids_ran": seen_content, "fatal": triage["counts"]["FATAL"], "mod_errors": triage["counts"]["MOD-ERROR"],
-            "members": verdicts, "unattributed": unattributed,
+            "members": verdicts, "unattributed": unattributed, "combat_filler_sides": filler_sides,
             "note": "INCOMPLETE means the probe's content-ids check never ran (start a New Game and wait one in-game day)."}
 
 
