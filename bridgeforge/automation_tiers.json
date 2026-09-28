@@ -101,6 +101,7 @@
     "loose-script-janino-risk": "code",
     "loose-script-janino-compile-error": "code",
     "fleet-type-name-missing": "auto",
+    "optional-library-integration": "none",
     "procgen-mod-body-leak": "auto",
     "loose-script-shadowed-by-dependency-jar": "decision",
     "loose-script-shadowed-by-jar": "none",

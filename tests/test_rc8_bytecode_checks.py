@@ -427,19 +427,31 @@ class UndeclaredLibraryDependencyTests(unittest.TestCase):
             findings = [item for item in _findings(result, "undeclared-library-dependency") if "library:GraphicsLib" in item.evidence]
             self.assertEqual(findings, [])
 
-    def test_ismodenabled_guarded_nexerelin_reference_is_review(self) -> None:
+    def _nex_scan(self, body: str) -> tuple[list, list]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _write(root / "mod_info.json", '{"id":"fixture"}')
-            _write(
-                root / "src" / "NexIntegration.java",
-                "package fx;\nimport exerelin.api.NexerelinFactionAPI;\n"
-                "class NexIntegration { void go() { if (Global.getSettings().isModEnabled(\"nexerelin\")) { } } }",
-            )
+            _write(root / "src" / "NexIntegration.java",
+                   "package fx;\nimport exerelin.api.NexerelinFactionAPI;\nclass NexIntegration { void go() { " + body + " } }")
             result = scan_mod(root)
-            findings = [item for item in _findings(result, "undeclared-library-dependency") if "library:Nexerelin" in item.evidence]
-            self.assertEqual(len(findings), 1)
-            self.assertEqual(findings[0].classification, "REVIEW")
+        undeclared = [item for item in _findings(result, "undeclared-library-dependency") if "library:Nexerelin" in item.evidence]
+        optional = [item for item in _findings(result, "optional-library-integration") if "library:Nexerelin" in item.evidence]
+        return undeclared, optional
+
+    def test_a_use_guarded_by_its_own_library_id_is_an_optional_integration(self) -> None:
+        undeclared, optional = self._nex_scan('if (Global.getSettings().isModEnabled("nexerelin")) { }')
+        self.assertEqual(undeclared, [])
+        self.assertEqual([item.classification for item in optional], ["SAFE"])
+
+    def test_a_guard_on_another_mod_id_stays_review(self) -> None:
+        undeclared, optional = self._nex_scan('if (Global.getSettings().isModEnabled("lw_lazylib")) { }')
+        self.assertEqual(optional, [])
+        self.assertEqual([item.classification for item in undeclared], ["REVIEW"])
+
+    def test_a_fail_fast_guard_stays_review(self) -> None:
+        undeclared, optional = self._nex_scan('if (!Global.getSettings().isModEnabled("nexerelin")) { throw new RuntimeException("needs Nexerelin"); }')
+        self.assertEqual(optional, [])
+        self.assertEqual([item.classification for item in undeclared], ["REVIEW"])
 
     def test_bytecode_only_reference_without_declared_dependency_is_manual(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

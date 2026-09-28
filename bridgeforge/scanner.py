@@ -5234,6 +5234,12 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
         dotted_needles = [prefix.replace("/", ".").rstrip(".") for prefix in prefixes if not prefix.startswith("kotlin")]
         source_hits: list[str] = []
         guarded = False
+        # Optional integration: every referencing source checks isModEnabled("<this library's id>") and none
+        # fails fast (throws) when it is missing. RC8 runs with -noverify (CLAUDE.md), so a library class resolves
+        # only when code using it runs, which the guard prevents when the library is absent.
+        id_guard = re.compile(r'\bisModEnabled\s*\(\s*"' + re.escape(dependency_id) + r'"\s*\)', re.IGNORECASE)
+        fail_fast = re.compile(r'!\s*[\w.()\s]*isModEnabled\s*\(\s*"' + re.escape(dependency_id) + r'"\s*\)\s*\)\s*\{?\s*throw\b', re.IGNORECASE)
+        every_hit_id_guarded = True
         for source in sorted(root.rglob("*.java")):
             if "disabled_files" in source.relative_to(root).parts:
                 continue
@@ -5246,6 +5252,8 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
             source_hits.append(_relative(root, source))
             if re.search(r"\bisModEnabled\s*\(", text):
                 guarded = True
+            if not id_guard.search(text) or fail_fast.search(text):
+                every_hit_id_guarded = False
         bytecode_hits: list[str] = []
         referencing_classes: set[str] = set()
         if not source_hits:
@@ -5277,6 +5285,11 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                            explanation="Every class that uses Console Commands' API is registered in data/console/commands.csv, which only Console Commands reads, so the classes load only when it is installed. An optional integration; no dependency needed.",
                            evidence=sorted(users)[:10])
                 continue
+        if source_hits and every_hit_id_guarded:
+            result.add(id="optional-library-integration", category="dependencies", severity="info", classification="SAFE", confidence="MEDIUM",
+                       explanation=f"Every source file that uses {library} checks isModEnabled(\"{dependency_id}\") and none throws when it is missing: an optional integration. RC8 runs with -noverify, so {library}'s classes are resolved only when that guarded code runs. No dependency needed; the mod works with or without {library}.",
+                       file="mod_info.json", evidence=[f"library:{library}", f"dependency-id:{dependency_id}", *source_hits[:5]])
+            continue
         classification = "REVIEW" if guarded else "MANUAL"
         result.add(
             id="undeclared-library-dependency",
