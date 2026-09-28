@@ -2329,9 +2329,12 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     1. **Always an opponent.** `loa_randtest` builds each side with `FleetFactoryV3.createFleet(FleetParamsV3)` for a
        faction and a combat-point size. When a group has no mod ships for one side (GRP-5: one ship vs none; GRP-3:
        none), fill it with a vanilla faction fleet of similar fleet points, so every probe mission has a fight.
+       **Done 2026-09-27 (probe 0.2.7):** an empty side gets 2-4 vanilla ships, logged `combat-filler`. Test: `test_probe_mission_fills_an_empty_side_with_vanilla_ships`.
     2. **Faction fleets, not just variants.** Generating a mod faction's own fleets with `FleetFactoryV3` tests its
        doctrine, known ships and autofit together, which fixed variants miss (a faction whose lists only work for
        hand-made variants).
+       **Done 2026-09-27 (probe 0.2.8):** `faction-fleet-gen` builds one medium patrol per mod faction with `FleetFactoryV3` (never
+       spawned); an empty or throwing build is a FAIL blamed on that faction's mod. Test: `test_a_faction_fleet_generation_failure_blames_the_factions_mod`.
     3. **Balanced sides by seed search.** It rerolls seeds and keeps the pair whose fleet points are closest, so a
        fight is fair enough to see both sides act.
     4. **Stations and modules.** `loa_stationtest` puts station variants (theirs and vanilla's `station1_Standard`...)

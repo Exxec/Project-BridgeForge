@@ -21,6 +21,9 @@ import com.fs.starfarer.api.campaign.econ.SubmarketAPI;
 import com.fs.starfarer.api.fleet.FleetMemberAPI;
 import com.fs.starfarer.api.fleet.FleetMemberType;
 import com.fs.starfarer.api.combat.ShipVariantAPI;
+import com.fs.starfarer.api.impl.campaign.fleets.FleetFactoryV3;
+import com.fs.starfarer.api.impl.campaign.fleets.FleetParamsV3;
+import com.fs.starfarer.api.impl.campaign.ids.FleetTypes;
 import com.fs.starfarer.api.impl.campaign.ids.Submarkets;
 
 import java.util.Arrays;
@@ -173,6 +176,11 @@ public class CampaignProbeScript implements EveryFrameScript {
                 checkFactionKnownLists();
             }
         });
+        runCheck("faction-fleet-gen", new Runnable() {
+            public void run() {
+                checkFactionFleetGeneration();
+            }
+        });
         runCheck("submarket-stock", new Runnable() {
             public void run() {
                 checkSubmarketStock();
@@ -304,6 +312,42 @@ public class CampaignProbeScript implements EveryFrameScript {
             } else {
                 ProbeLog.emit("faction-known-lists", ProbeLog.STATUS_OK, factionId,
                         "knownShips=" + ships + " knownWeapons=" + weapons + " knownFighters=" + fighters);
+            }
+        }
+    }
+
+    /**
+     * 0.2.8 (ROADMAP item 29.2, from Legacy of Arkgneisis's loa_randtest): build one medium patrol for each of the
+     * target mod's own factions with RC8's own generator, the way the game makes its fleets. That tests the
+     * faction's doctrine, known ships and autofit together; hand-made variants alone do not. The fleet is never
+     * spawned into the sector. FleetParamsV3 fields and FleetFactoryV3.createFleet checked with javap, 2026-09-27.
+     */
+    private void checkFactionFleetGeneration() {
+        for (String factionId : config.factions) {
+            if (VANILLA_FACTIONS.contains(factionId) || Global.getSector().getFaction(factionId) == null) {
+                continue;
+            }
+            FleetParamsV3 params = new FleetParamsV3();
+            params.factionId = factionId;
+            params.fleetType = FleetTypes.PATROL_MEDIUM;
+            params.combatPts = 60f;
+            params.quality = 1f;
+            params.qualityOverride = Float.valueOf(1f);
+            params.ignoreMarketFleetSizeMult = Boolean.TRUE;
+            params.random = new java.util.Random(1L);
+            try {
+                CampaignFleetAPI fleet = FleetFactoryV3.createFleet(params);
+                int members = fleet == null ? 0 : fleet.getFleetData().getNumMembers();
+                if (members == 0) {
+                    ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_FAIL, factionId,
+                            "FleetFactoryV3 built an empty " + FleetTypes.PATROL_MEDIUM + " (doctrine or known ships unusable)");
+                } else {
+                    ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_OK, factionId,
+                            members + " member(s) in a generated " + FleetTypes.PATROL_MEDIUM);
+                }
+            } catch (Throwable t) {
+                ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_FAIL, factionId,
+                        "FleetFactoryV3.createFleet threw " + t.getClass().getName() + ": " + t.getMessage());
             }
         }
     }

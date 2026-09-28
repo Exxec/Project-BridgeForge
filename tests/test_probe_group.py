@@ -86,6 +86,25 @@ class MergeAndReportTests(unittest.TestCase):
         self.assertEqual(report["members"]["mod_b"]["verdict"], "FAIL")
         self.assertIn("hull mod [x] has no spec", report["members"]["mod_b"]["failures"][0])
 
+    def test_a_faction_fleet_generation_failure_blames_the_factions_mod(self) -> None:
+        # Probe 0.2.8 faction-fleet-gen (ROADMAP 29.2): a FAIL names the faction, and the report blames its mod.
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            a = build_probe_config(_workspace(queue, "A", "mod_a", "hull_a"))
+            working_b = _workspace(queue, "B", "mod_b", "hull_b")
+            (working_b / "data" / "world" / "factions").mkdir(parents=True)
+            (working_b / "data" / "world" / "factions" / "b_navy.faction").write_text('{"id": "b_navy"}', encoding="utf-8")
+            merged = merge_configs([a, build_probe_config(working_b)])
+            log = root / "run.stdout.log"
+            log.write_text(
+                "5 [main] INFO  com.fs.starfarer.StarfarerLauncher  - Starting\n"
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.8|content-ids|OK|all-content|checked=2 failed=0 ship-variants built=2\n"
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.8|faction-fleet-gen|FAIL|b_navy|FleetFactoryV3 built an empty patrolMedium\n",
+                encoding="utf-8")
+            report = group_report(log, merged)
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
+        self.assertEqual(report["members"]["mod_b"]["verdict"], "FAIL")
+
     def test_no_content_check_means_incomplete(self) -> None:
         with resolved_temp_dir() as root:
             a = build_probe_config(_workspace(root / "q", "A", "mod_a", "hull_a"))
