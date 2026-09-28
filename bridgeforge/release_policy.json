@@ -370,6 +370,16 @@
       "local_only": true,
       "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission; Vow sprite is a BridgeForge recolour of SOTF art (owner decision 2026-09-27)",
       "recorded_on": "2026-09-27"
+    },
+    "bluefriendballs": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
+    },
+    "FactionRelationshipsUniquified": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-09-27); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-09-27"
     }
   },
   "default": {
