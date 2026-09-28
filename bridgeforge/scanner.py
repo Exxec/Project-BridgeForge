@@ -6270,6 +6270,22 @@ def _scan_asset_reference_missing(root: Path, result: ScanResult, vanilla_core: 
                     candidate = file_value
                 _report_asset_reference_missing(result, root, vanilla_core, relative, "sounds.json:file", candidate)
 
+    # settings.json "graphics": {category: {key: path}} is loaded at startup; a missing file is a Fatal before the
+    # main menu (GRP-9, 2026-09-28: Maelstrom Superweapons Arsenal Older Version registered sw_shields256.png, the
+    # current release's name, while shipping the same sprites as swo_shields256.png).
+    settings_path = root / "data" / "config" / "settings.json"
+    if settings_path.is_file():
+        data = _load_lenient_json_file(settings_path)
+        graphics = data.get("graphics") if isinstance(data, dict) else None
+        if isinstance(graphics, dict):
+            relative = _relative(root, settings_path)
+            for category, entries in graphics.items():
+                if not isinstance(entries, dict):
+                    continue
+                for key, value in entries.items():
+                    if isinstance(value, str) and value.strip().lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
+                        _report_asset_reference_missing(result, root, vanilla_core, relative, f"settings.json:graphics.{category}.{key}", value.strip())
+
 
 # ROADMAP P14 item 15: engine_styles.json, hull_styles.json, custom_entities.json and planets.json
 # are merged by whole-entry replace, not a per-field merge (Starsector wiki: "any mod added
