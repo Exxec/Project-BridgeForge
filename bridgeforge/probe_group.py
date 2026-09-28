@@ -330,12 +330,26 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None) -> dict:
 OWNER_STANDING_REASON = "revived for the owner's local archive (live-validated {date}); not published without the author's permission (owner decision 2026-09-27)"
 
 
-def _workspaces_by_mod_id(queue: Path) -> dict[str, Path]:
-    found = {}
+def _workspaces_by_mod_id(queue: Path, mods_dir: Path | None = None) -> dict[str, Path | None]:
+    """{mod id: the workspace that was tested}. `install` copies a member to <rig>/mods/<workspace name>, so a rig
+    folder with that id and a same-named workspace decides. Otherwise one workspace per id; two or more is None
+    (ambiguous). SEEKER-SOLO2-20260928 recorded and archived the old `SEEKER` workspace, not the tested SEEKER-0.6,
+    because the first workspace by name won."""
+    candidates: dict[str, list[Path]] = {}
     for workspace in sorted(p for p in Path(queue).iterdir() if p.is_dir() and not p.name.startswith("_")):
         mod_id = _mod_info(workspace / "working").get("id")
         if isinstance(mod_id, str) and mod_id:
-            found.setdefault(mod_id, workspace)
+            candidates.setdefault(mod_id, []).append(workspace)
+    in_rig: dict[str, set[str]] = {}
+    if mods_dir is not None and Path(mods_dir).is_dir():
+        for folder in Path(mods_dir).iterdir():
+            mod_id = _mod_info(folder).get("id") if folder.is_dir() else None
+            if isinstance(mod_id, str):
+                in_rig.setdefault(mod_id, set()).add(folder.name)
+    found: dict[str, Path | None] = {}
+    for mod_id, workspaces in candidates.items():
+        tested = [w for w in workspaces if w.name in in_rig.get(mod_id, set())]
+        found[mod_id] = tested[0] if len(tested) == 1 else workspaces[0] if len(workspaces) == 1 else None
     return found
 
 
@@ -356,7 +370,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     report = group_report(log, config, mods_dir=Path(rig) / "mods")
     text = Path(log).read_text(encoding="utf-8", errors="replace")
     version = (re.search(r"BF-PROBE\|(\d+\.\d+\.\d+)\|", text) or [None, "?"])[1]
-    workspaces = _workspaces_by_mod_id(queue)
+    workspaces = _workspaces_by_mod_id(queue, Path(rig) / "mods")
     recorded, skipped, archived = [], [], []
     for mod_id, verdict in sorted(report["members"].items()):
         workspace = workspaces.get(mod_id)

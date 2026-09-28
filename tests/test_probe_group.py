@@ -221,6 +221,23 @@ class InstallTests(unittest.TestCase):
         self.assertNotIn("LIVE_VALIDATED", report_b)
         self.assertEqual(len(top_zip), 1)
 
+    def test_record_picks_the_workspace_installed_in_the_rig(self) -> None:
+        # SEEKER-SOLO2-20260928: workspaces SEEKER (0.3.0) and SEEKER-0.6 share mod id SEEKER; the first by name was
+        # recorded and archived, not the SEEKER-0.6 the rig ran. With neither in the rig, the id is ambiguous.
+        import shutil
+
+        from bridgeforge.probe_group import _workspaces_by_mod_id
+        with resolved_temp_dir() as root:
+            queue = root / "In operation"
+            _workspace(queue, "SEEKER", "SEEKER", "hull_a")
+            newer = _workspace(queue, "SEEKER-0.6", "SEEKER", "hull_a").parent
+            rig = _rig(root)
+            ambiguous = _workspaces_by_mod_id(queue, rig / "mods")
+            shutil.copytree(newer / "working", rig / "mods" / "SEEKER-0.6")
+            tested = _workspaces_by_mod_id(queue, rig / "mods")
+        self.assertIsNone(ambiguous["SEEKER"])
+        self.assertEqual(tested["SEEKER"].name, "SEEKER-0.6")
+
     def test_exclude_solo_and_large_campaign_mods_run_alone(self) -> None:
         # ROADMAP P15 31.3: large campaign mods (systems + 60 content ids) and --solo get their own group.
         from unittest import mock
