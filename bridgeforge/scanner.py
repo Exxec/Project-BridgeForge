@@ -5015,7 +5015,7 @@ def _collect_csv_column_class_refs(path: Path, column: str, root: Path, referenc
         references.append((relative, column, value))
 
 
-def _scan_data_class_references_missing(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+def _scan_data_class_references_missing(root: Path, result: ScanResult, vanilla_core: Path | None, provider_roots: list[Path] | None = None) -> None:
     """Every fully qualified class named in mod data must resolve to a class Starsector can actually load.
 
     Checked against: this mod's loaded jars (result.compiled_class_names), a loose data/scripts .java source
@@ -5110,8 +5110,12 @@ def _scan_data_class_references_missing(root: Path, result: ScanResult, vanilla_
         name.rsplit(".", 1)[-1] for name in (set(vanilla_jar_classes) | vanilla_loose_fqns) if ".rulecmd." in name
     }
 
+    # A declared dependency's own jar (SEEKER 0.6.6's weapons name MagicLib's data.scripts.weapons.MagicVectorThruster,
+    # which MagicLib 1.5.6 still ships for compatibility; 2026-09-28). Needs explicit provider_roots.
+    dependency_classes = _dependency_jar_class_names(root, provider_roots)
+
     def resolve(fqn: str, is_rule_command: bool) -> str:
-        if fqn in result.compiled_class_names or fqn in local_source_fqns:
+        if fqn in result.compiled_class_names or fqn in local_source_fqns or fqn in dependency_classes:
             return "resolved"
         if vanilla_core is not None and (fqn in vanilla_jar_classes or fqn in vanilla_loose_fqns):
             return "resolved"
@@ -5732,7 +5736,32 @@ def _scan_carrier_bays_proposal(root: Path, result: ScanResult, vanilla_core: Pa
         )
 
 
-def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+def _dependency_content_ids(root: Path, provider_roots: list[Path] | None) -> dict[str, set[str]]:
+    """Hull mod, weapon, wing and hull ids a declared dependency defines (SEEKER 0.6.6 builds MagicLib's
+    ML_interferenceWarning into its hulls; 2026-09-28). Explicit provider_roots only, like _dependency_jar_class_names."""
+    found: dict[str, set[str]] = {"hullmod": set(), "weapon": set(), "wing": set(), "hull": set()}
+    if not provider_roots:
+        return found
+    from .java_toolchain import declared_dependencies
+    from .substitutes import provider_index
+
+    deps = declared_dependencies(root)
+    if not deps:
+        return found
+    by_id = {p.mod_id: p for p in provider_index([Path(r) for r in provider_roots], exclude=root)}
+    for dep_id in deps:
+        provider = by_id.get(dep_id)
+        if provider is None:
+            continue
+        dep = Path(provider.path)
+        found["hullmod"] |= set(_csv_id_index(dep / "data" / "hullmods" / "hull_mods.csv", None))
+        found["weapon"] |= set(_csv_id_index(dep / "data" / "weapons" / "weapon_data.csv", None))
+        found["wing"] |= set(_csv_id_index(dep / "data" / "hulls" / "wing_data.csv", None))
+        found["hull"] |= {p.stem for p in (dep / "data" / "hulls").rglob("*.ship")} if (dep / "data" / "hulls").is_dir() else set()
+    return found
+
+
+def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_core: Path | None, provider_roots: list[Path] | None = None) -> None:
     """Hull mods, wings, weapons and hulls used by the mod's data but defined by neither it nor vanilla.
 
     Communist Clouds builds `vayra_red_army` into its hulls and fields `vayra_*` wings and weapons: it
@@ -5747,6 +5776,11 @@ def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_
     hulls = set(_ship_file_index(root, vanilla_core)) | set(skins)
     if not (weapons and hull_mods and wings and hulls):
         return
+    from_dependencies = _dependency_content_ids(root, provider_roots)
+    weapons |= from_dependencies["weapon"]
+    hull_mods |= from_dependencies["hullmod"]
+    wings |= from_dependencies["wing"]
+    hulls |= from_dependencies["hull"]
     missing: dict[str, dict[str, set[str]]] = {"hullmod": {}, "wing": {}, "weapon": {}, "hull": {}}
 
     def check(kind: str, ident: object, known: set[str], where: str) -> None:
@@ -6565,11 +6599,11 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_module_captain_personality_risk(root, result)
     _scan_spawned_ship_captain_personality_risk(root, result)
     _scan_mod_info_triage_banner(root, result)
-    _scan_data_class_references_missing(root, result, vanilla_root)
+    _scan_data_class_references_missing(root, result, vanilla_root, provider_roots)
     _scan_hardcoded_hyperspace_coordinates(root, result)
     _scan_hardcoded_terrain_grid_size(root, result)
     _scan_variant_validity(root, result, vanilla_root)
-    _scan_unresolved_content_references(root, result, vanilla_root)
+    _scan_unresolved_content_references(root, result, vanilla_root, provider_roots)
     _scan_carrier_bays_proposal(root, result, vanilla_root)
     _scan_description_missing(root, result, vanilla_root)
     _scan_asset_reference_missing(root, result, vanilla_root)
