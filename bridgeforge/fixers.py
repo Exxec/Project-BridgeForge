@@ -1965,6 +1965,12 @@ def _reencode_invalid(raw: bytes, offsets: list[int], encoding: str, relative: s
     return bytes(out + raw[last:])
 
 
+def _fleet_type_display_name(fleet_type: str) -> str:
+    """"Zeta AI raid" -> "Zeta AI Raid"; camelCase ids split into words: "pathFleet" -> "Path Fleet"."""
+    words = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", fleet_type).split(" ")
+    return " ".join(w[:1].upper() + w[1:] for w in words if w)
+
+
 def _fix_fleet_type_name_missing(root: Path, options: dict) -> list[FileChange]:
     """Add a `fleetTypeNames` entry per unnamed fleet type (P15 item 20.15), title-casing the type as Zorg18's
     hand fix did ("Zeta AI raid" -> "Zeta AI Raid"). Text insertion, so comments and formatting survive;
@@ -1983,16 +1989,33 @@ def _fix_fleet_type_name_missing(root: Path, options: dict) -> list[FileChange]:
         if fleet_type and finding.file:
             by_file.setdefault(finding.file, []).append(fleet_type)
     names = options.get("names") or {}
+    # A vanilla faction's type (The Mayorate's "pathFleet" for luddic_path): the mod has no faction file to edit,
+    # so the name goes in its own data/world/factions/default_fleet_type_names.json, which RC8 merges with
+    # vanilla's. Evidence: Broken Star and Nexerelin ship that file with only their own entries (2026-09-27), and
+    # vanilla fleets keep their names with them enabled.
+    defaults_relative = "data/world/factions/default_fleet_type_names.json"
+    for relative in [r for r in by_file if not (root / r).is_file() and r != defaults_relative]:
+        by_file.setdefault(defaults_relative, []).extend(by_file.pop(relative))
     changes = []
     for relative, types in sorted(by_file.items()):
         path = root / relative
+        if relative == defaults_relative:
+            raw = path.read_bytes() if path.is_file() else b""
+            text, had_bom = _decode(raw) if raw else ("{\n}\n", False)
+            newline = "\r\n" if "\r\n" in text else "\n"
+            entries = "".join(newline + "\t" + json.dumps(t) + ":" + json.dumps(names.get(t) or _fleet_type_display_name(t)) + ","
+                              for t in sorted(set(types)))
+            brace = text.index("{")
+            text = text[:brace + 1] + entries + text[brace + 1:]
+            changes.append(FileChange(path=path, before=raw, after=_encode(text, had_bom), existed_before=path.is_file()))
+            continue
         if not path.is_file():
-            continue  # a vanilla faction's type: the name belongs in the mod's own default_fleet_type_names.json
+            continue
         raw = path.read_bytes()
         text, had_bom = _decode(raw)
         newline = "\r\n" if "\r\n" in text else "\n"
         entries = "".join(
-            newline + "\t\t" + json.dumps(t) + ":" + json.dumps(names.get(t) or " ".join(w[:1].upper() + w[1:] for w in t.split(" "))) + ","
+            newline + "\t\t" + json.dumps(t) + ":" + json.dumps(names.get(t) or _fleet_type_display_name(t)) + ","
             for t in sorted(set(types)))
         match = re.search(r'"fleetTypeNames"\s*:\s*\{', text)
         if match:
