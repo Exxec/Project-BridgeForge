@@ -908,6 +908,14 @@ def build_parser() -> argparse.ArgumentParser:
     esc_run.add_argument("--timeout", type=int, default=1800, help="seconds per attempt")
     esc_apply = esc_sub.add_parser("apply", help="copy an attempt already VERIFIED (and reviewed) into working/, without re-running the agent")
     esc_apply.add_argument("--attempt", type=int, help="which attempt (default: the newest VERIFIED one)")
+    esc_apply.add_argument("--rebuild-jar", action="store_true", help="the attempt edits jar sources: rebuild the jar from them (refused on any lost class or member) and install it")
+    esc_rule = esc_sub.add_parser("rule", help="record one owner ruling for a finding id across the queue: accept it in every escalated mod's baseline, or approve its fixer as a standing approval")
+    esc_rule.add_argument("finding")
+    esc_rule.add_argument("queue", type=Path)
+    esc_rule.add_argument("--accept", action="store_true")
+    esc_rule.add_argument("--approve-fixer", action="store_true")
+    esc_rule.add_argument("--reason", required=True)
+    esc_rule.add_argument("--json", action="store_true")
     esc_queue = esc_sub.add_parser("queue", help="across a queue: which findings block the ESCALATED mods, and which mods one decision would clear; writes ESCALATIONS_BY_FINDING.md")
     esc_queue.add_argument("queue", type=Path)
     esc_queue.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
@@ -3038,6 +3046,16 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else render_revive(result), end="\n" if args.json else "")
         return 0
+    if args.command == "escalation" and args.escalation_command == "rule":
+        from .escalation_queue import rule
+        try:
+            entry = rule(args.queue, args.finding, accept=args.accept, approve_fixer=args.approve_fixer, reason=args.reason)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(entry, indent=2, ensure_ascii=False) if args.json else
+              f"Ruling recorded ({entry['ruling']}) for {entry['finding']}: {len(entry['mods'])} mod baseline(s) updated. Re-run revive-queue --only-status ESCALATED to apply.")
+        return 0
     if args.command == "escalation" and args.escalation_command == "queue":
         from .escalation_queue import summarize_queue
         result = summarize_queue(args.queue, quiet=args.quiet)
@@ -3071,7 +3089,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 0 if result["status"] == "PASS" else 1
             if args.escalation_command == "apply":
                 from .escalation import apply_verified
-                result = apply_verified(args.workspace, args.packet, attempt=args.attempt)
+                result = apply_verified(args.workspace, args.packet, attempt=args.attempt, rebuild_jar=args.rebuild_jar)
                 if args.json:
                     print(json.dumps(result, indent=2, ensure_ascii=False))
                 else:

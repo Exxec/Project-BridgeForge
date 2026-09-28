@@ -259,6 +259,25 @@ class EscalationRunTests(unittest.TestCase):
         self.assertIn("[255,0]", settings)
         self.assertIn('"version": "2"', mod_info)  # the other change is kept, not overwritten by the sandbox copy
 
+    def test_a_jar_source_edit_needs_rebuild_jar(self):
+        # ROADMAP P15 31.7: a source fix in a compiled mod changes nothing until the jar is rebuilt.
+        from bridgeforge.escalation import apply_verified
+
+        with resolved_temp_dir() as root:
+            workspace = _workspace(root)
+            revive(workspace)
+            run_packet(workspace, AGENT_PACKET, _agent(root, AGENT_FIX))
+            packet_path = workspace / "reports" / "escalations" / f"{AGENT_PACKET}.json"
+            packet = json.loads(packet_path.read_text(encoding="utf-8"))
+            packet["allowed_files"].append("jars/src/data/Fix.java")
+            packet_path.write_text(json.dumps(packet), encoding="utf-8")
+            sandbox = workspace / "scratch" / "escalations" / packet["id"] / "attempt-1" / "working"
+            (sandbox / "jars" / "src" / "data").mkdir(parents=True)
+            (sandbox / "jars" / "src" / "data" / "Fix.java").write_text("class Fix {}", encoding="utf-8")
+            with self.assertRaises(EscalationError) as caught:
+                apply_verified(workspace, AGENT_PACKET)
+        self.assertIn("--rebuild-jar", str(caught.exception))
+
     def test_edits_outside_the_packet_are_rejected(self):
         body = AGENT_FIX + "Path('mod_info.json').write_text('{}', encoding='utf-8')\n"
         with resolved_temp_dir() as root:

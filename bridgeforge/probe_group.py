@@ -298,7 +298,8 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None) -> dict:
         if match["check"] == "content-ids" and match["subject"] == "all-content":
             seen_content = True
         if match["check"] == "combat-filler" and match["status"] == "INFO":
-            filler_sides.append(match["subject"])  # ROADMAP P15 31.13: vanilla ships stood in for a side
+            if match["subject"] not in filler_sides:
+                filler_sides.append(match["subject"])  # ROADMAP P15 31.13: vanilla ships stood in for a side
         if match["status"] != "FAIL":
             continue
         subject = match["subject"].split(":", 1)[-1].split("/", 1)[0]

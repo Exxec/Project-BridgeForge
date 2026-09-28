@@ -19,7 +19,7 @@ ROOT_FILES = {"README.md", "STATUS.md", "LIVE_TEST_INSTRUCTIONS.md", "OFFLINE_VA
               "PROBE_GROUPS.json", "FINDING_STATS.previous.json",
               "SUPERSESSION.json", "SUPERSESSION.partial.jsonl",
               "ESCALATIONS_BY_FINDING.json", "ESCALATIONS_BY_FINDING.md", "ESCALATIONS_BY_FINDING.partial.jsonl", ".rerevive-stamp", "DESCRIPTIONS_NEEDED.csv",
-              "REVIVE_QUEUE.json", "REVIVE_QUEUE.partial.jsonl"}  # checkpoints of an unfinished run (progress.py); probe-group plan (P15 item 24)
+              "REVIVE_QUEUE.json", "REVIVE_QUEUE.partial.jsonl", "ESCALATION_RULINGS.jsonl"}  # checkpoints of an unfinished run (progress.py); probe-group plan (P15 item 24)
 
 # ROADMAP P14 item 31: audit_revival's COMPLETION_STATUS_PATTERN (used by _completion_statuses)
 # correctly demands a bare, standalone status line as a release-readiness gate - that strict
