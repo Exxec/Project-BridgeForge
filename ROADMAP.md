@@ -2025,6 +2025,9 @@ whether the result passed; recurring agent fixes become deterministic fixers.
       value changes (up to about 25 values), recorded per mod with the exact keys in a baseline so any later
       change shows; always review a large set (over 100 usually means a stale copy of an old settings.json).
       Covers RemnantPad and S-TechPad (24 UI colours each, a UI theme) and Combat-Misc-Utils (`forceNoVBO`).
+      **Applied 2026-09-27** (testing cleared lists the same day): up to 25 changed values is SAFE
+      `settings-json-override-accepted`; revive records the keys in `<workspace>/SETTINGS_BASELINE.json`, and a later
+      change, or more than 25 values, is REVIEW `settings-json-override-breadth`. Test: `test_owner_limit_baseline_and_a_changed_baseline`.
     - **Test first:** Blue-Friend-Balls sets `ruleCommandPackages` to its own package only. If a list value
       replaces vanilla's list rather than adding to it, vanilla's five rule-command packages are lost and much
       campaign dialogue could break. One rig run with it enabled (new game, talk to a market, open a bar) settles

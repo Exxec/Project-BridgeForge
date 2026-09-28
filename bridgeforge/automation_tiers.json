@@ -146,6 +146,7 @@
     "runtime-placeholder-unsupported-operation": "code",
     "script-sandbox-forbidden-api": "code",
     "security-manager": "code",
+    "settings-json-override-accepted": "none",
     "settings-json-override-breadth": "decision",
     "ship-data-missing-fighter-bays-column": "auto",
     "shippable-work-file": "auto",

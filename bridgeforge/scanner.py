@@ -211,6 +211,8 @@ LIBRARY_DEPENDENCY_IDS = {
     "LunaLib": "lunalib",
     "Nexerelin": "nexerelin",
 }
+SETTINGS_ACCEPT_LIMIT = 25  # owner, 2026-09-27 (ROADMAP item 19 held rule)
+SETTINGS_BASELINE_FILE = "SETTINGS_BASELINE.json"
 DESIGN_TYPE_CSV_TARGETS = (
     ("data", "hulls", "ship_data.csv"),
     ("data", "weapons", "weapon_data.csv"),
@@ -3854,6 +3856,27 @@ def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | Non
     overridden = sorted(_settings_value_changes(mod_settings, vanilla_settings))
     if not overridden:
         return
+    # Owner's held rule (ROADMAP item 19, 2026-09-27; cleared once list merging was settled the same day): a small,
+    # deliberate set of up to SETTINGS_ACCEPT_LIMIT changed values is accepted, recorded per mod with the exact keys
+    # in <workspace>/SETTINGS_BASELINE.json (revive writes it) so any later change shows. Larger sets stay REVIEW.
+    baseline_path = root.parent / SETTINGS_BASELINE_FILE if root.name == "working" else None
+    baseline = None
+    if baseline_path is not None and baseline_path.is_file():
+        loaded = _load_lenient_json_file(baseline_path) or {}
+        baseline = sorted(loaded.get("keys") or []) if isinstance(loaded, dict) else None
+    if len(overridden) <= SETTINGS_ACCEPT_LIMIT and (baseline is None or baseline == overridden):
+        result.add(
+            id="settings-json-override-accepted", category="metadata", severity="info", classification="SAFE", confidence="DETERMINISTIC",
+            explanation=(f"data/config/settings.json changes {len(overridden)} vanilla value(s), within the owner's accepted limit of "
+                         f"{SETTINGS_ACCEPT_LIMIT} for a deliberate tuning set. The exact keys are " + ("recorded in the workspace's "
+                         f"{SETTINGS_BASELINE_FILE}, and match." if baseline is not None else f"listed here; revive records them in {SETTINGS_BASELINE_FILE}.")),
+            file="data/config/settings.json", evidence=[f"overridden:{len(overridden)}", *overridden])
+        return
+    baseline_note = ""
+    if baseline is not None and baseline != overridden:
+        added, dropped = sorted(set(overridden) - set(baseline)), sorted(set(baseline) - set(overridden))
+        baseline_note = (f" The keys changed since {SETTINGS_BASELINE_FILE} was recorded: added {', '.join(added[:10]) or 'none'}; "
+                         f"no longer changed {', '.join(dropped[:10]) or 'none'}.")
     result.add(
         id="settings-json-override-breadth",
         category="metadata",
@@ -3867,7 +3890,7 @@ def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | Non
             "set is normal; a large one usually means a near-complete copy of an older settings.json, which "
             "reverts the game's own tuning across four versions with no error. Review the list, not the count - "
             "this is blast radius, not a verdict."
-        ),
+        ) + baseline_note,
         file="data/config/settings.json",
         evidence=[f"overridden:{len(overridden)}", f"vanilla-keys:{len(vanilla_settings)}", *overridden[:25]],
     )
