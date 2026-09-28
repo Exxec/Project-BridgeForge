@@ -323,8 +323,17 @@ public class CampaignProbeScript implements EveryFrameScript {
      * spawned into the sector. FleetParamsV3 fields and FleetFactoryV3.createFleet checked with javap, 2026-09-27.
      */
     private void checkFactionFleetGeneration() {
+        Set<String> toBuild = new HashSet<String>();
         for (String factionId : config.factions) {
-            if (VANILLA_FACTIONS.contains(factionId) || Global.getSector().getFaction(factionId) == null) {
+            if (!VANILLA_FACTIONS.contains(factionId)) {
+                toBuild.add(factionId);
+            }
+        }
+        // 0.2.9 (GRP-8, 2026-09-28): a mod that only patches a faction (Amogus-Shipyards' hegemony.faction adds its
+        // ships to the Hegemony) had nothing checked; build the patched factions' fleets as well.
+        toBuild.addAll(config.patchedFactions);
+        for (String factionId : toBuild) {
+            if (Global.getSector().getFaction(factionId) == null) {
                 continue;
             }
             FleetParamsV3 params = new FleetParamsV3();

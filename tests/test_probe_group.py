@@ -105,6 +105,24 @@ class MergeAndReportTests(unittest.TestCase):
         self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
         self.assertEqual(report["members"]["mod_b"]["verdict"], "FAIL")
 
+    def test_a_patched_vanilla_faction_is_built_and_blamed_on_the_patching_mod(self) -> None:
+        # Probe 0.2.9 (GRP-8, 2026-09-28): Amogus-Shipyards' hegemony.faction has no id; it patches the Hegemony.
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            a = build_probe_config(_workspace(queue, "A", "mod_a", "hull_a"))
+            working_b = _workspace(queue, "B", "mod_b", "hull_b")
+            (working_b / "data" / "world" / "factions").mkdir(parents=True)
+            (working_b / "data" / "world" / "factions" / "hegemony.faction").write_text('{"knownShips": {"hulls": ["hull_b"]}}', encoding="utf-8")
+            merged = merge_configs([a, build_probe_config(working_b)])
+            log = root / "run.stdout.log"
+            log.write_text("5 [main] INFO  com.fs.starfarer.StarfarerLauncher  - Starting" + chr(10) + ""
+                           "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|content-ids|OK|all-content|checked=2 failed=0 ship-variants built=2" + chr(10) + ""
+                           "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|faction-fleet-gen|FAIL|hegemony|FleetFactoryV3 built an empty patrolMedium" + chr(10) + "", encoding="utf-8")
+            report = group_report(log, merged)
+        self.assertEqual(merged["patched_factions"], ["hegemony"])
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
+        self.assertEqual(report["members"]["mod_b"]["verdict"], "FAIL")
+
     def test_no_content_check_means_incomplete(self) -> None:
         with resolved_temp_dir() as root:
             a = build_probe_config(_workspace(root / "q", "A", "mod_a", "hull_a"))

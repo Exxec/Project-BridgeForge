@@ -172,7 +172,7 @@ def merge_configs(configs: list[dict]) -> dict:
     """One probe config for a group: lists united, maps merged, per-member ids kept for the report."""
     merged: dict = {
         "schema_version": 1, "target_mod_id": "group:" + ",".join(c["target_mod_id"] for c in configs),
-        "hulls": [], "variants": {}, "track_entities": [], "factions": [], "content_variants": {"ship": [], "other": []},
+        "hulls": [], "variants": {}, "track_entities": [], "factions": [], "patched_factions": [], "content_variants": {"ship": [], "other": []},
         "content_ship_hulls": {}, "content_special_items": [], "content_wings": [], "hulls_skipped_no_variant": [],
         "setups": [], "apply": configs[0].get("apply", "once-per-save") if configs else "once-per-save",
         "campaign_interval_days": min((c["campaign_interval_days"] for c in configs), default=5.0),
@@ -181,7 +181,7 @@ def merge_configs(configs: list[dict]) -> dict:
         "group_members": {}, "mod_systems": [], "mod_body_types": {},
     }
     for c in configs:
-        for key in ("hulls", "track_entities", "factions", "content_special_items", "content_wings", "hulls_skipped_no_variant"):
+        for key in ("hulls", "track_entities", "factions", "patched_factions", "content_special_items", "content_wings", "hulls_skipped_no_variant"):
             merged[key] = sorted(set(merged[key]) | set(c.get(key) or []))
         for kind in ("ship", "other"):
             merged["content_variants"][kind] = sorted(set(merged["content_variants"][kind]) | set(c["content_variants"][kind]))
@@ -191,7 +191,7 @@ def merge_configs(configs: list[dict]) -> dict:
         merged["mod_body_types"].update(c.get("mod_body_types") or {})
         merged["group_members"][c["target_mod_id"]] = {
             "hulls": sorted(c["hulls"]), "variants": sorted(set(c["content_variants"]["ship"]) | set(c["content_variants"]["other"])),
-            "wings": sorted(c["content_wings"]), "items": sorted(c["content_special_items"]), "factions": sorted(c["factions"])}
+            "wings": sorted(c["content_wings"]), "items": sorted(c["content_special_items"]), "factions": sorted(set(c["factions"]) | set(c.get("patched_factions") or []))}
     return merged
 
 

@@ -404,6 +404,21 @@ def _mod_faction_ids(mod_root: Path) -> list[str]:
     return sorted(ids)
 
 
+def _mod_patched_faction_ids(mod_root: Path) -> list[str]:
+    """Factions the mod patches rather than declares: a .faction file with no "id", named after the faction it
+    merges into (Amogus-Shipyards' hegemony.faction adds its ships to the Hegemony, GRP-8 2026-09-28). The probe
+    builds their fleets too, so the mod's additions are tested in real generated fleets."""
+    ids: set[str] = set()
+    for path in sorted((mod_root / "data" / "world" / "factions").glob("*.faction")):
+        try:
+            data = _load_lenient_json_file(path)
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict) and not data.get("id"):
+            ids.add(path.stem)
+    return sorted(ids)
+
+
 def build_probe_config(
     mod_dir: Path,
     track_entities: list[str] | None = None,
@@ -447,6 +462,7 @@ def build_probe_config(
         "variants": variants,
         "track_entities": sorted(set(track_entities or [])),
         "factions": _mod_faction_ids(mod_root),
+        "patched_factions": _mod_patched_faction_ids(mod_root),
         "content_variants": _content_variants(mod_root, hulls),
         "content_ship_hulls": _content_ship_hulls(mod_root, hulls),
         "content_special_items": _content_special_items(mod_root),
