@@ -1943,6 +1943,43 @@ def _fix_data_file_not_utf8(root: Path, options: dict) -> list[FileChange]:
     return changes
 
 
+NAMED_ENCODINGS_FILE = "NAMED_ENCODINGS.json"
+
+
+def _named_encodings_path(mod_dir: Path) -> Path | None:
+    """<workspace>/NAMED_ENCODINGS.json when mod_dir is a workspace's working/ (ROADMAP P15 item 20.4)."""
+    mod_dir = Path(mod_dir).resolve()
+    return mod_dir.parent / NAMED_ENCODINGS_FILE if mod_dir.name == "working" else None
+
+
+def record_named_encodings(mod_dir: Path, encodings: dict[str, str]) -> Path | None:
+    """Keep a person's `fix --encoding FILE=ENC` decisions in the workspace, so a fresh copy from original/ (and revive) can reapply them."""
+    path = _named_encodings_path(mod_dir)
+    if path is None or not encodings:
+        return None
+    known = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    known.update({name.replace("\\", "/"): encoding for name, encoding in encodings.items()})
+    path.write_text(json.dumps(dict(sorted(known.items())), indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def pending_named_encodings(mod_dir: Path) -> dict[str, str]:
+    """Recorded encodings whose file is still not valid UTF-8 (already converted files are left out)."""
+    path = _named_encodings_path(mod_dir)
+    if path is None or not path.is_file():
+        return {}
+    pending = {}
+    for name, encoding in json.loads(path.read_text(encoding="utf-8")).items():
+        target = Path(mod_dir) / name
+        try:
+            target.read_bytes().decode("utf-8")
+        except UnicodeDecodeError:
+            pending[name] = encoding
+        except OSError:
+            continue
+    return pending
+
+
 # Encodings a person may name for data-file-not-utf8 (`fix --encoding FILE=ENC`), each seen in the queue
 # 2026-09-27: CP-1252 letters (Thule-Legacy, Epta-Consortium), Mac Roman (DME), Shift-JIS (Stinger-Shipyards).
 _NAMEABLE_ENCODINGS = frozenset({"cp1252", "mac_roman", "shift_jis", "gbk", "gb18030", "latin-1"})

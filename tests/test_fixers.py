@@ -1687,6 +1687,28 @@ class DataFileNotUtf8FixerTests(unittest.TestCase):
         self.assertEqual(len(refused), 1)
         self.assertIn("data/strings/tips.csv", refused[0]["reason"])
 
+    def test_named_encodings_are_recorded_and_reapplied_by_revive(self) -> None:
+        # ROADMAP P15 20.4: a person's fix --encoding decision survives a fresh copy from original/.
+        from bridgeforge.cli import main
+        from bridgeforge.revive import _try_fixers
+
+        with tempfile.TemporaryDirectory() as directory:
+            working = Path(directory) / "ws" / "working"
+            _write(working / "mod_info.json", '{"id": "x"}')
+            (working / "data/strings").mkdir(parents=True)
+            raw = 'id,text\r\na,"日本"\r\n'.encode("shift_jis")
+            (working / "data/strings/tips.csv").write_bytes(raw)
+            main(["fix", str(working), "--finding", "data-file-not-utf8", "--encoding", "data/strings/tips.csv=shift_jis", "--apply"])
+            recorded = json.loads((working.parent / "NAMED_ENCODINGS.json").read_text(encoding="utf-8"))
+            (working / "data/strings/tips.csv").write_bytes(raw)  # a fresh copy from original/
+            findings = [{"id": f.id, "classification": f.classification, "file": f.file, "evidence": f.evidence}
+                        for f in _findings(scan_mod(working), "data-file-not-utf8")]
+            applied, _pending = _try_fixers(working, findings, target="0.98a-RC8", vanilla_core=None, approved={"data-file-not-utf8"}, apply=True)
+            text = (working / "data/strings/tips.csv").read_bytes().decode("utf-8")
+        self.assertEqual(recorded, {"data/strings/tips.csv": "shift_jis"})
+        self.assertEqual([item["files"] for item in applied], [["data/strings/tips.csv"]])
+        self.assertIn("日本", text)
+
     def test_refuses_mac_roman_shift_jis_and_accented_letters(self) -> None:
         cases = {
             "mac_roman.csv": b"id,text\na,the station\xd5s hull\n",  # Mac Roman 0xD5 = right quote

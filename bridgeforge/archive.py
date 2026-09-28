@@ -126,7 +126,8 @@ def _render_note(info: dict, name: str, version: str, licence: dict, status: str
         lines += ["## Status: releasable", "", f"Recorded in `release_policy.json` as `RELEASABLE`: {licence.get('reason') or 'no reason recorded'}.", ""]
     lines += [f"Revival report status: **{status or 'none recorded'}** (archived {today}).", "", "## What changed from the original", ""]
     if not has_original:
-        lines.append("No `original/` copy was kept, so the changes cannot be listed here; see `workspace/REVIVAL_REPORT.md`.")
+        lines.append("`original/` holds no unpacked mod (only the download as archives, or nothing), so the changes cannot be "
+                     "listed file by file here; see `workspace/REVIVAL_REPORT.md`.")
     else:
         lines.append(f"{len(changed)} shipped file(s) changed and {len(added)} added, compared byte for byte with `original/`:")
         lines += [f"- changed: `{item}`" for item in changed[:40]] + [f"- added: `{item}`" for item in added[:20]]
@@ -136,6 +137,6 @@ def _render_note(info: dict, name: str, version: str, licence: dict, status: str
                          "revival report's scans was not required." if jars_identical else "At least one jar differs from the original: see the revival report for how it was rebuilt and tested.")
     lines += ["", "See `workspace/REVIVAL_REPORT.md` for every change with its evidence.", "", "## Contents", "",
               f"- `{folder}/` - the mod folder, ready to drop into `mods/`.", f"- `{zip_name}` - the same folder, zipped.",
-              "- `original/` - the download as received, unmodified." if has_original else "- (no `original/` was kept)",
+              "- `original/` - the download as received, unmodified.",
               "- `workspace/` - revival report, plan, baselines and the workspace's own reports.", ""]
     return "\n".join(lines)

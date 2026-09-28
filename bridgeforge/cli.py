@@ -2236,6 +2236,11 @@ def main(argv: list[str] | None = None) -> int:
                     print(diff_text or "(no textual diff; binary or empty change)")
             return 0
         applied = apply_fix(plan)
+        if plan.finding_id == "data-file-not-utf8" and options["encodings"]:
+            from .fixers import record_named_encodings
+            recorded = record_named_encodings(plan.mod_root, options["encodings"])
+            if recorded is not None and not args.json:
+                print(f"Named encodings recorded: {recorded}")
         try:
             rescan = scan_mod(plan.mod_root)
         except ValueError as exc:

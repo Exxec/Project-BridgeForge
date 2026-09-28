@@ -2057,6 +2057,8 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     4. **Persist named encodings.** `fix --encoding FILE=ENC` decisions live only in the fixed files; record them in
        the workspace (REVIVAL_PLAN.md or a small JSON) so a re-copy from `original/` can reapply them, and let
        `revive` read them.
+       **Done 2026-09-27:** `fix --encoding` records each decision in `<workspace>/NAMED_ENCODINGS.json`; `revive` passes
+       the recorded encodings of files still not UTF-8 to the fixer. Test: `test_named_encodings_are_recorded_and_reapplied_by_revive`.
     5. **`revive` should keep a fixer's partial refusals.** When `data-file-not-utf8` converts some files and
        refuses others, the refused list is dropped because the plan has changes; surface it as a pending item.
        **Done 2026-09-27:** the fixer records `partial_refusals` on its options and `revive` adds them as a FIXER_REFUSED

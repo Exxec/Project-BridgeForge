@@ -103,6 +103,10 @@ def _fix_options(finding_id: str, working: Path, target: str, vanilla_core: Path
     base = {"target_game_version": target, "vanilla_core": vanilla_core, "scan_findings": findings}
     if finding_id == "faction-known-lists-missing":
         return [{**base, "faction_file": working / f["file"]} for f in findings if f.get("file")]
+    if finding_id == "data-file-not-utf8":
+        from .fixers import pending_named_encodings
+        # A person's earlier `fix --encoding` decisions (<workspace>/NAMED_ENCODINGS.json, ROADMAP P15 20.4).
+        return [{**base, "encodings": pending_named_encodings(working)}]
     return [base]
 
 
