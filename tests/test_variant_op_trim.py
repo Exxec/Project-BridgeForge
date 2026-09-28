@@ -71,3 +71,22 @@ class VariantOpTrimTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReferenceCoreTests(unittest.TestCase):
+    def test_only_variants_that_fit_under_the_reference_are_trimmed(self) -> None:
+        # Owner ruling 2026-09-27, option 2: an over-budget variant that is over on the reference game too was
+        # authored that way and is left alone.
+        with resolved_temp_dir() as root:
+            mod, core = _fixture(root, weapons=30, caps=10, vents=10, mods=["big_mod", "small_mod"])  # 63 vs 50 on "RC8"
+            old = root / "old"
+            import shutil
+            shutil.copytree(core, old)
+            (old / "data" / "hullmods" / "hull_mods.csv").write_text(
+                "name,id,cost_frigate,cost_dest,cost_cruiser,cost_capital\nBig,big_mod,1,1,1,1\nSmall,small_mod,1,1,1,1\n", encoding="utf-8")  # 52: fits
+            fits_there = compute_fix(mod, "variant-op-over-budget", {"vanilla_core": core, "reference_core": old})
+            (old / "data" / "hullmods" / "hull_mods.csv").write_text(
+                "name,id,cost_frigate,cost_dest,cost_cruiser,cost_capital\nBig,big_mod,1,1,20,1\nSmall,small_mod,1,1,20,1\n", encoding="utf-8")  # over there too
+            with self.assertRaises(FixerError):
+                compute_fix(mod, "variant-op-over-budget", {"vanilla_core": core, "reference_core": old})
+        self.assertEqual(len(fits_there.changes), 1)

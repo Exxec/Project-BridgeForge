@@ -2086,6 +2086,18 @@ def _fix_variant_op_over_budget(root: Path, options: dict) -> list[FileChange]:
         findings = [f for f in scan_mod(root, vanilla_core=vanilla).findings if f.id == "variant-op-over-budget"]
     else:
         findings = _findings_of(root, options, "variant-op-over-budget")
+    reference = options.get("reference_core")
+    if reference:
+        # Owner ruling 2026-09-27 (option 2): trim only variants that fit under the reference game's costs, i.e.
+        # the ones RC8's cost changes pushed over; a variant over budget there too was authored that way (as RC8's
+        # own 12 over-budget variants are) and is left alone.
+        from .models import ScanResult, TargetProfile
+        from .scanner import _scan_variant_validity
+
+        ref_result = ScanResult(input_path=root, target=TargetProfile())
+        _scan_variant_validity(root, ref_result, Path(reference))
+        authored = {f.file for f in ref_result.findings if f.id == "variant-op-over-budget"}
+        findings = [f for f in findings if f.file not in authored]
     ship_files, skins, skin_slots = _ship_file_index(root, vanilla), _skin_index(root, vanilla), _skin_weapon_slot_changes(root, vanilla)
     hull_mod_costs = _csv_id_index(root / "data" / "hullmods" / "hull_mods.csv", vanilla / "data" / "hullmods" / "hull_mods.csv")
     changes, refused = [], []
