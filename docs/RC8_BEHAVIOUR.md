@@ -1,0 +1,23 @@
+# RC8 behaviour register
+
+Facts about Starsector 0.98a-RC8 that BridgeForge relies on, each with the evidence that proved it and the
+checks or fixers that depend on it (ROADMAP P15 item 31.6). Add a row when a live run, a vanilla file or javap
+settles a question; cite the row id in the code comment that relies on it. A fact without evidence does not go here.
+
+| Id | Fact | Evidence (date) | Relied on by |
+|---|---|---|---|
+| RC8-01 | `settings.json` merges objects key by key; a key a mod only adds inside a vanilla object is not an override. | SEEKER, Exigency, Flu-X add `plugins`/`graphics` entries and ran normally (live, 2026-09-24). | `settings-json-override-breadth` (`_settings_value_changes`) |
+| RC8-02 | `settings.json` lists add to vanilla's list rather than replace it (`ruleCommandPackages`). | Ten rig mods set it to their own package only; GRP-SPARKLE-20260927 ran SOTF, LunaLib and MagicLib together and New Game, which needs vanilla's `rulecmd.newgame` package, worked (2026-09-27). | Blue-Friend-Balls BFB-SET-01; ROADMAP item 19 |
+| RC8-03 | `mod_info.json` `replace` entries ending in `settings.json` are skipped; settings.json always merges. | javap of `ModManager` / `ModSpec.getFullOverrides()` (ROADMAP P14 item 42). | `replace-entry-ignored` |
+| RC8-04 | `sounds.json` merges by sound id inside a category; a mod naming some `music` ids keeps vanilla's others. | Every Exigency session EX-2..EX-10 loaded its sounds.json (3 music ids) and still played vanilla's title, Corvus campaign and neutral-encounter music (2026-09-28). | `preset-entry-drops-vanilla-fields` / `preset-entry-overrides-vanilla` (sounds.json flattening) |
+| RC8-05 | `data/world/factions/default_fleet_type_names.json` merges with vanilla's. | Broken Star and Nexerelin ship it with only their own entries, and vanilla fleets keep their names (2026-09-27). | `fleet-type-name-missing` fixer (vanilla factions) |
+| RC8-06 | Over-budget variants load; RC8 ships 12 of its own 447 variants over their ordnance points (e.g. `invictus_Support` 334/240). | Scan of RC8 `data/variants` (2026-09-27). | Owner ruling option 2: `variant-op-over-budget` trims only what RC8's costs pushed over (`fix --reference-core`) |
+| RC8-07 | S-mods and permanent mods cost no OP, even when a variant also lists them in `hullMods`. | 9 of 696 over-budget queue variants list them twice (e.g. `brdy_stenos_event`) (2026-09-27). | `variant-op-over-budget` (skips `sMods`/`permaMods`) |
+| RC8-08 | A variant naming a missing weapon is a Fatal dialog at New Game; a missing hull mod in a variant is dropped silently. | Live runs (2026-09-27). | `content-reference-unresolved` severity by kind |
+| RC8-09 | A Fatal dialog never reaches the redirected stdout log. | Live runs; `bf-test.ps1` records dialog text in `<TESTID>.windows.txt` (2026-09-27). | `log-triage` (reads `.windows.txt`) |
+| RC8-10 | A missing `settings.json` `graphics` sprite is a Fatal before the main menu. | GRP-9-20260928: `Error loading [graphics/shield/sw_shields256.png]` (2026-09-28). | `asset-reference-missing` (settings.json graphics) |
+| RC8-11 | A hostile faction's market refuses docking with the transponder on and allows only black-market trade with it off. | Vanilla `rules.csv` `marketPostOpenNoTrade` and the transponder-off rules (2026-09-27). | Zorg18 r4 `ZorgHiveExchange` (`isBlackMarket`) |
+| RC8-12 | A one-off commodity nothing produces must be tagged `nonecon`, or a submarket's stock loses it. | Zorg18 ZG4-3: `zorg_assimilation` never showed until tagged `nonecon`, like vanilla's AI cores (2026-09-27). | Zorg18 r4; noted in CLAUDE.md |
+| RC8-13 | Loose scripts are compiled by Janino 2.7.8: typed for-each over `List<String>` is fine; lambdas and method calls on generic-typed values are not. The game runs with `-noverify`. | `compile-check`'s Janino harness against RC8's own jar; 47 of 48 mods the old pattern flagged compile clean (2026-09-27). | `loose-script-janino-compile-error`; `optional-library-integration` (-noverify) |
+| RC8-14 | A jar class beats a same-named loose `data/**.java`, across mods too. | Live runs (2026-09-14). | `loose-script-shadowed-by-jar`, `loose-script-shadowed-by-dependency-jar` |
+| RC8-15 | `com.fs.starfarer.combat.entities.BallisticProjectile.advance(float)` still exists in `starfarer_obf.jar`. | javap (2026-09-28). | Exigency teleporter review (`obfuscated-internal-api-use` accepted) |

@@ -13,6 +13,7 @@ BridgeForge is an offline, evidence-first toolkit for reviving legacy Starsector
   `UNKNOWN` are never auto-applied. Compiling is not proof of behaviour.
 - A claim about the game or its API needs evidence (javap output, a vanilla file, a log line).
   Record the evidence and date in the code comment or roadmap entry, as the existing code does.
+  Proven runtime behaviour goes in `docs/RC8_BEHAVIOUR.md` (one row per fact, cite its id in code).
 - The real Starsector install is read-only. Rig commands refuse to run unless the rig's
   `starsector-core` is a junction/symlink.
 - Never commit Fractal Softworks game files (jars, art, data). The probe's mission icon is
@@ -52,7 +53,8 @@ progress rather than waiting blind.
   `bf-test.ps1` records dialog text in `<TESTID>.windows.txt`, and `log-triage` reads it.
 - `bf-test launch` logs only the session it starts; a player relaunch logs only to the rig's `starsector.log`.
 - Edit code with Write/Edit, not Python-in-bash heredocs: `
-`, `
+`, `
+
 ` and `\"` inside a heredoc'd Python string are
   unescaped once by Python and land as real newlines or quotes, which broke six edits in one session. For a long
   generated file, write it to the scratchpad with Write and run it. Git Bash's `/tmp` is not Python's `/tmp` on Windows.

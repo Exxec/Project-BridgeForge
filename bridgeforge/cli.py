@@ -857,6 +857,14 @@ def build_parser() -> argparse.ArgumentParser:
     policy_set.add_argument("--on", help="decision date (default: today)")
     for command in (policy_show, policy_set):
         command.add_argument("--policy", type=Path, help=argparse.SUPPRESS)
+    desc_cmd = subcommands.add_parser("descriptions", help="missing codex descriptions: build the queue sheet, or apply a reviewed draft table with credits and an original-descriptions copy")
+    desc_sub = desc_cmd.add_subparsers(dest="descriptions_command", required=True)
+    desc_sheet = desc_sub.add_parser("sheet", help="write <queue>/DESCRIPTIONS_NEEDED.csv from a live check")
+    desc_sheet.add_argument("queue", type=Path)
+    desc_sheet.add_argument("--vanilla-core", type=Path)
+    desc_apply = desc_sub.add_parser("apply", help="add a draft table's rows to working/data/strings/descriptions.csv; write BRIDGEFORGE_CREDITS.txt and alt-original-descriptions/")
+    desc_apply.add_argument("workspace", type=Path)
+    desc_apply.add_argument("draft", type=Path, help="markdown with | `id` | TYPE | text | rows")
     ci_cmd = subcommands.add_parser("check-impact", help="rescan the mods whose escalation packets hold FINDING_ID and report which are now cleared, reduced or unchanged (--all: also find newly flagged mods)")
     ci_cmd.add_argument("finding")
     ci_cmd.add_argument("queue", type=Path)
@@ -2979,6 +2987,21 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(dumps(plan) if args.json else render(plan))
+        return 0
+    if args.command == "descriptions":
+        from .descriptions import DescriptionsError, apply_draft, build_sheet
+        try:
+            if args.descriptions_command == "sheet":
+                result = build_sheet(args.queue, args.vanilla_core)
+                print(f"{result['entries']} missing description(s) in {result['mods']} mod(s). Written: {result['path']}")
+            else:
+                result = apply_draft(args.workspace, args.draft)
+                print(f"Added {len(result['added'])} row(s); already present: {len(result['skipped_existing'])}.")
+                print(f"Credits: {result['credits']}")
+                print(f"Original-descriptions copy: {result['alternative']}")
+        except (DescriptionsError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
         return 0
     if args.command == "check-impact":
         from .check_impact import check_impact
