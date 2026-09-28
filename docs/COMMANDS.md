@@ -643,6 +643,7 @@ classify a Starsector log into FATAL / MOD-ERROR / KNOWN-NOISE / OTHER without m
 | `--mod-prefix` PREFIX | repeatable | additional mod source/package prefix to attribute errors to; repeatable |
 | `--mods-dir` MODS_DIR | - | mods folder the log ran with: names the mod whose jar owns each crash frame (suspect/involved) |
 | `--all-mods` | - | with --mods-dir: index every mod folder, not just enabled_mods.json (e.g. a log from a different mod list) |
+| `--last-sessions` N | - | a rolling starsector.log: triage only its last N game sessions (a relaunch during a test logs only there) |
 | `--json` | - | - |
 
 ## copy-drift

@@ -310,6 +310,7 @@ def build_parser() -> argparse.ArgumentParser:
     log_triage.add_argument("--mod-prefix", action="append", default=[], metavar="PREFIX", help="additional mod source/package prefix to attribute errors to; repeatable")
     log_triage.add_argument("--mods-dir", type=Path, help="mods folder the log ran with: names the mod whose jar owns each crash frame (suspect/involved)")
     log_triage.add_argument("--all-mods", action="store_true", help="with --mods-dir: index every mod folder, not just enabled_mods.json (e.g. a log from a different mod list)")
+    log_triage.add_argument("--last-sessions", type=int, metavar="N", help="a rolling starsector.log: triage only its last N game sessions (a relaunch during a test logs only there)")
     log_triage.add_argument("--json", action="store_true")
     copy_drift = subcommands.add_parser("copy-drift", help="hash-compare a mod working copy against its deployed/test-rig copy")
     copy_drift.add_argument("working_copy", type=Path)
@@ -2006,7 +2007,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "log-triage":
         try:
-            result = triage_log(args.log, args.mod_prefix, mods_dir=args.mods_dir, all_mods=args.all_mods)
+            result = triage_log(args.log, args.mod_prefix, mods_dir=args.mods_dir, all_mods=args.all_mods, last_sessions=args.last_sessions)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -2014,6 +2015,9 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, indent=2, sort_keys=True))
         else:
             counts = result["counts"]
+            if result.get("sessions"):
+                sessions = result["sessions"]
+                print(f"Sessions: last {sessions['found']} of the log, from line {sessions['first_line']} (line numbers below count from there)")
             print(f"FATAL={counts['FATAL']} MOD-ERROR={counts['MOD-ERROR']} KNOWN-NOISE={counts['KNOWN-NOISE']} OTHER={counts['OTHER']}")
             milestones = result["milestones"]
             print(f"Main menu reached: {milestones['main_menu_reached']}; campaign loads: {len(milestones['campaign_loads'])}; finished-saving events: {milestones['finished_saving_count']}; mission variant preloads (startup, not play): {len(milestones['mission_variant_preloads'])}")

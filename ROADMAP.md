@@ -2111,6 +2111,8 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     17. **Triage across relaunches.** `bf-test launch` redirects only the session it starts; a player relaunch
         (ZG-7's save/quit/load) goes only to the game's `starsector.log`. `triage` should also read the rig's
         `starsector.log` lines after the launch time, so a multi-session test is triaged whole.
+        **Done 2026-09-27:** `log-triage <rig>/logs/starsector.log --last-sessions N` triages only the last N sessions
+        (each starts at the launcher's "Starting Starsector" line; the log has no dates). Test: `tests/test_log_triage_sessions.py`.
     16. **`shippable-work-file` references (done 2026-09-27):** mentions inside IDE/VCS folders (`.idea`, `.git`,
         `src*`) no longer count as runtime references; Jackundor's `.idea/libraries/data.xml` had kept two
         backup zips in the mod. Test: `tests/test_fixers.py`.
