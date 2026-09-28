@@ -5346,6 +5346,67 @@ def _console_command_classes(root: Path) -> set[str]:
     return {(row.get("class") or "").strip() for row in rows if (row.get("class") or "").strip()}
 
 
+# RC8-16. Market conditions in 0.8.1a's market_conditions.csv that RC8's no longer defines (diffed 2026-09-28). 0.9 turned most
+# into industries (RC8 industries.csv ids noted; None where there is no direct successor). A market that adds one throws
+# "Market condition [antimatter_fuel_production] not found", a Fatal at New Game (FlowerGod, FG-SOLO-20260928).
+LEGACY_MARKET_CONDITIONS = {
+    "antimatter_fuel_production": "fuelprod", "aquaculture": "aquaculture", "autofac_heavy_industry": "heavyindustry",
+    "cryosanctum": "cryosanctum", "light_industrial_complex": "lightindustry", "military_base": "militarybase",
+    "orbital_burns": None, "orbital_station": "orbitalstation", "ore_complex": "mining", "ore_refining_complex": "refining",
+    "organics_complex": "mining", "spaceport": "spaceport", "volatiles_complex": "mining", "volatiles_depot": None,
+}
+
+
+def _scan_legacy_market_conditions(root: Path, result: ScanResult) -> None:
+    """Code that adds a pre-0.9 market condition. MarketAPI.addIndustry is absent from 0.8.1a's API (javap, 2026-09-28),
+    so a class that calls addCondition with one of these ids and never addIndustry is unported 0.8 market code."""
+    own = {(row.get("id") or "").strip() for row in _read_csv_rows_lenient(root / "data" / "campaign" / "market_conditions.csv") or []}
+    legacy = {cid for cid in LEGACY_MARKET_CONDITIONS if cid not in own}
+    hits: dict[str, set[str]] = {}
+    for source in sorted(root.rglob("*.java")):
+        parts = source.relative_to(root).parts
+        if "disabled_files" in parts or "src-decompiled" in parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if "addCondition" not in text or "addIndustry" in text:
+            continue
+        found = {cid for cid in legacy if f'"{cid}"' in text}
+        if found:
+            hits[_relative(root, source)] = found
+    for jar, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None or "addCondition" not in info.utf8_values or "addIndustry" in info.utf8_values:
+            continue
+        found = legacy & set(info.string_constants)
+        if found:
+            hits[f"{_relative(root, jar)}!{member}"] = found
+    # aquaculture, cryosanctum and spaceport are RC8 industry ids too, so alone they are ambiguous: a class may pass one
+    # to getIndustry/hasIndustry. The 2026-09-28 sweep of 293 working copies flagged seven such classes on "spaceport"
+    # alone (Omega-Trauma's among them, live-validated). Only a class with an id RC8 has no industry for counts.
+    both = {"aquaculture", "cryosanctum", "spaceport"}
+    hits = {where: found for where, found in hits.items() if found - both}
+    if not hits:
+        return
+    ids = sorted(set().union(*hits.values()))
+    result.add(
+        id="legacy-market-condition",
+        category="campaign",
+        severity="high",
+        classification="MANUAL",
+        confidence="HIGH",
+        explanation="Code adds market conditions that 0.9 removed (most became industries), and never calls addIndustry, "
+                    "which 0.8.1a's API lacked: unported 0.8 market code. RC8 throws \"Market condition [...] not found\" "
+                    "when the market is built, a Fatal at New Game. Add the successor industry instead ("
+                    + ", ".join(f"{cid} -> {LEGACY_MARKET_CONDITIONS[cid] or 'no direct successor'}" for cid in ids)
+                    + "), plus population and a spaceport, which every RC8 market needs.",
+        file=sorted(hits)[0],
+        evidence=[f"{where}: {', '.join(sorted(found))}" for where, found in sorted(hits.items())][:10],
+    )
+
+
 def _nexerelin_custom_start_classes(root: Path) -> set[str]:
     """Classes named by "className" in data/config/exerelin/customStarts.json (loaded only by Nexerelin)."""
     data = _load_lenient_json_file(root / "data" / "config" / "exerelin" / "customStarts.json")
@@ -6656,6 +6717,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_shiproles(root, result, vanilla_root)
     _scan_carrier_rework_gap(root, result)
     _scan_black_hole_flag(root, result)
+    _scan_legacy_market_conditions(root, result)
     _scan_mod_info_game_version(result)
     _scan_vanilla_path_shadowing(root, result, vanilla_root)
     _scan_preset_entry_overrides(root, result, vanilla_root)

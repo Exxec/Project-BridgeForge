@@ -99,6 +99,7 @@
     "loose-script-compile-error": "code",
     "loose-script-compile-unavailable": "inspect",
     "loose-script-janino-risk": "code",
+    "legacy-market-condition": "code",
     "loose-script-janino-compile-error": "code",
     "fleet-type-name-missing": "auto",
     "optional-library-integration": "none",
