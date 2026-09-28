@@ -2029,6 +2029,11 @@ whether the result passed; recurring agent fixes become deterministic fixers.
       replaces vanilla's list rather than adding to it, vanilla's five rule-command packages are lost and much
       campaign dialogue could break. One rig run with it enabled (new game, talk to a market, open a bar) settles
       how lists merge; until then it stays blocked.
+      **Settled 2026-09-27: lists add, they do not replace.** Ten rig mods set `ruleCommandPackages` to their own
+      package only (MagicLib, LunaLib, Console Commands, SOTF, Tahlan, SWP, IndEvo, Nightcross, Broken Star,
+      Arkgneisis); GRP-SPARKLE-20260927 ran SOTF, LunaLib and MagicLib together and New Game, which needs vanilla's
+      `rulecmd.newgame` package, worked. Blue-Friend-Balls is unblocked (its report, BFB-SET-01). Evidence covers
+      `ruleCommandPackages`; other list keys still count as overrides until shown the same way.
 20. **Enhancements found in the 2026-09-27 local session (proposed, not started).** Most useful first.
     1. **`archive` command for local-only mods.** Archiving ClearCommands and RevenantLib into `Done/` was
        done by hand: shipped files via `copy_drift._collect`, a zip, `original/`, `workspace/` reports and an
