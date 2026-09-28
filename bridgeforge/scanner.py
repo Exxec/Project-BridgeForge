@@ -5407,6 +5407,147 @@ def _scan_legacy_market_conditions(root: Path, result: ScanResult) -> None:
     )
 
 
+def _unregistered_skill_ids(vanilla_core: Path | None) -> set[str]:
+    """Skill ids RC8 ships a .skill file for, or comments out of skill_data.csv, but does not register. With the
+    0.8.1a reference beside the RC8 install, its skill ids too (removed in 0.9's skill rework)."""
+    if vanilla_core is None:
+        return set()
+    skills = Path(vanilla_core) / "data" / "characters" / "skills"
+    rows = _read_csv_rows_lenient(skills / "skill_data.csv") or []
+    registered = {(r.get("id") or "").strip() for r in rows if not (r.get("id") or "").strip().startswith("#")}
+    known = {p.stem for p in skills.glob("*.skill")} | {(r.get("id") or "").strip().lstrip("#") for r in rows}
+    reference = Path(vanilla_core).parent.parent / "Starsector8.1" / "starsector-core" / "data" / "characters" / "skills" / "skill_data.csv"
+    known |= {(r.get("id") or "").strip() for r in _read_csv_rows_lenient(reference) or []}
+    return {s for s in known - registered if s}
+
+
+def _scan_unregistered_skill_set(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """RC8-18: setSkillLevel/increaseSkill with a skill RC8 does not register throws a NullPointerException in
+    CharacterStats.refreshCharacterStatsEffects (FlowerGod's bounty officer, FG-SOLO2-20260928). Reads
+    (getSkillLevel) are not flagged: nothing shows they fail."""
+    bad = _unregistered_skill_ids(vanilla_core) - {
+        (r.get("id") or "").strip() for r in _read_csv_rows_lenient(root / "data" / "characters" / "skills" / "skill_data.csv") or []}
+    if not bad:
+        return
+    setters = ("setSkillLevel", "increaseSkill")
+    hits: dict[str, set[str]] = {}
+    for source in sorted(root.rglob("*.java")):
+        parts = source.relative_to(root).parts
+        if "disabled_files" in parts or "src-decompiled" in parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        found = {m.group(2) for m in re.finditer(r"\b(setSkillLevel|increaseSkill)\s*\(\s*\"([A-Za-z0-9_]+)\"", text) if m.group(2) in bad}
+        if found:
+            hits[_relative(root, source)] = found
+    for jar, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None or not any(name in info.utf8_values for name in setters):
+            continue
+        found = bad & set(info.string_constants)
+        if found:
+            hits[f"{_relative(root, jar)}!{member}"] = found
+    if not hits:
+        return
+    result.add(
+        id="skill-unregistered",
+        category="campaign",
+        severity="high",
+        classification="MANUAL",
+        confidence="MEDIUM",
+        explanation="Code sets a skill RC8 does not register (a 0.8 skill, or one RC8 comments out of skill_data.csv). "
+                    "RC8 then throws a NullPointerException in CharacterStats.refreshCharacterStatsEffects, a Fatal when the "
+                    "code runs. Pick the RC8 successor (a commented-out skill's .skill file names the scripts it runs) and "
+                    "RC8's level range. In a jar, a class that also only reads the skill is included; confirm the set.",
+        file=sorted(hits)[0],
+        evidence=[f"{where}: {', '.join(sorted(found))}" for where, found in sorted(hits.items())][:10],
+    )
+
+
+# CJK Unified Ideographs, Extension A, CJK punctuation, full-width forms, Hiragana/Katakana, Hangul.
+_CJK = re.compile(r"[　-〿぀-ヿ㐀-䶿一-鿿가-힯＀-￯]")
+
+
+def _scan_untranslated_cjk_text(root: Path, result: ScanResult) -> None:
+    """RC8-19: the game's fonts have no CJK glyphs, so Chinese/Japanese/Korean text renders as '???' (FlowerGod's
+    faction intel, 2026-09-28). Counts player-facing strings in data/ CSV/JSON and in jar string constants."""
+    counts: dict[str, int] = {}
+    data_dir = root / "data"
+    if data_dir.is_dir():
+        for path in sorted(data_dir.rglob("*")):
+            if path.suffix.lower() not in (".csv", ".json", ".faction", ".skin", ".ship", ".variant", ".system", ".wpn") or not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            n = len(_CJK.findall(text))
+            if n:
+                counts[_relative(root, path)] = n
+    for jar, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None:
+            continue
+        n = sum(1 for s in info.string_constants if _CJK.search(s))
+        if n:
+            key = _relative(root, jar)
+            counts[key] = counts.get(key, 0) + n
+    info_name = str(result.metadata.get("name") or "")
+    if not counts and not _CJK.search(info_name):
+        return
+    top = sorted(counts.items(), key=lambda kv: -kv[1])
+    result.add(
+        id="untranslated-cjk-text",
+        category="content",
+        severity="medium",
+        classification="REVIEW",
+        confidence="HIGH",
+        explanation="Player-facing text is Chinese, Japanese or Korean. RC8's fonts have no CJK glyphs, so it shows as "
+                    "'???'. Translate the data files with Project Go (the owner-approved translator; ASCII paths, private "
+                    "workspace, then check for leftover CJK); strings in a jar need a separate pass.",
+        file=top[0][0] if top else "mod_info.json",
+        evidence=[f"{where}: {n} {'string(s)' if where.endswith('.jar') else 'CJK char(s)'}" for where, n in top[:10]]
+                 + (["mod_info.json name"] if _CJK.search(info_name) else []),
+    )
+
+
+# A quoted phrase written with a backslash or slash before each quote (C style) inside a CSV field. Standard CSV
+# escapes a quote by doubling it, so BridgeForge's reader splits the row (SEEKER 0.6.6 special_items.csv
+# `/"brute force/"`: the probe config got a fragment as special item "0"). The game's reader did not make that stray
+# row (getSpecialItemSpec("0") was null, SEEKER-SOLO-20260928), so the harm is tools misreading the file, and the
+# slashes shown in-game. Exotica Technologies' special_items.csv has the backslash form (2026-09-28 sweep).
+CSV_SLASH_QUOTE = re.compile(r'[/\\]"([^",\r\n]{1,80}?)[/\\]"')
+
+
+def _scan_csv_slash_quote(root: Path, result: ScanResult) -> None:
+    data_dir = root / "data"
+    if not data_dir.is_dir():
+        return
+    for path in sorted(data_dir.rglob("*.csv")):
+        try:
+            text = path.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            continue
+        matches = list(CSV_SLASH_QUOTE.finditer(text))
+        if not matches:
+            continue
+        result.add(
+            id="csv-slash-quote-escape",
+            category="data",
+            severity="medium",
+            classification="SAFE",
+            confidence="HIGH",
+            explanation="A CSV field quotes a phrase with a slash or backslash before each quote. Standard CSV escapes a "
+                        "quote by doubling it, so BridgeForge (and the probe config it builds) splits the row; the game "
+                        "reads past it but shows the slashes. The fix writes the doubled-quote escape vanilla's "
+                        "descriptions.csv uses, so the game and the tools read the same text.",
+            file=_relative(root, path),
+            evidence=[m.group(0) for m in matches[:10]],
+        )
+
+
 def _nexerelin_custom_start_classes(root: Path) -> set[str]:
     """Classes named by "className" in data/config/exerelin/customStarts.json (loaded only by Nexerelin)."""
     data = _load_lenient_json_file(root / "data" / "config" / "exerelin" / "customStarts.json")
@@ -5672,6 +5813,14 @@ def _ship_file_index(root: Path, vanilla_core: Path | None) -> dict[str, dict]:
             hull_id = data.get("hullId")
             if isinstance(hull_id, str) and hull_id.strip():
                 index[hull_id.strip()] = data
+            elif path.stem in index:
+                # A .ship with no hullId is a partial file the game merges over the same-path vanilla one:
+                # Militarized Odyssey's odyssey.ship adds only a decorative "WS 020" (2026-09-28), and replacing
+                # vanilla's entry made every stock slot look missing. weaponSlots merge by id.
+                base = index[path.stem]
+                slots = {s.get("id"): s for s in base.get("weaponSlots") or [] if isinstance(s, dict)}
+                slots.update({s.get("id"): s for s in data.get("weaponSlots") or [] if isinstance(s, dict)})
+                index[path.stem] = {**base, **data, "weaponSlots": list(slots.values())}
             else:
                 index[path.stem] = data
     return index
@@ -6200,6 +6349,26 @@ def _scan_variant_validity(root: Path, result: ScanResult, vanilla_core: Path | 
                     continue
                 slot = slot_by_id.get(slot_id)
                 if slot is None:
+                    # RC8-17: a weapon in a slot the hull lacks is a Fatal when the ship is drawn ("Slot id [WS 006]
+                    # not found on hull [hyperion]", FlowerGod's FGV_hyperion_Attack, FG-SOLO3-20260928). RC8
+                    # redesigned vanilla hulls (the Hyperion went from six weapon slots to three), so old variants
+                    # of vanilla hulls hit this. The probe builds the variant without error; drawing it fails.
+                    if slot_by_id:
+                        result.add(
+                            id="variant-weapon-slot-missing",
+                            category="variants",
+                            severity="high",
+                            classification="REVIEW",
+                            confidence="DETERMINISTIC",
+                            explanation=(
+                                f"Variant '{variant_id}' puts weapon '{weapon_id}' in slot '{slot_id}', which hull "
+                                f"'{resolved_hull_id}' does not have. RC8 throws \"Slot id [...] not found on hull\" when "
+                                "the ship is drawn (a fleet screen, a mission): a Fatal. Refit the variant to the hull's "
+                                f"current slots ({', '.join(sorted(slot_by_id))})."
+                            ),
+                            file=relative,
+                            evidence=[f"variant:{variant_id}", f"hull:{resolved_hull_id}", f"slot:{slot_id}", f"weapon:{weapon_id}"],
+                        )
                     continue
                 slot_type = str(slot.get("type") or "").strip().upper()
                 if slot_type in WEAPON_SLOT_SKIP_TYPES:
@@ -6718,6 +6887,9 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_carrier_rework_gap(root, result)
     _scan_black_hole_flag(root, result)
     _scan_legacy_market_conditions(root, result)
+    _scan_unregistered_skill_set(root, result, vanilla_root)
+    _scan_untranslated_cjk_text(root, result)
+    _scan_csv_slash_quote(root, result)
     _scan_mod_info_game_version(result)
     _scan_vanilla_path_shadowing(root, result, vanilla_root)
     _scan_preset_entry_overrides(root, result, vanilla_root)

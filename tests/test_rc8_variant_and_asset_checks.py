@@ -195,6 +195,20 @@ class VariantOpOverBudgetTests(unittest.TestCase):
             self.assertEqual(_findings(result, "variant-op-over-budget"), [])
 
 
+class VariantWeaponSlotMissingTests(unittest.TestCase):
+    def test_a_weapon_in_a_slot_the_hull_lacks_fires(self) -> None:
+        # FlowerGod FGV_hyperion_Attack (FG-SOLO3-20260928): "WS 006" on RC8's three-slot Hyperion, a Fatal when drawn.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "data" / "hulls" / "ship_data.csv", SHIP_DATA_HEADER + _ship_data_row("demo_hull", 100, 0))
+            _write_json(root / "data" / "hulls" / "demo_hull.ship", _basic_ship_json("demo_hull", slots=[{"id": "WS1", "type": "ENERGY", "size": "MEDIUM"}]))
+            _write_json(root / "data" / "variants" / "demo_variant.variant",
+                        _basic_variant("demo_hull", "demo_variant", weapon_groups=[{"weapons": {"WS1": "gun", "WS 006": "gun"}}]))
+            hits = _findings(scan_mod(root), "variant-weapon-slot-missing")
+        self.assertEqual(len(hits), 1)
+        self.assertIn("slot:WS 006", hits[0].evidence)
+
+
 class VariantWeaponSlotMismatchTests(unittest.TestCase):
     def test_size_mismatch_fires(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

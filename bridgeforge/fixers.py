@@ -58,6 +58,7 @@ SUPPORTED_FINDINGS = (
     "fleet-type-name-missing",
     "variant-op-over-budget",
     "procgen-mod-body-leak",
+    "csv-slash-quote-escape",
 )
 
 
@@ -2181,7 +2182,26 @@ def _fix_procgen_mod_body_leak(root: Path, options: dict) -> list[FileChange]:
         changes.append(FileChange(path=path, before=raw, after=_encode(newline.join(lines), had_bom)))
     return changes
 
+def _fix_csv_slash_quote_escape(root: Path, options: dict) -> list[FileChange]:
+    """Rewrite each /"phrase/" (or \\"phrase\\") that `csv-slash-quote-escape` names as ""phrase"", the CSV escape
+    vanilla's descriptions.csv uses (SEEKER 0.6.6 special_items.csv, 2026-09-28). Nothing else in the file changes."""
+    from .scanner import CSV_SLASH_QUOTE
+
+    changes = []
+    for relative in sorted({f.file for f in _findings_of(root, options, "csv-slash-quote-escape") if f.file}):
+        path = root / relative
+        if not path.is_file():
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        fixed = CSV_SLASH_QUOTE.sub(lambda m: '""' + m.group(1) + '""', text)
+        if fixed != text:
+            changes.append(FileChange(path=path, before=raw, after=_encode(fixed, had_bom)))
+    return changes
+
+
 _FIXER_FUNCS = {
+    "csv-slash-quote-escape": _fix_csv_slash_quote_escape,
     "procgen-mod-body-leak": _fix_procgen_mod_body_leak,
     "fleet-type-name-missing": _fix_fleet_type_name_missing,
     "variant-op-over-budget": _fix_variant_op_over_budget,
