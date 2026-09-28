@@ -51,6 +51,16 @@ progress rather than waiting blind.
   Game; a missing hull mod in a variant is dropped silently. A Fatal dialog never reaches the redirected log:
   `bf-test.ps1` records dialog text in `<TESTID>.windows.txt`, and `log-triage` reads it.
 - `bf-test launch` logs only the session it starts; a player relaunch logs only to the rig's `starsector.log`.
+- The shipped copy is every root file and every top-level folder except tool/build folders (`copy_drift`); allowlists
+  dropped `sun_fr/` (GRP-3) and a root `*.json.default` (GRP-7), both Fatal at startup. Probe groups must enable
+  dependencies of dependencies (SPARKLE -> SOTF -> four libraries).
+- `settings.json` lists add to vanilla's, not replace (`ruleCommandPackages`, 2026-09-27; ROADMAP item 19).
+- 0.6-era stations sold from the station's own cargo; RC8 trades only through markets. Give the entity a market;
+  for a hostile faction, a submarket with `isBlackMarket()` is reachable with the transponder off (`rules.csv`
+  `marketPostOpenNoTrade`). A one-off commodity nothing produces needs the `nonecon` tag or it will not show.
+  "Any weapon" random stock must skip `restricted`/`threat`/`omega`/`dweller`/`no_sell` weapons.
+- Addon retargets: check the base mod's renamed ids and sprite prefixes, and compare PNG sizes before reusing
+  art (SOTF `fronsec_` -> `sotf_`, Vow redrawn). SOTF hulls are `codex_unlockable`: absent from the codex until met.
 
 ## Work that needs a local machine
 

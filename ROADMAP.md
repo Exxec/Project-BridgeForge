@@ -2309,6 +2309,25 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         this old-vs-author comparison for every future supersession and fold the per-check outcome into item 28.4's
         precision numbers.
 
+29. **Probe combat mission: ideas from Legacy of Arkgneisis's own test missions (2026-09-27, proposed).**
+    Owner noticed LoA ships four test missions (`loa_randtest`, `loa_stationtest`, `loa_testmission`,
+    `al_testmission`); read in `In operation/Arkgneisis/working/src/data/missions/`. Worth borrowing, most useful first:
+    1. **Always an opponent.** `loa_randtest` builds each side with `FleetFactoryV3.createFleet(FleetParamsV3)` for a
+       faction and a combat-point size. When a group has no mod ships for one side (GRP-5: one ship vs none; GRP-3:
+       none), fill it with a vanilla faction fleet of similar fleet points, so every probe mission has a fight.
+    2. **Faction fleets, not just variants.** Generating a mod faction's own fleets with `FleetFactoryV3` tests its
+       doctrine, known ships and autofit together, which fixed variants miss (a faction whose lists only work for
+       hand-made variants).
+    3. **Balanced sides by seed search.** It rerolls seeds and keeps the pair whose fleet points are closest, so a
+       fight is fair enough to see both sides act.
+    4. **Stations and modules.** `loa_stationtest` puts station variants (theirs and vanilla's `station1_Standard`...)
+       on one side. The probe currently skips module hulls at the cap (`loa_module_ars_big`); a station setup would
+       exercise them.
+    5. **Weaponless "blank" variants** (`loa_testmission`) separate hull loading from weapon problems when a
+       deployment fails.
+    6. **Keyboard options on the mission screen** (reroll, size, faction) are handy for manual play but not needed
+       for the probe, which runs unattended.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit
