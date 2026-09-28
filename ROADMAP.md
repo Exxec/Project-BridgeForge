@@ -2083,6 +2083,8 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         `applied_without_rerun`. Test: `tests/test_revive.py`.
     13. **Agent command discovery:** when `claude` is not on PATH, find the VS Code extension's `claude.exe` (item 21)
         or say where to look, instead of failing with WinError 2.
+        **Done 2026-09-27:** `escalation.resolve_agent_command` swaps `claude` for the newest extension's
+        `resources/native-binary/claude.exe` when `claude` is not on PATH. Test: `ResolveAgentCommandTests`.
     14. **Keep line endings in agent edits:** the agent turned CRLF into LF; `escalation verify` could normalise
         back to the file's original endings so diffs show only real changes.
        **Done 2026-09-27:** `escalation._copy_back` restores CRLF on an LF-only text edit of a CRLF file. Test: `tests/test_escalation_line_endings.py`.
