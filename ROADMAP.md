@@ -2406,7 +2406,16 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     13. **Probe: report each variant that fails to build by id** (Broken Star's ballistic-in-missile-slot variant is
         watched that way now), and count combat-filler use in the group report.
 
-       **Done:** `combat_filler_sides` in the group report.
+       **Done:** `combat_filler_sides` in the group report.27. **The shared copy step dropped mod-specific top-level folders (GRP-3, 2026-09-27).** Flux Reticle crashed at
+    startup: "Error loading [sun_fr/graphics/half.png]". Its sprites live in `sun_fr/graphics/` (settings.json points
+    there), but `copy_drift._collect` (used by prepare-test, copy-drift, release, archive, probe-group) copied only
+    `data`/`graphics`/`sounds`/`jars` plus declared jars, so the rig copy, and any release or archive, lacked them.
+    **Done 2026-09-27.** Every top-level folder is copied except tool/build folders (`reports`, `scratch`, `src*`,
+    `out`, `build`, `bin`, `disabled_files`, `gradle`, `META-INF`, `production`, `test`, VCS/IDE folders). Survey: 29
+    working copies have extra folders; affected so far were Flux Reticle and Fuel Siphoning (`sun_fs`, group 3,
+    resynced) and later-group MnemonicSensors (`imgs`) and More-Lamp-Colour-Options (`sound`); groups 1-2 and the three
+    `Done/` archives were unaffected. Test: `tests/test_copy_drift.py` (`CustomTopFolderTests`).
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit
