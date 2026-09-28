@@ -35,6 +35,16 @@ class CopyDriftSyncTests(unittest.TestCase):
             self.assertEqual((deployed / "data" / "a.csv").read_text(encoding="utf-8"), "changed")
             self.assertEqual((working / "data" / "a.csv").read_text(encoding="utf-8"), "changed")
 
+    def test_sync_makes_the_first_copy_when_the_rig_folder_does_not_exist(self) -> None:
+        with resolved_temp_dir() as base:
+            working, rig = _mod(base / "working"), self._rig(base)
+            result = sync_copies(working, rig / "mods" / "Fixture")
+            self.assertEqual(result["status"], "PASS")
+            self.assertTrue((rig / "mods" / "Fixture" / "data" / "a.csv").is_file())
+            with self.assertRaises(ValueError):
+                sync_copies(working, base / "elsewhere" / "Fixture")
+            self.assertFalse((base / "elsewhere").exists())
+
     def test_prune_moves_extras_into_the_rig_pruned_folder(self) -> None:
         with resolved_temp_dir() as base:
             working, rig = _mod(base / "working"), self._rig(base)

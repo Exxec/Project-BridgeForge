@@ -76,15 +76,6 @@ def _validation_evidence(report: str) -> dict[str, str]:
 
 
 # Library names reports use, with the mod_info dependency ids they stand for.
-_LIBRARY_DEPENDENCY_IDS = {
-    "LazyLib": {"lw_lazylib"},
-    "MagicLib": {"MagicLib"},
-    "GraphicsLib": {"shaderLib"},
-    "Nexerelin": {"nexerelin"},
-    "LunaLib": {"lunalib"},
-}
-
-
 def _stale_dependency_claims(dependency_check: str, mod_info_path: Path) -> list[str]:
     """Libraries a DEPENDENCY CHECK clause calls declared that mod_info.json doesn't declare.
 
@@ -102,13 +93,15 @@ def _stale_dependency_claims(dependency_check: str, mod_info_path: Path) -> list
     for item in metadata.get("dependencies") or []:
         if isinstance(item, dict):
             declared.update(str(item.get(key) or "").lower() for key in ("id", "name"))
+    from .scanner import LIBRARY_DEPENDENCY_IDS  # the one library table (ROADMAP P15 item 20.8)
+
     stale = []
     for clause in re.split(r"[;(]", dependency_check):
         # "were declared ... and were removed" records history, not a current claim.
         if not re.search(r"(?i)\bdeclared\b", clause) or re.search(r"(?i)optional|undeclared|not declared|removed|dropped|no longer|never used|unused", clause):
             continue
-        for name, ids in _LIBRARY_DEPENDENCY_IDS.items():
-            if re.search(rf"(?i)\b{name}\b", clause) and name.lower() not in declared and not {i.lower() for i in ids} & declared:
+        for name, dependency_id in LIBRARY_DEPENDENCY_IDS.items():
+            if re.search(rf"(?i)\b{name}\b", clause) and name.lower() not in declared and dependency_id.lower() not in declared:
                 stale.append(name)
     return sorted(set(stale))
 

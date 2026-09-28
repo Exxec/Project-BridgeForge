@@ -2048,6 +2048,7 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        never deletes the workspace. Trial on Combat-Radar: 1 file changed (`mod_info.json`), jars identical. Test:
        `tests/test_archive.py`.
     2. **Test list merging in settings.json** (item 19's held rule), then write the fixer or baseline helper for it.
+       **Done 2026-09-27:** lists add, they do not replace (item 19); no fixer needed for `ruleCommandPackages`.
     3. **`finding-stats` deltas.** Keep the previous run and report what moved between runs (mods that changed
        bucket, ids that disappeared), so the effect of new fixers and check fixes is measured, not recomputed by hand.
        **Done 2026-09-27.** `finding-stats --write` keeps the previous run as `FINDING_STATS.previous.json` and appends
@@ -2063,14 +2064,17 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        values column by column and treat a known script repackaging (PROVENANCE.md) as equal.
     7. **`prepare-test` first copy.** It refuses a rig folder that does not exist yet, so the first copy had to be
        made by hand; let it create the folder and do the initial sync.
+       **Done 2026-09-27:** `copy-drift --sync` makes the first copy when `<rig>/mods/<Mod>` does not exist yet (linked rigs only). Test: `test_sync_makes_the_first_copy_when_the_rig_folder_does_not_exist`.
     8. **One library table.** `revival_audit._LIBRARY_DEPENDENCY_IDS` duplicates `scanner.LIBRARY_DEPENDENCY_IDS`
        and already lacks the Console Commands entry item 14 added; derive one from the other.
+       **Done 2026-09-27:** `revival_audit` now reads `scanner.LIBRARY_DEPENDENCY_IDS` (it lacked Console Commands).
     9. **Check `undeclared-library-dependency` on real data** before adding it to the standing approvals; it
        declared the wrong library once (item 14).
     10. **Confirm dialog-text capture live** (item 18): the first run that shows an error dialog should put a
         `dialog:` line in `<TESTID>.windows.txt` and a FATAL in triage.
     11. **Faction-Relationships-Uniquified's lone 0x9D byte** (item 17): the tail of a broken UTF-8 `”`; a person
         decides the replacement.
+       **Done 2026-09-27:** owner chose to delete it (FRU-ENC-01 in its report).
     12. **`escalation apply <packet>`**: copy an attempt already VERIFIED (and reviewed) into `working/` with a
         backup, instead of `run --apply` re-running the agent and producing an unreviewed edit (item 21).
         **Done 2026-09-27.** `escalation apply WORKSPACE PACKET [--attempt N]` (`escalation.apply_verified`): the
@@ -2081,6 +2085,7 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         or say where to look, instead of failing with WinError 2.
     14. **Keep line endings in agent edits:** the agent turned CRLF into LF; `escalation verify` could normalise
         back to the file's original endings so diffs show only real changes.
+       **Done 2026-09-27:** `escalation._copy_back` restores CRLF on an LF-only text edit of a CRLF file. Test: `tests/test_escalation_line_endings.py`.
     15. **Done 2026-09-27: `fleet-type-name-missing`** (REVIEW; source literals in loose scripts and jar sources,
         against the faction file and vanilla's/the mod's `default_fleet_type_names.json`; test
         `tests/test_fleet_type_names.py`), tier `auto` with fixer `fleet-type-name-missing` (title-cased names inserted as
@@ -2102,6 +2107,7 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         should hold exactly one `star_zorg` and no `zorg_planet` outside Zorg Zeta.
         **Validated 2026-09-27 (ZG-R3-20260927):** probe 0.2.6 `campaign-layout|OK` with `star_zorg=1, zorg_planet=2`, no
         WARN/FAIL for either type (first live use of the check); owner confirmed the star; FATAL=0, MOD-ERROR=0.
+       **Done 2026-09-27:** fixed in r3 (procgen weights zeroed), and r4 archived after live tests ZG4-1..4.
     17. **Triage across relaunches.** `bf-test launch` redirects only the session it starts; a player relaunch
         (ZG-7's save/quit/load) goes only to the game's `starsector.log`. `triage` should also read the rig's
         `starsector.log` lines after the launch time, so a multi-session test is triaged whole.

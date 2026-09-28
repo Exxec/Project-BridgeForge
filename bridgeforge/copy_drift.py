@@ -145,6 +145,14 @@ def sync_copies(working_copy: Path, deployed_copy: Path, prune: bool = False, to
 
     from .probe_config import _is_link
 
+    deployed_path = Path(deployed_copy).expanduser()
+    if not deployed_path.exists():
+        # First copy (ROADMAP P15 item 20.7): prepare-test refused a rig folder that did not exist yet.
+        rig = deployed_path.resolve().parent.parent
+        if deployed_path.resolve().parent.name.lower() != "mods" or not _is_link(rig / "starsector-core"):
+            raise ValueError(f"{deployed_path} does not exist and is not in <rig>/mods/ of a linked rig; nothing was created.")
+        deployed_path.mkdir()
+        (deployed_path / "mod_info.json").write_bytes((_find_mod_root(Path(working_copy)) / "mod_info.json").read_bytes())
     before = compare_copies(working_copy, deployed_copy)
     working_root, deployed_root = Path(before["working_root"]), Path(before["deployed_root"])
     rig = deployed_root.parent.parent

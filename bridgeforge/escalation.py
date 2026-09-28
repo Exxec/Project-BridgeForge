@@ -84,17 +84,30 @@ def verify(packet: dict, working: Path) -> dict:
             "compile_checked": vanilla is not None, "changed_since_packet": stale}
 
 
+def _keep_line_endings(before: bytes, after: bytes) -> bytes:
+    """The original's CRLF endings back on an agent's LF-only text edit (ROADMAP P15 item 20.14: the agent turned
+    CRLF into LF, so every line showed as changed). Binary or undecodable content is returned unchanged."""
+    if b"\r\n" not in before or b"\r\n" in after or b"\x00" in after[:8192]:
+        return after
+    try:
+        text = after.decode("utf-8")
+    except UnicodeDecodeError:
+        return after
+    return text.replace("\n", "\r\n").encode("utf-8")
+
+
 def _copy_back(packet: dict, sandbox: Path, working: Path, changed: list[str]) -> list[dict]:
     written = []
     for name in changed:
         source, target = sandbox / name, working / name
         backup = None
+        before = target.read_bytes() if target.is_file() else b""
         if target.is_file():
             backup = target.with_name(f"{target.name}.pre-bf-escalation-{packet['id']}.bak")
             shutil.copyfile(target, backup)
         if source.is_file():
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, target)
+            target.write_bytes(_keep_line_endings(before, source.read_bytes()))
         elif target.is_file():
             target.unlink()
         written.append({"path": name, "backup": str(backup) if backup else None})
