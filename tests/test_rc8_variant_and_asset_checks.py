@@ -402,10 +402,22 @@ class DescriptionMissingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _write(root / "data" / "shipsystems" / "ship_systems.csv", "name,id,number\nDemo,demo_system,1\n")
+            _write_json(root / "data" / "shipsystems" / "demo_system.system", {"id": "demo_system", "type": "STAT_MOD"})
             result = scan_mod(root)
             hits = _findings(result, "description-missing")
             self.assertEqual(len(hits), 1)
             self.assertIn("ship-system:demo_system", hits[0].evidence)
+
+    def test_rows_the_game_never_loads_need_no_description(self) -> None:
+        # 2026-09-29 drafting review: RC8 skips a ship_systems.csv row with no .system ("not found in store",
+        # SEEKER-SOLO-20260928), and a weapon row with no .wpn or a DECORATIVE .wpn is never shown either.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "data" / "shipsystems" / "ship_systems.csv", "name,id,number\nOrphan,orphan_system,1\n")
+            _write(root / "data" / "weapons" / "weapon_data.csv", WEAPON_DATA_HEADER + _weapon_data_row("no_spec_gun", "5") + _weapon_data_row("glow", "5"))
+            _write_json(root / "data" / "weapons" / "glow.wpn", {"id": "glow", "type": "DECORATIVE", "size": "SMALL"})
+            hits = _findings(scan_mod(root), "description-missing")
+        self.assertEqual(hits, [])
 
 
 class AssetReferenceMissingTests(unittest.TestCase):

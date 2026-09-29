@@ -38,6 +38,21 @@ class DescriptionsApplyTests(unittest.TestCase):
         self.assertIn("x_gun", credits)
         self.assertEqual(alt, original)
 
+    def test_a_mod_without_descriptions_csv_gets_one_with_the_vanilla_header(self) -> None:
+        # 8 of 62 drafted mods on 2026-09-29 had no descriptions.csv (OMEGAslaught, DroneLib, ...).
+        with resolved_temp_dir() as root:
+            ws = root / "Mod"
+            (ws / "working").mkdir(parents=True)
+            (ws / "working" / "mod_info.json").write_text('{"id": "x", "name": "X Mod", "author": "Someone"}', encoding="utf-8")
+            draft = root / "draft.md"
+            draft.write_text(DRAFT, encoding="utf-8")
+            result = apply_draft(ws, draft)
+            rows = list(csv.reader(io.StringIO((ws / "working" / "data" / "strings" / "descriptions.csv").read_text(encoding="utf-8"))))
+            alt = (ws / "alt-original-descriptions" / "Mod" / "data" / "strings" / "descriptions.csv").read_text(encoding="utf-8")
+        self.assertEqual(result["added"], ["x_ship", "x_gun"])
+        self.assertEqual(rows[0], ["id", "type", "text1", "text2", "text3", "text4", "text5", "notes"])
+        self.assertEqual(alt.strip(), "id,type,text1,text2,text3,text4,text5,notes")  # the author shipped none
+
     def test_parse_draft_reads_only_table_rows(self) -> None:
         with resolved_temp_dir() as root:
             draft = Path(root) / "d.md"

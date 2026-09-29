@@ -166,9 +166,12 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
         # working/ that other packets have changed since (ROADMAP P15 31.8, Angry Periphery 2026-09-28).
         (attempt_dir / START_TREE_FILE).write_text(json.dumps(_tree(sandbox)), encoding="utf-8")
         shown = {**packet, "verify": f'{packet["verify"]} --working "{sandbox}"'}
-        prompt = render_packet(shown).replace(str(workspace / "working"), str(sandbox)) + feedback
-        (attempt_dir / "PROMPT.md").write_text(prompt, encoding="utf-8")
         note = attempt_dir / "NOTE.md"
+        # The real path, not "$BF_NOTE": an agent writing with file tools (no shell) never expands the variable
+        # and created a file literally named "$BF_NOTE" in the sandbox, which then failed the attempt as a file
+        # outside the packet (pilot, Fantastic Furniture and Vesperon Combine, 2026-09-29).
+        prompt = render_packet(shown).replace(str(workspace / "working"), str(sandbox)).replace("$BF_NOTE", str(note)) + feedback
+        (attempt_dir / "PROMPT.md").write_text(prompt, encoding="utf-8")
         env = {**os.environ, "BF_PACKET": str(packets_dir(workspace) / f"{packet['id']}.json"), "BF_PROMPT": str(attempt_dir / "PROMPT.md"),
                "BF_NOTE": str(note), "BF_WORKING": str(sandbox)}
         try:
@@ -179,6 +182,13 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
         except OSError as exc:
             raise EscalationError(f"Could not start the agent command {command[0]!r}: {exc}") from exc
         (attempt_dir / "AGENT_OUTPUT.txt").write_text(agent_tail, encoding="utf-8")
+        for literal in ("$BF_NOTE", "%BF_NOTE%"):
+            stray = sandbox / literal
+            if stray.is_file():  # the note, written to the unexpanded name: keep it as the note
+                if not note.is_file():
+                    shutil.move(str(stray), str(note))
+                else:
+                    stray.unlink()
         changed = changed_files(working, sandbox)
         outside = [name for name in changed if name not in packet["allowed_files"]]
         reasons: list[str] = []

@@ -980,7 +980,10 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
                 file=relative,
                 evidence=["new Robot()"],
             )
-        if active_source and MEMORY_SELF_STORE_PATTERN.search(text):
+        # A java.util.Random subclass holds only primitive state and serializes cleanly; stored in memory it keeps
+        # its sequence across save and reload (anti-save-scum). KIND-STRANGER Vesperon's SequenceGenerator was flagged,
+        # and an agent "fix" that passed the verifier changed behaviour (review 2026-09-29).
+        if active_source and MEMORY_SELF_STORE_PATTERN.search(text) and not re.search(r"\bclass\s+\w+\s+extends\s+(?:java\.util\.)?Random\b", text):
             result.add(
                 id="campaign-memory-live-object",
                 category="save-risk",
@@ -6406,6 +6409,24 @@ def _scan_description_missing(root: Path, result: ScanResult, vanilla_core: Path
             described.setdefault(row_id, set()).add(row_type)
 
     ship_files = _ship_file_index(root, None)
+    # RC8's SpecStore applies weapon_data.csv / ship_systems.csv rows only to specs loaded from .wpn / .system
+    # files, and skips the rest: "Ship system [ART_weaponPlatform] from ship_systems.csv not found in store"
+    # (SEEKER-SOLO-20260928). A row with no spec, or a DECORATIVE weapon, is never shown, so it needs no
+    # description (9 of 474 drafted rows were such, 2026-09-29).
+    weapon_specs: dict[str, str] = {}
+    system_specs: set[str] = set()
+    # Only the mod's own specs: a row for a spec vanilla defines is a vanilla override, and vanilla owns its
+    # description (Communist Clouds' skimmer_drone and traveldrive, 2026-09-29).
+    for base in (root,):
+        if base is None or not Path(base).is_dir():
+            continue
+        for path in Path(base).rglob("*.wpn"):
+            spec = _load_lenient_json_file(path)
+            spec_id = spec.get("id") if isinstance(spec, dict) and isinstance(spec.get("id"), str) else path.stem
+            weapon_specs[spec_id] = str(spec.get("type", "")).upper() if isinstance(spec, dict) else ""
+        for path in Path(base).rglob("*.system"):
+            spec = _load_lenient_json_file(path)
+            system_specs.add(spec["id"] if isinstance(spec, dict) and isinstance(spec.get("id"), str) else path.stem)
 
     ship_data_path = root / "data" / "hulls" / "ship_data.csv"
     for row in _read_csv_rows(ship_data_path) or []:
@@ -6441,6 +6462,8 @@ def _scan_description_missing(root: Path, result: ScanResult, vanilla_core: Path
             continue
         if not (row.get("OPs") or "").strip():
             continue
+        if weapon_id == "id" or weapon_id not in weapon_specs or weapon_specs[weapon_id] == "DECORATIVE":
+            continue  # a repeated header row, a CSV row with no loaded spec, or a decorative fixture: never shown
         if "WEAPON" in described.get(weapon_id, set()):
             continue
         result.add(
@@ -6459,6 +6482,8 @@ def _scan_description_missing(root: Path, result: ScanResult, vanilla_core: Path
         system_id = (row.get("id") or "").strip()
         if _first_value_commented(row) or not system_id or system_id.startswith("#"):
             continue
+        if system_id not in system_specs:
+            continue  # no .system spec: RC8 skips the CSV row ("not found in store"), so nothing is shown
         if "SHIP_SYSTEM" in described.get(system_id, set()):
             continue
         result.add(

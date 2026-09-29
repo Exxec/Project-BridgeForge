@@ -201,6 +201,23 @@ class ReviveTests(unittest.TestCase):
 
 
 class EscalationRunTests(unittest.TestCase):
+    def test_a_note_written_to_the_literal_variable_name_still_counts(self):
+        # Pilot 2026-09-29: agents using file tools wrote "$BF_NOTE" as a file name in the sandbox, and every
+        # attempt was REJECTED as a change outside the packet. The prompt now names the real path, and a stray
+        # "$BF_NOTE" file is taken as the note.
+        literal_fix = AGENT_FIX.replace("Path(os.environ['BF_NOTE'])", "Path('$BF_NOTE')")
+        with resolved_temp_dir() as root:
+            workspace = _workspace(root)
+            revive(workspace)
+            result = run_packet(workspace, AGENT_PACKET, _agent(root, literal_fix))
+            attempt = workspace / "scratch" / "escalations" / AGENT_PACKET / "attempt-1"
+            prompt = (attempt / "PROMPT.md").read_text(encoding="utf-8")
+            note = (attempt / "NOTE.md").read_text(encoding="utf-8")
+        self.assertEqual(result["outcome"], "VERIFIED")
+        self.assertIn("Removed the empty array element", note)
+        self.assertNotIn("$BF_NOTE", prompt)
+        self.assertIn(str(attempt / "NOTE.md"), prompt)
+
     def test_verified_agent_fix_is_applied_with_backup_and_ledger(self):
         with resolved_temp_dir() as root:
             workspace = _workspace(root)

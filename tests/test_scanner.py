@@ -648,6 +648,19 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             self.assertTrue(any(item.id == "campaign-ui-robot-input-injection" for item in result.findings))
 
 
+    def test_a_random_subclass_stored_in_memory_is_not_a_live_object(self) -> None:
+        # KIND-STRANGER Vesperon's SequenceGenerator (2026-09-29): a Random keeps its sequence across reloads.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "Seq.java").write_text(
+                "class Seq extends java.util.Random { void save(MemoryAPI memory) { memory.set(\"$gen\", this); } }",
+                encoding="utf-8",
+            )
+            findings = {item.id for item in scan_mod(root).findings}
+        self.assertNotIn("campaign-memory-live-object", findings)
+
     def test_scanner_reports_live_objects_and_external_keys_in_campaign_memory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

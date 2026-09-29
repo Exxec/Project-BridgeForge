@@ -25,6 +25,8 @@ from .scanner import _load_lenient_json_file
 SHEET_FILE = "DESCRIPTIONS_NEEDED.csv"
 CREDITS_FILE = "BRIDGEFORGE_CREDITS.txt"
 ORIGINAL_BACKUP = "descriptions.csv.pre-bf-crafted"
+# RC8 starsector-core/data/strings/descriptions.csv header (read 2026-09-29).
+VANILLA_DESCRIPTIONS_HEADER = "id,type,text1,text2,text3,text4,text5,notes"
 _ROW = re.compile(r"\|\s*`([^`]+)`\s*\|\s*([A-Z_]+)\s*\|\s*(.+?)\s*\|\s*$")
 
 
@@ -125,11 +127,15 @@ def apply_draft(workspace: Path, draft: Path) -> dict:
     workspace = Path(workspace).expanduser().resolve()
     working = workspace / "working"
     target = working / "data" / "strings" / "descriptions.csv"
-    if not target.is_file():
-        raise DescriptionsError(f"{target} does not exist.")
     rows = parse_draft(draft)
     if not rows:
         raise DescriptionsError(f"{draft} has no `| \\`id\\` | TYPE | text |` rows.")
+    if not target.is_file():
+        # A mod with no descriptions.csv (8 of 62 on 2026-09-29, e.g. OMEGAslaught): RC8 merges mods'
+        # descriptions.csv by id, so start one with vanilla's own header. The author's version is then that
+        # header-only file, exactly what the author shipped: no descriptions.
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(VANILLA_DESCRIPTIONS_HEADER + "\n", encoding="utf-8")
     backup = workspace / "scratch" / ORIGINAL_BACKUP
     if not backup.exists():
         backup.parent.mkdir(parents=True, exist_ok=True)
@@ -138,12 +144,14 @@ def apply_draft(workspace: Path, draft: Path) -> dict:
     text = raw.decode("utf-8-sig")
     newline = "\r\n" if "\r\n" in text else "\n"
     header = next(csv.reader(io.StringIO(text)))
-    existing = {r[0] for r in csv.reader(io.StringIO(text)) if r}
+    # Keyed by id AND type: Junk Pirates' drone ids are both a hull (SHIP row) and a ship system (2026-09-29).
+    type_col = header.index("type") if "type" in header else 1
+    existing = {(r[0], r[type_col].strip().upper() if len(r) > type_col else "") for r in csv.reader(io.StringIO(text)) if r}
     out = io.StringIO()
     writer = csv.writer(out, lineterminator=newline)
     added = []
     for cid, kind, body in rows:
-        if cid in existing:
+        if (cid, kind) in existing:
             continue
         row = [""] * len(header)
         row[header.index("id")], row[header.index("type")], row[header.index("text1")] = cid, kind, body
@@ -155,5 +163,5 @@ def apply_draft(workspace: Path, draft: Path) -> dict:
     crafted += [item for item in added if item not in crafted]
     _credits(working, crafted)
     alt = rebuild_original_descriptions_copy(workspace)
-    return {"added": [cid for cid, _ in added], "skipped_existing": [cid for cid, _, _ in rows if cid in existing],
+    return {"added": [cid for cid, _ in added], "skipped_existing": [cid for cid, kind, _ in rows if (cid, kind) in existing],
             "credits": str(working / CREDITS_FILE), "alternative": str(alt)}
