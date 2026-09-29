@@ -32,6 +32,29 @@ class DescriptionsError(ValueError):
     pass
 
 
+def rebuild_original_descriptions_copy(workspace: Path) -> Path | None:
+    """alt-original-descriptions/<Mod>/: the current working copy with the author's own descriptions.csv (from
+    scratch/descriptions.csv.pre-bf-crafted) and no credits file. Rebuilt from working/ every time, so a later fix
+    reaches it: Broken Star r2's jar fix (2026-09-29) was missing from the author-only zip because the copy had
+    been taken once, when the descriptions were applied. None when no crafted descriptions were ever applied."""
+    workspace = Path(workspace)
+    working = workspace / "working"
+    backup = workspace / "scratch" / ORIGINAL_BACKUP
+    if not backup.is_file() or not working.is_dir():
+        return None
+    alt = workspace / "alt-original-descriptions" / workspace.name
+    if alt.exists():
+        shutil.rmtree(alt)
+    for relative, source in _collect(working).items():
+        if relative == CREDITS_FILE:
+            continue
+        (alt / relative).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, alt / relative)
+    (alt / "data" / "strings").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(backup, alt / "data" / "strings" / "descriptions.csv")
+    return alt
+
+
 def _index(path: Path) -> dict[str, dict]:
     try:
         return {r.get("id", ""): r for r in csv.DictReader(open(path, encoding="utf-8", errors="replace"))}
@@ -131,14 +154,6 @@ def apply_draft(workspace: Path, draft: Path) -> dict:
     crafted = _crafted_from_credits(working)
     crafted += [item for item in added if item not in crafted]
     _credits(working, crafted)
-    alt = workspace / "alt-original-descriptions" / workspace.name
-    if alt.exists():
-        shutil.rmtree(alt)
-    for relative, source in _collect(working).items():
-        if relative == CREDITS_FILE:
-            continue
-        (alt / relative).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, alt / relative)
-    shutil.copy2(backup, alt / "data" / "strings" / "descriptions.csv")
+    alt = rebuild_original_descriptions_copy(workspace)
     return {"added": [cid for cid, _ in added], "skipped_existing": [cid for cid, _, _ in rows if cid in existing],
             "credits": str(working / CREDITS_FILE), "alternative": str(alt)}

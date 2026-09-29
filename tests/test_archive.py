@@ -75,5 +75,34 @@ class ArchiveTests(unittest.TestCase):
         self.assertIn("Radar-3.0-original-descriptions.zip", layout)
         self.assertTrue(kept)
 
+    def test_the_original_descriptions_copy_is_rebuilt_from_the_current_working_copy(self) -> None:
+        # Broken Star r2 (2026-09-29): a jar fix made after the descriptions were applied was missing from the
+        # author-only zip, because that copy had been taken once, at apply time.
+        import zipfile
+        with resolved_temp_dir() as root:
+            ws = _workspace(root)
+            working = ws / "working"
+            strings = working / "data" / "strings"
+            strings.mkdir(parents=True, exist_ok=True)
+            (strings / "descriptions.csv").write_text("id,type,text1\nradar,CUSTOM,crafted\n", encoding="utf-8")
+            (ws / "scratch").mkdir(exist_ok=True)
+            (ws / "scratch" / "descriptions.csv.pre-bf-crafted").write_text("id,type,text1\n", encoding="utf-8")
+            stale = ws / "alt-original-descriptions" / "Radar"
+            stale.mkdir(parents=True)
+            (stale / "mod_info.json").write_text('{"id":"stale"}', encoding="utf-8")
+            (working / "fix.txt").write_text("fixed later", encoding="utf-8")
+            policy = root / "policy.json"
+            shutil.copy2(REPO_POLICY, policy)
+            record_policy_decision("bf_fixture_radar", local_only=True, reason="author unreachable", policy_path=policy)
+            archive_mod(ws, root / "Done", policy_path=policy, today="2026-09-29")
+            zip_path = next((root / "Done" / "Radar").glob("*-original-descriptions.zip"))
+            with zipfile.ZipFile(zip_path) as archive:
+                names = set(archive.namelist())
+                info = archive.read("Radar/mod_info.json").decode("utf-8")
+                descriptions = archive.read("Radar/data/strings/descriptions.csv").decode("utf-8")
+        self.assertIn("Radar/fix.txt", names)
+        self.assertNotIn("stale", info)
+        self.assertNotIn("crafted", descriptions)
+
 if __name__ == "__main__":
     unittest.main()

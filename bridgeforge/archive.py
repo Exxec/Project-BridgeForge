@@ -82,7 +82,9 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
         shutil.copytree(workspace / "original", target / "original")
     # A copy of the mod with only the author's original descriptions, kept when BridgeForge wrote missing ones
     # (owner request 2026-09-28); archived beside the revival with its own zip.
-    alt = workspace / "alt-original-descriptions" / workspace.name
+    # Rebuilt from working/ now, not taken from the copy made when the descriptions were applied (Broken Star r2).
+    from .descriptions import rebuild_original_descriptions_copy
+    alt = rebuild_original_descriptions_copy(workspace) or workspace / "alt-original-descriptions" / workspace.name
     if alt.is_dir():
         shutil.copytree(alt, target / "alt-original-descriptions" / workspace.name)
         with zipfile.ZipFile(target / f"{workspace.name}-{safe_version}-original-descriptions.zip", "w", zipfile.ZIP_DEFLATED) as archive:
