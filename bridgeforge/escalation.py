@@ -88,6 +88,12 @@ def verify(packet: dict, working: Path) -> dict:
             "compile_checked": vanilla is not None, "changed_since_packet": stale}
 
 
+# Where an agent writes its note: inside the sandbox (an agent may be confined to it), moved out before the diff.
+SANDBOX_NOTE = "BF_NOTE.md"
+# The prompt, also written inside the sandbox for an agent that reads a file rather than stdin.
+SANDBOX_PROMPT = "BF_PROMPT.md"
+
+
 def resolve_agent_command(agent: str, home: Path | None = None) -> str:
     """`claude ...` with no `claude` on PATH: use the VS Code extension's bundled binary (ROADMAP P15 item 20.13).
 
@@ -167,28 +173,42 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
         (attempt_dir / START_TREE_FILE).write_text(json.dumps(_tree(sandbox)), encoding="utf-8")
         shown = {**packet, "verify": f'{packet["verify"]} --working "{sandbox}"'}
         note = attempt_dir / "NOTE.md"
-        # The real path, not "$BF_NOTE": an agent writing with file tools (no shell) never expands the variable
-        # and created a file literally named "$BF_NOTE" in the sandbox, which then failed the attempt as a file
-        # outside the packet (pilot, Fantastic Furniture and Vesperon Combine, 2026-09-29).
-        prompt = render_packet(shown).replace(str(workspace / "working"), str(sandbox)).replace("$BF_NOTE", str(note)) + feedback
+        # The agent writes its note INSIDE the sandbox, under a reserved name that is moved out before the diff.
+        # Pilot 2026-09-29: an agent is confined to its working directory, so a note path one level up was refused
+        # and it wrote NOTE.md in the sandbox (Arthr's Faction Blender); and an agent using file tools never
+        # expands "$BF_NOTE", so it created a file of that name (Fantastic Furniture, Vesperon Combine). Every such
+        # attempt was REJECTED as a change outside the packet. So the prompt names the real in-sandbox path.
+        sandbox_note = sandbox / SANDBOX_NOTE
+        prompt = render_packet(shown).replace(str(workspace / "working"), str(sandbox)).replace("$BF_NOTE", str(sandbox_note)) + feedback
         (attempt_dir / "PROMPT.md").write_text(prompt, encoding="utf-8")
-        env = {**os.environ, "BF_PACKET": str(packets_dir(workspace) / f"{packet['id']}.json"), "BF_PROMPT": str(attempt_dir / "PROMPT.md"),
-               "BF_NOTE": str(note), "BF_WORKING": str(sandbox)}
+        # Also inside the sandbox, removed before the diff: stdin alone raced. Fast Engine Rendering's agents
+        # (2026-09-29) got "no stdin data received in 3s" and exited, so a Claude CLI is also told to read this file.
+        (sandbox / SANDBOX_PROMPT).write_text(prompt, encoding="utf-8")
+        env = {**os.environ, "BF_PACKET": str(packets_dir(workspace) / f"{packet['id']}.json"), "BF_PROMPT": str(sandbox / SANDBOX_PROMPT),
+               "BF_NOTE": str(sandbox_note), "BF_WORKING": str(sandbox)}
+        run_command = command[0] if os.name == "nt" and isinstance(agent, str) else command
+        if isinstance(agent, str) and re.search(r"\bclaude(\.exe)?\b", agent, re.I) and re.search(r"(^|\s)(-p|--print)(\s|$)", agent):
+            pointer = f"Your whole task is in {SANDBOX_PROMPT} in the current directory. Read it and follow it exactly."
+            run_command = f'{run_command} "{pointer}"' if isinstance(run_command, str) else [*run_command, pointer]
         try:
-            completed = subprocess.run(command[0] if os.name == "nt" and isinstance(agent, str) else command, cwd=sandbox, input=prompt, env=env, capture_output=True, text=True, timeout=timeout, check=False)
+            completed = subprocess.run(run_command, cwd=sandbox, input=prompt, env=env, capture_output=True, text=True, timeout=timeout, check=False)
             agent_rc, agent_tail = completed.returncode, (completed.stdout + completed.stderr)[-4000:]
         except subprocess.TimeoutExpired:
             agent_rc, agent_tail = None, f"agent timed out after {timeout}s"
         except OSError as exc:
             raise EscalationError(f"Could not start the agent command {command[0]!r}: {exc}") from exc
         (attempt_dir / "AGENT_OUTPUT.txt").write_text(agent_tail, encoding="utf-8")
-        for literal in ("$BF_NOTE", "%BF_NOTE%"):
-            stray = sandbox / literal
-            if stray.is_file():  # the note, written to the unexpanded name: keep it as the note
-                if not note.is_file():
-                    shutil.move(str(stray), str(note))
-                else:
-                    stray.unlink()
+        # The note, wherever the agent put it inside the sandbox: the reserved name, an unexpanded variable name,
+        # or a NOTE.md the mod itself does not ship. The first found becomes the attempt's note; the rest go.
+        for name in (SANDBOX_NOTE, "$BF_NOTE", "%BF_NOTE%", "NOTE.md"):
+            stray = sandbox / name
+            if not stray.is_file() or (name == "NOTE.md" and (working / name).exists()):
+                continue
+            if not note.is_file():
+                shutil.move(str(stray), str(note))
+            else:
+                stray.unlink()
+        (sandbox / SANDBOX_PROMPT).unlink(missing_ok=True)
         changed = changed_files(working, sandbox)
         outside = [name for name in changed if name not in packet["allowed_files"]]
         reasons: list[str] = []

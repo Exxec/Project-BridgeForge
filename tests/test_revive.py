@@ -216,7 +216,35 @@ class EscalationRunTests(unittest.TestCase):
         self.assertEqual(result["outcome"], "VERIFIED")
         self.assertIn("Removed the empty array element", note)
         self.assertNotIn("$BF_NOTE", prompt)
-        self.assertIn(str(attempt / "NOTE.md"), prompt)
+        self.assertIn(str(attempt / "working" / "BF_NOTE.md"), prompt)  # inside the sandbox: agents are confined to it
+
+    def test_a_claude_print_agent_is_pointed_at_the_prompt_file(self):
+        # 2026-09-29: Fast Engine Rendering's agents got "no stdin data received in 3s" and exited. A `claude -p`
+        # command now also gets a short argument naming BF_PROMPT.md, written into the sandbox (and removed after).
+        body = ("import os, sys\nfrom pathlib import Path\n"
+                "assert any('BF_PROMPT.md' in arg for arg in sys.argv[1:]), sys.argv\n"
+                "assert 'settings.json' in Path('BF_PROMPT.md').read_text(encoding='utf-8')\n" + AGENT_FIX)
+        with resolved_temp_dir() as root:
+            workspace = _workspace(root)
+            revive(workspace)
+            script = root / "claude.py"
+            script.write_text(body, encoding="utf-8")
+            result = run_packet(workspace, AGENT_PACKET, f'"{sys.executable}" "{script}" -p')
+            sandbox = workspace / "scratch" / "escalations" / AGENT_PACKET / "attempt-1" / "working"
+            leftover = (sandbox / "BF_PROMPT.md").exists()
+        self.assertEqual(result["outcome"], "VERIFIED")
+        self.assertFalse(leftover)
+
+    def test_a_note_left_as_NOTE_md_inside_the_sandbox_still_counts(self):
+        # Pilot 2026-09-29 (Arthr's Faction Blender): a sandbox-confined agent wrote NOTE.md in its working folder.
+        in_sandbox = AGENT_FIX.replace("Path(os.environ['BF_NOTE'])", "Path('NOTE.md')")
+        with resolved_temp_dir() as root:
+            workspace = _workspace(root)
+            revive(workspace)
+            result = run_packet(workspace, AGENT_PACKET, _agent(root, in_sandbox))
+            note = (workspace / "scratch" / "escalations" / AGENT_PACKET / "attempt-1" / "NOTE.md").read_text(encoding="utf-8")
+        self.assertEqual(result["outcome"], "VERIFIED")
+        self.assertIn("Removed the empty array element", note)
 
     def test_verified_agent_fix_is_applied_with_backup_and_ledger(self):
         with resolved_temp_dir() as root:
