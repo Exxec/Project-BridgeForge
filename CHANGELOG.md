@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Escalation harness, from the 2026-09-29 pilots:**
+  - The agent writes its note inside the sandbox (`BF_NOTE.md`), since Claude Code agents are confined to their
+    working directory. A literal `$BF_NOTE` file, or a stray `NOTE.md` the mod does not ship, is also taken as the
+    note.
+  - The prompt is also written inside the sandbox (`BF_PROMPT.md`), and a `claude -p` agent gets a short argument
+    naming it, because stdin raced ("no stdin data received in 3s").
+  - Every agent fix is reviewed before it is applied. One that passed the verifier still changed behaviour (Vesperon
+    Combine's reload-safe random sequence), and it was not applied.
+- **Descriptions:** 465 drafted descriptions applied across 61 mods, credited, with author-only copies. Rows are
+  keyed by id and type. A mod with no `descriptions.csv` gets one with RC8's header. `description-missing` skips rows
+  the game never shows.
+- **Archive:** the author-only descriptions copy is rebuilt from the current working copy.
+- **New fixers** for variant fit (wings over bays, mismatched and missing slots), as standing approvals.
+- **Broken Star r2:** a guard for markets in hyperspace, a New Game crash in the owner's full mod list.
+
 - **Workflow (ROADMAP item 31, all 13 parts):** `probe-group record TESTID --archive` marks a run's passing mods
   LIVE_VALIDATED and archives them; `plan --solo/--exclude` and auto-solo for large campaign mods; `revive-queue`
   (checkpointed) and `check-impact`; `descriptions sheet|apply` with credits and an author-only descriptions copy;
