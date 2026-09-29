@@ -101,6 +101,16 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(faction["context"]["path"], ["ranks", "posts", "patrolCommander", "name"])
         self.assertFalse(any("Ignored.java" in e["file"] for e in doc["entries"]))
 
+    def test_export_skips_decompiled_source_and_tool_folders(self) -> None:
+        # FlowerGod (2026-09-29): src-decompiled/ duplicated 960 of the jar's own strings; the game never loads it.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            for folder in ("src-decompiled/data", "scratch/market-fix/src", "reports"):
+                (mod / folder).mkdir(parents=True, exist_ok=True)
+                (mod / folder / "Copy.java").write_text('class Copy { String s = "花神会"; }\n', encoding="utf-8")
+            doc = export_translation(mod)
+        self.assertFalse(any("Copy.java" in e["file"] for e in doc["entries"]))
+
 
 class ProjectGoMemoryTests(unittest.TestCase):
     def test_tm_export_matches_project_go_schema_and_ranks_author_english(self) -> None:
@@ -136,6 +146,13 @@ class PlaceholderTests(unittest.TestCase):
         # Blackrock rules text: "...welcome, $playerName." vs the Chinese "...$playerName。"
         from bridgeforge.translation import _placeholders
         self.assertEqual(_placeholders("欢迎，$playerName。"), _placeholders("Welcome, $playerName."))
+
+    def test_a_literal_percent_is_not_a_placeholder(self) -> None:
+        # FlowerGod hull_mods.csv: "增加 %s ％" becomes "Increases by %s%%" (String.format, as Nexerelin writes it);
+        # the %s must still match.
+        from bridgeforge.translation import _placeholders
+        self.assertEqual(_placeholders("伤害增加 %s ％"), _placeholders("Damage increased by %s%%"))
+        self.assertNotEqual(_placeholders("伤害增加 %s ％"), _placeholders("Damage increased by 5%%"))
 
     def test_stale_reference_english_with_different_placeholders_is_only_a_hint(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

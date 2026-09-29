@@ -33,7 +33,7 @@ from .scanner import _blank_java_comments, _loaded_mod_jars, _parse_class_file, 
 SCHEMA_VERSION = 1
 CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
 JSONLIKE_SUFFIXES = {".json", ".faction", ".ship", ".variant", ".wpn", ".proj", ".skin", ".system"}
-EXCLUDED_DIRS = {"src", "out", "build", "target", ".idea", ".vscode", ".git", "__macosx", "meta-inf"}
+EXCLUDED_DIRS = {"src", "out", "build", "target", ".idea", ".vscode", ".git", "__macosx", "meta-inf", "disabled_files", "reports", "scratch"}
 # Tokens a translation must carry over unchanged: Java format specifiers, Starsector $variables and
 # the \u0001 highlight marker used by getText/format helpers.
 # No space flag and only real conversion letters, so English prose like "50% faster" is not a token.
@@ -55,7 +55,9 @@ def _sha256(path: Path) -> str:
 
 
 def _is_excluded(rel: Path) -> bool:
-    return any(part.lower() in EXCLUDED_DIRS for part in rel.parts[:-1])
+    # src-decompiled*/ is BridgeForge's decompile of a jar, never loaded: its strings are the jar's own, exported from
+    # the jar (FlowerGod 2026-09-29: 960 duplicate entries from src-decompiled/).
+    return any(part.lower() in EXCLUDED_DIRS or part.lower().startswith("src-decompiled") for part in rel.parts[:-1])
 
 
 def _has_cjk(text: str) -> bool:
@@ -535,7 +537,10 @@ def prefill_from_reference(document: dict, mod_dir: Path, reference_dir: Path) -
 # ---- apply ---------------------------------------------------------------------------------------
 
 def _placeholders(text: str) -> Counter:
-    return Counter(_PLACEHOLDER.findall(text))
+    # "%%" is a literal percent sign, not a value to carry over: Chinese sources write a full-width "％" that English
+    # must write as "%%" where the game runs String.format (hull_mods.csv, as Nexerelin's and SWP's do) and as "%"
+    # elsewhere (FlowerGod, 2026-09-29), so it is left out of the comparison on both sides.
+    return Counter(token for token in _PLACEHOLDER.findall(text) if token != "%%")
 
 
 def _resolved(document: dict) -> tuple[dict[str, dict], list[str]]:
