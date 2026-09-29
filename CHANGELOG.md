@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Workflow (ROADMAP item 31, all 13 parts):** `probe-group record TESTID --archive` marks a run's passing mods
+  LIVE_VALIDATED and archives them; `plan --solo/--exclude` and auto-solo for large campaign mods; `revive-queue`
+  (checkpointed) and `check-impact`; `descriptions sheet|apply` with credits and an author-only descriptions copy;
+  escalation rulings recorded in `ESCALATION_RULINGS.jsonl`; `supersession` reads the Downloads archive through the
+  corpus index; one status reader (`report_status.py`); `docs/RC8_BEHAVIOUR.md` records proven runtime behaviour.
+- **Probe 0.2.9-0.2.11:** fleets for vanilla factions a mod patches; no false FAILs for fleetless factions or a
+  Nexerelin random sector (detected without reflection, which the script sandbox forbids); the report file is capped
+  at 256 KB, since a common file over 1 MB is a Fatal (EXI08-VANILLA).
+- **Dependency fixes:** `undeclared-library-dependency` never declares a guarded (optional) library; a
+  `loadClass`/`forName` probe or a Nexerelin custom start (`customStarts.json`) counts as optional. 70 wrongly added
+  entries were reverted across 104 local mods. Class and content references resolve against declared dependencies,
+  in `revive` and now in the report draft too.
+- **False positives fixed:** a commented CSV header row (`description-missing`), constructor-only hull mod fields,
+  commented placeholder throws, `sounds.json` music entries; `settings.json` graphics paths are now checked.
+
 ## 0.3.0 (2026-09-27)
 
 194 commits since 0.2.0. Highlights of the last live session, then the full list:

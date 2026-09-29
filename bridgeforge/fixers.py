@@ -58,6 +58,7 @@ SUPPORTED_FINDINGS = (
     "fleet-type-name-missing",
     "variant-op-over-budget",
     "procgen-mod-body-leak",
+    "csv-slash-quote-escape",
 )
 
 
@@ -734,11 +735,12 @@ def _add_dependency_entry(text: str, dependency_id: str, name: str) -> str:
 def _fix_undeclared_library_dependency(root: Path, options: dict) -> list[FileChange]:
     """Resolve `undeclared-library-dependency`: declare the library findings already identified
     the mod actually reaches by package (LazyLib/MagicLib/GraphicsLib/LunaLib/Nexerelin), using the
-    exact id `scanner.LIBRARY_DEPENDENCY_IDS` maps to. Declaring a library the mod already imports
-    is safe regardless of whether the finding is MANUAL (unguarded) or REVIEW (an isModEnabled guard
-    found, suggesting an optional integration) - Starsector's dependency mechanism has no separate
-    "optional" shape, so a real integration wants the dependency present either way, and it never
-    makes the undeclared-crash failure mode worse.
+    exact id `scanner.LIBRARY_DEPENDENCY_IDS` maps to. Only an UNGUARDED use is declared. A guarded one
+    (`guard:present` in the evidence: an isModEnabled check or a loadClass/Class.forName probe) is an
+    optional integration and is left alone: declaring it makes the library mandatory and changes what the
+    mod does. Exigency 0.8.01a (2026-09-28) probes for Nexerelin and runs its illegal-tech event only
+    without it; this fixer declared Nexerelin, which switched the event off and forced a Nexerelin random
+    sector on every test (the old note here called declaring "safe regardless" of a guard; it was not).
 
     Hand-verified this session, twice: `scanner.LIBRARY_DEPENDENCY_IDS` had the wrong case for two
     libraries (`magiclib`/`shaderlib` instead of the real `MagicLib`/`shaderLib`, found by reading
@@ -754,6 +756,9 @@ def _fix_undeclared_library_dependency(root: Path, options: dict) -> list[FileCh
         raise FixerError("No undeclared-library-dependency finding for this mod.")
 
     to_add: dict[str, str] = {}  # dependency_id -> library display name
+    findings = [f for f in findings if "guard:present" not in (f.evidence or [])]
+    if not findings:
+        raise FixerError("Every undeclared-library-dependency finding here is guarded (an optional integration); nothing is declared.")
     for finding in findings:
         library = next((item.split(":", 1)[1] for item in finding.evidence if item.startswith("library:")), None)
         dependency_id = next((item.split(":", 1)[1] for item in finding.evidence if item.startswith("dependency-id:")), None)
@@ -2177,7 +2182,26 @@ def _fix_procgen_mod_body_leak(root: Path, options: dict) -> list[FileChange]:
         changes.append(FileChange(path=path, before=raw, after=_encode(newline.join(lines), had_bom)))
     return changes
 
+def _fix_csv_slash_quote_escape(root: Path, options: dict) -> list[FileChange]:
+    """Rewrite each /"phrase/" (or \\"phrase\\") that `csv-slash-quote-escape` names as ""phrase"", the CSV escape
+    vanilla's descriptions.csv uses (SEEKER 0.6.6 special_items.csv, 2026-09-28). Nothing else in the file changes."""
+    from .scanner import CSV_SLASH_QUOTE
+
+    changes = []
+    for relative in sorted({f.file for f in _findings_of(root, options, "csv-slash-quote-escape") if f.file}):
+        path = root / relative
+        if not path.is_file():
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        fixed = CSV_SLASH_QUOTE.sub(lambda m: '""' + m.group(1) + '""', text)
+        if fixed != text:
+            changes.append(FileChange(path=path, before=raw, after=_encode(fixed, had_bom)))
+    return changes
+
+
 _FIXER_FUNCS = {
+    "csv-slash-quote-escape": _fix_csv_slash_quote_escape,
     "procgen-mod-body-leak": _fix_procgen_mod_body_leak,
     "fleet-type-name-missing": _fix_fleet_type_name_missing,
     "variant-op-over-budget": _fix_variant_op_over_budget,

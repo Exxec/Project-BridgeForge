@@ -84,7 +84,10 @@ def _scan(working: Path, vanilla_core: Path | None) -> list[dict]:
     from .scanner import scan_mod
 
     accepted = mod_baseline_keys(working)
-    findings = [asdict(f) for f in scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None).findings]
+    # The rig's mods/ holds the libraries mods depend on; declared-dependency jars resolve class references there.
+    rig_mods = Path(working).resolve().parent.parent / "_rig" / "mods"
+    providers = [rig_mods] if rig_mods.is_dir() else None
+    findings = [asdict(f) for f in scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None, provider_roots=providers).findings]
     _record_settings_baseline(working, findings)
     return [f for f in findings if finding_dict_baseline_key(f) not in accepted]
 
@@ -438,7 +441,10 @@ def _draft_report(working: Path, vanilla_core: Path | None, status: str, *, writ
 
     if status != "UNATTENDED_DONE":
         return {"status": "NOT_DRAFTED", "reason": f"revive ended {status}; a report is drafted only when nothing is left to do"}
-    draft = write_revival_report_draft(working, vanilla_core) if write else draft_revival_report(working, vanilla_core)
+    rig_mods = Path(working).resolve().parent.parent / "_rig" / "mods"
+    providers = [rig_mods] if rig_mods.is_dir() else None
+    draft = (write_revival_report_draft(working, vanilla_core, providers) if write
+             else draft_revival_report(working, vanilla_core, providers))
     return {key: value for key, value in draft.items() if key not in ("report_text", "plan_text")}
 
 

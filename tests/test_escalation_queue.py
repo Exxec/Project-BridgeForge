@@ -33,6 +33,28 @@ class EscalationQueueTests(unittest.TestCase):
         self.assertIn("`variant-op-over-budget`: A", markdown)
         self.assertFalse(checkpoint_left)
 
+    def test_rule_accepts_in_baselines_or_approves_the_fixer(self) -> None:
+        # ROADMAP P15 31.12: one owner ruling per finding id, recorded, instead of rulings typed into chat.
+        from bridgeforge.escalation_queue import rule
+
+        with resolved_temp_dir() as queue:
+            _revive(queue, "A", "ESCALATED", ["variant-op-over-budget"])
+            (queue / "A" / "working").mkdir()
+            (queue / "A" / "reports" / "escalations").mkdir(parents=True)
+            (queue / "A" / "reports" / "escalations" / "variant-op-over-budget--1.json").write_text(json.dumps(
+                {"findings": [{"id": "variant-op-over-budget", "file": "data/variants/x.variant", "evidence": ["variant:x"]}]}), encoding="utf-8")
+            accepted = rule(queue, "variant-op-over-budget", accept=True, reason="authored that way", today="2026-09-28")
+            baseline = json.loads((queue / "A" / "working" / "reports" / "baseline.json").read_text(encoding="utf-8"))
+            approved = rule(queue, "variant-op-over-budget", approve_fixer=True, reason="trim to fit", today="2026-09-28")
+            policy = json.loads((queue / "AUTOMATION_POLICY.json").read_text(encoding="utf-8"))
+            log = (queue / "ESCALATION_RULINGS.jsonl").read_text(encoding="utf-8").splitlines()
+            with self.assertRaises(ValueError):
+                rule(queue, "variant-op-over-budget", accept=True, reason=" ")
+        self.assertEqual(accepted["mods"], ["A"])
+        self.assertEqual(baseline["findings"], ["variant-op-over-budget|data/variants/x.variant|variant:x"])
+        self.assertEqual(policy["approved_fixers"]["variant-op-over-budget"]["reason"], "trim to fit")
+        self.assertEqual(len(log), 2)
+        self.assertEqual(approved["ruling"], "approve-fixer")
 
 if __name__ == "__main__":
     unittest.main()

@@ -27,7 +27,6 @@ from .scanner import _load_lenient_json_file
 SCHEMA_VERSION = 1
 PROBE_MOD_ID = "bridgeforge_probe"
 READY_STATUS = "READY_FOR_LIVE_TEST"
-_STATUS_LINE = re.compile(r"^[A-Z][A-Z_]+$")
 
 
 class ProbeGroupError(ValueError):
@@ -35,12 +34,9 @@ class ProbeGroupError(ValueError):
 
 
 def _report_status(workspace: Path) -> str | None:
-    report = workspace / "working" / "reports" / "REVIVAL_REPORT.md"
-    if not report.is_file():
-        return None
-    lines = [line.strip() for line in report.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
-    statuses = [line for line in lines if _STATUS_LINE.match(line)]
-    return statuses[-1] if statuses else None
+    from .report_status import report_status
+
+    return report_status(workspace / "working" / "reports" / "REVIVAL_REPORT.md")
 
 
 def _latest_revive_status(workspace: Path) -> str | None:
@@ -122,12 +118,27 @@ def _member(workspace: Path) -> dict:
             "config": config}
 
 
-def plan_groups(queue: Path, rig: Path, size: int = 8, workspaces: list[Path] | None = None) -> dict:
-    """Greedy grouping: each member joins the first group it shares no mod or content id with."""
+# A campaign mod this large runs alone by default (ROADMAP P15 31.3): it creates star systems and ships this many
+# content ids. Exigency, Broken Star, FlowerGod, Omega Trauma and SEEKER were planned into groups by hand, 2026-09-28.
+SOLO_CONTENT_THRESHOLD = 60
+
+
+def _is_large_campaign_mod(member: dict) -> bool:
+    config = member.get("config") or {}
+    return bool(config.get("mod_systems")) and len(member.get("content") or ()) >= SOLO_CONTENT_THRESHOLD
+
+
+def plan_groups(queue: Path, rig: Path, size: int = 8, workspaces: list[Path] | None = None,
+                exclude: set[str] | None = None, solo: set[str] | None = None, auto_solo: bool = True) -> dict:
+    """Greedy grouping: each member joins the first group it shares no mod or content id with. `exclude` leaves
+    workspaces out, `solo` gives each its own group, and large campaign mods run solo unless `auto_solo` is off."""
+    exclude, solo = set(exclude or ()), set(solo or ())
     rig = Path(rig).expanduser().resolve()
     installed = rig_mod_ids(rig / "mods")
     members, unplaced = [], []
     for workspace in workspaces if workspaces is not None else ready_workspaces(queue):
+        if workspace.name in exclude:
+            continue
         try:
             member = _member(workspace)
         except Exception as exc:  # an unreadable mod is reported, never fatal to the plan
@@ -145,9 +156,10 @@ def plan_groups(queue: Path, rig: Path, size: int = 8, workspaces: list[Path] | 
             continue
         members.append(member)
     groups: list[list[dict]] = []
+    solo_groups: list[list[dict]] = []
     for member in members:
-        if member["total_conversion"]:
-            groups.append([member])
+        if member["total_conversion"] or member["workspace"] in solo or (auto_solo and _is_large_campaign_mod(member)):
+            solo_groups.append([member])
             continue
         ids = {member["mod_id"], *member["content"]}
         for group in groups:
@@ -158,6 +170,7 @@ def plan_groups(queue: Path, rig: Path, size: int = 8, workspaces: list[Path] | 
                 break
         else:
             groups.append([member])
+    groups += solo_groups
     return {
         "schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_PLAN", "rig": str(rig), "size": size,
         "groups": [{"group": index, "members": [{k: v for k, v in m.items() if k != "config"} for m in group]}
@@ -170,7 +183,7 @@ def merge_configs(configs: list[dict]) -> dict:
     """One probe config for a group: lists united, maps merged, per-member ids kept for the report."""
     merged: dict = {
         "schema_version": 1, "target_mod_id": "group:" + ",".join(c["target_mod_id"] for c in configs),
-        "hulls": [], "variants": {}, "track_entities": [], "factions": [], "content_variants": {"ship": [], "other": []},
+        "hulls": [], "variants": {}, "track_entities": [], "factions": [], "patched_factions": [], "content_variants": {"ship": [], "other": []},
         "content_ship_hulls": {}, "content_special_items": [], "content_wings": [], "hulls_skipped_no_variant": [],
         "setups": [], "apply": configs[0].get("apply", "once-per-save") if configs else "once-per-save",
         "campaign_interval_days": min((c["campaign_interval_days"] for c in configs), default=5.0),
@@ -179,7 +192,7 @@ def merge_configs(configs: list[dict]) -> dict:
         "group_members": {}, "mod_systems": [], "mod_body_types": {},
     }
     for c in configs:
-        for key in ("hulls", "track_entities", "factions", "content_special_items", "content_wings", "hulls_skipped_no_variant"):
+        for key in ("hulls", "track_entities", "factions", "patched_factions", "content_special_items", "content_wings", "hulls_skipped_no_variant"):
             merged[key] = sorted(set(merged[key]) | set(c.get(key) or []))
         for kind in ("ship", "other"):
             merged["content_variants"][kind] = sorted(set(merged["content_variants"][kind]) | set(c["content_variants"][kind]))
@@ -189,8 +202,22 @@ def merge_configs(configs: list[dict]) -> dict:
         merged["mod_body_types"].update(c.get("mod_body_types") or {})
         merged["group_members"][c["target_mod_id"]] = {
             "hulls": sorted(c["hulls"]), "variants": sorted(set(c["content_variants"]["ship"]) | set(c["content_variants"]["other"])),
-            "wings": sorted(c["content_wings"]), "items": sorted(c["content_special_items"]), "factions": sorted(c["factions"])}
+            "wings": sorted(c["content_wings"]), "items": sorted(c["content_special_items"]), "factions": sorted(set(c["factions"]) | set(c.get("patched_factions") or []))}
     return merged
+
+
+def _refuse_running_game(rig: Path) -> None:
+    """The rig's game holds the probe jar open, so an install fails midway with WinError 32 (2026-09-28). Try to
+    move the jar aside and back first; if that fails, say so before anything is copied (ROADMAP P15 31.9)."""
+    jar = Path(rig) / "mods" / "bridgeforge-probe" / "jars" / "bridgeforge-probe.jar"
+    if not jar.is_file():
+        return
+    probe = jar.with_name(jar.name + ".lockcheck")
+    try:
+        jar.replace(probe)
+    except OSError as exc:
+        raise ProbeGroupError(f"the rig's game appears to be running ({jar.name} is in use: {exc}); close Starsector, then install again.") from exc
+    probe.replace(jar)
 
 
 def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install_probe: bool = True) -> dict:
@@ -198,6 +225,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     rig = Path(rig).expanduser().resolve()
     queue = Path(queue).expanduser().resolve()
     _refuse_non_rig(rig)
+    _refuse_running_game(rig)
     group = next((g for g in plan.get("groups", []) if g["group"] == group_number), None)
     if group is None:
         raise ProbeGroupError(f"no group {group_number} in the plan (it has {len(plan.get('groups', []))}).")
@@ -262,13 +290,16 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None) -> dict:
             for item in ids.get(kind, []):
                 owner.setdefault(item, mod_id)
     verdicts = {mod_id: {"failures": [], "crashes": []} for mod_id in members}
-    unattributed, seen_content = [], False
+    unattributed, seen_content, filler_sides = [], False, []
     for line in Path(log).read_text(encoding="utf-8", errors="replace").splitlines():
         match = _PROBE_LINE.search(line)
         if not match:
             continue
         if match["check"] == "content-ids" and match["subject"] == "all-content":
             seen_content = True
+        if match["check"] == "combat-filler" and match["status"] == "INFO":
+            if match["subject"] not in filler_sides:
+                filler_sides.append(match["subject"])  # ROADMAP P15 31.13: vanilla ships stood in for a side
         if match["status"] != "FAIL":
             continue
         subject = match["subject"].split(":", 1)[-1].split("/", 1)[0]
@@ -291,5 +322,81 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None) -> dict:
             verdict["verdict"] = "PASS" if seen_content else "INCOMPLETE"
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_REPORT", "log": str(log),
             "content_ids_ran": seen_content, "fatal": triage["counts"]["FATAL"], "mod_errors": triage["counts"]["MOD-ERROR"],
-            "members": verdicts, "unattributed": unattributed,
+            "members": verdicts, "unattributed": unattributed, "combat_filler_sides": filler_sides,
             "note": "INCOMPLETE means the probe's content-ids check never ran (start a New Game and wait one in-game day)."}
+
+
+# The owner's standing reason for local-only revivals (owner decision 2026-09-27), used by `record --archive`.
+OWNER_STANDING_REASON = "revived for the owner's local archive (live-validated {date}); not published without the author's permission (owner decision 2026-09-27)"
+
+
+def _workspaces_by_mod_id(queue: Path, mods_dir: Path | None = None) -> dict[str, Path | None]:
+    """{mod id: the workspace that was tested}. `install` copies a member to <rig>/mods/<workspace name>, so a rig
+    folder with that id and a same-named workspace decides. Otherwise one workspace per id; two or more is None
+    (ambiguous). SEEKER-SOLO2-20260928 recorded and archived the old `SEEKER` workspace, not the tested SEEKER-0.6,
+    because the first workspace by name won."""
+    candidates: dict[str, list[Path]] = {}
+    for workspace in sorted(p for p in Path(queue).iterdir() if p.is_dir() and not p.name.startswith("_")):
+        mod_id = _mod_info(workspace / "working").get("id")
+        if isinstance(mod_id, str) and mod_id:
+            candidates.setdefault(mod_id, []).append(workspace)
+    in_rig: dict[str, set[str]] = {}
+    if mods_dir is not None and Path(mods_dir).is_dir():
+        for folder in Path(mods_dir).iterdir():
+            mod_id = _mod_info(folder).get("id") if folder.is_dir() else None
+            if isinstance(mod_id, str):
+                in_rig.setdefault(mod_id, set()).add(folder.name)
+    found: dict[str, Path | None] = {}
+    for mod_id, workspaces in candidates.items():
+        tested = [w for w in workspaces if w.name in in_rig.get(mod_id, set())]
+        found[mod_id] = tested[0] if len(tested) == 1 else workspaces[0] if len(workspaces) == 1 else None
+    return found
+
+
+def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: str, archive: bool = False,
+                 done_dir: Path | None = None, policy_path: Path | None = None, today: str | None = None) -> dict:
+    """After a group run: mark every PASS member LIVE_VALIDATED in its report; with `archive`, record the owner's
+    standing local-only licence where none exists, archive it into Done/ and copy its zip to Done/'s top level
+    (ROADMAP P15 item 31.1; replaces the session's record_group.py and shell loop)."""
+    import re
+    import shutil
+    from datetime import date
+
+    from .archive import ArchiveError, archive_mod
+    from .release import record_policy_decision
+    from .substitutes import revival_licence
+
+    today = today or date.today().isoformat()
+    report = group_report(log, config, mods_dir=Path(rig) / "mods")
+    text = Path(log).read_text(encoding="utf-8", errors="replace")
+    version = (re.search(r"BF-PROBE\|(\d+\.\d+\.\d+)\|", text) or [None, "?"])[1]
+    workspaces = _workspaces_by_mod_id(queue, Path(rig) / "mods")
+    recorded, skipped, archived = [], [], []
+    for mod_id, verdict in sorted(report["members"].items()):
+        workspace = workspaces.get(mod_id)
+        if verdict["verdict"] != "PASS" or workspace is None:
+            skipped.append({"mod_id": mod_id, "verdict": verdict["verdict"], "workspace": workspace.name if workspace else None})
+            continue
+        path = workspace / "working" / "reports" / "REVIVAL_REPORT.md"
+        body = path.read_text(encoding="utf-8").rstrip() if path.is_file() else f"# Revival report: {workspace.name}"
+        if f"## Live probe run {test_id}" not in body:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body + f"\n\n## Live probe run {test_id} (group run, RC8 rig)\n\n`bridgeforge probe-group report`: **PASS** "
+                            f"(probe {version}: content-ids ran, no FAIL line for this mod; group triage FATAL={report['fatal']}, "
+                            f"MOD-ERROR={report['mod_errors']}). Owner ran New Game, one in-game day and the probe combat mission.\n\nLIVE_VALIDATED\n",
+                            encoding="utf-8")
+        recorded.append(workspace.name)
+        if not archive:
+            continue
+        if revival_licence(mod_id, _mod_info(workspace / "working").get("name"), policy_path).get("decision") not in ("LOCAL_ONLY", "RELEASABLE"):
+            record_policy_decision(mod_id, local_only=True, reason=OWNER_STANDING_REASON.format(date=today), policy_path=policy_path)
+        done = Path(done_dir or Path(queue).parent / "Done")
+        try:
+            result = archive_mod(workspace, done, policy_path=policy_path, today=today)
+        except ArchiveError as exc:
+            skipped.append({"mod_id": mod_id, "verdict": "PASS", "workspace": workspace.name, "archive": str(exc)})
+            continue
+        shutil.copy2(result["zip"], done / Path(result["zip"]).name)
+        archived.append(workspace.name)
+    return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_RECORD", "test_id": test_id, "probe_version": version,
+            "recorded": recorded, "archived": archived, "skipped": skipped}

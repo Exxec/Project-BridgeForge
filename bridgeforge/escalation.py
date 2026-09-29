@@ -61,6 +61,9 @@ def _tree(root: Path) -> dict[str, str]:
             for p in sorted(root.rglob("*")) if p.is_file() and ".pre-bf-" not in p.name}
 
 
+START_TREE_FILE = "START_TREE.json"
+
+
 def changed_files(before: Path, after: Path) -> list[str]:
     old, new = _tree(before), _tree(after)
     return sorted(name for name in set(old) | set(new) if old.get(name) != new.get(name))
@@ -159,6 +162,9 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
             shutil.rmtree(attempt_dir)
         sandbox = attempt_dir / "working"
         shutil.copytree(working, sandbox, ignore=shutil.ignore_patterns("*.pre-bf-*"))
+        # The sandbox's starting state, so a later apply compares the attempt with its own start, not with a
+        # working/ that other packets have changed since (ROADMAP P15 31.8, Angry Periphery 2026-09-28).
+        (attempt_dir / START_TREE_FILE).write_text(json.dumps(_tree(sandbox)), encoding="utf-8")
         shown = {**packet, "verify": f'{packet["verify"]} --working "{sandbox}"'}
         prompt = render_packet(shown).replace(str(workspace / "working"), str(sandbox)) + feedback
         (attempt_dir / "PROMPT.md").write_text(prompt, encoding="utf-8")
@@ -207,7 +213,29 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
             "note": "Verified agent changes are REVIEW: they cleared the finding and the scan (and compile check, if any), not a live test."}
 
 
-def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = None, now=None) -> dict:
+JAR_SOURCE_ROOTS = ("jars/src/", "jar/src/", "src/")
+
+
+def _rebuild_attempt_jar(workspace: Path, packet: dict, attempt_dir: Path, source_root: str) -> dict:
+    """Rebuild the mod's jar from the attempt's own sources, in the attempt folder (ROADMAP P15 31.7). A source edit in a
+    compiled mod changes nothing until the jar is rebuilt; refuse unless the build passes and loses no class or member."""
+    from .rebuild_jar import rebuild_jar
+    from .scanner import _load_lenient_json_file
+
+    jars = (_load_lenient_json_file(workspace / "working" / "mod_info.json") or {}).get("jars") or []
+    if len(jars) != 1:
+        raise EscalationError(f"--rebuild-jar needs exactly one jar in mod_info.json (found {len(jars)}); rebuild by hand.")
+    result = rebuild_jar(attempt_dir, sources=f"working/{source_root.rstrip('/')}", jar=f"working/{jars[0]}",
+                         vanilla_core=Path(packet["vanilla_core"]) if packet.get("vanilla_core") else None,
+                         output=attempt_dir / "rebuild")
+    comparison = result.get("comparison") or {}
+    if result.get("status") not in ("PASS", "REVIEW") or comparison.get("unexpected_member_or_class_loss"):
+        raise EscalationError(f"the attempt's jar rebuild is {result.get('status')}: " + str(result.get("reason") or comparison.get("removed_classes") or "a class or member was lost"))
+    return {"jar": jars[0], "new_jar": result["new_jar"], "status": result["status"],
+            "changed_classes": [c["class"] for c in comparison.get("class_changes") or []], "added_classes": comparison.get("added_classes") or []}
+
+
+def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = None, now=None, rebuild_jar: bool = False) -> dict:
     """Copy an attempt already VERIFIED into `working/` without re-running the agent (P15 item 20.12).
 
     `run --apply` re-runs the agent and applies whatever the new attempt produces, which nobody has
@@ -243,7 +271,15 @@ def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = N
                    if working.joinpath(name).is_file() and digest and hashlib.sha256(working.joinpath(name).read_bytes()).hexdigest() != digest)
     if stale:
         raise EscalationError("working/ changed since the packet was made (" + ", ".join(stale) + "); run the packet again.")
-    changed = changed_files(working, sandbox)
+    start_file = sandbox.parent / START_TREE_FILE
+    if start_file.is_file():
+        start, now_tree, current = json.loads(start_file.read_text(encoding="utf-8")), _tree(sandbox), _tree(working)
+        changed = sorted(name for name in set(start) | set(now_tree) if start.get(name) != now_tree.get(name))
+        moved_on = [name for name in changed if current.get(name) != start.get(name)]
+        if moved_on:
+            raise EscalationError("working/ changed these files since the attempt started (" + ", ".join(moved_on) + "); run the packet again.")
+    else:
+        changed = changed_files(working, sandbox)  # attempts made before START_TREE.json existed
     outside = [name for name in changed if name not in packet["allowed_files"]]
     if outside:
         raise EscalationError("the attempt changed files outside the packet: " + ", ".join(outside))
@@ -252,7 +288,26 @@ def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = N
     check = verify(packet, sandbox)
     if check["status"] != "PASS":
         raise EscalationError("the attempt no longer verifies: " + "; ".join(check["reasons"]))
+    source_root = next((root for root in JAR_SOURCE_ROOTS if any(name.startswith(root) for name in changed)), None)
+    rebuilt = None
+    if source_root and not rebuild_jar:
+        raise EscalationError(f"the attempt edits jar sources ({source_root}); the shipped jar keeps the old code until rebuilt. "
+                              "Re-run with --rebuild-jar to rebuild it from the attempt and install it.")
+    if source_root:
+        rebuilt = _rebuild_attempt_jar(workspace, packet, sandbox.parent, source_root)
     written = _copy_back(packet, sandbox, working, changed)
+    if rebuilt:
+        from datetime import date
+
+        target = working / rebuilt["jar"]
+        moved = workspace / "scratch" / f"moved-{date.today().isoformat()}" / f"{packet['id']}-{target.name}"
+        moved.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(target), str(moved))
+        shutil.copy2(rebuilt["new_jar"], target)
+        with (workspace / "scratch" / "MOVES.log").open("a", encoding="utf-8") as handle:
+            handle.write(f"{date.today().isoformat()} moved working/{rebuilt['jar']} -> {moved.relative_to(workspace / 'scratch').as_posix()} "
+                         f"(escalation {packet['id']}: jar rebuilt from the verified attempt, {rebuilt['status']})\n")
+        rebuilt["previous_jar"] = str(moved)
     note = sandbox.parent / "NOTE.md"
     if note.is_file():
         shutil.copyfile(note, packets_dir(workspace) / f"{packet['id']}.NOTE.txt")
@@ -260,4 +315,4 @@ def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = N
                               "runner": "agent", "attempt": attempt, "outcome": "APPLIED", "reasons": [], "changed": changed,
                               "classification": "REVIEW", "applied_without_rerun": True}, now)
     return {"schema_version": SCHEMA_VERSION, "mode": "ESCALATION_APPLY", "packet": packet["id"], "attempt": attempt,
-            "written": written, "verify": check}
+            "written": written, "verify": check, "rebuilt_jar": rebuilt}

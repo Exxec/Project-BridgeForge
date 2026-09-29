@@ -723,7 +723,8 @@ def build_parser() -> argparse.ArgumentParser:
     stats_cmd.add_argument("--json", action="store_true")
     sup_cmd = subcommands.add_parser("supersession", help="find queued mods whose author has released a newer version (in the real install's mods/ or a modpack); read-only")
     sup_cmd.add_argument("queue", type=Path, help="the queue folder (In operation)")
-    sup_cmd.add_argument("--against", type=Path, action="append", required=True, metavar="DIR", help="a folder of mods to compare with; repeatable")
+    sup_cmd.add_argument("--against", type=Path, action="append", default=[], metavar="DIR", help="a folder of mods to compare with; repeatable")
+    sup_cmd.add_argument("--corpus-index", type=Path, help="also compare with every mod_info.json a corpus-index database lists (the Downloads archive)")
     sup_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     sup_cmd.add_argument("--json", action="store_true")
     archive_cmd = subcommands.add_parser("archive", help="package a finished revival into Done/<Mod>/: mod folder, zip, original, reports and an archive note (needs a licence decision; never deletes the workspace)")
@@ -738,6 +739,9 @@ def build_parser() -> argparse.ArgumentParser:
     group_plan.add_argument("--rig", type=Path, help="default: <queue>/_rig")
     group_plan.add_argument("--size", type=int, default=8, help="most mods per group (default 8)")
     group_plan.add_argument("--write", type=Path, help="save the plan as JSON (default: <queue>/PROBE_GROUPS.json)")
+    group_plan.add_argument("--exclude", action="append", default=[], metavar="WORKSPACE", help="leave this workspace out; repeatable")
+    group_plan.add_argument("--solo", action="append", default=[], metavar="WORKSPACE", help="give this workspace a group of its own; repeatable")
+    group_plan.add_argument("--no-auto-solo", action="store_true", help="also group large campaign mods (by default a mod that creates systems and has 60+ content ids runs alone)")
     group_plan.add_argument("--json", action="store_true")
     group_install = group_sub.add_parser("install", help="copy/sync one group's mods into the rig, write the merged probe config, set enabled_mods.json")
     group_install.add_argument("group", type=int)
@@ -745,6 +749,12 @@ def build_parser() -> argparse.ArgumentParser:
     group_install.add_argument("--queue", type=Path)
     group_install.add_argument("--rig", type=Path)
     group_install.add_argument("--json", action="store_true")
+    group_record = group_sub.add_parser("record", help="after a run: mark PASS members LIVE_VALIDATED; with --archive also record the standing local-only licence, archive into Done/ and copy each zip to Done/'s top")
+    group_record.add_argument("test_id", help="the bf-test.ps1 test id; reads <rig>/logs/<TESTID>.stdout.log")
+    group_record.add_argument("--archive", action="store_true")
+    group_record.add_argument("--queue", type=Path)
+    group_record.add_argument("--rig", type=Path)
+    group_record.add_argument("--json", action="store_true")
     group_report_cmd = group_sub.add_parser("report", help="per-mod verdicts for a group's run log")
     group_report_cmd.add_argument("log", type=Path, help="the run's stdout log (bf-test launch) or the rig's starsector.log")
     group_report_cmd.add_argument("--rig", type=Path)
@@ -848,6 +858,31 @@ def build_parser() -> argparse.ArgumentParser:
     policy_set.add_argument("--on", help="decision date (default: today)")
     for command in (policy_show, policy_set):
         command.add_argument("--policy", type=Path, help=argparse.SUPPRESS)
+    desc_cmd = subcommands.add_parser("descriptions", help="missing codex descriptions: build the queue sheet, or apply a reviewed draft table with credits and an original-descriptions copy")
+    desc_sub = desc_cmd.add_subparsers(dest="descriptions_command", required=True)
+    desc_sheet = desc_sub.add_parser("sheet", help="write <queue>/DESCRIPTIONS_NEEDED.csv from a live check")
+    desc_sheet.add_argument("queue", type=Path)
+    desc_sheet.add_argument("--vanilla-core", type=Path)
+    desc_apply = desc_sub.add_parser("apply", help="add a draft table's rows to working/data/strings/descriptions.csv; write BRIDGEFORGE_CREDITS.txt and alt-original-descriptions/")
+    desc_apply.add_argument("workspace", type=Path)
+    desc_apply.add_argument("draft", type=Path, help="markdown with | `id` | TYPE | text | rows")
+    ci_cmd = subcommands.add_parser("check-impact", help="rescan the mods whose escalation packets hold FINDING_ID and report which are now cleared, reduced or unchanged (--all: also find newly flagged mods)")
+    ci_cmd.add_argument("finding")
+    ci_cmd.add_argument("queue", type=Path)
+    ci_cmd.add_argument("--vanilla-core", type=Path)
+    ci_cmd.add_argument("--all", action="store_true", help="scan every workspace, not just those with packets for the finding")
+    ci_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
+    ci_cmd.add_argument("--json", action="store_true")
+    rq_cmd = subcommands.add_parser("revive-queue", help="run revive across a queue: all workspaces, those never revived, or those with a given last status; progress lines, resumable, writes REVIVE_QUEUE.json")
+    rq_cmd.add_argument("queue", type=Path)
+    rq_cmd.add_argument("--only-status", action="append", default=[], metavar="STATUS", help="only workspaces whose last revive status is this (e.g. ESCALATED); repeatable")
+    rq_cmd.add_argument("--never-revived", action="store_true", help="only workspaces with no REVIVE.json yet")
+    rq_cmd.add_argument("--apply", action="store_true")
+    rq_cmd.add_argument("--draft-report", action="store_true")
+    rq_cmd.add_argument("--vanilla-core", type=Path)
+    rq_cmd.add_argument("--restart", action="store_true", help="ignore an earlier run's checkpoint")
+    rq_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
+    rq_cmd.add_argument("--json", action="store_true")
     revive_cmd = subcommands.add_parser("revive", help="run the mechanical part of a revival unattended (scan, permitted fixers, rescan, until nothing changes) and write escalation packets for the rest (roadmap P15 item 2)")
     revive_cmd.add_argument("workspace", type=Path, help="a workspace folder holding working/mod_info.json")
     revive_cmd.add_argument("--apply", action="store_true", help="write fixes into working/ (default: dry run; reports and packets are still written)")
@@ -873,6 +908,14 @@ def build_parser() -> argparse.ArgumentParser:
     esc_run.add_argument("--timeout", type=int, default=1800, help="seconds per attempt")
     esc_apply = esc_sub.add_parser("apply", help="copy an attempt already VERIFIED (and reviewed) into working/, without re-running the agent")
     esc_apply.add_argument("--attempt", type=int, help="which attempt (default: the newest VERIFIED one)")
+    esc_apply.add_argument("--rebuild-jar", action="store_true", help="the attempt edits jar sources: rebuild the jar from them (refused on any lost class or member) and install it")
+    esc_rule = esc_sub.add_parser("rule", help="record one owner ruling for a finding id across the queue: accept it in every escalated mod's baseline, or approve its fixer as a standing approval")
+    esc_rule.add_argument("finding")
+    esc_rule.add_argument("queue", type=Path)
+    esc_rule.add_argument("--accept", action="store_true")
+    esc_rule.add_argument("--approve-fixer", action="store_true")
+    esc_rule.add_argument("--reason", required=True)
+    esc_rule.add_argument("--json", action="store_true")
     esc_queue = esc_sub.add_parser("queue", help="across a queue: which findings block the ESCALATED mods, and which mods one decision would clear; writes ESCALATIONS_BY_FINDING.md")
     esc_queue.add_argument("queue", type=Path)
     esc_queue.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
@@ -1078,7 +1121,7 @@ def main(argv: list[str] | None = None) -> int:
         rig = (args.rig or queue / "_rig").expanduser().resolve()
         try:
             if args.probe_group_command == "plan":
-                result = plan_groups(queue, rig, size=args.size)
+                result = plan_groups(queue, rig, size=args.size, exclude=set(args.exclude), solo=set(args.solo), auto_solo=not args.no_auto_solo)
                 target = args.write or queue / "PROBE_GROUPS.json"
                 target.write_text(json.dumps(result, indent=2), encoding="utf-8")
                 if not args.json:
@@ -1096,6 +1139,16 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"  {item['workspace']}: {item['action']}")
                     print(f"  enabled_mods.json -> {result['enabled_mods']}")
                     print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
+            elif args.probe_group_command == "record":
+                from .probe_group import record_group
+                config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
+                result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive)
+                if not args.json:
+                    print(f"Recorded LIVE_VALIDATED ({result['probe_version']}): {', '.join(result['recorded']) or 'none'}")
+                    if args.archive:
+                        print(f"Archived to Done/: {', '.join(result['archived']) or 'none'}")
+                    for item in result["skipped"]:
+                        print(f"  not recorded: {item['mod_id']} ({item['verdict']}) {item.get('archive', '')}")
             else:
                 config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
                 result = group_report(args.log, config, mods_dir=rig / "mods")
@@ -1107,6 +1160,8 @@ def main(argv: list[str] | None = None) -> int:
                             print(f"      {item}")
                     for item in result["unattributed"]:
                         print(f"  (group) {item}")
+                    if result.get("combat_filler_sides"):
+                        print(f"  combat: vanilla filler ships stood in for side(s) {', '.join(result['combat_filler_sides'])} (the group had no mod ships there)")
         except (ProbeGroupError, ProbeConfigError, OSError, ValueError, StopIteration) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -1115,7 +1170,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "supersession":
         from .supersession import find_superseded
-        result = find_superseded(args.queue, args.against, quiet=args.quiet)
+        result = find_superseded(args.queue, args.against, quiet=args.quiet, corpus_index=args.corpus_index)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
@@ -2944,6 +2999,42 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(dumps(plan) if args.json else render(plan))
         return 0
+    if args.command == "descriptions":
+        from .descriptions import DescriptionsError, apply_draft, build_sheet
+        try:
+            if args.descriptions_command == "sheet":
+                result = build_sheet(args.queue, args.vanilla_core)
+                print(f"{result['entries']} missing description(s) in {result['mods']} mod(s). Written: {result['path']}")
+            else:
+                result = apply_draft(args.workspace, args.draft)
+                print(f"Added {len(result['added'])} row(s); already present: {len(result['skipped_existing'])}.")
+                print(f"Credits: {result['credits']}")
+                print(f"Original-descriptions copy: {result['alternative']}")
+        except (DescriptionsError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        return 0
+    if args.command == "check-impact":
+        from .check_impact import check_impact
+        result = check_impact(args.queue, args.finding, vanilla_core=args.vanilla_core, all_workspaces=args.all, quiet=args.quiet)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            for row in result["mods"]:
+                if row["verdict"] in ("CLEARED", "REDUCED", "NEW"):
+                    print(f"{row['verdict']:9} {row['workspace']} ({row['before']} -> {row['now']})")
+            print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())) + f". Written: {result['result_path']}")
+        return 0
+    if args.command == "revive-queue":
+        from .revive_queue import revive_queue
+        result = revive_queue(args.queue, only_status=set(args.only_status) or None, never_revived=args.never_revived, apply=args.apply,
+                              draft_report=args.draft_report, vanilla_core=args.vanilla_core, quiet=args.quiet, restart=args.restart)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items(), key=lambda kv: str(kv[0]))))
+            print(f"Written: {result['result_path']}")
+        return 0
     if args.command == "revive":
         from .revive import ReviveError, render as render_revive, revive
         try:
@@ -2954,6 +3045,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else render_revive(result), end="\n" if args.json else "")
+        return 0
+    if args.command == "escalation" and args.escalation_command == "rule":
+        from .escalation_queue import rule
+        try:
+            entry = rule(args.queue, args.finding, accept=args.accept, approve_fixer=args.approve_fixer, reason=args.reason)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(entry, indent=2, ensure_ascii=False) if args.json else
+              f"Ruling recorded ({entry['ruling']}) for {entry['finding']}: {len(entry['mods'])} mod baseline(s) updated. Re-run revive-queue --only-status ESCALATED to apply.")
         return 0
     if args.command == "escalation" and args.escalation_command == "queue":
         from .escalation_queue import summarize_queue
@@ -2988,7 +3089,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 0 if result["status"] == "PASS" else 1
             if args.escalation_command == "apply":
                 from .escalation import apply_verified
-                result = apply_verified(args.workspace, args.packet, attempt=args.attempt)
+                result = apply_verified(args.workspace, args.packet, attempt=args.attempt, rebuild_jar=args.rebuild_jar)
                 if args.json:
                     print(json.dumps(result, indent=2, ensure_ascii=False))
                 else:

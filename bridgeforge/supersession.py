@@ -59,6 +59,61 @@ def reference_index(references: list[Path]) -> dict[str, list[dict]]:
     return index
 
 
+def corpus_reference_index(db: Path) -> dict[str, list[dict]]:
+    """Every mod_info.json the corpus index lists (loose, or inside .zip/.jar/.7z under its root), by mod id
+    (ROADMAP P15 31.11: compare the queue with the owner's Downloads archive, not only the installed mods)."""
+    import sqlite3
+    import zipfile
+
+    from .scanner import _parse_json
+
+    index: dict[str, list[dict]] = {}
+    connection = sqlite3.connect(str(db))
+    try:
+        root = Path(dict(connection.execute("SELECT key, value FROM meta").fetchall()).get("root") or ".")
+        rows = connection.execute("SELECT source, location FROM files WHERE location LIKE '%mod_info.json'").fetchall()
+    finally:
+        connection.close()  # a `with` block commits but does not close; the file stays locked on Windows
+    archives: dict[str, object] = {}
+    for source, location in rows:
+        text = None
+        try:
+            if source == location:
+                text = (root / source).read_text(encoding="utf-8-sig", errors="replace")
+            else:
+                inner = location.split("!", 1)[1]
+                if source.lower().endswith((".zip", ".jar")):
+                    handle = archives.get(source) or archives.setdefault(source, zipfile.ZipFile(root / source))
+                    text = handle.read(inner).decode("utf-8-sig", errors="replace")
+                elif source.lower().endswith(".7z"):
+                    try:
+                        import py7zr
+                    except ImportError:
+                        continue  # the optional [archives] extra is not installed
+                    try:
+                        with py7zr.SevenZipFile(root / source) as seven:
+                            reader = getattr(seven, "read", None)
+                            if reader is None:
+                                continue  # this py7zr version cannot read single members; skip the archive
+                            text = next(iter(reader([inner]).values())).read().decode("utf-8-sig", errors="replace")
+                    except Exception:  # noqa: BLE001 - an unreadable .7z is skipped, never fatal
+                        continue
+        except (OSError, KeyError, ValueError, zipfile.BadZipFile, StopIteration):
+            continue
+        try:
+            info = _parse_json(text)[0] if text else None
+        except ValueError:
+            continue  # a mod_info.json even the lenient reader cannot parse
+        mod_id = info.get("id") if isinstance(info, dict) else None
+        if isinstance(mod_id, str) and mod_id:
+            index.setdefault(mod_id.lower(), []).append({"path": f"{root / source}" + (f"!{location.split('!', 1)[1]}" if source != location else ""),
+                                                         "name": str(info.get("name") or ""), "version": _version_text(info.get("version")),
+                                                         "game_version": str(info.get("gameVersion") or "")})
+    for handle in archives.values():
+        handle.close()
+    return index
+
+
 def _original_info(workspace: Path) -> dict:
     original = workspace / "original"
     if original.is_dir():
@@ -77,7 +132,9 @@ def judge(workspace: Path, index: dict[str, list[dict]]) -> dict:
               "version": ours, "verdict": "NO_MATCH", "reference": None}
     candidates = index.get(mod_id.lower(), [])
     # Ignore a reference that is this workspace's own deployed copy (a rig mods/ folder holding the revival).
-    candidates = [c for c in candidates if _BF_SUFFIX.search(c["version"]) is None]
+    # Our own builds are never a newer release: +bf versions, and earlier BridgeForge revival builds kept in the
+    # Downloads archive ("0.2.2-0.98a-revival-r13", Void-Tec, 2026-09-28).
+    candidates = [c for c in candidates if _BF_SUFFIX.search(c["version"]) is None and "revival" not in c["version"].lower()]
     if not candidates:
         return record
     best = max(candidates, key=lambda c: (c["game_version"].startswith("0.98"), version_key(c["version"])))
@@ -94,12 +151,16 @@ def judge(workspace: Path, index: dict[str, list[dict]]) -> dict:
     return record
 
 
-def find_superseded(queue: Path, references: list[Path], quiet: bool = False) -> dict:
+def find_superseded(queue: Path, references: list[Path], quiet: bool = False, corpus_index: Path | None = None) -> dict:
     queue = Path(queue).expanduser().resolve()
     references = [Path(r).expanduser().resolve() for r in references]
     workspaces = sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_") and (p / "working" / "mod_info.json").is_file())
     index = reference_index(references)
-    header = {"schema_version": SCHEMA_VERSION, "queue": str(queue), "references": [str(r) for r in references]}
+    if corpus_index is not None:
+        for mod_id, entries in corpus_reference_index(Path(corpus_index)).items():
+            index.setdefault(mod_id, []).extend(entries)
+    header = {"schema_version": SCHEMA_VERSION, "queue": str(queue), "references": [str(r) for r in references],
+              "corpus_index": str(corpus_index) if corpus_index else None}
     records = []
     with Checkpoint(queue / CHECKPOINT_FILE, header) as checkpoint:
         for number, workspace in enumerate(workspaces, 1):

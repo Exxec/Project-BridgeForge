@@ -77,3 +77,48 @@ def render(result: dict) -> str:
         if row["only_blocker"]:
             lines.append(f"- `{row['finding']}`: " + ", ".join(row["only_blocker"]))
     return "\n".join(lines) + "\n"
+
+
+def rule(queue: Path, finding_id: str, *, accept: bool = False, approve_fixer: bool = False, reason: str, policy: Path | None = None,
+         today: str | None = None) -> dict:
+    """Record one owner ruling for a finding id across the queue (ROADMAP P15 31.12), instead of rulings typed into
+    chat and applied by hand. `accept`: add the finding's packet entries to every ESCALATED mod's accepted-findings
+    baseline, with the reason in ESCALATION_RULINGS.jsonl. `approve_fixer`: add the fixer to AUTOMATION_POLICY.json's
+    standing approvals (revive then applies it)."""
+    from datetime import date
+
+    from .baseline import accept_findings
+    from .fixers import SUPPORTED_FINDINGS
+
+    if accept == approve_fixer:
+        raise ValueError("choose exactly one of accept or approve_fixer.")
+    if not reason.strip():
+        raise ValueError("a ruling needs a reason.")
+    queue = Path(queue).expanduser().resolve()
+    today = today or date.today().isoformat()
+    touched = []
+    if approve_fixer:
+        if finding_id not in SUPPORTED_FINDINGS:
+            raise ValueError(f"{finding_id} has no fixer to approve; use accept.")
+        policy = Path(policy or queue / "AUTOMATION_POLICY.json")
+        data = json.loads(policy.read_text(encoding="utf-8")) if policy.is_file() else {"approved_fixers": {}}
+        data.setdefault("approved_fixers", {})[finding_id] = {"reason": reason, "recorded_on": today}
+        body = "{\n  \"approved_fixers\": {\n" + ",\n".join(f"    {json.dumps(k)}: {json.dumps(v, ensure_ascii=False)}" for k, v in data["approved_fixers"].items()) + "\n  }\n}\n"
+        policy.write_text(body, encoding="utf-8")
+    else:
+        for workspace in sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_")):
+            record = _workspace_packets(workspace)
+            if not record or record["status"] != "ESCALATED":
+                continue
+            keys = []
+            for path in (workspace / "reports" / "escalations").glob(f"{finding_id}--*.json"):
+                for finding in json.loads(path.read_text(encoding="utf-8")).get("findings") or []:
+                    evidence = finding.get("evidence") or []
+                    keys.append(f"{finding.get('id')}|{finding.get('file') or ''}|{evidence[0] if evidence else ''}")
+            if keys:
+                accept_findings(workspace / "working", keys)
+                touched.append(workspace.name)
+    entry = {"date": today, "finding": finding_id, "ruling": "accept" if accept else "approve-fixer", "reason": reason, "mods": touched}
+    with (queue / "ESCALATION_RULINGS.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    return entry

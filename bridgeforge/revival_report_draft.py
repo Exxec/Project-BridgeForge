@@ -46,7 +46,9 @@ def draft_revival_report(mod_dir: Path, vanilla_core: Path | None = None, provid
     if not root.is_dir():
         raise ValueError(f"{root} is not an existing directory.")
 
-    result = scan_mod(root, TargetProfile(), vanilla_core, compile_check=False)
+    # provider_roots resolve class references against declared dependencies (SEEKER 0.6.6's MagicLib weapon
+    # effects were BLOCKED here, 2026-09-28, though revive's own scan resolved them).
+    result = scan_mod(root, TargetProfile(), vanilla_core, compile_check=False, provider_roots=provider_roots)
     # Findings the mod's own baseline accepts (working/reports/baseline*.json) don't block the draft,
     # as corpus-recheck and revive treat them; the report lists them in their own section instead.
     accepted_keys = mod_baseline_keys(root)

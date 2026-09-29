@@ -317,6 +317,34 @@ class ScannerTests(unittest.TestCase):
             placeholder = next(item for item in result.findings if item.id == "runtime-placeholder-unsupported-operation")
             self.assertIn("reachability: configured-entrypoint", placeholder.evidence)
 
+    def test_settings_graphics_path_that_does_not_exist_is_reported(self) -> None:
+        # GRP-9 (2026-09-28): a missing settings.json graphics sprite is a Fatal before the main menu.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            (root / "data" / "config").mkdir(parents=True)
+            (root / "graphics" / "shield").mkdir(parents=True)
+            (root / "graphics" / "shield" / "here.png").write_bytes(b"png")
+            (root / "data" / "config" / "settings.json").write_text(
+                '{"graphics": {"fx": {"ok": "graphics/shield/here.png", "gone": "graphics/shield/missing.png"}}}', encoding="utf-8")
+            core = root / "core"
+            (core / "data").mkdir(parents=True)
+            found = [f for f in scan_mod(root, vanilla_core=core).findings if f.id == "asset-reference-missing"]
+        self.assertEqual([f.evidence[1] for f in found], ["path:graphics/shield/missing.png"])
+
+    def test_commented_out_placeholder_throw_is_not_a_finding(self) -> None:
+        # Xenoargh-AI-Overhaul (2026-09-28): IDE stubs keep "//throw new UnsupportedOperationException" commented out.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            (root / "data" / "scripts").mkdir(parents=True)
+            (root / "data" / "scripts" / "Plugin.java").write_text(
+                "package data.scripts; public class Plugin { void render() {" + chr(10) + "  //throw new UnsupportedOperationException();" + chr(10) + "} }",
+                encoding="utf-8",
+            )
+            result = scan_mod(root)
+            self.assertEqual([f for f in result.findings if f.id == "runtime-placeholder-unsupported-operation"], [])
+
     def test_scanner_follows_unambiguous_local_call_from_configured_entrypoint(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

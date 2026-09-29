@@ -56,7 +56,7 @@ class PresetEntryOverrideTests(unittest.TestCase):
     def test_every_preset_file_is_covered_and_missing_counterparts_are_skipped(self):
         vanilla = {"star_red": {"type": "star", "texture": "a.png", "iconTexture": "b.png"}}
         mine = {"star_red": {"type": "star", "texture": "a.png"}}
-        names = ("hull_styles.json", "custom_entities.json", "sounds.json", "planets.json")
+        names = ("hull_styles.json", "custom_entities.json", "planets.json")  # sounds.json: its own test below
         with resolved_temp_dir() as root:
             mod, core = root / "a" / "mod", root / "a" / "core"
             _write(mod / "mod_info.json", '{"id":"fixture","name":"Fixture","gameVersion":"0.98a"}')
@@ -68,7 +68,17 @@ class PresetEntryOverrideTests(unittest.TestCase):
         self.assertEqual(sorted(f.file for f in covered), sorted(f"data/config/{name}" for name in names))
         self.assertTrue(all(f.evidence == ["star_red: loses iconTexture"] for f in covered))
         self.assertEqual(nothing, {})
-
+
+    def test_sounds_json_merges_by_sound_id_within_a_category(self):
+        # Live 2026-09-28: Exigency's sounds.json names 3 of vanilla's music ids and vanilla's other music still played.
+        vanilla = {"music": {"music_title": [{"file": "t.ogg", "volume": 1}], "music_campaign": [{"file": "c.ogg", "volume": 1}]}}
+        omitting = {"music": {"music_campaign": [{"file": "mine.ogg", "volume": 1}]}}
+        dropping = {"music": {"music_campaign": [{"file": "mine.ogg"}]}}
+        with resolved_temp_dir() as root:
+            quiet = _scan(root / "a", {"sounds.json": omitting}, {"sounds.json": vanilla})
+            loud = _scan(root / "b", {"sounds.json": dropping}, {"sounds.json": vanilla})
+        self.assertNotIn("preset-entry-drops-vanilla-fields", quiet)
+        self.assertIn("preset-entry-drops-vanilla-fields", loud)
 
 if __name__ == "__main__":
     unittest.main()

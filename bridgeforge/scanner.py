@@ -908,7 +908,8 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
         for needle, (rule_id, explanation) in LEGACY_API_RULES.items():
             if needle in text:
                 result.add(id=rule_id, category="source-api", severity="high", classification="REVIEW", confidence="HIGH", explanation=explanation, file=relative, evidence=[needle])
-        if active_source and RUNTIME_PLACEHOLDER_PATTERN.search(text):
+        # Comments blanked: Xenoargh-AI-Overhaul's IDE stubs keep the throw commented out (2026-09-28).
+        if active_source and RUNTIME_PLACEHOLDER_PATTERN.search(_blank_java_comments(text)):
             result.add(
                 id="runtime-placeholder-unsupported-operation",
                 category="source",
@@ -2377,6 +2378,8 @@ def _attribute_library_usage(result: ScanResult) -> None:
                 result.add(id="declared-library-unreferenced", category="dependencies", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="A declared library has no bundled, import, or source-call evidence. Confirm whether it is required before removing or changing it.", evidence=[library])
             if imports and not declared and not bundled and not bytecode_referenced and _library_import_only(Path(result.input_path), result, [prefix.replace(".", "/") for prefix in prefixes]):
                 pass  # an unused import compiled away; reported once as library-import-unused-in-jar
+            elif imports and library == "Nexerelin" and _only_nexerelin_custom_starts(Path(result.input_path), prefixes):
+                pass  # reported once as optional-library-integration (registered:customStarts.json)
             elif imports and not declared and not bundled:
                 result.add(
                     id="source-library-dependency-undeclared",
@@ -2767,7 +2770,7 @@ def _scan_non_english_text(root: Path, result: ScanResult) -> None:
             if hits:
                 counts[_relative(root, path)] += hits
     if counts:
-        result.add(id="player-text-non-english", category="localization", severity="low", classification="REVIEW", confidence="DETERMINISTIC", explanation=f"{len(counts)} data file(s) hold CJK text outside comments ({sum(counts.values())} characters). Translate with translate-export / translate-apply before English live tests; translate-check also covers jar strings.", evidence=[f"{path}: {count}" for path, count in counts.most_common(15)] + ([f"... {len(counts) - 15} more file(s)"] if len(counts) > 15 else []))
+        result.add(id="player-text-non-english", category="localization", severity="low", classification="REVIEW", confidence="DETERMINISTIC", explanation=f"{len(counts)} data file(s) hold CJK text outside comments ({sum(counts.values())} characters). RC8's fonts have no CJK glyphs, so it shows as '???' in game (RC8-19, FlowerGod 2026-09-28). Translate with translate-export / translate-apply before English live tests; translate-check also covers jar strings.", evidence=[f"{path}: {count}" for path, count in counts.most_common(15)] + ([f"... {len(counts) - 15} more file(s)"] if len(counts) > 15 else []))
 
 
 # Design docs and IDE files came from the Chinese mods (2026-09-13): .docx/.sai2 notes, IntelliJ .iml.
@@ -3208,6 +3211,21 @@ def _scan_preset_entry_overrides(root: Path, result: ScanResult, vanilla_core: P
         mod_data, vanilla_data = _load_lenient_json_file(mod_path), _load_lenient_json_file(vanilla_path)
         if not (isinstance(mod_data, dict) and isinstance(vanilla_data, dict)):
             continue
+        if name == "sounds.json":
+            # sounds.json's top-level keys are categories ("music"); the entries replaced whole are one level down,
+            # and only the ids the mod names. Live evidence 2026-09-28: every Exigency session (EX-2..EX-10) loaded its
+            # sounds.json, which defines 3 of vanilla's music ids, and still played vanilla's title, Corvus campaign and
+            # neutral-encounter music. So compare "<category>.<id>" entries, not whole categories.
+            def entries(data: dict, names: dict | None = None) -> dict:
+                flat = {}
+                for key, value in data.items():
+                    inner = (names or data).get(key)
+                    if isinstance(value, dict) and isinstance(inner, dict):
+                        flat.update({f"{key}.{sub}": sub_value for sub, sub_value in value.items()})
+                    else:
+                        flat[key] = value
+                return flat
+            mod_data, vanilla_data = entries(mod_data, vanilla_data), entries(vanilla_data, mod_data)
         dropped: list[str] = []
         changed: list[str] = []
         for key in sorted(set(mod_data) & set(vanilla_data)):
@@ -3490,6 +3508,119 @@ def _looks_like_constant(name: str) -> bool:
     return bool(re.fullmatch(r"[A-Z][A-Z0-9_]*", name))
 
 
+# Bytes each opcode's operands take (JVM spec, chapter 6); -1: variable (tableswitch/lookupswitch/wide).
+_OPERAND_BYTES = [0] * 256
+for _op in (0x10, 0x12, 0x15, 0x16, 0x17, 0x18, 0x19, 0x36, 0x37, 0x38, 0x39, 0x3A, 0xA9, 0xBC):
+    _OPERAND_BYTES[_op] = 1
+for _op in (0x11, 0x13, 0x14, 0x84, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xBB, 0xBD, 0xC0, 0xC1, 0xC6, 0xC7) + tuple(range(0x99, 0xA9)):
+    _OPERAND_BYTES[_op] = 2
+for _op in (0xC5,):
+    _OPERAND_BYTES[_op] = 3
+for _op in (0xB9, 0xBA, 0xC8, 0xC9):
+    _OPERAND_BYTES[_op] = 4
+for _op in (0xAA, 0xAB, 0xC4):
+    _OPERAND_BYTES[_op] = -1
+
+
+def _instance_fields_written_outside_constructors(data: bytes) -> set[tuple[str, str]] | None:
+    """(owner class, field name) for every putfield in a method other than <init>.
+
+    A hull mod field written only in its constructor is set once per object (configuration such as
+    RogueSynth's flavourText/rarity), not per-ship state; only writes elsewhere can leak between ships.
+    None when the class file cannot be walked (the caller then keeps the declaration-only rule).
+    """
+    import struct
+
+    try:
+        pos = 8
+        count = struct.unpack_from(">H", data, pos)[0]
+        pos += 2
+        utf8, classes, name_types, fieldrefs = {}, {}, {}, {}
+        index = 1
+        while index < count:
+            tag = data[pos]
+            pos += 1
+            if tag == 1:
+                length = struct.unpack_from(">H", data, pos)[0]
+                utf8[index] = data[pos + 2:pos + 2 + length].decode("utf-8", errors="replace")
+                pos += 2 + length
+            elif tag in (3, 4):
+                pos += 4
+            elif tag in (5, 6):
+                pos += 8
+                index += 1
+            elif tag in (7, 8, 16, 19, 20):
+                if tag == 7:
+                    classes[index] = struct.unpack_from(">H", data, pos)[0]
+                pos += 2
+            elif tag in (9, 10, 11, 12, 17, 18):
+                a, b = struct.unpack_from(">HH", data, pos)
+                if tag == 9:
+                    fieldrefs[index] = (a, b)
+                elif tag == 12:
+                    name_types[index] = (a, b)
+                pos += 4
+            elif tag == 15:
+                pos += 3
+            else:
+                return None
+            index += 1
+        pos += 6  # access_flags, this_class, super_class
+        pos += 2 + 2 * struct.unpack_from(">H", data, pos)[0]
+
+        def skip_attributes(p: int) -> int:
+            n = struct.unpack_from(">H", data, p)[0]
+            p += 2
+            for _ in range(n):
+                p += 6 + struct.unpack_from(">I", data, p + 2)[0]
+            return p
+
+        n_fields = struct.unpack_from(">H", data, pos)[0]
+        pos += 2
+        for _ in range(n_fields):
+            pos = skip_attributes(pos + 6)
+        n_methods = struct.unpack_from(">H", data, pos)[0]
+        pos += 2
+        written: set[tuple[str, str]] = set()
+        for _ in range(n_methods):
+            name = utf8.get(struct.unpack_from(">H", data, pos + 2)[0], "")
+            pos += 6
+            n_attrs = struct.unpack_from(">H", data, pos)[0]
+            pos += 2
+            for _ in range(n_attrs):
+                attr_name = utf8.get(struct.unpack_from(">H", data, pos)[0], "")
+                attr_len = struct.unpack_from(">I", data, pos + 2)[0]
+                body = pos + 6
+                if attr_name == "Code" and name != "<init>":
+                    code_len = struct.unpack_from(">I", data, body + 4)[0]
+                    start = body + 8
+                    i = 0
+                    while i < code_len:
+                        op = data[start + i]
+                        if op == 0xB5:
+                            ref = fieldrefs.get(struct.unpack_from(">H", data, start + i + 1)[0])
+                            if ref and ref[1] in name_types:
+                                written.add((utf8.get(classes.get(ref[0], -1), ""), utf8.get(name_types[ref[1]][0], "")))
+                        size = _OPERAND_BYTES[op]
+                        if size >= 0:
+                            i += 1 + size
+                        elif op == 0xC4:  # wide
+                            i += 6 if data[start + i + 1] == 0x84 else 4
+                        else:
+                            pad = (4 - ((i + 1) % 4)) % 4
+                            j = i + 1 + pad
+                            if op == 0xAA:
+                                low, high = struct.unpack_from(">ii", data, start + j + 4)
+                                i = j + 12 + 4 * (high - low + 1)
+                            else:
+                                pairs = struct.unpack_from(">i", data, start + j + 4)[0]
+                                i = j + 8 + 8 * pairs
+                pos = body + attr_len
+        return written
+    except (IndexError, struct.error):
+        return None
+
+
 def _scan_hullmod_instance_state(root: Path, result: ScanResult) -> None:
     """Hull mods are single shared instances: mutable instance fields leak state between ships (SEEKER-DEATH-01).
 
@@ -3505,13 +3636,41 @@ def _scan_hullmod_instance_state(root: Path, result: ScanResult) -> None:
         "never reset per ship. SEEKER's ART_organicHull did this and also re-ran its death effect every frame "
         "on a wreck, spawning debris until the game crawled. Keep per-ship state in ship.getCustomData()."
     )
+    # A field written only in <init> is set once per object (configuration), not per-ship state. Writes are
+    # collected across every jar class, because a subclass writing an inherited field names itself as the owner
+    # (RogueSynth, 2026-09-27: RS_BaseVariantHullmod's 11 flagged fields are all constructor-only).
+    classes: list[tuple[Path, str, _ClassFileInfo]] = []
+    writes: set[tuple[str, str]] = set()
+    walk_failed = False
     for jar, member, data in _iter_jar_class_files(root):
         info = _parse_class_file(data)
-        if info is None or info.super_class not in _HULLMOD_BASES:
+        if info is None:
             continue
+        found = _instance_fields_written_outside_constructors(data)
+        if found is None:
+            walk_failed = True
+        else:
+            writes |= found
+        classes.append((jar, member, info))
+    supers = {info.this_class: info.super_class for _jar, _member, info in classes}
+
+    def descends_from(name: str, ancestor: str) -> bool:
+        for _ in range(20):
+            if name == ancestor:
+                return True
+            name = supers.get(name, "")
+            if not name:
+                return False
+        return False
+
+    for jar, member, info in classes:
+        if info.super_class not in _HULLMOD_BASES:
+            continue
+        written_names = {name for owner, name in writes if descends_from(owner, info.this_class)}
         mutable = sorted(
             name for name, descriptor, is_static, is_final in info.fields
             if not is_static and not is_final and not _looks_like_constant(name) and not descriptor.startswith("Ljava/util/")
+            and (walk_failed or name in written_names)
         )
         if mutable:
             result.add(id="hullmod-instance-state", category="scripts", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation=explanation, file=f"{_relative(root, jar)}!{member}", evidence=[f"field:{name}" for name in mutable[:12]])
@@ -4858,7 +5017,7 @@ def _collect_csv_column_class_refs(path: Path, column: str, root: Path, referenc
         references.append((relative, column, value))
 
 
-def _scan_data_class_references_missing(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+def _scan_data_class_references_missing(root: Path, result: ScanResult, vanilla_core: Path | None, provider_roots: list[Path] | None = None) -> None:
     """Every fully qualified class named in mod data must resolve to a class Starsector can actually load.
 
     Checked against: this mod's loaded jars (result.compiled_class_names), a loose data/scripts .java source
@@ -4953,8 +5112,12 @@ def _scan_data_class_references_missing(root: Path, result: ScanResult, vanilla_
         name.rsplit(".", 1)[-1] for name in (set(vanilla_jar_classes) | vanilla_loose_fqns) if ".rulecmd." in name
     }
 
+    # A declared dependency's own jar (SEEKER 0.6.6's weapons name MagicLib's data.scripts.weapons.MagicVectorThruster,
+    # which MagicLib 1.5.6 still ships for compatibility; 2026-09-28). Needs explicit provider_roots.
+    dependency_classes = _dependency_jar_class_names(root, provider_roots)
+
     def resolve(fqn: str, is_rule_command: bool) -> str:
-        if fqn in result.compiled_class_names or fqn in local_source_fqns:
+        if fqn in result.compiled_class_names or fqn in local_source_fqns or fqn in dependency_classes:
             return "resolved"
         if vanilla_core is not None and (fqn in vanilla_jar_classes or fqn in vanilla_loose_fqns):
             return "resolved"
@@ -5183,6 +5346,175 @@ def _console_command_classes(root: Path) -> set[str]:
     return {(row.get("class") or "").strip() for row in rows if (row.get("class") or "").strip()}
 
 
+# RC8-16. Market conditions in 0.8.1a's market_conditions.csv that RC8's no longer defines (diffed 2026-09-28). 0.9 turned most
+# into industries (RC8 industries.csv ids noted; None where there is no direct successor). A market that adds one throws
+# "Market condition [antimatter_fuel_production] not found", a Fatal at New Game (FlowerGod, FG-SOLO-20260928).
+LEGACY_MARKET_CONDITIONS = {
+    "antimatter_fuel_production": "fuelprod", "aquaculture": "aquaculture", "autofac_heavy_industry": "heavyindustry",
+    "cryosanctum": "cryosanctum", "light_industrial_complex": "lightindustry", "military_base": "militarybase",
+    "orbital_burns": None, "orbital_station": "orbitalstation", "ore_complex": "mining", "ore_refining_complex": "refining",
+    "organics_complex": "mining", "spaceport": "spaceport", "volatiles_complex": "mining", "volatiles_depot": None,
+}
+
+
+def _scan_legacy_market_conditions(root: Path, result: ScanResult) -> None:
+    """Code that adds a pre-0.9 market condition. MarketAPI.addIndustry is absent from 0.8.1a's API (javap, 2026-09-28),
+    so a class that calls addCondition with one of these ids and never addIndustry is unported 0.8 market code."""
+    own = {(row.get("id") or "").strip() for row in _read_csv_rows_lenient(root / "data" / "campaign" / "market_conditions.csv") or []}
+    legacy = {cid for cid in LEGACY_MARKET_CONDITIONS if cid not in own}
+    hits: dict[str, set[str]] = {}
+    for source in sorted(root.rglob("*.java")):
+        parts = source.relative_to(root).parts
+        if "disabled_files" in parts or "src-decompiled" in parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if "addCondition" not in text or "addIndustry" in text:
+            continue
+        found = {cid for cid in legacy if f'"{cid}"' in text}
+        if found:
+            hits[_relative(root, source)] = found
+    for jar, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None or "addCondition" not in info.utf8_values or "addIndustry" in info.utf8_values:
+            continue
+        found = legacy & set(info.string_constants)
+        if found:
+            hits[f"{_relative(root, jar)}!{member}"] = found
+    # aquaculture, cryosanctum and spaceport are RC8 industry ids too, so alone they are ambiguous: a class may pass one
+    # to getIndustry/hasIndustry. The 2026-09-28 sweep of 293 working copies flagged seven such classes on "spaceport"
+    # alone (Omega-Trauma's among them, live-validated). Only a class with an id RC8 has no industry for counts.
+    both = {"aquaculture", "cryosanctum", "spaceport"}
+    hits = {where: found for where, found in hits.items() if found - both}
+    if not hits:
+        return
+    ids = sorted(set().union(*hits.values()))
+    result.add(
+        id="legacy-market-condition",
+        category="campaign",
+        severity="high",
+        classification="MANUAL",
+        confidence="HIGH",
+        explanation="Code adds market conditions that 0.9 removed (most became industries), and never calls addIndustry, "
+                    "which 0.8.1a's API lacked: unported 0.8 market code. RC8 throws \"Market condition [...] not found\" "
+                    "when the market is built, a Fatal at New Game. Add the successor industry instead ("
+                    + ", ".join(f"{cid} -> {LEGACY_MARKET_CONDITIONS[cid] or 'no direct successor'}" for cid in ids)
+                    + "), plus population and a spaceport, which every RC8 market needs.",
+        file=sorted(hits)[0],
+        evidence=[f"{where}: {', '.join(sorted(found))}" for where, found in sorted(hits.items())][:10],
+    )
+
+
+def _unregistered_skill_ids(vanilla_core: Path | None) -> set[str]:
+    """Skill ids RC8 ships a .skill file for, or comments out of skill_data.csv, but does not register. With the
+    0.8.1a reference beside the RC8 install, its skill ids too (removed in 0.9's skill rework)."""
+    if vanilla_core is None:
+        return set()
+    skills = Path(vanilla_core) / "data" / "characters" / "skills"
+    rows = _read_csv_rows_lenient(skills / "skill_data.csv") or []
+    registered = {(r.get("id") or "").strip() for r in rows if not (r.get("id") or "").strip().startswith("#")}
+    known = {p.stem for p in skills.glob("*.skill")} | {(r.get("id") or "").strip().lstrip("#") for r in rows}
+    reference = Path(vanilla_core).parent.parent / "Starsector8.1" / "starsector-core" / "data" / "characters" / "skills" / "skill_data.csv"
+    known |= {(r.get("id") or "").strip() for r in _read_csv_rows_lenient(reference) or []}
+    return {s for s in known - registered if s}
+
+
+def _scan_unregistered_skill_set(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """RC8-18: setSkillLevel/increaseSkill with a skill RC8 does not register throws a NullPointerException in
+    CharacterStats.refreshCharacterStatsEffects (FlowerGod's bounty officer, FG-SOLO2-20260928). Reads
+    (getSkillLevel) are not flagged: nothing shows they fail."""
+    bad = _unregistered_skill_ids(vanilla_core) - {
+        (r.get("id") or "").strip() for r in _read_csv_rows_lenient(root / "data" / "characters" / "skills" / "skill_data.csv") or []}
+    if not bad:
+        return
+    setters = ("setSkillLevel", "increaseSkill")
+    hits: dict[str, set[str]] = {}
+    for source in sorted(root.rglob("*.java")):
+        parts = source.relative_to(root).parts
+        if "disabled_files" in parts or "src-decompiled" in parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        found = {m.group(2) for m in re.finditer(r"\b(setSkillLevel|increaseSkill)\s*\(\s*\"([A-Za-z0-9_]+)\"", text) if m.group(2) in bad}
+        if found:
+            hits[_relative(root, source)] = found
+    for jar, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None or not any(name in info.utf8_values for name in setters):
+            continue
+        found = bad & set(info.string_constants)
+        if found:
+            hits[f"{_relative(root, jar)}!{member}"] = found
+    if not hits:
+        return
+    result.add(
+        id="skill-unregistered",
+        category="campaign",
+        severity="high",
+        classification="MANUAL",
+        confidence="MEDIUM",
+        explanation="Code sets a skill RC8 does not register (a 0.8 skill, or one RC8 comments out of skill_data.csv). "
+                    "RC8 then throws a NullPointerException in CharacterStats.refreshCharacterStatsEffects, a Fatal when the "
+                    "code runs. Pick the RC8 successor (a commented-out skill's .skill file names the scripts it runs) and "
+                    "RC8's level range. In a jar, a class that also only reads the skill is included; confirm the set.",
+        file=sorted(hits)[0],
+        evidence=[f"{where}: {', '.join(sorted(found))}" for where, found in sorted(hits.items())][:10],
+    )
+
+
+# A quoted phrase written with a backslash or slash before each quote (C style) inside a CSV field. Standard CSV
+# escapes a quote by doubling it, so BridgeForge's reader splits the row (SEEKER 0.6.6 special_items.csv
+# `/"brute force/"`: the probe config got a fragment as special item "0"). The game's reader did not make that stray
+# row (getSpecialItemSpec("0") was null, SEEKER-SOLO-20260928), so the harm is tools misreading the file, and the
+# slashes shown in-game. Exotica Technologies' special_items.csv has the backslash form (2026-09-28 sweep).
+CSV_SLASH_QUOTE = re.compile(r'[/\\]"([^",\r\n]{1,80}?)[/\\]"')
+
+
+def _scan_csv_slash_quote(root: Path, result: ScanResult) -> None:
+    data_dir = root / "data"
+    if not data_dir.is_dir():
+        return
+    for path in sorted(data_dir.rglob("*.csv")):
+        try:
+            text = path.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            continue
+        matches = list(CSV_SLASH_QUOTE.finditer(text))
+        if not matches:
+            continue
+        result.add(
+            id="csv-slash-quote-escape",
+            category="data",
+            severity="medium",
+            classification="SAFE",
+            confidence="HIGH",
+            explanation="A CSV field quotes a phrase with a slash or backslash before each quote. Standard CSV escapes a "
+                        "quote by doubling it, so BridgeForge (and the probe config it builds) splits the row; the game "
+                        "reads past it but shows the slashes. The fix writes the doubled-quote escape vanilla's "
+                        "descriptions.csv uses, so the game and the tools read the same text.",
+            file=_relative(root, path),
+            evidence=[m.group(0) for m in matches[:10]],
+        )
+
+
+def _nexerelin_custom_start_classes(root: Path) -> set[str]:
+    """Classes named by "className" in data/config/exerelin/customStarts.json (loaded only by Nexerelin)."""
+    data = _load_lenient_json_file(root / "data" / "config" / "exerelin" / "customStarts.json")
+    starts = data.get("starts") if isinstance(data, dict) else None
+    return {s["className"].strip() for s in starts or [] if isinstance(s, dict) and isinstance(s.get("className"), str) and s["className"].strip()}
+
+
+def _only_nexerelin_custom_starts(root: Path, prefixes) -> bool:
+    """True when every source using these packages is a class registered in customStarts.json."""
+    registered = _nexerelin_custom_start_classes(root)
+    users = set(_sources_mentioning(root, [prefix.rstrip(".") for prefix in prefixes]).values()) if registered else set()
+    return bool(users) and users <= registered
+
+
 def _sources_mentioning(root: Path, dotted: list[str]) -> dict[str, str]:
     """{relative source path: class name} for .java files that mention any dotted package."""
     found: dict[str, str] = {}
@@ -5232,6 +5564,42 @@ def _library_import_only(root: Path, result: ScanResult, slash_prefixes: tuple[s
         if info is not None and any(ref.startswith(prefix) for ref in info.referenced_classes for prefix in slash_prefixes):
             return []
     return mentioning
+
+
+# Names a mod probes for with loadClass/Class.forName to detect a library at runtime (the library is then optional).
+# Exigency 0.8.01a probes "data.scripts.world.ExerelinGen", Nexerelin's class outside its own package (2026-09-28).
+LIBRARY_PROBE_MARKERS = {
+    "Nexerelin": ("exerelin", "ExerelinGen"),
+    "Console Commands": ("lazywizard.console",),
+    "LunaLib": ("lunalib",),
+    "MagicLib": ("magiclib", "data.scripts.util.Magic", "org.magiclib"),
+    "GraphicsLib": ("dark.shaders", "org.dark."),
+    "LazyLib": ("lazywizard.lazylib",),
+}
+_PRESENCE_PROBE = re.compile(r'\b(?:loadClass|forName)\s*\(\s*"([^"]+)"')
+
+
+def _library_presence_probed(root: Path, library: str) -> bool:
+    """A source file or jar class probes for this library by class name (loadClass/Class.forName)."""
+    markers = LIBRARY_PROBE_MARKERS.get(library, ())
+    if not markers:
+        return False
+    for source in root.rglob("*.java"):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if any(any(m.lower() in name.lower() for m in markers) for name in _PRESENCE_PROBE.findall(text)):
+            return True
+    for _jar, _member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None or not ({"loadClass", "forName"} & set(info.utf8_values)):
+            continue
+        if any(any(m.lower() in value.lower() for m in markers) and "." in value for value in info.string_constants):
+            return True
+    return False
 
 
 def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
@@ -5308,9 +5676,21 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                            explanation="Every class that uses Console Commands' API is registered in data/console/commands.csv, which only Console Commands reads, so the classes load only when it is installed. An optional integration; no dependency needed.",
                            evidence=sorted(users)[:10])
                 continue
-        if source_hits and every_hit_id_guarded:
+        if library == "Nexerelin":
+            # Nexerelin's exerelin.campaign.customstart.CustomStartDefs loads each "className" listed in
+            # data/config/exerelin/customStarts.json (ExerelinCore.jar 0.12.2c, 2026-09-28), so classes registered
+            # only there load only with Nexerelin (SEEKER 0.6.6's six SKR_*Start classes).
+            registered = _nexerelin_custom_start_classes(root)
+            users = set(_sources_mentioning(root, dotted_needles).values()) if source_hits else referencing_classes
+            if registered and users and users <= registered:
+                result.add(id="optional-library-integration", category="dependencies", severity="info", classification="SAFE", confidence="HIGH",
+                           explanation="Every class that uses Nexerelin is a custom start registered in data/config/exerelin/customStarts.json, which only Nexerelin reads, so the classes load only when it is installed. An optional integration; no dependency needed.",
+                           file="mod_info.json", evidence=[f"library:{library}", f"dependency-id:{dependency_id}", "registered:customStarts.json", *sorted(users)[:5]])
+                continue
+        probed = _library_presence_probed(root, library)
+        if (source_hits and every_hit_id_guarded) or probed:
             result.add(id="optional-library-integration", category="dependencies", severity="info", classification="SAFE", confidence="MEDIUM",
-                       explanation=f"Every source file that uses {library} checks isModEnabled(\"{dependency_id}\") and none throws when it is missing: an optional integration. RC8 runs with -noverify, so {library}'s classes are resolved only when that guarded code runs. No dependency needed; the mod works with or without {library}.",
+                       explanation=("The mod probes for " + library + " at runtime (loadClass/Class.forName of its classes) before using it" if probed else f"Every source file that uses {library} checks isModEnabled(\"{dependency_id}\")") + f" and none throws when it is missing: an optional integration. RC8 runs with -noverify, so {library}'s classes are resolved only when that guarded code runs. No dependency needed; the mod works with or without {library}.",
                        file="mod_info.json", evidence=[f"library:{library}", f"dependency-id:{dependency_id}", *source_hits[:5]])
             continue
         # Owner ruling 2026-09-27: an unguarded use of a known, maintained library is fixed by declaring it (the
@@ -5336,7 +5716,7 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                 )
             ),
             file="mod_info.json",
-            evidence=[f"library:{library}", f"dependency-id:{dependency_id}", *source_hits[:5], *bytecode_hits[:5]],
+            evidence=[f"library:{library}", f"dependency-id:{dependency_id}", *(["guard:present"] if guarded else []), *source_hits[:5], *bytecode_hits[:5]],
         )
 
 
@@ -5386,6 +5766,14 @@ def _ship_file_index(root: Path, vanilla_core: Path | None) -> dict[str, dict]:
             hull_id = data.get("hullId")
             if isinstance(hull_id, str) and hull_id.strip():
                 index[hull_id.strip()] = data
+            elif path.stem in index:
+                # A .ship with no hullId is a partial file the game merges over the same-path vanilla one:
+                # Militarized Odyssey's odyssey.ship adds only a decorative "WS 020" (2026-09-28), and replacing
+                # vanilla's entry made every stock slot look missing. weaponSlots merge by id.
+                base = index[path.stem]
+                slots = {s.get("id"): s for s in base.get("weaponSlots") or [] if isinstance(s, dict)}
+                slots.update({s.get("id"): s for s in data.get("weaponSlots") or [] if isinstance(s, dict)})
+                index[path.stem] = {**base, **data, "weaponSlots": list(slots.values())}
             else:
                 index[path.stem] = data
     return index
@@ -5575,7 +5963,32 @@ def _scan_carrier_bays_proposal(root: Path, result: ScanResult, vanilla_core: Pa
         )
 
 
-def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+def _dependency_content_ids(root: Path, provider_roots: list[Path] | None) -> dict[str, set[str]]:
+    """Hull mod, weapon, wing and hull ids a declared dependency defines (SEEKER 0.6.6 builds MagicLib's
+    ML_interferenceWarning into its hulls; 2026-09-28). Explicit provider_roots only, like _dependency_jar_class_names."""
+    found: dict[str, set[str]] = {"hullmod": set(), "weapon": set(), "wing": set(), "hull": set()}
+    if not provider_roots:
+        return found
+    from .java_toolchain import declared_dependencies
+    from .substitutes import provider_index
+
+    deps = declared_dependencies(root)
+    if not deps:
+        return found
+    by_id = {p.mod_id: p for p in provider_index([Path(r) for r in provider_roots], exclude=root)}
+    for dep_id in deps:
+        provider = by_id.get(dep_id)
+        if provider is None:
+            continue
+        dep = Path(provider.path)
+        found["hullmod"] |= set(_csv_id_index(dep / "data" / "hullmods" / "hull_mods.csv", None))
+        found["weapon"] |= set(_csv_id_index(dep / "data" / "weapons" / "weapon_data.csv", None))
+        found["wing"] |= set(_csv_id_index(dep / "data" / "hulls" / "wing_data.csv", None))
+        found["hull"] |= {p.stem for p in (dep / "data" / "hulls").rglob("*.ship")} if (dep / "data" / "hulls").is_dir() else set()
+    return found
+
+
+def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_core: Path | None, provider_roots: list[Path] | None = None) -> None:
     """Hull mods, wings, weapons and hulls used by the mod's data but defined by neither it nor vanilla.
 
     Communist Clouds builds `vayra_red_army` into its hulls and fields `vayra_*` wings and weapons: it
@@ -5590,6 +6003,11 @@ def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_
     hulls = set(_ship_file_index(root, vanilla_core)) | set(skins)
     if not (weapons and hull_mods and wings and hulls):
         return
+    from_dependencies = _dependency_content_ids(root, provider_roots)
+    weapons |= from_dependencies["weapon"]
+    hull_mods |= from_dependencies["hullmod"]
+    wings |= from_dependencies["wing"]
+    hulls |= from_dependencies["hull"]
     missing: dict[str, dict[str, set[str]]] = {"hullmod": {}, "wing": {}, "weapon": {}, "hull": {}}
 
     def check(kind: str, ident: object, known: set[str], where: str) -> None:
@@ -5884,6 +6302,26 @@ def _scan_variant_validity(root: Path, result: ScanResult, vanilla_core: Path | 
                     continue
                 slot = slot_by_id.get(slot_id)
                 if slot is None:
+                    # RC8-17: a weapon in a slot the hull lacks is a Fatal when the ship is drawn ("Slot id [WS 006]
+                    # not found on hull [hyperion]", FlowerGod's FGV_hyperion_Attack, FG-SOLO3-20260928). RC8
+                    # redesigned vanilla hulls (the Hyperion went from six weapon slots to three), so old variants
+                    # of vanilla hulls hit this. The probe builds the variant without error; drawing it fails.
+                    if slot_by_id:
+                        result.add(
+                            id="variant-weapon-slot-missing",
+                            category="variants",
+                            severity="high",
+                            classification="REVIEW",
+                            confidence="DETERMINISTIC",
+                            explanation=(
+                                f"Variant '{variant_id}' puts weapon '{weapon_id}' in slot '{slot_id}', which hull "
+                                f"'{resolved_hull_id}' does not have. RC8 throws \"Slot id [...] not found on hull\" when "
+                                "the ship is drawn (a fleet screen, a mission): a Fatal. Refit the variant to the hull's "
+                                f"current slots ({', '.join(sorted(slot_by_id))})."
+                            ),
+                            file=relative,
+                            evidence=[f"variant:{variant_id}", f"hull:{resolved_hull_id}", f"slot:{slot_id}", f"weapon:{weapon_id}"],
+                        )
                     continue
                 slot_type = str(slot.get("type") or "").strip().upper()
                 if slot_type in WEAPON_SLOT_SKIP_TYPES:
@@ -5924,6 +6362,13 @@ def _hull_hints(row: dict[str, str]) -> set[str]:
     return {token.strip().upper() for token in (row.get("hints") or "").split(",") if token.strip()}
 
 
+def _first_value_commented(row: dict) -> bool:
+    """Starsector skips a CSV row whose first column starts with '#' (Exigency 0.8.01a keeps a commented copy of the
+    header, "#name,id,...", as row 2, which read as a hull and a weapon named "id"; 2026-09-28)."""
+    first = next(iter(row.values()), "") if row else ""
+    return str(first or "").strip().startswith("#")
+
+
 def _scan_description_missing(root: Path, result: ScanResult, vanilla_core: Path | None = None) -> None:
     """A mod hull/weapon/ship-system id with no matching descriptions.csv row of the right type.
 
@@ -5953,7 +6398,7 @@ def _scan_description_missing(root: Path, result: ScanResult, vanilla_core: Path
     ship_data_path = root / "data" / "hulls" / "ship_data.csv"
     for row in _read_csv_rows(ship_data_path) or []:
         hull_id = (row.get("id") or "").strip()
-        if not hull_id or hull_id.startswith("#"):
+        if not hull_id or hull_id.startswith("#") or _first_value_commented(row):
             continue
         hints = _hull_hints(row)
         if "HIDE_IN_CODEX" in hints or "MODULE" in hints:
@@ -5977,7 +6422,7 @@ def _scan_description_missing(root: Path, result: ScanResult, vanilla_core: Path
     weapon_data_path = root / "data" / "weapons" / "weapon_data.csv"
     for row in _read_csv_rows(weapon_data_path) or []:
         weapon_id = (row.get("id") or "").strip()
-        if not weapon_id or weapon_id.startswith("#"):
+        if not weapon_id or weapon_id.startswith("#") or _first_value_commented(row):
             continue
         hints = {token.strip().upper() for token in (row.get("hints") or "").split(",") if token.strip()}
         if "SYSTEM" in hints:
@@ -6000,7 +6445,7 @@ def _scan_description_missing(root: Path, result: ScanResult, vanilla_core: Path
     ship_systems_path = root / "data" / "shipsystems" / "ship_systems.csv"
     for row in _read_csv_rows(ship_systems_path) or []:
         system_id = (row.get("id") or "").strip()
-        if not system_id or system_id.startswith("#"):
+        if _first_value_commented(row) or not system_id or system_id.startswith("#"):
             continue
         if "SHIP_SYSTEM" in described.get(system_id, set()):
             continue
@@ -6112,6 +6557,22 @@ def _scan_asset_reference_missing(root: Path, result: ScanResult, vanilla_core: 
                 else:
                     candidate = file_value
                 _report_asset_reference_missing(result, root, vanilla_core, relative, "sounds.json:file", candidate)
+
+    # settings.json "graphics": {category: {key: path}} is loaded at startup; a missing file is a Fatal before the
+    # main menu (GRP-9, 2026-09-28: Maelstrom Superweapons Arsenal Older Version registered sw_shields256.png, the
+    # current release's name, while shipping the same sprites as swo_shields256.png).
+    settings_path = root / "data" / "config" / "settings.json"
+    if settings_path.is_file():
+        data = _load_lenient_json_file(settings_path)
+        graphics = data.get("graphics") if isinstance(data, dict) else None
+        if isinstance(graphics, dict):
+            relative = _relative(root, settings_path)
+            for category, entries in graphics.items():
+                if not isinstance(entries, dict):
+                    continue
+                for key, value in entries.items():
+                    if isinstance(value, str) and value.strip().lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
+                        _report_asset_reference_missing(result, root, vanilla_core, relative, f"settings.json:graphics.{category}.{key}", value.strip())
 
 
 # ROADMAP P14 item 15: engine_styles.json, hull_styles.json, custom_entities.json and planets.json
@@ -6378,6 +6839,9 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_shiproles(root, result, vanilla_root)
     _scan_carrier_rework_gap(root, result)
     _scan_black_hole_flag(root, result)
+    _scan_legacy_market_conditions(root, result)
+    _scan_unregistered_skill_set(root, result, vanilla_root)
+    _scan_csv_slash_quote(root, result)
     _scan_mod_info_game_version(result)
     _scan_vanilla_path_shadowing(root, result, vanilla_root)
     _scan_preset_entry_overrides(root, result, vanilla_root)
@@ -6392,11 +6856,11 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_module_captain_personality_risk(root, result)
     _scan_spawned_ship_captain_personality_risk(root, result)
     _scan_mod_info_triage_banner(root, result)
-    _scan_data_class_references_missing(root, result, vanilla_root)
+    _scan_data_class_references_missing(root, result, vanilla_root, provider_roots)
     _scan_hardcoded_hyperspace_coordinates(root, result)
     _scan_hardcoded_terrain_grid_size(root, result)
     _scan_variant_validity(root, result, vanilla_root)
-    _scan_unresolved_content_references(root, result, vanilla_root)
+    _scan_unresolved_content_references(root, result, vanilla_root, provider_roots)
     _scan_carrier_bays_proposal(root, result, vanilla_root)
     _scan_description_missing(root, result, vanilla_root)
     _scan_asset_reference_missing(root, result, vanilla_root)

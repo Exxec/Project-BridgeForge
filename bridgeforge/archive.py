@@ -24,7 +24,6 @@ from .copy_drift import _collect
 from .scanner import _load_lenient_json_file
 
 SCHEMA_VERSION = 1
-_STATUS_LINE = re.compile(r"^[A-Z][A-Z_]+$")
 
 
 class ArchiveError(ValueError):
@@ -49,10 +48,9 @@ def _original_root(workspace: Path) -> Path | None:
 
 
 def _final_status(report: Path) -> str | None:
-    if not report.is_file():
-        return None
-    statuses = [line.strip() for line in report.read_text(encoding="utf-8", errors="replace").splitlines() if _STATUS_LINE.match(line.strip())]
-    return statuses[-1] if statuses else None
+    from .report_status import report_status
+
+    return report_status(report)
 
 
 def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = None, today: str | None = None) -> dict:
@@ -82,6 +80,14 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
             archive.write(folder / relative, f"{workspace.name}/{relative}")
     if (workspace / "original").is_dir():
         shutil.copytree(workspace / "original", target / "original")
+    # A copy of the mod with only the author's original descriptions, kept when BridgeForge wrote missing ones
+    # (owner request 2026-09-28); archived beside the revival with its own zip.
+    alt = workspace / "alt-original-descriptions" / workspace.name
+    if alt.is_dir():
+        shutil.copytree(alt, target / "alt-original-descriptions" / workspace.name)
+        with zipfile.ZipFile(target / f"{workspace.name}-{safe_version}-original-descriptions.zip", "w", zipfile.ZIP_DEFLATED) as archive:
+            for item in sorted(p for p in alt.rglob("*") if p.is_file()):
+                archive.write(item, f"{workspace.name}/{item.relative_to(alt).as_posix()}")
     kept = target / "workspace"
     kept.mkdir()
     for source_dir in (working / "reports", workspace / "reports"):

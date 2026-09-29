@@ -323,8 +323,23 @@ public class CampaignProbeScript implements EveryFrameScript {
      * spawned into the sector. FleetParamsV3 fields and FleetFactoryV3.createFleet checked with javap, 2026-09-27.
      */
     private void checkFactionFleetGeneration() {
+        Set<String> toBuild = new HashSet<String>();
         for (String factionId : config.factions) {
-            if (VANILLA_FACTIONS.contains(factionId) || Global.getSector().getFaction(factionId) == null) {
+            if (!VANILLA_FACTIONS.contains(factionId)) {
+                toBuild.add(factionId);
+            }
+        }
+        // 0.2.9 (GRP-8, 2026-09-28): a mod that only patches a faction (Amogus-Shipyards' hegemony.faction adds its
+        // ships to the Hegemony) had nothing checked; build the patched factions' fleets as well.
+        toBuild.addAll(config.patchedFactions);
+        for (String factionId : toBuild) {
+            FactionAPI generated = Global.getSector().getFaction(factionId);
+            if (generated == null) {
+                continue;
+            }
+            if (generated.getKnownShips().isEmpty()) {
+                // 0.2.10: a faction with no known ships fields no fleets by design (Exigency's mysterious_contact).
+                ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_INFO, factionId, "skipped: the faction knows no ships");
                 continue;
             }
             FleetParamsV3 params = new FleetParamsV3();
@@ -610,6 +625,12 @@ public class CampaignProbeScript implements EveryFrameScript {
     // weight must stay in those systems (FAIL otherwise), and one with a weight is reported with where it went.
     // API (javap, RC8 starfarer.api.jar, 2026-09-27): SectorAPI.getStarSystem(String)/getStarSystems(),
     // LocationAPI.getPlanets(), PlanetAPI.getTypeId(), StarSystemAPI.getBaseName().
+    /** A random sector (Nexerelin's non-Corvus mode) has no vanilla Corvus system. Public API only: the script sandbox
+     *  forbids reflection, so Nexerelin's SectorManager.getCorvusMode() cannot be called (0.2.10). */
+    private static boolean nexerelinRandomSector() {
+        return Global.getSector().getStarSystem("Corvus") == null;
+    }
+
     private void checkCampaignLayout() {
         if (config.modSystems.isEmpty() && config.modBodyTypes.isEmpty()) {
             return;
@@ -617,8 +638,14 @@ public class CampaignProbeScript implements EveryFrameScript {
         int missing = 0;
         for (String name : config.modSystems) {
             if (Global.getSector().getStarSystem(name) == null) {
-                ProbeLog.emit("campaign-layout", ProbeLog.STATUS_FAIL, "system:" + name, "the mod creates this system but it is not in the sector");
-                missing++;
+                if (nexerelinRandomSector()) {
+                    // 0.2.10: in Nexerelin's random sector a mod may skip its own systems by design (Exigency skips
+                    // Tasserus unless SectorManager.getCorvusMode(), EXI-SOLO 2026-09-28).
+                    ProbeLog.emit("campaign-layout", ProbeLog.STATUS_WARN, "system:" + name, "not in the sector; Nexerelin random-sector mode, where mods may skip their systems");
+                } else {
+                    ProbeLog.emit("campaign-layout", ProbeLog.STATUS_FAIL, "system:" + name, "the mod creates this system but it is not in the sector");
+                    missing++;
+                }
             }
         }
         Set<String> own = new HashSet<String>(config.modSystems);
