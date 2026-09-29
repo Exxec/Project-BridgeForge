@@ -2574,6 +2574,23 @@ Bridgeforge modernizes legacy mods. It does not profile performance. The related
 - **V0.9:** modernization-opportunity analysis; no automatic adoption. **Status: static, report-only adoption candidates implemented with explicit high behavioral risk and no automatic change path.**
 - **V1.0:** repeatable scan → diagnose → plan → apply → compile → review → validate → report pipeline. **Status: orchestration command and final workspace modernization report implemented.**
 
+## Idea: save doctor, editor and trainer, a separate program (2026-09-29)
+
+Owner idea: a separate program that diagnoses and fixes saves, then grows into an editor and trainer. Start small, as
+BridgeForge did. BridgeForge's saves stay read-only (P3b: "the game creates state, BridgeForge reads it"), so
+writing lives in a sibling program that reuses BridgeForge's save reader and `save-*` commands, the RC8 registries
+and `RC8_BEHAVIOUR.md`, the rig and probe patterns, Project Go's GUI and packaging, and SPW's agent-mod and
+crash-log work. Proposal, growth order and owner decisions:
+[docs/SAVE_TOOL_PROPOSAL.md](docs/SAVE_TOOL_PROPOSAL.md).
+
+1. [ ] Owner decisions: working name and repository, language (suggested: a Python CLI first), trainer approach
+   (our helper mod or Console Commands), public or local-only.
+2. [ ] Diagnose (read-only): package the `save-*` commands and crash reading for players.
+3. [ ] Fix on a copy: plan, write the copy, re-read it, then load-test it in the rig. Original saves are never
+   overwritten.
+4. [ ] Editor, validated against RC8 registries (skills RC8-18, market conditions RC8-16, weapon slots RC8-17, ids).
+5. [ ] Trainer.
+
 ## Sister repository interoperability (proposed 2026-09-27)
 
 Design and acceptance gates: [docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md](docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md). These are pending, separate from revival completion and release readiness.
