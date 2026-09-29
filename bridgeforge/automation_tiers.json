@@ -102,7 +102,6 @@
     "legacy-market-condition": "code",
     "variant-weapon-slot-missing": "decision",
     "skill-unregistered": "code",
-    "untranslated-cjk-text": "input",
     "csv-slash-quote-escape": "auto",
     "loose-script-janino-compile-error": "code",
     "fleet-type-name-missing": "auto",

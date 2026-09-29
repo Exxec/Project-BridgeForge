@@ -1,4 +1,4 @@
-"""Checks from the 2026-09-28 live runs: skill-unregistered, untranslated-cjk-text, csv-slash-quote-escape."""
+"""Checks from the 2026-09-28 live runs: skill-unregistered, csv-slash-quote-escape."""
 from __future__ import annotations
 
 import csv
@@ -49,22 +49,6 @@ class SkillUnregisteredTests(unittest.TestCase):
         self.assertEqual(len(bad), 1)
         self.assertIn("safety_procedures", bad[0].evidence[0])
         self.assertEqual(fixed, [])
-
-
-class UntranslatedCjkTextTests(unittest.TestCase):
-    def test_chinese_descriptions_are_flagged(self) -> None:
-        # FlowerGod's faction intel rendered as '???' (2026-09-28): the game fonts have no CJK glyphs.
-        with tempfile.TemporaryDirectory() as directory:
-            mod = _mod(Path(directory))
-            strings = mod / "data" / "strings"
-            strings.mkdir(parents=True)
-            (strings / "descriptions.csv").write_text("id,type,text1\nfg,CUSTOM,花神会是由一位海盗创立的\n", encoding="utf-8")
-            hits = _ids(scan_mod(mod), "untranslated-cjk-text")
-            (strings / "descriptions.csv").write_text("id,type,text1\nfg,CUSTOM,Founded by a pirate\n", encoding="utf-8")
-            clean = _ids(scan_mod(mod), "untranslated-cjk-text")
-        self.assertEqual(len(hits), 1)
-        self.assertIn("Project Go", hits[0].explanation)
-        self.assertEqual(clean, [])
 
 
 class CsvSlashQuoteEscapeTests(unittest.TestCase):

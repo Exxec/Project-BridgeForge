@@ -2770,7 +2770,7 @@ def _scan_non_english_text(root: Path, result: ScanResult) -> None:
             if hits:
                 counts[_relative(root, path)] += hits
     if counts:
-        result.add(id="player-text-non-english", category="localization", severity="low", classification="REVIEW", confidence="DETERMINISTIC", explanation=f"{len(counts)} data file(s) hold CJK text outside comments ({sum(counts.values())} characters). Translate with translate-export / translate-apply before English live tests; translate-check also covers jar strings.", evidence=[f"{path}: {count}" for path, count in counts.most_common(15)] + ([f"... {len(counts) - 15} more file(s)"] if len(counts) > 15 else []))
+        result.add(id="player-text-non-english", category="localization", severity="low", classification="REVIEW", confidence="DETERMINISTIC", explanation=f"{len(counts)} data file(s) hold CJK text outside comments ({sum(counts.values())} characters). RC8's fonts have no CJK glyphs, so it shows as '???' in game (RC8-19, FlowerGod 2026-09-28). Translate with translate-export / translate-apply before English live tests; translate-check also covers jar strings.", evidence=[f"{path}: {count}" for path, count in counts.most_common(15)] + ([f"... {len(counts) - 15} more file(s)"] if len(counts) > 15 else []))
 
 
 # Design docs and IDE files came from the Chinese mods (2026-09-13): .docx/.sai2 notes, IntelliJ .iml.
@@ -5466,53 +5466,6 @@ def _scan_unregistered_skill_set(root: Path, result: ScanResult, vanilla_core: P
     )
 
 
-# CJK Unified Ideographs, Extension A, CJK punctuation, full-width forms, Hiragana/Katakana, Hangul.
-_CJK = re.compile(r"[　-〿぀-ヿ㐀-䶿一-鿿가-힯＀-￯]")
-
-
-def _scan_untranslated_cjk_text(root: Path, result: ScanResult) -> None:
-    """RC8-19: the game's fonts have no CJK glyphs, so Chinese/Japanese/Korean text renders as '???' (FlowerGod's
-    faction intel, 2026-09-28). Counts player-facing strings in data/ CSV/JSON and in jar string constants."""
-    counts: dict[str, int] = {}
-    data_dir = root / "data"
-    if data_dir.is_dir():
-        for path in sorted(data_dir.rglob("*")):
-            if path.suffix.lower() not in (".csv", ".json", ".faction", ".skin", ".ship", ".variant", ".system", ".wpn") or not path.is_file():
-                continue
-            try:
-                text = path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            n = len(_CJK.findall(text))
-            if n:
-                counts[_relative(root, path)] = n
-    for jar, member, data in _iter_jar_class_files(root):
-        info = _parse_class_file(data)
-        if info is None:
-            continue
-        n = sum(1 for s in info.string_constants if _CJK.search(s))
-        if n:
-            key = _relative(root, jar)
-            counts[key] = counts.get(key, 0) + n
-    info_name = str(result.metadata.get("name") or "")
-    if not counts and not _CJK.search(info_name):
-        return
-    top = sorted(counts.items(), key=lambda kv: -kv[1])
-    result.add(
-        id="untranslated-cjk-text",
-        category="content",
-        severity="medium",
-        classification="REVIEW",
-        confidence="HIGH",
-        explanation="Player-facing text is Chinese, Japanese or Korean. RC8's fonts have no CJK glyphs, so it shows as "
-                    "'???'. Translate the data files with Project Go (the owner-approved translator; ASCII paths, private "
-                    "workspace, then check for leftover CJK); strings in a jar need a separate pass.",
-        file=top[0][0] if top else "mod_info.json",
-        evidence=[f"{where}: {n} {'string(s)' if where.endswith('.jar') else 'CJK char(s)'}" for where, n in top[:10]]
-                 + (["mod_info.json name"] if _CJK.search(info_name) else []),
-    )
-
-
 # A quoted phrase written with a backslash or slash before each quote (C style) inside a CSV field. Standard CSV
 # escapes a quote by doubling it, so BridgeForge's reader splits the row (SEEKER 0.6.6 special_items.csv
 # `/"brute force/"`: the probe config got a fragment as special item "0"). The game's reader did not make that stray
@@ -6888,7 +6841,6 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_black_hole_flag(root, result)
     _scan_legacy_market_conditions(root, result)
     _scan_unregistered_skill_set(root, result, vanilla_root)
-    _scan_untranslated_cjk_text(root, result)
     _scan_csv_slash_quote(root, result)
     _scan_mod_info_game_version(result)
     _scan_vanilla_path_shadowing(root, result, vanilla_root)
