@@ -1021,15 +1021,16 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
                     evidence=[system_name] + (["null-guarded"] if guarded else []),
                 )
             for entity_id in HARDCODED_ENTITY_LOOKUP_PATTERN.findall(text):
+                guarded = _lookup_null_guarded(_blank_java_comments(text), "getEntityById", entity_id)
                 result.add(
                     id="hard-coded-campaign-entity-reference",
                     category="campaign",
-                    severity="medium",
-                    classification="REVIEW",
+                    severity="low" if guarded else "medium",
+                    classification="SAFE" if guarded else "REVIEW",
                     confidence="DETERMINISTIC",
-                    explanation="Campaign code looks up an entity by a fixed ID. Verify that the entity is created before this code runs and null-check optional or save-dependent entities before dereferencing them.",
+                    explanation=("Campaign code looks up an entity by a fixed ID and null-checks the result, so a missing entity (a random sector, a total conversion) is handled." if guarded else "Campaign code looks up an entity by a fixed ID. Verify that the entity is created before this code runs and null-check optional or save-dependent entities before dereferencing them."),
                     file=relative,
-                    evidence=[entity_id],
+                    evidence=[entity_id] + (["null-guarded"] if guarded else []),
                 )
             for integration, prefix in EXTERNAL_CAMPAIGN_MEMORY_PREFIXES.items():
                 keys = sorted(set(re.findall(rf'"({re.escape(prefix)}[A-Za-z0-9_]+)"', text)))
@@ -1839,7 +1840,14 @@ def _scan_system_generation_unguarded(root: Path, result: ScanResult) -> None:
 
 def _system_lookup_null_guarded(text: str, system_name: str) -> bool:
     """True when getStarSystem("<name>") is compared with null, inline or through the variable it's assigned to."""
-    call = r'getStarSystem\s*\(\s*"' + re.escape(system_name) + r'"\s*\)'
+    return _lookup_null_guarded(text, "getStarSystem", system_name)
+
+
+def _lookup_null_guarded(text: str, method: str, name: str) -> bool:
+    """True when <method>("<name>") is compared with null, inline or through the variable it's assigned to.
+    Used for getStarSystem and getEntityById: Fantastic Furniture checks getEntityById("gilead") != null before
+    using it, and an agent could not clear a finding that had nothing to fix (pilot 4, 2026-09-29)."""
+    call = re.escape(method) + r'\s*\(\s*"' + re.escape(name) + r'"\s*\)'
     if re.search(call + r"\s*[!=]=\s*null|null\s*[!=]=\s*[^;]*" + call, text):
         return True
     for variable in re.findall(r"\b([A-Za-z_$][\w$]*)\s*=\s*[^;=]*" + call, text):

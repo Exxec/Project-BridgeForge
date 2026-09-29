@@ -184,6 +184,20 @@ class SystemLookupGuardTests(unittest.TestCase):
         self.assertEqual(by_system["corvus"].classification, "REVIEW")
         self.assertEqual(by_system["corvus"].severity, "medium")
 
+    def test_null_guarded_entity_lookups_are_safe_too(self) -> None:
+        # Fantastic Furniture (pilot 4, 2026-09-29): `if (getEntityById("gilead") != null)` before use.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            world = mod / "src" / "data" / "scripts" / "world"
+            world.mkdir(parents=True, exist_ok=True)
+            (world / "Furniture.java").write_text('class Furniture { void a(com.fs.starfarer.api.campaign.SectorAPI s) {\n  if (s.getEntityById("gilead") != null) { s.getEntityById("gilead").getMarket(); }\n  s.getEntityById("jangala").getMarket();\n} }', encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        by_entity = {}
+        for f in _ids(result, "hard-coded-campaign-entity-reference"):
+            by_entity.setdefault(f.evidence[0], []).append(f)
+        self.assertTrue(all(f.classification == "SAFE" for f in by_entity["gilead"]))
+        self.assertEqual(by_entity["jangala"][0].classification, "REVIEW")
+
 
 class FactionTraitWeightLegacyPersonalityIdTests(unittest.TestCase):
     """Real case, 2026-09-21: zorg.faction's traits.captain block weights 0.6-era personality ids

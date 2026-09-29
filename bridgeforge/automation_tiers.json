@@ -123,7 +123,7 @@
     "mod-info-game-version-inexact": "auto",
     "mod-info-jar-missing": "inspect",
     "mod-info-triage-banner": "auto",
-    "module-captain-personality-risk": "code",
+    "module-captain-personality-risk": "none",
     "non-ascii-file-path": "decision",
     "non-ascii-identifier": "decision",
     "non-strict-json-trailing-comma": "none",
