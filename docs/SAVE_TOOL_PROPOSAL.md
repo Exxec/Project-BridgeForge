@@ -1,4 +1,4 @@
-# Proposal: save doctor, editor and trainer (separate program, 2026-09-29)
+# Salvor (working name): save doctor, editor and trainer, a separate program (2026-09-29)
 
 Status: idea, owner-requested. Start small and grow, as BridgeForge did. It will be messy at first, and that is
 expected.
@@ -41,9 +41,10 @@ dependency.
    - market conditions versus industries (RC8-16);
    - a hull's real weapon slots (RC8-17);
    - hull, variant, weapon and special-item ids.
-4. **Trainer.** In-game toggles (credits, repairs, CR, reveal map, instant travel) through a small helper mod on the
-   public API only, the same pattern as BridgeForge's probe and SPW's Tick Marker. First check how much Console
-   Commands already covers, and integrate with it rather than copy it.
+4. **Trainer, offline.** Presets applied to a copy of the save between play sessions: max credits, repair and
+   full CR for the fleet, reveal the map, add blueprints, set relations. There is no in-game mod and nothing
+   runs inside the game (owner decision 2026-09-29). Every preset goes through the editor's validation and the
+   same copy, re-read and rig-load gate.
 
 ## What to reuse
 
@@ -70,10 +71,14 @@ dependency.
   - Compiling or parsing is not proof: a fix counts only after the save loads in the rig.
   - Long runs print progress and checkpoint.
 
-## Decisions for the owner
+## Decisions (owner, 2026-09-29)
 
-1. **A working name, and its own repository:** separate, like SPW and Project Go.
-2. **Language:** Python reuses BridgeForge's save reader at once; Java fits Project Go's GUI. Suggested: start as
-   a Python CLI (diagnose, then fix on a copy) and add a GUI later.
-3. **Trainer:** our own helper mod, integration with Console Commands, or both.
-4. **Public or local-only:** a diagnose-only first release carries the least risk.
+1. **Name:** Salvor, a working name that can change later. In Starsector a salvor recovers what is wrecked. It
+   gets its own repository, separate like SPW and Project Go.
+2. **Language:** Python. It reuses BridgeForge's save reader, parsers and registries directly. A GUI can come later
+   (for example the stdlib `tkinter`, or a local HTML viewer as SPW has) without changing the core.
+3. **Trainer:** completely independent of the game: offline presets on a save copy, no helper mod, no Console
+   Commands dependency.
+4. **Distribution:** local-only.
+
+Still open: when to start. BridgeForge's live queue comes first.
