@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from .build_tag import _NAME_PATTERN, _find_top_level_key, _string_literal_to_text, _structural_depths, _text_to_string_literal
+from .build_tag import _NAME_PATTERN, _STRING_LITERAL, _find_top_level_key, _string_literal_to_text, _structural_depths, _text_to_string_literal
 from .scanner import (
     DESIGN_TYPE_CSV_TARGETS,
     FACTION_SPECIAL_ROLE_KEYS,
@@ -59,6 +59,9 @@ SUPPORTED_FINDINGS = (
     "variant-op-over-budget",
     "procgen-mod-body-leak",
     "csv-slash-quote-escape",
+    "variant-wings-exceed-bays",
+    "variant-weapon-slot-mismatch",
+    "variant-weapon-slot-missing",
 )
 
 
@@ -2074,6 +2077,173 @@ def _fix_fleet_type_name_missing(root: Path, options: dict) -> list[FileChange]:
     return changes
 
 
+# ---------------------------------------------------------------------------
+# Bracket-span helpers for the variant-fit fixers below. `.variant` files are lenient JSON (# / //
+# comments, trailing commas), so edits stay surgical text-span rewrites, never a json.dumps
+# round-trip that would reformat the file (as `_fix_variant_op_over_budget` above already does for
+# flux numbers and hullMods entries). These three locate/remove spans inside "wings" and
+# "weaponGroups" the same way, using `_structural_depths` (build_tag.py) so a `{`/`[`/`}`/`]`
+# inside a string or a comment never miscounts.
+# ---------------------------------------------------------------------------
+
+_STRING_PAIR_RE = re.compile(r"(?:" + _STRING_LITERAL + r")\s*:\s*(?:" + _STRING_LITERAL + r")")
+
+
+def _matching_bracket(text: str, depths: list[int], open_pos: int) -> int | None:
+    """Position of the `]`/`}` that closes the `[`/`{` at `open_pos`."""
+    target = depths[open_pos] + 1
+    close_char = "]" if text[open_pos] == "[" else "}"
+    for i in range(open_pos + 1, len(text)):
+        if text[i] == close_char and depths[i] == target:
+            return i
+    return None
+
+
+def _enclosing_bracket(text: str, depths: list[int], pos: int, open_char: str) -> int | None:
+    """Position of the `open_char` one depth level up that directly encloses `pos` (also works when
+    `pos` is itself another bracket's open position, since an open bracket char is recorded at the
+    depth of its own context, same as any other content character there)."""
+    target = depths[pos] - 1
+    for i in range(pos - 1, -1, -1):
+        if text[i] == open_char and depths[i] == target:
+            return i
+    return None
+
+
+def _remove_span_with_comma(text: str, start: int, end: int) -> str:
+    """Remove text[start:end] plus the one adjacent list/object comma: the one after it (with any
+    whitespace) if there is more after, else the one before it (it was last). Mirrors
+    `_fix_variant_op_over_budget`'s hullMods removal so a trimmed array/object still closes exactly
+    like lenient JSON expects, without reformatting anything else."""
+    after = text[end:]
+    after_match = re.match(r"\s*,\s*", after)
+    if after_match:
+        return text[:start] + text[end + after_match.end():]
+    before = text[:start]
+    before_match = re.search(r",\s*\Z", before)
+    if before_match:
+        return text[:before_match.start()] + text[end:]
+    return text[:start] + text[end:]
+
+
+def _fix_variant_wings_exceed_bays(root: Path, options: dict) -> list[FileChange]:
+    """Drop wings from the END of the variant's own "wings" list until the total (plus the hull's
+    built-in wings, which live on the .ship and can never be removed here) fits its fighter bays
+    (owner ruling 2026-09-29: drop only what RC8's changed hulls can no longer fit; keep everything
+    else exactly as the mod author wrote it). The kept wings stay in the author's order; nothing else
+    in the file changes. A variant whose built-in wings alone already exceed the bays has nothing in
+    its own wings list left to trim, and is refused."""
+    string_re = re.compile(_STRING_LITERAL)
+    changes: list[FileChange] = []
+    refused: list[str] = []
+    for finding in _findings_of(root, options, "variant-wings-exceed-bays"):
+        if not finding.file:
+            continue
+        values = {e.split(":", 1)[0]: e.split(":", 1)[1] for e in finding.evidence if ":" in e}
+        try:
+            wings_count = int(values.get("wings", ""))
+            built_in = int(values.get("built-in-wings", ""))
+            bays = int(values.get("fighter-bays", ""))
+        except ValueError:
+            refused.append(f"{finding.file}: wings/built-in-wings/fighter-bays evidence is not numeric")
+            continue
+        excess = wings_count + built_in - bays
+        if excess <= 0:
+            continue
+        path = root / finding.file
+        if not path.is_file():
+            refused.append(f"{finding.file}: file not found")
+            continue
+        if excess > wings_count:
+            refused.append(
+                f"{finding.file}: built-in wings alone ({built_in}) already exceed {bays} bay(s); "
+                "nothing in the variant's own wings list can fix this"
+            )
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        match = re.search(r'"wings"\s*:\s*\[', text)
+        if match is None:
+            refused.append(f"{finding.file}: no \"wings\" array found")
+            continue
+        open_pos = match.end() - 1
+        depths = _structural_depths(text)
+        close_pos = _matching_bracket(text, depths, open_pos)
+        if close_pos is None:
+            refused.append(f"{finding.file}: \"wings\" array has no matching ']'")
+            continue
+        literals = list(string_re.finditer(text, open_pos + 1, close_pos))
+        if len(literals) != wings_count:
+            refused.append(
+                f"{finding.file}: {len(literals)} wing entries found in the file but the scan saw {wings_count}; ambiguous, skipped"
+            )
+            continue
+        for literal in reversed(literals[wings_count - excess:]):
+            text = _remove_span_with_comma(text, literal.start(), literal.end())
+        changes.append(FileChange(path=path, before=raw, after=_encode(text, had_bom)))
+    if refused:
+        if not changes:
+            raise FixerError("No variant-wings-exceed-bays finding could be trimmed: " + "; ".join(refused))
+        options.setdefault("partial_refusals", []).append("Not trimmed (variant-wings-exceed-bays): " + "; ".join(refused))
+    return changes
+
+
+def _fix_variant_weapon_slot_removed(root: Path, options: dict, finding_id: str) -> list[FileChange]:
+    """Shared by variant-weapon-slot-mismatch and variant-weapon-slot-missing (owner ruling
+    2026-09-29): remove the one slot->weapon entry the finding names from its weapon group's
+    "weapons"; if that empties the group's own weapons, remove the whole group object from
+    "weaponGroups" too (rather than leave an empty group behind). Nothing else in the file changes.
+    Several findings against the same file are applied in turn, each against the file as the
+    previous one left it, so two bad weapons in the same group correctly empty (and remove) it.
+    """
+    by_file: dict[str, list] = {}
+    for finding in _findings_of(root, options, finding_id):
+        if finding.file:
+            by_file.setdefault(finding.file, []).append(finding)
+    changes: list[FileChange] = []
+    refused: list[str] = []
+    for relative in sorted(by_file):
+        findings = by_file[relative]
+        path = root / relative
+        if not path.is_file():
+            refused.append(f"{relative}: file not found")
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        for finding in findings:
+            values = {e.split(":", 1)[0]: e.split(":", 1)[1] for e in finding.evidence if ":" in e}
+            slot_id, weapon_id = values.get("slot"), values.get("weapon")
+            if not slot_id or not weapon_id:
+                refused.append(f"{relative}: {finding.id} evidence has no slot/weapon id")
+                continue
+            match = re.search(r'"' + re.escape(slot_id) + r'"\s*:\s*"' + re.escape(weapon_id) + r'"', text)
+            if match is None:
+                refused.append(f"{relative}: slot '{slot_id}' -> weapon '{weapon_id}' not found (already changed?)")
+                continue
+            depths = _structural_depths(text)
+            weapons_open = _enclosing_bracket(text, depths, match.start(), "{")
+            weapons_close = _matching_bracket(text, depths, weapons_open) if weapons_open is not None else None
+            if weapons_open is None or weapons_close is None:
+                refused.append(f"{relative}: could not locate the weapons object enclosing slot '{slot_id}'")
+                continue
+            remaining = len(_STRING_PAIR_RE.findall(text[weapons_open + 1:weapons_close]))
+            if remaining <= 1:
+                group_open = _enclosing_bracket(text, depths, weapons_open, "{")
+                group_close = _matching_bracket(text, depths, group_open) if group_open is not None else None
+                if group_open is None or group_close is None:
+                    refused.append(f"{relative}: could not locate the weapon group enclosing slot '{slot_id}'")
+                    continue
+                text = _remove_span_with_comma(text, group_open, group_close + 1)
+            else:
+                text = _remove_span_with_comma(text, match.start(), match.end())
+        changes.append(FileChange(path=path, before=raw, after=_encode(text, had_bom)))
+    if refused:
+        if not changes:
+            raise FixerError(f"No {finding_id} finding could be fixed: " + "; ".join(refused))
+        options.setdefault("partial_refusals", []).append(f"Not fixed ({finding_id}): " + "; ".join(refused))
+    return changes
+
+
 def _fix_variant_op_over_budget(root: Path, options: dict) -> list[FileChange]:
     """Trim an over-budget variant to its hull's ordnance points (owner ruling 2026-09-27: "trim to fit if
     possible, best estimate"). Order: flux capacitors, then flux vents (1 OP each, the least character-changing),
@@ -2205,6 +2375,9 @@ _FIXER_FUNCS = {
     "procgen-mod-body-leak": _fix_procgen_mod_body_leak,
     "fleet-type-name-missing": _fix_fleet_type_name_missing,
     "variant-op-over-budget": _fix_variant_op_over_budget,
+    "variant-wings-exceed-bays": _fix_variant_wings_exceed_bays,
+    "variant-weapon-slot-mismatch": lambda root, options: _fix_variant_weapon_slot_removed(root, options, "variant-weapon-slot-mismatch"),
+    "variant-weapon-slot-missing": lambda root, options: _fix_variant_weapon_slot_removed(root, options, "variant-weapon-slot-missing"),
     "data-file-not-utf8": _fix_data_file_not_utf8,
     "shippable-work-file": _fix_shippable_work_file,
     "wing-role-assault-removed": _fix_wing_role_assault_removed,
