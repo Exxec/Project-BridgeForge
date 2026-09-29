@@ -94,6 +94,19 @@ class LibraryImportOnlyTests(unittest.TestCase):
         self.assertEqual(_ids(result, "source-library-dependency-undeclared"), [])
 
 
+class SourceLibraryFindingDeferredTests(unittest.TestCase):
+    def test_source_import_finding_defers_to_the_library_rule(self) -> None:
+        # Owner ruling 2026-09-29: 53 mods carried source-library-dependency-undeclared for a library that
+        # undeclared-library-dependency (or optional-library-integration) already judged.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "scripts").mkdir(parents=True)
+            (mod / "data" / "scripts" / "Use.java").write_text("import org.lazywizard.lazylib.MathUtils;\npublic class Use { float f = MathUtils.getDistance(null, null); }\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual(len(_ids(result, "undeclared-library-dependency")), 1)
+        self.assertEqual(_ids(result, "source-library-dependency-undeclared"), [])
+
+
 class NexerelinCustomStartOptionalTests(unittest.TestCase):
     def _scan(self, register: bool):
         # SEEKER 0.6.6: its Nexerelin classes are custom starts named in data/config/exerelin/customStarts.json.

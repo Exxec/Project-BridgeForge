@@ -5501,6 +5501,18 @@ def _scan_csv_slash_quote(root: Path, result: ScanResult) -> None:
         )
 
 
+def _drop_library_findings_judged_elsewhere(result: ScanResult) -> None:
+    """source-library-dependency-undeclared says only "source imports it"; undeclared-library-dependency (declare it:
+    standing approval) and optional-library-integration (guarded, no dependency) judge the same library with more
+    evidence. Where either exists, the source finding is a duplicate that blocked 38 mods on a question already
+    answered (owner ruling 2026-09-29: treat it like the existing rule)."""
+    judged = {e.split(":", 1)[1] for f in result.findings if f.id in ("undeclared-library-dependency", "optional-library-integration")
+              for e in f.evidence if e.startswith("library:")}
+    if judged:
+        result.findings[:] = [f for f in result.findings
+                              if not (f.id == "source-library-dependency-undeclared" and f.evidence and f.evidence[0] in judged)]
+
+
 def _nexerelin_custom_start_classes(root: Path) -> set[str]:
     """Classes named by "className" in data/config/exerelin/customStarts.json (loaded only by Nexerelin)."""
     data = _load_lenient_json_file(root / "data" / "config" / "exerelin" / "customStarts.json")
@@ -6852,6 +6864,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_obfuscated_internal_api_use(root, result)
     _scan_csv_design_type_column(root, result)
     _scan_undeclared_library_dependency(root, result)
+    _drop_library_findings_judged_elsewhere(result)
     _scan_orbit_period_hazards(root, result)
     _scan_module_captain_personality_risk(root, result)
     _scan_spawned_ship_captain_personality_risk(root, result)

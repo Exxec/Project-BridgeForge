@@ -523,8 +523,8 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
                 encoding="utf-8",
             )
             result = scan_mod(root)
-            undeclared = [item for item in result.findings if item.id == "source-library-dependency-undeclared"]
-            self.assertEqual([item.evidence[0] for item in undeclared], ["MagicLib", "Nexerelin"])
+            undeclared = [item for item in result.findings if item.id in ("source-library-dependency-undeclared", "undeclared-library-dependency")]
+            self.assertEqual(sorted(item.evidence[0].removeprefix("library:") for item in undeclared), ["MagicLib", "Nexerelin"])
             self.assertTrue(all(item.classification == "REVIEW" for item in undeclared))
             usage = {item["library"]: item for item in result.library_usage}
             self.assertTrue(usage["MagicLib"]["imported"])
@@ -582,9 +582,11 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             usage = {item["library"]: item for item in result.library_usage}
             self.assertFalse(usage["LazyLib"]["bundled"])
             self.assertTrue(usage["LazyLib"]["imported"])
-            undeclared = [item for item in result.findings if item.id == "source-library-dependency-undeclared"]
-            self.assertEqual(len(undeclared), 1)
-            self.assertEqual(undeclared[0].evidence[0], "LazyLib")
+            # Reported once, by undeclared-library-dependency (source-library-dependency-undeclared defers to it,
+            # owner ruling 2026-09-29).
+            undeclared = [item for item in result.findings if item.id == "undeclared-library-dependency"]
+            self.assertEqual([item.evidence[0] for item in undeclared], ["library:LazyLib"])
+            self.assertEqual([item for item in result.findings if item.id == "source-library-dependency-undeclared"], [])
             self.assertEqual(undeclared[0].classification, "REVIEW")
 
     def test_scanner_reports_legacy_custom_ui_and_dialog_callbacks(self) -> None:

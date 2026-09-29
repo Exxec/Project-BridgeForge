@@ -71,6 +71,17 @@ dependency.
   - Compiling or parsing is not proof: a fix counts only after the save loads in the rig.
   - Long runs print progress and checkpoint.
 
+## Later, and higher risk: an in-game battle assistant (owner idea, 2026-09-29)
+
+A separate helper mod that assists in live battles, kept apart from Salvor's offline tools. It is well down the
+road. It runs inside the game, so it inherits every runtime hazard BridgeForge has recorded:
+- the script sandbox forbids reflection;
+- a common file over 1 MB is a Fatal;
+- listeners that `onGameLoad` re-adds pile up;
+- anything it spawns or changes lives in the save.
+
+Treat it as its own project with its own live-test gates; it is not a Salvor feature.
+
 ## Decisions (owner, 2026-09-29)
 
 1. **Name:** Salvor, a working name that can change later. In Starsector a salvor recovers what is wrecked. It
