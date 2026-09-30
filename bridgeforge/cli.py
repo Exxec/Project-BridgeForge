@@ -945,6 +945,16 @@ def build_parser() -> argparse.ArgumentParser:
     rebuild_jar_cmd.add_argument("--output", type=Path, help="where the rebuilt jar and compiled classes go (default: a new temp directory)")
     rebuild_jar_cmd.add_argument("--install", action="store_true", help="only when status is PASS: move the working copy's current jar to scratch/moved-<date>/ (logged in MOVES.log) and copy the rebuilt jar in")
     rebuild_jar_cmd.add_argument("--json", action="store_true")
+    patch_jar_cmd = subcommands.add_parser("patch-jar-class", help="recompile a few edited classes and swap them into a mod jar, checked against the shipped classes with javap (members, calls, null checks)")
+    patch_jar_cmd.add_argument("mod", type=Path, help="mod workspace (holding working/)")
+    patch_jar_cmd.add_argument("--jar", required=True, help="the jar to patch, relative to working/ (e.g. jars/Name.jar)")
+    patch_jar_cmd.add_argument("sources", type=Path, nargs="+", help="the edited .java files (a scratch copy or an escalation attempt's)")
+    patch_jar_cmd.add_argument("--source-root", help="the mod's source tree, relative to working/ (e.g. jars/src); with --install each source is copied there by its package")
+    patch_jar_cmd.add_argument("--allow-removed", action="append", default=[], help="a member name whose removal is intended (a hull-mod field moved to per-ship custom data); repeatable")
+    patch_jar_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, put on the compile classpath")
+    patch_jar_cmd.add_argument("--jdk", type=Path)
+    patch_jar_cmd.add_argument("--install", action="store_true", help="only when PASS: keep the old jar and sources in scratch/jar-patch-<date>/ and swap the classes in")
+    patch_jar_cmd.add_argument("--json", action="store_true")
     fold_cmd = subcommands.add_parser("fold", help="fold a discontinued library-like mod into a RevenantLib-shaped target directory (roadmap P14 item 10): copy it byte-for-byte, keeping its ids and class names, and record provenance plus a dependency_successors.json entry")
     fold_cmd.add_argument("source", type=Path, help="the library mod's own directory (holding mod_info.json), e.g. a working copy")
     fold_cmd.add_argument("target", type=Path, help="the RevenantLib-shaped target directory (holds/gets original/<source name>/ and reports/PROVENANCE.md)")
@@ -3165,6 +3175,30 @@ def main(argv: list[str] | None = None) -> int:
             if args.output:
                 print(f"Written: {args.output}")
         return 0
+    if args.command == "patch-jar-class":
+        from .jar_patch import JarPatchError, patch_jar_classes
+        try:
+            result = patch_jar_classes(args.mod, args.jar, args.sources, vanilla_core=args.vanilla_core, jdk=args.jdk,
+                                       source_root=args.source_root, allow_removed=args.allow_removed, install=args.install)
+        except (JarPatchError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"{result['status']}: {args.jar}" + (" (installed)" if result["installed"] else ""))
+            for error in result["compile"]["errors"][:5]:
+                print(f"  compile: {error}")
+            for entry in result["classes"]:
+                bits = [f"null checks {entry['null_checks'][0]}->{entry['null_checks'][1]}"] if "null_checks" in entry else ["new"]
+                if entry.get("members"):
+                    bits.append("members " + json.dumps(entry["members"]))
+                if entry.get("calls_changed"):
+                    bits.append("calls " + json.dumps(entry["calls_changed"]))
+                print(f"  {entry['class']}: " + "; ".join(bits))
+            for refusal in result.get("refusals", []):
+                print(f"  refused: {refusal}")
+        return 0 if result["status"] == "PASS" else 1
     if args.command == "rebuild-jar":
         from .rebuild_jar import RebuildJarError, rebuild_jar
         try:

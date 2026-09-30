@@ -75,6 +75,17 @@ class VariantWingsExceedBaysTests(unittest.TestCase):
             self.assertIn("fighter-bays:1", hits[0].evidence)
             self.assertIn("wings:2", hits[0].evidence)
 
+    def test_built_in_wings_alone_over_bays_is_a_safe_note(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "data" / "hulls" / "ship_data.csv", SHIP_DATA_HEADER + _ship_data_row("demo_hull", 40, 1))
+            _write_json(root / "data" / "hulls" / "demo_hull.ship", _basic_ship_json("demo_hull", built_in_wings=["w1", "w2"]))
+            _write_json(root / "data" / "variants" / "demo_variant.variant", _basic_variant("demo_hull", "demo_variant", wings=[]))
+            result = scan_mod(root)
+            notes = _findings(result, "variant-built-in-wings-exceed-bays")
+            self.assertEqual([f.classification for f in notes], ["SAFE"])
+            self.assertEqual(_findings(result, "variant-wings-exceed-bays"), [])
+
     def test_built_in_wings_count_toward_bays(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -64,7 +64,9 @@ class VariantWingsExceedBaysFixerTests(unittest.TestCase):
                 _basic_ship_json("demo_hull", built_in_wings=["builtin_a", "builtin_b"]),
             )
             _write_json(root / "data" / "variants" / "demo_variant.variant", _basic_variant("demo_hull", "demo_variant"))
-            self.assertEqual(len(_findings(scan_mod(root), "variant-wings-exceed-bays")), 1)
+            found = scan_mod(root)
+            self.assertEqual(_findings(found, "variant-wings-exceed-bays"), [])
+            self.assertEqual(len(_findings(found, "variant-built-in-wings-exceed-bays")), 1)  # a SAFE note instead
             with self.assertRaises(FixerError):
                 compute_fix(root, "variant-wings-exceed-bays", {})
 

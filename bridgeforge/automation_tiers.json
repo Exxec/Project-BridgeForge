@@ -179,6 +179,7 @@
     "variant-id-in-weapon-slot": "decision",
     "variant-op-over-budget": "auto",
     "variant-weapon-slot-mismatch": "auto",
+    "variant-built-in-wings-exceed-bays": "none",
     "variant-wings-exceed-bays": "auto",
     "version-inference-blocked": "inspect",
     "weapon-effect-static-combat-state": "code",

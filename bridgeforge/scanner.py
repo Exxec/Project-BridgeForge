@@ -6222,7 +6222,24 @@ def _scan_variant_validity(root: Path, result: ScanResult, vanilla_core: Path | 
         }
         fighter_bays += sum(BAY_ADDING_HULL_MODS.get(mod, 0) for mod in bay_mods)
         total_wings = len(wing_list) + built_in_wing_count
-        if total_wings > fighter_bays:
+        if total_wings > fighter_bays and not wing_list:
+            # Only the hull's built-in wings exceed the bays and the variant lists none of its own: nothing in the
+            # variant can change, so it is reported as authored (All the Domain Drones' drone modules, 2026-09-30;
+            # owner rule 2026-09-29: drop only what no longer fits, keep the rest as authored).
+            result.add(
+                id="variant-built-in-wings-exceed-bays",
+                category="variants",
+                severity="low",
+                classification="SAFE",
+                confidence="DETERMINISTIC",
+                explanation=(
+                    f"Hull '{resolved_hull_id}' has {built_in_wing_count} built-in wing(s) but {fighter_bays} fighter bay(s), "
+                    f"and variant '{variant_id}' adds none of its own. As authored; the extra built-in wings may not deploy."
+                ),
+                file=relative,
+                evidence=[f"variant:{variant_id}", f"hull:{resolved_hull_id}", f"built-in-wings:{built_in_wing_count}", f"fighter-bays:{fighter_bays}"],
+            )
+        elif total_wings > fighter_bays:
             result.add(
                 id="variant-wings-exceed-bays",
                 category="variants",
