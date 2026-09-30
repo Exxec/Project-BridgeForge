@@ -86,14 +86,15 @@ def verify(packet: dict, working: Path) -> dict:
     # SAFE, and it must count as fixed (Vayra's Sector, 2026-09-30: guarded getEntityById lookups "remained").
     findings = [f for f in _scan(working, vanilla) if not _informational(f)]
     target_file = packet.get("file") or ""
-    remaining = [f for f in findings if f["id"] == packet["finding"] and (not target_file or (f.get("file") or "") == target_file)]
+    targets = set(packet.get("merged") or [packet["finding"]])
+    remaining = [f for f in findings if f["id"] in targets and (not target_file or (f.get("file") or "") == target_file)]
     baseline = set(packet.get("baseline_keys") or [])
     new = sorted({"|".join(finding_key(f)) for f in findings if tier_for(f["id"]) in ACTIONABLE} - baseline)
     stale = sorted(name for name, digest in (packet.get("file_sha256") or {}).items()
                    if working.joinpath(name).is_file() and digest and hashlib.sha256(working.joinpath(name).read_bytes()).hexdigest() != digest)
     reasons = []
     if remaining:
-        reasons.append(f"{len(remaining)} `{packet['finding']}` finding(s) remain: " + "; ".join((f.get("evidence") or [f["explanation"]])[0] for f in remaining[:3]))
+        reasons.append(f"{len(remaining)} " + ", ".join(f"`{i}`" for i in sorted({f['id'] for f in remaining})) + " finding(s) remain: " + "; ".join((f.get("evidence") or [f["explanation"]])[0] for f in remaining[:3]))
     if new:
         reasons.append("new findings appeared: " + ", ".join(new[:10]))
     return {"status": "PASS" if not reasons else "FAIL", "reasons": reasons, "remaining": len(remaining), "new_findings": new,
@@ -156,6 +157,60 @@ def _copy_back(packet: dict, sandbox: Path, working: Path, changed: list[str]) -
             target.unlink()
         written.append({"path": name, "backup": str(backup) if backup else None})
     return written
+
+
+RUN_LOCK = "RUN.lock"
+
+
+def _pid_alive(pid: int) -> bool:
+    if os.name == "nt":
+        # Not os.kill(pid, 0): on Windows that calls TerminateProcess.
+        import ctypes
+
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        code = ctypes.c_ulong()
+        ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return code.value == 259  # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+class run_lock:
+    """One escalation run per workspace. Pilots on 2026-09-29 collided: a stopped task left its agent children
+    running, a second run started on the same workspace, and Git Bash could not see the Windows processes. A run
+    records its PID in scratch/escalations/RUN.lock and a second run refuses while that process is alive."""
+
+    def __init__(self, workspace: Path):
+        self.path = Path(workspace).expanduser().resolve() / "scratch" / "escalations" / RUN_LOCK
+
+    def __enter__(self):
+        if self.path.is_file():
+            try:
+                pid = int(self.path.read_text(encoding="utf-8").split()[0])
+            except (ValueError, IndexError, OSError):
+                pid = 0
+            if pid and pid != os.getpid() and _pid_alive(pid):
+                raise EscalationError(f"another escalation run (PID {pid}) is using this workspace; wait for it or stop it "
+                                      f"(PowerShell: Stop-Process -Id {pid}, and its agent children), then remove {self.path} if it stays.")
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(f"{os.getpid()}\n", encoding="utf-8")
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if self.path.read_text(encoding="utf-8").split()[0] == str(os.getpid()):
+                self.path.unlink()
+        except (OSError, IndexError):
+            pass
+        return False
 
 
 def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, apply: bool = False, retries: int = 1,

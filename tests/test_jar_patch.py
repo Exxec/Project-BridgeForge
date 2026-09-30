@@ -81,3 +81,42 @@ class JarPatchTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class JarPacketsTests(JarPatchTests):
+    """`jar-packets`: source lookup and the faithful check for jar-only packets."""
+
+    def _packet(self, ws: Path, entry: str) -> None:
+        import json
+        packets = ws / "reports" / "escalations"
+        packets.mkdir(parents=True)
+        (packets / "hullmod-instance-state--1.json").write_text(json.dumps(
+            {"id": "hullmod-instance-state--1", "finding": "hullmod-instance-state", "kind": "agent", "allowed_files": [entry]}), encoding="utf-8")
+
+    def test_matching_source_is_faithful_and_copied_to_edit(self) -> None:
+        from bridgeforge.jar_patch import prepare_jar_packets
+        with resolved_temp_dir() as root:
+            ws = self._workspace(root)
+            self._packet(ws, "jars/mod.jar!data/hullmods/Gantry.class")
+            row = prepare_jar_packets(ws)["packets"][0]
+            copied = Path(row["edit"]).is_file()
+        self.assertEqual(row["state"], "FAITHFUL", row)
+        self.assertTrue(copied)
+        self.assertIn("--install", row["next"])
+
+    def test_a_source_that_is_not_what_shipped_differs(self) -> None:
+        from bridgeforge.jar_patch import prepare_jar_packets
+        with resolved_temp_dir() as root:
+            ws = self._workspace(root)
+            (ws / "working" / "src" / "data" / "hullmods" / "Gantry.java").write_text(PER_SHIP, encoding="utf-8")
+            self._packet(ws, "jars/mod.jar!data/hullmods/Gantry.class")
+            row = prepare_jar_packets(ws)["packets"][0]
+        self.assertEqual(row["state"], "SOURCE_DIFFERS", row)
+
+    def test_no_source_says_so(self) -> None:
+        from bridgeforge.jar_patch import prepare_jar_packets
+        with resolved_temp_dir() as root:
+            ws = self._workspace(root)
+            self._packet(ws, "jars/mod.jar!data/hullmods/Missing.class")
+            row = prepare_jar_packets(ws)["packets"][0]
+        self.assertEqual(row["state"], "NO_SOURCE")

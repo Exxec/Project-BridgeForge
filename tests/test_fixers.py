@@ -1190,6 +1190,34 @@ class FactionKnownListsMissingTests(unittest.TestCase):
             after_scan = scan_mod(root, vanilla_core=vanilla)
             self.assertEqual(_findings(after_scan, "faction-known-lists-missing"), [])
 
+    def test_a_0_6_faction_derives_lists_from_fleet_compositions(self) -> None:
+        # Antediluvians' wayfarer.faction (2026-09-30): no shipRoles; fleets name a variant and a wing directly.
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
+            root = Path(mod_dir)
+            vanilla = Path(vanilla_dir)
+            faction_path = root / "data" / "world" / "factions" / "oldfac.faction"
+            _write(faction_path, '{id:"oldfac","fleetCompositions":{"f":{"displayName":"F","ships":{"variant1":[1, 1],"wing1_wing":[6, 6],},},},}')
+            _write(vanilla / "data" / "world" / "factions" / "pirates.faction", '{"id":"pirates"}')
+            _write(root / "data" / "variants" / "variant1.variant", '{"hullId":"hull1","weaponGroups":[{"weapons":{"WP0":"weapon1"}}]}')
+            _write(root / "data" / "hulls" / "ship_data.csv", "id,name\nhull1,Hull One\n")
+            _write(root / "data" / "weapons" / "weapon_data.csv", "id,name\nweapon1,Weapon One\n")
+            _write(root / "data" / "hulls" / "wing_data.csv", "id,role,role desc,op cost\nwing1_wing,FIGHTER,desc,4\n")
+            apply_fix(compute_fix(root, "faction-known-lists-missing", {"faction_file": faction_path, "vanilla_core": vanilla}))
+            data = _load_lenient_json_file(faction_path)
+            self.assertEqual(data["knownShips"]["hulls"], ["hull1"])
+            self.assertEqual(data["knownFighters"]["fighters"], ["wing1_wing"])
+            self.assertEqual(_findings(scan_mod(root, vanilla_core=vanilla), "faction-known-lists-missing"), [])
+
+    def test_a_faction_nothing_reads_is_a_safe_note(self) -> None:
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
+            root = Path(mod_dir)
+            vanilla = Path(vanilla_dir)
+            _write(root / "data" / "world" / "factions" / "hvb_hostile.faction", '{"id":"hvb_hostile","displayName":"hostile"}')
+            _write(vanilla / "data" / "world" / "factions" / "pirates.faction", '{"id":"pirates"}')
+            found = _findings(scan_mod(root, vanilla_core=vanilla), "faction-known-lists-missing")
+        self.assertEqual([f.classification for f in found], ["SAFE"])
+        self.assertIn("nothing-reads-lists", found[0].evidence)
+
     def test_refuses_on_unresolved_id(self) -> None:
         with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
             root = Path(mod_dir)

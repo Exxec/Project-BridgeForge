@@ -406,3 +406,25 @@ class EscalationRunTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SameFilePacketMergeTests(unittest.TestCase):
+    """Two agent findings on one file become one packet (Pegasus Belt Council, 2026-09-30)."""
+
+    def test_agent_packets_on_one_file_merge(self) -> None:
+        from bridgeforge.revive import _merge_same_file
+
+        def packet(finding: str, file: str, kind: str = "agent") -> dict:
+            return {"id": packet_id(finding, file), "finding": finding, "kind": kind, "file": file, "allowed_files": [file] if kind == "agent" else [],
+                    "hint": f"hint {finding}", "excerpts": {}, "findings": [{"id": finding, "file": file, "evidence": ["line:3"]}]}
+
+        with resolved_temp_dir() as root:
+            (root / "Gen.java").write_text("a\nb\nc\n", encoding="utf-8")
+            merged = _merge_same_file([packet("x-entity", "Gen.java"), packet("x-system", "Gen.java"), packet("x-entity", "Other.java"),
+                                       packet("x-owner", "Gen.java", kind="owner")], root)
+        self.assertEqual(len(merged), 3)
+        head = merged[0]
+        self.assertEqual(head["merged"], ["x-entity", "x-system"])
+        self.assertEqual([f["id"] for f in head["findings"]], ["x-entity", "x-system"])
+        self.assertIn("hint x-system", head["hint"])
+        self.assertNotIn("merged", merged[1])

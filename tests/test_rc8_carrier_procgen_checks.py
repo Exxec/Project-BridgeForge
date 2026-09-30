@@ -82,7 +82,7 @@ class ProcgenRowChecksTests(unittest.TestCase):
 
 
 class FactionKnownListsTests(unittest.TestCase):
-    def test_new_faction_missing_known_lists_is_review(self) -> None:
+    def test_new_faction_missing_known_lists_nothing_reads_is_a_note(self) -> None:
         with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
             root = Path(mod_dir)
             vanilla = Path(vanilla_dir)
@@ -94,7 +94,9 @@ class FactionKnownListsTests(unittest.TestCase):
             result = scan_mod(root, vanilla_core=vanilla)
             findings = _findings(result, "faction-known-lists-missing")
             self.assertEqual(len(findings), 1)
-            self.assertEqual(findings[0].classification, "REVIEW")
+            # No shipRoles, fleets or markets: nothing reads the lists, so it is a note (2026-09-30).
+            self.assertEqual(findings[0].classification, "SAFE")
+            self.assertIn("nothing-reads-lists", findings[0].evidence)
             self.assertIn("missing:knownShips,knownWeapons,knownFighters", findings[0].evidence)
 
     def test_faction_with_known_lists_present_is_not_flagged(self) -> None:

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Less hand work in escalation (ROADMAP P15 item 32):** `escalation review` sheets with flags, `--watch-dir`, one
+  agent packet per file, a per-workspace run lock, `jar-packets`, `ready-list`, a campaign lookup guard fixer,
+  faction known lists from 0.6-era `fleetCompositions`, and a quieter `hullmod-instance-state` (fields never written
+  are dropped; arrays, objects and non-private fields stay).
+- **`patch-jar-class`:** recompile a few edited classes against RC8 and swap them into a jar, compared with javap
+  first. **RC8-20:** `getEntityById` falls back to a case-insensitive scan.
+
 - **Escalation harness, from the 2026-09-29 pilots:**
   - The agent writes its note inside the sandbox (`BF_NOTE.md`), since Claude Code agents are confined to their
     working directory. A literal `$BF_NOTE` file, or a stray `NOTE.md` the mod does not ship, is also taken as the

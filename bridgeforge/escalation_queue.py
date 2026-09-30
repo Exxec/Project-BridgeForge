@@ -27,7 +27,8 @@ def _workspace_packets(workspace: Path) -> dict | None:
     data = json.loads(revive.read_text(encoding="utf-8"))
     if data.get("status") != "ESCALATED":
         return {"status": data.get("status"), "blockers": []}
-    blockers = sorted({(p.get("finding"), p.get("tier"), p.get("kind")) for p in data.get("packets") or [] if p.get("finding")})
+    blockers = sorted({(finding, p.get("tier"), p.get("kind")) for p in data.get("packets") or [] if p.get("finding")
+                       for finding in p.get("merged") or [p["finding"]]})
     return {"status": "ESCALATED", "blockers": [list(b) for b in blockers]}
 
 
@@ -111,8 +112,13 @@ def rule(queue: Path, finding_id: str, *, accept: bool = False, approve_fixer: b
             if not record or record["status"] != "ESCALATED":
                 continue
             keys = []
-            for path in (workspace / "reports" / "escalations").glob(f"{finding_id}--*.json"):
-                for finding in json.loads(path.read_text(encoding="utf-8")).get("findings") or []:
+            for path in (workspace / "reports" / "escalations").glob("*--*.json"):
+                packet = json.loads(path.read_text(encoding="utf-8"))
+                if finding_id not in (packet.get("merged") or [packet.get("finding") or path.name.split("--", 1)[0]]):
+                    continue
+                for finding in packet.get("findings") or []:
+                    if finding.get("id") != finding_id:
+                        continue
                     evidence = finding.get("evidence") or []
                     keys.append(f"{finding.get('id')}|{finding.get('file') or ''}|{evidence[0] if evidence else ''}")
             if keys:

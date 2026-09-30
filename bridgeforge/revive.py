@@ -41,6 +41,12 @@ _LINE_REFS = re.compile(r"(?::|\bline )(\d{1,6})\b")
 # Where to look for evidence, per finding family. Packets carry these so an agent starts from the
 # right BridgeForge command instead of guessing at the game's API.
 HINTS = {
+    # The recipe used by hand on Unusually Gullible Hullmods, Molecular Replicator and Flu-X (2026-09-29/30).
+    "hullmod-instance-state": ("The game makes ONE instance of a hull mod and shares it across every ship that has it, so a field written "
+                               "during combat or refit leaks between ships. Move each listed field into per-ship state: "
+                               "`ship.getCustomData()` keyed by a constant plus ship.getId() (or one small static inner State class "
+                               "stored there), read and written where the field was. Keep constants and values set only in the "
+                               "declaration as they are. Do not change any formula, timing or effect; only where the value is kept."),
     "removed-api-call": "The replacement is named in the finding. `bridgeforge api-diff` lists what RC8 removed or changed; RevenantLib's bf.legacyfleets/bf.legacyworld hold shims for 0.6 world-gen and fleet calls.",
     "legacy-vanilla-class-import": "Find the RC8 successor with `bridgeforge api-diff` or `javap -cp starfarer.api.jar`; never guess a class name.",
     "loose-script-compile-error": "The javac errors are the evidence. Janino compiles loose scripts at runtime: no generics inference beyond Java 5-era, no lambdas, no enhanced switch.",
@@ -277,7 +283,10 @@ def _informational(finding: dict) -> bool:
     it (pilot 4, 2026-09-29)."""
     from .fixers import SUPPORTED_FINDINGS
 
-    return finding.get("classification") == "SAFE" and finding.get("id") not in SUPPORTED_FINDINGS
+    # A lookup the code already null-checks is a note even though its id now has a fixer (the lookup guard,
+    # 2026-09-30): the fixer only touches unguarded ones.
+    handled = bool({"null-guarded", "nothing-reads-lists"} & set(finding.get("evidence") or []))
+    return finding.get("classification") == "SAFE" and (finding.get("id") not in SUPPORTED_FINDINGS or handled)
 
 
 def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dict], *, vanilla_core: Path | None, now=None,
@@ -312,7 +321,29 @@ def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dic
             "options": options_for() if options_for is not None and finding_id in CONTENT_FINDINGS else None,
         }
         packets.append(packet)
-    return packets
+    return _merge_same_file(packets, working)
+
+
+def _merge_same_file(packets: list[dict], working: Path) -> list[dict]:
+    """One agent packet per file, whatever its findings. Pegasus Belt Council (2026-09-30): an entity packet and a
+    system packet on each generator file each got an agent, and each agent's edit was verified against a file the
+    other had also changed, so the two had to be merged by hand. The first finding id names the packet; `merged`
+    lists every id it covers, and verify requires all of them gone."""
+    by_file: dict[str, list[dict]] = {}
+    for packet in packets:
+        if packet["kind"] == "agent" and packet["file"] and len(packet["allowed_files"]) == 1:
+            by_file.setdefault(packet["file"], []).append(packet)
+    drop = set()
+    for group in by_file.values():
+        if len(group) < 2:
+            continue
+        head = group[0]
+        head["merged"] = [p["finding"] for p in group]
+        head["findings"] = [f for p in group for f in p["findings"]]
+        head["hint"] = "\n\n".join(f"`{p['finding']}`: {p['hint']}" for p in group if p.get("hint")) or None
+        head["excerpts"] = {name: _excerpt(working / name, [e for f in head["findings"] for e in f.get("evidence") or []]) for name in head["allowed_files"]}
+        drop.update(id(p) for p in group[1:])
+    return [p for p in packets if id(p) not in drop]
 
 
 def render_packet(packet: dict) -> str:
@@ -322,6 +353,9 @@ def render_packet(packet: dict) -> str:
              f"- Finding: `{packet['finding']}` ({head['classification']}, {head['severity']}, confidence {head['confidence']}), tier `{packet['tier']}`",
              f"- For: {'an AI agent, verified by BridgeForge' if packet['kind'] == 'agent' else 'the owner'}",
              f"- Mod working copy: `{packet['workspace']}/working`", "", "## What the scanner found", "", head["explanation"], ""]
+    for other in dict.fromkeys(f["id"] for f in packet["findings"][1:] if f["id"] != head["id"]):
+        first = next(f for f in packet["findings"] if f["id"] == other)
+        lines += [f"Also in this file, `{other}` ({first['classification']}): {first['explanation']}", ""]
     for finding in packet["findings"]:
         if finding.get("file"):
             lines.append(f"- `{finding['file']}`")
@@ -345,7 +379,7 @@ def render_packet(packet: dict) -> str:
             if excerpt:
                 lines += ["", f"## `{name}` (numbered excerpt)", "", "```java" if name.endswith(".java") else "```", excerpt, "```"]
         lines += ["", "## Rules", ""] + [f"{n}. {rule}" for n, rule in enumerate(RULES, 1)]
-        lines += ["", "## Done means", "", f"`{packet['verify']}` passes: no `{packet['finding']}` finding remains"
+        lines += ["", "## Done means", "", f"`{packet['verify']}` passes: no " + ", ".join(f"`{i}`" for i in packet.get("merged") or [packet["finding"]]) + " finding remains"
                   + (f" on `{packet['file']}`" if packet["file"] else "") + ", and no new finding of tier decision/inspect/code appears."]
     else:
         lines += ["", "## Decision needed", "",
@@ -416,7 +450,7 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
         "compile_checked": vanilla_core is not None, "policy": str(policy_path), "approved": sorted(approved),
         "status": status, "hardest_tier": hardest, "rounds": rounds, "applied": applied_all,
         "findings_before": len(first), "findings_after": len(findings),
-        "packets": [{"id": p["id"], "kind": p["kind"], "tier": p["tier"], "finding": p["finding"], "file": p["file"]} for p in packets],
+        "packets": [{"id": p["id"], "kind": p["kind"], "tier": p["tier"], "finding": p["finding"], "merged": p.get("merged"), "file": p["file"]} for p in packets],
         "next": "Live test (the probe) after UNATTENDED_DONE; `bridgeforge escalation run` for agent packets; owner packets need a decision.",
     }
     if draft_report:

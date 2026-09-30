@@ -2938,13 +2938,19 @@ def _scan_faction_known_lists(root: Path, result: ScanResult, vanilla_core: Path
         # Zorg18 (2026-09-14): no markets, no shipRoles, fleets assembled member by member. Nothing reads
         # its known lists, so HIGH overstated it. Keep HIGH whenever market use can't be ruled out.
         market_use = _faction_market_evidence(root, faction_id)
-        unused = role_variant_count == 0 and market_use == "none"
+        compositions = data.get("fleetCompositions") if isinstance(data.get("fleetCompositions"), dict) else {}
+        fleet_ships = sum(len(c["ships"]) for c in compositions.values() if isinstance(c, dict) and isinstance(c.get("ships"), dict))
+        unused = role_variant_count == 0 and fleet_ships == 0 and market_use == "none"
         evidence.append(f"market-evidence:{market_use}")
+        if unused:
+            # Nothing to derive lists from and nothing reads them: a note, not work (hvb_hostile in Kadur Remnant,
+            # The Exalted and Vayra's Ship Pack, a utility faction spawner code hands whole fleets; 2026-09-30).
+            evidence.append("nothing-reads-lists")
         result.add(
             id="faction-known-lists-missing",
             category="factions",
             severity="low" if unused else "high",
-            classification="REVIEW",
+            classification="SAFE" if unused else "REVIEW",
             confidence="HIGH",
             explanation=(
                 "This faction is missing one or more of knownShips/knownWeapons/knownFighters. Since 0.8a, "
@@ -3713,6 +3719,27 @@ def _scan_hullmod_instance_state(root: Path, result: ScanResult) -> None:
             and not _looks_like_constant(match.group(2))
             and not re.search(r"\b(Map|HashMap|List|ArrayList|Set|HashSet|Collection|WeakHashMap)\b", match.group(1))
         })
+        # Only a field some method writes is shared state; one set at its declaration and only read is a constant
+        # in all but name (2026-09-30: 86 source packets, many of them tuning values or fields of commented-out code).
+        # Only primitive and String fields are dropped this way: an array or object can change through its contents
+        # without the field being assigned (Kingdom of Terra's KT_Biter fills `skull[0]` per ship through a setup call).
+        declarations = "\n".join(top_level)
+        # And only private ones: a public, protected or package field can be written from another class
+        # (More Planetary Conditions' `public float hybridMult`).
+        field_types = {m.group(2): m.group(1).strip() for m in _SOURCE_HULLMOD_FIELD.finditer(declarations)
+                       if re.match(r"\s*private\b", m.group(0))}
+        value_types = {"boolean", "byte", "char", "short", "int", "long", "float", "double", "String",
+                       "Boolean", "Byte", "Character", "Short", "Integer", "Long", "Float", "Double"}
+
+        def written(name: str) -> bool:
+            if field_types.get(name) not in value_types:
+                return True
+            n = re.escape(name)
+            writes = len(re.findall(rf"(?<![\w.])(?:this\.)?{n}\s*(?:[+\-*/%&|^]|<<|>>)?=(?!=)|(?<![\w.])(?:this\.)?{n}\s*(?:\+\+|--)|(?:\+\+|--)\s*(?:this\.)?{n}\b", body))
+            initialised = 1 if re.search(rf"[\w>\]]\s+{n}\s*=(?!=)", declarations) else 0
+            return writes > initialised
+
+        mutable = [name for name in mutable if written(name)]
         if mutable:
             result.add(id="hullmod-instance-state", category="scripts", severity="medium", classification="REVIEW", confidence="HEURISTIC", explanation=explanation, file=_relative(root, source), evidence=[f"field:{name}" for name in mutable[:12]])
 

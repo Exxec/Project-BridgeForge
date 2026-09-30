@@ -732,6 +732,9 @@ def build_parser() -> argparse.ArgumentParser:
     archive_cmd.add_argument("--done", type=Path, help="default: <repo>/Done")
     archive_cmd.add_argument("--policy", type=Path)
     archive_cmd.add_argument("--json", action="store_true")
+    ready_cmd = subcommands.add_parser("ready-list", help="the queue's mods ready for live testing (revival report READY_FOR_LIVE_TEST and latest revive UNATTENDED_DONE), with how to launch them")
+    ready_cmd.add_argument("queue", type=Path)
+    ready_cmd.add_argument("--json", action="store_true")
     group_cmd = subcommands.add_parser("probe-group", help="probe several finished mods in one live session: plan compatible groups, install one into the rig, report per mod (ROADMAP P15 item 24)")
     group_sub = group_cmd.add_subparsers(dest="probe_group_command", required=True)
     group_plan = group_sub.add_parser("plan", help="group READY_FOR_LIVE_TEST workspaces that share no mod or content id and whose dependencies are in the rig")
@@ -926,6 +929,10 @@ def build_parser() -> argparse.ArgumentParser:
     for command in (esc_show, esc_verify, esc_run, esc_apply):
         command.add_argument("packet", nargs="?" if command is esc_run else None, help="packet id (see `escalation list`)")
     esc_run.add_argument("--all", action="store_true", help="run every agent packet in turn")
+    esc_run.add_argument("--watch-dir", type=Path, action="append", default=[], help="a directory the agent must not touch (e.g. the session's memory folder); what changed in it is reported after the run; repeatable")
+    esc_review = esc_sub.add_parser("review", help="write reports/ESCALATION_REVIEW_SHEET.md: each packet's newest attempt with its diff and flags for changes that need a human (removed hints, Random/save logic, loop rewrites, swallowed exceptions)")
+    esc_review.add_argument("workspace", type=Path)
+    esc_review.add_argument("--json", action="store_true")
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
@@ -955,6 +962,11 @@ def build_parser() -> argparse.ArgumentParser:
     patch_jar_cmd.add_argument("--jdk", type=Path)
     patch_jar_cmd.add_argument("--install", action="store_true", help="only when PASS: keep the old jar and sources in scratch/jar-patch-<date>/ and swap the classes in")
     patch_jar_cmd.add_argument("--json", action="store_true")
+    jar_packets_cmd = subcommands.add_parser("jar-packets", help="for each jar-only escalation packet: find the class's source, copy it to scratch/jar-packets/ to edit, and say whether it rebuilds the shipped class unchanged (FAITHFUL) or not")
+    jar_packets_cmd.add_argument("mod", type=Path, help="mod workspace (holding working/)")
+    jar_packets_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, put on the compile classpath")
+    jar_packets_cmd.add_argument("--jdk", type=Path)
+    jar_packets_cmd.add_argument("--json", action="store_true")
     fold_cmd = subcommands.add_parser("fold", help="fold a discontinued library-like mod into a RevenantLib-shaped target directory (roadmap P14 item 10): copy it byte-for-byte, keeping its ids and class names, and record provenance plus a dependency_successors.json entry")
     fold_cmd.add_argument("source", type=Path, help="the library mod's own directory (holding mod_info.json), e.g. a working copy")
     fold_cmd.add_argument("target", type=Path, help="the RevenantLib-shaped target directory (holds/gets original/<source name>/ and reports/PROVENANCE.md)")
@@ -1122,6 +1134,28 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Archived: {result['archive']} ({result['files']} files, {result['licence']}, status {result['status']})")
             print(f"  {len(result['changed'])} file(s) changed, {len(result['added'])} added vs original; jars identical: {result['jars_identical']}")
             print(f"  Note: {result['note']}. The workspace is untouched; remove it yourself once the archive is checked.")
+        return 0
+    if args.command == "ready-list":
+        # Replaces the hand tally of "how many need live testing" (2026-09-30).
+        from .probe_group import ProbeGroupError, ready_workspaces
+        try:
+            ready = ready_workspaces(args.queue)
+        except ProbeGroupError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        rows = []
+        for workspace in ready:
+            revive_record = workspace / "reports" / "revive" / "REVIVE.json"
+            compiled = json.loads(revive_record.read_text(encoding="utf-8")).get("compile_checked") if revive_record.is_file() else None
+            rows.append({"workspace": workspace.name, "compile_checked": compiled})
+        if args.json:
+            print(json.dumps({"ready": rows, "count": len(rows)}, indent=2))
+            return 0
+        print(f"{len(rows)} mod(s) ready for live testing:")
+        for row in rows:
+            print(f"  {row['workspace']}" + ("" if row["compile_checked"] else "  (revive did not compile-check it)"))
+        if rows:
+            print(f'Next: bridgeforge probe-group plan "{args.queue}", then install a group and `.\\tools\\bf-test.ps1 launch <TESTID>`.')
         return 0
     if args.command == "probe-group":
         from .probe_group import ProbeGroupError, group_report, install_group, plan_groups
@@ -3076,6 +3110,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{len(row['only_blocker']):4} only / {len(row['mods']):4} mods  {row['finding']} ({row['tier']}, {row['kind']})")
             print(f"Escalated mods: {result['escalated']}. Written: {result['result_md']}")
         return 0
+    if args.command == "escalation" and args.escalation_command == "review":
+        from .escalation_review import review_sheet
+        result = review_sheet(args.workspace)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"{len(result['reviews'])} attempt(s) reviewed; flagged: {', '.join(result['flagged']) or 'none'}" + (f"\n  {result['sheet']}" if result["sheet"] else ""))
+        return 0
     if args.command == "escalation":
         from .escalation import EscalationError, list_packets, load_packet, run_packet, verify
         from .revive import render_packet
@@ -3125,7 +3167,18 @@ def main(argv: list[str] | None = None) -> int:
                 names = [args.packet]
             if not names or names == [None]:
                 raise EscalationError("Name a packet, or pass --all.")
-            results = [run_packet(args.workspace, name, args.agent, apply=args.apply, retries=args.retries, timeout=args.timeout) for name in names]
+            from .escalation_review import diff_snapshots, review_sheet, snapshot_dir
+            watched = {d: snapshot_dir(d) for d in args.watch_dir}
+            from .escalation import run_lock
+            with run_lock(args.workspace):
+                results = [run_packet(args.workspace, name, args.agent, apply=args.apply, retries=args.retries, timeout=args.timeout) for name in names]
+            for directory, before in watched.items():
+                touched = diff_snapshots(before, snapshot_dir(directory))
+                if any(touched.values()):
+                    print(f"WARNING: the agent run changed {directory}: {json.dumps(touched)}", file=sys.stderr)
+            review = review_sheet(args.workspace)
+            if review["flagged"] and not args.json:
+                print(f"Review first (flagged): {', '.join(review['flagged'])} -> {review['sheet']}", file=sys.stderr)
         except (EscalationError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -3174,6 +3227,21 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"  - {dotted.rsplit('.', 1)[-1]}.{method['signature'].split(' ', 1)[-1]}" + (f"  -> {', '.join(leads)}" if leads else ""))
             if args.output:
                 print(f"Written: {args.output}")
+        return 0
+    if args.command == "jar-packets":
+        from .jar_patch import JarPatchError, prepare_jar_packets
+        try:
+            result = prepare_jar_packets(args.mod, vanilla_core=args.vanilla_core, jdk=args.jdk)
+        except (JarPatchError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        for row in result["packets"]:
+            print(f"{row['state']:15} {row['class']}  ({row['finding']})\n  {row['next']}")
+        if not result["packets"]:
+            print("No jar-only packets.")
         return 0
     if args.command == "patch-jar-class":
         from .jar_patch import JarPatchError, patch_jar_classes

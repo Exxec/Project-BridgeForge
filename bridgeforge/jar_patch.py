@@ -155,3 +155,45 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
     result.update({"installed": True, "backup_jar": str(kept), "sources_copied": copied})
     (backup / f"PATCH-{jar_path.stem}.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     return result
+
+
+def prepare_jar_packets(workspace: Path, *, vanilla_core: Path | None = None, provider_roots: list[Path] | None = None,
+                        jdk: Path | None = None) -> dict:
+    """For each jar-only escalation packet: find the class's source in the working copy, copy it to
+    scratch/jar-packets/<packet>/ to edit, and compile the unedited copy with `patch_jar_classes` (no install).
+    `faithful` means the source rebuilds the shipped class with no member or call change, so an edit there is
+    safe to patch in; otherwise the bundled source is older or newer than the jar (VayraGhostShip, 2026-09-30)
+    and the class must be edited from a decompile. Replaces the per-packet lookup done by hand for nine mods."""
+    from .escalation import jar_only, list_packets
+
+    workspace = Path(workspace).expanduser().resolve()
+    working = workspace / "working"
+    sources_by_name: dict[str, list[Path]] = {}
+    for path in working.rglob("*.java"):
+        sources_by_name.setdefault(path.name, []).append(path)
+    rows = []
+    for packet in (p for p in list_packets(workspace) if p["kind"] == "agent" and jar_only(p)):
+        for entry in packet["allowed_files"]:
+            jar, _, class_path = entry.partition("!")
+            outer = class_path.split("$", 1)[0].removesuffix(".class")
+            wanted = outer + ".java"
+            candidates = [p for p in sources_by_name.get(Path(wanted).name, []) if p.as_posix().endswith("/" + wanted)]
+            row: dict = {"packet": packet["id"], "finding": packet["finding"], "jar": jar, "class": outer.replace("/", ".")}
+            if not candidates:
+                rows.append({**row, "source": None, "state": "NO_SOURCE", "next": "no source ships with the mod: decompile the jar (Vineflower/Fernflower; FlowerGod's src-decompiled/PROVENANCE.md has the command) and edit that class"})
+                continue
+            source = candidates[0]
+            target = workspace / "scratch" / "jar-packets" / packet["id"] / source.name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if not target.exists():
+                shutil.copy2(source, target)
+            check = patch_jar_classes(workspace, jar, [target], vanilla_core=vanilla_core, provider_roots=provider_roots, jdk=jdk)
+            main_class = next((c for c in check["classes"] if c["class"] == outer + ".class"), {})
+            faithful = check["status"] == "PASS" and not main_class.get("members") and not main_class.get("calls_changed")
+            state = "FAITHFUL" if faithful else ("COMPILE_FAILED" if not check["compile"]["success"] else "SOURCE_DIFFERS")
+            rows.append({**row, "source": str(source.relative_to(working)), "edit": str(target), "state": state,
+                         "differences": {k: main_class.get(k) for k in ("members", "calls_changed") if main_class.get(k)} or None,
+                         "errors": check["compile"]["errors"][:5] or None,
+                         "next": f'edit {target.name}, then bridgeforge patch-jar-class "{workspace}" --jar {jar} "{target}"'
+                                 + " --install" if faithful else "compare with the shipped class before editing; the source is not what shipped"})
+    return {"schema_version": SCHEMA_VERSION, "mode": "JAR_PACKETS", "workspace": str(workspace), "packets": rows}

@@ -62,6 +62,8 @@ SUPPORTED_FINDINGS = (
     "variant-wings-exceed-bays",
     "variant-weapon-slot-mismatch",
     "variant-weapon-slot-missing",
+    "hard-coded-campaign-system-reference",
+    "hard-coded-campaign-entity-reference",
 )
 
 
@@ -1319,17 +1321,23 @@ def _fix_faction_known_lists_missing(root: Path, options: dict) -> list[FileChan
     if not isinstance(data, dict):
         raise FixerError(f"{faction_path} could not be parsed as JSON.")
     ship_roles = data.get("shipRoles")
-    if not isinstance(ship_roles, dict):
-        raise FixerError(f"{faction_path} has no 'shipRoles' object to derive known lists from.")
-
     variant_ids: set[str] = set()
-    for block in ship_roles.values():
-        if not isinstance(block, dict):
-            continue
-        for key in block:
-            if key in FACTION_SPECIAL_ROLE_KEYS:
+    if isinstance(ship_roles, dict):
+        for block in ship_roles.values():
+            if not isinstance(block, dict):
                 continue
-            variant_ids.add(key)
+            for key in block:
+                if key in FACTION_SPECIAL_ROLE_KEYS:
+                    continue
+                variant_ids.add(key)
+    else:
+        # A 0.6-era faction lists its fleets in fleetCompositions[*].ships ({"atol_Wayfarer":[1, 1], ...}) instead
+        # of shipRoles (Antediluvians, Batavia, Qualljom and six more, 2026-09-30): the same variant and wing ids.
+        for composition in (data.get("fleetCompositions") or {}).values():
+            if isinstance(composition, dict) and isinstance(composition.get("ships"), dict):
+                variant_ids.update(key for key in composition["ships"] if isinstance(key, str) and key)
+    if not variant_ids:
+        raise FixerError(f"{faction_path} has no shipRoles or fleetCompositions ships to derive known lists from.")
 
     search_roots = [root, vanilla_root]
     valid_hull_ids = _hull_ids(root) | _hull_ids(vanilla_root)
@@ -1344,6 +1352,10 @@ def _fix_faction_known_lists_missing(root: Path, options: dict) -> list[FileChan
     unresolved: list[str] = []
 
     for variant_id in sorted(variant_ids):
+        if variant_id in valid_wing_ids and _load_variant(search_roots, variant_id) is None:
+            # Pre-0.65 role and fleet lists named wings directly ("broadsword_wing"): a known fighter, not a variant.
+            known_fighters.add(variant_id)
+            continue
         variant_data = _load_variant(search_roots, variant_id)
         if variant_data is None:
             unresolved.append(f"variant:{variant_id} (not found)")
@@ -1383,10 +1395,15 @@ def _fix_faction_known_lists_missing(root: Path, options: dict) -> list[FileChan
         '"knownFighters":{"fighters":[' + ",".join(json.dumps(item) for item in sorted(known_fighters)) + "]},"
     )
 
-    ship_roles_key_pattern = re.compile(r"['\"]shipRoles['\"]\s*:")
-    match = ship_roles_key_pattern.search(text)
+    depths = _structural_depths(text)
+    match = None
+    # Before the top-level key the lists were derived from: shipRoles, or a 0.6-era fleetCompositions.
+    for key in ("shipRoles", "fleetCompositions"):
+        match = _find_top_level_key(text, re.compile(r"(?P<key>['\"]?" + key + r"['\"]?)\s*:"), depths)
+        if match is not None:
+            break
     if match is None:
-        raise FixerError(f"{faction_path} has no 'shipRoles' key text to insert before.")
+        raise FixerError(f"{faction_path} has no top-level 'shipRoles' or 'fleetCompositions' key to insert before.")
     insert_at = match.start()
     new_text = text[:insert_at] + insertion + text[insert_at:]
     try:
@@ -2370,7 +2387,76 @@ def _fix_csv_slash_quote_escape(root: Path, options: dict) -> list[FileChange]:
     return changes
 
 
+def _fix_campaign_lookup_guard(root: Path, options: dict, finding_id: str) -> list[FileChange]:
+    """Guard an unguarded `getStarSystem("X")` / `getEntityById("X")` in a void method: right after the declaration
+    that takes the result, `if (v == null) { log a warning; return; }`. Done by hand for Pegasus Belt Council,
+    Vayra's Sector and First Persean Empire (2026-09-29/30): a generator that assumes a vanilla system or entity
+    exists NPEs at New Game in a total conversion or random sector.
+
+    Applied only where the edit cannot change anything else: a one-line local declaration directly in a void
+    method's body (not in a loop, lambda or inner block), so the early return skips only the rest of that method,
+    which would have thrown on the null. Every other shape is refused and stays with an agent."""
+    from .scanner import _blank_java_comments
+
+    method = "getStarSystem" if finding_id == "hard-coded-campaign-system-reference" else "getEntityById"
+    names_by_file: dict[str, set[str]] = {}
+    for finding in _findings_of(root, options, finding_id):
+        if finding.file and finding.evidence and "null-guarded" not in finding.evidence:
+            names_by_file.setdefault(finding.file, set()).add(finding.evidence[0])
+    changes, refused = [], []
+    for relative, names in sorted(names_by_file.items()):
+        path = root / relative
+        if not path.is_file() or path.suffix != ".java":
+            refused.append(relative)
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        newline = "\r\n" if "\r\n" in text else "\n"
+        lines = text.split(newline)
+        blank = _blank_java_comments(text).split(newline)
+        cls = re.search(r"\bclass\s+(\w+)", _blank_java_comments(text))
+        inserts: list[tuple[int, str]] = []
+        for name in sorted(names):
+            call = re.escape(method) + r'\s*\(\s*"' + re.escape(name) + r'"\s*\)'
+            hits = [i for i, line in enumerate(blank) if re.search(call, line)]
+            placed = False
+            for i in hits:
+                decl = re.match(r"^(\s*)(?:final\s+)?[\w.]+(?:<[\w.,\s<>?]*>)?\s+(\w+)\s*=\s*[^;]*" + call + r"\s*;\s*$", blank[i])
+                if not decl or cls is None:
+                    continue
+                # Brace depth from the enclosing method's opening brace must be exactly 1.
+                depth, start = 0, None
+                for j in range(i - 1, -1, -1):
+                    depth += blank[j].count("}") - blank[j].count("{")
+                    if depth < 0:
+                        start = j
+                        break
+                if start is None or depth != -1 or not re.search(r"\bvoid\s+\w+\s*\([^)]*\)\s*(?:throws[^{]*)?\{\s*$", blank[start]):
+                    continue
+                if "->" in blank[start]:
+                    continue
+                indent, variable = decl.group(1), decl.group(2)
+                what = "star system" if method == "getStarSystem" else "entity"
+                inserts.append((i + 1, newline.join([
+                    f"{indent}if ({variable} == null) {{ // BridgeForge: guard a missing {what} (a total conversion or random sector)",
+                    f'{indent}    com.fs.starfarer.api.Global.getLogger({cls.group(1)}.class).warn("{what} \\"{name}\\" not found, skipping the rest of this generator");',
+                    f"{indent}    return;",
+                    f"{indent}}}"])))
+                placed = True
+            if not placed:
+                refused.append(f"{relative} ({name})")
+        if inserts:
+            for index, block in sorted(inserts, reverse=True):
+                lines.insert(index, block)
+            changes.append(FileChange(path=path, before=raw, after=_encode(newline.join(lines), had_bom)))
+    if refused and not changes:
+        raise FixerError(f"{finding_id}: no lookup is a one-line declaration directly in a void method; left for an agent: " + ", ".join(refused))
+    return changes
+
+
 _FIXER_FUNCS = {
+    "hard-coded-campaign-system-reference": lambda root, options: _fix_campaign_lookup_guard(root, options, "hard-coded-campaign-system-reference"),
+    "hard-coded-campaign-entity-reference": lambda root, options: _fix_campaign_lookup_guard(root, options, "hard-coded-campaign-entity-reference"),
     "csv-slash-quote-escape": _fix_csv_slash_quote_escape,
     "procgen-mod-body-leak": _fix_procgen_mod_body_leak,
     "fleet-type-name-missing": _fix_fleet_type_name_missing,

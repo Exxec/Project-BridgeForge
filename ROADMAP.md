@@ -2407,6 +2407,42 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         watched that way now), and count combat-filler use in the group report.
 
        **Done:** `combat_filler_sides` in the group report.
+32. **Less hand work in escalation, from the 2026-09-29/30 batches (done 2026-09-30).** Owner-approved list; each
+    replaces a step done by hand at least twice.
+    1. **Review sheet** (`escalation review WS`, also written after every `escalation run`): each packet's newest
+       attempt with its diff and flags for a removed hint or tag, Random/save logic, a rewritten loop, a swallowed
+       exception, a net deletion, a moved baseline, or an agent asking to leave its sandbox. On the real batches it
+       flagged Covert (hint removed), Vesperon (Random) and Arthr (loop), the three caught by hand.
+       Tests: `tests/test_escalation_review.py`.
+    2. **Watched directories** (`escalation run --watch-dir DIR`): what an agent run changed there is reported, for
+       the session's memory folder.
+    3. **One packet per file:** agent packets for different findings on one file merge (`merged` lists the ids;
+       verify needs all gone; queue counts and `escalation rule` see every id). Pegasus's entity and system packets
+       were merged by hand. Test: `SameFilePacketMergeTests`.
+    4. **Run lock:** a second `escalation run` on a workspace refuses while the first's process is alive (the
+       2026-09-29 pilot collisions). Test: `RunLockTests`.
+    5. **`jar-packets WS`:** for each jar-only packet, finds the class's source, copies it to scratch to edit, and
+       says FAITHFUL / SOURCE_DIFFERS / COMPILE_FAILED / NO_SOURCE by compiling the unedited copy with
+       `patch-jar-class`. Too Much Information has no source and there is no decompiler on the machine now
+       (IntelliJ's Fernflower was used for FlowerGod). Tests: `JarPacketsTests`.
+    6. **`ready-list QUEUE`:** the mods ready for live testing (22 on 2026-09-30). Test: `tests/test_ready_list.py`.
+    7. **Campaign lookup guard fixer** (hard-coded-campaign-system/entity-reference): a one-line declaration of a
+       `getStarSystem`/`getEntityById` result directly in a void method gets `if (v == null) { warn; return; }`;
+       every other shape (Pegasus's inline `getEntityById("nomios")` argument, a loop) is refused for an agent. Tier
+       auto, but the findings are REVIEW, so revive applies it only once approved. A null-guarded lookup stays a note.
+       Tests: `tests/test_campaign_lookup_guard_fixer.py`.
+    8. **Faction known lists from `fleetCompositions`:** a 0.6-era faction without shipRoles derives its lists from
+       its fleets' ships, and a wing id in a role or fleet list counts as a known fighter. A faction with no roles,
+       fleets or markets is a SAFE note (`nothing-reads-lists`; hvb_hostile in three mods). Of 14 refusals, 6 now
+       derive, 3 become notes, 5 name variants that do not exist (aurora_Escort, condor_FS, heron_Standard,
+       mole_miner, Thule's own) and stay per-mod work. Tests: `FactionKnownListsMissingTests`.
+    9. **hullmod-instance-state:** a private primitive or String field that no method writes is no longer flagged
+       (9 of 86 source packets: commented-out code in AI War, Tahlan's runOnce); arrays, objects and non-private
+       fields still are (KT_Biter fills an array per ship). Agents get the per-ship `getCustomData()` recipe as the
+       packet hint. Tests: `tests/test_hullmod_instance_state.py`.
+    10. **Not built:** blank values from another version of the mod (`wing-op-cost-blank`): 10 of the 15 mods are
+        pre-0.8, when fighters had no OP cost, so no copy has a value. What RC8 does with a blank cost is not yet
+        proven (vanilla has none blank); a probe row for it is the next step.
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit

@@ -63,7 +63,7 @@ def revive_queue(queue: Path, *, only_status: set[str] | None = None, never_revi
                 try:
                     result = revive_one(workspace, vanilla_core=vanilla_core, apply=apply, draft_report=draft_report)
                     cached = {"workspace": workspace.name, "status": result.get("status"),
-                              "blockers": sorted({p.get("finding") for p in result.get("packets") or [] if p.get("finding")})}
+                              "blockers": sorted({f for p in result.get("packets") or [] if p.get("finding") for f in p.get("merged") or [p["finding"]]})}
                 except (ReviveError, OSError, ValueError) as exc:
                     cached = {"workspace": workspace.name, "status": "ERROR", "error": str(exc), "blockers": []}
                 checkpoint.add(workspace.name, cached)
