@@ -194,6 +194,19 @@ class ReviveTests(unittest.TestCase):
             self.assertEqual(load_packet(workspace, "content-reference-unresolved--mod")["options"], {"notes": ["stubbed"]})
         self.assertEqual(len(result["packets"]), 1)
 
+    def test_a_safe_finding_with_no_fixer_is_not_a_packet(self):
+        # Fantastic Furniture (pilot 4, 2026-09-29): SAFE, null-guarded getEntityById lookups became an agent packet.
+        with resolved_temp_dir() as root:
+            ws = root / "In operation" / "Guarded"
+            (ws / "working" / "data" / "scripts").mkdir(parents=True)
+            (ws / "working" / "mod_info.json").write_text(json.dumps({"id": "guarded", "name": "Guarded", "version": "1", "gameVersion": "0.98a-RC8"}), encoding="utf-8")
+            (ws / "working" / "data" / "scripts" / "Plugin.java").write_text(
+                'class Plugin { void f(com.fs.starfarer.api.campaign.SectorAPI s) { if (s.getEntityById("gilead") != null) { s.getEntityById("gilead").getMarket(); } } }\n',
+                encoding="utf-8")
+            result = revive(ws)
+        self.assertEqual([p["finding"] for p in result["packets"]], [])
+        self.assertEqual(result["status"], "UNATTENDED_DONE")
+
     def test_refuses_a_non_workspace(self):
         with resolved_temp_dir() as root:
             with self.assertRaises(ReviveError):

@@ -271,6 +271,15 @@ def _sha256(path: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
+def _informational(finding: dict) -> bool:
+    """A SAFE finding no fixer handles is a note, not work: nothing to fix, approve or decide. Fantastic Furniture's
+    null-guarded getEntityById("gilead") lookups (SAFE) still became an agent packet, and an agent failed twice on
+    it (pilot 4, 2026-09-29)."""
+    from .fixers import SUPPORTED_FINDINGS
+
+    return finding.get("classification") == "SAFE" and finding.get("id") not in SUPPORTED_FINDINGS
+
+
 def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dict], *, vanilla_core: Path | None, now=None,
                   options_for=None) -> list[dict]:
     working = workspace / "working"
@@ -280,7 +289,7 @@ def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dic
     groups: dict[tuple[str, str], list[dict]] = {}
     for finding in findings:
         tier = tier_for(finding["id"])
-        if tier not in ACTIONABLE:
+        if tier not in ACTIONABLE or _informational(finding):
             continue
         per_file = tier in AGENT_TIERS and finding.get("file")
         groups.setdefault((finding["id"], (finding.get("file") or "") if per_file else ""), []).append(finding)
@@ -385,7 +394,7 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
         if not applied:
             break
         findings = _scan(working, vanilla_core)
-    remaining_tiers = [tier_for(f["id"]) for f in findings]
+    remaining_tiers = [tier_for(f["id"]) for f in findings if not _informational(f)]
     roots = providers if providers else [workspace.parent, workspace.parent / "_rig" / "mods"]
     cache: dict = {}
 
