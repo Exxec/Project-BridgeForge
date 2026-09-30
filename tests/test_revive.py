@@ -213,6 +213,15 @@ class ReviveTests(unittest.TestCase):
                 revive(root)
 
 
+class JarOnlyPacketTests(unittest.TestCase):
+    def test_jar_only_packets_are_recognised(self):
+        # Fast Engine Rendering and Magellan Protectorate (2026-09-30): agents cannot open a jar in their sandbox.
+        from bridgeforge.escalation import jar_only
+        self.assertTrue(jar_only({"allowed_files": ["jars/x.jar!data/Cls.class"]}))
+        self.assertFalse(jar_only({"allowed_files": ["jars/x.jar!data/Cls.class", "src/data/Cls.java"]}))
+        self.assertFalse(jar_only({"allowed_files": []}))
+
+
 class EscalationRunTests(unittest.TestCase):
     def test_a_note_written_to_the_literal_variable_name_still_counts(self):
         # Pilot 2026-09-29: agents using file tools wrote "$BF_NOTE" as a file name in the sandbox, and every

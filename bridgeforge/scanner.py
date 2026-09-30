@@ -2057,6 +2057,8 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
                 for line_number, row in enumerate(rows, start=2):
                     if len(row) <= len(header) or not any(cell.strip() for cell in row):
                         continue
+                    if row[0].lstrip().startswith("#"):
+                        continue  # a comment row Starsector skips (Industrial Evolution's printing_whitelist.csv notes)
                     # Content beyond the header is a spilled row (loads into the wrong columns). Only
                     # empty trailing cells (spreadsheet padding; Mirfak's hull_mods rows reach 14,726
                     # cells) are ignored by Starsector but rejected by strict tools; that is SAFE to trim.

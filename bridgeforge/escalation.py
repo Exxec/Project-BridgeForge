@@ -49,6 +49,14 @@ def list_packets(workspace: Path) -> list[dict]:
     return [json.loads(path.read_text(encoding="utf-8")) for path in sorted(packets_dir(workspace).glob("*.json"))]
 
 
+def jar_only(packet: dict) -> bool:
+    """True when every file a packet may change is a jar entry ("x.jar!path/Cls.class"). An agent sandbox has no jar,
+    javap or python, so such a packet cannot be fixed there (Fast Engine Rendering, Magellan Protectorate,
+    2026-09-30); it is fixed in the main session by recompiling one class against RC8 and swapping it in."""
+    files = packet.get("allowed_files") or []
+    return bool(files) and all("!" in name for name in files)
+
+
 def load_packet(workspace: Path, packet: str) -> dict:
     path = packets_dir(workspace) / f"{packet}.json"
     if not path.is_file():
@@ -72,7 +80,11 @@ def changed_files(before: Path, after: Path) -> list[str]:
 def verify(packet: dict, working: Path) -> dict:
     """Did the packet's finding go away, without new actionable findings? Scans `working` afresh."""
     vanilla = Path(packet["vanilla_core"]) if packet.get("vanilla_core") else None
-    findings = _scan(working, vanilla)
+    from .revive import _informational
+
+    # A SAFE finding no fixer handles is a note, not work: a correct fix (a null guard) turns a REVIEW finding
+    # SAFE, and it must count as fixed (Vayra's Sector, 2026-09-30: guarded getEntityById lookups "remained").
+    findings = [f for f in _scan(working, vanilla) if not _informational(f)]
     target_file = packet.get("file") or ""
     remaining = [f for f in findings if f["id"] == packet["finding"] and (not target_file or (f.get("file") or "") == target_file)]
     baseline = set(packet.get("baseline_keys") or [])

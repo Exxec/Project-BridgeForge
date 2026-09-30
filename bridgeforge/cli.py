@@ -3097,7 +3097,22 @@ def main(argv: list[str] | None = None) -> int:
                     for item in result["written"]:
                         print(f"  {item['path']}" + (f" (backup {item['backup']})" if item.get("backup") else ""))
                 return 0
-            names = [p["id"] for p in list_packets(args.workspace) if p["kind"] == "agent"] if args.all else [args.packet]
+            from .escalation import jar_only
+
+            local_only = []
+            if args.all:
+                # A packet whose only files are jar entries ("x.jar!path/Cls.class") cannot be fixed in an agent sandbox:
+                # it has no jar, javap or python (Fast Engine Rendering and Magellan Protectorate agents changed nothing,
+                # 2026-09-30). --all leaves them out and lists them for the main session; naming one still runs it.
+                agent_packets = [p for p in list_packets(args.workspace) if p["kind"] == "agent"]
+                local_only = [p["id"] for p in agent_packets if jar_only(p)]
+                names = [p["id"] for p in agent_packets if p["id"] not in local_only]
+                for name in local_only:
+                    print(f"SKIPPED (jar-only, fix in the main session): {name}", file=sys.stderr)
+                if not names and local_only:
+                    return 0
+            else:
+                names = [args.packet]
             if not names or names == [None]:
                 raise EscalationError("Name a packet, or pass --all.")
             results = [run_packet(args.workspace, name, args.agent, apply=args.apply, retries=args.retries, timeout=args.timeout) for name in names]
