@@ -1105,6 +1105,28 @@ class CsvMissingDesignTypeColumnTests(unittest.TestCase):
             self.assertTrue(str(plan.changes[0].path).endswith("ship_data.csv"))
 
 
+class UnattendedInputFixerTests(unittest.TestCase):
+    """Owner ruling 2026-09-30: two input fixers run unattended with defaults that invent nothing."""
+
+    def test_nearest_vanilla_gen_row(self) -> None:
+        from bridgeforge.fixers import nearest_vanilla_gen_row
+        planets = {"barren", "water", "lava", "gas_giant", "frozen", "star_yellow", "star_red_dwarf"}
+        self.assertEqual(nearest_vanilla_gen_row("waterworld", "", planets, False), "water")
+        self.assertEqual(nearest_vanilla_gen_row("em_gas_giant", "", planets, False), "gas_giant")
+        self.assertEqual(nearest_vanilla_gen_row("batavia_shipyards", "Shipyards", planets, False), "barren")
+        self.assertEqual(nearest_vanilla_gen_row("my_sun", "Red Sun", planets, True), "star_red_dwarf")
+
+    def test_blank_design_type_column_needs_no_design_type_or_colour(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "data" / "hulls" / "ship_data.csv", "name,id\nOne,ff_one\n")
+            plan = compute_fix(root, "csv-missing-design-type-column", {"blank_design_type": True})
+            apply_fix(plan)
+            written = (root / "data" / "hulls" / "ship_data.csv").read_text(encoding="utf-8")
+        self.assertEqual(written, "name,id,tech/manufacturer\nOne,ff_one,\n")
+        self.assertEqual(len(plan.changes), 1)  # no settings.json colour
+
+
 class ProcgenRowMissingTests(unittest.TestCase):
     def _vanilla(self, vanilla: Path) -> None:
         _write(

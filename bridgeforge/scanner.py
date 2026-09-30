@@ -1065,6 +1065,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
             result.add(id="duplicate-source-layout", category="source", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Identical Java source appears at multiple paths. Establish the authoritative source/JAR layout before compiling or modifying it.", evidence=sorted(paths))
     _scan_mission_local_fleet_references(root, result, vanilla_core)
     _scan_campaign_fleet_references(root, result, vanilla_core)
+    _scan_jar_linkage(root, result, vanilla_core)
     _scan_core_campaign_plugin_reregistered(root, result)
     _scan_system_generation_unguarded(root, result)
     _scan_mission_required_files(root, result)
@@ -1854,6 +1855,53 @@ def _lookup_null_guarded(text: str, method: str, name: str) -> bool:
         if re.search(rf"\b{re.escape(variable)}\s*[!=]=\s*null\b|\bnull\s*[!=]=\s*{re.escape(variable)}\b", text):
             return True
     return False
+
+
+def _scan_jar_linkage(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """jar-linkage-unresolved: a declared jar calls a game method or field RC8 does not have (bridgeforge/linkage.py).
+    Too Much Information's beginTable(...)V (RC8 returns UIPanelAPI) is a NoSuchMethodError the first time the tooltip
+    draws. Over the 79 live-validated mods in Done/ (2026-09-30) it found only addImageWithText in four, the same
+    return-type change on tooltip paths the probe does not open, once jars of the rig's other mods count as
+    providers (SEEKER's NGCAddStartingShipsByFleetType is Nexerelin's, squatting a game package)."""
+    declared = result.metadata.get("jars")
+    if vanilla_core is None or not isinstance(declared, list):
+        return
+    from .linkage import unresolved_references
+
+    jars = [root / entry for entry in declared if isinstance(entry, str) and (root / entry).is_file()]
+    if not jars:
+        return
+    # Providers: the jars each other rig mod declares, not every jar in its folder (FlowerGod's build/cp held a
+    # copy of starfarer.api.jar, which hid every break, 2026-09-30).
+    rig_mods = Path(vanilla_core).resolve().parent / "mods"
+    others = []
+    for info_path in sorted(rig_mods.glob("*/mod_info.json")) if rig_mods.is_dir() else []:
+        info = _load_lenient_json_file(info_path) or {}
+        if not isinstance(info, dict) or info.get("id") == result.metadata.get("id"):
+            continue
+        others += [info_path.parent / j for j in info.get("jars") or [] if isinstance(j, str) and (info_path.parent / j).is_file()]
+    for entry, problems in unresolved_references(jars, vanilla_core, others).items():
+        jar_name, _, member = entry.partition("!")
+        jar_rel = next(_relative(root, j) for j in jars if j.name == jar_name)
+        relink = all(p.get("return_type_only") for p in problems)
+        evidence = [f"{p['owner'].replace('/', '.')}.{p['name']}{p['descriptor'] if p['kind'] != 'class' else ''}"
+                    + (f" (RC8: {', '.join(p['candidates'])})" if p.get("candidates") else "") + (" [class missing]" if p["kind"] == "class" else "")
+                    for p in problems][:12]
+        result.add(
+            id="jar-linkage-unresolved",
+            category="bytecode",
+            severity="high",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=("This class calls game methods whose RC8 signature differs only in return type; it throws NoSuchMethodError "
+                         "when that code runs. Recompiling the class against RC8 relinks it with no source change "
+                         "(`bridgeforge jar-packets`, then `patch-jar-class`)." if relink else
+                         "This class references game classes, methods or fields RC8 does not have (a NoSuchMethodError, "
+                         "NoSuchFieldError or NoClassDefFoundError when that code runs). The RC8 candidates are listed; "
+                         "port the call, then recompile the class (`bridgeforge jar-packets`, then `patch-jar-class`)."),
+            file=f"{jar_rel}!{member}",
+            evidence=evidence,
+        )
 
 
 def _scan_campaign_fleet_references(root: Path, result: ScanResult, vanilla_core: Path | None = None) -> None:

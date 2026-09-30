@@ -130,6 +130,31 @@ def _fix_options(finding_id: str, working: Path, target: str, vanilla_core: Path
     base = {"target_game_version": target, "vanilla_core": vanilla_core, "scan_findings": findings}
     if finding_id == "faction-known-lists-missing":
         return [{**base, "faction_file": working / f["file"]} for f in findings if f.get("file")]
+    if finding_id == "csv-missing-design-type-column":
+        return [{**base, "blank_design_type": True}]  # owner ruling 2026-09-30: add the column blank, invent nothing
+    if finding_id in ("procgen-planet-row-missing", "procgen-star-row-missing"):
+        # One run per type, copying the nearest vanilla row by name (owner ruling 2026-09-30); frequency is zeroed.
+        import csv as _csv
+
+        from .fixers import nearest_vanilla_gen_row
+        from .scanner import _load_lenient_json_file
+
+        is_star = finding_id == "procgen-star-row-missing"
+        vanilla_csv = Path(vanilla_core or "") / "data" / "campaign" / "procgen" / ("star_gen_data.csv" if is_star else "planet_gen_data.csv")
+        if vanilla_core is None or not vanilla_csv.is_file():
+            return [base]
+        with vanilla_csv.open(encoding="utf-8", errors="replace") as handle:
+            vanilla_ids = {row[0].strip() for row in _csv.reader(handle) if row and row[0].strip()}
+        planets = _load_lenient_json_file(working / "data" / "config" / "planets.json") if (working / "data" / "config" / "planets.json").is_file() else {}
+        runs = []
+        for finding in findings:
+            type_id = next((e.split(":", 1)[1] for e in finding.get("evidence") or [] if e.startswith("type:")), None)
+            spec = planets.get(type_id) if isinstance(planets, dict) and type_id else None
+            name = str(spec.get("name") or "") if isinstance(spec, dict) else ""
+            source_row = nearest_vanilla_gen_row(type_id or "", name, vanilla_ids, is_star) if type_id else None
+            if type_id and source_row:
+                runs.append({**base, "type_id": type_id, "from_vanilla_id": source_row})
+        return runs or [base]
     if finding_id == "data-file-not-utf8":
         from .fixers import pending_named_encodings
         # A person's earlier `fix --encoding` decisions (<workspace>/NAMED_ENCODINGS.json, ROADMAP P15 20.4).

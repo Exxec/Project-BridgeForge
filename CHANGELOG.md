@@ -6,6 +6,12 @@
   agent packet per file, a per-workspace run lock, `jar-packets`, `ready-list`, a campaign lookup guard fixer,
   faction known lists from 0.6-era `fleetCompositions`, and a quieter `hullmod-instance-state` (fields never written
   are dropped; arrays, objects and non-private fields stay).
+- **`jar-linkage-unresolved`:** a new check resolves every call a declared jar makes into a game class against RC8's
+  core jars. It found Too Much Information's `beginTable(...)V` (RC8 returns `UIPanelAPI`) and the same break for
+  `addImageWithText` in four live-validated mods; recompiling the class fixes it. `jar-packets` decompiles a jar with
+  no source (Vineflower) and treats a return-type relink as faithful.
+- **Unattended defaults for two approved fixers:** the design-type column is added blank; a missing procgen row copies
+  the nearest vanilla row by name with frequency 0.
 - **`patch-jar-class`:** recompile a few edited classes against RC8 and swap them into a jar, compared with javap
   first. **RC8-20:** `getEntityById` falls back to a case-insensitive scan.
 

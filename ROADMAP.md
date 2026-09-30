@@ -2443,6 +2443,23 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     10. **Not built:** blank values from another version of the mod (`wing-op-cost-blank`): 10 of the 15 mods are
         pre-0.8, when fighters had no OP cost, so no copy has a value. What RC8 does with a blank cost is not yet
         proven (vanilla has none blank); a probe row for it is the next step.
+    11. **Decompile for jar-only packets:** `jar-packets` decompiles a jar with no source using Vineflower 1.12.0
+        (the maintained Fernflower fork; `In operation/_tools/`, fetched from Maven Central 2026-09-30, SHA-1
+        checked, never committed) into scratch with a PROVENANCE.txt, then runs the same faithful check. A call whose
+        RC8 return type changed is a relink, not a difference. Too Much Information's five classes are FAITHFUL.
+        Tests: `RelinkAndDecompilerTests`.
+    12. **`jar-linkage-unresolved` (new check):** every Methodref/Fieldref a declared jar makes into a game class,
+        resolved through RC8's core jars and hierarchy (`bridgeforge/linkage.py`); jars other rig mods declare count
+        as providers. Found through Too Much Information: `TooltipMakerAPI.beginTable(...)V` returns `UIPanelAPI` in
+        RC8, a NoSuchMethodError as shipped that nothing flagged. Over the 79 live-validated mods in Done/ it found
+        only `addImageWithText` in four (Arkgneisis, Megastructures Tab, RogueSynth, Slightly Better Tech Mining),
+        the same break on tooltip paths the probe does not open: fixed by recompiling the class. Tier code (a
+        jar-only packet). Test: `tests/test_jar_linkage.py`.
+    13. **Two input fixers run unattended** (owner ruling 2026-09-30): `csv-missing-design-type-column` adds the
+        column blank (no design type invented, no colour), and `procgen-planet/star-row-missing` copies the vanilla
+        row nearest by name (water, lava, gas giant..., else barren / star_yellow) with frequency 0. Tier auto;
+        REVIEW findings, so applied where approved (planets and the design column are). Tests:
+        `UnattendedInputFixerTests`.
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit

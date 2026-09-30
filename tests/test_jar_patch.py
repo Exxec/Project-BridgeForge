@@ -120,3 +120,21 @@ class JarPacketsTests(JarPatchTests):
             self._packet(ws, "jars/mod.jar!data/hullmods/Missing.class")
             row = prepare_jar_packets(ws)["packets"][0]
         self.assertEqual(row["state"], "NO_SOURCE")
+
+
+class RelinkAndDecompilerTests(unittest.TestCase):
+    def test_a_return_type_change_alone_is_a_relink(self) -> None:
+        from bridgeforge.jar_patch import _only_return_type_relinks
+        # Too Much Information (2026-09-30): RC8's TooltipMakerAPI.beginTable returns UIPanelAPI, the jar expects void.
+        self.assertEqual(_only_return_type_relinks({"T.beginTable:(F)V": -2, "T.beginTable:(F)LUIPanelAPI;": 2}),
+                         ["T.beginTable:(F)V -> LUIPanelAPI;"])
+        self.assertEqual(_only_return_type_relinks({"T.a:(F)V": -1, "T.b:(F)V": 1}), [])
+        self.assertEqual(_only_return_type_relinks({"T.a:(F)V": -1}), [])
+
+    def test_decompiler_is_found_beside_the_queue(self) -> None:
+        from bridgeforge.jar_patch import find_decompiler
+        with resolved_temp_dir() as root:
+            (root / "_tools").mkdir()
+            (root / "_tools" / "vineflower-1.12.0.jar").write_bytes(b"")
+            found = find_decompiler(root / "Mod")
+        self.assertEqual(found.name, "vineflower-1.12.0.jar")

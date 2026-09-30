@@ -1096,13 +1096,18 @@ def _fix_csv_missing_design_type_column(root: Path, options: dict) -> list[FileC
     design_type = options.get("design_type")
     prefixes = options.get("id_prefixes") or []
     design_color = options.get("design_color")
-    if not design_type:
+    # Unattended (owner ruling 2026-09-30): add the column with every cell blank, as some vanilla rows are, so the
+    # loader finds it; no design type is invented, so no settings.json colour is needed.
+    blank = bool(options.get("blank_design_type"))
+    if blank:
+        design_type, prefixes = "", []
+    elif not design_type:
         raise FixerError("--design-type is required for csv-missing-design-type-column.")
-    if not prefixes:
+    if not blank and not prefixes:
         raise FixerError("At least one --id-prefix is required for csv-missing-design-type-column.")
-    if not design_color:
+    if not blank and not design_color:
         raise FixerError("--design-color R,G,B is required for csv-missing-design-type-column.")
-    rgb = _parse_rgb(design_color)
+    rgb = _parse_rgb(design_color) if not blank else None
 
     changes: list[FileChange] = []
     any_csv_fixed = False
@@ -1149,7 +1154,7 @@ def _fix_csv_missing_design_type_column(root: Path, options: dict) -> list[FileC
     if not any_csv_fixed:
         raise FixerError("Neither ship_data.csv nor weapon_data.csv is missing a tech/manufacturer column.")
 
-    settings_change = _add_design_type_color(root / "data" / "config" / "settings.json", design_type, rgb)
+    settings_change = None if blank else _add_design_type_color(root / "data" / "config" / "settings.json", design_type, rgb)
     if settings_change is not None:
         changes.append(settings_change)
     return changes
@@ -1186,6 +1191,30 @@ def _add_design_type_color(path: Path, name: str, rgb: list[int]) -> FileChange 
 # ---------------------------------------------------------------------------
 # Fixer: procgen-planet-row-missing / procgen-star-row-missing
 # ---------------------------------------------------------------------------
+
+
+_GEN_ROW_KEYWORDS = (  # first keyword found in the type's id or name picks the vanilla row to copy
+    ("black_hole", "black_hole"), ("blackhole", "black_hole"), ("neutron", "star_neutron"), ("pulsar", "star_neutron"),
+    ("dwarf", "star_browndwarf"), ("blue", "star_blue_giant"), ("red", "star_red_dwarf"), ("orange", "star_orange"),
+    ("white", "star_white"), ("yellow", "star_yellow"),
+    ("ice_giant", "ice_giant"), ("gas", "gas_giant"), ("giant", "gas_giant"), ("lava", "lava"), ("volcan", "lava"),
+    ("toxic", "toxic"), ("acid", "toxic"), ("irradiated", "irradiated"), ("radiat", "irradiated"),
+    ("cryo", "cryovolcanic"), ("frozen", "frozen"), ("ice", "frozen"), ("snow", "frozen"), ("tundra", "tundra"),
+    ("jungle", "jungle"), ("water", "water"), ("ocean", "water"), ("terran", "terran"), ("earth", "terran"),
+    ("desert", "desert"), ("arid", "arid"), ("rock", "rocky_metallic"), ("metal", "rocky_metallic"), ("barren", "barren"),
+)
+
+
+def nearest_vanilla_gen_row(type_id: str, name: str, vanilla_ids: set[str], is_star: bool) -> str | None:
+    """The vanilla procgen row to copy for a mod planet or star type with none: the first keyword of its id or name,
+    else barren / star_yellow. Frequency is zeroed after the copy, so only scripted placement uses it; the category
+    picks the conditions a scripted planet rolls, and the choice is in the reviewed diff."""
+    text = f"{type_id} {name}".lower()
+    for keyword, row in _GEN_ROW_KEYWORDS:
+        if keyword in text and row in vanilla_ids and row.startswith(("star_", "black_hole")) == is_star:
+            return row
+    fallback = "star_yellow" if is_star else "barren"
+    return fallback if fallback in vanilla_ids else None
 
 
 def _fix_procgen_row_missing(root: Path, finding_id: str, options: dict) -> list[FileChange]:

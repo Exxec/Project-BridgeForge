@@ -157,6 +157,45 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
     return result
 
 
+def _only_return_type_relinks(calls_changed: dict[str, int]) -> list[str]:
+    """The changed calls, when they pair up exactly as `owner.name:(args)OLD` -n / `owner.name:(args)NEW` +n: the same
+    call sites linked to a new return type. Empty when anything else changed."""
+    by_site: dict[str, dict[int, str]] = {}
+    for call, delta in calls_changed.items():
+        site, _, returned = call.rpartition(")")
+        by_site.setdefault(site, {})[delta] = returned
+    relinks = []
+    for site, deltas in by_site.items():
+        if len(deltas) != 2 or sum(deltas) != 0:
+            return []
+        relinks.append(f"{site}){deltas[min(deltas)]} -> {deltas[max(deltas)]}")
+    return sorted(relinks)
+
+
+def find_decompiler(workspace: Path) -> Path | None:
+    """Vineflower (the maintained Fernflower fork): $BF_DECOMPILER, else the queue's _tools/vineflower-*.jar. Fetched
+    from Maven Central 2026-09-30 (1.12.0, SHA-1 checked); a local tool, never committed."""
+    import os
+
+    named = os.environ.get("BF_DECOMPILER")
+    if named and Path(named).is_file():
+        return Path(named)
+    found = sorted(Path(workspace).parent.glob("_tools/vineflower-*.jar"))
+    return found[-1] if found else None
+
+
+def _decompiled_tree(workspace: Path, jar: str, java: Path, decompiler: Path) -> Path | None:
+    out = workspace / "scratch" / "jar-packets" / "_decompiled" / Path(jar).stem
+    if not out.is_dir():
+        out.mkdir(parents=True)
+        run = subprocess.run([str(java), "-jar", str(decompiler), "-log=WARN", str(workspace / "working" / jar), str(out)],
+                             capture_output=True, text=True, check=False)
+        (out / "PROVENANCE.txt").write_text(
+            f"Decompiler output ({decompiler.name}), not the author's source.\nInput: working/{jar}\nExit: {run.returncode}\n"
+            + (run.stderr or "")[-2000:], encoding="utf-8")
+    return out if any(out.rglob("*.java")) else None
+
+
 def prepare_jar_packets(workspace: Path, *, vanilla_core: Path | None = None, provider_roots: list[Path] | None = None,
                         jdk: Path | None = None) -> dict:
     """For each jar-only escalation packet: find the class's source in the working copy, copy it to
@@ -178,7 +217,13 @@ def prepare_jar_packets(workspace: Path, *, vanilla_core: Path | None = None, pr
             outer = class_path.split("$", 1)[0].removesuffix(".class")
             wanted = outer + ".java"
             candidates = [p for p in sources_by_name.get(Path(wanted).name, []) if p.as_posix().endswith("/" + wanted)]
-            row: dict = {"packet": packet["id"], "finding": packet["finding"], "jar": jar, "class": outer.replace("/", ".")}
+            row: dict = {"packet": packet["id"], "finding": packet["finding"], "jar": jar, "class": outer.replace("/", "."), "decompiled": False}
+            if not candidates:
+                decompiler, jdk_info = find_decompiler(workspace), find_jdk(jdk)
+                tree = _decompiled_tree(workspace, jar, jdk_info.javac.with_name("java.exe" if jdk_info.javac.suffix else "java"), decompiler) \
+                    if decompiler and jdk_info else None
+                if tree is not None and (tree / wanted).is_file():
+                    candidates, row["decompiled"] = [tree / wanted], True
             if not candidates:
                 rows.append({**row, "source": None, "state": "NO_SOURCE", "next": "no source ships with the mod: decompile the jar (Vineflower/Fernflower; FlowerGod's src-decompiled/PROVENANCE.md has the command) and edit that class"})
                 continue
@@ -189,9 +234,15 @@ def prepare_jar_packets(workspace: Path, *, vanilla_core: Path | None = None, pr
                 shutil.copy2(source, target)
             check = patch_jar_classes(workspace, jar, [target], vanilla_core=vanilla_core, provider_roots=provider_roots, jdk=jdk)
             main_class = next((c for c in check["classes"] if c["class"] == outer + ".class"), {})
-            faithful = check["status"] == "PASS" and not main_class.get("members") and not main_class.get("calls_changed")
+            relinked = _only_return_type_relinks(main_class.get("calls_changed") or {})
+            if relinked:
+                # The shipped class calls a method whose return type RC8 changed (Too Much Information:
+                # TooltipMakerAPI.beginTable(...)V is ...UIPanelAPI in RC8), a NoSuchMethodError as shipped;
+                # the recompile links the RC8 descriptor. Same calls otherwise, so still faithful.
+                row["relinked"] = relinked
+            faithful = check["status"] == "PASS" and not main_class.get("members") and (not main_class.get("calls_changed") or bool(relinked))
             state = "FAITHFUL" if faithful else ("COMPILE_FAILED" if not check["compile"]["success"] else "SOURCE_DIFFERS")
-            rows.append({**row, "source": str(source.relative_to(working)), "edit": str(target), "state": state,
+            rows.append({**row, "source": str(source.relative_to(workspace)), "edit": str(target), "state": state,
                          "differences": {k: main_class.get(k) for k in ("members", "calls_changed") if main_class.get(k)} or None,
                          "errors": check["compile"]["errors"][:5] or None,
                          "next": f'edit {target.name}, then bridgeforge patch-jar-class "{workspace}" --jar {jar} "{target}"'
