@@ -19,6 +19,8 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **FSF Miltary Company - [a111164_ExtendPack]**: jar classes ported to RC8 interface changes (AbstractMethodError as shipped)
 - **Wotani Federation**: jar classes ported to RC8 interface changes (AbstractMethodError as shipped)
 - **Polaris Prime**: jar classes ported to RC8 interface changes (AbstractMethodError as shipped)
+- **Arkships**: gate picker ported to RC8's CampaignEntityPickerListener (AbstractMethodError as shipped)
+- **Roguelite Sector**: startup dialog's anonymous classes ported to RC8 interface changes (AbstractMethodError as shipped)
 
 ## 2026-09-30
 

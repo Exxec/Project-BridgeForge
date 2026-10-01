@@ -2506,6 +2506,11 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        obfuscated internal Cloud class), Exotica Technologies (Kotlin decompile does not build), Bounties Expanded and
        Special Hullmod Upgrades (the rebuild adds or drops a null check), Valkyrians (decompile error), and the
        anonymous classes the port does not edit.
+    10. **Anonymous classes and source copy-back (2026-10-01):** an anonymous class of a base-class interface is
+        ported in its outer source (`new CampaignEntityPickerListener() {` -> `new ...BaseCampaignEntityPickerListener() {`;
+        Arkships' gate picker, which the full revive run caught, and RogueliteSector's startup dialog). When the
+        source came from the mod's own tree, the edited file is copied back over it (backup beside it) so the shipped
+        source matches the patched jar. Test: `CopyBackTests`.
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit

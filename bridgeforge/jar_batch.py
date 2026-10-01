@@ -291,6 +291,22 @@ def _port_base(text: str, simple_name: str, owners: set[str]) -> str | None:
     return text[:head.end(2)] + f" extends {base}" + text[head.end(2):]
 
 
+def _copy_back_sources(origins: dict[Path, Path], edited: list[Path], working: Path, tag: str) -> list[str]:
+    """Copy each edited class back over the mod's own source it came from (backup beside it), so the source tree
+    matches the patched jar. Decompiled sources have no origin and are left in scratch."""
+    updated = []
+    for target in edited:
+        source = origins.get(target)
+        if source is None or not source.is_file() or source.read_bytes() == target.read_bytes():
+            continue
+        backup = source.with_name(source.name + f".pre-bf-{tag}.bak")
+        if not backup.exists():
+            shutil.copy2(source, backup)
+        shutil.copy2(target, source)
+        updated.append(str(source.relative_to(working)))
+    return updated
+
+
 def port_interfaces(workspace: Path, vanilla_core: Path, *, apply: bool = False) -> dict:
     """Port jar classes `jar-interface-method-missing` names when every missing method has a known mechanical port:
     edit the shipped or decompiled source, compile, and patch only if each class changes by exactly those
@@ -307,22 +323,53 @@ def port_interfaces(workspace: Path, vanilla_core: Path, *, apply: bool = False)
     java = jdk.javac.with_name("java.exe" if jdk.javac.suffix else "java") if jdk else None
     result = {"workspace": ws.name, "classes": len(missing), "jars": [], "unported": []}
     by_jar: dict[str, list[Path]] = {}
+    anonymous_done: set[Path] = set()
+    origins: dict[Path, Path] = {}  # edited scratch copy -> the mod's own source it came from
     for entry, methods in sorted(missing.items()):
         jar_name, _, member = entry.partition("!")
         jar_rel = next(j for j in jars if j.name == jar_name).relative_to(working).as_posix()
         class_path = member.removesuffix(".class")
         owners = {m.split(".", 1)[0] for m in methods}
         via_base = not set(methods) <= {_ONHIT, _DIALOG, _BUTTON} and len(owners) == 1 and next(iter(owners)) in BASE_CLASSES
+        # An anonymous class (`Outer$1`) of one of the base-class interfaces: `new Iface() {` -> `new Base() {` in the
+        # outer source; its own methods still override (Arkships' gate picker, a CampaignEntityPickerListener, 2026-10-01).
+        anonymous = bool(re.search(r"\$\d+$", class_path)) and len(owners) == 1 and next(iter(owners)) in BASE_CLASSES
+        if anonymous:
+            outer = class_path.split("$", 1)[0]
+            target = ws / "scratch" / "port-interfaces" / (outer + ".java")
+            if target not in anonymous_done and target not in by_jar.get(jar_rel, []):
+                source, decompiled = _source_for(ws, working, jar_rel, outer, java)
+                if source is None:
+                    result["unported"].append({"class": class_path, "missing": methods, "why": "no source"})
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+                anonymous_done.add(target)
+                if not decompiled:
+                    origins[target] = source
+            iface = next(iter(owners))
+            simple = iface.rsplit("/", 1)[-1]
+            text = target.read_text(encoding="utf-8")
+            text, count = re.subn(rf"\bnew\s+(?:[\w.]+\.)?{re.escape(simple)}\s*\(\s*\)\s*\{{", f"new {BASE_CLASSES[iface]}() {{", text)
+            if not count and BASE_CLASSES[iface] not in text:
+                result["unported"].append({"class": class_path, "missing": methods, "why": "anonymous class not found in the outer source"})
+                continue
+            target.write_text(text, encoding="utf-8")
+            if target not in by_jar.setdefault(jar_rel, []):
+                by_jar[jar_rel].append(target)
+            continue
         if "$" in class_path or not (set(methods) <= {_ONHIT, _DIALOG, _BUTTON} or via_base):
             result["unported"].append({"class": class_path, "missing": methods,
                                        "why": "inner or anonymous class" if "$" in class_path else "no known mechanical port"})
             continue
         target = ws / "scratch" / "port-interfaces" / (class_path + ".java")
         # Always from a fresh copy: a dry run's edited copy would no longer match the port's pattern.
-        source, _ = _source_for(ws, working, jar_rel, class_path, java)
+        source, decompiled = _source_for(ws, working, jar_rel, class_path, java)
         if source is None:
             result["unported"].append({"class": class_path, "missing": methods, "why": "no source"})
             continue
+        if not decompiled:
+            origins[target] = source
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
         text = target.read_text(encoding="utf-8")
@@ -359,7 +406,8 @@ def port_interfaces(workspace: Path, vanilla_core: Path, *, apply: bool = False)
             row.update({"state": "NOT_PATCHED", "why": check["compile"]["errors"][:2] or bad[:4]})
         elif apply:
             done = patch_jar_classes(ws, jar_rel, sources, vanilla_core=vanilla_core, install=True)
-            row.update({"state": "PORTED", "backup": done.get("backup_jar")})
+            row.update({"state": "PORTED", "backup": done.get("backup_jar"),
+                        "sources_updated": _copy_back_sources(origins, sources, working, "port-interfaces")})
         else:
             row["state"] = "WOULD_PORT"
         result["jars"].append(row)

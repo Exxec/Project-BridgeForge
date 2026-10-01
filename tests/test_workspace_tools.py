@@ -92,3 +92,22 @@ class OverloadGateTests(unittest.TestCase):
     def test_renames_are_listed_with_the_rc8_name(self) -> None:
         from bridgeforge.jar_batch import RENAMED_METHODS
         self.assertEqual(RENAMED_METHODS["com/fs/starfarer/api/impl/campaign/events/OfficerManagerEvent.pickPortrait"], "pickPortraitPreferNonDuplicate")
+
+
+class CopyBackTests(unittest.TestCase):
+    def test_an_edited_copy_goes_back_over_the_mod_source_with_a_backup(self) -> None:
+        from bridgeforge.jar_batch import _copy_back_sources
+        with resolved_temp_dir() as root:
+            working = root / "working"
+            source = working / "jars" / "src" / "data" / "Gate.java"
+            source.parent.mkdir(parents=True)
+            source.write_text("new CampaignEntityPickerListener() {}", encoding="utf-8")
+            edited = root / "scratch" / "data" / "Gate.java"
+            edited.parent.mkdir(parents=True)
+            edited.write_text("new com.fs.starfarer.api.campaign.BaseCampaignEntityPickerListener() {}", encoding="utf-8")
+            updated = _copy_back_sources({edited: source}, [edited], working, "port-interfaces")
+            backup = source.with_name("Gate.java.pre-bf-port-interfaces.bak").read_text(encoding="utf-8")
+            now = source.read_text(encoding="utf-8")
+        self.assertEqual(len(updated), 1)
+        self.assertIn("BaseCampaignEntityPickerListener", now)
+        self.assertIn("new CampaignEntityPickerListener()", backup)
