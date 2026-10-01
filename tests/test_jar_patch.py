@@ -138,3 +138,13 @@ class RelinkAndDecompilerTests(unittest.TestCase):
             (root / "_tools" / "vineflower-1.12.0.jar").write_bytes(b"")
             found = find_decompiler(root / "Mod")
         self.assertEqual(found.name, "vineflower-1.12.0.jar")
+
+
+class NestCallTests(unittest.TestCase):
+    def test_calls_inside_the_class_nest_are_separated(self) -> None:
+        from bridgeforge.jar_patch import _in_nest
+        # VayraGhostShip (2026-09-30): an old javac's access$000 bridge vs a Java 17 direct nestmate call.
+        entry = "data/scripts/hullmods/VayraGhostShip.class"
+        self.assertTrue(_in_nest("data/scripts/hullmods/VayraGhostShip$NanobotData.access$000:(I)V", entry))
+        self.assertTrue(_in_nest("init:(Lcom/fs/starfarer/api/combat/ShipAPI;)V", entry))
+        self.assertFalse(_in_nest("com/fs/starfarer/api/ui/TooltipMakerAPI.beginTable:(F)V", entry))

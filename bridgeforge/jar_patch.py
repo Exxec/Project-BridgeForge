@@ -39,6 +39,13 @@ class JarPatchError(ValueError):
     pass
 
 
+def _in_nest(call: str, class_entry: str) -> bool:
+    """`call` ("owner.name:desc", or "name:desc" for the class itself) targets the class's own nest."""
+    outer = class_entry.removesuffix(".class").split("$", 1)[0]
+    owner = call.split(":", 1)[0].rsplit(".", 1)[0] if "." in call.split(":", 1)[0] else outer
+    return owner == outer or owner.startswith(outer + "$")
+
+
 def _javap_stats(javap: Path, class_file: Path) -> tuple[Counter, int]:
     out = subprocess.run([str(javap), "-c", "-p", str(class_file)], capture_output=True, text=True, check=False).stdout
     calls = Counter(m.group(1) for m in re.finditer(r"//\s*(?:Method|InterfaceMethod)\s+(\S+)", out))
@@ -69,6 +76,19 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
         rig_mods = workspace.parent / "_rig" / "mods"
         provider_roots = [rig_mods] if rig_mods.is_dir() else []
     classpath = assemble_classpath(working, vanilla_core, provider_roots).classpath()
+    # Also every jar the rig's mods declare: the game loads them together, and a mod can use a library it never
+    # declared (Vayra's Sector and LazyLib, 2026-09-30). Only declared jars: FlowerGod's build/cp held a game jar copy.
+    import os
+
+    from .scanner import _load_lenient_json_file
+    extra = []
+    for root in provider_roots:
+        for info_path in sorted(Path(root).glob("*/mod_info.json")):
+            info = _load_lenient_json_file(info_path) or {}
+            if isinstance(info, dict):
+                extra += [str(info_path.parent / j) for j in info.get("jars") or [] if isinstance(j, str) and (info_path.parent / j).is_file()]
+    if extra:
+        classpath = os.pathsep.join([classpath, *extra]) if classpath else os.pathsep.join(extra)
 
     out_dir = Path(tempfile.mkdtemp(prefix="bf-jar-patch-"))
     run = run_javac(jdk_info.javac, classpath, sources, out_dir / "classes")
@@ -109,8 +129,11 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
         changed = {k: new_calls.get(k, 0) - old_calls.get(k, 0) for k in set(old_calls) | set(new_calls) if new_calls.get(k, 0) != old_calls.get(k, 0)}
         entry.update({
             "members": {k: diff.get(k, []) for k in ("methods_removed", "methods_added", "fields_removed", "fields_added") if diff.get(k)},
-            "calls_changed": {k: v for k, v in sorted(changed.items()) if not _NOISE.search(k)},
+            "calls_changed": {k: v for k, v in sorted(changed.items()) if not _NOISE.search(k) and not _in_nest(k, name)},
             "concat_or_logging_calls_changed": sorted(k for k in changed if _NOISE.search(k)),
+            # Calls inside the class's own nest: an old javac reached a private inner member through a synthetic
+            # access$NNN bridge, Java 11+ calls it directly (VayraGhostShip$NanobotData, 2026-09-30). Shown, not counted.
+            "nest_calls_changed": {k: v for k, v in sorted(changed.items()) if not _NOISE.search(k) and _in_nest(k, name)},
             "null_checks": [old_null, new_null],
             "forbidden_sandbox_references": diff.get("forbidden_sandbox_references", []),
         })
