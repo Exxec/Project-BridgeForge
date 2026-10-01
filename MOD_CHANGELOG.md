@@ -1,0 +1,97 @@
+# Mod changelog
+
+Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; each mod's evidence is in its revival report.
+
+## 2026-09-30
+
+- **Legacy of Arkgneisis** v2.0a DEV+bf.3: relinked a tooltip call RC8 changed (addImageWithText, NoSuchMethodError as shipped); back to live test
+- **Megastructures Tab** 1.0.0+bf.1: relinked a tooltip call RC8 changed (addImageWithText); back to live test
+- **RogueSynth** 0.0.1-beta.4+bf.2: relinked a hull-mod tooltip call RC8 changed (addImageWithText); back to live test
+- **Slightly Better Tech Mining** 0.95.1-2.6.0+bf.1: relinked two industry tooltip calls RC8 changed (addImageWithText); back to live test
+- **Too Much Information**: relinked five hull-mod tooltip tables (beginTable, NoSuchMethodError as shipped)
+- **Nightcross**: Plasma Aggregator kept one ship's weapon state for every ship; now per ship
+
+## 2026-09-29
+
+- **Broken Star [BF r2] 0.1+bf.2**: revived for RC8 and archived (live validated)
+- **Seeker - Unidentified Contact 0.6.6**: revived for RC8 and archived (live validated)
+- **FlowerGod**: Chinese text translated in place to English (one mod, not a side-by-side translation)
+
+## 2026-09-28
+
+- **Adjusted Sector 0.7.1**: revived for RC8 and archived (live validated)
+- **Amogus Shipyards 1.1.1**: revived for RC8 and archived (live validated)
+- **! Angry Periphery 4 1.5**: revived for RC8 and archived (live validated)
+- **Arthr's Faction Blender 1.0**: revived for RC8 and archived (live validated)
+- **Arthr's Pirates but EPIC 1.0**: revived for RC8 and archived (live validated)
+- **Doc's Needless Economic Expansion Pack 0.2.0 Mann Co**: revived for RC8 and archived (live validated)
+- **(INCOMPATIBLE WITH STARLORODS) Exigency 0.8.01a**: revived for RC8 and archived (live validated)
+- **Logistics Notifications 1.4.4**: revived for RC8 and archived (live validated)
+- **M3s Varren Clans test [BF r1] 0.0.1a+bf.1**: revived for RC8 and archived (live validated)
+- **Maelstrom Extra Planetary Conditions 1.0.0**: revived for RC8 and archived (live validated)
+- **Maelstrom Superweapons Arsenal Older Version 1.7**: revived for RC8 and archived (live validated)
+- **Marine Portraits 1.0**: revived for RC8 and archived (live validated)
+- **Megastructures Tab 1.0.0**: revived for RC8 and archived (live validated)
+- **Meme portraits 1.01**: revived for RC8 and archived (live validated)
+- **Missing Names Mod 0.7**: revived for RC8 and archived (live validated)
+- **MnemonicSensors 0.2.3**: revived for RC8 and archived (live validated)
+- **Omega-Trauma [BF r1] 0.1.1+bf.1**: revived for RC8 and archived (live validated)
+- **Piotrs Placeholder 1.0.0**: revived for RC8 and archived (live validated)
+- **RemnantPad 1.1**: revived for RC8 and archived (live validated)
+- **RogueSynth [BF r1] 0.0.1-beta.4+bf.1**: revived for RC8 and archived (live validated)
+- **S-TechPad 1.0**: revived for RC8 and archived (live validated)
+- **Union Rail-Systems 0.1**: revived for RC8 and archived (live validated)
+- **WalHullmods 0.1**: revived for RC8 and archived (live validated)
+- **Starsector AI Overhaul 0.91a+bf.1**: revived for RC8 and archived (live validated)
+- **$$ Starsector FX CORE $$ 9.1a+bf.1**: revived for RC8 and archived (live validated)
+- **Yunru's Cissonius 0.95.1-1.1**: revived for RC8 and archived (live validated)
+
+## 2026-09-27
+
+- **Accelerated Construction 1.0**: revived for RC8 and archived (live validated)
+- **Anex Weapons 0.2.4**: revived for RC8 and archived (live validated)
+- **Animal Portrait Pack 0.1**: revived for RC8 and archived (live validated)
+- **Legacy of Arkgneisis [BF r2] v2.0a DEV+bf.2**: revived for RC8 and archived (live validated)
+- **Aryas Nightingale Ships 0.02**: revived for RC8 and archived (live validated)
+- **Baird Jobs 1.0**: revived for RC8 and archived (live validated)
+- **Battletech Portrait Pack 1.1**: revived for RC8 and archived (live validated)
+- **BF Legacy Fleets 1.0.0**: revived for RC8 and archived (live validated)
+- **Blockade Ship 0.11**: revived for RC8 and archived (live validated)
+- **Blue Friend Balls 1.0.0**: revived for RC8 and archived (live validated)
+- **Boneyard 1.2**: revived for RC8 and archived (live validated)
+- **Capture Officers and Crew 1.0.4**: revived for RC8 and archived (live validated)
+- **Combat Radar 3.0**: revived for RC8 and archived (live validated)
+- **D-MOD Services 0.1.1**: revived for RC8 and archived (live validated)
+- **$$$ Dakkaholics Sprites 1.4**: revived for RC8 and archived (live validated)
+- **Degenerate Portrait Pack 1.1**: revived for RC8 and archived (live validated)
+- **Deluxe Player Flags 1.01a**: revived for RC8 and archived (live validated)
+- **Faction Relationships Uniquified 0.1.1**: revived for RC8 and archived (live validated)
+- **Filter Hullmods versions are for suckers**: revived for RC8 and archived (live validated)
+- **Fuel Siphoning 1.2.2**: revived for RC8 and archived (live validated)
+- **Furry Portrait Pack v1.6**: revived for RC8 and archived (live validated)
+- **Guardian Prototype 1.1**: revived for RC8 and archived (live validated)
+- **Horny Jail 1.0.0**: revived for RC8 and archived (live validated)
+- **Interesting Portraits Pack 1.2**: revived for RC8 and archived (live validated)
+- **Internal Affairs 1.1**: revived for RC8 and archived (live validated)
+- **Invisible Hand, colony markets 1.55**: revived for RC8 and archived (live validated)
+- **Jackundor's Advanced Arms 0.4.0**: revived for RC8 and archived (live validated)
+- **jeffships 1**: revived for RC8 and archived (live validated)
+- **(KIND STRANGER) Automatic Orders 0.3.2**: revived for RC8 and archived (live validated)
+- **Less generic relationship descriptions 1.0**: revived for RC8 and archived (live validated)
+- **Portrait Faction Expanded: Hegemony 1.00**: revived for RC8 and archived (live validated)
+- **Power Fantasy Portrait 1**: revived for RC8 and archived (live validated)
+- **Punishing: Gray Raven Portrait Pack 1.1.0**: revived for RC8 and archived (live validated)
+- **Reduce Hypershunt Demands 1.0.a**: revived for RC8 and archived (live validated)
+- **Remnant Command Transfer 1.0.1**: revived for RC8 and archived (live validated)
+- **Ship Browser 0.1.0**: revived for RC8 and archived (live validated)
+- **Ship Direction Marker 1.3.1**: revived for RC8 and archived (live validated)
+- **Simulator Overhaul 1.4**: revived for RC8 and archived (live validated)
+- **Slightly Better Tech-Mining 0.95.1-2.6.0**: revived for RC8 and archived (live validated)
+- **SOTF Addon - SPARKLE 6.9**: revived for RC8 and archived (live validated)
+- **stinger sector tips tupac fan club**: revived for RC8 and archived (live validated)
+- **Subtle Planetary Shield v1.0**: revived for RC8 and archived (live validated)
+- **Thumper Madness 0.8a**: revived for RC8 and archived (live validated)
+- **Transfer All Items 1.2**: revived for RC8 and archived (live validated)
+- **Unconventional Armaments 1.4b**: revived for RC8 and archived (live validated)
+- **Yunru's Unpack Blueprints 2.1**: revived for RC8 and archived (live validated)
+- **Zorg [BF r4] V18+bf.4**: revived for RC8 and archived (live validated)

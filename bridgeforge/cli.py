@@ -732,6 +732,17 @@ def build_parser() -> argparse.ArgumentParser:
     archive_cmd.add_argument("--done", type=Path, help="default: <repo>/Done")
     archive_cmd.add_argument("--policy", type=Path)
     archive_cmd.add_argument("--json", action="store_true")
+    modlog_cmd = subcommands.add_parser("mod-changelog", help="MOD_CHANGELOG.md: bigger updates to revived mods by date (archive adds one per archived mod)")
+    modlog_sub = modlog_cmd.add_subparsers(dest="modlog_command", required=True)
+    modlog_add = modlog_sub.add_parser("add", help="add one line under its date")
+    modlog_add.add_argument("mod", help="the mod's display name")
+    modlog_add.add_argument("text", help="what changed, one line")
+    modlog_add.add_argument("--version")
+    modlog_add.add_argument("--date", help="YYYY-MM-DD (default today)")
+    modlog_add.add_argument("--file", type=Path, help="default: <repo>/MOD_CHANGELOG.md")
+    modlog_seed = modlog_sub.add_parser("seed", help="one 'archived' line per Done/*/ARCHIVE_NOTE.md, under its archive date")
+    modlog_seed.add_argument("--done", type=Path, default=Path(__file__).resolve().parent.parent / "Done")
+    modlog_seed.add_argument("--file", type=Path)
     ready_cmd = subcommands.add_parser("ready-list", help="the queue's mods ready for live testing (revival report READY_FOR_LIVE_TEST and latest revive UNATTENDED_DONE), with how to launch them")
     ready_cmd.add_argument("queue", type=Path)
     ready_cmd.add_argument("--json", action="store_true")
@@ -1134,6 +1145,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Archived: {result['archive']} ({result['files']} files, {result['licence']}, status {result['status']})")
             print(f"  {len(result['changed'])} file(s) changed, {len(result['added'])} added vs original; jars identical: {result['jars_identical']}")
             print(f"  Note: {result['note']}. The workspace is untouched; remove it yourself once the archive is checked.")
+        return 0
+    if args.command == "mod-changelog":
+        from .mod_changelog import DEFAULT_PATH, add_entry, seed_from_archives
+        if args.modlog_command == "add":
+            print(add_entry(args.mod, args.text, version=args.version, day=args.date, path=args.file))
+        else:
+            print(f"{seed_from_archives(args.done, args.file or DEFAULT_PATH)} line(s) added to {args.file or DEFAULT_PATH}")
         return 0
     if args.command == "ready-list":
         # Replaces the hand tally of "how many need live testing" (2026-09-30).

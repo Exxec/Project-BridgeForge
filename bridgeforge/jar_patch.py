@@ -161,7 +161,19 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
         for name, data in new_classes.items():
             if name not in names:
                 target_jar.writestr(name, data)
-    temp.replace(jar_path)
+    # A jar that just appeared in the workspace may be held open briefly by an indexer (VS Code's Java extension,
+    # Arkgneisis 2026-09-30: WinError 5); retry before giving up, and never leave the temp behind.
+    import time
+
+    for attempt in range(10):
+        try:
+            temp.replace(jar_path)
+            break
+        except PermissionError:
+            if attempt == 9:
+                temp.unlink(missing_ok=True)
+                raise
+            time.sleep(1)
     copied = []
     if source_root:
         root = (working / source_root).resolve()

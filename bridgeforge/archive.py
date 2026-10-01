@@ -116,6 +116,10 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
     note = _render_note(info, name, version, licence, status, changed, added, jars_identical, jar_names, original is not None,
                         zip_path.name, workspace.name, today or date.today().isoformat())
     (target / "ARCHIVE_NOTE.md").write_text(note, encoding="utf-8")
+    # The mods' own changelog, beside Done/ (the repo root in use; a temp folder in tests).
+    from .mod_changelog import add_entry
+    add_entry(name, f"revived for RC8 and archived ({(status or 'no status').replace('_', ' ').lower()})", version=version,
+              day=today or date.today().isoformat(), path=target.parent.parent / "MOD_CHANGELOG.md")
     return {"schema_version": SCHEMA_VERSION, "mode": "ARCHIVE", "archive": str(target), "files": len(files), "zip": str(zip_path),
             "licence": licence.get("decision"), "status": status, "changed": changed, "added": added,
             "jars_identical": jars_identical, "note": str(target / "ARCHIVE_NOTE.md")}
