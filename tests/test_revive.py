@@ -428,3 +428,15 @@ class SameFilePacketMergeTests(unittest.TestCase):
         self.assertEqual([f["id"] for f in head["findings"]], ["x-entity", "x-system"])
         self.assertIn("hint x-system", head["hint"])
         self.assertNotIn("merged", merged[1])
+
+
+class RefusedAutoRoutingTests(unittest.TestCase):
+    def test_a_refused_automatic_fix_becomes_an_agent_packet_per_file(self) -> None:
+        from bridgeforge.revive import build_packets
+        finding = {"id": "hard-coded-campaign-entity-reference", "file": "data/scripts/Gen.java", "classification": "REVIEW",
+                   "severity": "medium", "confidence": "DETERMINISTIC", "explanation": "x", "evidence": ["nomios"]}
+        with resolved_temp_dir() as root:
+            (root / "working" / "data" / "scripts").mkdir(parents=True)
+            (root / "working" / "data" / "scripts" / "Gen.java").write_text("class Gen {}", encoding="utf-8")
+            packets = build_packets(root, [finding], [{"finding": finding["id"], "state": "FIXER_REFUSED", "reason": "inline argument"}], vanilla_core=None)
+        self.assertEqual([(p["kind"], p["file"]) for p in packets], [("agent", "data/scripts/Gen.java")])

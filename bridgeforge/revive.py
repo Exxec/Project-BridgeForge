@@ -328,13 +328,17 @@ def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dic
         tier = tier_for(finding["id"])
         if tier not in ACTIONABLE or _informational(finding):
             continue
-        per_file = tier in AGENT_TIERS and finding.get("file")
+        # An automatic fixer that refused (a lookup the guard fixer cannot edit, 2026-10-01) leaves code work, not a
+        # decision: it goes to an agent per file like any code finding.
+        refused_auto = tier == "auto" and (fixer_state.get(finding["id"]) or {}).get("state") == "FIXER_REFUSED"
+        per_file = (tier in AGENT_TIERS or refused_auto) and finding.get("file")
         groups.setdefault((finding["id"], (finding.get("file") or "") if per_file else ""), []).append(finding)
     for (finding_id, file), group in sorted(groups.items()):
         tier = tier_for(finding_id)
         fix = fixer_state.get(finding_id)
         files = sorted({f["file"] for f in group if f.get("file")})
-        kind = "agent" if tier in AGENT_TIERS and files else "owner"
+        refused_auto = tier == "auto" and fix is not None and fix["state"] == "FIXER_REFUSED"
+        kind = "agent" if (tier in AGENT_TIERS or refused_auto) and files else "owner"
         if fix is not None and fix["state"] != "FIXER_REFUSED":
             kind = "owner"  # the fix exists; it needs a yes, not a new fix
         packet = {

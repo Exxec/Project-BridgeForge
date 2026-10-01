@@ -248,5 +248,24 @@ class FactionTraitWeightLegacyPersonalityIdTests(unittest.TestCase):
         self.assertEqual(_ids(result, "faction-trait-weight-legacy-personality-id"), [])
 
 
+
+class SystemGenerationChainTests(unittest.TestCase):
+    def test_generation_reached_only_from_onnewgame_through_a_generator_is_a_note(self) -> None:
+        # Junk Pirates (2026-10-01): plugin.onNewGame -> new JunkGen().generate -> new Brehinni().generate.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            src = mod / "src" / "data" / "scripts" / "world"
+            (src / "Brehinni.java").write_text("public class Brehinni { public void generate(SectorAPI s) { s.createStarSystem(\"Brehinni\"); } }", encoding="utf-8")
+            (src / "JunkGen.java").write_text("public class JunkGen { public void generate(SectorAPI s) { new Brehinni().generate(s); } }", encoding="utf-8")
+            (src / "Plugin.java").write_text("public class Plugin extends BaseModPlugin { public void onNewGame() { new JunkGen().generate(null); } }", encoding="utf-8")
+            note = _ids(scan_mod(mod), "system-generation-unguarded")
+            (src / "Plugin.java").write_text("public class Plugin extends BaseModPlugin { public void onGameLoad(boolean n) { new JunkGen().generate(null); } }", encoding="utf-8")
+            review = _ids(scan_mod(mod), "system-generation-unguarded")
+        self.assertEqual([f.classification for f in note], ["SAFE"])
+        self.assertIn("(called from onNewGame)", note[0].evidence[0])
+        self.assertEqual([f.classification for f in review], ["REVIEW"])
+        self.assertIn("(called from onGameLoad)", review[0].evidence[0])
+
+
 if __name__ == "__main__":
     unittest.main()
