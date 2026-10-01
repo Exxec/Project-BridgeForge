@@ -2483,6 +2483,29 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     5. `revive-review QUEUE --since DATE`: every applied fix diffed against its first backup; flags a misplaced
        lookup guard or a jar-source edit. Over 2026-09-30: 75 applied, 0 flagged after the repairs.
     Tests: `tests/test_workspace_tools.py`, `tests/test_progress.py`.
+    6. **`jar-interface-method-missing` (new check, 2026-10-01):** a concrete jar class whose game supertypes declare
+       an abstract method nothing in its hierarchy implements (an AbstractMethodError as shipped), from the class
+       files (`linkage.missing_interface_methods`; access flags now parsed). Found by compiling Polaris Prime, UNGP
+       and Wotani; the check then found nine more Wotani on-hit classes the relink never touched.
+    7. **`port-interfaces QUEUE|WS --vanilla-core [--apply]`** (long-running): ports the known RC8 contract changes
+       in shipped or decompiled source (onHit's ApplyDamageResultAPI, createCustomDialog's callback, an empty
+       buttonPressed) or, for a class implementing HullModEffect, CustomProductionPickerDelegate,
+       CampaignEntityPickerListener, CustomUIPanelPlugin or CustomDialogDelegate directly, `extends` vanilla's base
+       class (each checked concrete and complete for its interface). Patched only when each class changes by exactly
+       that. First run: 85 classes in 9 mods (DME 54, Wotani 10, Grytpype 6). Revive runs it when
+       `jar-interface-method-missing` is approved (not yet).
+    8. **Relink, three more cases:** a shipped source that does not compile (Lombok) falls back to the decompile;
+       Vineflower runs with `--kt-enable=false` (Kotlin classes as Java); an RC8 overload of the same name the
+       unedited source recompiles onto (Void-Tec's addCustom) and a same-descriptor rename (RENAMED_METHODS:
+       pickPortrait -> pickPortraitPreferNonDuplicate, Kadur Remnant) pass the gate. Declared dependencies are found
+       in the queue too (Magellan Shenanigans needs Magellan Protectorate). Scratch copies are keyed by package path
+       (Kadur's seven MissionDefinition classes). Tests: `OverloadGateTests`, `JarInterfaceMethodTests`, `SourcePortTests`.
+    9. **Left for a person (2026-10-01):** Tore-Up-Plenty (addMarket gained a parameter, setBaseSmugglingStabilityValue
+       removed, source does not build), Tyrador (createOfficer's 4-argument form has no RC8 match), DME
+       (BaseSalvageSpecial.setExtraSalvage removed; one mine-strike AI class), More Combat Terrain Effects (calls the
+       obfuscated internal Cloud class), Exotica Technologies (Kotlin decompile does not build), Bounties Expanded and
+       Special Hullmod Upgrades (the rebuild adds or drops a null check), Valkyrians (decompile error), and the
+       anonymous classes the port does not edit.
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit

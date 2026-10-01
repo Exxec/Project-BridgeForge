@@ -90,4 +90,5 @@ LONG_RUNNING_COMMANDS = (
     ("revive-queue",),
     ("check-impact",),
     ("relink",),
+    ("port-interfaces",),
 )

@@ -65,6 +65,7 @@
     "hardcoded-terrain-grid-size": "code",
     "hullmod-instance-state": "code",
     "jar-linkage-unresolved": "code",
+    "jar-interface-method-missing": "code",
     "internal-jvm-api": "code",
     "invalid-csv": "inspect",
     "invalid-mod-info": "inspect",

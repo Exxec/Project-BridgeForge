@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **`jar-interface-method-missing` and `port-interfaces`:** jar classes missing a method RC8's interfaces require
+  (an AbstractMethodError as shipped) are found from the class files and ported where the change is mechanical; 85
+  classes in 9 mods on the first run. Relink also handles Lombok sources, Kotlin classes, same-name overloads and
+  renamed methods.
 - **Scratch scripts as commands (ROADMAP P15 item 33):** `relink` (queue-wide, resumable; Object-owner noise and
   decompile re-declarations handled; revive runs it when approved), `patch-jar-sources`, `bump-version`,
   `restore-from-done` and `revive-review`.

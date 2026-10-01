@@ -6,6 +6,19 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 
 - **Epta Consortium**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
 - **Scy Nation**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Magellan Shenanigans**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Wotani Federation**: ported an on-hit effect to RC8's onHit signature (AbstractMethodError as shipped) and relinked arc calls
+- **Polaris Prime**: ported a dialog to RC8's createCustomDialog(panel, callback) (AbstractMethodError as shipped) and relinked a tooltip call
+- **Unofficial New Game Plus**: ported two dialogs to RC8's createCustomDialog(panel, callback), added the new buttonPressed callback, relinked 14 tooltip classes
+- **VoidTec [BF r1]**: recompiled a tooltip class onto RC8's addCustom(UIComponentAPI, float) overload (NoSuchMethodError as shipped)
+- **Kadur Remnant**: missions use RC8's renamed pickPortraitPreferNonDuplicate (NoSuchMethodError as shipped)
+- **Dassault-Mikoyan Engineering**: jar classes ported to RC8 interface changes (AbstractMethodError as shipped)
+- **Grytpype and Moriarty's Defense Authority**: jar classes ported to RC8 interface changes (AbstractMethodError as shipped)
+- **RogueliteSector**: jar classes ported to RC8 interface changes (AbstractMethodError as shipped)
+- **ICE**: jar classes ported to RC8 interface changes (AbstractMethodError as shipped)
+- **FSF Miltary Company - [a111164_ExtendPack]**: jar classes ported to RC8 interface changes (AbstractMethodError as shipped)
+- **Wotani Federation**: jar classes ported to RC8 interface changes (AbstractMethodError as shipped)
+- **Polaris Prime**: jar classes ported to RC8 interface changes (AbstractMethodError as shipped)
 
 ## 2026-09-30
 

@@ -58,5 +58,48 @@ class JarLinkageTests(unittest.TestCase):
         self.assertIn("return type", found[0].explanation)
 
 
+
+NEW_HOOK = {"com/fs/starfarer/api/combat/Hook.java": "package com.fs.starfarer.api.combat; public interface Hook { void hit(int a, Object result, float b); }",
+            "com/fs/starfarer/api/combat/BaseHook.java": "package com.fs.starfarer.api.combat; public class BaseHook implements Hook { public void hit(int a, Object result, float b) {} }"}
+OLD_HOOK = {"com/fs/starfarer/api/combat/Hook.java": "package com.fs.starfarer.api.combat; public interface Hook { void hit(int a, float b); }"}
+HOOK_MOD = {"data/Effect.java": "package data; public class Effect implements com.fs.starfarer.api.combat.Hook { public void hit(int a, float b) {} }",
+            "data/Fine.java": "package data; public class Fine extends com.fs.starfarer.api.combat.BaseHook {}"}
+
+
+class JarInterfaceMethodTests(unittest.TestCase):
+    """jar-interface-method-missing (2026-10-01): an interface RC8 changed, implemented with the old signature."""
+
+    def setUp(self) -> None:
+        self.javac = shutil.which("javac")
+        if self.javac is None:
+            self.skipTest("no javac on PATH")
+
+    def test_a_class_built_against_the_old_interface_is_reported(self) -> None:
+        with resolved_temp_dir() as root:
+            old_api = _compile(self.javac, root / "old", {**OLD_HOOK, "com/fs/starfarer/api/combat/BaseHook.java":
+                               "package com.fs.starfarer.api.combat; public class BaseHook implements Hook { public void hit(int a, float b) {} }"})
+            _jar(_compile(self.javac, root / "new", NEW_HOOK), root / "starsector-core" / "starfarer.api.jar")
+            mod = root / "mod"
+            _jar(_compile(self.javac, root / "modbuild", HOOK_MOD, classpath=old_api), mod / "jars" / "m.jar")
+            (mod / "mod_info.json").write_text(json.dumps({"id": "m", "name": "m", "version": "1", "gameVersion": "0.98a-RC8",
+                                                           "jars": ["jars/m.jar"]}), encoding="utf-8")
+            found = [f for f in scan_mod(mod, vanilla_core=root / "starsector-core").findings if f.id == "jar-interface-method-missing"]
+        self.assertEqual([f.file for f in found], ["jars/m.jar!data/Effect.class"])  # Fine inherits the new method
+        self.assertIn("Hook.hit(ILjava.lang.Object;F)V", found[0].evidence[0])
+
+
+class SourcePortTests(unittest.TestCase):
+    def test_onhit_dialog_button_and_base_class_ports(self) -> None:
+        from bridgeforge.jar_batch import _port_base, _port_button, _port_dialog, _port_onhit
+        onhit = "public void onHit(DamagingProjectileAPI p, CombatEntityAPI t, Vector2f v, boolean s, CombatEngineAPI e) {}"
+        self.assertIn("boolean s, com.fs.starfarer.api.combat.listeners.ApplyDamageResultAPI damageResult, CombatEngineAPI e)", _port_onhit(onhit))
+        self.assertIsNone(_port_onhit(_port_onhit(onhit)))  # never twice
+        self.assertIn("CustomDialogCallback callback)", _port_dialog("public void createCustomDialog(CustomPanelAPI panel) {}"))
+        self.assertIn("void buttonPressed(Object buttonId)", _port_button("public class P implements CustomUIPanelPlugin {\n}\n", "P"))
+        self.assertEqual(_port_base("public class H implements HullModEffect {}", "H", {"com/fs/starfarer/api/combat/HullModEffect"}),
+                         "public class H extends com.fs.starfarer.api.combat.BaseHullMod implements HullModEffect {}")
+        self.assertIsNone(_port_base("public class H extends Other implements HullModEffect {}", "H", {"com/fs/starfarer/api/combat/HullModEffect"}))
+
+
 if __name__ == "__main__":
     unittest.main()

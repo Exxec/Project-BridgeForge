@@ -739,6 +739,13 @@ def build_parser() -> argparse.ArgumentParser:
     relink_cmd.add_argument("--restart", action="store_true", help="ignore an earlier run's checkpoint")
     relink_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     relink_cmd.add_argument("--json", action="store_true")
+    port_cmd = subcommands.add_parser("port-interfaces", help="jar classes missing a method RC8's interfaces require (jar-interface-method-missing): port the known contract changes in shipped or decompiled source and patch only when nothing else changes. A queue or one workspace")
+    port_cmd.add_argument("path", type=Path)
+    port_cmd.add_argument("--vanilla-core", type=Path, required=True)
+    port_cmd.add_argument("--apply", action="store_true")
+    port_cmd.add_argument("--restart", action="store_true", help="ignore an earlier run's checkpoint")
+    port_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
+    port_cmd.add_argument("--json", action="store_true")
     pjs_cmd = subcommands.add_parser("patch-jar-sources", help="edits in a jar's source tree (with *.pre-bf-* backups) -> the jar: prove the pre-edit source rebuilds the shipped class, then patch the edited class in")
     pjs_cmd.add_argument("workspace", type=Path)
     pjs_cmd.add_argument("--vanilla-core", type=Path, required=True)
@@ -1187,6 +1194,22 @@ def main(argv: list[str] | None = None) -> int:
                   + (f"\n  removed in RC8: {', '.join(row['port'])}" if row.get("port") else ""))
         if "counts" in result:
             print("counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())))
+        return 0
+    if args.command == "port-interfaces":
+        from .jar_batch import port_interfaces, port_interfaces_queue
+        path = args.path.expanduser().resolve()
+        if (path / "working" / "mod_info.json").is_file():
+            rows = [port_interfaces(path, args.vanilla_core, apply=args.apply)]
+            result = rows[0]
+        else:
+            result = port_interfaces_queue(path, args.vanilla_core, apply=args.apply, quiet=args.quiet, restart=args.restart)
+            rows = result["workspaces"]
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        for row in rows:
+            print(f"{row['workspace']}: {row['classes']} class(es)" + "".join(f"\n  {j['jar']}: {j['state']} ({j['classes']})" for j in row["jars"])
+                  + "".join(f"\n  not ported: {u['class']} ({u['why']})" for u in row["unported"][:6]))
         return 0
     if args.command == "patch-jar-sources":
         from .jar_batch import patch_jar_sources

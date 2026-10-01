@@ -1066,6 +1066,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_mission_local_fleet_references(root, result, vanilla_core)
     _scan_campaign_fleet_references(root, result, vanilla_core)
     _scan_jar_linkage(root, result, vanilla_core)
+    _scan_jar_interface_methods(root, result, vanilla_core)
     _scan_core_campaign_plugin_reregistered(root, result)
     _scan_system_generation_unguarded(root, result)
     _scan_mission_required_files(root, result)
@@ -1901,6 +1902,42 @@ def _scan_jar_linkage(root: Path, result: ScanResult, vanilla_core: Path | None)
                          "port the call, then recompile the class (`bridgeforge jar-packets`, then `patch-jar-class`)."),
             file=f"{jar_rel}!{member}",
             evidence=evidence,
+        )
+
+
+def _scan_jar_interface_methods(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """jar-interface-method-missing: a concrete jar class implements a game interface (or extends an abstract game
+    class) without a method RC8 requires: an AbstractMethodError when the game calls it. Polaris Prime, UNGP and
+    Wotani (10 on-hit classes) were found only by compiling, 2026-10-01; `bridgeforge port-interfaces` ports the
+    known contract changes (onHit's ApplyDamageResultAPI, createCustomDialog's callback, buttonPressed)."""
+    declared = result.metadata.get("jars")
+    if vanilla_core is None or not isinstance(declared, list):
+        return
+    from .linkage import missing_interface_methods
+
+    jars = [root / entry for entry in declared if isinstance(entry, str) and (root / entry).is_file()]
+    if not jars:
+        return
+    rig_mods = Path(vanilla_core).resolve().parent / "mods"
+    others = []
+    for info_path in sorted(rig_mods.glob("*/mod_info.json")) if rig_mods.is_dir() else []:
+        info = _load_lenient_json_file(info_path) or {}
+        if isinstance(info, dict) and info.get("id") != result.metadata.get("id"):
+            others += [info_path.parent / j for j in info.get("jars") or [] if isinstance(j, str) and (info_path.parent / j).is_file()]
+    for entry, methods in missing_interface_methods(jars, vanilla_core, others).items():
+        jar_name, _, member = entry.partition("!")
+        jar_rel = next(_relative(root, j) for j in jars if j.name == jar_name)
+        result.add(
+            id="jar-interface-method-missing",
+            category="bytecode",
+            severity="high",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=("This class implements a game interface or abstract class without a method RC8 requires (an "
+                         "AbstractMethodError when the game calls it). Known contract changes are ported by "
+                         "`bridgeforge port-interfaces`; others need the method added by hand, then `patch-jar-class`."),
+            file=f"{jar_rel}!{member}",
+            evidence=[m.replace("/", ".") for m in methods][:8],
         )
 
 

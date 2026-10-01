@@ -465,6 +465,17 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
             applied_all.append(entry)
             rounds.append({"round": len(rounds) + 1, "applied": [entry], "findings": len(findings)})
             findings = _scan(working, vanilla_core)
+    # Interface ports, when approved: known RC8 contract changes on jar classes (jar_batch.port_interfaces).
+    if apply and vanilla_core is not None and "jar-interface-method-missing" in approved and any(f["id"] == "jar-interface-method-missing" for f in findings):
+        from .jar_batch import port_interfaces
+
+        ported = port_interfaces(workspace, vanilla_core, apply=True)
+        done = [j["jar"] for j in ported["jars"] if j.get("state") == "PORTED"]
+        if done:
+            entry = {"finding": "jar-interface-method-missing", "files": done, "why": "approved (port-interfaces)"}
+            applied_all.append(entry)
+            rounds.append({"round": len(rounds) + 1, "applied": [entry], "findings": len(findings)})
+            findings = _scan(working, vanilla_core)
     remaining_tiers = [tier_for(f["id"]) for f in findings if not _informational(f)]
     roots = providers if providers else [workspace.parent, workspace.parent / "_rig" / "mods"]
     cache: dict = {}

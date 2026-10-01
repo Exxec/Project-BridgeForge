@@ -72,10 +72,13 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
     jdk_info = find_jdk(jdk)
     if jdk_info is None:
         raise JarPatchError("No JDK found (checked --jdk, In operation/_rig/jdk-*, JAVA_HOME, PATH).")
+    rig_mods = workspace.parent / "_rig" / "mods"
     if provider_roots is None:
-        rig_mods = workspace.parent / "_rig" / "mods"
         provider_roots = [rig_mods] if rig_mods.is_dir() else []
-    classpath = assemble_classpath(working, vanilla_core, provider_roots).classpath()
+    # Declared dependencies are also looked up in the queue: Magellan Shenanigans needs Magellan Protectorate's
+    # classes, a queued mod not in the rig (2026-10-01). Only the rig's jars are added wholesale (below).
+    dependency_roots = [*provider_roots, workspace.parent] if workspace.parent not in provider_roots else list(provider_roots)
+    classpath = assemble_classpath(working, vanilla_core, dependency_roots).classpath()
     # Also every jar the rig's mods declare: the game loads them together, and a mod can use a library it never
     # declared (Vayra's Sector and LazyLib, 2026-09-30). Only declared jars: FlowerGod's build/cp held a game jar copy.
     import os
@@ -199,6 +202,13 @@ def _drop_object_owner_swaps(calls_changed: dict[str, int]) -> dict[str, int]:
     """Remove an Object method whose recorded owner changed (`Object.equals` -> `CampaignFleetAPI.equals`): javac
     versions name the receiver's static type or Object, the same method either way (Epta, Scy Nation, 2026-09-30)."""
     rest = dict(calls_changed)
+    # javac 9+ checks an implicit null (an inner-class `outer.new`, a method reference) with Objects.requireNonNull
+    # where older javac called getClass() (Special Hullmod Upgrades, 2026-10-01): the same check.
+    swap = [c for c in rest if c.endswith(".getClass:()Ljava/lang/Class;")]
+    need = "java/util/Objects.requireNonNull:(Ljava/lang/Object;)Ljava/lang/Object;"
+    if swap and need in rest and rest[need] > 0 and sum(rest[c] for c in swap) == -rest[need]:
+        for call in [*swap, need]:
+            del rest[call]
     for method in _OBJECT_METHODS:
         hits = {call: delta for call, delta in rest.items() if call.endswith("." + method) or call == method}
         if hits and sum(hits.values()) == 0:
@@ -241,7 +251,7 @@ def _decompiled_tree(workspace: Path, jar: str, java: Path, decompiler: Path) ->
     out = workspace / "scratch" / "jar-packets" / "_decompiled" / Path(jar).stem
     if not out.is_dir():
         out.mkdir(parents=True)
-        run = subprocess.run([str(java), "-jar", str(decompiler), "-log=WARN", str(workspace / "working" / jar), str(out)],
+        run = subprocess.run([str(java), "-jar", str(decompiler), "-log=WARN", "--kt-enable=false", str(workspace / "working" / jar), str(out)],
                              capture_output=True, text=True, check=False)
         (out / "PROVENANCE.txt").write_text(
             f"Decompiler output ({decompiler.name}), not the author's source.\nInput: working/{jar}\nExit: {run.returncode}\n"

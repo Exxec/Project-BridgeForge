@@ -78,3 +78,17 @@ class RelinkHelperTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OverloadGateTests(unittest.TestCase):
+    def test_balanced_overload_calls_drop_and_unbalanced_stay(self) -> None:
+        from bridgeforge.jar_batch import _drop_overloads
+        site = "com/fs/starfarer/api/ui/TooltipMakerAPI.addCustom"
+        calls = {site + ":(Lcom/fs/starfarer/api/ui/CustomPanelAPI;F)Lx;": -1, site + ":(Lcom/fs/starfarer/api/ui/UIComponentAPI;F)Lx;": 1}
+        self.assertEqual(_drop_overloads(calls, {site}), {})  # Void-Tec: same call site, new overload
+        self.assertEqual(_drop_overloads({**calls, site + ":(F)Lx;": 1}, {site}), {**calls, site + ":(F)Lx;": 1})
+        self.assertEqual(_drop_overloads(calls, set()), calls)
+
+    def test_renames_are_listed_with_the_rc8_name(self) -> None:
+        from bridgeforge.jar_batch import RENAMED_METHODS
+        self.assertEqual(RENAMED_METHODS["com/fs/starfarer/api/impl/campaign/events/OfficerManagerEvent.pickPortrait"], "pickPortraitPreferNonDuplicate")

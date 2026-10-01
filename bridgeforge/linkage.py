@@ -38,6 +38,8 @@ class ClassInfo:
     methods: set[tuple[str, str]] = field(default_factory=set)
     fields: set[tuple[str, str]] = field(default_factory=set)
     refs: set[tuple[str, str, str, str]] = field(default_factory=set)  # (kind, owner, name, descriptor)
+    access: int = 0
+    abstract_methods: set[tuple[str, str]] = field(default_factory=set)
 
 
 def parse_class(data: bytes) -> ClassInfo | None:
@@ -83,21 +85,24 @@ def parse_class(data: bytes) -> ClassInfo | None:
         def class_name(i: int) -> str:
             return utf8.get(classes.get(i, -1), "")
 
+        access = struct.unpack_from(">H", data, pos)[0]
         pos += 2
         this_index, super_index, interfaces_count = struct.unpack_from(">HHH", data, pos)
         pos += 6
         interfaces = [class_name(struct.unpack_from(">H", data, pos + 2 * k)[0]) for k in range(interfaces_count)]
         pos += 2 * interfaces_count
-        info = ClassInfo(class_name(this_index), class_name(super_index) or None, interfaces)
+        info = ClassInfo(class_name(this_index), class_name(super_index) or None, interfaces, access=access)
         for members in (info.fields, info.methods):
             member_count = struct.unpack_from(">H", data, pos)[0]
             pos += 2
             for _ in range(member_count):
-                _flags, name_index, descriptor_index, attr_count = struct.unpack_from(">HHHH", data, pos)
+                flags, name_index, descriptor_index, attr_count = struct.unpack_from(">HHHH", data, pos)
                 pos += 8
                 for _ in range(attr_count):
                     pos += 6 + struct.unpack_from(">I", data, pos + 2)[0]
                 members.add((utf8.get(name_index, ""), utf8.get(descriptor_index, "")))
+                if members is info.methods and flags & 0x0400:  # ACC_ABSTRACT
+                    info.abstract_methods.add((utf8.get(name_index, ""), utf8.get(descriptor_index, "")))
         for tag, owner, name_type in refs:
             name_index, descriptor_index = nat.get(name_type, (-1, -1))
             owner_name = class_name(owner)
@@ -218,4 +223,54 @@ def unresolved_references(mod_jars: list[Path], vanilla_core: Path, extra_jars: 
                                  "return_type_only": returns_only})
         if problems:
             result[f"{jar.name}!{class_name}.class"] = problems
+    return result
+
+
+def missing_interface_methods(mod_jars: list[Path], vanilla_core: Path, extra_jars: list[Path] | None = None) -> dict[str, list[str]]:
+    """{jar!class: [missing "owner.name(desc)"]}: a concrete mod class whose game supertypes declare an abstract method
+    that nothing in its hierarchy implements, an AbstractMethodError when the game calls it. Found 2026-10-01 only by
+    compiling: Polaris Prime and Unofficial New Game Plus implement CustomDialogDelegate.createCustomDialog(panel) (RC8
+    added a callback parameter), Wotani the old OnHitEffectPlugin.onHit. A hierarchy that reaches a class outside the
+    core and the mod's own jars (a library) is not judged."""
+    core = core_index(str(Path(vanilla_core).resolve()))
+    if not core:
+        return {}
+    mod: dict[str, tuple[Path, ClassInfo]] = {}
+    for jar in mod_jars:
+        for name, info in jar_classes(jar).items():
+            mod.setdefault(name, (jar, info))
+    others = set()
+    for jar in extra_jars or []:
+        others |= _class_names(jar)
+
+    def lookup(name: str) -> ClassInfo | None:
+        return mod[name][1] if name in mod else core.get(name)
+
+    result: dict[str, list[str]] = {}
+    for name, (jar, info) in sorted(mod.items()):
+        if info.access & (0x0200 | 0x0400):  # interface or abstract class: not instantiated itself
+            continue
+        implemented: set[tuple[str, str]] = set()
+        required: dict[tuple[str, str], str] = {}
+        seen, stack, unknown, touches_core = set(), [name], False, False
+        while stack:
+            current = stack.pop()
+            if current in seen or current == "java/lang/Object":
+                continue
+            seen.add(current)
+            node = lookup(current)
+            if node is None:
+                unknown = True  # a library or JDK supertype: could implement anything
+                break
+            if current in core:
+                touches_core = True
+                for method in node.abstract_methods:
+                    required.setdefault(method, current)
+            implemented |= node.methods - node.abstract_methods
+            stack += [c for c in (node.super_name, *node.interfaces) if c]
+        if unknown or not touches_core:
+            continue
+        missing = sorted(f"{owner}.{m[0]}{m[1]}" for m, owner in required.items() if m not in implemented)
+        if missing:
+            result[f"{jar.name}!{name}.class"] = missing
     return result
