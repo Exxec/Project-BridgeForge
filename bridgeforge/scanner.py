@@ -3567,7 +3567,9 @@ _SOURCE_STATIC_STATE = re.compile(r"\bstatic\s+(?!final\b)(?:(?:private|protecte
 
 
 _HULLMOD_BASES = {"com/fs/starfarer/api/combat/BaseHullMod"}
-_SOURCE_HULLMOD_FIELD = re.compile(r"^\s*(?:private|protected|public)?\s*(?!static\b)(?!final\b)(?:transient\s+|volatile\s+)*([A-Za-z_][\w.<>\[\], ]*?)\s+(\w+)\s*(?:=[^;]*)?;", re.MULTILINE)
+# Whitespace inside a declaration is [ \t], not \s: \s crossed lines and backtracked for 13 s on AI War's
+# AIW_Forcefield.java (2026-09-30). A multi-line initializer is still matched by [^;]*.
+_SOURCE_HULLMOD_FIELD = re.compile(r"^[ \t]*(?:private|protected|public)?[ \t]*(?!static\b)(?!final\b)(?:transient[ \t]+|volatile[ \t]+)*([A-Za-z_][\w.<>\[\], ]*?)[ \t]+(\w+)[ \t]*(?:=[^;]*)?;", re.MULTILINE)
 
 
 def _looks_like_constant(name: str) -> bool:
@@ -3730,10 +3732,14 @@ def _scan_hullmod_instance_state(root: Path, result: ScanResult) -> None:
                 return False
         return False
 
+    # Grouped by owner: one hierarchy walk per owning class, not per write (AI War took 29 s here, 2026-09-30).
+    names_by_owner: dict[str, set[str]] = {}
+    for owner, name in writes:
+        names_by_owner.setdefault(owner, set()).add(name)
     for jar, member, info in classes:
         if info.super_class not in _HULLMOD_BASES:
             continue
-        written_names = {name for owner, name in writes if descends_from(owner, info.this_class)}
+        written_names = {name for owner, names in names_by_owner.items() if descends_from(owner, info.this_class) for name in names}
         mutable = sorted(
             name for name, descriptor, is_static, is_final in info.fields
             if not is_static and not is_final and not _looks_like_constant(name) and not descriptor.startswith("Ljava/util/")

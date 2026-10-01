@@ -123,6 +123,26 @@ def jar_classes(jar: Path) -> dict[str, ClassInfo]:
     return found
 
 
+def _class_names(jar: Path) -> frozenset[str]:
+    # A revive scans each mod several times and each scan reads every other rig mod's jars: cache by file state
+    # (the first queue run spent minutes on one mod, 2026-09-30).
+    try:
+        stat = jar.stat()
+    except OSError:
+        return frozenset()
+    return _class_names_cached(str(jar.resolve()), stat.st_mtime_ns, stat.st_size)
+
+
+@lru_cache(maxsize=512)
+def _class_names_cached(path: str, _mtime: int, _size: int) -> frozenset[str]:
+    # Entry names are enough for a provider (a class sits at its package path); no class file is parsed.
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return frozenset(name[:-6] for name in archive.namelist() if name.endswith(".class"))
+    except (OSError, zipfile.BadZipFile):
+        return frozenset()
+
+
 @lru_cache(maxsize=4)
 def core_index(vanilla_core: str) -> dict[str, ClassInfo]:
     root = Path(vanilla_core)
@@ -181,7 +201,7 @@ def unresolved_references(mod_jars: list[Path], vanilla_core: Path, extra_jars: 
             mod_classes.setdefault(class_name, (jar, info))
     provided = set(mod_classes)
     for jar in extra_jars or []:
-        provided |= set(jar_classes(jar))
+        provided |= _class_names(jar)
     result: dict[str, list[dict]] = {}
     for class_name, (jar, info) in sorted(mod_classes.items()):
         problems = []
