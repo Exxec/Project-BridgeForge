@@ -764,7 +764,7 @@ def build_parser() -> argparse.ArgumentParser:
     close_cmd.add_argument("--reason", required=True, help="the evidence: what supersedes it, or what RC8 removed")
     restore_cmd = subcommands.add_parser("restore-from-done", help="rebuild an In operation workspace from a Done/ archive (shipped folder, original, reports and baseline)")
     restore_cmd.add_argument("archive", type=Path, help="Done/<Mod>")
-    restore_cmd.add_argument("--queue", type=Path, default=Path(__file__).resolve().parent.parent / "In operation")
+    restore_cmd.add_argument("--queue", type=Path, help="default: <repo>/In operation")
     review_cmd = subcommands.add_parser("revive-review", help="every fix revive applied since a date, as diffs against the first backup, with placement checks (lookup guards, jar-source edits)")
     review_cmd.add_argument("queue", type=Path)
     review_cmd.add_argument("--since", required=True, help="YYYY-MM-DD")
@@ -778,7 +778,7 @@ def build_parser() -> argparse.ArgumentParser:
     modlog_add.add_argument("--date", help="YYYY-MM-DD (default today)")
     modlog_add.add_argument("--file", type=Path, help="default: <repo>/MOD_CHANGELOG.md")
     modlog_seed = modlog_sub.add_parser("seed", help="one 'archived' line per Done/*/ARCHIVE_NOTE.md, under its archive date")
-    modlog_seed.add_argument("--done", type=Path, default=Path(__file__).resolve().parent.parent / "Done")
+    modlog_seed.add_argument("--done", type=Path, help="default: <repo>/Done")
     modlog_seed.add_argument("--file", type=Path)
     ready_cmd = subcommands.add_parser("ready-list", help="the queue's mods ready for live testing (revival report READY_FOR_LIVE_TEST and latest revive UNATTENDED_DONE), with how to launch them")
     ready_cmd.add_argument("queue", type=Path)
@@ -1253,7 +1253,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "restore-from-done":
         from .workspace_tools import restore_from_done
         try:
-            result = restore_from_done(args.archive, args.queue)
+            result = restore_from_done(args.archive, args.queue or Path(__file__).resolve().parent.parent / "In operation")
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -1274,7 +1274,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.modlog_command == "add":
             print(add_entry(args.mod, args.text, version=args.version, day=args.date, path=args.file))
         else:
-            print(f"{seed_from_archives(args.done, args.file or DEFAULT_PATH)} line(s) added to {args.file or DEFAULT_PATH}")
+            done_dir = args.done or Path(__file__).resolve().parent.parent / "Done"
+            print(f"{seed_from_archives(done_dir, args.file or DEFAULT_PATH)} line(s) added to {args.file or DEFAULT_PATH}")
         return 0
     if args.command == "ready-list":
         # Replaces the hand tally of "how many need live testing" (2026-09-30).

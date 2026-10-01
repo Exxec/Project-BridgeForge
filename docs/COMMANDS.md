@@ -1574,7 +1574,7 @@ rebuild an In operation workspace from a Done/ archive (shipped folder, original
 | Argument | Notes | Help |
 |---|---|---|
 | `archive` | - | Done/<Mod> |
-| `--queue` QUEUE | default C:/Users/exxec/Documents/Project BridgeForge/In operation | - |
+| `--queue` QUEUE | - | default: <repo>/In operation |
 
 ## revive-review
 
@@ -1610,7 +1610,7 @@ one 'archived' line per Done/*/ARCHIVE_NOTE.md, under its archive date
 
 | Argument | Notes | Help |
 |---|---|---|
-| `--done` DONE | default C:/Users/exxec/Documents/Project BridgeForge/Done | - |
+| `--done` DONE | - | default: <repo>/Done |
 | `--file` FILE | - | - |
 
 ## ready-list
