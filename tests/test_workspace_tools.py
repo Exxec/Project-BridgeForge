@@ -147,3 +147,17 @@ class ThisCheckNoiseTests(unittest.TestCase):
             subprocess.run([javac, "-d", str(root), str(root / "C.java")], check=True, capture_output=True)
             calls, _ = _javap_stats(Path(javap), root / "C.class")
         self.assertEqual(calls["java/util/Objects.requireNonNull:(Ljava/lang/Object;)Ljava/lang/Object;"], 1)  # o, not this
+
+
+class SettledTests(unittest.TestCase):
+    def test_live_validated_mods_are_left_alone_by_queue_commands(self) -> None:
+        from bridgeforge.report_status import is_closed
+        with resolved_temp_dir() as root:
+            ws = root / "Mod"
+            (ws / "working" / "reports").mkdir(parents=True)
+            (ws / "working" / "reports" / "REVIVAL_REPORT.md").write_text("# r\n\nLIVE_VALIDATED\n", encoding="utf-8")
+            settled = is_closed(ws)
+            (ws / "working" / "reports" / "REVIVAL_REPORT.md").write_text("# r\n\nREADY_FOR_LIVE_TEST\n", encoding="utf-8")
+            open_again = is_closed(ws)
+        self.assertTrue(settled)
+        self.assertFalse(open_again)

@@ -35,5 +35,12 @@ def report_status(report: Path) -> str | None:
     return last_status(report.read_text(encoding="utf-8", errors="replace"))
 
 
+# Queue commands also leave LIVE_VALIDATED mods alone: they are archived and tested, and an unattended fix would change
+# a tested mod without a version bump (2026-10-01; none had been). Changing one is a deliberate, versioned step
+# (restore-from-done / bump-version).
+SETTLED_STATUSES = (*CLOSED_STATUSES, "LIVE_VALIDATED")
+
+
 def is_closed(workspace: Path) -> bool:
-    return report_status(Path(workspace) / "working" / "reports" / "REVIVAL_REPORT.md") in CLOSED_STATUSES
+    """Closed or live-validated: no unattended queue work."""
+    return report_status(Path(workspace) / "working" / "reports" / "REVIVAL_REPORT.md") in SETTLED_STATUSES
