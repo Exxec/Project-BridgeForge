@@ -2435,14 +2435,25 @@ def _fix_campaign_lookup_guard(root: Path, options: dict, finding_id: str) -> li
     changes, refused = [], []
     for relative, names in sorted(names_by_file.items()):
         path = root / relative
-        if not path.is_file() or path.suffix != ".java":
+        # A jar's source tree is not what runs: an edit there changes nothing until the jar is rebuilt, so it is a jar
+        # packet for patch-jar-class (21 of 33 first-run edits were jar sources, 2026-09-30).
+        if not path.is_file() or path.suffix != ".java" or relative.replace("\\", "/").startswith(("src/", "jars/src/", "jar/src/")):
             refused.append(relative)
             continue
         raw = path.read_bytes()
         text, had_bom = _decode(raw)
         newline = "\r\n" if "\r\n" in text else "\n"
+        # Split the real and the comment-blanked text on the same boundaries: the blanker turns "\r" into a space, so
+        # on a CRLF file split(newline) gave the blanked text ONE line and the guard went in at line 1, inside a doc
+        # comment, once per revive round (Scy Nation's SCY_outposts, five times, 2026-09-30). Mixed endings: refuse.
+        if newline == "\r\n" and text.count("\n") != text.count("\r\n"):
+            refused.append(f"{relative} (mixed line endings)")
+            continue
         lines = text.split(newline)
-        blank = _blank_java_comments(text).split(newline)
+        blank = _blank_java_comments(text.replace("\r\n", "\n")).split("\n")
+        if len(blank) != len(lines):
+            refused.append(f"{relative} (line split mismatch)")
+            continue
         cls = re.search(r"\bclass\s+(\w+)", _blank_java_comments(text))
         inserts: list[tuple[int, str]] = []
         for name in sorted(names):
@@ -2465,6 +2476,8 @@ def _fix_campaign_lookup_guard(root: Path, options: dict, finding_id: str) -> li
                 if "->" in blank[start]:
                     continue
                 indent, variable = decl.group(1), decl.group(2)
+                if i + 1 < len(lines) and f"if ({variable} == null)" in lines[i + 1]:
+                    continue  # already guarded right here: never insert twice
                 what = "star system" if method == "getStarSystem" else "entity"
                 inserts.append((i + 1, newline.join([
                     f"{indent}if ({variable} == null) {{ // BridgeForge: guard a missing {what} (a total conversion or random sector)",

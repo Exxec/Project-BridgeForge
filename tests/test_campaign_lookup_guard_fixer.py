@@ -57,6 +57,32 @@ class CampaignLookupGuardTests(unittest.TestCase):
         self.assertLess(text.index("system == null"), text.index('getEntityById("nomios")'))
         self.assertEqual(after, {"hard-coded-campaign-system-reference": "SAFE", "hard-coded-campaign-entity-reference": "SAFE"})
 
+    def test_a_crlf_file_with_a_doc_comment_gets_one_guard_after_the_declaration(self) -> None:
+        # Scy Nation's SCY_outposts (2026-09-30): CRLF and a class doc comment put the guard inside the comment, five times.
+        source = GEN.replace("public class Gen {", "/**\n * @author someone\n */\npublic class Gen {").replace("\n", "\r\n")
+        with resolved_temp_dir() as root:
+            _mod(root, source)
+            path = root / "data" / "scripts" / "world" / "Gen.java"
+            for _ in range(2):  # revive runs a fixer once per round
+                try:
+                    plan = compute_fix(root, "hard-coded-campaign-system-reference", {})
+                except FixerError:
+                    break
+                for change in plan.changes:
+                    change.path.write_bytes(change.after)
+            lines = path.read_bytes().decode().split("\r\n")
+        at = next(i for i, line in enumerate(lines) if 'getStarSystem("Arcadia")' in line)
+        self.assertIn("if (system == null) { // BridgeForge", lines[at + 1])
+        self.assertEqual(sum("if (system == null)" in line for line in lines), 1)
+
+    def test_a_jar_source_is_left_for_patch_jar_class(self) -> None:
+        with resolved_temp_dir() as root:
+            (root / "src" / "data" / "scripts" / "world").mkdir(parents=True)
+            (root / "src" / "data" / "scripts" / "world" / "Gen.java").write_bytes(GEN.encode())
+            (root / "mod_info.json").write_text('{"id":"m","name":"m","version":"1","gameVersion":"0.98a-RC8"}', encoding="utf-8")
+            with self.assertRaises(FixerError):
+                compute_fix(root, "hard-coded-campaign-system-reference", {})
+
     def test_a_lookup_inside_a_loop_is_refused(self) -> None:
         with resolved_temp_dir() as root:
             _mod(root, IN_LOOP)
