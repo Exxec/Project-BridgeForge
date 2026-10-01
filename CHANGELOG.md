@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Scratch scripts as commands (ROADMAP P15 item 33):** `relink` (queue-wide, resumable; Object-owner noise and
+  decompile re-declarations handled; revive runs it when approved), `patch-jar-sources`, `bump-version`,
+  `restore-from-done` and `revive-review`.
 - **Less hand work in escalation (ROADMAP P15 item 32):** `escalation review` sheets with flags, `--watch-dir`, one
   agent packet per file, a per-workspace run lock, `jar-packets`, `ready-list`, a campaign lookup guard fixer,
   faction known lists from 0.6-era `fleetCompositions`, and a quieter `hullmod-instance-state` (fields never written

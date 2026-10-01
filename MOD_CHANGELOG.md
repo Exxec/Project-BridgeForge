@@ -2,6 +2,11 @@
 
 Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; each mod's evidence is in its revival report.
 
+## 2026-10-01
+
+- **Epta Consortium**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Scy Nation**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+
 ## 2026-09-30
 
 - **Legacy of Arkgneisis** v2.0a DEV+bf.3: relinked a tooltip call RC8 changed (addImageWithText, NoSuchMethodError as shipped); back to live test

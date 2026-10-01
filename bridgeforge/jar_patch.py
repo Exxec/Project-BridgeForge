@@ -192,9 +192,27 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
     return result
 
 
+_OBJECT_METHODS = ("equals:(Ljava/lang/Object;)Z", "hashCode:()I", "toString:()Ljava/lang/String;", "getClass:()Ljava/lang/Class;")
+
+
+def _drop_object_owner_swaps(calls_changed: dict[str, int]) -> dict[str, int]:
+    """Remove an Object method whose recorded owner changed (`Object.equals` -> `CampaignFleetAPI.equals`): javac
+    versions name the receiver's static type or Object, the same method either way (Epta, Scy Nation, 2026-09-30)."""
+    rest = dict(calls_changed)
+    for method in _OBJECT_METHODS:
+        hits = {call: delta for call, delta in rest.items() if call.endswith("." + method) or call == method}
+        if hits and sum(hits.values()) == 0:
+            for call in hits:
+                del rest[call]
+    return rest
+
+
 def _only_return_type_relinks(calls_changed: dict[str, int]) -> list[str]:
     """The changed calls, when they pair up exactly as `owner.name:(args)OLD` -n / `owner.name:(args)NEW` +n: the same
-    call sites linked to a new return type. Empty when anything else changed."""
+    call sites linked to a new return type. Empty when anything else changed. Object-method owner swaps are ignored."""
+    calls_changed = _drop_object_owner_swaps(calls_changed)
+    if not calls_changed:
+        return ["(Object-method owner only)"]
     by_site: dict[str, dict[int, str]] = {}
     for call, delta in calls_changed.items():
         site, _, returned = call.rpartition(")")

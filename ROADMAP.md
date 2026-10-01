@@ -2468,6 +2468,21 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         Tore-Up-Plenty, Tyrador, Void-Tec. The four live-validated Done/ mods with the same break were relinked at
         the owner's request, versions iterated (+bf.N), back to READY_FOR_LIVE_TEST (MOD_CHANGELOG.md).
         Review of the run's 33 lookup guards found the CRLF placement bug fixed in 32.7.
+33. **The 2026-09-30 scratch scripts as commands (done 2026-10-01).** Owner request: automation for hand work.
+    1. `relink QUEUE|WS --vanilla-core [--apply]` (long-running: progress, RELINK.partial.jsonl): the relink path
+       from 32.14, with two fixes that made more classes relinkable: an Object method whose recorded owner changed
+       (`Object.equals` vs `CampaignFleetAPI.equals`) is noise, and a decompile's re-declared variable in a shared
+       switch scope is commented out and recompiled (RogueSynth). Queue dry run: 157 clean, 2 more relinkable
+       (Epta, Scy Nation; applied), 9 left with the reason, 6 need a port. Revive runs it itself when
+       `jar-linkage-unresolved` is approved in AUTOMATION_POLICY.json (not approved yet).
+    2. `patch-jar-sources WS --vanilla-core [--apply]`: edits in a jar's source tree (backups beside them) go into
+       the jar after the pre-edit source is shown to rebuild the shipped class.
+    3. `bump-version WS --note`: +bf.N, a dated report section ending READY_FOR_LIVE_TEST, a MOD_CHANGELOG line.
+    4. `restore-from-done Done/<Mod>`: workspace back from an archive, reports and baseline included; says when
+       the archive kept no baseline (Arkgneisis).
+    5. `revive-review QUEUE --since DATE`: every applied fix diffed against its first backup; flags a misplaced
+       lookup guard or a jar-source edit. Over 2026-09-30: 75 applied, 0 flagged after the repairs.
+    Tests: `tests/test_workspace_tools.py`, `tests/test_progress.py`.
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit

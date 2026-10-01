@@ -89,4 +89,5 @@ LONG_RUNNING_COMMANDS = (
     ("escalation", "queue"),
     ("revive-queue",),
     ("check-impact",),
+    ("relink",),
 )

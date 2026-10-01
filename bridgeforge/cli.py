@@ -732,6 +732,29 @@ def build_parser() -> argparse.ArgumentParser:
     archive_cmd.add_argument("--done", type=Path, help="default: <repo>/Done")
     archive_cmd.add_argument("--policy", type=Path)
     archive_cmd.add_argument("--json", action="store_true")
+    relink_cmd = subcommands.add_parser("relink", help="recompile classes whose game calls RC8 changed only by return type (jar-linkage-unresolved), from shipped or decompiled source, unedited; patch only when nothing else changes. A queue folder or one workspace")
+    relink_cmd.add_argument("path", type=Path, help="a queue (In operation) or one workspace")
+    relink_cmd.add_argument("--vanilla-core", type=Path, required=True)
+    relink_cmd.add_argument("--apply", action="store_true", help="install (backups in scratch/jar-patch-<date>/); default: report only")
+    relink_cmd.add_argument("--restart", action="store_true", help="ignore an earlier run's checkpoint")
+    relink_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
+    relink_cmd.add_argument("--json", action="store_true")
+    pjs_cmd = subcommands.add_parser("patch-jar-sources", help="edits in a jar's source tree (with *.pre-bf-* backups) -> the jar: prove the pre-edit source rebuilds the shipped class, then patch the edited class in")
+    pjs_cmd.add_argument("workspace", type=Path)
+    pjs_cmd.add_argument("--vanilla-core", type=Path, required=True)
+    pjs_cmd.add_argument("--apply", action="store_true")
+    pjs_cmd.add_argument("--json", action="store_true")
+    bump_cmd = subcommands.add_parser("bump-version", help="a shipped mod changed after archiving: +bf.N in mod_info, a dated revival-report section ending READY_FOR_LIVE_TEST, and a MOD_CHANGELOG line")
+    bump_cmd.add_argument("workspace", type=Path)
+    bump_cmd.add_argument("--note", required=True, help="what changed and the evidence (first line goes to the mod changelog)")
+    bump_cmd.add_argument("--date")
+    restore_cmd = subcommands.add_parser("restore-from-done", help="rebuild an In operation workspace from a Done/ archive (shipped folder, original, reports and baseline)")
+    restore_cmd.add_argument("archive", type=Path, help="Done/<Mod>")
+    restore_cmd.add_argument("--queue", type=Path, default=Path(__file__).resolve().parent.parent / "In operation")
+    review_cmd = subcommands.add_parser("revive-review", help="every fix revive applied since a date, as diffs against the first backup, with placement checks (lookup guards, jar-source edits)")
+    review_cmd.add_argument("queue", type=Path)
+    review_cmd.add_argument("--since", required=True, help="YYYY-MM-DD")
+    review_cmd.add_argument("--json", action="store_true")
     modlog_cmd = subcommands.add_parser("mod-changelog", help="MOD_CHANGELOG.md: bigger updates to revived mods by date (archive adds one per archived mod)")
     modlog_sub = modlog_cmd.add_subparsers(dest="modlog_command", required=True)
     modlog_add = modlog_sub.add_parser("add", help="add one line under its date")
@@ -1145,6 +1168,66 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Archived: {result['archive']} ({result['files']} files, {result['licence']}, status {result['status']})")
             print(f"  {len(result['changed'])} file(s) changed, {len(result['added'])} added vs original; jars identical: {result['jars_identical']}")
             print(f"  Note: {result['note']}. The workspace is untouched; remove it yourself once the archive is checked.")
+        return 0
+    if args.command == "relink":
+        from .jar_batch import relink_queue, relink_workspace
+        path = args.path.expanduser().resolve()
+        if (path / "working" / "mod_info.json").is_file():
+            result = relink_workspace(path, args.vanilla_core, apply=args.apply)
+            rows = [result]
+        else:
+            result = relink_queue(path, args.vanilla_core, apply=args.apply, quiet=args.quiet, restart=args.restart)
+            rows = result["workspaces"]
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        for row in rows:
+            print(f"{row['state']:13} {row['workspace']}" + "".join(f"\n  {j['jar']}: {j['state']} ({j['classes']} class(es))" for j in row.get("jars") or [])
+                  + (f"\n  no source: {', '.join(row['missing_source'])}" if row.get("missing_source") else "")
+                  + (f"\n  removed in RC8: {', '.join(row['port'])}" if row.get("port") else ""))
+        if "counts" in result:
+            print("counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())))
+        return 0
+    if args.command == "patch-jar-sources":
+        from .jar_batch import patch_jar_sources
+        result = patch_jar_sources(args.workspace, args.vanilla_core, apply=args.apply)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        for row in result["jars"]:
+            print(f"{row['state']:20} {row['jar']}: {', '.join(row['files'])}")
+            for cls, change in (row.get("classes") or {}).items():
+                print(f"  {cls}: null checks {change['null_checks']}, calls {change['calls'] or '{}'}, members {change['members'] or '{}'}")
+        for name in result["not_in_any_jar"]:
+            print(f"NOT IN ANY JAR       {name}")
+        return 0
+    if args.command == "bump-version":
+        from .workspace_tools import bump_version
+        try:
+            result = bump_version(args.workspace, args.note, day=args.date)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"{result['old']} -> {result['new']}\n  {result['changelog']}")
+        return 0
+    if args.command == "restore-from-done":
+        from .workspace_tools import restore_from_done
+        try:
+            result = restore_from_done(args.archive, args.queue)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"restored {result['workspace']} (reports: {', '.join(result['restored_reports']) or 'none'})" + (f"\n  NOTE: {result['note']}" if result["note"] else ""))
+        return 0
+    if args.command == "revive-review":
+        from .workspace_tools import review_applied
+        result = review_applied(args.queue, args.since)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        print(f"{result['applied']} applied fix(es) since {args.since}; {len(result['flagged'])} flagged")
+        for row in result["flagged"]:
+            print(f"  {row['workspace']}: {row['finding']} {row['file']}: {', '.join(row['flags'])}")
         return 0
     if args.command == "mod-changelog":
         from .mod_changelog import DEFAULT_PATH, add_entry, seed_from_archives
