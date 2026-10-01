@@ -123,6 +123,12 @@ def _original_info(workspace: Path) -> dict:
     return _load_lenient_json_file(workspace / "working" / "mod_info.json") or {}
 
 
+def _name_key(name: str) -> str:
+    """A mod name compared loosely: case, punctuation and a trailing dev/beta/test tag ignored."""
+    key = re.sub(r"[^a-z0-9]+", "", re.sub(r"\b(dev|beta|test|wip)\b", "", name.lower()))
+    return key if len(key) >= 6 else ""  # too short to identify a mod
+
+
 def judge(workspace: Path, index: dict[str, list[dict]]) -> dict:
     working = _load_lenient_json_file(workspace / "working" / "mod_info.json") or {}
     original = _original_info(workspace)
@@ -135,6 +141,21 @@ def judge(workspace: Path, index: dict[str, list[dict]]) -> dict:
     # Our own builds are never a newer release: +bf versions, and earlier BridgeForge revival builds kept in the
     # Downloads archive ("0.2.2-0.98a-revival-r13", Void-Tec, 2026-09-28).
     candidates = [c for c in candidates if _BF_SUFFIX.search(c["version"]) is None and "revival" not in c["version"].lower()]
+    if not any(c["game_version"].startswith("0.98") for c in candidates):
+        # The same mod under a new id: Dassault-Mikoyan Engineering is istl_dam (1.1.8a, 0.9.1a) and
+        # "istl_dassaultmikoyan dev" (1.8a, 0.95.1a) in the queue but istl_dassaultmikoyan (1.9f, 0.98a) installed, and
+        # its version numbers do not compare ("1.18a" is 1.1.8a). A 0.98 release with the same name supersedes a
+        # revival of an older build; matched_by "name" so a person confirms it (owner, 2026-10-01).
+        wanted = _name_key(record["name"])
+        by_name = [c for entries in index.values() for c in entries
+                   if wanted and _name_key(c["name"]) == wanted and c["game_version"].startswith("0.98")
+                   and _BF_SUFFIX.search(c["version"]) is None and "revival" not in c["version"].lower()
+                   and Path(c["path"].split("!", 1)[0]).resolve() != (workspace / "working").resolve()]
+        ours_game = str(original.get("gameVersion") or "")
+        if by_name and not ours_game.startswith("0.98"):
+            record.update({"verdict": "SUPERSEDED", "matched_by": "name", "reference": max(by_name, key=lambda c: version_key(c["version"])),
+                           "note": f"same name, released for {by_name[0]['game_version']}; ours is from {ours_game or 'an older game'}"})
+            return record
     if not candidates:
         return record
     best = max(candidates, key=lambda c: (c["game_version"].startswith("0.98"), version_key(c["version"])))

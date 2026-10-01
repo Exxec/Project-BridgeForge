@@ -72,5 +72,20 @@ class SupersessionTests(unittest.TestCase):
         verdicts = {m["workspace"]: m["verdict"] for m in result["mods"]}
         self.assertEqual(verdicts, {"Pack": "SUPERSEDED", "Void": "NO_MATCH"})
 
+
+class NameMatchTests(unittest.TestCase):
+    def test_a_098_release_under_a_new_id_supersedes_by_name(self) -> None:
+        # Dassault-Mikoyan Engineering (2026-10-01): istl_dam 1.18a queued, istl_dassaultmikoyan 1.9f on 0.98a installed.
+        from bridgeforge.supersession import judge
+        with resolved_temp_dir() as root:
+            ws = root / "DME"
+            (ws / "working").mkdir(parents=True)
+            (ws / "working" / "mod_info.json").write_text('{"id":"istl_dam","name":"Dassault-Mikoyan Engineering","version":"1.18a","gameVersion":"0.9.1a"}', encoding="utf-8")
+            index = {"istl_dassaultmikoyan": [{"path": str(root / "mods" / "DME"), "name": "Dassault-Mikoyan Engineering dev",
+                                               "version": "1.9fHijacked", "game_version": "0.98a-RC5"}]}
+            record = judge(ws, index)
+        self.assertEqual((record["verdict"], record["matched_by"]), ("SUPERSEDED", "name"))
+
+
 if __name__ == "__main__":
     unittest.main()
