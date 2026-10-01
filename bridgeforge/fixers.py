@@ -1051,6 +1051,23 @@ def _fix_csv_row_extra_columns(root: Path, options: dict) -> list[FileChange]:
             continue
         header_len = len(header)
 
+        # A space before an opening quote (`SHIP, "text, with commas"`) stops the field being read as quoted: its
+        # commas split it and its line breaks end the record early (SWP Triumphant's descriptions.csv, 2026-10-01).
+        # Dropping that space everywhere, and only when every row then fits the header, restores the rows as authored.
+        try:
+            widths = [len(row) for row in csv.reader(io.StringIO(text))]
+        except csv.Error:
+            widths = []
+        if any(width > header_len for width in widths[1:]):
+            unspaced = re.sub(r'(^|,)[ \t]+"', r'\1"', text, flags=re.M)
+            try:
+                rewidths = [len(row) for row in csv.reader(io.StringIO(unspaced))]
+            except csv.Error:
+                rewidths = []
+            if unspaced != text and rewidths and all(width <= header_len for width in rewidths[1:]):
+                changes.append(FileChange(path=path, before=raw, after=_encode(unspaced, had_bom)))
+                continue
+
         edits: list[tuple[int, int, str]] = []
         for rec_start, rec_end in records[1:]:
             record_text = text[rec_start:rec_end]
@@ -1064,6 +1081,18 @@ def _fix_csv_row_extra_columns(root: Path, options: dict) -> list[FileChange]:
             if len(fields) <= header_len:
                 continue
             extras = fields[header_len:]
+            # A space before an opening quote (`SHIP, "text, with commas"`) stops the field being read as quoted, so
+            # its commas split it (SWP Triumphant's descriptions.csv, 2026-10-01). Dropping that space, and only
+            # when the row then has exactly the header's width, restores the field as authored.
+            unspaced = re.sub(r'(^|,)[ \t]+"', r'\1"', content)
+            if unspaced != content:
+                try:
+                    respaced = next(csv.reader(io.StringIO(unspaced)))
+                except (csv.Error, StopIteration):
+                    respaced = []
+                if len(respaced) == header_len:
+                    edits.append((rec_start, rec_end, unspaced + term))
+                    continue
             if any(value.strip() for value in extras):
                 raise FixerError(
                     f"{_relative(root, path)}: a csv-row-extra-columns row has non-empty extra "

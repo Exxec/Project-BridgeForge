@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
 import tempfile
 import unittest
@@ -1027,6 +1029,18 @@ class ModInfoGameVersionInexactTests(unittest.TestCase):
             data = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(data["gameVersion"], "0.98a")
             self.assertEqual(data["id"], "fixture")
+
+
+class CsvSpaceBeforeQuoteTests(unittest.TestCase):
+    def test_a_space_before_an_opening_quote_is_dropped_when_that_fits_the_header(self) -> None:
+        # SWP Triumphant's descriptions.csv (2026-10-01): `SHIP, "...` split a multi-line description at its commas.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "data" / "strings" / "descriptions.csv"
+            _write(path, 'id,type,text1,text2\nx,SHIP, "One, two, five\nthree, four",\n')
+            apply_fix(compute_fix(root, "csv-row-extra-columns", {}))
+            rows = list(csv.reader(io.StringIO(path.read_text(encoding="utf-8"))))
+        self.assertEqual(rows[1], ["x", "SHIP", "One, two, five\nthree, four", ""])
 
 
 class CsvRowExtraColumnsTests(unittest.TestCase):
