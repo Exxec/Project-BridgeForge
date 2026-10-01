@@ -10,6 +10,25 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Slightly Better Tech Mining** 0.95.1-2.6.0+bf.1: relinked two industry tooltip calls RC8 changed (addImageWithText); back to live test
 - **Too Much Information**: relinked five hull-mod tooltip tables (beginTable, NoSuchMethodError as shipped)
 - **Nightcross**: Plasma Aggregator kept one ship's weapon state for every ship; now per ship
+- **Better Colonies**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Cryosleeper 2 - Domain Electric Boogaloo Edition**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Dassault-Mikoyan Engineering dev**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Erexeus Technology Complex**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Fleet Action History**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Holy Covenant of Kemet**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **ICE**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **(KIND STRANGER) Foundation Of Borken**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Kingdom of Terra**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Maelstrom Shadow-Light Power Company**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Maelstrom Tahlan Shipworks**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Magellan Protectorate**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Nomadic Survival**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **~Ship Catalogue / Variant Editor**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Sylphon RnD**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Terraformers**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **[Traverser Design Bureau]**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Yuri Expedition**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **prv Starworks**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
 
 ## 2026-09-29
 

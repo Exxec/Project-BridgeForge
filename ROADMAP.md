@@ -2460,6 +2460,14 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         row nearest by name (water, lava, gas giant..., else barren / star_yellow) with frequency 0. Tier auto;
         REVIEW findings, so applied where approved (planets and the design column are). Tests:
         `UnattendedInputFixerTests`.
+    14. **First queue run with the linkage check (2026-09-30):** 36 queued mods call game members RC8 changed; 30
+        only by return type. 19 were relinked in the main session (unedited shipped or decompiled source, patched
+        only when every changed call is a return-type relink and no member changes); 11 were left: their source or
+        decompile does not compile against RC8 (7), shows other differences (3), or is missing a class (2). 6 need
+        a real port (a removed class or member): Dassault-Mikoyan, Kadur Remnant, More Combat Terrain Effects,
+        Tore-Up-Plenty, Tyrador, Void-Tec. The four live-validated Done/ mods with the same break were relinked at
+        the owner's request, versions iterated (+bf.N), back to READY_FOR_LIVE_TEST (MOD_CHANGELOG.md).
+        Review of the run's 33 lookup guards found the CRLF placement bug fixed in 32.7.
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit
