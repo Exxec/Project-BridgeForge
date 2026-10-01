@@ -115,3 +115,18 @@ def review_applied(queue: Path, since: str) -> dict:
                         row["flags"].append("jar-source-edit (no effect until the jar is patched: patch-jar-sources)")
                 rows.append(row)
     return {"since": since, "applied": len(rows), "flagged": [r for r in rows if r["flags"]], "rows": rows}
+
+
+def close_workspace(workspace: Path, status: str, reason: str, *, day: str | None = None) -> str:
+    """End revival work on a mod: a dated revival-report section ending in SUPERSEDED or NOT_REVIVABLE, which every
+    queue command then skips (report_status.CLOSED_STATUSES). Nothing is moved or deleted."""
+    from .report_status import CLOSED_STATUSES
+
+    if status not in CLOSED_STATUSES:
+        raise ValueError(f"status must be one of {', '.join(CLOSED_STATUSES)}")
+    report = Path(workspace).expanduser().resolve() / "working" / "reports" / "REVIVAL_REPORT.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    body = report.read_text(encoding="utf-8").rstrip() if report.is_file() else "# Revival report"
+    title = "Superseded" if status == "SUPERSEDED" else "Not revivable for RC8"
+    report.write_text(body + f"\n\n## {title} ({day or date.today().isoformat()})\n\n{reason.strip()}\n\n{status}\n", encoding="utf-8")
+    return str(report)

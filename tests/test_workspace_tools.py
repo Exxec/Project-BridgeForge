@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import unittest
+from pathlib import Path
 
 from bridgeforge.jar_batch import repair_decompile
 from bridgeforge.jar_patch import _only_return_type_relinks
@@ -111,3 +112,38 @@ class CopyBackTests(unittest.TestCase):
         self.assertEqual(len(updated), 1)
         self.assertIn("BaseCampaignEntityPickerListener", now)
         self.assertIn("new CampaignEntityPickerListener()", backup)
+
+
+class CloseTests(unittest.TestCase):
+    def test_a_closed_mod_ends_its_report_and_is_skipped(self) -> None:
+        from bridgeforge.report_status import is_closed
+        from bridgeforge.workspace_tools import close_workspace
+        with resolved_temp_dir() as root:
+            ws = root / "Mod"
+            (ws / "working").mkdir(parents=True)
+            self.assertFalse(is_closed(ws))
+            close_workspace(ws, "NOT_REVIVABLE", "Calls the game's obfuscated Cloud class; no public replacement.", day="2026-10-01")
+            closed = is_closed(ws)
+            text = (ws / "working" / "reports" / "REVIVAL_REPORT.md").read_text(encoding="utf-8")
+        self.assertTrue(closed)
+        self.assertTrue(text.rstrip().endswith("NOT_REVIVABLE"))
+        with self.assertRaises(ValueError):
+            close_workspace(root, "READY", "no")
+
+
+class ThisCheckNoiseTests(unittest.TestCase):
+    def test_require_non_null_on_this_is_not_a_call(self) -> None:
+        import shutil
+        import subprocess
+        from bridgeforge.jar_patch import _javap_stats
+        javac, javap = shutil.which("javac"), shutil.which("javap")
+        if not (javac and javap):
+            self.skipTest("no JDK on PATH")
+        with resolved_temp_dir() as root:
+            (root / "C.java").write_text(
+                "public class C { static final String ID = \"x\"; Object o;\n"
+                "  String a() { java.util.Objects.requireNonNull(this); return ID; }\n"
+                "  void b() { java.util.Objects.requireNonNull(o); } }\n", encoding="utf-8")
+            subprocess.run([javac, "-d", str(root), str(root / "C.java")], check=True, capture_output=True)
+            calls, _ = _javap_stats(Path(javap), root / "C.class")
+        self.assertEqual(calls["java/util/Objects.requireNonNull:(Ljava/lang/Object;)Ljava/lang/Object;"], 1)  # o, not this

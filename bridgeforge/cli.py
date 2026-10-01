@@ -755,6 +755,10 @@ def build_parser() -> argparse.ArgumentParser:
     bump_cmd.add_argument("workspace", type=Path)
     bump_cmd.add_argument("--note", required=True, help="what changed and the evidence (first line goes to the mod changelog)")
     bump_cmd.add_argument("--date")
+    close_cmd = subcommands.add_parser("close", help="end revival work on a mod: a dated report section ending SUPERSEDED or NOT_REVIVABLE; queue commands skip it after")
+    close_cmd.add_argument("workspace", type=Path)
+    close_cmd.add_argument("--status", required=True, choices=["SUPERSEDED", "NOT_REVIVABLE"])
+    close_cmd.add_argument("--reason", required=True, help="the evidence: what supersedes it, or what RC8 removed")
     restore_cmd = subcommands.add_parser("restore-from-done", help="rebuild an In operation workspace from a Done/ archive (shipped folder, original, reports and baseline)")
     restore_cmd.add_argument("archive", type=Path, help="Done/<Mod>")
     restore_cmd.add_argument("--queue", type=Path, default=Path(__file__).resolve().parent.parent / "In operation")
@@ -1232,6 +1236,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(f"{result['old']} -> {result['new']}\n  {result['changelog']}")
+        return 0
+    if args.command == "close":
+        from .workspace_tools import close_workspace
+        print(f"{args.status}: {close_workspace(args.workspace, args.status, args.reason)}")
         return 0
     if args.command == "restore-from-done":
         from .workspace_tools import restore_from_done

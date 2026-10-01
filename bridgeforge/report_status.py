@@ -12,7 +12,10 @@ from pathlib import Path
 from .revival_audit import COMPLETION_STATUSES
 
 # Statuses the live-testing workflow adds after a report is first declared.
-WORKFLOW_STATUSES = ("LIVE_VALIDATED", "SUPERSEDED", "ESCALATED")
+WORKFLOW_STATUSES = ("LIVE_VALIDATED", "SUPERSEDED", "ESCALATED", "NOT_REVIVABLE")
+# Closed: no more revival work. Queue commands skip these (superseded mods still ran through every revive, 2026-10-01).
+# NOT_REVIVABLE: the mod depends on something RC8 removed with no public replacement (More Combat Terrain Effects).
+CLOSED_STATUSES = ("SUPERSEDED", "NOT_REVIVABLE")
 REPORT_STATUSES = frozenset((*COMPLETION_STATUSES, *WORKFLOW_STATUSES))
 
 
@@ -30,3 +33,7 @@ def report_status(report: Path) -> str | None:
     if not report.is_file():
         return None
     return last_status(report.read_text(encoding="utf-8", errors="replace"))
+
+
+def is_closed(workspace: Path) -> bool:
+    return report_status(Path(workspace) / "working" / "reports" / "REVIVAL_REPORT.md") in CLOSED_STATUSES

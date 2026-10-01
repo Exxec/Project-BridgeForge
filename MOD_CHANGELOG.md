@@ -21,6 +21,19 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Polaris Prime**: jar classes ported to RC8 interface changes (AbstractMethodError as shipped)
 - **Arkships**: gate picker ported to RC8's CampaignEntityPickerListener (AbstractMethodError as shipped)
 - **Roguelite Sector**: startup dialog's anonymous classes ported to RC8 interface changes (AbstractMethodError as shipped)
+- **RevenantLib** 1.3.0+bf.1: DroneLib (tomatopaste) folded in whole; its ShipAPI wrapper given the 83 methods RC8 added (AbstractMethodError as shipped)
+- **Neutrino Corporation: Nostalgia Edition**: two ship systems ported to RC8's ShipSystemStatsScript (AbstractMethodError as shipped)
+- **The Nomads**: a ship system ported to RC8's ShipSystemStatsScript (AbstractMethodError as shipped)
+- **(KIND STRANGER) Tiandong Heavy Industries**: fleet inflater given RC8's three new inflater methods, with vanilla's own bodies (AbstractMethodError as shipped)
+- **Valkyrians**: relinked a hull-mod class whose game calls changed in RC8 (decompile's lost parentheses restored)
+- **Explorer Society [BF r3]**: jar's stale on-hit class replaced by the already-ported script (AbstractMethodError as shipped)
+- **Tyrador Safeguard Coalition**: jar's stale on-hit class rebuilt from its already-ported source (AbstractMethodError as shipped)
+- **Vanidad y Afliction Operation**: custom collision shape given RC8's two new BoundsAPI methods (AbstractMethodError as shipped)
+- **Tore Up Plenty**: 0.8 markets ported: industry-conditions become RC8 industries, addMarket gains RC8's argument, removed smuggling-stability call dropped
+- **Tyrador Safeguard Coalition**: forgeship officer creation rebuilt from the author's own newer source (old createOfficer form gone in RC8); tooltip calls relinked
+- **Bounties Expanded**: recompiled a skirmish-bounty class whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
+- **Special Hullmod Upgrades**: 35 classes relinked and four hull mods ported to RC8's HullModEffect (NoSuchMethodError/AbstractMethodError as shipped)
+- **Xenoargh Rebal**: tow cable hull mod ported to RC8's HullModEffect (AbstractMethodError as shipped)
 
 ## 2026-09-30
 

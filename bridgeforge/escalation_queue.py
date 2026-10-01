@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from .progress import Checkpoint, report
+from .report_status import is_closed
 
 SCHEMA_VERSION = 1
 RESULT_JSON = "ESCALATIONS_BY_FINDING.json"
@@ -34,7 +35,7 @@ def _workspace_packets(workspace: Path) -> dict | None:
 
 def summarize_queue(queue: Path, quiet: bool = False) -> dict:
     queue = Path(queue).expanduser().resolve()
-    workspaces = sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_") and (p / "reports" / "revive" / "REVIVE.json").is_file())
+    workspaces = sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_") and (p / "reports" / "revive" / "REVIVE.json").is_file() and not is_closed(p))
     header = {"schema_version": SCHEMA_VERSION, "queue": str(queue),
               "revive_mtimes": {w.name: (w / "reports" / "revive" / "REVIVE.json").stat().st_mtime for w in workspaces}}
     by_finding: dict[tuple, dict] = {}
@@ -107,7 +108,7 @@ def rule(queue: Path, finding_id: str, *, accept: bool = False, approve_fixer: b
         body = "{\n  \"approved_fixers\": {\n" + ",\n".join(f"    {json.dumps(k)}: {json.dumps(v, ensure_ascii=False)}" for k, v in data["approved_fixers"].items()) + "\n  }\n}\n"
         policy.write_text(body, encoding="utf-8")
     else:
-        for workspace in sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_")):
+        for workspace in sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_") and not is_closed(p)):
             record = _workspace_packets(workspace)
             if not record or record["status"] != "ESCALATED":
                 continue

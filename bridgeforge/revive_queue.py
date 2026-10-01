@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from .progress import Checkpoint, report
+from .report_status import is_closed
 
 SCHEMA_VERSION = 1
 RESULT_FILE = "REVIVE_QUEUE.json"
@@ -30,7 +31,7 @@ def _last_status(workspace: Path) -> str | None:
 
 def select_workspaces(queue: Path, only_status: set[str] | None = None, never_revived: bool = False) -> list[Path]:
     chosen = []
-    for workspace in sorted(p for p in Path(queue).iterdir() if p.is_dir() and not p.name.startswith("_")):
+    for workspace in sorted(p for p in Path(queue).iterdir() if p.is_dir() and not p.name.startswith("_") and not is_closed(p)):
         if not (workspace / "working" / "mod_info.json").is_file():
             continue
         status = _last_status(workspace)

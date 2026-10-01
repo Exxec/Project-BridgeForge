@@ -20,6 +20,7 @@ from pathlib import Path
 from .jar_patch import _decompiled_tree, _only_return_type_relinks, find_decompiler, patch_jar_classes
 from .java_toolchain import find_jdk
 from .linkage import unresolved_references
+from .report_status import is_closed
 from .scanner import _load_lenient_json_file
 
 SCHEMA_VERSION = 1
@@ -210,7 +211,7 @@ def relink_queue(queue: Path, vanilla_core: Path, *, apply: bool = False, quiet:
 
     queue = Path(queue).expanduser().resolve()
     workspaces = [p for p in sorted(queue.iterdir()) if p.is_dir() and not p.name.startswith("_") and (p / "working" / "mod_info.json").is_file()
-                  and _info(p / "working").get("jars")]
+                  and _info(p / "working").get("jars") and not is_closed(p)]
     checkpoint_path = queue / "RELINK.partial.jsonl"
     if restart:
         checkpoint_path.unlink(missing_ok=True)
@@ -278,6 +279,8 @@ BASE_CLASSES = {
     "com/fs/starfarer/api/campaign/CampaignEntityPickerListener": "com.fs.starfarer.api.campaign.BaseCampaignEntityPickerListener",
     "com/fs/starfarer/api/campaign/CustomUIPanelPlugin": "com.fs.starfarer.api.campaign.BaseCustomUIPanelPlugin",
     "com/fs/starfarer/api/campaign/CustomDialogDelegate": "com.fs.starfarer.api.campaign.BaseCustomDialogDelegate",
+    # Neutrino, The Nomads (getDisplayNameOverride); BaseShipSystemScript implements ShipSystemStatsScriptAdvanced.
+    "com/fs/starfarer/api/plugins/ShipSystemStatsScript": "com.fs.starfarer.api.impl.combat.BaseShipSystemScript",
 }
 
 
@@ -376,8 +379,16 @@ def port_interfaces(workspace: Path, vanilla_core: Path, *, apply: bool = False)
         if via_base:
             text = _port_base(text, Path(class_path).name, owners)
         for method in [] if via_base else methods:
+            if text is None:
+                break
+            # A source already in RC8's form (a source fixer ported it, but the jar kept the old class: Explorer
+            # Society, Tyrador, 2026-10-01) is built into the jar as it is.
+            already = {_ONHIT: r"\bonHit\s*\([^)]*\bApplyDamageResultAPI\b", _DIALOG: r"\bcreateCustomDialog\s*\([^)]*CustomDialogCallback",
+                       _BUTTON: r"\bvoid\s+buttonPressed\s*\("}[method]
+            if re.search(already, text):
+                continue
             text = (_port_onhit(text) if method == _ONHIT else _port_dialog(text) if method == _DIALOG else
-                    _port_button(text, Path(class_path).name)) if text is not None else None
+                    _port_button(text, Path(class_path).name))
         if text is None:
             result["unported"].append({"class": class_path, "missing": methods, "why": "the source did not match the port's pattern"})
             continue
@@ -466,7 +477,7 @@ def port_interfaces_queue(queue: Path, vanilla_core: Path, *, apply: bool = Fals
 
     queue = Path(queue).expanduser().resolve()
     workspaces = [p for p in sorted(queue.iterdir()) if p.is_dir() and not p.name.startswith("_") and (p / "working" / "mod_info.json").is_file()
-                  and _info(p / "working").get("jars")]
+                  and _info(p / "working").get("jars") and not is_closed(p)]
     checkpoint_path = queue / "PORT_INTERFACES.partial.jsonl"
     if restart:
         checkpoint_path.unlink(missing_ok=True)

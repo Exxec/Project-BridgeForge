@@ -2511,6 +2511,21 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         Arkships' gate picker, which the full revive run caught, and RogueliteSector's startup dialog). When the
         source came from the mod's own tree, the edited file is copied back over it (backup beside it) so the shipped
         source matches the patched jar. Test: `CopyBackTests`.
+    11. **Owner rulings 2026-10-01, done.** DroneLib folded into RevenantLib 1.3.0+bf.1 (whole, names unchanged;
+        `dl_DroneAPI` given the 83 methods RC8 added to ShipAPI as forwarding delegates; RevenantLib builds from
+        source again with the obf jars on its classpath and `setColor` -> `setBaseColor`). More Combat Terrain Effects
+        and Exotica: superseded (0.98 releases in the 0.98 Modpack V6.2), as are both Dassault-Mikoyan copies,
+        Logistics Notifications, ScalarTech and Stinger (name match). Hand ports: Tiandong (three inflater methods,
+        vanilla bodies), Vanidad (two BoundsAPI methods), Tore-Up-Plenty (0.8 markets: industry-conditions ->
+        addIndustry via LEGACY_MARKET_CONDITIONS, addMarket(m, true), smuggling stability dropped), Tyrador
+        (forgeship rebuilt from the author's newer source), Valkyrians (decompile parentheses), Bounties Expanded and
+        Special Hullmod Upgrades (the only extra difference was `requireNonNull(this)`), Explorer Society and
+        Tyrador on-hit (jar kept a stale class the fixer had already ported in source), Neutrino and The Nomads
+        (BaseShipSystemScript added to the base-class table), Xenoargh Rebal TowCable.
+    12. **Tooling from those:** `close WS --status SUPERSEDED|NOT_REVIVABLE --reason` (queue commands now skip closed
+        mods: 102 of 295), `requireNonNull(this)` is not a counted call, port-interfaces builds a source already in
+        RC8's form, and supersession matches by name. Tests: `CloseTests`, `ThisCheckNoiseTests`, `PortTableTests`,
+        `NameMatchTests`.
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit

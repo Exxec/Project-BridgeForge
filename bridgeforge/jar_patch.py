@@ -48,7 +48,18 @@ def _in_nest(call: str, class_entry: str) -> bool:
 
 def _javap_stats(javap: Path, class_file: Path) -> tuple[Counter, int]:
     out = subprocess.run([str(javap), "-c", "-p", str(class_file)], capture_output=True, text=True, check=False).stdout
-    calls = Counter(m.group(1) for m in re.finditer(r"//\s*(?:Method|InterfaceMethod)\s+(\S+)", out))
+    calls: Counter = Counter()
+    previous = ""
+    for line in out.splitlines():
+        found = re.search(r"//\s*(?:Method|InterfaceMethod)\s+(\S+)", line)
+        if found:
+            # Objects.requireNonNull(this) is javac checking `this` before a static constant written as
+            # `this.CONSTANT` (decompiler output; Special Hullmod Upgrades, Bounties Expanded, 2026-10-01). `this` is
+            # never null, so the check does nothing and is not counted as a call.
+            if not (found.group(1).startswith("java/util/Objects.requireNonNull:") and re.search(r":\s*aload_0\s*$", previous)):
+                calls[found.group(1)] += 1
+        if re.search(r"^\s*\d+:", line):
+            previous = line
     return calls, len(re.findall(r"\bif(?:non)?null\b", out))
 
 

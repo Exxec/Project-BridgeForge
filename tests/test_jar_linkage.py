@@ -101,5 +101,12 @@ class SourcePortTests(unittest.TestCase):
         self.assertIsNone(_port_base("public class H extends Other implements HullModEffect {}", "H", {"com/fs/starfarer/api/combat/HullModEffect"}))
 
 
+
+class PortTableTests(unittest.TestCase):
+    def test_ship_system_scripts_extend_base_ship_system_script(self) -> None:
+        from bridgeforge.jar_batch import BASE_CLASSES
+        self.assertEqual(BASE_CLASSES["com/fs/starfarer/api/plugins/ShipSystemStatsScript"], "com.fs.starfarer.api.impl.combat.BaseShipSystemScript")
+
+
 if __name__ == "__main__":
     unittest.main()
