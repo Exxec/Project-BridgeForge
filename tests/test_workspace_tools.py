@@ -161,3 +161,25 @@ class SettledTests(unittest.TestCase):
             open_again = is_closed(ws)
         self.assertTrue(settled)
         self.assertFalse(open_again)
+
+
+class DeclareProvidersTests(unittest.TestCase):
+    def test_a_swap_declares_its_providers_and_nothing_else(self) -> None:
+        from bridgeforge.workspace_tools import declare_providers
+        with resolved_temp_dir() as root:
+            ws = root / "Addon"
+            (ws / "working").mkdir(parents=True)
+            (ws / "working" / "mod_info.json").write_text('{"id":"addon","name":"Addon","version":"1"}', encoding="utf-8")
+            packets = ws / "reports" / "escalations"
+            packets.mkdir(parents=True)
+            swap = {"options": {"substitutes": {"strategy": "SWAP", "uncovered": [], "providers": [
+                {"mod_id": "ORA", "name": "Outer Rim Alliance", "game_version": "0.98a-RC8"}]}}}
+            (packets / "content-reference-unresolved--mod.json").write_text(json.dumps(swap), encoding="utf-8")
+            result = declare_providers(ws, apply=True)
+            info = json.loads((ws / "working" / "mod_info.json").read_text(encoding="utf-8"))
+            swap["options"]["substitutes"]["strategy"] = "ESCALATE"
+            (packets / "content-reference-unresolved--mod.json").write_text(json.dumps(swap), encoding="utf-8")
+            refused = declare_providers(ws, apply=True)
+        self.assertEqual(info["dependencies"], [{"id": "ORA", "name": "Outer Rim Alliance"}])
+        self.assertEqual(result["state"], "DECLARED")
+        self.assertEqual(refused["state"], "NOT_SWAP")

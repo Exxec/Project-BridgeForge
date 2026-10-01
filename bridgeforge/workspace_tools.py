@@ -130,3 +130,36 @@ def close_workspace(workspace: Path, status: str, reason: str, *, day: str | Non
     title = "Superseded" if status == "SUPERSEDED" else "Not revivable for RC8"
     report.write_text(body + f"\n\n## {title} ({day or date.today().isoformat()})\n\n{reason.strip()}\n\n{status}\n", encoding="utf-8")
     return str(report)
+
+
+def declare_providers(workspace: Path, *, apply: bool = False) -> dict:
+    """Apply a `content-reference-unresolved` packet whose recommended strategy is SWAP: every needed id is provided
+    by visible 0.98 mods, so the fix is declaring them as dependencies and nothing else changes (2026-10-01: 9 of the
+    21 mods it blocked). Any other strategy (ESCALATE, STRIP_FROM_MOD) is left for a person."""
+    from .fixers import _add_dependency_entry
+    from .scanner import _parse_json
+
+    workspace = Path(workspace).expanduser().resolve()
+    info_path = workspace / "working" / "mod_info.json"
+    result = {"workspace": workspace.name, "state": "NO_PACKET", "declared": []}
+    for packet_path in sorted((workspace / "reports" / "escalations").glob("content-reference-unresolved--*.json")):
+        subs = (json.loads(packet_path.read_text(encoding="utf-8")).get("options") or {}).get("substitutes") or {}
+        if subs.get("strategy") != "SWAP" or subs.get("uncovered"):
+            result.update({"state": "NOT_SWAP", "strategy": subs.get("strategy"), "reason": subs.get("reason")})
+            return result
+        raw = info_path.read_text(encoding="utf-8")
+        info, _ = _parse_json(raw)
+        have = {str(d.get("id") if isinstance(d, dict) else d).lower() for d in (info.get("dependencies") or [])}
+        text = raw
+        for provider in subs.get("providers") or []:
+            if provider.get("mod_id") and provider["mod_id"].lower() not in have:
+                text = _add_dependency_entry(text, provider["mod_id"], provider.get("name") or provider["mod_id"])
+                result["declared"].append(f"{provider['mod_id']} ({provider.get('name')}, {provider.get('game_version')})")
+        _parse_json(text)  # must still parse
+        result["state"] = "DECLARED" if result["declared"] else "ALREADY_DECLARED"
+        if apply and text != raw:
+            backup = info_path.with_name("mod_info.json.pre-bf-declare-providers.bak")
+            if not backup.exists():
+                shutil.copy2(info_path, backup)
+            info_path.write_text(text, encoding="utf-8")
+    return result

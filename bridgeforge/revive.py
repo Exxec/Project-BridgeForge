@@ -92,7 +92,10 @@ def _scan(working: Path, vanilla_core: Path | None) -> list[dict]:
     accepted = mod_baseline_keys(working)
     # The rig's mods/ holds the libraries mods depend on; declared-dependency jars resolve class references there.
     rig_mods = Path(working).resolve().parent.parent / "_rig" / "mods"
-    providers = [rig_mods] if rig_mods.is_dir() else None
+    # And the queue itself: a declared dependency revived alongside (Communist Clouds -> Vayra Merged) is not in the
+    # rig, and its content read as unresolved in mods that already declared it (2026-10-01).
+    queue = Path(working).resolve().parent.parent
+    providers = [p for p in (rig_mods, queue) if p.is_dir()] or None
     findings = [asdict(f) for f in scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None, provider_roots=providers).findings]
     _record_settings_baseline(working, findings)
     return [f for f in findings if finding_dict_baseline_key(f) not in accepted]
@@ -533,7 +536,8 @@ def _draft_report(working: Path, vanilla_core: Path | None, status: str, *, writ
     if status != "UNATTENDED_DONE":
         return {"status": "NOT_DRAFTED", "reason": f"revive ended {status}; a report is drafted only when nothing is left to do"}
     rig_mods = Path(working).resolve().parent.parent / "_rig" / "mods"
-    providers = [rig_mods] if rig_mods.is_dir() else None
+    queue = Path(working).resolve().parent.parent  # declared dependencies revived alongside, as in _scan
+    providers = [p for p in (rig_mods, queue) if p.is_dir()] or None
     draft = (write_revival_report_draft(working, vanilla_core, providers) if write
              else draft_revival_report(working, vanilla_core, providers))
     return {key: value for key, value in draft.items() if key not in ("report_text", "plan_text")}

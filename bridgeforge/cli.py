@@ -755,6 +755,9 @@ def build_parser() -> argparse.ArgumentParser:
     bump_cmd.add_argument("workspace", type=Path)
     bump_cmd.add_argument("--note", required=True, help="what changed and the evidence (first line goes to the mod changelog)")
     bump_cmd.add_argument("--date")
+    declare_cmd = subcommands.add_parser("declare-providers", help="apply a content-reference-unresolved SWAP: declare the visible 0.98 mods that provide every needed id (nothing else changes); any other strategy is left for a person")
+    declare_cmd.add_argument("workspace", type=Path, nargs="+")
+    declare_cmd.add_argument("--apply", action="store_true")
     close_cmd = subcommands.add_parser("close", help="end revival work on a mod: a dated report section ending SUPERSEDED or NOT_REVIVABLE; queue commands skip it after")
     close_cmd.add_argument("workspace", type=Path)
     close_cmd.add_argument("--status", required=True, choices=["SUPERSEDED", "NOT_REVIVABLE"])
@@ -1236,6 +1239,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         print(f"{result['old']} -> {result['new']}\n  {result['changelog']}")
+        return 0
+    if args.command == "declare-providers":
+        from .workspace_tools import declare_providers
+        for workspace in args.workspace:
+            result = declare_providers(workspace, apply=args.apply)
+            print(f"{result['state']:16} {result['workspace']}: " + (", ".join(result["declared"]) or str(result.get("strategy") or "")))
         return 0
     if args.command == "close":
         from .workspace_tools import close_workspace
