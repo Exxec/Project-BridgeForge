@@ -165,6 +165,11 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_cmd.add_argument("--mods", type=Path, required=True, help="the mods folder the save will be loaded with")
     doctor_cmd.add_argument("--vanilla-core", type=Path, help="starsector-core, so the game's own classes resolve")
     doctor_cmd.add_argument("--json", action="store_true")
+    rplan_cmd = subcommands.add_parser("save-removal-plan", help="for each object of a missing mod's class in a save: droppable (nothing outside refers to it) or blocked (lists the outside references); read-only, the plan for a fix on a copy")
+    rplan_cmd.add_argument("save", type=Path)
+    rplan_cmd.add_argument("--mods", type=Path, required=True)
+    rplan_cmd.add_argument("--vanilla-core", type=Path)
+    rplan_cmd.add_argument("--json", action="store_true")
     save_risk = subcommands.add_parser("save-risk", help="flag changed persistent-identifier-shaped fields")
     save_risk.add_argument("workspace", type=Path)
     pipeline = subcommands.add_parser("pipeline", help="run the auditable Bridgeforge modernization pipeline")
@@ -964,6 +969,8 @@ def build_parser() -> argparse.ArgumentParser:
     esc_run.add_argument("--timeout", type=int, default=1800, help="seconds per attempt")
     esc_apply = esc_sub.add_parser("apply", help="copy an attempt already VERIFIED (and reviewed) into working/, without re-running the agent")
     esc_apply.add_argument("--attempt", type=int, help="which attempt (default: the newest VERIFIED one)")
+    esc_apply.add_argument("--patch-class", action="store_true", help="the attempt edits jar sources: patch just the edited classes into their jar (patch-jar-class checks) and copy the sources back")
+    esc_apply.add_argument("--allow-removed", action="append", default=[], help="with --patch-class: a member whose removal is intended (fields moved to per-ship state); repeatable")
     esc_apply.add_argument("--rebuild-jar", action="store_true", help="the attempt edits jar sources: rebuild the jar from them (refused on any lost class or member) and install it")
     esc_rule = esc_sub.add_parser("rule", help="record one owner ruling for a finding id across the queue: accept it in every escalated mod's baseline, or approve its fixer as a standing approval")
     esc_rule.add_argument("finding")
@@ -2704,6 +2711,17 @@ def main(argv: list[str] | None = None) -> int:
             for spec in config.get("setups", []) or []:
                 print(f"Setup: {spec}")
         return 0
+    if args.command == "save-removal-plan":
+        from .save_removal_plan import plan_removal
+        result = plan_removal(args.save, args.mods, args.vanilla_core)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            return 0
+        print(f"{result['objects']} object(s) of missing classes: {result['droppable']} droppable, {result['blocked']} blocked")
+        for row in result["rows"]:
+            print(f"  {row['state']:9} {row['class']} (in {row['parent']}, line {row['line']})"
+                  + (f"  referenced from {', '.join(row['ref_examples'])}" if row["ref_examples"] else ""))
+        return 0
     if args.command == "save-doctor":
         from .save_doctor import diagnose
         result = diagnose(args.save, args.mods, args.vanilla_core)
@@ -3301,7 +3319,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 0 if result["status"] == "PASS" else 1
             if args.escalation_command == "apply":
                 from .escalation import apply_verified
-                result = apply_verified(args.workspace, args.packet, attempt=args.attempt, rebuild_jar=args.rebuild_jar)
+                result = apply_verified(args.workspace, args.packet, attempt=args.attempt, rebuild_jar=args.rebuild_jar,
+                                        patch_classes=args.patch_class, allow_removed=args.allow_removed)
                 if args.json:
                     print(json.dumps(result, indent=2, ensure_ascii=False))
                 else:

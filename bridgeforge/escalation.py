@@ -370,7 +370,8 @@ def _rebuild_attempt_jar(workspace: Path, packet: dict, attempt_dir: Path, sourc
             "changed_classes": [c["class"] for c in comparison.get("class_changes") or []], "added_classes": comparison.get("added_classes") or []}
 
 
-def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = None, now=None, rebuild_jar: bool = False) -> dict:
+def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = None, now=None, rebuild_jar: bool = False,
+                   patch_classes: bool = False, allow_removed: list[str] | None = None) -> dict:
     """Copy an attempt already VERIFIED into `working/` without re-running the agent (P15 item 20.12).
 
     `run --apply` re-runs the agent and applies whatever the new attempt produces, which nobody has
@@ -425,6 +426,37 @@ def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = N
         raise EscalationError("the attempt no longer verifies: " + "; ".join(check["reasons"]))
     source_root = next((root for root in JAR_SOURCE_ROOTS if any(name.startswith(root) for name in changed)), None)
     rebuilt = None
+    patched = []
+    if source_root and patch_classes:
+        # Patch only the edited classes into their jar (patch-jar-class: refuses a removed member unless named, a new
+        # top-level class, or a sandbox-forbidden reference), instead of rebuilding the whole jar. Done by hand for
+        # Neutrino (tomatopaste) and The Mayorate, 2026-10-02.
+        import zipfile
+
+        from .jar_patch import patch_jar_classes
+        from .scanner import _load_lenient_json_file
+
+        info = _load_lenient_json_file(working / "mod_info.json") or {}
+        jars = [j for j in info.get("jars") or [] if isinstance(j, str) and (working / j).is_file()]
+        by_jar: dict[str, list[Path]] = {}
+        for name in changed:
+            if not name.endswith(".java"):
+                continue
+            text = (sandbox / name).read_text(encoding="utf-8", errors="replace")
+            package = re.search(r"^\s*package\s+([\w.]+)\s*;", text, re.M)
+            entry = (package.group(1).replace(".", "/") + "/" if package else "") + Path(name).stem + ".class"
+            jar = next((j for j in jars if entry in zipfile.ZipFile(working / j).namelist()), None)
+            if jar is None:
+                raise EscalationError(f"{name}: class {entry} is in no declared jar; nothing to patch.")
+            by_jar.setdefault(jar, []).append(sandbox / name)
+        vanilla = Path(packet["vanilla_core"]) if packet.get("vanilla_core") else None
+        for jar, sources in by_jar.items():
+            check = patch_jar_classes(workspace, jar, sources, vanilla_core=vanilla, allow_removed=allow_removed)
+            if check["status"] != "PASS":
+                raise EscalationError(f"patching {jar} refused: {check.get('refusals') or check['compile']['errors'][:2]}")
+            done = patch_jar_classes(workspace, jar, sources, vanilla_core=vanilla, allow_removed=allow_removed, install=True)
+            patched.append({"jar": jar, "classes": [c["class"] for c in check["classes"]], "backup": done.get("backup_jar")})
+        source_root = None  # the jar is patched; the sources are copied back below
     if source_root and not rebuild_jar:
         raise EscalationError(f"the attempt edits jar sources ({source_root}); the shipped jar keeps the old code until rebuilt. "
                               "Re-run with --rebuild-jar to rebuild it from the attempt and install it.")
@@ -450,4 +482,4 @@ def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = N
                               "runner": "agent", "attempt": attempt, "outcome": "APPLIED", "reasons": [], "changed": changed,
                               "classification": "REVIEW", "applied_without_rerun": True}, now)
     return {"schema_version": SCHEMA_VERSION, "mode": "ESCALATION_APPLY", "packet": packet["id"], "attempt": attempt,
-            "written": written, "verify": check, "rebuilt_jar": rebuilt}
+            "written": written, "verify": check, "rebuilt_jar": rebuilt, "patched_classes": patched}

@@ -112,8 +112,9 @@ def diagnose(save: Path, mods_dir: Path, vanilla_core: Path | None = None) -> di
                 continue  # a package someone installed owns: not this check's question (save-compat's)
             if package.startswith(("java.", "javax.", "com.fs.", "org.lwjgl.", "org.json.")) or not package:
                 continue
-            item = unresolved.setdefault(package, {"occurrences": 0, "examples": set(), "sample_path": sample_path})
+            item = unresolved.setdefault(package, {"occurrences": 0, "examples": set(), "classes": set(), "sample_path": sample_path})
             item["occurrences"] += 1
+            item["classes"].add(token)
             if len(item["examples"]) < 3:
                 item["examples"].add(token)
         with campaign_xml.open("r", encoding="utf-8", errors="replace") as handle:
@@ -122,7 +123,7 @@ def diagnose(save: Path, mods_dir: Path, vanilla_core: Path | None = None) -> di
                     non_finite += 1
     for package, item in sorted(unresolved.items(), key=lambda kv: -kv[1]["occurrences"]):
         problems.append({"class": "CLASS_UNRESOLVED", "package": package, "occurrences": item["occurrences"],
-                         "examples": sorted(item["examples"]), "sample_path": item["sample_path"]})
+                         "examples": sorted(item["examples"]), "classes": sorted(item["classes"]), "sample_path": item["sample_path"]})
     if non_finite:
         problems.append({"class": "NON_FINITE", "lines": non_finite})
 

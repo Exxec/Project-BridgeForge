@@ -113,3 +113,11 @@ Doc's Needless Economic Expansion Pack industries but the mod no longer enabled)
 found and handled on the way: dotted XStream aliases the game registers (`WSR.V`, no such class exists) and the
 obfuscator's keyword-named classes and fields (`if.new`, `super.Object`). Salvor's first fix (stage 2) is the
 remedy for MOD_MISSING and CLASS_UNRESOLVED on a copy, then a rig load of that copy.
+
+`bridgeforge save-removal-plan SAVE --mods DIR` is the evidence for stage 2's first fix: for every object of a
+CLASS_UNRESOLVED class it collects the XStream ids inside it (`z="N"`) and every `ref="N"` to them, and marks it
+DROPPABLE (only other doomed objects refer to it) or BLOCKED (listing the outside references). On the rig's
+Ward Franks save, all 134 objects of Doc's Needless Economic Expansion Pack (133 industry entries and one lamp
+remover script an industry refers to) are droppable; the two saves with only a missing mod in their descriptor hold
+no objects of it at all, the simplest case. Matching is by exact class name, never package (`data.scripts` is
+shared by many mods).

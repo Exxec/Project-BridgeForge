@@ -62,6 +62,9 @@ RULES = (
     "Every claim about the game or its API needs evidence (javap output, a vanilla file, a log line); cite it in the note.",
     "Write the note to the path in $BF_NOTE: what you changed, why, the evidence, and any behaviour change a player would notice.",
     "BridgeForge re-verifies your work: the finding must be gone and no new MANUAL/UNKNOWN finding may appear. Compiling is not proof of behaviour, so the result is labelled REVIEW.",
+    # Agents twice rewrote a file in the main session's memory folder (2026-10-01/02, caught by --watch-dir).
+    "Write nothing outside this sandbox: not the project's other folders, not any memory, notes or settings folder. "
+    "Put everything you learned in the note.",
 )
 
 

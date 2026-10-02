@@ -74,5 +74,25 @@ class SaveDoctorTests(unittest.TestCase):
         self.assertIn("low", result["recovery"]["TRUNCATED"])
 
 
+
+class RemovalPlanTests(unittest.TestCase):
+    def test_objects_are_droppable_unless_something_outside_refers_to_them(self) -> None:
+        from bridgeforge.save_removal_plan import plan_removal
+        with resolved_temp_dir() as root:
+            (root / "mods").mkdir()
+            body = ("<markets><Market z=\"2\"><industries>\n"
+                    "<gone.mod.Factory z=\"3\"><script z=\"4\"></script></gone.mod.Factory>\n"
+                    "<gone.mod.Mine z=\"5\"></gone.mod.Mine>\n"
+                    "</industries>\n"
+                    "<lookAt ref=\"5\"/>\n"
+                    "<scr><gone.mod.Lamp z=\"6\"><owner ref=\"3\"/></gone.mod.Lamp></scr>\n"
+                    "</Market></markets>")
+            save = _save(root, [], body)
+            plan = plan_removal(save, root / "mods")
+        states = {row["class"]: row["state"] for row in plan["rows"]}
+        self.assertEqual(states, {"gone.mod.Factory": "DROPPABLE", "gone.mod.Mine": "BLOCKED", "gone.mod.Lamp": "DROPPABLE"})
+        self.assertEqual((plan["droppable"], plan["blocked"]), (2, 1))
+
+
 if __name__ == "__main__":
     unittest.main()
