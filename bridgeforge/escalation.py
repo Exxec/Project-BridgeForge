@@ -247,6 +247,12 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
     if not command:
         raise EscalationError("No agent command given.")
     attempts, feedback = [], ""
+    # A new run starts clean: attempts left by an earlier run (a stopped batch's attempt-2 beside this run's attempt-1)
+    # made the review sheet show the stale one, while apply took this run's (Hegemony Expeditionary, 2026-10-02).
+    previous = workspace / "scratch" / "escalations" / packet["id"]
+    if previous.is_dir():
+        for stale in previous.glob("attempt-*"):
+            shutil.rmtree(stale, ignore_errors=True)
     for number in range(1, retries + 2):
         attempt_dir = workspace / "scratch" / "escalations" / packet["id"] / f"attempt-{number}"
         if attempt_dir.exists():

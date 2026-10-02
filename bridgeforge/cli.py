@@ -160,6 +160,11 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("workspace", type=Path)
     validate.add_argument("--target-starsector", default="0.98.x")
     validate.add_argument("--target-java", type=int, default=17)
+    doctor_cmd = subcommands.add_parser("save-doctor", help="why a save will not load with what is installed, in one read-only pass: missing mods, classes no installed mod provides, NaN/Infinity values, a file cut off mid-write, version changes; each with how recoverable it usually is")
+    doctor_cmd.add_argument("save", type=Path, help="save folder (holding campaign.xml and descriptor.xml)")
+    doctor_cmd.add_argument("--mods", type=Path, required=True, help="the mods folder the save will be loaded with")
+    doctor_cmd.add_argument("--vanilla-core", type=Path, help="starsector-core, so the game's own classes resolve")
+    doctor_cmd.add_argument("--json", action="store_true")
     save_risk = subcommands.add_parser("save-risk", help="flag changed persistent-identifier-shaped fields")
     save_risk.add_argument("workspace", type=Path)
     pipeline = subcommands.add_parser("pipeline", help="run the auditable Bridgeforge modernization pipeline")
@@ -2699,6 +2704,19 @@ def main(argv: list[str] | None = None) -> int:
             for spec in config.get("setups", []) or []:
                 print(f"Setup: {spec}")
         return 0
+    if args.command == "save-doctor":
+        from .save_doctor import diagnose
+        result = diagnose(args.save, args.mods, args.vanilla_core)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            return 0
+        print(f"{result['verdict']}: {result['character']} ({result['game_version']}, {result['enabled_mods']} mods)")
+        for problem in result["problems"]:
+            detail = problem.get("mod") or problem.get("package") or problem.get("file") or f"{problem.get('lines')} line(s)"
+            print(f"  {problem['class']:16} {detail}" + (f"  e.g. {', '.join(problem['examples'])}" if problem.get("examples") else ""))
+        for name, text in result["recovery"].items():
+            print(f"  recovery {name}: {text}")
+        return 0 if result["verdict"] == "NO_KNOWN_PROBLEM" else 1
     if args.command in {"save-inspect", "save-diff", "save-scripts", "save-growth", "save-provenance", "save-content", "save-removal", "save-summary"}:
         try:
             if args.command == "save-inspect":

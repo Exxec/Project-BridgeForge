@@ -93,3 +93,23 @@ Treat it as its own project with its own live-test gates; it is not a Salvor fea
 4. **Distribution:** local-only.
 
 Still open: when to start. BridgeForge's live queue comes first.
+
+## Groundwork done (2026-10-02)
+
+`bridgeforge save-doctor SAVE --mods DIR [--vanilla-core DIR]` is the diagnose stage's front door: one read-only
+pass of a save against a whole mods folder, one verdict per problem class with how recoverable that class usually
+is (`bridgeforge/save_doctor.py`, tests in `tests/test_save_doctor.py`):
+
+| Class | What it means | Usual recovery |
+|---|---|---|
+| MOD_MISSING | a mod enabled in the save is not installed | high: reinstall, or remove its content from a copy |
+| CLASS_UNRESOLVED | a class the save serializes is in no installed jar or the game's | high: same remedy |
+| NON_FINITE | a NaN or Infinity number in the save | high for the file; fix the mod bug that wrote it |
+| TRUNCATED | campaign.xml cut off before its closing tag | low: use an older save |
+| VERSION_CHANGED | an installed mod's version differs from the save's | informational |
+
+First run over the rig's 57 saves: 54 clean, 3 real problems (two saves with a since-removed mod enabled, one with
+Doc's Needless Economic Expansion Pack industries but the mod no longer enabled). Two false-positive classes were
+found and handled on the way: dotted XStream aliases the game registers (`WSR.V`, no such class exists) and the
+obfuscator's keyword-named classes and fields (`if.new`, `super.Object`). Salvor's first fix (stage 2) is the
+remedy for MOD_MISSING and CLASS_UNRESOLVED on a copy, then a rig load of that copy.
