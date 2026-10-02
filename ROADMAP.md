@@ -2695,6 +2695,8 @@ Bridgeforge modernizes legacy mods. It does not profile performance. The related
 
 ## Idea: Salvor (working name), a save doctor, editor and trainer as a separate program (2026-09-29)
 
+**Started 2026-10-02:** `Documents/Project Salvor` (local git, no remote), v0.1.0 `repair` on a copy; BridgeForge provides `save-doctor` and `save-removal-plan` (read-only).
+
 Owner idea: a separate program that diagnoses and fixes saves, then grows into an editor and trainer. Start small, as
 BridgeForge did. BridgeForge's saves stay read-only (P3b: "the game creates state, BridgeForge reads it"), so
 writing lives in a sibling program that reuses BridgeForge's save reader and `save-*` commands, the RC8 registries

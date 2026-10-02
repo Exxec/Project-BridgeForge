@@ -46,7 +46,10 @@ def plan_removal(save: Path, mods_dir: Path, vanilla_core: Path | None = None, *
                     closing, tag, attr_text, self_closing = match.groups()
                     if closing:
                         if stack and stack[-1][0] == tag:
-                            stack.pop()
+                            closed_tag, closed_in = stack.pop()
+                            # The flagged object's own closing tag: its last line (XStream writes one tag per line).
+                            if closed_in is not None and (not stack or stack[-1][1] != closed_in):
+                                subtrees[closed_in]["end_line"] = line_no
                         continue
                     attrs = dict(_ATTR.findall(attr_text))
                     inside = stack[-1][1] if stack else None
@@ -61,6 +64,8 @@ def plan_removal(save: Path, mods_dir: Path, vanilla_core: Path | None = None, *
                         refs.append((attrs["ref"], inside, "/" + "/".join(t for t, _ in stack[-4:] + [(tag, None)])))
                     if not self_closing:
                         stack.append((tag, inside))
+                    elif inside is not None and len(subtrees) - 1 == inside and subtrees[inside]["line"] == line_no and "end_line" not in subtrees[inside]:
+                        subtrees[inside]["end_line"] = line_no  # a self-closing flagged object
     owner = {z: index for index, tree in enumerate(subtrees) for z in tree["ids"]}
     external: dict[int, list[str]] = {}
     for ref, inside, path in refs:
@@ -72,7 +77,7 @@ def plan_removal(save: Path, mods_dir: Path, vanilla_core: Path | None = None, *
     rows = []
     for index, tree in enumerate(subtrees):
         outside = external.get(index, [])
-        rows.append({"class": tree["class"], "line": tree["line"], "parent": tree["parent"], "path": tree["path"],
+        rows.append({"class": tree["class"], "line": tree["line"], "end_line": tree.get("end_line"), "parent": tree["parent"], "path": tree["path"],
                      "ids": len(tree["ids"]), "state": "BLOCKED" if outside else "DROPPABLE",
                      "external_refs": len(outside), "ref_examples": sorted(set(outside))[:3]})
     droppable = sum(1 for r in rows if r["state"] == "DROPPABLE")
