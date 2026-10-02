@@ -29,6 +29,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from .automation import ACTIONABLE, tier_for
@@ -159,6 +160,23 @@ def _copy_back(packet: dict, sandbox: Path, working: Path, changed: list[str]) -
     return written
 
 
+def _kill_tree(process: subprocess.Popen) -> None:
+    """Stop an agent and everything it started (Windows: taskkill /T; elsewhere its process group)."""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)], capture_output=True, check=False, timeout=60)
+        else:
+            import signal
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        process.kill()
+        process.wait(timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 RUN_LOCK = "RUN.lock"
 
 
@@ -257,13 +275,27 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
         if isinstance(agent, str) and re.search(r"\bclaude(\.exe)?\b", agent, re.I) and re.search(r"(^|\s)(-p|--print)(\s|$)", agent):
             pointer = f"Your whole task is in {SANDBOX_PROMPT} in the current directory. Read it and follow it exactly."
             run_command = f'{run_command} "{pointer}"' if isinstance(run_command, str) else [*run_command, pointer]
+        # Output goes to a file, not a pipe, and a timeout kills the whole process tree: with capture_output, a helper
+        # process the agent started kept the pipe open after the agent was killed, and run() waited 13 hours on a
+        # Hegemony Expeditionary packet (2026-10-02).
+        output_path = attempt_dir / "AGENT_OUTPUT.full.txt"
         try:
-            completed = subprocess.run(run_command, cwd=sandbox, input=prompt, env=env, capture_output=True, text=True, timeout=timeout, check=False)
-            agent_rc, agent_tail = completed.returncode, (completed.stdout + completed.stderr)[-4000:]
-        except subprocess.TimeoutExpired:
-            agent_rc, agent_tail = None, f"agent timed out after {timeout}s"
+            with output_path.open("w", encoding="utf-8", errors="replace") as output, tempfile.TemporaryFile("w+", encoding="utf-8") as stdin:
+                stdin.write(prompt)
+                stdin.seek(0)
+                process = subprocess.Popen(run_command, cwd=sandbox, stdin=stdin, stdout=output, stderr=subprocess.STDOUT, env=env, text=True,
+                                           start_new_session=os.name != "nt")
+                try:
+                    agent_rc = process.wait(timeout=timeout)
+                    timed_out = False
+                except subprocess.TimeoutExpired:
+                    _kill_tree(process)
+                    agent_rc, timed_out = None, True
         except OSError as exc:
             raise EscalationError(f"Could not start the agent command {command[0]!r}: {exc}") from exc
+        agent_tail = output_path.read_text(encoding="utf-8", errors="replace")[-4000:]
+        if timed_out:
+            agent_tail += f"\nagent timed out after {timeout}s (process tree killed)"
         (attempt_dir / "AGENT_OUTPUT.txt").write_text(agent_tail, encoding="utf-8")
         # The note, wherever the agent put it inside the sandbox: the reserved name, an unexpanded variable name,
         # or a NOTE.md the mod itself does not ship. The first found becomes the attempt's note; the rest go.

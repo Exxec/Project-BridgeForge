@@ -2466,7 +2466,7 @@ def _fix_campaign_lookup_guard(root: Path, options: dict, finding_id: str) -> li
         path = root / relative
         # A jar's source tree is not what runs: an edit there changes nothing until the jar is rebuilt, so it is a jar
         # packet for patch-jar-class (21 of 33 first-run edits were jar sources, 2026-09-30).
-        if not path.is_file() or path.suffix != ".java" or relative.replace("\\", "/").startswith(("src/", "jars/src/", "jar/src/")):
+        if not path.is_file() or path.suffix != ".java" or relative.replace("\\", "/").startswith(("src/", "jars/", "jar/")):  # any source under jars/ (Free Stars Union: jars/FSU_source_from_Procyon/)
             refused.append(relative)
             continue
         raw = path.read_bytes()

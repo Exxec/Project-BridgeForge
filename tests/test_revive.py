@@ -223,6 +223,24 @@ class JarOnlyPacketTests(unittest.TestCase):
 
 
 class EscalationRunTests(unittest.TestCase):
+    def test_a_timeout_kills_the_agent_and_its_helpers(self):
+        # Hegemony Expeditionary (2026-10-02): a helper the agent started kept the output pipe open and the run
+        # waited 13 hours. Output now goes to a file and the whole tree is killed.
+        import time
+        hang = ("import subprocess, sys, time\n"
+                "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])\n"
+                "time.sleep(120)\n")
+        with resolved_temp_dir() as root:
+            workspace = _workspace(root)
+            revive(workspace)
+            started = time.monotonic()
+            result = run_packet(workspace, AGENT_PACKET, _agent(root, hang), retries=0, timeout=3)
+            elapsed = time.monotonic() - started
+            output = (workspace / "scratch" / "escalations" / AGENT_PACKET / "attempt-1" / "AGENT_OUTPUT.txt").read_text(encoding="utf-8")
+        self.assertLess(elapsed, 60)
+        self.assertEqual(result["outcome"], "FAILED")
+        self.assertIn("timed out", output)
+
     def test_a_note_written_to_the_literal_variable_name_still_counts(self):
         # Pilot 2026-09-29: agents using file tools wrote "$BF_NOTE" as a file name in the sandbox, and every
         # attempt was REJECTED as a change outside the packet. The prompt now names the real path, and a stray
