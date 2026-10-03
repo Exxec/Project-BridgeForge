@@ -5,6 +5,8 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 ## 2026-10-02
 
 - **Polaris Prime**: officer picker closes through RC8's dialog callback instead of a simulated Escape keypress (java.awt.Robot)
+- **Tore Up Plenty**: Scrap Armour's maneuverability penalty now applies (it was a near-zero bonus from a percent/multiplier mix-up); the description's 'a quarter' is what it does
+- **Mountain and Sea**: declares GraphicsLib, which its plugin calls; loose scripts compile under RC8
 
 ## 2026-10-01
 
