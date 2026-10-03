@@ -62,9 +62,6 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(diff_snapshots(before, after), {"added": ["new.md"], "removed": [], "changed": ["edit.md"]})
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class RunLockTests(unittest.TestCase):
     def test_a_live_run_blocks_a_second_and_a_dead_one_does_not(self) -> None:
@@ -88,3 +85,24 @@ class RunLockTests(unittest.TestCase):
             with run_lock(root):
                 self.assertEqual(lock.read_text(encoding="utf-8").split()[0], str(os.getpid()))
             self.assertFalse(lock.exists())
+
+
+class RemoveTreeTests(unittest.TestCase):
+    def test_read_only_git_objects_do_not_block_cleanup(self) -> None:
+        # Hiigaran Descendants and The Nomads ship their .git folder (2026-10-02): plain rmtree hit WinError 5.
+        import os
+        import stat
+
+        from bridgeforge.escalation import _remove_tree
+        with resolved_temp_dir() as root:
+            obj = root / "attempt-1" / "working" / ".git" / "objects" / "00" / "abc"
+            obj.parent.mkdir(parents=True)
+            obj.write_text("x", encoding="utf-8")
+            os.chmod(obj, stat.S_IREAD)
+            _remove_tree(root / "attempt-1")
+            gone = not (root / "attempt-1").exists()
+        self.assertTrue(gone)
+
+
+if __name__ == "__main__":
+    unittest.main()

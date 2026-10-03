@@ -29,6 +29,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -160,6 +161,21 @@ def _copy_back(packet: dict, sandbox: Path, working: Path, changed: list[str]) -
     return written
 
 
+def _remove_tree(path: Path) -> None:
+    """rmtree that clears the read-only flag first: a mod shipping its .git folder has read-only object files, and
+    plain rmtree failed with WinError 5 on Hiigaran Descendants and The Nomads (2026-10-02)."""
+    import stat
+
+    def clear_and_retry(function, target, _info):
+        os.chmod(target, stat.S_IWRITE)
+        function(target)
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=clear_and_retry)
+    else:
+        shutil.rmtree(path, onerror=clear_and_retry)
+
+
 def _kill_tree(process: subprocess.Popen) -> None:
     """Stop an agent and everything it started (Windows: taskkill /T; elsewhere its process group)."""
     try:
@@ -252,11 +268,11 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
     previous = workspace / "scratch" / "escalations" / packet["id"]
     if previous.is_dir():
         for stale in previous.glob("attempt-*"):
-            shutil.rmtree(stale, ignore_errors=True)
+            _remove_tree(stale)
     for number in range(1, retries + 2):
         attempt_dir = workspace / "scratch" / "escalations" / packet["id"] / f"attempt-{number}"
         if attempt_dir.exists():
-            shutil.rmtree(attempt_dir)
+            _remove_tree(attempt_dir)
         sandbox = attempt_dir / "working"
         shutil.copytree(working, sandbox, ignore=shutil.ignore_patterns("*.pre-bf-*"))
         # The sandbox's starting state, so a later apply compares the attempt with its own start, not with a

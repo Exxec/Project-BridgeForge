@@ -2,6 +2,10 @@
 
 Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; each mod's evidence is in its revival report.
 
+## 2026-10-02
+
+- **Polaris Prime**: officer picker closes through RC8's dialog callback instead of a simulated Escape keypress (java.awt.Robot)
+
 ## 2026-10-01
 
 - **Epta Consortium**: recompiled classes whose game calls changed return type in RC8 (NoSuchMethodError as shipped)
