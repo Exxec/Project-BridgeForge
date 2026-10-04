@@ -92,4 +92,5 @@ LONG_RUNNING_COMMANDS = (
     ("relink",),
     ("port-interfaces",),
     ("translate-batch",),
+    ("done-audit",),
 )

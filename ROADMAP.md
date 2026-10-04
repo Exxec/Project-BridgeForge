@@ -2687,6 +2687,29 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         game ignores (first cell starting `#`); FSF's `rules.csv` comment rows came back blank from the agent and blocked
         the mod. Test: `CommentedCsvRowTests`. Same day: intake retries a Windows PermissionError on the final rename
         (the 9-mod Yunru pack's freshly extracted tree, held open briefly; failed twice before).
+    34. **Live crash lessons, 2026-10-04 (owner crash logs in Downloads):** (a) DNEEP crashed on load:
+        `setIndustryOnPlanet(SystemName, ...)` dereferenced `getStarSystem(SystemName)` for vanilla systems a
+        random sector lacks; the literal-name checks never saw a variable. **Done:** `campaign-lookup-dereferenced-unguarded`
+        (a getStarSystem/getEntityById on a variable used directly with no null check earlier in the method) and its
+        fixer (guard and return, only when the lookup is the first statement of a void method; anything else refused).
+        It reproduces the hand fix on the archived DNEEP; DNEEP is now +bf.1. Test: `UnguardedVariableLookupTests`.
+        (b) RogueSynth's tooltip threw NoSuchMethodError on `addImageWithText(F)V`: `jar-linkage-unresolved` had found
+        it and the queue copy was relinked (+bf.2), but Done/ still held +bf.1, as did Arkgneisis, Megastructures Tab
+        and Slightly Better Tech Mining. **Done:** `done-audit` (re-scans every Done/ mod: STALE when the queue copy's
+        shipped files differ from the archive, plus crash-class and MANUAL/UNKNOWN findings the baseline does not
+        accept; Done/DONE_AUDIT.md; long-running). Test: `tests/test_done_audit.py`. The five were re-archived (old
+        archives kept in Done/_previous/<mod>-<version>; a live waiver recorded for each narrow fix); the shipped-copy
+        audit compares against `scratch/original-extracted/` when original/ keeps only zips (Arkgneisis). Next: an
+        `archive --replace` that does the _previous move itself, and a Done/ check after every bump-version.
+    35. **Suspect initStar/addPlanet arguments** (owner request 2026-10-04). Zorg18's archived +bf.4 carried two bugs
+        from the modpack port it was built from: the 0.6 call `initStar("star_zorg", 200f, 10000, -10000)` (last two the
+        hyperspace location in 0.6) became RC8 `initStar(id, type, 200f, -10000)`, a corona of -10000, and Zeta I's
+        `addPlanet(star, "Zeta I", "zorg_planet", 0, 100, 5000, 100)` lost its radius, shifting to `0, 0, 100, 5000`
+        (a radius-0 planet orbiting at 100). Zeta II was ported right. **Done:** `bridgeforge/procgen_args.py` and
+        `procgen-call-argument-suspect` (tier decision: the intended numbers need a person), from sources and, with a
+        JDK, jar classes via javap (float pushes tracked to RC8's signatures; only literals judged: radius <= 0,
+        corona < 0, orbitRadius < 0, orbitDays <= 0). Flags both calls in the archived jar and the modpack source; the
+        owner's rebuild is clean. In `done-audit`'s crash class. Tests: `tests/test_procgen_args.py`.
     21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
         escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
         edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next

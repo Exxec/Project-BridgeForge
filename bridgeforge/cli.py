@@ -1036,6 +1036,12 @@ def build_parser() -> argparse.ArgumentParser:
     rebuild_jar_cmd.add_argument("--output", type=Path, help="where the rebuilt jar and compiled classes go (default: a new temp directory)")
     rebuild_jar_cmd.add_argument("--install", action="store_true", help="only when status is PASS: move the working copy's current jar to scratch/moved-<date>/ (logged in MOVES.log) and copy the rebuilt jar in")
     rebuild_jar_cmd.add_argument("--json", action="store_true")
+    done_audit_cmd = subcommands.add_parser("done-audit", help="re-scan every archived revival in Done/: STALE when the queue copy changed since archiving, plus crash-class and MANUAL/UNKNOWN findings the baseline does not accept (writes Done/DONE_AUDIT.md)")
+    done_audit_cmd.add_argument("--done", type=Path, help="default: <repo>/Done")
+    done_audit_cmd.add_argument("--queue", type=Path, help="default: <repo>/In operation")
+    done_audit_cmd.add_argument("--vanilla-core", type=Path)
+    done_audit_cmd.add_argument("--quiet", action="store_true", help="no per-mod progress lines")
+    done_audit_cmd.add_argument("--json", action="store_true")
     tbatch_cmd = subcommands.add_parser("translate-batch", help="a mod's whole translation in one command: export, AI agent per chunk, strict checks (filled, no CJK left, placeholders kept), apply to a complete copy or in place, check (ROADMAP 34.28)")
     tbatch_cmd.add_argument("mod_dir", type=Path)
     tbatch_target = tbatch_cmd.add_mutually_exclusive_group(required=True)
@@ -3532,6 +3538,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{row['state']:15} {row['class']}  ({row['finding']})\n  {row['next']}")
         if not result["packets"]:
             print("No jar-only packets.")
+        return 0
+    if args.command == "done-audit":
+        from .done_audit import RESULT_MD, done_audit
+        from .substitutes import REPO_ROOT
+        done = args.done or REPO_ROOT / "Done"
+        result = done_audit(done, args.queue or REPO_ROOT / "In operation", vanilla_core=args.vanilla_core, quiet=args.quiet)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())) + f". Report: {Path(done) / RESULT_MD}")
         return 0
     if args.command == "translate-batch":
         from .translate_batch import TranslateBatchError, agent_translator, translate_batch

@@ -5159,6 +5159,93 @@ def _external_memory_keys_harmless(text: str, keys: list[str], mod_id: str) -> b
     return True
 
 
+_JDK_FOR_PROCGEN: list = []
+
+
+def _scan_procgen_call_arguments(root: Path, result: ScanResult) -> None:
+    """Suspect literal initStar / addPlanet arguments in sources and jar classes (bridgeforge.procgen_args):
+    Zorg18's archived build had corona -10000 and a radius-0 planet from a 0.6-to-RC8 port (2026-10-04)."""
+    from .procgen_args import jar_suspects, source_suspects
+
+    def add(file: str, where: str, method: str, problems: list[str]) -> None:
+        result.add(
+            id="procgen-call-argument-suspect",
+            category="campaign",
+            severity="medium",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation=(f"{method}() gets {', '.join(problems)}. RC8's signatures are initStar(id, type, radius, corona, ...) "
+                         "and addPlanet(id, focus, name, type, angle, radius, orbitRadius, orbitDays); a 0.6-era call "
+                         "ported by position shifts its numbers into the wrong slots (Zorg18: corona -10000, a radius-0 "
+                         "planet orbiting at 100, 2026-10-04)."),
+            file=file,
+            evidence=[where, f"call:{method}", *problems],
+        )
+
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if "initStar" not in text and "addPlanet" not in text:
+            continue
+        for line, method, problems in source_suspects(text):
+            add(_relative(root, source), f"line:{line}", method, problems)
+    jars = [p for p in root.rglob("*.jar") if "disabled_files" not in p.relative_to(root).parts]
+    if not jars:
+        return
+    if not _JDK_FOR_PROCGEN:
+        from .java_toolchain import find_jdk
+
+        _JDK_FOR_PROCGEN.append(find_jdk())
+    jdk = _JDK_FOR_PROCGEN[0]
+    if jdk is None:
+        return
+    for jar in jars:
+        for class_name, method_name, method, problems in jar_suspects(jar, jdk.javap):
+            add(f"{_relative(root, jar)}!{class_name}", f"method:{method_name}", method, problems)
+
+
+_VARIABLE_LOOKUP_DEREF = re.compile(r"\b(getStarSystem|getEntityById)\s*\(\s*([A-Za-z_]\w*)\s*\)\s*\.\s*\w+\s*\(")
+
+
+def _scan_unguarded_variable_lookup(root: Path, result: ScanResult) -> None:
+    """`getStarSystem(name).x()` / `getEntityById(id).x()` on a variable, with no null check of that call before it in
+    the method. A save without the system (a Nexerelin random sector, a total conversion) crashes there: DNEEP's
+    setIndustryOnPlanet(SystemName, ...) took vanilla system names and crashed on load in the owner's game
+    (NullPointerException from onGameLoad, 2026-10-04). The literal-name checks never saw it."""
+    for source in sorted(root.rglob("*.java")):
+        parts = source.relative_to(root).parts
+        if "disabled_files" in parts or "scratch" in parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        for match in _VARIABLE_LOOKUP_DEREF.finditer(text):
+            method, var = match.group(1), match.group(2)
+            if var in ("this", "super"):
+                continue
+            window = text[max(0, text.rfind("\n    public ", 0, match.start()), text.rfind("\n\tpublic ", 0, match.start())):match.start()]
+            if re.search(rf"{method}\s*\(\s*{re.escape(var)}\s*\)\s*(==|!=)\s*null", window):
+                continue
+            line = text.count("\n", 0, match.start()) + 1
+            result.add(
+                id="campaign-lookup-dereferenced-unguarded",
+                category="campaign",
+                severity="high",
+                classification="REVIEW",
+                confidence="HIGH",
+                explanation=(f"{method}({var}) is used directly (`{match.group(0)}`), with no null check of that lookup earlier "
+                             "in the method. A save or sector without that system or entity throws a NullPointerException "
+                             "here (DNEEP crashed on load this way in a live game, 2026-10-04)."),
+                file=_relative(root, source),
+                evidence=[f"line:{line}", f"call:{method}({var})"],
+            )
+
+
 _NEX_SECTOR_MANAGER_IMPORT = re.compile(r"^[ \t]*import\s+exerelin\.campaign\.SectorManager\s*;[ \t]*\r?\n", re.M)
 _NEX_CORVUS_CALL = re.compile(r"\bSectorManager\s*\.\s*(?:getManager\s*\(\s*\)\s*\.\s*)?getCorvusMode\s*\(\s*\)")
 
@@ -7257,6 +7344,8 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_module_captain_personality_risk(root, result)
     _scan_spawned_ship_captain_personality_risk(root, result)
     _scan_nexerelin_corvus_mode_import(root, result)
+    _scan_unguarded_variable_lookup(root, result)
+    _scan_procgen_call_arguments(root, result)
     _scan_mod_info_triage_banner(root, result)
     _scan_data_class_references_missing(root, result, vanilla_root, provider_roots)
     _scan_hardcoded_hyperspace_coordinates(root, result)

@@ -54,6 +54,7 @@ SUPPORTED_FINDINGS = (
     "json-missing-comma",
     "builtin-wing-is-hullmod",
     "wing-op-cost-blank",
+    "campaign-lookup-dereferenced-unguarded",
     "faction-trait-weight-legacy-personality-id",
     "shiproles-wing-id",
     "csv-fullwidth-number",
@@ -1696,6 +1697,58 @@ def _fix_nexerelin_corvus_mode_import(root: Path, options: dict) -> list[FileCha
 
 
 # ---------------------------------------------------------------------------
+# Fixer: campaign-lookup-dereferenced-unguarded (2026-10-04)
+# ---------------------------------------------------------------------------
+
+_VOID_METHOD_HEADER = re.compile(r"\bvoid\s+\w+\s*\([^)]*\)\s*(?:throws[^{]*)?\{\s*$")
+
+
+def _fix_lookup_dereferenced_unguarded(root: Path, options: dict) -> list[FileChange]:
+    """Guard `getStarSystem(name).x()` / `getEntityById(id).x()` with `if (lookup == null) { return; }` when the
+    statement is the first one in a void method (DNEEP's setIndustryOnPlanet, fixed by hand 2026-10-04): the early
+    return skips only what would have thrown. Any other shape (inside a loop, after other statements, in a method that
+    returns a value) is refused and left for a person. Loose scripts only."""
+    from .scanner import _blank_java_comments
+
+    lines_by_file: dict[str, set[int]] = {}
+    for finding in _findings_of(root, options, "campaign-lookup-dereferenced-unguarded"):
+        if finding.file and not finding.file.replace("\\", "/").startswith(("jars/", "src/")) and "!" not in finding.file:
+            lines_by_file.setdefault(finding.file, set()).update(int(e.split(":", 1)[1]) for e in finding.evidence if e.startswith("line:"))
+    changes, refused = [], []
+    for rel, wanted in sorted(lines_by_file.items()):
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        eol = "\r\n" if "\r\n" in text else "\n"
+        # splitlines counts line breaks as the scanner's universal-newline read does (a lone CR included)
+        lines = text.splitlines(keepends=True)
+        blank = _blank_java_comments(text).splitlines(keepends=True)
+        inserts = []
+        for number in sorted(wanted):
+            index = number - 1
+            call = re.search(r"\b(getStarSystem|getEntityById)\s*\(\s*([A-Za-z_]\w*)\s*\)", blank[index])
+            previous = index - 1
+            while previous >= 0 and not blank[previous].strip():
+                previous -= 1
+            if not call or previous < 0 or not _VOID_METHOD_HEADER.search(blank[previous]):
+                refused.append(f"{rel}:{number}")
+                continue
+            receiver = re.search(r"([\w.()]*?)\b" + call.group(1) + r"\s*\(", lines[index])
+            prefix = receiver.group(1) if receiver else ""
+            indent = re.match(r"[ \t]*", lines[index]).group(0)
+            inserts.append((index, [f"{indent}// BridgeForge: a missing system or entity (random sector, total conversion) is skipped.{eol}",
+                                    f"{indent}if ({prefix}{call.group(1)}({call.group(2)}) == null) {{{eol}",
+                                    f"{indent}    return;{eol}", f"{indent}}}{eol}"]))
+        for index, block in sorted(inserts, reverse=True):
+            lines[index:index] = block
+        if inserts:
+            changes.append(FileChange(path=path, before=raw, after=_encode("".join(lines), had_bom)))
+    if not changes:
+        raise FixerError("No unguarded lookup is the first statement of a void method" + (f" (refused: {', '.join(refused[:5])})" if refused else "."))
+    return changes
+
+
+# ---------------------------------------------------------------------------
 # Fixer: wing-op-cost-blank (ROADMAP 34.22; approval-gated: the value is a comparison, not a conversion)
 # ---------------------------------------------------------------------------
 
@@ -2837,6 +2890,7 @@ _FIXER_FUNCS = {
     "json-missing-comma": _fix_json_missing_comma,
     "builtin-wing-is-hullmod": _fix_builtin_wing_is_hullmod,
     "wing-op-cost-blank": _fix_wing_op_cost_blank,
+    "campaign-lookup-dereferenced-unguarded": _fix_lookup_dereferenced_unguarded,
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
     "shiproles-wing-id": _fix_shiproles_wing_id,
     "csv-fullwidth-number": _fix_csv_fullwidth_number,

@@ -5,6 +5,13 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 ## 2026-10-04
 
 - **Seeker [BF r4]** 0.3.0-0.98a+bf.4: Organic hull: heal, shed, hammer and projectile timers and the field radius are now kept per ship (they were shared by every ship with the hull mod, so one ship's timing drove the others). Patched into SEEKER.jar from a Vineflower decompile; reopened after it was wrongly closed as superseded by 0.6.6, a different mod (5 of 37 ships shared).
+- **Doc's Needless Economic Expansion Pack** 0.2.0 Mann Co+bf.1: Guarded setIndustryOnPlanet/setConditionOnPlanet against a missing star system: a save without Corvus/Samarra/Galatia/Aztlan (Nexerelin random sector) crashed on load with a NullPointerException (owner crash log 2026-10-04).
+- **RogueSynth [BF r1]** 0.0.1-beta.4+bf.2: revived for RC8 and archived (ready for live test)
+- **Legacy of Arkgneisis [BF r2]** v2.0a DEV+bf.3: revived for RC8 and archived (ready for live test)
+- **Megastructures Tab** 1.0.0+bf.1: revived for RC8 and archived (ready for live test)
+- ** Slightly Better Tech-Mining** 0.95.1-2.6.0+bf.1: revived for RC8 and archived (ready for live test)
+- **Doc's Needless Economic Expansion Pack** 0.2.0 Mann Co+bf.1: revived for RC8 and archived (ready for live test)
+- **Zorg18** V18+bf.5: Zorg Zeta fixed: the modpack port's corona -10000 and radius-0 Zeta I (0.6 arguments shifted) restored to the author's values; system moved to (70000, -40000). Not live-tested.
 
 ## 2026-10-03
 

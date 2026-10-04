@@ -2036,3 +2036,35 @@ class WingOpCostFixerTests(unittest.TestCase):
             with self.assertRaises(FixerError):
                 compute_fix(mod, "wing-op-cost-blank", {"scan_findings": findings})  # no vanilla core: refused
         self.assertEqual(text, "id,variant,fleet pts,num,role,op cost\nfx_fighter_wing,fx,6,3,FIGHTER,8\nfx_spare_wing,fx2,3,4,INTERCEPTOR,\n")
+
+
+class UnguardedVariableLookupTests(unittest.TestCase):
+    # 2026-10-04: DNEEP's setIndustryOnPlanet(SystemName, ...) crashed on load in the owner's game.
+    SOURCE = ("package data.plugins;\r\n\r\npublic class P {\r\n"
+              "    public void setIndustryOnPlanet(String SystemName, String Planet) {\r\n"
+              "        List<PlanetAPI> planets = Global.getSector().getStarSystem(SystemName).getPlanets();\r\n"
+              "    }\r\n"
+              "    public int count(String name) {\r\n"
+              "        return Global.getSector().getStarSystem(name).getPlanets().size();\r\n"
+              "    }\r\n"
+              "    public void guarded(String name) {\r\n"
+              "        if (Global.getSector().getStarSystem(name) == null) return;\r\n"
+              "        Global.getSector().getStarSystem(name).getPlanets();\r\n"
+              "    }\r\n}\r\n")
+
+    def test_flags_unguarded_uses_and_guards_the_first_statement_of_a_void_method(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            _write(mod / "mod_info.json", '{"id": "fx"}')
+            path = mod / "data" / "plugins" / "P.java"
+            path.parent.mkdir(parents=True)
+            path.write_bytes(self.SOURCE.encode("utf-8"))
+            found = _findings(scan_mod(mod), "campaign-lookup-dereferenced-unguarded")
+            apply_fix(compute_fix(mod, "campaign-lookup-dereferenced-unguarded"))
+            text = path.read_bytes().decode("utf-8")
+            left = _findings(scan_mod(mod), "campaign-lookup-dereferenced-unguarded")
+        self.assertEqual(sorted(e for f in found for e in f.evidence if e.startswith("line:")), ["line:5", "line:8"])
+        self.assertIn("    public void setIndustryOnPlanet(String SystemName, String Planet) {\r\n"
+                      "        // BridgeForge: a missing system or entity (random sector, total conversion) is skipped.\r\n"
+                      "        if (Global.getSector().getStarSystem(SystemName) == null) {\r\n", text)
+        self.assertEqual([e for f in left for e in f.evidence if e.startswith("line:")], ["line:12"])  # the int method: refused

@@ -175,6 +175,8 @@
     "unreadable-source": "inspect",
     "json-missing-comma": "auto",
     "builtin-wing-is-hullmod": "auto",
+    "procgen-call-argument-suspect": "decision",
+    "campaign-lookup-dereferenced-unguarded": "auto",
     "unverified-json-syntax": "inspect",
     "unverified-mod-info-syntax": "inspect",
     "vanilla-class-duplicated-in-jar": "decision",
