@@ -2728,6 +2728,9 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         knownWeapons left as authored (its only own weapons are SYSTEM). Exigency 0.8 is +bf.2, re-archived.
         **Done:** `faction-known-tag-unmatched` (tier decision: which items belong to the tag is a judgement), against
         the mod's, RC8's and declared dependencies' ship/weapon/wing tags; in `done-audit`. Test: `FactionKnownTagTests`.
+        Same day, `done-audit` checks packaging too (owner question: are all mods correctly packaged?): the mod's
+        `<folder>-<version>.zip` exists, names the version its mod_info.json declares, holds no entry twice
+        (case-insensitive) and the same files as the folder. Test: `PackagingTests`.
     21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
         escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
         edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next
