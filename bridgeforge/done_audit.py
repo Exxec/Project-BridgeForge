@@ -60,8 +60,11 @@ def packaging_problems(folder: Path, root: Path) -> list[str]:
 
     from .live_trust import _mod_info, _sha256, shipped_files
 
+    from .archive import _version_text
+
     problems = []
-    version = str(_mod_info(root).get("version") or "")
+    # A {"major", "minor", "patch"} version is named as text (Anex Weapons 0.2.4), as `archive` names the zip.
+    version = _version_text(_mod_info(root).get("version"))
     zips = sorted(p for p in Path(folder).glob("*.zip") if "backup" not in p.name.lower())
     if not zips:
         return ["no zip beside the mod folder"]
@@ -80,9 +83,15 @@ def packaging_problems(folder: Path, root: Path) -> list[str]:
         twice = sorted(n for n, c in seen.items() if c > 1)
         if twice:
             problems.append(f"{len(twice)} entr{'y' if len(twice) == 1 else 'ies'} twice (case-insensitive): {', '.join(twice[:3])}")
-        info = archive.read(prefix + "mod_info.json").decode("utf-8", "replace") if prefix + "mod_info.json" in names else ""
-        if version and version not in info:
-            problems.append(f"the zip's mod_info.json does not declare {version!r}")
+        info = archive.read(prefix + "mod_info.json").decode("utf-8-sig", "replace") if prefix + "mod_info.json" in names else ""
+        from .scanner import _parse_json
+
+        try:
+            zipped_version = _version_text((_parse_json(info)[0] or {}).get("version")) if info else ""
+        except ValueError:
+            zipped_version = ""
+        if version and zipped_version != version:
+            problems.append(f"the zip's mod_info.json declares {zipped_version or 'no version'!r}, not {version!r}")
         zipped = {n[len(prefix):].casefold(): hashlib.sha256(archive.read(n)).hexdigest() for n in inside}
     missing = sorted(set(folder_files) - set(zipped))
     extra = sorted(set(zipped) - set(folder_files))

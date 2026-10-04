@@ -17,6 +17,12 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.1: revived for RC8 and archived (ready for live test)
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.2: Exigency and Exipirated ships and Exigency weapons can be bought and raided: the factions knew them by blueprint tags (exigency_bp, exipirated_bp) that no hull or weapon carried (owner report 2026-10-04).
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.2: revived for RC8 and archived (ready for live test)
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.3: Avesta Station roams the RC8 core worlds again: its 29 hyperspace waypoints were 0.7-era coordinates (it wandered empty space north-east of the core); each is remapped from the 0.7.2 starmap.json onto RC8's by the three nearest core systems (owner report 2026-10-04).
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.3: revived for RC8 and archived (ready for live test)
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.4: Avesta Station shows its name on the map (was icon-only), owner request.
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.4: revived for RC8 and archived (ready for live test)
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.5: The Tasserus Ship Graveyard is revealed on the map (vanilla wreck icon and name; it had no icon and was hidden), owner request.
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.5: revived for RC8 and archived (ready for live test)
 
 ## 2026-10-03
 

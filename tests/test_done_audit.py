@@ -58,6 +58,6 @@ class PackagingTests(unittest.TestCase):
             missing = packaging_problems(folder, folder / "Mod")
         text = " | ".join(problems)
         self.assertIn("entry twice", text)
-        self.assertIn("does not declare '1+bf.2'", text)
+        self.assertIn("declares '1+bf.1', not '1+bf.2'", text)
         self.assertIn("zip differs from the folder", text)  # mod_info.json bytes differ
         self.assertEqual(missing, ["no zip beside the mod folder"])
