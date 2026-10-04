@@ -2628,6 +2628,14 @@ whether the result passed; recurring agent fixes become deterministic fixers.
            name (as done for New Galactic Order's ship_systems). The missing values need the same nearest-vanilla
            comparison and approval; until then only `op cost` is filled. Needs live evidence first: what RC8 does with
            a wing that has no `range`/`attackRunRange` (fighters that never leave, or vanilla defaults).
+        **Part 1 done 2026-10-04:** `_fix_wing_op_cost_blank` (tier `input`: needs the owner's approval; needs
+        `--vanilla-core`; only wings a variant fits or a faction knows; appends the column to a pre-0.8 file). Test:
+        `WingOpCostFixerTests`. Same day: `builtin-wing-is-hullmod` check and fixer (a hull mod id under
+        `builtInWings`, The Nomads' nom_komodo_p listed vanilla `advancedcore` there; the key is renamed when every
+        entry is a hull mod and there is no builtInMods yet; test `BuiltinWingIsHullmodTests`), and fresh fixer scans
+        now pass the caller's vanilla core. `probe-group plan --provider-source` (default: the real install's mods/ and
+        the 0.98 modpack) stages providers the queue lacks, copying from them and never writing there
+        (`OutsideProviderTests`).
     21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
         escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
         edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next

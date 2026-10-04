@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from bridgeforge.cli import main
@@ -1984,3 +1985,54 @@ class JsonMissingCommaTests(unittest.TestCase):
             result = scan_mod(root)
         self.assertEqual(_findings(result, "json-missing-comma"), [])
         self.assertTrue(_findings(result, "unverified-json-syntax"))
+
+
+class BuiltinWingIsHullmodTests(unittest.TestCase):
+    # 2026-10-04: The Nomads' nom_komodo_p.ship listed the vanilla hull mod advancedcore under builtInWings.
+    def test_renames_the_key_when_every_entry_is_a_hull_mod(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core = root / "core"
+            _write(core / "data" / "hullmods" / "hull_mods.csv", "name,id\nAdvanced Targeting Core,advancedcore\n")
+            _write(core / "data" / "hulls" / "wing_data.csv", "id,variant\ntalon_wing,talon_wing\n")
+            _write(core / "data" / "weapons" / "weapon_data.csv", "name,id\nLight Machine Gun,lightmg\n")
+            mod = root / "mod"
+            _write(mod / "mod_info.json", '{"id":"fixture"}')
+            ship = mod / "data" / "hulls" / "fx_p.ship"
+            _write(ship, '{\n  "hullId": "fx_p",\n  "builtInWings": [\n    "advancedcore"\n  ]\n}\n')
+            _write(mod / "data" / "hulls" / "fx_q.ship", '{"hullId": "fx_q", "builtInMods": ["x"], "builtInWings": ["advancedcore"]}')
+            found = _findings(scan_mod(mod, vanilla_core=core), "builtin-wing-is-hullmod")
+            content = _findings(scan_mod(mod, vanilla_core=core), "content-reference-unresolved")
+            apply_fix(compute_fix(mod, "builtin-wing-is-hullmod", {"vanilla_core": core}))
+            text = ship.read_text(encoding="utf-8")
+            after = [f.file for f in _findings(scan_mod(mod, vanilla_core=core), "builtin-wing-is-hullmod")]
+        self.assertEqual(sorted(f.file for f in found), ["data/hulls/fx_p.ship", "data/hulls/fx_q.ship"])
+        self.assertFalse(any("wing:advancedcore" in str(f.evidence) for f in content))
+        self.assertIn('"builtInMods": [\n    "advancedcore"', text)
+        self.assertEqual(after, ["data/hulls/fx_q.ship"])  # it already has builtInMods: left to a person
+
+
+class WingOpCostFixerTests(unittest.TestCase):
+    # ROADMAP 34.22 (2026-10-04): the owner's ruling for 36 wings in 7 mods, as an approval-gated fixer.
+    def _core(self, root: Path) -> Path:
+        core = root / "core"
+        _write(core / "data" / "hulls" / "wing_data.csv", "id,variant,role,fleet pts,num,op cost\n"
+               "talon_wing,talon,INTERCEPTOR,3,4,2\nbroadsword_wing,bs,FIGHTER,6,3,8\n")
+        return core
+
+    def test_legacy_layout_gets_the_column_and_only_fittable_wings_get_a_cost(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core = self._core(root)
+            mod = root / "mod"
+            _write(mod / "mod_info.json", '{"id":"fixture"}')
+            path = mod / "data" / "hulls" / "wing_data.csv"
+            _write(path, "id,variant,fleet pts,num,role\nfx_fighter_wing,fx,6,3,FIGHTER\nfx_spare_wing,fx2,3,4,INTERCEPTOR\n")
+            _write(mod / "data" / "variants" / "fx_carrier.variant", '{"variantId": "fx_carrier", "wings": ["fx_fighter_wing"]}')
+            findings = [SimpleNamespace(id="wing-op-cost-blank", file="data/hulls/wing_data.csv", evidence=[f"wing:{w}"])
+                        for w in ("fx_fighter_wing", "fx_spare_wing")]
+            apply_fix(compute_fix(mod, "wing-op-cost-blank", {"vanilla_core": core, "scan_findings": findings}))
+            text = path.read_text(encoding="utf-8")
+            with self.assertRaises(FixerError):
+                compute_fix(mod, "wing-op-cost-blank", {"scan_findings": findings})  # no vanilla core: refused
+        self.assertEqual(text, "id,variant,fleet pts,num,role,op cost\nfx_fighter_wing,fx,6,3,FIGHTER,8\nfx_spare_wing,fx2,3,4,INTERCEPTOR,\n")

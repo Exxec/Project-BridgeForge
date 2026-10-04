@@ -786,7 +786,7 @@ apply a SAFE, mechanical fixer for one supported finding id (dry-run diff by def
 | Argument | Notes | Help |
 |---|---|---|
 | `mod_dir` | - | - |
-| `--finding` ID | required | supported: mod-info-game-version-inexact, csv-row-extra-columns, csv-missing-design-type-column, procgen-planet-row-missing, procgen-star-row-missing, faction-known-lists-missing, mod-info-triage-banner, wing-data-missing-role-desc-column, target-interface-method-missing, removed-api-call, carrier-bays-proposal, revenantlib-fold-conflict, undeclared-library-dependency, rules-firebest-populate-options, personality-id-unknown, hullmod-instance-state, nexerelin-corvus-mode-import, spawned-ship-captain-personality-risk, json-missing-comma, faction-trait-weight-legacy-personality-id, shiproles-wing-id, csv-fullwidth-number, ship-data-missing-fighter-bays-column, missing-custom-ui-button-pressed-callback, shippable-work-file, data-file-not-utf8, fleet-type-name-missing, variant-op-over-budget, procgen-mod-body-leak, csv-slash-quote-escape, variant-wings-exceed-bays, variant-weapon-slot-mismatch, variant-weapon-slot-missing, hard-coded-campaign-system-reference, hard-coded-campaign-entity-reference |
+| `--finding` ID | required | supported: mod-info-game-version-inexact, csv-row-extra-columns, csv-missing-design-type-column, procgen-planet-row-missing, procgen-star-row-missing, faction-known-lists-missing, mod-info-triage-banner, wing-data-missing-role-desc-column, target-interface-method-missing, removed-api-call, carrier-bays-proposal, revenantlib-fold-conflict, undeclared-library-dependency, rules-firebest-populate-options, personality-id-unknown, hullmod-instance-state, nexerelin-corvus-mode-import, spawned-ship-captain-personality-risk, json-missing-comma, builtin-wing-is-hullmod, wing-op-cost-blank, faction-trait-weight-legacy-personality-id, shiproles-wing-id, csv-fullwidth-number, ship-data-missing-fighter-bays-column, missing-custom-ui-button-pressed-callback, shippable-work-file, data-file-not-utf8, fleet-type-name-missing, variant-op-over-budget, procgen-mod-body-leak, csv-slash-quote-escape, variant-wings-exceed-bays, variant-weapon-slot-mismatch, variant-weapon-slot-missing, hard-coded-campaign-system-reference, hard-coded-campaign-entity-reference |
 | `--apply` | - | write the change (default: print a dry-run diff only) |
 | `--json` | - | - |
 | `--target-game-version` TARGET_GAME_VERSION | - | required for mod-info-game-version-inexact |
@@ -1692,6 +1692,7 @@ group READY_FOR_LIVE_TEST workspaces that share no mod or content id and whose d
 | `--write` WRITE | - | save the plan as JSON (default: <queue>/PROBE_GROUPS.json) |
 | `--exclude` WORKSPACE | repeatable | leave this workspace out; repeatable |
 | `--solo` WORKSPACE | repeatable | give this workspace a group of its own; repeatable |
+| `--provider-source` MODS_DIR | repeatable | a mods/ folder to copy missing providers from when the queue has none (default: the real install's mods/ and the 0.98 modpack in Downloads, when present); repeatable |
 | `--no-auto-solo` | - | also group large campaign mods (by default a mod that creates systems and has 60+ content ids runs alone) |
 | `--json` | - | - |
 

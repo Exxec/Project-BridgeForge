@@ -6339,6 +6339,7 @@ def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_
     wings |= from_dependencies["wing"]
     hulls |= from_dependencies["hull"]
     missing: dict[str, dict[str, set[str]]] = {"hullmod": {}, "wing": {}, "weapon": {}, "hull": {}}
+    misplaced: list[tuple[str, str]] = []
 
     def check(kind: str, ident: object, known: set[str], where: str) -> None:
         if isinstance(ident, str) and ident.strip() and ident not in known:
@@ -6357,6 +6358,9 @@ def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_
                 check("hullmod", ident, hull_mods, where)
         for key in ("wings", "builtInWings"):
             for ident in spec.get(key) or []:
+                if key == "builtInWings" and isinstance(ident, str) and ident not in wings and ident in hull_mods:
+                    misplaced.append((where, ident))  # a hull mod under the wings key (The Nomads' nom_komodo_p)
+                    continue
                 check("wing", ident, wings, where)
         for group in spec.get("weaponGroups") or []:
             if isinstance(group, dict) and isinstance(group.get("weapons"), dict):
@@ -6369,6 +6373,19 @@ def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_
             check("hull", spec.get("hullId"), hulls, where)
         if path.suffix.lower() == ".skin":
             check("hull", spec.get("baseHullId"), hulls, where)
+    for where, ident in misplaced:
+        result.add(
+            id="builtin-wing-is-hullmod",
+            category="hulls",
+            severity="high",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=(f"builtInWings lists '{ident}', which is a hull mod, not a wing (The Nomads' nom_komodo_p.ship listed "
+                         "the vanilla advancedcore there, 2026-10-04). RC8 looks it up as a wing and does not find it. It "
+                         "belongs under builtInMods."),
+            file=where,
+            evidence=[f"hullmod:{ident}", "key:builtInWings"],
+        )
     unresolved = [(kind, ident, files) for kind, table in missing.items() for ident, files in sorted(table.items())]
     if not unresolved:
         return

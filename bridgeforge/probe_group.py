@@ -129,13 +129,34 @@ def _is_large_campaign_mod(member: dict) -> bool:
 
 
 PROVIDER_READY = ("UNATTENDED_DONE",)
+# Where `probe-group plan` looks for providers the queue lacks (read and copied from, never written): the real
+# install's mods/ and the owner's 0.98 modpack (2026-10-04). Only the CLI uses these defaults.
+DEFAULT_PROVIDER_SOURCES = (
+    Path(r"C:\Program Files (x86)\Fractal Softworks\Starsector\mods"),
+    Path.home() / "Downloads" / "Starsector 0.98 Modpack V6.2" / "Starsector 0.98 Modpack V6.2" / "mods",
+)
 
 
-def _providers_for(queue: Path, missing: list[str]) -> tuple[list[dict], list[str]]:
+def _source_index(sources: list[Path]) -> list[dict[str, list[Path]]]:
+    """Per extra source folder (a mods/ directory), {mod id: [mod folders]}."""
+    indexes = []
+    for source in sources:
+        by_id: dict[str, list[Path]] = {}
+        for folder in sorted(p for p in Path(source).iterdir() if p.is_dir()) if Path(source).is_dir() else []:
+            mod_id = _mod_info(folder).get("id") if (folder / "mod_info.json").is_file() else None
+            if isinstance(mod_id, str) and mod_id:
+                by_id.setdefault(mod_id, []).append(folder)
+        indexes.append(by_id)
+    return indexes
+
+
+def _providers_for(queue: Path, missing: list[str], extra_sources: list[Path] | tuple = ()) -> tuple[list[dict], list[str]]:
     """Ready workspaces in the queue that provide each missing dependency id (ROADMAP 36.1, 2026-10-04: SCY Nation
     Utility, Yunru's Glinthawk/Old School and MUDA waited on SCY, YunruCore and ORA). A provider must declare the id
     in working/mod_info.json and its latest revive must be UNATTENDED_DONE; none or two is a problem, never a guess.
-    Dependencies of a provider that are themselves missing are looked up the same way."""
+    With none in the queue, `extra_sources` (mods/ folders, e.g. the real install's or a modpack's; copied from,
+    never edited) are tried in order, and the first holding exactly one folder with that id provides it (2026-10-04:
+    16 blocked addons were fully provided by installed mods). Dependencies of a provider are looked up the same way."""
     found: list[dict] = []
     problems: list[str] = []
     pending = list(missing)
@@ -145,6 +166,7 @@ def _providers_for(queue: Path, missing: list[str]) -> tuple[list[dict], list[st
         mod_id = _mod_info(workspace / "working").get("id") if (workspace / "working" / "mod_info.json").is_file() else None
         if isinstance(mod_id, str) and mod_id:
             by_id.setdefault(mod_id, []).append(workspace)
+    extra = _source_index(list(extra_sources))
     while pending:
         mod_id = pending.pop(0)
         if mod_id in seen:
@@ -152,6 +174,19 @@ def _providers_for(queue: Path, missing: list[str]) -> tuple[list[dict], list[st
         seen.add(mod_id)
         candidates = by_id.get(mod_id, [])
         ready = [w for w in candidates if _latest_revive_status(w) in PROVIDER_READY]
+        if not ready and not candidates:
+            outside = next(((source, folders) for source, index in zip(extra_sources, extra) if (folders := index.get(mod_id))), None)
+            if outside and len(outside[1]) == 1:
+                info = _mod_info(outside[1][0])
+                found.append({"mod_id": mod_id, "workspace": outside[1][0].name, "version": str(info.get("version") or ""),
+                              "source": str(outside[1][0]), "origin": str(outside[0])})
+                for dep in info.get("dependencies") or []:
+                    if isinstance(dep, dict) and isinstance(dep.get("id"), str) and dep["id"] not in seen:
+                        pending.append(dep["id"])
+                continue
+            if outside:
+                problems.append(f"{mod_id}: two or more copies in {outside[0]}")
+                continue
         if len(ready) != 1:
             states = ", ".join(f"{w.name}={_latest_revive_status(w)}" for w in candidates) or "no workspace declares it"
             problems.append(f"{mod_id}: {'two or more ready providers' if len(ready) > 1 else 'no ready provider'} ({states})")
@@ -176,7 +211,7 @@ def stage_providers(group: dict, queue: Path, rig: Path) -> list[dict]:
     for provider in [p for m in group["members"] for p in m.get("stage_providers") or []]:
         if any(s["mod_id"] == provider["mod_id"] for s in staged):
             continue
-        working = Path(queue) / provider["workspace"] / "working"
+        working = Path(provider["source"]) if provider.get("source") else Path(queue) / provider["workspace"] / "working"
         if provider["mod_id"] in installed:
             target = mods_dir / installed[provider["mod_id"]]
             drift = compare_copies(working, target)
@@ -198,7 +233,8 @@ def stage_providers(group: dict, queue: Path, rig: Path) -> list[dict]:
 
 
 def plan_groups(queue: Path, rig: Path, size: int = 8, workspaces: list[Path] | None = None,
-                exclude: set[str] | None = None, solo: set[str] | None = None, auto_solo: bool = True) -> dict:
+                exclude: set[str] | None = None, solo: set[str] | None = None, auto_solo: bool = True,
+                extra_sources: list[Path] | tuple = ()) -> dict:
     """Greedy grouping: each member joins the first group it shares no mod or content id with. `exclude` leaves
     workspaces out, `solo` gives each its own group, and large campaign mods run solo unless `auto_solo` is off."""
     exclude, solo = set(exclude or ()), set(solo or ())
@@ -221,7 +257,7 @@ def plan_groups(queue: Path, rig: Path, size: int = 8, workspaces: list[Path] | 
             continue
         _, missing = dependency_closure(rig / "mods", [dep for dep in member["dependencies"] if dep != member["mod_id"]], installed)
         if missing:
-            found, problems = _providers_for(queue, missing)
+            found, problems = _providers_for(queue, missing, extra_sources)
             if problems:
                 unplaced.append({"workspace": workspace.name, "reason": f"dependencies not in the rig: {', '.join(missing)}",
                                  "providers": problems})

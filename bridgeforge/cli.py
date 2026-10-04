@@ -813,6 +813,7 @@ def build_parser() -> argparse.ArgumentParser:
     group_plan.add_argument("--write", type=Path, help="save the plan as JSON (default: <queue>/PROBE_GROUPS.json)")
     group_plan.add_argument("--exclude", action="append", default=[], metavar="WORKSPACE", help="leave this workspace out; repeatable")
     group_plan.add_argument("--solo", action="append", default=[], metavar="WORKSPACE", help="give this workspace a group of its own; repeatable")
+    group_plan.add_argument("--provider-source", action="append", type=Path, default=None, metavar="MODS_DIR", help="a mods/ folder to copy missing providers from when the queue has none (default: the real install's mods/ and the 0.98 modpack in Downloads, when present); repeatable")
     group_plan.add_argument("--no-auto-solo", action="store_true", help="also group large campaign mods (by default a mod that creates systems and has 60+ content ids runs alone)")
     group_plan.add_argument("--json", action="store_true")
     group_install = group_sub.add_parser("install", help="copy/sync one group's mods into the rig, write the merged probe config, set enabled_mods.json")
@@ -1375,7 +1376,10 @@ def main(argv: list[str] | None = None) -> int:
         rig = (args.rig or queue / "_rig").expanduser().resolve()
         try:
             if args.probe_group_command == "plan":
-                result = plan_groups(queue, rig, size=args.size, exclude=set(args.exclude), solo=set(args.solo), auto_solo=not args.no_auto_solo)
+                from .probe_group import DEFAULT_PROVIDER_SOURCES
+                sources = args.provider_source if args.provider_source is not None else [p for p in DEFAULT_PROVIDER_SOURCES if p.is_dir()]
+                result = plan_groups(queue, rig, size=args.size, exclude=set(args.exclude), solo=set(args.solo), auto_solo=not args.no_auto_solo,
+                                     extra_sources=sources)
                 target = args.write or queue / "PROBE_GROUPS.json"
                 target.write_text(json.dumps(result, indent=2), encoding="utf-8")
                 if not args.json:
@@ -1385,7 +1389,7 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"Not grouped: {item['workspace']} - {item['reason']}")
                         for problem in item.get("providers") or []:
                             print(f"    {problem}")
-                    staging = sorted({f"{p['mod_id']} from {p['workspace']}" for g in result["groups"] for m in g["members"] for p in m.get("stage_providers") or []})
+                    staging = sorted({f"{p['mod_id']} from {p.get('source') or p['workspace']}" for g in result["groups"] for m in g["members"] for p in m.get("stage_providers") or []})
                     if staging:
                         print("Providers to stage (install those groups with --stage-providers): " + "; ".join(staging))
                     print(f"Plan written: {target}. Next: bridgeforge probe-group install <N>, then bf-test.ps1 launch <TESTID>.")

@@ -186,6 +186,34 @@ class ProviderStagingTests(unittest.TestCase):
         self.assertIn("base: no ready provider (Base=ESCALATED)", addon["providers"])
 
 
+class OutsideProviderTests(unittest.TestCase):
+    # 2026-10-04: 16 blocked addons were provided by mods in the real install, not the queue.
+    def test_a_provider_outside_the_queue_is_staged_from_its_source(self) -> None:
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            _workspace(queue, "Addon", "addon", "hull_addon", deps=["base"])
+            source = root / "install_mods"
+            (source / "Base 1.0").mkdir(parents=True)
+            (source / "Base 1.0" / "mod_info.json").write_text('{"id": "base", "version": "1.0"}', encoding="utf-8")
+            (source / "Base 1.0" / "data").mkdir()
+            (source / "Base 1.0" / "data" / "x.csv").write_text("id\n", encoding="utf-8")
+            rig = _rig(root)
+            core = root / "core_real"
+            core.mkdir()
+            link_dir(core, rig / "starsector-core")
+            plan = plan_groups(queue, rig, extra_sources=[source])
+            without = plan_groups(queue, rig)
+            group = next(g for g in plan["groups"] if g["members"][0]["workspace"] == "Addon")
+            result = install_group(plan, group["group"], queue, rig, install_probe=False, stage=True)
+            copied = (rig / "mods" / "Base 1.0" / "data" / "x.csv").is_file()
+            source_untouched = sorted(p.name for p in (source / "Base 1.0").rglob("*"))
+        self.assertEqual(group["members"][0]["stage_providers"][0]["origin"], str(source))
+        self.assertIn("Addon", [u["workspace"] for u in without["unplaced"]])
+        self.assertEqual(result["staged_providers"][0]["action"], "copied")
+        self.assertTrue(copied)
+        self.assertEqual(source_untouched, ["data", "mod_info.json", "x.csv"])
+
+
 class BisectTests(unittest.TestCase):
     def test_a_group_splits_into_two_new_groups(self) -> None:
         plan = {"groups": [{"group": 1, "members": [{"workspace": w} for w in "ABCDE"]}, {"group": 2, "members": [{"workspace": "F"}]}]}

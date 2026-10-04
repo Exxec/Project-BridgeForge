@@ -52,6 +52,8 @@ SUPPORTED_FINDINGS = (
     "nexerelin-corvus-mode-import",
     "spawned-ship-captain-personality-risk",
     "json-missing-comma",
+    "builtin-wing-is-hullmod",
+    "wing-op-cost-blank",
     "faction-trait-weight-legacy-personality-id",
     "shiproles-wing-id",
     "csv-fullwidth-number",
@@ -291,7 +293,7 @@ def _findings_of(root: Path, options: dict, finding_id: str) -> list:
     if supplied is None:
         from .scanner import scan_mod
 
-        return [f for f in scan_mod(root).findings if f.id == finding_id]
+        return [f for f in scan_mod(root, vanilla_core=options.get("vanilla_core")).findings if f.id == finding_id]
     from types import SimpleNamespace
 
     found = [SimpleNamespace(**f) if isinstance(f, dict) else f for f in supplied]
@@ -1694,6 +1696,121 @@ def _fix_nexerelin_corvus_mode_import(root: Path, options: dict) -> list[FileCha
 
 
 # ---------------------------------------------------------------------------
+# Fixer: wing-op-cost-blank (ROADMAP 34.22; approval-gated: the value is a comparison, not a conversion)
+# ---------------------------------------------------------------------------
+
+
+def _raw_csv_spans(line: str) -> list[tuple[int, int]]:
+    spans, start, quoted = [], 0, False
+    for i, ch in enumerate(line):
+        if ch == '"':
+            quoted = not quoted
+        elif ch == "," and not quoted:
+            spans.append((start, i))
+            start = i + 1
+    spans.append((start, len(line.rstrip("\r\n"))))
+    return spans
+
+
+def _fix_wing_op_cost_blank(root: Path, options: dict) -> list[FileChange]:
+    """Set a blank wing `op cost` to the nearest vanilla RC8 wing's (same role, nearest fleet pts, then fighter
+    count), only for a wing a variant fits or a faction knows (autofit can fit it): built-in or unused wings are never
+    charged and stay as they are. A pre-0.8 file without the column gets an `op cost` column appended, rows padded to
+    the header first. Only the one cell changes. Done by hand for 36 wings in 7 mods on 2026-10-04 (owner ruling)."""
+    import csv as _csv
+    import io as _io
+
+    from .scanner import _load_lenient_json_file
+
+    core = options.get("vanilla_core")
+    if not core:
+        raise FixerError("wing-op-cost-blank needs --vanilla-core: the cost is read from the nearest vanilla wing.")
+    vanilla = [r for r in _csv.DictReader(_io.StringIO((Path(core) / "data/hulls/wing_data.csv").read_text(encoding="utf-8-sig")))
+               if r.get("id") and (r.get("op cost") or "").strip()]
+    if not vanilla:
+        raise FixerError("the vanilla core's wing_data.csv has no op costs to compare with.")
+
+    def number(value) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    flagged = {e.split(":", 1)[1] for f in _findings_of(root, options, "wing-op-cost-blank") for e in f.evidence if e.startswith("wing:")}
+    used: set[str] = set()
+    for spec_path in (root / "data" / "variants").rglob("*.variant") if (root / "data" / "variants").is_dir() else []:
+        spec = _load_lenient_json_file(spec_path)
+        if isinstance(spec, dict):
+            used |= {w for w in spec.get("wings") or [] if isinstance(w, str)}
+    factions = " ".join(p.read_text(encoding="utf-8", errors="replace") for p in (root / "data/world/factions").glob("*.faction")) \
+        if (root / "data/world/factions").is_dir() else ""
+    targets = {w for w in flagged if w in used or f'"{w}"' in factions}
+    if not targets:
+        raise FixerError("No blank-cost wing is fitted by a variant or known to a faction: nothing is ever charged, accept as authored.")
+    path = root / "data/hulls/wing_data.csv"
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    lines = text.splitlines(keepends=True)
+    header = next(_csv.reader(_io.StringIO(lines[0])))
+    if "op cost" not in header:
+        width, eol = len(header), ("\r\n" if lines[0].endswith("\r\n") else "\n")
+        lines[0] = lines[0].rstrip("\r\n") + ",op cost" + eol
+        for n, line in enumerate(lines[1:], 1):
+            if line.strip():
+                body = line.rstrip("\r\n") + "," * max(0, width - len(_raw_csv_spans(line)))
+                lines[n] = body + "," + (line[len(line.rstrip("\r\n")):] or eol)
+        header = header + ["op cost"]
+    column = header.index("op cost")
+    changed = 0
+    for n, line in enumerate(lines[1:], 1):
+        row = next(_csv.reader(_io.StringIO(line)), [])
+        if not row or row[0] not in targets or len(row) <= column or row[column].strip():
+            continue
+        fields = dict(zip(header, row))
+        same = [v for v in vanilla if v["role"] == (fields.get("role") or "").strip()] or vanilla
+        best = min(same, key=lambda v: (abs(number(v["fleet pts"]) - number(fields.get("fleet pts"))), abs(number(v["num"]) - number(fields.get("num")))))
+        start, end = _raw_csv_spans(line)[column]
+        lines[n] = line[:start] + best["op cost"].strip() + line[end:]
+        changed += 1
+    if not changed:
+        raise FixerError("The flagged wings' rows could not be edited mechanically.")
+    return [FileChange(path=path, before=raw, after=_encode("".join(lines), had_bom))]
+
+
+# ---------------------------------------------------------------------------
+# Fixer: builtin-wing-is-hullmod (2026-10-04)
+# ---------------------------------------------------------------------------
+
+
+def _fix_builtin_wing_is_hullmod(root: Path, options: dict) -> list[FileChange]:
+    """Rename `builtInWings` to `builtInMods` when every entry under it is a hull mod and the spec has no
+    `builtInMods` yet (The Nomads' nom_komodo_p.ship, fixed by hand 2026-10-04). Mixed lists, or a spec that already
+    has builtInMods, are refused: moving single entries between arrays is left to a person."""
+    from .scanner import _load_lenient_json_file
+
+    files = sorted({f.file for f in _findings_of(root, options, "builtin-wing-is-hullmod") if f.file})
+    flagged: dict[str, set[str]] = {}
+    for finding in _findings_of(root, options, "builtin-wing-is-hullmod"):
+        flagged.setdefault(finding.file, set()).update(e.split(":", 1)[1] for e in finding.evidence if e.startswith("hullmod:"))
+    changes, refused = [], []
+    for rel in files:
+        path = root / rel
+        spec = _load_lenient_json_file(path) or {}
+        wings = [w for w in spec.get("builtInWings") or [] if isinstance(w, str)]
+        if "builtInMods" in spec or set(wings) - flagged.get(rel, set()):
+            refused.append(rel)
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        new_text, count = re.subn(r'(["\'])builtInWings\1(\s*:)', r'\1builtInMods\1\2', text, count=1)
+        if count:
+            changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    if not changes:
+        raise FixerError("No builtInWings list can be renamed mechanically" + (f" (refused: {', '.join(refused[:5])})" if refused else "."))
+    return changes
+
+
+# ---------------------------------------------------------------------------
 # Fixer: json-missing-comma (ROADMAP 34.16)
 # ---------------------------------------------------------------------------
 
@@ -2718,6 +2835,8 @@ _FIXER_FUNCS = {
     "nexerelin-corvus-mode-import": _fix_nexerelin_corvus_mode_import,
     "spawned-ship-captain-personality-risk": _fix_spawned_ship_captain,
     "json-missing-comma": _fix_json_missing_comma,
+    "builtin-wing-is-hullmod": _fix_builtin_wing_is_hullmod,
+    "wing-op-cost-blank": _fix_wing_op_cost_blank,
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
     "shiproles-wing-id": _fix_shiproles_wing_id,
     "csv-fullwidth-number": _fix_csv_fullwidth_number,
