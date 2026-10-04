@@ -979,7 +979,12 @@ def build_parser() -> argparse.ArgumentParser:
     esc_rule.add_argument("--approve-fixer", action="store_true")
     esc_rule.add_argument("--reason", required=True)
     esc_rule.add_argument("--json", action="store_true")
-    esc_queue = esc_sub.add_parser("queue", help="across a queue: which findings block the ESCALATED mods, and which mods one decision would clear; writes ESCALATIONS_BY_FINDING.md")
+    esc_accept = esc_sub.add_parser("accept", help="accept one mod's findings as authored: add them to its baseline and the reason (the evidence) to reports/ESCALATION_REVIEW.md")
+    esc_accept.add_argument("workspace", type=Path)
+    esc_accept.add_argument("selectors", nargs="+", help="FINDING_ID or FINDING_ID:FILE_PART (a substring of the finding's file)")
+    esc_accept.add_argument("--reason", required=True, help="why it is right as written, with the evidence")
+    esc_accept.add_argument("--json", action="store_true")
+    esc_queue = esc_sub.add_parser("queue",help="across a queue: which findings block the ESCALATED mods, and which mods one decision would clear; writes ESCALATIONS_BY_FINDING.md")
     esc_queue.add_argument("queue", type=Path)
     esc_queue.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     esc_queue.add_argument("--json", action="store_true")
@@ -1012,7 +1017,11 @@ def build_parser() -> argparse.ArgumentParser:
     rebuild_jar_cmd.add_argument("--output", type=Path, help="where the rebuilt jar and compiled classes go (default: a new temp directory)")
     rebuild_jar_cmd.add_argument("--install", action="store_true", help="only when status is PASS: move the working copy's current jar to scratch/moved-<date>/ (logged in MOVES.log) and copy the rebuilt jar in")
     rebuild_jar_cmd.add_argument("--json", action="store_true")
-    patch_jar_cmd = subcommands.add_parser("patch-jar-class", help="recompile a few edited classes and swap them into a mod jar, checked against the shipped classes with javap (members, calls, null checks)")
+    port_state_cmd = subcommands.add_parser("port-hullmod-state", help="move a hull mod source's per-ship instance fields into a per-ship State in ship.getCustomData() and write the result (for a jar source, feed it to patch-jar-class --allow-removed)")
+    port_state_cmd.add_argument("source", type=Path, help="the hull mod's .java (a decompiled or bundled jar source)")
+    port_state_cmd.add_argument("--field", action="append", required=True, help="a field to move (the finding's field:NAME); repeatable")
+    port_state_cmd.add_argument("--out", type=Path, required=True, help="where to write the ported source (never the input)")
+    patch_jar_cmd = subcommands.add_parser("patch-jar-class",help="recompile a few edited classes and swap them into a mod jar, checked against the shipped classes with javap (members, calls, null checks)")
     patch_jar_cmd.add_argument("mod", type=Path, help="mod workspace (holding working/)")
     patch_jar_cmd.add_argument("--jar", required=True, help="the jar to patch, relative to working/ (e.g. jars/Name.jar)")
     patch_jar_cmd.add_argument("sources", type=Path, nargs="+", help="the edited .java files (a scratch copy or an escalation attempt's)")
@@ -3278,6 +3287,16 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(entry, indent=2, ensure_ascii=False) if args.json else
               f"Ruling recorded ({entry['ruling']}) for {entry['finding']}: {len(entry['mods'])} mod baseline(s) updated. Re-run revive-queue --only-status ESCALATED to apply.")
         return 0
+    if args.command == "escalation" and args.escalation_command == "accept":
+        from .escalation_queue import accept_in_mod
+        try:
+            entry = accept_in_mod(args.workspace, args.selectors, args.reason)
+        except (ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(entry, indent=2, ensure_ascii=False) if args.json else
+              f"Accepted {len(entry['keys'])} finding(s) as authored in {entry['baseline']}. Re-run revive to apply.")
+        return 0
     if args.command == "escalation" and args.escalation_command == "queue":
         from .escalation_queue import summarize_queue
         result = summarize_queue(args.queue, quiet=args.quiet)
@@ -3421,6 +3440,21 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{row['state']:15} {row['class']}  ({row['finding']})\n  {row['next']}")
         if not result["packets"]:
             print("No jar-only packets.")
+        return 0
+    if args.command == "port-hullmod-state":
+        from .hullmod_state import HullModStateError, port_hullmod_state
+        if args.out.resolve() == args.source.resolve():
+            print("bridgeforge: --out must not be the input source.", file=sys.stderr)
+            return 2
+        try:
+            ported = port_hullmod_state(args.source.read_text(encoding="utf-8"), args.field, args.source.stem)
+        except (HullModStateError, OSError) as exc:
+            print(f"bridgeforge: not ported: {exc}", file=sys.stderr)
+            return 2
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(ported, encoding="utf-8")
+        removed = " ".join(f"--allow-removed {f}" for f in args.field)
+        print(f"Ported: {args.out}\nNext: bridgeforge patch-jar-class MOD {args.out} --jar JAR {removed} --install")
         return 0
     if args.command == "patch-jar-class":
         from .jar_patch import JarPatchError, patch_jar_classes

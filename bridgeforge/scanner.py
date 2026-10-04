@@ -70,7 +70,8 @@ PERCENT_MULTIPLIER_PATTERN = re.compile(
 HARDCODED_SYSTEM_LOOKUP_PATTERN = re.compile(r"\bgetStarSystem\s*\(\s*\"([^\"]+)\"\s*\)")
 HARDCODED_ENTITY_LOOKUP_PATTERN = re.compile(r"\bgetEntityById\s*\(\s*\"([^\"]+)\"\s*\)")
 CAMPAIGN_SYSTEM_CREATION_PATTERN = re.compile(r"\b(?:createStarSystem|addStarSystem)\s*\(\s*\"([^\"]+)\"")
-CAMPAIGN_ENTITY_CREATION_PATTERN = re.compile(r"\b(?:addCustomEntity|addEntity)\s*\(\s*\"([^\"]+)\"")
+# addPlanet/initStar take the entity id first (javap, RC8 LocationAPI/StarSystemAPI, 2026-10-04).
+CAMPAIGN_ENTITY_CREATION_PATTERN = re.compile(r"\b(?:addCustomEntity|addEntity|addPlanet|initStar)\s*\(\s*\"([^\"]+)\"")
 MISSION_FLEET_REFERENCE_PATTERN = re.compile(
     r"\baddToFleet\s*\(\s*FleetSide\.(?:PLAYER|ENEMY)\s*,\s*\"([^\"]+)\"\s*,\s*FleetMemberType\.(SHIP|FIGHTER_WING)"
 )
@@ -2385,6 +2386,7 @@ def _scan_campaign_identifier_context(root: Path, result: ScanResult) -> None:
     mod_id = str(result.metadata.get("id") or "").strip()
     local_systems: set[str] = set()
     local_entities: set[str] = set()
+    created_in: dict[str, set[str]] = {}
     for source in root.rglob("*.java"):
         if "disabled_files" in source.relative_to(root).parts:
             continue
@@ -2392,8 +2394,18 @@ def _scan_campaign_identifier_context(root: Path, result: ScanResult) -> None:
             text = source.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        local_systems.update(CAMPAIGN_SYSTEM_CREATION_PATTERN.findall(text))
-        local_entities.update(CAMPAIGN_ENTITY_CREATION_PATTERN.findall(text))
+        systems = set(CAMPAIGN_SYSTEM_CREATION_PATTERN.findall(text))
+        entities = set(CAMPAIGN_ENTITY_CREATION_PATTERN.findall(text))
+        local_systems |= systems
+        local_entities |= entities
+        created_in[_relative(root, source)] = systems | entities
+
+    def same_file(finding, identifier: str) -> None:
+        # ROADMAP 34.6: the lookup's own file creates the id (Sylphon's Nym, ORA's Joy, Hiver's Kiztac: 7 of 14 hand
+        # decisions on 2026-10-04), a generator looking up what it just made. A note, not work.
+        if identifier in created_in.get(finding.file or "", set()):
+            finding.classification = "SAFE"
+            finding.evidence.append("created-in-same-file")
 
     def ownership(identifier: str, defined: set[str]) -> str:
         if identifier in defined:
@@ -2408,11 +2420,13 @@ def _scan_campaign_identifier_context(root: Path, result: ScanResult) -> None:
             identifier = finding.evidence[0]
             state = ownership(identifier, local_systems)
             finding.evidence.append(f"ownership: {state}")
+            same_file(finding, identifier)
             lookups.append({"kind": "system", "id": identifier, "ownership": state})
         elif finding.id == "hard-coded-campaign-entity-reference" and finding.evidence:
             identifier = finding.evidence[0]
             state = ownership(identifier, local_entities)
             finding.evidence.append(f"ownership: {state}")
+            same_file(finding, identifier)
             lookups.append({"kind": "entity", "id": identifier, "ownership": state})
     result.migration_context["campaign_identifier_context"] = {
         "defined_system_ids": sorted(local_systems),
@@ -5079,6 +5093,49 @@ def _scan_module_captain_personality_risk(root: Path, result: ScanResult) -> Non
         )
 
 
+_NEX_SECTOR_MANAGER_IMPORT = re.compile(r"^[ \t]*import\s+exerelin\.campaign\.SectorManager\s*;[ \t]*\r?\n", re.M)
+_NEX_CORVUS_CALL = re.compile(r"\bSectorManager\s*\.\s*(?:getManager\s*\(\s*\)\s*\.\s*)?getCorvusMode\s*\(\s*\)")
+
+
+def _scan_nexerelin_corvus_mode_import(root: Path, result: ScanResult) -> None:
+    """A loose script importing Nexerelin's SectorManager only to ask getCorvusMode() (ROADMAP 34.13).
+
+    Janino compiles every loose script at startup, so without Nexerelin the import alone fails (Hiver Swarm,
+    2026-10-04), whatever isModEnabled check guards the call. Nexerelin 0.12.2d's new-game entry point
+    (ExerelinNewGameSetup.generateStarSystems, javap and its bundled source, 2026-10-04) writes
+    `$nex_randomSector` = !corvusMode to sector memory, so the same answer needs no import. A mod that requires
+    Nexerelin is skipped: there the import always resolves."""
+    raw = result.metadata.get("dependencies") or result.metadata.get("requiredDependencies") or []
+    if "nexerelin" in json.dumps(raw).lower():
+        return
+    for source in sorted((root / "data").rglob("*.java")) if (root / "data").is_dir() else []:
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        blank = _blank_java_comments(text, strings=True)
+        if not _NEX_SECTOR_MANAGER_IMPORT.search(blank):
+            continue
+        calls = len(_NEX_CORVUS_CALL.findall(blank))
+        others = len(re.findall(r"\bSectorManager\b", blank)) - calls - 1
+        if calls and others == 0 and "exerelin." not in _NEX_SECTOR_MANAGER_IMPORT.sub("", blank):
+            result.add(
+                id="nexerelin-corvus-mode-import",
+                category="scripts",
+                severity="critical",
+                classification="REVIEW",
+                confidence="HIGH",
+                explanation=(
+                    "This loose script imports Nexerelin's SectorManager only for getCorvusMode(). Janino compiles "
+                    "every loose script at startup, so without Nexerelin the import fails to compile. Nexerelin's "
+                    "new-game setup writes $nex_randomSector (= !corvusMode) to sector memory, which gives the "
+                    "same answer with no import."
+                ),
+                file=_relative(root, source),
+                evidence=[f"calls:{calls}", "import:exerelin.campaign.SectorManager"],
+            )
+
+
 _SPAWN_SHIP_CALL_PATTERN = re.compile(r"\b(spawnShipOrWing|spawnFleetMember)\s*\(\s*\"([^\"]+)\"")
 
 
@@ -7072,6 +7129,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_orbit_period_hazards(root, result)
     _scan_module_captain_personality_risk(root, result)
     _scan_spawned_ship_captain_personality_risk(root, result)
+    _scan_nexerelin_corvus_mode_import(root, result)
     _scan_mod_info_triage_banner(root, result)
     _scan_data_class_references_missing(root, result, vanilla_root, provider_roots)
     _scan_hardcoded_hyperspace_coordinates(root, result)

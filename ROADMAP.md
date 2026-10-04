@@ -2536,6 +2536,11 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        methods that receive a `ShipAPI`/`FleetMemberAPI`, there are no static writers, and the compiled diff is state
        plumbing only; jar classes go through `patch-jar-class`. SEEKER's organic hull and Nightcross's plasma
        aggregator are the test cases.
+       **Done 2026-10-04** for loose scripts: `bridgeforge/hullmod_state.py` `port_hullmod_state` (single-field
+       private declarations; refuses a method without exactly one `ShipAPI` parameter, a shadowing local, a use outside
+       a method), the `hullmod-instance-state` fixer, and `port-hullmod-state SOURCE --field F --out PATH` for jar
+       sources (then `patch-jar-class --allow-removed F`). A ported fixture compiles under RC8's Janino. Tests:
+       `HullModInstanceStateFixerTests`, `PortHullModStateCommandTests`. Not yet: `FleetMemberAPI` campaign methods.
     2. **Entity-lookup "use the variable" fixer** (`hard-coded-campaign-entity-reference`, the next largest: 45). The
        accepted agent fix in Hegemony, Scion, Mayorate, Gensoukyou, Traverser, Mountain-and-Sea and The Nomads was the
        same: `system.getEntityById("x")` in the method that created `"x"` with `PlanetAPI v = system.initStar/addPlanet(
@@ -2553,6 +2558,10 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        rewriting the code (Mountain-and-Sea's agent used reflection, which the script sandbox forbids).
     6. **Own-system lookups are notes:** `hard-coded-campaign-system-reference` for a system the same mod creates with
        `createStarSystem("X")` is SAFE (Qualljom's Holotis, accepted by hand).
+       **Done 2026-10-04:** a system or entity lookup whose own file creates the id is SAFE with evidence
+       `created-in-same-file`, a note in revive and skipped by the lookup-guard fixer. `addPlanet`/`initStar` now count
+       as creations (javap: id is the first argument), so Sylphon's Nym and Hiver's Kiztac read as local. Tests:
+       `test_scanner_attributes_local_campaign_identifiers`, `test_scanner_counts_add_planet_and_init_star_as_local_entities`.
     7. **Agent-result triage before review:** flag automatically what was rejected by hand this week: reflection
        (`java.lang.reflect`, sandbox-forbidden), a method body emptied or turned into a no-op, `this` hidden behind a
        local to dodge `campaign-memory-live-object` (ICE), live objects moved to a static map (Void-Tec TimerBar),
@@ -2568,6 +2577,27 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         mistake; only 5 of its 37 ships are in 0.6.6).
     11. **Ready mods to live-test groups automatically:** `probe-group plan` over `ready-list` output, with groups sized
         by mod weight and conflicts (same id, same vanilla files overridden), so one rig session tests many mods.
+    12. **`escalation accept WORKSPACE ID[:FILE_PART]... --reason`** (the scratch script used for six mods on
+        2026-10-04): packet findings into the mod's baseline, the reason and keys into `ESCALATION_REVIEW.md`; a
+        selector matching nothing is an error. **Done 2026-10-04.** Test: `test_accept_in_mod_by_finding_and_file_part`.
+    13. **`nexerelin-corvus-mode-import` check and fixer:** a loose script importing `exerelin.campaign.SectorManager`
+        only for `getCorvusMode()` fails Janino without Nexerelin (Hiver Swarm). Rewritten to
+        `!getBoolean("$nex_randomSector")`, which Nexerelin 0.12.2d's `ExerelinNewGameSetup` writes (javap and bundled
+        source). Skipped when the mod requires Nexerelin. **Done 2026-10-04.** Tests: `NexerelinCorvusModeImportTests`.
+        Still open: confirm live that the entry point runs before mod `onNewGame` (Hiver Swarm in a Nex random sector).
+    14. **Spawned-ship captain fixer:** `spawnShipOrWing(id, loc, facing)` for a ship -> the overload with a captain from
+        `createPerson()` + `setPersonality(STEADY)` (RC8's `ChiralFigmentStats`); the check then treats that overload as
+        guarded instead of flagging every literal id (Traverser's turrets, by hand 2026-10-04).
+    15. **Orbit-period check follows constants:** when every caller of the helper passes a constant radius, compute the
+        period and drop the finding (ORA's six derelicts, 250-425 days).
+    16. **Missing-comma JSON repair:** a list item followed by another item on the next line gets a comma, only when that
+        is the parse error and the file then parses (Hiigaran's `polaris.json`).
+    17. **External memory keys, fewer false positives:** a Nexerelin key only written, or read under an
+        `isModEnabled("nexerelin")` guard, is a note (Kadur, Hiver).
+    18. **Stray work archives move automatically:** `shippable-work-file` for a `.rar`/`.zip`/`.7z` in the mod root moves
+        it to `scratch/moved-work-files/` (Hiver's `Replacement Ships.rar`).
+    19. **Missing rig providers:** `probe-group plan` copies (or names the command to copy) a ready provider into the rig
+        when a mod is unplaced only for it (SCY, YunruCore, ORA).
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit

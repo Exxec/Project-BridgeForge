@@ -48,6 +48,8 @@ SUPPORTED_FINDINGS = (
     "undeclared-library-dependency",
     "rules-firebest-populate-options",
     "personality-id-unknown",
+    "hullmod-instance-state",
+    "nexerelin-corvus-mode-import",
     "faction-trait-weight-legacy-personality-id",
     "shiproles-wing-id",
     "csv-fullwidth-number",
@@ -1660,6 +1662,73 @@ def _fix_personality_id_unknown(root: Path, options: dict) -> list[FileChange]:
 
 
 # ---------------------------------------------------------------------------
+# Fixer: nexerelin-corvus-mode-import (ROADMAP 34.13)
+# ---------------------------------------------------------------------------
+
+
+def _fix_nexerelin_corvus_mode_import(root: Path, options: dict) -> list[FileChange]:
+    """SectorManager[.getManager()].getCorvusMode() -> (!Global.getSector().getMemoryWithoutUpdate()
+    .getBoolean("$nex_randomSector")) and the Nexerelin import dropped (done by hand for Hiver Swarm, 2026-10-04;
+    evidence in scanner._scan_nexerelin_corvus_mode_import). Without Nexerelin the key is absent and getBoolean
+    returns false, i.e. "Corvus mode", which is the vanilla sector."""
+    from .scanner import _NEX_CORVUS_CALL, _NEX_SECTOR_MANAGER_IMPORT
+
+    replacement = '(!Global.getSector().getMemoryWithoutUpdate().getBoolean("$nex_randomSector"))'
+    changes: list[FileChange] = []
+    for rel in sorted({f.file for f in _findings_of(root, options, "nexerelin-corvus-mode-import") if f.file}):
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        new_text = _NEX_CORVUS_CALL.sub(lambda _m: replacement, _NEX_SECTOR_MANAGER_IMPORT.sub("", text, count=1))
+        if "import com.fs.starfarer.api.Global;" not in new_text and "import com.fs.starfarer.api.*;" not in new_text:
+            package = re.search(r"^package [\w.]+;\s*\n", new_text, re.M)
+            at = package.end() if package else 0
+            new_text = new_text[:at] + "import com.fs.starfarer.api.Global;\n" + new_text[at:]
+        if new_text != text:
+            changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    if not changes:
+        raise FixerError("No loose script imports Nexerelin's SectorManager only for getCorvusMode().")
+    return changes
+
+
+# ---------------------------------------------------------------------------
+# Fixer: hullmod-instance-state (loose scripts only; ROADMAP 34.1)
+# ---------------------------------------------------------------------------
+
+
+def _fix_hullmod_instance_state(root: Path, options: dict) -> list[FileChange]:
+    """Move a hull mod's flagged instance fields into a per-ship State in ship.getCustomData()
+    (`hullmod_state.port_hullmod_state`, the rewrite done by hand for SEEKER and Sylphon on 2026-10-04). Jar
+    classes and jar sources need patch-jar-class, so they are refused; so is any shape the port refuses."""
+    from .hullmod_state import HullModStateError, port_hullmod_state
+
+    fields_by_file: dict[str, list[str]] = {}
+    for finding in _findings_of(root, options, "hullmod-instance-state"):
+        if finding.file:
+            fields_by_file.setdefault(finding.file, []).extend(
+                e.split(":", 1)[1] for e in finding.evidence if e.startswith("field:"))
+    loose = {rel: names for rel, names in fields_by_file.items()
+             if "!" not in rel and rel.endswith(".java") and not rel.replace("\\", "/").startswith(("jars/", "src/"))}
+    if not loose:
+        raise FixerError("No loose hull mod script keeps per-ship instance fields (jar classes need patch-jar-class).")
+    changes: list[FileChange] = []
+    refused: list[str] = []
+    for rel, names in sorted(loose.items()):
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        try:
+            new_text = port_hullmod_state(text, sorted(set(names)), path.stem)
+        except HullModStateError as exc:
+            refused.append(f"{rel}: {exc}")
+            continue
+        changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    if not changes:
+        raise FixerError("Not mechanical: " + "; ".join(refused[:5]))
+    return changes
+
+
+# ---------------------------------------------------------------------------
 # Shared: surgically rename/merge keys inside one JSON sub-object's interior text (a `.faction`'s
 # `traits.<role>` or `shipRoles.<role>` block - both are flat `"id": <number>` maps).
 # ---------------------------------------------------------------------------
@@ -2459,7 +2528,7 @@ def _fix_campaign_lookup_guard(root: Path, options: dict, finding_id: str) -> li
     method = "getStarSystem" if finding_id == "hard-coded-campaign-system-reference" else "getEntityById"
     names_by_file: dict[str, set[str]] = {}
     for finding in _findings_of(root, options, finding_id):
-        if finding.file and finding.evidence and "null-guarded" not in finding.evidence:
+        if finding.file and finding.evidence and "null-guarded" not in finding.evidence and "created-in-same-file" not in finding.evidence:
             names_by_file.setdefault(finding.file, set()).add(finding.evidence[0])
     changes, refused = [], []
     for relative, names in sorted(names_by_file.items()):
@@ -2553,6 +2622,8 @@ _FIXER_FUNCS = {
     "undeclared-library-dependency": _fix_undeclared_library_dependency,
     "rules-firebest-populate-options": _fix_rules_firebest_populate_options,
     "personality-id-unknown": _fix_personality_id_unknown,
+    "hullmod-instance-state": _fix_hullmod_instance_state,
+    "nexerelin-corvus-mode-import": _fix_nexerelin_corvus_mode_import,
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
     "shiproles-wing-id": _fix_shiproles_wing_id,
     "csv-fullwidth-number": _fix_csv_fullwidth_number,

@@ -56,5 +56,27 @@ class EscalationQueueTests(unittest.TestCase):
         self.assertEqual(len(log), 2)
         self.assertEqual(approved["ruling"], "approve-fixer")
 
+    def test_accept_in_mod_by_finding_and_file_part(self) -> None:
+        # ROADMAP 34.12: one mod's findings accepted as authored, with the evidence in ESCALATION_REVIEW.md.
+        from bridgeforge.escalation_queue import accept_in_mod
+
+        with resolved_temp_dir() as ws:
+            (ws / "working").mkdir()
+            (ws / "reports" / "escalations").mkdir(parents=True)
+            (ws / "reports" / "escalations" / "hard-coded-campaign-entity-reference--1.json").write_text(json.dumps({"findings": [
+                {"id": "hard-coded-campaign-entity-reference", "file": "data/scripts/world/A_Gen.java", "evidence": ["a_star"]},
+                {"id": "hard-coded-campaign-entity-reference", "file": "data/scripts/B.java", "evidence": ["corvus"]}]}), encoding="utf-8")
+            entry = accept_in_mod(ws, ["hard-coded-campaign-entity-reference:A_Gen"], "A_Gen creates a_star (initStar, line 4)", today="2026-10-04")
+            baseline = json.loads((ws / "working" / "reports" / "baseline.json").read_text(encoding="utf-8"))
+            review = (ws / "reports" / "ESCALATION_REVIEW.md").read_text(encoding="utf-8")
+            with self.assertRaises(ValueError):
+                accept_in_mod(ws, ["hard-coded-campaign-entity-reference:Typo"], "x")
+            with self.assertRaises(ValueError):
+                accept_in_mod(ws, ["hard-coded-campaign-entity-reference"], " ")
+        self.assertEqual(entry["keys"], ["hard-coded-campaign-entity-reference|data/scripts/world/A_Gen.java|a_star"])
+        self.assertEqual(baseline["findings"], entry["keys"])
+        self.assertIn("## 2026-10-04: hard-coded-campaign-entity-reference accepted as authored", review)
+        self.assertIn("initStar, line 4", review)
+
 if __name__ == "__main__":
     unittest.main()

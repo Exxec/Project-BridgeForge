@@ -1821,3 +1821,100 @@ class DataFileNamedEncodingTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(mac, "id,t\na,it’s Mystère\n")
         self.assertEqual(sjis, "id,t\na,the ship’s hull é\n")
+
+
+class HullModInstanceStateFixerTests(unittest.TestCase):
+    # ROADMAP 34.1 (2026-10-04): the per-ship State port done by hand for SEEKER and Sylphon, as a fixer.
+    SOURCE = (
+        "package data.hullmods;\n\n"
+        "import com.fs.starfarer.api.combat.BaseHullMod;\n"
+        "import com.fs.starfarer.api.combat.ShipAPI;\n\n"
+        "public class Fixture extends BaseHullMod {\n"
+        "    private static final float DELAY = 2f;\n"
+        "    private float timer = 0f;\n\n"
+        "    public void advanceInCombat(ShipAPI ship, float amount) {\n"
+        "        this.timer += amount;\n"
+        "        if (timer > DELAY) { reset(ship); }\n"
+        "    }\n\n"
+        "    private void reset(ShipAPI s) {\n"
+        "        timer = 0f;\n"
+        "    }\n"
+        "}\n"
+    )
+
+    def _mod(self, root: Path, source: str) -> Path:
+        (root / "mod_info.json").write_text('{"id":"fixture","name":"F","version":"1","gameVersion":"0.98a-RC8"}', encoding="utf-8")
+        path = root / "data" / "hullmods" / "Fixture.java"
+        path.parent.mkdir(parents=True)
+        path.write_text(source, encoding="utf-8")
+        return path
+
+    def test_moves_fields_into_per_ship_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(root, self.SOURCE)
+            self.assertEqual(len(_findings(scan_mod(root), "hullmod-instance-state")), 1)
+            apply_fix(compute_fix(root, "hullmod-instance-state"))
+            text = path.read_text(encoding="utf-8")
+            self.assertEqual(_findings(scan_mod(root), "hullmod-instance-state"), [])
+        self.assertIn("private static class State {\n        float timer = 0f;\n    }", text)
+        self.assertIn('ship.getCustomData().get("Fixture_bfState")', text)
+        self.assertIn("if (ship == null) return new State();", text)
+        self.assertEqual(text.count("State bfState = bfState("), 2)
+        self.assertIn("bfState.timer += amount;", text)
+        self.assertIn("State bfState = bfState(s);\n        bfState.timer = 0f;", text)
+        self.assertIn("private static final float DELAY = 2f;", text)
+
+    def test_refuses_a_method_without_a_ship(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, self.SOURCE.replace("private void reset(ShipAPI s) {", "private void reset() {").replace("reset(ship)", "reset()"))
+            with self.assertRaises(FixerError):
+                compute_fix(root, "hullmod-instance-state")
+
+
+class PortHullModStateCommandTests(unittest.TestCase):
+    def test_writes_the_port_and_refuses_overwriting_the_input(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "Fixture.java"
+            source.write_text(HullModInstanceStateFixerTests.SOURCE, encoding="utf-8")
+            out = Path(directory) / "out" / "Fixture.java"
+            with mock.patch("sys.stdout", new_callable=io.StringIO):
+                code = main(["port-hullmod-state", str(source), "--field", "timer", "--out", str(out)])
+            with mock.patch("sys.stderr", new_callable=io.StringIO):
+                same = main(["port-hullmod-state", str(source), "--field", "timer", "--out", str(source)])
+            ported = out.read_text(encoding="utf-8")
+        self.assertEqual(code, 0)
+        self.assertEqual(same, 2)
+        self.assertIn("bfState.timer += amount;", ported)
+
+
+class NexerelinCorvusModeImportTests(unittest.TestCase):
+    # ROADMAP 34.13 (2026-10-04): Hiver Swarm's plugin failed to compile without Nexerelin.
+    def _mod(self, root: Path, dependencies: str = "[]") -> Path:
+        (root / "mod_info.json").write_text('{"id":"fixture","dependencies":' + dependencies + '}', encoding="utf-8")
+        path = root / "data" / "scripts" / "Plugin.java"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            "package data.scripts;\n\nimport com.fs.starfarer.api.BaseModPlugin;\nimport exerelin.campaign.SectorManager;\n\n"
+            "public class Plugin extends BaseModPlugin {\n    public void onNewGame() {\n"
+            "        if (SectorManager.getManager().getCorvusMode()) { }\n    }\n}\n", encoding="utf-8")
+        return path
+
+    def test_reads_sector_memory_instead_of_importing_nexerelin(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(root)
+            self.assertEqual(len(_findings(scan_mod(root), "nexerelin-corvus-mode-import")), 1)
+            apply_fix(compute_fix(root, "nexerelin-corvus-mode-import"))
+            text = path.read_text(encoding="utf-8")
+            self.assertEqual(_findings(scan_mod(root), "nexerelin-corvus-mode-import"), [])
+        self.assertNotIn("exerelin", text)
+        self.assertIn('if ((!Global.getSector().getMemoryWithoutUpdate().getBoolean("$nex_randomSector"))) { }', text)
+        self.assertIn("import com.fs.starfarer.api.Global;", text)
+
+    def test_not_flagged_when_the_mod_requires_nexerelin(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, '[{"id":"nexerelin"}]')
+            self.assertEqual(_findings(scan_mod(root), "nexerelin-corvus-mode-import"), [])

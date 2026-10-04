@@ -375,10 +375,35 @@ class ScannerTests(unittest.TestCase):
                 encoding="utf-8",
             )
             result = scan_mod(root)
-            findings = {item.evidence[0]: item.evidence[-1] for item in result.findings if item.id.startswith("hard-coded-campaign-")}
-            self.assertEqual(findings["fixture_system"], "ownership: defined-locally")
-            self.assertEqual(findings["fixture_entity"], "ownership: defined-locally")
-            self.assertEqual(findings["Askonia"], "ownership: external-or-core-unresolved")
+            findings = {item.evidence[0]: item for item in result.findings if item.id.startswith("hard-coded-campaign-")}
+            self.assertIn("ownership: defined-locally", findings["fixture_system"].evidence)
+            self.assertIn("ownership: defined-locally", findings["fixture_entity"].evidence)
+            self.assertIn("ownership: external-or-core-unresolved", findings["Askonia"].evidence)
+            # ROADMAP 34.6: a lookup of what the same file creates is a note, not work.
+            self.assertEqual(findings["fixture_entity"].classification, "SAFE")
+            self.assertIn("created-in-same-file", findings["fixture_entity"].evidence)
+            self.assertNotIn("created-in-same-file", findings["Askonia"].evidence)
+
+    def test_scanner_counts_add_planet_and_init_star_as_local_entities(self) -> None:
+        # ROADMAP 34.6 (2026-10-04): Sylphon's SRD_planet_nym1 (addPlanet) and Hiver's Kiztac (initStar) read as
+        # external because only addCustomEntity/addEntity were matched.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "Gen.java").write_text(
+                'class Gen { void generate() { system.initStar("gen_star", "star_red", 500, 300); system.addPlanet("gen_p1", star, "P", "arid", 0, 100, 2000, 90); system.getEntityById("gen_star"); system.getEntityById("gen_p1"); } }',
+                encoding="utf-8",
+            )
+            (root / "src" / "Other.java").write_text('class Other { void x() { sector.getEntityById("gen_p1").getMarket(); } }', encoding="utf-8")
+            result = scan_mod(root)
+            lookups = [item for item in result.findings if item.id == "hard-coded-campaign-entity-reference"]
+            same = {item.evidence[0] for item in lookups if "created-in-same-file" in item.evidence}
+            other = [item for item in lookups if item.file and item.file.endswith("Other.java")]
+            self.assertEqual(same, {"gen_star", "gen_p1"})
+            self.assertTrue(other)
+            self.assertIn("ownership: defined-locally", other[0].evidence)
+            self.assertNotIn("created-in-same-file", other[0].evidence)
 
 
     def test_scanner_reports_runtime_placeholders_in_source_and_compiled_classes(self) -> None:

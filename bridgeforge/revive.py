@@ -316,7 +316,7 @@ def _informational(finding: dict) -> bool:
 
     # A lookup the code already null-checks is a note even though its id now has a fixer (the lookup guard,
     # 2026-09-30): the fixer only touches unguarded ones.
-    handled = bool({"null-guarded", "nothing-reads-lists"} & set(finding.get("evidence") or []))
+    handled = bool({"null-guarded", "nothing-reads-lists", "created-in-same-file"} & set(finding.get("evidence") or []))
     return finding.get("classification") == "SAFE" and (finding.get("id") not in SUPPORTED_FINDINGS or handled)
 
 
