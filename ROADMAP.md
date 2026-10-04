@@ -2598,6 +2598,8 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         it to `scratch/moved-work-files/` (Hiver's `Replacement Ships.rar`).
     19. **Missing rig providers:** `probe-group plan` copies (or names the command to copy) a ready provider into the rig
         when a mod is unplaced only for it (SCY, YunruCore, ORA).
+    20. **Commented-out mission fleet lines:** `mission-local-fleet-reference-missing` matched a `//` line (Scy-Nation's
+        `SCY_11_soldierOfFortune`, MissionDefinition.java:52, 2026-10-04); blank comments first, as other source checks do.
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit
