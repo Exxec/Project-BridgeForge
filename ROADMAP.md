@@ -2526,6 +2526,48 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         mods: 102 of 295), `requireNonNull(this)` is not a counted call, port-interfaces builds a source already in
         RC8's form, and supersession matches by name. Tests: `CloseTests`, `ThisCheckNoiseTests`, `PortTableTests`,
         `NameMatchTests`.
+34. **Plan: fixers and automation for the hand work of the 2026-10-02/04 agent batches (owner request 2026-10-04).**
+    Each item is work done by hand (or by agents, then reviewed by hand) at least three times. Ordered by how much
+    hand work it removes.
+    1. **Per-ship state fixer for `hullmod-instance-state`** (the largest packet class: 54 source + 44 jar). Done by
+       hand or by agent 12+ times with one recipe: move each written field into a private static `State` class kept in
+       `ship.getCustomData()` (or `member` data for campaign methods), read `State s = state(ship)` at the top of each
+       method that takes the ship, `this.x` -> `s.x`. Fixer applies only when every written field is used solely inside
+       methods that receive a `ShipAPI`/`FleetMemberAPI`, there are no static writers, and the compiled diff is state
+       plumbing only; jar classes go through `patch-jar-class`. SEEKER's organic hull and Nightcross's plasma
+       aggregator are the test cases.
+    2. **Entity-lookup "use the variable" fixer** (`hard-coded-campaign-entity-reference`, the next largest: 45). The
+       accepted agent fix in Hegemony, Scion, Mayorate, Gensoukyou, Traverser, Mountain-and-Sea and The Nomads was the
+       same: `system.getEntityById("x")` in the method that created `"x"` with `PlanetAPI v = system.initStar/addPlanet(
+       "x", ...)` -> `v`. Deterministic when exactly one local in the same method was created with that literal id
+       (or a String local holding it, as Traverser's `systemName`).
+    3. **Percent/multiplier fixer** (`suspicious-percent-multiplier`): `modifyPercent(id, 1f - P * 0.01f)` beside a
+       `modifyMult(id, 1f - P * 0.01f)` of the same constant -> `modifyPercent(id, -P)`. Tore-Up-Plenty and Batavia (4
+       hull mods), each confirmed against its description. Applied only with that sibling multiplier present.
+    4. **CSV repairs:** unescaped inner quotes (`the "little" brother` -> `""little""`, New Galactic Order) when
+       doubling them makes every row fit the header; and mixed-layout files (ship_systems rows from a newer header)
+       rewritten by column name into RC8's header when the wide rows match RC8's positions up to the last filled
+       column. Both done by hand 2026-10-02.
+    5. **Missing-dependency for compile errors:** a `loose-script-compile-error` whose missing package belongs to a
+       known library (GraphicsLib `org.dark.shaders`, LazyLib, MagicLib) declares the library instead of an agent
+       rewriting the code (Mountain-and-Sea's agent used reflection, which the script sandbox forbids).
+    6. **Own-system lookups are notes:** `hard-coded-campaign-system-reference` for a system the same mod creates with
+       `createStarSystem("X")` is SAFE (Qualljom's Holotis, accepted by hand).
+    7. **Agent-result triage before review:** flag automatically what was rejected by hand this week: reflection
+       (`java.lang.reflect`, sandbox-forbidden), a method body emptied or turned into a no-op, `this` hidden behind a
+       local to dodge `campaign-memory-live-object` (ICE), live objects moved to a static map (Void-Tec TimerBar),
+       imports of nested classes at the wrong path (Polaris). Add to `escalation_review.FLAGS`.
+    8. **Batch runner as a command:** `escalation batch MODS... [--max-minutes 55]` with the rules the scratch script
+       learned: stop at the first usage-limit message from this run only, skip a mod whose workspace lock is held,
+       kill the agent tree on timeout, stop before the hour cap and print what is left so the next run resumes.
+       Replaces `agent_batch*.sh`.
+    9. **`escalation apply --patch-class` by default** for an attempt that edits jar sources (src/, jars/src/, a
+       mod's own source tree), with the new class diff shown first; refuse only when the source is not faithful.
+    10. **Supersession by content, not id:** a same-id 0.98 release supersedes only when it keeps most of the old
+        content ids (ships, weapons, hull mods); otherwise NEWER_DIFFERENT for a person (SEEKER 0.2 was closed by
+        mistake; only 5 of its 37 ships are in 0.6.6).
+    11. **Ready mods to live-test groups automatically:** `probe-group plan` over `ready-list` output, with groups sized
+        by mod weight and conflicts (same id, same vanilla files overridden), so one rig session tests many mods.
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit
