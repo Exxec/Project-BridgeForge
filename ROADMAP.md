@@ -2616,6 +2616,18 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         references. Test: `test_moves_unreferenced_work_files_to_scratch_and_keeps_referenced_ones`.
     19. **Missing rig providers:** `probe-group plan` copies (or names the command to copy) a ready provider into the rig
         when a mod is unplaced only for it (SCY, YunruCore, ORA).
+    22. **Wing OP cost fixer and legacy wing_data layout** (owner ruling 2026-10-04: 36 blank wing costs in 7 mods set
+        to the nearest vanilla wing's by hand-run script; 6 of the 7 files were the pre-0.8 layout with no `op cost`
+        column at all). Two parts:
+        1. `wing-op-cost-blank` fixer, approval-gated (the value is a comparison, not a conversion): for a wing a
+           variant or a faction's autofit can fit, set the cost of the nearest vanilla RC8 wing with the same role
+           (nearest fleet pts, then fighter count). Built-in or never-fitted wings stay notes. Edit only that cell
+           (quote-aware raw edit, like the scratch script); write the table it used into the review sheet.
+        2. `wing-data-legacy-layout` check and fixer: a header without `tags`, `tier`, `rarity`, `op cost`, `range`,
+           `attackRunRange` or `attackPositionOffset` is the pre-0.8 layout. Rewrite rows into RC8's header by column
+           name (as done for New Galactic Order's ship_systems). The missing values need the same nearest-vanilla
+           comparison and approval; until then only `op cost` is filled. Needs live evidence first: what RC8 does with
+           a wing that has no `range`/`attackRunRange` (fighters that never leave, or vanilla defaults).
     21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
         escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
         edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next
