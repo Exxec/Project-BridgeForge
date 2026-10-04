@@ -1679,6 +1679,8 @@ class ShippableWorkFileFixerTests(unittest.TestCase):
             (mod / "sounds/pack.zip").write_bytes(b"PK\x05\x06" + b"\x00" * 18)
             # An IDE file naming a work file is not a runtime reference (Jackundor's .idea, 2026-09-27).
             _write(mod / ".idea/libraries/data.xml", '<root url="jar://$PROJECT_DIR$/graphics/ships/hull.psd" />')
+            # Nor is a root readme (Hiver Swarm's README named its .rar, ROADMAP 34.18).
+            _write(mod / "README.txt", "Unpack hull.psd and notes.old if you like.")
             self.assertTrue(_findings(scan_mod(mod), "shippable-work-file"))
             plan = compute_fix(mod, "shippable-work-file")
             applied = apply_fix(plan)
@@ -1918,3 +1920,25 @@ class NexerelinCorvusModeImportTests(unittest.TestCase):
             root = Path(directory)
             self._mod(root, '[{"id":"nexerelin"}]')
             self.assertEqual(_findings(scan_mod(root), "nexerelin-corvus-mode-import"), [])
+
+
+class SpawnedShipCaptainFixerTests(unittest.TestCase):
+    # ROADMAP 34.14 (2026-10-04): Traverser's turrets, done by hand, as a fixer; the captain overload is guarded.
+    def test_gives_a_spawned_ship_a_captain_and_the_rescan_is_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            path = root / "data" / "shipsystems" / "Deploy.java"
+            path.parent.mkdir(parents=True)
+            path.write_text(
+                "package data.shipsystems;\n\npublic class Deploy {\n    void go(CombatFleetManagerAPI m, Vector2f at) {\n"
+                '        m.spawnShipOrWing("fx_turret", at, (float) Math.random() * 360f);\n'
+                '        m.spawnShipOrWing("fx_wing", at, 0f);\n    }\n}\n', encoding="utf-8")
+            self.assertEqual(len(_findings(scan_mod(root), "spawned-ship-captain-personality-risk")), 1)
+            apply_fix(compute_fix(root, "spawned-ship-captain-personality-risk"))
+            text = path.read_text(encoding="utf-8")
+            self.assertEqual(_findings(scan_mod(root), "spawned-ship-captain-personality-risk"), [])
+        self.assertIn('m.spawnShipOrWing("fx_turret", at, (float) Math.random() * 360f, 0f, bfSpawnCaptain());', text)
+        self.assertIn('m.spawnShipOrWing("fx_wing", at, 0f);', text)
+        self.assertIn("Personalities.STEADY", text)
+        self.assertTrue(text.rstrip().endswith("}"))

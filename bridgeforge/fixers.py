@@ -50,6 +50,7 @@ SUPPORTED_FINDINGS = (
     "personality-id-unknown",
     "hullmod-instance-state",
     "nexerelin-corvus-mode-import",
+    "spawned-ship-captain-personality-risk",
     "faction-trait-weight-legacy-personality-id",
     "shiproles-wing-id",
     "csv-fullwidth-number",
@@ -1692,6 +1693,70 @@ def _fix_nexerelin_corvus_mode_import(root: Path, options: dict) -> list[FileCha
 
 
 # ---------------------------------------------------------------------------
+# Fixer: spawned-ship-captain-personality-risk (loose scripts only; ROADMAP 34.14)
+# ---------------------------------------------------------------------------
+
+_SPAWN_THREE_ARGS = re.compile(r"\bspawnShipOrWing\s*\(")
+_BF_SPAWN_CAPTAIN = (
+    "\n    // BridgeForge: a ship spawned without a captain has no personality, and RC8's Ship.getPersonality() NPEs\n"
+    "    // on it. RC8's ChiralFigmentStats spawns ships with createPerson() + setPersonality (ROADMAP 34.14).\n"
+    "    private static com.fs.starfarer.api.characters.PersonAPI bfSpawnCaptain() {\n"
+    "        com.fs.starfarer.api.characters.PersonAPI captain = com.fs.starfarer.api.Global.getSettings().createPerson();\n"
+    "        captain.setPersonality(com.fs.starfarer.api.impl.campaign.ids.Personalities.STEADY);\n"
+    "        return captain;\n"
+    "    }\n"
+)
+
+
+def _fix_spawned_ship_captain(root: Path, options: dict) -> list[FileChange]:
+    """spawnShipOrWing("ship", loc, facing) -> spawnShipOrWing("ship", loc, facing, 0f, bfSpawnCaptain()), the
+    overload with a captain (done by hand for Traverser's turrets, 2026-10-04). The 3-argument form has no
+    travel-drive burn, so 0f keeps it. A 4-argument call keeps its own burn. Only the flagged lines change;
+    wings are never flagged. Jar sources need patch-jar-class and are refused."""
+    from .scanner import _blank_java_comments, _call_argument_count
+
+    lines_by_file: dict[str, set[int]] = {}
+    for finding in _findings_of(root, options, "spawned-ship-captain-personality-risk"):
+        if finding.file and "!" not in finding.file and not finding.file.replace("\\", "/").startswith(("jars/", "src/")):
+            if any(e == "call:spawnShipOrWing" for e in finding.evidence):
+                lines_by_file.setdefault(finding.file, set()).update(
+                    int(e.split(":", 1)[1]) for e in finding.evidence if e.startswith("line:"))
+    changes: list[FileChange] = []
+    for rel, lines in sorted(lines_by_file.items()):
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        blank = _blank_java_comments(text, strings=True)
+        edits = []
+        for match in _SPAWN_THREE_ARGS.finditer(blank):
+            if text.count("\n", 0, match.start()) + 1 not in lines:
+                continue
+            count = _call_argument_count(blank, match.start())
+            if count not in (3, 4):
+                continue
+            depth, close = 0, None
+            for i in range(match.end() - 1, len(blank)):
+                depth += {"(": 1, ")": -1}.get(blank[i], 0)
+                if depth == 0:
+                    close = i
+                    break
+            if close is not None:
+                edits.append((close, (", 0f" if count == 3 else "") + ", bfSpawnCaptain()"))
+        if not edits:
+            continue
+        out = text
+        for at, insert in sorted(edits, reverse=True):
+            out = out[:at] + insert + out[at:]
+        if "bfSpawnCaptain() {" not in out:
+            last = _blank_java_comments(out, strings=True).rstrip().rfind("}")
+            out = out[:last] + _BF_SPAWN_CAPTAIN + out[last:]
+        changes.append(FileChange(path=path, before=raw, after=_encode(out, had_bom)))
+    if not changes:
+        raise FixerError("No flagged loose-script spawnShipOrWing call could be given a captain mechanically.")
+    return changes
+
+
+# ---------------------------------------------------------------------------
 # Fixer: hullmod-instance-state (loose scripts only; ROADMAP 34.1)
 # ---------------------------------------------------------------------------
 
@@ -2012,6 +2077,10 @@ def _referencing_bytes(root: Path, skip: set[str]) -> bytes:
         if not path.is_file() or relative in skip or _is_excluded(relative):
             continue
         suffix = path.suffix.lower()
+        # A root readme or changelog is for people, never read by the game (Hiver Swarm's README named its
+        # "Replacement Ships.rar", which kept the archive shipping; ROADMAP 34.18, 2026-10-04).
+        if "/" not in relative and suffix in {".txt", ".md"}:
+            continue
         try:
             if suffix in _REFERENCE_SUFFIXES and path.stat().st_size <= 8 * 1024 * 1024:
                 parts.append(path.read_bytes().lower())
@@ -2624,6 +2693,7 @@ _FIXER_FUNCS = {
     "personality-id-unknown": _fix_personality_id_unknown,
     "hullmod-instance-state": _fix_hullmod_instance_state,
     "nexerelin-corvus-mode-import": _fix_nexerelin_corvus_mode_import,
+    "spawned-ship-captain-personality-risk": _fix_spawned_ship_captain,
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
     "shiproles-wing-id": _fix_shiproles_wing_id,
     "csv-fullwidth-number": _fix_csv_fullwidth_number,

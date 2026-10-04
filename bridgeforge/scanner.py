@@ -2064,7 +2064,7 @@ def _scan_mission_local_fleet_references(root: Path, result: ScanResult, vanilla
             text = source.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for fleet_id, member_type in MISSION_FLEET_REFERENCE_PATTERN.findall(text):
+        for fleet_id, member_type in MISSION_FLEET_REFERENCE_PATTERN.findall(_blank_java_comments(text)):
             resolution = "external-or-core"
             if fleet_id.startswith(prefix):
                 resolution = "resolved-local" if fleet_id in (variants if member_type == "SHIP" else wings) else "missing-local"
@@ -5139,6 +5139,28 @@ def _scan_nexerelin_corvus_mode_import(root: Path, result: ScanResult) -> None:
 _SPAWN_SHIP_CALL_PATTERN = re.compile(r"\b(spawnShipOrWing|spawnFleetMember)\s*\(\s*\"([^\"]+)\"")
 
 
+def _call_argument_count(text: str, index: int) -> int:
+    """Top-level arguments of the call whose argument list starts at or after `index` (the first '(' from
+    there); string literals are expected blanked or quote-free. 0 when the list does not close."""
+    open_index = text.find("(", index)
+    if open_index < 0:
+        return 0
+    depth, count, seen = 0, 1, False
+    for i in range(open_index, len(text)):
+        char = text[i]
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+            if depth == 0:
+                return count if seen else 0
+        elif char == "," and depth == 1:
+            count += 1
+        elif depth >= 1 and not char.isspace():
+            seen = True
+    return 0
+
+
 def _scan_spawned_ship_captain_personality_risk(root: Path, result: ScanResult) -> None:
     """A ship (not wing) spawned directly via spawnShipOrWing/spawnFleetMember gets an AI captain with no personality."""
     wing_ids = _wing_ids_set(root / "data" / "hulls" / "wing_data.csv")
@@ -5153,6 +5175,9 @@ def _scan_spawned_ship_captain_personality_risk(root: Path, result: ScanResult) 
         for match in _SPAWN_SHIP_CALL_PATTERN.finditer(text):
             call_name, spawned_id = match.group(1), match.group(2)
             if spawned_id.endswith("_wing") or spawned_id in wing_ids:
+                continue
+            # The overload with a captain (5 args) is how RC8's ChiralFigmentStats spawns ships: guarded (34.14).
+            if call_name == "spawnShipOrWing" and _call_argument_count(_blank_java_comments(text, strings=True), match.start()) == 5:
                 continue
             line_number = text.count("\n", 0, match.start()) + 1
             result.add(

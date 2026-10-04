@@ -751,6 +751,20 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             self.assertIn("hard-coded-campaign-entity-reference", findings)
             self.assertIn("mission-local-fleet-reference-missing", findings)
 
+    def test_commented_out_mission_fleet_line_is_not_a_reference(self) -> None:
+        # ROADMAP 34.20 (2026-10-04): Scy-Nation's SCY_11 mission escalated on a // line.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"zorg"}', encoding="utf-8")
+            source = root / "data" / "missions" / "fixture"
+            source.mkdir(parents=True)
+            (source / "MissionDefinition.java").write_text(
+                "class MissionDefinition { void define() {\n// api.addToFleet(FleetSide.PLAYER, \"zorg_missing_Configurated\", FleetMemberType.SHIP, \"Z\", true);\n} }",
+                encoding="utf-8",
+            )
+            findings = {item.id for item in scan_mod(root).findings}
+            self.assertNotIn("mission-local-fleet-reference-missing", findings)
+
     def test_scanner_resolves_local_mission_variant_hull_and_weapon_assets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

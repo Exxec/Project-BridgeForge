@@ -163,7 +163,7 @@
     "source-import-unresolved": "decision",
     "source-library-dependency-undeclared": "decision",
     "source-lombok-annotation-processing": "code",
-    "spawned-ship-captain-personality-risk": "code",
+    "spawned-ship-captain-personality-risk": "auto",
     "suspicious-percent-multiplier": "code",
     "system-generation-unguarded": "code",
     "target-bytecode-exceeds-profile": "decision",

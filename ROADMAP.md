@@ -2587,7 +2587,10 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         Still open: confirm live that the entry point runs before mod `onNewGame` (Hiver Swarm in a Nex random sector).
     14. **Spawned-ship captain fixer:** `spawnShipOrWing(id, loc, facing)` for a ship -> the overload with a captain from
         `createPerson()` + `setPersonality(STEADY)` (RC8's `ChiralFigmentStats`); the check then treats that overload as
-        guarded instead of flagging every literal id (Traverser's turrets, by hand 2026-10-04).
+        guarded instead of flagging every literal id (Traverser's turrets, by hand 2026-10-04). **Done 2026-10-04:**
+        `_fix_spawned_ship_captain` (loose scripts; 3-arg calls get `0f`, 4-arg keep their burn) adds a `bfSpawnCaptain()`
+        helper; the check skips 5-arg calls (`_call_argument_count`). Fixer output compiles under RC8's Janino. Test:
+        `SpawnedShipCaptainFixerTests`.
     15. **Orbit-period check follows constants:** when every caller of the helper passes a constant radius, compute the
         period and drop the finding (ORA's six derelicts, 250-425 days).
     16. **Missing-comma JSON repair:** a list item followed by another item on the next line gets a comma, only when that
@@ -2595,11 +2598,63 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     17. **External memory keys, fewer false positives:** a Nexerelin key only written, or read under an
         `isModEnabled("nexerelin")` guard, is a note (Kadur, Hiver).
     18. **Stray work archives move automatically:** `shippable-work-file` for a `.rar`/`.zip`/`.7z` in the mod root moves
-        it to `scratch/moved-work-files/` (Hiver's `Replacement Ships.rar`).
+        it to `scratch/moved-work-files/` (Hiver's `Replacement Ships.rar`). **Done 2026-10-04:** the fixer already
+        existed; it kept the archive because Hiver's root README named it. Root `.txt`/`.md` no longer count as
+        references. Test: `test_moves_unreferenced_work_files_to_scratch_and_keeps_referenced_ones`.
     19. **Missing rig providers:** `probe-group plan` copies (or names the command to copy) a ready provider into the rig
         when a mod is unplaced only for it (SCY, YunruCore, ORA).
     20. **Commented-out mission fleet lines:** `mission-local-fleet-reference-missing` matched a `//` line (Scy-Nation's
         `SCY_11_soldierOfFortune`, MissionDefinition.java:52, 2026-10-04); blank comments first, as other source checks do.
+        **Done 2026-10-04.** Test: `test_commented_out_mission_fleet_line_is_not_a_reference`.
+35. **Plan: features shared with the sister programs, both ways (owner request 2026-10-04).** SPW
+    (`Documents/Starsector project workbench`, `Exxec/SPW`), Project Go (`Documents/Starsector project go`) and
+    Salvor (`Documents/Project Salvor`) stay separate programs with no shared runtime code; ports are copies with
+    their own tests, or versioned JSON files one writes and the other reads. Project Go's and SPW's own
+    interchange designs (`docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md`, `docs/SISTER_REPO_INTERCHANGE_DESIGN.md`,
+    2026-09-27) are the contracts to follow.
+
+    From BridgeForge to the others:
+    1. **Salvor reads per-ship state keys:** `<HullMod>_bfState` / `ART_organicHull_state` in ship custom data are
+       BridgeForge's (34.1); Salvor's diagnose names them instead of reporting unknown objects, and warns when a
+       save from before the patch still holds the mod's old field values.
+    2. **Salvor reads the sector mode:** `$nex_randomSector` / `$nex_corvusMode` in sector memory decide whether a
+       missing Corvus system is a fault (vanilla sector) or expected (Nexerelin random sector) before any removal plan.
+    3. **Salvor uses `progress.py` and checkpoints** for save folders and large saves (the 2026-09-27 rule).
+    4. **Salvor records "keep as is" rulings** with a reason, as `escalation accept` does, so a later run does not
+       flag them again.
+    5. **SPW gets the RC8 org.json leniency rules:** BridgeForge's `_parse_json` (javap-backed, see
+       [[bridgeforge-json-leniency-gap]]) plus the missing-comma repair (34.16) and the early-closing root check
+       (`json-content-after-root`, Holy Covenant's stray brace), so both tools agree on what RC8 loads.
+    6. **SPW compiles loose scripts with RC8's Janino** before it writes one (`compile_check.janino_compile`).
+    7. **Project Go gets BridgeForge's untranslated-text list:** `player-text-non-english` / `non-ascii-identifier`
+       file+key evidence as an input that names what its extractor skipped (it missed 861 strings on Nightcross,
+       108 units on FlowerGod). Fits Project Go's own P7 (`docs/BRIDGEFORGE_METHOD_CONVERSION.md`).
+    8. **Project Go path wrapper:** copy to an ASCII, space-free path, run `ssmt-cli`, copy back; removes the
+       non-ASCII path and `JAVA_HOME`-with-space launcher failures.
+    9. **One evidence-row format for all three:** `docs/RC8_BEHAVIOUR.md` (one row per live-proven fact, cited by id)
+       adopted by Salvor for save-format facts and by SPW for runtime facts.
+
+    From the others to BridgeForge:
+    10. **hs_err crash logs in `log-triage`** (SPW `crash_log.find_crash_logs/parse_crash_log`): a JVM crash
+        (`hs_err_pid*.log`, one sits in this checkout today) is triaged with the problematic frame, the Java frames
+        that belong to a mod (SPW `jar_ownership`), and memory figures, beside the game log and `windows.txt`.
+    11. **Rig core integrity** (SPW `core_integrity.classify_core_integrity`): before `bf-test launch`, hash the rig's
+        `starsector-core` against a recorded RC8 baseline, so "the rig matches vanilla RC8" is checked, not assumed.
+    12. **SPW performance export into `spw_bridge.py`:** read SPW's versioned `performance-report.json` and mod
+        identity inventory instead of guessed key aliases; keep old imports as unverified. The inventory's duplicate
+        ids, renamed-disabled `mod_info`, and stale `enabled_mods.json` feed `probe-group` and the rig preflight.
+    13. **Translated-clone audit** (Project Go `PatchBuilder`'s `TranslatedCloneAudit`): before `archive`/`release`,
+        compare every file of the shipped copy to `original/`; a file may differ only when a recorded fix or
+        translation explains it. Catches stray edits and lost files that today only a probe run would show.
+    14. **Glossary for translations** (Project Go `GLOSSARY_FORMAT.md`, schema v1): `translate-apply` uses a shared
+        term list so a faction, ship or weapon name is translated the same way across files and mods.
+    15. **Project Go's standard CSV text columns** (`StandardCsvSchemas`): which columns of which vanilla CSVs are
+        player-visible text, so `player-text-non-english` and `translate-export` check exactly those columns.
+    16. **Project Go coverage export into the translation review:** join its `localization-coverage.json` on exact
+        source hash and path; a mismatch blocks a "fully translated" claim.
+    17. **Salvor's save fingerprint** (SPW `save_fingerprint`): `save-baseline` records which mods and versions a save
+        was made with, so a probe or a Salvor repair can say a save and a rig do not match before loading it.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit
