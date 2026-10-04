@@ -2680,6 +2680,13 @@ whether the result passed; recurring agent fixes become deterministic fixers.
     32. **Definitions index:** a derived table in bridgeforge-state (kind, id or asset path, mod id, version,
         gameVersion, source, file) built from the corpus index, so "who defines X / ships Y" is one query. Small next to
         the corpus index (which holds full file text); feeds 34.26 and 34.24.
+    33. **Translation false positives and gaps found by the 2026-10-04 batch:** (a) `player-text-non-english` counted
+        CJK in trailing `#` comments of JSON-like files as player text: all 8,781 of Mirfak Parcel Service's characters
+        are comments (`"displayName":"Mirfak Parcel Service",  # 显示名称`) and translate-export rightly finds 0 units.
+        Count only what translate-export would export. (b) **Done:** translate-export skipped nothing in CSV rows the
+        game ignores (first cell starting `#`); FSF's `rules.csv` comment rows came back blank from the agent and blocked
+        the mod. Test: `CommentedCsvRowTests`. Same day: intake retries a Windows PermissionError on the final rename
+        (the 9-mod Yunru pack's freshly extracted tree, held open briefly; failed twice before).
     21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
         escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
         edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next

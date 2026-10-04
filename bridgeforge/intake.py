@@ -31,6 +31,22 @@ def operation_root(repo_root: Path, *, create: bool = False) -> Path:
     return operation
 
 
+def _rename_with_retry(source: Path, target: Path, attempts: int = 8) -> None:
+    """Rename, retrying a Windows PermissionError: a freshly extracted tree is often held open for a moment by
+    antivirus or indexing, so renaming it failed with 'Access is denied' twice in a row for the 9-mod Yunru pack
+    (2026-10-04). Any other error, or the last attempt's, is raised."""
+    import time
+
+    for attempt in range(attempts):
+        try:
+            source.rename(target)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.5 * (attempt + 1))
+
+
 def _folder_name(name: str) -> str:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 _.\-]*", name) or _normalized_member_name(name) != name:
         raise ValueError("mod folder name must be one portable component starting with a letter/digit")
@@ -133,9 +149,9 @@ def intake_archive(archive: Path, repo_root: Path, *, name: str | None = None,
         moved = []
         try:
             for child in sorted(p for p in stage.iterdir() if p != marker):
-                child.rename(destination / child.name)
+                _rename_with_retry(child, destination / child.name)
                 moved.append(child.name)
-            marker.rename(destination / marker.name)
+            _rename_with_retry(marker, destination / marker.name)
         except BaseException:
             for child_name in reversed(moved):
                 (destination / child_name).rename(stage / child_name)

@@ -321,3 +321,16 @@ class PrefillTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CommentedCsvRowTests(unittest.TestCase):
+    # 2026-10-04: FSF's rules.csv "#..." rows were exported, came back blank and blocked the whole mod.
+    def test_rows_starting_with_hash_are_not_exported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "mod"
+            (mod / "data" / "campaign").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            (mod / "data" / "campaign" / "rules.csv").write_text(
+                "id,trigger,text\n#通用的舰队招呼,,\ngreet,OpenDialog,你好\n", encoding="utf-8")
+            entries = export_translation(mod)["entries"]
+        self.assertEqual([e["source"] for e in entries], ["你好"])

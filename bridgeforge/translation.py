@@ -361,8 +361,11 @@ def _units(mod_dir: Path, rel: str, path: Path):
         text = path.read_bytes().decode("utf-8-sig", "replace")
         cells = list(_csv_cells(text))
         header, keys = _csv_row_keys(cells)
+        # A row whose first cell starts with '#' is a comment the game skips: never player text (FSF's rules.csv
+        # "#通用的舰队招呼" rows came back blank from the agent and blocked the whole mod, 2026-10-04).
+        commented = {row for row, col, s, e, value, q in cells if col == 0 and value.lstrip().startswith("#")}
         for row, col, s, e, value, q in cells:
-            if row and _has_cjk(value):
+            if row and row not in commented and _has_cjk(value):
                 column = header[col] if col < len(header) else f"#{col}"
                 yield {"id": f"csv:{rel}#{keys.get(row, row)}:{column}", "file": rel, "kind": "csv", "context": {"row": keys.get(row), "column": column}, "source": value}
     elif suffix in JSONLIKE_SUFFIXES or rel == "mod_info.json":
