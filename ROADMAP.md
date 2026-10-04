@@ -2566,6 +2566,9 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        (`java.lang.reflect`, sandbox-forbidden), a method body emptied or turned into a no-op, `this` hidden behind a
        local to dodge `campaign-memory-live-object` (ICE), live objects moved to a static map (Void-Tec TimerBar),
        imports of nested classes at the wrong path (Polaris). Add to `escalation_review.FLAGS`.
+       **Done 2026-10-04:** flags `reflection`, `static-map-state`, `this-hidden-in-local`, `nested-class-import` and
+       `method-emptied` (a method declaration with an empty body, or a net deletion ending in a bare return; an empty
+       `catch` stays `exception-swallowed`). Review prompts only. Test: `test_patterns_rejected_by_hand_are_flagged`.
     8. **Batch runner as a command:** `escalation batch MODS... [--max-minutes 55]` with the rules the scratch script
        learned: stop at the first usage-limit message from this run only, skip a mod whose workspace lock is held,
        kill the agent tree on timeout, stop before the hour cap and print what is left so the next run resumes.
@@ -2574,7 +2577,12 @@ whether the result passed; recurring agent fixes become deterministic fixers.
        mod's own source tree), with the new class diff shown first; refuse only when the source is not faithful.
     10. **Supersession by content, not id:** a same-id 0.98 release supersedes only when it keeps most of the old
         content ids (ships, weapons, hull mods); otherwise NEWER_DIFFERENT for a person (SEEKER 0.2 was closed by
-        mistake; only 5 of its 37 ships are in 0.6.6).
+        mistake; only 5 of its 37 ships are in 0.6.6). **Done 2026-10-04:** `supersession.content_overlap` compares
+        `kind:id` rows of ship_data, weapon_data and hull_mods; under 50% of ours kept is `NEWER_DIFFERENT`; an
+        unreadable side keeps the verdict with `content_overlap: null`. Rechecked the 101 SUPERSEDED verdicts in the
+        queue's SUPERSESSION.json: 71 confirmed, 27 unreadable (no content CSVs), 3 NEWER_DIFFERENT: SEEKER (22 of 152,
+        14%), Cebby-Ship-Pack (0 of 5) and prv-Starworks (131 of 267, 49%), all three for the owner to decide.
+        Test: `ContentOverlapTests`.
     11. **Ready mods to live-test groups automatically:** `probe-group plan` over `ready-list` output, with groups sized
         by mod weight and conflicts (same id, same vanilla files overridden), so one rig session tests many mods.
     12. **`escalation accept WORKSPACE ID[:FILE_PART]... --reason`** (the scratch script used for six mods on

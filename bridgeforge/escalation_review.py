@@ -25,7 +25,19 @@ FLAGS = (
     ("random-or-save-logic", "±", re.compile(r"\b(Random|getSeed|setSeed|getPersistentData|getMemoryWithoutUpdate|MathUtils\.getRandom)\b")),
     ("loop-rewritten", "±", re.compile(r"^\s*(for|while|do)\b|\.forEach\(|\bIterator\b")),
     ("exception-swallowed", "+", re.compile(r"catch\s*\(\s*(Throwable|Exception|RuntimeException)\b")),
+    # ROADMAP 34.7 (2026-10-04): patterns rejected by hand in the agent batches. Review prompts, never verdicts.
+    # Mountain-and-Sea's agent used reflection, which RC8's script sandbox forbids.
+    ("reflection", "+", re.compile(r"\bjava\.lang\.reflect\b|\.getDeclared(?:Field|Method)s?\s*\(|\.setAccessible\s*\(|\bClass\.forName\s*\(")),
+    # Void-Tec's TimerBar moved per-ship state into a static map: session-only, never saved, leaks across battles.
+    ("static-map-state", "+", re.compile(r"\bstatic\b[^=;(]*\b(?:Map|HashMap|WeakHashMap|ConcurrentHashMap|LinkedHashMap)\s*<")),
+    # ICE's agent hid `this` behind a local to dodge campaign-memory-live-object.
+    ("this-hidden-in-local", "+", re.compile(r"\b\w+(?:<[^>]*>)?\s+\w+\s*=\s*this\s*;")),
+    # Polaris's agent imported a nested class at the wrong path; worth a look whenever one is added.
+    ("nested-class-import", "+", re.compile(r"^\s*import\s+[\w.]*\.[A-Z]\w*\.[A-Z]\w*\s*;")),
 )
+# A method declaration (return type, name, parameters) whose body is empty; `catch (...) {}` is a different flag.
+_EMPTY_BODY = re.compile(r"^\s*(?:(?:public|protected|private|static|final|synchronized)\s+)*[\w<>\[\],.]+\s+(?!catch\b|if\b|while\b|for\b|switch\b)\w+\s*\([^)]*\)\s*(?:throws\s+[\w.,\s]+)?\{\s*\}")
+_BARE_RETURN = re.compile(r"^\s*return(?:\s+(?:null|false|true|0|0f))?\s*;\s*$")
 TEXT_SUFFIXES = {".java", ".json", ".csv", ".ship", ".variant", ".wpn", ".skin", ".system", ".faction", ".txt", ".md", ".ini", ".settings"}
 
 
@@ -54,6 +66,11 @@ def flag_diff(lines: list[str]) -> list[str]:
             flags.add(name)
     if len(removed) > len(added) + 5:
         flags.add("net-deletion")
+        # Void-Tec's HullModDataStorage save hook was gutted to a bare return (34.7).
+        if any(_EMPTY_BODY.search(line) or _BARE_RETURN.match(line) for line in added):
+            flags.add("method-emptied")
+    elif any(_EMPTY_BODY.search(line) for line in added):
+        flags.add("method-emptied")
     return sorted(flags)
 
 

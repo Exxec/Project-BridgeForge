@@ -1915,6 +1915,19 @@ class NexerelinCorvusModeImportTests(unittest.TestCase):
         self.assertIn('if ((!Global.getSector().getMemoryWithoutUpdate().getBoolean("$nex_randomSector"))) { }', text)
         self.assertIn("import com.fs.starfarer.api.Global;", text)
 
+    def test_not_flagged_when_a_jar_class_shadows_the_loose_file(self) -> None:
+        # Kadur Remnant ships its plugin both loose and in KadurRemnant.jar; the jar class wins (2026-10-04).
+        import zipfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root)
+            (root / "mod_info.json").write_text('{"id":"fixture","dependencies":[],"jars":["jars/m.jar"]}', encoding="utf-8")
+            (root / "jars").mkdir()
+            with zipfile.ZipFile(root / "jars" / "m.jar", "w") as jar:
+                jar.writestr("data/scripts/Plugin.class", b"\xca\xfe\xba\xbe\x00\x00\x00\x3d")
+            self.assertEqual(_findings(scan_mod(root), "nexerelin-corvus-mode-import"), [])
+
     def test_not_flagged_when_the_mod_requires_nexerelin(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

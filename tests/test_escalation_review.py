@@ -25,6 +25,18 @@ class ReviewSheetTests(unittest.TestCase):
     def test_flags_the_changes_past_batches_needed_a_human_for(self) -> None:
         self.assertEqual(flag_diff(["-  hints: SHIP_WITH_MODULES", "+  hints: "]), ["hint-or-tag-removed"])
         self.assertEqual(flag_diff(["-  hints: SHIP_WITH_MODULES", "+  hints: SHIP_WITH_MODULES, CARRIER"]), [])
+
+    def test_patterns_rejected_by_hand_are_flagged(self) -> None:
+        # ROADMAP 34.7 (2026-10-04): Mountain-and-Sea, Void-Tec, ICE and Polaris attempts.
+        self.assertEqual(flag_diff(["+import java.lang.reflect.Field;"]), ["reflection"])
+        self.assertEqual(flag_diff(["+    f.setAccessible(true);"]), ["reflection"])
+        self.assertEqual(flag_diff(["+    private static final Map<String, Float> TIMERS = new HashMap<>();"]), ["static-map-state"])
+        self.assertEqual(flag_diff(["+        Object self = this;"]), ["this-hidden-in-local"])
+        self.assertEqual(flag_diff(["+import data.scripts.ui.Outer.Inner;"]), ["nested-class-import"])
+        self.assertEqual(flag_diff(["+    public void onGameSave() {}"]), ["method-emptied"])
+        gutted = [f"-        line {i};" for i in range(8)] + ["+        return;"]
+        self.assertEqual(flag_diff(gutted), ["method-emptied", "net-deletion"])
+        self.assertEqual(flag_diff(["+        float x = this.y;", "+import com.fs.starfarer.api.Global;"]), [])
         self.assertEqual(flag_diff(["+Random r = new Random(seed);"]), ["random-or-save-logic"])
         self.assertEqual(flag_diff(["-for (String s : list) {", "+list.forEach(s -> {"]), ["loop-rewritten"])
         self.assertEqual(flag_diff(["+} catch (Throwable t) {}"]), ["exception-swallowed"])

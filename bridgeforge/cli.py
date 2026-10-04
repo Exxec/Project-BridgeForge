@@ -1445,10 +1445,12 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
         for record in result["mods"]:
-            if record["verdict"] in ("SUPERSEDED", "SAME_RELEASE", "NEWER_ELSEWHERE"):
+            if record["verdict"] in ("SUPERSEDED", "SAME_RELEASE", "NEWER_ELSEWHERE", "NEWER_DIFFERENT"):
                 ref = record["reference"]
                 renamed = f" [named '{ref['name']}' there]" if ref.get("name") and ref["name"].strip().lower() != record["name"].strip().lower() else ""
                 print(f"{record['verdict']:16} {record['workspace']}: ours {record['version']}, theirs {ref['version']} ({ref['game_version'] or 'no gameVersion'}) at {ref['path']}{renamed}")
+                if record["verdict"] == "NEWER_DIFFERENT":
+                    print(f"                 {record['note']}")
         print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())))
         print(f"Written: {result['result_path']}")
         return 0

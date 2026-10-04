@@ -5182,6 +5182,11 @@ def _scan_nexerelin_corvus_mode_import(root: Path, result: ScanResult) -> None:
         blank = _blank_java_comments(text, strings=True)
         if not _NEX_SECTOR_MANAGER_IMPORT.search(blank):
             continue
+        # A jar class of the same name wins and the loose file is never compiled (Kadur Remnant ships
+        # data/scripts/KadurModPlugin.java beside the same class in KadurRemnant.jar; read 2026-10-04).
+        package = re.search(r"^\s*package\s+([\w.]+)\s*;", blank, re.M)
+        if package and f"{package.group(1)}.{source.stem}" in result.compiled_class_names:
+            continue
         calls = len(_NEX_CORVUS_CALL.findall(blank))
         others = len(re.findall(r"\bSectorManager\b", blank)) - calls - 1
         if calls and others == 0 and "exerelin." not in _NEX_SECTOR_MANAGER_IMPORT.sub("", blank):

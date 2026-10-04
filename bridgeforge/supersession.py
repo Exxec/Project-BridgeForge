@@ -6,7 +6,8 @@ whose author had since released an RC8 version: reviving the old copy was wasted
 the reference folders (the real install's mods/, a modpack) by mod id and compares versions with each
 workspace's original download. Read-only: it reports and never changes a workspace's status.
 
-Verdicts: SUPERSEDED (a reference copy targets 0.98 with a newer version), SAME_RELEASE (the same version already
+Verdicts: SUPERSEDED (a reference copy targets 0.98 with a newer version and keeps at least half our content),
+NEWER_DIFFERENT (newer, but keeps under half our ships, weapons and hull mods: a person decides), SAME_RELEASE (the same version already
 targets 0.98 there: nothing newer, but a working copy exists), NEWER_ELSEWHERE (a newer copy exists but targets an
 older game), NOT_SUPERSEDED (a reference copy exists but is older), NO_MATCH. Both mod names are recorded: a
 shared id with a different name (Cryosleeper 2 in AoTD - Dreams of Past) needs a look.
@@ -129,7 +130,79 @@ def _name_key(name: str) -> str:
     return key if len(key) >= 6 else ""  # too short to identify a mod
 
 
+CONTENT_FILES = {"hull": "data/hulls/ship_data.csv", "weapon": "data/weapons/weapon_data.csv", "hullmod": "data/hullmods/hull_mods.csv"}
+# Under half of our ships, weapons and hull mods in the newer copy: a different mod under the same id or name
+# (ROADMAP 34.10). SEEKER 0.2 (Tartiflette, 0.65.2a) shares 5 of 37 ships, 16 of 108 weapons and 1 of 7 hull mods
+# with SEEKER 0.6.6 and was wrongly closed as SUPERSEDED (owner, 2026-10-04).
+MIN_CONTENT_OVERLAP = 0.5
+
+
+def _content_ids(root: Path) -> set[str] | None:
+    """`kind:id` for every row of the mod's ship, weapon and hull mod CSVs; None when it has none of them."""
+    import csv
+    import io
+
+    found: set[str] = set()
+    seen_any = False
+    for kind, relative in CONTENT_FILES.items():
+        path = Path(root) / relative
+        if not path.is_file():
+            continue
+        seen_any = True
+        try:
+            text = path.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            continue
+        for row in csv.DictReader(io.StringIO(text)):
+            value = (row.get("id") or "").strip()
+            if value and not value.startswith("#"):
+                found.add(f"{kind}:{value}")
+    return found if seen_any else None
+
+
+def _mod_root(workspace: Path) -> Path:
+    original = workspace / "original"
+    if original.is_dir():
+        infos = sorted(original.rglob("mod_info.json"), key=lambda p: len(p.parts))
+        if infos:
+            return infos[0].parent
+    return workspace / "working"
+
+
+def content_overlap(workspace: Path, reference_path: str) -> dict | None:
+    """How much of our original's content the reference copy keeps; None when either side cannot be read (a
+    reference inside an archive, "x.zip!inner", or a mod with no ship/weapon/hull mod CSV)."""
+    if "!" in reference_path:
+        return None
+    reference = Path(reference_path)
+    if reference.name.lower() == "mod_info.json":  # the corpus index records the mod_info file, not its folder
+        reference = reference.parent
+    if not reference.is_dir():
+        return None
+    ours, theirs = _content_ids(_mod_root(workspace)), _content_ids(reference)
+    if not ours or theirs is None:
+        return None
+    shared = ours & theirs
+    return {"ours": len(ours), "shared": len(shared), "share": round(len(shared) / len(ours), 3)}
+
+
+def _apply_content_overlap(workspace: Path, record: dict) -> dict:
+    if record.get("verdict") != "SUPERSEDED" or not record.get("reference"):
+        return record
+    overlap = content_overlap(workspace, record["reference"]["path"])
+    record["content_overlap"] = overlap
+    if overlap is not None and overlap["share"] < MIN_CONTENT_OVERLAP:
+        record["verdict"] = "NEWER_DIFFERENT"
+        record["note"] = (f"the newer copy keeps {overlap['shared']} of our {overlap['ours']} ships/weapons/hull mods "
+                          f"({overlap['share']:.0%}): likely a different mod under the same {record.get('matched_by', 'id')}; a person decides")
+    return record
+
+
 def judge(workspace: Path, index: dict[str, list[dict]]) -> dict:
+    return _apply_content_overlap(workspace, _judge_by_version(workspace, index))
+
+
+def _judge_by_version(workspace: Path, index: dict[str, list[dict]]) -> dict:
     working = _load_lenient_json_file(workspace / "working" / "mod_info.json") or {}
     original = _original_info(workspace)
     mod_id = str(working.get("id") or original.get("id") or "")
