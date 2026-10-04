@@ -61,3 +61,14 @@ class ProcgenArgsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProcgenFalsePositiveTests(unittest.TestCase):
+    # done-audit 2026-10-04: Exigency's retrograde Tasserus orbits and Arkgneisis' mission planets were flagged.
+    def test_retrograde_orbit_and_mission_addplanet_are_not_suspect(self) -> None:
+        self.assertEqual(source_suspects('system.addPlanet("a", star, "A", "barren", 0, 100, 5000, -45);'), [])
+        mission = ("  public void defineMission(com.fs.starfarer.api.mission.MissionDefinitionAPI);\n"
+                   "    Code:\n       0: fconst_0\n       1: fconst_0\n       2: fconst_0\n       3: ldc #9 // String star\n"
+                   "       5: fconst_0\n       6: invokeinterface #11,  6 // InterfaceMethod com/fs/starfarer/api/mission/"
+                   "MissionDefinitionAPI.addPlanet:(FFFLjava/lang/String;F)V\n")
+        self.assertEqual(javap_suspects(mission), [])

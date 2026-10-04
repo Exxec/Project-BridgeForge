@@ -10,7 +10,9 @@ planet radius, shifting `addPlanet(..., 0, 100, 5000, 100)` to `(..., 0, 0, 100,
 - addPlanet(String id, SectorEntityToken focus, String name, String type, float angle, float radius,
   float orbitRadius, float orbitDays)
 
-Only literal values are judged: radius <= 0, corona < 0, orbitRadius < 0 or orbitDays <= 0 is suspect. Loose and
+Only literal values are judged: radius <= 0, corona < 0, orbitRadius < 0 or orbitDays == 0 is suspect. A negative
+orbitDays is a retrograde orbit, as Exigency's author used for Tasserus (2026-10-04). MissionDefinitionAPI's
+addPlanet(x, y, radius, type, gravity) is another method: jar calls are judged only on LocationAPI/StarSystemAPI. Loose and
 bundled sources are parsed; jar classes are read with javap when a JDK is available.
 """
 from __future__ import annotations
@@ -56,7 +58,7 @@ def judge(method: str, floats: list[float | None], has_color: bool = False) -> l
             problems.append(f"planet radius {radius:g}")
         if orbit_radius is not None and orbit_radius < 0:
             problems.append(f"orbit radius {orbit_radius:g}")
-        if orbit_days is not None and orbit_days <= 0:
+        if orbit_days is not None and orbit_days == 0:  # negative is a retrograde orbit (Exigency's Tasserus)
             problems.append(f"orbit days {orbit_days:g}")
     return problems
 
@@ -115,6 +117,9 @@ def javap_suspects(listing: str) -> list[tuple[str, str, list[str]]]:
         invoke = _INVOKE.match(line)
         if invoke:
             method, descriptor = invoke.group(2), invoke.group(3)
+            if not invoke.group(1).endswith(("/LocationAPI", "/StarSystemAPI")):
+                floats, pending_int = [], None
+                continue
             count = descriptor.count("F")
             values = floats[-count:] if count and len(floats) >= count else [None] * count
             if method == "initStar":

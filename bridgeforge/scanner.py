@@ -5237,6 +5237,24 @@ def _scan_faction_known_tags(root: Path, result: ScanResult, vanilla_core: Path 
         return
     bases = [root, vanilla_core, *[Path(d) for d in result.migration_context.get("dependency_roots") or []]]
     carried = {key: set().union(*(_csv_tags(b / rel) for b in bases for rel in files)) for key, files in _KNOWN_LISTS.items()}
+    # Skins carry tags too: RC8's XIV_bp and heg_aux_bp are only on data/hulls/skins/*.skin (dominator_xiv.skin).
+    for base in bases:
+        skins = base / "data" / "hulls" / "skins"
+        for skin in sorted(skins.glob("*.skin")) if skins.is_dir() else []:
+            spec = _load_lenient_json_file(skin)
+            if isinstance(spec, dict) and isinstance(spec.get("tags"), list):
+                tags = {t for t in spec["tags"] if isinstance(t, str)}
+                carried["knownShips"] |= tags
+                carried["priorityShips"] |= tags
+    # A tag RC8's own factions list in the same block is harmless however little it matches (hegemony.faction's
+    # knownWeapons tag "hegemony", omega.faction's knownFighters tag "omega"; their explicit lists do the work).
+    vanilla_dir = vanilla_core / "data" / "world" / "factions"
+    for vanilla in sorted(vanilla_dir.glob("*.faction")) if vanilla_dir.is_dir() else []:
+        spec = _load_lenient_json_file(vanilla)
+        for key in _KNOWN_LISTS:
+            block = spec.get(key) if isinstance(spec, dict) else None
+            if isinstance(block, dict) and isinstance(block.get("tags"), list):
+                carried[key] |= {t for t in block["tags"] if isinstance(t, str)}
     for path in factions:
         spec = _load_lenient_json_file(path)
         if not isinstance(spec, dict):

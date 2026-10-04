@@ -65,3 +65,22 @@ class FactionKnownTagTests(unittest.TestCase):
                 '{"id": "fx", "knownShips": {"tags": ["fx_bp", "base_bp", "fx_other"], "hulls": []}}', encoding="utf-8")
             found = [f for f in scan_mod(mod, vanilla_core=core).findings if f.id == "faction-known-tag-unmatched"]
         self.assertEqual([f.evidence for f in found], [["list:knownShips", "tag:fx_bp"]])
+
+    def test_skin_tags_and_tags_vanilla_factions_use_are_not_flagged(self) -> None:
+        # done-audit 2026-10-04: Amogus' hegemony.faction (XIV_bp on vanilla skins; knownWeapons tag "hegemony").
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core = root / "core"
+            (core / "data" / "hulls" / "skins").mkdir(parents=True)
+            (core / "data" / "world" / "factions").mkdir(parents=True)
+            (core / "data" / "hulls" / "ship_data.csv").write_text("name,id,tags\nWolf,wolf,base_bp\n", encoding="utf-8")
+            (core / "data" / "hulls" / "skins" / "wolf_xiv.skin").write_text('{"skinHullId": "wolf_xiv", "tags": ["XIV_bp"]}', encoding="utf-8")
+            (core / "data" / "world" / "factions" / "hegemony.faction").write_text(
+                '{"id": "hegemony", "knownWeapons": {"tags": ["hegemony"]}}', encoding="utf-8")
+            mod = root / "mod"
+            (mod / "data" / "world" / "factions").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            (mod / "data" / "world" / "factions" / "hegemony.faction").write_text(
+                '{"id": "hegemony", "knownShips": {"tags": ["XIV_bp"]}, "knownWeapons": {"tags": ["hegemony"]}}', encoding="utf-8")
+            found = [f for f in scan_mod(mod, vanilla_core=core).findings if f.id == "faction-known-tag-unmatched"]
+        self.assertEqual(found, [])
