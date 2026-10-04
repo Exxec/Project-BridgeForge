@@ -38,3 +38,16 @@ class RenamedIdsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OutsideProviderSourcesTests(unittest.TestCase):
+    # ROADMAP 34.25: opt-in per queue, so tests and other machines scan the same way.
+    def test_reads_the_queue_file_and_is_empty_without_it(self) -> None:
+        from bridgeforge.revive import outside_provider_sources
+
+        with resolved_temp_dir() as root:
+            none = outside_provider_sources(root)
+            _write(root / "PROVIDER_SOURCES.json", '{"sources": ["C:/mods", "D:/pack/mods"]}')
+            some = outside_provider_sources(root)
+        self.assertEqual(none, [])
+        self.assertEqual([p.name for p in some], ["mods", "mods"])

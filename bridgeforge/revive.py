@@ -86,6 +86,23 @@ def load_policy(path: Path | None) -> dict:
     return {"approved_fixers": dict(data.get("approved_fixers") or {})}
 
 
+PROVIDER_SOURCES_FILE = "PROVIDER_SOURCES.json"
+
+
+def outside_provider_sources(queue: Path) -> list[Path]:
+    """Extra mods/ folders whose copies of a declared dependency count when scanning (ROADMAP 34.25, 2026-10-04):
+    `<queue>/PROVIDER_SOURCES.json` as {"sources": [paths]}. Opt-in per queue so a test or another machine scans the
+    same way; list only 0.98 collections (an install's mods/, a 0.98 modpack): an older archive's copies would make
+    content RC8's version removed look present (Roider Union 1.4.5 still has what 2.3.1 dropped)."""
+    path = Path(queue) / PROVIDER_SOURCES_FILE
+    if not path.is_file():
+        return []
+    try:
+        return [Path(p) for p in json.loads(path.read_text(encoding="utf-8")).get("sources") or []]
+    except (OSError, ValueError):
+        return []
+
+
 def _scan(working: Path, vanilla_core: Path | None) -> list[dict]:
     """Scan findings minus the ones the mod's own baseline accepts (working/reports/baseline*.json):
     an accepted finding is never fixed, packeted or counted against the mod."""
@@ -98,7 +115,7 @@ def _scan(working: Path, vanilla_core: Path | None) -> list[dict]:
     # And the queue itself: a declared dependency revived alongside (Communist Clouds -> Vayra Merged) is not in the
     # rig, and its content read as unresolved in mods that already declared it (2026-10-01).
     queue = Path(working).resolve().parent.parent
-    providers = [p for p in (rig_mods, queue) if p.is_dir()] or None
+    providers = [p for p in (rig_mods, queue, *outside_provider_sources(queue)) if p.is_dir()] or None
     findings = [asdict(f) for f in scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None, provider_roots=providers).findings]
     _record_settings_baseline(working, findings)
     return [f for f in findings if finding_dict_baseline_key(f) not in accepted]
@@ -544,7 +561,7 @@ def _draft_report(working: Path, vanilla_core: Path | None, status: str, *, writ
         return {"status": "NOT_DRAFTED", "reason": f"revive ended {status}; a report is drafted only when nothing is left to do"}
     rig_mods = Path(working).resolve().parent.parent / "_rig" / "mods"
     queue = Path(working).resolve().parent.parent  # declared dependencies revived alongside, as in _scan
-    providers = [p for p in (rig_mods, queue) if p.is_dir()] or None
+    providers = [p for p in (rig_mods, queue, *outside_provider_sources(queue)) if p.is_dir()] or None
     draft = (write_revival_report_draft(working, vanilla_core, providers) if write
              else draft_revival_report(working, vanilla_core, providers))
     return {key: value for key, value in draft.items() if key not in ("report_text", "plan_text")}

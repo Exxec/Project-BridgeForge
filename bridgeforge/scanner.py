@@ -6293,24 +6293,32 @@ def _scan_carrier_bays_proposal(root: Path, result: ScanResult, vanilla_core: Pa
         )
 
 
+_DEPENDENCY_ROOTS_CACHE: dict[tuple, list[Path]] = {}
+
+
+def _dependency_roots(root: Path, provider_roots: list[Path] | None) -> list[Path]:
+    """Every folder, in any provider root, that provides one of the mod's declared dependencies. All copies count
+    (ROADMAP 34.25, 2026-10-04): the queue's revived Scy Nation lacked ids the modpack's newer copy defines, and
+    keeping one copy per id hid them; 16 addons' content and 6 mods' art were in installed providers."""
+    if not provider_roots:
+        return []
+    key = (str(Path(root).resolve()), tuple(str(Path(r)) for r in provider_roots))
+    if key not in _DEPENDENCY_ROOTS_CACHE:
+        from .java_toolchain import declared_dependencies
+        from .substitutes import provider_index
+
+        deps = set(declared_dependencies(root) or [])
+        _DEPENDENCY_ROOTS_CACHE[key] = [Path(p.path) for p in provider_index([Path(r) for r in provider_roots], exclude=root)
+                                        if p.mod_id in deps] if deps else []
+    return _DEPENDENCY_ROOTS_CACHE[key]
+
+
 def _dependency_content_ids(root: Path, provider_roots: list[Path] | None) -> dict[str, set[str]]:
     """Hull mod, weapon, wing and hull ids a declared dependency defines (SEEKER 0.6.6 builds MagicLib's
-    ML_interferenceWarning into its hulls; 2026-09-28). Explicit provider_roots only, like _dependency_jar_class_names."""
+    ML_interferenceWarning into its hulls; 2026-09-28). Explicit provider_roots only, like _dependency_jar_class_names;
+    the union over every copy of each dependency (_dependency_roots)."""
     found: dict[str, set[str]] = {"hullmod": set(), "weapon": set(), "wing": set(), "hull": set()}
-    if not provider_roots:
-        return found
-    from .java_toolchain import declared_dependencies
-    from .substitutes import provider_index
-
-    deps = declared_dependencies(root)
-    if not deps:
-        return found
-    by_id = {p.mod_id: p for p in provider_index([Path(r) for r in provider_roots], exclude=root)}
-    for dep_id in deps:
-        provider = by_id.get(dep_id)
-        if provider is None:
-            continue
-        dep = Path(provider.path)
+    for dep in _dependency_roots(root, provider_roots):
         found["hullmod"] |= set(_csv_id_index(dep / "data" / "hullmods" / "hull_mods.csv", None))
         found["weapon"] |= set(_csv_id_index(dep / "data" / "weapons" / "weapon_data.csv", None))
         found["wing"] |= set(_csv_id_index(dep / "data" / "hulls" / "wing_data.csv", None))
@@ -6861,6 +6869,10 @@ def _asset_exists(candidate: str, root: Path, vanilla_core: Path | None) -> bool
 def _report_asset_reference_missing(result: ScanResult, root: Path, vanilla_core: Path | None, file: str, field: str, candidate: str) -> None:
     if _asset_exists(candidate, root, vanilla_core):
         return
+    # RC8 resolves graphics and sounds across every enabled mod: a declared dependency's file is found (34.25,
+    # 2026-10-04: the Interstellar Imperium and Mayasuran expansions' art was in the installed base mods).
+    if any((Path(dep) / candidate).is_file() for dep in result.migration_context.get("dependency_roots") or []):
+        return
     if vanilla_core is None:
         result.add(
             id="asset-reference-missing",
@@ -7202,6 +7214,8 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     if vanilla_root is not None and not vanilla_root.is_dir():
         vanilla_root = None
     result = ScanResult(input_path=root, target=target or TargetProfile())
+    # Declared dependencies' folders, for asset and content references they supply (ROADMAP 34.25).
+    result.migration_context["dependency_roots"] = [str(p) for p in _dependency_roots(root, provider_roots)]
     for path in sorted(root.rglob("*")):
         if path.is_file():
             result.files.append({"path": _relative(root, path), "size_bytes": path.stat().st_size})

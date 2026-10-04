@@ -772,6 +772,34 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             self.assertIn("hard-coded-campaign-entity-reference", findings)
             self.assertIn("mission-local-fleet-reference-missing", findings)
 
+    def test_a_declared_dependency_supplies_art_and_content(self) -> None:
+        # ROADMAP 34.25 (2026-10-04): the Interstellar Imperium expansion's art was in the installed base mod.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core = root / "core"
+            for rel, text in {"data/hullmods/hull_mods.csv": "name,id\nX,x\n", "data/hulls/wing_data.csv": "id,variant\nw,w\n",
+                              "data/weapons/weapon_data.csv": "name,id\nG,g\n"}.items():
+                (core / rel).parent.mkdir(parents=True, exist_ok=True)
+                (core / rel).write_text(text, encoding="utf-8")
+            providers = root / "installed"
+            base = providers / "Base"
+            (base / "graphics" / "ships").mkdir(parents=True)
+            (base / "graphics" / "ships" / "titan.png").write_bytes(b"png")
+            (base / "mod_info.json").write_text('{"id": "base"}', encoding="utf-8")
+            (base / "data" / "weapons").mkdir(parents=True)
+            (base / "data" / "weapons" / "weapon_data.csv").write_text("name,id\nBig Gun,base_gun\n", encoding="utf-8")
+            mod = root / "addon"
+            (mod / "data" / "hulls").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "addon", "dependencies": [{"id": "base"}]}', encoding="utf-8")
+            (mod / "data" / "hulls" / "a.ship").write_text('{"hullId": "a", "spriteName": "graphics/ships/titan.png", '
+                                                          '"builtInWeapons": {"WS1": "base_gun"}}', encoding="utf-8")
+            alone = {f.id for f in scan_mod(mod, vanilla_core=core).findings}
+            provided = {f.id for f in scan_mod(mod, vanilla_core=core, provider_roots=[providers]).findings}
+        self.assertIn("asset-reference-missing", alone)
+        self.assertIn("content-reference-unresolved", alone)
+        self.assertNotIn("asset-reference-missing", provided)
+        self.assertNotIn("content-reference-unresolved", provided)
+
     def test_commented_out_mission_fleet_line_is_not_a_reference(self) -> None:
         # ROADMAP 34.20 (2026-10-04): Scy-Nation's SCY_11 mission escalated on a // line.
         with tempfile.TemporaryDirectory() as directory:

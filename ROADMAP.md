@@ -2649,6 +2649,32 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         Maelstrom Xhan expansion), and Traverser's `TDB_chuan_yue_xue_zhe` (only SIMILAR: the Cold Sky Scholar is an
         unmanned redesign, so the hull was retired). Test: `tests/test_renamed_ids.py`. Next: a remap fixer for
         RENAMED results, approval-gated.
+    25. **Declared dependencies outside the queue supply content and art.** **Done 2026-10-04:**
+        `scanner._dependency_roots` (every copy of each declared dependency across the provider roots, not one per
+        id), used by `content-reference-unresolved` (union of ids) and `asset-reference-missing` (RC8 resolves graphics
+        across enabled mods); `revive` adds `<queue>/PROVIDER_SOURCES.json` sources (opt-in; `In operation` lists the
+        real install's mods/ and the 0.98 modpack, never the mostly-0.95 Ironclads archive). By hand the same day this
+        cleared 16 addons' content and 6 mods' art. Tests: `test_a_declared_dependency_supplies_art_and_content`,
+        `OutsideProviderSourcesTests`.
+    26. **`find-providers` command:** the 2026-10-04 lookup scripts as one read-only command: missing ids and art of
+        a mod looked up across the install, modpack, queue and corpus index (zips and 7z), with version, gameVersion and
+        "defined" versus "only referenced".
+    27. **`escalation decisions` command:** the decision sheet for the commonest blockers (DECISIONS_2026-10-04.md),
+        with the evidence each recommendation rests on (built-in or fitted wings, fatal or silent missing content,
+        unused referring files, CJK size).
+    28. **`translate-batch` command:** the agent translation pipeline (export, 120-entry chunks, one agent per chunk,
+        strict verify: every entry filled, no CJK left, markers kept; apply only when all pass; checkpointed).
+    29. **Supersession across multi-mod packs:** read every root inside a pack zip (the Yunru pack held 9 modules and
+        superseded YunruCore and Old School Expansion at 100% content overlap, found by hand).
+    30. **References from files RC8 never loads are notes** (extends 34.23): a `.ship` or `.wpn` with no ship_data /
+        weapon_data row that nothing mounts (YunruCore's 36 addon hull files, Stardust's smc_leftarm_mech, Terraformers'
+        7 unfinished decorative weapons, all accepted by hand 2026-10-04), an unregistered `.faction`
+        (Traverser's TDB_CN), variants outside data/variants. Needs RC8 evidence that an unregistered spec file loads
+        nothing.
+    31. **Remap fixer for `renamed-ids` RENAMED results**, approval-gated (Xhan's targeting mast, by hand).
+    32. **Definitions index:** a derived table in bridgeforge-state (kind, id or asset path, mod id, version,
+        gameVersion, source, file) built from the corpus index, so "who defines X / ships Y" is one query. Small next to
+        the corpus index (which holds full file text); feeds 34.26 and 34.24.
     21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
         escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
         edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next
