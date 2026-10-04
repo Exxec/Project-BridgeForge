@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sys
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -378,6 +379,59 @@ def _dialog_fatals(windows_log: Path) -> list[dict[str, object]]:
 SESSION_START = "StarfarerLauncher  - Starting Starsector"
 
 
+def _rig_fingerprint(mods_dir: Path) -> dict[str, object]:
+    """What the triaged run ran on (ROADMAP 36.10): the enabled mods with their versions, and the SHA-256 of the
+    recorded core baseline file (None when no baseline was recorded), so a pasted result describes itself."""
+    import hashlib
+    import json as _json
+
+    from .rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
+
+    enabled = _enabled_mod_ids(mods_dir) or set()
+    versions = {}
+    for child in sorted(p for p in mods_dir.iterdir() if p.is_dir()) if mods_dir.is_dir() else []:
+        try:
+            info = _json.loads((child / "mod_info.json").read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(info, dict) and info.get("id") in enabled:
+            versions[str(info["id"])] = str(info.get("version") or "")
+    baseline = _repo_root() / DEFAULT_CORE_BASELINE_RELATIVE
+    core = hashlib.sha256(baseline.read_bytes()).hexdigest() if baseline.is_file() else None
+    return {"enabled_mods": dict(sorted(versions.items())), "core_baseline_sha256": core}
+
+
+def _jvm_crashes_beside(log: Path, owner_index: dict[str, str] | None) -> list[dict[str, object]]:
+    """hs_err logs in the log's folder (the JVM's working directory, starsector-core for a game launch; ROADMAP
+    35.10). One written after the log was started is a FATAL of this session; older ones are listed, not counted."""
+    from .crash_log import attribute_frames, find_crash_logs, parse_crash_log
+
+    try:
+        info = log.stat()
+    except OSError:
+        return []
+    # When the log file was created: st_birthtime where the OS keeps it, st_ctime on Windows. Without either a
+    # crash is listed but never counted as this session's.
+    started = getattr(info, "st_birthtime", None) or (info.st_ctime if sys.platform == "win32" else None)
+    crashes = []
+    for crash_path in find_crash_logs(log.parent):
+        crash = parse_crash_log(crash_path)
+        try:
+            written = crash_path.stat().st_mtime
+        except OSError:
+            continue
+        entry: dict[str, object] = {
+            "kind": "jvm-crash", "matched_rule": "JVM crash (hs_err)", "source": crash_path.name, "file": crash_path.name, "message": "; ".join(crash.get("problem_summary") or [])[:400],
+            # Without a creation time, a crash ends the session: its file and the log's last write land together.
+            "during_this_log": (written >= started) if started is not None else abs(written - info.st_mtime) <= 300, "command_line": crash.get("command_line"),
+            "time": crash.get("crash_time_raw"), "java_frames": (crash.get("java_frames") or [])[:20],
+        }
+        if owner_index is not None:
+            entry.update(attribute_frames(crash, owner_index))
+        crashes.append(entry)
+    return crashes
+
+
 def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: Path | None = None, all_mods: bool = False,
                last_sessions: int | None = None) -> dict[str, object]:
     """Classify a Starsector log into FATAL / MOD-ERROR / KNOWN-NOISE / OTHER without modifying it.
@@ -415,6 +469,8 @@ def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: 
     windows_log = _windows_log_for(path)
     if windows_log is not None:
         classified["FATAL"].extend(_dialog_fatals(windows_log))
+    jvm_crashes = _jvm_crashes_beside(path, owner_index)
+    classified["FATAL"].extend(crash for crash in jvm_crashes if crash["during_this_log"])
     result = {
         "schema_version": 1,
         "mode": "READ_ONLY_LOG_TRIAGE",
@@ -428,10 +484,12 @@ def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: 
         "milestones": milestones,
         "vanilla_shadowing_symptoms": shadow_symptoms,
         "probe": _summarize_probe(probe_entries),
+        "jvm_crash_logs": jvm_crashes,
         "caveat": FATAL_ABSENCE_CAVEAT,
     }
     if owner_index is not None:
         result["mods_dir"] = str(Path(mods_dir).expanduser().resolve())
+        result["rig_fingerprint"] = _rig_fingerprint(Path(mods_dir))
         result["attribution"] = _summarize_attribution(classified["FATAL"] + classified["MOD-ERROR"] + classified["OTHER"])
     if sessions is not None:
         result["sessions"] = sessions  # line numbers count from sessions["first_line"]

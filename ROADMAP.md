@@ -2608,6 +2608,13 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         references. Test: `test_moves_unreferenced_work_files_to_scratch_and_keeps_referenced_ones`.
     19. **Missing rig providers:** `probe-group plan` copies (or names the command to copy) a ready provider into the rig
         when a mod is unplaced only for it (SCY, YunruCore, ORA).
+    21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
+        escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
+        edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next
+        fixer from real work and never promotes a REVIEW finding to SAFE. Not for CI (private game and mod inputs).
+    **Owner order 2026-10-04 for what is left of item 34:** 34.7 agent-result triage and 34.10 supersession by
+    content first (both prevent costly wrong decisions), then 34.2 entity-lookup fixer (throughput), 34.11 groups from
+    `ready-list`, 34.3 the narrow percent fixer (strict evidence: a matching `modifyMult` and the description), 34.21.
     20. **Commented-out mission fleet lines:** `mission-local-fleet-reference-missing` matched a `//` line (Scy-Nation's
         `SCY_11_soldierOfFortune`, MissionDefinition.java:52, 2026-10-04); blank comments first, as other source checks do.
         **Done 2026-10-04.** Test: `test_commented_out_mission_fleet_line_is_not_a_reference`.
@@ -2659,6 +2666,38 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         source hash and path; a mismatch blocks a "fully translated" claim.
     17. **Salvor's save fingerprint** (SPW `save_fingerprint`): `save-baseline` records which mods and versions a save
         was made with, so a probe or a Salvor repair can say a save and a rig do not match before loading it.
+
+36. **Plan: live-test trust (owner priorities 2026-10-04).** Design: `docs/LIVE_TEST_TRUST_DESIGN.md`. Order: 2, 4, 1,
+    3, 5, then 6-11.
+    **Done 2026-10-04** (all eleven): `probe_group._providers_for`/`stage_providers` and `install --stage-providers`
+    (36.1, `ProviderStagingTests`); `rig_doctor._check_core_integrity` with the build read from `StarfarerLauncher`
+    and `bf-test.ps1 launch` refusing on a rig-doctor FAIL (36.2, `RigCoreIntegrityTests`, `RigCoreBuildTests`);
+    `live_trust.audit_shipped`, `audit-shipped`, `audit-explain` (36.3, `ShippedAuditTests`); `crash_log.py`, the
+    launch copying `hs_err_pid*.log` beside the log, crashes attributed in `group_report` (36.4, `tests/test_crash_log.py`);
+    `live_trust.save_made_with`/`compare_made_with`, `made_with` in save baselines (36.5, `SaveMadeWithTests`);
+    `write_run_record` from `probe-group record` into `<queue>/_live/` (36.6), `live_status` (36.7, `RunRecordTests`),
+    `probe-group bisect` (36.8, `BisectTests`), the known-noise check in the run record (36.9), `rig_fingerprint` in
+    `log-triage` (36.10), `archive_gate` in `archive` and `record --archive` (36.11, `ArchiveGateTests`).
+    Left for a local session: record the RC8 core baseline once (`rig-doctor --write-core-baseline`). Mods validated
+    before 2026-10-04 read `UNKNOWN_BUILD`; archive them after a re-run, or with `audit-explain --live --reason`.
+    1. **Missing rig providers staged by `probe-group`** (supersedes 34.19): find the ready workspace that declares the
+       missing id, print or perform the `copy-drift --sync`, verify id, version and zero drift before the probe runs.
+    2. **Core integrity in the launch preflight** (35.11): `rig-doctor` `core_integrity` **built 2026-10-04**
+       (`_check_core_integrity`, `--write-core-baseline`; test `RigCoreIntegrityTests`). Still: record the RC8
+       baseline with its build, run it from `bf-test.ps1 launch` and stop on FAIL, cite the baseline in results.
+    3. **Shipped-copy audit before archive/release** (35.13): every difference from `original/` explained by a
+       recorded change, else the archive fails; `audit-explain` records a person's explanation.
+    4. **JVM crash logs in `log-triage`** (35.10): **built 2026-10-04** (`bridgeforge/crash_log.py` from SPW; FATAL
+       `JVM crash (hs_err)` with mod-owned frames; tests `tests/test_crash_log.py`). Still: `bf-test.ps1` copies the
+       hs_err to `<TESTID>.hs_err.log`; time match where creation time is unknown; `probe-group record` uses it.
+    5. **Save baselines bound to their mod set** (35.17): `made_with` from `descriptor.xml` plus rig versions/jar
+       hashes; a mismatch makes a comparison REVIEW or UNKNOWN, never a pass. Shared reader with Salvor.
+    6. **One run record per live test** (`reports/live/<TESTID>.json`) joining inputs and outputs.
+    7. **Stale-result detection:** a live result holds only while the shipped hash matches its run record.
+    8. **`probe-group bisect N`:** split a failed group into two dependency-closed groups.
+    9. **Known-noise budget per group:** a jump in KNOWN-NOISE between runs of a group is REVIEW.
+    10. **Rig fingerprint in triage output:** enabled mod set and core baseline id printed with the result.
+    11. **Archive gate:** refuse a stale (7) or unaudited (3) mod unless the owner records why.
 
 ## Post-1.0 research and gated automation
 

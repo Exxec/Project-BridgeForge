@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import zipfile
 from pathlib import Path
 
@@ -351,6 +352,75 @@ def _check_real_install_saves_untouched(
     return _check("real_install_saves_untouched", "PASS", detail)
 
 
+DEFAULT_CORE_BASELINE_RELATIVE = Path("bridgeforge-state") / "rig-core-baseline.json"
+
+
+def _core_files(core: Path) -> list[Path]:
+    """The files that decide what game a rig runs: every starsector-core jar and the core settings.json."""
+    files = sorted(p for p in core.glob("*.jar") if p.is_file())
+    settings = core / "data" / "config" / "settings.json"
+    return files + ([settings] if settings.is_file() else [])
+
+
+_BUILD_PATTERN = re.compile(rb"\d+\.\d+(?:\.\d+)?a-RC\d+")
+
+
+def core_build(core: Path) -> str | None:
+    """The game build a core is, e.g. "0.98a-RC8": the version constant in starfarer_obf.jar's
+    StarfarerLauncher.class (read 2026-10-04; the jar manifests carry no version)."""
+    try:
+        with zipfile.ZipFile(Path(core) / "starfarer_obf.jar") as jar:
+            data = jar.read("com/fs/starfarer/StarfarerLauncher.class")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return None
+    match = _BUILD_PATTERN.search(data)
+    return match.group().decode() if match else None
+
+
+def _check_core_integrity(runtime_dir: Path, repo_root: Path, core_baseline: Path | None, write_core_baseline: bool) -> dict[str, object]:
+    """The rig's starsector-core still hashes the same as when the baseline was recorded (ROADMAP 35.11, from SPW's
+    core_integrity, 2026-10-04): "the rig matches vanilla RC8" is checked, not assumed. Hashing alone never claims a
+    modification without a baseline; record one from a known-good install with write_core_baseline."""
+    import hashlib
+
+    name = "core_integrity"
+    core = runtime_dir / "starsector-core"
+    if not core.is_dir():
+        return _check(name, "SKIPPED", f"{core} does not exist.")
+    baseline_path = Path(core_baseline) if core_baseline is not None else repo_root / DEFAULT_CORE_BASELINE_RELATIVE
+    current = {}
+    for path in _core_files(core):
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+        current[path.relative_to(core).as_posix()] = digest.hexdigest()
+    build = core_build(core)
+    if write_core_baseline:
+        baseline_path.parent.mkdir(parents=True, exist_ok=True)
+        baseline_path.write_text(json.dumps({"core": str(core.resolve()), "build": build, "sha256": current}, indent=2) + "\n", encoding="utf-8")
+        return _check(name, "PASS", f"Core baseline for {build or 'an unknown build'} written to {baseline_path} ({len(current)} file(s)).")
+    if not baseline_path.is_file():
+        return _check(name, "SKIPPED", f"No core baseline at {baseline_path}; record one with --write-core-baseline on a known-good RC8 install.")
+    try:
+        baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return _check(name, "FAIL", f"Core baseline at {baseline_path} could not be read: {exc}")
+    recorded = baseline.get("sha256") or {}
+    if baseline.get("build") and build and build != baseline["build"]:
+        # A new game release is a different build, not drift: say so, and ask for a baseline of that build.
+        return _check(name, "FAIL", f"The rig runs {build} but the baseline records {baseline['build']}; record a baseline for {build} (--write-core-baseline).")
+    changed = sorted(f for f in recorded if f in current and current[f] != recorded[f])
+    missing = sorted(set(recorded) - set(current))
+    added = sorted(set(current) - set(recorded))
+    if changed or missing:
+        return _check(name, "FAIL", f"starsector-core differs from the baseline at {baseline_path}: changed={changed}, missing={missing}, added={added}.")
+    detail = f"starsector-core matches the baseline ({len(recorded)} file(s))."
+    if added:
+        return _check(name, "WARN", detail + f" New since the baseline: {added}.")
+    return _check(name, "PASS", detail)
+
+
 def rig_doctor(
     runtime_dir: Path,
     *,
@@ -359,6 +429,8 @@ def rig_doctor(
     saves_baseline: Path | None = None,
     write_saves_baseline: bool = False,
     reference_manifest: Path | None = None,
+    core_baseline: Path | None = None,
+    write_core_baseline: bool = False,
 ) -> dict[str, object]:
     """Read-only pre-flight checks for a Starsector test rig; the only write is the opt-in saves baseline.
 
@@ -394,6 +466,7 @@ def rig_doctor(
             _check_revenantlib_contract(runtime_dir),
             _check_working_copy_drift(runtime_dir, working_copies or {}),
             _check_real_install_saves_untouched(repo_root, real_install, saves_baseline, write_saves_baseline),
+            _check_core_integrity(runtime_dir, repo_root, core_baseline, write_core_baseline),
         ]
 
     checks.append(_check_layout(repo_root, working_copies or {}))

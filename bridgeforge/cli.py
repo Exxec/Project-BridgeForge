@@ -519,6 +519,8 @@ def build_parser() -> argparse.ArgumentParser:
     rig_doctor_cmd.add_argument("--no-default-working", action="store_true", help="don't use the project's known working-copy mapping")
     rig_doctor_cmd.add_argument("--real-install", type=Path, help="real Starsector install, to confirm its saves are untouched (read-only)")
     rig_doctor_cmd.add_argument("--write-saves-baseline", action="store_true", help="record the real install's saves listing as the baseline (the only write)")
+    rig_doctor_cmd.add_argument("--core-baseline", type=Path, help="core hash baseline (default bridgeforge-state/rig-core-baseline.json)")
+    rig_doctor_cmd.add_argument("--write-core-baseline", action="store_true", help="record the rig starsector-core hashes as the baseline (do this on a known-good RC8 install)")
     rig_doctor_cmd.add_argument("--reference-manifest", type=Path, help="P10 historical rig manifest; verifies the dedicated install and skips the incompatible RC8 probe check")
     rig_doctor_cmd.add_argument("--json", action="store_true")
     rig_create_cmd = subcommands.add_parser("rig-create", help="register a dedicated historical Starsector install as a P10 reference rig")
@@ -742,6 +744,15 @@ def build_parser() -> argparse.ArgumentParser:
     archive_cmd.add_argument("--done", type=Path, help="default: <repo>/Done")
     archive_cmd.add_argument("--policy", type=Path)
     archive_cmd.add_argument("--json", action="store_true")
+    audit_cmd = subcommands.add_parser("audit-shipped", help="compare a workspace's shipped copy with original/: every changed, added or removed file must be explained by a recorded change (ROADMAP 36.3); also shows its live status (36.7)")
+    audit_cmd.add_argument("workspace", type=Path)
+    audit_cmd.add_argument("--json", action="store_true")
+    explain_cmd = subcommands.add_parser("audit-explain", help="record why shipped files differ from original/, or (--live) why the mod may be archived without a current live result")
+    explain_cmd.add_argument("workspace", type=Path)
+    explain_cmd.add_argument("files", nargs="*", help="shipped paths relative to working/")
+    explain_cmd.add_argument("--reason", required=True)
+    explain_cmd.add_argument("--live", action="store_true")
+    explain_cmd.add_argument("--json", action="store_true")
     relink_cmd = subcommands.add_parser("relink", help="recompile classes whose game calls RC8 changed only by return type (jar-linkage-unresolved), from shipped or decompiled source, unedited; patch only when nothing else changes. A queue folder or one workspace")
     relink_cmd.add_argument("path", type=Path, help="a queue (In operation) or one workspace")
     relink_cmd.add_argument("--vanilla-core", type=Path, required=True)
@@ -809,7 +820,14 @@ def build_parser() -> argparse.ArgumentParser:
     group_install.add_argument("--plan", type=Path, help="default: <queue>/PROBE_GROUPS.json")
     group_install.add_argument("--queue", type=Path)
     group_install.add_argument("--rig", type=Path)
+    group_install.add_argument("--stage-providers", action="store_true", help="also copy the queue workspaces that provide missing dependencies into the rig, verifying id, version and files (ROADMAP 36.1)")
     group_install.add_argument("--json", action="store_true")
+    group_bisect = group_sub.add_parser("bisect", help="split a failed group into two new groups at the end of the plan, each dependency-closed (ROADMAP 36.8)")
+    group_bisect.add_argument("group", type=int)
+    group_bisect.add_argument("--plan", type=Path, help="default: <queue>/PROBE_GROUPS.json")
+    group_bisect.add_argument("--queue", type=Path)
+    group_bisect.add_argument("--rig", type=Path)
+    group_bisect.add_argument("--json", action="store_true")
     group_record = group_sub.add_parser("record", help="after a run: mark PASS members LIVE_VALIDATED; with --archive also record the standing local-only licence, archive into Done/ and copy each zip to Done/'s top")
     group_record.add_argument("test_id", help="the bf-test.ps1 test id; reads <rig>/logs/<TESTID>.stdout.log")
     group_record.add_argument("--archive", action="store_true")
@@ -1189,9 +1207,38 @@ def main(argv: list[str] | None = None) -> int:
         summary = save_provider_index(provider_index(roots), args.output, roots)
         print(f"Provider index: {summary['providers']} mods, {summary['ids']} ids -> {summary['output']}")
         return 0
+    if args.command == "audit-shipped":
+        from .live_trust import audit_shipped, live_status
+        result = {"audit": audit_shipped(args.workspace), "live": live_status(args.workspace)}
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            audit = result["audit"]
+            print(f"Shipped-copy audit: {audit['status']}" + (f" ({audit['reason']})" if audit.get("reason") else ""))
+            for row in audit.get("differences") or []:
+                print(f"  {row['kind']:<8} {row['file']}: {row['explained_by'] or 'UNEXPLAINED'}")
+            live = result["live"]
+            print(f"Live result: {live['status']}" + (f" (last PASS {live['test_id']}, {live.get('date')})" if live.get("test_id") else ""))
+        return 0 if result["audit"]["status"] == "PASS" else 1
+    if args.command == "audit-explain":
+        from .live_trust import explain_shipped
+        try:
+            path = explain_shipped(args.workspace, args.files, args.reason, live=args.live)
+        except (ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps({"written": str(path)}) if args.json else f"Recorded in {path}.")
+        return 0
     if args.command == "archive":
         from .archive import ArchiveError, archive_mod
         from .substitutes import REPO_ROOT
+        from .live_trust import archive_gate
+        gate = archive_gate(args.workspace)
+        if not gate["allowed"]:
+            # ROADMAP 36.11: no archive for an unaudited or stale-tested mod unless the owner recorded why.
+            print("bridgeforge: archive refused: " + "; ".join(gate["problems"]), file=sys.stderr)
+            print(f'  explain with: bridgeforge audit-explain "{args.workspace}" FILE... --reason "..." (or --live --reason for the live result)', file=sys.stderr)
+            return 2
         try:
             result = archive_mod(args.workspace, args.done or REPO_ROOT / "Done", policy_path=args.policy)
         except (ArchiveError, OSError) as exc:
@@ -1336,16 +1383,32 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"Group {group['group']} ({len(group['members'])} mod(s)): " + ", ".join(m["workspace"] for m in group["members"]))
                     for item in result["unplaced"]:
                         print(f"Not grouped: {item['workspace']} - {item['reason']}")
+                        for problem in item.get("providers") or []:
+                            print(f"    {problem}")
+                    staging = sorted({f"{p['mod_id']} from {p['workspace']}" for g in result["groups"] for m in g["members"] for p in m.get("stage_providers") or []})
+                    if staging:
+                        print("Providers to stage (install those groups with --stage-providers): " + "; ".join(staging))
                     print(f"Plan written: {target}. Next: bridgeforge probe-group install <N>, then bf-test.ps1 launch <TESTID>.")
             elif args.probe_group_command == "install":
                 plan = json.loads((args.plan or queue / "PROBE_GROUPS.json").read_text(encoding="utf-8"))
-                result = install_group(plan, args.group, queue, rig)
+                result = install_group(plan, args.group, queue, rig, stage=args.stage_providers)
                 if not args.json:
                     print(f"Group {result['group']} installed: {', '.join(result['members'])}")
+                    for item in result["staged_providers"]:
+                        print(f"  provider {item['mod_id']} {item['version']} from {item['workspace']}: {item['action']} (id, version and files verified)")
                     for item in result["copied"]:
                         print(f"  {item['workspace']}: {item['action']}")
                     print(f"  enabled_mods.json -> {result['enabled_mods']}")
                     print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
+            elif args.probe_group_command == "bisect":
+                from .probe_group import bisect_group
+                plan_path = args.plan or queue / "PROBE_GROUPS.json"
+                result = bisect_group(json.loads(plan_path.read_text(encoding="utf-8")), args.group)
+                plan_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+                if not args.json:
+                    for group in result["groups"][-2:]:
+                        print(f"Group {group['group']} ({len(group['members'])} mod(s)): " + ", ".join(m["workspace"] for m in group["members"]))
+                    print(f"Plan updated: {plan_path}. Install and run each half.")
             elif args.probe_group_command == "record":
                 from .probe_group import record_group
                 config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
@@ -2286,6 +2349,10 @@ def main(argv: list[str] | None = None) -> int:
                 sessions = result["sessions"]
                 print(f"Sessions: last {sessions['found']} of the log, from line {sessions['first_line']} (line numbers below count from there)")
             print(f"FATAL={counts['FATAL']} MOD-ERROR={counts['MOD-ERROR']} KNOWN-NOISE={counts['KNOWN-NOISE']} OTHER={counts['OTHER']}")
+            if result.get("rig_fingerprint"):
+                fingerprint = result["rig_fingerprint"]
+                core = (fingerprint["core_baseline_sha256"] or "none recorded")[:12]
+                print(f"Rig: {len(fingerprint['enabled_mods'])} enabled mod(s), core baseline {core}: " + ", ".join(f"{k} {v}" for k, v in fingerprint["enabled_mods"].items())[:600])
             milestones = result["milestones"]
             print(f"Main menu reached: {milestones['main_menu_reached']}; campaign loads: {len(milestones['campaign_loads'])}; finished-saving events: {milestones['finished_saving_count']}; mission variant preloads (startup, not play): {len(milestones['mission_variant_preloads'])}")
             for event in result["fatal"]:
@@ -2293,6 +2360,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"FATAL {where} [{event['matched_rule']}]: {event['message']}")
                 if event.get("top_mod_frame"):
                     print(f"  top mod frame: {event['top_mod_frame']}")
+                if event.get("kind") == "jvm-crash" and event.get("top_mod"):
+                    print(f"  nearest mod frame: {event['top_mod']} ({event['mod_frames'][0]['class']})")
             for event in result["mod_errors"]:
                 print(f"MOD-ERROR line {event['line']}: {event.get('top_mod_frame') or event['message']}")
             for symptom in result["vanilla_shadowing_symptoms"]:
@@ -2822,7 +2891,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             working[mod_id] = Path(path)
         try:
-            result = rig_doctor(args.runtime_dir, working_copies=working, real_install=args.real_install, write_saves_baseline=args.write_saves_baseline, reference_manifest=args.reference_manifest)
+            result = rig_doctor(args.runtime_dir, working_copies=working, real_install=args.real_install, write_saves_baseline=args.write_saves_baseline, reference_manifest=args.reference_manifest, core_baseline=args.core_baseline, write_core_baseline=args.write_core_baseline)
         except (ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

@@ -5,7 +5,7 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.probe_group import group_report, install_group, merge_configs, plan_groups
+from bridgeforge.probe_group import ProbeGroupError, bisect_group, group_report, install_group, merge_configs, plan_groups
 from bridgeforge.probe_config import build_probe_config
 from tests.support import link_dir, resolved_temp_dir
 
@@ -52,7 +52,8 @@ class PlanTests(unittest.TestCase):
             plan = plan_groups(queue, _rig(root, "lw_lazylib"), size=8)
         groups = [[m["workspace"] for m in g["members"]] for g in plan["groups"]]
         self.assertEqual(groups, [["A", "C"], ["B"], ["T"]])
-        self.assertEqual(plan["unplaced"][0], {"workspace": "D", "reason": "dependencies not in the rig: missing_lib"})
+        self.assertEqual(plan["unplaced"][0]["reason"], "dependencies not in the rig: missing_lib")
+        self.assertEqual(plan["unplaced"][0]["providers"], ["missing_lib: no ready provider (no workspace declares it)"])
         self.assertEqual(plan["unplaced"][1]["workspace"], "V")
         self.assertIn("gameVersion 0.95.1a-RC6", plan["unplaced"][1]["reason"])
 
@@ -144,6 +145,57 @@ class MergeAndReportTests(unittest.TestCase):
         self.assertEqual(report["members"]["mod_a"]["verdict"], "INCOMPLETE")
 
 
+def _done(workspace: Path) -> None:
+    (workspace / "reports" / "revive").mkdir(parents=True, exist_ok=True)
+    (workspace / "reports" / "revive" / "REVIVE.json").write_text('{"status": "UNATTENDED_DONE"}', encoding="utf-8")
+
+
+class ProviderStagingTests(unittest.TestCase):
+    # ROADMAP 36.1 (2026-10-04): SCY Nation Utility waited on SCY, which was revived in the same queue.
+    def test_a_ready_provider_is_planned_staged_and_verified(self) -> None:
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            _workspace(queue, "Addon", "addon", "hull_addon", deps=["base"])
+            base = _workspace(queue, "Base", "base", "hull_base", status="ESCALATED").parent  # not itself ready to test
+            _done(base)
+            rig = _rig(root)
+            core = root / "core_real"
+            core.mkdir()
+            link_dir(core, rig / "starsector-core")
+            plan = plan_groups(queue, rig)
+            addon_group = next(g for g in plan["groups"] if g["members"][0]["workspace"] == "Addon")
+            with self.assertRaises(ProbeGroupError):
+                install_group(plan, addon_group["group"], queue, rig, install_probe=False)
+            result = install_group(plan, addon_group["group"], queue, rig, install_probe=False, stage=True)
+            enabled = json.loads((rig / "mods" / "enabled_mods.json").read_text(encoding="utf-8"))["enabledMods"]
+            staged_info = (rig / "mods" / "Base" / "mod_info.json").is_file()
+        self.assertEqual(addon_group["members"][0]["stage_providers"], [{"mod_id": "base", "workspace": "Base", "version": ""}])
+        self.assertEqual(result["staged_providers"][0]["action"], "copied")
+        self.assertTrue(staged_info)
+        self.assertEqual(enabled, ["base", "addon", "bridgeforge_probe"])
+
+    def test_an_escalated_provider_is_not_staged(self) -> None:
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            _workspace(queue, "Addon", "addon", "hull_addon", deps=["base"])
+            base = _workspace(queue, "Base", "base", "hull_base").parent
+            (base / "reports" / "revive").mkdir(parents=True)
+            (base / "reports" / "revive" / "REVIVE.json").write_text('{"status": "ESCALATED"}', encoding="utf-8")
+            plan = plan_groups(queue, _rig(root))
+        addon = next(u for u in plan["unplaced"] if u["workspace"] == "Addon")
+        self.assertIn("base: no ready provider (Base=ESCALATED)", addon["providers"])
+
+
+class BisectTests(unittest.TestCase):
+    def test_a_group_splits_into_two_new_groups(self) -> None:
+        plan = {"groups": [{"group": 1, "members": [{"workspace": w} for w in "ABCDE"]}, {"group": 2, "members": [{"workspace": "F"}]}]}
+        result = bisect_group(plan, 1)
+        with self.assertRaises(ProbeGroupError):
+            bisect_group(result, 2)
+        self.assertEqual([[m["workspace"] for m in g["members"]] for g in result["groups"][2:]], [["A", "B", "C"], ["D", "E"]])
+        self.assertEqual(result["groups"][0]["bisected_into"], [3, 4])
+
+
 class InstallTests(unittest.TestCase):
     def test_install_copies_members_writes_config_and_enables_dependencies(self) -> None:
         with resolved_temp_dir() as root:
@@ -211,12 +263,20 @@ class InstallTests(unittest.TestCase):
                 "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|content-ids|FAIL|all-content|checked=2 failed=1" + chr(10) + "", encoding="utf-8")
             policy = root / "policy.json"
             shutil.copy2(Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json", policy)
+            # The archive gate (ROADMAP 36.11) needs original/ to audit against.
+            shutil.copytree(a, queue / "A" / "original" / "A")
             result = record_group(rig / "logs" / "GRP-T.stdout.log", merged, queue, rig, test_id="GRP-T", archive=True,
                                   done_dir=root / "Done", policy_path=policy, today="2026-09-28")
+            from bridgeforge.live_trust import live_status
+            run = json.loads((queue / "_live" / "GRP-T.json").read_text(encoding="utf-8"))
+            live_a = live_status(queue / "A")["status"]
             report_a = (a / "reports" / "REVIVAL_REPORT.md").read_text(encoding="utf-8")
             report_b = (b / "reports" / "REVIVAL_REPORT.md").read_text(encoding="utf-8")
             top_zip = sorted(p.name for p in (root / "Done").glob("*.zip"))
         self.assertEqual((result["recorded"], result["archived"], result["probe_version"]), (["A"], ["A"], "0.2.9"))
+        self.assertEqual({m["workspace"]: m["verdict"] for m in run["members"]}, {"A": "PASS", "B": "FAIL"})
+        self.assertEqual(run["known_noise"]["status"], "NO_PREVIOUS")
+        self.assertEqual(live_a, "CURRENT")
         self.assertTrue(report_a.rstrip().endswith("LIVE_VALIDATED"))
         self.assertNotIn("LIVE_VALIDATED", report_b)
         self.assertEqual(len(top_zip), 1)

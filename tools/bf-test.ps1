@@ -182,6 +182,10 @@ switch ($Command) {
         $out = Join-Path $Logs "$id.stdout.log"
         $err = Join-Path $Logs "$id.stderr.log"
         if (Get-RigJava) { throw "A rig game is already running; close it first." }
+        # ROADMAP 36.2: pre-flight before every launch (isolation, core integrity against the recorded RC8 baseline,
+        # probe, enabled mods, drift). A FAIL stops the run; there is no override: fix the rig, then launch.
+        $doctor = Invoke-Bf @("rig-doctor", $Rig, "--real-install", (Split-Path $Core -Parent))
+        if ($doctor -ne 0) { throw "rig-doctor failed (see above); launch refused." }
         Initialize-WindowTools
         $windowLog = Join-Path $Logs "$id.windows.txt"
         # A reused test id must not carry an earlier attempt's dialogs into this run's triage (GRP-3, 2026-09-27).
@@ -246,6 +250,17 @@ switch ($Command) {
                 }
             }
             $wrapper.Dispose()
+        }
+        # ROADMAP 36.4: a JVM crash writes hs_err_pid<PID>.log to the game's working directory, not our log. Copy any
+        # written during this launch beside the log as hs_err_pid<PID>.<TESTID>.log, which log-triage reads.
+        foreach ($dir in @($Rig, $Core)) {
+            Get-ChildItem -Path $dir -Filter "hs_err_pid*.log" -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.LastWriteTime -ge $started } |
+                ForEach-Object {
+                    $copy = Join-Path $Logs ($_.BaseName + ".$id.log")
+                    Copy-Item -Path $_.FullName -Destination $copy -Force
+                    Write-Host "JVM crash log: $($_.Name) -> $copy"
+                }
         }
         Write-Host "Game closed. Triage:"
         Invoke-Triage $id ""

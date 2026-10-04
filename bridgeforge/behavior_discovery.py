@@ -648,6 +648,12 @@ def write_probe_baseline(observation_input: Path, output: Path, *, build: str, s
     return _write_json(path, result)
 
 
+def _save_made_with(save_dir: Path) -> dict | None:
+    from .live_trust import save_made_with
+
+    return save_made_with(save_dir)
+
+
 def build_save_baseline(
     save: Path,
     *,
@@ -729,6 +735,8 @@ def build_save_baseline(
         "reference": {"kind": "old-game-rig", "id": build},
         "scenario": scenario,
         "input": {"kind": "starsector-save", "path": str(campaign), "sha256": hashlib.sha256(raw).hexdigest()},
+        # ROADMAP 36.5: the build and mods the save was made with, so a comparison can say it is not like-for-like.
+        "made_with": _save_made_with(campaign.parent),
         "observations": observations,
         "observation_count": len(observations),
         "verdict": None,
