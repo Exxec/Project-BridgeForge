@@ -2719,6 +2719,15 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         literal reads in sources and, with a JDK, jar classes via javap, against RC8's, the mod's and its declared
         dependencies' settings.json. Flags the three in the old Exigency jar, none in +bf.1. In `done-audit`'s crash
         class. Tests: `tests/test_settings_keys.py`. Same day: Zorg18 V18+bf.6 (Unimatrix size 10, owner request).
+    37. **Faction blueprint tags that match nothing** (owner report 2026-10-04: Exigency's ships could not be bought).
+        exigency.faction knew `knownShips/priorityShips/knownWeapons {tags: [exigency_bp]}` and exipirated.faction
+        `exipirated_bp`, but no hull or weapon carried those tags (only Exigency's wings did), so neither faction knew
+        its own ships or weapons: none in its markets, none from raids. Author's latent bug (original identical, no
+        runtime registration). Fixed: Exigency's 7 ship hulls and 18 sellable weapons tagged exigency_bp (SYSTEM-hinted
+        and fighter-only weapons and fighter hulls left out), Exipirated's 7 hulls exipirated_bp; Exipirated's
+        knownWeapons left as authored (its only own weapons are SYSTEM). Exigency 0.8 is +bf.2, re-archived.
+        **Done:** `faction-known-tag-unmatched` (tier decision: which items belong to the tag is a judgement), against
+        the mod's, RC8's and declared dependencies' ship/weapon/wing tags; in `done-audit`. Test: `FactionKnownTagTests`.
     21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
         escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
         edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next

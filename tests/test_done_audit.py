@@ -37,3 +37,27 @@ class DoneAuditTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PackagingTests(unittest.TestCase):
+    def test_duplicate_entries_wrong_version_and_folder_drift(self) -> None:
+        import zipfile
+
+        from bridgeforge.done_audit import packaging_problems
+
+        with resolved_temp_dir() as root:
+            folder = root / "Mod"
+            _write(folder / "Mod" / "mod_info.json", '{"id": "m", "version": "1+bf.2"}')
+            _write(folder / "Mod" / "data" / "campaign" / "rules.csv", "id\n")
+            with zipfile.ZipFile(folder / "Mod-1+bf.2.zip", "w") as z:
+                z.writestr("Mod/mod_info.json", '{"id": "m", "version": "1+bf.1"}')
+                z.writestr("Mod/data/campaign/rules.csv", "id\n")
+                z.writestr("Mod/Data/campaign/rules.csv", "id\n")
+            problems = packaging_problems(folder, folder / "Mod")
+            (folder / "Mod-1+bf.2.zip").unlink()
+            missing = packaging_problems(folder, folder / "Mod")
+        text = " | ".join(problems)
+        self.assertIn("entry twice", text)
+        self.assertIn("does not declare '1+bf.2'", text)
+        self.assertIn("zip differs from the folder", text)  # mod_info.json bytes differ
+        self.assertEqual(missing, ["no zip beside the mod folder"])

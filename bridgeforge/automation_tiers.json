@@ -177,6 +177,7 @@
     "builtin-wing-is-hullmod": "auto",
     "procgen-call-argument-suspect": "decision",
     "settings-key-missing": "code",
+    "faction-known-tag-unmatched": "decision",
     "campaign-lookup-dereferenced-unguarded": "auto",
     "unverified-json-syntax": "inspect",
     "unverified-mod-info-syntax": "inspect",

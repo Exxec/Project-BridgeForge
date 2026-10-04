@@ -46,3 +46,22 @@ class SettingsKeysTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FactionKnownTagTests(unittest.TestCase):
+    # Owner report 2026-10-04: Exigency's ships could not be bought; knownShips' tag exigency_bp was on no hull.
+    def test_a_known_tag_no_hull_carries_is_flagged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core = root / "core"
+            (core / "data" / "hulls").mkdir(parents=True)
+            (core / "data" / "hulls" / "ship_data.csv").write_text("name,id,tags\nWolf,wolf,base_bp\n", encoding="utf-8")
+            mod = root / "mod"
+            (mod / "data" / "hulls").mkdir(parents=True)
+            (mod / "data" / "world" / "factions").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            (mod / "data" / "hulls" / "ship_data.csv").write_text("name,id,tags\nA,fx_a,\nB,fx_b,fx_other\n", encoding="utf-8")
+            (mod / "data" / "world" / "factions" / "fx.faction").write_text(
+                '{"id": "fx", "knownShips": {"tags": ["fx_bp", "base_bp", "fx_other"], "hulls": []}}', encoding="utf-8")
+            found = [f for f in scan_mod(mod, vanilla_core=core).findings if f.id == "faction-known-tag-unmatched"]
+        self.assertEqual([f.evidence for f in found], [["list:knownShips", "tag:fx_bp"]])

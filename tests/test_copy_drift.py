@@ -113,3 +113,19 @@ class CustomTopFolderTests(unittest.TestCase):
                 (mod / name).write_text("x", encoding="utf-8")
             files = sorted(_collect(mod))
         self.assertEqual(files, ["mod_info.json", "readme.txt", "transfer_all_items_settings.json.default"])
+
+
+class CapitalisedDataFolderTests(unittest.TestCase):
+    # 2026-10-04: Faction Relationships Uniquified ships Data/ (capital D); on Windows it was walked as data/ and Data/.
+    def test_a_capitalised_data_folder_is_listed_once(self) -> None:
+        import tempfile
+
+        from bridgeforge.copy_drift import _collect
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Data" / "campaign").mkdir(parents=True)
+            (root / "Data" / "campaign" / "rules.csv").write_text("id\n", encoding="utf-8")
+            (root / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            files = sorted(_collect(root))
+        self.assertEqual(files, ["Data/campaign/rules.csv", "mod_info.json"])

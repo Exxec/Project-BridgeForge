@@ -5208,6 +5208,59 @@ def _scan_procgen_call_arguments(root: Path, result: ScanResult) -> None:
             add(f"{_relative(root, jar)}!{class_name}", f"method:{method_name}", method, problems)
 
 
+_KNOWN_LISTS = {"knownShips": ("data/hulls/ship_data.csv",), "priorityShips": ("data/hulls/ship_data.csv",),
+                "knownWeapons": ("data/weapons/weapon_data.csv",), "knownFighters": ("data/hulls/wing_data.csv",)}
+
+
+def _csv_tags(path: Path) -> set[str]:
+    import csv as _csv
+    import io as _io
+
+    if not path.is_file():
+        return set()
+    try:
+        rows = _csv.DictReader(_io.StringIO(path.read_text(encoding="utf-8-sig", errors="replace")))
+        return {t.strip() for r in rows for t in (r.get("tags") or "").split(",") if t.strip()}
+    except _csv.Error:
+        return set()
+
+
+def _scan_faction_known_tags(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """A faction's knownShips/priorityShips/knownWeapons/knownFighters names a tag no hull/weapon/wing of the mod,
+    RC8 or a declared dependency carries: the faction then knows none of those items, so its markets cannot sell them
+    and its fleets cannot field them. Exigency's knownShips {tags: [exigency_bp]} matched no hull (only its wings were
+    tagged), so its ships could not be bought (owner report 2026-10-04)."""
+    if vanilla_core is None:
+        return
+    factions = sorted((root / "data" / "world" / "factions").glob("*.faction")) if (root / "data" / "world" / "factions").is_dir() else []
+    if not factions:
+        return
+    bases = [root, vanilla_core, *[Path(d) for d in result.migration_context.get("dependency_roots") or []]]
+    carried = {key: set().union(*(_csv_tags(b / rel) for b in bases for rel in files)) for key, files in _KNOWN_LISTS.items()}
+    for path in factions:
+        spec = _load_lenient_json_file(path)
+        if not isinstance(spec, dict):
+            continue
+        for key in _KNOWN_LISTS:
+            block = spec.get(key)
+            tags = block.get("tags") if isinstance(block, dict) else None
+            for tag in tags or []:
+                if isinstance(tag, str) and tag.strip() and tag not in carried[key]:
+                    result.add(
+                        id="faction-known-tag-unmatched",
+                        category="factions",
+                        severity="high",
+                        classification="REVIEW",
+                        confidence="HIGH",
+                        explanation=(f"{key} lists tag '{tag}', but no {'hull' if 'Ships' in key else 'weapon' if 'Weapons' in key else 'wing'} "
+                                     "in this mod, RC8 or a declared dependency carries it, so the faction knows none of "
+                                     "them: its markets cannot sell them and its fleets cannot field them (Exigency's "
+                                     "exigency_bp was on its wings only, 2026-10-04)."),
+                        file=_relative(root, path),
+                        evidence=[f"list:{key}", f"tag:{tag}"],
+                    )
+
+
 def _scan_settings_keys_missing(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
     """Literal settings reads whose key no settings.json defines (bridgeforge.settings_keys; Exigency 0.8 crashed on
     opening a market reading blackMarketMinSupplies, 2026-10-04). Needs the vanilla core to know RC8's keys."""
@@ -7396,6 +7449,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_unguarded_variable_lookup(root, result)
     _scan_procgen_call_arguments(root, result)
     _scan_settings_keys_missing(root, result, vanilla_root)
+    _scan_faction_known_tags(root, result, vanilla_root)
     _scan_mod_info_triage_banner(root, result)
     _scan_data_class_references_missing(root, result, vanilla_root, provider_roots)
     _scan_hardcoded_hyperspace_coordinates(root, result)

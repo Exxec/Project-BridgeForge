@@ -15,6 +15,8 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Zorg18** V18+bf.6: Unimatrix is a size 10 colony (was 3), population_10; new campaigns only. Not live-tested.
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.1: Exipirated Avesta black market: blackMarketMinFuel/Supplies/Marines are read with defaults (50/50/30, the 0.8.1a vanilla values); RC8 has none of these settings and opening the market crashed with JSONException (owner crash log 2026-10-04, via Starpocalypse).
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.1: revived for RC8 and archived (ready for live test)
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.2: Exigency and Exipirated ships and Exigency weapons can be bought and raided: the factions knew them by blueprint tags (exigency_bp, exipirated_bp) that no hull or weapon carried (owner report 2026-10-04).
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.2: revived for RC8 and archived (ready for live test)
 
 ## 2026-10-03
 
