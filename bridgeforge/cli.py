@@ -1036,6 +1036,18 @@ def build_parser() -> argparse.ArgumentParser:
     rebuild_jar_cmd.add_argument("--output", type=Path, help="where the rebuilt jar and compiled classes go (default: a new temp directory)")
     rebuild_jar_cmd.add_argument("--install", action="store_true", help="only when status is PASS: move the working copy's current jar to scratch/moved-<date>/ (logged in MOVES.log) and copy the rebuilt jar in")
     rebuild_jar_cmd.add_argument("--json", action="store_true")
+    tbatch_cmd = subcommands.add_parser("translate-batch", help="a mod's whole translation in one command: export, AI agent per chunk, strict checks (filled, no CJK left, placeholders kept), apply to a complete copy or in place, check (ROADMAP 34.28)")
+    tbatch_cmd.add_argument("mod_dir", type=Path)
+    tbatch_target = tbatch_cmd.add_mutually_exclusive_group(required=True)
+    tbatch_target.add_argument("--out", type=Path, help="new folder for the complete translated copy")
+    tbatch_target.add_argument("--in-place", action="store_true", help="edit mod_dir itself (a working copy only)")
+    tbatch_cmd.add_argument("--agent", default="claude -p --permission-mode acceptEdits --model claude-sonnet-5", help="the agent command; it gets the prompt on stdin and edits one chunk file")
+    tbatch_cmd.add_argument("--work", type=Path, help="folder for chunks and the checkpoint (default: <out or mod>.translate-work beside it)")
+    tbatch_cmd.add_argument("--chunk", type=int, default=120, help="entries per agent call (default 120)")
+    tbatch_cmd.add_argument("--reference", type=Path, help="an English copy of the same mod to prefill from")
+    tbatch_cmd.add_argument("--record", type=Path, action="append", default=[], help="a translator's zh/en record to prefill from; repeatable")
+    tbatch_cmd.add_argument("--quiet", action="store_true", help="no per-chunk progress lines")
+    tbatch_cmd.add_argument("--json", action="store_true")
     renamed_cmd = subcommands.add_parser("renamed-ids", help="was a missing id renamed in a newer copy of its mod? Same name and description is RENAMED; a shared name word is only SIMILAR (read-only)")
     renamed_cmd.add_argument("old_copy", type=Path, help="a mod folder that still defines the ids")
     renamed_cmd.add_argument("new_copy", type=Path, help="the newer copy of the same mod")
@@ -3521,6 +3533,30 @@ def main(argv: list[str] | None = None) -> int:
         if not result["packets"]:
             print("No jar-only packets.")
         return 0
+    if args.command == "translate-batch":
+        from .translate_batch import TranslateBatchError, agent_translator, translate_batch
+        from .translation import TranslationError as TranslateApplyError
+        base = (args.out or args.mod_dir).expanduser().resolve()
+        work = args.work or base.with_name(base.name + ".translate-work")
+        try:
+            result = translate_batch(args.mod_dir, translator=agent_translator(args.agent), work_dir=work, out_dir=args.out,
+                                     in_place=args.in_place, chunk=args.chunk, reference=args.reference, records=args.record, quiet=args.quiet)
+        except (TranslateBatchError, TranslateApplyError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        else:
+            print(f"Entries {result['entries']}, sent to the agent in {result['chunks']} chunk(s), translated {result['translated']}.")
+            if result["stopped"]:
+                print(f"Stopped: {result['stopped']}. Rerun the same command to continue from the checkpoint.")
+            for number, problems in result["failed_chunks"].items():
+                print(f"  chunk {number} rejected twice: {'; '.join(problems[:3])}")
+            if result["applied"] is not None:
+                print(f"Applied -> {args.out or args.mod_dir}; translate-check {result['check']['status']}, leftover non-English units: {result['check']['leftover_count']}")
+            elif not result["stopped"]:
+                print(f"Not applied: fix or rerun the rejected chunks (work folder {result['work_dir']}).")
+        return 0 if result["applied"] is not None else 1
     if args.command == "renamed-ids":
         from .renamed_ids import find_renamed
         results = find_renamed(args.old_copy, args.new_copy, args.ids)

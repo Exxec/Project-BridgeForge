@@ -2664,6 +2664,11 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         unused referring files, CJK size).
     28. **`translate-batch` command:** the agent translation pipeline (export, 120-entry chunks, one agent per chunk,
         strict verify: every entry filled, no CJK left, markers kept; apply only when all pass; checkpointed).
+        **Done 2026-10-04:** `bridgeforge/translate_batch.py`, `translate-batch MOD (--out COPY | --in-place) [--agent CMD]
+        [--reference EN_COPY] [--record REC]`: export, prefill, chunks to the agent (one chunk file each, prompt on stdin),
+        `verify_chunk` (ids/sources unchanged, filled, no CJK, placeholders as apply counts them), one retry, glossary
+        carried between chunks, apply and translate-check; checkpointed and stops at a usage limit. In
+        LONG_RUNNING_COMMANDS. Tests: `tests/test_translate_batch.py`.
     29. **Supersession across multi-mod packs:** read every root inside a pack zip (the Yunru pack held 9 modules and
         superseded YunruCore and Old School Expansion at 100% content overlap, found by hand).
     30. **References from files RC8 never loads are notes** (extends 34.23): a `.ship` or `.wpn` with no ship_data /

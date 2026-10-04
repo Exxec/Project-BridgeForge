@@ -91,4 +91,5 @@ LONG_RUNNING_COMMANDS = (
     ("check-impact",),
     ("relink",),
     ("port-interfaces",),
+    ("translate-batch",),
 )
