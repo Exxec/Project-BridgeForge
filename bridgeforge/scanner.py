@@ -723,6 +723,45 @@ def _emit_json_tolerance_findings(result: ScanResult, category: str, file: str, 
         result.add(id="json-escaped-apostrophe", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="A double-quoted string escapes an apostrophe as \\'. Starsector's org.json loader reads it as a plain apostrophe (verified against starsector-core/json.jar), but strict JSON rejects the escape. BridgeForge parsed it structurally and does not recommend rewriting it.", file=file)
 
 
+_JSON_VALUE_END = re.compile(r"""(?:"|\]|\}|\d|\btrue|\bfalse|\bnull|[A-Za-z_]\w*)\s*$""")
+
+
+def _repair_missing_commas(text: str, limit: int = 20) -> tuple[str, list[int]] | None:
+    """Insert the commas a strict parse says are missing between two lines, until the file parses the way RC8's
+    org.json does (`_parse_json`); None when it still fails or the gap is not line-ended. org.json rejects a missing
+    separator ("Expected a ',' or ']'", JSONArray/JSONObject in starsector-core/json.jar), so this is a real load
+    error, not a tolerance. Hiigaran's polaris.json lacked one after "organics_common" (ROADMAP 34.16, 2026-10-04)."""
+    lines = text.split("\n")
+    fixed: list[int] = []
+    for _ in range(limit):
+        try:
+            _parse_json("\n".join(lines))
+            return ("\n".join(lines), fixed) if fixed else None
+        except json.JSONDecodeError as exc:
+            # _parse_json reports the strict error and, in its message, where the lenient pass failed.
+            inner = re.search(r"Expecting ',' delimiter at line (\d+)", exc.msg)
+            if inner:
+                target = int(inner.group(1)) - 1
+            elif exc.msg.startswith("Expecting ',' delimiter"):
+                target = exc.lineno - 1
+            else:
+                return None
+            if not 0 <= target < len(lines):
+                return None
+            previous = target - 1
+            while previous >= 0 and re.sub(r"(#|//).*$", "", lines[previous]).strip() == "":
+                previous -= 1
+            if previous < 0 or previous in fixed:
+                return None
+            content = re.sub(r"\s*(#|//)[^\"]*$", "", lines[previous].rstrip("\r"))
+            if not _JSON_VALUE_END.search(content):
+                return None
+            tail = lines[previous].rstrip("\r")[len(content):]
+            lines[previous] = content + "," + tail + ("\r" if lines[previous].endswith("\r") else "")
+            fixed.append(previous + 1)
+    return None
+
+
 def _unverified_json_syntax_finding(result: ScanResult, category: str, file: str, exc: Exception) -> None:
     result.add(id="unverified-json-syntax", category=category, severity="medium", classification="UNKNOWN", confidence="DETERMINISTIC", explanation=f"A strict JSON parser rejected this file ({exc}). This is not proof that the target game parser rejects it; no matching parser-tolerance evidence is available.", file=file)
 
@@ -1036,15 +1075,16 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
             for integration, prefix in EXTERNAL_CAMPAIGN_MEMORY_PREFIXES.items():
                 keys = sorted(set(re.findall(rf'"({re.escape(prefix)}[A-Za-z0-9_]+)"', text)))
                 if keys:
+                    harmless = _external_memory_keys_harmless(text, keys, integration.lower())
                     result.add(
                         id="external-campaign-memory-key",
                         category="campaign",
-                        severity="medium",
-                        classification="REVIEW",
+                        severity="low" if harmless else "medium",
+                        classification="SAFE" if harmless else "REVIEW",
                         confidence="DETERMINISTIC",
                         explanation=f"Campaign code reads {integration}-namespaced memory state directly. Verify the integration is optional, null-safe, and tested with {integration} disabled.",
                         file=relative,
-                        evidence=[integration, *keys],
+                        evidence=[integration, *keys] + (["written-or-guarded"] if harmless else []),
                     )
         commented_spawns = re.findall(r"//[^\r\n]*\b(?:addSpawnPoint|spawnFleet)\s*\(", text)
         uncommented_text = re.sub(r"//[^\r\n]*", "", text)
@@ -2154,7 +2194,13 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
         try:
             _, tolerances = _parse_json(text)
         except json.JSONDecodeError as exc:
-            _unverified_json_syntax_finding(result, "assets", _relative(root, path), exc)
+            repaired = _repair_missing_commas(text)
+            if repaired:
+                result.add(id="json-missing-comma", category="assets", severity="high", classification="REVIEW", confidence="DETERMINISTIC",
+                           explanation="Two values sit on consecutive lines with no comma between them. Starsector's org.json loader rejects that (\"Expected a ',' or ']'\"), so the file fails to load. With a comma at the end of each listed line the file parses as RC8 reads it.",
+                           file=_relative(root, path), evidence=[f"line:{n}" for n in repaired[1]])
+            else:
+                _unverified_json_syntax_finding(result, "assets", _relative(root, path), exc)
         else:
             _emit_json_tolerance_findings(result, "assets", _relative(root, path), tolerances)
     # Starsector's other JSON-like files: only the trailing-data result is reported here (content
@@ -5091,6 +5137,26 @@ def _scan_module_captain_personality_risk(root: Path, result: ScanResult) -> Non
             file=_relative(root, ship_data_path),
             evidence=[f"hull:{hull_id}", "hint:SHIP_WITH_MODULES"],
         )
+
+
+def _external_memory_keys_harmless(text: str, keys: list[str], mod_id: str) -> bool:
+    """Every use of every key is a write (`set`/`unset`: an inert entry without the integration; Kadur's
+    `$nex_recentlyCapturedByPlayer`), or a read on a line guarded by `isModEnabled("<mod_id>")` directly or through a
+    boolean assigned from it (Hiver's `!haveNexerelin || ...getBoolean("$nex_randomSector")`). ROADMAP 34.17."""
+    blank = _blank_java_comments(text)
+    guards = set(re.findall(rf'\b(\w+)\s*=\s*[^;]*isModEnabled\s*\(\s*"{re.escape(mod_id)}"\s*\)', blank))
+    for key in keys:
+        for match in re.finditer(re.escape(f'"{key}"'), blank):
+            before = blank[max(0, match.start() - 40):match.start()]
+            if re.search(r"\b(?:set|unset)\s*\(\s*$", before):
+                continue
+            line_start = blank.rfind("\n", 0, match.start()) + 1
+            line_end = blank.find("\n", match.end())
+            line = blank[line_start:line_end if line_end >= 0 else len(blank)]
+            if f'isModEnabled("{mod_id}")' in line.replace(" ", "") or any(re.search(rf"\b{re.escape(g)}\b", line) for g in guards):
+                continue
+            return False
+    return True
 
 
 _NEX_SECTOR_MANAGER_IMPORT = re.compile(r"^[ \t]*import\s+exerelin\.campaign\.SectorManager\s*;[ \t]*\r?\n", re.M)

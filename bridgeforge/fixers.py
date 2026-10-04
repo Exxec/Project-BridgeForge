@@ -51,6 +51,7 @@ SUPPORTED_FINDINGS = (
     "hullmod-instance-state",
     "nexerelin-corvus-mode-import",
     "spawned-ship-captain-personality-risk",
+    "json-missing-comma",
     "faction-trait-weight-legacy-personality-id",
     "shiproles-wing-id",
     "csv-fullwidth-number",
@@ -1693,6 +1694,28 @@ def _fix_nexerelin_corvus_mode_import(root: Path, options: dict) -> list[FileCha
 
 
 # ---------------------------------------------------------------------------
+# Fixer: json-missing-comma (ROADMAP 34.16)
+# ---------------------------------------------------------------------------
+
+
+def _fix_json_missing_comma(root: Path, options: dict) -> list[FileChange]:
+    """Apply scanner._repair_missing_commas, which only succeeds when the file then parses as RC8 reads it."""
+    from .scanner import _repair_missing_commas
+
+    changes: list[FileChange] = []
+    for rel in sorted({f.file for f in _findings_of(root, options, "json-missing-comma") if f.file}):
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        repaired = _repair_missing_commas(text)
+        if repaired:
+            changes.append(FileChange(path=path, before=raw, after=_encode(repaired[0], had_bom)))
+    if not changes:
+        raise FixerError("No flagged JSON file parses after adding the missing commas.")
+    return changes
+
+
+# ---------------------------------------------------------------------------
 # Fixer: spawned-ship-captain-personality-risk (loose scripts only; ROADMAP 34.14)
 # ---------------------------------------------------------------------------
 
@@ -2694,6 +2717,7 @@ _FIXER_FUNCS = {
     "hullmod-instance-state": _fix_hullmod_instance_state,
     "nexerelin-corvus-mode-import": _fix_nexerelin_corvus_mode_import,
     "spawned-ship-captain-personality-risk": _fix_spawned_ship_captain,
+    "json-missing-comma": _fix_json_missing_comma,
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
     "shiproles-wing-id": _fix_shiproles_wing_id,
     "csv-fullwidth-number": _fix_csv_fullwidth_number,

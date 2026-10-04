@@ -1942,3 +1942,32 @@ class SpawnedShipCaptainFixerTests(unittest.TestCase):
         self.assertIn('m.spawnShipOrWing("fx_wing", at, 0f);', text)
         self.assertIn("Personalities.STEADY", text)
         self.assertTrue(text.rstrip().endswith("}"))
+
+
+class JsonMissingCommaTests(unittest.TestCase):
+    # ROADMAP 34.16 (2026-10-04): Hiigaran's polaris.json; org.json rejects a missing separator.
+    def test_adds_the_comma_and_the_file_then_parses(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            path = root / "data" / "campaign" / "econ" / "x.json"
+            path.parent.mkdir(parents=True)
+            path.write_bytes(b'{\r\n\t"conditions":[\r\n\t\t"a",\r\n\t\t#"b",\r\n\t\t"c"\r\n\t\t"d",\r\n\t],\r\n}\r\n')
+            found = _findings(scan_mod(root), "json-missing-comma")
+            apply_fix(compute_fix(root, "json-missing-comma"))
+            data = path.read_bytes()
+            after = scan_mod(root)
+        self.assertEqual(found[0].evidence, ["line:5"])
+        self.assertIn(b'\t\t"c",\r\n\t\t"d"', data)
+        self.assertEqual(_findings(after, "json-missing-comma"), [])
+        self.assertEqual(_findings(after, "unverified-json-syntax"), [])
+
+    def test_other_syntax_errors_stay_unverified(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            (root / "data").mkdir()
+            (root / "data" / "y.json").write_text('{"a": [1, 2}', encoding="utf-8")
+            result = scan_mod(root)
+        self.assertEqual(_findings(result, "json-missing-comma"), [])
+        self.assertTrue(_findings(result, "unverified-json-syntax"))

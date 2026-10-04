@@ -699,6 +699,27 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             findings = {item.id for item in result.findings}
             self.assertIn("campaign-memory-live-object", findings)
             self.assertIn("external-campaign-memory-key", findings)
+            self.assertEqual(next(i for i in result.findings if i.id == "external-campaign-memory-key").classification, "REVIEW")
+
+    def test_external_memory_key_written_or_guarded_is_safe(self) -> None:
+        # ROADMAP 34.17 (2026-10-04): Kadur only writes $nex_ keys; Hiver reads one behind isModEnabled("nexerelin").
+        cases = {
+            "Write.java": 'class Write { void a(MarketAPI m) { m.getMemoryWithoutUpdate().set("$nex_recentlyCapturedByPlayer", true, 365f); } }',
+            "Guard.java": 'class Guard { void b() { boolean haveNexerelin = Global.getSettings().getModManager().isModEnabled("nexerelin");\n'
+                          '  if (!haveNexerelin || !Global.getSector().getMemoryWithoutUpdate().getBoolean("$nex_randomSector")) { } } }',
+            "Read.java": 'class Read { void c() { Global.getSector().getMemoryWithoutUpdate().getBoolean("$nex_randomSector"); } }',
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "src").mkdir()
+            for name, body in cases.items():
+                (root / "src" / name).write_text(body, encoding="utf-8")
+            result = scan_mod(root)
+            by_file = {Path(i.file).name: i for i in result.findings if i.id == "external-campaign-memory-key"}
+        self.assertEqual(by_file["Write.java"].classification, "SAFE")
+        self.assertEqual(by_file["Guard.java"].classification, "SAFE")
+        self.assertEqual(by_file["Read.java"].classification, "REVIEW")
 
 
     def test_scanner_reports_campaign_spawning_disabled_only_in_active_source(self) -> None:

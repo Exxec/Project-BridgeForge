@@ -173,6 +173,7 @@
     "unreadable-json": "inspect",
     "unreadable-mod-info": "inspect",
     "unreadable-source": "inspect",
+    "json-missing-comma": "auto",
     "unverified-json-syntax": "inspect",
     "unverified-mod-info-syntax": "inspect",
     "vanilla-class-duplicated-in-jar": "decision",

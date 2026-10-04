@@ -2592,11 +2592,16 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         helper; the check skips 5-arg calls (`_call_argument_count`). Fixer output compiles under RC8's Janino. Test:
         `SpawnedShipCaptainFixerTests`.
     15. **Orbit-period check follows constants:** when every caller of the helper passes a constant radius, compute the
-        period and drop the finding (ORA's six derelicts, 250-425 days).
+        period and drop the finding (ORA's six derelicts, 250-425 days). Deferred 2026-10-04: proving the formula stays
+        positive for every caller needs expression evaluation, not a pattern; a near-miss would hide a save crash.
     16. **Missing-comma JSON repair:** a list item followed by another item on the next line gets a comma, only when that
-        is the parse error and the file then parses (Hiigaran's `polaris.json`).
+        is the parse error and the file then parses (Hiigaran's `polaris.json`). **Done 2026-10-04:** new finding
+        `json-missing-comma` (REVIEW, replaces `unverified-json-syntax` only when the repair parses; org.json's
+        "Expected a ',' or ']'" / "or '}'" read from RC8's json.jar) and its fixer. On Hiigaran's original it picks
+        line 16, the hand fix. Tests: `JsonMissingCommaTests`.
     17. **External memory keys, fewer false positives:** a Nexerelin key only written, or read under an
-        `isModEnabled("nexerelin")` guard, is a note (Kadur, Hiver).
+        `isModEnabled("nexerelin")` guard, is a note (Kadur, Hiver). **Done 2026-10-04:** SAFE with evidence
+        `written-or-guarded` (`_external_memory_keys_harmless`). Test: `test_external_memory_key_written_or_guarded_is_safe`.
     18. **Stray work archives move automatically:** `shippable-work-file` for a `.rar`/`.zip`/`.7z` in the mod root moves
         it to `scratch/moved-work-files/` (Hiver's `Replacement Ships.rar`). **Done 2026-10-04:** the fixer already
         existed; it kept the archive because Hiver's root README named it. Root `.txt`/`.md` no longer count as
