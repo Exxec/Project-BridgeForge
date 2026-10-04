@@ -2636,6 +2636,12 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         now pass the caller's vanilla core. `probe-group plan --provider-source` (default: the real install's mods/ and
         the 0.98 modpack) stages providers the queue lacks, copying from them and never writing there
         (`OutsideProviderTests`).
+    23. **Content references only from files the game loads:** `content-reference-unresolved` read every `.variant`
+        under `data/`, so KIND STRANGER Disassemble-Reassemble's 14 missing `dara_` ids all came from the author's
+        `data/!TEMP_DISABLED_VARIANTS/`, which RC8 never loads (accepted by hand 2026-10-04). Limit variants to
+        `data/variants/**` (and missions' own), hulls and skins to `data/hulls/**`, after confirming RC8's load paths
+        with evidence (a live run with a variant parked outside `data/variants/`). Same day, provider staging gained
+        the Ironclads archive as a source, offering only copies whose gameVersion is 0.98 and the newest version.
     21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
         escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
         edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next

@@ -194,7 +194,7 @@ class OutsideProviderTests(unittest.TestCase):
             _workspace(queue, "Addon", "addon", "hull_addon", deps=["base"])
             source = root / "install_mods"
             (source / "Base 1.0").mkdir(parents=True)
-            (source / "Base 1.0" / "mod_info.json").write_text('{"id": "base", "version": "1.0"}', encoding="utf-8")
+            (source / "Base 1.0" / "mod_info.json").write_text('{"id": "base", "version": "1.0", "gameVersion": "0.98a-RC8"}', encoding="utf-8")
             (source / "Base 1.0" / "data").mkdir()
             (source / "Base 1.0" / "data" / "x.csv").write_text("id\n", encoding="utf-8")
             rig = _rig(root)

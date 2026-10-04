@@ -134,6 +134,8 @@ PROVIDER_READY = ("UNATTENDED_DONE",)
 DEFAULT_PROVIDER_SOURCES = (
     Path(r"C:\Program Files (x86)\Fractal Softworks\Starsector\mods"),
     Path.home() / "Downloads" / "Starsector 0.98 Modpack V6.2" / "Starsector 0.98 Modpack V6.2" / "mods",
+    # The owner's backlog: mostly 0.95a, so only its 0.98 copies are ever offered (see _providers_for).
+    Path.home() / "Downloads" / "Ironclads mega archive",
 )
 
 
@@ -175,7 +177,17 @@ def _providers_for(queue: Path, missing: list[str], extra_sources: list[Path] | 
         candidates = by_id.get(mod_id, [])
         ready = [w for w in candidates if _latest_revive_status(w) in PROVIDER_READY]
         if not ready and not candidates:
-            outside = next(((source, folders) for source, index in zip(extra_sources, extra) if (folders := index.get(mod_id))), None)
+            # Every source holding exactly one copy offers it; the newest version wins (Roider Union: 2.3.1 installed,
+            # 2.6 in the archive, and Roider Armatura needs 2.6's items, 2026-10-04).
+            from .archive import _version_text
+            from .supersession import version_key
+
+            # Only a copy built for 0.98 can run in the RC8 rig (the archive's Roider Union is 1.4.5 for 0.95.1a).
+            offers = [(source, folders) for source, index in zip(extra_sources, extra) if len(folders := index.get(mod_id) or []) == 1
+                      and str(_mod_info(folders[0]).get("gameVersion") or "").startswith("0.98")]
+            duplicated = [(source, folders) for source, index in zip(extra_sources, extra) if len(index.get(mod_id) or []) > 1]
+            outside = max(offers, key=lambda o: version_key(_version_text(_mod_info(o[1][0]).get("version"))), default=None) or \
+                (duplicated[0] if duplicated else None)
             if outside and len(outside[1]) == 1:
                 info = _mod_info(outside[1][0])
                 found.append({"mod_id": mod_id, "workspace": outside[1][0].name, "version": str(info.get("version") or ""),
