@@ -2642,6 +2642,13 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         `data/variants/**` (and missions' own), hulls and skins to `data/hulls/**`, after confirming RC8's load paths
         with evidence (a live run with a variant parked outside `data/variants/`). Same day, provider staging gained
         the Ironclads archive as a source, offering only copies whose gameVersion is 0.98 and the newest version.
+    24. **Renamed ids across versions:** `renamed-ids OLD_COPY NEW_COPY kind:id...` (read-only): RENAMED when the newer copy
+        has one entry with the same display name and description, SIMILAR when only a name word is shared (never
+        enough to remap), reading an old copy's alternate tables such as ship_data_old.csv. **Done 2026-10-04.** It
+        reproduces both hand cases: Xhan Empire 3.0.1's `XHAN_targeting_mast` -> `XHAN_TargetingMast` (remapped in the
+        Maelstrom Xhan expansion), and Traverser's `TDB_chuan_yue_xue_zhe` (only SIMILAR: the Cold Sky Scholar is an
+        unmanned redesign, so the hull was retired). Test: `tests/test_renamed_ids.py`. Next: a remap fixer for
+        RENAMED results, approval-gated.
     21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
         escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
         edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next

@@ -1036,6 +1036,11 @@ def build_parser() -> argparse.ArgumentParser:
     rebuild_jar_cmd.add_argument("--output", type=Path, help="where the rebuilt jar and compiled classes go (default: a new temp directory)")
     rebuild_jar_cmd.add_argument("--install", action="store_true", help="only when status is PASS: move the working copy's current jar to scratch/moved-<date>/ (logged in MOVES.log) and copy the rebuilt jar in")
     rebuild_jar_cmd.add_argument("--json", action="store_true")
+    renamed_cmd = subcommands.add_parser("renamed-ids", help="was a missing id renamed in a newer copy of its mod? Same name and description is RENAMED; a shared name word is only SIMILAR (read-only)")
+    renamed_cmd.add_argument("old_copy", type=Path, help="a mod folder that still defines the ids")
+    renamed_cmd.add_argument("new_copy", type=Path, help="the newer copy of the same mod")
+    renamed_cmd.add_argument("ids", nargs="+", help="kind:id (hull, weapon, hullmod, wing)")
+    renamed_cmd.add_argument("--json", action="store_true")
     port_state_cmd = subcommands.add_parser("port-hullmod-state", help="move a hull mod source's per-ship instance fields into a per-ship State in ship.getCustomData() and write the result (for a jar source, feed it to patch-jar-class --allow-removed)")
     port_state_cmd.add_argument("source", type=Path, help="the hull mod's .java (a decompiled or bundled jar source)")
     port_state_cmd.add_argument("--field", action="append", required=True, help="a field to move (the finding's field:NAME); repeatable")
@@ -3515,6 +3520,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{row['state']:15} {row['class']}  ({row['finding']})\n  {row['next']}")
         if not result["packets"]:
             print("No jar-only packets.")
+        return 0
+    if args.command == "renamed-ids":
+        from .renamed_ids import find_renamed
+        results = find_renamed(args.old_copy, args.new_copy, args.ids)
+        if args.json:
+            print(json.dumps(results, indent=2, ensure_ascii=False))
+        else:
+            for r in results:
+                extra = (" -> " + ", ".join(r["renamed_to"])) if r.get("renamed_to") else ""
+                near = ("; similar: " + ", ".join(f"{s['id']} ({s['name']})" for s in r["similar"])) if r.get("similar") else ""
+                print(f"{r['verdict']:<16} {r['id']}{extra}{near}")
         return 0
     if args.command == "port-hullmod-state":
         from .hullmod_state import HullModStateError, port_hullmod_state
