@@ -24,7 +24,7 @@ CRASH_CLASS = frozenset({
     "jar-linkage-unresolved", "campaign-lookup-dereferenced-unguarded", "loose-script-compile-error",
     "nexerelin-corvus-mode-import", "json-missing-comma", "content-reference-unresolved", "builtin-wing-is-hullmod",
     "hard-coded-campaign-system-reference", "hard-coded-campaign-entity-reference", "personality-id-unknown",
-    "spawned-ship-captain-personality-risk", "removed-api-call", "procgen-call-argument-suspect",
+    "spawned-ship-captain-personality-risk", "removed-api-call", "procgen-call-argument-suspect", "settings-key-missing",
 })
 RESULT_JSON, RESULT_MD, CHECKPOINT = "DONE_AUDIT.json", "DONE_AUDIT.md", "DONE_AUDIT.partial.jsonl"
 

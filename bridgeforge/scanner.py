@@ -5208,6 +5208,55 @@ def _scan_procgen_call_arguments(root: Path, result: ScanResult) -> None:
             add(f"{_relative(root, jar)}!{class_name}", f"method:{method_name}", method, problems)
 
 
+def _scan_settings_keys_missing(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """Literal settings reads whose key no settings.json defines (bridgeforge.settings_keys; Exigency 0.8 crashed on
+    opening a market reading blackMarketMinSupplies, 2026-10-04). Needs the vanilla core to know RC8's keys."""
+    if vanilla_core is None:
+        return
+    from .settings_keys import jar_reads, settings_keys, source_reads
+
+    known = settings_keys(vanilla_core / "data" / "config" / "settings.json", root / "data" / "config" / "settings.json",
+                          *[Path(d) / "data" / "config" / "settings.json" for d in result.migration_context.get("dependency_roots") or []])
+    if not known:
+        return
+    reads: list[tuple[str, str, str, str]] = []
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if "getSettings" in text:
+            reads += [(_relative(root, source), f"line:{line}", getter, key) for line, getter, key in source_reads(text)]
+    jars = [p for p in root.rglob("*.jar") if "disabled_files" not in p.relative_to(root).parts]
+    if jars:
+        if not _JDK_FOR_PROCGEN:
+            from .java_toolchain import find_jdk
+
+            _JDK_FOR_PROCGEN.append(find_jdk())
+        if _JDK_FOR_PROCGEN[0] is not None:
+            for jar in jars:
+                reads += [(f"{_relative(root, jar)}!{cls}", "jar", getter, key) for cls, getter, key in jar_reads(jar, _JDK_FOR_PROCGEN[0].javap)]
+    for file, where, getter, key in reads:
+        if key in known:
+            continue
+        result.add(
+            id="settings-key-missing",
+            category="config",
+            severity="high",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation=(f"Global.getSettings().{getter}(\"{key}\") reads a key that neither RC8's settings.json, this "
+                         "mod's nor a declared dependency's defines: RC8 throws JSONException when the line runs "
+                         "(Exigency 0.8's black market read blackMarketMinSupplies, which vanilla dropped in 0.9a, "
+                         "2026-10-04). Define the key in the mod's settings.json, or read it with "
+                         "getSettingsJSON().optDouble(key, default) using the old vanilla value."),
+            file=file,
+            evidence=[f"key:{key}", f"call:{getter}", where],
+        )
+
+
 _VARIABLE_LOOKUP_DEREF = re.compile(r"\b(getStarSystem|getEntityById)\s*\(\s*([A-Za-z_]\w*)\s*\)\s*\.\s*\w+\s*\(")
 
 
@@ -7346,6 +7395,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_nexerelin_corvus_mode_import(root, result)
     _scan_unguarded_variable_lookup(root, result)
     _scan_procgen_call_arguments(root, result)
+    _scan_settings_keys_missing(root, result, vanilla_root)
     _scan_mod_info_triage_banner(root, result)
     _scan_data_class_references_missing(root, result, vanilla_root, provider_roots)
     _scan_hardcoded_hyperspace_coordinates(root, result)

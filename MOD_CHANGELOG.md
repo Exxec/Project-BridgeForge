@@ -12,6 +12,9 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - ** Slightly Better Tech-Mining** 0.95.1-2.6.0+bf.1: revived for RC8 and archived (ready for live test)
 - **Doc's Needless Economic Expansion Pack** 0.2.0 Mann Co+bf.1: revived for RC8 and archived (ready for live test)
 - **Zorg18** V18+bf.5: Zorg Zeta fixed: the modpack port's corona -10000 and radius-0 Zeta I (0.6 arguments shifted) restored to the author's values; system moved to (70000, -40000). Not live-tested.
+- **Zorg18** V18+bf.6: Unimatrix is a size 10 colony (was 3), population_10; new campaigns only. Not live-tested.
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.1: Exipirated Avesta black market: blackMarketMinFuel/Supplies/Marines are read with defaults (50/50/30, the 0.8.1a vanilla values); RC8 has none of these settings and opening the market crashed with JSONException (owner crash log 2026-10-04, via Starpocalypse).
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.1: revived for RC8 and archived (ready for live test)
 
 ## 2026-10-03
 

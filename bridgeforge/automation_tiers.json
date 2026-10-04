@@ -176,6 +176,7 @@
     "json-missing-comma": "auto",
     "builtin-wing-is-hullmod": "auto",
     "procgen-call-argument-suspect": "decision",
+    "settings-key-missing": "code",
     "campaign-lookup-dereferenced-unguarded": "auto",
     "unverified-json-syntax": "inspect",
     "unverified-mod-info-syntax": "inspect",

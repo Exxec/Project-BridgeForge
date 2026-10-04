@@ -2710,6 +2710,15 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         JDK, jar classes via javap (float pushes tracked to RC8's signatures; only literals judged: radius <= 0,
         corona < 0, orbitRadius < 0, orbitDays <= 0). Flags both calls in the archived jar and the modpack source; the
         owner's rebuild is clean. In `done-audit`'s crash class. Tests: `tests/test_procgen_args.py`.
+    36. **Settings keys no settings.json defines** (owner crash log 2026-10-04): Exigency 0.8's
+        `ExipiratedAvestaSubmarketPlugin` read `getFloat("blackMarketMinSupplies")` (and ...MinFuel, ...MinMarines):
+        vanilla had them in 0.8.1a (50, 50, 30) and dropped them by 0.9a; Exigency never defined them; RC8 threw
+        `JSONException` when Starpocalypse refreshed the Avesta market. Fixed in the jar (patch-jar-class: three
+        getFloat -> `getSettingsJSON().optDouble(key, 0.8.1a value)`), Exigency 0.8 is +bf.1, re-archived. **Done:**
+        `bridgeforge/settings_keys.py` and `settings-key-missing` (tier code: the right default needs the key's history),
+        literal reads in sources and, with a JDK, jar classes via javap, against RC8's, the mod's and its declared
+        dependencies' settings.json. Flags the three in the old Exigency jar, none in +bf.1. In `done-audit`'s crash
+        class. Tests: `tests/test_settings_keys.py`. Same day: Zorg18 V18+bf.6 (Unimatrix size 10, owner request).
     21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
         escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
         edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next
