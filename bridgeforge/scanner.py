@@ -1224,8 +1224,10 @@ def _find_legacy_add_orbital_station_calls(text: str) -> list[tuple[int, int]]:
 # search finds no CrewXPLevel/XPLevel anywhere in RC8, confirming the type itself is gone, not just moved).
 _CREW_XP_LEVEL_PATTERN = re.compile(
     r"import\s+com\.fs\.starfarer\.api\.campaign\.CargoAPI\.CrewXPLevel\s*;[ \t]*\r?\n?"
-    r"|CrewXPLevel\s*\.\s*\w+\s*,\s*"
-    r"|,\s*CrewXPLevel\s*\.\s*\w+"
+    # The CargoAPI. qualifier is part of the span (Ironclads' FleetSpawner wrote addCrew(CargoAPI.CrewXPLevel.REGULAR,
+    # n); leaving the qualifier produced addCrew(CargoAPI.(int)...), 2026-10-04).
+    r"|(?:(?:com\.fs\.starfarer\.api\.campaign\.)?CargoAPI\s*\.\s*)?CrewXPLevel\s*\.\s*\w+\s*,\s*"
+    r"|,\s*(?:(?:com\.fs\.starfarer\.api\.campaign\.)?CargoAPI\s*\.\s*)?CrewXPLevel\s*\.\s*\w+"
 )
 
 

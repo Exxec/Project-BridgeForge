@@ -729,6 +729,19 @@ class CrewXPLevelRewriteTests(unittest.TestCase):
             after_scan = scan_mod(root)
             self.assertEqual(_findings(after_scan, "removed-api-call"), [])
 
+    def test_qualified_cargoapi_crewxplevel_is_dropped_whole(self) -> None:
+        # Ironclads' FleetSpawner (2026-10-04): addCrew(CargoAPI.CrewXPLevel.REGULAR, n) left addCrew(CargoAPI.n).
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            path = root / "data" / "scripts" / "world" / "Spawner.java"
+            _write(path, "package data.scripts.world;\npublic class Spawner {\n"
+                         "    void crew(CargoAPI cargo) { cargo.addCrew(CargoAPI.CrewXPLevel.REGULAR, (int)(cargo.getMaxPersonnel()/2)); }\n}\n")
+            apply_fix(compute_fix(root, "removed-api-call"))
+            text = path.read_text(encoding="utf-8")
+        self.assertIn("cargo.addCrew((int)(cargo.getMaxPersonnel()/2));", text)
+        self.assertNotIn("CargoAPI.(", text)
+
     def test_addtofleet_trailing_crewxplevel_argument_is_dropped_both_overload_shapes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
