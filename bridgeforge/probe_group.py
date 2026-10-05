@@ -76,6 +76,29 @@ def rig_mod_ids(rig_mods: Path) -> dict[str, str]:
     return found
 
 
+def _version_major(version) -> str:
+    if isinstance(version, dict):
+        return str(version.get("major", "")).strip()
+    return str(version or "").strip().split(".")[0]
+
+
+def dependency_version_conflicts(rig_mods: Path, enabled: list[str]) -> list[dict]:
+    """Enabled mods whose declared dependency version has another major than the installed provider. RC8's
+    launcher drops such a mod from enabled_mods.json with no log line (RC8-23; zzz Bingus Sustem wanted IndEvo
+    3.0.c and US 0.43 against 4.1.b and 3.0.3, GRP2C-20261005)."""
+    folders = rig_mod_ids(rig_mods)
+    infos = {mod_id: _mod_info(Path(rig_mods) / folder) for mod_id, folder in folders.items()}
+    conflicts = []
+    for mod_id in enabled:
+        for dep in infos.get(mod_id, {}).get("dependencies") or []:
+            if not isinstance(dep, dict) or dep.get("id") not in infos:
+                continue
+            wanted, installed = dep.get("version"), infos[dep["id"]].get("version")
+            if _version_major(wanted) and _version_major(installed) and _version_major(wanted) != _version_major(installed):
+                conflicts.append({"mod_id": mod_id, "dependency": dep["id"], "wanted": wanted, "installed": installed})
+    return conflicts
+
+
 def dependency_closure(rig_mods: Path, dependencies: list[str], installed: dict[str, str] | None = None) -> tuple[list[str], list[str]]:
     """(every mod id needed, dependencies first; ids missing from the rig), following dependencies of dependencies.
 
@@ -418,6 +441,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     enabled_path.write_text(json.dumps({"enabledMods": enabled}), encoding="utf-8")
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_INSTALL", "group": group_number,
             "members": [m["workspace"] for m in group["members"]], "copied": copied, "staged_providers": staged, "enabled_mods": enabled,
+            "dependency_version_conflicts": dependency_version_conflicts(mods_dir, enabled),
             "config_path": str(common / CONFIG_FILE), "checked_ids": len(config["content_variants"]["ship"]) + len(config["content_variants"]["other"])
             + len(config["content_wings"]) + len(config["content_special_items"])}
 

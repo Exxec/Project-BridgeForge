@@ -1473,6 +1473,9 @@ def main(argv: list[str] | None = None) -> int:
                     for item in result["copied"]:
                         print(f"  {item['workspace']}: {item['action']}")
                     print(f"  enabled_mods.json -> {result['enabled_mods']}")
+                    for item in result.get("dependency_version_conflicts", []):
+                        print(f"  WARN {item['mod_id']} wants {item['dependency']} {item['wanted']}, rig has {item['installed']}: "
+                              "RC8 disables a mod whose dependency major differs (RC8-23); fix its mod_info.json")
                     print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
             elif args.probe_group_command == "bisect":
                 from .probe_group import bisect_group

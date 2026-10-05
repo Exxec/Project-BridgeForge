@@ -5,7 +5,7 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.live_trust import archive_gate, audit_shipped, explain_shipped, live_status, write_run_record
+from bridgeforge.live_trust import archive_gate, audit_shipped, explain_shipped, live_status, original_root, write_run_record
 from tests.support import resolved_temp_dir
 
 
@@ -149,3 +149,14 @@ class SaveMadeWithTests(unittest.TestCase):
         self.assertEqual(compare_made_with(made, {**made, "mods": {"lib": "1.5.6", "mod_a": "2.1"}})["status"], "REVIEW")
         self.assertEqual(compare_made_with(made, {**made, "mods": {"lib": "1.5.6"}})["status"], "UNKNOWN")
         self.assertEqual(compare_made_with(None, made)["status"], "UNKNOWN")
+
+
+class OriginalRootTests(unittest.TestCase):
+    def test_original_extracted_folder_is_found(self) -> None:
+        # yunruindustries keeps original/archive/<zip> and original/extracted/<Mod Name>/ (2026-10-05)
+        with resolved_temp_dir() as root:
+            mod = root / "ws" / "original" / "extracted" / "Yunru Industries"
+            mod.mkdir(parents=True)
+            (mod / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "ws" / "original" / "archive").mkdir()
+            self.assertEqual(original_root(root / "ws"), mod)

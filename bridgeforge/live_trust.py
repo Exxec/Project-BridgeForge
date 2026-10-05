@@ -163,6 +163,11 @@ def original_root(workspace: Path) -> Path | None:
     nested = [p for p in original.iterdir() if p.is_dir() and (p / "mod_info.json").is_file()] if original.is_dir() else []
     if len(nested) == 1:
         return nested[0]
+    # original/archive/ + original/extracted/<Mod Name>/ (yunruindustries, 2026-10-05)
+    extracted_in_original = [p for p in (original / "extracted").iterdir() if p.is_dir() and (p / "mod_info.json").is_file()] \
+        if (original / "extracted").is_dir() else []
+    if len(extracted_in_original) == 1:
+        return extracted_in_original[0]
     # original/ that keeps only the downloaded archives (Arkgneisis) is compared with their extraction in
     # scratch/original-extracted/, which leaves original/ byte-for-byte as received (2026-10-04).
     extracted = sorted(p.parent for p in (Path(workspace) / "scratch" / "original-extracted").rglob("mod_info.json"))

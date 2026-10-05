@@ -685,6 +685,31 @@
       "local_only": true,
       "reason": "revived for the owner's local archive (live-validated 2026-10-05); not published without the author's permission (owner decision 2026-09-27)",
       "recorded_on": "2026-10-05"
+    },
+    "vayrashippack": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-05); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-05"
+    },
+    "wal_weps": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-05); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-05"
+    },
+    "yunruindustries": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-05); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-05"
+    },
+    "zzzMUDA": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-05); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-05"
+    },
+    "zzz_atheos_star_system": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-05); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-05"
     }
   },
   "default": {

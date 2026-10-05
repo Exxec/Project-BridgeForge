@@ -5,7 +5,8 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.probe_group import ProbeGroupError, bisect_group, group_report, install_group, merge_configs, plan_groups
+from bridgeforge.probe_group import (ProbeGroupError, bisect_group, dependency_version_conflicts, group_report, install_group,
+                                     merge_configs, plan_groups)
 from bridgeforge.probe_config import build_probe_config
 from tests.support import link_dir, resolved_temp_dir
 
@@ -381,3 +382,21 @@ class InstallTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DependencyVersionTests(unittest.TestCase):
+    def test_major_mismatch_is_reported_minor_is_not(self) -> None:
+        # RC8-23: zzz Bingus Sustem declared IndEvo 3.0.c against 4.1.b and was silently disabled (GRP2C-20261005)
+        with resolved_temp_dir() as root:
+            mods = root / "mods"
+            for folder, info in {
+                "IndEvo": {"id": "IndEvo", "version": "4.1.b"},
+                "US": {"id": "US", "version": {"major": "3", "minor": "0", "patch": "3"}},
+                "Lazy": {"id": "lw_lazylib", "version": "3.0.0"},
+                "Bingus": {"id": "bingus", "version": "1", "dependencies": [
+                    {"id": "IndEvo", "version": "3.0.c"}, {"id": "US", "version": "3.0.1"}, {"id": "lw_lazylib"}]},
+            }.items():
+                (mods / folder).mkdir(parents=True)
+                (mods / folder / "mod_info.json").write_text(json.dumps(info), encoding="utf-8")
+            conflicts = dependency_version_conflicts(mods, ["bingus", "IndEvo"])
+        self.assertEqual(conflicts, [{"mod_id": "bingus", "dependency": "IndEvo", "wanted": "3.0.c", "installed": "4.1.b"}])

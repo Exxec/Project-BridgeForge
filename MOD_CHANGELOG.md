@@ -51,6 +51,14 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Steel Cardinal** 0.3.0: revived for RC8 and archived (live validated)
 - **Vayra's Sector** 3.2.1: revived for RC8 and archived (live validated)
 - **Seeker [BF r4]** 0.3.0-0.98a+bf.4: revived for RC8 and archived (live validated)
+- **EZ Damage [BF r1]** 2a+bf.1: revived for RC8 and archived (live validated)
+- **Walrus Arsenal** 0.2: revived for RC8 and archived (live validated)
+- **zzz Bingus Sustem** 0.6.9: revived for RC8 and archived (live validated)
+- **Vayra's Ship Pack** 1.2.3: revived for RC8 and archived (live validated)
+- ** Yunru Industries** 2025-03-30: revived for RC8 and archived (live validated)
+- **zzzMilitaristic Utilitarian Defensive Alliance** 0.1.00000000001: revived for RC8 and archived (live validated)
+- **Vayra's Ship Pack** 1.2.3: Shieldwall Drones system file renamed to its id; no longer hides vanilla drone_pd
+- **zzz Bingus Sustem** 0.6.9: dependency versions set to the tested IndEvo 4.1.b and Unknown Skies 3.0.3 (RC8 disabled it otherwise)
 
 ## 2026-10-04
 
