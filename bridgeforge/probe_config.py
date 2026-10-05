@@ -398,7 +398,23 @@ def _content_special_items(mod_root: Path) -> list[str]:
         return []
     rows = csv.DictReader(io.StringIO(path.read_text(encoding="utf-8-sig", errors="replace")))
     ids = {(row.get("id") or "").strip() for row in rows}
-    return sorted(item for item in ids if item and not item.startswith("#"))
+    # A row copying a vanilla item (Aivon Republic's special_items.csv repeats fighter_bp, ship_bp ... 2026-10-05) is
+    # vanilla's item: a blueprint needs its wing/ship id as data, so building it empty threw a false FAIL.
+    vanilla = _vanilla_special_items()
+    return sorted(item for item in ids if item and not item.startswith("#") and item not in vanilla)
+
+
+def _vanilla_special_items() -> set[str]:
+    import csv
+    import io
+
+    from .java_toolchain import REPO_ROOT
+
+    path = REPO_ROOT / "In operation" / "_rig" / "starsector-core" / "data" / "campaign" / "special_items.csv"
+    if not path.is_file():
+        return set()
+    rows = csv.DictReader(io.StringIO(path.read_text(encoding="utf-8-sig", errors="replace")))
+    return {(row.get("id") or "").strip() for row in rows if (row.get("id") or "").strip()}
 
 
 def _content_ship_hulls(mod_root: Path, deployable_hulls: list[str]) -> dict[str, str]:

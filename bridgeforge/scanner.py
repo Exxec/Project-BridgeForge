@@ -204,6 +204,9 @@ BUNDLED_LIBRARY_PACKAGE_PREFIXES = {
     "Nexerelin": ("exerelin/",),
     "JSON": ("org/json/",),
     "LWJGL": ("org/lwjgl/",),
+    # CMUtils (Combat Misc Utils, id cmutils): Neutrino (tomatopaste) calls cmu/CMUtils without declaring it, a
+    # NoClassDefFoundError in live GRP4-20261005c (2026-10-05).
+    "CMUtils": ("cmu/",),
 }
 LIBRARY_DEPENDENCY_IDS = {
     "GraphicsLib": "shaderLib",
@@ -212,6 +215,7 @@ LIBRARY_DEPENDENCY_IDS = {
     "MagicLib": "MagicLib",
     "LunaLib": "lunalib",
     "Nexerelin": "nexerelin",
+    "CMUtils": "cmutils",  # CMUtils 0.3.2 mod_info.json
 }
 SETTINGS_ACCEPT_LIMIT = 25  # owner, 2026-09-27 (ROADMAP item 19 held rule)
 SETTINGS_BASELINE_FILE = "SETTINGS_BASELINE.json"

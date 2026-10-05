@@ -106,15 +106,42 @@ def mod_created_systems(root: Path) -> list[str]:
             names.update(_CREATE_SYSTEM_SOURCE.findall(source.read_text(encoding="utf-8", errors="replace")))
         except OSError:
             continue
+    string_values = _strings_json_values(root)
     for jar in _loaded_mod_jars(root):
         try:
             with zipfile.ZipFile(jar) as archive:
                 for member in archive.namelist():
                     if member.endswith(".class"):
-                        names.update(_jar_system_names(archive.read(member)))
+                        data = archive.read(member)
+                        names.update(_jar_system_names(data))
+                        # Names read at runtime from data/strings/strings.json (Outer Rim Alliance's ORA_godunov:
+                        # getString("ORA", "gdnv_system") -> "Godunov"; the probe saw no ORA systems, 2026-10-05).
+                        # Through any wrapper (ORA_txt.txt(key)): a *_system key constant is specific enough.
+                        if string_values and b"createStarSystem" in data:
+                            parsed = _constant_pool(data)
+                            if parsed is not None:
+                                pool, _ = parsed
+                                for entry in pool.values():
+                                    if entry[0] == 8:
+                                        key = _utf8(pool, entry[1])
+                                        if key in string_values:
+                                            names.add(string_values[key])
         except (OSError, zipfile.BadZipFile):
             continue
     return sorted(names)
+
+
+def _strings_json_values(root: Path) -> dict[str, str]:
+    """{key: value} for the string entries of the mod's data/strings/strings.json (every category)."""
+    from .scanner import _load_lenient_json_file
+
+    path = Path(root) / "data" / "strings" / "strings.json"
+    spec = _load_lenient_json_file(path) if path.is_file() else None
+    values: dict[str, str] = {}
+    for category in (spec or {}).values() if isinstance(spec, dict) else []:
+        if isinstance(category, dict):
+            values.update({k: v for k, v in category.items() if isinstance(v, str) and k.endswith("_system")})
+    return values
 
 
 def _procgen_weights(root: Path) -> dict[str, float]:

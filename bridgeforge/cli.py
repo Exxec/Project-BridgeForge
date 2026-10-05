@@ -2456,7 +2456,7 @@ def main(argv: list[str] | None = None) -> int:
                     from .log_triage import class_owner_index
                     index = class_owner_index(args.mods_dir, enabled_only=not args.all_mods)
                     stack = re.findall(r"\bat\s+((?:data|src|org|com)\.[\w.$]+)\.[\w$<>]+\(", args.log.read_text(encoding="utf-8", errors="replace"))
-                    unowned = sorted({c.split("$")[0] for c in stack if not c.startswith(("com.fs.", "org.lwjgl", "org.json"))
+                    unowned = sorted({c.split("$")[0] for c in stack if not c.startswith(("com.fs.", "org.lwjgl", "org.json", "org.codehaus.", "org.apache.", "com.thoughtworks.", "sun.", "java."))
                                       and c.split("$")[0] not in index})
                     if unowned:
                         print(f"  Not in any mod under {args.mods_dir}: {', '.join(unowned[:5])} -- the log likely came "

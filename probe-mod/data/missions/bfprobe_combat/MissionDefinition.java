@@ -2,6 +2,7 @@ package data.missions.bfprobe_combat;
 
 import com.bridgeforge.probe.BfProbeCombatPlugin;
 import com.bridgeforge.probe.ProbeConfig;
+import com.bridgeforge.probe.ProbeFiles;
 import com.bridgeforge.probe.ProbeLog;
 import com.fs.starfarer.api.fleet.FleetGoal;
 import com.fs.starfarer.api.fleet.FleetMemberType;
@@ -50,6 +51,18 @@ public class MissionDefinition implements MissionDefinitionPlugin {
         api.setFleetTagline(FleetSide.ENEMY, "BridgeForge probe side B");
         api.addBriefingItem("BridgeForge combat probe (rig only): AI-controlled, ends automatically");
 
+        // 0.2.13 (owner request 2026-10-05): every hull fights. With 12 per side most hulls were skipped (group 1: 30
+        // fought, 86 skipped); now each start of the mission fights the next slice of 2 x cap hulls, wrapping round,
+        // so restarting the mission covers the whole group. The round counter lives in a common file.
+        int total = config.variantByHull.size();
+        int perRound = 2 * cap;
+        int rounds = total == 0 ? 1 : (total + perRound - 1) / perRound;
+        int round = ProbeFiles.nextCombatRound() % rounds;
+        int sliceStart = round * perRound;
+        int sliceEnd = Math.min(total, sliceStart + perRound);
+        ProbeLog.emit("combat-round", ProbeLog.STATUS_INFO, "round " + (round + 1) + " of " + rounds,
+                "hulls " + (sliceStart + 1) + "-" + sliceEnd + " of " + total + (rounds > 1 ? "; restart the mission for the next round" : ""));
+        int position = 0;
         int index = 0;
         int deployedA = 0;
         int deployedB = 0;
@@ -61,6 +74,11 @@ public class MissionDefinition implements MissionDefinitionPlugin {
             Map.Entry entry = (Map.Entry) it.next();
             String hullId = (String) entry.getKey();
             String variantId = (String) entry.getValue();
+            if (position < sliceStart || position >= sliceEnd) {
+                position++;
+                continue; // another round's slice
+            }
+            position++;
             FleetSide side = (index % 2 == 0) ? FleetSide.PLAYER : FleetSide.ENEMY;
             boolean sideFull = side == FleetSide.PLAYER ? deployedA >= cap : deployedB >= cap;
             if (sideFull) {
