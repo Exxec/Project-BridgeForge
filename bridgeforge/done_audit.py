@@ -26,6 +26,8 @@ CRASH_CLASS = frozenset({
     "hard-coded-campaign-system-reference", "hard-coded-campaign-entity-reference", "personality-id-unknown",
     "spawned-ship-captain-personality-risk", "removed-api-call", "procgen-call-argument-suspect", "settings-key-missing", "faction-known-tag-unmatched",
 })
+# Compatibility risks (owner question 2026-10-04, AoTD): reported per archive, not counted as findings.
+COMPAT_CLASS = frozenset({"industry-plugin-override", "new-game-plugin-override", "temporary-market-fleet-source"})
 RESULT_JSON, RESULT_MD, CHECKPOINT = "DONE_AUDIT.json", "DONE_AUDIT.md", "DONE_AUDIT.partial.jsonl"
 
 
@@ -123,17 +125,21 @@ def _audit_one(folder: Path, queue: Path, vanilla_core: Path | None, provider_ro
     if working.is_dir():
         stale = _casefold_hash(working) != _casefold_hash(root)
     accepted = mod_baseline_keys(root) | (mod_baseline_keys(working) if working.is_dir() else set())
-    hits = []
+    hits, compat = [], []
     for finding in scan_mod(root, vanilla_core=vanilla_core, provider_roots=provider_roots or None).findings:
         data = asdict(finding)
         if finding_dict_baseline_key(data) in accepted:
+            continue
+        if data["id"] in COMPAT_CLASS:
+            compat.append({"id": data["id"], "file": data.get("file"), "evidence": (data.get("evidence") or [])[:1]})
             continue
         if data["id"] in CRASH_CLASS or data["classification"] in ("MANUAL", "UNKNOWN"):
             hits.append({"id": data["id"], "classification": data["classification"], "file": data.get("file"),
                          "evidence": (data.get("evidence") or [])[:3]})
     packaging = packaging_problems(folder, root)
     status = "STALE" if stale else ("PACKAGING" if packaging else ("FINDINGS" if hits else "CLEAN"))
-    return {"mod": folder.name, "status": status, "stale": stale, "packaging": packaging, "findings": hits}
+    return {"mod": folder.name, "status": status, "stale": stale, "packaging": packaging, "findings": hits,
+            "compat": compat}
 
 
 def done_audit(done: Path, queue: Path, vanilla_core: Path | None = None, quiet: bool = False) -> dict:
@@ -162,7 +168,7 @@ def done_audit(done: Path, queue: Path, vanilla_core: Path | None = None, quiet:
         (done / RESULT_JSON).write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
         lines = ["# Done/ audit", "", "Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())), ""]
         for record in records:
-            if record["status"] == "CLEAN":
+            if record["status"] == "CLEAN" and not record.get("compat"):
                 continue
             lines.append(f"## {record['mod']}: {record['status']}")
             if record["stale"]:
@@ -171,6 +177,8 @@ def done_audit(done: Path, queue: Path, vanilla_core: Path | None = None, quiet:
                 lines.append(f"- packaging: {problem}")
             for hit in record["findings"]:
                 lines.append(f"- `{hit['id']}` ({hit['classification']}) {hit['file'] or ''}: {'; '.join(map(str, hit['evidence']))}")
+            for hit in record.get("compat") or []:
+                lines.append(f"- compatibility: `{hit['id']}` {hit['file'] or ''}: {'; '.join(map(str, hit['evidence']))}")
             lines.append("")
         (done / RESULT_MD).write_text("\n".join(lines), encoding="utf-8")
         checkpoint.finish()

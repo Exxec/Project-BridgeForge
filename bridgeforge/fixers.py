@@ -55,6 +55,7 @@ SUPPORTED_FINDINGS = (
     "builtin-wing-is-hullmod",
     "wing-op-cost-blank",
     "campaign-lookup-dereferenced-unguarded",
+    "temporary-market-fleet-source",
     "faction-trait-weight-legacy-personality-id",
     "shiproles-wing-id",
     "csv-fullwidth-number",
@@ -1749,6 +1750,76 @@ def _fix_lookup_dereferenced_unguarded(root: Path, options: dict) -> list[FileCh
 
 
 # ---------------------------------------------------------------------------
+# Fixer: temporary-market-fleet-source (ROADMAP 34.38, 2026-10-04)
+# ---------------------------------------------------------------------------
+
+_TEMP_MARKET = re.compile(r"\b([A-Za-z_]\w*)\s*=\s*Global\s*\.\s*getFactory\s*\(\s*\)\s*\.\s*createMarket\s*\(")
+_REMOVE_MARKET_LINE = re.compile(r"^([ \t]*)Global\s*\.\s*getSector\s*\(\s*\)\s*\.\s*getEconomy\s*\(\s*\)\s*\.\s*removeMarket\s*\(\s*([A-Za-z_]\w*)\s*\)\s*;[ \t]*(\r?\n?)$")
+
+
+def _temporary_market_sources(root: Path, options: dict) -> list[Path]:
+    """Source files for the findings: a loose script as is; a jar class through the mod's bundled source
+    (jars/src/ or src/, matched by package path), which patch-jar-class then compiles into the jar."""
+    paths: list[Path] = []
+    for finding in _findings_of(root, options, "temporary-market-fleet-source"):
+        file = (finding.file or "").replace("\\", "/")
+        if "!" in file:
+            class_path = file.split("!", 1)[1].split("$", 1)[0].removesuffix(".class") + ".java"
+            candidates = [root / base / class_path for base in ("jars/src", "src")]
+            found = next((c for c in candidates if c.is_file()), None)
+            if found is None:
+                raise FixerError(f"{file}: no bundled source for this class (jars/src/ or src/); decompile it first")
+            paths.append(found)
+        elif file:
+            paths.append(root / file)
+    return sorted(set(paths))
+
+
+def _fix_temporary_market_fleet_source(root: Path, options: dict) -> list[FileChange]:
+    """Drop `Global.getSector().getEconomy().removeMarket(m);` where `m` came from `createMarket(...)` in the same
+    file and is never `addMarket`-ed: the market never entered the economy, so vanilla only removes it from a list it is
+    not in and marks the location cache stale (ReachEconomy.removeMarket, javap 2026-10-04; RC8-22), and
+    the fleet still builds from the same market (same quality and size). AoTD Theory of Toolbox's economy turns each
+    such call into a structural refresh (AoTDEconomy.removeMarket, 2026-10-04). A market that is also added, or a
+    removeMarket not alone on its line, is refused."""
+    from .scanner import _blank_java_comments
+
+    changes, refused = [], []
+    for path in _temporary_market_sources(root, options):
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        blank = _blank_java_comments(text)
+        created = set(_TEMP_MARKET.findall(blank))
+        lines = text.splitlines(keepends=True)
+        blank_lines = blank.splitlines(keepends=True)
+        changed = False
+        for index, line in enumerate(blank_lines):
+            match = _REMOVE_MARKET_LINE.match(line)
+            if not match:
+                continue
+            name = match.group(2)
+            if name not in created or re.search(r"\baddMarket\s*\(\s*" + re.escape(name) + r"\b", blank):
+                refused.append(f"{_relative_path(root, path)}:{index + 1}")
+                continue
+            eol = match.group(3) or ""
+            lines[index] = (f"{match.group(1)}// BridgeForge: removeMarket({name}) dropped; {name} never entered the economy, "
+                            f"so vanilla only removed it from a list it was not in and marked a cache stale (RC8-22).{eol}")
+            changed = True
+        if changed:
+            changes.append(FileChange(path=path, before=raw, after=_encode("".join(lines), had_bom)))
+    if not changes:
+        raise FixerError("No removeMarket of a never-added temporary market found" + (f" (refused: {', '.join(refused[:5])})" if refused else "."))
+    return changes
+
+
+def _relative_path(root: Path, path: Path) -> str:
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return str(path)
+
+
+# ---------------------------------------------------------------------------
 # Fixer: wing-op-cost-blank (ROADMAP 34.22; approval-gated: the value is a comparison, not a conversion)
 # ---------------------------------------------------------------------------
 
@@ -2891,6 +2962,7 @@ _FIXER_FUNCS = {
     "builtin-wing-is-hullmod": _fix_builtin_wing_is_hullmod,
     "wing-op-cost-blank": _fix_wing_op_cost_blank,
     "campaign-lookup-dereferenced-unguarded": _fix_lookup_dereferenced_unguarded,
+    "temporary-market-fleet-source": _fix_temporary_market_fleet_source,
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
     "shiproles-wing-id": _fix_shiproles_wing_id,
     "csv-fullwidth-number": _fix_csv_fullwidth_number,

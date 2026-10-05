@@ -5279,6 +5279,120 @@ def _scan_faction_known_tags(root: Path, result: ScanResult, vanilla_core: Path 
                     )
 
 
+_NEW_GAME_PLUGIN_KEYS = ("newGameSectorProcGen", "newGameCreationEntryPoint")
+# RC8 industries whose plugin AoTD sets at load (javap of each mod plugin, 2026-10-04: IndustrySpecAPI.setPluginClass).
+_AOTD_REPLUGGED = {"population": "AoTD Theory of Toolbox", "heavyindustry": "AoTD Vaults of Knowledge",
+                   "orbitalworks": "AoTD Vaults of Knowledge", "patrolhq": "AoTD Seats of Power",
+                   "militarybase": "AoTD Seats of Power", "highcommand": "AoTD Seats of Power"}
+
+
+def _scan_shared_hook_overrides(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """Hooks only one mod can own (owner question 2026-10-04, AoTD compatibility):
+
+    - industry-plugin-override: an industries.csv row for an RC8 industry with another plugin class. Whichever mod
+      sets it last wins, silently: AoTD Theory of Toolbox sets population's plugin at load
+      (AoTDToolboxTheoryPlugin: getIndustrySpec(POPULATION).setPluginClass), dropping DNEEP's
+      PopulationAndInfrastructureDNEEP. Compatible form: a market condition adding to the industry through
+      Industry.getDemand/getSupply.
+    - new-game-plugin-override: settings.json plugins.newGameSectorProcGen / newGameCreationEntryPoint (Adjusted
+      Sector); Nexerelin, Random Assortment of Things and Wide Horizons set the same keys and only one is used.
+    """
+    if vanilla_core is not None:
+        vanilla_rows = _industry_plugins(vanilla_core / "data" / "campaign" / "industries.csv")
+        for industry_id, plugin in sorted(_industry_plugins(root / "data" / "campaign" / "industries.csv").items()):
+            original = vanilla_rows.get(industry_id)
+            if original and plugin and plugin != original:
+                result.add(
+                    id="industry-plugin-override",
+                    category="compatibility",
+                    severity="medium",
+                    classification="REVIEW",
+                    confidence="HIGH",
+                    explanation=(f"industries.csv gives RC8's '{industry_id}' the plugin {plugin.split('.')[-1]} (RC8: "
+                                 f"{original.split('.')[-1]}). Only one plugin can run per industry; another mod that sets "
+                                 "it silently replaces this one"
+                                 + (f" ({_AOTD_REPLUGGED[industry_id]} sets '{industry_id}' at load)" if industry_id in _AOTD_REPLUGGED else "")
+                                 + ". A market condition that adds through Industry.getDemand/getSupply works with any plugin."),
+                    file="data/campaign/industries.csv",
+                    evidence=[f"industry:{industry_id}", f"plugin:{plugin}", f"rc8:{original}"],
+                )
+    settings = root / "data" / "config" / "settings.json"
+    spec = _load_lenient_json_file(settings) if settings.is_file() else None
+    plugins = spec.get("plugins") if isinstance(spec, dict) else None
+    for key in _NEW_GAME_PLUGIN_KEYS:
+        if isinstance(plugins, dict) and isinstance(plugins.get(key), str):
+            result.add(
+                id="new-game-plugin-override",
+                category="compatibility",
+                severity="medium",
+                classification="REVIEW",
+                confidence="HIGH",
+                explanation=(f"settings.json sets plugins.{key} to {plugins[key]}. The game uses one value for it; "
+                             "Nexerelin, Random Assortment of Things and Wide Horizons set it too, so with any of them "
+                             "enabled one generator is silently not used."),
+                file="data/config/settings.json",
+                evidence=[f"key:{key}", f"plugin:{plugins[key]}"],
+            )
+
+
+def _industry_plugins(path: Path) -> dict[str, str]:
+    import csv as _csv
+    import io as _io
+
+    if not path.is_file():
+        return {}
+    try:
+        rows = _csv.DictReader(_io.StringIO(path.read_text(encoding="utf-8-sig", errors="replace")))
+        return {r["id"].strip(): (r.get("plugin") or "").strip() for r in rows if (r.get("id") or "").strip()
+                and not r["id"].strip().startswith("#")}
+    except (_csv.Error, KeyError):
+        return {}
+
+
+def _scan_temporary_market_fleet_source(root: Path, result: ScanResult) -> None:
+    """A class that creates a market, builds a fleet from it and removes it again (Exigency, Arkgneisis,
+    Omega-Trauma). RC8's FleetFactoryV3 does this itself when FleetParamsV3.source is null: it picks the nearest
+    market to locInHyper, or builds an internal stand-in that never enters the economy (FleetFactoryV3.java, 2026-10-04).
+    The mod's own removeMarket runs through the economy, which AoTD Theory of Toolbox turns into a full structural
+    refresh per fleet."""
+    import zipfile
+
+    hits: list[tuple[str, str]] = []
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if "createMarket(" in text and "removeMarket(" in text and "FleetParamsV3" in text:
+            hits.append((_relative(root, source), "source"))
+    for jar in sorted(p for p in root.rglob("*.jar") if "disabled_files" not in p.relative_to(root).parts):
+        try:
+            with zipfile.ZipFile(jar) as archive:
+                for name in archive.namelist():
+                    if name.endswith(".class"):
+                        data = archive.read(name)
+                        if b"createMarket" in data and b"removeMarket" in data and b"FleetParamsV3" in data:
+                            hits.append((f"{_relative(root, jar)}!{name}", "jar"))
+        except (OSError, zipfile.BadZipFile):
+            continue
+    for file, where in hits:
+        result.add(
+            id="temporary-market-fleet-source",
+            category="compatibility",
+            severity="low",
+            classification="REVIEW",
+            confidence="MEDIUM",
+            explanation=("Creates a market to build a fleet from and removes it again. RC8's FleetFactoryV3 does this "
+                         "itself when FleetParamsV3.source is null (nearest market to locInHyper, or an internal "
+                         "stand-in outside the economy); the mod's removeMarket instead mutates the economy, which AoTD "
+                         "Theory of Toolbox turns into a full refresh per fleet."),
+            file=file,
+            evidence=[f"found:{where}", "calls:createMarket+removeMarket+FleetParamsV3"],
+        )
+
+
 def _scan_settings_keys_missing(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
     """Literal settings reads whose key no settings.json defines (bridgeforge.settings_keys; Exigency 0.8 crashed on
     opening a market reading blackMarketMinSupplies, 2026-10-04). Needs the vanilla core to know RC8's keys."""
@@ -7468,6 +7582,8 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_procgen_call_arguments(root, result)
     _scan_settings_keys_missing(root, result, vanilla_root)
     _scan_faction_known_tags(root, result, vanilla_root)
+    _scan_shared_hook_overrides(root, result, vanilla_root)
+    _scan_temporary_market_fleet_source(root, result)
     _scan_mod_info_triage_banner(root, result)
     _scan_data_class_references_missing(root, result, vanilla_root, provider_roots)
     _scan_hardcoded_hyperspace_coordinates(root, result)

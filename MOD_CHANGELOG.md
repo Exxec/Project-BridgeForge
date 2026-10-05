@@ -23,6 +23,12 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.4: revived for RC8 and archived (ready for live test)
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.5: The Tasserus Ship Graveyard is revealed on the map (vanilla wreck icon and name; it had no icon and was hidden), owner request.
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.5: revived for RC8 and archived (ready for live test)
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.6: Factions learn their tagged blueprints on game load, so saves started before bf.2 spawn Exigency fleets
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.6: revived for RC8 and archived (ready for live test)
+- **Adjusted Sector** 0.7.1+bf.1: Ships settings_my.json as settings.json so the sector generator is active (the archive had presets only)
+- **Adjusted Sector** 0.7.1+bf.1: revived for RC8 and archived (ready for live test)
+- **Omega-Trauma [BF r1]** 0.1.1+bf.2: IIRT_Nor knows the iirt_all_bp hulls (its own tag matched none) and iirt_sd_10 weapons carry iirt_sd_bp, so IIRT_Army knows them
+- **Omega-Trauma [BF r1]** 0.1.1+bf.2: revived for RC8 and archived (ready for live test)
 
 ## 2026-10-03
 

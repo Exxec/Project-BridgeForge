@@ -2731,6 +2731,17 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         Same day, `done-audit` checks packaging too (owner question: are all mods correctly packaged?): the mod's
         `<folder>-<version>.zip` exists, names the version its mod_info.json declares, holds no entry twice
         (case-insensitive) and the same files as the folder. Test: `PackagingTests`.
+    38. **Hooks only one mod can own** (owner question 2026-10-04: will AoTD conflict with revived mods?). AoTD sets
+        six RC8 industries' plugins at load (javap, `IndustrySpecAPI.setPluginClass`): population (Theory of Toolbox),
+        heavyindustry and orbitalworks (Vaults of Knowledge), patrolhq, militarybase, highcommand (Seats of Power);
+        Toolbox also replaces the economy object (`AoTDEconomy`, reflection). DNEEP's industries.csv population plugin
+        is therefore silently dropped with Toolbox; Adjusted Sector's new-game plugins collide with Nexerelin, Random
+        Assortment of Things and Wide Horizons (same settings keys); Exigency's and Omega-Trauma's fleet spawners create
+        and remove a market per fleet, which Toolbox turns into a structural economy refresh (RC8's FleetFactoryV3
+        handles `source = null` itself). **Done:** `industry-plugin-override` (names the AoTD mod when it is one of the
+        six), `new-game-plugin-override`, `temporary-market-fleet-source`, all REVIEW; `done-audit` lists them as
+        compatibility risks without changing an archive's status; compatibility sections in the DNEEP, Adjusted Sector
+        and Slightly Better Tech Mining archive notes. Test: `tests/test_shared_hooks.py`.
     21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
         escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
         edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next
