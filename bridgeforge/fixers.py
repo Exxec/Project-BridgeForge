@@ -3477,7 +3477,11 @@ def compute_fix(mod_dir: Path, finding_id: str, options: dict | None = None) -> 
         raise FixerError(f"{root} is not an existing directory.")
     options = options or {}
     handler = _FIXER_FUNCS[finding_id]
-    changes = [change for change in handler(root, options) if change.changed]
+    try:
+        changes = [change for change in handler(root, options) if change.changed]
+    except UnicodeDecodeError as exc:
+        # _decode is strict on purpose: a lossy read would write U+FFFD back (seen in Molecular Replicator, 2026-10-04).
+        raise FixerError(f"A file this fix reads is not valid UTF-8 ({exc.reason} at byte {exc.start}); run the data-file-not-utf8 fix first.") from exc
     if not changes:
         raise FixerError(f"No change was computed for finding '{finding_id}'.")
     if not options.get("allow_shadowed_edit"):

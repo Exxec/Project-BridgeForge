@@ -2261,3 +2261,19 @@ class SuppliesLegacyColumnTests(unittest.TestCase):
             self.assertEqual([f for f in scan_mod(root).findings if f.id == "ship-data-supplies-legacy-column"], [])
             with self.assertRaises(FixerError):
                 compute_fix(root, "ship-data-supplies-legacy-column")
+
+
+class NonUtf8RefusalTests(unittest.TestCase):
+    def test_a_fixer_meeting_non_utf8_bytes_refuses_cleanly_and_writes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "mod"
+            _write(root / "mod_info.json", '{"id": "nu"}')
+            target = root / "data" / "config" / "t.json"
+            target.parent.mkdir(parents=True)
+            raw = b'{"a": 1, "a": 1, "name": "Caf\x85"}'
+            target.write_bytes(raw)
+            with self.assertRaises(FixerError) as caught:
+                compute_fix(root, "json-duplicate-key")
+            untouched = target.read_bytes() == raw
+        self.assertIn("data-file-not-utf8", str(caught.exception))
+        self.assertTrue(untouched)

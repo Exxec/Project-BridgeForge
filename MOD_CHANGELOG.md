@@ -68,6 +68,7 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Hiver Swarm** 1.07: revived for RC8 and archived (live validated)
 - **Hiver Swarm** 1.07: starts without Nexerelin: Nexerelin-only rule conditions dropped, Nexerelin import replaced with a sector-memory check
 - **Holy Covenant of Kemet** 0.2.2h: revived for RC8 and archived (live validated)
+- **Zorg18** V18+bf.7: ship_data.csv gains supplies/rec and supplies/mo (supplies/day x vanilla ratio per hull size), so Zorg ships have a deployment cost; needs a live re-test before re-archiving
 
 ## 2026-10-04
 
