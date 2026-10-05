@@ -84,3 +84,17 @@ class TemporaryMarketFixerTests(unittest.TestCase):
         self.assertNotIn("getEconomy().removeMarket(m);", after)
         self.assertIn("// BridgeForge: removeMarket(m) dropped", after)
         self.assertIn("new FleetParamsV3(m,", after)  # the fleet still builds from the same market
+
+
+class LibraryMentionInCommentTests(unittest.TestCase):
+    def test_a_comment_naming_a_library_is_not_a_dependency(self) -> None:
+        # DNEEP (2026-10-05): a BridgeForge comment "a Nexerelin random sector" was read as Nexerelin code.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "mod"
+            (mod / "data" / "plugins").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            (mod / "data" / "plugins" / "P.java").write_text(
+                "package data.plugins;\n// a save without this system (a Nexerelin random sector, exerelin.campaign) crashed\n"
+                "public class P { }\n", encoding="utf-8")
+            used = [f for f in scan_mod(mod).findings if f.id == "undeclared-library-dependency"]
+        self.assertEqual(used, [])

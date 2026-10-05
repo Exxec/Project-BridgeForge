@@ -1850,7 +1850,10 @@ def _fix_wing_op_cost_blank(root: Path, options: dict) -> list[FileChange]:
     if not core:
         raise FixerError("wing-op-cost-blank needs --vanilla-core: the cost is read from the nearest vanilla wing.")
     vanilla = [r for r in _csv.DictReader(_io.StringIO((Path(core) / "data/hulls/wing_data.csv").read_text(encoding="utf-8-sig")))
-               if r.get("id") and (r.get("op cost") or "").strip()]
+               if r.get("id") and (r.get("op cost") or "").strip()
+               # A 0-cost RC8 wing is special-purpose, not a price (mining_drone, borer, terminator): Ironclads'
+               # su57_wing was matched to one and charged 0 (2026-10-05).
+               and (r.get("op cost") or "").strip() not in ("0", "0.0")]
     if not vanilla:
         raise FixerError("the vanilla core's wing_data.csv has no op costs to compare with.")
 

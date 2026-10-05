@@ -6291,7 +6291,9 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
             if "disabled_files" in source.relative_to(root).parts:
                 continue
             try:
-                text = source.read_text(encoding="utf-8", errors="replace")
+                # Comments are not code: DNEEP was flagged for Nexerelin by a BridgeForge comment naming
+                # "a Nexerelin random sector" (2026-10-05).
+                text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
             except OSError:
                 continue
             if not any(needle in text for needle in dotted_needles):

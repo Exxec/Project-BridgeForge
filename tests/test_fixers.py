@@ -2050,6 +2050,23 @@ class WingOpCostFixerTests(unittest.TestCase):
                 compute_fix(mod, "wing-op-cost-blank", {"scan_findings": findings})  # no vanilla core: refused
         self.assertEqual(text, "id,variant,fleet pts,num,role,op cost\nfx_fighter_wing,fx,6,3,FIGHTER,8\nfx_spare_wing,fx2,3,4,INTERCEPTOR,\n")
 
+    def test_a_zero_cost_vanilla_wing_is_never_the_match(self) -> None:
+        # Ironclads' su57_wing (SUPPORT, 6 fp) matched RC8's terminator_wing (SUPPORT, 6 fp, 0 OP), 2026-10-05.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core = root / "core"
+            _write(core / "data" / "hulls" / "wing_data.csv", "id,variant,role,fleet pts,num,op cost\n"
+                   "terminator_wing,t,SUPPORT,6,1,0\nmining_wing,m,SUPPORT,5,2,4\n")
+            mod = root / "mod"
+            _write(mod / "mod_info.json", '{"id":"fixture"}')
+            path = mod / "data" / "hulls" / "wing_data.csv"
+            _write(path, "id,variant,fleet pts,num,role,op cost\nfx_support_wing,fx,6,1,SUPPORT,\n")
+            _write(mod / "data" / "variants" / "fx_carrier.variant", '{"variantId": "fx_carrier", "wings": ["fx_support_wing"]}')
+            findings = [SimpleNamespace(id="wing-op-cost-blank", file="data/hulls/wing_data.csv", evidence=["wing:fx_support_wing"])]
+            apply_fix(compute_fix(mod, "wing-op-cost-blank", {"vanilla_core": core, "scan_findings": findings}))
+            text = path.read_text(encoding="utf-8")
+        self.assertIn("fx_support_wing,fx,6,1,SUPPORT,4", text)
+
 
 class UnguardedVariableLookupTests(unittest.TestCase):
     # 2026-10-04: DNEEP's setIndustryOnPlanet(SystemName, ...) crashed on load in the owner's game.

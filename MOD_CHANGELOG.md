@@ -2,6 +2,14 @@
 
 Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; each mod's evidence is in its revival report.
 
+## 2026-10-05
+
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.7: Fleet managers no longer remove a market that never entered the economy (works with AoTD Theory of Toolbox's economy)
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.7: revived for RC8 and archived (ready for live test)
+- **Doc's Needless Economic Expansion Pack** 0.2.0 Mann Co+bf.2: Population needs as a market condition instead of a replacement Population plugin (works with AoTD Theory of Toolbox); each 'demand met' stability bonus now counts
+- **Doc's Needless Economic Expansion Pack** 0.2.0 Mann Co+bf.2: revived for RC8 and archived (ready for live test)
+- **Ironclads** v.11+bf.1: Revived for RC8: economy on RC8 industries, sector without RC8 procgen, missions playable, carriers with bays, RC8 rules/hull mods/factions kept
+
 ## 2026-10-04
 
 - **Seeker [BF r4]** 0.3.0-0.98a+bf.4: Organic hull: heal, shed, hammer and projectile timers and the field radius are now kept per ship (they were shared by every ship with the hull mod, so one ship's timing drove the others). Patched into SEEKER.jar from a Vineflower decompile; reopened after it was wrongly closed as superseded by 0.6.6, a different mod (5 of 37 ships shared).
