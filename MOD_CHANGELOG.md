@@ -65,6 +65,9 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Flu-X [BF r3]** 2.0.0+bf.3: revived for RC8 and archived (live validated)
 - **Hiigaran Descendants** 2.1: revived for RC8 and archived (live validated)
 - **Hiigaran Descendants** 2.1: declares GraphicsLib, which its plugin requires (stopped at startup without it)
+- **Hiver Swarm** 1.07: revived for RC8 and archived (live validated)
+- **Hiver Swarm** 1.07: starts without Nexerelin: Nexerelin-only rule conditions dropped, Nexerelin import replaced with a sector-memory check
+- **Holy Covenant of Kemet** 0.2.2h: revived for RC8 and archived (live validated)
 
 ## 2026-10-04
 

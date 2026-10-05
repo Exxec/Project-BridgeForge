@@ -185,6 +185,7 @@
     "replace-drops-rc8-entries": "decision",
     "retired-vanilla-class-copy": "code",
     "bundled-source-stale": "none",
+    "person-names-duplicate-row": "auto",
     "campaign-lookup-dereferenced-unguarded": "auto",
     "unverified-json-syntax": "inspect",
     "unverified-mod-info-syntax": "inspect",

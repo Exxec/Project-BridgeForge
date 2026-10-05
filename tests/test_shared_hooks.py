@@ -98,3 +98,20 @@ class LibraryMentionInCommentTests(unittest.TestCase):
                 "public class P { }\n", encoding="utf-8")
             used = [f for f in scan_mod(mod).findings if f.id == "undeclared-library-dependency"]
         self.assertEqual(used, [])
+
+
+class PersonNamesDuplicateRowTests(unittest.TestCase):
+    def test_repeated_row_is_found_and_removed_keeping_bytes(self) -> None:
+        # Ironclads: "Duplicate key [Mao |  | f | xle | ]" Fatal at startup (GRP10B-20261005); blank rows repeat too
+        from bridgeforge.fixers import compute_fix
+
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "mod"
+            (mod / "data" / "characters").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "pn"}', encoding="utf-8")
+            names = mod / "data" / "characters" / "person_names.csv"
+            names.write_bytes(b"name,gender,usage,category\r\nMao,,l,xle\r\n,,,\r\nMao,,f,xle\r\n,,,\r\nMao,,f,xle\r\nTabar,,l,fringe\r\n")
+            found = [f for f in scan_mod(mod).findings if f.id == "person-names-duplicate-row"]
+            after = compute_fix(mod, "person-names-duplicate-row").changes[0].after
+        self.assertEqual(found[0].evidence, ["line:6"])
+        self.assertEqual(after, b"name,gender,usage,category\r\nMao,,l,xle\r\n,,,\r\nMao,,f,xle\r\n,,,\r\nTabar,,l,fringe\r\n")

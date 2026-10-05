@@ -5891,6 +5891,46 @@ MOD_INFO_TRIAGE_BANNER_PATTERN = re.compile(
 )
 
 
+def _person_names_duplicate_lines(path: Path) -> list[int]:
+    """1-based line numbers of rows that repeat an earlier row of the same file (blank rows ignored)."""
+    try:
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return []
+    seen: set[tuple[str, ...]] = set()
+    repeats = []
+    for number, line in enumerate(text.splitlines()[1:], start=2):
+        cells = tuple(cell.strip() for cell in next(csv.reader([line]), []))
+        if not any(cells) or cells[0].startswith("#"):
+            continue
+        if cells in seen:
+            repeats.append(number)
+        seen.add(cells)
+    return repeats
+
+
+def _scan_person_names_duplicate_row(root: Path, result: ScanResult) -> None:
+    """RC8 keys person_names.csv rows by every column and stops at startup on a repeat inside one file:
+    'Duplicate key [Mao |  | f | xle | ] while loading [data/characters/person_names.csv' (Ironclads, a Fatal dialog,
+    GRP10B-20261005). A row also present in vanilla's file is fine: Ironclads shares 1010 rows with it."""
+    path = root / "data" / "characters" / "person_names.csv"
+    if not path.is_file():
+        return
+    repeats = _person_names_duplicate_lines(path)
+    if repeats:
+        result.add(
+            id="person-names-duplicate-row",
+            category="content",
+            severity="high",
+            classification="SAFE",
+            confidence="DETERMINISTIC",
+            explanation=f"{len(repeats)} row(s) repeat an earlier row of person_names.csv. RC8 stops at startup with a "
+                        "Fatal 'Duplicate key' dialog. Removing the repeat keeps the name; `fix` does it.",
+            file=_relative(root, path),
+            evidence=[f"line:{number}" for number in repeats[:20]],
+        )
+
+
 def _scan_mod_info_triage_banner(root: Path, result: ScanResult) -> None:
     """A mod_info.json name/description/author still carrying a pre-release triage banner."""
     mod_info = _load_lenient_json_file(root / "mod_info.json")
@@ -7904,6 +7944,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_retired_vanilla_class_copy(root, result, vanilla_root)
     _scan_bundled_source_stale(root, result)
     _scan_mod_info_triage_banner(root, result)
+    _scan_person_names_duplicate_row(root, result)
     _scan_data_class_references_missing(root, result, vanilla_root, provider_roots)
     _scan_hardcoded_hyperspace_coordinates(root, result)
     _scan_hardcoded_terrain_grid_size(root, result)

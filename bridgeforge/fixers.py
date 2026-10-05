@@ -57,6 +57,7 @@ SUPPORTED_FINDINGS = (
     "campaign-lookup-dereferenced-unguarded",
     "temporary-market-fleet-source",
     "rc8-signature-changed",
+    "person-names-duplicate-row",
     "faction-trait-weight-legacy-personality-id",
     "shiproles-wing-id",
     "csv-fullwidth-number",
@@ -1817,6 +1818,21 @@ def _fix_temporary_market_fleet_source(root: Path, options: dict) -> list[FileCh
     return changes
 
 
+def _fix_person_names_duplicate_row(root: Path, options: dict) -> list[FileChange]:
+    """Remove rows of data/characters/person_names.csv that repeat an earlier row (RC8 'Duplicate key' Fatal,
+    Ironclads GRP10B-20261005). The first copy stays; every other byte, line endings included, is kept."""
+    from .scanner import _person_names_duplicate_lines
+
+    path = root / "data" / "characters" / "person_names.csv"
+    repeats = set(_person_names_duplicate_lines(path)) if path.is_file() else set()
+    if not repeats:
+        raise FixerError("No repeated person_names.csv row found.")
+    raw = path.read_bytes()
+    lines = raw.split(b"\n")
+    after = b"\n".join(line for number, line in enumerate(lines, start=1) if number not in repeats)
+    return [FileChange(path=path, before=raw, after=after)]
+
+
 def _fix_rc8_signature_changed(root: Path, options: dict) -> list[FileChange]:
     """Rewrite old-form calls to RC8's exact form (bridgeforge.signature_rewrites; ROADMAP 41). A file under jars/src
     or src/ is the jar's bundled source: rebuild the jar (patch-jar-class) after this."""
@@ -2991,6 +3007,7 @@ _FIXER_FUNCS = {
     "wing-op-cost-blank": _fix_wing_op_cost_blank,
     "campaign-lookup-dereferenced-unguarded": _fix_lookup_dereferenced_unguarded,
     "temporary-market-fleet-source": _fix_temporary_market_fleet_source,
+    "person-names-duplicate-row": _fix_person_names_duplicate_row,
     "rc8-signature-changed": _fix_rc8_signature_changed,
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
     "shiproles-wing-id": _fix_shiproles_wing_id,
