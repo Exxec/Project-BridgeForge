@@ -1812,6 +1812,7 @@ def _scan_core_campaign_plugin_reregistered(root: Path, result: ScanResult) -> N
 
 
 _MEMORY_FLAG_CHECK = re.compile(r"getMemory(?:WithoutUpdate)?\s*\(\s*\)\s*\.\s*(?:getBoolean|contains|is)\s*\(")
+_PERSISTENT_FLAG_CHECK = re.compile(r"getPersistentData\s*\(\s*\)\s*\.\s*(?:containsKey|get)\s*\(")
 
 
 def _method_body(text: str, name: str) -> str:
@@ -1884,14 +1885,20 @@ def _scan_system_generation_unguarded(root: Path, result: ScanResult) -> None:
                     other = other_path.stem
                     if other in chain:
                         continue
-                    if any(re.search(rf"\bnew\s+{re.escape(c)}\s*\(|\b{re.escape(c)}\s*\.\s*generate\s*\(", other_text) for c in frontier):
+                    # A qualified `new src.data.scripts.world.Art_Gen()` counts too (KIND-STRANGER Artefact, 2026-10-05).
+                    if any(re.search(rf"\bnew\s+(?:[\w.]+\.)?{re.escape(c)}\s*\(|\b{re.escape(c)}\s*\.\s*generate\s*\(", other_text) for c in frontier):
                         chain.add(other)
                         found.append(other)
                 frontier = found
                 if not found:
                     break
-            generates = re.compile("|".join(rf"\bnew\s+{re.escape(c)}\s*\(|\b{re.escape(c)}\s*\.\s*generate\s*\(" for c in sorted(chain)))
+            generates = re.compile("|".join(rf"\bnew\s+(?:[\w.]+\.)?{re.escape(c)}\s*\(|\b{re.escape(c)}\s*\.\s*generate\s*\(" for c in sorted(chain)))
             reachers = [path for path, body in plugins.items() if generates.search(body)] or callers
+            # A once-per-save flag in the reaching plugin guards it (ROADMAP 51): SLPC's onGameLoad generates only when
+            # getPersistentData() lacks CLASS_MARK, and sets it first (2026-10-05).
+            if any(_PERSISTENT_FLAG_CHECK.search(plugins.get(path, "")) or _MEMORY_FLAG_CHECK.search(plugins.get(path, ""))
+                   for path in reachers):
+                continue
             on_new_game = False
             for path in reachers:
                 plugin_text = plugins.get(path, "")
@@ -5573,6 +5580,77 @@ def _scan_retired_vanilla_class_copy(root: Path, result: ScanResult, vanilla_cor
                 )
 
 
+_SOURCE_ROOTS = ("src", "jars/src", "src/src", "jars/source", "source")
+_JAVA_METHOD = re.compile(r"\bpublic\s+(?:static\s+|final\s+|synchronized\s+|abstract\s+)*[\w<>\[\],.?\s]+?\s+(\w+)\s*\(")
+
+
+def _scan_bundled_source_stale(root: Path, result: ScanResult) -> None:
+    """Bundled jar source that does not match the shipped jar (ROADMAP 47). Grytpype & Moriarty's src/ hull mods said
+    `implements HullModEffect` where the jar's classes extend BaseHullMod; Tritachyon's src/ had a PeachGarden system
+    the jar never shipped (2026-10-05). Source-based findings on such files may describe code that never runs; the jar
+    is the truth."""
+    jar_classes: dict[str, _ClassFileInfo] = {}
+    for _, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is not None and info.this_class and "$" not in info.this_class:
+            jar_classes[info.this_class] = info
+    if not jar_classes:
+        return
+    differing, source_only, compared = [], [], 0
+    seen: set[Path] = set()
+    for rel in _SOURCE_ROOTS:
+        base = root / rel
+        if not base.is_dir():
+            continue
+        for source in sorted(base.rglob("*.java")):
+            if source in seen or "disabled_files" in source.relative_to(root).parts:
+                continue
+            seen.add(source)
+            try:
+                text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"), strings=True)
+            except OSError:
+                continue
+            package = re.search(r"^\s*package\s+([\w.]+)\s*;", text, re.M)
+            internal = ((package.group(1).replace(".", "/") + "/") if package else "") + source.stem
+            info = jar_classes.get(internal)
+            if info is None:
+                if re.search(rf"\b(?:class|interface|enum)\s+{re.escape(source.stem)}\b", text):
+                    source_only.append(_relative(root, source))
+                continue
+            compared += 1
+            header = re.search(rf"\b(?:class|interface|enum)\s+{re.escape(source.stem)}\b([^{{]*)\{{", text)
+            reasons = []
+            if header:
+                extends = re.search(r"\bextends\s+([\w.]+)", header.group(1))
+                source_super = extends.group(1).split(".")[-1] if extends else "Object"
+                jar_super = (info.super_class or "java/lang/Object").split("/")[-1]
+                if "class" in header.group(0).split(source.stem)[0] and source_super != jar_super:
+                    reasons.append(f"extends {source_super} in source, {jar_super} in jar")
+            source_methods = set(_JAVA_METHOD.findall(text))
+            jar_methods = {name for name, _, public in info.methods if public and not name.startswith(("<", "lambda$", "access$"))}
+            # Only methods the jar has and the source lacks: a source-only name is usually an anonymous inner class's
+            # method, compiled into a separate $1 class (Exigency's console commands, 2026-10-05).
+            missing = sorted(jar_methods - source_methods)
+            if missing:
+                reasons.append(f"methods only in jar: {', '.join(missing[:3])}")
+            if reasons:
+                differing.append(f"{_relative(root, source)}: {'; '.join(reasons)}")
+    if differing or (source_only and compared):
+        result.add(
+            id="bundled-source-stale",
+            category="source",
+            severity="medium",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation=(f"The mod's bundled jar source does not match the shipped jar: {len(differing)} of {compared} "
+                         f"compared class(es) differ and {len(source_only)} source class(es) are not in any jar. The jar "
+                         "is what runs: findings on these source files may describe code that never runs, and a "
+                         "source fix must be compiled into the jar (patch-jar-class)."),
+            file=None,
+            evidence=[f"differ:{len(differing)}", f"source-only:{len(source_only)}", *differing[:4], *[f"not in jar: {s}" for s in source_only[:3]]],
+        )
+
+
 def _scan_rc8_signature_changed(root: Path, result: ScanResult) -> None:
     """Old-form calls with an exact RC8 equivalent (bridgeforge.signature_rewrites; ROADMAP 41, Ironclads 2026-10-04)."""
     from .signature_rewrites import suspects
@@ -7802,6 +7880,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_rc8_signature_changed(root, result)
     _scan_replace_drops_rc8_entries(root, result, vanilla_root)
     _scan_retired_vanilla_class_copy(root, result, vanilla_root)
+    _scan_bundled_source_stale(root, result)
     _scan_mod_info_triage_banner(root, result)
     _scan_data_class_references_missing(root, result, vanilla_root, provider_roots)
     _scan_hardcoded_hyperspace_coordinates(root, result)

@@ -20,23 +20,44 @@ from pathlib import Path
 class Checkpoint:
     def __init__(self, path: Path | None, header: dict):
         self.path, self.header = path, header
+        self._regrown = False
         self.done: dict[str, dict] = self._load() if path else {}
         self._out = None
         if path:
             path.parent.mkdir(parents=True, exist_ok=True)
             if not self.done:
                 path.write_text(json.dumps(header) + "\n", encoding="utf-8")
+            elif self._regrown:
+                # Same run with more items (ROADMAP 49): keep the finished records under the new header.
+                records = "".join(json.dumps({"key": k, "value": v}, ensure_ascii=False) + "\n" for k, v in self.done.items())
+                path.write_text(json.dumps(header) + "\n" + records, encoding="utf-8")
             self._out = path.open("a", encoding="utf-8")
+
+    @staticmethod
+    def _grown(old: object, new: dict) -> bool:
+        """True when `old` differs from `new` only in list values that grew (every old item still listed): the
+        2026-10-04 queue pass restarted from 0 because two workspaces had been added."""
+        if not isinstance(old, dict) or set(old) != set(new):
+            return False
+        for key, value in new.items():
+            if old[key] == value:
+                continue
+            if not (isinstance(old[key], list) and isinstance(value, list) and set(map(str, old[key])) <= set(map(str, value))):
+                return False
+        return True
 
     def _load(self) -> dict[str, dict]:
         if not self.path.is_file():
             return {}
         lines = self.path.read_text(encoding="utf-8").splitlines()
         try:
-            if not lines or json.loads(lines[0]) != self.header:
-                return {}
+            old = json.loads(lines[0]) if lines else None
         except json.JSONDecodeError:
             return {}
+        if old != self.header:
+            if not self._grown(old, self.header):
+                return {}
+            self._regrown = True
         records = {}
         for line in lines[1:]:
             try:

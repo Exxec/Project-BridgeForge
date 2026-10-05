@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 from bridgeforge.fixers import apply_fix, compute_fix
@@ -150,3 +151,61 @@ class NeverCalledGeneratorTests(unittest.TestCase):
         self.assertEqual(len(found), 1)
         self.assertEqual(found[0][0], "SAFE")
         self.assertIn("never called", found[0][1][0])
+
+
+class GenerationGuardPatternTests(unittest.TestCase):
+    # ROADMAP 51 (2026-10-05): SLPC's persistent-data flag and Artefact's qualified generator call.
+    def _scan(self, plugin: str) -> list:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "mod"
+            (mod / "data" / "scripts" / "world").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            (mod / "data" / "scripts" / "world" / "Gen.java").write_text(
+                'package data.scripts.world;\npublic class Gen { public void generate(SectorAPI sector) {\n'
+                '  StarSystemAPI system = sector.createStarSystem("Uclora");\n} }\n', encoding="utf-8")
+            (mod / "data" / "scripts" / "Plugin.java").write_text(plugin, encoding="utf-8")
+            return [(f.classification, f.evidence[0]) for f in scan_mod(mod).findings if f.id == "system-generation-unguarded"]
+
+    def test_a_persistent_data_flag_in_onGameLoad_guards_generation(self) -> None:
+        found = self._scan('public class Plugin extends BaseModPlugin { public void onGameLoad(boolean n) {\n'
+                           '  if (!Global.getSector().getPersistentData().containsKey("mark")) {\n'
+                           '    Global.getSector().getPersistentData().put("mark", true); new Gen().generate(Global.getSector()); } } }\n')
+        self.assertEqual(found, [])
+
+    def test_a_qualified_generator_call_is_traced(self) -> None:
+        found = self._scan('public class Plugin extends BaseModPlugin { public void onNewGame() {\n'
+                           '  new data.scripts.world.Gen().generate(Global.getSector()); } }\n')
+        self.assertEqual(found, [("SAFE", "data/scripts/world/Gen.java:3: Uclora (called from onNewGame)")])
+
+
+class BundledSourceStaleTests(unittest.TestCase):
+    def test_source_whose_class_header_or_presence_differs_from_the_jar(self) -> None:
+        # ROADMAP 47 (2026-10-05): Grytpype's src said "implements HullModEffect", the jar's class extends BaseHullMod.
+        import shutil
+        import subprocess
+
+        javac = shutil.which("javac")
+        jdk = Path(r"C:\Users\exxec\Documents\Project BridgeForge\In operation\_rig\jdk-25.0.4.1+1\bin")
+        if (jdk / "javac.exe").is_file():
+            javac = str(jdk / "javac.exe")
+        if not javac:
+            self.skipTest("no javac")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "build" / "data"
+            build.mkdir(parents=True)
+            (build / "Base.java").write_text("package data;\npublic class Base { }\n", encoding="utf-8")
+            (build / "Mod.java").write_text("package data;\npublic class Mod extends Base { public void go() {} }\n", encoding="utf-8")
+            subprocess.run([javac, "-d", str(root / "classes"), str(build / "Base.java"), str(build / "Mod.java")], check=True)
+            mod = root / "mod"
+            (mod / "jars").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            with zipfile.ZipFile(mod / "jars" / "m.jar", "w") as z:
+                for name in ("Base", "Mod"):
+                    z.write(root / "classes" / "data" / f"{name}.class", f"data/{name}.class")
+            (mod / "src" / "data").mkdir(parents=True)
+            (mod / "src" / "data" / "Mod.java").write_text("package data;\npublic class Mod { public void go() {} }\n", encoding="utf-8")
+            (mod / "src" / "data" / "Ghost.java").write_text("package data;\npublic class Ghost { }\n", encoding="utf-8")
+            found = [f.evidence for f in scan_mod(mod).findings if f.id == "bundled-source-stale"]
+        self.assertEqual(found[0][:2], ["differ:1", "source-only:1"])
+        self.assertIn("extends Object in source, Base in jar", found[0][2])

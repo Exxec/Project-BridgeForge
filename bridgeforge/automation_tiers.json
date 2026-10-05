@@ -184,6 +184,7 @@
     "rc8-signature-changed": "auto",
     "replace-drops-rc8-entries": "decision",
     "retired-vanilla-class-copy": "code",
+    "bundled-source-stale": "none",
     "campaign-lookup-dereferenced-unguarded": "auto",
     "unverified-json-syntax": "inspect",
     "unverified-mod-info-syntax": "inspect",

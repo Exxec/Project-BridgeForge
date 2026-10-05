@@ -687,6 +687,7 @@ def build_parser() -> argparse.ArgumentParser:
     decide_cmd.add_argument("--json", action="store_true")
     docs_cmd = subcommands.add_parser("docs-index", help="regenerate docs/CHECKS.md (every finding id: where it's emitted, tests, bug classes; scanner helpers) and docs/COMMANDS.md (every command and argument) from the source")
     docs_cmd.add_argument("--check", action="store_true", help="don't write; exit 1 if either file is stale")
+    docs_cmd.add_argument("--stage", action="store_true", help="git add the generated docs that git tracks (only those: a glob over docs/ hits gitignored files and fails, ROADMAP 52)")
     docs_cmd.add_argument("--json", action="store_true")
     lookup_cmd = subcommands.add_parser("lookup", help="query a mod's archaeology graph for a class/id/file: definitions, references, related classes, lifecycle, save evidence, source/bytecode status, findings, runtime observations, and an inspection priority")
     lookup_cmd.add_argument("thing", nargs="?", help="class name (full or short), id, file path or symbol; omit with --top for the treasure map")
@@ -953,6 +954,10 @@ def build_parser() -> argparse.ArgumentParser:
     ci_cmd.add_argument("--all", action="store_true", help="scan every workspace, not just those with packets for the finding")
     ci_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     ci_cmd.add_argument("--json", action="store_true")
+    bs_cmd = subcommands.add_parser("baseline-stats", help="read-only: rank checks by how often their findings were accepted as harmless in workspace baselines (where a check needs refining)")
+    bs_cmd.add_argument("queue", type=Path, nargs="?", default=Path("In operation"))
+    bs_cmd.add_argument("--top", type=int, default=25)
+    bs_cmd.add_argument("--json", action="store_true")
     rq_cmd = subcommands.add_parser("revive-queue", help="run revive across a queue: all workspaces, those never revived, or those with a given last status; progress lines, resumable, writes REVIVE_QUEUE.json")
     rq_cmd.add_argument("queue", type=Path)
     rq_cmd.add_argument("--only-status", action="append", default=[], metavar="STATUS", help="only workspaces whose last revive status is this (e.g. ESCALATED); repeatable")
@@ -961,6 +966,7 @@ def build_parser() -> argparse.ArgumentParser:
     rq_cmd.add_argument("--draft-report", action="store_true")
     rq_cmd.add_argument("--vanilla-core", type=Path)
     rq_cmd.add_argument("--restart", action="store_true", help="ignore an earlier run's checkpoint")
+    rq_cmd.add_argument("--jobs", type=int, default=1, help="workspaces revived side by side (each writes only its own workspace; default 1)")
     rq_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     rq_cmd.add_argument("--json", action="store_true")
     revive_cmd = subcommands.add_parser("revive", help="run the mechanical part of a revival unattended (scan, permitted fixers, rescan, until nothing changes) and write escalation packets for the rest (roadmap P15 item 2)")
@@ -1129,6 +1135,11 @@ def main(argv: list[str] | None = None) -> int:
         argv = ["rebuild-from-reference-local", *argv[1:]]
     _reconfigure_streams_for_pipes()
     args = build_parser().parse_args(argv)
+    if args.command == "baseline-stats":
+        from .baseline_stats import baseline_stats, render
+        result = baseline_stats(args.queue)
+        print(json.dumps(result, indent=2) if args.json else render(result, args.top))
+        return 0
     if args.command == "docs-index":
         from .checks_index import write_reference_docs
         result = write_reference_docs(check_only=args.check)
@@ -1138,6 +1149,13 @@ def main(argv: list[str] | None = None) -> int:
             print("Stale (run bridgeforge docs-index): " + ", ".join(result["stale"]))
         else:
             print("Written: " + ", ".join(result["written"]) if result["written"] else "docs/CHECKS.md and docs/COMMANDS.md are up to date")
+        if args.stage and result["status"] != "STALE":
+            import subprocess
+
+            tracked = subprocess.run(["git", "ls-files", "docs/CHECKS.md", "docs/COMMANDS.md"], capture_output=True, text=True).stdout.split()
+            if tracked:
+                subprocess.run(["git", "add", "--", *tracked], check=False)
+                print("Staged: " + ", ".join(tracked))
         return 1 if result["status"] == "STALE" else 0
     if args.command == "lookup":
         from .lookup import lookup
@@ -3357,7 +3375,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "revive-queue":
         from .revive_queue import revive_queue
         result = revive_queue(args.queue, only_status=set(args.only_status) or None, never_revived=args.never_revived, apply=args.apply,
-                              draft_report=args.draft_report, vanilla_core=args.vanilla_core, quiet=args.quiet, restart=args.restart)
+                              draft_report=args.draft_report, vanilla_core=args.vanilla_core, quiet=args.quiet, restart=args.restart,
+                              jobs=args.jobs)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
         else:

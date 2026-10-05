@@ -45,7 +45,7 @@ def select_workspaces(queue: Path, only_status: set[str] | None = None, never_re
 
 def revive_queue(queue: Path, *, only_status: set[str] | None = None, never_revived: bool = False, apply: bool = False,
                  draft_report: bool = False, vanilla_core: Path | None = None, quiet: bool = False, restart: bool = False,
-                 revive_one=None) -> dict:
+                 revive_one=None, jobs: int = 1) -> dict:
     from .revive import ReviveError, revive
 
     revive_one = revive_one or revive
@@ -57,6 +57,28 @@ def revive_queue(queue: Path, *, only_status: set[str] | None = None, never_revi
         (queue / CHECKPOINT_FILE).unlink()
     records = []
     with Checkpoint(queue / CHECKPOINT_FILE, header) as checkpoint:
+        if jobs > 1 and revive_one is revive:
+            # ROADMAP 49: each workspace's revive writes only inside that workspace, so they run side by side.
+            from concurrent.futures import ProcessPoolExecutor, as_completed
+
+            pending = [w for w in workspaces if checkpoint.get(w.name) is None]
+            by_name = {}
+            for w in workspaces:
+                if checkpoint.get(w.name) is not None:
+                    by_name[w.name] = checkpoint.get(w.name)
+            done = len(by_name)
+            with ProcessPoolExecutor(max_workers=jobs) as pool:
+                futures = {pool.submit(_revive_worker, str(w), str(vanilla_core) if vanilla_core else None, apply, draft_report): w
+                           for w in pending}
+                for future in as_completed(futures):
+                    cached, seconds = future.result()
+                    checkpoint.add(cached["workspace"], cached)
+                    by_name[cached["workspace"]] = cached
+                    done += 1
+                    if not quiet:
+                        report(done, len(workspaces), cached["workspace"], cached["status"] or "?", seconds)
+            records = [by_name[w.name] for w in workspaces]
+            workspaces = []
         for number, workspace in enumerate(workspaces, 1):
             cached = checkpoint.get(workspace.name)
             started = time.perf_counter()
@@ -82,3 +104,19 @@ def revive_queue(queue: Path, *, only_status: set[str] | None = None, never_revi
         (queue / RESULT_FILE).write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
         checkpoint.finish()
     return result
+
+
+def _revive_worker(workspace: str, vanilla_core: str | None, apply: bool, draft_report: bool) -> tuple[dict, float]:
+    """One workspace in a worker process (revive_queue jobs > 1)."""
+    from .revive import ReviveError, revive
+
+    started = time.perf_counter()
+    name = Path(workspace).name
+    try:
+        result = revive(Path(workspace), vanilla_core=Path(vanilla_core) if vanilla_core else None, apply=apply,
+                        draft_report=draft_report)
+        cached = {"workspace": name, "status": result.get("status"),
+                  "blockers": sorted({f for p in result.get("packets") or [] if p.get("finding") for f in p.get("merged") or [p["finding"]]})}
+    except (ReviveError, OSError, ValueError) as exc:
+        cached = {"workspace": name, "status": "ERROR", "error": str(exc), "blockers": []}
+    return cached, time.perf_counter() - started

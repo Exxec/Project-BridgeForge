@@ -2767,6 +2767,25 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         also has a 4-argument form with another third type); 42 as `replace-drops-rc8-entries` (it also found Ironclads'
         vanilla faction copies lacking knownHullMods and doctrine); 43 as `retired-vanilla-class-copy` (classes an
         older reference install shipped and RC8 does not). Tests: `tests/test_signature_rewrites.py`.
+    46. [ ] **Probe: gameplay sweeps, not just load** (owner request 2026-10-05). (a) class sweep: load every class of
+        each enabled mod jar and resolve its methods (catches NoSuchMethodError at the menu, RogueSynth's tooltip);
+        (b) campaign smoke: after a new game and ~30 days, per faction known ships/weapons, market count, fleets alive,
+        ships for sale (Exigency's unbuyable ships and missing fleets read as zeros); (c) mission sweep: each listed
+        mission's fleets resolve; (d) hull mod tooltip and refit render sweep.
+    47. [ ] **bundled-source-stale** (check): compile the mod's bundled jar source and compare classes/members with the
+        jar; when they differ, checks judge from the jar (Grytpype's hull mods, Tritachyon's PeachGarden, 2026-10-05).
+    48. [ ] **False-positive accounting**: baseline acceptances carry their finding id and reason; `finding-stats`
+        ranks checks by how often findings were accepted as harmless; each acceptance pattern becomes a test.
+    49. [ ] **Faster long runs**: a checkpoint resumes when only the workspace list grew (the 2026-10-04 queue pass
+        restarted from 0 because two workspaces were added); scans cached by content hash; parallel workers.
+    50. [ ] **mods-compat**: read-only scan of the owner's real mods folder for shared hooks (industry plugins,
+        new-game generators, replaced core files, shadowed vanilla scripts) across every installed mod.
+    51. [ ] **Check guard patterns**: persistent-data flags (SLPC's CLASS_MARK) and nested `src/src` roots (Artefact)
+        in system-generation-unguarded.
+    52. [ ] **Commit helper**: stage tracked docs only (a `git add docs/*.md` on gitignored files broke a commit
+        chain, 2026-10-04).
+    53. [ ] **Crash-log triage outside the rig**: take a pasted crash log, find the owning mod and class in the
+        owner's real mods folder (the EPTA crash took a manual search, 2026-10-04).
     44. [ ] **Whole-jar rebuild command**: decompile (Vineflower) -> source tree -> javac --release 17 against RC8 ->
         jar, with a class diff against the original (Ironclads' IroncladsEcon.jar was rebuilt by hand).
     45. [ ] **0.7 economy translators** (decision tier, once a second 0.7 economy mod arrives): Ironclads'

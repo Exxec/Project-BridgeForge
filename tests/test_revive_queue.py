@@ -47,3 +47,19 @@ class ReviveQueueTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ParallelQueueTests(unittest.TestCase):
+    def test_jobs_revive_side_by_side_and_keep_queue_order(self) -> None:
+        # ROADMAP 49 (2026-10-05): the queue pass took ~7 hours one workspace at a time.
+        from bridgeforge.revive_queue import revive_queue
+
+        with resolved_temp_dir() as root:
+            queue = root / "queue"
+            for name in ("Alpha", "Beta", "Gamma"):
+                (queue / name / "working").mkdir(parents=True)
+                (queue / name / "working" / "mod_info.json").write_text(
+                    '{"id": "%s", "name": "%s", "version": "1", "gameVersion": "0.98a-RC8"}' % (name.lower(), name), encoding="utf-8")
+            result = revive_queue(queue, never_revived=True, quiet=True, jobs=2)
+        self.assertEqual([r["workspace"] for r in result["mods"]], ["Alpha", "Beta", "Gamma"])
+        self.assertTrue(all(r["status"] for r in result["mods"]))
