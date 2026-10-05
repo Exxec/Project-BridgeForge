@@ -107,6 +107,22 @@ class SourceLibraryFindingDeferredTests(unittest.TestCase):
         self.assertEqual(_ids(result, "source-library-dependency-undeclared"), [])
 
 
+class LibraryRequiredThroughVariableTests(unittest.TestCase):
+    def test_throw_on_a_stored_enabled_check_is_a_required_library(self) -> None:
+        # Hiigaran Descendants 2.1: `boolean hasGraphicsLib = ...isModEnabled("shaderLib"); if (!hasGraphicsLib) throw`
+        # read as an optional guard, so its missing shaderLib dependency went unflagged (GRP7B-20261005).
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "scripts").mkdir(parents=True)
+            (mod / "data" / "scripts" / "Plug.java").write_text(
+                "import org.dark.shaders.util.ShaderLib;\npublic class Plug { void load() {\n"
+                "  boolean hasGraphicsLib = Global.getSettings().getModManager().isModEnabled(\"shaderLib\");\n"
+                "  if (hasGraphicsLib) { ShaderLib.init(); }\n"
+                "  if (!hasGraphicsLib) { throw new RuntimeException(\"requires GraphicsLib\"); }\n} }\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual(len(_ids(result, "undeclared-library-dependency")), 1)
+
+
 class NexerelinCustomStartOptionalTests(unittest.TestCase):
     def _scan(self, register: bool):
         # SEEKER 0.6.6: its Nexerelin classes are custom starts named in data/config/exerelin/customStarts.json.

@@ -63,6 +63,8 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Flower Gods Union [BF r1]** 1.1.9+bf.1: revived for RC8 and archived (live validated)
 - **FlowerGod** 1.1.9+bf.1: bounty message format order fixed (crash on the first campaign day)
 - **Flu-X [BF r3]** 2.0.0+bf.3: revived for RC8 and archived (live validated)
+- **Hiigaran Descendants** 2.1: revived for RC8 and archived (live validated)
+- **Hiigaran Descendants** 2.1: declares GraphicsLib, which its plugin requires (stopped at startup without it)
 
 ## 2026-10-04
 

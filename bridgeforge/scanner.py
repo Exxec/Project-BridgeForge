@@ -6012,6 +6012,15 @@ def _scan_data_class_references_missing(root: Path, result: ScanResult, vanilla_
                     continue
                 command = match.group(1)
                 references.append((relative, "script(rule-command)", f"com.fs.starfarer.api.impl.campaign.rulecmd.{command}"))
+            # Conditions run commands too ("!Nex_Commission hasFactionCommission"), resolved at load like scripts:
+            # Hiver Swarm's Nexerelin-only condition stopped RC8 at startup without Nexerelin (GRP8B-20261005).
+            for line in (row.get("conditions") or "").splitlines():
+                line = line.strip().lstrip("!").strip()
+                if not line or line.startswith("#") or line.startswith("$"):
+                    continue
+                match = _RULE_COMMAND_PATTERN.match(line)
+                if match:
+                    references.append((relative, "script(rule-command)", f"com.fs.starfarer.api.impl.campaign.rulecmd.{match.group(1)}"))
 
     settings_path = root / "data" / "config" / "settings.json"
     settings = _load_lenient_json_file(settings_path)
@@ -6548,6 +6557,15 @@ def _library_presence_probed(root: Path, library: str) -> bool:
     return False
 
 
+def _fails_fast_through_variable(text: str, dependency_id: str) -> bool:
+    """`boolean has = ...isModEnabled("<id>"); ... if (!has) { throw` -- a required library, not an optional one.
+    Hiigaran Descendants 2.1 (HiiModPlugin.onApplicationLoad, shaderLib) stopped at startup this way, GRP7B-20261005."""
+    for name in re.findall(r'\b(\w+)\s*=\s*[\w.()\s]*isModEnabled\s*\(\s*"' + re.escape(dependency_id) + r'"\s*\)', text, re.IGNORECASE):
+        if re.search(r'if\s*\(\s*!\s*' + re.escape(name) + r'\s*\)\s*\{?\s*throw\b', text):
+            return True
+    return False
+
+
 def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
     """Code that reaches a known library's package without mod_info.json declaring that dependency."""
     for library, dependency_id in LIBRARY_DEPENDENCY_IDS.items():
@@ -6591,7 +6609,7 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
             source_hits.append(_relative(root, source))
             if re.search(r"\bisModEnabled\s*\(", text):
                 guarded = True
-            if not id_guard.search(text) or fail_fast.search(text):
+            if not id_guard.search(text) or fail_fast.search(text) or _fails_fast_through_variable(text, dependency_id):
                 every_hit_id_guarded = False
         bytecode_hits: list[str] = []
         referencing_classes: set[str] = set()

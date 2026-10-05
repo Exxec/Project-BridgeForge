@@ -116,6 +116,20 @@ class DataClassReferenceMissingTests(unittest.TestCase):
             self.assertFalse(any(item.endswith(".AddBarEvent") for item in classes))
             self.assertTrue(any(item.endswith(".TotallyMissingCmd") for item in classes))
 
+    def test_rule_command_in_conditions_is_checked(self) -> None:
+        # Hiver Swarm 1.07: "!Nex_Commission hasFactionCommission" in conditions stopped RC8 at startup without
+        # Nexerelin (GRP8B-20261005); only script lines were read. Memory tests ($x, !$x) are not commands.
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
+            root = Path(mod_dir)
+            _write(
+                root / "data" / "campaign" / "rules.csv",
+                "id,trigger,conditions,script,text,options,notes\n"
+                'fixtureCond,PopulateOptions,"$isPerson\n!$player.flag\n!Nex_Commission hasFactionCommission",,,,\n',
+            )
+            result = scan_mod(root, vanilla_core=Path(vanilla_dir))
+            classes = [item for hit in _findings(result, "data-class-reference-missing") for item in hit.evidence if item.startswith("class:")]
+            self.assertEqual(classes, ["class:com.fs.starfarer.api.impl.campaign.rulecmd.Nex_Commission"])
+
     def test_vanilla_namespace_reference_resolves_with_vanilla_core(self) -> None:
         import zipfile
 
