@@ -273,6 +273,17 @@ def class_owner_index(mods_dir: Path, enabled_only: bool = True) -> dict[str, st
                 segments = fqn.split(".")
                 if len(segments) > 1:
                     package_owners.setdefault(".".join(segments[:-1]), set()).add(mod_id)
+        # Loose scripts the game compiles at load (ROADMAP 53): a crash in data/scripts/... named no mod, because
+        # only jar classes were indexed (the EPTA report's data.scripts.combat.hydrofoil class, 2026-10-04).
+        # Exact class names only: the shared data.* packages never feed the package fallback.
+        for source in child.glob("data/**/*.java"):
+            try:
+                head = source.read_text(encoding="utf-8", errors="replace")[:4000]
+            except OSError:
+                continue
+            package = re.search(r"^\s*package\s+([\w.]+)\s*;", head, re.M)
+            if package:
+                index.setdefault(f"{package.group(1)}.{source.stem}", mod_id)
     # Package fallback (for classes a rebuilt jar renamed or a log from another build): only the
     # class's own immediate package, only when exactly one mod uses it, and never the loose-script
     # `data.*` packages (data.scripts, data.hullmods, data.shipsystems...) that nearly every old mod

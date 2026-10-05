@@ -114,4 +114,5 @@ LONG_RUNNING_COMMANDS = (
     ("port-interfaces",),
     ("translate-batch",),
     ("done-audit",),
+    ("mods-compat",),
 )

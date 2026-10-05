@@ -2,6 +2,9 @@ package com.bridgeforge.probe;
 
 import com.fs.starfarer.api.EveryFrameScript;
 import com.fs.starfarer.api.Global;
+import com.fs.starfarer.api.combat.ShipAPI;
+import com.fs.starfarer.api.combat.ShipHullSpecAPI;
+import com.fs.starfarer.api.loading.HullModSpecAPI;
 import com.fs.starfarer.api.campaign.CargoAPI;
 import com.fs.starfarer.api.campaign.CargoStackAPI;
 import com.fs.starfarer.api.campaign.SpecialItemData;
@@ -211,6 +214,21 @@ public class CampaignProbeScript implements EveryFrameScript {
                 checkCampaignLayout();
             }
         });
+        runCheck("mission-fleets", new Runnable() {
+            public void run() {
+                checkMissionFleets();
+            }
+        });
+        runCheck("class-sweep", new Runnable() {
+            public void run() {
+                checkClassSweep();
+            }
+        });
+        runCheck("hullmod-descriptions", new Runnable() {
+            public void run() {
+                checkHullModDescriptions();
+            }
+        });
         ProbeLog.end("campaign");
     }
 
@@ -306,6 +324,21 @@ public class CampaignProbeScript implements EveryFrameScript {
             int ships = faction.getKnownShips().size();
             int weapons = faction.getKnownWeapons().size();
             int fighters = faction.getKnownFighters().size();
+            // 0.2.12: a mod faction knowing only vanilla hulls (Exigency's knownShips [exigency_bp, base_bp] with no
+            // hull tagged exigency_bp, 2026-10-04) has ships > 0 but none of its own: count the mod's own.
+            if (config.factions.contains(factionId) && targetModDefinesHulls()) {
+                int own = 0;
+                for (String hullId : faction.getKnownShips()) {
+                    ShipHullSpecAPI hull = Global.getSettings().getHullSpec(hullId);
+                    if (hull != null && hull.getSourceMod() != null && config.targetModId.equals(hull.getSourceMod().getId())) {
+                        own++;
+                    }
+                }
+                if (own == 0) {
+                    ProbeLog.emit("faction-known-lists", ProbeLog.STATUS_WARN, factionId,
+                            "knows none of " + config.targetModId + "'s own ships (knownShips=" + ships + ")");
+                }
+            }
             if (ships == 0 || weapons == 0 || fighters == 0) {
                 ProbeLog.emit("faction-known-lists", ProbeLog.STATUS_WARN, factionId,
                         "knownShips=" + ships + " knownWeapons=" + weapons + " knownFighters=" + fighters);
@@ -494,6 +527,83 @@ public class CampaignProbeScript implements EveryFrameScript {
                 + config.contentSpecialItems.size();
         ProbeLog.emit("content-ids", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "all-content",
                 "checked=" + total + " failed=" + failed + " ship-variants built=" + config.contentShipVariants.size());
+    }
+
+    private Boolean targetDefinesHulls;
+
+    private boolean targetModDefinesHulls() {
+        if (targetDefinesHulls == null) {
+            targetDefinesHulls = Boolean.FALSE;
+            for (ShipHullSpecAPI hull : Global.getSettings().getAllShipHullSpecs()) {
+                if (hull.getSourceMod() != null && config.targetModId.equals(hull.getSourceMod().getId())) {
+                    targetDefinesHulls = Boolean.TRUE;
+                    break;
+                }
+            }
+        }
+        return targetDefinesHulls;
+    }
+
+    // ---- 0.2.12 sweeps (ROADMAP 46) ----------------------------------------------------
+
+    /** Every fleet member the mod's missions name must resolve (Ironclads' missions named 21 variants that never
+     *  shipped: a Fatal at mission start). Existence only: a mission builds them itself. */
+    private void checkMissionFleets() {
+        int failed = 0;
+        for (String variantId : config.missionShips) {
+            failed += reportContent("mission-variant", variantId, Global.getSettings().doesVariantExist(variantId) ? null : "doesVariantExist=false");
+        }
+        for (String wingId : config.missionWings) {
+            failed += reportContent("mission-wing", wingId, wingProblem(wingId));
+        }
+        ProbeLog.emit("mission-fleets", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "all-missions",
+                "checked=" + (config.missionShips.size() + config.missionWings.size()) + " failed=" + failed);
+    }
+
+    /** Load each top-level class of the target jar through the game's own script class loader (public API: the
+     *  sandbox forbids reflection, so no member resolution). A missing superclass, interface or class the jar needs
+     *  to load surfaces here, in the campaign, instead of when a player reaches that code. */
+    private void checkClassSweep() {
+        ClassLoader loader = Global.getSettings().getScriptClassLoader();
+        int failed = 0;
+        for (String name : config.classSweep) {
+            try {
+                loader.loadClass(name);
+            } catch (Throwable t) {
+                failed++;
+                ProbeLog.emit("class-sweep", ProbeLog.STATUS_FAIL, name, t.getClass().getName() + ": " + t.getMessage());
+            }
+        }
+        ProbeLog.emit("class-sweep", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "all-classes",
+                "loaded=" + (config.classSweep.size() - failed) + " failed=" + failed);
+    }
+
+    /** Ask every hull mod the target mod defines for its description parameters at each hull size, the code a
+     *  refit tooltip runs (RogueSynth's tooltip threw NoSuchMethodError only when shown). A full tooltip needs the UI. */
+    private void checkHullModDescriptions() {
+        int checked = 0;
+        int failed = 0;
+        for (HullModSpecAPI spec : Global.getSettings().getAllHullModSpecs()) {
+            if (spec.getSourceMod() == null || !config.targetModId.equals(spec.getSourceMod().getId())) {
+                continue;
+            }
+            checked++;
+            try {
+                if (spec.getEffect() != null) {
+                    for (ShipAPI.HullSize size : new ShipAPI.HullSize[] {ShipAPI.HullSize.FRIGATE, ShipAPI.HullSize.DESTROYER,
+                            ShipAPI.HullSize.CRUISER, ShipAPI.HullSize.CAPITAL_SHIP}) {
+                        for (int i = 0; i < 4; i++) {
+                            spec.getEffect().getDescriptionParam(i, size);
+                        }
+                    }
+                }
+            } catch (Throwable t) {
+                failed++;
+                ProbeLog.emit("hullmod-descriptions", ProbeLog.STATUS_FAIL, spec.getId(), t.getClass().getName() + ": " + t.getMessage());
+            }
+        }
+        ProbeLog.emit("hullmod-descriptions", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "all-hullmods",
+                "checked=" + checked + " failed=" + failed);
     }
 
     private static int reportContent(String kind, String id, String problem) {

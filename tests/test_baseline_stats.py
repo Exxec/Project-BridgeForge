@@ -24,3 +24,19 @@ class BaselineStatsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LooseScriptOwnerTests(unittest.TestCase):
+    def test_a_loose_script_class_names_its_mod(self) -> None:
+        # ROADMAP 53 (2026-10-05): a crash in a loose data/scripts class named no mod (only jars were indexed).
+        from bridgeforge.log_triage import class_owner_index
+
+        with resolved_temp_dir() as root:
+            mod = root / "mods" / "Hydro"
+            (mod / "data" / "scripts" / "combat").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "hydro", "name": "Hydro"}', encoding="utf-8")
+            (mod / "data" / "scripts" / "combat" / "CombatRenderingScript.java").write_text(
+                "package data.scripts.combat.hydrofoil;\npublic class CombatRenderingScript { }\n", encoding="utf-8")
+            index = class_owner_index(root / "mods", enabled_only=False)
+        self.assertEqual(index.get("data.scripts.combat.hydrofoil.CombatRenderingScript"), "hydro")
+        self.assertNotIn("data.scripts.combat.hydrofoil", index)  # no shared data.* package fallback

@@ -954,6 +954,18 @@ def build_parser() -> argparse.ArgumentParser:
     ci_cmd.add_argument("--all", action="store_true", help="scan every workspace, not just those with packets for the finding")
     ci_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     ci_cmd.add_argument("--json", action="store_true")
+    dj_cmd = subcommands.add_parser("decompile-jar", help="decompile a jar (Vineflower) into an editable source tree, the first step before rebuild-jar")
+    dj_cmd.add_argument("jar", type=Path)
+    dj_cmd.add_argument("--output", type=Path, required=True, help="folder for the source tree (e.g. a workspace's scratch/decompiled)")
+    dj_cmd.add_argument("--vineflower", type=Path, help="vineflower jar (default: In operation/_tools/vineflower*.jar)")
+    dj_cmd.add_argument("--jdk", type=Path)
+    dj_cmd.add_argument("--json", action="store_true")
+    mc_cmd = subcommands.add_parser("mods-compat", help="read-only: hooks only one mod can own (industry plugins, new-game generators, replaced core files, shadowed vanilla scripts) claimed by two or more mods in a real mods folder")
+    mc_cmd.add_argument("mods_dir", type=Path)
+    mc_cmd.add_argument("--vanilla-core", type=Path, required=True)
+    mc_cmd.add_argument("--output", type=Path, default=Path("In operation"), help="where MODS_COMPAT.json/.md go")
+    mc_cmd.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
+    mc_cmd.add_argument("--json", action="store_true")
     bs_cmd = subcommands.add_parser("baseline-stats", help="read-only: rank checks by how often their findings were accepted as harmless in workspace baselines (where a check needs refining)")
     bs_cmd.add_argument("queue", type=Path, nargs="?", default=Path("In operation"))
     bs_cmd.add_argument("--top", type=int, default=25)
@@ -1135,6 +1147,23 @@ def main(argv: list[str] | None = None) -> int:
         argv = ["rebuild-from-reference-local", *argv[1:]]
     _reconfigure_streams_for_pipes()
     args = build_parser().parse_args(argv)
+    if args.command == "decompile-jar":
+        from .decompile import decompile_jar
+        try:
+            result = decompile_jar(args.jar, args.output, args.vineflower, args.jdk)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2) if args.json else f"{result['sources']} source file(s) in {result['output']} (exit {result['exit_code']}). Next: {result['next']}")
+        return 0 if result["exit_code"] == 0 else 1
+    if args.command == "mods-compat":
+        from .mods_compat import mods_compat
+        result = mods_compat(args.mods_dir, args.vanilla_core, args.output, quiet=args.quiet)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"{result['mods']} mod(s); {len(result['conflicts'])} hook(s) claimed by two or more. See {args.output / 'MODS_COMPAT.md'}")
+        return 0
     if args.command == "baseline-stats":
         from .baseline_stats import baseline_stats, render
         result = baseline_stats(args.queue)
@@ -2419,6 +2448,19 @@ def main(argv: list[str] | None = None) -> int:
                 for event in result["fatal"] + result["mod_errors"]:
                     if event.get("suspect"):
                         print(f"  line {event['line']}: suspect {event['suspect']}; on stack: {', '.join(event.get('involved') or [])}")
+                if args.mods_dir is not None and not attribution.get("counts_by_suspect"):
+                    # ROADMAP 53: say so when the crashing mod code is in no mod here (the EPTA report's
+                    # data.scripts.combat.hydrofoil class was in no installed mod: the log came from another folder).
+                    import re
+
+                    from .log_triage import class_owner_index
+                    index = class_owner_index(args.mods_dir, enabled_only=not args.all_mods)
+                    stack = re.findall(r"\bat\s+((?:data|src|org|com)\.[\w.$]+)\.[\w$<>]+\(", args.log.read_text(encoding="utf-8", errors="replace"))
+                    unowned = sorted({c.split("$")[0] for c in stack if not c.startswith(("com.fs.", "org.lwjgl", "org.json"))
+                                      and c.split("$")[0] not in index})
+                    if unowned:
+                        print(f"  Not in any mod under {args.mods_dir}: {', '.join(unowned[:5])} -- the log likely came "
+                              "from a different mods folder; pass that folder as --mods-dir.")
             print(result["caveat"])
         return 0 if not result["fatal"] else 1
     if args.command == "copy-drift":

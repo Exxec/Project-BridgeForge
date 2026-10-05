@@ -2767,26 +2767,39 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         also has a 4-argument form with another third type); 42 as `replace-drops-rc8-entries` (it also found Ironclads'
         vanilla faction copies lacking knownHullMods and doctrine); 43 as `retired-vanilla-class-copy` (classes an
         older reference install shipped and RC8 does not). Tests: `tests/test_signature_rewrites.py`.
-    46. [ ] **Probe: gameplay sweeps, not just load** (owner request 2026-10-05). (a) class sweep: load every class of
+    46. [x] **Probe: gameplay sweeps, not just load** (owner request 2026-10-05). (a) class sweep: load every class of
         each enabled mod jar and resolve its methods (catches NoSuchMethodError at the menu, RogueSynth's tooltip);
         (b) campaign smoke: after a new game and ~30 days, per faction known ships/weapons, market count, fleets alive,
         ships for sale (Exigency's unbuyable ships and missing fleets read as zeros); (c) mission sweep: each listed
         mission's fleets resolve; (d) hull mod tooltip and refit render sweep.
-    47. [ ] **bundled-source-stale** (check): compile the mod's bundled jar source and compare classes/members with the
+    47. [x] **bundled-source-stale** (check): compile the mod's bundled jar source and compare classes/members with the
         jar; when they differ, checks judge from the jar (Grytpype's hull mods, Tritachyon's PeachGarden, 2026-10-05).
-    48. [ ] **False-positive accounting**: baseline acceptances carry their finding id and reason; `finding-stats`
+    48. [x] **False-positive accounting**: baseline acceptances carry their finding id and reason; `finding-stats`
         ranks checks by how often findings were accepted as harmless; each acceptance pattern becomes a test.
-    49. [ ] **Faster long runs**: a checkpoint resumes when only the workspace list grew (the 2026-10-04 queue pass
+    49. [x] **Faster long runs**: a checkpoint resumes when only the workspace list grew (the 2026-10-04 queue pass
         restarted from 0 because two workspaces were added); scans cached by content hash; parallel workers.
-    50. [ ] **mods-compat**: read-only scan of the owner's real mods folder for shared hooks (industry plugins,
+    50. [x] **mods-compat**: read-only scan of the owner's real mods folder for shared hooks (industry plugins,
         new-game generators, replaced core files, shadowed vanilla scripts) across every installed mod.
-    51. [ ] **Check guard patterns**: persistent-data flags (SLPC's CLASS_MARK) and nested `src/src` roots (Artefact)
+    51. [x] **Check guard patterns**: persistent-data flags (SLPC's CLASS_MARK) and nested `src/src` roots (Artefact)
         in system-generation-unguarded.
-    52. [ ] **Commit helper**: stage tracked docs only (a `git add docs/*.md` on gitignored files broke a commit
+    52. [x] **Commit helper**: stage tracked docs only (a `git add docs/*.md` on gitignored files broke a commit
         chain, 2026-10-04).
-    53. [ ] **Crash-log triage outside the rig**: take a pasted crash log, find the owning mod and class in the
+    53. [x] **Crash-log triage outside the rig**: take a pasted crash log, find the owning mod and class in the
         owner's real mods folder (the EPTA crash took a manual search, 2026-10-04).
-    44. [ ] **Whole-jar rebuild command**: decompile (Vineflower) -> source tree -> javac --release 17 against RC8 ->
+        **Done 2026-10-05 (44, 46-53):** 44 `decompile-jar` (Vineflower -> source tree; `rebuild-jar` already
+        compiled, jarred and diffed). 46 probe 0.2.12: `mission-fleets` (every fleet member the missions name resolves),
+        `class-sweep` (each top-level class of the target jar loads through the game's script class loader; the
+        sandbox forbids reflection, so no member resolution), `hullmod-descriptions` (getDescriptionParam at each hull
+        size for the target mod's hull mods; a full tooltip needs the UI), and `faction-known-lists` warns when a mod
+        faction knows none of the mod's own ships (Exigency's base_bp-only case); probe-config writes
+        `mission_fleets` and `class_sweep`. Live verification with the next live test. 47 `bundled-source-stale`. 48
+        `baseline-stats`. 49 checkpoint resume on a grown list and `revive-queue --jobs N` (scan caching deferred:
+        results also depend on the BridgeForge version). 50 `mods-compat` (on the owner's install: AI-Retrofit,
+        Shadowyards and IndEvo against AoTD, two LevelupPluginImpl shadows). 51 persistent-data flags and qualified
+        generator calls. 52 `docs-index --stage`. 53 `log-triage --mods-dir` indexes loose scripts and names crash
+        classes in no installed mod (the EPTA report). Tests: test_decompile, test_probe_config, test_mods_compat,
+        test_baseline_stats, test_progress, test_revive_queue, test_signature_rewrites.
+    44. [x] **Whole-jar rebuild command**: decompile (Vineflower) -> source tree -> javac --release 17 against RC8 ->
         jar, with a class diff against the original (Ironclads' IroncladsEcon.jar was rebuilt by hand).
     45. [ ] **0.7 economy translators** (decision tier, once a second 0.7 economy mod arrives): Ironclads'
         `IroncladsMarkets` condition->industry table and its commodity-row conversion (nearest RC8 analogue's

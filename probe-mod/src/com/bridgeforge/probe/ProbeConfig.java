@@ -42,6 +42,10 @@ public final class ProbeConfig {
     public final List<String> modSystems = new ArrayList<String>();
     public final Map<String, Float> modBodyTypes = new LinkedHashMap<String, Float>();
     public final Map<String, String> contentShipHulls = new LinkedHashMap<String, String>();
+    // 0.2.12 (ROADMAP 46): fleet members the mod's missions name, and the target jar's top-level classes.
+    public final List<String> missionShips = new ArrayList<String>();
+    public final List<String> missionWings = new ArrayList<String>();
+    public final List<String> classSweep = new ArrayList<String>();
 
     public static ProbeConfig load() throws Exception {
         ProbeConfig config = new ProbeConfig();
@@ -102,6 +106,12 @@ public final class ProbeConfig {
         addAll(root.optJSONArray("content_wings"), config.contentWings);
         addAll(root.optJSONArray("content_special_items"), config.contentSpecialItems);
         addAll(root.optJSONArray("mod_systems"), config.modSystems);
+        JSONObject missionFleets = root.optJSONObject("mission_fleets");
+        if (missionFleets != null) {
+            addAll(missionFleets.optJSONArray("ship"), config.missionShips);
+            addAll(missionFleets.optJSONArray("wing"), config.missionWings);
+        }
+        addAll(root.optJSONArray("class_sweep"), config.classSweep);
         JSONObject bodyTypes = root.optJSONObject("mod_body_types");
         if (bodyTypes != null) {
             JSONArray typeNames = bodyTypes.names();

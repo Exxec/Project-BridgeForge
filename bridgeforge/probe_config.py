@@ -327,6 +327,43 @@ def _variant_by_hull(mod_root: Path, hulls: list[str]) -> dict[str, str]:
     return by_hull
 
 
+def _mission_fleet_refs(mod_root: Path) -> dict[str, list[str]]:
+    """Every fleet member the mod's missions name, by kind (ROADMAP 46c): the probe resolves each. Ironclads'
+    missions named 21 variants no Ironclads version ever shipped (2026-10-04), which content_variants (the variants the
+    mod defines) cannot see."""
+    from .scanner import MISSION_FLEET_REFERENCE_PATTERN, _blank_java_comments
+
+    ships: set[str] = set()
+    wings: set[str] = set()
+    sources = list((mod_root / "data" / "missions").glob("*/MissionDefinition.java")) if (mod_root / "data" / "missions").is_dir() else []
+    for source in sources:
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        for fleet_id, member_type in MISSION_FLEET_REFERENCE_PATTERN.findall(text):
+            (wings if member_type == "FIGHTER_WING" else ships).add(fleet_id)
+    return {"ship": sorted(ships), "wing": sorted(wings)}
+
+
+def _class_sweep(mod_root: Path) -> list[str]:
+    """Top-level class names in the jars mod_info.json loads (ROADMAP 46a): the probe loads each and resolves its
+    members, which surfaces a missing class at the main menu instead of in play. The game's sandbox keeps the probe
+    from listing jars itself, so the list comes from here."""
+    import zipfile
+
+    from .scanner import _loaded_mod_jars
+
+    names: set[str] = set()
+    for jar in _loaded_mod_jars(mod_root):
+        try:
+            with zipfile.ZipFile(jar) as archive:
+                names |= {n[:-6].replace("/", ".") for n in archive.namelist() if n.endswith(".class") and "$" not in n}
+        except (OSError, zipfile.BadZipFile):
+            continue
+    return sorted(names)
+
+
 def _content_variants(mod_root: Path, deployable_hulls: list[str]) -> dict[str, list[str]]:
     """Every variant id the mod defines, split by what the probe may do with it (ROADMAP P14 item 49).
 
@@ -469,6 +506,8 @@ def build_probe_config(
         "mod_systems": mod_created_systems(mod_root),
         "mod_body_types": {t: f["procgen_weight"] for t, f in mod_body_types(mod_root).items()},
         "content_wings": sorted(_wing_ids_set(mod_root / "data" / "hulls" / "wing_data.csv")),
+        "mission_fleets": _mission_fleet_refs(mod_root),
+        "class_sweep": _class_sweep(mod_root),
         "campaign_interval_days": campaign_interval_days,
         "combat_seconds": combat_seconds,
         "combat_cap_per_side": combat_cap_per_side,
