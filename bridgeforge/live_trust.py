@@ -251,7 +251,8 @@ def explain_shipped(workspace: Path, files: list[str], reason: str, today: str |
     if live:
         data["live"] = {"reason": reason.strip(), "date": today or date.today().isoformat()}
     for relative in files:
-        data["files"][relative.replace("\\", "/")] = {"reason": reason.strip(), "date": today or date.today().isoformat()}
+        # strip: a list read from a CRLF file left "\r" on every key, so none matched (SEEKER, 2026-10-05)
+        data["files"][relative.strip().replace("\\", "/")] ={"reason": reason.strip(), "date": today or date.today().isoformat()}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return path

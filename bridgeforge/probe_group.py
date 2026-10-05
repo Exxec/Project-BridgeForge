@@ -539,7 +539,8 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     for mod_id, verdict in sorted(report["members"].items()):
         workspace = workspaces.get(mod_id)
         if verdict["verdict"] != "PASS" or workspace is None:
-            skipped.append({"mod_id": mod_id, "verdict": verdict["verdict"], "workspace": workspace.name if workspace else None})
+            skipped.append({"mod_id": mod_id, "verdict": verdict["verdict"], "workspace": workspace.name if workspace else None,
+                            "archive": "" if workspace else "no single workspace: two or more share this mod id (rig folders too)"})
             continue
         path = workspace / "working" / "reports" / "REVIVAL_REPORT.md"
         body = path.read_text(encoding="utf-8").rstrip() if path.is_file() else f"# Revival report: {workspace.name}"

@@ -43,6 +43,14 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Smol Shippack** 0.06a: revived for RC8 and archived (live validated)
 - **The Silent Armada (Demo) [BF r1]** vD 0.14+bf.1: revived for RC8 and archived (live validated)
 - **Sanguinary Autonomist Defectors** 1.2: revived for RC8 and archived (live validated)
+- **Too Much Information** 0.96: revived for RC8 and archived (live validated)
+- **Unusually Gullible Hullmods** 0.4.2: revived for RC8 and archived (live validated)
+- **Upgraded Rotary Weapons** 1.50: revived for RC8 and archived (live validated)
+- **Vanilla Armatura** 1.1: revived for RC8 and archived (live validated)
+- **Aivon Republic** 0.0.4: revived for RC8 and archived (live validated)
+- **Steel Cardinal** 0.3.0: revived for RC8 and archived (live validated)
+- **Vayra's Sector** 3.2.1: revived for RC8 and archived (live validated)
+- **Seeker [BF r4]** 0.3.0-0.98a+bf.4: revived for RC8 and archived (live validated)
 
 ## 2026-10-04
 
