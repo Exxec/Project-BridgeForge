@@ -1,0 +1,89 @@
+"""rc8-signature-changed (ROADMAP 41; Ironclads, javap 2026-10-04): old-form calls with an exact RC8 equivalent."""
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+
+from bridgeforge.fixers import apply_fix, compute_fix
+from bridgeforge.scanner import scan_mod
+
+OLD = ('class G {\n  void g() {\n'
+       '    Global.getSector().getEconomy().addMarket(market);\n'
+       '    Misc.addNebulaFromPNG("a.png", 0, 0, hyper, "terrain", "deep", 4, 4, Terrain.HYPERSPACE);\n'
+       '    system.addTerrain("nebula", new TileParams("  x, y  ", 6, 6, "terrain", "nebula", 4, 4));\n'
+       '    this.market.addCondition("event, bounty", true, this);\n'
+       '    m.addCondition("x"); m.addCondition("y", data); econ.addMarket(m, true); // addMarket(m)\n'
+       '  }\n}\n')
+
+
+class SignatureRewriteTests(unittest.TestCase):
+    def test_check_flags_each_old_form_and_the_fixer_writes_rc8s(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "mod"
+            (mod / "data" / "scripts").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            path = mod / "data" / "scripts" / "G.java"
+            path.write_text(OLD, encoding="utf-8")
+            calls = sorted(f.evidence[1] for f in scan_mod(mod).findings if f.id == "rc8-signature-changed")
+            apply_fix(compute_fix(mod, "rc8-signature-changed"))
+            text = path.read_text(encoding="utf-8")
+            after = [f for f in scan_mod(mod).findings if f.id == "rc8-signature-changed"]
+        self.assertEqual(calls, ["call:TileParams", "call:addCondition", "call:addMarket", "call:addNebulaFromPNG"])
+        self.assertIn("addMarket(market, true);", text)
+        self.assertIn("Terrain.HYPERSPACE, null);", text)
+        self.assertIn('"nebula", 4, 4, null));', text)  # a comma inside the tile string is not an argument
+        self.assertIn('addCondition("event, bounty", this);', text)  # comma in the id string kept
+        self.assertIn('m.addCondition("y", data); econ.addMarket(m, true); // addMarket(m)', text)  # RC8 forms kept
+        self.assertEqual(after, [])
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class ReplaceDropsRc8EntriesTests(unittest.TestCase):
+    def test_a_replaced_csv_missing_rc8_rows_is_flagged(self) -> None:
+        # Ironclads (2026-10-05) replaced hull_mods.csv with a 0.7 copy lacking 92 of RC8's hull mods.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core, mod = root / "core", root / "mod"
+            (core / "data" / "hullmods").mkdir(parents=True)
+            (core / "data" / "hullmods" / "hull_mods.csv").write_text("name,id\nA,automated\nB,heavyarmor\n", encoding="utf-8")
+            (mod / "data" / "hullmods").mkdir(parents=True)
+            (mod / "data" / "hullmods" / "hull_mods.csv").write_text("name,id\nB,heavyarmor\nC,fx_own\n", encoding="utf-8")
+            (mod / "mod_info.json").write_text('{"id": "fx", "replace": ["data/hullmods/hull_mods.csv"]}', encoding="utf-8")
+            found = [f.evidence for f in scan_mod(mod, vanilla_core=core).findings if f.id == "replace-drops-rc8-entries"]
+        self.assertEqual(found, [["replace:data/hullmods/hull_mods.csv", "lost:1", "id:automated"]])
+
+
+class RetiredVanillaClassTests(unittest.TestCase):
+    def test_a_class_only_an_older_vanilla_shipped_is_flagged(self) -> None:
+        # Ironclads' jar bundled 0.7.2's SystemBountyEvent, which RC8 no longer ships (2026-10-05).
+        import zipfile
+
+        from bridgeforge import scanner
+
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            core = base / "Starsector" / "starsector-core"
+            old = base / "Starsector7.2" / "starsector-core"
+            core.mkdir(parents=True)
+            old.mkdir(parents=True)
+            api = "com/fs/starfarer/api/impl/campaign/"
+            with zipfile.ZipFile(core / "starfarer.api.jar", "w") as z:
+                z.writestr(api + "CoreScript.class", b"")
+            with zipfile.ZipFile(old / "starfarer.api.jar", "w") as z:
+                z.writestr(api + "CoreScript.class", b"")
+                z.writestr(api + "events/SystemBountyEvent.class", b"")
+            mod = base / "mod"
+            (mod / "jars").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            with zipfile.ZipFile(mod / "jars" / "m.jar", "w") as z:
+                z.writestr(api + "events/SystemBountyEvent.class", b"")
+                z.writestr(api + "CoreScript.class", b"")  # still in RC8: another check's business
+                z.writestr(api + "rulecmd/payFee.class", b"")  # a mod's own class in vanilla's package
+            scanner._OLD_VANILLA_CLASSES.clear()
+            found = [f.evidence for f in scan_mod(mod, vanilla_core=core).findings if f.id == "retired-vanilla-class-copy"]
+            scanner._OLD_VANILLA_CLASSES.clear()
+        self.assertEqual(found, [["class:com.fs.starfarer.api.impl.campaign.events.SystemBountyEvent"]])

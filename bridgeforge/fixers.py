@@ -56,6 +56,7 @@ SUPPORTED_FINDINGS = (
     "wing-op-cost-blank",
     "campaign-lookup-dereferenced-unguarded",
     "temporary-market-fleet-source",
+    "rc8-signature-changed",
     "faction-trait-weight-legacy-personality-id",
     "shiproles-wing-id",
     "csv-fullwidth-number",
@@ -386,7 +387,11 @@ _CREW_XP_LEVEL_MATCHER = REMOVED_API_CALLS[2][0]
 _CREW_XP_LEVEL_SIGNATURE = REMOVED_API_CALLS[2][1]
 
 
-def _rewrite_crew_xp_level_span(_matched_text: str) -> str:
+def _rewrite_crew_xp_level_span(matched_text: str) -> str:
+    # getCrew(CrewXPLevel.X): REGULAR reads all crew, other tiers 0 (owner decision "one crew", Ironclads 2026-10-05).
+    read = re.match(r"getCrew\s*\(.*CrewXPLevel\s*\.\s*(\w+)\s*\)$", matched_text, re.S)
+    if read:
+        return "getCrew()" if read.group(1) == "REGULAR" else "getCrew() * 0 /* 0.7 non-REGULAR crew tier */"
     return ""
 
 
@@ -1812,6 +1817,26 @@ def _fix_temporary_market_fleet_source(root: Path, options: dict) -> list[FileCh
     return changes
 
 
+def _fix_rc8_signature_changed(root: Path, options: dict) -> list[FileChange]:
+    """Rewrite old-form calls to RC8's exact form (bridgeforge.signature_rewrites; ROADMAP 41). A file under jars/src
+    or src/ is the jar's bundled source: rebuild the jar (patch-jar-class) after this."""
+    from .scanner import _blank_java_comments
+    from .signature_rewrites import rewrite
+
+    files = sorted({f.file for f in _findings_of(root, options, "rc8-signature-changed") if f.file})
+    changes = []
+    for rel in files:
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        new, count = rewrite(text, _blank_java_comments(text, strings=True))
+        if count:
+            changes.append(FileChange(path=path, before=raw, after=_encode(new, had_bom)))
+    if not changes:
+        raise FixerError("No old-form call with an exact RC8 equivalent found.")
+    return changes
+
+
 def _relative_path(root: Path, path: Path) -> str:
     try:
         return path.relative_to(root).as_posix()
@@ -2966,6 +2991,7 @@ _FIXER_FUNCS = {
     "wing-op-cost-blank": _fix_wing_op_cost_blank,
     "campaign-lookup-dereferenced-unguarded": _fix_lookup_dereferenced_unguarded,
     "temporary-market-fleet-source": _fix_temporary_market_fleet_source,
+    "rc8-signature-changed": _fix_rc8_signature_changed,
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
     "shiproles-wing-id": _fix_shiproles_wing_id,
     "csv-fullwidth-number": _fix_csv_fullwidth_number,

@@ -61,10 +61,14 @@ class FactionKnownTagTests(unittest.TestCase):
             (mod / "data" / "world" / "factions").mkdir(parents=True)
             (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
             (mod / "data" / "hulls" / "ship_data.csv").write_text("name,id,tags\nA,fx_a,\nB,fx_b,fx_other\n", encoding="utf-8")
+            # Exigency's shape: its own tag dead, base_bp matching only vanilla hulls -> knows none of its own ships.
             (mod / "data" / "world" / "factions" / "fx.faction").write_text(
-                '{"id": "fx", "knownShips": {"tags": ["fx_bp", "base_bp", "fx_other"], "hulls": []}}', encoding="utf-8")
+                '{"id": "fx", "knownShips": {"tags": ["fx_bp", "base_bp"], "hulls": []}}', encoding="utf-8")
+            # A dead tag beside one that covers the mod's ships is harmless (2026-10-05 refinement).
+            (mod / "data" / "world" / "factions" / "fy.faction").write_text(
+                '{"id": "fy", "knownShips": {"tags": ["fy_bp", "fx_other"], "hulls": []}}', encoding="utf-8")
             found = [f for f in scan_mod(mod, vanilla_core=core).findings if f.id == "faction-known-tag-unmatched"]
-        self.assertEqual([f.evidence for f in found], [["list:knownShips", "tag:fx_bp"]])
+        self.assertEqual([(f.file.split("/")[-1], f.evidence) for f in found], [("fx.faction", ["list:knownShips", "tag:fx_bp"])])
 
     def test_skin_tags_and_tags_vanilla_factions_use_are_not_flagged(self) -> None:
         # done-audit 2026-10-04: Amogus' hegemony.faction (XIV_bp on vanilla skins; knownWeapons tag "hegemony").

@@ -729,6 +729,19 @@ class CrewXPLevelRewriteTests(unittest.TestCase):
             after_scan = scan_mod(root)
             self.assertEqual(_findings(after_scan, "removed-api-call"), [])
 
+    def test_tier_reads_become_one_crew(self) -> None:
+        # ROADMAP 40 (Ironclads, 2026-10-05): REGULAR reads all crew, other tiers read 0.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            path = root / "data" / "scripts" / "Mine.java"
+            _write(path, "package data.scripts;\nimport com.fs.starfarer.api.campaign.CargoAPI.CrewXPLevel;\npublic class Mine {\n"
+                         "    float c(CargoAPI cargo) { return cargo.getCrew(CrewXPLevel.REGULAR) + cargo.getCrew(CargoAPI.CrewXPLevel.ELITE); }\n}\n")
+            apply_fix(compute_fix(root, "removed-api-call"))
+            text = path.read_text(encoding="utf-8")
+        self.assertIn("cargo.getCrew() + cargo.getCrew() * 0", text)
+        self.assertNotIn("CrewXPLevel.", text)
+
     def test_qualified_cargoapi_crewxplevel_is_dropped_whole(self) -> None:
         # Ironclads' FleetSpawner (2026-10-04): addCrew(CargoAPI.CrewXPLevel.REGULAR, n) left addCrew(CargoAPI.n).
         with tempfile.TemporaryDirectory() as directory:

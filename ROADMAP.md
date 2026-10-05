@@ -2747,20 +2747,26 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         whose class is RC8's source plus added `demand()`/`supply()` calls and stability effects becomes a market
         condition adding them through `Industry.getDemand/getSupply` (RC8's ResourceDepositsCondition pattern); any
         other change is MANUAL. Proven first by hand on DNEEP (`PopulationNeedsDNEEP`) with AoTD on the rig.
-    40. [ ] **Crew-tier mapper** (Ironclads, 2026-10-04): `CargoAPI.CrewXPLevel` (removed in RC8) -> one crew; reads of
+    40. [x] **Crew-tier mapper** (Ironclads, 2026-10-04): `CargoAPI.CrewXPLevel` (removed in RC8) -> one crew; reads of
         REGULAR become `getCrew()`, other tiers 0 (tier sums stay right), add/removeCrew drop the tier. Owner decision
         "one crew". Done by hand in 5 Ironclads files.
-    41. [ ] **Signature rewrites with exact RC8 equivalents** (Ironclads, javap 2026-10-04): `EconomyAPI.addMarket(m)`
+    41. [x] **Signature rewrites with exact RC8 equivalents** (Ironclads, javap 2026-10-04): `EconomyAPI.addMarket(m)`
         -> `addMarket(m, true)` (vanilla passes true); `TileParams(..., 7 args)` -> RC8's 8th `name` argument;
         `RepActionEnvelope(action, param, CommMessageAPI, boolean)` -> `(action, param, message, null, boolean)`;
         `MarketAPI.addCondition(id, boolean, Object)` -> `addCondition(id, Object)`.
-    42. [ ] **Replaced core file drops RC8 rows** (check): a `replace` entry for an RC8 CSV the mod does not fully
+    42. [x] **Replaced core file drops RC8 rows** (check): a `replace` entry for an RC8 CSV the mod does not fully
         restate (Ironclads replaced commodities.csv and market_conditions.csv, losing `crew`, AI cores and every
         deposit condition RC8's own code adds). Nothing flagged it.
-    43. [ ] **Bundled copy of a retired vanilla class** (check): a mod class in a `com.fs.starfarer.api` package that
+    43. [x] **Bundled copy of a retired vanilla class** (check): a mod class in a `com.fs.starfarer.api` package that
         RC8 no longer ships and nothing in the mod starts (Ironclads' `SystemBountyEvent` was vanilla 0.7.2's,
         unchanged; RC8 replaced it with SystemBountyIntel). `vanilla-duplicated-classes` compares only against
         classes RC8 still has.
+        **Done 2026-10-05 (40-43):** 40 in `removed-api-call` (the scanner pattern now matches `getCrew(CrewXPLevel.X)`;
+        REGULAR -> `getCrew()`, other tiers `getCrew() * 0`), test `test_tier_reads_become_one_crew`; 41 as
+        `rc8-signature-changed` (check + auto fixer, `bridgeforge/signature_rewrites.py`; RepActionEnvelope left out: RC8
+        also has a 4-argument form with another third type); 42 as `replace-drops-rc8-entries` (it also found Ironclads'
+        vanilla faction copies lacking knownHullMods and doctrine); 43 as `retired-vanilla-class-copy` (classes an
+        older reference install shipped and RC8 does not). Tests: `tests/test_signature_rewrites.py`.
     44. [ ] **Whole-jar rebuild command**: decompile (Vineflower) -> source tree -> javac --release 17 against RC8 ->
         jar, with a class diff against the original (Ironclads' IroncladsEcon.jar was rebuilt by hand).
     45. [ ] **0.7 economy translators** (decision tier, once a second 0.7 economy mod arrives): Ironclads'

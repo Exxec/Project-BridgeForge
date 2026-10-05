@@ -1226,6 +1226,9 @@ _CREW_XP_LEVEL_PATTERN = re.compile(
     r"import\s+com\.fs\.starfarer\.api\.campaign\.CargoAPI\.CrewXPLevel\s*;[ \t]*\r?\n?"
     # The CargoAPI. qualifier is part of the span (Ironclads' FleetSpawner wrote addCrew(CargoAPI.CrewXPLevel.REGULAR,
     # n); leaving the qualifier produced addCrew(CargoAPI.(int)...), 2026-10-04).
+    # A tier read, getCrew(CrewXPLevel.X) (ROADMAP 40; Ironclads' salvage scripts, 2026-10-05): owner decision "one
+    # crew" -- REGULAR (the tier hired crew came in) reads all crew, other tiers read 0, so tier sums stay right.
+    r"|getCrew\s*\(\s*(?:(?:com\.fs\.starfarer\.api\.campaign\.)?CargoAPI\s*\.\s*)?CrewXPLevel\s*\.\s*\w+\s*\)"
     r"|(?:(?:com\.fs\.starfarer\.api\.campaign\.)?CargoAPI\s*\.\s*)?CrewXPLevel\s*\.\s*\w+\s*,\s*"
     r"|,\s*(?:(?:com\.fs\.starfarer\.api\.campaign\.)?CargoAPI\s*\.\s*)?CrewXPLevel\s*\.\s*\w+"
 )
@@ -5214,6 +5217,28 @@ _KNOWN_LISTS = {"knownShips": ("data/hulls/ship_data.csv",), "priorityShips": ("
                 "knownWeapons": ("data/weapons/weapon_data.csv",), "knownFighters": ("data/hulls/wing_data.csv",)}
 
 
+def _mod_items(root: Path, key: str) -> tuple[set[str], set[str]]:
+    """(ids, tags) of the mod's own hulls, weapons or wings for one known-list key."""
+    import csv as _csv
+    import io as _io
+
+    ids: set[str] = set()
+    tags: set[str] = set()
+    for rel in _KNOWN_LISTS[key]:
+        path = root / rel
+        if not path.is_file():
+            continue
+        try:
+            for row in _csv.DictReader(_io.StringIO(path.read_text(encoding="utf-8-sig", errors="replace"))):
+                item = (row.get("id") or "").strip()
+                if item and not item.startswith("#"):
+                    ids.add(item)
+                    tags |= {t.strip() for t in (row.get("tags") or "").split(",") if t.strip()}
+        except _csv.Error:
+            continue
+    return ids, tags
+
+
 def _csv_tags(path: Path) -> set[str]:
     import csv as _csv
     import io as _io
@@ -5264,7 +5289,24 @@ def _scan_faction_known_tags(root: Path, result: ScanResult, vanilla_core: Path 
         for key in _KNOWN_LISTS:
             block = spec.get(key)
             tags = block.get("tags") if isinstance(block, dict) else None
+            # A dead tag only costs something when the block gives the faction none of this mod's own items (by id or
+            # by a tag a mod item carries): 28 queue mods held 156 findings, mostly dead fighter/weapon tags beside
+            # lists that already cover the mod's items (2026-10-05). Exigency's knownShips [exigency_bp, base_bp]
+            # still counts: base_bp matched only vanilla hulls, none of Exigency's.
+            own_ids, own_tags = _mod_items(root, key)
+            listed = {v for k, vals in (block or {}).items() if k != "tags" and isinstance(vals, list) for v in vals if isinstance(v, str)} if isinstance(block, dict) else set()
+            if own_ids and (listed & own_ids or any(isinstance(t, str) and t in own_tags for t in tags or [])):
+                continue
+            # Otherwise a dead tag matters when it looks like the mod's own (kadur_theocracy beside kadur_* tags: a
+            # renamed tag) or the list gives the faction nothing at all. A tag naming another mod's content (Vayra's
+            # Sector lists mayasura_bp, kazeron, westernesse: optional integration) is not flagged (2026-10-05).
+            yields = bool(listed) or any(isinstance(t, str) and t in carried[key] for t in tags or [])
+            own_prefixes = {n.split("_")[0].lower() for n in own_ids | own_tags if "_" in n}
             for tag in tags or []:
+                if not (isinstance(tag, str) and tag.strip() and tag not in carried[key]):
+                    continue
+                if yields and tag.split("_")[0].lower() not in own_prefixes:
+                    continue
                 if isinstance(tag, str) and tag.strip() and tag not in carried[key]:
                     result.add(
                         id="faction-known-tag-unmatched",
@@ -5396,6 +5438,143 @@ def _scan_temporary_market_fleet_source(root: Path, result: ScanResult) -> None:
             file=file,
             evidence=[f"found:{where}", "calls:createMarket+removeMarket+FleetParamsV3"],
         )
+
+
+def _scan_replace_drops_rc8_entries(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """A mod_info `replace` entry for an RC8 file the mod's copy does not fully restate (ROADMAP 42). Ironclads
+    replaced commodities.csv, market_conditions.csv and hull_mods.csv with 0.7 copies, dropping `crew`, AI cores, every
+    deposit condition and 92 hull mods (64 used by RC8's own code); nothing flagged it (2026-10-05)."""
+    if vanilla_core is None:
+        return
+    import csv as _csv
+    import io as _io
+
+    info = _load_lenient_json_file(root / "mod_info.json") if (root / "mod_info.json").is_file() else None
+    replaced = info.get("replace") if isinstance(info, dict) else None
+    for rel in replaced if isinstance(replaced, list) else []:
+        if not isinstance(rel, str):
+            continue
+        ours, theirs = root / rel, vanilla_core / rel
+        if not theirs.is_file():
+            continue
+
+        def ids(path: Path) -> set[str]:
+            if not path.is_file():
+                return set()
+            if path.suffix.lower() == ".csv":
+                text = path.read_text(encoding="utf-8-sig", errors="replace")
+                rows = list(_csv.DictReader(_io.StringIO(text)))
+                key = "id" if rows and "id" in rows[0] else (next(iter(rows[0])) if rows else None)
+                return {(r.get(key) or "").strip() for r in rows if key and (r.get(key) or "").strip()
+                        and not (r.get(key) or "").strip().startswith("#")}
+            spec = _load_lenient_json_file(path)
+            return set(spec) if isinstance(spec, dict) else set()
+
+        lost = sorted(ids(theirs) - ids(ours))
+        if not lost:
+            continue
+        result.add(
+            id="replace-drops-rc8-entries",
+            category="compatibility",
+            severity="high",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation=(f"mod_info.json replaces {rel}, and the mod's copy lacks {len(lost)} entr"
+                         f"{'y' if len(lost) == 1 else 'ies'} RC8's has. RC8's own code may look them up by id "
+                         "(Ironclads' hull_mods.csv dropped 64 hull mods RC8 uses). Unless the mod deliberately "
+                         "removes them, add its rows instead of replacing the file."),
+            file="mod_info.json",
+            evidence=[f"replace:{rel}", f"lost:{len(lost)}", *[f"id:{i}" for i in lost[:5]]],
+        )
+
+
+_REFERENCE_INSTALLS = ("Starsector62", "Starsector7.2", "Starsector8.1", "Starsector9a", "Starsector9.0", "Starsector9.5.1a")
+_OLD_VANILLA_CLASSES: dict[str, set[str]] = {}
+
+
+def _old_vanilla_api_classes(vanilla_core: Path) -> set[str]:
+    """Classes any older reference install's starfarer.api.jar shipped (beside RC8's install; CLAUDE.md)."""
+    import zipfile
+
+    base = Path(vanilla_core).resolve().parent.parent
+    key = str(base)
+    if key not in _OLD_VANILLA_CLASSES:
+        names: set[str] = set()
+        for install in _REFERENCE_INSTALLS:
+            jar = base / install / "starsector-core" / "starfarer.api.jar"
+            try:
+                with zipfile.ZipFile(jar) as archive:
+                    names |= {n[:-6] for n in archive.namelist() if n.endswith(".class") and "$" not in n}
+            except (OSError, zipfile.BadZipFile):
+                continue
+        _OLD_VANILLA_CLASSES[key] = names
+    return _OLD_VANILLA_CLASSES[key]
+
+
+def _scan_retired_vanilla_class_copy(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """A mod class in vanilla's own package that an older vanilla shipped and RC8 no longer does (ROADMAP 43).
+    Ironclads bundled 0.7.2's SystemBountyEvent unchanged; nothing in the mod started it (0.7's core did), RC8
+    replaced it with SystemBountyIntel, so on RC8 it is dead code (2026-10-05). vanilla-class-duplicated-in-jar
+    compares only with classes RC8 still has."""
+    if vanilla_core is None:
+        return
+    import zipfile
+
+    old = _old_vanilla_api_classes(vanilla_core)
+    if not old:
+        return
+    try:
+        with zipfile.ZipFile(Path(vanilla_core) / "starfarer.api.jar") as archive:
+            rc8 = {n[:-6] for n in archive.namelist() if n.endswith(".class")}
+    except (OSError, zipfile.BadZipFile):
+        return
+    for jar in sorted(p for p in root.rglob("*.jar") if "disabled_files" not in p.relative_to(root).parts):
+        try:
+            with zipfile.ZipFile(jar) as archive:
+                names = [n[:-6] for n in archive.namelist() if n.endswith(".class") and "$" not in n]
+        except (OSError, zipfile.BadZipFile):
+            continue
+        for name in names:
+            if name.startswith("com/fs/starfarer/api/") and name in old and name not in rc8:
+                result.add(
+                    id="retired-vanilla-class-copy",
+                    category="api",
+                    severity="medium",
+                    classification="REVIEW",
+                    confidence="HIGH",
+                    explanation=(f"{name.replace('/', '.')} is a copy of a vanilla class an older Starsector shipped "
+                                 "and RC8 no longer does. Vanilla's own core started classes like this; on RC8 nothing "
+                                 "may, so it is dead code, or it stands in for a system RC8 replaced (Ironclads' "
+                                 "SystemBountyEvent: RC8 uses SystemBountyIntel)."),
+                    file=f"{_relative(root, jar)}!{name}.class",
+                    evidence=[f"class:{name.replace('/', '.')}"],
+                )
+
+
+def _scan_rc8_signature_changed(root: Path, result: ScanResult) -> None:
+    """Old-form calls with an exact RC8 equivalent (bridgeforge.signature_rewrites; ROADMAP 41, Ironclads 2026-10-04)."""
+    from .signature_rewrites import suspects
+
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"), strings=True)
+        except OSError:
+            continue
+        for line, rule, _, _ in suspects(text):
+            result.add(
+                id="rc8-signature-changed",
+                category="api",
+                severity="high",
+                classification="REVIEW",
+                confidence="HIGH",
+                explanation=(f"{rule}(...) uses its pre-RC8 argument list; RC8 has only the changed signature "
+                             "(addMarket gained withJunkAndChatter, TileParams/addNebulaFromPNG a name, addCondition "
+                             "lost its boolean), so this does not compile on RC8. The fixer writes RC8's exact form."),
+                file=_relative(root, source),
+                evidence=[f"line:{line}", f"call:{rule}"],
+            )
 
 
 def _scan_settings_keys_missing(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
@@ -7591,6 +7770,9 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_faction_known_tags(root, result, vanilla_root)
     _scan_shared_hook_overrides(root, result, vanilla_root)
     _scan_temporary_market_fleet_source(root, result)
+    _scan_rc8_signature_changed(root, result)
+    _scan_replace_drops_rc8_entries(root, result, vanilla_root)
+    _scan_retired_vanilla_class_copy(root, result, vanilla_root)
     _scan_mod_info_triage_banner(root, result)
     _scan_data_class_references_missing(root, result, vanilla_root, provider_roots)
     _scan_hardcoded_hyperspace_coordinates(root, result)
