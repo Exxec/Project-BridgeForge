@@ -543,7 +543,29 @@ def _placeholders(text: str) -> Counter:
     # "%%" is a literal percent sign, not a value to carry over: Chinese sources write a full-width "％" that English
     # must write as "%%" where the game runs String.format (hull_mods.csv, as Nexerelin's and SWP's do) and as "%"
     # elsewhere (FlowerGod, 2026-09-29), so it is left out of the comparison on both sides.
-    return Counter(token for token in _PLACEHOLDER.findall(text) if token != "%%")
+    # Format specifiers count by the argument each one consumes (_format_arguments), so "%1$s" and "%s" match.
+    return Counter(token for token in _PLACEHOLDER.findall(text) if token != "%%" and not token.startswith("%")) \
+        + Counter(f"%{index}{conversion}" for index, conversion in _format_arguments(text))
+
+
+_FORMAT_SPEC = re.compile(r"%(?:(\d+)\$)?[-#+0,(]*\d*(?:\.\d+)?([sdfxXeEgGcbhno%])")
+
+
+def _format_arguments(text: str) -> list[tuple[int, str]]:
+    """(argument index, conversion) for each String.format specifier, in the order Java reads them: an unindexed
+    one takes the next argument, "%2$s" the second. A reordering translation must index its specifiers;
+    FlowerGod's "%s posts an emergency bounty of %d credits on %s" fed the name to %d and crashed
+    (IllegalFormatConversionException, GRP5B-20261005), which an unordered count of tokens let through."""
+    found, ordinary = [], 0
+    for match in _FORMAT_SPEC.finditer(text):
+        if match.group(2) == "%":
+            continue
+        if match.group(1):
+            found.append((int(match.group(1)), match.group(2)))
+        else:
+            ordinary += 1
+            found.append((ordinary, match.group(2)))
+    return found
 
 
 def _resolved(document: dict) -> tuple[dict[str, dict], list[str]]:

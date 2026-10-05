@@ -140,7 +140,16 @@ class PlaceholderTests(unittest.TestCase):
     def test_memory_key_glued_to_chinese_stays_ascii(self) -> None:
         from bridgeforge.translation import _placeholders
         self.assertEqual(_placeholders("$LTHS_Person1标记的NPC进行此对话"), _placeholders("Talk to the NPC marked by $LTHS_Person1"))
-        self.assertEqual(sorted(_placeholders("获得 %s 点 $player.name").elements()), ["$player.name", "%s"])
+        self.assertEqual(sorted(_placeholders("获得 %s 点 $player.name").elements()), ["$player.name", "%1s"])
+
+    def test_reordered_format_specifiers_must_be_indexed(self) -> None:
+        # FlowerGod FG_PersonBountyEvent: the English swapped %d and %s, so the name reached %d and the game
+        # crashed with IllegalFormatConversionException (GRP5B-20261005). Indexed specifiers keep Java's order.
+        from bridgeforge.translation import _placeholders
+        source = "%s 紧急发布了针对 %s 价值 %d 星币的赏金"
+        self.assertNotEqual(_placeholders(source), _placeholders("%s posts an emergency bounty of %d credits on %s"))
+        self.assertEqual(_placeholders(source), _placeholders("%1$s posts an emergency bounty of %3$d credits on %2$s"))
+        self.assertEqual(_placeholders("%s 和 %s"), _placeholders("%s and %s"))
 
     def test_sentence_period_is_not_part_of_a_variable(self) -> None:
         # Blackrock rules text: "...welcome, $playerName." vs the Chinese "...$playerName。"

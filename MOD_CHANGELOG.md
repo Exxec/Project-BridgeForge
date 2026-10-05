@@ -59,6 +59,10 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **zzzMilitaristic Utilitarian Defensive Alliance** 0.1.00000000001: revived for RC8 and archived (live validated)
 - **Vayra's Ship Pack** 1.2.3: Shieldwall Drones system file renamed to its id; no longer hides vanilla drone_pd
 - **zzz Bingus Sustem** 0.6.9: dependency versions set to the tested IndEvo 4.1.b and Unknown Skies 3.0.3 (RC8 disabled it otherwise)
+- **First Persean Empire** 1.1.1: revived for RC8 and archived (live validated)
+- **Flower Gods Union [BF r1]** 1.1.9+bf.1: revived for RC8 and archived (live validated)
+- **FlowerGod** 1.1.9+bf.1: bounty message format order fixed (crash on the first campaign day)
+- **Flu-X [BF r3]** 2.0.0+bf.3: revived for RC8 and archived (live validated)
 
 ## 2026-10-04
 
