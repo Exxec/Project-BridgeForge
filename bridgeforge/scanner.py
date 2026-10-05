@@ -590,7 +590,7 @@ def _quote_barewords_and_keys(text: str) -> tuple[str, set[str]]:
     return _BAREWORD_TOKEN_PATTERN.sub(replace, text), tolerances
 
 
-def _parse_json(text: str) -> tuple[object, set[str]]:
+def _parse_json(text: str, object_pairs_hook=None) -> tuple[object, set[str]]:
     """Parse JSON the way Starsector's lenient (org.json-based) loader does.
 
     Strict `json.loads` is tried first so the common, well-formed case is not
@@ -602,7 +602,7 @@ def _parse_json(text: str) -> tuple[object, set[str]]:
     report it rather than silently "fixing" the file.
     """
     try:
-        return json.loads(text), set()
+        return json.loads(text, object_pairs_hook=object_pairs_hook), set()
     except json.JSONDecodeError as original_error:
         tolerances: set[str] = set()
         try:
@@ -636,7 +636,7 @@ def _parse_json(text: str) -> tuple[object, set[str]]:
             # we tolerate; "repairing" it would hide a genuinely broken file.
             raise original_error
         try:
-            data = json.loads(without_commas)
+            data = json.loads(without_commas, object_pairs_hook=object_pairs_hook)
         except json.JSONDecodeError as rewritten_error:
             if rewritten_error.msg != "Extra data":
                 # Say where the lenient rewrite really stopped: Rebal's file failed on a ';' at line 29
@@ -650,7 +650,7 @@ def _parse_json(text: str) -> tuple[object, set[str]]:
             # rest -- including real keys when an extra '}' closes the root early (Blackrock's
             # br_consortium.faction loses its factionDoctrine this way).
             stripped = without_commas.lstrip()
-            data, end = json.JSONDecoder().raw_decode(stripped)
+            data, end = json.JSONDecoder(object_pairs_hook=object_pairs_hook).raw_decode(stripped)
             tolerances.add("trailing-data")
             if re.search(r'["\w]', stripped[end:]):
                 tolerances.add("trailing-content")
@@ -5931,6 +5931,59 @@ def _scan_person_names_duplicate_row(root: Path, result: ScanResult) -> None:
         )
 
 
+_DUPLICATE_KEY_SUFFIXES = (".json", ".faction", ".ship", ".variant", ".wpn", ".proj", ".skin", ".system")
+
+
+def _json_duplicate_keys(text: str) -> list[str]:
+    """Keys repeated inside one object, in reading order. Empty when the text does not parse."""
+    repeats: list[str] = []
+
+    def hook(pairs):
+        seen = set()
+        for key, _value in pairs:
+            if key in seen:
+                repeats.append(key)
+            seen.add(key)
+        return dict(pairs)
+
+    try:
+        _parse_json(text, object_pairs_hook=hook)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    return repeats
+
+
+def _scan_json_duplicate_key(root: Path, result: ScanResult) -> None:
+    """org.json (RC8's loader) refuses a key repeated in one object: Fatal 'Duplicate key "knownFighters"' on Ironclads'
+    pirates.faction, which BridgeForge's own known-lists fixer had given a second copy (GRP10E-20261005). Python's json
+    keeps the last copy silently, so nothing else here notices."""
+    for path in sorted(root.rglob("*")):
+        if path.suffix.lower() not in _DUPLICATE_KEY_SUFFIXES or not path.is_file():
+            continue
+        relative = path.relative_to(root)
+        if relative.parts and relative.parts[0].lower() in ("reports", "scratch", "disabled_files"):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            continue
+        if text.count('"') < 4:
+            continue
+        repeats = _json_duplicate_keys(text)
+        if repeats:
+            result.add(
+                id="json-duplicate-key",
+                category="content",
+                severity="high",
+                classification="REVIEW",
+                confidence="DETERMINISTIC",
+                explanation="A key appears twice in one JSON object. RC8's org.json loader stops at startup with a Fatal "
+                            "'Duplicate key' dialog. Keep the copy the mod means and remove the other.",
+                file=_relative(root, path),
+                evidence=[f"key:{key}" for key in repeats[:10]],
+            )
+
+
 def _scan_mod_info_triage_banner(root: Path, result: ScanResult) -> None:
     """A mod_info.json name/description/author still carrying a pre-release triage banner."""
     mod_info = _load_lenient_json_file(root / "mod_info.json")
@@ -7945,6 +7998,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_bundled_source_stale(root, result)
     _scan_mod_info_triage_banner(root, result)
     _scan_person_names_duplicate_row(root, result)
+    _scan_json_duplicate_key(root, result)
     _scan_data_class_references_missing(root, result, vanilla_root, provider_roots)
     _scan_hardcoded_hyperspace_coordinates(root, result)
     _scan_hardcoded_terrain_grid_size(root, result)

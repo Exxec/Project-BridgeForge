@@ -1253,6 +1253,27 @@ class FactionKnownListsMissingTests(unittest.TestCase):
             after_scan = scan_mod(root, vanilla_core=vanilla)
             self.assertEqual(_findings(after_scan, "faction-known-lists-missing"), [])
 
+    def test_an_existing_known_list_is_kept_not_repeated(self) -> None:
+        # Ironclads pirates.faction already had knownFighters; the fixer added a second, and RC8 stopped with
+        # Fatal 'Duplicate key "knownFighters"' (GRP10E-20261005).
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
+            root = Path(mod_dir)
+            vanilla = Path(vanilla_dir)
+            faction_path = root / "data" / "world" / "factions" / "newfac.faction"
+            _write(faction_path, '{"id":"newfac","knownFighters":{"fighters":["wing1_wing","wing2_wing"]},'
+                                 '"shipRoles":{"role1":{"variant1":1}}}')
+            _write(vanilla / "data" / "world" / "factions" / "pirates.faction", '{"id":"pirates"}')
+            _write(root / "data" / "variants" / "variant1.variant", '{"hullId":"hull1","weaponGroups":[{"weapons":{"WP0":"weapon1"}}],"wings":["wing1_wing"]}')
+            _write(root / "data" / "hulls" / "ship_data.csv", "id,name\nhull1,Hull One\n")
+            _write(root / "data" / "weapons" / "weapon_data.csv", "id,name\nweapon1,Weapon One\n")
+            _write(root / "data" / "hulls" / "wing_data.csv", "id,role,role desc,op cost\nwing1_wing,FIGHTER,desc,4\nwing2_wing,FIGHTER,desc,4\n")
+            apply_fix(compute_fix(root, "faction-known-lists-missing", {"faction_file": faction_path, "vanilla_core": vanilla}))
+            text = faction_path.read_text(encoding="utf-8")
+            data = json.loads(text)
+        self.assertEqual(text.count('"knownFighters"'), 1)
+        self.assertEqual(data["knownFighters"]["fighters"], ["wing1_wing", "wing2_wing"])
+        self.assertEqual(data["knownShips"]["hulls"], ["hull1"])
+
     def test_a_0_6_faction_derives_lists_from_fleet_compositions(self) -> None:
         # Antediluvians' wayfarer.faction (2026-09-30): no shipRoles; fleets name a variant and a wing directly.
         with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:

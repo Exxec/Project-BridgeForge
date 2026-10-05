@@ -186,6 +186,7 @@
     "retired-vanilla-class-copy": "code",
     "bundled-source-stale": "none",
     "person-names-duplicate-row": "auto",
+    "json-duplicate-key": "inspect",
     "campaign-lookup-dereferenced-unguarded": "auto",
     "unverified-json-syntax": "inspect",
     "unverified-mod-info-syntax": "inspect",

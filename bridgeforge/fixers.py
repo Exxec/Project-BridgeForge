@@ -1461,11 +1461,13 @@ def _fix_faction_known_lists_missing(root: Path, options: dict) -> list[FileChan
     if unresolved:
         raise FixerError("Refusing to derive known-lists: unresolved id(s): " + "; ".join(sorted(set(unresolved))))
 
-    insertion = (
-        '"knownShips":{"hulls":[' + ",".join(json.dumps(item) for item in sorted(known_hulls)) + "]},"
-        '"knownWeapons":{"weapons":[' + ",".join(json.dumps(item) for item in sorted(known_weapons)) + "]},"
-        '"knownFighters":{"fighters":[' + ",".join(json.dumps(item) for item in sorted(known_fighters)) + "]},"
-    )
+    # Only the lists the faction lacks: RC8 refuses a repeated key (Fatal 'Duplicate key "knownFighters"', Ironclads
+    # pirates.faction, GRP10E-20261005), and Python's json keeps the last copy silently, so the re-parse below hid it.
+    lists = (("knownShips", "hulls", known_hulls), ("knownWeapons", "weapons", known_weapons), ("knownFighters", "fighters", known_fighters))
+    insertion = "".join(f'"{key}":{{"{inner}":[' + ",".join(json.dumps(item) for item in sorted(items)) + "]},"
+                        for key, inner, items in lists if key not in data)
+    if not insertion:
+        raise FixerError(f"{faction_path} already declares knownShips, knownWeapons and knownFighters.")
 
     depths = _structural_depths(text)
     match = None

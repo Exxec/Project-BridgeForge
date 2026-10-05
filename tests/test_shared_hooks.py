@@ -115,3 +115,18 @@ class PersonNamesDuplicateRowTests(unittest.TestCase):
             after = compute_fix(mod, "person-names-duplicate-row").changes[0].after
         self.assertEqual(found[0].evidence, ["line:6"])
         self.assertEqual(after, b"name,gender,usage,category\r\nMao,,l,xle\r\n,,,\r\nMao,,f,xle\r\n,,,\r\nTabar,,l,fringe\r\n")
+
+
+class JsonDuplicateKeyTests(unittest.TestCase):
+    def test_a_repeated_key_in_a_faction_is_flagged(self) -> None:
+        # Ironclads pirates.faction: Fatal 'Duplicate key "knownFighters"' (GRP10E-20261005); lenient syntax still parses
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "mod"
+            (mod / "data" / "world" / "factions").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "dk"}', encoding="utf-8")
+            (mod / "data" / "world" / "factions" / "pirates.faction").write_text(
+                '{\n\t# comment\n\t"id":"pirates",\n\t"knownFighters":{"fighters":["a_wing"]},\n'
+                '\t"knownShips":{"hulls":["h"]},"knownFighters":{"fighters":["a_wing"]},\n}', encoding="utf-8")
+            (mod / "data" / "world" / "factions" / "clean.faction").write_text('{"id":"clean","a":{"x":1},"b":{"x":2}}', encoding="utf-8")
+            found = [(f.file, f.evidence) for f in scan_mod(mod).findings if f.id == "json-duplicate-key"]
+        self.assertEqual(found, [("data/world/factions/pirates.faction", ["key:knownFighters"])])
