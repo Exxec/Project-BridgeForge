@@ -36,9 +36,32 @@ def settings_keys(*settings_files: Path) -> set[str]:
     return keys
 
 
+_MOD_GUARD = re.compile(r"isModEnabled\s*\(\s*\"[^\"]+\"\s*\)\s*(?:&&|\?)")
+
+
 def source_reads(text: str) -> list[tuple[int, str, str]]:
-    """(line, getter, key) for literal settings reads in Java source (comments must be blanked)."""
-    return [(text.count("\n", 0, m.start()) + 1, m.group(1), m.group(2)) for m in _SOURCE_READ.finditer(text)]
+    """(line, getter, key) for literal settings reads in Java source (comments must be blanked).
+
+    A read guarded earlier in the same statement by `isModEnabled("x") &&` (or `? ...`) is left out: the key is that
+    other mod's setting, read only when it is enabled (Kadur Remnant reads IndEvo's PirateHaven/dryDock and Better
+    Deserving S-Mods' BuiltInSMod that way, 2026-10-05)."""
+    found = []
+    for m in _SOURCE_READ.finditer(text):
+        statement_start = max(text.rfind(";", 0, m.start()), text.rfind("{", 0, m.start()), text.rfind("}", 0, m.start()))
+        if _MOD_GUARD.search(text[statement_start + 1:m.start()]):
+            continue
+        found.append((text.count("\n", 0, m.start()) + 1, m.group(1), m.group(2)))
+    return found
+
+
+def guarded_keys(text: str) -> set[str]:
+    """Keys this source reads only behind an isModEnabled guard (see source_reads)."""
+    guarded = set()
+    for m in _SOURCE_READ.finditer(text):
+        statement_start = max(text.rfind(";", 0, m.start()), text.rfind("{", 0, m.start()), text.rfind("}", 0, m.start()))
+        if _MOD_GUARD.search(text[statement_start + 1:m.start()]):
+            guarded.add(m.group(2))
+    return guarded
 
 
 def javap_reads(listing: str) -> list[tuple[str, str]]:

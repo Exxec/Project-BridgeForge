@@ -82,6 +82,7 @@ RELEASE_BLOCKING_TODO_PATTERN = re.compile(
     re.I,
 )
 ROBOT_INPUT_INJECTION_PATTERN = re.compile(r"\bnew\s+(?:java\.awt\.)?Robot\s*\(")
+_INTERFACE_BASE_CLASSES = {"HullModEffect": "BaseHullMod", "ShipSystemStatsScript": "BaseShipSystemScript"}
 TARGET_INTERFACE_CONTRACTS = {
     "LevelupPlugin": {
         "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?LevelupPlugin\b"),
@@ -964,6 +965,12 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
             for contract_id, contract in TARGET_INTERFACE_CONTRACTS.items():
                 if contract["implements"].search(text) and not contract["method"].search(text):
                     interface = contract.get("interface", contract_id)
+                    # A class extending RC8's base class inherits the method (javap 2026-10-05: BaseHullMod has
+                    # showInRefitScreenModPickerFor/isSModEffectAPenalty, BaseShipSystemScript all six overrides).
+                    # Grytpype & Moriarty's hull mods "extends BaseHullMod implements HullModEffect" were flagged.
+                    base = _INTERFACE_BASE_CLASSES.get(interface)
+                    if base and re.search(r"\bextends\s+(?:[\w.]+\.)?" + base + r"\b", text):
+                        continue
                     result.add(
                         id="target-interface-method-missing",
                         category="source-api",
@@ -2438,6 +2445,7 @@ def _scan_campaign_identifier_context(root: Path, result: ScanResult) -> None:
     local_systems: set[str] = set()
     local_entities: set[str] = set()
     created_in: dict[str, set[str]] = {}
+    entities_in: dict[str, set[str]] = {}
     for source in root.rglob("*.java"):
         if "disabled_files" in source.relative_to(root).parts:
             continue
@@ -2450,11 +2458,16 @@ def _scan_campaign_identifier_context(root: Path, result: ScanResult) -> None:
         local_systems |= systems
         local_entities |= entities
         created_in[_relative(root, source)] = systems | entities
+        entities_in[_relative(root, source)] = {e.casefold() for e in entities}
 
     def same_file(finding, identifier: str) -> None:
         # ROADMAP 34.6: the lookup's own file creates the id (Sylphon's Nym, ORA's Joy, Hiver's Kiztac: 7 of 14 hand
         # decisions on 2026-10-04), a generator looking up what it just made. A note, not work.
-        if identifier in created_in.get(finding.file or "", set()):
+        # Entity ids match case-insensitively: getEntityById is (RC8-20); Aivon's addPlanet("Atempause") then
+        # getEntityById("atempause") resolves (2026-10-05).
+        if identifier in created_in.get(finding.file or "", set()) or (
+                finding.id == "hard-coded-campaign-entity-reference"
+                and identifier.casefold() in entities_in.get(finding.file or "", set())):
             finding.classification = "SAFE"
             finding.evidence.append("created-in-same-file")
 
@@ -5582,13 +5595,14 @@ def _scan_settings_keys_missing(root: Path, result: ScanResult, vanilla_core: Pa
     opening a market reading blackMarketMinSupplies, 2026-10-04). Needs the vanilla core to know RC8's keys."""
     if vanilla_core is None:
         return
-    from .settings_keys import jar_reads, settings_keys, source_reads
+    from .settings_keys import guarded_keys, jar_reads, settings_keys, source_reads
 
     known = settings_keys(vanilla_core / "data" / "config" / "settings.json", root / "data" / "config" / "settings.json",
                           *[Path(d) / "data" / "config" / "settings.json" for d in result.migration_context.get("dependency_roots") or []])
     if not known:
         return
     reads: list[tuple[str, str, str, str]] = []
+    guarded_by_path: dict[str, set[str]] = {}
     for source in sorted(root.rglob("*.java")):
         if "disabled_files" in source.relative_to(root).parts:
             continue
@@ -5598,6 +5612,7 @@ def _scan_settings_keys_missing(root: Path, result: ScanResult, vanilla_core: Pa
             continue
         if "getSettings" in text:
             reads += [(_relative(root, source), f"line:{line}", getter, key) for line, getter, key in source_reads(text)]
+            guarded_by_path[_relative(root, source)] = guarded_keys(text)
     jars = [p for p in root.rglob("*.jar") if "disabled_files" not in p.relative_to(root).parts]
     if jars:
         if not _JDK_FOR_PROCGEN:
@@ -5606,7 +5621,12 @@ def _scan_settings_keys_missing(root: Path, result: ScanResult, vanilla_core: Pa
             _JDK_FOR_PROCGEN.append(find_jdk())
         if _JDK_FOR_PROCGEN[0] is not None:
             for jar in jars:
-                reads += [(f"{_relative(root, jar)}!{cls}", "jar", getter, key) for cls, getter, key in jar_reads(jar, _JDK_FOR_PROCGEN[0].javap)]
+                for cls, getter, key in jar_reads(jar, _JDK_FOR_PROCGEN[0].javap):
+                    # The class's bundled source shows this read behind an isModEnabled guard (Kadur Remnant).
+                    stem = cls.split("$", 1)[0].removesuffix(".class") + ".java"
+                    if any(path.endswith(stem) and key in keys for path, keys in guarded_by_path.items()):
+                        continue
+                    reads.append((f"{_relative(root, jar)}!{cls}", "jar", getter, key))
     for file, where, getter, key in reads:
         if key in known:
             continue

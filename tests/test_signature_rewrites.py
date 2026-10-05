@@ -87,3 +87,33 @@ class RetiredVanillaClassTests(unittest.TestCase):
             found = [f.evidence for f in scan_mod(mod, vanilla_core=core).findings if f.id == "retired-vanilla-class-copy"]
             scanner._OLD_VANILLA_CLASSES.clear()
         self.assertEqual(found, [["class:com.fs.starfarer.api.impl.campaign.events.SystemBountyEvent"]])
+
+
+class InheritedInterfaceMethodTests(unittest.TestCase):
+    def test_extending_rc8s_base_class_supplies_the_method(self) -> None:
+        # Grytpype & Moriarty (2026-10-05): "extends BaseHullMod implements HullModEffect" was flagged.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "mod"
+            (mod / "data" / "hullmods").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            (mod / "data" / "hullmods" / "A.java").write_text(
+                "package data.hullmods;\npublic class A extends BaseHullMod implements HullModEffect { }\n", encoding="utf-8")
+            (mod / "data" / "hullmods" / "B.java").write_text(
+                "package data.hullmods;\npublic class B implements HullModEffect { }\n", encoding="utf-8")
+            files = sorted({f.file for f in scan_mod(mod).findings if f.id == "target-interface-method-missing"})
+        self.assertEqual(files, ["data/hullmods/B.java"])
+
+
+class EntityLookupCaseTests(unittest.TestCase):
+    def test_a_lookup_differing_only_in_case_from_its_creation_is_safe(self) -> None:
+        # Aivon Republic (2026-10-05): addPlanet("Atempause", ...) then getEntityById("atempause"); RC8-20.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "mod"
+            (mod / "data" / "scripts").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            (mod / "data" / "scripts" / "Gen.java").write_text(
+                'class Gen { void g(StarSystemAPI system, PlanetAPI star) {\n'
+                '  PlanetAPI a = system.addPlanet("Atempause", star, "Atempause", "terran", 30, 90, 3500, 180f);\n'
+                '  station.setCircularOrbit(system.getEntityById("atempause"), 45, 200, 15);\n} }\n', encoding="utf-8")
+            found = [f.classification for f in scan_mod(mod).findings if f.id == "hard-coded-campaign-entity-reference"]
+        self.assertEqual(found, ["SAFE"])

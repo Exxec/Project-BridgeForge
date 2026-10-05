@@ -88,3 +88,11 @@ class FactionKnownTagTests(unittest.TestCase):
                 '{"id": "hegemony", "knownShips": {"tags": ["XIV_bp"]}, "knownWeapons": {"tags": ["hegemony"]}}', encoding="utf-8")
             found = [f for f in scan_mod(mod, vanilla_core=core).findings if f.id == "faction-known-tag-unmatched"]
         self.assertEqual(found, [])
+
+
+class GuardedSettingsReadTests(unittest.TestCase):
+    def test_a_read_behind_an_isModEnabled_guard_is_another_mods_setting(self) -> None:
+        # Kadur Remnant (2026-10-05): isModEnabled("IndEvo") && getBoolean("PirateHaven"), IndEvo's own key.
+        text = ('if (Global.getSettings().getModManager().isModEnabled("IndEvo") && Global.getSettings().getBoolean("PirateHaven")) {}\n'
+                'boolean b = Global.getSettings().getBoolean("ownKey");\n')
+        self.assertEqual(source_reads(text), [(2, "getBoolean", "ownKey")])
