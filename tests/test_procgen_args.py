@@ -72,3 +72,11 @@ class ProcgenFalsePositiveTests(unittest.TestCase):
                    "       5: fconst_0\n       6: invokeinterface #11,  6 // InterfaceMethod com/fs/starfarer/api/mission/"
                    "MissionDefinitionAPI.addPlanet:(FFFLjava/lang/String;F)V\n")
         self.assertEqual(javap_suspects(mission), [])
+
+
+class FixedPlacementTests(unittest.TestCase):
+    def test_radius_and_days_zero_is_a_placement(self) -> None:
+        # Vanilla's addPlanet(null, null, null, BLACK_HOLE, 0, radius, 0, 0); Nightcross' dwarfs (2026-10-05).
+        self.assertEqual(source_suspects('system.addPlanet(null, null, null, "star_browndwarf", 0, 300, 0, 0);'), [])
+        self.assertEqual([p for _, _, p in source_suspects('system.addPlanet("a", star, "A", "barren", 0, 100, 4000, 0);')],
+                         [["orbit days 0"]])

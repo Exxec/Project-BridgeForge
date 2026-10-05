@@ -1762,7 +1762,11 @@ def _declared_spec_ids(folder: Path, pattern: str, key: str) -> dict[str, Path]:
     filename is only a fallback when a file can't be parsed or declares no id.
     """
     specs: dict[str, Path] = {}
-    for path in sorted(folder.glob(pattern)):
+    # Variants load from subfolders too (RC8's own core keeps 356 there, data/variants/anubis/...; Sanguinary
+    # Autonomist Defectors' mothership variants live in data/variants/mothership/, 2026-10-05). Hulls and weapons
+    # are flat in RC8's core, so they are not searched recursively.
+    found = folder.rglob(pattern) if pattern == "*.variant" else folder.glob(pattern)
+    for path in sorted(found):
         declared = None
         try:
             data, _ = _parse_json(path.read_text(encoding="utf-8-sig"))
@@ -1901,10 +1905,15 @@ def _scan_system_generation_unguarded(root: Path, result: ScanResult) -> None:
             if reached != "onGameLoad" and on_new_game:
                 reached = "onNewGame"
             line = text.count("\n", 0, match.start()) + 1
+            if reached == "unknown" and not any(
+                    re.search(rf"\b{re.escape(source.stem)}\b", other_text) for other_path, other_text in texts.items()
+                    if other_path != source):
+                # Nothing references the generator (Galaxy Tigers' test/Testo, 2026-10-05): dead code cannot duplicate.
+                reached = "never called"
             hits.append(f"{_relative(root, source)}:{line}: {name} (called from {reached})")
     # Generation reached only from onNewGame runs once per sector, as vanilla's own generators do: a note, not
     # work. onGameLoad (duplicates on every load) or a caller not traced stays REVIEW.
-    if hits and all(h.endswith("(called from onNewGame)") for h in hits):
+    if hits and all(h.endswith(("(called from onNewGame)", "(called from never called)")) for h in hits):
         result.add(
             id="system-generation-unguarded",
             category="campaign",

@@ -117,3 +117,36 @@ class EntityLookupCaseTests(unittest.TestCase):
                 '  station.setCircularOrbit(system.getEntityById("atempause"), 45, 200, 15);\n} }\n', encoding="utf-8")
             found = [f.classification for f in scan_mod(mod).findings if f.id == "hard-coded-campaign-entity-reference"]
         self.assertEqual(found, ["SAFE"])
+
+
+class VariantSubfolderTests(unittest.TestCase):
+    def test_a_mission_variant_in_a_subfolder_resolves(self) -> None:
+        # Sanguinary Autonomist Defectors (2026-10-05): data/variants/mothership/*.variant.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "mod"
+            (mod / "data" / "variants" / "mothership").mkdir(parents=True)
+            (mod / "data" / "missions" / "m").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            (mod / "data" / "variants" / "mothership" / "fx_big_Standard.variant").write_text(
+                '{"variantId": "fx_big_Standard", "hullId": "fx_big"}', encoding="utf-8")
+            (mod / "data" / "missions" / "m" / "MissionDefinition.java").write_text(
+                'class M { void d(MissionDefinitionAPI api) { api.addToFleet(FleetSide.PLAYER, "fx_big_Standard", FleetMemberType.SHIP, true); } }',
+                encoding="utf-8")
+            found = [f for f in scan_mod(mod).findings if f.id == "mission-local-fleet-reference-missing"]
+        self.assertEqual(found, [])
+
+
+class NeverCalledGeneratorTests(unittest.TestCase):
+    def test_a_generator_nothing_references_is_safe(self) -> None:
+        # Galaxy Tigers' test/Testo (2026-10-05): a system generator no class calls cannot duplicate a system.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "mod"
+            (mod / "data" / "scripts" / "world").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            (mod / "data" / "scripts" / "world" / "Testo.java").write_text(
+                'package data.scripts.world;\npublic class Testo { public void generate(SectorAPI sector) {\n'
+                '  StarSystemAPI system = sector.createStarSystem("Test");\n} }\n', encoding="utf-8")
+            found = [(f.classification, f.evidence) for f in scan_mod(mod).findings if f.id == "system-generation-unguarded"]
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0][0], "SAFE")
+        self.assertIn("never called", found[0][1][0])

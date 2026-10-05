@@ -58,7 +58,9 @@ def judge(method: str, floats: list[float | None], has_color: bool = False) -> l
             problems.append(f"planet radius {radius:g}")
         if orbit_radius is not None and orbit_radius < 0:
             problems.append(f"orbit radius {orbit_radius:g}")
-        if orbit_days is not None and orbit_days == 0:  # negative is a retrograde orbit (Exigency's Tasserus)
+        # Negative is a retrograde orbit (Exigency's Tasserus). Radius 0 and days 0 is a placement, not an orbit:
+        # vanilla's addPlanet(null, null, null, BLACK_HOLE, 0, radius, 0, 0) and Nightcross' dwarfs (2026-10-05).
+        if orbit_days is not None and orbit_days == 0 and orbit_radius != 0:
             problems.append(f"orbit days {orbit_days:g}")
     return problems
 
