@@ -13,7 +13,7 @@ from .scanner import _load_lenient_json_file, _read_csv_rows, _wing_ids_set
 
 DEFAULT_CAMPAIGN_INTERVAL_DAYS = 5.0
 DEFAULT_COMBAT_SECONDS = 60.0
-DEFAULT_COMBAT_CAP_PER_SIDE = 12
+DEFAULT_COMBAT_CAP_PER_SIDE = 30  # owner 2026-10-05 (was 12)
 
 # On-disk names under <runtime_dir>/saves/common/. Starsector's SettingsAPI common-file methods
 # APPEND ".data" to the name the mod asks for: the probe's Java side reads "bf_probe_rig" and the
