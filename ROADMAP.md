@@ -1754,6 +1754,34 @@ Progression, each stage feeding the next:
     `tools/build_jar.py`; its first real build is in `docs/LOCAL_HANDOFF.md` item 7). Tests:
     `tests/test_substitutes.py` (`WorkspaceStatusTests`).
 
+55. **Automation from the 2026-10-05 live-test crashes (owner: "apply all these").** **Done 2026-10-05.** Every item below was a manual
+    step or an unpredicted Fatal in groups 1-10.
+    - 55a. **Done.** `probe-group install` resets the combat round counter, moves a second rig folder with a member's mod id to
+      `mods-disabled-providers`, enables dependencies read from the current `mod_info.json`, and warns when a provider copy lacks a folder
+      the real install has (`incomplete_provider_copies`). Tests: `tests/test_probe_group.py` (`InstallHygieneTests`).
+    - 55b. **Done.** `undeclared-library-dependency`: a plugin that throws when a library is missing (stored `isModEnabled` flag, or a
+      library it never references) is a required library (`required:throws-without` evidence); `fix` declares it. Applied to
+      Dassault-Mikoyan Engineering (GraphicsLib, MagicLib), HullMods Expansion and P9 Colony Group (MagicLib). Artefact and Tiandong only use
+      Nexerelin and Console Commands optionally. Tests: `tests/test_batch_lessons.py` (`LibraryRequiredByThrowTests`).
+    - 55c. **Done.** `json-duplicate-key` fixer (tier auto): removes a later copy with an identical value; splits an array element whose keys
+      repeat as whole blocks (two markets without the `},{`); leaves other repeats. A `.faction` file in no `factions.csv` is not flagged
+      (GMDA's `gmda_patrol.faction` is never loaded, so its archive needs nothing). Applied to Arthr's Ships n Shit. Tests: `tests/test_fixers.py`.
+    - 55d. **Done.** `dependency-version-major-mismatch` (RC8-23) as a scanner finding with a fixer (tier input, needs `--providers`).
+      None of 132 archived mods has one; applied to seven workspaces (Arthr's Ships n Shit, Arulite Starworks, Erexeus, Magellan Shenanigans,
+      More Combat Terrain Effects, More Planetary Conditions, Vanidad y Afliction Operation). Tests: `tests/test_fixers.py`.
+    - 55e. **Done.** `bridgeforge/conversion_checks.py`: `conversion-faction-names-removed-hull` (REVIEW; fixer writes replaced vanilla
+      faction copies without the removed variants and lists them in `replace`; reproduces the Ironclads hand fix) and
+      `factions-csv-relists-neutral` (REVIEW, MEDIUM: Ironclads GRP10D failed with neutral relisted, but Vacuum relists it last and passed, so
+      it is a pointer, not a rule). Tests: `tests/test_conversion_checks.py`.
+    - 55f. **Done.** `audit-explain --auto` and `probe-group record --archive` record the provable categories (credits, syntax-only JSON,
+      manufacturer column, unloaded archive, translation); the rest still needs `--reason`. Tests: `tests/test_live_trust.py` (`AutoExplainTests`).
+    - 55g. **Done.** `reindex_format_slots` numbers a translation's reordered `String.format` slots (applied inside `_resolved`; the apply
+      result lists `format_slots_reindexed`); `vanilla-path-shadowing` fixer renames a file saved at a vanilla path under another id (tier
+      input, needs `--vanilla-core`). Tests: `tests/test_translation.py`, `tests/test_fixers.py`.
+    - 55h. **Done.** `ship-data-supplies-legacy-column` (tier auto) adds `supplies/rec` and `supplies/mo` as `supplies/day` times 3.0 (frigate), 2.0
+      (destroyer), 2.65 (cruiser), 2.67 (capital); reproduces SEEKER's values. Applied to Batavia, Firestorm Federation, Ironclads, Qualljom and
+      Renis Imperium, which had no supplies/rec at all. Still open: Zorg18-old-rebuild and the archived Zorg18 (locked; needs `+bf.N`).
+
 ## P15: Unattended revival with verified AI escalation (planned 2026-09-26)
 
 Owner goal (2026-09-26): not to remove AI from revivals but to reduce what reaches it and make what

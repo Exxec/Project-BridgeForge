@@ -792,7 +792,7 @@ apply a SAFE, mechanical fixer for one supported finding id (dry-run diff by def
 | Argument | Notes | Help |
 |---|---|---|
 | `mod_dir` | - | - |
-| `--finding` ID | required | supported: mod-info-game-version-inexact, csv-row-extra-columns, csv-missing-design-type-column, procgen-planet-row-missing, procgen-star-row-missing, faction-known-lists-missing, mod-info-triage-banner, wing-data-missing-role-desc-column, target-interface-method-missing, removed-api-call, carrier-bays-proposal, revenantlib-fold-conflict, undeclared-library-dependency, rules-firebest-populate-options, personality-id-unknown, hullmod-instance-state, nexerelin-corvus-mode-import, spawned-ship-captain-personality-risk, json-missing-comma, builtin-wing-is-hullmod, wing-op-cost-blank, campaign-lookup-dereferenced-unguarded, temporary-market-fleet-source, rc8-signature-changed, person-names-duplicate-row, faction-trait-weight-legacy-personality-id, shiproles-wing-id, csv-fullwidth-number, ship-data-missing-fighter-bays-column, missing-custom-ui-button-pressed-callback, shippable-work-file, data-file-not-utf8, fleet-type-name-missing, variant-op-over-budget, procgen-mod-body-leak, csv-slash-quote-escape, variant-wings-exceed-bays, variant-weapon-slot-mismatch, variant-weapon-slot-missing, hard-coded-campaign-system-reference, hard-coded-campaign-entity-reference |
+| `--finding` ID | required | supported: mod-info-game-version-inexact, csv-row-extra-columns, csv-missing-design-type-column, procgen-planet-row-missing, procgen-star-row-missing, faction-known-lists-missing, mod-info-triage-banner, wing-data-missing-role-desc-column, target-interface-method-missing, removed-api-call, carrier-bays-proposal, revenantlib-fold-conflict, undeclared-library-dependency, rules-firebest-populate-options, personality-id-unknown, hullmod-instance-state, nexerelin-corvus-mode-import, spawned-ship-captain-personality-risk, json-missing-comma, builtin-wing-is-hullmod, wing-op-cost-blank, campaign-lookup-dereferenced-unguarded, temporary-market-fleet-source, rc8-signature-changed, person-names-duplicate-row, json-duplicate-key, dependency-version-major-mismatch, conversion-faction-names-removed-hull, factions-csv-relists-neutral, vanilla-path-shadowing, ship-data-supplies-legacy-column, faction-trait-weight-legacy-personality-id, shiproles-wing-id, csv-fullwidth-number, ship-data-missing-fighter-bays-column, missing-custom-ui-button-pressed-callback, shippable-work-file, data-file-not-utf8, fleet-type-name-missing, variant-op-over-budget, procgen-mod-body-leak, csv-slash-quote-escape, variant-wings-exceed-bays, variant-weapon-slot-mismatch, variant-weapon-slot-missing, hard-coded-campaign-system-reference, hard-coded-campaign-entity-reference |
 | `--apply` | - | write the change (default: print a dry-run diff only) |
 | `--json` | - | - |
 | `--target-game-version` TARGET_GAME_VERSION | - | required for mod-info-game-version-inexact |
@@ -1556,7 +1556,8 @@ record why shipped files differ from original/, or (--live) why the mod may be a
 |---|---|---|
 | `workspace` | - | - |
 | `files` | nargs * | shipped paths relative to working/ |
-| `--reason` REASON | required | - |
+| `--reason` REASON | - | why; required unless --auto |
+| `--auto` | - | record every difference whose category the files prove (credits, syntax-only JSON, manufacturer column, unloaded archive, translation); no files or reason needed |
 | `--live` | - | - |
 | `--json` | - | - |
 

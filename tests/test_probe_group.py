@@ -400,3 +400,51 @@ class DependencyVersionTests(unittest.TestCase):
                 (mods / folder / "mod_info.json").write_text(json.dumps(info), encoding="utf-8")
             conflicts = dependency_version_conflicts(mods, ["bingus", "IndEvo"])
         self.assertEqual(conflicts, [{"mod_id": "bingus", "dependency": "IndEvo", "wanted": "3.0.c", "installed": "4.1.b"}])
+
+
+class InstallHygieneTests(unittest.TestCase):
+    def _install(self, root: Path, deps: list[str], rig_ids: tuple[str, ...]):
+        queue = root / "q"
+        _workspace(queue, "A", "mod_a", "hull_a", deps=deps)
+        rig = _rig(root, *rig_ids)
+        core = root / "core_real"
+        core.mkdir()
+        link_dir(core, rig / "starsector-core")
+        return queue, rig, plan_groups(queue, rig)
+
+    def test_second_folder_with_a_members_id_is_moved_aside_and_round_counter_reset(self) -> None:
+        # SEEKER-0.6 beside SEEKER, Legacy-of-Arkgneisis-0.98a beside Arkgneisis (2026-10-05)
+        with resolved_temp_dir() as root:
+            queue, rig, plan = self._install(root, [], ())
+            (rig / "mods" / "A-old").mkdir()
+            (rig / "mods" / "A-old" / "mod_info.json").write_text(json.dumps({"id": "mod_a"}), encoding="utf-8")
+            (rig / "saves" / "common").mkdir(parents=True)
+            (rig / "saves" / "common" / "bf_probe_combat_round.data").write_text("3", encoding="utf-8")
+            result = install_group(plan, 1, queue, rig, install_probe=False)
+            gone = not (rig / "mods" / "A-old").exists()
+            aside = (rig / "mods-disabled-providers" / "A-old").is_dir()
+            counter = (rig / "saves" / "common" / "bf_probe_combat_round.data").exists()
+        self.assertEqual(result["moved_aside"], [{"mod_id": "mod_a", "folder": "A-old", "kept": "A"}])
+        self.assertTrue(gone and aside)
+        self.assertFalse(counter)
+
+    def test_dependency_added_to_mod_info_after_planning_is_enabled(self) -> None:
+        # Hiigaran Descendants declared shaderLib after the group was planned (GRP7B-20261005)
+        with resolved_temp_dir() as root:
+            queue, rig, plan = self._install(root, [], ("shaderLib",))
+            info = queue / "A" / "working" / "mod_info.json"
+            info.write_text(json.dumps({"id": "mod_a", "gameVersion": "0.98a-RC8", "dependencies": [{"id": "shaderLib"}]}), encoding="utf-8")
+            install_group(plan, 1, queue, rig, install_probe=False)
+            enabled = json.loads((rig / "mods" / "enabled_mods.json").read_text(encoding="utf-8"))["enabledMods"]
+        self.assertEqual(enabled, ["shaderLib", "mod_a", "bridgeforge_probe"])
+
+    def test_provider_copy_missing_a_folder_the_real_install_has_is_reported(self) -> None:
+        # Industrial Evolution without its IndEvo/ sounds folder: Fatal on the first Group 2 launch (2026-10-05)
+        with resolved_temp_dir() as root:
+            queue, rig, plan = self._install(root, ["lib"], ("lib",))
+            (rig / "mods" / "lib" / "data").mkdir()
+            (root / "mods" / "lib" / "IndEvo").mkdir(parents=True)
+            (root / "mods" / "lib" / "data").mkdir()
+            (root / "mods" / "lib" / "src").mkdir()
+            result = install_group(plan, 1, queue, rig, install_probe=False)
+        self.assertEqual(result["incomplete_providers"], [{"mod_id": "lib", "folder": "lib", "missing": ["IndEvo"]}])

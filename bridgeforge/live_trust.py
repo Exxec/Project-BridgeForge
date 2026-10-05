@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import date
 from pathlib import Path
 
@@ -261,6 +262,91 @@ def explain_shipped(workspace: Path, files: list[str], reason: str, today: str |
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
+
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Auto-explain: the shipped-copy differences that can be proven from the files themselves (ROADMAP item 55f)
+# ---------------------------------------------------------------------------------------------------------------
+
+_CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
+_JSONLIKE = (".json", ".faction", ".ship", ".variant", ".wpn", ".proj", ".skin", ".system")
+_UNLOADED_ARCHIVES = (".rar", ".zip", ".7z")
+
+
+def _text(path: Path) -> str:
+    return path.read_text(encoding="utf-8-sig", errors="replace")
+
+
+def _same_parsed_json(before: Path, after: Path) -> bool:
+    from .scanner import _load_lenient_json_file
+
+    a, b = _load_lenient_json_file(before), _load_lenient_json_file(after)
+    return a is not None and a == b
+
+
+def _only_manufacturer_column_added(before: Path, after: Path) -> bool:
+    import csv
+    import io
+
+    try:
+        old = list(csv.reader(io.StringIO(_text(before))))
+        new = list(csv.reader(io.StringIO(_text(after))))
+    except csv.Error:
+        return False
+    if not old or not new or old[0] == new[0]:
+        return False
+    added = [h for h in new[0] if h not in old[0]]
+    if added != ["tech/manufacturer"] or [h for h in old[0] if h not in new[0]]:
+        return False
+    keep = [new[0].index(h) for h in old[0]]
+
+    def padded(row: list[str], width: int) -> list[str]:
+        return [cell.strip() for cell in (row + [""] * width)[:width]]
+
+    old_rows = [padded(row, len(old[0])) for row in old[1:] if row]
+    new_rows = [padded(row, len(new[0])) for row in new[1:] if row]
+    return old_rows == [[row[i] for i in keep] for row in new_rows]
+
+
+def auto_explain_shipped(workspace: Path, today: str | None = None) -> dict[str, list[str]]:
+    """Record the reason for every unexplained shipped difference whose category the files prove, and return
+    {reason: files}. What stays unexplained still fails the audit. Categories:
+    - credits: BRIDGEFORGE_CREDITS.txt added;
+    - syntax-only JSON: the original and shipped file parse to equal values;
+    - manufacturer column: tech/manufacturer added to a CSV, every other cell unchanged;
+    - unloaded archive: a .rar/.zip/.7z of the original dropped from the shipped copy and kept under scratch/;
+    - translation: the original holds CJK text, the shipped file less of it, and reports/translation/ exists."""
+    workspace = Path(workspace)
+    audit = audit_shipped(workspace)
+    root = original_root(workspace)
+    if root is None or not audit.get("unexplained"):
+        return {}
+    working = workspace / "working"
+    scratch = workspace / "scratch"
+    kept_names = {p.name for p in scratch.rglob("*") if p.is_file()} if scratch.is_dir() else set()
+    translated = (workspace / "reports" / "translation").is_dir() and any((workspace / "reports" / "translation").glob("*.json"))
+    groups: dict[str, list[str]] = {}
+    for relative in audit["unexplained"]:
+        before, after = root / relative, working / relative
+        reason = None
+        suffix = Path(relative).suffix.lower()
+        if relative == "BRIDGEFORGE_CREDITS.txt" and after.is_file() and not before.is_file():
+            reason = "revival credits file added by BridgeForge"
+        elif before.is_file() and after.is_file():
+            if suffix in _JSONLIKE and _same_parsed_json(before, after):
+                reason = "JSON syntax made strict for RC8; the parsed values are identical to the original"
+            elif suffix == ".csv" and _only_manufacturer_column_added(before, after):
+                reason = "RC8 schema: tech/manufacturer column added; every other value is unchanged"
+            elif translated and len(_CJK.findall(_text(before))) > len(_CJK.findall(_text(after))):
+                reason = "Chinese -> English translation (reports/translation/); the original holds the Chinese text"
+        elif before.is_file() and not after.is_file() and suffix in _UNLOADED_ARCHIVES and before.name in kept_names:
+            reason = "an archive the author bundled in the mod, never loaded by the game; kept under scratch/"
+        if reason:
+            groups.setdefault(reason, []).append(relative)
+    for reason, files in groups.items():
+        explain_shipped(workspace, files, "auto-explained: " + reason, today)
+    return groups
 
 
 # ---------------------------------------------------------------------------------------------------------------

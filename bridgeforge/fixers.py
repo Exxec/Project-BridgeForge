@@ -58,6 +58,12 @@ SUPPORTED_FINDINGS = (
     "temporary-market-fleet-source",
     "rc8-signature-changed",
     "person-names-duplicate-row",
+    "json-duplicate-key",
+    "dependency-version-major-mismatch",
+    "conversion-faction-names-removed-hull",
+    "factions-csv-relists-neutral",
+    "vanilla-path-shadowing",
+    "ship-data-supplies-legacy-column",
     "faction-trait-weight-legacy-personality-id",
     "shiproles-wing-id",
     "csv-fullwidth-number",
@@ -775,7 +781,8 @@ def _fix_undeclared_library_dependency(root: Path, options: dict) -> list[FileCh
         raise FixerError("No undeclared-library-dependency finding for this mod.")
 
     to_add: dict[str, str] = {}  # dependency_id -> library display name
-    findings = [f for f in findings if "guard:present" not in (f.evidence or [])]
+    # A guard whose absent branch throws is a required library, not an optional one (Hiigaran Descendants, shaderLib).
+    findings = [f for f in findings if "guard:present" not in (f.evidence or []) or "required:throws-without" in (f.evidence or [])]
     if not findings:
         raise FixerError("Every undeclared-library-dependency finding here is guarded (an optional integration); nothing is declared.")
     for finding in findings:
@@ -1818,6 +1825,442 @@ def _fix_temporary_market_fleet_source(root: Path, options: dict) -> list[FileCh
     if not changes:
         raise FixerError("No removeMarket of a never-added temporary market found" + (f" (refused: {', '.join(refused[:5])})" if refused else "."))
     return changes
+
+
+class _ObjectScan:
+    """Index-based reader of lenient (org.json style) JSON that records every object's entries as
+    (key, key_start, value_start, value_end), so a repeated key can be cut out by its exact text span."""
+
+    def __init__(self, text: str) -> None:
+        self.t = text
+        self.n = len(text)
+        self.objects: list[tuple[int, list[tuple[str, int, int, int]]]] = []
+        self.in_array: set[int] = set()
+
+    def ws(self, i: int) -> int:
+        t = self.t
+        while i < self.n:
+            c = t[i]
+            if c in " \t\r\n﻿":
+                i += 1
+            elif c == "#" or t.startswith("//", i):
+                j = t.find("\n", i)
+                i = self.n if j < 0 else j
+            elif t.startswith("/*", i):
+                j = t.find("*/", i + 2)
+                i = self.n if j < 0 else j + 2
+            else:
+                break
+        return i
+
+    def string(self, i: int) -> int:
+        quote = self.t[i]
+        i += 1
+        while i < self.n:
+            c = self.t[i]
+            if c == "\\":
+                i += 2
+                continue
+            if c == quote:
+                return i + 1
+            i += 1
+        raise ValueError("unterminated string")
+
+    def value(self, i: int) -> int:
+        i = self.ws(i)
+        if i >= self.n:
+            raise ValueError("value expected")
+        c = self.t[i]
+        if c == "{":
+            return self.obj(i)
+        if c == "[":
+            return self.arr(i)
+        if c in "\"'":
+            return self.string(i)
+        while i < self.n and self.t[i] not in ",;}]\n#" and not self.t.startswith("//", i):
+            i += 1
+        while self.t[i - 1] in " \t\r":
+            i -= 1
+        return i
+
+    def arr(self, i: int) -> int:
+        i += 1
+        while True:
+            i = self.ws(i)
+            if i >= self.n:
+                raise ValueError("unterminated array")
+            if self.t[i] == "]":
+                return i + 1
+            if self.t[i] in ",;":
+                i += 1
+                continue
+            if self.t[i] == "{":
+                self.in_array.add(i)
+            i = self.value(i)
+
+    def obj(self, i: int) -> int:
+        entries: list[tuple[str, int, int, int]] = []
+        obj_start = i
+        i += 1
+        while True:
+            i = self.ws(i)
+            if i >= self.n:
+                raise ValueError("unterminated object")
+            c = self.t[i]
+            if c == "}":
+                self.objects.append((obj_start, entries))
+                return i + 1
+            if c in ",;":
+                i += 1
+                continue
+            key_start = i
+            if c in "\"'":
+                key_end = self.string(i)
+                key = self.t[key_start + 1:key_end - 1]
+            else:
+                key_end = key_start
+                while key_end < self.n and (self.t[key_end].isalnum() or self.t[key_end] in "_.-$"):
+                    key_end += 1
+                if key_end == key_start:
+                    raise ValueError("key expected")
+                key = self.t[key_start:key_end]
+            i = self.ws(key_end)
+            if i >= self.n or self.t[i] not in ":=":
+                raise ValueError("':' expected")
+            value_start = self.ws(i + 1)
+            value_end = self.value(value_start)
+            entries.append((key, key_start, value_start, value_end))
+            i = value_end
+
+
+def _repeated_key_edits(text: str) -> tuple[list[tuple[int, int, str]], list[str]]:
+    """Edits (begin, end, replacement) that clear repeated keys, and the keys left alone.
+
+    - A later copy of a key whose value equals the first copy's is removed.
+    - An object inside an array whose keys repeat as whole blocks in the same order (Arthr's Ships n Shit
+      ass_solace.json: two markets without the `},{` between them) is several objects: a separator is inserted
+      before each later block.
+    Anything else (a repeat with a different value) is left for the owner."""
+    from .scanner import _parse_json
+
+    scan = _ObjectScan(text)
+    scan.value(scan.ws(0))
+
+    def parsed(fragment: str):
+        try:
+            return _parse_json(fragment)[0]
+        except (json.JSONDecodeError, ValueError):
+            return fragment.strip()
+
+    edits: list[tuple[int, int, str]] = []
+    differing: list[str] = []
+    for obj_start, entries in scan.objects:
+        keys = [entry[0] for entry in entries]
+        if len(set(keys)) == len(keys):
+            continue
+        starts = [i for i, key in enumerate(keys) if i and key == keys[0]]
+        blocks = [keys[a:b] for a, b in zip([0, *starts], [*starts, len(keys)])]
+        identical_values = all(
+            parsed(text[e[2]:e[3]]) == parsed(text[entries[j][2]:entries[j][3]])
+            for block_start in starts for j, e in enumerate(entries[block_start:block_start + len(blocks[0])]))
+        if (starts and obj_start in scan.in_array and all(block == blocks[0] for block in blocks) and len(blocks[0]) >= 2
+                and not identical_values):
+            for block_start in starts:
+                previous_end = entries[block_start - 1][3]
+                key_start = entries[block_start][1]
+                between = text[previous_end:key_start]
+                edits.append((previous_end, key_start, "\n\t\t},\n\t\t{" + between.replace(",", "", 1)))
+            continue
+        first: dict[str, tuple[int, int]] = {}
+        for key, key_start, value_start, value_end in entries:
+            if key not in first:
+                first[key] = (value_start, value_end)
+                continue
+            f_start, f_end = first[key]
+            if parsed(text[f_start:f_end]) != parsed(text[value_start:value_end]):
+                differing.append(key)
+                continue
+            begin = key_start
+            while begin > 0 and text[begin - 1] in " \t":
+                begin -= 1
+            at_line_start = begin == 0 or text[begin - 1] == "\n"
+            end = value_end
+            while end < len(text) and text[end] in " \t":
+                end += 1
+            if end < len(text) and text[end] in ",;":
+                end += 1
+                while end < len(text) and text[end] in " \t\r":
+                    end += 1
+                if at_line_start and end < len(text) and text[end] == "\n":
+                    end += 1
+            elif not at_line_start:
+                begin = key_start
+            edits.append((begin, end, ""))
+    edits.sort()
+    kept: list[tuple[int, int, str]] = []
+    for edit in edits:
+        if kept and edit[0] < kept[-1][1]:
+            continue
+        kept.append(edit)
+    return kept, differing
+
+
+def _fix_json_duplicate_key(root: Path, options: dict) -> list[FileChange]:
+    """Remove a later copy of a key repeated inside one JSON object when its value equals the first copy's (RC8's
+    org.json stops at startup on any repeat: Ironclads pirates.faction, GRP10E-20261005). A repeat with a different
+    value is left for the owner: which copy the mod meant is not decidable here."""
+    from .scanner import _json_duplicate_keys
+
+    files = sorted({f.file for f in _findings_of(root, options, "json-duplicate-key") if f.file})
+    if not files:
+        raise FixerError("No json-duplicate-key finding for this mod.")
+    changes, left = [], []
+    for relative in files:
+        path = root / relative
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        try:
+            edits, differing = _repeated_key_edits(text)
+        except (ValueError, IndexError):
+            left.append(f"{relative} (could not locate the repeated key)")
+            continue
+        if differing:
+            left.append(f"{relative}: {', '.join(sorted(set(differing)))} repeated with a different value")
+        if not edits:
+            continue
+        new_text = text
+        for begin, end, replacement in reversed(edits):
+            new_text = new_text[:begin] + replacement + new_text[end:]
+        left_repeats = _json_duplicate_keys(new_text)
+        if len(left_repeats) != len(differing):
+            left.append(f"{relative} (the edit left {len(left_repeats)} repeat(s), expected {len(differing)})")
+            continue
+        try:
+            _parse_json(new_text)
+        except json.JSONDecodeError as exc:
+            left.append(f"{relative} (the edit no longer parses: {exc.msg})")
+            continue
+        changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    if not changes:
+        raise FixerError("Nothing removed: " + "; ".join(left or ["no identical repeat found"]))
+    return changes
+
+
+def _matching_brace(text: str, open_at: int) -> int:
+    """Index of the '}' closing the '{' at open_at, skipping strings; -1 when unbalanced."""
+    depth, i, quote = 0, open_at, ""
+    while i < len(text):
+        c = text[i]
+        if quote:
+            if c == "\\":
+                i += 1
+            elif c == quote:
+                quote = ""
+        elif c in "\"'":
+            quote = c
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
+
+
+def _fix_dependency_version_major_mismatch(root: Path, options: dict) -> list[FileChange]:
+    """Set each mismatched dependency's declared version to the provider's (RC8-23: a major mismatch disables the mod
+    silently; zzz Bingus Sustem, GRP2C-20261005). Needs `options["provider_roots"]`. Only a string version is edited;
+    a {"major":..} object is left for the owner."""
+    from .scanner import dependency_version_major_conflicts
+
+    conflicts = dependency_version_major_conflicts(root, options.get("provider_roots"))
+    if not conflicts:
+        raise FixerError("No dependency-version-major-mismatch found (pass provider roots with --providers).")
+    path = root / "mod_info.json"
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    refused = []
+    version_value = re.compile(r'("version"\s*:\s*)(?:"[^"]*"|\{[^{}]*\})')
+    for conflict in conflicts:
+        id_match = re.search(r'"id"\s*:\s*"' + re.escape(conflict["id"]) + '"', text)
+        open_at = text.rfind("{", 0, id_match.start()) if id_match else -1
+        close_at = _matching_brace(text, open_at) if open_at >= 0 else -1
+        entry = text[open_at:close_at + 1] if close_at > open_at else ""
+        if not version_value.search(entry):
+            refused.append(conflict["id"])
+            continue
+        text = (text[:open_at] + version_value.sub(lambda m: m.group(1) + json.dumps(conflict["provider"]), entry, count=1)
+                + text[close_at + 1:])
+    if text == _decode(raw)[0]:
+        raise FixerError("Nothing edited: " + ", ".join(refused) + " (version is not a plain string in the dependency entry).")
+    try:
+        _parse_json(text)
+    except json.JSONDecodeError as exc:
+        raise FixerError(f"Edited {path} failed to re-parse: {exc}") from exc
+    return [FileChange(path=path, before=raw, after=_encode(text, had_bom))]
+
+
+def _fix_conversion_faction_names_removed_hull(root: Path, options: dict) -> list[FileChange]:
+    """Replace each vanilla faction file that names variants of removed hulls with a copy lacking those lines, and list
+    the copies in mod_info.json `replace` (Ironclads, GRP10B-GRP10F 2026-10-05; see bridgeforge.conversion_checks).
+    Copies come from --vanilla-core (read only; the result stays in the mod's workspace, which is never committed). A
+    mod overlay that holds more than a showInIntelTab stub is left for the owner."""
+    from . import conversion_checks as cc
+
+    vanilla_core = options.get("vanilla_core")
+    if not vanilla_core:
+        raise FixerError("--vanilla-core is required for conversion-faction-names-removed-hull.")
+    vanilla_core = Path(vanilla_core).expanduser().resolve()
+    hits = cc.factions_naming_removed_hulls(root, vanilla_core)
+    if not hits:
+        raise FixerError("No faction file names a variant of a removed hull.")
+    replaced = cc.replace_list(root)
+    changes, listed, refused = [], [], []
+    for name, variants in sorted(hits.items()):
+        usable, hidden = cc.stub_value(root, name)
+        if not usable:
+            refused.append(f"{name} (the mod's own file holds more than a showInIntelTab stub)")
+            continue
+        relative = (cc.FACTION_DIR / name).as_posix()
+        mine = root / cc.FACTION_DIR / name
+        source = mine if relative.lower() in replaced and mine.is_file() else vanilla_core / "data" / "world" / "factions" / name
+        import textwrap
+
+        header = textwrap.wrap(f"BridgeForge: RC8's own {name}, REPLACED (mod_info replace) without the lines naming "
+                               + ", ".join(variants) + ": their hulls are not in this mod's ship_data.csv, and RC8 prices every "
+                               "variant a faction names at startup (conversion-faction-names-removed-hull).", 110)
+        try:
+            after = cc.faction_copy_without(source.read_bytes(), variants, header, hidden)
+        except ValueError as exc:
+            refused.append(f"{name} ({exc})")
+            continue
+        before = mine.read_bytes() if mine.is_file() else b""
+        changes.append(FileChange(path=mine, before=before, after=after, existed_before=mine.is_file()))
+        if relative.lower() not in replaced:
+            listed.append(relative)
+    if not changes:
+        raise FixerError("Nothing written: " + "; ".join(refused))
+    if listed:
+        info = root / "mod_info.json"
+        raw = info.read_bytes()
+        text, had_bom = _decode(raw)
+        try:
+            new_text = cc.add_replace_entries(text, listed)
+            _parse_json(new_text)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise FixerError(f"Could not add the files to mod_info.json replace: {exc}") from exc
+        changes.append(FileChange(path=info, before=raw, after=_encode(new_text, had_bom)))
+    return changes
+
+
+def _fix_factions_csv_relists_neutral(root: Path, options: dict) -> list[FileChange]:
+    """Remove the neutral.faction row from the mod's factions.csv (Ironclads, GRP10D-20261005)."""
+    from . import conversion_checks as cc
+
+    path = cc.listing_path(root)
+    if not path.is_file():
+        raise FixerError("No factions.csv in this mod.")
+    raw = path.read_bytes()
+    after = cc.remove_neutral_row(raw)
+    if after == raw:
+        raise FixerError("factions.csv does not list neutral.faction.")
+    return [FileChange(path=path, before=raw, after=after)]
+
+
+_SHADOW_ID_KEYS = {".system": "id", ".wpn": "id", ".proj": "id", ".variant": "variantId", ".ship": "hullId", ".skin": "skinHullId"}
+
+
+def _fix_vanilla_path_shadowing(root: Path, options: dict) -> list[FileChange]:
+    """Rename a data file saved at a vanilla path under another id to its own id: Vayra's Ship Pack saved its Shieldwall
+    Drones system (id vayra_exemplardrones) as data/shipsystems/drone_pd.system, which replaced vanilla's drone_pd, so two
+    vanilla hulls lost their system (GRP2C-20261005). Only a file whose content id differs from the vanilla file at the same
+    path is moved; a file that carries vanilla's own id is a deliberate override and stays. Needs --vanilla-core."""
+    vanilla_core = options.get("vanilla_core")
+    if not vanilla_core:
+        raise FixerError("--vanilla-core is required for vanilla-path-shadowing.")
+    vanilla = Path(vanilla_core).expanduser().resolve()
+    changes, refused = [], []
+    data_dir = root / "data"
+    for path in sorted(data_dir.rglob("*")) if data_dir.is_dir() else []:
+        key = _SHADOW_ID_KEYS.get(path.suffix.lower())
+        if key is None or not path.is_file() or "disabled_files" in path.relative_to(root).parts:
+            continue
+        counterpart = vanilla / path.relative_to(root)
+        if not counterpart.is_file():
+            continue
+        mine, theirs = _load_lenient_json_file(path), _load_lenient_json_file(counterpart)
+        own, vanilla_id = (mine or {}).get(key) if isinstance(mine, dict) else None, (theirs or {}).get(key) if isinstance(theirs, dict) else None
+        if not isinstance(own, str) or not own or own == vanilla_id or own == path.stem:
+            continue
+        target = path.with_name(own + path.suffix)
+        if target.exists():
+            refused.append(f"{_relative_path(root, path)} (a file named {target.name} already exists)")
+            continue
+        raw = path.read_bytes()
+        changes.append(FileChange(path=target, before=b"", after=raw, existed_before=False))
+        changes.append(FileChange(path=path, before=raw, after=b"", removed=True))
+    if not changes:
+        raise FixerError("No file saved at a vanilla path under another id" + (f" (refused: {'; '.join(refused)})" if refused else "."))
+    return changes
+
+
+# Owner rule 2026-10-05 ("Vanilla ratio per hull"): the median of RC8 supplies/rec over 0.6.2 supplies/day on the hulls both
+# versions share, by hull size (14 frigates, 13 destroyers, 8 cruisers, 7 capitals). The old x30 gave SEEKER 150-600 DP hulls
+# that could never deploy (RC8 vanilla tops out at 100; maxBattleSize is 400).
+SUPPLY_RATIOS = {"FRIGATE": 3.0, "DESTROYER": 2.0, "CRUISER": 2.65, "CAPITAL_SHIP": 2.67}
+
+
+def _fix_ship_data_supplies_legacy_column(root: Path, options: dict) -> list[FileChange]:
+    """Add `supplies/rec` and `supplies/mo` to a 0.6-era ship_data.csv that has only `supplies/day`: day x the ratio for the
+    hull's size (from its .ship file), rounded and at least 1; rec = mo. Rows without a positive day, fighters and hulls with no
+    readable size are left blank. `supplies/day` stays, as in the revived SEEKER."""
+    import csv as csv_module
+    import io
+
+    path = root / "data" / "hulls" / "ship_data.csv"
+    if not path.is_file():
+        raise FixerError("No data/hulls/ship_data.csv in this mod.")
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    rows = list(csv_module.reader(io.StringIO(text, newline="")))
+    if not rows or "supplies/day" not in rows[0]:
+        raise FixerError("ship_data.csv has no supplies/day column.")
+    header = rows[0]
+    if "supplies/rec" in header or "supplies/mo" in header:
+        raise FixerError("ship_data.csv already has supplies/rec or supplies/mo; nothing to convert.")
+    id_at, day_at = header.index("id"), header.index("supplies/day")
+    width = len(header)
+    sizes = {}
+    for ship in (root / "data" / "hulls").glob("*.ship"):
+        data = _load_lenient_json_file(ship)
+        if isinstance(data, dict) and isinstance(data.get("hullId"), str):
+            sizes[data["hullId"]] = data.get("hullSize")
+    newline = "\r\n" if "\r\n" in text else "\n"
+    out_rows, converted, skipped = [header + ["supplies/rec", "supplies/mo"]], 0, []
+    for row in rows[1:]:
+        if not row or not any(cell.strip() for cell in row):
+            out_rows.append(row)
+            continue
+        row = row + [""] * (width - len(row))
+        value = ""
+        try:
+            day = float(row[day_at]) if row[day_at].strip() else 0.0
+        except ValueError:
+            day = 0.0
+        if day > 0:
+            ratio = SUPPLY_RATIOS.get(sizes.get(row[id_at].strip()) or "")
+            if ratio is None:
+                skipped.append(row[id_at])
+            else:
+                value = str(max(1, round(day * ratio)))
+                converted += 1
+        out_rows.append(row[:width] + [value, value])
+    if not converted:
+        raise FixerError("No hull row could be converted" + (f" (no readable hull size for: {', '.join(skipped[:8])})" if skipped else "."))
+    buffer = io.StringIO()
+    csv_module.writer(buffer, lineterminator=newline).writerows(out_rows)
+    return [FileChange(path=path, before=raw, after=_encode(buffer.getvalue(), had_bom))]
 
 
 def _fix_person_names_duplicate_row(root: Path, options: dict) -> list[FileChange]:
@@ -3010,6 +3453,12 @@ _FIXER_FUNCS = {
     "campaign-lookup-dereferenced-unguarded": _fix_lookup_dereferenced_unguarded,
     "temporary-market-fleet-source": _fix_temporary_market_fleet_source,
     "person-names-duplicate-row": _fix_person_names_duplicate_row,
+    "json-duplicate-key": _fix_json_duplicate_key,
+    "dependency-version-major-mismatch": _fix_dependency_version_major_mismatch,
+    "conversion-faction-names-removed-hull": _fix_conversion_faction_names_removed_hull,
+    "factions-csv-relists-neutral": _fix_factions_csv_relists_neutral,
+    "vanilla-path-shadowing": _fix_vanilla_path_shadowing,
+    "ship-data-supplies-legacy-column": _fix_ship_data_supplies_legacy_column,
     "rc8-signature-changed": _fix_rc8_signature_changed,
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
     "shiproles-wing-id": _fix_shiproles_wing_id,

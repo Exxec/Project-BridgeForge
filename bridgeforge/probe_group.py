@@ -383,6 +383,66 @@ def _refuse_running_game(rig: Path) -> None:
     probe.replace(jar)
 
 
+def _rig_folders_by_id(mods_dir: Path) -> dict[str, list[Path]]:
+    found: dict[str, list[Path]] = {}
+    for child in sorted(q for q in Path(mods_dir).iterdir() if q.is_dir()):
+        mod_id = _mod_info(child).get("id")
+        if isinstance(mod_id, str) and mod_id:
+            found.setdefault(mod_id, []).append(child)
+    return found
+
+
+def _move_aside_duplicate_ids(rig: Path, members: dict[str, Path]) -> list[dict]:
+    """Move a second rig folder with a member's mod id to <rig>/mods-disabled-providers. SEEKER-0.6 beside SEEKER and
+    Legacy-of-Arkgneisis-0.98a beside Arkgneisis (2026-10-05): the game loads one, record_group could not tell which
+    was tested."""
+    mods_dir = rig / "mods"
+    aside = rig / "mods-disabled-providers"
+    moved = []
+    for mod_id, keep in members.items():
+        for folder in _rig_folders_by_id(mods_dir).get(mod_id, []):
+            if folder.resolve() != keep.resolve():
+                aside.mkdir(exist_ok=True)
+                target = aside / folder.name
+                if target.exists():
+                    shutil.rmtree(target)
+                shutil.move(str(folder), str(target))
+                moved.append({"mod_id": mod_id, "folder": folder.name, "kept": keep.name})
+    return moved
+
+
+_PROVIDER_COPY_IGNORED = {"src", ".git", ".github", "changelog", "changelog.txt", "license.txt", "desktop.ini"}
+
+
+def incomplete_provider_copies(rig: Path, enabled: list[str]) -> list[dict]:
+    """Enabled mods whose rig folder lacks a top-level entry the real install's copy of the same folder has (read
+    only). Industrial Evolution in the rig had no IndEvo/ folder, so the first Group 2 launch ended on a missing
+    sound (2026-10-05). The real mods folder is the one beside the rig's starsector-core junction target."""
+    core = Path(rig) / "starsector-core"
+    try:
+        real_mods = core.resolve().parent / "mods"
+    except OSError:
+        return []
+    if not real_mods.is_dir() or real_mods.resolve() == (Path(rig) / "mods").resolve():
+        return []
+    problems = []
+    for mod_id in enabled:
+        for folder in _rig_folders_by_id(Path(rig) / "mods").get(mod_id, []):
+            real = real_mods / folder.name
+            if not real.is_dir():
+                continue
+            have = {c.name.lower() for c in folder.iterdir()}
+            missing = sorted(c.name for c in real.iterdir() if c.name.lower() not in have and c.name.lower() not in _PROVIDER_COPY_IGNORED)
+            if missing:
+                problems.append({"mod_id": mod_id, "folder": folder.name, "missing": missing})
+    return problems
+
+
+def _reset_combat_round(common: Path) -> None:
+    for stale in Path(common).glob("bf_probe_combat_round*"):
+        stale.unlink()
+
+
 def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install_probe: bool = True,
                   stage: bool = False) -> dict:
     """Copy/sync members into the rig, write the merged config, set enabled_mods.json. A group whose members
@@ -419,9 +479,11 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
                 copied.append({"workspace": member["workspace"], "action": f"synced {drift['drift_count']} file(s)"})
         configs.append(build_probe_config(working))
         installed[member["mod_id"]] = member["workspace"]
+    moved_aside = _move_aside_duplicate_ids(rig, {m["mod_id"]: mods_dir / m["workspace"] for m in group["members"]})
     config = merge_configs(configs)
     common = rig / "saves" / "common"
     common.mkdir(parents=True, exist_ok=True)
+    _reset_combat_round(common)
     (common / CONFIG_FILE).write_text(json.dumps(config, indent=2, sort_keys=True), encoding="utf-8")
     if not (common / RIG_MARKER_FILE).is_file():
         (common / RIG_MARKER_FILE).write_text("rig\n", encoding="utf-8")
@@ -429,7 +491,10 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
         _install_probe_mod(rig)
     enabled = []
     for member in group["members"]:
-        needed, _ = dependency_closure(mods_dir, [dep for dep in member["dependencies"] if dep != member["mod_id"]])
+        current = [d.get("id") for d in _mod_info(queue / member["workspace"] / "working").get("dependencies") or []
+                   if isinstance(d, dict) and isinstance(d.get("id"), str)]
+        wanted = [dep for dep in dict.fromkeys([*member["dependencies"], *current]) if dep != member["mod_id"]]
+        needed, _ = dependency_closure(mods_dir, wanted)
         for mod_id in [*needed, member["mod_id"]]:
             if mod_id not in enabled:
                 enabled.append(mod_id)
@@ -442,6 +507,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_INSTALL", "group": group_number,
             "members": [m["workspace"] for m in group["members"]], "copied": copied, "staged_providers": staged, "enabled_mods": enabled,
             "dependency_version_conflicts": dependency_version_conflicts(mods_dir, enabled),
+            "moved_aside": moved_aside, "incomplete_providers": incomplete_provider_copies(rig, enabled),
             "config_path": str(common / CONFIG_FILE), "checked_ids": len(config["content_variants"]["ship"]) + len(config["content_variants"]["other"])
             + len(config["content_wings"]) + len(config["content_special_items"])}
 
@@ -550,7 +616,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     workspaces = _workspaces_by_mod_id(queue, Path(rig) / "mods")
     # ROADMAP 36.6: one run record joining inputs and outputs, written before any archive so the gate (36.11)
     # sees this run's shipped hashes.
-    from .live_trust import archive_gate, save_made_with, write_run_record
+    from .live_trust import archive_gate, auto_explain_shipped, save_made_with, write_run_record
     from .log_triage import triage_log
     from .rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
 
@@ -580,6 +646,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
         if revival_licence(mod_id, _mod_info(workspace / "working").get("name"), policy_path).get("decision") not in ("LOCAL_ONLY", "RELEASABLE"):
             record_policy_decision(mod_id, local_only=True, reason=OWNER_STANDING_REASON.format(date=today), policy_path=policy_path)
         done = Path(done_dir or Path(queue).parent / "Done")
+        auto_explain_shipped(workspace)
         gate = archive_gate(workspace)
         if not gate["allowed"]:
             skipped.append({"mod_id": mod_id, "verdict": "PASS", "workspace": workspace.name, "archive": "; ".join(gate["problems"])})

@@ -568,6 +568,36 @@ def _format_arguments(text: str) -> list[tuple[int, str]]:
     return found
 
 
+def reindex_format_slots(source: str, english: str) -> str | None:
+    """The English text with its String.format slots numbered (`%1$s ... %3$d ... %2$s`) so each takes the argument the
+    source's slot of the same conversion takes, or None when no such rewrite is needed or provable. The k-th slot of a
+    conversion in the English maps to the k-th of that conversion in the source. FlowerGod's "%s ... %d ... %s" against
+    the source's "%s ... %s ... %d" fed the person's name to %d (GRP5B-20261005)."""
+    src = [m for m in _FORMAT_SPEC.finditer(source) if m.group(2) != "%"]
+    eng = [m for m in _FORMAT_SPEC.finditer(english) if m.group(2) != "%"]
+    if not src or len(src) != len(eng) or any(m.group(1) for m in eng):
+        return None
+    source_args = _format_arguments(source)
+    used: set[int] = set()
+    mapping = []
+    for match in eng:
+        candidates = [index for index, conversion in source_args if conversion == match.group(2) and index not in used]
+        if not candidates:
+            return None
+        mapping.append(candidates[0])
+        used.add(candidates[0])
+    if mapping == list(range(1, len(mapping) + 1)):
+        return None
+    out, last = [], 0
+    for match, index in zip(eng, mapping):
+        out.append(english[last:match.start()])
+        out.append("%" + str(index) + "$" + match.group(0)[1:])
+        last = match.end()
+    out.append(english[last:])
+    rewritten = "".join(out)
+    return rewritten if _placeholders(rewritten) == _placeholders(source) else None
+
+
 def _resolved(document: dict) -> tuple[dict[str, dict], list[str]]:
     glossary = document.get("glossary") or {}
     by_file: dict[str, dict] = defaultdict(dict)
@@ -576,6 +606,12 @@ def _resolved(document: dict) -> tuple[dict[str, dict], list[str]]:
         value = entry.get("translation") or glossary.get(entry["source"], "")
         if not value:
             continue
+        if _placeholders(value) != _placeholders(entry["source"]):
+            reindexed = reindex_format_slots(entry["source"], value)
+            if reindexed is not None:
+                if entry["id"] not in document.setdefault("_reindexed", []):
+                    document["_reindexed"].append(entry["id"])
+                value = reindexed
         if _placeholders(value) != _placeholders(entry["source"]):
             problems.append(f"{entry['id']}: placeholders differ ({sorted(_placeholders(entry['source']).elements())} vs {sorted(_placeholders(value).elements())})")
             continue
@@ -627,6 +663,7 @@ def apply_translation(mod_dir: Path, document: dict, out_dir: Path | None = None
         "entries": total,
         "applied": dict(applied),
         "problems": problems,
+        "format_slots_reindexed": document.get("_reindexed", []),
         "leftover_cjk_units": remaining,
     }
 

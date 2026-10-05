@@ -343,3 +343,30 @@ class CommentedCsvRowTests(unittest.TestCase):
                 "id,trigger,text\n#通用的舰队招呼,,\ngreet,OpenDialog,你好\n", encoding="utf-8")
             entries = export_translation(mod)["entries"]
         self.assertEqual([e["source"] for e in entries], ["你好"])
+
+
+class ReindexFormatSlotsTests(unittest.TestCase):
+    def test_reordered_english_gets_numbered_slots(self) -> None:
+        # FlowerGod: source "%s %s %d", English "%s %d %s" crashed the bounty event (GRP5B-20261005)
+        from bridgeforge.translation import reindex_format_slots
+
+        source = "%s 紧急发布了针对 %s 价值 %d 星币的赏金"
+        english = "%s posts an emergency bounty of %d credits on %s"
+        self.assertEqual(reindex_format_slots(source, english), "%1$s posts an emergency bounty of %3$d credits on %2$s")
+        self.assertEqual(reindex_format_slots("%s 和 %d", "%s and %d"), None)  # already in order
+        self.assertEqual(reindex_format_slots("%s 和 %s", "%s and %s"), None)
+        self.assertEqual(reindex_format_slots("%s 和 %d", "%2$d and %1$s"), None)  # already indexed: left alone
+        self.assertEqual(reindex_format_slots("%s 和 %d", "only %d"), None)  # different count: not provable
+        self.assertEqual(reindex_format_slots("%5.1f 和 %s", "%s and %5.1f"), "%2$s and %1$5.1f")
+
+    def test_apply_reindexes_instead_of_reporting_a_placeholder_difference(self) -> None:
+        from bridgeforge.translation import _placeholders, _resolved
+
+        document = {"entries": [{"id": "e1", "file": "a.csv", "kind": "csv", "source": "%s 在 %d 天",
+                                 "translation": "in %d days, %s"}]}
+        by_file, problems = _resolved(document)
+        value = by_file["a.csv"]["e1"]["translation"]
+        self.assertEqual(problems, [])
+        self.assertEqual(value, "in %2$d days, %1$s")
+        self.assertEqual(_placeholders(value), _placeholders("%s 在 %d 天"))
+        self.assertEqual(document["_reindexed"], ["e1"])

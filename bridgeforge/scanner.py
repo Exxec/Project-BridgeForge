@@ -1123,6 +1123,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_system_generation_unguarded(root, result)
     _scan_mission_required_files(root, result)
     _scan_loose_script_janino_risk(root, result, provider_roots)
+    _scan_dependency_version_major(root, result, provider_roots)
     _scan_weapon_effect_static_state(root, result)
     _scan_rules_firebest_populate_options(root, result)
     _scan_hullmod_instance_state(root, result)
@@ -1686,6 +1687,55 @@ def _dependency_jar_class_names(root: Path, provider_roots: list[Path] | None = 
             if info is not None and info.this_class:
                 classes.setdefault(info.this_class.replace("/", "."), provider.name)
     return classes
+
+
+def _version_major_of(version) -> str:
+    if isinstance(version, dict):
+        return str(version.get("major", "")).strip()
+    return str(version or "").strip().split(".")[0]
+
+
+def dependency_version_major_conflicts(root: Path, provider_roots: list[Path] | None) -> list[dict]:
+    """Declared dependencies whose version has another major than every provider with that id (RC8-23: the launcher
+    drops the mod without a log line; zzz Bingus Sustem wanted IndEvo 3.0.c and US 0.43 against 4.1.b and 3.0.3).
+    A provider with the same major counts as a match, so a mods folder holding several versions does not flag."""
+    from .substitutes import provider_index
+
+    if not provider_roots:
+        return []
+    info = _load_lenient_json_file(Path(root) / "mod_info.json")
+    declared = [d for d in (info.get("dependencies") if isinstance(info, dict) else None) or [] if isinstance(d, dict) and d.get("id")]
+    if not declared:
+        return []
+    by_id: dict[str, list] = {}
+    for provider in provider_index([Path(entry) for entry in provider_roots], exclude=Path(root)):
+        by_id.setdefault(provider.mod_id, []).append(provider)
+    conflicts = []
+    for dep in declared:
+        wanted = _version_major_of(dep.get("version"))
+        providers = by_id.get(dep["id"])
+        if not wanted or not providers:
+            continue
+        majors = {_version_major_of(p.version) for p in providers if p.version}
+        if majors and wanted not in majors:
+            conflicts.append({"id": dep["id"], "declared": dep.get("version"), "provider": sorted(p.version for p in providers if p.version)[-1]})
+    return conflicts
+
+
+def _scan_dependency_version_major(root: Path, result: ScanResult, provider_roots: list[Path] | None) -> None:
+    for conflict in dependency_version_major_conflicts(root, provider_roots):
+        result.add(
+            id="dependency-version-major-mismatch",
+            category="dependencies",
+            severity="high",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=f"mod_info.json asks for {conflict['id']} {conflict['declared']}, but the provider available is "
+                        f"{conflict['provider']}: another major version. RC8's launcher then disables this mod at startup without a "
+                        "log line (RC8-23). If the mod was tested against the available provider, `fix` sets the declared version to it.",
+            file="mod_info.json",
+            evidence=[f"dependency:{conflict['id']}", f"declared:{conflict['declared']}", f"provider:{conflict['provider']}"],
+        )
 
 
 def _scan_loose_script_janino_risk(root: Path, result: ScanResult, provider_roots: list[Path] | None = None) -> None:
@@ -5953,13 +6003,33 @@ def _json_duplicate_keys(text: str) -> list[str]:
     return repeats
 
 
-def _scan_json_duplicate_key(root: Path, result: ScanResult) -> None:
+def _loaded_faction_paths(root: Path, vanilla_core: Path | None) -> set[str] | None:
+    """data-relative paths of the faction files the game loads for this mod: those its factions.csv lists plus vanilla's
+    (a mod file at a vanilla path replaces it). None when vanilla is unknown, meaning "treat every faction as loaded"."""
+    if vanilla_core is None:
+        return None
+    paths: set[str] = set()
+    for base in (root, Path(vanilla_core)):
+        listing = base / "data" / "world" / "factions" / "factions.csv"
+        if listing.is_file():
+            for line in listing.read_text(encoding="utf-8-sig", errors="replace").splitlines()[1:]:
+                cell = line.split(",")[0].strip().strip('"').replace("\\", "/")
+                if cell:
+                    paths.add(cell.lower())
+    return paths
+
+
+def _scan_json_duplicate_key(root: Path, result: ScanResult, vanilla_core: Path | None = None) -> None:
     """org.json (RC8's loader) refuses a key repeated in one object: Fatal 'Duplicate key "knownFighters"' on Ironclads'
     pirates.faction, which BridgeForge's own known-lists fixer had given a second copy (GRP10E-20261005). Python's json
     keeps the last copy silently, so nothing else here notices."""
+    loaded_factions = _loaded_faction_paths(root, vanilla_core)
     for path in sorted(root.rglob("*")):
         if path.suffix.lower() not in _DUPLICATE_KEY_SUFFIXES or not path.is_file():
             continue
+        if (path.suffix.lower() == ".faction" and loaded_factions is not None
+                and path.relative_to(root).as_posix().lower() not in loaded_factions):
+            continue  # never loaded: GMDA's gmda_patrol.faction is in no factions.csv (checked 2026-10-05)
         relative = path.relative_to(root)
         if relative.parts and relative.parts[0].lower() in ("reports", "scratch", "disabled_files"):
             continue
@@ -5982,6 +6052,27 @@ def _scan_json_duplicate_key(root: Path, result: ScanResult) -> None:
                 file=_relative(root, path),
                 evidence=[f"key:{key}" for key in repeats[:10]],
             )
+
+
+def _scan_supplies_legacy_column(root: Path, result: ScanResult) -> None:
+    """A 0.6-era ship_data.csv has `supplies/day`; RC8 reads `supplies/rec` and `supplies/mo`, so every hull would cost
+    nothing to keep fielded. The conversion is the vanilla ratio per hull size (owner rule 2026-10-05), not x30 (SEEKER's
+    first conversion gave 150-600 DP hulls that could never deploy)."""
+    path = root / "data" / "hulls" / "ship_data.csv"
+    header = _csv_header(path) if path.is_file() else None
+    if header and "supplies/day" in header and "supplies/rec" not in header and "supplies/mo" not in header:
+        result.add(
+            id="ship-data-supplies-legacy-column",
+            category="content",
+            severity="medium",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation="ship_data.csv has the 0.6-era supplies/day column and no supplies/rec or supplies/mo, which RC8 reads. "
+                        "`fix` adds them as supplies/day times the vanilla 0.6.2 -> RC8 ratio for the hull's size (frigate 3.0, "
+                        "destroyer 2.0, cruiser 2.65, capital 2.67; owner rule 2026-10-05); never x30.",
+            file=_relative(root, path),
+            evidence=["column:supplies/day"],
+        )
 
 
 def _scan_mod_info_triage_banner(root: Path, result: ScanResult) -> None:
@@ -6659,6 +6750,41 @@ def _fails_fast_through_variable(text: str, dependency_id: str) -> bool:
     return False
 
 
+def _throws_without_library(text: str, dependency_id: str) -> bool:
+    direct = re.compile(r'!\s*[\w.()\s]*isModEnabled\s*\(\s*"' + re.escape(dependency_id) + r'"\s*\)\s*\)\s*\{?\s*throw\b', re.IGNORECASE)
+    return bool(direct.search(text)) or _fails_fast_through_variable(text, dependency_id)
+
+
+def _scan_library_required_by_throw(root: Path, result: ScanResult) -> None:
+    """A plugin that throws when a library is missing needs that library whether or not it reaches the library's
+    package: HullMods Expansion's "MagicLib is Required to run this mod" and P9 Colony Group's, neither declared.
+    Emits the same finding the fixer reads (no guard evidence, so `fix` declares it)."""
+    already = {f.evidence[0] for f in result.findings if f.id == "undeclared-library-dependency" and f.evidence}
+    for library, dependency_id in LIBRARY_DEPENDENCY_IDS.items():
+        if f"library:{library}" in already or _mod_info_declares_dependency(result, dependency_id):
+            continue
+        for source in sorted(root.rglob("*.java")):
+            if "disabled_files" in source.relative_to(root).parts:
+                continue
+            try:
+                text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                continue
+            if "isModEnabled" in text and _throws_without_library(text, dependency_id):
+                result.add(
+                    id="undeclared-library-dependency",
+                    category="dependencies",
+                    severity="high",
+                    classification="REVIEW",
+                    confidence="HIGH",
+                    explanation=f"{_relative(root, source)} throws when {library} is not enabled, so the mod needs {library}, but "
+                                "mod_info.json does not declare it; the game's launcher then does not enable it first.",
+                    file="mod_info.json",
+                    evidence=[f"library:{library}", f"dependency-id:{dependency_id}", "required:throws-without", _relative(root, source)],
+                )
+                break
+
+
 def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
     """Code that reaches a known library's package without mod_info.json declaring that dependency."""
     for library, dependency_id in LIBRARY_DEPENDENCY_IDS.items():
@@ -6688,6 +6814,7 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
         id_guard = re.compile(r'\bisModEnabled\s*\(\s*"' + re.escape(dependency_id) + r'"\s*\)', re.IGNORECASE)
         fail_fast = re.compile(r'!\s*[\w.()\s]*isModEnabled\s*\(\s*"' + re.escape(dependency_id) + r'"\s*\)\s*\)\s*\{?\s*throw\b', re.IGNORECASE)
         every_hit_id_guarded = True
+        fails_fast_hit = False
         for source in sorted(root.rglob("*.java")):
             if "disabled_files" in source.relative_to(root).parts:
                 continue
@@ -6702,6 +6829,8 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
             source_hits.append(_relative(root, source))
             if re.search(r"\bisModEnabled\s*\(", text):
                 guarded = True
+            if fail_fast.search(text) or _fails_fast_through_variable(text, dependency_id):
+                fails_fast_hit = True
             if not id_guard.search(text) or fail_fast.search(text) or _fails_fast_through_variable(text, dependency_id):
                 every_hit_id_guarded = False
         bytecode_hits: list[str] = []
@@ -6775,7 +6904,7 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                 )
             ),
             file="mod_info.json",
-            evidence=[f"library:{library}", f"dependency-id:{dependency_id}", *(["guard:present"] if guarded else []), *source_hits[:5], *bytecode_hits[:5]],
+            evidence=[f"library:{library}", f"dependency-id:{dependency_id}", *(["guard:present"] if guarded else []), *(["required:throws-without"] if fails_fast_hit else []), *source_hits[:5], *bytecode_hits[:5]],
         )
 
 
@@ -7981,6 +8110,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_obfuscated_internal_api_use(root, result)
     _scan_csv_design_type_column(root, result)
     _scan_undeclared_library_dependency(root, result)
+    _scan_library_required_by_throw(root, result)
     _drop_library_findings_judged_elsewhere(result)
     _scan_orbit_period_hazards(root, result)
     _scan_module_captain_personality_risk(root, result)
@@ -7998,7 +8128,12 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_bundled_source_stale(root, result)
     _scan_mod_info_triage_banner(root, result)
     _scan_person_names_duplicate_row(root, result)
-    _scan_json_duplicate_key(root, result)
+    _scan_supplies_legacy_column(root, result)
+    _scan_json_duplicate_key(root, result, vanilla_root)
+    from .conversion_checks import scan_factions_csv_relists_neutral, scan_factions_naming_removed_hulls
+
+    scan_factions_naming_removed_hulls(root, result, vanilla_root)
+    scan_factions_csv_relists_neutral(root, result, vanilla_root)
     _scan_data_class_references_missing(root, result, vanilla_root, provider_roots)
     _scan_hardcoded_hyperspace_coordinates(root, result)
     _scan_hardcoded_terrain_grid_size(root, result)

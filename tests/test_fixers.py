@@ -2132,3 +2132,132 @@ class UnguardedVariableLookupTests(unittest.TestCase):
                       "        // BridgeForge: a missing system or entity (random sector, total conversion) is skipped.\r\n"
                       "        if (Global.getSector().getStarSystem(SystemName) == null) {\r\n", text)
         self.assertEqual([e for f in left for e in f.evidence if e.startswith("line:")], ["line:12"])  # the int method: refused
+
+
+class JsonDuplicateKeyFixerTests(unittest.TestCase):
+    def _mod(self, directory: str, relative: str, content: bytes) -> Path:
+        root = Path(directory) / "mod"
+        (root / Path(relative).parent).mkdir(parents=True)
+        (root / "mod_info.json").write_text('{"id": "dk"}', encoding="utf-8")
+        (root / relative).write_bytes(content)
+        return root
+
+    def test_identical_repeat_is_removed_and_everything_else_kept(self) -> None:
+        # Ironclads pirates.faction: knownFighters twice (GRP10E-20261005); CRLF and comments must survive
+        content = (b'{\r\n\t# keep this comment\r\n\t"id":"pirates",\r\n\t"knownFighters":{"fighters":["a_wing"]},\r\n'
+                   b'\t"knownShips":{"hulls":["h"]},\r\n\t"knownFighters":{"fighters":["a_wing"]},\r\n}')
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._mod(directory, "data/config/things.json", content)
+            after = compute_fix(root, "json-duplicate-key").changes[0].after
+        self.assertEqual(after, b'{\r\n\t# keep this comment\r\n\t"id":"pirates",\r\n\t"knownFighters":{"fighters":["a_wing"]},\r\n'
+                                b'\t"knownShips":{"hulls":["h"]},\r\n}')
+
+    def test_objects_without_a_separator_in_an_array_are_split(self) -> None:
+        # Arthr's Ships n Shit ass_solace.json: two markets in one object
+        content = (b'{"markets":[\n\t\t{\n\t\t\t"entities":["a"],\n\t\t\t"size":3,\n\t\t\t"industries":["x"],\n'
+                   b'\t\t\t"entities":["b"],\n\t\t\t"size":4,\n\t\t\t"industries":["y"]\n\t\t}\n\t]}')
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._mod(directory, "data/campaign/econ/s.json", content)
+            after = compute_fix(root, "json-duplicate-key").changes[0].after.decode("utf-8")
+        markets = json.loads(after)["markets"]
+        self.assertEqual([(m["entities"], m["size"], m["industries"]) for m in markets], [(["a"], 3, ["x"]), (["b"], 4, ["y"])])
+
+    def test_a_repeat_with_a_different_value_outside_that_pattern_is_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._mod(directory, "data/config/t.json", b'{"a":1,"b":2,"a":3}')
+            with self.assertRaises(FixerError) as caught:
+                compute_fix(root, "json-duplicate-key")
+        self.assertIn("different value", str(caught.exception))
+
+
+class LoadedFactionDuplicateKeyTests(unittest.TestCase):
+    def test_a_faction_file_in_no_factions_csv_is_not_flagged(self) -> None:
+        # GMDA gmda_patrol.faction repeats "gremlin" but is in no factions.csv, so the game never loads it
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
+            root, vanilla = Path(mod_dir), Path(vanilla_dir)
+            _write(vanilla / "data" / "world" / "factions" / "factions.csv", "faction\ndata/world/factions/pirates.faction\n")
+            _write(root / "mod_info.json", '{"id": "lf"}')
+            repeated = '{"id":"x","shipRoles":{"a":{"gremlin":0,"gremlin":0}}}'
+            _write(root / "data" / "world" / "factions" / "unlisted.faction", repeated)
+            _write(root / "data" / "world" / "factions" / "listed.faction", repeated)
+            _write(root / "data" / "world" / "factions" / "factions.csv", "faction\ndata/world/factions/listed.faction\n")
+            files = [f.file for f in scan_mod(root, vanilla_core=vanilla).findings if f.id == "json-duplicate-key"]
+        self.assertEqual(files, ["data/world/factions/listed.faction"])
+
+
+class DependencyVersionMajorTests(unittest.TestCase):
+    def _fixture(self, directory: str, declared: str, provider_version: str):
+        base = Path(directory)
+        mod, mods = base / "mod", base / "mods"
+        _write(mod / "mod_info.json", '{"id": "bingus",\n "dependencies": [{"id": "IndEvo", "name": "Industrial.Evolution", "version": "%s"}]}' % declared)
+        _write(mods / "IndEvo" / "mod_info.json", '{"id": "IndEvo", "version": "%s"}' % provider_version)
+        return mod, mods
+
+    def test_major_mismatch_is_flagged_and_fixed_minor_is_not(self) -> None:
+        # zzz Bingus Sustem: IndEvo 3.0.c against 4.1.b disabled the mod silently (RC8-23, GRP2C-20261005)
+        with tempfile.TemporaryDirectory() as directory:
+            mod, mods = self._fixture(directory, "3.0.c", "4.1.b")
+            found = [f for f in scan_mod(mod, provider_roots=[mods]).findings if f.id == "dependency-version-major-mismatch"]
+            after = compute_fix(mod, "dependency-version-major-mismatch", {"provider_roots": [mods]}).changes[0].after.decode("utf-8")
+            same_major = Path(directory) / "same"
+            _write(same_major / "mod_info.json", '{"id": "x", "dependencies": [{"id": "IndEvo", "version": "4.0.a"}]}')
+            quiet = [f for f in scan_mod(same_major, provider_roots=[mods]).findings if f.id == "dependency-version-major-mismatch"]
+        self.assertEqual(found[0].evidence, ["dependency:IndEvo", "declared:3.0.c", "provider:4.1.b"])
+        self.assertEqual(json.loads(after)["dependencies"][0]["version"], "4.1.b")
+        self.assertEqual(json.loads(after)["dependencies"][0]["name"], "Industrial.Evolution")
+        self.assertEqual(quiet, [])
+
+    def test_object_form_version_is_replaced_by_the_providers_string(self) -> None:
+        # Magellan Shenanigans declares MagicLib as {"major":0,"minor":46,"patch":0}
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            mod, mods = base / "mod", base / "mods"
+            _write(mod / "mod_info.json", '{"id":"m","dependencies":[{"id":"IndEvo","version":{"major":3,"minor":0}},{"id":"keep","version":"1.0"}]}')
+            _write(mods / "IndEvo" / "mod_info.json", '{"id": "IndEvo", "version": "4.1.b"}')
+            after = json.loads(compute_fix(mod, "dependency-version-major-mismatch", {"provider_roots": [mods]}).changes[0].after.decode("utf-8"))
+        self.assertEqual(after["dependencies"], [{"id": "IndEvo", "version": "4.1.b"}, {"id": "keep", "version": "1.0"}])
+
+
+class VanillaPathShadowRenameTests(unittest.TestCase):
+    def test_file_with_another_id_at_a_vanilla_path_is_renamed_and_a_real_override_stays(self) -> None:
+        # Vayra's Ship Pack: its vayra_exemplardrones system was saved as drone_pd.system (GRP2C-20261005)
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
+            root, vanilla = Path(mod_dir), Path(vanilla_dir)
+            _write(vanilla / "data" / "shipsystems" / "drone_pd.system", '{"id":"drone_pd","type":"DRONE_LAUNCHER"}')
+            _write(vanilla / "data" / "shipsystems" / "damper.system", '{"id":"damper","type":"STAT_MOD"}')
+            _write(root / "mod_info.json", '{"id":"vs"}')
+            _write(root / "data" / "shipsystems" / "drone_pd.system", '{"id":"vs_drones","type":"DRONE_LAUNCHER"}')
+            _write(root / "data" / "shipsystems" / "damper.system", '{"id":"damper","type":"STAT_MOD","tweak":1}')
+            apply_fix(compute_fix(root, "vanilla-path-shadowing", {"vanilla_core": vanilla}))
+            names = sorted(p.name for p in (root / "data" / "shipsystems").glob("*.system"))
+            moved = (root / "data" / "shipsystems" / "vs_drones.system").read_text(encoding="utf-8")
+        self.assertEqual(names, ["damper.system", "vs_drones.system"])
+        self.assertIn("vs_drones", moved)
+
+
+class SuppliesLegacyColumnTests(unittest.TestCase):
+    def test_supplies_are_converted_by_hull_size_not_times_thirty(self) -> None:
+        # SEEKER: x30 gave the Guardian 600 DP, undeployable; the owner chose the vanilla ratio per hull size (2026-10-05)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "mod"
+            _write(root / "mod_info.json", '{"id": "sp"}')
+            _write(root / "data" / "hulls" / "ship_data.csv",
+                   "name,id,supplies/day,hints\nGuardian,g,20,\nFrig,f,2,\nTug,t,1,\nWing,w,0.5,\nModule,m,,\nMystery,x,4,\n")
+            for hull, size in (("g", "CAPITAL_SHIP"), ("f", "FRIGATE"), ("t", "DESTROYER"), ("w", "FIGHTER"), ("m", "FRIGATE")):
+                _write(root / "data" / "hulls" / f"{hull}.ship", json.dumps({"hullId": hull, "hullSize": size}))
+            found = [f for f in scan_mod(root).findings if f.id == "ship-data-supplies-legacy-column"]
+            after = compute_fix(root, "ship-data-supplies-legacy-column").changes[0].after.decode("utf-8")
+        rows = {r["id"]: r for r in csv.DictReader(io.StringIO(after))}
+        self.assertEqual(len(found), 1)
+        self.assertEqual({k: (v["supplies/rec"], v["supplies/mo"]) for k, v in rows.items()},
+                         {"g": ("53", "53"), "f": ("6", "6"), "t": ("2", "2"), "w": ("", ""), "m": ("", ""), "x": ("", "")})
+        self.assertEqual(rows["g"]["supplies/day"], "20")
+
+    def test_a_file_that_already_has_the_rc8_columns_is_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "mod"
+            _write(root / "mod_info.json", '{"id": "sp"}')
+            _write(root / "data" / "hulls" / "ship_data.csv", "id,supplies/day,supplies/rec,supplies/mo\nf,2,6,6\n")
+            self.assertEqual([f for f in scan_mod(root).findings if f.id == "ship-data-supplies-legacy-column"], [])
+            with self.assertRaises(FixerError):
+                compute_fix(root, "ship-data-supplies-legacy-column")

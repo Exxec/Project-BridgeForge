@@ -751,7 +751,8 @@ def build_parser() -> argparse.ArgumentParser:
     explain_cmd = subcommands.add_parser("audit-explain", help="record why shipped files differ from original/, or (--live) why the mod may be archived without a current live result")
     explain_cmd.add_argument("workspace", type=Path)
     explain_cmd.add_argument("files", nargs="*", help="shipped paths relative to working/")
-    explain_cmd.add_argument("--reason", required=True)
+    explain_cmd.add_argument("--reason", help="why; required unless --auto")
+    explain_cmd.add_argument("--auto", action="store_true", help="record every difference whose category the files prove (credits, syntax-only JSON, manufacturer column, unloaded archive, translation); no files or reason needed")
     explain_cmd.add_argument("--live", action="store_true")
     explain_cmd.add_argument("--json", action="store_true")
     relink_cmd = subcommands.add_parser("relink", help="recompile classes whose game calls RC8 changed only by return type (jar-linkage-unresolved), from shipped or decompiled source, unedited; patch only when nothing else changes. A queue folder or one workspace")
@@ -1292,7 +1293,19 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Live result: {live['status']}" + (f" (last PASS {live['test_id']}, {live.get('date')})" if live.get("test_id") else ""))
         return 0 if result["audit"]["status"] == "PASS" else 1
     if args.command == "audit-explain":
-        from .live_trust import explain_shipped
+        from .live_trust import auto_explain_shipped, explain_shipped
+        if args.auto:
+            groups = auto_explain_shipped(args.workspace)
+            if args.json:
+                print(json.dumps(groups, indent=2))
+            else:
+                for reason, files in groups.items():
+                    print(f"{len(files)} file(s): {reason}")
+                print("Nothing could be proven; explain the rest with --reason." if not groups else "Anything still unexplained needs --reason.")
+            return 0
+        if not args.reason:
+            print("bridgeforge: --reason is required (or pass --auto).", file=sys.stderr)
+            return 2
         try:
             path = explain_shipped(args.workspace, args.files, args.reason, live=args.live)
         except (ValueError, OSError) as exc:
@@ -1473,6 +1486,10 @@ def main(argv: list[str] | None = None) -> int:
                     for item in result["copied"]:
                         print(f"  {item['workspace']}: {item['action']}")
                     print(f"  enabled_mods.json -> {result['enabled_mods']}")
+                    for item in result.get("moved_aside", []):
+                        print(f"  moved {item['folder']} to mods-disabled-providers: it shares mod id {item['mod_id']} with {item['kept']}")
+                    for item in result.get("incomplete_providers", []):
+                        print(f"  WARN {item['folder']} lacks {', '.join(item['missing'])} that the real install has; recopy it")
                     for item in result.get("dependency_version_conflicts", []):
                         print(f"  WARN {item['mod_id']} wants {item['dependency']} {item['wanted']}, rig has {item['installed']}: "
                               "RC8 disables a mod whose dependency major differs (RC8-23); fix its mod_info.json")

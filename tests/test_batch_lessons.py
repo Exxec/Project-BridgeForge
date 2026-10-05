@@ -559,3 +559,34 @@ class OrgJsonSeparatorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LibraryRequiredByThrowTests(unittest.TestCase):
+    def test_plugin_that_throws_without_a_library_it_never_references_is_declared_by_fix(self) -> None:
+        # HullMods Expansion and P9 Colony Group: "MagicLib is Required to run this mod", MagicLib undeclared (2026-10-05)
+        from bridgeforge.fixers import compute_fix
+
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "scripts").mkdir(parents=True)
+            (mod / "data" / "scripts" / "Plug.java").write_text(
+                "public class Plug { void load() {\n"
+                "  boolean hasMagicLib = Global.getSettings().getModManager().isModEnabled(\"MagicLib\");\n"
+                "  if (!hasMagicLib) { throw new RuntimeException(\"MagicLib is Required\"); }\n} }\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+            found = [f for f in result.findings if f.id == "undeclared-library-dependency"]
+            after = compute_fix(mod, "undeclared-library-dependency").changes[0].after.decode("utf-8")
+        self.assertEqual(len(found), 1)
+        self.assertIn("required:throws-without", found[0].evidence)
+        self.assertIn('"MagicLib"', after)
+
+    def test_an_optional_guard_that_does_not_throw_is_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "scripts").mkdir(parents=True)
+            (mod / "data" / "scripts" / "Plug.java").write_text(
+                "public class Plug { void load() {\n"
+                "  boolean has = Global.getSettings().getModManager().isModEnabled(\"MagicLib\");\n"
+                "  if (has) { doExtra(); }\n} }\n", encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual([f for f in result.findings if f.id == "undeclared-library-dependency"], [])

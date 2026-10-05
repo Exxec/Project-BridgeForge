@@ -5,7 +5,8 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.live_trust import archive_gate, audit_shipped, explain_shipped, live_status, original_root, write_run_record
+from bridgeforge.live_trust import (archive_gate, audit_shipped, auto_explain_shipped, explain_shipped, live_status, original_root,
+                                    write_run_record)
 from tests.support import resolved_temp_dir
 
 
@@ -160,3 +161,38 @@ class OriginalRootTests(unittest.TestCase):
             (mod / "mod_info.json").write_text("{}", encoding="utf-8")
             (root / "ws" / "original" / "archive").mkdir()
             self.assertEqual(original_root(root / "ws"), mod)
+
+
+class AutoExplainTests(unittest.TestCase):
+    def test_provable_categories_are_explained_and_a_real_edit_is_not(self) -> None:
+        with resolved_temp_dir() as root:
+            ws = _workspace(root)
+            original, working = ws / "original" / "Mod v1", ws / "working"
+            # syntax-only JSON: a trailing comma
+            _write(original / "data" / "config" / "a.json", '{"x": [1, 2]}')
+            _write(working / "data" / "config" / "a.json", '{"x": [1, 2],}')
+            # a real value change
+            _write(original / "data" / "config" / "b.json", '{"x": 1}')
+            _write(working / "data" / "config" / "b.json", '{"x": 2}')
+            # credits file, manufacturer column, unloaded archive, translation
+            _write(working / "BRIDGEFORGE_CREDITS.txt", "credits")
+            _write(original / "data" / "weapons" / "weapon_data.csv", "id,name\nw1,Gun\nw2,\n")
+            _write(working / "data" / "weapons" / "weapon_data.csv", "id,name,tech/manufacturer\nw1,Gun,Infected\nw2,,Infected\n")
+            _write(original / "data" / "strings" / "d.csv", "id,text\nx,我是中文\n")
+            _write(working / "data" / "strings" / "d.csv", "id,text\nx,I am English\n")
+            _write(ws / "reports" / "translation" / "m-en.json", "{}")
+            (original / "Extra Ships.rar").write_bytes(b"Rar!")
+            _write(ws / "scratch" / "moved-work-files" / "Extra Ships.rar", "Rar!")
+            groups = auto_explain_shipped(ws)
+            after = audit_shipped(ws)
+        explained = sorted(f for files in groups.values() for f in files)
+        self.assertEqual(explained, ["BRIDGEFORGE_CREDITS.txt", "Extra Ships.rar", "data/config/a.json", "data/strings/d.csv", "data/weapons/weapon_data.csv"])
+        self.assertEqual(after["unexplained"], ["data/config/b.json"])
+
+    def test_a_csv_with_a_changed_value_is_not_called_a_column_addition(self) -> None:
+        with resolved_temp_dir() as root:
+            ws = _workspace(root)
+            _write(ws / "original" / "Mod v1" / "data" / "weapons" / "weapon_data.csv", "id,name\nw1,Gun\n")
+            _write(ws / "working" / "data" / "weapons" / "weapon_data.csv", "id,name,tech/manufacturer\nw1,Cannon,Infected\n")
+            groups = auto_explain_shipped(ws)
+        self.assertEqual(groups, {})
