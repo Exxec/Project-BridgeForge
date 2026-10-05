@@ -1486,6 +1486,8 @@ def main(argv: list[str] | None = None) -> int:
                     for item in result["copied"]:
                         print(f"  {item['workspace']}: {item['action']}")
                     print(f"  enabled_mods.json -> {result['enabled_mods']}")
+                    for folder in result.get("probe_mission_added", []):
+                        print(f"  added the probe mission to {folder}'s mission list (it replaces the list; RC8 would hide the probe)")
                     for item in result.get("moved_aside", []):
                         print(f"  moved {item['folder']} to mods-disabled-providers: it shares mod id {item['mod_id']} with {item['kept']}")
                     for item in result.get("incomplete_providers", []):

@@ -28,7 +28,7 @@ import java.util.Map;
  */
 public class MissionDefinition implements MissionDefinitionPlugin {
 
-    private static final int DEFAULT_CAP = 12;
+    private static final int DEFAULT_CAP = 30; // owner 2026-10-05 (was 12), matches probe_config
 
     public void defineMission(MissionDefinitionAPI api) {
         ProbeConfig config;

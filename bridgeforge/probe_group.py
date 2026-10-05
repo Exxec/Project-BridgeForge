@@ -443,6 +443,36 @@ def _reset_combat_round(common: Path) -> None:
         stale.unlink()
 
 
+def _add_probe_mission_to_replacing_members(rig: Path, members: dict[str, Path]) -> list[str]:
+    """A total conversion that lists data/missions/mission_list.csv in mod_info `replace` wipes every earlier mod's missions,
+    and the probe loads before it (Ironclads GRP10N-20261005: the owner could not reach the probe mission). Append the probe's row
+    to that member's rig copy, which `install` rewrites on every sync. Returns the folders changed."""
+    from .conversion_checks import replace_list
+
+    probe_list = Path(rig) / "mods" / "bridgeforge-probe" / "data" / "missions" / "mission_list.csv"
+    if not probe_list.is_file():
+        return []
+    rows = [line.strip() for line in probe_list.read_text(encoding="utf-8-sig").splitlines()[1:] if line.strip().strip(",")]
+    changed = []
+    for folder in members.values():
+        if "data/missions/mission_list.csv" not in replace_list(folder):
+            continue
+        target = folder / "data" / "missions" / "mission_list.csv"
+        if not target.is_file():
+            continue
+        raw = target.read_bytes()
+        text = raw.decode("utf-8-sig", errors="replace")
+        have = {line.split(",")[0].strip() for line in text.splitlines()}
+        missing = [row for row in rows if row.split(",")[0].strip() not in have]
+        if not missing:
+            continue
+        newline = "\r\n" if "\r\n" in text else "\n"
+        target.write_bytes((raw if raw.endswith((b"\n", b"\r")) else raw + newline.encode("utf-8"))
+                           + (newline.join(missing) + newline).encode("utf-8"))
+        changed.append(folder.name)
+    return changed
+
+
 def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install_probe: bool = True,
                   stage: bool = False) -> dict:
     """Copy/sync members into the rig, write the merged config, set enabled_mods.json. A group whose members
@@ -489,6 +519,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
         (common / RIG_MARKER_FILE).write_text("rig\n", encoding="utf-8")
     if install_probe:
         _install_probe_mod(rig)
+    probe_mission_added = _add_probe_mission_to_replacing_members(rig, {m["mod_id"]: mods_dir / m["workspace"] for m in group["members"]})
     enabled = []
     for member in group["members"]:
         current = [d.get("id") for d in _mod_info(queue / member["workspace"] / "working").get("dependencies") or []
@@ -508,6 +539,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
             "members": [m["workspace"] for m in group["members"]], "copied": copied, "staged_providers": staged, "enabled_mods": enabled,
             "dependency_version_conflicts": dependency_version_conflicts(mods_dir, enabled),
             "moved_aside": moved_aside, "incomplete_providers": incomplete_provider_copies(rig, enabled),
+            "probe_mission_added": probe_mission_added,
             "config_path": str(common / CONFIG_FILE), "checked_ids": len(config["content_variants"]["ship"]) + len(config["content_variants"]["other"])
             + len(config["content_wings"]) + len(config["content_special_items"])}
 

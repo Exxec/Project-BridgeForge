@@ -2817,6 +2817,47 @@ def _is_mission_source(root: Path, path: Path) -> bool:
     return False
 
 
+def _scan_star_type_undefined(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """A `star_*` type named in the mod's code that neither the mod's planets.json nor RC8's defines. StarSystem.initStar
+    then builds a planet from a null spec: NullPointerException 'PlanetSpec.getPlanetType() because <parameter1> is null'
+    (Ironclads' SystemComposer asked for 0.7's star_red and star_blue, which RC8 renamed star_red_dwarf/star_blue_giant;
+    GRP10Q-20261005). Needs --vanilla-core: without RC8's planets.json nothing is claimed."""
+    if vanilla_core is None:
+        return
+    defined: set[str] = set()
+    for path in (root / "data" / "config" / "planets.json", vanilla_core / "data" / "config" / "planets.json"):
+        data = _load_lenient_json_file(path)
+        if isinstance(data, dict):
+            defined.update(data)
+    if not defined:
+        return
+    used: dict[str, list[str]] = {}
+    for source in root.rglob("*.java"):
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for literal in set(re.findall(r'"(star_[a-z0-9_]+)"', text)):
+            if literal not in defined:
+                used.setdefault(literal, []).append(_relative(root, source))
+    if not used:
+        return
+    result.add(
+        id="star-type-undefined",
+        category="campaign",
+        severity="critical",
+        classification="REVIEW",
+        confidence="HIGH",
+        explanation="Code in this mod names star type(s) " + ", ".join(sorted(used)) + " that neither this mod's data/config/planets.json "
+                    "nor RC8's defines. initStar() then builds the star from a null spec and New Game stops with a NullPointerException "
+                    "(GRP10Q-20261005). RC8 renamed several 0.7-era stars (star_red -> star_red_dwarf, star_blue -> star_blue_giant): "
+                    "restore the mod's own spec from its original planets.json, or point the code at RC8's id. A restored star also "
+                    "needs a star_gen_data.csv row (procgen-star-row-missing).",
+        file="data/config/planets.json",
+        evidence=[f"type:{name}" for name in sorted(used)] + [f"used-in:{f}" for name in sorted(used) for f in sorted(set(used[name]))[:3]],
+    )
+
+
 def _scan_procgen_rows(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
     """Every campaign-placed planets.json type needs a procgen CSV row (crash if absent)."""
     planets_path = root / "data" / "config" / "planets.json"
@@ -5959,6 +6000,179 @@ def _person_names_duplicate_lines(path: Path) -> list[int]:
     return repeats
 
 
+def _csv_first_cells(text: str) -> list[tuple[int, int, str, bool]]:
+    """(start, end, value, quoted) of the first cell of every record of a CSV, by text offset. A quoted cell may hold newlines."""
+    cells: list[tuple[int, int, str, bool]] = []
+    i, n = 0, len(text)
+    while i < n:
+        start, quoted, value = i, text[i] == '"', ""
+        if quoted:
+            i += 1
+            chars = []
+            while i < n:
+                if text[i] == '"':
+                    if i + 1 < n and text[i + 1] == '"':
+                        chars.append('"')
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                chars.append(text[i])
+                i += 1
+            value = "".join(chars)
+        else:
+            while i < n and text[i] not in ",\r\n":
+                i += 1
+            value = text[start:i]
+        cells.append((start, i, value, quoted))
+        in_quotes = False
+        while i < n:  # skip the rest of the record
+            c = text[i]
+            if c == '"':
+                in_quotes = not in_quotes
+            elif c == "\n" and not in_quotes:
+                i += 1
+                break
+            i += 1
+    return cells
+
+
+def _rules_duplicate_id_cells(text: str) -> list[tuple[int, int, str, bool, int]]:
+    """Later copies of a rule id in rules.csv: (start, end, id, quoted, occurrence number from 2). The header record and
+    blank or `#` comment ids are not rules."""
+    seen: dict[str, int] = {}
+    repeats = []
+    for index, (start, end, value, quoted) in enumerate(_csv_first_cells(text)):
+        key = value.strip()
+        if index == 0 or not key or key.startswith("#"):
+            continue
+        seen[key] = seen.get(key, 0) + 1
+        if seen[key] > 1:
+            repeats.append((start, end, key, quoted, seen[key]))
+    return repeats
+
+
+def _scan_rules_csv_duplicate_id(root: Path, result: ScanResult) -> None:
+    """RC8 refuses two rules.csv rows with the same id: Fatal 'Duplicate key [marketPostOpenPiratesHostile | ] while loading
+    data/campaign/rules.csv' (Ironclads, GRP10J-20261005). 0.7.2 told same-id rules apart by their conditions, so a mod written
+    then repeats ids (Ironclads: one rule per faction under one id)."""
+    path = root / "data" / "campaign" / "rules.csv"
+    if not path.is_file():
+        return
+    try:
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return
+    repeats = _rules_duplicate_id_cells(text)
+    if repeats:
+        result.add(
+            id="rules-csv-duplicate-id",
+            category="content",
+            severity="high",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=f"{len(repeats)} rules.csv row(s) repeat an earlier row's id. RC8 stops at startup with a Fatal 'Duplicate key' "
+                        "dialog. `fix` renames each later copy to <id>_2, <id>_3; the rule's conditions and text are untouched.",
+            file=_relative(root, path),
+            evidence=sorted({f"id:{key}" for _s, _e, key, _q, _n in repeats})[:20],
+        )
+
+
+def _csv_record_cells(text: str) -> list[list[tuple[int, int, str, bool]]]:
+    """Every record of a CSV as a list of (start, end, value, quoted) cells by text offset. A quoted cell may hold newlines;
+    `""` inside one is a quote. The end offset excludes the delimiter."""
+    records: list[list[tuple[int, int, str, bool]]] = []
+    i, n = 0, len(text)
+    while i < n:
+        record: list[tuple[int, int, str, bool]] = []
+        while True:
+            start, quoted = i, i < n and text[i] == '"'
+            if quoted:
+                i += 1
+                chars = []
+                while i < n:
+                    if text[i] == '"':
+                        if i + 1 < n and text[i + 1] == '"':
+                            chars.append('"')
+                            i += 2
+                            continue
+                        i += 1
+                        break
+                    chars.append(text[i])
+                    i += 1
+                value = "".join(chars)
+            else:
+                while i < n and text[i] not in ",\r\n":
+                    i += 1
+                value = text[start:i]
+            record.append((start, i, value, quoted))
+            if i < n and text[i] == ",":
+                i += 1
+                continue
+            if i < n and text[i] == "\r":
+                i += 1
+            if i < n and text[i] == "\n":
+                i += 1
+            break
+        records.append(record)
+    return records
+
+
+def _rules_whitespace_only_line_cells(text: str) -> list[tuple[int, int, str, str]]:
+    """(start, end, column, fixed value) for each conditions/script cell of a real rule holding a whitespace-only line. RC8 skips
+    an empty line but stops at one holding spaces: RuleException 'No tokens found in string: []' (Ironclads ngcSmugglerOption,
+    GRP10K-20261005); vanilla has none outside a commented-out row."""
+    records = _csv_record_cells(text)
+    if not records:
+        return []
+    header = [cell[2].strip() for cell in records[0]]
+    wanted = [(header.index(name), name) for name in ("conditions", "script") if name in header]
+    found = []
+    for record in records[1:]:
+        rule_id = record[0][2].strip() if record else ""
+        if not rule_id or rule_id.startswith("#"):
+            continue
+        for index, name in wanted:
+            if index >= len(record):
+                continue
+            start, end, value, quoted = record[index]
+            fixed_lines, changed = [], False
+            for line in value.split("\n"):
+                body = line.rstrip("\r")
+                if body and not body.strip(" \t"):
+                    fixed_lines.append(line[len(body):])
+                    changed = True
+                else:
+                    fixed_lines.append(line)
+            if changed:
+                found.append((start, end, name, "\n".join(fixed_lines)))
+    return found
+
+
+def _scan_rules_csv_whitespace_only_line(root: Path, result: ScanResult) -> None:
+    path = root / "data" / "campaign" / "rules.csv"
+    if not path.is_file():
+        return
+    try:
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return
+    cells = _rules_whitespace_only_line_cells(text)
+    if cells:
+        result.add(
+            id="rules-csv-whitespace-only-line",
+            category="content",
+            severity="high",
+            classification="SAFE",
+            confidence="DETERMINISTIC",
+            explanation=f"{len(cells)} rules.csv conditions/script cell(s) hold a line of only spaces. RC8 skips an empty line but "
+                        "stops at startup on one with spaces (RuleException 'No tokens found in string: []', Ironclads "
+                        "GRP10K-20261005). `fix` empties those lines; nothing else changes.",
+            file=_relative(root, path),
+            evidence=[f"{name}-cell-at:{start}" for start, _e, name, _v in cells][:20],
+        )
+
+
 def _scan_person_names_duplicate_row(root: Path, result: ScanResult) -> None:
     """RC8 keys person_names.csv rows by every column and stops at startup on a repeat inside one file:
     'Duplicate key [Mao |  | f | xle | ] while loading [data/characters/person_names.csv' (Ironclads, a Fatal dialog,
@@ -6176,6 +6390,19 @@ def _scan_data_class_references_missing(root: Path, result: ScanResult, vanilla_
                 value = data.get(field)
                 if isinstance(value, str) and value.strip() and not value.strip().startswith("#"):
                     references.append((_relative(root, path), field, value.strip()))
+
+    # .skill files name their effect classes under effectGroups[].effects[].script (Ironclads' ordnance_expert.skill named
+    # data.characters.skills.scripts.OrdnanceExpertEffect1, a 0.7.2 vanilla loose script RC8 no longer has: Fatal
+    # 'Error loading [...]' at startup, GRP10L-20261005).
+    for skill in root.rglob("*.skill"):
+        if "disabled_files" in skill.relative_to(root).parts:
+            continue
+        spec = _load_lenient_json_file(skill)
+        for group in (spec.get("effectGroups") if isinstance(spec, dict) else None) or []:
+            for effect in (group.get("effects") if isinstance(group, dict) else None) or []:
+                script = effect.get("script") if isinstance(effect, dict) else None
+                if isinstance(script, str) and script.strip() and not script.strip().startswith("#"):
+                    references.append((_relative(root, skill), "skill-effect-script", script.strip()))
 
     rules_path = root / "data" / "campaign" / "rules.csv"
     rules_header = _csv_header(rules_path) or []
@@ -8091,6 +8318,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_revenantlib_fold_conflict(result)
     _infer_environment(result)
     _scan_procgen_rows(root, result, vanilla_root)
+    _scan_star_type_undefined(root, result, vanilla_root)
     _scan_faction_known_lists(root, result, vanilla_root)
     _scan_rules_condition_defects(root, result, vanilla_root)
     _scan_design_type_colors(root, result, vanilla_root)
@@ -8128,11 +8356,20 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_bundled_source_stale(root, result)
     _scan_mod_info_triage_banner(root, result)
     _scan_person_names_duplicate_row(root, result)
+    _scan_rules_csv_duplicate_id(root, result)
+    _scan_rules_csv_whitespace_only_line(root, result)
     _scan_supplies_legacy_column(root, result)
     _scan_json_duplicate_key(root, result, vanilla_root)
-    from .conversion_checks import scan_factions_csv_relists_neutral, scan_factions_naming_removed_hulls
+    from .conversion_checks import (
+        scan_factions_csv_relists_neutral,
+        scan_factions_naming_missing_content,
+        scan_factions_naming_removed_hulls,
+        scan_lifecycle_plugin_missing,
+    )
 
     scan_factions_naming_removed_hulls(root, result, vanilla_root)
+    scan_factions_naming_missing_content(root, result, vanilla_root)
+    scan_lifecycle_plugin_missing(root, result)
     scan_factions_csv_relists_neutral(root, result, vanilla_root)
     _scan_data_class_references_missing(root, result, vanilla_root, provider_roots)
     _scan_hardcoded_hyperspace_coordinates(root, result)

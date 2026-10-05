@@ -107,6 +107,241 @@ def scan_factions_naming_removed_hulls(root: Path, result: ScanResult, vanilla_c
     )
 
 
+# The three item tables a total conversion may replace, and the faction-file arrays that name their ids
+# (RC8's CoreLifecyclePluginImpl.verifyFactionData prices every id in knownShips/knownFighters/knownWeapons at game load:
+# "Weapon spec [lightneedler] not found!", "Ship hull spec [crig] not found!", Ironclads GRP10U/GRP10V 2026-10-05).
+REPLACED_TABLES = {"hulls": "data/hulls/ship_data.csv", "fighters": "data/hulls/wing_data.csv", "weapons": "data/weapons/weapon_data.csv"}
+_ARRAY_OPEN = re.compile(r'^\s*"(hulls|fighters|weapons)"\s*:\s*\[\s*$')
+_ARRAY_ITEM = re.compile(r'^\s*"([^"]+)"\s*,?\s*(?:#.*)?$')
+
+
+def replaced_table_ids(root: Path) -> dict[str, set[str]]:
+    """{'hulls'|'fighters'|'weapons': ids the mod's own table holds} for each table the mod replaces."""
+    replaced = replace_list(root)
+    return {kind: _csv_ids(Path(root) / path) for kind, path in REPLACED_TABLES.items() if path in replaced}
+
+
+def _array_ids(text: str) -> list[tuple[str, str]]:
+    """(kind, id) for each one-per-line entry of a hulls/fighters/weapons array in a faction file."""
+    found, kind = [], None
+    for line in text.splitlines():
+        opened = _ARRAY_OPEN.match(line)
+        if opened:
+            kind = opened.group(1)
+        elif kind and re.match(r"^\s*\]", line):
+            kind = None
+        elif kind and (item := _ARRAY_ITEM.match(line)):
+            found.append((kind, item.group(1)))
+    return found
+
+
+def factions_naming_missing_content(root: Path, vanilla_core: Path | None) -> dict[str, dict[str, list[str]]]:
+    """{faction file name: {kind: ids}} for the vanilla factions (the mod's replaced copy where it has one) whose hull,
+    fighter or weapon lists name ids the mod's replaced tables lack. Empty unless the mod replaces a table."""
+    root = Path(root)
+    tables = replaced_table_ids(root)
+    if vanilla_core is None or not tables:
+        return {}
+    replaced = replace_list(root)
+    result: dict[str, dict[str, list[str]]] = {}
+    for vanilla_file in sorted((Path(vanilla_core) / "data" / "world" / "factions").glob("*.faction")):
+        source = _faction_source(root, vanilla_file, replaced)
+        try:
+            text = source.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            continue
+        missing: dict[str, list[str]] = {}
+        for kind, item in _array_ids(text):
+            if kind in tables and item not in tables[kind] and item not in missing.setdefault(kind, []):
+                missing[kind].append(item)
+        missing = {kind: ids for kind, ids in missing.items() if ids}
+        if missing:
+            result[vanilla_file.name] = missing
+    return result
+
+
+def scan_factions_naming_missing_content(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    hits = factions_naming_missing_content(root, vanilla_core)
+    if not hits:
+        return
+    result.add(
+        id="conversion-faction-names-missing-content",
+        category="content",
+        severity="high",
+        classification="REVIEW",
+        confidence="DETERMINISTIC",
+        explanation="This mod replaces " + ", ".join(sorted(REPLACED_TABLES[k] for k in replaced_table_ids(root))) + ", but "
+                    + ", ".join(sorted(hits)) + " still list hulls, fighters or weapons it removed. RC8 checks every id a faction "
+                    "knows when a game loads and stops (Fatal 'Weapon spec [x] not found!' or 'Ship hull spec [x] not found!'). "
+                    "Faction files merge, so the mod must replace each file with a copy lacking those ids; `fix` writes them "
+                    "from --vanilla-core.",
+        file="mod_info.json",
+        evidence=[f"{name}:{kind}:{len(ids)}:{','.join(ids[:3])}" for name, kinds in sorted(hits.items()) for kind, ids in sorted(kinds.items())],
+    )
+
+
+def faction_copy_without_content(source: bytes, tables: dict[str, set[str]], header: list[str], hidden_stub_value: bool | None) -> tuple[bytes, int]:
+    """The faction file with every one-per-line hull/fighter/weapon id the replaced tables lack removed, a comment header and
+    a showInIntelTab stub value added as faction_copy_without does. Returns (bytes, ids dropped)."""
+    text = source.decode("utf-8-sig")
+    newline = "\r\n" if "\r\n" in text else "\n"
+    kept, kind, dropped = [], None, 0
+    for line in text.split(newline):
+        opened = _ARRAY_OPEN.match(line)
+        if opened:
+            kind = opened.group(1)
+        elif kind and re.match(r"^\s*\]", line):
+            kind = None
+        elif kind in tables and (item := _ARRAY_ITEM.match(line)) and item.group(1) not in tables[kind]:
+            dropped += 1
+            continue
+        kept.append(line)
+    insert_at = next(i for i, line in enumerate(kept) if line.strip().startswith("{")) + 1
+    added = ["# " + line for line in header]
+    existing = [i for i, line in enumerate(kept) if re.match(r'^\s*"showInIntelTab"\s*:', line)]
+    if hidden_stub_value is not None:
+        value = "true" if hidden_stub_value else "false"
+        if existing:
+            indent = re.match(r"^\s*", kept[existing[0]]).group(0)
+            kept[existing[0]] = indent + '"showInIntelTab":' + value + ","
+        else:
+            added.append('\t"showInIntelTab":' + value + ",")
+    kept[insert_at:insert_at] = added
+    return newline.join(kept).encode("utf-8"), dropped
+
+
+
+# ---- vanilla world generation in a total conversion ---------------------------------------------------------------------
+# RC8's CoreLifecyclePluginImpl builds vanilla worlds on every new game and game load: onNewGame() the Tri-Tachyon black site,
+# Limbo and the gate hauler; onGameLoad() Limbo, the gate hauler and Nameless Rock (with a derelict Onslaught); and the
+# faction check names core-world markets. With the hull list replaced those fleet members have no hull:
+# NullPointerException 'HullVariantSpec.clone() because this.variant is null' (Ironclads GRP10P and GRP10T-20261005; javap of
+# RC8's CoreLifecyclePluginImpl.onGameLoad). Vacuum solved the same trap with a coreLifecyclePlugin subclass.
+LIFECYCLE_PLUGIN_TEMPLATE = '''package data.scripts.plugins;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+
+import com.fs.starfarer.api.EveryFrameScript;
+import com.fs.starfarer.api.Global;
+import com.fs.starfarer.api.campaign.SectorAPI;
+import com.fs.starfarer.api.impl.campaign.CoreLifecyclePluginImpl;
+import com.fs.starfarer.api.impl.campaign.CoreRuleTokenReplacementGeneratorImpl;
+
+/**
+ * Written by BridgeForge (conversion-vanilla-lifecycle-plugin). RC8's CoreLifecyclePluginImpl builds vanilla world content
+ * at every new game and game load (black site, Limbo, gate hauler, Nameless Rock) with vanilla fleets; this mod replaces the
+ * hull list, so those fleet members have no hull and New Game stops with a NullPointerException. This subclass skips that
+ * content and keeps vanilla's other load steps (javap of RC8's onGameLoad): economy restore, rule token generator, junk,
+ * scripts, faction check and skill conversion. It also removes the core-world route managers. Loose script (Janino): no
+ * generics, no lambdas.
+ */
+public class %(class_name)s extends CoreLifecyclePluginImpl {
+
+    private static final Set CORE_WORLD_SCRIPTS = new HashSet(Arrays.asList(new String[] {
+            "MiscFleetRouteManager",
+            "PilgrimageFleetRouteManager",
+            "PersonalFleetOxanaHyder",
+            "PersonalFleetHoracioCaden",
+            "SDFHegemony",
+            "SDFTriTachyon",
+            "SDFLuddicChurch",
+            "SDFLeague",
+            "StrandedGiveTJScript"}));
+
+    public void onGameLoad(boolean newGame) {
+        econPostSaveRestore();
+        Global.getSector().getRules().addTokenReplacementGenerator(new CoreRuleTokenReplacementGeneratorImpl());
+        if (!newGame) {
+            addJunk();
+            regenAsteroids();
+        }
+        addScriptsIfNeeded();
+        verifyFactionData();
+        convertTo0951aSkillSystemIfNeeded();
+    }
+
+    public void onNewGame() {
+    }
+
+    public void onNewGameAfterTimePass() {
+    }
+
+    public void markStoryCriticalMarketsEtc() {
+    }
+
+    public void tagLuddicShrines() {
+    }
+
+    protected void addScriptsIfNeeded() {
+        super.addScriptsIfNeeded();
+        SectorAPI sector = Global.getSector();
+        List scripts = new ArrayList(sector.getScripts());
+        Iterator it = scripts.iterator();
+        while (it.hasNext()) {
+            EveryFrameScript script = (EveryFrameScript) it.next();
+            if (CORE_WORLD_SCRIPTS.contains(script.getClass().getSimpleName())) {
+                sector.removeScript(script);
+            }
+        }
+    }
+}
+'''
+
+
+def lifecycle_plugin_class_name(root: Path) -> str:
+    info = _load_lenient_json_file(Path(root) / "mod_info.json")
+    mod_id = info.get("id") if isinstance(info, dict) and isinstance(info.get("id"), str) else Path(root).name
+    words = [w for w in re.split(r"[^A-Za-z0-9]+", mod_id) if w]
+    return "".join(w[:1].upper() + w[1:] for w in words) + "CoreLifecyclePlugin"
+
+
+def lifecycle_plugin_missing(root: Path) -> bool:
+    """The mod replaces data/hulls/ship_data.csv but its settings.json names no plugins.coreLifecyclePlugin."""
+    root = Path(root)
+    if REPLACED_HULLS not in replace_list(root):
+        return False
+    settings = _load_lenient_json_file(root / "data" / "config" / "settings.json")
+    plugins = settings.get("plugins") if isinstance(settings, dict) else None
+    return not (isinstance(plugins, dict) and isinstance(plugins.get("coreLifecyclePlugin"), str) and plugins["coreLifecyclePlugin"].strip())
+
+
+def scan_lifecycle_plugin_missing(root: Path, result: ScanResult) -> None:
+    if not lifecycle_plugin_missing(root):
+        return
+    result.add(
+        id="conversion-vanilla-lifecycle-plugin",
+        category="campaign",
+        severity="high",
+        classification="REVIEW",
+        confidence="HIGH",
+        explanation="This mod replaces data/hulls/ship_data.csv but sets no plugins.coreLifecyclePlugin in data/config/settings.json. RC8's "
+                    "CoreLifecyclePluginImpl then builds vanilla worlds (Tri-Tachyon black site, Limbo, gate hauler, Nameless Rock) with "
+                    "vanilla fleets whose hulls the mod removed, and New Game stops with a NullPointerException ('HullVariantSpec.clone() "
+                    "because this.variant is null', Ironclads GRP10P/GRP10T-20261005; Vacuum solved it with a coreLifecyclePlugin "
+                    "subclass). `fix` writes a Janino-safe subclass that skips that content and registers it. The sector then lacks those "
+                    "vanilla locations: a content decision, so review it.",
+        file="data/config/settings.json",
+        evidence=["replaces:data/hulls/ship_data.csv", "plugins.coreLifecyclePlugin:absent"],
+    )
+
+
+def add_core_lifecycle_plugin_setting(text: str, class_path: str) -> str:
+    """Add `"coreLifecyclePlugin":"<class_path>"` to settings.json's `plugins` block (created if absent), keeping the text."""
+    entry = '"coreLifecyclePlugin":"%s",' % class_path
+    block = re.search(r'"plugins"\s*:\s*\{', text)
+    if block:
+        return text[:block.end()] + "\n\t\t" + entry + text[block.end():]
+    brace = text.rindex("}")
+    body = text[:brace].rstrip()
+    separator = "" if body.endswith(("{", ",")) else ","
+    return body + separator + '\n\t"plugins":{\n\t\t' + entry + "\n\t},\n" + text[brace:]
+
+
 def factions_csv_relists_neutral(root: Path, vanilla_core: Path | None) -> bool:
     """The mod's factions.csv lists vanilla's neutral.faction again. Ironclads GRP10D-20261005 (neutral, player, pirates and
     independent relisted) loaded hegemony first and died with a NullPointerException in the Faction class (its hard-coded

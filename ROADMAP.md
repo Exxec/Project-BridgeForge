@@ -1781,6 +1781,13 @@ Progression, each stage feeding the next:
     - 55h. **Done.** `ship-data-supplies-legacy-column` (tier auto) adds `supplies/rec` and `supplies/mo` as `supplies/day` times 3.0 (frigate), 2.0
       (destroyer), 2.65 (cruiser), 2.67 (capital); reproduces SEEKER's values. Applied to Batavia, Firestorm Federation, Ironclads, Qualljom and
       Renis Imperium, which had no supplies/rec at all. Still open: Zorg18-old-rebuild and the archived Zorg18 (locked; needs `+bf.N`).
+    - 55i. **Done 2026-10-05.** Ironclads (group 10) passed live as GRP10Y after eleven more fixes; checks and fixers from them:
+      `conversion-faction-names-missing-content` (tier input; vanilla factions listing hulls/fighters/weapons a replaced table removed),
+      `conversion-vanilla-lifecycle-plugin` (tier input; writes a coreLifecyclePlugin subclass, Janino-compiled in the test),
+      `star-type-undefined` (tier decision; 0.7 star_red/star_blue that RC8 renamed). The probe is 0.2.15: a faction whose cheapest hull
+      costs more than the 60-point test patrol is skipped, and body types in a sector without Corvus are information, not a leak.
+      Tests: tests/test_conversion_checks.py, tests/test_total_conversion_scans.py (also covers the skill-effect-script check).
+      Still open: Ironclads' Done/ archive needs 98 audit-explain entries (not live testing).
 
 ## P15: Unattended revival with verified AI escalation (planned 2026-09-26)
 

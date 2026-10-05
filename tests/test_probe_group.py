@@ -448,3 +448,31 @@ class InstallHygieneTests(unittest.TestCase):
             (root / "mods" / "lib" / "src").mkdir()
             result = install_group(plan, 1, queue, rig, install_probe=False)
         self.assertEqual(result["incomplete_providers"], [{"mod_id": "lib", "folder": "lib", "missing": ["IndEvo"]}])
+
+
+class ProbeMissionInReplacingMemberTests(unittest.TestCase):
+    def test_probe_row_is_appended_to_a_member_that_replaces_the_mission_list(self) -> None:
+        # Ironclads replaces data/missions/mission_list.csv, so the probe mission never showed (GRP10N-20261005)
+        from bridgeforge.probe_group import _add_probe_mission_to_replacing_members
+
+        crlf = b"\r\n"
+        with resolved_temp_dir() as root:
+            rig = root / "rig"
+            (rig / "mods" / "bridgeforge-probe" / "data" / "missions").mkdir(parents=True)
+            (rig / "mods" / "bridgeforge-probe" / "data" / "missions" / "mission_list.csv").write_text("mission,\nbfprobe_combat,\n", encoding="utf-8")
+            conv = rig / "mods" / "Conv"
+            (conv / "data" / "missions").mkdir(parents=True)
+            (conv / "mod_info.json").write_text(json.dumps({"id": "conv", "replace": ["data/missions/mission_list.csv"]}), encoding="utf-8")
+            (conv / "data" / "missions" / "mission_list.csv").write_bytes(b"mission" + crlf + b"conv_one" + crlf)
+            plain = rig / "mods" / "Plain"
+            (plain / "data" / "missions").mkdir(parents=True)
+            (plain / "mod_info.json").write_text(json.dumps({"id": "plain"}), encoding="utf-8")
+            (plain / "data" / "missions" / "mission_list.csv").write_bytes(b"mission" + crlf)
+            first = _add_probe_mission_to_replacing_members(rig, {"conv": conv, "plain": plain})
+            second = _add_probe_mission_to_replacing_members(rig, {"conv": conv, "plain": plain})
+            conv_text = (conv / "data" / "missions" / "mission_list.csv").read_bytes()
+            plain_text = (plain / "data" / "missions" / "mission_list.csv").read_bytes()
+        self.assertEqual(first, ["Conv"])
+        self.assertEqual(second, [])
+        self.assertEqual(conv_text, b"mission" + crlf + b"conv_one" + crlf + b"bfprobe_combat," + crlf)
+        self.assertEqual(plain_text, b"mission" + crlf)

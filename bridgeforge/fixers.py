@@ -61,9 +61,13 @@ SUPPORTED_FINDINGS = (
     "json-duplicate-key",
     "dependency-version-major-mismatch",
     "conversion-faction-names-removed-hull",
+    "conversion-faction-names-missing-content",
+    "conversion-vanilla-lifecycle-plugin",
     "factions-csv-relists-neutral",
     "vanilla-path-shadowing",
     "ship-data-supplies-legacy-column",
+    "rules-csv-duplicate-id",
+    "rules-csv-whitespace-only-line",
     "faction-trait-weight-legacy-personality-id",
     "shiproles-wing-id",
     "csv-fullwidth-number",
@@ -2154,6 +2158,88 @@ def _fix_conversion_faction_names_removed_hull(root: Path, options: dict) -> lis
     return changes
 
 
+def _fix_conversion_faction_names_missing_content(root: Path, options: dict) -> list[FileChange]:
+    """Replace each vanilla faction file that lists hulls, fighters or weapons the mod's replaced tables removed with a copy
+    lacking those ids, and list the copies in mod_info.json `replace` (Ironclads, GRP10U/GRP10V 2026-10-05; see
+    bridgeforge.conversion_checks). Copies come from --vanilla-core (read only). A mod overlay that holds more than a
+    showInIntelTab stub is left for the owner."""
+    import textwrap
+
+    from . import conversion_checks as cc
+
+    vanilla_core = options.get("vanilla_core")
+    if not vanilla_core:
+        raise FixerError("--vanilla-core is required for conversion-faction-names-missing-content.")
+    vanilla_core = Path(vanilla_core).expanduser().resolve()
+    hits = cc.factions_naming_missing_content(root, vanilla_core)
+    if not hits:
+        raise FixerError("No faction file lists a hull, fighter or weapon the mod's replaced tables removed.")
+    tables = cc.replaced_table_ids(root)
+    replaced = cc.replace_list(root)
+    changes, listed, refused = [], [], []
+    for name, kinds in sorted(hits.items()):
+        usable, hidden = cc.stub_value(root, name)
+        if not usable:
+            refused.append(f"{name} (the mod's own file holds more than a showInIntelTab stub)")
+            continue
+        relative = (cc.FACTION_DIR / name).as_posix()
+        mine = root / cc.FACTION_DIR / name
+        source = mine if relative.lower() in replaced and mine.is_file() else vanilla_core / "data" / "world" / "factions" / name
+        header = textwrap.wrap(f"BridgeForge: RC8's own {name}, REPLACED (mod_info replace) without the "
+                               + ", ".join(f"{sum(len(ids) for k, ids in kinds.items() if k == kind)} {kind}" for kind in sorted(kinds))
+                               + " this mod's replaced tables removed: RC8 checks every id a faction knows when a game loads "
+                               "(conversion-faction-names-missing-content).", 110)
+        after, _dropped = cc.faction_copy_without_content(source.read_bytes(), tables, header, hidden)
+        before = mine.read_bytes() if mine.is_file() else b""
+        changes.append(FileChange(path=mine, before=before, after=after, existed_before=mine.is_file()))
+        if relative.lower() not in replaced:
+            listed.append(relative)
+    if not changes:
+        raise FixerError("Nothing written: " + "; ".join(refused))
+    if listed:
+        info = root / "mod_info.json"
+        raw = info.read_bytes()
+        text, had_bom = _decode(raw)
+        try:
+            new_text = cc.add_replace_entries(text, listed)
+            _parse_json(new_text)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise FixerError(f"Could not add the files to mod_info.json replace: {exc}") from exc
+        changes.append(FileChange(path=info, before=raw, after=_encode(new_text, had_bom)))
+    return changes
+
+
+def _fix_conversion_vanilla_lifecycle_plugin(root: Path, options: dict) -> list[FileChange]:
+    """Write a coreLifecyclePlugin subclass that skips RC8's vanilla world generation and register it in settings.json
+    (Ironclads, GRP10P/GRP10T-20261005; see bridgeforge.conversion_checks). Nothing is read from the game install."""
+    from . import conversion_checks as cc
+
+    if not cc.lifecycle_plugin_missing(root):
+        raise FixerError("This mod does not replace ship_data.csv, or already sets plugins.coreLifecyclePlugin.")
+    class_name = cc.lifecycle_plugin_class_name(root)
+    source = root / "data" / "scripts" / "plugins" / f"{class_name}.java"
+    if source.exists():
+        raise FixerError(f"{_relative_path(root, source)} already exists; register it in settings.json by hand.")
+    class_path = f"data.scripts.plugins.{class_name}"
+    settings = root / "data" / "config" / "settings.json"
+    changes = [FileChange(path=source, before=b"", after=(cc.LIFECYCLE_PLUGIN_TEMPLATE % {"class_name": class_name}).encode("utf-8"),
+                          existed_before=False)]
+    if settings.is_file():
+        raw = settings.read_bytes()
+        text, had_bom = _decode(raw)
+        new_text = cc.add_core_lifecycle_plugin_setting(text, class_path)
+        after = _encode(new_text, had_bom)
+    else:
+        raw, new_text = b"", '{\n\t"plugins":{\n\t\t"coreLifecyclePlugin":"%s",\n\t},\n}\n' % class_path
+        after = new_text.encode("utf-8")
+    try:
+        _parse_json(new_text)
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise FixerError(f"Could not add the plugin to settings.json: {exc}") from exc
+    changes.append(FileChange(path=settings, before=raw, after=after, existed_before=settings.is_file()))
+    return changes
+
+
 def _fix_factions_csv_relists_neutral(root: Path, options: dict) -> list[FileChange]:
     """Remove the neutral.faction row from the mod's factions.csv (Ironclads, GRP10D-20261005)."""
     from . import conversion_checks as cc
@@ -2261,6 +2347,53 @@ def _fix_ship_data_supplies_legacy_column(root: Path, options: dict) -> list[Fil
     buffer = io.StringIO()
     csv_module.writer(buffer, lineterminator=newline).writerows(out_rows)
     return [FileChange(path=path, before=raw, after=_encode(buffer.getvalue(), had_bom))]
+
+
+def _fix_rules_csv_duplicate_id(root: Path, options: dict) -> list[FileChange]:
+    """Rename each later copy of a repeated rules.csv id to <id>_2, <id>_3 (RC8 'Duplicate key', Ironclads GRP10J-20261005),
+    editing only the id cell so every other byte of the file stays."""
+    from .scanner import _csv_first_cells, _rules_duplicate_id_cells
+
+    path = root / "data" / "campaign" / "rules.csv"
+    if not path.is_file():
+        raise FixerError("No data/campaign/rules.csv in this mod.")
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    repeats = _rules_duplicate_id_cells(text)
+    if not repeats:
+        raise FixerError("No repeated rules.csv id found.")
+    taken = {value.strip() for _s, _e, value, _q in _csv_first_cells(text)}
+    renames = []
+    for start, end, key, quoted, number in repeats:  # names in reading order, edits from the end so offsets hold
+        while f"{key}_{number}" in taken:
+            number += 1
+        new_id = f"{key}_{number}"
+        taken.add(new_id)
+        renames.append((start, end, f'"{new_id}"' if quoted else new_id))
+    new_text = text
+    for start, end, replacement in reversed(renames):
+        new_text = new_text[:start] + replacement + new_text[end:]
+    return [FileChange(path=path, before=raw, after=_encode(new_text, had_bom))]
+
+
+def _fix_rules_csv_whitespace_only_line(root: Path, options: dict) -> list[FileChange]:
+    """Empty the whitespace-only lines of rules.csv conditions/script cells (RC8 'No tokens found in string: []', Ironclads
+    GRP10K-20261005). Only those cells change; the rest of the file keeps its bytes."""
+    from .scanner import _rules_whitespace_only_line_cells
+
+    path = root / "data" / "campaign" / "rules.csv"
+    if not path.is_file():
+        raise FixerError("No data/campaign/rules.csv in this mod.")
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    cells = _rules_whitespace_only_line_cells(text)
+    if not cells:
+        raise FixerError("No whitespace-only line in a rules.csv conditions or script cell.")
+    new_text = text
+    for start, end, _name, value in reversed(cells):
+        cell = '"' + value.replace('"', '""') + '"' if text[start] == '"' else value
+        new_text = new_text[:start] + cell + new_text[end:]
+    return [FileChange(path=path, before=raw, after=_encode(new_text, had_bom))]
 
 
 def _fix_person_names_duplicate_row(root: Path, options: dict) -> list[FileChange]:
@@ -3456,9 +3589,13 @@ _FIXER_FUNCS = {
     "json-duplicate-key": _fix_json_duplicate_key,
     "dependency-version-major-mismatch": _fix_dependency_version_major_mismatch,
     "conversion-faction-names-removed-hull": _fix_conversion_faction_names_removed_hull,
+    "conversion-faction-names-missing-content": _fix_conversion_faction_names_missing_content,
+    "conversion-vanilla-lifecycle-plugin": _fix_conversion_vanilla_lifecycle_plugin,
     "factions-csv-relists-neutral": _fix_factions_csv_relists_neutral,
     "vanilla-path-shadowing": _fix_vanilla_path_shadowing,
     "ship-data-supplies-legacy-column": _fix_ship_data_supplies_legacy_column,
+    "rules-csv-duplicate-id": _fix_rules_csv_duplicate_id,
+    "rules-csv-whitespace-only-line": _fix_rules_csv_whitespace_only_line,
     "rc8-signature-changed": _fix_rc8_signature_changed,
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
     "shiproles-wing-id": _fix_shiproles_wing_id,
