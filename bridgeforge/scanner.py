@@ -5373,7 +5373,10 @@ def _scan_temporary_market_fleet_source(root: Path, result: ScanResult) -> None:
                 for name in archive.namelist():
                     if name.endswith(".class"):
                         data = archive.read(name)
-                        if b"createMarket" in data and b"removeMarket" in data and b"FleetParamsV3" in data:
+                        # A class that also calls addMarket may remove a market it registered (Omega-Trauma's
+                        # IIRT_Omega_Invasion removes a planet's real market; 2026-10-04): not this pattern.
+                        if (b"createMarket" in data and b"removeMarket" in data and b"FleetParamsV3" in data
+                                and b"addMarket" not in data):
                             hits.append((f"{_relative(root, jar)}!{name}", "jar"))
         except (OSError, zipfile.BadZipFile):
             continue

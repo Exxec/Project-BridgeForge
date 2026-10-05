@@ -29,6 +29,10 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Adjusted Sector** 0.7.1+bf.1: revived for RC8 and archived (ready for live test)
 - **Omega-Trauma [BF r1]** 0.1.1+bf.2: IIRT_Nor knows the iirt_all_bp hulls (its own tag matched none) and iirt_sd_10 weapons carry iirt_sd_bp, so IIRT_Army knows them
 - **Omega-Trauma [BF r1]** 0.1.1+bf.2: revived for RC8 and archived (ready for live test)
+- **Fuel Siphoning** 1.2.2+bf.1: Drops the author's 'Change Log.url' web shortcut from the shipped copy
+- **Fuel Siphoning** 1.2.2+bf.1: revived for RC8 and archived (ready for live test)
+- **Faction Relationships Uniquified** 0.1.1+bf.1: Data/ renamed data/ (case-sensitive systems never found rules.csv; the zip held both spellings)
+- **Faction Relationships Uniquified** 0.1.1+bf.1: revived for RC8 and archived (ready for live test)
 
 ## 2026-10-03
 

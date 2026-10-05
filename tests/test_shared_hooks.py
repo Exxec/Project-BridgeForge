@@ -56,6 +56,7 @@ class SharedHookTests(unittest.TestCase):
         with zipfile.ZipFile(self.mod / "jars" / "m.jar", "w") as jar:
             jar.writestr("data/A.class", b"createMarket FleetParamsV3 removeMarket")
             jar.writestr("data/B.class", b"createMarket FleetParamsV3")
+            jar.writestr("data/C.class", b"createMarket FleetParamsV3 removeMarket addMarket")  # Omega-Trauma's shape
         found = sorted(f.file for f in scan_mod(self.mod, vanilla_core=self.core).findings
                        if f.id == "temporary-market-fleet-source")
         self.assertEqual(found, ["data/scripts/Spawner.java", "jars/m.jar!data/A.class"])

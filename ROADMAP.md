@@ -2741,7 +2741,31 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         handles `source = null` itself). **Done:** `industry-plugin-override` (names the AoTD mod when it is one of the
         six), `new-game-plugin-override`, `temporary-market-fleet-source`, all REVIEW; `done-audit` lists them as
         compatibility risks without changing an archive's status; compatibility sections in the DNEEP, Adjusted Sector
-        and Slightly Better Tech Mining archive notes. Test: `tests/test_shared_hooks.py`.
+        and Slightly Better Tech Mining archive notes. Test: `tests/test_shared_hooks.py`. Fixer (tier auto) for
+        `temporary-market-fleet-source`: drops `removeMarket` of a market that never entered the economy (RC8-22).
+    39. [ ] **Population-delta fixer** (owner request 2026-10-04): an industries.csv override of a vanilla industry
+        whose class is RC8's source plus added `demand()`/`supply()` calls and stability effects becomes a market
+        condition adding them through `Industry.getDemand/getSupply` (RC8's ResourceDepositsCondition pattern); any
+        other change is MANUAL. Proven first by hand on DNEEP (`PopulationNeedsDNEEP`) with AoTD on the rig.
+    40. [ ] **Crew-tier mapper** (Ironclads, 2026-10-04): `CargoAPI.CrewXPLevel` (removed in RC8) -> one crew; reads of
+        REGULAR become `getCrew()`, other tiers 0 (tier sums stay right), add/removeCrew drop the tier. Owner decision
+        "one crew". Done by hand in 5 Ironclads files.
+    41. [ ] **Signature rewrites with exact RC8 equivalents** (Ironclads, javap 2026-10-04): `EconomyAPI.addMarket(m)`
+        -> `addMarket(m, true)` (vanilla passes true); `TileParams(..., 7 args)` -> RC8's 8th `name` argument;
+        `RepActionEnvelope(action, param, CommMessageAPI, boolean)` -> `(action, param, message, null, boolean)`;
+        `MarketAPI.addCondition(id, boolean, Object)` -> `addCondition(id, Object)`.
+    42. [ ] **Replaced core file drops RC8 rows** (check): a `replace` entry for an RC8 CSV the mod does not fully
+        restate (Ironclads replaced commodities.csv and market_conditions.csv, losing `crew`, AI cores and every
+        deposit condition RC8's own code adds). Nothing flagged it.
+    43. [ ] **Bundled copy of a retired vanilla class** (check): a mod class in a `com.fs.starfarer.api` package that
+        RC8 no longer ships and nothing in the mod starts (Ironclads' `SystemBountyEvent` was vanilla 0.7.2's,
+        unchanged; RC8 replaced it with SystemBountyIntel). `vanilla-duplicated-classes` compares only against
+        classes RC8 still has.
+    44. [ ] **Whole-jar rebuild command**: decompile (Vineflower) -> source tree -> javac --release 17 against RC8 ->
+        jar, with a class diff against the original (Ironclads' IroncladsEcon.jar was rebuilt by hand).
+    45. [ ] **0.7 economy translators** (decision tier, once a second 0.7 economy mod arrives): Ironclads'
+        `IroncladsMarkets` condition->industry table and its commodity-row conversion (nearest RC8 analogue's
+        0.7->RC8 price ratio and RC8-only columns), generalised.
     21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
         escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
         edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next
