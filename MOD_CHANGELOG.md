@@ -7,6 +7,8 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.8: Avesta Station now sits in a star system and hops between systems (VRI Arkship style) instead of flying through hyperspace; fixes Nexerelin RaidIntel.getETA NPE (null star system) when a faction raids Avesta. Older saves are migrated on load. Live-tested 2026-10-06: three hops, no errors; no raid on Avesta occurred.
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.8: revived for RC8 and archived (ready for live test)
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.8: revived for RC8 and archived (live validated)
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.9: Exipirated fleets can now field the faction's own ships: its 17 variants are in the ship roles (they were in none, so its patrols came out empty). Not yet live-tested.
+- **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.9: revived for RC8 and archived (live validated)
 
 ## 2026-10-05
 

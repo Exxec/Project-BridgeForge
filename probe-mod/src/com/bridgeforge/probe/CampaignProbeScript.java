@@ -441,6 +441,14 @@ public class CampaignProbeScript implements EveryFrameScript {
         }
         ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
                 "knownShips=" + faction.getKnownShips().size() + "; variants per role: " + roles.toString().trim());
+        // 0.2.19: name the variants and the known hulls, so a one-variant role table can be traced to its source file.
+        for (String role : new String[] {"combatSmall", "combatMedium", "combatLarge", "fastAttack", "carrierMedium"}) {
+            Set<String> variants = faction.getVariantsForRole(role);
+            ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                    "role " + role + " variants: " + (variants == null ? "none" : variants.toString()));
+        }
+        ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                "known ships: " + new java.util.TreeSet<String>(faction.getKnownShips()).toString());
         MarketAPI own = null;
         for (MarketAPI market : Global.getSector().getEconomy().getMarketsCopy()) {
             if (factionId.equals(market.getFactionId())) {
