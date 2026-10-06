@@ -1789,6 +1789,9 @@ Progression, each stage feeding the next:
       Tests: tests/test_conversion_checks.py, tests/test_total_conversion_scans.py (also covers the skill-effect-script check).
       Still open: Ironclads' Done/ archive needs 98 audit-explain entries (not live testing).
 
+56. **Exigency's Avesta hopped between systems instead of flying through hyperspace (owner crash log 2026-10-06).** **Done 2026-10-06; live run AVESTA-HOP-1 passed (owner accepted).** Nexerelin's raid intel threw `NullPointerException` in `RaidIntel.getETA` for Avesta, whose market sat in hyperspace (no star system); the entity is now in a star system and relocates like VRI's Arkship. Exigency 0.8 is +bf.8, re-archived; the old 0.7.2 workspace is left as it was. Evidence: javap of `RaidIntel` (field `system`, `getETA`) and Nexerelin 0.12.2d's `OffensiveFleetIntel` constructor (`target.getStarSystem()`). Details in the mod's REVIVAL_REPORT. No scanner check yet: a market whose primary entity is in hyperspace is a possible new finding (a candidate if a second mod shows it). Live: Avesta orbited and hopped three times, no exception; no raid on Avesta happened, so the original crash path was not exercised.
+57. **Capacity-overage evidence run (owner report 2026-10-06; for VoidSmith's Save Workshop, S5).** **Open, needs the rig and a live session.** Owner reports that carrying more than capacity slows the fleet if the limit is weight based and raises supplies per day; the formula is unknown. Run on a throwaway save with `probe-config --setup` lines (credits, cargo style setups) at, below and above capacity for cargo, fuel and crew, on at least three different fleets; record quantities, observed fleet speed and daily supplies use, the game version and the procedure. Also record whether the capacity figures stored in a save's cargo container are written at save time or derived later (observed attributes on the container: max cargo, space used, max fuel, max personnel). Done when `docs/RC8_BEHAVIOUR.md` has dated rows with the method, or the observations show no rule; VoidSmith's `docs/SAVE_WORKSHOP_IMPLEMENTATION_PLAN.md` then cites the row ids. Add a `docs/LOCAL_HANDOFF.md` entry only if the run cannot be done in the same session.
+
 ## P15: Unattended revival with verified AI escalation (planned 2026-09-26)
 
 Owner goal (2026-09-26): not to remove AI from revivals but to reduce what reaches it and make what
@@ -3114,7 +3117,14 @@ crash-log work. Proposal, growth order and owner decisions:
 3. [ ] Fix on a copy: plan, write the copy, re-read it, then load-test it in the rig. Original saves are never
    overwritten.
 4. [ ] Editor, validated against RC8 registries (skills RC8-18, market conditions RC8-16, weapon slots RC8-17, ids).
-5. [ ] Trainer: offline presets on a save copy, through the editor's validation and the rig-load gate.
+   **Moved to VoidSmith (owner, 2026-10-06);** Salvor stays a lightweight save rescue (diagnose and repair a copy). First scope:
+   minor edits to the current state (credits, supplies, fuel, crew, marines, machinery, story points), then fleet repair
+   state, then blueprints, members and relations. Blocked on a VoidSmith charter decision (it is read-only and its
+   campaign-save parsing is decision-gated); capacity behaviour above cargo limits needs live evidence first.
+   Design: [docs/SAVE_TOOL_PROPOSAL.md](docs/SAVE_TOOL_PROPOSAL.md), revision 2026-10-06; VoidSmith side recorded as its phase 57
+   (`docs/SAVE_WORKSHOP_DESIGN.md`, design only). Overage effects (slower fleet, more supplies per day, formula unknown) need a
+   controlled rig run before any rule is written down.
+5. [ ] Trainer: offline presets on a save copy, through the editor's validation and the rig-load gate (follows the editor, in VoidSmith).
 
 ## Sister repository interoperability (proposed 2026-09-27)
 

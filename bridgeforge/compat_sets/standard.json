@@ -123,6 +123,14 @@
           "gameVersion": "0.98a",
           "required_by": [],
           "notes": "Widely used ship-pack content mod; depends on LazyLib and MagicLib."
+        },
+        "speedUp": {
+          "name": "SpeedUp",
+          "folder_hint": "SpeedUp",
+          "role": "tool",
+          "gameVersion": "0.98a-RC7",
+          "required_by": [],
+          "notes": "Owner request 2026-10-06: hold Caps Lock or the middle mouse button to speed time up in live tests. Utility mod with no content; probe-group install and bf-test enable it when the rig has it."
         }
       }
     }

@@ -94,6 +94,40 @@ Treat it as its own project with its own live-test gates; it is not a Salvor fea
 
 Still open: when to start. BridgeForge's live queue comes first.
 
+## Revision (owner, 2026-10-06): Salvor stays a save rescue; the editor goes to VoidSmith
+
+Salvor is now **lightweight save rescue**: diagnose a save and repair a copy (stages 1 and 2 above; v0.1 `repair`
+exists in `Documents/Project Salvor`). It will not grow an editor or trainer. Editing moves to **VoidSmith**
+(`Documents/Starsector project forge`), which already has the GUI, the ship, hull and weapon registries, and the
+legality rules an editor needs to validate against.
+
+The editor's scope now starts with **minor edits to the player's current state**:
+
+| Tier | Edits | Check before writing |
+|---|---|---|
+| 1 (first) | credits; cargo commodities in the player fleet (supplies, fuel, crew, marines, heavy machinery); story points | quantity is a non-negative whole number; commodity id exists (RC8 `commodities.csv`); capacity behaviour above the cargo/fuel/crew limit is **unproven**, so it needs live evidence (probe, then `RC8_BEHAVIOUR.md`) before the tool allows or refuses it |
+| 2 | fleet member repair state: CR, hull, armour, crew on a member; officer level and skills | skills must be registered (RC8-18); CR in range for the hull |
+| 3 | blueprints known, fleet members added or removed, relations, market conditions and industries | hull, variant and weapon ids and slots (RC8-17), conditions versus industries (RC8-16) |
+| later | offline trainer presets (max credits, full repair, reveal map) | all of the above through the same gate |
+
+Rules that carry over unchanged: never write the original save; plan, then write a copy, then re-read it, then load
+it in the rig before a player trusts it; refuse paths the tool does not recognise.
+
+**VoidSmith side (done 2026-10-06, design only).** VoidSmith is published and read-only, and its roadmap item 56
+kept campaign-save parsing decision-gated. Owner approved the change; VoidSmith now has
+`docs/SAVE_WORKSHOP_DESIGN.md` and roadmap phase 57 (decision-gated, not implemented), with `AGENTS.md` 0.6
+allowing exactly one write: a new copy of a user-selected save below its configured output directory, never the
+original and never the game's saves folder. Nothing is built there until its parser-gate inputs exist.
+BridgeForge provides the read side (`save-*` commands, RC8 behaviour rows) and evidence.
+
+**Capacity overages (owner report, 2026-10-06; unproven).** Carrying more than the fleet's capacity slows the fleet
+if the limit is weight based, and raises supplies per day. The calculation is unknown. Rules: the editor never
+predicts the effect; it refuses over-capacity quantities by default, and allows them only on explicit opt-in with a
+warning. Evidence needed before any rule is written into `RC8_BEHAVIOUR.md`: a controlled rig run that sets cargo,
+fuel and crew at, below and above capacity on a throwaway save, then records fleet speed and daily supplies use
+for each case. A probe setup (`probe-config --setup`) can apply the quantities in game; this is a candidate
+roadmap item for the next live session.
+
 ## Groundwork done (2026-10-02)
 
 `bridgeforge save-doctor SAVE --mods DIR [--vanilla-core DIR]` is the diagnose stage's front door: one read-only
@@ -121,3 +155,10 @@ Ward Franks save, all 134 objects of Doc's Needless Economic Expansion Pack (133
 remover script an industry refers to) are droppable; the two saves with only a missing mod in their descriptor hold
 no objects of it at all, the simplest case. Matching is by exact class name, never package (`data.scripts` is
 shared by many mods).
+
+## Handed to VoidSmith (2026-10-06)
+
+VoidSmith's `docs/SAVE_WORKSHOP_IMPLEMENTATION_PLAN.md` has the module layout, GUI design, build slices and an appendix
+of what BridgeForge's rig and save work taught (observed save structure, rig isolation, window-text capture, snapshot
+discipline, evidence rows, progress and checkpoint rule). BridgeForge's part is the evidence: roadmap item 57 (the
+capacity-overage run) and any `RC8_BEHAVIOUR.md` rows it produces, which VoidSmith's plan cites by id.

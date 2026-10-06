@@ -245,6 +245,19 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(enabled, ["lw_lazylib", "mod_a", "mod_c", "bridgeforge_probe"])
         self.assertEqual(sorted(config["group_members"]), ["mod_a", "mod_c"])
 
+    def test_install_enables_speedup_when_the_rig_has_it(self) -> None:
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            _workspace(queue, "A", "mod_a", "hull_a")
+            rig = _rig(root, "speedUp")
+            core = root / "core_real"
+            core.mkdir()
+            link_dir(core, rig / "starsector-core")
+            plan = plan_groups(queue, rig)
+            install_group(plan, 1, queue, rig, install_probe=False)
+            enabled = json.loads((rig / "mods" / "enabled_mods.json").read_text(encoding="utf-8"))["enabledMods"]
+        self.assertEqual(enabled, ["mod_a", "bridgeforge_probe", "speedUp"])
+
     def test_dependencies_of_dependencies_are_enabled_and_a_missing_one_blocks_the_plan(self) -> None:
         # GRP-SPARKLE (2026-09-27): SPARKLE -> Secrets of the Frontier -> LazyLib, GraphicsLib, LunaLib, MagicLib.
         with resolved_temp_dir() as root:

@@ -8,7 +8,7 @@ group is probed by merging each member's `build_probe_config` output. 66 mods re
   id or a content id (hull, variant, wing, special item) and every member's declared dependencies are in the
   rig. Total conversions always go alone. Anything unplaceable is listed with its reason.
 - `install_group`: copies or syncs each member into the rig (shipped files only), writes the merged config
-  and rig marker, installs the probe, and sets enabled_mods.json (members, their dependencies, the probe).
+  and rig marker, installs the probe, and sets enabled_mods.json (members, their dependencies, the probe, SpeedUp when the rig has it).
 - `group_report`: after a run, attributes each probe FAIL line to the member whose content id it names, and
   each crash to the member whose jar threw (log-triage attribution), giving one verdict per member.
 Refuses to write anywhere but an isolated rig (starsector-core a junction/symlink), like probe-config.
@@ -26,6 +26,9 @@ from .scanner import _load_lenient_json_file
 
 SCHEMA_VERSION = 1
 PROBE_MOD_ID = "bridgeforge_probe"
+# Utility mod for live tests (owner request 2026-10-06): hold caps lock or the middle mouse button to speed the game up.
+# Enabled in every rig that has it installed; it changes nothing unless the key is held.
+SPEEDUP_MOD_ID = "speedUp"
 READY_STATUS = "READY_FOR_LIVE_TEST"
 
 
@@ -530,6 +533,8 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
             if mod_id not in enabled:
                 enabled.append(mod_id)
     enabled.append(PROBE_MOD_ID)
+    if SPEEDUP_MOD_ID in rig_mod_ids(mods_dir) and SPEEDUP_MOD_ID not in enabled:
+        enabled.append(SPEEDUP_MOD_ID)
     enabled_path = mods_dir / "enabled_mods.json"
     backup = enabled_path.with_name("enabled_mods.json.pre-bftest.bak")
     if enabled_path.is_file() and not backup.exists():
