@@ -9,6 +9,19 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.8: revived for RC8 and archived (live validated)
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.9: Exipirated fleets can now field the faction's own ships: its 17 variants are in the ship roles (they were in none, so its patrols came out empty). Not yet live-tested.
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.9: revived for RC8 and archived (live validated)
+- **Kadur Remnant** 3.2.3support6: revived for RC8 and archived (live validated)
+- **(KIND STRANGER) Free Stars Union** 1.2.0: revived for RC8 and archived (live validated)
+- **(KIND STRANGER) Metelson_Industries** 7.3.4: revived for RC8 and archived (live validated)
+- **Yunru's Glinthawk Operations** 0.95.1-2.5.9: revived for RC8 and archived (live validated)
+- **Tritachyon+** 2022-09-30: revived for RC8 and archived (live validated)
+- **Yunru's Hullmods** 2025-03-30: revived for RC8 and archived (live validated)
+- **Yunru's Worlds** 2025-07-06: revived for RC8 and archived (live validated)
+- **Magellan Protectorate** 1.5a: revived for RC8 and archived (live validated)
+- **Stardust Merchant Coalition** 1.1.0: revived for RC8 and archived (live validated)
+- **Sylphon RnD** 1.0: revived for RC8 and archived (live validated)
+- **The Nomads** 1.4.11-rc2: revived for RC8 and archived (live validated)
+- **Pegasus Belt Council** 1.6: revived for RC8 and archived (live validated)
+- **YunruCore** 2025-07-06b: revived for RC8 and archived (live validated)
 
 ## 2026-10-05
 

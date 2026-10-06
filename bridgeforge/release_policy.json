@@ -745,6 +745,51 @@
       "local_only": true,
       "reason": "revived for the owner's local archive (live-validated 2026-10-05); not published without the author's permission (owner decision 2026-09-27)",
       "recorded_on": "2026-10-05"
+    },
+    "kadur_remnant": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-06); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-06"
+    },
+    "Aic": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-06); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-06"
+    },
+    "metelson_release": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-06); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-06"
+    },
+    "yunru_hegemon": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-06); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-06"
+    },
+    "yunru_ttp": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-06); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-06"
+    },
+    "yunruhullmods": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-06); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-06"
+    },
+    "yunruworlds": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-06); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-06"
+    },
+    "nomads": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-06); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-06"
+    },
+    "smc_coalition": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-06); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-06"
     }
   },
   "default": {
