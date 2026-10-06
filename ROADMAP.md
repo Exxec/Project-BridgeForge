@@ -3146,3 +3146,34 @@ Design and acceptance gates: [docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md](docs/
 2. [ ] Consume Project Go localization coverage for an exact mod-root hash; expose uncovered and unknown items without changing source or claiming complete coverage from partial extraction.
 3. [ ] Compare BridgeForge's release evidence fields with VoidSmith and Project Go as a design reference; do not create a shared runtime dependency.
 4. [ ] Consume optional SPW mod inventory with duplicate/disabled identity handling, while preserving BridgeForge's native scan.
+
+## Proposed ideas (2026-10-06, owner asked for per-project ideas; proposed, not approved)
+
+Each idea gives the benefit and where the evidence came from. None is scheduled.
+
+1. [ ] **Rig bring-up in one command (`rig-up`).** Create or refresh a rig, sync its mods from working copies, enable the
+   mods a test needs plus the probe and SpeedUp, write the probe config and run `rig-doctor`. Benefit: the Exigency test needed
+   about ten manual steps (sync, enabled_mods, probe-config, doctor, SpeedUp); one command removes slips such as the
+   `/MIR` path mangling and a stale rig copy.
+2. [ ] **`accept` for a non-group live run.** After a clean run, check the log milestones (main menu, save, no FATAL or
+   MOD-ERROR), append the dated evidence section to the revival report, set LIVE_VALIDATED, and archive. Benefit: this session
+   hand-edited the report status and re-archived by hand; the evidence section would be uniform and checkable.
+3. [ ] **`archive --refresh`.** Replace an existing Done/ folder safely and rebuild its `-with-readme.zip` for that folder
+   only. Benefit: today it means deleting the folder and running a whole-Done script; a mistake could touch other archives.
+4. [ ] **Caught-exception triage.** `log-triage` reported MOD-ERROR=0 on a run whose real risk (Nexerelin's `StrategicAI`
+   logging an NPE and carrying on) is a logged ERROR with a stack trace, not a crash. Attribute each logged stack trace to the
+   mod that owns the top non-vanilla frame and count it per mod. Benefit: finds failures that do not crash, such as the
+   original Avesta error, before a player does.
+5. [ ] **Time-accelerated soak run.** A scenario that lets a campaign run for many in-game months (SpeedUp, or the probe's
+   interval) and then triages the whole log. Benefit: relocation, raids, economy ticks and fleet managers only show up over
+   months; the Avesta hop appeared only after about 60 game days.
+6. [ ] **Raid and invasion scenario mod.** A separate mod, allowed to use Nexerelin classes, that forces a raid at a chosen
+   market. The public-API-only probe cannot. Benefit: turns "raid path unobserved" (item 56) into a test, and covers other
+   target types (no industries, hidden markets).
+7. [ ] **Finish item 58.** Run the live negative control; add a static check for `addMarket` on a hyperspace entity in loose
+   scripts; sweep the corpus for other stations in hyperspace. Benefit: a known crash class found in every mod that has it.
+8. [ ] **Migration packs with revivals.** A revived mod that renames ids or classes ships a local migration pack with its `+bf.N`
+   revision, checked by `save-compat` before archiving. Benefit: the owner's own saves survive revisions; feeds Salvor's Migrate
+   goal.
+9. [ ] **Save-format survey across versions.** Run `save-format-survey` on saves from other game versions when available, to
+   give VoidSmith's Save Workshop the version boundaries its parser gate needs. Benefit: closes the one-version limit of item 59.
