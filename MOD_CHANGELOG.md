@@ -24,6 +24,8 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **YunruCore** 2025-07-06b: revived for RC8 and archived (live validated)
 - **Nightcross Armory [BF r1]** 2.1.4+bf.1: revived for RC8 and archived (live validated)
 - **Omega-Trauma [BF r1]** 0.1.1+bf.2: revived for RC8 and archived (live validated)
+- **Zorg [BF r6]** V18+bf.7: revived for RC8 and archived (live validated)
+- **Zorg** V18+bf.7: supplies/rec and supplies/mo columns added to ship_data.csv (supplies per day times the 0.6.2 to RC8 ratio per hull size), so deployment points are no longer blank; Zorg Zeta relocated to (70000, -40000); live run: new game, one in-game day, all 11 hulls in combat
 
 ## 2026-10-05
 
