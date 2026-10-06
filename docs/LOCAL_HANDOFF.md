@@ -45,6 +45,8 @@ HEAD here: `tests/test_locks.py::test_child_with_cwd_inside_target_is_found` (pr
 6. Not written: a scanner check for an industry or content id that a newer installed library renamed (Tritachyon asked
    for `BOGGLED_AI_STATION`, TASC 10.0.9 calls it `BOGGLED_REMNANT_STATION`; fixed by hand, jar rebuilt).
 7. Gated roadmap items 39 and 45 are unchanged.
+8. **Paused by the owner (2026-10-06): ROADMAP item 60 (60a-60e)**, five proposed automation and gap-coverage entries,
+   nothing started; item 6 above is 60d. Ask the owner which to start; the recommended order is 60a, 60b, 60c, 60d, 60e.
 
 **How a live run works.** Close Starsector first, then from the repo root:
 ```powershell
