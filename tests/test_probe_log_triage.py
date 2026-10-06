@@ -63,3 +63,31 @@ class ProbeLogTriageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MarketStarSystemProbeTests(unittest.TestCase):
+    """`market-star-system` (probe 0.2.16, ROADMAP item 58): a market with no star system crashes Nexerelin raid intel."""
+
+    def test_probe_source_emits_the_check_and_the_version_is_current(self) -> None:
+        root = Path(__file__).resolve().parents[1] / "probe-mod"
+        source = (root / "src/com/bridgeforge/probe/CampaignProbeScript.java").read_text(encoding="utf-8")
+        self.assertIn('runCheck("market-star-system"', source)
+        self.assertIn("RaidIntel.getETA", source)
+        version = (root / "src/com/bridgeforge/probe/ProbeLog.java").read_text(encoding="utf-8")
+        self.assertIn('VERSION = "0.2.16"', version)
+
+    def test_a_fail_line_for_a_market_without_a_star_system_is_flagged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "starsector.log"
+            log.write_text(
+                "\n".join(
+                    [
+                        _log_line(100, "BF-PROBE|0.2.16|market-star-system|FAIL|station_market|entity station in Hyperspace; MarketAPI.getStarSystem() is null"),
+                        _log_line(200, "BF-PROBE|0.2.16|market-star-system|OK|markets|every market has a star system"),
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            probe = triage_log(log)["probe"]
+        self.assertEqual({entry["check"] for entry in probe["flagged"]}, {"market-star-system"})
+        self.assertEqual(probe["counts_by_status"]["FAIL"], 1)

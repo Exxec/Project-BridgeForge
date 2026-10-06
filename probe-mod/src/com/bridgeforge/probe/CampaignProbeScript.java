@@ -194,6 +194,11 @@ public class CampaignProbeScript implements EveryFrameScript {
                 checkFleetPresence();
             }
         });
+        runCheck("market-star-system", new Runnable() {
+            public void run() {
+                checkMarketStarSystems();
+            }
+        });
         runCheck("tracked-entities", new Runnable() {
             public void run() {
                 checkTrackedEntities();
@@ -492,6 +497,37 @@ public class CampaignProbeScript implements EveryFrameScript {
     }
 
     // ---- tracked custom entities -----------------------------------------------------
+
+    // ---- markets with no star system (0.2.16, ROADMAP item 58) -----------------------------------
+    //
+    // Nexerelin builds every raid/invasion intel from MarketAPI.getStarSystem() and hands it to RaidIntel,
+    // whose getETA reads system.getHyperspaceAnchor(). A market whose entity floats in hyperspace has no star
+    // system, so the intel threw NullPointerException (Exigency's Avesta, owner crash log 2026-10-06; javap of
+    // RaidIntel and Nexerelin 0.12.2d's OffensiveFleetIntel). API evidence (javap RC8, 2026-10-06):
+    // MarketAPI.getStarSystem/getPrimaryEntity/getContainingLocation/isHidden, LocationAPI.isHyperspace,
+    // ModManagerAPI.isModEnabled. FAIL when Nexerelin is enabled (the crash needs it), WARN otherwise.
+
+    private void checkMarketStarSystems() {
+        boolean nexerelin = Global.getSettings().getModManager().isModEnabled("nexerelin");
+        int bad = 0;
+        for (MarketAPI market : Global.getSector().getEconomy().getMarketsCopy()) {
+            if (market.getStarSystem() != null) {
+                continue;
+            }
+            SectorEntityToken entity = market.getPrimaryEntity();
+            LocationAPI location = market.getContainingLocation();
+            String where = entity == null ? "no primary entity"
+                    : "entity " + entity.getId() + " in " + (location == null ? "no location" : location.getName());
+            bad++;
+            ProbeLog.emit("market-star-system", nexerelin ? ProbeLog.STATUS_FAIL : ProbeLog.STATUS_WARN, market.getId(),
+                    where + "; MarketAPI.getStarSystem() is null"
+                    + (nexerelin ? ", so a Nexerelin raid or invasion targeting it throws in RaidIntel.getETA"
+                    : "; harmful if Nexerelin is enabled"));
+        }
+        if (bad == 0) {
+            ProbeLog.emit("market-star-system", ProbeLog.STATUS_OK, "markets", "every market has a star system");
+        }
+    }
 
     private void checkTrackedEntities() {
         for (String entityId : config.trackEntities) {

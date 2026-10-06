@@ -59,6 +59,7 @@ from .scenarios import ScenarioError, list_scenarios, scenario_check, scenario_p
 from .save_reader import SaveReadError
 from .save_inspect import audit_scripts, diff_saves, growth_trend, inspect_save, save_provenance
 from .save_content_compat import check_save_content, removal_safety
+from .save_format_survey import survey_saves
 from .save_summary import redacted_summary
 from .test_plan import TestPlanError, plan_tests
 from .spw_bridge import SpwBridgeError, ingest_spw_report, log_spam, perf_gate
@@ -483,6 +484,7 @@ def build_parser() -> argparse.ArgumentParser:
     summary_cmd = _save_tool("save-summary", "write a redacted, shareable save summary with no player data (local file only)", mod_dir="multi")
     summary_cmd.add_argument("--out", required=True, type=Path, help="output JSON path")
     summary_cmd.add_argument("--vanilla-core", type=Path)
+    _save_tool("save-format-survey", "survey where saves keep the player fleet's cargo and credits (structure only, no names or quantities; read-only)", multi_save=True)
     bootstrap_cmd = subcommands.add_parser("bootstrap", help="one-time: write a scan baseline and record the current build manifest for each mod (nothing written inside mods)")
     bootstrap_cmd.add_argument("mod_dirs", nargs="+", type=Path)
     bootstrap_cmd.add_argument("--vanilla-core", required=True, type=Path)
@@ -2924,6 +2926,20 @@ def main(argv: list[str] | None = None) -> int:
         for name, text in result["recovery"].items():
             print(f"  recovery {name}: {text}")
         return 0 if result["verdict"] == "NO_KNOWN_PROBLEM" else 1
+    if args.command == "save-format-survey":
+        try:
+            result = survey_saves(args.saves)
+        except (SaveReadError, ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True, default=str))
+        else:
+            print(f"Surveyed {result['saves_surveyed']} save(s); {result['saves_with_player_cargo']} with player cargo")
+            print(f"  game versions: {result['game_versions']}")
+            print(f"  cargo attributes in every save: {result['cargo_attributes_in_every_save']}")
+            print(f"  credits value present in every save: {result['credits_value_present_in_every_save']}")
+        return 0
     if args.command in {"save-inspect", "save-diff", "save-scripts", "save-growth", "save-provenance", "save-content", "save-removal", "save-summary"}:
         try:
             if args.command == "save-inspect":

@@ -156,6 +156,39 @@ remover script an industry refers to) are droppable; the two saves with only a m
 no objects of it at all, the simplest case. Matching is by exact class name, never package (`data.scripts` is
 shared by many mods).
 
+## Migrate: making a broken save load again (owner goal, 2026-10-06)
+
+Question: if a game or mod update makes a save incompatible, can the save be changed to load? Often, not always, by break type:
+
+| Break | Convertible? |
+|---|---|
+| mod removed or never loaded | yes (Salvor `repair`: drop objects only doomed objects refer to) |
+| class renamed or moved | usually, by a mapping derived from comparing the old and new jars; safe only when 1:1 and evidenced |
+| data id renamed or removed (hull, variant, weapon, hullmod, industry, condition, faction) | often: remap when the new id is known, else substitute or drop (changes the save's contents) |
+| field added | usually, by filling a default; risk is code assuming non-null |
+| field removed or type changed | sometimes; whether the game tolerates a leftover unknown field needs a test |
+| a mod redesigned its stored state | only with a mod-specific migration |
+| the game's own classes or aliases changed | small steps between close builds, maybe; across major versions effectively no |
+
+"Compatible" can only mean the save loads without crashing, proved by a rig load test of the converted copy, never "plays
+identically". Shape: diff the builds; classify each delta SAFE, REVIEW, MANUAL or UNKNOWN with evidence; apply only SAFE
+ones to a copy; rig-load it; keep migration packs as local data.
+
+**Not a public utility.** Packs encode third-party class names, ids and obfuscated game internals (not shippable), go stale
+with every update, cannot guarantee behaviour, and depend on the player's exact mod versions. Salvor stays local-only
+(decision 2026-09-29, reaffirmed 2026-10-06). A public release, if ever wanted, is limited to the safe subset (drop, remove,
+default-fill) with a mapping built at run time from the player's own old and new installs and nothing third-party bundled.
+Roadmap: Salvor entry, item 6.
+
+## Format survey results (2026-10-06, `save-format-survey`)
+
+Over the rig's saves: 77 folders, 74 readable (three are empty folders with no `campaign.xml`), all written by one game
+version, 0.98a-RC8. In all 74 the player fleet's cargo container carries the same attributes (`z`, `uS`, `mC`, `sU`,
+`mF`, `mP`, `fT`: capacity, space-used and fuel/personnel figures among them), holds resource stacks (typically four
+types of resource stack, sometimes plus special-item or weapon stacks), and contains a credits value object.
+Limits: **one game version only**, so the version boundaries VoidSmith's parser gate asks for are not covered, and the
+survey does not show whether the capacity attributes are stored at save time or derived (roadmap item 57).
+
 ## Handed to VoidSmith (2026-10-06)
 
 VoidSmith's `docs/SAVE_WORKSHOP_IMPLEMENTATION_PLAN.md` has the module layout, GUI design, build slices and an appendix
