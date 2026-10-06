@@ -53,7 +53,8 @@ def _final_status(report: Path) -> str | None:
     return report_status(report)
 
 
-def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = None, today: str | None = None) -> dict:
+def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = None, today: str | None = None,
+                refresh: bool = False) -> dict:
     from .substitutes import revival_licence
 
     workspace = Path(workspace).expanduser().resolve()
@@ -67,7 +68,9 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
         raise ArchiveError(f"no licence decision for {mod_id}: record one first (bridgeforge release-policy set {mod_id} --local-only|--releasable --reason ...).")
     target = Path(done_dir).expanduser().resolve() / workspace.name
     if target.exists():
-        raise ArchiveError(f"{target} already exists; archive into a fresh folder or remove it first.")
+        if not refresh:
+            raise ArchiveError(f"{target} already exists; archive into a fresh folder or remove it first (or pass --refresh).")
+        _remove_previous_archive(target, Path(done_dir).expanduser().resolve())
     folder = target / workspace.name
     files = _collect(working)
     for relative, source in files.items():
@@ -123,6 +126,41 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
     return {"schema_version": SCHEMA_VERSION, "mode": "ARCHIVE", "archive": str(target), "files": len(files), "zip": str(zip_path),
             "licence": licence.get("decision"), "status": status, "changed": changed, "added": added,
             "jars_identical": jars_identical, "note": str(target / "ARCHIVE_NOTE.md")}
+
+
+def _remove_previous_archive(target: Path, done_dir: Path) -> None:
+    """Delete one earlier archive so it can be rebuilt (`--refresh`). Only a direct child of the Done folder that holds
+    an ARCHIVE_NOTE.md, so a wrong path can never remove anything else."""
+    if target.parent != done_dir:
+        raise ArchiveError(f"refusing to remove {target}: it is not directly inside {done_dir}.")
+    if not (target / "ARCHIVE_NOTE.md").is_file():
+        raise ArchiveError(f"refusing to remove {target}: it has no ARCHIVE_NOTE.md, so it is not an archive made here.")
+    shutil.rmtree(target)
+
+
+_CONTENTS_SECTION = re.compile(r"(?ms)^## Contents[ \t]*\r?\n.*?(?=^#{1,2} |\Z)")
+
+
+def write_readme_copies(target: Path) -> list[str]:
+    """For each zip in an archive folder, write `<name>-with-readme.zip` holding the same files plus a `readme.txt` taken from
+    ARCHIVE_NOTE.md without its Contents section, and the folder's own `readme.txt`. Replaces what
+    tools/copy-done-archives-with-readme.ps1 did for the whole Done/ tree, for one archive."""
+    target = Path(target)
+    note = (target / "ARCHIVE_NOTE.md").read_text(encoding="utf-8")
+    readme = (_CONTENTS_SECTION.sub("", note).rstrip() + "\r\n").encode("utf-8")
+    (target / "readme.txt").write_bytes(readme)
+    written = []
+    for source in sorted(target.glob("*.zip")):
+        if source.stem.lower().endswith("-with-readme"):
+            continue
+        copy = source.with_name(source.stem + "-with-readme.zip")
+        with zipfile.ZipFile(source) as original, zipfile.ZipFile(copy, "w", zipfile.ZIP_DEFLATED) as out:
+            for item in original.infolist():
+                if item.filename.lower() != "readme.txt":
+                    out.writestr(item, original.read(item.filename))
+            out.writestr("readme.txt", readme)
+        written.append(copy.name)
+    return written
 
 
 def _render_note(info: dict, name: str, version: str, licence: dict, status: str | None, changed: list[str], added: list[str],

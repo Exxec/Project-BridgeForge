@@ -169,6 +169,11 @@ public class CampaignProbeScript implements EveryFrameScript {
 
     private void runAllChecks() {
         ProbeLog.start("campaign");
+        // 0.2.17: a heartbeat of how many campaign days the run has covered, so `bridgeforge soak-report` can tell a
+        // long soak run from a short one (the campaign clock is the only reliable measure; SpeedUp changes how fast
+        // real time passes, not this).
+        ProbeLog.emit("campaign-day", ProbeLog.STATUS_INFO, "clock",
+                "daysSinceStart=" + Global.getSector().getClock().getElapsedDaysSince(startTimestamp));
         runCheck("rings-orbits", new Runnable() {
             public void run() {
                 checkRingsAndOrbits();

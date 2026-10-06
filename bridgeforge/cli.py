@@ -60,6 +60,8 @@ from .save_reader import SaveReadError
 from .save_inspect import audit_scripts, diff_saves, growth_trend, inspect_save, save_provenance
 from .save_content_compat import check_save_content, removal_safety
 from .save_format_survey import survey_saves
+from .live_accept import AcceptError, accept_run
+from .soak_report import soak_report
 from .save_summary import redacted_summary
 from .test_plan import TestPlanError, plan_tests
 from .spw_bridge import SpwBridgeError, ingest_spw_report, log_spam, perf_gate
@@ -443,6 +445,22 @@ def build_parser() -> argparse.ArgumentParser:
     probe_config_cmd.add_argument("--install", action="store_true", help="also install/refresh the probe mod into <runtime>/mods/bridgeforge-probe/ from the release copy")
     probe_config_cmd.add_argument("--dry-run", action="store_true", help="report what would be written without touching the rig")
     probe_config_cmd.add_argument("--json", action="store_true")
+    accept_cmd = subcommands.add_parser("accept", help="record a passing hand-run live test of one workspace: checks the log, writes the dated evidence section and LIVE_VALIDATED to the revival report, and a run record the archive gate reads")
+    accept_cmd.add_argument("workspace", type=Path)
+    accept_cmd.add_argument("--log", required=True, type=Path, help="the run's stdout log")
+    accept_cmd.add_argument("--test-id", required=True)
+    accept_cmd.add_argument("--note", required=True, help="what the owner did and saw")
+    accept_cmd.add_argument("--not-exercised", help="what the run did not cover (for example: no raid on the station happened)")
+    accept_cmd.add_argument("--days", type=float, help="campaign days the run was meant to cover; INCOMPLETE soak is refused")
+    accept_cmd.add_argument("--mods-dir", type=Path, help="the rig's mods/ directory, to attribute errors to mods")
+    accept_cmd.add_argument("--accept-findings", help="reason to accept probe FAIL lines or caught exceptions; written into the report")
+    accept_cmd.add_argument("--record-only", action="store_true", help="write only the run record, not a report section (the report already says it)")
+    accept_cmd.add_argument("--json", action="store_true")
+    soak_cmd = subcommands.add_parser("soak-report", help="judge a long-run campaign session from its log: days covered, FATAL/MOD-ERROR, probe FAILs and caught exceptions (read-only)")
+    soak_cmd.add_argument("log", type=Path)
+    soak_cmd.add_argument("--days", type=float, required=True, help="campaign days the run was meant to cover")
+    soak_cmd.add_argument("--mods-dir", type=Path, help="the rig's mods/ directory, to attribute caught exceptions to mods")
+    soak_cmd.add_argument("--json", action="store_true")
     save_compat_cmd = subcommands.add_parser("save-compat", help="check whether a save's referenced mod classes exist in the build's loaded jars (read-only)")
     save_compat_cmd.add_argument("save", type=Path, help="save directory or its campaign.xml")
     save_compat_cmd.add_argument("mod_dir", type=Path)
@@ -746,6 +764,8 @@ def build_parser() -> argparse.ArgumentParser:
     archive_cmd.add_argument("workspace", type=Path)
     archive_cmd.add_argument("--done", type=Path, help="default: <repo>/Done")
     archive_cmd.add_argument("--policy", type=Path)
+    archive_cmd.add_argument("--refresh", action="store_true", help="replace an existing archive of this mod in Done/ (only a folder holding an ARCHIVE_NOTE.md directly inside Done/)")
+    archive_cmd.add_argument("--readme-copy", action="store_true", help="also write <zip>-with-readme.zip and readme.txt for this archive")
     archive_cmd.add_argument("--json", action="store_true")
     audit_cmd = subcommands.add_parser("audit-shipped", help="compare a workspace's shipped copy with original/: every changed, added or removed file must be explained by a recorded change (ROADMAP 36.3); also shows its live status (36.7)")
     audit_cmd.add_argument("workspace", type=Path)
@@ -1326,7 +1346,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f'  explain with: bridgeforge audit-explain "{args.workspace}" FILE... --reason "..." (or --live --reason for the live result)', file=sys.stderr)
             return 2
         try:
-            result = archive_mod(args.workspace, args.done or REPO_ROOT / "Done", policy_path=args.policy)
+            result = archive_mod(args.workspace, args.done or REPO_ROOT / "Done", policy_path=args.policy, refresh=args.refresh)
+            if args.readme_copy:
+                from .archive import write_readme_copies
+                result["readme_copies"] = write_readme_copies(Path(result["archive"]))
         except (ArchiveError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -2435,6 +2458,37 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(payload)
         return 0
+    if args.command == "accept":
+        try:
+            result = accept_run(args.workspace, args.log, test_id=args.test_id, note=args.note, days=args.days,
+                                not_exercised=args.not_exercised, mods_dir=args.mods_dir,
+                                accept_findings=args.accept_findings, record_only=args.record_only)
+        except (AcceptError, ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(f"Accepted {result['test_id']} for {result['workspace']}: run record {result['run_record']}")
+            if result["report"]:
+                print(f"  report section written: {result['report']}")
+            if result["accepted_findings"]:
+                print(f"  findings accepted: {'; '.join(result['accepted_findings'])}")
+        return 0
+    if args.command == "soak-report":
+        try:
+            result = soak_report(args.log, args.days, mods_dir=args.mods_dir)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(f"Soak: {result['verdict']}: {result['reason']}")
+            for group in result["caught_exceptions"]["groups"][:10]:
+                print(f"  x{group['count']} {group['exception']}: {group['first_frame'] or group['message']}")
+            print(result["caveat"])
+        return 0 if result["verdict"] == "PASS" else 1
     if args.command == "log-triage":
         try:
             result = triage_log(args.log, args.mod_prefix, mods_dir=args.mods_dir, all_mods=args.all_mods, last_sessions=args.last_sessions)
@@ -2464,6 +2518,12 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"  nearest mod frame: {event['top_mod']} ({event['mod_frames'][0]['class']})")
             for event in result["mod_errors"]:
                 print(f"MOD-ERROR line {event['line']}: {event.get('top_mod_frame') or event['message']}")
+            caught = result["caught_exceptions"]
+            if caught["distinct"]:
+                print(f"Caught exceptions (logged, game carried on): {caught['total_events']} event(s), {caught['distinct']} distinct")
+                for group in caught["groups"][:10]:
+                    owner = f" [{group['suspect']}]" if group.get("suspect") else ""
+                    print(f"  x{group['count']} {group['exception']}{owner} lines {group['first_line']}-{group['last_line']}: {group['first_frame'] or group['message']}")
             for symptom in result["vanilla_shadowing_symptoms"]:
                 print(f"Vanilla-shadowing symptom line {symptom['line']}: ship system [{symptom['ship_system']}] from {symptom['csv']}")
             attribution = result.get("attribution")

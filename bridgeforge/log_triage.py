@@ -358,6 +358,49 @@ def _summarize_attribution(entries: list[dict[str, object]]) -> dict[str, object
     }
 
 
+_EXCEPTION_HEAD_RE = re.compile(r"^\s*(?P<cls>(?:[\w$]+\.)+[\w$]*(?:Exception|Error))\b:?\s*(?P<msg>.*)$")
+
+
+def _caught_exceptions(events: list[_Event], categories: list[str], owner_index: dict[str, str] | None) -> dict[str, object]:
+    """Group the logged-but-survived exceptions (ROADMAP item 4 of the 2026-10-06 ideas).
+
+    A game that logs an ERROR with a stack trace and carries on never shows in a crash check: Nexerelin's
+    `StrategicAI` logged a NullPointerException from `RaidIntel.getETA` every time it planned a raid on a market with no
+    star system. Events classified FATAL or KNOWN-NOISE are left to their own sections. The rest are grouped by
+    (exception class, first stack frame) so a repeating error is one line with a count, not hundreds. The owning mod of the
+    nearest mod frame is given when `owner_index` is known; the mod whose DATA caused the exception is often not on the
+    stack at all, so `suspect` is where the code threw, not necessarily the cause.
+    """
+    groups: dict[tuple[str, str], dict[str, object]] = {}
+    for event, category in zip(events, categories):
+        if category in ("FATAL", "KNOWN-NOISE"):
+            continue
+        exception_line = None
+        for line in (*event.frames[:2], event.head_message):
+            if _EXCEPTION_HEAD_RE.match(line):
+                exception_line = line
+                break
+        if exception_line is None:
+            continue
+        match = _EXCEPTION_HEAD_RE.match(exception_line)
+        first_frame = next((line.strip() for line in event.frames if _STACK_FRAME_RE.match(line)), "")
+        key = (match.group("cls"), first_frame)
+        group = groups.get(key)
+        if group is None:
+            group = {
+                "exception": match.group("cls"), "message": match.group("msg")[:200], "first_frame": first_frame,
+                "logger": event.logger, "context": event.head_message[:200], "count": 0,
+                "first_line": event.line_no, "last_line": event.line_no,
+            }
+            if owner_index is not None:
+                group.update({k: v for k, v in _attribute_event(event, owner_index).items() if k in ("suspect", "involved")})
+            groups[key] = group
+        group["count"] += 1
+        group["last_line"] = event.line_no
+    ordered = sorted(groups.values(), key=lambda g: (-g["count"], g["first_line"]))
+    return {"total_events": sum(g["count"] for g in ordered), "distinct": len(ordered), "groups": ordered}
+
+
 # A Fatal dialog never reaches the redirected log (PRB-CID-FAIL-20260927: "Fatal: Weapon spec
 # [ART_dimention_leftGun_BFTYPO] not found!" appeared only on screen and triage said FATAL=0). bf-test.ps1's
 # window watcher writes each dialog's text to <TESTID>.windows.txt as "HH:mm:ss dialog: '<title>' text: '<text>'".
@@ -467,9 +510,11 @@ def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: 
         lines = lines[first:]
     events, milestones, shadow_symptoms, probe_entries = _iter_events_and_milestones(lines)
     classified: dict[str, list[dict[str, object]]] = {"FATAL": [], "MOD-ERROR": [], "KNOWN-NOISE": [], "OTHER": []}
+    event_categories: list[str] = []
     for event in events:
         outcome = _classify_event(event, prefixes)
         category = outcome.pop("category")
+        event_categories.append(category)
         entry: dict[str, object] = {"line": event.line_no, "level": event.level, "logger": event.logger, "message": event.head_message}
         entry.update(outcome)
         if category in ("FATAL", "MOD-ERROR"):
@@ -492,6 +537,7 @@ def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: 
         "mod_errors": classified["MOD-ERROR"],
         "known_noise": classified["KNOWN-NOISE"],
         "other": classified["OTHER"],
+        "caught_exceptions": _caught_exceptions(events, event_categories, owner_index),
         "milestones": milestones,
         "vanilla_shadowing_symptoms": shadow_symptoms,
         "probe": _summarize_probe(probe_entries),
