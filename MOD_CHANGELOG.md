@@ -69,6 +69,8 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Hiver Swarm** 1.07: starts without Nexerelin: Nexerelin-only rule conditions dropped, Nexerelin import replaced with a sector-memory check
 - **Holy Covenant of Kemet** 0.2.2h: revived for RC8 and archived (live validated)
 - **Zorg18** V18+bf.7: ship_data.csv gains supplies/rec and supplies/mo (supplies/day x vanilla ratio per hull size), so Zorg ships have a deployment cost; needs a live re-test before re-archiving
+- **Ironclads** v.11+bf.1: revived for RC8 and archived (live validated)
+- **Ironclads** v.11+bf.1: total conversion revived for RC8: 0.7 economy rebuilt on RC8 industries, own sector without RC8 procgen or vanilla worlds, replaced factions and tables, five RC8 missions, carriers with bays; passed a full live run (new game, one in-game day, all 140 hulls in combat)
 
 ## 2026-10-04
 
