@@ -1,0 +1,2 @@
+# Conformance inputs and expected bytes must survive checkout exactly.
+* -text whitespace=cr-at-eol

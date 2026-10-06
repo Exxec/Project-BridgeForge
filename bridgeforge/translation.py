@@ -74,6 +74,17 @@ def _mod_id(mod_dir: Path) -> str:
 
 # ---- CSV -----------------------------------------------------------------------------------------
 
+def _translation_csv_text(raw: bytes) -> tuple[str, str, bool]:
+    """Retain Project Go's established strict UTF-8/GB18030 CSV compatibility."""
+    bom = raw.startswith(b"\xef\xbb\xbf")
+    try:
+        return raw.decode("utf-8-sig"), "utf-8", bom
+    except UnicodeDecodeError:
+        if bom:
+            raise
+        return raw.decode("gb18030"), "gb18030", False
+
+
 def _csv_cells(text: str):
     """Yield (row, col, start, end, value, quoted) for every cell, with raw spans."""
     i, n, row, col = 0, len(text), 0, 0
@@ -358,7 +369,7 @@ def _rewrite_class_strings(data: bytes, replacements: dict[int, str]) -> bytes:
 def _units(mod_dir: Path, rel: str, path: Path):
     suffix = path.suffix.lower()
     if suffix == ".csv":
-        text = path.read_bytes().decode("utf-8-sig", "replace")
+        text, _, _ = _translation_csv_text(path.read_bytes())
         cells = list(_csv_cells(text))
         header, keys = _csv_row_keys(cells)
         # A row whose first cell starts with '#' is a comment the game skips: never player text (FSF's rules.csv
@@ -369,7 +380,7 @@ def _units(mod_dir: Path, rel: str, path: Path):
                 column = header[col] if col < len(header) else f"#{col}"
                 yield {"id": f"csv:{rel}#{keys.get(row, row)}:{column}", "file": rel, "kind": "csv", "context": {"row": keys.get(row), "column": column}, "source": value}
     elif suffix in JSONLIKE_SUFFIXES or rel == "mod_info.json":
-        text = path.read_text(encoding="utf-8-sig", errors="replace")
+        text = path.read_bytes().decode("utf-8-sig", errors="replace")
         ordinal = 0
         for s, e, value, jpath, is_key in _jsonlike_strings(text):
             if _has_cjk(value):
@@ -502,7 +513,7 @@ def prefill_from_reference(document: dict, mod_dir: Path, reference_dir: Path) -
             english = table.get(int(entry["context"]["cp_index"])) if table else None
         elif entry["kind"] == "csv":
             if entry["file"] not in csv_cache:
-                text = ref_path.read_bytes().decode("utf-8-sig", "replace")
+                text, _, _ = _translation_csv_text(ref_path.read_bytes())
                 cells = list(_csv_cells(text))
                 header, keys = _csv_row_keys(cells)
                 table: dict[tuple, str] = {}
@@ -670,8 +681,7 @@ def apply_translation(mod_dir: Path, document: dict, out_dir: Path | None = None
 
 def _apply_csv(path: Path, rel: str, entries: dict, applied: Counter, problems: list) -> None:
     raw = path.read_bytes()
-    bom = raw.startswith(b"\xef\xbb\xbf")
-    text = raw.decode("utf-8-sig")
+    text, encoding, bom = _translation_csv_text(raw)
     cells = list(_csv_cells(text))
     header, keys = _csv_row_keys(cells)
     edits = []
@@ -692,12 +702,12 @@ def _apply_csv(path: Path, rel: str, entries: dict, applied: Counter, problems: 
     if _csv_shape(new) != _csv_shape(text):
         problems.append(f"{rel}: CSV structure would change; file left untouched")
         return
-    path.write_bytes((b"\xef\xbb\xbf" if bom else b"") + new.encode("utf-8"))
+    path.write_bytes((b"\xef\xbb\xbf" if bom else b"") + new.encode(encoding))
     applied["csv"] += len(edits)
 
 
 def _apply_jsonlike(path: Path, rel: str, entries: dict, applied: Counter, problems: list) -> None:
-    text = path.read_text(encoding="utf-8-sig")
+    text = path.read_bytes().decode("utf-8-sig")
     had_bom = path.read_bytes().startswith(b"\xef\xbb\xbf")
     tokens = list(_jsonlike_strings(text))
     # Keys per object, so a translated key never duplicates a sibling. Blackrock's CN settings.json
@@ -740,7 +750,7 @@ def _apply_jsonlike(path: Path, rel: str, entries: dict, applied: Counter, probl
 
 
 def _apply_java(path: Path, rel: str, entries: dict, applied: Counter, problems: list) -> None:
-    original = path.read_text(encoding="utf-8")
+    original = path.read_bytes().decode("utf-8")
     blanked = _blank_java_comments(original)
     edits, ordinal = [], 0
     for m in _JAVA_STRING.finditer(blanked):
@@ -758,7 +768,7 @@ def _apply_java(path: Path, rel: str, entries: dict, applied: Counter, problems:
     new = original
     for s, e, replacement in sorted(edits, reverse=True):
         new = new[:s] + replacement + new[e:]
-    path.write_text(new, encoding="utf-8")
+    path.write_bytes(new.encode("utf-8"))
     applied["java"] += len(edits)
 
 

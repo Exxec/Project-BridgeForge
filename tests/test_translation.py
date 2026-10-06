@@ -198,6 +198,55 @@ class CorruptJarTests(unittest.TestCase):
 
 
 class ApplyTests(unittest.TestCase):
+    def test_json_apply_preserves_crlf_outside_literal(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "mod"
+            _write(root / "mod_info.json", '{"id":"crlf","name":"CRLF"}')
+            path = root / "data" / "test.json"
+            path.parent.mkdir(parents=True)
+            before = '{\r\n  "text": "中文", // retained\r\n}\r\n'.encode()
+            path.write_bytes(before)
+            document = export_translation(root)
+            document["entries"][0]["translation"] = "English"
+            output = Path(temporary) / "output"
+            apply_translation(root, document, out_dir=output)
+            self.assertEqual((output / "data/test.json").read_bytes(), before.replace("中文".encode(), b"English"))
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_legacy_csv_encoding_preserves_non_target_cells(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "mod"
+            _write(root / "mod_info.json", '{"id":"legacy","name":"Legacy"}')
+            path = root / "data" / "legacy.csv"
+            path.parent.mkdir(parents=True)
+            before = 'id,name,value\r\nx,中文,123.00,extra\r\n'.encode("gb18030")
+            path.write_bytes(before)
+            document = export_translation(root)
+            self.assertEqual(len(document["entries"]), 1)
+            self.assertEqual(document["entries"][0]["source"], "中文")
+            document["entries"][0]["translation"] = "English"
+            output = Path(temporary) / "output"
+            apply_translation(root, document, out_dir=output)
+            self.assertEqual((output / "data/legacy.csv").read_bytes(), before.replace("中文".encode("gb18030"), b"English"))
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_java_apply_preserves_lf_and_crlf_outside_literal(self):
+        for newline in (b"\n", b"\r\n"):
+            with self.subTest(newline=newline), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp) / "mod"
+                _write(root / "mod_info.json", '{"id":"newline","name":"Newline"}')
+                path = root / "data" / "scripts" / "Test.java"
+                path.parent.mkdir(parents=True)
+                before = b'// comment' + newline + 'class Test { String s = "中文"; }'.encode() + newline
+                path.write_bytes(before)
+                document = export_translation(root)
+                for entry in document["entries"]:
+                    entry["translation"] = "English"
+                output = Path(temp) / "output"
+                apply_translation(root, document, out_dir=output)
+                self.assertEqual((output / "data/scripts/Test.java").read_bytes(), before.replace("中文".encode(), b"English"))
+                self.assertEqual(path.read_bytes(), before)
+
     def _translated(self, root: Path) -> dict:
         doc = export_translation(root)
         for entry in doc["entries"]:
