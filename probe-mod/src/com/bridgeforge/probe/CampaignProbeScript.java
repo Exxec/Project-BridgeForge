@@ -413,6 +413,7 @@ public class CampaignProbeScript implements EveryFrameScript {
                 if (members == 0) {
                     ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_FAIL, factionId,
                             "FleetFactoryV3 built an empty " + FleetTypes.PATROL_MEDIUM + " (doctrine or known ships unusable)");
+                    diagnoseEmptyFleet(generated, factionId);
                 } else {
                     ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_OK, factionId,
                             members + " member(s) in a generated " + FleetTypes.PATROL_MEDIUM);
@@ -421,6 +422,45 @@ public class CampaignProbeScript implements EveryFrameScript {
                 ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_FAIL, factionId,
                         "FleetFactoryV3.createFleet threw " + t.getClass().getName() + ": " + t.getMessage());
             }
+        }
+    }
+
+    /**
+     * 0.2.18: say WHY a faction's generated patrol is empty. Exipirated (Exigency 0.8) built an empty patrol in the probe
+     * while the game's own managers fielded Exipirated fleets from a market. Two causes to separate: the faction's ship
+     * roles have no variants (a role table that never mentions its hulls), or the probe's market-less, quality-1 patrol
+     * differs from a real market patrol. API (javap RC8, 2026-10-06): FactionAPI.getVariantsForRole(String),
+     * getKnownShips(); FleetParamsV3(MarketAPI, Vector2f, String, Float, String, float x7) as the mods call it.
+     */
+    private void diagnoseEmptyFleet(FactionAPI faction, String factionId) {
+        StringBuilder roles = new StringBuilder();
+        for (String role : new String[] {"combatSmall", "combatMedium", "combatLarge", "combatCapital", "fastAttack",
+                "escortSmall", "escortMedium", "carrierSmall", "carrierMedium", "carrierLarge", "freighterSmall"}) {
+            Set<String> variants = faction.getVariantsForRole(role);
+            roles.append(role).append('=').append(variants == null ? 0 : variants.size()).append(' ');
+        }
+        ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                "knownShips=" + faction.getKnownShips().size() + "; variants per role: " + roles.toString().trim());
+        MarketAPI own = null;
+        for (MarketAPI market : Global.getSector().getEconomy().getMarketsCopy()) {
+            if (factionId.equals(market.getFactionId())) {
+                own = market;
+                break;
+            }
+        }
+        if (own == null) {
+            ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId, "no market of this faction to test a market patrol");
+            return;
+        }
+        try {
+            CampaignFleetAPI fleet = FleetFactoryV3.createFleet(new FleetParamsV3(own, null, factionId, Float.valueOf(-1f),
+                    FleetTypes.PATROL_LARGE, 120f, 0f, 0f, 0f, 0f, 0f, 0f));
+            int members = fleet == null ? 0 : fleet.getFleetData().getNumMembers();
+            ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                    "market patrol from " + own.getId() + " (patrolLarge, 120 points, quality -1): " + members + " member(s)");
+        } catch (Throwable t) {
+            ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                    "market patrol threw " + t.getClass().getName() + ": " + t.getMessage());
         }
     }
 
