@@ -22,6 +22,8 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **The Nomads** 1.4.11-rc2: revived for RC8 and archived (live validated)
 - **Pegasus Belt Council** 1.6: revived for RC8 and archived (live validated)
 - **YunruCore** 2025-07-06b: revived for RC8 and archived (live validated)
+- **Nightcross Armory [BF r1]** 2.1.4+bf.1: revived for RC8 and archived (live validated)
+- **Omega-Trauma [BF r1]** 0.1.1+bf.2: revived for RC8 and archived (live validated)
 
 ## 2026-10-05
 

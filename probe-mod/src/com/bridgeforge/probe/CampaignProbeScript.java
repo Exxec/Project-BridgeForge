@@ -904,13 +904,31 @@ public class CampaignProbeScript implements EveryFrameScript {
         return Global.getSector().getStarSystem("Corvus") == null;
     }
 
+    /**
+     * 0.2.22: SectorAPI.getStarSystem(String) did not return Nightcross's hidden abyssal system Nix although its save holds
+     * "Nix Star System" (base name Nix, tags system_abyssal, theme_hidden; GRP7A-20261006), so fall back to scanning
+     * getStarSystems() by base name, display name and id before calling a mod's system missing.
+     */
+    private static StarSystemAPI findSystem(String name) {
+        StarSystemAPI direct = Global.getSector().getStarSystem(name);
+        if (direct != null) {
+            return direct;
+        }
+        for (StarSystemAPI system : Global.getSector().getStarSystems()) {
+            if (name.equals(system.getBaseName()) || name.equals(system.getName()) || name.equals(system.getId())) {
+                return system;
+            }
+        }
+        return null;
+    }
+
     private void checkCampaignLayout() {
         if (config.modSystems.isEmpty() && config.modBodyTypes.isEmpty()) {
             return;
         }
         int missing = 0;
         for (String name : config.modSystems) {
-            if (Global.getSector().getStarSystem(name) == null) {
+            if (findSystem(name) == null) {
                 if (nexerelinRandomSector()) {
                     // 0.2.10: in Nexerelin's random sector a mod may skip its own systems by design (Exigency skips
                     // Tasserus unless SectorManager.getCorvusMode(), EXI-SOLO 2026-09-28).

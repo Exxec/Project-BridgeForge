@@ -74,7 +74,7 @@ class MarketStarSystemProbeTests(unittest.TestCase):
         self.assertIn('runCheck("market-star-system"', source)
         self.assertIn("RaidIntel.getETA", source)
         version = (root / "src/com/bridgeforge/probe/ProbeLog.java").read_text(encoding="utf-8")
-        self.assertIn('VERSION = "0.2.21"', version)
+        self.assertIn('VERSION = "0.2.22"', version)
 
     def test_a_fail_line_for_a_market_without_a_star_system_is_flagged(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
