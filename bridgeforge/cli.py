@@ -1542,13 +1542,16 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"  not recorded: {item['mod_id']} ({item['verdict']}) {item.get('archive', '')}")
             else:
                 config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
-                result = group_report(args.log, config, mods_dir=rig / "mods")
+                from .probe_group import accepted_probe_findings
+                result = group_report(args.log, config, mods_dir=rig / "mods", accepted=accepted_probe_findings(queue, rig / "mods"))
                 if not args.json:
                     print(f"FATAL={result['fatal']} MOD-ERROR={result['mod_errors']}; content-ids ran: {result['content_ids_ran']}")
                     for mod_id, verdict in sorted(result["members"].items()):
                         print(f"  {verdict['verdict']:<10} {mod_id}")
                         for item in verdict["failures"] + verdict["crashes"]:
                             print(f"      {item}")
+                        for item in verdict.get("accepted", []):
+                            print(f"      (accepted, not a failure) {item}")
                     for item in result["unattributed"]:
                         print(f"  (group) {item}")
                     if result.get("combat_filler_sides"):

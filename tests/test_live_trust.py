@@ -162,6 +162,19 @@ class OriginalRootTests(unittest.TestCase):
             (root / "ws" / "original" / "archive").mkdir()
             self.assertEqual(original_root(root / "ws"), mod)
 
+    def test_a_pack_download_resolves_to_the_root_with_the_working_copys_id(self) -> None:
+        # yunruhullmods and yunruworlds were extracted from the one Yunru Core pack (GRP1B-20261006)
+        with resolved_temp_dir() as root:
+            ws = root / "ws"
+            for folder, mod_id in (("Pack - Core", "yunrucore"), ("Pack - Hullmods", "yunruhullmods"), ("Pack - Worlds", "yunruworlds")):
+                (ws / "original" / "extracted" / folder).mkdir(parents=True)
+                (ws / "original" / "extracted" / folder / "mod_info.json").write_text('{"id":"%s"}' % mod_id, encoding="utf-8")
+            (ws / "working").mkdir()
+            (ws / "working" / "mod_info.json").write_text('{"id":"yunruhullmods"}', encoding="utf-8")
+            self.assertEqual(original_root(ws), ws / "original" / "extracted" / "Pack - Hullmods")
+            (ws / "working" / "mod_info.json").write_text('{"id":"somethingelse"}', encoding="utf-8")
+            self.assertIsNone(original_root(ws))
+
 
 class AutoExplainTests(unittest.TestCase):
     def test_provable_categories_are_explained_and_a_real_edit_is_not(self) -> None:

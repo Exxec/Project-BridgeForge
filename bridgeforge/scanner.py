@@ -6173,6 +6173,89 @@ def _scan_rules_csv_whitespace_only_line(root: Path, result: ScanResult) -> None
         )
 
 
+_CURLY_OPEN, _CURLY_CLOSE = "\u201c", "\u201d"
+_OR_LINE = re.compile(r"\r?\n[ \t]*OR[ \t]*\r?\n")
+
+
+def _alternative_needs_straight_quotes(alternative: str) -> bool:
+    """A rules.csv text alternative whose curly double quotes RC8 cannot read: an opening quote with no closing one, or a
+    comma between a pair. Metelson Industries' greetingMIHostileWeaker/Stronger (a curly opening quote closed by a straight
+    one, "speaks quickly, <U+201C>If our lives are already written, it would...") stopped RC8 at startup with 'Mismatched
+    quotes in the string' (alternatives bisected on the rig, BIS4E-BIS4H 2026-10-06; the straight-quote version loaded).
+    A balanced pair with no comma inside loads (Faction Relationships Uniquified, live validated), so it is left alone."""
+    opens, closes = alternative.count(_CURLY_OPEN), alternative.count(_CURLY_CLOSE)
+    if opens != closes:
+        return True
+    position = 0
+    while True:
+        start = alternative.find(_CURLY_OPEN, position)
+        if start < 0:
+            return False
+        end = alternative.find(_CURLY_CLOSE, start)
+        if end < 0 or "," in alternative[start:end]:
+            return True
+        position = end + 1
+
+
+def _rules_curly_quote_cells(text: str) -> list[tuple[int, int, str]]:
+    """(start, end, fixed value) for each text cell of a real rule with an alternative that needs straight quotes; the fixed
+    value changes only the curly double quotes of those alternatives to straight ones."""
+    records = _csv_record_cells(text)
+    if not records:
+        return []
+    header = [cell[2].strip() for cell in records[0]]
+    if "text" not in header:
+        return []
+    index = header.index("text")
+    found = []
+    for record in records[1:]:
+        rule_id = record[0][2].strip() if record else ""
+        if not rule_id or rule_id.startswith("#") or index >= len(record):
+            continue
+        start, end, value, _quoted = record[index]
+        pieces, separators, position = [], [], 0
+        for match in _OR_LINE.finditer(value):
+            pieces.append(value[position:match.start()])
+            separators.append(match.group(0))
+            position = match.end()
+        pieces.append(value[position:])
+        changed = False
+        for number, piece in enumerate(pieces):
+            if (_CURLY_OPEN in piece or _CURLY_CLOSE in piece) and _alternative_needs_straight_quotes(piece):
+                pieces[number] = piece.replace(_CURLY_OPEN, '"').replace(_CURLY_CLOSE, '"')
+                changed = True
+        if changed:
+            fixed = pieces[0] + "".join(sep + piece for sep, piece in zip(separators, pieces[1:]))
+            found.append((start, end, fixed))
+    return found
+
+
+def _scan_rules_csv_curly_quotes(root: Path, result: ScanResult) -> None:
+    path = root / "data" / "campaign" / "rules.csv"
+    if not path.is_file():
+        return
+    try:
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return
+    cells = _rules_curly_quote_cells(text)
+    if cells:
+        result.add(
+            id="rules-csv-curly-quote-unreadable",
+            category="content",
+            severity="high",
+            classification="REVIEW",
+            confidence="HIGH",
+            explanation=f"{len(cells)} rules.csv text cell(s) hold a curly double quote RC8 cannot read: an opening quote with no "
+                        "closing one, or a comma between a pair. RC8 stops at startup with 'Mismatched quotes in the string' "
+                        "(Metelson Industries' greetingMIHostileWeaker and greetingMIHostileStronger, GRP4A-20261006). `fix` "
+                        "changes only the curly double quotes of those alternatives to straight ones, the same punctuation; "
+                        "balanced pairs without a comma are left alone.",
+            file=_relative(root, path),
+            evidence=[f"text-cell-at:{start}" for start, _e, _v in cells][:20],
+        )
+
+
 def _scan_person_names_duplicate_row(root: Path, result: ScanResult) -> None:
     """RC8 keys person_names.csv rows by every column and stops at startup on a repeat inside one file:
     'Duplicate key [Mao |  | f | xle | ] while loading [data/characters/person_names.csv' (Ironclads, a Fatal dialog,
@@ -6968,6 +7051,29 @@ def _library_presence_probed(root: Path, library: str) -> bool:
     return False
 
 
+def _unguarded_library_users(root: Path, source_hits: list[str], library: str, dependency_id: str) -> list[str]:
+    """Source files that use a library with no sign of a guard: no isModEnabled(<id>), no loadClass/forName probe, no catch of
+    NoClassDefFoundError/LinkageError/Throwable, and no `if (...)` condition naming the library or its id (a flag the plugin
+    set from its own probe). A probe elsewhere in the mod does not protect such a file: Free Stars Union's AicModPlugin probes
+    ShaderLib in a try/catch, yet aic_temporalstats built a StandardLight in combat and stopped the game with
+    NoClassDefFoundError (GRP3A-20261006)."""
+    id_guard = re.compile(r'\bisModEnabled\s*\(\s*"' + re.escape(dependency_id) + r'"\s*\)', re.IGNORECASE)
+    catches = re.compile(r"catch\s*\(\s*(?:final\s+)?(?:\w+\s*\|\s*)*(?:NoClassDefFoundError|LinkageError|Throwable|Error)\b")
+    names = sorted({re.escape(dependency_id.lower()), re.escape(library.lower().replace(" ", ""))})
+    flag = re.compile(r"\bif\s*\(\s*!?\s*[\w.]*(?:" + "|".join(names) + r")", re.IGNORECASE)
+    markers = LIBRARY_PROBE_MARKERS.get(library, ())
+    unguarded = []
+    for relative in source_hits:
+        try:
+            text = _blank_java_comments((root / relative).read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        probes = any(any(m.lower() in name.lower() for m in markers) for name in _PRESENCE_PROBE.findall(text))
+        if not (id_guard.search(text) or probes or catches.search(text) or flag.search(text)):
+            unguarded.append(relative)
+    return unguarded
+
+
 def _fails_fast_through_variable(text: str, dependency_id: str) -> bool:
     """`boolean has = ...isModEnabled("<id>"); ... if (!has) { throw` -- a required library, not an optional one.
     Hiigaran Descendants 2.1 (HiiModPlugin.onApplicationLoad, shaderLib) stopped at startup this way, GRP7B-20261005."""
@@ -7103,6 +7209,9 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                            file="mod_info.json", evidence=[f"library:{library}", f"dependency-id:{dependency_id}", "registered:customStarts.json", *sorted(users)[:5]])
                 continue
         probed = _library_presence_probed(root, library)
+        unguarded_users = _unguarded_library_users(root, source_hits, library, dependency_id) if probed and not every_hit_id_guarded else []
+        if unguarded_users:
+            probed = False
         if (source_hits and every_hit_id_guarded) or probed:
             result.add(id="optional-library-integration", category="dependencies", severity="info", classification="SAFE", confidence="MEDIUM",
                        explanation=("The mod probes for " + library + " at runtime (loadClass/Class.forName of its classes) before using it" if probed else f"Every source file that uses {library} checks isModEnabled(\"{dependency_id}\")") + f" and none throws when it is missing: an optional integration. RC8 runs with -noverify, so {library}'s classes are resolved only when that guarded code runs. No dependency needed; the mod works with or without {library}.",
@@ -7126,12 +7235,12 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                     " An isModEnabled(...) guard was found (in a referencing source file, or in a loaded class "
                     "that checks this mod id), suggesting an optional integration rather than a hard dependency. "
                     "A plugin may also use that check to fail fast when a required library is missing, so confirm."
-                    if guarded
+                    if guarded and not unguarded_users
                     else ""
                 )
             ),
             file="mod_info.json",
-            evidence=[f"library:{library}", f"dependency-id:{dependency_id}", *(["guard:present"] if guarded else []), *(["required:throws-without"] if fails_fast_hit else []), *source_hits[:5], *bytecode_hits[:5]],
+            evidence=[f"library:{library}", f"dependency-id:{dependency_id}", *(["guard:present"] if guarded and not unguarded_users else []), *(["required:throws-without"] if fails_fast_hit else []), *[f"probe-present-but-unguarded-use:{u}" for u in unguarded_users[:5]], *source_hits[:5], *bytecode_hits[:5]],
         )
 
 
@@ -8358,6 +8467,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_person_names_duplicate_row(root, result)
     _scan_rules_csv_duplicate_id(root, result)
     _scan_rules_csv_whitespace_only_line(root, result)
+    _scan_rules_csv_curly_quotes(root, result)
     _scan_supplies_legacy_column(root, result)
     _scan_json_duplicate_key(root, result, vanilla_root)
     from .conversion_checks import (

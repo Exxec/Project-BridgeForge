@@ -129,5 +129,89 @@ class LifecyclePluginTests(unittest.TestCase):
         self.assertEqual(found, [])
 
 
+class ProbedLibraryStillUsedUnguardedTests(unittest.TestCase):
+    PLUGIN = (
+        'public class Plugin { public void onApplicationLoad() throws ClassNotFoundException { try { '
+        'Global.getSettings().getScriptClassLoader().loadClass("org.dark.shaders.util.ShaderLib"); } '
+        'catch (ClassNotFoundException ex) {} } }\n'
+    )
+
+    def _mod(self, directory: str, system_source: str) -> Path:
+        mod = Path(directory) / "mod"
+        _write(mod / "mod_info.json", '{"id":"demo","name":"Demo","version":"1.0","gameVersion":"0.98a-RC8","dependencies":[{"id":"lw_lazylib"}]}')
+        _write(mod / "src" / "Plugin.java", self.PLUGIN)
+        _write(mod / "src" / "System.java", system_source)
+        return mod
+
+    def test_a_probe_elsewhere_does_not_clear_an_unguarded_use(self) -> None:
+        # Free Stars Union: AicModPlugin probed ShaderLib, but aic_temporalstats built a StandardLight in combat with no guard and
+        # the game stopped with NoClassDefFoundError (GRP3A-20261006)
+        source = "import org.dark.shaders.light.StandardLight;\npublic class System { void apply() { StandardLight light = new StandardLight(); } }\n"
+        with tempfile.TemporaryDirectory() as directory:
+            result = scan_mod(self._mod(directory, source))
+            hits = _findings(result, "undeclared-library-dependency")
+            optional = [f for f in _findings(result, "optional-library-integration") if "library:GraphicsLib" in f.evidence]
+        self.assertEqual(len(hits), 1)
+        self.assertIn("probe-present-but-unguarded-use:src/System.java", hits[0].evidence)
+        self.assertNotIn("guard:present", hits[0].evidence)
+        self.assertEqual(optional, [])
+
+    def test_a_use_behind_a_class_catch_or_a_flag_stays_optional(self) -> None:
+        source = (
+            "import org.dark.shaders.light.StandardLight;\n"
+            "public class System { static boolean hasGraphicsLib; void apply() { if (hasGraphicsLib) { StandardLight l = new StandardLight(); } } }\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            result = scan_mod(self._mod(directory, source))
+            hits = _findings(result, "undeclared-library-dependency")
+            optional = [f for f in _findings(result, "optional-library-integration") if "library:GraphicsLib" in f.evidence]
+        self.assertEqual(hits, [])
+        self.assertEqual(len(optional), 1)
+
+
+class RulesCsvCurlyQuoteTests(unittest.TestCase):
+    HEADER = "id,trigger,conditions,script,text,options,notes"
+    CHECK = "rules-csv-curly-quote-unreadable"
+    OPEN, CLOSE = "“", "”"
+
+    def _mod(self, directory: str, text_cell: str) -> Path:
+        mod = Path(directory) / "mod"
+        _write(mod / "mod_info.json", MOD_INFO)
+        row = 'greet,OpenCommLink,,,"' + text_cell.replace('"', '""') + '",,'
+        _write(mod / "data" / "campaign" / "rules.csv", self.HEADER + "\n" + row + "\n")
+        return mod
+
+    def test_an_unmatched_curly_opening_quote_is_flagged_and_made_straight(self) -> None:
+        # Metelson Industries: a curly opening quote closed by a straight one stopped RC8 with 'Mismatched quotes' (GRP4A-20261006)
+        from bridgeforge.fixers import apply_fix, compute_fix
+
+        cell = ("Hello.\nOR\nWith a smile, " + self.OPEN + "If our lives are already written, it would take a man. "
+                'I am no such man." done.')
+        with tempfile.TemporaryDirectory() as directory:
+            mod = self._mod(directory, cell)
+            found = _findings(scan_mod(mod), self.CHECK)
+            apply_fix(compute_fix(mod, self.CHECK, {}))
+            text = (mod / "data" / "campaign" / "rules.csv").read_text(encoding="utf-8")
+            after = _findings(scan_mod(mod), self.CHECK)
+        self.assertEqual(len(found), 1)
+        self.assertNotIn(self.OPEN, text)
+        self.assertIn('""If our lives', text)
+        self.assertIn("Hello.\nOR\nWith a smile", text)
+        self.assertEqual(after, [])
+
+    def test_a_balanced_pair_without_a_comma_is_left_alone(self) -> None:
+        # Faction Relationships Uniquified (live validated) has a pair like this
+        cell = "the phrase " + self.OPEN + "P.K!!!" + self.CLOSE + " covers the screen."
+        with tempfile.TemporaryDirectory() as directory:
+            found = _findings(scan_mod(self._mod(directory, cell)), self.CHECK)
+        self.assertEqual(found, [])
+
+    def test_a_pair_with_a_comma_inside_is_flagged(self) -> None:
+        cell = "He says " + self.OPEN + "well, then" + self.CLOSE + " and leaves."
+        with tempfile.TemporaryDirectory() as directory:
+            found = _findings(scan_mod(self._mod(directory, cell)), self.CHECK)
+        self.assertEqual(len(found), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

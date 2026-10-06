@@ -399,24 +399,37 @@ public class CampaignProbeScript implements EveryFrameScript {
                         + cheapest + " fleet points, more than the 60-point test patrol");
                 continue;
             }
-            FleetParamsV3 params = new FleetParamsV3();
-            params.factionId = factionId;
-            params.fleetType = FleetTypes.PATROL_MEDIUM;
-            params.combatPts = 60f;
-            params.quality = 1f;
-            params.qualityOverride = Float.valueOf(1f);
-            params.ignoreMarketFleetSizeMult = Boolean.TRUE;
-            params.random = new java.util.Random(1L);
             try {
-                CampaignFleetAPI fleet = FleetFactoryV3.createFleet(params);
-                int members = fleet == null ? 0 : fleet.getFleetData().getNumMembers();
+                // 0.2.20: a doctrine that favours big ships (Magellan's Star Tigers, shipSize 5) can afford nothing at 60
+                // points and still field fleets in the game; retry with larger budgets before calling the patrol empty
+                // (GRP5A-20261006). The first budget that builds a fleet is reported.
+                float[] budgets = new float[] {60f, 120f, 240f, 480f};
+                int members = 0;
+                float builtAt = 0f;
+                for (float budget : budgets) {
+                    FleetParamsV3 params = new FleetParamsV3();
+                    params.factionId = factionId;
+                    params.fleetType = FleetTypes.PATROL_MEDIUM;
+                    params.combatPts = budget;
+                    params.quality = 1f;
+                    params.qualityOverride = Float.valueOf(1f);
+                    params.ignoreMarketFleetSizeMult = Boolean.TRUE;
+                    params.random = new java.util.Random(1L);
+                    CampaignFleetAPI fleet = FleetFactoryV3.createFleet(params);
+                    members = fleet == null ? 0 : fleet.getFleetData().getNumMembers();
+                    if (members > 0) {
+                        builtAt = budget;
+                        break;
+                    }
+                }
                 if (members == 0) {
                     ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_FAIL, factionId,
-                            "FleetFactoryV3 built an empty " + FleetTypes.PATROL_MEDIUM + " (doctrine or known ships unusable)");
+                            "FleetFactoryV3 built an empty " + FleetTypes.PATROL_MEDIUM + " at 60 to 480 points (doctrine or known ships unusable)");
                     diagnoseEmptyFleet(generated, factionId);
                 } else {
                     ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_OK, factionId,
-                            members + " member(s) in a generated " + FleetTypes.PATROL_MEDIUM);
+                            members + " member(s) in a generated " + FleetTypes.PATROL_MEDIUM
+                                    + (builtAt > 60f ? " (needed " + (int) builtAt + " points: the doctrine favours large ships)" : ""));
                 }
             } catch (Throwable t) {
                 ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_FAIL, factionId,
@@ -449,6 +462,53 @@ public class CampaignProbeScript implements EveryFrameScript {
         }
         ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
                 "known ships: " + new java.util.TreeSet<String>(faction.getKnownShips()).toString());
+        // 0.2.20 (Magellan's Star Tigers, GRP5B-20261006: roles resolve to variants, yet no patrol builds at 60 to 480
+        // points): create every resolved variant as a fleet member on its own, report the doctrine, and try the other
+        // patrol sizes, so the cause is named in one run.
+        try {
+            com.fs.starfarer.api.campaign.FactionDoctrineAPI doctrine = faction.getDoctrine();
+            ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                    "doctrine: warships=" + doctrine.getWarships() + " carriers=" + doctrine.getCarriers() + " phaseShips="
+                            + doctrine.getPhaseShips() + " numShips=" + doctrine.getNumShips() + " shipSize=" + doctrine.getShipSize());
+        } catch (Throwable t) {
+            ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId, "doctrine unreadable: " + t);
+        }
+        Set<String> tried = new java.util.TreeSet<String>();
+        for (String role : new String[] {"combatSmall", "combatMedium", "combatLarge", "combatCapital", "fastAttack",
+                "escortSmall", "escortMedium", "carrierSmall", "carrierMedium", "carrierLarge"}) {
+            Set<String> variants = faction.getVariantsForRole(role);
+            if (variants != null) {
+                tried.addAll(variants);
+            }
+        }
+        for (String variantId : tried) {
+            try {
+                FleetMemberAPI member = Global.getFactory().createFleetMember(FleetMemberType.SHIP, variantId);
+                ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId, "variant " + variantId + " as a fleet member: "
+                        + (member == null ? "null" : "ok, hull " + member.getHullId() + ", fleet points " + member.getFleetPointCost()));
+            } catch (Throwable t) {
+                ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                        "variant " + variantId + " as a fleet member threw " + t.getClass().getName() + ": " + t.getMessage());
+            }
+        }
+        for (String type : new String[] {FleetTypes.PATROL_SMALL, FleetTypes.PATROL_LARGE, FleetTypes.PATROL_MEDIUM}) {
+            try {
+                FleetParamsV3 other = new FleetParamsV3();
+                other.factionId = factionId;
+                other.fleetType = type;
+                other.combatPts = 480f;
+                other.quality = 1f;
+                other.qualityOverride = Float.valueOf(1f);
+                other.ignoreMarketFleetSizeMult = Boolean.TRUE;
+                other.random = new java.util.Random(2L);
+                CampaignFleetAPI fleet = FleetFactoryV3.createFleet(other);
+                ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId, type + " at 480 points: "
+                        + (fleet == null ? 0 : fleet.getFleetData().getNumMembers()) + " member(s)");
+            } catch (Throwable t) {
+                ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                        type + " at 480 points threw " + t.getClass().getName() + ": " + t.getMessage());
+            }
+        }
         MarketAPI own = null;
         for (MarketAPI market : Global.getSector().getEconomy().getMarketsCopy()) {
             if (factionId.equals(market.getFactionId())) {

@@ -107,6 +107,42 @@ class MergeAndReportTests(unittest.TestCase):
         self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
         self.assertEqual(report["members"]["mod_b"]["verdict"], "FAIL")
 
+    def test_an_accepted_probe_finding_is_listed_and_no_longer_fails_the_mod(self) -> None:
+        # Magellan's hidden magellan_startigers builds no patrol and nothing spawns its fleets (GRP5C-20261006); the owner-side
+        # decision lives in the workspace's working/reports/probe_accepted.json with a reason
+        from bridgeforge.probe_group import accepted_probe_findings
+
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            a = build_probe_config(_workspace(queue, "A", "mod_a", "hull_a"))
+            working_b = _workspace(queue, "B", "mod_b", "hull_b")
+            (working_b / "data" / "world" / "factions").mkdir(parents=True)
+            (working_b / "data" / "world" / "factions" / "b_navy.faction").write_text('{"id": "b_navy"}', encoding="utf-8")
+            (working_b / "data" / "world" / "factions" / "b_other.faction").write_text('{"id": "b_other"}', encoding="utf-8")
+            (working_b / "reports").mkdir(exist_ok=True)
+            (working_b / "reports" / "probe_accepted.json").write_text(json.dumps({"accepted": [
+                {"check": "faction-fleet-gen", "subject": "b_navy", "reason": "hidden, nothing spawns its fleets"},
+                {"check": "faction-fleet-gen", "subject": "b_nothing_reason"}]}), encoding="utf-8")
+            merged = merge_configs([a, build_probe_config(working_b)])
+            log = root / "run.stdout.log"
+            log.write_text(
+                "5 [main] INFO  com.fs.starfarer.StarfarerLauncher  - Starting\n"
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.8|content-ids|OK|all-content|checked=2 failed=0 ship-variants built=2\n"
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.8|faction-fleet-gen|FAIL|b_navy|FleetFactoryV3 built an empty patrolMedium\n",
+                encoding="utf-8")
+            accepted = accepted_probe_findings(queue, None)
+            with_accepted = group_report(log, merged, accepted=accepted)
+            without = group_report(log, merged)
+            other_log = root / "other.stdout.log"
+            other_log.write_text(log.read_text(encoding="utf-8").replace("|b_navy|", "|b_other|"), encoding="utf-8")
+            other_faction = group_report(other_log, merged, accepted=accepted)
+        self.assertEqual(list(accepted), ["mod_b"])
+        self.assertEqual(len(accepted["mod_b"]), 1, "an entry without a reason is ignored")
+        self.assertEqual(with_accepted["members"]["mod_b"]["verdict"], "PASS")
+        self.assertIn("faction-fleet-gen|b_navy", with_accepted["members"]["mod_b"]["accepted"][0])
+        self.assertEqual(without["members"]["mod_b"]["verdict"], "FAIL")
+        self.assertEqual(other_faction["members"]["mod_b"]["verdict"], "FAIL", "only the named faction is accepted")
+
     def test_a_patched_vanilla_faction_is_built_and_blamed_on_the_patching_mod(self) -> None:
         # Probe 0.2.9 (GRP-8, 2026-09-28): Amogus-Shipyards' hegemony.faction has no id; it patches the Hegemony.
         with resolved_temp_dir() as root:

@@ -552,9 +552,32 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
 _PROBE_LINE = re.compile(r"BF-PROBE\|(?P<version>[^|]*)\|(?P<check>[^|]*)\|(?P<status>[^|]*)\|(?P<subject>[^|]*)\|(?P<detail>.*)$")
 
 
-def group_report(log: Path, config: dict, mods_dir: Path | None = None) -> dict:
+ACCEPTED_PROBE_FILE = Path("reports") / "probe_accepted.json"
+
+
+def accepted_probe_findings(queue: Path, mods_dir: Path | None = None) -> dict[str, list[dict]]:
+    """{mod id: [{"check", "subject", "reason"}]} from each tested workspace's working/reports/probe_accepted.json: probe FAIL
+    lines the owner accepted, each with its reason (Magellan's hidden magellan_startigers faction builds no patrol and nothing in
+    the mod spawns its fleets, GRP5C-20261006). An entry hides exactly one `check|subject` line; the verdict still lists it."""
+    found: dict[str, list[dict]] = {}
+    for mod_id, workspace in _workspaces_by_mod_id(queue, mods_dir).items():
+        path = workspace / "working" / ACCEPTED_PROBE_FILE if workspace is not None else None
+        if path is None or not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        entries = [item for item in data.get("accepted", []) if isinstance(item, dict) and item.get("check") and item.get("subject") and item.get("reason")]
+        if entries:
+            found[mod_id] = entries
+    return found
+
+
+def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted: dict[str, list[dict]] | None = None) -> dict:
     """One verdict per member: probe FAIL lines matched by the content id or faction they name, and crashes
-    by the mod whose jar threw (log-triage attribution). Unmatched FAILs are reported for the group."""
+    by the mod whose jar threw (log-triage attribution). Unmatched FAILs are reported for the group. `accepted` moves the
+    named FAIL lines of a member to its `accepted` list (see accepted_probe_findings); they no longer fail it."""
     from .log_triage import triage_log
 
     members = config.get("group_members") or {}
@@ -579,6 +602,9 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None) -> dict:
         subject = match["subject"].split(":", 1)[-1].split("/", 1)[0]
         mod_id = owner.get(subject)
         entry = f"{match['check']}|{match['subject']}|{match['detail'].strip()[:200]}"
+        if mod_id and any(a["check"] == match["check"] and a["subject"] == match["subject"] for a in (accepted or {}).get(mod_id, [])):
+            verdicts[mod_id].setdefault("accepted", []).append(entry)
+            continue
         (verdicts[mod_id]["failures"] if mod_id else unattributed).append(entry)
     triage = triage_log(log, mods_dir=mods_dir) if mods_dir is not None else triage_log(log)
     for event in triage["fatal"] + triage["mod_errors"]:
@@ -647,7 +673,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     from .substitutes import revival_licence
 
     today = today or date.today().isoformat()
-    report = group_report(log, config, mods_dir=Path(rig) / "mods")
+    report = group_report(log, config, mods_dir=Path(rig) / "mods", accepted=accepted_probe_findings(queue, Path(rig) / "mods"))
     text = Path(log).read_text(encoding="utf-8", errors="replace")
     version = (re.search(r"BF-PROBE\|(\d+\.\d+\.\d+)\|", text) or [None, "?"])[1]
     workspaces = _workspaces_by_mod_id(queue, Path(rig) / "mods")

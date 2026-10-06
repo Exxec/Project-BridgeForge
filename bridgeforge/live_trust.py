@@ -169,6 +169,18 @@ def original_root(workspace: Path) -> Path | None:
         if (original / "extracted").is_dir() else []
     if len(extracted_in_original) == 1:
         return extracted_in_original[0]
+    # One download that holds a whole pack (the Yunru Core pack: Core, Arsenal, Hullmods, Worlds, ...): the original is the
+    # root whose mod_info id is the working copy's id (yunruhullmods and yunruworlds, GRP1B-20261006).
+    if len(extracted_in_original) > 1:
+        from .scanner import _load_lenient_json_file
+
+        wanted = _load_lenient_json_file(Path(workspace) / "working" / "mod_info.json")
+        wanted_id = wanted.get("id") if isinstance(wanted, dict) else None
+        same = [p for p in extracted_in_original
+                if isinstance(_load_lenient_json_file(p / "mod_info.json"), dict)
+                and _load_lenient_json_file(p / "mod_info.json").get("id") == wanted_id]
+        if wanted_id and len(same) == 1:
+            return same[0]
     # original/ that keeps only the downloaded archives (Arkgneisis) is compared with their extraction in
     # scratch/original-extracted/, which leaves original/ byte-for-byte as received (2026-10-04).
     extracted = sorted(p.parent for p in (Path(workspace) / "scratch" / "original-extracted").rglob("mod_info.json"))

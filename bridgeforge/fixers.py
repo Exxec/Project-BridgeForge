@@ -68,6 +68,7 @@ SUPPORTED_FINDINGS = (
     "ship-data-supplies-legacy-column",
     "rules-csv-duplicate-id",
     "rules-csv-whitespace-only-line",
+    "rules-csv-curly-quote-unreadable",
     "faction-trait-weight-legacy-personality-id",
     "shiproles-wing-id",
     "csv-fullwidth-number",
@@ -2396,6 +2397,25 @@ def _fix_rules_csv_whitespace_only_line(root: Path, options: dict) -> list[FileC
     return [FileChange(path=path, before=raw, after=_encode(new_text, had_bom))]
 
 
+def _fix_rules_csv_curly_quote_unreadable(root: Path, options: dict) -> list[FileChange]:
+    """Change the curly double quotes of unreadable rules.csv text alternatives to straight ones (Metelson Industries,
+    GRP4A-20261006). Only those cells change; the rest of the file keeps its bytes."""
+    from .scanner import _rules_curly_quote_cells
+
+    path = root / "data" / "campaign" / "rules.csv"
+    if not path.is_file():
+        raise FixerError("No data/campaign/rules.csv in this mod.")
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    cells = _rules_curly_quote_cells(text)
+    if not cells:
+        raise FixerError("No rules.csv text alternative holds an unreadable curly double quote.")
+    new_text = text
+    for start, end, value in reversed(cells):
+        new_text = new_text[:start] + '"' + value.replace('"', '""') + '"' + new_text[end:]
+    return [FileChange(path=path, before=raw, after=_encode(new_text, had_bom))]
+
+
 def _fix_person_names_duplicate_row(root: Path, options: dict) -> list[FileChange]:
     """Remove rows of data/characters/person_names.csv that repeat an earlier row (RC8 'Duplicate key' Fatal,
     Ironclads GRP10B-20261005). The first copy stays; every other byte, line endings included, is kept."""
@@ -3596,6 +3616,7 @@ _FIXER_FUNCS = {
     "ship-data-supplies-legacy-column": _fix_ship_data_supplies_legacy_column,
     "rules-csv-duplicate-id": _fix_rules_csv_duplicate_id,
     "rules-csv-whitespace-only-line": _fix_rules_csv_whitespace_only_line,
+    "rules-csv-curly-quote-unreadable": _fix_rules_csv_curly_quote_unreadable,
     "rc8-signature-changed": _fix_rc8_signature_changed,
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
     "shiproles-wing-id": _fix_shiproles_wing_id,

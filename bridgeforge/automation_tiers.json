@@ -202,6 +202,7 @@
     "ship-data-supplies-legacy-column": "auto",
     "rules-csv-duplicate-id": "auto",
     "rules-csv-whitespace-only-line": "auto",
+    "rules-csv-curly-quote-unreadable": "input",
     "vanilla-script-shadow-repointable": "decision",
     "variant-id-in-weapon-slot": "decision",
     "variant-op-over-budget": "auto",
