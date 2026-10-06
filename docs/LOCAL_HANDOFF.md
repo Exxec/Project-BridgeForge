@@ -18,6 +18,61 @@ Updated 2026-09-27 after the first local pass (ROADMAP P15 item 13): P1, R2, G4 
 tooling entries are done and removed; G2's content expectation and R2's BDS command were wrong.
 Every long command now prints `[n/total]` progress and resumes if interrupted (P15 item 12).
 
+## 0. Resume here: where the 2026-10-06 live-test session stopped
+
+**State.** Every mod `probe-group plan` knew about is live-validated and archived in `Done/`; the plan lists
+nothing left. Archived this session: Ironclads, Kadur Remnant, Free Stars Union, Metelson Industries,
+Glinthawk Operations, Tritachyon, yunruhullmods, yunruworlds, Magellan Protectorate, Pegasus Belt Council,
+Stardust Merchant Coalition, Sylphon RnD, The Nomads, yunrucore (workspace `YunruCore-2025`), Nightcross,
+Omega Trauma (re-archived), Zorg18 V18+bf.7. Code is committed up to `d363e49e` (ROADMAP items 55i, 55j). The
+owner's `.gitignore` edit and the untracked folders (`.goal-transfer/`, `fixtures/`, `ac8-save-editor-research/`,
+...) are deliberately not committed. Probe is 0.2.22. Last full suite: 1553 tests, one failure that also fails on a clean
+HEAD here: `tests/test_locks.py::test_child_with_cwd_inside_target_is_found` (process cwd lookup; environmental).
+
+**Open, in the order to take them (the owner decides the first four; do not decide for them):**
+1. Ironclads (`Done/Ironclads`): review the nine replaced vanilla faction files, the new-game character-point
+   conversion (manual option = 6 points, three skills dropped) and the removed vanilla worlds (black site, Limbo, gate
+   hauler, Nameless Rock; `data/scripts/plugins/IroncladsCoreLifecyclePlugin.java`).
+2. Hiver Swarm: its Nexerelin condition lines were dropped from `rules.csv` (review).
+3. Accepted probe finding: Magellan's hidden `magellan_startigers` builds no patrol at any size in RC8's
+   `FleetFactoryV3` (cause not found; nothing in the mod spawns its fleets). Recorded in the workspace's
+   `working/reports/probe_accepted.json` as a session decision. Delete the entry to reopen it.
+4. Zorg18's three revive findings (cosmetic design-type column, missing `zorg.faction` known lists, jar `initStar` call)
+   were put in `working/reports/baseline.json` as accepted (unchanged from the archived +bf.6); yunrucore's six
+   description-less weapons and five manufacturer colours likewise. Remove the baseline keys to reopen.
+5. Combat-Misc-Utils 0.4.1 (`In operation/Combat-Misc-Utils`): imported, status ASSESSMENT_REQUIRED, never revived.
+   `revive` it, then `probe-group plan`.
+6. Not written: a scanner check for an industry or content id that a newer installed library renamed (Tritachyon asked
+   for `BOGGLED_AI_STATION`, TASC 10.0.9 calls it `BOGGLED_REMNANT_STATION`; fixed by hand, jar rebuilt).
+7. Gated roadmap items 39 and 45 are unchanged.
+
+**How a live run works.** Close Starsector first, then from the repo root:
+```powershell
+python -m bridgeforge probe-group plan --no-auto-solo [--solo <Workspace>]   # writes In operation\PROBE_GROUPS.json
+python -m bridgeforge probe-group install 1 --stage-providers
+Set-ExecutionPolicy -Scope Process Bypass; .\tools\bf-test.ps1 launch GRP<N><letter>-<yyyymmdd>   # blocks until the game closes
+python -m bridgeforge probe-group report "In operation\_rig\logs\<TESTID>.stdout.log"
+python -m bridgeforge probe-group record <TESTID> --archive
+```
+A person must play: New Game, a career all the way through, one in-game day, the combat mission to its last round, quit.
+A launch that dies at startup ends by itself in seconds (read `<TESTID>.triage.txt` and `<TESTID>.windows.txt`). `record`
+reads the probe config the last `install` wrote, so record before installing the next group. If the audit blocks an archive,
+`bridgeforge audit-shipped "In operation\<Ws>"` lists each UNEXPLAINED difference; explain with `audit-explain <Ws> <files>
+--reason "<evidence>"` (`--auto` first). Recording writes `MOD_CHANGELOG.md` and `bridgeforge/release_policy.json`: do not run
+the test suite while it does (hermeticity check), then commit them.
+
+**Traps found this session.**
+- `git commit`'s hook runs `python -m ruff`; the project `.venv` Python has no ruff. Put
+  `C:\Users\exxec\AppData\Local\Python\pythoncore-3.14-64` first on `PATH` for the commit.
+- Workspaces get locked to non-admin sessions (twice: `Done\` zips and 14 workspaces; cause unknown). If `probe-group plan` says
+  "Access is denied", run `tools\unlock-workspaces.ps1 -Apply` from an Administrator PowerShell (dry run without `-Apply`).
+- A mod that already has an archive in `Done/` collides on `record --archive`: move the old folder to
+  `Done\_replaced-<date>\` (never delete an archive without the owner's word), then record again.
+- Edit code with the Write/Edit tools: `\n`, `\\` and `\"` inside shell heredoc Python are unescaped and corrupted files again
+  and again. Run `python -m bridgeforge docs-index` after adding a check, and do not edit tracked files while the suite runs.
+- Provider sources: `probe-group plan` with `--provider-source` set to the real install stages MagicLib 1.5.6 over the rig's 1.5.7
+  and the installer refuses; use the default sources.
+
 ## 1. Measure and try the unattended pipeline (ROADMAP P15)
 
 ### P2. First real `revive` and agent run (P15 items 2-3, 8-9)
