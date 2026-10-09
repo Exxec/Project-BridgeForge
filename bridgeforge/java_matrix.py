@@ -16,8 +16,12 @@ Needs the game install and a rig, so a live run is local-only (docs/LOCAL_HANDOF
 """
 from __future__ import annotations
 
+import json
+import os
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from . import boot_test
@@ -189,42 +193,184 @@ def setup_rig(rig: Path, variants: list[dict]) -> list[str]:
     return written
 
 
-def run_java_matrix(rig: Path, mods: list[str], variants: list[dict], repeats: int = 3, timeout: int = 240, checkpoint: Path | None = None, quiet: bool = False, log_name: str | None = None) -> dict:
+MAX_PARALLEL = 3  # owner limit 2026-10-09: RAM (~4 GB per instance) and GPU, and timing changes under load
+INSTANCE_FILE = "instance.json"
+LEDGER_NAME = "java-matrix-ledger.json"
+
+
+def _link(target: Path, link: Path) -> None:
+    """Junction on Windows (the rig layout), symlink elsewhere."""
+    try:
+        import _winapi
+    except ImportError:
+        link.symlink_to(target, target_is_directory=True)
+    else:
+        _winapi.CreateJunction(str(target), str(link))
+
+
+def make_instance_rig(rig: Path, variant: dict, mods: list[str]) -> Path:
+    """A throwaway rig for one parallel instance: its own mods/logs/saves, the same starsector-core.
+
+    Every folder in the main rig's mods/ is linked in (not copied); enabled_mods.json, logs and saves are the
+    instance's own, which is what lets run_boot_test's one-run-per-rig refusal stay in force. Rebuilt each run.
+    """
+    rig = Path(rig).resolve()
+    inst = rig / "instances" / variant["id"]
+    if inst.exists():
+        _remove_tree(inst)
+    (inst / "mods").mkdir(parents=True)
+    for sub in ("logs", "saves", "screenshots"):
+        (inst / sub).mkdir()
+    _link((rig / "starsector-core").resolve(), inst / "starsector-core")
+    src = rig / "mods"
+    if src.is_dir():
+        for child in sorted(p for p in src.iterdir() if p.is_dir()):
+            _link(child.resolve(), inst / "mods" / child.name)
+    (inst / variant["bat"]).write_text(build_launcher(variant["jdk_home"], variant["launcher"], variant["major"]), encoding="utf-8", newline="")
+    return inst
+
+
+def _remove_tree(path: Path) -> None:
+    """Delete an instance rig without following its junctions into the real mods or install."""
+    import shutil
+
+    for root, dirs, _files in os.walk(path, topdown=True):
+        for name in list(dirs):
+            p = Path(root) / name
+            if boot_test._is_link(p):
+                os.rmdir(p) if os.name == "nt" else p.unlink()
+                dirs.remove(name)
+    shutil.rmtree(path, ignore_errors=True)
+
+
+def _mods_key(variant: dict, mods: list[str]) -> str:
+    return f"{variant['id']}|{variant['java_version']}|{','.join(sorted(mods))}"
+
+
+def load_ledger(path: Path | None) -> dict:
+    if path and Path(path).is_file():
+        try:
+            return json.loads(Path(path).read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _write_instance(inst: Path, **fields: object) -> None:
+    path = inst / INSTANCE_FILE
+    data = {}
+    if path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            data = {}
+    data.update(fields)
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def list_instances(rig: Path) -> list[dict]:
+    """State of every instance rig under <rig>/instances: variant, run, status, whether its java is alive."""
+    rig = Path(rig).expanduser().resolve()
+    out = []
+    base = rig / "instances"
+    for inst in sorted(p for p in base.iterdir() if p.is_dir()) if base.is_dir() else []:
+        path = inst / INSTANCE_FILE
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        alive = bool(boot_test._running_java_under(inst))
+        if data.get("state") == "running" and not alive and data.get("finished") is None:
+            data["state"] = "running (no java yet)" if time.time() - data.get("started", 0) < 60 else "stale"
+        data["java_alive"] = alive
+        out.append(data)
+    return out
+
+
+def run_java_matrix(rig: Path, mods: list[str], variants: list[dict], repeats: int = 3, timeout: int = 240, checkpoint: Path | None = None, quiet: bool = False, log_name: str | None = None, parallel: int = 1, ledger: Path | None = None, skip_known: bool = False) -> dict:
     """Boot `mods` through every variant `repeats` times; one progress line per boot, resumable from `checkpoint`.
 
-    A variant whose launcher .bat is missing is reported REFUSED (run `java-matrix setup` first), not skipped.
+    parallel=1 runs in the rig itself, one boot at a time (the reference). parallel=2..3 gives each variant its
+    own instance rig (make_instance_rig) and runs that many variants at once; one variant's repeats stay serial.
+    skip_known reuses a PASS_ALL recorded in `ledger` for the same variant, Java build and mod set instead of
+    booting again (new mod sets have no entry, so they run everywhere). A variant whose launcher .bat is missing
+    is REFUSED (run `java-matrix setup` first), not skipped.
     """
+    if not 1 <= parallel <= MAX_PARALLEL:
+        raise ValueError(f"--parallel must be 1..{MAX_PARALLEL}")
     rig = Path(rig).expanduser().resolve()
     base = log_name or "java-matrix"
-    total = len(variants) * repeats
+    known = load_ledger(ledger) if skip_known else {}
     header = {"rig": str(rig), "mods": sorted(mods), "variants": [v["id"] for v in variants], "repeats": repeats}
     rows: dict[str, list[dict]] = {v["id"]: [] for v in variants}
-    done = 0
-    with Checkpoint(checkpoint, header) as ckpt:
-        for variant in variants:
-            for run in range(1, repeats + 1):
-                key = f"{variant['id']}#{run}"
-                done += 1
-                saved = ckpt.get(key)
-                if saved is not None:
-                    rows[variant["id"]].append(saved)
-                    if not quiet:
-                        report(done, total, key, saved["status"], None)
-                    continue
+    reused: dict[str, dict] = {}
+    todo = []
+    for variant in variants:
+        entry = known.get(_mods_key(variant, mods))
+        if entry and entry.get("pass_rate") == 1.0:
+            reused[variant["id"]] = entry
+        else:
+            todo.append(variant)
+    total = len(todo) * repeats
+    lock = threading.Lock()
+    counter = [0]
+
+    def boot_variant(variant: dict, ckpt: Checkpoint) -> None:
+        target_rig, inst = rig, None
+        if parallel > 1:
+            inst = make_instance_rig(rig, variant, mods)
+            target_rig = inst
+        for run in range(1, repeats + 1):
+            key = f"{variant['id']}#{run}"
+            saved = ckpt.get(key)
+            if saved is not None:
+                row, seconds = saved, None
+            else:
+                if inst is not None:
+                    _write_instance(inst, variant=variant["id"], launcher=variant["launcher"], java=variant["java_version"], mods=sorted(mods), run=run, of=repeats, state="running", started=time.time(), finished=None, status=None)
                 started = time.monotonic()
-                result = boot_test.run_boot_test(rig, mods, timeout=timeout, log_name=f"{base}-{variant['id']}-{run}", bat_name=variant["bat"])
+                result = boot_test.run_boot_test(target_rig, mods, timeout=timeout, log_name=f"{base}-{variant['id']}-{run}", bat_name=variant["bat"])
+                seconds = time.monotonic() - started
                 triage = result.get("triage") if isinstance(result.get("triage"), dict) else {}
                 row = {"run": run, "status": result["status"], "reason": result.get("reason"), "elapsed_seconds": result.get("elapsed_seconds"), "log": result.get("log"), "triage": triage.get("counts"), "vanilla_shadowing_symptoms": len(triage.get("vanilla_shadowing_symptoms") or [])}
-                ckpt.add(key, row)
+                if inst is not None:
+                    _write_instance(inst, state="done", finished=time.time(), status=row["status"], log=row["log"])
+            with lock:
+                if seconds is not None:
+                    ckpt.add(key, row)
                 rows[variant["id"]].append(row)
+                counter[0] += 1
                 if not quiet:
-                    report(done, total, key, result["status"], time.monotonic() - started)
+                    report(counter[0], total, key, row["status"], seconds)
+
+    with Checkpoint(checkpoint, header) as ckpt:
+        if parallel == 1:
+            for variant in todo:
+                boot_variant(variant, ckpt)
+        else:
+            with ThreadPoolExecutor(max_workers=parallel) as pool:
+                for future in [pool.submit(boot_variant, v, ckpt) for v in todo]:
+                    future.result()
     matrix = []
     for variant in variants:
+        meta = {k: variant[k] for k in ("id", "major", "launcher", "java_version")}
+        if variant["id"] in reused:
+            matrix.append({**meta, "runs": 0, "passed": 0, "pass_rate": 1.0, "statuses": ["KNOWN_PASS"], "results": [], "reused_from": reused[variant["id"]].get("date")})
+            continue
         runs = rows[variant["id"]]
         passed = sum(1 for r in runs if r["status"] == "PASS")
-        matrix.append({**{k: variant[k] for k in ("id", "major", "launcher", "java_version")}, "runs": len(runs), "passed": passed, "pass_rate": round(passed / len(runs), 2) if runs else None, "statuses": [r["status"] for r in runs], "results": runs})
-    result = {"schema_version": 1, "mode": "JAVA_MATRIX", "mods": sorted(mods), "repeats": repeats, "matrix": matrix, "verdict": _verdict(matrix)}
+        matrix.append({**meta, "runs": len(runs), "passed": passed, "pass_rate": round(passed / len(runs), 2) if runs else None, "statuses": [r["status"] for r in runs], "results": runs})
+    result = {"schema_version": 1, "mode": "JAVA_MATRIX", "mods": sorted(mods), "repeats": repeats, "parallel": parallel, "matrix": matrix, "verdict": _verdict(matrix)}
+    if ledger is not None:
+        data = load_ledger(ledger)
+        stamp = time.strftime("%Y-%m-%d")
+        for variant, m in zip(variants, matrix):
+            if m["runs"]:
+                data[_mods_key(variant, mods)] = {"pass_rate": m["pass_rate"], "runs": m["runs"], "date": stamp, "parallel": parallel}
+        Path(ledger).parent.mkdir(parents=True, exist_ok=True)
+        Path(ledger).write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
     if checkpoint is not None and Path(checkpoint).is_file():
         Path(checkpoint).unlink()
     return result
@@ -246,8 +392,9 @@ def _verdict(matrix: list[dict]) -> str:
 
 
 def render(result: dict) -> str:
-    lines = [f"Verdict: {result['verdict']} ({result['repeats']} run(s) per variant)"]
+    lines = [f"Verdict: {result['verdict']} ({result['repeats']} run(s) per variant, {result.get('parallel', 1)} at a time)"]
     for m in result["matrix"]:
-        lines.append(f"  {m['id']:<14} Java {m['java_version']:<12} {m['passed']}/{m['runs']} PASS  {' '.join(m['statuses'])}")
+        known = f"  (reused from {m['reused_from']})" if "reused_from" in m else ""
+        lines.append(f"  {m['id']:<14} Java {m['java_version']:<12} {m['passed']}/{m['runs']} PASS  {' '.join(m['statuses'])}{known}")
     return "\n".join(lines)
 

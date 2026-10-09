@@ -417,8 +417,15 @@ def build_parser() -> argparse.ArgumentParser:
     jm_run.add_argument("--repeats", type=int, default=3)
     jm_run.add_argument("--timeout", type=int, default=240)
     jm_run.add_argument("--log-name")
+    jm_run.add_argument("--parallel", type=int, default=None, metavar="N", help="boot up to N variants at once, 1..3, each in its own instance rig (default 1, the serial reference; 3 with --preset compare)")
+    jm_run.add_argument("--preset", choices=["compare"], help="compare = Java 25 and 28, direct and Fast Rendering: vanilla, FR, Java 28, FR + Java 28 (4 variants, 3 at a time)")
+    jm_run.add_argument("--skip-known", action="store_true", help="reuse a recorded all-pass for the same variant, Java build and mod set instead of booting again (new mod sets always boot)")
+    jm_run.add_argument("--ledger", type=Path, default=Path("bridgeforge-state") / "java-matrix-ledger.json")
     jm_run.add_argument("--quiet", action="store_true", help="no per-boot progress lines on stderr")
     jm_run.add_argument("--json", action="store_true")
+    jm_inst = jm_sub.add_parser("instances", help="list the parallel instances of a rig: variant, run, state, whether its java is alive")
+    jm_inst.add_argument("rig", type=Path)
+    jm_inst.add_argument("--json", action="store_true")
     jm_log = jm_sub.add_parser("describe-log", help="read a tester's starsector.log: Java version and whether Fast Rendering was loaded")
     jm_log.add_argument("log", type=Path)
     jm_log.add_argument("--json", action="store_true")
@@ -2841,6 +2848,13 @@ def main(argv: list[str] | None = None) -> int:
                 jdks = jm.discover_jdks(args.rig, args.jdk_root)
                 print(json.dumps(jdks, indent=2) if args.json else "\n".join(f"Java {j['major']:<3} {j['version']:<14} {j['home']}" for j in jdks) or "no JDKs found")
                 return 0 if jdks else 1
+            if args.java_matrix_command == "instances":
+                found = jm.list_instances(args.rig)
+                print(json.dumps(found, indent=2) if args.json else "\n".join(f"{i.get('variant')}: {i.get('state')} run {i.get('run')}/{i.get('of')} status={i.get('status')} java_alive={i['java_alive']}" for i in found) or "no instances")
+                return 0
+            if getattr(args, "preset", None) == "compare":
+                args.java, args.launcher = [25, 28], None
+                args.parallel = args.parallel or 3
             variants = jm.plan_variants(jm.discover_jdks(args.rig, args.jdk_root), args.launcher, args.java)
             if not variants:
                 print("bridgeforge: no JDK matched; try `java-matrix discover` or --jdk-root", file=sys.stderr)
@@ -2850,7 +2864,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps({"written": written, "variants": variants}, indent=2) if args.json else "Wrote " + ", ".join(written))
                 return 0
             checkpoint = Path(args.rig) / "logs" / "java-matrix.partial.jsonl"
-            result = jm.run_java_matrix(args.rig, args.mods, variants, repeats=args.repeats, timeout=args.timeout, checkpoint=checkpoint, quiet=args.quiet, log_name=args.log_name)
+            result = jm.run_java_matrix(args.rig, args.mods, variants, repeats=args.repeats, timeout=args.timeout, checkpoint=checkpoint, quiet=args.quiet, log_name=args.log_name, parallel=args.parallel or 1, ledger=args.ledger, skip_known=args.skip_known)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

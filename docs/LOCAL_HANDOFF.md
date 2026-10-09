@@ -85,6 +85,8 @@ Set up 2026-10-09, not yet run. Do this when live testing resumes:
 4. `python -m bridgeforge java-matrix run "In operation/_rig" --mods <ids> --repeats 3` in the background; read its progress lines. "Done" = a pass-rate table per variant. If Java 28 + `fr` fails and `direct` passes, Fast Rendering is the cause; add a row to `docs/RC8_BEHAVIOUR.md`.
 5. For a tester's report: `java-matrix describe-log <their starsector.log>` shows their Java and whether Fast Rendering was loaded.
 
+Parallel (owner 2026-10-09, max 3): `java-matrix run RIG --mods <ids> --preset compare` boots vanilla (Java 25), FR, Java 28 and FR + Java 28, three at once, each in `RIG/instances/<variant>/` (linked mods and core, own logs/saves). `java-matrix instances RIG` shows state. Serial (`--parallel 1`) stays the reference: parallel load changes timing, which matters for a race. `--skip-known` reuses a recorded all-pass (`bridgeforge-state/java-matrix-ledger.json`) for the same variant, Java build and mod set, so only new mods boot everywhere. Check RAM (about 4 GB each) before the first parallel run.
+
 Known limit: the stale-process check only sees java.exe under the rig, and these JDKs live outside it; the run kills the launcher's process tree on timeout.
 
 ## 1. Measure and try the unattended pipeline (ROADMAP P15)

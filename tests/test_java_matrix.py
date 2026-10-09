@@ -124,6 +124,74 @@ class RunTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "REFUSED")
 
 
+class ParallelTests(unittest.TestCase):
+    def _variants(self, n=4):
+        return [{"id": f"j{25 + i}-direct", "major": 25 + i, "launcher": "direct", "jdk_home": "x", "java_version": str(25 + i), "bat": f"run-j{25 + i}-direct.bat"} for i in range(n)]
+
+    def _ok(self, rig, mods, timeout, log_name, bat_name):
+        return {"status": "PASS", "reason": None, "log": log_name, "elapsed_seconds": 0.1, "triage": None}
+
+    def test_parallel_is_capped_at_three(self):
+        with resolved_temp_dir() as root:
+            rig = _rig(root)
+            for bad in (0, 4):
+                with self.assertRaises(ValueError):
+                    java_matrix.run_java_matrix(rig, ["m"], self._variants(1), parallel=bad)
+
+    def test_each_parallel_variant_gets_its_own_rig_with_linked_mods_and_core(self):
+        with resolved_temp_dir() as root:
+            rig = _rig(root)
+            (rig / "mods" / "ModA").mkdir(parents=True)
+            (rig / "mods" / "ModA" / "mod_info.json").write_text("{}", encoding="utf-8")
+            seen = []
+
+            def fake(inst, mods, timeout, log_name, bat_name):
+                seen.append(Path(inst))
+                return self._ok(inst, mods, timeout, log_name, bat_name)
+
+            with mock.patch.object(boot_test, "run_boot_test", fake), redirect_stderr(io.StringIO()):
+                result = java_matrix.run_java_matrix(rig, ["ModA"], self._variants(3), repeats=1, parallel=3)
+            self.assertEqual(result["verdict"], "PASS_ALL")
+            self.assertEqual(sorted(p.name for p in seen), ["j25-direct", "j26-direct", "j27-direct"])
+            inst = rig / "instances" / "j25-direct"
+            self.assertTrue(boot_test._is_link(inst / "starsector-core"))
+            self.assertTrue((inst / "mods" / "ModA" / "mod_info.json").is_file())
+            self.assertTrue((inst / "run-j25-direct.bat").is_file())
+            self.assertEqual(json.loads((inst / "instance.json").read_text(encoding="utf-8"))["state"], "done")
+            self.assertEqual(len(java_matrix.list_instances(rig)), 3)
+            # rebuilding removes the junctions without touching the real mod behind them
+            java_matrix.make_instance_rig(rig, self._variants(1)[0], ["ModA"])
+            self.assertTrue((rig / "mods" / "ModA" / "mod_info.json").is_file())
+
+    def test_skip_known_reuses_an_all_pass_for_the_same_mod_set_only(self):
+        calls = []
+
+        def fake(rig, mods, timeout, log_name, bat_name):
+            calls.append(bat_name)
+            return self._ok(rig, mods, timeout, log_name, bat_name)
+
+        with resolved_temp_dir() as root, mock.patch.object(boot_test, "run_boot_test", fake), redirect_stderr(io.StringIO()):
+            rig, ledger, variants = _rig(root), root / "ledger.json", self._variants(2)
+            java_matrix.run_java_matrix(rig, ["m"], variants, repeats=1, ledger=ledger)
+            calls.clear()
+            again = java_matrix.run_java_matrix(rig, ["m"], variants, repeats=1, ledger=ledger, skip_known=True)
+            self.assertEqual(calls, [])
+            self.assertEqual(again["matrix"][0]["statuses"], ["KNOWN_PASS"])
+            self.assertEqual(again["verdict"], "PASS_ALL")
+            java_matrix.run_java_matrix(rig, ["m", "new_mod"], variants, repeats=1, ledger=ledger, skip_known=True)
+            self.assertEqual(len(calls), 2)  # a new mod set boots on every variant
+
+    def test_cli_exposes_parallel_skip_known_and_instances(self):
+        out = io.StringIO()
+        with redirect_stdout(out), self.assertRaises(SystemExit):
+            main(["java-matrix", "run", "--help"])
+        for flag in ("--parallel", "--skip-known", "--preset"):
+            self.assertIn(flag, out.getvalue())
+        with resolved_temp_dir() as root, redirect_stdout(io.StringIO()) as listing:
+            self.assertEqual(main(["java-matrix", "instances", str(_rig(root))]), 0)
+        self.assertIn("no instances", listing.getvalue())
+
+
 class DescribeLogTests(unittest.TestCase):
     def test_reads_java_version_and_fast_rendering_from_a_tester_log(self):
         with resolved_temp_dir() as root:
