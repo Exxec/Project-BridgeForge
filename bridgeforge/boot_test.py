@@ -105,7 +105,7 @@ def _result(status: str, reason: str | None, log: Path | None = None, errlog: Pa
     }
 
 
-def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_name: str | None = None, keep_mods: bool = False) -> dict:
+def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_name: str | None = None, keep_mods: bool = False, bat_name: str | None = None) -> dict:
     """Launch an isolated Starsector runtime rig headlessly and watch its log for a boot milestone.
 
     NEVER call this against a real/shared install: runtime_dir must be a disposable rig whose
@@ -132,7 +132,7 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
             "a new boot test; two overlapping runs would corrupt the shared log/mods rig.",
         )
 
-    bat_path = runtime_dir / BAT_NAME
+    bat_path = runtime_dir / (bat_name or BAT_NAME)
     if not bat_path.is_file():
         return _result("REFUSED", f"Launcher not found: {bat_path}")
 

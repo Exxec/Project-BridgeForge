@@ -75,6 +75,18 @@ the test suite while it does (hermeticity check), then commit them.
 - Provider sources: `probe-group plan` with `--provider-source` set to the real install stages MagicLib 1.5.6 over the rig's 1.5.7
   and the installer refuses; use the default sources.
 
+## 0a. Java/launcher matrix: first live use (ROADMAP item 61)
+
+Set up 2026-10-09, not yet run. Do this when live testing resumes:
+
+1. `python -m bridgeforge java-matrix discover --rig "In operation/_rig"` (found here: Java 8 jre, 25, 27, 28; **no Java 17**: add one with `--jdk-root`).
+2. `python -m bridgeforge java-matrix setup "In operation/_rig"` writes `run-j25-direct.bat`, `run-j25-fr.bat`, ... (Java 8 is skipped unless `--java 8`).
+3. Check the `fr` bats by hand once: the rig's `starsector-core` junction must expose `fr.vmparams` (and `PatchLibAgent.jar` if used); confirm the log lands in `_rig/logs`, not the real install.
+4. `python -m bridgeforge java-matrix run "In operation/_rig" --mods <ids> --repeats 3` in the background; read its progress lines. "Done" = a pass-rate table per variant. If Java 28 + `fr` fails and `direct` passes, Fast Rendering is the cause; add a row to `docs/RC8_BEHAVIOUR.md`.
+5. For a tester's report: `java-matrix describe-log <their starsector.log>` shows their Java and whether Fast Rendering was loaded.
+
+Known limit: the stale-process check only sees java.exe under the rig, and these JDKs live outside it; the run kills the launcher's process tree on timeout.
+
 ## 1. Measure and try the unattended pipeline (ROADMAP P15)
 
 ### P2. First real `revive` and agent run (P15 items 2-3, 8-9)

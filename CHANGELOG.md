@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **`java-matrix` (ROADMAP item 61):** boot one mod set through every Java version and launcher (direct or Fast Rendering) in a rig, with a pass rate per variant; set up, not yet run live.
 - **`jar-interface-method-missing` and `port-interfaces`:** jar classes missing a method RC8's interfaces require
   (an AbstractMethodError as shipped) are found from the class files and ported where the change is mechanical; 85
   classes in 9 mods on the first run. Relink also handles Lombok sources, Kotlin classes, same-name overloads and

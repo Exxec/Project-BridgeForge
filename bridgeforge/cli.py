@@ -396,6 +396,32 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_test_cmd.add_argument("--log-name")
     prepare_test_cmd.add_argument("--keep-mods", action="store_true")
     prepare_test_cmd.add_argument("--json", action="store_true")
+    jm_cmd = subcommands.add_parser("java-matrix", help="boot one mod set through every Java version and launcher (direct / Fast Rendering) in a rig; local-only, needs a rig and the game install (ROADMAP item 61)")
+    jm_sub = jm_cmd.add_subparsers(dest="java_matrix_command", required=True)
+    jm_discover = jm_sub.add_parser("discover", help="list the JDKs found beside the rig's install, in the rig and in the usual install folders")
+    jm_discover.add_argument("--rig", type=Path)
+    jm_discover.add_argument("--jdk-root", type=Path, action="append", default=[], help="extra folder holding JDKs (repeatable)")
+    jm_discover.add_argument("--json", action="store_true")
+    jm_setup = jm_sub.add_parser("setup", help="write one run-j<major>-<launcher>.bat per variant into the rig (never touches run-java25.bat)")
+    jm_setup.add_argument("rig", type=Path)
+    jm_setup.add_argument("--java", type=int, nargs="+", metavar="MAJOR", help="only these Java majors (default: every JDK found)")
+    jm_setup.add_argument("--launcher", nargs="+", choices=["direct", "fr"], help="default: both")
+    jm_setup.add_argument("--jdk-root", type=Path, action="append", default=[])
+    jm_setup.add_argument("--json", action="store_true")
+    jm_run = jm_sub.add_parser("run", help="boot --mods through every variant --repeats times and report a pass rate per variant")
+    jm_run.add_argument("rig", type=Path)
+    jm_run.add_argument("--mods", nargs="+", required=True, metavar="ID")
+    jm_run.add_argument("--java", type=int, nargs="+", metavar="MAJOR")
+    jm_run.add_argument("--launcher", nargs="+", choices=["direct", "fr"])
+    jm_run.add_argument("--jdk-root", type=Path, action="append", default=[])
+    jm_run.add_argument("--repeats", type=int, default=3)
+    jm_run.add_argument("--timeout", type=int, default=240)
+    jm_run.add_argument("--log-name")
+    jm_run.add_argument("--quiet", action="store_true", help="no per-boot progress lines on stderr")
+    jm_run.add_argument("--json", action="store_true")
+    jm_log = jm_sub.add_parser("describe-log", help="read a tester's starsector.log: Java version and whether Fast Rendering was loaded")
+    jm_log.add_argument("log", type=Path)
+    jm_log.add_argument("--json", action="store_true")
     boot_test_cmd = subcommands.add_parser("boot-test", help="run a boot smoke test of a Starsector runtime with explicit mods enabled")
     boot_test_cmd.add_argument("runtime_dir", type=Path)
     boot_test_cmd.add_argument("--mods", nargs="+", required=True, metavar="ID")
@@ -2804,6 +2830,32 @@ def main(argv: list[str] | None = None) -> int:
                 boot_result = result["boot_test"]
                 print(f"Boot test: {boot_result.get('status')} {boot_result.get('reason', '')}".rstrip())
         return 0 if result["status"] in {"PASS", "SAME_FOLDER"} else 1
+    if args.command == "java-matrix":
+        from . import java_matrix as jm
+        try:
+            if args.java_matrix_command == "describe-log":
+                result = jm.describe_log_java(args.log)
+                print(json.dumps(result, indent=2) if args.json else f"Java {result['java_version']}; Fast Rendering: {result['fast_rendering']}; launcher hint: {result['launcher_hint']}")
+                return 0
+            if args.java_matrix_command == "discover":
+                jdks = jm.discover_jdks(args.rig, args.jdk_root)
+                print(json.dumps(jdks, indent=2) if args.json else "\n".join(f"Java {j['major']:<3} {j['version']:<14} {j['home']}" for j in jdks) or "no JDKs found")
+                return 0 if jdks else 1
+            variants = jm.plan_variants(jm.discover_jdks(args.rig, args.jdk_root), args.launcher, args.java)
+            if not variants:
+                print("bridgeforge: no JDK matched; try `java-matrix discover` or --jdk-root", file=sys.stderr)
+                return 2
+            if args.java_matrix_command == "setup":
+                written = jm.setup_rig(args.rig, variants)
+                print(json.dumps({"written": written, "variants": variants}, indent=2) if args.json else "Wrote " + ", ".join(written))
+                return 0
+            checkpoint = Path(args.rig) / "logs" / "java-matrix.partial.jsonl"
+            result = jm.run_java_matrix(args.rig, args.mods, variants, repeats=args.repeats, timeout=args.timeout, checkpoint=checkpoint, quiet=args.quiet, log_name=args.log_name)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2, sort_keys=True) if args.json else jm.render(result))
+        return 0 if result["verdict"] == "PASS_ALL" else 1
     if args.command == "boot-test":
         try:
             from . import boot_test as boot_test_module

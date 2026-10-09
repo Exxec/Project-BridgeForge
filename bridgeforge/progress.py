@@ -115,4 +115,5 @@ LONG_RUNNING_COMMANDS = (
     ("translate-batch",),
     ("done-audit",),
     ("mods-compat",),
+    ("java-matrix", "run"),
 )
