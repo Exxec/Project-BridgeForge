@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **`java-matrix mass` (ROADMAP item 62):** tests each archived mod with its dependencies through the Java/launcher variants, screening first, and reports environment-sensitive mods. Launchers now drop flags the JDK refuses (JDK 28 rejects `-noverify`); AoTD / Toolbox compatibility plan in `docs/AOTD_COMPAT_PLAN.md` (item 63).
 - **`java-matrix` (ROADMAP item 61):** boot one mod set through every Java version and launcher (direct or Fast Rendering) in a rig, with a pass rate per variant; set up, not yet run live.
 - **`jar-interface-method-missing` and `port-interfaces`:** jar classes missing a method RC8's interfaces require
   (an AbstractMethodError as shipped) are found from the class files and ported where the change is mechanical; 85

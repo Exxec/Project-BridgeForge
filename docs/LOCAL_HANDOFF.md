@@ -87,6 +87,8 @@ Set up 2026-10-09, not yet run. Do this when live testing resumes:
 
 Parallel (owner 2026-10-09, max 3): `java-matrix run RIG --mods <ids> --preset compare` boots vanilla (Java 25), FR, Java 28 and FR + Java 28, three at once, each in `RIG/instances/<variant>/` (linked mods and core, own logs/saves). `java-matrix instances RIG` shows state. Serial (`--parallel 1`) stays the reference: parallel load changes timing, which matters for a race. `--skip-known` reuses a recorded all-pass (`bridgeforge-state/java-matrix-ledger.json`) for the same variant, Java build and mod set, so only new mods boot everywhere. Check RAM (about 4 GB each) before the first parallel run.
 
+Mass test (item 62): `python -m bridgeforge java-matrix mass "In operation/_rig" --only Ironclads` first (one mod, see the table), then `--limit 20`, then the whole archive in the background. Read `bridgeforge-state/mass-test/MASS_TEST.md`; logs are kept under `bridgeforge-state/mass-test/logs/<mod>/`. Check `dropped_flags` in the JSON: a JDK that refuses a flag is itself an environment difference (JDK 28+13 refuses `-noverify` and `-XX:+UseVectorStubs`). Prepatcher is not in the matrix yet (item 63 step 1).
+
 Known limit: the stale-process check only sees java.exe under the rig, and these JDKs live outside it; the run kills the launcher's process tree on timeout.
 
 ## 1. Measure and try the unattended pipeline (ROADMAP P15)

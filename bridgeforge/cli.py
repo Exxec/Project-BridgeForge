@@ -423,6 +423,25 @@ def build_parser() -> argparse.ArgumentParser:
     jm_run.add_argument("--ledger", type=Path, default=Path("bridgeforge-state") / "java-matrix-ledger.json")
     jm_run.add_argument("--quiet", action="store_true", help="no per-boot progress lines on stderr")
     jm_run.add_argument("--json", action="store_true")
+    jm_mass = jm_sub.add_parser("mass", help="test every archived mod in Done/ (with its dependencies only) through the variants, screening first; reports which mods behave differently by environment (ROADMAP item 62)")
+    jm_mass.add_argument("rig", type=Path)
+    jm_mass.add_argument("--done-dir", type=Path, default=Path("Done"))
+    jm_mass.add_argument("--only", nargs="+", metavar="NAME", help="only these Done/ folders")
+    jm_mass.add_argument("--limit", type=int, help="test only the first N mods")
+    jm_mass.add_argument("--providers", type=Path, action="append", default=[], help="extra folder of mods that supply dependencies (the rig's mods/ and the install's mods/ are always searched)")
+    jm_mass.add_argument("--java", type=int, nargs="+", metavar="MAJOR", default=[25, 28])
+    jm_mass.add_argument("--launcher", nargs="+", choices=["direct", "fr"])
+    jm_mass.add_argument("--jdk-root", type=Path, action="append", default=[])
+    jm_mass.add_argument("--no-screen", action="store_true", help="boot every variant for every mod (default: baseline and Fast Rendering on the highest Java first; the rest only on a mismatch)")
+    jm_mass.add_argument("--retest-baseline", action="store_true", help="also re-boot the baseline for LIVE_VALIDATED mods (default: assume it passes)")
+    jm_mass.add_argument("--repeats", type=int, default=1)
+    jm_mass.add_argument("--parallel", type=int, default=3, metavar="N")
+    jm_mass.add_argument("--timeout", type=int, default=240)
+    jm_mass.add_argument("--skip-known", action="store_true")
+    jm_mass.add_argument("--ledger", type=Path, default=Path("bridgeforge-state") / "java-matrix-ledger.json")
+    jm_mass.add_argument("--output", type=Path, default=Path("bridgeforge-state") / "mass-test")
+    jm_mass.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
+    jm_mass.add_argument("--json", action="store_true")
     jm_inst = jm_sub.add_parser("instances", help="list the parallel instances of a rig: variant, run, state, whether its java is alive")
     jm_inst.add_argument("rig", type=Path)
     jm_inst.add_argument("--json", action="store_true")
@@ -2852,6 +2871,24 @@ def main(argv: list[str] | None = None) -> int:
                 found = jm.list_instances(args.rig)
                 print(json.dumps(found, indent=2) if args.json else "\n".join(f"{i.get('variant')}: {i.get('state')} run {i.get('run')}/{i.get('of')} status={i.get('status')} java_alive={i['java_alive']}" for i in found) or "no instances")
                 return 0
+            if args.java_matrix_command == "mass":
+                from . import mass_test as mt
+                targets = mt.collect_targets(args.done_dir, args.only)
+                if not targets:
+                    print(f"bridgeforge: no archived mods found under {args.done_dir}", file=sys.stderr)
+                    return 2
+                variants = jm.plan_variants(jm.discover_jdks(args.rig, args.jdk_root), args.launcher, args.java)
+                if not variants:
+                    print("bridgeforge: no JDK matched; try `java-matrix discover` or --jdk-root", file=sys.stderr)
+                    return 2
+                rig_path = Path(args.rig).expanduser().resolve()
+                roots = [*args.providers, rig_path / "mods", (rig_path / "starsector-core").resolve().parent / "mods"]
+                providers = mt.index_providers(roots)
+                for target in targets:
+                    providers.setdefault(target["id"], Path(target["folder"]))
+                result = mt.run_mass(args.rig, targets, variants, providers, args.output, screen=not args.no_screen, skip_baseline_validated=not args.retest_baseline, repeats=args.repeats, timeout=args.timeout, parallel=args.parallel, ledger=args.ledger, skip_known=args.skip_known, quiet=args.quiet, limit=args.limit)
+                print(json.dumps(result, indent=2) if args.json else "Mass test: " + ", ".join(f"{k}={v}" for k, v in sorted(result["counts"].items())) + f". See {args.output / 'MASS_TEST.md'}")
+                return 0 if not any(k in result["counts"] for k in ("ENVIRONMENT_SENSITIVE", "FLAKY")) else 1
             if getattr(args, "preset", None) == "compare":
                 args.java, args.launcher = [25, 28], None
                 args.parallel = args.parallel or 3

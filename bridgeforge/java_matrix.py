@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -137,8 +138,69 @@ def bat_name(vid: str) -> str:
     return f"run-{vid}.bat"
 
 
-def build_launcher(jdk_home: str, launcher: str, java_major: int) -> str:
-    """Text of a rig launcher .bat. CWD is the starsector-core junction, as in the proven run-java25.bat."""
+_REJECTED = ("Unrecognized", "Unsupported", "Improperly specified", "Invalid")
+_PROBES: dict[tuple[str, str], bool] = {}
+
+
+def _java_rejects(java_exe: Path, flags: list[str]) -> bool:
+    """True when `java <flags> -version` fails because a flag is unknown to this JVM (not for any other reason)."""
+    try:
+        done = subprocess.run([str(java_exe), "-XX:+UnlockDiagnosticVMOptions", "-XX:+UnlockExperimentalVMOptions", *flags, "-version"], capture_output=True, text=True, timeout=60, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return done.returncode != 0 and any(marker in (done.stderr or "") for marker in _REJECTED)
+
+
+def probeable(flag: str) -> bool:
+    """Flags a newer JVM may have removed. -D, --add-*, -javaagent, -classpath and the main class are never probed."""
+    return flag.startswith("-XX:") or flag == "-noverify"
+
+
+def unsupported_flags(java_exe: Path, flags: list[str]) -> list[str]:
+    """Flags this JDK refuses. JDK 28+13 rejects `-noverify` and `-XX:+UseVectorStubs` (found 2026-10-10), which
+    would stop the launcher before the game starts, so a variant drops what its JVM does not know and records it."""
+    flags = [f for f in dict.fromkeys(flags) if probeable(f)]
+    if not flags:
+        return []
+    key = (str(java_exe), " ".join(flags))
+    if key not in _PROBES:
+        _PROBES[key] = _java_rejects(java_exe, flags)
+    if not _PROBES[key]:
+        return []
+    dropped = []
+    for flag in flags:
+        single = (str(java_exe), flag)
+        if single not in _PROBES:
+            _PROBES[single] = _java_rejects(java_exe, [flag])
+        if _PROBES[single]:
+            dropped.append(flag)
+    return dropped
+
+
+def write_launcher_files(target: Path, variant: dict, core: Path) -> list[str]:
+    """Write the variant's bat (and, for Fast Rendering, a filtered copy of the install's fr.vmparams) into
+    `target`; returns and records the flags this JDK does not know. The install's own files are only read."""
+    java_exe = Path(variant["jdk_home"]) / "bin" / "java.exe"
+    if variant["launcher"] == "direct":
+        dropped = unsupported_flags(java_exe, [t for line in DIRECT_FLAGS for t in line.split()])
+    else:
+        source = Path(core) / "fr.vmparams"
+        if not source.is_file():
+            raise ValueError(f"{source} not found; the Fast Rendering launcher needs fr.vmparams in the install's starsector-core")
+        lines = source.read_text(encoding="utf-8", errors="replace").splitlines()
+        dropped = unsupported_flags(java_exe, [line.strip() for line in lines])
+        kept = [line for line in lines if line.strip() not in dropped]
+        (Path(target) / "fr.filtered.vmparams").write_text("\n".join(kept) + "\n", encoding="utf-8", newline="")
+    variant["dropped_flags"] = dropped
+    (Path(target) / variant["bat"]).write_text(build_launcher(variant["jdk_home"], variant["launcher"], variant["major"], dropped), encoding="utf-8", newline="")
+    return dropped
+
+
+def build_launcher(jdk_home: str, launcher: str, java_major: int, dropped: list[str] | None = None) -> str:
+    """Text of a rig launcher .bat. CWD is the starsector-core junction, as in the proven run-java25.bat.
+
+    `dropped` (from write_launcher_files) lists flags to leave out; for Fast Rendering it also switches to the
+    filtered fr.filtered.vmparams beside the bat. None keeps the install's fr.vmparams untouched."""
     if launcher not in LAUNCHERS:
         raise ValueError(f"unknown launcher {launcher!r}; expected one of {', '.join(LAUNCHERS)}")
     head = [
@@ -150,7 +212,8 @@ def build_launcher(jdk_home: str, launcher: str, java_major: int) -> str:
     ]
     java = f'"{jdk_home}\\bin\\java.exe"'
     if launcher == "direct":
-        flags = list(DIRECT_FLAGS)
+        flags = [" ".join(t for t in line.split() if t not in (dropped or ())) for line in DIRECT_FLAGS]
+        flags = [f for f in flags if f]
         if java_major < 17:
             flags = [f.replace(" --enable-native-access=ALL-UNNAMED", "") for f in flags]
         body = [java + " ^"]
@@ -159,11 +222,12 @@ def build_launcher(jdk_home: str, launcher: str, java_major: int) -> str:
     else:
         # fr.bat's own command line; the later -D wins, so the log lands in the rig, not the real install.
         logs = PATH_FLAGS[-1]
+        argfile = "@fr.vmparams" if dropped is None else '"@%RT%fr.filtered.vmparams"'
         body = [
             "IF EXIST PatchLibAgent.jar (",
-            f"  {java} -javaagent:PatchLibAgent.jar @fr.vmparams {logs}",
+            f"  {java} -javaagent:PatchLibAgent.jar {argfile} {logs}",
             ") ELSE (",
-            f"  {java} @fr.vmparams {logs}",
+            f"  {java} {argfile} {logs}",
             ")",
         ]
     return "\r\n".join(head + body) + "\r\n"
@@ -187,8 +251,7 @@ def setup_rig(rig: Path, variants: list[dict]) -> list[str]:
         raise ValueError(f"{rig / 'starsector-core'} is not a junction/symlink; java-matrix setup refuses a non-isolated rig")
     written = []
     for variant in variants:
-        path = rig / variant["bat"]
-        path.write_text(build_launcher(variant["jdk_home"], variant["launcher"], variant["major"]), encoding="utf-8", newline="")
+        write_launcher_files(rig, variant, rig / "starsector-core")
         written.append(variant["bat"])
     return written
 
@@ -208,11 +271,12 @@ def _link(target: Path, link: Path) -> None:
         _winapi.CreateJunction(str(target), str(link))
 
 
-def make_instance_rig(rig: Path, variant: dict, mods: list[str]) -> Path:
+def make_instance_rig(rig: Path, variant: dict, mods: list[str], mod_sources: list[Path] | None = None) -> Path:
     """A throwaway rig for one parallel instance: its own mods/logs/saves, the same starsector-core.
 
     Every folder in the main rig's mods/ is linked in (not copied); enabled_mods.json, logs and saves are the
     instance's own, which is what lets run_boot_test's one-run-per-rig refusal stay in force. Rebuilt each run.
+    `mod_sources` (mass testing) links exactly those mod folders instead, so a run sees only the mods it needs.
     """
     rig = Path(rig).resolve()
     inst = rig / "instances" / variant["id"]
@@ -223,10 +287,13 @@ def make_instance_rig(rig: Path, variant: dict, mods: list[str]) -> Path:
         (inst / sub).mkdir()
     _link((rig / "starsector-core").resolve(), inst / "starsector-core")
     src = rig / "mods"
-    if src.is_dir():
+    if mod_sources is not None:
+        for folder in mod_sources:
+            _link(Path(folder).resolve(), inst / "mods" / Path(folder).name)
+    elif src.is_dir():
         for child in sorted(p for p in src.iterdir() if p.is_dir()):
             _link(child.resolve(), inst / "mods" / child.name)
-    (inst / variant["bat"]).write_text(build_launcher(variant["jdk_home"], variant["launcher"], variant["major"]), encoding="utf-8", newline="")
+    write_launcher_files(inst, variant, inst / "starsector-core")
     return inst
 
 
@@ -241,6 +308,22 @@ def _remove_tree(path: Path) -> None:
                 os.rmdir(p) if os.name == "nt" else p.unlink()
                 dirs.remove(name)
     shutil.rmtree(path, ignore_errors=True)
+
+
+def _keep_logs(result: dict, dest: Path) -> str | None:
+    """Copy a boot's stdout/stderr logs out of a throwaway instance rig; returns the kept stdout path."""
+    import shutil
+
+    dest.mkdir(parents=True, exist_ok=True)
+    kept = None
+    for field in ("log", "errlog"):
+        src = result.get(field)
+        if src and Path(src).is_file():
+            target = dest / Path(src).name
+            shutil.copy2(src, target)
+            if field == "log":
+                kept = str(target)
+    return kept
 
 
 def _mods_key(variant: dict, mods: list[str]) -> str:
@@ -289,14 +372,16 @@ def list_instances(rig: Path) -> list[dict]:
     return out
 
 
-def run_java_matrix(rig: Path, mods: list[str], variants: list[dict], repeats: int = 3, timeout: int = 240, checkpoint: Path | None = None, quiet: bool = False, log_name: str | None = None, parallel: int = 1, ledger: Path | None = None, skip_known: bool = False) -> dict:
+def run_java_matrix(rig: Path, mods: list[str], variants: list[dict], repeats: int = 3, timeout: int = 240, checkpoint: Path | None = None, quiet: bool = False, log_name: str | None = None, parallel: int = 1, ledger: Path | None = None, skip_known: bool = False, mod_sources: list[Path] | None = None, keep_logs: Path | None = None) -> dict:
     """Boot `mods` through every variant `repeats` times; one progress line per boot, resumable from `checkpoint`.
 
     parallel=1 runs in the rig itself, one boot at a time (the reference). parallel=2..3 gives each variant its
     own instance rig (make_instance_rig) and runs that many variants at once; one variant's repeats stay serial.
     skip_known reuses a PASS_ALL recorded in `ledger` for the same variant, Java build and mod set instead of
     booting again (new mod sets have no entry, so they run everywhere). A variant whose launcher .bat is missing
-    is REFUSED (run `java-matrix setup` first), not skipped.
+    is REFUSED (run `java-matrix setup` first), not skipped. `mod_sources` forces instance rigs that link only
+    those mod folders (even serially); `keep_logs` copies each boot's logs there, because an instance rig is
+    rebuilt for the next run and takes its logs with it.
     """
     if not 1 <= parallel <= MAX_PARALLEL:
         raise ValueError(f"--parallel must be 1..{MAX_PARALLEL}")
@@ -319,8 +404,8 @@ def run_java_matrix(rig: Path, mods: list[str], variants: list[dict], repeats: i
 
     def boot_variant(variant: dict, ckpt: Checkpoint) -> None:
         target_rig, inst = rig, None
-        if parallel > 1:
-            inst = make_instance_rig(rig, variant, mods)
+        if parallel > 1 or mod_sources is not None:
+            inst = make_instance_rig(rig, variant, mods, mod_sources)
             target_rig = inst
         for run in range(1, repeats + 1):
             key = f"{variant['id']}#{run}"
@@ -337,6 +422,8 @@ def run_java_matrix(rig: Path, mods: list[str], variants: list[dict], repeats: i
                 row = {"run": run, "status": result["status"], "reason": result.get("reason"), "elapsed_seconds": result.get("elapsed_seconds"), "log": result.get("log"), "triage": triage.get("counts"), "vanilla_shadowing_symptoms": len(triage.get("vanilla_shadowing_symptoms") or [])}
                 if inst is not None:
                     _write_instance(inst, state="done", finished=time.time(), status=row["status"], log=row["log"])
+                    if keep_logs is not None:
+                        row["log"] = _keep_logs(result, Path(keep_logs))
             with lock:
                 if seconds is not None:
                     ckpt.add(key, row)
@@ -355,7 +442,7 @@ def run_java_matrix(rig: Path, mods: list[str], variants: list[dict], repeats: i
                     future.result()
     matrix = []
     for variant in variants:
-        meta = {k: variant[k] for k in ("id", "major", "launcher", "java_version")}
+        meta = {**{k: variant[k] for k in ("id", "major", "launcher", "java_version")}, "dropped_flags": variant.get("dropped_flags", [])}
         if variant["id"] in reused:
             matrix.append({**meta, "runs": 0, "passed": 0, "pass_rate": 1.0, "statuses": ["KNOWN_PASS"], "results": [], "reused_from": reused[variant["id"]].get("date")})
             continue

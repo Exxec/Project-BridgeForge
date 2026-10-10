@@ -116,4 +116,5 @@ LONG_RUNNING_COMMANDS = (
     ("done-audit",),
     ("mods-compat",),
     ("java-matrix", "run"),
+    ("java-matrix", "mass"),
 )
