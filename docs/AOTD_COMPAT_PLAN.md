@@ -21,7 +21,7 @@ installed is not enough. Seats of Power and Vaults of Knowledge ask for Toolbox 
 
 ## Why this matters now
 
-1. **Prepatcher supports Java 17 and one validated Java 27 (`27+22`).** Its `docs/COMPATIBILITY.md`: newer JVMs
+1. **Prepatcher's documentation validates Java 17 and one Java 27 build (`27+22`); the owner reports (2026-10-10) that its author and other testers have since confirmed Java 28 compatible. That confirmation is not in the 0.18.4 docs read here, so the matrix still records it as an owner-reported fact, not a proven one.** Its `docs/COMPATIBILITY.md`: newer JVMs
    get the same capability check but "support is not claimed without separate validation". Java 28 is therefore
    unvalidated by its author. On Java 27+ it also repairs obfuscator member names such as `while.new`, which
    Java 27's class-file parser rejects.
@@ -93,4 +93,4 @@ Order is the order I recommend. "Cloud" means it needs no game; "Local" needs th
 - Whether `env-check` (step 2) should parse `@argfile` launchers such as `Miko_Simple.txt`: it must, or it repeats the
   mistake above. Add the three-agent chain (resource cache, FR, Prepatcher) as a matrix variant that mirrors the owner's launch.
 - Whether a tester's setup includes Prepatcher: their log (not available) or one question.
-- A Java 28 boot with and without Prepatcher: Prepatcher's author does not claim it.
+- A Java 28 boot with and without Prepatcher: the 0.18.4 docs do not claim it; the owner reports the author has confirmed it, so this run checks that on the owner's rig.
