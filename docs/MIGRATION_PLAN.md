@@ -2,9 +2,10 @@
 
 Written 2026-10-10 at the owner's request ("a plan to migrate everything to a different computer; I know Syncthing
 but not what can and can't be migrated"). **Plan only, nothing built or moved.** Facts below were read from this
-machine on 2026-10-10. File sizes are **not measured**: a `du` over `In operation/` and `Done/` ran past six minutes
-without finishing, which is itself the finding (hundreds of workspaces, very many small files; plan for hours, not
-minutes, and run any inventory in the background).
+machine on 2026-10-10. Sizes (`du`, 2026-10-10; it took about 12 minutes, so run any inventory in the background): `In operation/` 21 GB,
+`Done/` 8.3 GB, `bridgeforge-state/` 6.1 GB, `artifacts/` 1.1 GB, `.git` 1.7 GB, `docs/` 82 MB, everything else under 5 MB. That is
+about 38 GB of project data before the game installs, the reference installs and the `Downloads` archive (not measured).
+Plan the copy for hours, not minutes: the cost is the very large number of small files, not the bytes.
 
 ## 1. What there is, and what to do with each
 
