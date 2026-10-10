@@ -57,7 +57,9 @@ def collect_targets(done_dir: Path, only: list[str] | None = None) -> list[dict]
         version = info.get("version")
         if isinstance(version, dict):
             version = ".".join(str(version.get(k, "")) for k in ("major", "minor", "patch"))
-        targets.append({"name": archive.name, "id": info["id"], "version": str(version or ""), "folder": str(shipped[0]), "status": match.group(1) if match else None, "dependencies": _dep_ids(info)})
+        total_conversion = str(info.get("totalConversion", "")).strip().lower() == "true"
+        replaces = bool(info.get("replace"))
+        targets.append({"name": archive.name, "id": info["id"], "version": str(version or ""), "folder": str(shipped[0]), "status": match.group(1) if match else None, "dependencies": _dep_ids(info), "bundleable": not (total_conversion or replaces)})
     return targets
 
 
@@ -97,7 +99,7 @@ def resolve_needs(target: dict, providers: dict[str, Path]) -> dict:
 def pick_screen_variants(variants: list[dict]) -> tuple[dict, dict]:
     """(baseline, stress): direct launcher on the lowest Java, Fast Rendering on the highest Java."""
     direct = [v for v in variants if v["launcher"] == "direct"] or variants
-    fr = [v for v in variants if v["launcher"] == "fr"] or variants
+    fr = [v for v in variants if v["launcher"] in ("fr", "miko", "miko-noprep")] or variants
     return min(direct, key=lambda v: v["major"]), max(fr, key=lambda v: v["major"])
 
 
@@ -113,6 +115,71 @@ def classify(matrix: list[dict]) -> str:
     if any(0.0 < r < 1.0 for r in rates):
         return "FLAKY"
     return "ENVIRONMENT_SENSITIVE"
+
+
+DEFAULT_BUNDLE_HEAP_GB = 5  # a bundle loads several mods at once
+
+
+def plan_bundles(targets: list[dict], size: int) -> list[list[dict]]:
+    """Greedy groups of up to `size` mods booted together. A total conversion or a mod that replaces core files
+    never shares a boot (it changes what every other mod sees, so a failure could not be placed); everything
+    else may. size 1 means no bundling."""
+    if size <= 1:
+        return [[t] for t in targets]
+    groups: list[list[dict]] = []
+    current: list[dict] = []
+    for target in targets:
+        if not target.get("bundleable", True):
+            groups.append([target])
+            continue
+        current.append(target)
+        if len(current) == size:
+            groups.append(current)
+            current = []
+    if current:
+        groups.append(current)
+    return groups
+
+
+def _union_needs(needs_list: list[dict]) -> dict:
+    folders: dict[str, Path] = {}
+    for needs in needs_list:
+        for mod_id, folder in zip(needs["ids"], needs["folders"]):
+            folders.setdefault(mod_id, folder)
+    ids = sorted(folders)
+    return {"ids": ids, "folders": [folders[i] for i in ids], "missing": []}
+
+
+def _settle(rig: Path, group: list[dict], providers: dict[str, Path], variants: list[dict], opts: dict) -> list[dict]:
+    """Rows for every mod in `group`. A group of one is a full test; a larger one boots together on the screen
+    variants and, if that fails, is split in halves until the failure is placed. Halves that each pass although
+    the whole failed are recorded as a bundle conflict, not an environment problem."""
+    if len(group) == 1:
+        target = group[0]
+        needs = resolve_needs(target, providers)
+        if needs["missing"]:
+            return [{"name": target["name"], "id": target["id"], "version": target["version"], "stage": "none", "verdict": "SKIPPED_MISSING_DEPENDENCY", "missing": needs["missing"], "matrix": []}]
+        return [_test_one(rig, target, needs, variants, opts["screen"], opts["skip_baseline_validated"], opts["repeats"], opts["timeout"], opts["parallel"], opts["ledger"], opts["skip_known"], opts["logs"])]
+    resolved = [(t, resolve_needs(t, providers)) for t in group]
+    rows = [row for t, n in resolved if n["missing"] for row in _settle(rig, [t], providers, variants, opts)]
+    ready = [(t, n) for t, n in resolved if not n["missing"]]
+    if len(ready) < 2:
+        return rows + [row for t, _n in ready for row in _settle(rig, [t], providers, variants, opts)]
+    names = [t["name"] for t, _n in ready]
+    baseline, stress = pick_screen_variants(variants)
+    all_validated = all(t["status"] == "LIVE_VALIDATED" for t, _n in ready)
+    first = [stress] if (opts["skip_baseline_validated"] and all_validated) or baseline is stress else [baseline, stress]
+    first = [dict(v, heap_gb=DEFAULT_BUNDLE_HEAP_GB) for v in first]
+    result = java_matrix.run_java_matrix(rig, _union_needs([n for _t, n in ready])["ids"], first, repeats=opts["repeats"], timeout=opts["timeout"], quiet=True, parallel=min(opts["parallel"], len(first)), mod_sources=_union_needs([n for _t, n in ready])["folders"], keep_logs=opts["logs"] / ("bundle-" + "+".join(names))[:120], log_name="mass-bundle")
+    if all(m["pass_rate"] == 1.0 for m in result["matrix"]):
+        return rows + [{"name": t["name"], "id": t["id"], "version": t["version"], "stage": f"bundle({len(ready)})", "verdict": "SCREEN_PASS", "bundle": names, "matrix": result["matrix"]} for t, _n in ready]
+    mid = len(ready) // 2
+    left = _settle(rig, [t for t, _n in ready[:mid]], providers, variants, opts)
+    right = _settle(rig, [t for t, _n in ready[mid:]], providers, variants, opts)
+    if all(r["verdict"] in ("SCREEN_PASS", "ALL_PASS") for r in left + right):
+        for r in left + right:
+            r["bundle_conflict"] = names  # each half passes alone, the whole failed: a mod-vs-mod conflict
+    return rows + left + right
 
 
 def _test_one(rig: Path, target: dict, needs: dict, variants: list[dict], screen: bool, skip_baseline_validated: bool, repeats: int, timeout: int, parallel: int, ledger: Path | None, skip_known: bool, keep_logs: Path) -> dict:
@@ -145,8 +212,9 @@ def _test_one(rig: Path, target: dict, needs: dict, variants: list[dict], screen
     return {"name": target["name"], "id": target["id"], "version": target["version"], "stage": stage, "verdict": verdict, "matrix": matrix}
 
 
-def run_mass(rig: Path, targets: list[dict], variants: list[dict], providers: dict[str, Path], output: Path, screen: bool = True, skip_baseline_validated: bool = True, repeats: int = 1, timeout: int = 240, parallel: int = 3, ledger: Path | None = None, skip_known: bool = False, quiet: bool = False, limit: int | None = None) -> dict:
-    """Test each target in turn (parallel instances within a target); resumable; writes MASS_TEST.json/.md."""
+def run_mass(rig: Path, targets: list[dict], variants: list[dict], providers: dict[str, Path], output: Path, screen: bool = True, skip_baseline_validated: bool = True, repeats: int = 1, timeout: int = 240, parallel: int = 3, ledger: Path | None = None, skip_known: bool = False, quiet: bool = False, limit: int | None = None, bundle: int = 1) -> dict:
+    """Test each target (or bundle of targets) in turn, parallel instances within a test; resumable; writes
+    MASS_TEST.json/.md. `bundle` > 1 needs `screen`: mods are booted together and only split on a failure."""
     rig = Path(rig).expanduser().resolve()
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
@@ -155,23 +223,28 @@ def run_mass(rig: Path, targets: list[dict], variants: list[dict], providers: di
     rows: list[dict] = []
     started_all = time.monotonic()
     with Checkpoint(output / "mass-test.partial.jsonl", header) as ckpt:
-        for index, target in enumerate(chosen, 1):
+        opts = {"screen": screen, "skip_baseline_validated": skip_baseline_validated, "repeats": repeats, "timeout": timeout, "parallel": parallel, "ledger": ledger, "skip_known": skip_known, "logs": output / "logs"}
+        done = 0
+        pending = []
+        for target in chosen:
             saved = ckpt.get(target["name"])
-            if saved is not None:
-                rows.append(saved)
-                if not quiet:
-                    report(index, len(chosen), target["name"], saved["verdict"], None)
+            if saved is None:
+                pending.append(target)
                 continue
-            needs = resolve_needs(target, providers)
-            started = time.monotonic()
-            if needs["missing"]:
-                row = {"name": target["name"], "id": target["id"], "version": target["version"], "stage": "none", "verdict": "SKIPPED_MISSING_DEPENDENCY", "missing": needs["missing"], "matrix": []}
-            else:
-                row = _test_one(rig, target, needs, variants, screen, skip_baseline_validated, repeats, timeout, parallel, ledger, skip_known, output / "logs")
-            ckpt.add(target["name"], row)
-            rows.append(row)
+            rows.append(saved)
+            done += 1
             if not quiet:
-                report(index, len(chosen), target["name"], row["verdict"], time.monotonic() - started)
+                report(done, len(chosen), target["name"], saved["verdict"], None)
+        for group in plan_bundles(pending, bundle if screen else 1):
+            started = time.monotonic()
+            settled = _settle(rig, group, providers, variants, opts)
+            per_mod = (time.monotonic() - started) / max(1, len(settled))
+            for row in settled:
+                ckpt.add(row["name"], row)
+                rows.append(row)
+                done += 1
+                if not quiet:
+                    report(done, len(chosen), row["name"], row["verdict"] + (" [bundle conflict]" if row.get("bundle_conflict") else ""), per_mod)
     counts: dict[str, int] = {}
     for row in rows:
         counts[row["verdict"]] = counts.get(row["verdict"], 0) + 1

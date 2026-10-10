@@ -862,7 +862,7 @@ write one run-j<major>-<launcher>.bat per variant into the rig (never touches ru
 |---|---|---|
 | `rig` | - | - |
 | `--java` MAJOR | nargs + | only these Java majors (default: every JDK found) |
-| `--launcher` LAUNCHER | nargs +; one of direct, fr | default: both |
+| `--launcher` LAUNCHER | nargs +; one of direct, fr, miko, miko-noprep | default: both |
 | `--jdk-root` JDK_ROOT | repeatable | - |
 | `--json` | - | - |
 
@@ -875,13 +875,13 @@ boot --mods through every variant --repeats times and report a pass rate per var
 | `rig` | - | - |
 | `--mods` ID | required; nargs + | - |
 | `--java` MAJOR | nargs + | - |
-| `--launcher` LAUNCHER | nargs +; one of direct, fr | - |
+| `--launcher` LAUNCHER | nargs +; one of direct, fr, miko, miko-noprep | - |
 | `--jdk-root` JDK_ROOT | repeatable | - |
 | `--repeats` REPEATS | default 3 | - |
 | `--timeout` TIMEOUT | default 240 | - |
 | `--log-name` LOG_NAME | - | - |
 | `--parallel` N | - | boot up to N variants at once, 1..3, each in its own instance rig (default 1, the serial reference; 3 with --preset compare) |
-| `--preset` PRESET | one of compare | compare = Java 25 and 28, direct and Fast Rendering: vanilla, FR, Java 28, FR + Java 28 (4 variants, 3 at a time) |
+| `--preset` PRESET | one of compare, real | compare = Java 25 and 28, direct and Fast Rendering: vanilla, FR, Java 28, FR + Java 28 (4 variants, 3 at a time); real = the owner's Miko launch on Java 28, with and without Prepatcher |
 | `--skip-known` | - | reuse a recorded all-pass for the same variant, Java build and mod set instead of booting again (new mod sets always boot) |
 | `--ledger` LEDGER | default bridgeforge-state/java-matrix-ledger.json | - |
 | `--quiet` | - | no per-boot progress lines on stderr |
@@ -899,10 +899,11 @@ test every archived mod in Done/ (with its dependencies only) through the varian
 | `--limit` LIMIT | - | test only the first N mods |
 | `--providers` PROVIDERS | repeatable | extra folder of mods that supply dependencies (the rig's mods/ and the install's mods/ are always searched) |
 | `--java` MAJOR | nargs +; default [25, 28] | - |
-| `--launcher` LAUNCHER | nargs +; one of direct, fr | - |
+| `--launcher` LAUNCHER | nargs +; one of direct, fr, miko, miko-noprep | - |
 | `--jdk-root` JDK_ROOT | repeatable | - |
 | `--no-screen` | - | boot every variant for every mod (default: baseline and Fast Rendering on the highest Java first; the rest only on a mismatch) |
 | `--retest-baseline` | - | also re-boot the baseline for LIVE_VALIDATED mods (default: assume it passes) |
+| `--bundle` N | default 4 | boot up to N unrelated mods together while screening and split only on a failure (default 4; 1 = one mod per boot). Total conversions and core-replacing mods always boot alone |
 | `--repeats` REPEATS | default 1 | - |
 | `--parallel` N | default 3 | - |
 | `--timeout` TIMEOUT | default 240 | - |

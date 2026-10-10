@@ -28,7 +28,11 @@ from pathlib import Path
 from . import boot_test
 from .progress import Checkpoint, report
 
-LAUNCHERS = ("direct", "fr")
+LAUNCHERS = ("direct", "fr", "miko", "miko-noprep")
+DEFAULT_LAUNCHERS = ("direct", "fr")  # miko variants mirror the owner's real launch and are opt-in
+MIKO_ARGS = "Miko_Simple.txt"  # the argument file Miko_Rouge.bat passes to java (@..\Miko_Simple.txt)
+PREPATCHER_MARKER = "StarsectorPrepatcherAgent"
+DEFAULT_HEAP_GB = 4  # 32 GB machine, three instances: 3 x (heap + ~2 GB native) leaves room for the OS (owner 2026-10-10)
 
 # Directories searched for a JDK, in addition to the install the rig links to and the rig itself.
 COMMON_JDK_ROOTS = (
@@ -46,7 +50,7 @@ DIRECT_FLAGS = (
     "--enable-preview --enable-native-access=ALL-UNNAMED",
     "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.locks=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.lang.ref=ALL-UNNAMED --add-opens=java.base/java.text=ALL-UNNAMED --add-opens=java.desktop/java.awt.font=ALL-UNNAMED --add-opens=java.desktop/java.awt=ALL-UNNAMED",
     "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED --add-exports=java.base/jdk.internal.misc=ALL-UNNAMED --add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
-    "-Xms2g -Xmx4g -Xss4m",
+    "-Xms{heap}g -Xmx{heap}g -Xss4m",
 )
 PATH_FLAGS = (
     "-Dcom.fs.starfarer.settings.paths.saves=..\\saves",
@@ -182,7 +186,9 @@ def write_launcher_files(target: Path, variant: dict, core: Path) -> list[str]:
     `target`; returns and records the flags this JDK does not know. The install's own files are only read."""
     java_exe = Path(variant["jdk_home"]) / "bin" / "java.exe"
     if variant["launcher"] == "direct":
-        dropped = unsupported_flags(java_exe, [t for line in DIRECT_FLAGS for t in line.split()])
+        dropped = unsupported_flags(java_exe, [t for line in DIRECT_FLAGS for t in line.split() if "{" not in t])
+    elif variant["launcher"] in ("miko", "miko-noprep"):
+        dropped = _write_miko_args(Path(target), variant, Path(core), java_exe)
     else:
         source = Path(core) / "fr.vmparams"
         if not source.is_file():
@@ -192,11 +198,50 @@ def write_launcher_files(target: Path, variant: dict, core: Path) -> list[str]:
         kept = [line for line in lines if line.strip() not in dropped]
         (Path(target) / "fr.filtered.vmparams").write_text("\n".join(kept) + "\n", encoding="utf-8", newline="")
     variant["dropped_flags"] = dropped
-    (Path(target) / variant["bat"]).write_text(build_launcher(variant["jdk_home"], variant["launcher"], variant["major"], dropped), encoding="utf-8", newline="")
+    (Path(target) / variant["bat"]).write_text(build_launcher(variant["jdk_home"], variant["launcher"], variant["major"], dropped, variant.get("heap_gb", DEFAULT_HEAP_GB), variant.get("id", "")), encoding="utf-8", newline="")
     return dropped
 
 
-def build_launcher(jdk_home: str, launcher: str, java_major: int, dropped: list[str] | None = None) -> str:
+def _write_miko_args(target: Path, variant: dict, core: Path, java_exe: Path) -> list[str]:
+    """Copy the owner's Miko_Simple.txt into the rig with four edits: heap, log path, flags the JDK refuses, and
+    (miko-noprep) the Prepatcher agent line. Links the Mikohime library folder the file's `..\\mikohime` paths need
+    and the Prepatcher mod folder its agent path needs. The install is only read."""
+    install = Path(core).resolve().parent
+    source = install / MIKO_ARGS
+    if not source.is_file():
+        raise ValueError(f"{source} not found; the miko launcher mirrors the owner's {MIKO_ARGS}")
+    lines = source.read_text(encoding="utf-8", errors="replace").splitlines()
+    dropped = unsupported_flags(java_exe, [line.strip() for line in lines])
+    heap = variant.get("heap_gb", DEFAULT_HEAP_GB)
+    out = []
+    # Same path style as the owner's own saves line (their file doubles its backslashes): saves -> logs.
+    saves_line = next((l.strip() for l in lines if l.strip().startswith("-Dcom.fs.starfarer.settings.paths.saves=")), "")
+    logs_value = saves_line.split("=", 1)[1].replace("saves", "logs") if "=" in saves_line else "..\\logs"
+    for line in lines:
+        text = line.strip()
+        if text in dropped:
+            continue
+        if text.startswith("-Xms"):
+            line = f"-Xms{heap}g"
+        elif text.startswith("-Xmx"):
+            line = f"-Xmx{heap}g"
+        elif text.startswith("-Dcom.fs.starfarer.settings.paths.logs="):
+            line = "-Dcom.fs.starfarer.settings.paths.logs=" + logs_value
+        elif variant["launcher"] == "miko-noprep" and PREPATCHER_MARKER in text and not text.startswith("#"):
+            continue
+        out.append(line)
+    (target / f"miko-{variant['id']}.args").write_text("\n".join(out) + "\n", encoding="utf-8", newline="")
+    for name, src in (("mikohime", install / "mikohime"),):
+        if src.is_dir() and not (target / name).exists():
+            _link(src, target / name)
+    (target / "fr-resource-cache").mkdir(exist_ok=True)  # a fresh cache per rig: nothing stale from the install
+    prepatcher = install / "mods" / "StarsectorPrepatcher"
+    if variant["launcher"] == "miko" and prepatcher.is_dir() and (target / "mods").is_dir() and not (target / "mods" / prepatcher.name).exists():
+        _link(prepatcher, target / "mods" / prepatcher.name)
+    return dropped
+
+
+def build_launcher(jdk_home: str, launcher: str, java_major: int, dropped: list[str] | None = None, heap_gb: int = DEFAULT_HEAP_GB, vid: str = "") -> str:
     """Text of a rig launcher .bat. CWD is the starsector-core junction, as in the proven run-java25.bat.
 
     `dropped` (from write_launcher_files) lists flags to leave out; for Fast Rendering it also switches to the
@@ -212,16 +257,18 @@ def build_launcher(jdk_home: str, launcher: str, java_major: int, dropped: list[
     ]
     java = f'"{jdk_home}\\bin\\java.exe"'
     if launcher == "direct":
-        flags = [" ".join(t for t in line.split() if t not in (dropped or ())) for line in DIRECT_FLAGS]
+        flags = [" ".join(t for t in line.format(heap=heap_gb).split() if t not in (dropped or ())) for line in DIRECT_FLAGS]
         flags = [f for f in flags if f]
         if java_major < 17:
             flags = [f.replace(" --enable-native-access=ALL-UNNAMED", "") for f in flags]
         body = [java + " ^"]
         body += [f" {flag} ^" for flag in (*flags, *PATH_FLAGS)]
         body += [f" -classpath {CLASSPATH} ^", " com.fs.starfarer.StarfarerLauncher"]
+    elif launcher in ("miko", "miko-noprep"):
+        body = [f'{java} "@%RT%miko-{vid}.args"']
     else:
-        # fr.bat's own command line; the later -D wins, so the log lands in the rig, not the real install.
-        logs = PATH_FLAGS[-1]
+        # fr.bat's own command line; the later -D and -Xmx win, so the log lands in the rig and the heap is ours.
+        logs = PATH_FLAGS[-1] + f" -Xms{heap_gb}g -Xmx{heap_gb}g"
         argfile = "@fr.vmparams" if dropped is None else '"@%RT%fr.filtered.vmparams"'
         body = [
             "IF EXIST PatchLibAgent.jar (",
@@ -238,9 +285,9 @@ def plan_variants(jdks: list[dict], launchers: list[str] | None = None, majors: 
     chosen = [j for j in jdks if (j["major"] in majors if majors else j["major"] >= 17)]
     out = []
     for jdk in chosen:
-        for launcher in launchers or list(LAUNCHERS):
+        for launcher in launchers or list(DEFAULT_LAUNCHERS):
             vid = variant_id(jdk["major"], launcher)
-            out.append({"id": vid, "major": jdk["major"], "launcher": launcher, "jdk_home": jdk["home"], "java_version": jdk["version"], "bat": bat_name(vid)})
+            out.append({"id": vid, "major": jdk["major"], "launcher": launcher, "jdk_home": jdk["home"], "java_version": jdk["version"], "bat": bat_name(vid), "heap_gb": DEFAULT_HEAP_GB})
     return out
 
 

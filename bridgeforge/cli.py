@@ -405,20 +405,20 @@ def build_parser() -> argparse.ArgumentParser:
     jm_setup = jm_sub.add_parser("setup", help="write one run-j<major>-<launcher>.bat per variant into the rig (never touches run-java25.bat)")
     jm_setup.add_argument("rig", type=Path)
     jm_setup.add_argument("--java", type=int, nargs="+", metavar="MAJOR", help="only these Java majors (default: every JDK found)")
-    jm_setup.add_argument("--launcher", nargs="+", choices=["direct", "fr"], help="default: both")
+    jm_setup.add_argument("--launcher", nargs="+", choices=["direct", "fr", "miko", "miko-noprep"], help="default: both")
     jm_setup.add_argument("--jdk-root", type=Path, action="append", default=[])
     jm_setup.add_argument("--json", action="store_true")
     jm_run = jm_sub.add_parser("run", help="boot --mods through every variant --repeats times and report a pass rate per variant")
     jm_run.add_argument("rig", type=Path)
     jm_run.add_argument("--mods", nargs="+", required=True, metavar="ID")
     jm_run.add_argument("--java", type=int, nargs="+", metavar="MAJOR")
-    jm_run.add_argument("--launcher", nargs="+", choices=["direct", "fr"])
+    jm_run.add_argument("--launcher", nargs="+", choices=["direct", "fr", "miko", "miko-noprep"])
     jm_run.add_argument("--jdk-root", type=Path, action="append", default=[])
     jm_run.add_argument("--repeats", type=int, default=3)
     jm_run.add_argument("--timeout", type=int, default=240)
     jm_run.add_argument("--log-name")
     jm_run.add_argument("--parallel", type=int, default=None, metavar="N", help="boot up to N variants at once, 1..3, each in its own instance rig (default 1, the serial reference; 3 with --preset compare)")
-    jm_run.add_argument("--preset", choices=["compare"], help="compare = Java 25 and 28, direct and Fast Rendering: vanilla, FR, Java 28, FR + Java 28 (4 variants, 3 at a time)")
+    jm_run.add_argument("--preset", choices=["compare", "real"], help="compare = Java 25 and 28, direct and Fast Rendering: vanilla, FR, Java 28, FR + Java 28 (4 variants, 3 at a time); real = the owner's Miko launch on Java 28, with and without Prepatcher")
     jm_run.add_argument("--skip-known", action="store_true", help="reuse a recorded all-pass for the same variant, Java build and mod set instead of booting again (new mod sets always boot)")
     jm_run.add_argument("--ledger", type=Path, default=Path("bridgeforge-state") / "java-matrix-ledger.json")
     jm_run.add_argument("--quiet", action="store_true", help="no per-boot progress lines on stderr")
@@ -430,10 +430,11 @@ def build_parser() -> argparse.ArgumentParser:
     jm_mass.add_argument("--limit", type=int, help="test only the first N mods")
     jm_mass.add_argument("--providers", type=Path, action="append", default=[], help="extra folder of mods that supply dependencies (the rig's mods/ and the install's mods/ are always searched)")
     jm_mass.add_argument("--java", type=int, nargs="+", metavar="MAJOR", default=[25, 28])
-    jm_mass.add_argument("--launcher", nargs="+", choices=["direct", "fr"])
+    jm_mass.add_argument("--launcher", nargs="+", choices=["direct", "fr", "miko", "miko-noprep"])
     jm_mass.add_argument("--jdk-root", type=Path, action="append", default=[])
     jm_mass.add_argument("--no-screen", action="store_true", help="boot every variant for every mod (default: baseline and Fast Rendering on the highest Java first; the rest only on a mismatch)")
     jm_mass.add_argument("--retest-baseline", action="store_true", help="also re-boot the baseline for LIVE_VALIDATED mods (default: assume it passes)")
+    jm_mass.add_argument("--bundle", type=int, default=4, metavar="N", help="boot up to N unrelated mods together while screening and split only on a failure (default 4; 1 = one mod per boot). Total conversions and core-replacing mods always boot alone")
     jm_mass.add_argument("--repeats", type=int, default=1)
     jm_mass.add_argument("--parallel", type=int, default=3, metavar="N")
     jm_mass.add_argument("--timeout", type=int, default=240)
@@ -2886,12 +2887,15 @@ def main(argv: list[str] | None = None) -> int:
                 providers = mt.index_providers(roots)
                 for target in targets:
                     providers.setdefault(target["id"], Path(target["folder"]))
-                result = mt.run_mass(args.rig, targets, variants, providers, args.output, screen=not args.no_screen, skip_baseline_validated=not args.retest_baseline, repeats=args.repeats, timeout=args.timeout, parallel=args.parallel, ledger=args.ledger, skip_known=args.skip_known, quiet=args.quiet, limit=args.limit)
+                result = mt.run_mass(args.rig, targets, variants, providers, args.output, screen=not args.no_screen, skip_baseline_validated=not args.retest_baseline, repeats=args.repeats, timeout=args.timeout, parallel=args.parallel, ledger=args.ledger, skip_known=args.skip_known, quiet=args.quiet, limit=args.limit, bundle=args.bundle)
                 print(json.dumps(result, indent=2) if args.json else "Mass test: " + ", ".join(f"{k}={v}" for k, v in sorted(result["counts"].items())) + f". See {args.output / 'MASS_TEST.md'}")
                 return 0 if not any(k in result["counts"] for k in ("ENVIRONMENT_SENSITIVE", "FLAKY")) else 1
             if getattr(args, "preset", None) == "compare":
                 args.java, args.launcher = [25, 28], None
                 args.parallel = args.parallel or 3
+            elif getattr(args, "preset", None) == "real":
+                args.java, args.launcher = [28], ["miko", "miko-noprep"]
+                args.parallel = args.parallel or 2
             variants = jm.plan_variants(jm.discover_jdks(args.rig, args.jdk_root), args.launcher, args.java)
             if not variants:
                 print("bridgeforge: no JDK matched; try `java-matrix discover` or --jdk-root", file=sys.stderr)

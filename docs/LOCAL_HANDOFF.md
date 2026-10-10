@@ -89,6 +89,8 @@ Parallel (owner 2026-10-09, max 3): `java-matrix run RIG --mods <ids> --preset c
 
 Mass test (item 62): `python -m bridgeforge java-matrix mass "In operation/_rig" --only Ironclads` first (one mod, see the table), then `--limit 20`, then the whole archive in the background. Read `bridgeforge-state/mass-test/MASS_TEST.md`; logs are kept under `bridgeforge-state/mass-test/logs/<mod>/`. Check `dropped_flags` in the JSON: a JDK that refuses a flag is itself an environment difference (JDK 28+13 refuses `-noverify` and `-XX:+UseVectorStubs`). Prepatcher is not in the matrix yet (item 63 step 1).
 
+Optimised mass run (item 62 addendum, 32 GB): `java-matrix mass "In operation/_rig" --preset compare --bundle 4` (vanilla, FR, Java 28, FR + Java 28, three at a time, 4 GB each, bundles of up to 4 unrelated mods). Your real launch: `--preset real` (Miko_Simple.txt copy on Java 28 with and without Prepatcher). Pass Prepatcher in `--mods` when testing the AoTD stack. Reports mark `bundle_conflict` and `dropped_flags`.
+
 Known limit: the stale-process check only sees java.exe under the rig, and these JDKs live outside it; the run kills the launcher's process tree on timeout.
 
 ## 1. Measure and try the unattended pipeline (ROADMAP P15)
