@@ -28,9 +28,16 @@ installed is not enough. Seats of Power and Vaults of Knowledge ask for Toolbox 
 2. **Prepatcher must be the last `-javaagent`, and it picks a profile from the effective JVM flags**
    (`JAVA17_STANDARD`, `JAVA27_STANDARD`, `FR_AGENT_CHAIN`, `FR_PREDEFINE_BRIDGE`). Configuring both Fast Rendering
    architectures at once is an explicit conflict that stops the launch.
-3. **This install's `vmparams` and `fr.vmparams` carry no Prepatcher agent** (only `fr.agent.jar` in
-   `fr.vmparams`). So the fork's startup requirement is unmet here as configured. *Unproven whether Mikohime's
-   launcher adds it; I found no `-javaagent` for it in `Miko_Rouge.bat` or `mikohime/`.*
+3. **Correction 2026-10-10: the owner's real launcher does load Prepatcher.** `Miko_Rouge.bat` runs
+   `jdk-28+13\bin\java.exe @..\Miko_Simple.txt`, and that argument file lists, in order, `fr-resource-cache-agent.jar`,
+   `fr.agent.jar`, then `StarsectorPrepatcher\agent\StarsectorPrepatcherAgent.jar` (last, as required), on G1 with 16 GB.
+   (`Miko_Info.txt` agrees: Java 28, Fast Rendering, FR Resource Cache and Prepatcher enabled.) An earlier version of
+   this plan said the agent was missing; that came from searching only `Miko_Rouge.bat`, not the `@` file. The plain
+   `vmparams` and `fr.vmparams` (what the matrix builds from) still carry no Prepatcher, so they are not the owner's setup.
+   After Fast Rendering was updated to 0.9.1 (2026-10-09) the only difference found between the new `fr.vmparams` and
+   `Miko_Simple.txt` is `-Dcom.genir.renderer.watchdog=0` (not in the Miko file). `fr-resource-cache-agent.jar` in
+   `starsector-core` is dated 2026-09-10 and `fr-resource-cache/` (66 MB) 2026-09-01, both older than the FR update;
+   *unproven* whether a stale cache can serve outdated game files, but it is the first thing to rule out.
 4. The tester's traces (`SpecStore.lambda$SpecStore_init$0` on a thread pool) show a patched class loader.
    Prepatcher and Fast Rendering both patch game classes, so the cause of those errors may be either, or the
    combination. The environment matrix (item 61/62) must therefore include Prepatcher as an axis.
@@ -83,7 +90,7 @@ Order is the order I recommend. "Cloud" means it needs no game; "Local" needs th
 
 ## Evidence still to collect before building 4-6
 
-- Whether the owner's real launch path loads Prepatcher at all (item 3 above); a `java-matrix` run with
-  `prepatcher on` and the fork enabled gives the answer without guessing.
+- Whether `env-check` (step 2) should parse `@argfile` launchers such as `Miko_Simple.txt`: it must, or it repeats the
+  mistake above. Add the three-agent chain (resource cache, FR, Prepatcher) as a matrix variant that mirrors the owner's launch.
 - Whether a tester's setup includes Prepatcher: their log (not available) or one question.
 - A Java 28 boot with and without Prepatcher: Prepatcher's author does not claim it.
