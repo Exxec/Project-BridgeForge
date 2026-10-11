@@ -230,3 +230,13 @@ class LogTriageTests(unittest.TestCase):
             fatal_log = Path(directory) / "fatal.log"
             fatal_log.write_text("10 [Thread-2] ERROR x  - java.lang.NoClassDefFoundError: Foo\n", encoding="utf-8")
             self.assertEqual(main(["log-triage", str(fatal_log)]), 1)
+
+
+class FastRenderingBaseSpawnPointTests(unittest.TestCase):
+    def test_the_script_store_line_every_fast_rendering_start_logs_is_noise_not_a_mod_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "x.stdout.log"
+            log.write_text("5412 [Thread-3] ERROR com.fs.starfarer.loading.scripts.ScriptStore  - Error while initializing plugin "
+                           "[data.scripts.world.BaseSpawnPoint]: data.scripts.world.BaseSpawnPoint\n", encoding="utf-8")
+            counts = triage_log(log)["counts"]
+        self.assertEqual((counts["MOD-ERROR"], counts["KNOWN-NOISE"]), (0, 1))

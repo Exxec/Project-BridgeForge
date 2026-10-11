@@ -194,9 +194,9 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
             if auto_click and click_note is None and elapsed >= next_click_try:
                 # The launcher window waits for a click (owner, 2026-10-11); see launcher_click.
                 next_click_try = elapsed + 3.0
-                from .launcher_click import click_launcher_once
+                from .launcher_click import click_launcher_once, descendant_pids
                 pids = {item.get("pid") for item in _running_java_under(runtime_dir) if isinstance(item.get("pid"), int)}
-                click_note = click_launcher_once(pids)
+                click_note = click_launcher_once(pids | descendant_pids(process.pid))
             marker_found = False
             if log_path.is_file():
                 try:

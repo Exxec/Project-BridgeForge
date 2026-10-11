@@ -1846,6 +1846,7 @@ group READY_FOR_LIVE_TEST workspaces that share no mod or content id and whose d
 | `--write` WRITE | - | save the plan as JSON (default: <queue>/PROBE_GROUPS.json) |
 | `--exclude` WORKSPACE | repeatable | leave this workspace out; repeatable |
 | `--solo` WORKSPACE | repeatable | give this workspace a group of its own; repeatable |
+| `--retest` WORKSPACE | repeatable | add an already live-validated workspace as a group of its own to run again, e.g. under another Java or Fast Rendering; its recorded status is not touched until `record`; repeatable |
 | `--provider-source` MODS_DIR | repeatable | a mods/ folder to copy missing providers from when the queue has none (default: the real install's mods/ and the 0.98 modpack in Downloads, when present); repeatable |
 | `--no-auto-solo` | - | also group large campaign mods (by default a mod that creates systems and has 60+ content ids runs alone) |
 | `--json` | - | - |

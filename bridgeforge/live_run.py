@@ -37,6 +37,9 @@ DEPLOY = (0.526, 0.635)
 COMBAT_CONTINUE = (0.50, 0.745)
 MISSION_ROW_STEP = 0.0594  # list entries are 57 px apart in the 960 px view (measured 2026-10-11)
 MAX_ROWS_REACHABLE = 7  # entries above the last one that show without scrolling back up
+VISIBLE_MISSION_ROWS = 9
+FIRST_MISSION_ROW_Y = 0.248  # centre of the top slot (238 px of 960)
+VANILLA_MISSION_ROWS = 14  # RC8's own mission_list.csv; live_run reads the real count from the rig's core
 
 MENU_LOADED = "Reading save data from"
 CAMPAIGN_END = "probe|INFO|campaign|END"
@@ -85,10 +88,32 @@ def wait_for(log: Path, marker: str, timeout: float, hands: Hands, since: int = 
     return marker in _log_text(log)[since:]
 
 
-def new_game(hands: Hands) -> None:
+# Ironclads (a total conversion with its own New Game rules.csv rows) asks occupation, territory, a recent event and how the skills
+# were learned, then goes straight to generation: no fleet, difficulty or tutorial screens. Measured on GRP10Y2-20261011 (java 28, FR).
+IRONCLADS_OCCUPATION = (0.30, 0.618)
+IRONCLADS_TERRITORY = (0.40, 0.618)
+IRONCLADS_RECENT = (0.40, 0.618)
+IRONCLADS_SKILLS_AUTOMATIC = (0.50, 0.618)
+IRONCLADS_CONTINUE = (0.30, 0.618)
+
+NEW_GAME_FLOWS: dict[str, tuple[tuple[tuple[float, float], float], ...]] = {
+    "default": ((MAIN_MENU_NEW_GAME, 3), (NEW_CHIP_GENERATE_NAME, 1.5), (NEW_CHIP_CONTINUE, 4), (FIRST_CHOICE, 4), (FIRST_CHOICE, 4),
+                (DIFFICULTY_NORMAL, 4), (SKIP_TUTORIAL, 12), (START_GAME, 1)),
+    "ironclads": ((MAIN_MENU_NEW_GAME, 3), (NEW_CHIP_GENERATE_NAME, 1.5), (NEW_CHIP_CONTINUE, 4), (IRONCLADS_OCCUPATION, 4),
+                  (IRONCLADS_TERRITORY, 4), (IRONCLADS_RECENT, 4), (IRONCLADS_SKILLS_AUTOMATIC, 4), (IRONCLADS_CONTINUE, 1)),
+}
+
+
+def new_game_flow_for(log_text: str) -> str:
+    """The New Game flow the group needs: a mod with its own screens is named in the log's mod list, else the default."""
+    block = _MOD_LINE.search(log_text)
+    ids = {m.group("id") for m in _MOD_ENTRY.finditer(block.group("body"))} if block else set()
+    return "ironclads" if "ironclads" in ids else "default"
+
+
+def new_game(hands: Hands, flow: str = "default") -> None:
     """Main menu to the campaign map's first frame: default chip, first choice everywhere, Normal, skip the tutorial."""
-    for point, pause in ((MAIN_MENU_NEW_GAME, 3), (NEW_CHIP_GENERATE_NAME, 1.5), (NEW_CHIP_CONTINUE, 4),
-                         (FIRST_CHOICE, 4), (FIRST_CHOICE, 4), (DIFFICULTY_NORMAL, 4), (SKIP_TUTORIAL, 12), (START_GAME, 1)):
+    for point, pause in NEW_GAME_FLOWS[flow]:
         hands.front()
         hands.click(*point)
         hands.sleep(pause)
@@ -111,10 +136,31 @@ _MOD_LINE = re.compile(r"Running with the following mods[^\n]*\n(?P<body>(?:[^\n
 _MOD_ENTRY = re.compile(r"StarfarerLauncher\s+-\s{4}(?P<name>.+?) \[id: (?P<id>[^\]]+)\].*?\(from (?P<path>[^)]+)\)")
 
 
-def missions_below_probe(log_text: str, probe_id: str = "bridgeforge_probe") -> int | None:
-    """How many mission-list rows come after the probe's mission. The list shows mods in the launcher's priority order (the
-    log's 'Running with the following mods'), so a mod listed after the probe puts its missions below it: Neutrino's five
-    pushed the probe up and the fixed click started a Neutrino mission (GRP1B-20261011). None: the log has no mod list."""
+def _mission_rows(mod_path: str) -> int:
+    csv_path = Path(mod_path) / "data" / "missions" / "mission_list.csv"
+    try:
+        lines = csv_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return 0
+    return sum(1 for row in lines[1:] if row.strip(" ,\t"))
+
+
+def _replaces_mission_list(mod_path: str) -> bool:
+    from .scanner import _load_lenient_json_file
+
+    info = _load_lenient_json_file(Path(mod_path) / "mod_info.json")
+    replace = info.get("replace") if isinstance(info, dict) else None
+    return isinstance(replace, list) and any(str(item).replace("\\", "/").lower() == "data/missions/mission_list.csv" for item in replace)
+
+
+def mission_list_layout(log_text: str, vanilla_rows: int = 0, probe_id: str = "bridgeforge_probe") -> tuple[int, int] | None:
+    """(rows below the probe's mission, rows in the whole list) as the in-game mission list will show them, from the log's mod list.
+
+    The list shows mods in the launcher's priority order, so a mod listed after the probe puts its missions below it: Neutrino's
+    five pushed the probe up and the fixed click started a Neutrino mission (GRP1B-20261011). A mod whose mod_info `replace`s
+    mission_list.csv drops the vanilla missions and every mod before it, and `install` adds the probe mission to that mod's own list,
+    so the probe is that list's last row: Ironclads' list is its eight missions and nothing else (GRP10Y2-20261011).
+    None: the log has no mod list or no probe in it."""
     block = _MOD_LINE.search(log_text)
     if not block:
         return None
@@ -122,22 +168,38 @@ def missions_below_probe(log_text: str, probe_id: str = "bridgeforge_probe") -> 
     ids = [e["id"] for e in entries]
     if probe_id not in ids:
         return None
-    below = 0
-    for entry in entries[ids.index(probe_id) + 1:]:
-        csv_path = Path(entry["path"]) / "data" / "missions" / "mission_list.csv"
-        try:
-            rows = [line.strip() for line in csv_path.read_text(encoding="utf-8", errors="replace").splitlines()]
-        except OSError:
-            continue
-        below += sum(1 for row in rows[1:] if row.strip(" ,"))
-    return below
+    probe_at = ids.index(probe_id)
+    replacer = next((i for i, e in enumerate(entries) if _replaces_mission_list(e["path"])), None)
+    if replacer is None:
+        total = vanilla_rows + sum(_mission_rows(e["path"]) for e in entries)
+        below = sum(_mission_rows(e["path"]) for e in entries[probe_at + 1:])
+        return below, total
+    shown = entries[replacer:]
+    total = sum(_mission_rows(e["path"]) for e in shown)
+    anchor = max(probe_at, replacer)  # the probe sits in the replacer's own list when it is listed before it
+    below = sum(_mission_rows(e["path"]) for e in entries[anchor + 1:])
+    return below, total
 
 
-def play_probe_combat(hands: Hands, rows_below: int = 0) -> None:
+def missions_below_probe(log_text: str, probe_id: str = "bridgeforge_probe") -> int | None:
+    """The first half of `mission_list_layout`, with no vanilla missions counted."""
+    layout = mission_list_layout(log_text, 0, probe_id)
+    return None if layout is None else layout[0]
+
+
+def probe_mission_y(rows_below: int, total: int | None = None) -> float:
+    """Where the probe's row is in the mission list. A list longer than the view is scrolled to its bottom, so the last row is at the
+    bottom slot; a short one starts at the top slot and the last row is where its count puts it."""
+    if total is not None and total <= VISIBLE_MISSION_ROWS:
+        return FIRST_MISSION_ROW_Y + (total - 1 - rows_below) * MISSION_ROW_STEP
+    return PROBE_MISSION[1] - rows_below * MISSION_ROW_STEP
+
+
+def play_probe_combat(hands: Hands, rows_below: int = 0, total: int | None = None) -> None:
     hands.front()
     hands.scroll(*MISSION_LIST_SCROLL_POINT, -40)
     hands.sleep(1)
-    hands.click(PROBE_MISSION[0], PROBE_MISSION[1] - rows_below * MISSION_ROW_STEP)
+    hands.click(PROBE_MISSION[0], probe_mission_y(rows_below, total))
     hands.sleep(1.5)
     hands.click(*PLAY_MISSION)
     hands.sleep(6)
@@ -148,7 +210,8 @@ def play_probe_combat(hands: Hands, rows_below: int = 0) -> None:
     hands.key(SPACE_KEY)
 
 
-def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: float = 600, combat_timeout: float = 240) -> LiveResult:
+def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: float = 600, combat_timeout: float = 240,
+          vanilla_rows: int = VANILLA_MISSION_ROWS) -> LiveResult:
     """Run the whole live sequence against a started game whose stdout is `log`."""
     result = LiveResult("LIVE_STUCK", log=str(log))
 
@@ -160,18 +223,19 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
         return stuck("main-menu", "the game never logged that the main menu was up")
     result.stages.append("main-menu")
     hands.sleep(20)  # the menu is drawn some seconds after its log line
-    new_game(hands)
+    new_game(hands, new_game_flow_for(_log_text(log)))
     if not wait_for(log, CAMPAIGN_END, campaign_timeout, hands):
         return stuck("new-game", "no 'campaign END' probe line: a screen did not take the click, generation failed, or the probe is not enabled")
     result.stages.append("campaign")
     to_mission_list(hands)
     rounds_total, round_no = 1, 0
-    rows_below = missions_below_probe(_log_text(log)) or 0
+    layout = mission_list_layout(_log_text(log), vanilla_rows)
+    rows_below, list_total = layout if layout else (0, None)
     if rows_below > MAX_ROWS_REACHABLE:
         return stuck("mission-list", f"{rows_below} mission rows sit below the probe's; only {MAX_ROWS_REACHABLE} are reachable without scrolling back")
     while round_no < rounds_total:
         offset = len(_log_text(log))
-        play_probe_combat(hands, rows_below)
+        play_probe_combat(hands, rows_below, list_total)
         if not wait_for(log, COMBAT_END, combat_timeout, hands, since=offset):
             return stuck(f"combat-round-{round_no + 1}", "no 'combat END' probe line after starting the probe mission")
         round_no += 1
@@ -188,13 +252,16 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
     return result
 
 
-def real_hands(rig: Path) -> Hands:
-    """Hands on the game under `rig`: foreground and click through game_click, aliveness from the rig's java processes."""
+def real_hands(rig: Path, launcher_pid: int | None = None) -> Hands:
+    """Hands on the game under `rig`: foreground and click through game_click, aliveness from the rig's java processes and, when the
+    launcher's process id is given, everything it started (the java-28 JDK sits outside the rig)."""
     from . import game_click
     from .boot_test import _running_java_under
+    from .launcher_click import descendant_pids
 
     def pids() -> set[int]:
-        return {item["pid"] for item in _running_java_under(rig) if isinstance(item.get("pid"), int)}
+        found = {item["pid"] for item in _running_java_under(rig) if isinstance(item.get("pid"), int)}
+        return found | (descendant_pids(launcher_pid) if launcher_pid else set())
 
     def geometry():
         found = game_click.game_window(pids())
@@ -214,7 +281,7 @@ def real_hands(rig: Path) -> Hands:
 def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240) -> LiveResult:
     """Start the rig game, click through the launcher, drive the run, then stop the rig's java. Refuses like boot_test."""
     from .boot_test import _is_link, _running_java_under, _terminate_tree
-    from .launcher_click import click_launcher_once
+    from .launcher_click import click_launcher_once, descendant_pids
 
     rig = Path(rig).expanduser().resolve()
     if not _is_link(rig / "starsector-core"):
@@ -228,21 +295,23 @@ def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu
     logs.mkdir(parents=True, exist_ok=True)
     log, err = logs / f"{test_id}.stdout.log", logs / f"{test_id}.stderr.log"
     process = subprocess.Popen(f'cmd.exe /c ""{bat}" > "{log}" 2> "{err}""', cwd=str(rig))
-    hands = real_hands(rig)
+    hands = real_hands(rig, process.pid)
     base_alive = hands.alive
     clicked = {"done": False}
 
     def alive_and_click() -> bool:
         # The launcher window waits for Play before the game logs anything (owner, 2026-10-11).
         if not clicked["done"]:
-            pids = {item["pid"] for item in _running_java_under(rig) if isinstance(item.get("pid"), int)}
+            pids = {item["pid"] for item in _running_java_under(rig) if isinstance(item.get("pid"), int)} | descendant_pids(process.pid)
             if click_launcher_once(pids):
                 clicked["done"] = True
         return base_alive() or process.poll() is None
 
     hands.alive = alive_and_click
     try:
-        return drive(log, hands, menu_timeout=menu_timeout)
+        core_list = rig / "starsector-core" / "data" / "missions" / "mission_list.csv"
+        vanilla_rows = _mission_rows(str(core_list.parent.parent.parent)) or VANILLA_MISSION_ROWS
+        return drive(log, hands, menu_timeout=menu_timeout, vanilla_rows=vanilla_rows)
     finally:
         for java in _running_java_under(rig):
             if isinstance(java.get("pid"), int):

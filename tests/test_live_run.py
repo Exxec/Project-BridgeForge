@@ -1,6 +1,7 @@
 """probe-group live (ROADMAP 60f(2)): the sequence and its log-confirmed stages, with fake hands and a scripted log."""
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 
@@ -126,3 +127,40 @@ class MissionsBelowProbeTests(unittest.TestCase):
         hands = live_run.Hands(click=lambda fx, fy: clicks.append((fx, fy)), key=lambda v: None, scroll=lambda *a: None, sleep=lambda s: None)
         live_run.play_probe_combat(hands, rows_below=3)
         self.assertAlmostEqual(clicks[0][1], live_run.PROBE_MISSION[1] - 3 * live_run.MISSION_ROW_STEP)
+
+
+class MissionListLayoutTests(unittest.TestCase):
+    """GRP10Y2-20261011: Ironclads replaces the mission list (no vanilla missions) and the probe's mission is the last of its eight."""
+
+    def _log(self, base: Path, mods: list[tuple[str, str, int, bool]]) -> str:
+        lines = ["1 [Thread-2] INFO  com.fs.starfarer.StarfarerLauncher  - Running with the following mods (in order of priority):"]
+        for name, mod_id, rows, replaces in mods:
+            folder = base / mod_id
+            (folder / "data" / "missions").mkdir(parents=True)
+            (folder / "data" / "missions" / "mission_list.csv").write_text("mission,\n" + "".join(f"m{i},\n" for i in range(rows)), encoding="utf-8")
+            info = {"id": mod_id, "replace": ["data/missions/mission_list.csv"] if replaces else []}
+            (folder / "mod_info.json").write_text(json.dumps(info), encoding="utf-8")
+            lines.append(f"1 [Thread-2] INFO  com.fs.starfarer.StarfarerLauncher  -     {name} [id: {mod_id}] [version 1] (from {folder})")
+        lines.append("1 [Thread-2] INFO  com.fs.starfarer.StarfarerLauncher  - Mod list finished")
+        return "\n".join(lines) + "\n"
+
+    def test_a_replacing_mod_hides_vanilla_and_holds_the_probe_row_last(self) -> None:
+        with resolved_temp_dir() as base:
+            text = self._log(base, [("BridgeForge Probe", "bridgeforge_probe", 1, False), ("Ironclads", "ironclads", 8, True), ("SpeedUp", "speedUp", 0, False)])
+            self.assertEqual(live_run.mission_list_layout(text, 14), (0, 8))
+
+    def test_without_a_replacement_vanilla_rows_count_and_mods_after_the_probe_sit_below(self) -> None:
+        with resolved_temp_dir() as base:
+            text = self._log(base, [("BridgeForge Probe", "bridgeforge_probe", 1, False), ("Neutrino", "Neutrino", 5, False)])
+            self.assertEqual(live_run.mission_list_layout(text, 14), (5, 20))
+
+    def test_a_short_list_is_top_anchored_and_a_long_one_bottom_anchored(self) -> None:
+        self.assertAlmostEqual(live_run.probe_mission_y(0, 8), live_run.FIRST_MISSION_ROW_Y + 7 * live_run.MISSION_ROW_STEP)
+        self.assertAlmostEqual(live_run.probe_mission_y(0, 15), live_run.PROBE_MISSION[1])
+        self.assertAlmostEqual(live_run.probe_mission_y(2, 15), live_run.PROBE_MISSION[1] - 2 * live_run.MISSION_ROW_STEP)
+
+    def test_a_group_with_ironclads_gets_its_own_new_game_flow(self) -> None:
+        with resolved_temp_dir() as base:
+            text = self._log(base, [("BridgeForge Probe", "bridgeforge_probe", 1, False), ("Ironclads", "ironclads", 8, True)])
+        self.assertEqual(live_run.new_game_flow_for(text), "ironclads")
+        self.assertEqual(live_run.new_game_flow_for("nothing\n"), "default")

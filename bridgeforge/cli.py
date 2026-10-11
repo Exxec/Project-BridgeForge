@@ -892,6 +892,7 @@ def build_parser() -> argparse.ArgumentParser:
     group_plan.add_argument("--write", type=Path, help="save the plan as JSON (default: <queue>/PROBE_GROUPS.json)")
     group_plan.add_argument("--exclude", action="append", default=[], metavar="WORKSPACE", help="leave this workspace out; repeatable")
     group_plan.add_argument("--solo", action="append", default=[], metavar="WORKSPACE", help="give this workspace a group of its own; repeatable")
+    group_plan.add_argument("--retest", action="append", default=[], metavar="WORKSPACE", help="add an already live-validated workspace as a group of its own to run again, e.g. under another Java or Fast Rendering; its recorded status is not touched until `record`; repeatable")
     group_plan.add_argument("--provider-source", action="append", type=Path, default=None, metavar="MODS_DIR", help="a mods/ folder to copy missing providers from when the queue has none (default: the real install's mods/ and the 0.98 modpack in Downloads, when present); repeatable")
     group_plan.add_argument("--no-auto-solo", action="store_true", help="also group large campaign mods (by default a mod that creates systems and has 60+ content ids runs alone)")
     group_plan.add_argument("--json", action="store_true")
@@ -1557,8 +1558,13 @@ def main(argv: list[str] | None = None) -> int:
             if args.probe_group_command == "plan":
                 from .probe_group import DEFAULT_PROVIDER_SOURCES
                 sources = args.provider_source if args.provider_source is not None else [p for p in DEFAULT_PROVIDER_SOURCES if p.is_dir()]
-                result = plan_groups(queue, rig, size=args.size, exclude=set(args.exclude), solo=set(args.solo), auto_solo=not args.no_auto_solo,
-                                     extra_sources=sources)
+                from .probe_group import ready_workspaces
+                retest = [Path(queue) / name for name in args.retest]
+                missing = [str(p) for p in retest if not (p / "working" / "mod_info.json").is_file()]
+                if missing:
+                    raise ProbeGroupError("--retest needs a workspace with working/mod_info.json: " + ", ".join(missing))
+                result = plan_groups(queue, rig, size=args.size, exclude=set(args.exclude), solo=set(args.solo) | set(args.retest), auto_solo=not args.no_auto_solo,
+                                     extra_sources=sources, workspaces=[*ready_workspaces(queue), *[p for p in retest if p not in ready_workspaces(queue)]])
                 target = args.write or queue / "PROBE_GROUPS.json"
                 target.write_text(json.dumps(result, indent=2), encoding="utf-8")
                 if not args.json:

@@ -50,6 +50,7 @@ KNOWN_NOISE = (
     ("Nexerelin quest-skip JSON", re.compile(r"QuestChainSkipEntry"), "Nexerelin quest-skip list JSON parse hiccup; known non-fatal first-run/format issue."),
     ("Nexerelin first-run setup", re.compile(r"ExerelinSetupData"), "Nexerelin first-run setup-data initialization notice; non-fatal."),
     ("MagicLib subsystemInfoKey", re.compile(r"subsystemInfoKey"), "MagicLib subsystem settings key type warning; falls back to a default, non-fatal."),
+    ("Fast Rendering BaseSpawnPoint plugin", re.compile(re.escape("Error while initializing plugin [data.scripts.world.BaseSpawnPoint]")), "Logged by the script store at every Fast Rendering start, for any mod set and on Java 25 and 28 (found in 187 mass-test logs of unrelated mods, 2026-10-11; never at java 25 without FR); vanilla's abstract BaseSpawnPoint is not a plugin, the main menu and campaign are unaffected."),
     ("Vanilla lightmortar_fighter row", re.compile(r"Weapon \[lightmortar_fighter\] from weapon_data\.csv not found in store"), "RC8's own weapon_data.csv keeps a '#'-named Light Mortar (Fighter) row with no .wpn file; logged every run, no effect."),
 )
 

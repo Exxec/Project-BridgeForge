@@ -71,3 +71,28 @@ def click_launcher_once(pids: set[int]) -> str | None:
             time.sleep(1.5)  # let the launcher finish drawing before the click
             return click_window(handle)
     return None
+
+
+def descendant_pids(root_pid: int) -> set[int]:
+    """The process ids below `root_pid` (the cmd.exe that runs a launcher .bat), so a java.exe that lives outside the rig (the java-28
+    JDK sits in the real install, not under _rig) is still found; matching the exe path under the rig missed it and the launcher
+    waited for a click that never came (SMOKE-iron28-20261011)."""
+    try:
+        import psutil  # type: ignore
+
+        return {child.pid for child in psutil.Process(root_pid).children(recursive=True)}
+    except Exception:
+        pass
+    import json
+    import subprocess
+
+    script = ("$ids=@(" + str(int(root_pid)) + "); $all=Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId; "
+              "do { $new=@($all | Where-Object { $ids -contains $_.ParentProcessId -and $ids -notcontains $_.ProcessId } | ForEach-Object { $_.ProcessId }); "
+              "$ids+=$new } while ($new.Count -gt 0); $ids | ConvertTo-Json -Compress")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True, timeout=30).stdout.strip()
+        data = json.loads(out) if out else []
+    except Exception:
+        return set()
+    data = data if isinstance(data, list) else [data]
+    return {int(x) for x in data if int(x) != root_pid}

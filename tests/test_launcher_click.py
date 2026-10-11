@@ -33,6 +33,16 @@ class LauncherClickTests(unittest.TestCase):
         import inspect
         self.assertIn("auto_click", inspect.signature(boot_test.run_boot_test).parameters)
 
+    def test_descendant_pids_finds_a_child_outside_any_rig_folder(self) -> None:
+        import os
+        import subprocess
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        try:
+            self.assertIn(child.pid, launcher_click.descendant_pids(os.getpid()))
+        finally:
+            child.kill()
+            child.wait()
+
 
 if __name__ == "__main__":
     unittest.main()
