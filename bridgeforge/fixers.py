@@ -50,6 +50,7 @@ SUPPORTED_FINDINGS = (
     "personality-id-unknown",
     "hullmod-instance-state",
     "runtime-placeholder-unsupported-operation",
+    "hulk-death-effect-repeats",
     "black-hole-type-missing-flag",
     "nexerelin-corvus-mode-import",
     "spawned-ship-captain-personality-risk",
@@ -2774,6 +2775,37 @@ def _fix_runtime_placeholder_hooks(root: Path, options: dict) -> list[FileChange
     return changes
 
 
+def _fix_hulk_death_effect_repeats(root: Path, options: dict) -> list[FileChange]:
+    """Run a hull mod's wreck effect once per ship: `if (s.isHulk())` becomes `if (s.isHulk() && bfFirstDeath(s, "<Class>_deathDone"))`
+    and a static helper keeps the flag in the ship's custom data (the guard SEEKER's Organic Hull had; RC8-27). Loose sources only;
+    a class compiled into a jar needs a decompile and patch-jar-class, so those are refused."""
+    from .scanner import _HULK_IF, _hulk_block_spawns
+
+    files = sorted({f.file for f in _findings_of(root, options, "hulk-death-effect-repeats") if f.file and "!" not in f.file and f.file.endswith(".java")})
+    if not files:
+        raise FixerError("No loose hull mod source repeats a wreck effect (jar classes need a decompile and patch-jar-class).")
+    changes: list[FileChange] = []
+    for rel in files:
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        key = path.stem + "_deathDone"
+        edits = [m for m in _HULK_IF.finditer(text) if _hulk_block_spawns(text, m.end())]
+        if not edits:
+            continue
+        for match in reversed(edits):
+            var = match["var"]
+            guarded = f'if ({var}.isHulk() && bfFirstDeath({var}, "{key}")) {{'
+            text = text[:match.start()] + guarded + text[match.end():]
+        helper = ("private static boolean bfFirstDeath(com.fs.starfarer.api.combat.ShipAPI ship, String key) { "
+                  "if (ship.getCustomData().containsKey(key)) { return false; } ship.setCustomData(key, Boolean.TRUE); return true; }")
+        text = _insert_before_class_end(text, [helper], "run the wreck effect once per ship; RC8 calls a hull mod for a wreck every frame (RC8-27)")
+        changes.append(FileChange(path=path, before=raw, after=_encode(text, had_bom)))
+    if not changes:
+        raise FixerError("The flagged wreck checks no longer spawn anything; nothing to guard.")
+    return changes
+
+
 def _fix_hullmod_instance_state(root: Path, options: dict) -> list[FileChange]:
     """Move a hull mod's flagged instance fields into a per-ship State in ship.getCustomData()
     (`hullmod_state.port_hullmod_state`, the rewrite done by hand for SEEKER and Sylphon on 2026-10-04). Jar
@@ -3706,6 +3738,7 @@ _FIXER_FUNCS = {
     "personality-id-unknown": _fix_personality_id_unknown,
     "hullmod-instance-state": _fix_hullmod_instance_state,
     "runtime-placeholder-unsupported-operation": _fix_runtime_placeholder_hooks,
+    "hulk-death-effect-repeats": _fix_hulk_death_effect_repeats,
     "black-hole-type-missing-flag": _fix_black_hole_type_missing_flag,
     "nexerelin-corvus-mode-import": _fix_nexerelin_corvus_mode_import,
     "spawned-ship-captain-personality-risk": _fix_spawned_ship_captain,

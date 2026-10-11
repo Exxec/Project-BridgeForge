@@ -1127,6 +1127,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_weapon_effect_static_state(root, result)
     _scan_rules_firebest_populate_options(root, result)
     _scan_hullmod_instance_state(root, result)
+    _scan_hulk_death_effect_repeats(root, result)
     _scan_personality_ids(root, result)
     _scan_faction_trait_weight_legacy_personality_ids(root, result)
     _scan_removed_market_condition_ids(root, result)
@@ -3980,6 +3981,69 @@ def _instance_fields_written_outside_constructors(data: bytes) -> set[tuple[str,
         return written
     except (IndexError, struct.error):
         return None
+
+
+_HULK_SPAWN_CALLS = frozenset({"spawnShipOrWing", "spawnProjectile"})
+_HULK_IF = re.compile(r"if\s*\(\s*(?P<var>\w+)\s*\.\s*isHulk\s*\(\s*\)\s*\)\s*\{")
+HULK_DEATH_GUARD_KEY_SUFFIX = "_deathDone"
+
+
+def _hulk_block_spawns(text: str, start: int) -> bool:
+    """The brace block opened at `start` (just after its '{') calls a spawn method, directly or through a method of the same class."""
+    depth, i = 1, start
+    while i < len(text) and depth:
+        depth += {"{": 1, "}": -1}.get(text[i], 0)
+        i += 1
+    block = text[start:i]
+    if any(re.search(r"\b" + name + r"\s*\(", block) for name in _HULK_SPAWN_CALLS):
+        return True
+    for called in set(re.findall(r"\b(?:this\s*\.\s*)?([A-Za-z_]\w*)\s*\(", block)):
+        body = re.search(r"\b(?:void|boolean|int|float)\s+" + re.escape(called) + r"\s*\([^)]*\)\s*\{", text)
+        if body and any(re.search(r"\b" + name + r"\s*\(", text[body.end():body.end() + 6000]) for name in _HULK_SPAWN_CALLS):
+            return True
+    return False
+
+
+def hulk_death_effect_sites(text: str) -> list[str]:
+    """Wreck checks in a hull mod source that spawn ships or projectiles with no once-per-ship guard: the variable names."""
+    if "advanceInCombat" not in text:
+        return []
+    found = []
+    for match in _HULK_IF.finditer(text):
+        if _hulk_block_spawns(text, match.end()):
+            found.append(match["var"])
+    return found
+
+
+def _scan_hulk_death_effect_repeats(root: Path, result: ScanResult) -> None:
+    """A hull mod whose advanceInCombat spawns wreck debris under `if (ship.isHulk())` with no once-per-ship guard. RC8 keeps calling
+    a hull mod for a wreck every frame, so the death effect repeats every frame: one SEEKER Bone-Breaker kill grew the field to 2,388
+    hulks and 8 s frames (RC8-27, DUEL9-20261011). The fix is a once-per-ship flag in ship.getCustomData(), which SEEKER's
+    Organic Hull already had and Liquid Skin and Phased Mainframe did not."""
+    explanation = ("This hull mod spawns ships or projectiles when its ship is a wreck (isHulk), with no once-per-ship guard. RC8 keeps "
+                   "running a hull mod for a wreck every frame, so the death effect repeats every frame and the wrecks it spawns pile up "
+                   "until the game crawls (RC8-27: one SEEKER Bone-Breaker kill made 2,388 hulks and 8-second frames). Run the effect "
+                   "once per ship with a flag in ship.getCustomData().")
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        sites = hulk_death_effect_sites(text)
+        if sites:
+            result.add(id="hulk-death-effect-repeats", category="scripts", severity="high", classification="REVIEW", confidence="HIGH",
+                       explanation=explanation, file=_relative(root, source), evidence=[f"wreck-check:{v}.isHulk()" for v in sites])
+    for jar, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None or "isHulk" not in info.utf8_values or "advanceInCombat" not in info.utf8_values:
+            continue
+        if not (_HULK_SPAWN_CALLS & set(info.utf8_values)) or {"setCustomData", "getCustomData"} & set(info.utf8_values):
+            continue
+        result.add(id="hulk-death-effect-repeats", category="scripts", severity="high", classification="REVIEW", confidence="MEDIUM",
+                   explanation=explanation + " Compiled class: decompile it, add the guard, then patch-jar-class.",
+                   file=f"{_relative(root, jar)}!{member}", evidence=[f"class:{info.this_class}", "calls:" + ",".join(sorted(_HULK_SPAWN_CALLS & set(info.utf8_values)))])
 
 
 def _scan_hullmod_instance_state(root: Path, result: ScanResult) -> None:
@@ -7103,12 +7167,28 @@ def _unguarded_library_users(root: Path, source_hits: list[str], library: str, d
         probes = any(any(m.lower() in name.lower() for m in markers) for name in _PRESENCE_PROBE.findall(text))
         if not (id_guard.search(text) or probes or catches.search(text) or flag.search(text)):
             unguarded.append(relative)
-        elif not id_guard.search(text) and _library_call_outside_guard(text, markers, flag):
-            unguarded.append(relative)  # a probe in the file does not cover a call that sits outside any guarding block
+        elif (not id_guard.search(text) and _MOD_PLUGIN_CLASS.search(text) and not _probe_returns_early(text, markers)
+              and _library_call_outside_guard(text, markers, flag)):
+            # A probe in the mod plugin does not cover a call outside any guarding block: onApplicationLoad runs at every start.
+            # Only the mod plugin: a helper class's call is usually guarded by its caller, which this textual check cannot see
+            # (a sweep of 300 workspaces found 3 such false hits in shader and ship system classes, 2026-10-11).
+            unguarded.append(relative)
     return unguarded
 
 
 _GUARD_HEADER = re.compile(r"\b(?:try|catch|synchronized)\b")
+_MOD_PLUGIN_CLASS = re.compile(r"\bextends\s+BaseModPlugin\b")
+
+
+def _probe_returns_early(text: str, markers: tuple[str, ...]) -> bool:
+    """`try { loadClass("<library class>") } catch (...) { return; }`: everything after the probe runs only with the library
+    (Upgraded Rotary Weapons' URW_modPlugin, 2026-10-11)."""
+    for match in re.finditer(r'(?:loadClass|forName)\s*\(\s*"([^"]+)"[^{}]*\}\s*catch\s*\([^)]*\)\s*\{\s*return\s*;', text):
+        if any(m.lower() in match.group(1).lower() for m in markers):
+            return True
+    return False
+
+
 _IMPORT_LINE = re.compile(r"^\s*import\s+([\w.]+)\.(\w+)\s*;", re.M)
 
 

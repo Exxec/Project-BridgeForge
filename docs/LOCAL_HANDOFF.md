@@ -18,35 +18,28 @@ Updated 2026-09-27 after the first local pass (ROADMAP P15 item 13): P1, R2, G4 
 tooling entries are done and removed; G2's content expectation and R2's BDS command were wrong.
 Every long command now prints `[n/total]` progress and resumes if interrupted (P15 item 12).
 
-## 0. Resume here: where the 2026-10-06 live-test session stopped
+## 0. Resume here: where the 2026-10-11 session stopped
 
-**State.** Every mod `probe-group plan` knew about is live-validated and archived in `Done/`; the plan lists
-nothing left. Archived this session: Ironclads, Kadur Remnant, Free Stars Union, Metelson Industries,
-Glinthawk Operations, Tritachyon, yunruhullmods, yunruworlds, Magellan Protectorate, Pegasus Belt Council,
-Stardust Merchant Coalition, Sylphon RnD, The Nomads, yunrucore (workspace `YunruCore-2025`), Nightcross,
-Omega Trauma (re-archived), Zorg18 V18+bf.7. Code is committed up to `d363e49e` (ROADMAP items 55i, 55j). The
-owner's `.gitignore` edit and the untracked folders (`.goal-transfer/`, `fixtures/`, `ac8-save-editor-research/`,
-...) are deliberately not committed. Probe is 0.2.22. Last full suite: 1553 tests, one failure that also fails on a clean
-HEAD here: `tests/test_locks.py::test_child_with_cwd_inside_target_is_found` (process cwd lookup; environmental).
+**State.** `probe-group plan` lists nothing left; `Done/` holds 149 archives (`Done/MASTER_LOG.md`, regenerated 2026-10-11).
+Archived or re-archived on 2026-10-11: Combat-Misc-Utils 0.4.1, Neutrino Corporation 1.8.9 (upstream line, intaken from
+`Neutrino corp older.zip`), Neutrino Corporation: Nostalgia Edition 1.87-RC3, Seeker 0.3.0-0.98a+bf.5 (wreck death-effect fix,
+RC8-27), Yellowjackets 0.1, Fast Engine Rendering 1.1.2+bf.1. Ironclads was re-run on Java 28 with Fast Rendering (PASS,
+GRP10Y3-20261011). Old top-level zips of refreshed archives are in `Done/_replaced-2026-10-11/` (not deleted). The owner's
+`.gitignore` edit and the untracked folders (`.goal-transfer/`, `everything-claude-code/`, `ac8-save-editor-research/`, ...)
+are deliberately not committed. Probe is 0.2.23.
 
-**Open, in the order to take them (the owner decides the first four; do not decide for them):**
-1. Ironclads (`Done/Ironclads`): review the nine replaced vanilla faction files, the new-game character-point
-   conversion (manual option = 6 points, three skills dropped) and the removed vanilla worlds (black site, Limbo, gate
-   hauler, Nameless Rock; `data/scripts/plugins/IroncladsCoreLifecyclePlugin.java`).
-2. Hiver Swarm: its Nexerelin condition lines were dropped from `rules.csv` (review).
-3. Accepted probe finding: Magellan's hidden `magellan_startigers` builds no patrol at any size in RC8's
-   `FleetFactoryV3` (cause not found; nothing in the mod spawns its fleets). Recorded in the workspace's
-   `working/reports/probe_accepted.json` as a session decision. Delete the entry to reopen it.
-4. Zorg18's three revive findings (cosmetic design-type column, missing `zorg.faction` known lists, jar `initStar` call)
-   were put in `working/reports/baseline.json` as accepted (unchanged from the archived +bf.6); yunrucore's six
-   description-less weapons and five manufacturer colours likewise. Remove the baseline keys to reopen.
-5. Combat-Misc-Utils 0.4.1 (`In operation/Combat-Misc-Utils`): imported, status ASSESSMENT_REQUIRED, never revived.
-   `revive` it, then `probe-group plan`.
-6. Not written: a scanner check for an industry or content id that a newer installed library renamed (Tritachyon asked
-   for `BOGGLED_AI_STATION`, TASC 10.0.9 calls it `BOGGLED_REMNANT_STATION`; fixed by hand, jar rebuilt).
-7. Gated roadmap items 39 and 45 are unchanged.
-8. **Paused by the owner (2026-10-06): ROADMAP item 60 (60a-60e)**, five proposed automation and gap-coverage entries,
-   nothing started; item 6 above is 60d. Ask the owner which to start; the recommended order is 60a, 60b, 60c, 60d, 60e.
+**Unattended tools (2026-10-11):** `probe-group smoke` (boot to the menu, launcher clicked), `probe-group live TESTID` (whole live
+run with real clicks; leave the PC alone), `probe-group duel TESTID` (rig-only duel missions with a frame/timer meter),
+`probe-group plan --retest WORKSPACE`. Known weakness: menu and mission-list clicks are fixed fractions of the window (ROADMAP 65k).
+
+**Open (owner decisions are marked):**
+1. Owner: the review items (Ironclads' replaced vanilla faction files, character-point conversion and removed vanilla worlds;
+   Hiver Swarm's dropped Nexerelin lines; Magellan's accepted `magellan_startigers`; Zorg18's and yunrucore's accepted findings)
+   were checked on 2026-10-11 with the recommendation to keep them as they are; the owner asked for no change but has not
+   explicitly approved each one.
+2. The raw folder `In operation/Neutrino corp older` was deleted on 2026-10-11 at the owner's go-ahead: its files are identical to
+   `Neutrino-Corporation-1.8.9/original/extracted/` (only git's index stat differed) and `Neutrino corp older.zip` stays in Downloads.
+3. Gated roadmap items 39 and 45 are unchanged.
 
 **How a live run works.** Close Starsector first, then from the repo root:
 ```powershell

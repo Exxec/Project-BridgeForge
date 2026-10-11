@@ -211,7 +211,7 @@ class ProbeDoesNotCoverUnguardedCallTests(unittest.TestCase):
              'ShaderLibExists = true; } catch (ClassNotFoundException ex) { ShaderLibExists = false; } }\n')
 
     def _hits(self, body: str):
-        source = ("package data.scripts;\nimport org.dark.shaders.util.ShaderLib;\npublic class P {\n"
+        source = ("package data.scripts;\nimport org.dark.shaders.util.ShaderLib;\npublic class P extends BaseModPlugin {\n"
                   "    public static boolean ShaderLibExists;\n    " + self.PROBE + body + "}\n")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -225,6 +225,14 @@ class ProbeDoesNotCoverUnguardedCallTests(unittest.TestCase):
 
     def test_call_inside_an_if_on_the_probe_flag_is_optional(self) -> None:
         self.assertEqual(self._hits("    public void onApplicationLoad() {\n        if (ShaderLibExists) {\n            ShaderLib.init();\n        }\n    }\n"), [])
+
+    def test_a_probe_that_returns_early_guards_what_follows(self) -> None:
+        # Upgraded Rotary Weapons' URW_modPlugin: try { loadClass(ShaderLib) } catch (...) { return; } ShaderLib.init();
+        body = ('    public void onApplicationLoad() {\n'
+                '        try { Global.getSettings().getScriptClassLoader().loadClass("org.dark.shaders.util.ShaderLib"); }'
+                ' catch (ClassNotFoundException ex) { return; }\n'
+                '        ShaderLib.init();\n    }\n')
+        self.assertEqual(self._hits(body), [])
 
     def test_call_inside_try_is_optional(self) -> None:
         self.assertEqual(self._hits("    public void onApplicationLoad() {\n        try {\n            ShaderLib.init();\n        } catch (Throwable t) { }\n    }\n"), [])
