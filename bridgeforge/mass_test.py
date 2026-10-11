@@ -46,6 +46,10 @@ def collect_targets(done_dir: Path, only: list[str] | None = None) -> list[dict]
     for archive in sorted(p for p in Path(done_dir).iterdir() if p.is_dir()):
         if only and archive.name not in only:
             continue
+        if archive.name.startswith("_"):
+            # Done/_previous, _replaced-<date> and _wrong-archive-<date> hold set-aside archives, not a mod: the first mass run
+            # (2026-10-11) "passed" `_previous` as a mod because one of its children carries a mod_info.json.
+            continue
         shipped = [c for c in sorted(archive.iterdir()) if c.is_dir() and c.name not in NON_SHIPPED and (c / "mod_info.json").is_file()]
         if not shipped:
             continue
@@ -159,7 +163,7 @@ def _settle(rig: Path, group: list[dict], providers: dict[str, Path], variants: 
         needs = resolve_needs(target, providers)
         if needs["missing"]:
             return [{"name": target["name"], "id": target["id"], "version": target["version"], "stage": "none", "verdict": "SKIPPED_MISSING_DEPENDENCY", "missing": needs["missing"], "matrix": []}]
-        return [_test_one(rig, target, needs, variants, opts["screen"], opts["skip_baseline_validated"], opts["repeats"], opts["timeout"], opts["parallel"], opts["ledger"], opts["skip_known"], opts["logs"])]
+        return [_test_one(rig, target, needs, variants, opts["screen"], opts["skip_baseline_validated"], opts["repeats"], opts["timeout"], opts["parallel"], opts["ledger"], opts["skip_known"], opts["logs"], opts.get("lunalib_needs"))]
     resolved = [(t, resolve_needs(t, providers)) for t in group]
     rows = [row for t, n in resolved if n["missing"] for row in _settle(rig, [t], providers, variants, opts)]
     ready = [(t, n) for t, n in resolved if not n["missing"]]
@@ -182,7 +186,35 @@ def _settle(rig: Path, group: list[dict], providers: dict[str, Path], variants: 
     return rows + left + right
 
 
-def _test_one(rig: Path, target: dict, needs: dict, variants: list[dict], screen: bool, skip_baseline_validated: bool, repeats: int, timeout: int, parallel: int, ledger: Path | None, skip_known: bool, keep_logs: Path) -> dict:
+LUNALIB_SIGNATURE = re.compile(r"NoClassDefFoundError: lunalib/")
+
+
+def _failed_for_lunalib(log_dir: Path, variant_id: str) -> bool:
+    """A kept boot log of this variant ends in a missing lunalib class (GraphicsLib 1.12.1's ShaderLib.init under Fast Rendering)."""
+    for log in sorted(Path(log_dir).glob(f"*-{variant_id}-*.stdout.log")):
+        try:
+            if LUNALIB_SIGNATURE.search(log.read_text(encoding="utf-8", errors="replace")):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _retry_with_lunalib(rig: Path, target: dict, needs: dict, variants: list[dict], row: dict, run_kwargs: dict, lunalib_needs: dict, log_dir: Path) -> None:
+    """Every failing variant died on a missing lunalib class: boot those variants again with LunaLib enabled. All pass: the
+    verdict becomes NEEDS_LUNALIB (a library gap, not the mod's code). The mass test enables only declared dependencies, so a
+    mod that reaches GraphicsLib without LunaLib shows up as environment-sensitive on Fast Rendering (11 mods, 2026-10-11)."""
+    failing = [m["id"] for m in row["matrix"] if m["pass_rate"] == 0.0]
+    if not failing or not all(_failed_for_lunalib(log_dir, vid) for vid in failing):
+        return
+    union = _union_needs([needs, lunalib_needs])
+    again = java_matrix.run_java_matrix(rig, union["ids"], [v for v in variants if v["id"] in failing], **{**run_kwargs, "mod_sources": union["folders"], "keep_logs": log_dir / "with-lunalib", "parallel": min(run_kwargs["parallel"], len(failing))})
+    row["lunalib_retry"] = {m["id"]: m["pass_rate"] for m in again["matrix"]}
+    if again["matrix"] and all(m["pass_rate"] == 1.0 for m in again["matrix"]):
+        row["verdict"] = "NEEDS_LUNALIB"
+
+
+def _test_one(rig: Path, target: dict, needs: dict, variants: list[dict], screen: bool, skip_baseline_validated: bool, repeats: int, timeout: int, parallel: int, ledger: Path | None, skip_known: bool, keep_logs: Path, lunalib_needs: dict | None = None) -> dict:
     run_kwargs = dict(repeats=repeats, timeout=timeout, quiet=True, parallel=parallel, ledger=ledger, skip_known=skip_known, mod_sources=needs["folders"], keep_logs=keep_logs / target["name"], log_name=f"mass-{target['id']}")
     baseline, stress = pick_screen_variants(variants)
     assumed: list[dict] = []
@@ -209,7 +241,10 @@ def _test_one(rig: Path, target: dict, needs: dict, variants: list[dict], screen
     verdict = classify(matrix)
     if stage == "screen" and verdict == "ALL_PASS":
         verdict = "SCREEN_PASS"
-    return {"name": target["name"], "id": target["id"], "version": target["version"], "stage": stage, "verdict": verdict, "matrix": matrix}
+    row = {"name": target["name"], "id": target["id"], "version": target["version"], "stage": stage, "verdict": verdict, "matrix": matrix}
+    if verdict in ("ENVIRONMENT_SENSITIVE", "ALL_FAIL") and lunalib_needs:
+        _retry_with_lunalib(rig, target, needs, variants, row, run_kwargs, lunalib_needs, keep_logs / target["name"])
+    return row
 
 
 def run_mass(rig: Path, targets: list[dict], variants: list[dict], providers: dict[str, Path], output: Path, screen: bool = True, skip_baseline_validated: bool = True, repeats: int = 1, timeout: int = 240, parallel: int = 3, ledger: Path | None = None, skip_known: bool = False, quiet: bool = False, limit: int | None = None, bundle: int = 1) -> dict:
@@ -223,7 +258,10 @@ def run_mass(rig: Path, targets: list[dict], variants: list[dict], providers: di
     rows: list[dict] = []
     started_all = time.monotonic()
     with Checkpoint(output / "mass-test.partial.jsonl", header) as ckpt:
-        opts = {"screen": screen, "skip_baseline_validated": skip_baseline_validated, "repeats": repeats, "timeout": timeout, "parallel": parallel, "ledger": ledger, "skip_known": skip_known, "logs": output / "logs"}
+        lunalib = providers.get("lunalib")
+        lunalib_info = _mod_info(lunalib) if lunalib else None
+        lunalib_needs = resolve_needs({"id": "lunalib", "folder": str(lunalib), "dependencies": _dep_ids(lunalib_info) if lunalib_info else []}, providers) if lunalib else None
+        opts = {"lunalib_needs": lunalib_needs, "screen": screen, "skip_baseline_validated": skip_baseline_validated, "repeats": repeats, "timeout": timeout, "parallel": parallel, "ledger": ledger, "skip_known": skip_known, "logs": output / "logs"}
         done = 0
         pending = []
         for target in chosen:
@@ -265,6 +303,9 @@ def render_markdown(result: dict) -> str:
     for m in sensitive:
         cells = ", ".join(f"{x['id']}={x['pass_rate']}" for x in m["matrix"])
         lines.append(f"- **{m['name']}** {m['version']}: {m['verdict']} ({cells})")
+    needs_luna = [m for m in result["mods"] if m["verdict"] == "NEEDS_LUNALIB"]
+    lines += ["", "## Needs LunaLib (fail only without it; pass with it enabled)", ""]
+    lines += [f"- **{m['name']}** {m['version']}: failed on {', '.join(k for k, v in (m.get('lunalib_retry') or {}).items())} without LunaLib" for m in needs_luna] or ["None."]
     lines += ["", "## Failing everywhere (the mod itself)", ""]
     failing = [m for m in result["mods"] if m["verdict"] == "ALL_FAIL"]
     lines += [f"- {m['name']} {m['version']}" for m in failing] or ["None."]

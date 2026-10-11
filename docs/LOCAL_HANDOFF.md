@@ -64,6 +64,12 @@ reads the probe config the last `install` wrote, so record before installing the
 the test suite while it does (hermeticity check), then commit them.
 
 **Traps found this session.**
+- **A live launch waits for a click.** `bf-test.ps1 launch` starts the game's launcher window; nothing runs, and no log is
+  written, until the owner clicks "Play Starsector" there (owner, 2026-10-11). A launch that "never started" (GRP1A-20261010,
+  stopped by hand) was this. Since 2026-10-11 `bf-test.ps1 launch` clicks it itself: it finds the launcher window, posts
+  mouse messages at (50%, 68%) of the window, and falls back to a real cursor click 8 s later if the log still lacks "Running
+  with the following mods" (proven on CLICKTEST-20261011: main menu reached with no manual click; the log is in
+  `<id>.windows.txt`). `BF_NO_AUTOCLICK=1` turns it off. The mass boot test (`java-matrix`) starts java directly and needs no click.
 - `git commit`'s hook runs `python -m ruff`; the project `.venv` Python has no ruff. Put
   `C:\Users\exxec\AppData\Local\Python\pythoncore-3.14-64` first on `PATH` for the commit.
 - Workspaces get locked to non-admin sessions (twice: `Done\` zips and 14 workspaces; cause unknown). If `probe-group plan` says

@@ -96,6 +96,49 @@ public static class BfWin2 {
         }, IntPtr.Zero);
         return String.Join(" ", parts.ToArray()).Replace((char)13, (char)32).Replace((char)10, (char)32);
     }
+    [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern IntPtr ChildWindowFromPointEx(IntPtr parent, POINT pt, uint flags);
+    [DllImport("user32.dll")] private static extern bool ScreenToClient(IntPtr hWnd, ref POINT pt);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT pt);
+    [DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
+    // Click a point of a window given as fractions of its rectangle (the launcher's Play button sits at 0.50, 0.68 of its
+    // 563x352 window, measured from the owner's screenshot 2026-10-11). Posted: window messages to the child under the point,
+    // no cursor movement. Physical: move the real cursor, click, put it back; only as a fallback, it needs the window on top.
+    public static string ClickWindow(long handle, double fx, double fy, bool physical) {
+        IntPtr hWnd = new IntPtr(handle);
+        RECT r;
+        if (!GetWindowRect(hWnd, out r)) return "no window rectangle";
+        int sx = r.Left + (int)((r.Right - r.Left) * fx);
+        int sy = r.Top + (int)((r.Bottom - r.Top) * fy);
+        if (!physical) {
+            POINT p; p.X = sx; p.Y = sy;
+            ScreenToClient(hWnd, ref p);
+            IntPtr child = ChildWindowFromPointEx(hWnd, p, 0);
+            IntPtr target = (child == IntPtr.Zero) ? hWnd : child;
+            POINT q; q.X = sx; q.Y = sy;
+            ScreenToClient(target, ref q);
+            IntPtr lp = new IntPtr((q.Y << 16) | (q.X & 0xFFFF));
+            PostMessage(target, 0x0200, IntPtr.Zero, lp);           // WM_MOUSEMOVE
+            PostMessage(target, 0x0201, new IntPtr(1), lp);         // WM_LBUTTONDOWN
+            PostMessage(target, 0x0202, IntPtr.Zero, lp);           // WM_LBUTTONUP
+            return "posted click to " + target.ToInt64() + " at " + sx + "," + sy;
+        }
+        POINT old; GetCursorPos(out old);
+        SetForegroundWindow(hWnd);
+        System.Threading.Thread.Sleep(300);
+        SetCursorPos(sx, sy);
+        System.Threading.Thread.Sleep(150);
+        mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);                 // left down
+        mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);                 // left up
+        System.Threading.Thread.Sleep(150);
+        SetCursorPos(old.X, old.Y);
+        return "physical click at " + sx + "," + sy;
+    }
     public static List<string> VisibleWindows(uint pid) {
         List<string> found = new List<string>();
         EnumWindows(delegate (IntPtr hWnd, IntPtr lParam) {
@@ -200,9 +243,24 @@ switch ($Command) {
         $shots = 0
         $menuReached = $false
         $suspectShot = $false
+        # The game's launcher window waits for "Play Starsector" and nothing runs until it is clicked (owner, 2026-10-11).
+        # Click it for them: first by posting window messages, then, if the game still has not started 8 s later, with a real
+        # click. The game has started once its log says "Running with the following mods". BF_NO_AUTOCLICK=1 turns this off.
+        $autoClick = -not $env:BF_NO_AUTOCLICK
+        $launcherHandle = 0
+        $postedAt = $null
+        $physicalDone = $false
         while ($true) {
             $java = @(Get-RigJava)
             foreach ($proc in $java) { $ownedProcesses[$proc.Id] = $proc.StartTime }
+            if ($autoClick -and $launcherHandle -ne 0 -and -not $physicalDone -and $postedAt -and ((Get-Date) - $postedAt).TotalSeconds -gt 8) {
+                $physicalDone = $true
+                if (-not (Select-String -Path $out -SimpleMatch "Running with the following mods" -Quiet -ErrorAction SilentlyContinue)) {
+                    $note = [BfWin2]::ClickWindow($launcherHandle, 0.50, 0.68, $true)
+                    Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} auto-click (fallback): {1}" -f (Get-Date), $note)
+                    Write-Host "Launcher still waiting; $note"
+                }
+            }
             if (-not $wrapper.HasExited -or $java.Count -gt 0) {
                 if (-not $menuReached -and (Test-Path $out)) {
                     $menuReached = [bool](Select-String -Path $out -SimpleMatch $MainMenuMarker -Quiet)
@@ -214,6 +272,15 @@ switch ($Command) {
                         $seen[$entry] = $true
                         $title = $entry.Split("|", 2)[1]
                         Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} window: '{1}'" -f (Get-Date), $title)
+                        $entryHandle = [long]$entry.Split("|", 2)[0]
+                        if ($autoClick -and -not $postedAt -and $entryHandle -ne 0 -and $title -match "Starsector" -and -not (Select-String -Path $out -SimpleMatch "Running with the following mods" -Quiet -ErrorAction SilentlyContinue)) {
+                            Start-Sleep -Milliseconds 1500   # let the launcher finish drawing before the click
+                            $launcherHandle = $entryHandle
+                            $note = [BfWin2]::ClickWindow($launcherHandle, 0.50, 0.68, $false)
+                            $postedAt = Get-Date
+                            Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} auto-click: {1}" -f (Get-Date), $note)
+                            Write-Host "Launcher window found; $note"
+                        }
                         $dialogText = [BfWin2]::ChildText([long]$entry.Split("|", 2)[0])
                         if ($dialogText) {
                             # log-triage reads these lines: a Fatal dialog never reaches the game log.

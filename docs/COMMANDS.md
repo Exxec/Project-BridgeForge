@@ -901,6 +901,7 @@ test every archived mod in Done/ (with its dependencies only) through the varian
 | `--providers` PROVIDERS | repeatable | extra folder of mods that supply dependencies (the rig's mods/ and the install's mods/ are always searched) |
 | `--java` MAJOR | nargs +; default [25, 28] | - |
 | `--launcher` LAUNCHER | nargs +; one of direct, fr, miko, miko-noprep | - |
+| `--preset` PRESET | one of compare, real | compare = Java 25 and 28, direct and Fast Rendering (what mass runs by default); real = the owner's Miko launch on Java 28, with and without Prepatcher (2 at a time) |
 | `--jdk-root` JDK_ROOT | repeatable | - |
 | `--no-screen` | - | boot every variant for every mod (default: baseline and Fast Rendering on the highest Java first; the rest only on a mismatch) |
 | `--retest-baseline` | - | also re-boot the baseline for LIVE_VALIDATED mods (default: assume it passes) |

@@ -327,8 +327,17 @@ def make_instance_rig(rig: Path, variant: dict, mods: list[str], mod_sources: li
     """
     rig = Path(rig).resolve()
     inst = rig / "instances" / variant["id"]
-    if inst.exists():
+    # The previous boot's java can still hold a log open for a moment, so the first removal may leave the folder behind (the
+    # first mass run, 2026-10-11, died with FileExistsError on instances/j28-fr/logs). Retry, then say what is in the way
+    # instead of building over stale logs, which a boot test would read as its own.
+    for attempt in range(8):
+        if not inst.exists():
+            break
         _remove_tree(inst)
+        if inst.exists():
+            time.sleep(1.5)
+    if inst.exists():
+        raise RuntimeError(f"cannot clear the old instance rig {inst}: a process may still hold files open there")
     (inst / "mods").mkdir(parents=True)
     for sub in ("logs", "saves", "screenshots"):
         (inst / sub).mkdir()

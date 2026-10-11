@@ -33,6 +33,17 @@ def _row(vid: str, rate: float) -> dict:
 
 
 class CollectTests(unittest.TestCase):
+    def test_set_aside_underscore_folders_are_not_mods(self):
+        # 2026-10-11: Done/_previous was "passed" as a mod because one of its children has a mod_info.json
+        with resolved_temp_dir() as root:
+            _archive(root, "Alpha", "alpha")
+            (root / "_previous" / "Old").mkdir(parents=True)
+            (root / "_previous" / "Old" / "mod_info.json").write_text(json.dumps({"id": "old"}), encoding="utf-8")
+            (root / "_replaced-2026-10-06" / "Omega" / "Omega").mkdir(parents=True)
+            (root / "_replaced-2026-10-06" / "Omega" / "Omega" / "mod_info.json").write_text(json.dumps({"id": "omega"}), encoding="utf-8")
+            names = [t["name"] for t in mass_test.collect_targets(root)]
+        self.assertEqual(names, ["Alpha"])
+
     def test_collects_shipped_folder_version_status_and_dependencies_not_original_copies(self):
         with resolved_temp_dir() as root:
             _archive(root, "Alpha", "alpha", ["lw_lazylib"])
@@ -97,6 +108,50 @@ class RunMassTests(unittest.TestCase):
             self.assertEqual(calls, [["j28-fr"], ["j25-fr", "j28-direct"]])
             self.assertEqual(result["mods"][0]["verdict"], "ENVIRONMENT_SENSITIVE")
             self.assertIn("Alpha", (root / "out" / "MASS_TEST.md").read_text(encoding="utf-8"))
+
+    def _run_with_logs(self, root, targets, fails_without_lunalib, signature):
+        calls = []
+
+        def fake(rig, mods, variants, **kw):
+            calls.append((sorted(mods), [v["id"] for v in variants]))
+            rows = []
+            for v in variants:
+                failing = "lunalib" not in mods and v["id"] in fails_without_lunalib
+                if failing:
+                    logs = Path(kw["keep_logs"])
+                    logs.mkdir(parents=True, exist_ok=True)
+                    (logs / f"mass-alpha-{v['id']}-1.stdout.log").write_text(signature, encoding="utf-8")
+                rows.append(_row(v["id"], 0.0 if failing else 1.0))
+            return {"matrix": rows}
+
+        providers = {t["id"]: Path(t["folder"]) for t in targets}
+        with mock.patch.object(java_matrix, "run_java_matrix", fake), redirect_stderr(io.StringIO()):
+            result = mass_test.run_mass(root, targets, VARIANTS, providers, root / "out")
+        return result, calls
+
+    def test_a_failure_that_ends_in_a_missing_lunalib_class_is_retried_with_lunalib(self):
+        # 2026-10-11: 11 archived mods failed only on Fast Rendering, all in GraphicsLib's ShaderLib.init without LunaLib
+        with resolved_temp_dir() as root:
+            _archive(root, "Alpha", "alpha")
+            _archive(root, "LunaLib", "lunalib")
+            providers_root = [t for t in mass_test.collect_targets(root)]
+            result, calls = self._run_with_logs(root, providers_root, {"j28-fr", "j25-fr"},
+                                                "java.lang.NoClassDefFoundError: lunalib/lunaSettings/LunaSettingsListener")
+            row = next(m for m in result["mods"] if m["id"] == "alpha")
+            md = (root / "out" / "MASS_TEST.md").read_text(encoding="utf-8")
+        self.assertEqual(row["verdict"], "NEEDS_LUNALIB")
+        self.assertEqual(sorted(row["lunalib_retry"]), ["j25-fr", "j28-fr"])
+        self.assertTrue(any("lunalib" in mods for mods, _v in calls))
+        self.assertIn("Needs LunaLib", md)
+
+    def test_a_failure_for_any_other_reason_is_not_retried_or_relabelled(self):
+        with resolved_temp_dir() as root:
+            _archive(root, "Alpha", "alpha")
+            _archive(root, "LunaLib", "lunalib")
+            result, calls = self._run_with_logs(root, mass_test.collect_targets(root), {"j28-fr", "j25-fr"}, "java.lang.NullPointerException")
+            row = next(m for m in result["mods"] if m["id"] == "alpha")
+        self.assertEqual(row["verdict"], "ENVIRONMENT_SENSITIVE")
+        self.assertNotIn("lunalib_retry", row)
 
     def test_unvalidated_mod_boots_the_baseline_too_and_missing_dependency_is_skipped(self):
         with resolved_temp_dir() as root:

@@ -432,6 +432,7 @@ def build_parser() -> argparse.ArgumentParser:
     jm_mass.add_argument("--providers", type=Path, action="append", default=[], help="extra folder of mods that supply dependencies (the rig's mods/ and the install's mods/ are always searched)")
     jm_mass.add_argument("--java", type=int, nargs="+", metavar="MAJOR", default=[25, 28])
     jm_mass.add_argument("--launcher", nargs="+", choices=["direct", "fr", "miko", "miko-noprep"])
+    jm_mass.add_argument("--preset", choices=["compare", "real"], help="compare = Java 25 and 28, direct and Fast Rendering (what mass runs by default); real = the owner's Miko launch on Java 28, with and without Prepatcher (2 at a time)")
     jm_mass.add_argument("--jdk-root", type=Path, action="append", default=[])
     jm_mass.add_argument("--no-screen", action="store_true", help="boot every variant for every mod (default: baseline and Fast Rendering on the highest Java first; the rest only on a mismatch)")
     jm_mass.add_argument("--retest-baseline", action="store_true", help="also re-boot the baseline for LIVE_VALIDATED mods (default: assume it passes)")
@@ -2881,6 +2882,11 @@ def main(argv: list[str] | None = None) -> int:
                 if not targets:
                     print(f"bridgeforge: no archived mods found under {args.done_dir}", file=sys.stderr)
                     return 2
+                if args.preset == "compare":
+                    args.java, args.launcher = [25, 28], None
+                elif args.preset == "real":
+                    args.java, args.launcher = [28], ["miko", "miko-noprep"]
+                    args.parallel = min(args.parallel, 2)
                 variants = jm.plan_variants(jm.discover_jdks(args.rig, args.jdk_root), args.launcher, args.java)
                 if not variants:
                     print("bridgeforge: no JDK matched; try `java-matrix discover` or --jdk-root", file=sys.stderr)

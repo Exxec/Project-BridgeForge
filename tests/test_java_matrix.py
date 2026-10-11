@@ -163,6 +163,36 @@ class ParallelTests(unittest.TestCase):
             java_matrix.make_instance_rig(rig, self._variants(1)[0], ["ModA"])
             self.assertTrue((rig / "mods" / "ModA" / "mod_info.json").is_file())
 
+    def test_an_instance_rig_that_cannot_be_cleared_is_reported_not_built_over(self):
+        # the first mass run died with FileExistsError on instances/j28-fr/logs: the old rig survived its removal
+        with resolved_temp_dir() as root:
+            rig = _rig(root)
+            stale = rig / "instances" / "j25-direct" / "logs"
+            stale.mkdir(parents=True)
+            (stale / "old.log").write_text("from the previous boot", encoding="utf-8")
+            with mock.patch.object(java_matrix, "_remove_tree"), mock.patch.object(java_matrix.time, "sleep"):
+                with self.assertRaises(RuntimeError) as caught:
+                    java_matrix.make_instance_rig(rig, self._variants(1)[0], ["ModA"])
+            self.assertIn("cannot clear the old instance rig", str(caught.exception))
+            self.assertTrue((stale / "old.log").is_file())
+
+    def test_a_removal_that_works_on_the_second_try_is_enough(self):
+        with resolved_temp_dir() as root:
+            rig = _rig(root)
+            stale = rig / "instances" / "j25-direct"
+            (stale / "logs").mkdir(parents=True)
+            real, calls = java_matrix._remove_tree, []
+
+            def flaky(path):
+                calls.append(path)
+                if len(calls) > 1:
+                    real(path)
+
+            with mock.patch.object(java_matrix, "_remove_tree", flaky), mock.patch.object(java_matrix.time, "sleep"):
+                inst = java_matrix.make_instance_rig(rig, self._variants(1)[0], ["ModA"])
+            self.assertEqual(len(calls), 2)
+            self.assertTrue((inst / "mods").is_dir())
+
     def test_skip_known_reuses_an_all_pass_for_the_same_mod_set_only(self):
         calls = []
 
