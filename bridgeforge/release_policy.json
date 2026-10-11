@@ -800,6 +800,11 @@
       "local_only": true,
       "reason": "revived for the owner's local archive (live-validated 2026-10-11); not published without the author's permission (owner decision 2026-09-27)",
       "recorded_on": "2026-10-11"
+    },
+    "cmutils": {
+      "local_only": true,
+      "reason": "revived for the owner's local archive (live-validated 2026-10-11); not published without the author's permission (owner decision 2026-09-27)",
+      "recorded_on": "2026-10-11"
     }
   },
   "default": {

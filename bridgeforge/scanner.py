@@ -7151,9 +7151,13 @@ def _scan_library_required_by_throw(root: Path, result: ScanResult) -> None:
 
 def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
     """Code that reaches a known library's package without mod_info.json declaring that dependency."""
+    own_info = _load_lenient_json_file(root / "mod_info.json")
+    own_id = str(own_info.get("id", "")).strip().lower() if isinstance(own_info, dict) else ""
     for library, dependency_id in LIBRARY_DEPENDENCY_IDS.items():
         if _mod_info_declares_dependency(result, dependency_id):
             continue
+        if own_id and own_id == dependency_id.lower():
+            continue  # the mod IS this library: Combat-Misc-Utils (cmutils) was told to depend on itself (2026-10-11)
         prefixes = BUNDLED_LIBRARY_PACKAGE_PREFIXES[library]
         import_only = _library_import_only(root, result, prefixes)
         if import_only:

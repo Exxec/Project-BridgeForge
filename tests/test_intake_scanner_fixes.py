@@ -184,3 +184,20 @@ class BytecodeDependencyGuardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LibraryIsNotItsOwnDependencyTests(unittest.TestCase):
+    """revive --apply put {"id":"cmutils"} into Combat-Misc-Utils' own mod_info.json (2026-10-11): the mod is the library."""
+
+    def _hits(self, own_id: str):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", json.dumps({"id": own_id, "version": "1"}))
+            _write(root / "data" / "scripts" / "Uses.java", "import cmu.CMUtils;\npublic class Uses { CMUtils x; }\n")
+            return [f for f in scan_mod(root, TargetProfile()).findings if f.id == "undeclared-library-dependency" and "library:CMUtils" in f.evidence]
+
+    def test_the_library_itself_is_not_told_to_depend_on_itself(self) -> None:
+        self.assertEqual(self._hits("cmutils"), [])
+
+    def test_another_mod_using_it_without_declaring_it_still_is(self) -> None:
+        self.assertEqual(len(self._hits("someothermod")), 1)

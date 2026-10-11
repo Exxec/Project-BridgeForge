@@ -16,6 +16,7 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - ** Slightly Better Tech-Mining** 0.95.1-2.6.0+bf.1: revived for RC8 and archived (live validated)
 - **Fast Engine Rendering** 1.1.2+bf.1: LazyLib declared as a dependency: the mod plugin refuses to start without it ('LazyLib is required to run at least one of the mods you have installed'; the mass boot test failed it on every launcher without LazyLib, 2026-10-11) but mod_info.json declared none. The 2026-09-28 dependency revert had removed it. Evidence: mass-test logs for Fast-Engine-Rendering.
 - **Fast Engine Rendering** 1.1.2+bf.1: revived for RC8 and archived (live validated)
+- **Combat Misc Utils** 0.4.1: revived for RC8 and archived (live validated)
 
 ## 2026-10-06
 
