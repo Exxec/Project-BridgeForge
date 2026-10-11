@@ -923,6 +923,13 @@ def build_parser() -> argparse.ArgumentParser:
     group_smoke.add_argument("--rig", type=Path)
     group_smoke.add_argument("--queue", type=Path)
     group_smoke.add_argument("--json", action="store_true")
+    group_live = group_sub.add_parser("live", help="after `install`: play the group's live run unattended with real mouse clicks (launcher, New Game, the campaign probe's day, the probe combat mission) and confirm each stage from the log; leave the mouse and keyboard alone")
+    group_live.add_argument("test_id", help="log name: writes <rig>/logs/<TESTID>.stdout.log, readable by `probe-group report` and `record`")
+    group_live.add_argument("--bat", default="run-j25-direct.bat")
+    group_live.add_argument("--menu-timeout", type=int, default=240)
+    group_live.add_argument("--rig", type=Path)
+    group_live.add_argument("--queue", type=Path)
+    group_live.add_argument("--json", action="store_true")
     group_report_cmd = group_sub.add_parser("report", help="per-mod verdicts for a group's run log")
     group_report_cmd.add_argument("log", type=Path, help="the run's stdout log (bf-test launch) or the rig's starsector.log")
     group_report_cmd.add_argument("--rig", type=Path)
@@ -1587,6 +1594,21 @@ def main(argv: list[str] | None = None) -> int:
                     if result.get("lunalib_advice"):
                         print(f"  WARN {result['lunalib_advice']}")
                     print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
+            elif args.probe_group_command == "live":
+                from .live_run import live_run
+                print("Starting the live run: leave the mouse and keyboard alone until it finishes (about three minutes after loading).", file=sys.stderr)
+                live = live_run(rig, args.test_id, bat_name=args.bat, menu_timeout=args.menu_timeout)
+                result = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "rounds": live.rounds, "stages": live.stages, "log": live.log}
+                if not args.json:
+                    print(f"{live.verdict}: stages {', '.join(live.stages) or 'none'}; combat rounds {live.rounds}")
+                    if live.verdict != "LIVE_DONE":
+                        print(f"  stuck at {live.stage}: {live.detail}")
+                    else:
+                        print(f"  Next: bridgeforge probe-group report \"{live.log}\", then record --archive.")
+                if live.verdict != "LIVE_DONE":
+                    if args.json:
+                        print(json.dumps(result, indent=2, ensure_ascii=False))
+                    return 1
             elif args.probe_group_command == "smoke":
                 from .probe_group import smoke_group
                 result = smoke_group(rig, bat_name=args.bat, timeout=args.timeout, log_name=args.log_name)

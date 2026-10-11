@@ -69,7 +69,7 @@ the test suite while it does (hermeticity check), then commit them.
   stopped by hand) was this. Since 2026-10-11 `bf-test.ps1 launch` clicks it itself: it finds the launcher window, posts
   mouse messages at (50%, 68%) of the window, and falls back to a real cursor click 8 s later if the log still lacks "Running
   with the following mods" (proven on CLICKTEST-20261011: main menu reached with no manual click; the log is in
-  `<id>.windows.txt`). `BF_NO_AUTOCLICK=1` turns it off. `probe-group smoke` (after `install N`) does the same click from Python and boots to the main menu in about 12 s: run it before asking anyone to play. The mass boot test (`java-matrix`) starts java directly on fresh instance rigs and needs no click.
+  `<id>.windows.txt`). `BF_NO_AUTOCLICK=1` turns it off. `probe-group live TESTID` (after `install N`) plays the whole live run unattended with real clicks (leave the mouse and keyboard alone for about five minutes; then `probe-group report` and `record --archive` on that log). `probe-group smoke` (after `install N`) does the same click from Python and boots to the main menu in about 12 s: run it before asking anyone to play. The mass boot test (`java-matrix`) starts java directly on fresh instance rigs and needs no click.
 - `git commit`'s hook runs `python -m ruff`; the project `.venv` Python has no ruff. Put
   `C:\Users\exxec\AppData\Local\Python\pythoncore-3.14-64` first on `PATH` for the commit.
 - Workspaces get locked to non-admin sessions (twice: `Done\` zips and 14 workspaces; cause unknown). If `probe-group plan` says
