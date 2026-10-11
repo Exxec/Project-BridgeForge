@@ -2868,7 +2868,8 @@ def _scan_star_type_undefined(root: Path, result: ScanResult, vanilla_core: Path
             text = source.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for literal in set(re.findall(r'"(star_[a-z0-9_]+)"', text)):
+        # Comments are not code: Neutrino's Exelion.java names star_blackhole only in a commented-out initStar (2026-10-11).
+        for literal in set(re.findall(r'"(star_[a-z0-9_]+)"', _blank_java_comments(text))):
             if literal not in defined:
                 used.setdefault(literal, []).append(_relative(root, source))
     if not used:

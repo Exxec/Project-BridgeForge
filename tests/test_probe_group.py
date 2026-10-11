@@ -652,3 +652,28 @@ class LunaLibAdviceTests(unittest.TestCase):
         self.assertIsNone(lunalib_advice(["shaderLib", "lunalib"], installed))
         self.assertIsNone(lunalib_advice(["demo"], installed))
         self.assertIsNone(lunalib_advice(["shaderLib"], {"shaderLib": "GraphicsLib"}))
+
+
+class CampaignLayoutAttributionTests(unittest.TestCase):
+    """GRP1B2-20261011: Neutrino's campaign-layout FAIL lines name a system, not a content id, so they were group-level and made the
+    verdict UNCLEAR. With one member they are that member's, and an accepted entry then applies."""
+
+    def _report(self, accepted):
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            a = build_probe_config(_workspace(queue, "A", "mod_a", "hull_a"))
+            log = root / "run.stdout.log"
+            log.write_text(
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.23|content-ids|OK|all-content|checked=1 failed=0\n"
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.23|campaign-layout|FAIL|mod-systems|systems expected=2 missing=1\n",
+                encoding="utf-8")
+            return group_report(log, merge_configs([a]), accepted=accepted)
+
+    def test_single_member_owns_the_layout_failure(self) -> None:
+        report = self._report(None)
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "FAIL")
+        self.assertEqual(report["unattributed"], [])
+
+    def test_an_accepted_layout_entry_clears_it(self) -> None:
+        report = self._report({"mod_a": [{"check": "campaign-layout", "subject": "mod-systems", "reason": "author disabled Exelion"}]})
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")

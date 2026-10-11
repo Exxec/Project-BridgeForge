@@ -35,6 +35,8 @@ PLAY_MISSION = (0.6875, 0.752)
 DEPLOY_ALL = (0.577, 0.635)
 DEPLOY = (0.526, 0.635)
 COMBAT_CONTINUE = (0.50, 0.745)
+MISSION_ROW_STEP = 0.0594  # list entries are 57 px apart in the 960 px view (measured 2026-10-11)
+MAX_ROWS_REACHABLE = 7  # entries above the last one that show without scrolling back up
 
 MENU_LOADED = "Reading save data from"
 CAMPAIGN_END = "probe|INFO|campaign|END"
@@ -105,11 +107,37 @@ def to_mission_list(hands: Hands) -> None:
     hands.sleep(3)
 
 
-def play_probe_combat(hands: Hands) -> None:
+_MOD_LINE = re.compile(r"Running with the following mods[^\n]*\n(?P<body>(?:[^\n]*StarfarerLauncher\s+-\s{4}[^\n]+\n)+)")
+_MOD_ENTRY = re.compile(r"StarfarerLauncher\s+-\s{4}(?P<name>.+?) \[id: (?P<id>[^\]]+)\].*?\(from (?P<path>[^)]+)\)")
+
+
+def missions_below_probe(log_text: str, probe_id: str = "bridgeforge_probe") -> int | None:
+    """How many mission-list rows come after the probe's mission. The list shows mods in the launcher's priority order (the
+    log's 'Running with the following mods'), so a mod listed after the probe puts its missions below it: Neutrino's five
+    pushed the probe up and the fixed click started a Neutrino mission (GRP1B-20261011). None: the log has no mod list."""
+    block = _MOD_LINE.search(log_text)
+    if not block:
+        return None
+    entries = [m.groupdict() for m in _MOD_ENTRY.finditer(block.group("body"))]
+    ids = [e["id"] for e in entries]
+    if probe_id not in ids:
+        return None
+    below = 0
+    for entry in entries[ids.index(probe_id) + 1:]:
+        csv_path = Path(entry["path"]) / "data" / "missions" / "mission_list.csv"
+        try:
+            rows = [line.strip() for line in csv_path.read_text(encoding="utf-8", errors="replace").splitlines()]
+        except OSError:
+            continue
+        below += sum(1 for row in rows[1:] if row.strip(" ,"))
+    return below
+
+
+def play_probe_combat(hands: Hands, rows_below: int = 0) -> None:
     hands.front()
-    hands.scroll(*MISSION_LIST_SCROLL_POINT, -30)
+    hands.scroll(*MISSION_LIST_SCROLL_POINT, -40)
     hands.sleep(1)
-    hands.click(*PROBE_MISSION)
+    hands.click(PROBE_MISSION[0], PROBE_MISSION[1] - rows_below * MISSION_ROW_STEP)
     hands.sleep(1.5)
     hands.click(*PLAY_MISSION)
     hands.sleep(6)
@@ -138,9 +166,12 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
     result.stages.append("campaign")
     to_mission_list(hands)
     rounds_total, round_no = 1, 0
+    rows_below = missions_below_probe(_log_text(log)) or 0
+    if rows_below > MAX_ROWS_REACHABLE:
+        return stuck("mission-list", f"{rows_below} mission rows sit below the probe's; only {MAX_ROWS_REACHABLE} are reachable without scrolling back")
     while round_no < rounds_total:
         offset = len(_log_text(log))
-        play_probe_combat(hands)
+        play_probe_combat(hands, rows_below)
         if not wait_for(log, COMBAT_END, combat_timeout, hands, since=offset):
             return stuck(f"combat-round-{round_no + 1}", "no 'combat END' probe line after starting the probe mission")
         round_no += 1

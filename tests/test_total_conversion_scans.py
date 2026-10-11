@@ -58,6 +58,15 @@ class StarTypeUndefinedTests(unittest.TestCase):
             _write(mod / "data" / "config" / "planets.json", mod_planets)
         return mod, core
 
+    def test_star_type_named_only_in_a_comment_is_not_code(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod, core = self._fixture(directory)
+            _write(mod / "data" / "scripts" / "Gen.java",
+                   'public class Gen { void run(Object s) { s.initStar("y", "star_white", 1f, 2f);\n'
+                   '// s.initStar("x", "star_gone", 1f, 2f);\n } }\n')
+            hits = _findings(scan_mod(mod, vanilla_core=core), "star-type-undefined")
+        self.assertEqual(hits, [])
+
     def test_a_star_type_neither_mod_nor_rc8_defines_is_flagged(self) -> None:
         # Ironclads' SystemComposer asked for 0.7's star_red; RC8 has star_red_dwarf: NPE 'PlanetSpec.getPlanetType()' (GRP10Q)
         with tempfile.TemporaryDirectory() as directory:

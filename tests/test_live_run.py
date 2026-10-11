@@ -90,3 +90,39 @@ class RefusalTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MissionsBelowProbeTests(unittest.TestCase):
+    """GRP1B-20261011: Neutrino's five missions sit below the probe's in the list, so a fixed click started one of them."""
+
+    def _log(self, base: Path, rows: dict[str, int]) -> str:
+        lines = ["1 [Thread-2] INFO  com.fs.starfarer.StarfarerLauncher  - Running with the following mods (in order of priority):"]
+        order = ["BridgeForge Probe|bridgeforge_probe", "Other Mod|other", "Neutrino Corporation|Neutrino"]
+        for entry in order:
+            name, mod_id = entry.split("|")
+            folder = base / mod_id
+            (folder / "data" / "missions").mkdir(parents=True)
+            body = "mission,\n" + "".join(f"m{i},\n" for i in range(rows.get(mod_id, 0))) + ",,\n"
+            (folder / "data" / "missions" / "mission_list.csv").write_text(body, encoding="utf-8")
+            lines.append(f"1 [Thread-2] INFO  com.fs.starfarer.StarfarerLauncher  -     {name} [id: {mod_id}] [version 1] (from {folder})")
+        lines.append("1 [Thread-2] INFO  com.fs.starfarer.StarfarerLauncher  - Mod list finished")
+        return "\n".join(lines) + "\n"
+
+    def test_counts_only_the_missions_of_mods_listed_after_the_probe(self) -> None:
+        with resolved_temp_dir() as base:
+            text = self._log(base, {"bridgeforge_probe": 1, "other": 2, "Neutrino": 5})
+            self.assertEqual(live_run.missions_below_probe(text), 7)
+
+    def test_probe_alone_has_nothing_below_it(self) -> None:
+        with resolved_temp_dir() as base:
+            text = self._log(base, {"bridgeforge_probe": 1})
+            self.assertEqual(live_run.missions_below_probe(text), 0)
+
+    def test_a_log_without_a_mod_list_is_unknown(self) -> None:
+        self.assertIsNone(live_run.missions_below_probe("nothing here\n"))
+
+    def test_click_moves_up_one_row_per_mission_below(self) -> None:
+        clicks = []
+        hands = live_run.Hands(click=lambda fx, fy: clicks.append((fx, fy)), key=lambda v: None, scroll=lambda *a: None, sleep=lambda s: None)
+        live_run.play_probe_combat(hands, rows_below=3)
+        self.assertAlmostEqual(clicks[0][1], live_run.PROBE_MISSION[1] - 3 * live_run.MISSION_ROW_STEP)
