@@ -457,3 +457,98 @@ def add_replace_entries(text: str, entries: list[str]) -> str:
     separator = "" if not body.strip() or body.rstrip().endswith(",") else ","
     block = separator + "\n" + "\n".join(f'"{e}",' for e in new) + "\n"
     return text[:close].rstrip() + block + text[close:]
+
+
+# ---- vanilla rows in a mod's own data tables -----------------------------------------------------------------------------------
+# A mod's ship_data.csv, weapon_data.csv or wing_data.csv merges with RC8's by id: a row whose id RC8 also defines REPLACES RC8's
+# row. Yellowjackets Mining Conglomerate (a 0.6.1 modding-template mod) carried 12 vanilla hull rows and 3 weapon rows that
+# differed from RC8's only in 0.6-era values, so loading it would have changed Brawler, Atlas, Onslaught and others for every
+# player (2026-10-10). A rebalance mod does this on purpose, so the finding asks; it never decides.
+VANILLA_ROW_TABLES = ("data/hulls/ship_data.csv", "data/weapons/weapon_data.csv", "data/hulls/wing_data.csv")
+
+
+def _table_records(text: str):
+    """[(id, start, end, cells)] for each data record of a CSV: its offsets in the text and its cell values."""
+    from .scanner import _csv_record_cells
+
+    records = _csv_record_cells(text)
+    if not records:
+        return []
+    header = [cell[2].strip() for cell in records[0]]
+    if "id" not in header:
+        return []
+    index = header.index("id")
+    spans = []
+    for number, record in enumerate(records[1:], 1):
+        if not record:
+            continue
+        start = record[0][0]
+        following = records[number + 1] if number + 1 < len(records) else None
+        end = following[0][0] if following else len(text)
+        values = [cell[2] for cell in record]
+        row_id = values[index].strip() if len(values) > index else ""
+        spans.append((row_id, start, end, dict(zip(header, values))))
+    return spans
+
+
+def vanilla_row_overrides(root: Path, vanilla_core: Path | None) -> dict[str, list[tuple[str, int]]]:
+    """{table: [(id, columns that differ from RC8's row)]} for rows of the mod's own tables whose id RC8 also defines. Tables
+    the mod lists in mod_info `replace` are the mod's whole table and are skipped; so is any id starting with '#'."""
+    root = Path(root)
+    if vanilla_core is None:
+        return {}
+    replaced = replace_list(root)
+    found: dict[str, list[tuple[str, int]]] = {}
+    for table in VANILLA_ROW_TABLES:
+        mine, theirs = root / table, Path(vanilla_core) / table
+        if table in replaced or not mine.is_file() or not theirs.is_file():
+            continue
+        try:
+            mine_text = mine.read_text(encoding="utf-8-sig", errors="replace")
+            their_text = theirs.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            continue
+        vanilla = {row_id: cells for row_id, _s, _e, cells in _table_records(their_text) if row_id and not row_id.startswith("#")}
+        rows = []
+        for row_id, _start, _end, cells in _table_records(mine_text):
+            if row_id and not row_id.startswith("#") and row_id in vanilla:
+                other = vanilla[row_id]
+                differing = sum(1 for column, value in cells.items() if column in other and value.strip() != other[column].strip())
+                rows.append((row_id, differing))
+        if rows:
+            found[table] = rows
+    return found
+
+
+def scan_vanilla_row_overrides(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    hits = vanilla_row_overrides(root, vanilla_core)
+    if not hits:
+        return
+    total = sum(len(rows) for rows in hits.values())
+    result.add(
+        id="csv-vanilla-row-override",
+        category="content",
+        severity="medium",
+        classification="REVIEW",
+        confidence="HIGH",
+        explanation=f"{total} row(s) in this mod's " + ", ".join(sorted(Path(t).name for t in hits)) + " carry ids RC8 already defines, so "
+                    "they replace RC8's own hulls, weapons or wings with this mod's values. A rebalance or total-conversion mod does "
+                    "that on purpose; a mod built from the modding template, or one that copied a vanilla table to add its own rows "
+                    "to, does it by accident and would silently change vanilla ships for every player (Yellowjackets Mining "
+                    "Conglomerate: 12 hull and 3 weapon rows of 0.6-era values, none used by the mod). If it is not intended, `fix` "
+                    "removes those rows (RC8's stand) after you approve; otherwise accept the finding.",
+        file=sorted(hits)[0],
+        evidence=[f"{table}:{row_id}:{differing}-columns-differ" for table, rows in sorted(hits.items()) for row_id, differing in rows[:12]],
+    )
+
+
+def remove_vanilla_rows(text: str, vanilla_ids: set[str]) -> tuple[str, list[str]]:
+    """The CSV text without the data records whose id is in `vanilla_ids`, and the ids removed. Only those records change."""
+    removed, spans = [], []
+    for row_id, start, end, _cells in _table_records(text):
+        if row_id in vanilla_ids:
+            spans.append((start, end))
+            removed.append(row_id)
+    for start, end in reversed(spans):
+        text = text[:start] + text[end:]
+    return text, removed

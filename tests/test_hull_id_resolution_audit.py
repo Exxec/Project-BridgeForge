@@ -18,6 +18,7 @@ EXEMPT = {
     # Both iterate ship_data.csv's own base-hull rows and look each up in the .ship index; a row id is
     # never a skin id, so there is no skin reference to resolve (item 17's audit, 2026-09-20).
     ("scanner.py", "_scan_carrier_bays_proposal"): "iterates ship_data.csv base-hull rows",
+    ("scanner.py", "carrier_bays_without_evidence"): "iterates ship_data.csv base-hull rows (same inputs as _scan_carrier_bays_proposal)",
     ("scanner.py", "_scan_description_missing"): "iterates ship_data.csv base-hull rows",
 }
 

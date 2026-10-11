@@ -53,6 +53,49 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
         }
     }
 
+    // 0.2.23: how many drones and fighter wings each ship had out at once. The Yellowjackets live run (2026-10-11) had only the
+    // owner's word that the Colony's drones launched; the log had no record of it. ShipAPI.getDeployedDrones() and
+    // getAllWings() checked with javap on RC8's starfarer.api.jar, 2026-10-11.
+    private final java.util.Map<ShipAPI, int[]> launches = new java.util.LinkedHashMap<ShipAPI, int[]>();
+
+    private void trackLaunches() {
+        try {
+            for (ShipAPI ship : loggedShips) {
+                if (ship == null) {
+                    continue;
+                }
+                List<ShipAPI> drones = ship.getDeployedDrones();
+                List<?> wings = ship.getAllWings();
+                int[] seen = launches.get(ship);
+                if (seen == null) {
+                    seen = new int[2];
+                    launches.put(ship, seen);
+                }
+                seen[0] = Math.max(seen[0], drones == null ? 0 : drones.size());
+                seen[1] = Math.max(seen[1], wings == null ? 0 : wings.size());
+            }
+        } catch (Throwable t) {
+            // the probe never stops combat over a launch count
+        }
+    }
+
+    private void reportLaunches() {
+        boolean any = false;
+        for (java.util.Map.Entry<ShipAPI, int[]> entry : launches.entrySet()) {
+            int[] seen = entry.getValue();
+            if (seen[0] + seen[1] > 0) {
+                any = true;
+                ShipAPI ship = entry.getKey();
+                String hullId = ship.getHullSpec() != null ? ship.getHullSpec().getHullId() : "?";
+                ProbeLog.emit("combat-launch", ProbeLog.STATUS_INFO, hullId,
+                        "most drones out at once=" + seen[0] + " most fighter wings out at once=" + seen[1] + " owner=" + ship.getOwner());
+            }
+        }
+        if (!any) {
+            ProbeLog.emit("combat-launch", ProbeLog.STATUS_INFO, "none", "no ship had a drone or fighter wing out");
+        }
+    }
+
     @Override
     public void advance(float amount, List<InputEventAPI> events) {
         if (ended) {
@@ -63,8 +106,10 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
             return;
         }
         logNewShips(engine);
+        trackLaunches();
         if (engine.getTotalElapsedTime(false) >= combatSeconds) {
             ended = true;
+            reportLaunches();
             ProbeLog.emit("combat-summary", ProbeLog.STATUS_INFO, "combat", "ships logged=" + loggedShips.size());
             ProbeLog.end("combat");
             engine.endCombat(0f);

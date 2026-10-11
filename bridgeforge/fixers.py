@@ -69,6 +69,7 @@ SUPPORTED_FINDINGS = (
     "rules-csv-duplicate-id",
     "rules-csv-whitespace-only-line",
     "rules-csv-curly-quote-unreadable",
+    "csv-vanilla-row-override",
     "faction-trait-weight-legacy-personality-id",
     "shiproles-wing-id",
     "csv-fullwidth-number",
@@ -924,7 +925,20 @@ def _fix_carrier_bays_proposal(root: Path, options: dict) -> list[FileChange]:
     than an invented 0. Every --hull id must already exist as a ship_data.csv row (comment/blank-id
     rows don't count); an id this file has no row for is refused rather than silently skipped.
     """
-    return _carrier_bays_edit(root, _parse_hull_bay_assignments(options.get("hulls") or []))
+    assignments = _parse_hull_bay_assignments(options.get("hulls") or []) if options.get("hulls") else {}
+    if options.get("hull_zero_no_evidence"):
+        # Hulls with a hangar value but no LAUNCH_BAY slot and no variant wings: 0 is what the data supports (see
+        # scanner.carrier_bays_without_evidence). Explicit --hull values win.
+        from .scanner import carrier_bays_without_evidence
+
+        vanilla_core = Path(options["vanilla_core"]).expanduser().resolve() if options.get("vanilla_core") else None
+        for hull_id in carrier_bays_without_evidence(root, vanilla_core):
+            assignments.setdefault(hull_id, 0)
+        if not assignments:
+            raise FixerError("--hull-zero-no-evidence: no hull has a hangar value without launch-bay slots or variant wings.")
+    elif not assignments:
+        raise FixerError("--hull ID=N is required (repeatable) for carrier-bays-proposal (or --hull-zero-no-evidence).")
+    return _carrier_bays_edit(root, assignments)
 
 
 def _fix_ship_data_missing_fighter_bays_column(root: Path, options: dict) -> list[FileChange]:
@@ -2416,6 +2430,32 @@ def _fix_rules_csv_curly_quote_unreadable(root: Path, options: dict) -> list[Fil
     return [FileChange(path=path, before=raw, after=_encode(new_text, had_bom))]
 
 
+def _fix_csv_vanilla_row_override(root: Path, options: dict) -> list[FileChange]:
+    """Remove the rows of the mod's ship_data/weapon_data/wing_data whose id RC8 also defines, so RC8's own rows stand
+    (Yellowjackets Mining Conglomerate, 2026-10-10: 12 hull and 3 weapon rows of 0.6-era values). Needs --vanilla-core. Tables
+    the mod replaces in mod_info.json are left alone. Only those records change; the rest of each file keeps its bytes."""
+    from . import conversion_checks as cc
+
+    vanilla_core = options.get("vanilla_core")
+    if not vanilla_core:
+        raise FixerError("--vanilla-core is required for csv-vanilla-row-override.")
+    vanilla_core = Path(vanilla_core).expanduser().resolve()
+    hits = cc.vanilla_row_overrides(root, vanilla_core)
+    if not hits:
+        raise FixerError("No row of the mod's ship, weapon or wing table repeats an id RC8 defines.")
+    changes = []
+    for table in sorted(hits):
+        path = root / table
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        theirs, _bom = _decode((vanilla_core / table).read_bytes())
+        vanilla_ids = {row_id for row_id, _s, _e, _c in cc._table_records(theirs) if row_id and not row_id.startswith("#")}
+        new_text, removed = cc.remove_vanilla_rows(text, vanilla_ids)
+        if removed:
+            changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    return changes
+
+
 def _fix_person_names_duplicate_row(root: Path, options: dict) -> list[FileChange]:
     """Remove rows of data/characters/person_names.csv that repeat an earlier row (RC8 'Duplicate key' Fatal,
     Ironclads GRP10B-20261005). The first copy stays; every other byte, line endings included, is kept."""
@@ -3617,6 +3657,7 @@ _FIXER_FUNCS = {
     "rules-csv-duplicate-id": _fix_rules_csv_duplicate_id,
     "rules-csv-whitespace-only-line": _fix_rules_csv_whitespace_only_line,
     "rules-csv-curly-quote-unreadable": _fix_rules_csv_curly_quote_unreadable,
+    "csv-vanilla-row-override": _fix_csv_vanilla_row_override,
     "rc8-signature-changed": _fix_rc8_signature_changed,
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
     "shiproles-wing-id": _fix_shiproles_wing_id,

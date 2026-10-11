@@ -203,6 +203,7 @@
     "rules-csv-duplicate-id": "auto",
     "rules-csv-whitespace-only-line": "auto",
     "rules-csv-curly-quote-unreadable": "input",
+    "csv-vanilla-row-override": "input",
     "vanilla-script-shadow-repointable": "decision",
     "variant-id-in-weapon-slot": "decision",
     "variant-op-over-budget": "auto",

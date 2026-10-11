@@ -7427,6 +7427,40 @@ def _system_type_index(root: Path, vanilla_core: Path | None) -> dict[str, str]:
     return index
 
 
+def carrier_bays_without_evidence(root: Path, vanilla_core: Path | None) -> list[str]:
+    """Hull ids of a pre-0.8 ship_data.csv that carry a `hangar` value (or variant wings) but no LAUNCH_BAY slot in the hull's
+    .ship file and no wings in any of the mod's variants for that hull. Nothing can launch from such a hull, so 0 is the one
+    bay count the data supports (Yellowjackets Mining Conglomerate, 2026-10-10: three hulls with hangar 5/4/3 copied from the
+    modding template, no bay slots, no wing_data). Same inputs as carrier-bays-proposal; hulls it would number are not here."""
+    path = root / "data" / "hulls" / "ship_data.csv"
+    header = _csv_header(path) if path.is_file() else None
+    if not header:
+        return []
+    columns = [cell.strip().lower() for cell in header]
+    if "fighter bays" in columns and "hangar" not in columns:
+        return []
+    ships = _ship_file_index(root, None)
+    wings_by_hull: Counter[str] = Counter()
+    variants_root = root / "data" / "variants"
+    for variant in sorted(variants_root.rglob("*.variant")) if variants_root.is_dir() else []:
+        spec = _load_lenient_json_file(variant)
+        if isinstance(spec, dict) and isinstance(spec.get("hullId"), str) and isinstance(spec.get("wings"), list):
+            wings_by_hull[spec["hullId"]] = max(wings_by_hull[spec["hullId"]], len(spec["wings"]))
+    found = []
+    for row in _read_csv_rows_lenient(path) or []:
+        normalized = {str(key).strip().lower(): (value or "").strip() for key, value in row.items() if key}
+        hull_id = normalized.get("id", "")
+        if not hull_id or hull_id.startswith("#") or normalized.get("fighter bays"):
+            continue
+        spec = ships.get(hull_id) or {}
+        if not spec or str(spec.get("hullSize") or "").upper() == "FIGHTER":
+            continue
+        slots = sum(1 for slot in spec.get("weaponSlots") or [] if isinstance(slot, dict) and slot.get("type") == "LAUNCH_BAY")
+        if (_float_or(normalized.get("hangar")) or wings_by_hull.get(hull_id, 0)) and not slots and not wings_by_hull.get(hull_id, 0):
+            found.append(hull_id)
+    return found
+
+
 def _scan_carrier_bays_proposal(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
     """Pre-0.8 mods: propose fighter bays per hull from the evidence the old data still carries.
 
@@ -8475,11 +8509,13 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
         scan_factions_naming_missing_content,
         scan_factions_naming_removed_hulls,
         scan_lifecycle_plugin_missing,
+        scan_vanilla_row_overrides,
     )
 
     scan_factions_naming_removed_hulls(root, result, vanilla_root)
     scan_factions_naming_missing_content(root, result, vanilla_root)
     scan_lifecycle_plugin_missing(root, result)
+    scan_vanilla_row_overrides(root, result, vanilla_root)
     scan_factions_csv_relists_neutral(root, result, vanilla_root)
     _scan_data_class_references_missing(root, result, vanilla_root, provider_roots)
     _scan_hardcoded_hyperspace_coordinates(root, result)
