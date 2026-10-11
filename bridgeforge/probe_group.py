@@ -615,7 +615,7 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
             continue
         subject = match["subject"].split(":", 1)[-1].split("/", 1)[0]
         mod_id = owner.get(subject)
-        if mod_id is None and match["check"] == "campaign-layout" and len(members) == 1:
+        if mod_id is None and match["check"] in ("campaign-layout", "combat-perf") and len(members) == 1:
             mod_id = next(iter(members))  # a sector-layout line names a system, not a content id: with one member it is that member's
         entry = f"{match['check']}|{match['subject']}|{match['detail'].strip()[:200]}"
         if mod_id and any(a["check"] == match["check"] and a["subject"] == match["subject"] for a in (accepted or {}).get(mod_id, [])):
@@ -628,8 +628,9 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
         suspect = event.get("suspect") or event.get("top_mod")
         text = f"{event.get('matched_rule') or event.get('level')}: {str(event.get('message'))[:160]}"
         (verdicts[suspect]["crashes"] if suspect in verdicts else unattributed).append(text)
+    # combat-perf FAIL (probe 0.2.24): a runaway field in a group of several members belongs to the group, so it is UNCLEAR.
     group_crash = any(not item.startswith(("content-ids", "faction", "planet", "rings", "submarket", "fleet", "setup", "combat"))
-                      for item in unattributed) or (triage["counts"]["FATAL"] and not any(v["crashes"] for v in verdicts.values()))
+                      or item.startswith("combat-perf") for item in unattributed) or (triage["counts"]["FATAL"] and not any(v["crashes"] for v in verdicts.values()))
     for mod_id, verdict in verdicts.items():
         if verdict["failures"] or verdict["crashes"]:
             verdict["verdict"] = "FAIL"

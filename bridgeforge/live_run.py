@@ -113,10 +113,66 @@ def new_game_flow_for(log_text: str) -> str:
     return "ironclads" if "ironclads" in ids else "default"
 
 
+def _menu_buttons(hands: Hands) -> list[tuple[float, float]] | None:
+    """The main menu buttons on screen now, or None when the screen cannot be read."""
+    if not hands.geometry:
+        return None
+    try:
+        import tempfile
+
+        from . import game_click
+        from .screen_read import Bitmap, main_menu_buttons
+
+        with tempfile.TemporaryDirectory() as directory:
+            shot = Path(directory) / "menu.bmp"
+            if not game_click.capture_client(hands.geometry(), shot):
+                return None
+            return main_menu_buttons(Bitmap.load(shot))
+    except Exception:
+        return None
+
+
+def menu_point(hands: Hands, name: str, fallback: tuple[float, float]) -> tuple[float, float]:
+    """Where the main menu's `name` button is, read from the screen once the menu has stopped moving (it slides in after a return
+    from the campaign, and a reading taken mid-slide sent a click to the wrong row, GRP-CMU3-20261011); the measured fraction when
+    the screen cannot be read."""
+    from .screen_read import main_menu_target
+
+    previous = None
+    for _ in range(10):
+        buttons = _menu_buttons(hands)
+        if buttons is None:
+            return fallback
+        if buttons and buttons == previous and main_menu_target(buttons, name):
+            return main_menu_target(buttons, name)
+        previous = buttons
+        hands.sleep(1.0)
+    return (main_menu_target(previous, name) if previous else None) or fallback
+
+
+def click_menu(hands: Hands, name: str, fallback: tuple[float, float], attempts: int = 3) -> bool:
+    """Click a main menu button and check the menu went away; try again if it is still there. True once it has gone (or when the
+    screen cannot be read, so the old blind click stands)."""
+    from .screen_read import main_menu_target
+
+    for _ in range(attempts):
+        hands.front()
+        hands.click(*menu_point(hands, name, fallback))
+        hands.sleep(2.5)
+        after = _menu_buttons(hands)
+        if after is None or not main_menu_target(after, name):
+            return True
+    return False
+
+
 def new_game(hands: Hands, flow: str = "default") -> None:
     """Main menu to the campaign map's first frame: default chip, first choice everywhere, Normal, skip the tutorial."""
     for point, pause in NEW_GAME_FLOWS[flow]:
         hands.front()
+        if point == MAIN_MENU_NEW_GAME:
+            click_menu(hands, "New Game", MAIN_MENU_NEW_GAME)
+            hands.sleep(max(0.0, pause - 2.5))
+            continue
         hands.click(*point)
         hands.sleep(pause)
 
@@ -130,7 +186,7 @@ def to_mission_list(hands: Hands) -> None:
     hands.sleep(2)
     hands.click(*GAME_MENU_EXIT_OK)
     hands.sleep(8)
-    hands.click(*MAIN_MENU_MISSIONS)
+    click_menu(hands, "Missions", MAIN_MENU_MISSIONS)
     hands.sleep(3)
 
 
@@ -302,7 +358,15 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
     logs = rig / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     log, err = logs / f"{test_id}.stdout.log", logs / f"{test_id}.stderr.log"
-    process = subprocess.Popen(f'cmd.exe /c ""{bat}" > "{log}" 2> "{err}""', cwd=str(rig))
+    from .rig_prefs import pinned_launcher_prefs
+
+    prefs = pinned_launcher_prefs()  # the click fractions were measured at 1280x960; the owner's own setting comes back afterwards
+    prefs.__enter__()
+    try:
+        process = subprocess.Popen(f'cmd.exe /c ""{bat}" > "{log}" 2> "{err}""', cwd=str(rig))
+    except Exception:
+        prefs.__exit__(None, None, None)
+        raise
     hands = real_hands(rig, process.pid)
     base_alive = hands.alive
     clicked = {"done": False}
@@ -325,6 +389,7 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
                 _terminate_tree(java["pid"])
         if process.poll() is None:
             _terminate_tree(process.pid)
+        prefs.__exit__(None, None, None)
 
 
 def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240) -> LiveResult:

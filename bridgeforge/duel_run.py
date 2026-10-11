@@ -188,7 +188,7 @@ def run_duel(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", comb
         else:
             hands.sleep(20)
             hands.front()
-            hands.click(*lr.MAIN_MENU_MISSIONS)
+            lr.click_menu(hands, "Missions", lr.MAIN_MENU_MISSIONS)
             hands.sleep(3)
             layout = lr.mission_list_layout(lr._log_text(log), vanilla_rows, DUEL_MOD_ID)
             below, total = layout if layout else (0, None)

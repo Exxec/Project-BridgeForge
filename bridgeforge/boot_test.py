@@ -173,6 +173,13 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
     err_path = logs_dir / f"{name}.stderr.log"
 
     command_line = f'cmd.exe /c ""{bat_path}" > "{log_path}" 2> "{err_path}""'
+    prefs = None
+    if auto_click:
+        # An unattended boot goes through the launcher: pin its resolution and give the owner's own back afterwards (rig_prefs).
+        from .rig_prefs import pinned_launcher_prefs
+
+        prefs = pinned_launcher_prefs()
+        prefs.__enter__()
     started = time.monotonic()
     try:
         # Passed as a raw command-line string (not a list): on Windows, subprocess uses a string
@@ -182,6 +189,8 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
         process = subprocess.Popen(command_line, cwd=str(runtime_dir))
     except OSError as exc:
         restored = _restore(keep_mods)
+        if prefs is not None:
+            prefs.__exit__(None, None, None)
         return _result("FAIL", f"Failed to launch {bat_path}: {exc}", log_path, err_path, 0.0, None, restored)
 
     status = "FAIL"
@@ -242,6 +251,8 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
             triage_summary = None
 
     restored = _restore(keep_mods)
+    if prefs is not None:
+        prefs.__exit__(None, None, None)
 
     outcome = _result(status, reason, log_path, err_path, elapsed, triage_summary, restored)
     outcome["launcher_click"] = click_note

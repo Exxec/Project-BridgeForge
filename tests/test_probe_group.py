@@ -677,3 +677,25 @@ class CampaignLayoutAttributionTests(unittest.TestCase):
     def test_an_accepted_layout_entry_clears_it(self) -> None:
         report = self._report({"mod_a": [{"check": "campaign-layout", "subject": "mod-systems", "reason": "author disabled Exelion"}]})
         self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
+
+
+class CombatPerfTests(unittest.TestCase):
+    """Probe 0.2.24 logs combat-perf FAIL when the field runs away (RC8-27: 2,388 wreck hulks after one Bone-Breaker kill)."""
+
+    LINE = "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.24|combat-perf|FAIL|runaway|hulks=412 ships=430 worstFrameMs=2400 at t=150s\n"
+    CONTENT = "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.24|content-ids|OK|all-content|checked=1 failed=0\n"
+
+    def _report(self, members: int):
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            configs = [build_probe_config(_workspace(queue, n, f"mod_{n.lower()}", f"hull_{n.lower()}")) for n in ("A", "B")[:members]]
+            log = root / "run.stdout.log"
+            log.write_text(self.CONTENT + self.LINE, encoding="utf-8")
+            return group_report(log, merge_configs(configs))
+
+    def test_a_runaway_fails_the_only_member(self) -> None:
+        self.assertEqual(self._report(1)["members"]["mod_a"]["verdict"], "FAIL")
+
+    def test_a_runaway_in_a_bigger_group_makes_every_member_unclear(self) -> None:
+        report = self._report(2)
+        self.assertEqual({v["verdict"] for v in report["members"].values()}, {"UNCLEAR"})
