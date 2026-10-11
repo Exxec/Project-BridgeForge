@@ -1,0 +1,1 @@
+BridgeForge duel (seeker). Rig only: logs the frame period while two hulls fight and one is destroyed.

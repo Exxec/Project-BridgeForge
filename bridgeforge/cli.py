@@ -931,6 +931,13 @@ def build_parser() -> argparse.ArgumentParser:
     group_live.add_argument("--rig", type=Path)
     group_live.add_argument("--queue", type=Path)
     group_live.add_argument("--json", action="store_true")
+    group_duel = group_sub.add_parser("duel", help="after `install` of the mod that owns the hulls: play the rig-only duel missions (SEEKER's Bone-Breaker against Betelgeuse, and two vanilla Onslaughts as the baseline) unattended and report the frame cost of a destruction; leave the mouse and keyboard alone")
+    group_duel.add_argument("test_id", help="log name: writes <rig>/logs/<TESTID>.stdout.log")
+    group_duel.add_argument("--bat", default="run-j25-direct.bat")
+    group_duel.add_argument("--only", action="append", default=[], choices=["seeker", "baseline", "overwhelm"], help="play just this duel (repeatable)")
+    group_duel.add_argument("--rig", type=Path)
+    group_duel.add_argument("--queue", type=Path)
+    group_duel.add_argument("--json", action="store_true")
     group_report_cmd = group_sub.add_parser("report", help="per-mod verdicts for a group's run log")
     group_report_cmd.add_argument("log", type=Path, help="the run's stdout log (bf-test launch) or the rig's starsector.log")
     group_report_cmd.add_argument("--rig", type=Path)
@@ -1612,6 +1619,20 @@ def main(argv: list[str] | None = None) -> int:
                     else:
                         print(f"  Next: bridgeforge probe-group report \"{live.log}\", then record --archive.")
                 if live.verdict != "LIVE_DONE":
+                    if args.json:
+                        print(json.dumps(result, indent=2, ensure_ascii=False))
+                    return 1
+            elif args.probe_group_command == "duel":
+                from .duel_run import run_duel
+                print("Starting the duel run: leave the mouse and keyboard alone until it finishes (about ten minutes).", file=sys.stderr)
+                result = run_duel(rig, args.test_id, bat_name=args.bat, only=tuple(args.only) or None)
+                if not args.json:
+                    print(f"played: {', '.join(result['played']) or 'none'}" + (f"; PROBLEM: {result['problem']}" if result["problem"] else ""))
+                    for label, row in result["summary"].items():
+                        print(f"  {label}: fight lasted {row['fight_game_seconds']} game s / {row['fight_real_seconds']} real s before the first kill; avg frame {row['avg_ms_before']} ms before the first destruction, {row['avg_ms_after']} ms after; worst frame {row['worst_frame_ms']} ms "
+                              f"(worst in the 4 s after a destruction {row['worst_after_destruction_ms']} ms); peak hulks {row['peak_hulks']}, ships {row['peak_ships']}, projectiles {row['peak_projectiles']}")
+                    print(f"  log {result['log']}")
+                if result["problem"]:
                     if args.json:
                         print(json.dumps(result, indent=2, ensure_ascii=False))
                     return 1

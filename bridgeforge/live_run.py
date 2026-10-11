@@ -10,6 +10,7 @@ The owner must leave the mouse and keyboard alone while it runs (about three min
 """
 from __future__ import annotations
 
+import contextlib
 import re
 import subprocess
 import time
@@ -57,6 +58,7 @@ class Hands:
     sleep: Callable[[float], None] = time.sleep
     alive: Callable[[], bool] = lambda: True
     front: Callable[[], None] = lambda: None
+    geometry: Callable[[], tuple] | None = None
 
 
 @dataclass
@@ -275,22 +277,28 @@ def real_hands(rig: Path, launcher_pid: int | None = None) -> Hands:
     return Hands(click=lambda fx, fy: game_click.click_fraction(geometry(), fx, fy),
                  key=game_click.press_key,
                  scroll=lambda fx, fy, n: game_click.scroll(geometry(), fx, fy, n),
-                 alive=lambda: bool(pids()), front=front)
+                 alive=lambda: bool(pids()), front=front, geometry=geometry)
 
 
-def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240) -> LiveResult:
-    """Start the rig game, click through the launcher, drive the run, then stop the rig's java. Refuses like boot_test."""
+class GameRefused(RuntimeError):
+    """The rig is not safe or ready to run a game (shared install, a game already running, no launcher)."""
+
+
+@contextlib.contextmanager
+def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
+    """Start the rig game, click through the launcher, yield (log, hands, vanilla mission rows), then stop the rig's java and the
+    launcher's whole tree. Refuses like boot_test: GameRefused with the reason."""
     from .boot_test import _is_link, _running_java_under, _terminate_tree
     from .launcher_click import click_launcher_once, descendant_pids
 
     rig = Path(rig).expanduser().resolve()
     if not _is_link(rig / "starsector-core"):
-        return LiveResult("LIVE_STUCK", "refused", f"{rig / 'starsector-core'} is not a junction/symlink; refusing to run in a shared install")
+        raise GameRefused(f"{rig / 'starsector-core'} is not a junction/symlink; refusing to run in a shared install")
     if _running_java_under(rig):
-        return LiveResult("LIVE_STUCK", "refused", "java is already running under the rig; close it first")
+        raise GameRefused("java is already running under the rig; close it first")
     bat = rig / bat_name
     if not bat.is_file():
-        return LiveResult("LIVE_STUCK", "refused", f"launcher not found: {bat}")
+        raise GameRefused(f"launcher not found: {bat}")
     logs = rig / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     log, err = logs / f"{test_id}.stdout.log", logs / f"{test_id}.stderr.log"
@@ -310,11 +318,19 @@ def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu
     hands.alive = alive_and_click
     try:
         core_list = rig / "starsector-core" / "data" / "missions" / "mission_list.csv"
-        vanilla_rows = _mission_rows(str(core_list.parent.parent.parent)) or VANILLA_MISSION_ROWS
-        return drive(log, hands, menu_timeout=menu_timeout, vanilla_rows=vanilla_rows)
+        yield log, hands, (_mission_rows(str(core_list.parent.parent.parent)) or VANILLA_MISSION_ROWS)
     finally:
         for java in _running_java_under(rig):
             if isinstance(java.get("pid"), int):
                 _terminate_tree(java["pid"])
         if process.poll() is None:
             _terminate_tree(process.pid)
+
+
+def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240) -> LiveResult:
+    """Play a group's live run (see drive) on a freshly started rig game, then stop it."""
+    try:
+        with running_game(rig, test_id, bat_name) as (log, hands, vanilla_rows):
+            return drive(log, hands, menu_timeout=menu_timeout, vanilla_rows=vanilla_rows)
+    except GameRefused as exc:
+        return LiveResult("LIVE_STUCK", "refused", str(exc))

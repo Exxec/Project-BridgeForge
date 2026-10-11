@@ -22,6 +22,8 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Combat Misc Utils** 0.4.1: 0.4.1 revived for RC8 as a library (bundled classes kept); passed a full live run
 - **Neutrino Corporation: Nostalgia Edition** 1.87-RC3: revived for RC8 and archived (live validated)
 - **Neutrino Corporation: Nostalgia Edition** 1.87-RC3: 1.87-RC3 revived for RC8: placeholder hooks and stubs fixed in the jar, black hole star flag, channels.json comma; passed a full live run
+- **Seeker [BF r5]** 0.3.0-0.98a+bf.5: revived for RC8 and archived (live validated)
+- **Seeker [BF r5]** 0.3.0-0.98a+bf.5: Bone-Breaker and Ubique no longer re-run their destruction every frame as wrecks (Liquid Skin and Phased Mainframe hull mods): the field grew to 2,388 wreck hulks and 8 s frames after one Bone-Breaker died; now 8 hulks and 17 ms frames (duel runs DUEL9/DUEL11/DUEL13-20261011); same once-per-ship guard Betelgeuse's Organic Hull already had
 
 ## 2026-10-06
 
