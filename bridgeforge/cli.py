@@ -915,6 +915,13 @@ def build_parser() -> argparse.ArgumentParser:
     group_record.add_argument("--queue", type=Path)
     group_record.add_argument("--rig", type=Path)
     group_record.add_argument("--json", action="store_true")
+    group_smoke = group_sub.add_parser("smoke", help="after `install`: boot the rig unattended to the main menu and triage the startup log (no launcher click, no New Game); catches load-time failures before a person plays")
+    group_smoke.add_argument("--bat", default="run-j25-direct.bat", help="rig launcher to start (default: java 25, started directly)")
+    group_smoke.add_argument("--timeout", type=int, default=240)
+    group_smoke.add_argument("--log-name")
+    group_smoke.add_argument("--rig", type=Path)
+    group_smoke.add_argument("--queue", type=Path)
+    group_smoke.add_argument("--json", action="store_true")
     group_report_cmd = group_sub.add_parser("report", help="per-mod verdicts for a group's run log")
     group_report_cmd.add_argument("log", type=Path, help="the run's stdout log (bf-test launch) or the rig's starsector.log")
     group_report_cmd.add_argument("--rig", type=Path)
@@ -1577,6 +1584,19 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"  WARN {item['mod_id']} wants {item['dependency']} {item['wanted']}, rig has {item['installed']}: "
                               "RC8 disables a mod whose dependency major differs (RC8-23); fix its mod_info.json")
                     print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
+            elif args.probe_group_command == "smoke":
+                from .probe_group import smoke_group
+                result = smoke_group(rig, bat_name=args.bat, timeout=args.timeout, log_name=args.log_name)
+                if not args.json:
+                    boot = result["boot"]
+                    print(f"{result['verdict']}: {boot['status']} in {boot['elapsed_seconds'] or 0:.0f}s; FATAL={result['fatal']} MOD-ERROR={result['mod_errors']}; log {boot['log']}")
+                    if boot["status"] != "PASS":
+                        print(f"  {boot['reason']}")
+                    print("  Startup only: New Game generation and combat still need the real run.")
+                if result["verdict"] != "SMOKE_PASS":
+                    if args.json:
+                        print(json.dumps(result, indent=2, ensure_ascii=False))
+                    return 1
             elif args.probe_group_command == "bisect":
                 from .probe_group import bisect_group
                 plan_path = args.plan or queue / "PROBE_GROUPS.json"

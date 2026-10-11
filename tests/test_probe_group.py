@@ -561,3 +561,44 @@ class ProbeMissionInReplacingMemberTests(unittest.TestCase):
         self.assertEqual(second, [])
         self.assertEqual(conv_text, b"mission" + crlf + b"conv_one" + crlf + b"bfprobe_combat," + crlf)
         self.assertEqual(plain_text, b"mission" + crlf)
+
+
+class SmokeGroupTests(unittest.TestCase):
+    """probe-group smoke (ROADMAP 60a): boot the installed group unattended and triage the startup log."""
+
+    def _rig(self, base: Path, enabled: list[str]) -> Path:
+        rig, core = base / "rig", base / "core"
+        core.mkdir()
+        (rig / "mods").mkdir(parents=True)
+        link_dir(core, rig / "starsector-core")
+        (rig / "mods" / "enabled_mods.json").write_text(json.dumps({"enabledMods": enabled}), encoding="utf-8")
+        return rig
+
+    def _smoke(self, boot: dict, enabled: list[str] | None = None):
+        from unittest import mock
+
+        from bridgeforge.probe_group import smoke_group
+        with resolved_temp_dir() as base:
+            rig = self._rig(base, ["alpha", "bfprobe"] if enabled is None else enabled)
+            with mock.patch("bridgeforge.boot_test.run_boot_test", return_value=boot) as run:
+                result = smoke_group(rig, timeout=5)
+        return result, run
+
+    def test_clean_boot_is_smoke_pass_and_uses_the_installed_mods(self) -> None:
+        boot = {"status": "PASS", "reason": None, "triage": {"counts": {"FATAL": 0, "MOD-ERROR": 0}}}
+        result, run = self._smoke(boot)
+        self.assertEqual(result["verdict"], "SMOKE_PASS")
+        self.assertEqual(run.call_args.args[1], ["alpha", "bfprobe"])
+        self.assertEqual(run.call_args.kwargs["bat_name"], "run-j25-direct.bat")
+
+    def test_mod_error_in_the_startup_log_is_smoke_errors(self) -> None:
+        boot = {"status": "PASS", "reason": None, "triage": {"counts": {"FATAL": 0, "MOD-ERROR": 2}}}
+        self.assertEqual(self._smoke(boot)[0]["verdict"], "SMOKE_ERRORS")
+
+    def test_process_that_never_reaches_the_menu_is_smoke_fail(self) -> None:
+        boot = {"status": "SUSPECT_FATAL_DIALOG", "reason": "stuck", "triage": None}
+        self.assertEqual(self._smoke(boot)[0]["verdict"], "SMOKE_FAIL")
+
+    def test_nothing_installed_is_refused(self) -> None:
+        with self.assertRaises(ProbeGroupError):
+            self._smoke({"status": "PASS", "triage": None}, enabled=[])

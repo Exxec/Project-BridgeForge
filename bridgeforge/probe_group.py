@@ -727,3 +727,38 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_RECORD", "test_id": test_id, "probe_version": version,
             "recorded": recorded, "archived": archived, "skipped": skipped,
             "run_record": str(Path(queue) / "_live" / f"{test_id}.json"), "known_noise": run_record["known_noise"]}
+
+
+SMOKE_BAT = "run-j25-direct.bat"
+
+
+def smoke_group(rig: Path, bat_name: str = SMOKE_BAT, timeout: int = 240, log_name: str | None = None) -> dict:
+    """Boot the rig with the group `install` just enabled, unattended, and read the startup log (ROADMAP 60a).
+
+    Catches what fails at load time before anyone is asked to play: a `rules.csv` with mismatched quotes, a duplicate
+    key, a missing library, a Fatal dialog (Metelson, Free Stars Union, Ironclads, 2026-10-05/06). It starts java
+    directly (`run-j25-direct.bat`), so there is no launcher to click, and stops at the main menu. It cannot reach New
+    Game generation (Tritachyon's missing industry crashed in onNewGame): the real run is still needed. Only java
+    processes under the rig are ever stopped (`boot_test._running_java_under`).
+    """
+    import time
+
+    from .boot_test import run_boot_test
+
+    rig = Path(rig)
+    _refuse_non_rig(rig)
+    enabled_path = rig / "mods" / "enabled_mods.json"
+    data = _load_lenient_json_file(enabled_path) if enabled_path.is_file() else None
+    enabled = [item for item in (data.get("enabledMods") or []) if isinstance(item, str)] if isinstance(data, dict) else []
+    if not enabled:
+        raise ProbeGroupError(f"{enabled_path} lists no enabled mods: run `probe-group install N` first.")
+    boot = run_boot_test(rig, enabled, timeout=timeout, log_name=log_name or f"SMOKE-{int(time.time())}", bat_name=bat_name, auto_click=True)
+    counts = (boot.get("triage") or {}).get("counts") or {}
+    fatal, errors = int(counts.get("FATAL", 0)), int(counts.get("MOD-ERROR", 0))
+    if boot["status"] == "PASS" and fatal == 0 and errors == 0:
+        verdict = "SMOKE_PASS"
+    elif boot["status"] == "PASS":
+        verdict = "SMOKE_ERRORS"
+    else:
+        verdict = "SMOKE_FAIL"
+    return {"verdict": verdict, "enabled_mods": enabled, "fatal": fatal, "mod_errors": errors, "boot": boot}

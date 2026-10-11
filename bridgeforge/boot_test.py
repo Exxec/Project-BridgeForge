@@ -105,7 +105,7 @@ def _result(status: str, reason: str | None, log: Path | None = None, errlog: Pa
     }
 
 
-def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_name: str | None = None, keep_mods: bool = False, bat_name: str | None = None) -> dict:
+def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_name: str | None = None, keep_mods: bool = False, bat_name: str | None = None, auto_click: bool = False) -> dict:
     """Launch an isolated Starsector runtime rig headlessly and watch its log for a boot milestone.
 
     NEVER call this against a real/shared install: runtime_dir must be a disposable rig whose
@@ -186,9 +186,17 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
 
     status = "FAIL"
     reason: str | None = None
+    click_note: str | None = None
+    next_click_try = 2.0
     try:
         while True:
             elapsed = time.monotonic() - started
+            if auto_click and click_note is None and elapsed >= next_click_try:
+                # The launcher window waits for a click (owner, 2026-10-11); see launcher_click.
+                next_click_try = elapsed + 3.0
+                from .launcher_click import click_launcher_once
+                pids = {item.get("pid") for item in _running_java_under(runtime_dir) if isinstance(item.get("pid"), int)}
+                click_note = click_launcher_once(pids)
             marker_found = False
             if log_path.is_file():
                 try:
@@ -235,7 +243,9 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
 
     restored = _restore(keep_mods)
 
-    return _result(status, reason, log_path, err_path, elapsed, triage_summary, restored)
+    outcome = _result(status, reason, log_path, err_path, elapsed, triage_summary, restored)
+    outcome["launcher_click"] = click_note
+    return outcome
 
 
 def _find_mod_id(runtime_dir: Path, mod_id: str) -> dict | None:
