@@ -7103,7 +7103,42 @@ def _unguarded_library_users(root: Path, source_hits: list[str], library: str, d
         probes = any(any(m.lower() in name.lower() for m in markers) for name in _PRESENCE_PROBE.findall(text))
         if not (id_guard.search(text) or probes or catches.search(text) or flag.search(text)):
             unguarded.append(relative)
+        elif not id_guard.search(text) and _library_call_outside_guard(text, markers, flag):
+            unguarded.append(relative)  # a probe in the file does not cover a call that sits outside any guarding block
     return unguarded
+
+
+_GUARD_HEADER = re.compile(r"\b(?:try|catch|synchronized)\b")
+_IMPORT_LINE = re.compile(r"^\s*import\s+([\w.]+)\.(\w+)\s*;", re.M)
+
+
+def _library_call_outside_guard(text: str, markers: tuple[str, ...], flag: re.Pattern) -> bool:
+    """A direct use of a class the file imports from the library (`ShaderLib.init()`, `new StandardLight(...)`) that is not inside
+    a `try` block, a catch, or an `if` whose condition names the library (a flag set from the probe). Neutrino's NCModPlugin
+    probed ShaderLib in a static block yet called ShaderLib.init() unguarded in onApplicationLoad, which stopped the game at
+    startup without GraphicsLib (SMOKE-neu-20261011). Brace tracking is textual; a guard in a caller is not seen."""
+    simple = sorted({m.group(2) for m in _IMPORT_LINE.finditer(text) if any(mk.lower() in (m.group(1) + ".").lower() for mk in markers)})
+    if not simple:
+        return False
+    names = "|".join(re.escape(name) for name in simple)
+    usage = re.compile(r"(?<![\w.])(?:" + names + r")\s*\.|\bnew\s+(?:" + names + r")\b")
+    stack: list[str] = []
+    last_boundary = 0
+    for i, ch in enumerate(text):
+        if ch == "{":
+            stack.append(text[last_boundary:i])
+            last_boundary = i + 1
+        elif ch == "}":
+            if stack:
+                stack.pop()
+            last_boundary = i + 1
+        elif ch == ";":
+            statement = text[last_boundary:i]
+            if not statement.lstrip().startswith("import") and usage.search(statement):
+                if not any(_GUARD_HEADER.search(header) or flag.search(header) for header in stack):
+                    return True
+            last_boundary = i + 1
+    return False
 
 
 def _fails_fast_through_variable(text: str, dependency_id: str) -> bool:

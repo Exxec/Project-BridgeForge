@@ -201,3 +201,30 @@ class LibraryIsNotItsOwnDependencyTests(unittest.TestCase):
 
     def test_another_mod_using_it_without_declaring_it_still_is(self) -> None:
         self.assertEqual(len(self._hits("someothermod")), 1)
+
+
+class ProbeDoesNotCoverUnguardedCallTests(unittest.TestCase):
+    """Neutrino 1.8.9's NCModPlugin probed ShaderLib in a static block but called ShaderLib.init() unguarded: GraphicsLib was a hard
+    requirement the scanner called optional (SMOKE-neu-20261011)."""
+
+    PROBE = ('static { try { Global.getSettings().getScriptClassLoader().loadClass("org.dark.shaders.util.ShaderLib"); '
+             'ShaderLibExists = true; } catch (ClassNotFoundException ex) { ShaderLibExists = false; } }\n')
+
+    def _hits(self, body: str):
+        source = ("package data.scripts;\nimport org.dark.shaders.util.ShaderLib;\npublic class P {\n"
+                  "    public static boolean ShaderLibExists;\n    " + self.PROBE + body + "}\n")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "mod_info.json", json.dumps({"id": "demo", "version": "1"}))
+            _write(root / "data" / "scripts" / "P.java", source)
+            return [f for f in scan_mod(root, TargetProfile()).findings
+                    if f.id == "undeclared-library-dependency" and "library:GraphicsLib" in f.evidence]
+
+    def test_call_outside_any_guard_is_a_hard_dependency(self) -> None:
+        self.assertEqual(len(self._hits("    public void onApplicationLoad() {\n        ShaderLib.init();\n    }\n")), 1)
+
+    def test_call_inside_an_if_on_the_probe_flag_is_optional(self) -> None:
+        self.assertEqual(self._hits("    public void onApplicationLoad() {\n        if (ShaderLibExists) {\n            ShaderLib.init();\n        }\n    }\n"), [])
+
+    def test_call_inside_try_is_optional(self) -> None:
+        self.assertEqual(self._hits("    public void onApplicationLoad() {\n        try {\n            ShaderLib.init();\n        } catch (Throwable t) { }\n    }\n"), [])

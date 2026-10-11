@@ -24,7 +24,7 @@ bridgeforge = ["release_policy.json", "dependency_successors.json", "automation_
 
 [tool.ruff]
 target-version = "py310"
-extend-exclude = ["probe-mod"]
+extend-exclude = ["probe-mod", "everything-claude-code"]
 
 [tool.ruff.lint]
 # Pyflakes (unused/undefined names) plus syntax errors.

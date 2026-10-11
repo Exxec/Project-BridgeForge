@@ -209,3 +209,23 @@ class AutoExplainTests(unittest.TestCase):
             _write(ws / "working" / "data" / "weapons" / "weapon_data.csv", "id,name,tech/manufacturer\nw1,Cannon,Infected\n")
             groups = auto_explain_shipped(ws)
         self.assertEqual(groups, {})
+
+
+class AutoExplainWorkFileAndRowsTests(unittest.TestCase):
+    def test_moved_work_file_and_added_rows_are_explained_but_a_changed_copy_is_not(self) -> None:
+        with resolved_temp_dir() as root:
+            ws = _workspace(root)
+            original, working = ws / "original" / "Mod v1", ws / "working"
+            _write(original / "data" / "hulls" / "a.ship.old", "backup")
+            _write(ws / "scratch" / "work-files" / "data" / "hulls" / "a.ship.old", "backup")
+            _write(original / "data" / "hulls" / "b.ship.old", "backup")
+            _write(ws / "scratch" / "work-files" / "data" / "hulls" / "b.ship.old", "edited later")
+            _write(original / "data" / "strings" / "descriptions.csv", "id,type,text1\nx,SHIP,One\n")
+            _write(working / "data" / "strings" / "descriptions.csv", "id,type,text1\nx,SHIP,One\ny,SHIP_SYSTEM,Two\n")
+            _write(original / "data" / "strings" / "changed.csv", "id,type,text1\nx,SHIP,One\n")
+            _write(working / "data" / "strings" / "changed.csv", "id,type,text1\nx,SHIP,Edited\ny,SHIP_SYSTEM,Two\n")
+            groups = auto_explain_shipped(ws)
+            after = audit_shipped(ws)
+        explained = sorted(f for files in groups.values() for f in files)
+        self.assertEqual(explained, ["data/hulls/a.ship.old", "data/strings/descriptions.csv"])
+        self.assertEqual(sorted(after["unexplained"]), ["data/hulls/b.ship.old", "data/strings/changed.csv"])

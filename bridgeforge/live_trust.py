@@ -321,6 +321,44 @@ def _only_manufacturer_column_added(before: Path, after: Path) -> bool:
     return old_rows == [[row[i] for i in keep] for row in new_rows]
 
 
+def _kept_in_work_files(scratch: Path, relative: str, original: Path) -> bool:
+    kept = scratch / "work-files" / relative
+    try:
+        return kept.is_file() and _sha256(kept) == _sha256(original)
+    except OSError:
+        return False
+
+
+def _only_rows_added(before: Path, after: Path) -> bool:
+    """A CSV whose header is unchanged and whose every original row is present, cell for cell, in the shipped file, which only
+    has extra rows (a description or content row added by BridgeForge or by hand)."""
+    import csv
+    import io
+
+    try:
+        old = list(csv.reader(io.StringIO(_text(before))))
+        new = list(csv.reader(io.StringIO(_text(after))))
+    except csv.Error:
+        return False
+    if not old or not new or [c.strip() for c in old[0]] != [c.strip() for c in new[0]]:
+        return False
+
+    def cells(row: list[str]) -> tuple[str, ...]:
+        trimmed = [c.strip() for c in row]
+        while trimmed and not trimmed[-1]:
+            trimmed.pop()
+        return tuple(trimmed)
+
+    old_rows = [cells(r) for r in old[1:] if any(c.strip() for c in r)]
+    new_rows = [cells(r) for r in new[1:] if any(c.strip() for c in r)]
+    remaining = list(new_rows)
+    for row in old_rows:
+        if row not in remaining:
+            return False
+        remaining.remove(row)
+    return len(new_rows) > len(old_rows)
+
+
 def auto_explain_shipped(workspace: Path, today: str | None = None) -> dict[str, list[str]]:
     """Record the reason for every unexplained shipped difference whose category the files prove, and return
     {reason: files}. What stays unexplained still fails the audit. Categories:
@@ -328,6 +366,9 @@ def auto_explain_shipped(workspace: Path, today: str | None = None) -> dict[str,
     - syntax-only JSON: the original and shipped file parse to equal values;
     - manufacturer column: tech/manufacturer added to a CSV, every other cell unchanged;
     - unloaded archive: a .rar/.zip/.7z of the original dropped from the shipped copy and kept under scratch/;
+    - moved work file: a file the original shipped is gone from working/ and a byte-identical copy sits under scratch/work-files/
+      (the shippable-work-file fixer's move);
+    - rows added: a CSV's header and every original row are unchanged and it only gained rows;
     - translation: the original holds CJK text, the shipped file less of it, and reports/translation/ exists."""
     workspace = Path(workspace)
     audit = audit_shipped(workspace)
@@ -346,12 +387,16 @@ def auto_explain_shipped(workspace: Path, today: str | None = None) -> dict[str,
         if relative == "BRIDGEFORGE_CREDITS.txt" and after.is_file() and not before.is_file():
             reason = "revival credits file added by BridgeForge"
         elif before.is_file() and after.is_file():
-            if suffix in _JSONLIKE and _same_parsed_json(before, after):
+            if suffix == ".csv" and _only_rows_added(before, after):
+                reason = "CSV rows added (the header and every original row are unchanged)"
+            elif suffix in _JSONLIKE and _same_parsed_json(before, after):
                 reason = "JSON syntax made strict for RC8; the parsed values are identical to the original"
             elif suffix == ".csv" and _only_manufacturer_column_added(before, after):
                 reason = "RC8 schema: tech/manufacturer column added; every other value is unchanged"
             elif translated and len(_CJK.findall(_text(before))) > len(_CJK.findall(_text(after))):
                 reason = "Chinese -> English translation (reports/translation/); the original holds the Chinese text"
+        elif before.is_file() and not after.is_file() and _kept_in_work_files(scratch, relative, before):
+            reason = "an author work file moved out of the shipped copy by the shippable-work-file fixer; a byte-identical copy is kept in scratch/work-files/"
         elif before.is_file() and not after.is_file() and suffix in _UNLOADED_ARCHIVES and before.name in kept_names:
             reason = "an archive the author bundled in the mod, never loaded by the game; kept under scratch/"
         if reason:

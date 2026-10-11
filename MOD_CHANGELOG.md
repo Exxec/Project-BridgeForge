@@ -20,6 +20,8 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Neutrino Corporation** 1.8.9: revived for RC8 and archived (live validated)
 - **Neutrino Corporation** 1.8.9: 1.8.9 (upstream line, id Neutrino) revived for RC8: jar classes patched for the missing CombatEntityAPI methods and IDE placeholder stubs, per-ship hull mod state, GraphicsLib declared, black hole star flag; passed a full live run (new game, one in-game day, combat)
 - **Combat Misc Utils** 0.4.1: 0.4.1 revived for RC8 as a library (bundled classes kept); passed a full live run
+- **Neutrino Corporation: Nostalgia Edition** 1.87-RC3: revived for RC8 and archived (live validated)
+- **Neutrino Corporation: Nostalgia Edition** 1.87-RC3: 1.87-RC3 revived for RC8: placeholder hooks and stubs fixed in the jar, black hole star flag, channels.json comma; passed a full live run
 
 ## 2026-10-06
 

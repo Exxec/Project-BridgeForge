@@ -49,6 +49,8 @@ SUPPORTED_FINDINGS = (
     "rules-firebest-populate-options",
     "personality-id-unknown",
     "hullmod-instance-state",
+    "runtime-placeholder-unsupported-operation",
+    "black-hole-type-missing-flag",
     "nexerelin-corvus-mode-import",
     "spawned-ship-captain-personality-risk",
     "json-missing-comma",
@@ -2707,6 +2709,71 @@ def _fix_spawned_ship_captain(root: Path, options: dict) -> list[FileChange]:
 # ---------------------------------------------------------------------------
 
 
+def _fix_black_hole_type_missing_flag(root: Path, options: dict) -> list[FileChange]:
+    """Add `"isBlackHole":true,` after `"isStar":true` in each flagged planets.json star type. RC8's own black_hole entry carries
+    exactly this pair (checked against starsector-core/data/config/planets.json, 2026-10-11); without it 0.98a draws a plain star."""
+    findings = _findings_of(root, options, "black-hole-type-missing-flag")
+    types = sorted({e.split(":", 1)[1] for f in findings for e in f.evidence if e.startswith("type:")})
+    path = root / "data" / "config" / "planets.json"
+    if not types or not path.is_file():
+        raise FixerError("No planets.json star type is flagged as a black hole without isBlackHole.")
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    done = 0
+    for type_id in types:
+        start = re.search(r"[\"']" + re.escape(type_id) + r"[\"']\s*:\s*\{", text)
+        if not start:
+            continue
+        star = re.compile(r"(?P<indent>[ \t]*)(?P<key>[\"']isStar[\"']\s*:\s*true)(?P<comma>\s*,)?").search(text, start.end())
+        if not star:
+            continue
+        nxt = re.search(r"^[ \t]*[\"'][\w]+[\"']\s*:\s*\{", text[start.end():], re.M)
+        if nxt and star.start() > start.end() + nxt.start():
+            continue  # the isStar found belongs to a later type
+        newline = "\r\n" if "\r\n" in text else "\n"
+        indent = star.group("indent")
+        if star.group("comma"):
+            insert_at = star.end()
+            text = text[:insert_at] + newline + indent + "\"isBlackHole\":true," + text[insert_at:]
+        else:
+            text = text[:star.end("key")] + "," + newline + indent + "\"isBlackHole\":true" + text[star.end("key"):]
+        done += 1
+    if not done:
+        raise FixerError("Could not place isBlackHole in planets.json.")
+    return [FileChange(path=path, before=raw, after=_encode(text, had_bom))]
+
+
+# IDE-generated `throw new UnsupportedOperationException(...)` bodies in ShipSystemStatsScript's override hooks. RC8's
+# BaseShipSystemScript answers -1 / -1 / -1 / -1 / null ("no override": use the .system file), read with javap and
+# starfarer.api.zip on 2026-10-11 (BaseShipSystemScript.getActiveOverride returns -1). Neutrino's two system scripts had
+# ten of these; the game calls the hooks for any system that names the class.
+_PLACEHOLDER_HOOKS = re.compile(
+    r"(?P<head>public\s+(?P<type>float|int)\s+(?P<name>get(?:Active|In|Out|Uses|Regen)Override)\s*\(\s*(?:[\w.]+\.)?ShipAPI\s+\w+\s*\)\s*\{)"
+    r"(?P<gap>\s*)throw\s+new\s+UnsupportedOperationException\s*\([^;]*\)\s*;[^\r\n]*")
+
+
+def _fix_runtime_placeholder_hooks(root: Path, options: dict) -> list[FileChange]:
+    """Replace the throwing bodies of ShipSystemStatsScript's five *Override hooks with BaseShipSystemScript's "no override"
+    answer (-1). Any other placeholder is not mechanical (what it should return depends on the class) and is refused. Edits
+    loose scripts and the `src/` tree alike; a class compiled into a jar still needs patch-jar-class."""
+    files = sorted({f.file for f in _findings_of(root, options, "runtime-placeholder-unsupported-operation")
+                    if f.file and f.file.endswith(".java") and "!" not in f.file})
+    changes: list[FileChange] = []
+    for rel in files:
+        path = root / rel
+        if not path.is_file():
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        new_text, count = _PLACEHOLDER_HOOKS.subn(
+            lambda m: f"{m['head']}{m['gap']}return {'-1f' if m['type'] == 'float' else '-1'};  // BridgeForge: BaseShipSystemScript's \"no override\"", text)
+        if count:
+            changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    if not changes:
+        raise FixerError("No ShipSystemStatsScript override hook throws UnsupportedOperationException; other placeholders need a person or agent.")
+    return changes
+
+
 def _fix_hullmod_instance_state(root: Path, options: dict) -> list[FileChange]:
     """Move a hull mod's flagged instance fields into a per-ship State in ship.getCustomData()
     (`hullmod_state.port_hullmod_state`, the rewrite done by hand for SEEKER and Sylphon on 2026-10-04). Jar
@@ -3638,6 +3705,8 @@ _FIXER_FUNCS = {
     "rules-firebest-populate-options": _fix_rules_firebest_populate_options,
     "personality-id-unknown": _fix_personality_id_unknown,
     "hullmod-instance-state": _fix_hullmod_instance_state,
+    "runtime-placeholder-unsupported-operation": _fix_runtime_placeholder_hooks,
+    "black-hole-type-missing-flag": _fix_black_hole_type_missing_flag,
     "nexerelin-corvus-mode-import": _fix_nexerelin_corvus_mode_import,
     "spawned-ship-captain-personality-risk": _fix_spawned_ship_captain,
     "json-missing-comma": _fix_json_missing_comma,
