@@ -6,6 +6,12 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 
 - **Yellowjackets Mining Conglomerate** 0.1: revived for RC8 and archived (live validated)
 - **Yellowjackets Mining Conglomerate** 0.1: 0.6.1a ship pack revived for RC8: 12 vanilla hull rows and 3 vanilla weapon rows removed so RC8's stand, supplies/bays/design-type columns added, test mission fixed, descriptions drafted; live run: new game, one in-game day, all 3 hulls in combat
+- **Adjusted Sector** 0.7.1+bf.1: revived for RC8 and archived (live validated)
+- **Faction Relationships Uniquified** 0.1.1+bf.1: revived for RC8 and archived (live validated)
+- **Fuel Siphoning** 1.2.2+bf.1: revived for RC8 and archived (live validated)
+- **Legacy of Arkgneisis [BF r2]** v2.0a DEV+bf.3: revived for RC8 and archived (live validated)
+- **Megastructures Tab** 1.0.0+bf.1: revived for RC8 and archived (live validated)
+- **RogueSynth [BF r1]** 0.0.1-beta.4+bf.2: revived for RC8 and archived (live validated)
 
 ## 2026-10-06
 
