@@ -730,6 +730,24 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
 
 
 SMOKE_BAT = "run-j25-direct.bat"
+# Load-time failures the game logs from CombatMain before any menu (saved rig logs, 2026-10-05/06): Metelson's rules.csv
+# (GRP1-20261005, BIS4G6), duplicate names/rows (GRP10B, GRP4A), a missing class from a library not enabled.
+SMOKE_LOAD_ERRORS = (
+    re.compile(r"JSONException: Mismatched quotes"),
+    re.compile(r"Missing close quote"),
+    re.compile(r"Duplicate key \["),
+    re.compile(r"NoClassDefFoundError"),
+    re.compile(r"ClassNotFoundException"),
+)
+
+
+def smoke_load_errors(log: Path, limit: int = 8) -> list[str]:
+    """Log lines that name a load-time failure, first `limit`, each trimmed; [] for a missing or clean log."""
+    try:
+        lines = Path(log).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    return [line.strip()[:240] for line in lines if any(p.search(line) for p in SMOKE_LOAD_ERRORS)][:limit]
 
 
 def smoke_group(rig: Path, bat_name: str = SMOKE_BAT, timeout: int = 240, log_name: str | None = None) -> dict:
@@ -755,10 +773,11 @@ def smoke_group(rig: Path, bat_name: str = SMOKE_BAT, timeout: int = 240, log_na
     boot = run_boot_test(rig, enabled, timeout=timeout, log_name=log_name or f"SMOKE-{int(time.time())}", bat_name=bat_name, auto_click=True)
     counts = (boot.get("triage") or {}).get("counts") or {}
     fatal, errors = int(counts.get("FATAL", 0)), int(counts.get("MOD-ERROR", 0))
-    if boot["status"] == "PASS" and fatal == 0 and errors == 0:
+    load_errors = smoke_load_errors(Path(boot["log"])) if boot.get("log") else []
+    if boot["status"] == "PASS" and fatal == 0 and errors == 0 and not load_errors:
         verdict = "SMOKE_PASS"
     elif boot["status"] == "PASS":
         verdict = "SMOKE_ERRORS"
     else:
         verdict = "SMOKE_FAIL"
-    return {"verdict": verdict, "enabled_mods": enabled, "fatal": fatal, "mod_errors": errors, "boot": boot}
+    return {"verdict": verdict, "enabled_mods": enabled, "fatal": fatal, "mod_errors": errors, "load_errors": load_errors, "boot": boot}

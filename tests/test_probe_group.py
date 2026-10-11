@@ -602,3 +602,41 @@ class SmokeGroupTests(unittest.TestCase):
     def test_nothing_installed_is_refused(self) -> None:
         with self.assertRaises(ProbeGroupError):
             self._smoke({"status": "PASS", "triage": None}, enabled=[])
+
+
+class SmokeLoadErrorTests(unittest.TestCase):
+    """Real lines from saved rig logs: Metelson's rules.csv (GRP1-20261005) and a duplicate name row (GRP10B-20261005)."""
+
+    def _errors(self, text: str):
+        from bridgeforge.probe_group import smoke_load_errors
+        with resolved_temp_dir() as base:
+            log = base / "x.stdout.log"
+            log.write_text(text, encoding="utf-8")
+            return smoke_load_errors(log)
+
+    def test_mismatched_quotes_and_duplicate_key_are_found(self) -> None:
+        text = ("8613 [Thread-2] ERROR com.fs.starfarer.combat.CombatMain  - org.json.JSONException: Mismatched quotes in the string; last quote: [,,\n"
+                "13764 [Thread-2] ERROR com.fs.starfarer.combat.CombatMain  - java.lang.RuntimeException: Duplicate key [Mao |  | f | xle | ] while loading [x]\n"
+                "1 [main] INFO  fine line\n")
+        found = self._errors(text)
+        self.assertEqual(len(found), 2)
+        self.assertIn("Mismatched quotes", found[0])
+
+    def test_clean_log_and_missing_log_give_nothing(self) -> None:
+        from bridgeforge.probe_group import smoke_load_errors
+        self.assertEqual(self._errors("1 [main] INFO  Running with the following mods\n"), [])
+        self.assertEqual(smoke_load_errors(Path("does-not-exist.log")), [])
+
+    def test_smoke_group_fails_a_clean_menu_boot_whose_log_has_a_load_error(self) -> None:
+        from unittest import mock
+
+        from bridgeforge.probe_group import smoke_group
+        with resolved_temp_dir() as base:
+            rig = SmokeGroupTests()._rig(base, ["alpha"])
+            log = base / "boot.stdout.log"
+            log.write_text("5 [Thread-2] ERROR x - java.lang.NoClassDefFoundError: lunalib/Foo\n", encoding="utf-8")
+            boot = {"status": "PASS", "reason": None, "log": str(log), "triage": {"counts": {"FATAL": 0, "MOD-ERROR": 0}}}
+            with mock.patch("bridgeforge.boot_test.run_boot_test", return_value=boot):
+                result = smoke_group(rig)
+        self.assertEqual(result["verdict"], "SMOKE_ERRORS")
+        self.assertEqual(len(result["load_errors"]), 1)

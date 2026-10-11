@@ -1592,6 +1592,8 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"{result['verdict']}: {boot['status']} in {boot['elapsed_seconds'] or 0:.0f}s; FATAL={result['fatal']} MOD-ERROR={result['mod_errors']}; log {boot['log']}")
                     if boot["status"] != "PASS":
                         print(f"  {boot['reason']}")
+                    for line in result["load_errors"]:
+                        print(f"  load error: {line}")
                     print("  Startup only: New Game generation and combat still need the real run.")
                 if result["verdict"] != "SMOKE_PASS":
                     if args.json:
