@@ -910,6 +910,7 @@ def build_parser() -> argparse.ArgumentParser:
     group_record = group_sub.add_parser("record", help="after a run: mark PASS members LIVE_VALIDATED; with --archive also record the standing local-only licence, archive into Done/ and copy each zip to Done/'s top")
     group_record.add_argument("test_id", help="the bf-test.ps1 test id; reads <rig>/logs/<TESTID>.stdout.log")
     group_record.add_argument("--archive", action="store_true")
+    group_record.add_argument("--refresh", action="store_true", help="with --archive: replace an earlier archive of the same mod in Done/ (deletes that folder; Done/ must hold an ARCHIVE_NOTE.md there)")
     group_record.add_argument("--queue", type=Path)
     group_record.add_argument("--rig", type=Path)
     group_record.add_argument("--json", action="store_true")
@@ -1587,7 +1588,7 @@ def main(argv: list[str] | None = None) -> int:
             elif args.probe_group_command == "record":
                 from .probe_group import record_group
                 config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
-                result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive)
+                result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive, refresh=args.refresh)
                 if not args.json:
                     print(f"Recorded LIVE_VALIDATED ({result['probe_version']}): {', '.join(result['recorded']) or 'none'}")
                     if args.archive:

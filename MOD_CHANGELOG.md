@@ -12,6 +12,8 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Legacy of Arkgneisis [BF r2]** v2.0a DEV+bf.3: revived for RC8 and archived (live validated)
 - **Megastructures Tab** 1.0.0+bf.1: revived for RC8 and archived (live validated)
 - **RogueSynth [BF r1]** 0.0.1-beta.4+bf.2: revived for RC8 and archived (live validated)
+- **Doc's Needless Economic Expansion Pack** 0.2.0 Mann Co+bf.2: revived for RC8 and archived (live validated)
+- ** Slightly Better Tech-Mining** 0.95.1-2.6.0+bf.1: revived for RC8 and archived (live validated)
 
 ## 2026-10-06
 

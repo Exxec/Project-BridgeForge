@@ -39,6 +39,33 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class StatusBehindTests(unittest.TestCase):
+    def test_an_archive_note_short_of_live_validated_is_flagged_when_the_live_record_is_current(self) -> None:
+        # Six archives made on 2026-10-04 as READY_FOR_LIVE_TEST passed their runs on 2026-10-05 and were never refreshed.
+        import json
+
+        from bridgeforge.live_trust import shipped_hash
+
+        with resolved_temp_dir() as root:
+            done, queue = root / "Done", root / "In operation"
+            for base in (done / "Mod" / "Mod", queue / "Mod" / "working"):
+                _write(base / "mod_info.json", '{"id": "m", "version": "1"}')
+            _write(done / "Mod" / "ARCHIVE_NOTE.md", "# Mod 1: archive note\n\nRevival report status: **READY_FOR_LIVE_TEST** (archived 2026-10-04).\n")
+            _write(done / "Quiet" / "Quiet" / "mod_info.json", '{"id": "q", "version": "1"}')
+            _write(queue / "Quiet" / "working" / "mod_info.json", '{"id": "q", "version": "1"}')
+            _write(done / "Quiet" / "ARCHIVE_NOTE.md", "# Quiet 1: archive note\n\nRevival report status: **READY_FOR_LIVE_TEST** (archived 2026-10-04).\n")
+            run = {"test_id": "GRP-X", "date": "2026-10-05", "verdict": "PASS", "version": "1",
+                   "shipped_sha256": shipped_hash(queue / "Mod" / "working")}
+            _write(queue / "Mod" / "reports" / "live_runs.jsonl", json.dumps(run) + "\n")
+            result = done_audit(done, queue, quiet=True)
+            report = (done / "DONE_AUDIT.md").read_text(encoding="utf-8")
+        by = {r["mod"]: r for r in result["mods"]}
+        # the fixture has no zip, so PACKAGING outranks it in `status`; the field and the report line are what matter here
+        self.assertIn("GRP-X", by["Mod"]["status_behind"])
+        self.assertIsNone(by["Quiet"]["status_behind"])  # no live record: nothing to be behind
+        self.assertIn("archive status behind the live record", report)
+
+
 class PackagingTests(unittest.TestCase):
     def test_duplicate_entries_wrong_version_and_folder_drift(self) -> None:
         import zipfile

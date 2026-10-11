@@ -1880,6 +1880,7 @@ after a run: mark PASS members LIVE_VALIDATED; with --archive also record the st
 |---|---|---|
 | `test_id` | - | the bf-test.ps1 test id; reads <rig>/logs/<TESTID>.stdout.log |
 | `--archive` | - | - |
+| `--refresh` | - | with --archive: replace an earlier archive of the same mod in Done/ (deletes that folder; Done/ must hold an ARCHIVE_NOTE.md there) |
 | `--queue` QUEUE | - | - |
 | `--rig` RIG | - | - |
 | `--json` | - | - |

@@ -137,9 +137,34 @@ def _audit_one(folder: Path, queue: Path, vanilla_core: Path | None, provider_ro
             hits.append({"id": data["id"], "classification": data["classification"], "file": data.get("file"),
                          "evidence": (data.get("evidence") or [])[:3]})
     packaging = packaging_problems(folder, root)
-    status = "STALE" if stale else ("PACKAGING" if packaging else ("FINDINGS" if hits else "CLEAN"))
-    return {"mod": folder.name, "status": status, "stale": stale, "packaging": packaging, "findings": hits,
+    behind = status_behind_live_record(folder, working)
+    status = "STALE" if stale else ("PACKAGING" if packaging else ("FINDINGS" if hits else ("STATUS_BEHIND" if behind else "CLEAN")))
+    return {"mod": folder.name, "status": status, "stale": stale, "status_behind": behind, "packaging": packaging, "findings": hits,
             "compat": compat}
+
+
+def status_behind_live_record(folder: Path, working: Path) -> str | None:
+    """Text when the archive's ARCHIVE_NOTE.md still gives a status short of LIVE_VALIDATED although the queue workspace's live
+    status is CURRENT (its last PASS ran on exactly the shipped files): six archives made on 2026-10-04 as READY_FOR_LIVE_TEST
+    passed their runs on 2026-10-05 and were never refreshed, because `record` without `--archive` updates the workspace only
+    (found 2026-10-11 from Done/MASTER_LOG.md). Re-archive with `probe-group record <id> --archive --refresh` or
+    `archive <workspace> --refresh --readme-copy`."""
+    import re
+
+    from .live_trust import live_status
+
+    note = Path(folder) / "ARCHIVE_NOTE.md"
+    try:
+        text = note.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    match = re.search(r"Revival report status: \*\*([A-Z_]+)\*\*", text)
+    if not match or match.group(1) == "LIVE_VALIDATED" or not Path(working).is_dir():
+        return None
+    live = live_status(Path(working).parent)
+    if live.get("status") != "CURRENT":
+        return None
+    return f"archive note says {match.group(1)}, live record {live.get('test_id')} ({live.get('date')}) is current"
 
 
 def done_audit(done: Path, queue: Path, vanilla_core: Path | None = None, quiet: bool = False) -> dict:
@@ -173,6 +198,8 @@ def done_audit(done: Path, queue: Path, vanilla_core: Path | None = None, quiet:
             lines.append(f"## {record['mod']}: {record['status']}")
             if record["stale"]:
                 lines.append("- the queue's working copy differs from the archive: re-archive it (fixes never reached Done/)")
+            if record.get("status_behind"):
+                lines.append(f"- archive status behind the live record: {record['status_behind']}; refresh the archive")
             for problem in record.get("packaging") or []:
                 lines.append(f"- packaging: {problem}")
             for hit in record["findings"]:

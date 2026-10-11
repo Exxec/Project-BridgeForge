@@ -660,7 +660,8 @@ def _newest_save_made_with(rig: Path, reader) -> dict | None:
 
 
 def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: str, archive: bool = False,
-                 done_dir: Path | None = None, policy_path: Path | None = None, today: str | None = None) -> dict:
+                 done_dir: Path | None = None, policy_path: Path | None = None, today: str | None = None,
+                 refresh: bool = False) -> dict:
     """After a group run: mark every PASS member LIVE_VALIDATED in its report; with `archive`, record the owner's
     standing local-only licence where none exists, archive it into Done/ and copy its zip to Done/'s top level
     (ROADMAP P15 item 31.1; replaces the session's record_group.py and shell loop)."""
@@ -715,7 +716,9 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
             skipped.append({"mod_id": mod_id, "verdict": "PASS", "workspace": workspace.name, "archive": "; ".join(gate["problems"])})
             continue
         try:
-            result = archive_mod(workspace, done, policy_path=policy_path, today=today)
+            # `refresh` replaces an earlier archive of this mod in Done/ (`archive --refresh`): the owner's word each time, because
+            # it deletes that folder (Omega Trauma 2026-10-06 and six stale archives 2026-10-11 were refreshed by hand).
+            result = archive_mod(workspace, done, policy_path=policy_path, today=today, refresh=refresh)
         except ArchiveError as exc:
             skipped.append({"mod_id": mod_id, "verdict": "PASS", "workspace": workspace.name, "archive": str(exc)})
             continue

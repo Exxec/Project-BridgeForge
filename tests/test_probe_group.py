@@ -359,6 +359,42 @@ class InstallTests(unittest.TestCase):
         self.assertNotIn("LIVE_VALIDATED", report_b)
         self.assertEqual(len(top_zip), 1)
 
+    def test_record_refresh_replaces_an_earlier_archive_only_when_asked(self) -> None:
+        # Six archives made as READY_FOR_LIVE_TEST stayed that way after their runs passed (2026-10-11): `record --archive` met
+        # the existing folder and stopped; `--refresh` is the owner's word to replace it.
+        import shutil
+
+        from bridgeforge.probe_group import record_group
+        with resolved_temp_dir() as root:
+            queue = root / "In operation"
+            a = _workspace(queue, "A", "mod_a", "hull_a")
+            merged = merge_configs([build_probe_config(a)])
+            rig = _rig(root)
+            (rig / "logs").mkdir(parents=True)
+            log = rig / "logs" / "GRP-R.stdout.log"
+            log.write_text("5 [main] INFO  com.fs.starfarer.StarfarerLauncher  - Starting" + chr(10)
+                           + "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|content-ids|OK|all-content|checked=1 failed=0" + chr(10),
+                           encoding="utf-8")
+            policy = root / "policy.json"
+            shutil.copy2(Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json", policy)
+            shutil.copytree(a, queue / "A" / "original" / "A")
+            done = root / "Done"
+            first = record_group(log, merged, queue, rig, test_id="GRP-R", archive=True, done_dir=done, policy_path=policy, today="2026-09-28")
+            (done / "A" / "marker.txt").write_text("from the first archive", encoding="utf-8")
+            again = record_group(log, merged, queue, rig, test_id="GRP-R", archive=True, done_dir=done, policy_path=policy, today="2026-10-11")
+            kept = (done / "A" / "marker.txt").is_file()
+            refreshed = record_group(log, merged, queue, rig, test_id="GRP-R", archive=True, done_dir=done, policy_path=policy,
+                                     today="2026-10-11", refresh=True)
+            replaced = not (done / "A" / "marker.txt").exists()
+            note = (done / "A" / "ARCHIVE_NOTE.md").read_text(encoding="utf-8")
+        self.assertEqual(first["archived"], ["A"])
+        self.assertEqual(again["archived"], [])
+        self.assertIn("already exists", again["skipped"][0]["archive"])
+        self.assertTrue(kept)
+        self.assertEqual(refreshed["archived"], ["A"])
+        self.assertTrue(replaced)
+        self.assertIn("archived 2026-10-11", note)
+
     def test_record_picks_the_workspace_installed_in_the_rig(self) -> None:
         # SEEKER-SOLO2-20260928: workspaces SEEKER (0.3.0) and SEEKER-0.6 share mod id SEEKER; the first by name was
         # recorded and archived, not the SEEKER-0.6 the rig ran. With neither in the rig, the id is ambiguous.
