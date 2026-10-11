@@ -1860,6 +1860,7 @@ copy/sync one group's mods into the rig, write the merged probe config, set enab
 | `--queue` QUEUE | - | - |
 | `--rig` RIG | - | - |
 | `--stage-providers` | - | also copy the queue workspaces that provide missing dependencies into the rig, verifying id, version and files (ROADMAP 36.1) |
+| `--with-lunalib` | - | also enable LunaLib when GraphicsLib is enabled without it (RC8-25: GraphicsLib 1.12.1 needs it under Fast Rendering) |
 | `--json` | - | - |
 
 ## probe-group bisect

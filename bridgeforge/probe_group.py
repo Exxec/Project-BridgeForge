@@ -476,8 +476,18 @@ def _add_probe_mission_to_replacing_members(rig: Path, members: dict[str, Path])
     return changed
 
 
+def lunalib_advice(enabled: list[str], installed: dict[str, str]) -> str | None:
+    """GraphicsLib 1.12.1 enabled without LunaLib while the rig has LunaLib: RC8-25 says a mod that calls ShaderLib.init then
+    dies with NoClassDefFoundError lunalib/... under Fast Rendering. Advice only: adding an undeclared library to a group would
+    hide a real dependency gap, so the owner decides (`--with-lunalib`)."""
+    if "shaderLib" in enabled and "lunalib" not in enabled and "lunalib" in installed:
+        return ("GraphicsLib is enabled without LunaLib. Under Fast Rendering a member that calls ShaderLib.init fails with "
+                "NoClassDefFoundError lunalib/... (RC8-25). Re-run install with --with-lunalib to enable it for this run.")
+    return None
+
+
 def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install_probe: bool = True,
-                  stage: bool = False) -> dict:
+                  stage: bool = False, with_lunalib: bool = False) -> dict:
     """Copy/sync members into the rig, write the merged config, set enabled_mods.json. A group whose members
     need providers from the queue installs only with `stage` (`--stage-providers`), which copies and verifies them."""
     rig = Path(rig).expanduser().resolve()
@@ -532,6 +542,10 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
         for mod_id in [*needed, member["mod_id"]]:
             if mod_id not in enabled:
                 enabled.append(mod_id)
+    advice = lunalib_advice(enabled, rig_mod_ids(mods_dir))
+    if advice and with_lunalib:
+        enabled.append("lunalib")
+        advice = None
     enabled.append(PROBE_MOD_ID)
     if SPEEDUP_MOD_ID in rig_mod_ids(mods_dir) and SPEEDUP_MOD_ID not in enabled:
         enabled.append(SPEEDUP_MOD_ID)
@@ -544,7 +558,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
             "members": [m["workspace"] for m in group["members"]], "copied": copied, "staged_providers": staged, "enabled_mods": enabled,
             "dependency_version_conflicts": dependency_version_conflicts(mods_dir, enabled),
             "moved_aside": moved_aside, "incomplete_providers": incomplete_provider_copies(rig, enabled),
-            "probe_mission_added": probe_mission_added,
+            "probe_mission_added": probe_mission_added, "lunalib_advice": advice,
             "config_path": str(common / CONFIG_FILE), "checked_ids": len(config["content_variants"]["ship"]) + len(config["content_variants"]["other"])
             + len(config["content_wings"]) + len(config["content_special_items"])}
 

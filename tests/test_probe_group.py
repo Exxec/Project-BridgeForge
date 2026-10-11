@@ -640,3 +640,15 @@ class SmokeLoadErrorTests(unittest.TestCase):
                 result = smoke_group(rig)
         self.assertEqual(result["verdict"], "SMOKE_ERRORS")
         self.assertEqual(len(result["load_errors"]), 1)
+
+
+class LunaLibAdviceTests(unittest.TestCase):
+    """RC8-25: GraphicsLib 1.12.1 enabled without LunaLib."""
+
+    def test_advice_only_when_graphicslib_is_on_and_lunalib_is_installed_but_off(self) -> None:
+        from bridgeforge.probe_group import lunalib_advice
+        installed = {"lunalib": "LunaLib-2.0.5", "shaderLib": "GraphicsLib"}
+        self.assertIn("--with-lunalib", lunalib_advice(["shaderLib", "demo"], installed))
+        self.assertIsNone(lunalib_advice(["shaderLib", "lunalib"], installed))
+        self.assertIsNone(lunalib_advice(["demo"], installed))
+        self.assertIsNone(lunalib_advice(["shaderLib"], {"shaderLib": "GraphicsLib"}))

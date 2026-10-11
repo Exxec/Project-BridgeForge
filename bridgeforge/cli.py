@@ -901,6 +901,7 @@ def build_parser() -> argparse.ArgumentParser:
     group_install.add_argument("--queue", type=Path)
     group_install.add_argument("--rig", type=Path)
     group_install.add_argument("--stage-providers", action="store_true", help="also copy the queue workspaces that provide missing dependencies into the rig, verifying id, version and files (ROADMAP 36.1)")
+    group_install.add_argument("--with-lunalib", action="store_true", help="also enable LunaLib when GraphicsLib is enabled without it (RC8-25: GraphicsLib 1.12.1 needs it under Fast Rendering)")
     group_install.add_argument("--json", action="store_true")
     group_bisect = group_sub.add_parser("bisect", help="split a failed group into two new groups at the end of the plan, each dependency-closed (ROADMAP 36.8)")
     group_bisect.add_argument("group", type=int)
@@ -1566,7 +1567,7 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"Plan written: {target}. Next: bridgeforge probe-group install <N>, then bf-test.ps1 launch <TESTID>.")
             elif args.probe_group_command == "install":
                 plan = json.loads((args.plan or queue / "PROBE_GROUPS.json").read_text(encoding="utf-8"))
-                result = install_group(plan, args.group, queue, rig, stage=args.stage_providers)
+                result = install_group(plan, args.group, queue, rig, stage=args.stage_providers, with_lunalib=args.with_lunalib)
                 if not args.json:
                     print(f"Group {result['group']} installed: {', '.join(result['members'])}")
                     for item in result["staged_providers"]:
@@ -1583,6 +1584,8 @@ def main(argv: list[str] | None = None) -> int:
                     for item in result.get("dependency_version_conflicts", []):
                         print(f"  WARN {item['mod_id']} wants {item['dependency']} {item['wanted']}, rig has {item['installed']}: "
                               "RC8 disables a mod whose dependency major differs (RC8-23); fix its mod_info.json")
+                    if result.get("lunalib_advice"):
+                        print(f"  WARN {result['lunalib_advice']}")
                     print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
             elif args.probe_group_command == "smoke":
                 from .probe_group import smoke_group
