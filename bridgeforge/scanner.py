@@ -2817,6 +2817,37 @@ def _is_mission_source(root: Path, path: Path) -> bool:
     return False
 
 
+def _scan_content_id_renamed_by_provider(root: Path, result: ScanResult, vanilla_core: Path | None, provider_roots: list[Path] | None) -> None:
+    """An industry id the mod's code asks for that no installed table defines while a close sibling id exists (ROADMAP 60d;
+    Tritachyon asked for BOGGLED_AI_STATION, Terraforming & Station Construction 10.0.9 calls it BOGGLED_REMNANT_STATION,
+    New Game stopped in onNewGame). Only the vanilla table, the mod's own and its declared providers' are consulted."""
+    from .provider_renamed_ids import renamed_industry_ids
+
+    provider_dirs: list[Path] = []
+    if provider_roots:
+        from .java_toolchain import declared_dependencies
+        from .substitutes import provider_index
+
+        deps = set(declared_dependencies(root))
+        provider_dirs = [Path(p.path) for p in provider_index([Path(r) for r in provider_roots], exclude=root) if p.mod_id in deps]
+    hits = renamed_industry_ids(root, vanilla_core, provider_dirs)
+    if not hits:
+        return
+    result.add(
+        id="content-id-renamed-by-provider",
+        category="campaign",
+        severity="high",
+        classification="REVIEW",
+        confidence="MEDIUM",
+        explanation="Code in this mod names industry id(s) " + ", ".join(h["used"] for h in hits) + " that no industries.csv this scan can see "
+                    "defines, while a close id does (" + ", ".join(f"{h['used']} -> {h['suggestion']}" for h in hits) + "). A newer library or "
+                    "RC8 may have renamed it; addIndustry then fails at New Game. Match is by name similarity only, so compare the two rows "
+                    "(and the older provider copy, when you have one) before changing the id. Hull mod, commodity and condition ids are not checked.",
+        file="data/campaign/industries.csv",
+        evidence=[f"{h['used']}->{h['suggestion']} ratio {h['ratio']}" for h in hits] + [f"used-in:{w}" for h in hits for w in h["where"]],
+    )
+
+
 def _scan_star_type_undefined(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
     """A `star_*` type named in the mod's code that neither the mod's planets.json nor RC8's defines. StarSystem.initStar
     then builds a planet from a null spec: NullPointerException 'PlanetSpec.getPlanetType() because <parameter1> is null'
@@ -8462,6 +8493,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _infer_environment(result)
     _scan_procgen_rows(root, result, vanilla_root)
     _scan_star_type_undefined(root, result, vanilla_root)
+    _scan_content_id_renamed_by_provider(root, result, vanilla_root, provider_roots)
     _scan_faction_known_lists(root, result, vanilla_root)
     _scan_rules_condition_defects(root, result, vanilla_root)
     _scan_design_type_colors(root, result, vanilla_root)

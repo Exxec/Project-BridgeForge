@@ -142,6 +142,7 @@
     "procgen-planet-row-missing": "auto",
     "procgen-star-row-missing": "auto",
     "star-type-undefined": "decision",
+    "content-id-renamed-by-provider": "decision",
     "release-blocking-source-todo": "decision",
     "removed-api-call": "auto",
     "removed-market-condition-id": "decision",
