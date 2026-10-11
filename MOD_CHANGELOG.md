@@ -2,6 +2,11 @@
 
 Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; each mod's evidence is in its revival report.
 
+## 2026-10-11
+
+- **Yellowjackets Mining Conglomerate** 0.1: revived for RC8 and archived (live validated)
+- **Yellowjackets Mining Conglomerate** 0.1: 0.6.1a ship pack revived for RC8: 12 vanilla hull rows and 3 vanilla weapon rows removed so RC8's stand, supplies/bays/design-type columns added, test mission fixed, descriptions drafted; live run: new game, one in-game day, all 3 hulls in combat
+
 ## 2026-10-06
 
 - **(INCOMPATIBLE WITH STARLORODS) Exigency** 0.8.01a+bf.8: Avesta Station now sits in a star system and hops between systems (VRI Arkship style) instead of flying through hyperspace; fixes Nexerelin RaidIntel.getETA NPE (null star system) when a faction raids Avesta. Older saves are migrated on load. Live-tested 2026-10-06: three hops, no errors; no raid on Avesta occurred.
