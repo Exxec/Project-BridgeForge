@@ -263,13 +263,17 @@ _MOD_LINE = re.compile(r"Running with the following mods[^\n]*\n(?P<body>(?:[^\n
 _MOD_ENTRY = re.compile(r"StarfarerLauncher\s+-\s{4}(?P<name>.+?) \[id: (?P<id>[^\]]+)\].*?\(from (?P<path>[^)]+)\)")
 
 
-def _mission_rows(mod_path: str) -> int:
+def _mission_ids(mod_path: str) -> list[str]:
     csv_path = Path(mod_path) / "data" / "missions" / "mission_list.csv"
     try:
         lines = csv_path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
-        return 0
-    return sum(1 for row in lines[1:] if row.strip(" ,\t"))
+        return []
+    return [row.split(",", 1)[0].strip() for row in lines[1:] if row.strip(" ,\t")]
+
+
+def _mission_rows(mod_path: str) -> int:
+    return len(_mission_ids(mod_path))
 
 
 def _replaces_mission_list(mod_path: str) -> bool:
@@ -302,7 +306,16 @@ def mission_list_layout(log_text: str, vanilla_rows: int = 0, probe_id: str = "b
         below = sum(_mission_rows(e["path"]) for e in entries[probe_at + 1:])
         return below, total
     shown = entries[replacer:]
-    total = sum(_mission_rows(e["path"]) for e in shown)
+    # The game loads a mission id once: when `install` put the probe mission into the replacer's own list and the probe mod, listed
+    # after it, lists the same row, that row is one row, not two (REG2-20261012: the click landed one row low and started an Ironclads
+    # mission, "stuck at combat-round-1").
+    seen: set[str] = set()
+    total = 0
+    for entry in shown:
+        for mission_id in _mission_ids(entry["path"]):
+            if mission_id not in seen:
+                seen.add(mission_id)
+                total += 1
     anchor = max(probe_at, replacer)  # the probe sits in the replacer's own list when it is listed before it
     below = sum(_mission_rows(e["path"]) for e in entries[anchor + 1:])
     return below, total

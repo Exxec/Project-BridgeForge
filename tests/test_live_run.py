@@ -149,6 +149,15 @@ class MissionListLayoutTests(unittest.TestCase):
             text = self._log(base, [("BridgeForge Probe", "bridgeforge_probe", 1, False), ("Ironclads", "ironclads", 8, True), ("SpeedUp", "speedUp", 0, False)])
             self.assertEqual(live_run.mission_list_layout(text, 14), (0, 8))
 
+    def test_a_probe_row_listed_by_both_the_replacer_and_the_probe_mod_counts_once(self) -> None:
+        """REG2-20261012: the probe is listed after Ironclads; both csv files carry the probe mission, the game shows it once."""
+        with resolved_temp_dir() as base:
+            text = self._log(base, [("Ironclads", "ironclads", 7, True), ("SpeedUp", "speedUp", 0, False), ("BridgeForge Probe", "bridgeforge_probe", 0, False)])
+            for mod_id in ("ironclads", "bridgeforge_probe"):
+                csv_path = base / mod_id / "data" / "missions" / "mission_list.csv"
+                csv_path.write_text(csv_path.read_text(encoding="utf-8") + "bfprobe_combat,\n", encoding="utf-8")
+            self.assertEqual(live_run.mission_list_layout(text, 14), (0, 8))
+
     def test_without_a_replacement_vanilla_rows_count_and_mods_after_the_probe_sit_below(self) -> None:
         with resolved_temp_dir() as base:
             text = self._log(base, [("BridgeForge Probe", "bridgeforge_probe", 1, False), ("Neutrino", "Neutrino", 5, False)])
