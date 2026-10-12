@@ -91,6 +91,7 @@ Failures found in these two days, grouped by what kind of defect they are:
 - **Pre-merge diff check** (`tools/agent-diff-check.py`): before merging an agent branch, list files that were deleted or shrank by more than 20 percent and files whose first commit is a rewrite of an existing path (the `migrate.py` near miss).
 - **Edit-method rule enforcement**: the heredoc-Python rule cannot be detected; instead the delegation template carries it, and a smoke test rewrites a file with an embedded `\n` through the documented route.
 - **Conflict hot spots**: H2.1 removes the main cause; until then, ask agents to add parsers through a registry function in their own module.
+- **Instruction-file currency pass (H5.4, last step of the queue, owner request 2026-10-12):** once the other steps are done, review and update every agent-instruction file so it matches the repo as it then is: `CLAUDE.md`, the local-only `AGENTS.md`, `docs/LOCAL_HANDOFF.md`, the memory index and entries (`MEMORY.md` and linked files: drop stale facts, verify named files, commands and flags still exist), and any `.claude/` rules or hook notes in the repo. Fold in the lessons from this hardening work (safeio, zipsafe, baseline expiry, known-failure baseline, rig-reset, agent-diff-check, LF policy, new commands) and re-run the checks they cite. Done when each file's claims were spot-checked against the code and the date is recorded in the roadmap entry.
 
 ## Order and effort
 
