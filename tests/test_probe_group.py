@@ -761,3 +761,73 @@ class MarketSupplyTests(unittest.TestCase):
                 install_group(plan, 1, queue, rig, install_probe=False, setups=["swap-industry:farming:x"])
         self.assertEqual(config["setups"], ["swap-industry:farming:aotd_subsidised_farming:3:DNEEP_grain"])
         self.assertEqual(config["expect_supply"], ["dneep_grain@aotd_subsidised_farming"])
+
+
+class MissionAndClassAttributionTests(unittest.TestCase):
+    """Found by REG-20261012-G1: with mission-fleets and class-sweep now merged into group configs (2026-10-11), their FAIL lines named
+    ids no member owned, so every member of the group read UNCLEAR."""
+
+    CONTENT = "9 INFO x - BF-PROBE|0.2.27|content-ids|OK|all-content|checked=1 failed=0\n"
+
+    def _report(self, lines: str):
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            a, b = _workspace(queue, "A", "mod_a", "hull_a"), _workspace(queue, "B", "mod_b", "hull_b")
+            (a / "data" / "missions" / "m1").mkdir(parents=True)
+            (a / "data" / "missions" / "m1" / "mission.json").write_text("{}", encoding="utf-8")
+            configs = [build_probe_config(a), build_probe_config(b)]
+            configs[0]["mission_fleets"] = {"ship": ["aiv_gone_standard"], "wing": []}
+            configs[1]["class_sweep"] = ["data.scripts.Broken"]
+            log = root / "run.stdout.log"
+            log.write_text(self.CONTENT + lines, encoding="utf-8")
+            return group_report(log, merge_configs(configs))
+
+    def test_a_mission_variant_and_a_class_sweep_failure_blame_their_own_mods_only(self) -> None:
+        report = self._report("BF-PROBE|0.2.27|content-ids|FAIL|mission-variant:aiv_gone_standard|doesVariantExist=false\n"
+                              "BF-PROBE|0.2.27|mission-fleets|FAIL|all-missions|checked=1 failed=1\n"
+                              "BF-PROBE|0.2.27|class-sweep|FAIL|data.scripts.Broken|java.lang.NoClassDefFoundError: x\n"
+                              "BF-PROBE|0.2.27|class-sweep|FAIL|all-classes|loaded=0 failed=1\n")
+        self.assertEqual({m: v["verdict"] for m, v in report["members"].items()}, {"mod_a": "FAIL", "mod_b": "FAIL"})
+        self.assertEqual(report["unattributed"], [])
+        self.assertIn("mission-variant:aiv_gone_standard", report["members"]["mod_a"]["failures"][0])
+        self.assertIn("data.scripts.Broken", report["members"]["mod_b"]["failures"][0])
+
+    def test_a_clean_group_with_mission_and_class_data_still_passes(self) -> None:
+        report = self._report("BF-PROBE|0.2.27|mission-fleets|OK|all-missions|checked=1 failed=0\n")
+        self.assertEqual({v["verdict"] for v in report["members"].values()}, {"PASS"})
+
+
+class OptionalIntegrationTests(unittest.TestCase):
+    """REG-20261012-G2: Bionic Alteration's console-command and LunaLib classes extend libraries nobody enabled; they are not defects."""
+
+    CONTENT = "9 INFO x - BF-PROBE|0.2.27|content-ids|OK|all-content|checked=1 failed=0\n"
+    FAILS = ("BF-PROBE|0.2.27|class-sweep|FAIL|x.commands.AddAll|java.lang.NoClassDefFoundError: org/lazywizard/console/BaseCommand\n"
+             "BF-PROBE|0.2.27|class-sweep|FAIL|x.Real|java.lang.NoClassDefFoundError: x/own/Missing\n")
+
+    def _report(self, enabled: list[str] | None):
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            config = build_probe_config(_workspace(queue, "A", "mod_a", "hull_a"))
+            config["class_sweep"] = ["x.commands.AddAll", "x.Real"]
+            mods = root / "rig" / "mods"
+            mods.mkdir(parents=True)
+            if enabled is not None:
+                (mods / "enabled_mods.json").write_text(json.dumps({"enabledMods": enabled}), encoding="utf-8")
+            log = root / "run.stdout.log"
+            log.write_text(self.CONTENT + self.FAILS, encoding="utf-8")
+            return group_report(log, merge_configs([config]), mods_dir=mods)
+
+    def test_a_class_of_a_disabled_optional_library_is_not_a_failure_but_an_own_missing_class_still_is(self) -> None:
+        report = self._report(["mod_a", "lw_lazylib"])
+        self.assertEqual(report["optional_integration_classes"], [{"class": "x.commands.AddAll", "library": "lw_console"}])
+        self.assertEqual(len(report["members"]["mod_a"]["failures"]), 1)
+        self.assertIn("x.Real", report["members"]["mod_a"]["failures"][0])
+
+    def test_with_the_library_enabled_the_same_class_failure_counts(self) -> None:
+        report = self._report(["mod_a", "lw_console"])
+        self.assertEqual(report["optional_integration_classes"], [])
+        self.assertEqual(len(report["members"]["mod_a"]["failures"]), 2)
+
+    def test_without_a_readable_enabled_list_nothing_is_treated_as_optional(self) -> None:
+        report = self._report(None)
+        self.assertEqual(len(report["members"]["mod_a"]["failures"]), 2)

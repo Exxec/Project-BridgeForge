@@ -507,4 +507,16 @@ def archive_gate(workspace: Path) -> dict:
         waived = manual.is_file() and json.loads(manual.read_text(encoding="utf-8")).get("live")
         if not waived:
             problems.append(f"live result {live['status']}" + (f" (last PASS {live['test_id']})" if live.get("test_id") else ""))
-    return {"allowed": not problems, "problems": problems, "audit": audit, "live": live}
+    # An accepted-findings baseline that was not re-justified since the mod's version changed (owner decision 2026-10-12: any version
+    # change expires it). Override: a written reason under "baseline" in reports/SHIPPED_CHANGES.json, like the live waiver above.
+    from .baseline_audit import audit_workspace
+
+    baseline = audit_workspace(Path(workspace))
+    if baseline["status"] in ("STALE_VERSION", "UNSTAMPED"):
+        manual = Path(workspace) / "reports" / SHIPPED_CHANGES
+        waived = manual.is_file() and str(json.loads(manual.read_text(encoding="utf-8")).get("baseline") or "").strip()
+        if not waived:
+            problems.append(f"accepted-findings baseline {baseline['status']} (accepted at {baseline['stamped_version'] or 'no recorded version'}, mod now "
+                            f"{baseline['current_version']}): `bridgeforge baseline-accept {Path(workspace).name} --reason \"...\"`, or give a written reason "
+                            f"under \"baseline\" in reports/{SHIPPED_CHANGES}")
+    return {"allowed": not problems, "problems": problems, "audit": audit, "live": live, "baseline": baseline}

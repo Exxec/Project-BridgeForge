@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .safeio import atomic_write_text
+
 import json
 from pathlib import Path
 
@@ -58,12 +60,18 @@ def finding_dict_baseline_key(finding: dict) -> str:
     return f"{finding.get('id')}|{finding.get('file') or ''}|{evidence[0] if evidence else ''}"
 
 
-def accept_findings(working: Path, keys: list[str]) -> Path:
+def accept_findings(working: Path, keys: list[str], reason: str | None = None) -> Path:
     """Add finding keys to the mod's accepted-findings baseline (the one `mod_baseline_path` reads, else
     working/reports/baseline.json), keeping every key already there. Used for owner rulings that accept a
     finding as authored (variant-op-over-budget, option 2, 2026-09-27)."""
     path = mod_baseline_path(working) or Path(working) / "reports" / "baseline.json"
     existing = load_baseline_keys(path) if path.is_file() else set()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"findings": sorted(existing | set(keys))}, indent=2) + "\n", encoding="utf-8")
+    payload = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    payload = payload if isinstance(payload, dict) else {}  # keeps a stamp and reasons already there
+    payload["findings"] = sorted(existing | set(keys))
+    atomic_write_text(path, json.dumps(payload, indent=2) + "\n")
+    from .baseline_audit import stamp_baseline  # lazy: baseline_audit imports this module
+
+    stamp_baseline(path, working, reason)
     return path

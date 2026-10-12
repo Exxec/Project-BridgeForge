@@ -7,6 +7,8 @@ and versions only, never game or mod files.
 """
 from __future__ import annotations
 
+from .safeio import atomic_write_text
+
 import re
 from datetime import date
 from pathlib import Path
@@ -48,7 +50,7 @@ def add_entry(mod: str, text: str, *, version: str | None = None, day: str | Non
     lines = sections.setdefault(day or date.today().isoformat(), [])
     if line not in lines:
         lines.append(line)
-    path.write_text(render(sections), encoding="utf-8")
+    atomic_write_text(path, render(sections))
     return line
 
 

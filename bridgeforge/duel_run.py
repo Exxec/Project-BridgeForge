@@ -7,6 +7,8 @@ main menu with real clicks (live_run), and summarises the logs. Same rules as li
 """
 from __future__ import annotations
 
+from .safeio import safe_rmtree
+
 import json
 import re
 import shutil
@@ -28,7 +30,7 @@ def install_duel_mod(rig: Path, source: Path = DUEL_SOURCE) -> Path:
         raise lr.GameRefused(f"{rig} is not a rig")
     target = rig / "mods" / "bf-duel"
     if target.exists():
-        shutil.rmtree(target)
+        safe_rmtree(target, [rig / "mods"])
     shutil.copytree(source, target)
     # A mission's icon is read from its own folder. Vanilla's is copied in here, in the rig only, so no game file is ever committed.
     icon = rig / "starsector-core" / "data" / "missions" / "ambush" / "icon.jpg"

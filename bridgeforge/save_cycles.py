@@ -13,6 +13,8 @@ original is never opened for writing.
 """
 from __future__ import annotations
 
+from .safeio import safe_rmtree
+
 import re
 import shutil
 from pathlib import Path
@@ -103,7 +105,7 @@ def break_cycle(save: Path, out: Path) -> dict:
         temporary.replace(target)
     except BaseException:
         temporary.unlink(missing_ok=True)
-        shutil.rmtree(out, ignore_errors=True)
+        safe_rmtree(out, [out.parent])
         raise
     remaining = find_cycles(out)
     return {"schema_version": 1, "mode": "BREAK_CYCLE_ON_COPY", "original": str(save), "copy": str(out), "changed_lines": changed,

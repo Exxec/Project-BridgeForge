@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .safeio import atomic_write_text
+
 import json
 import subprocess
 import time
@@ -159,9 +161,9 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
         original_text = enabled_mods_path.read_text(encoding="utf-8")
     backup_path = enabled_mods_path.with_suffix(".json.bootbak")
     if original_text is not None:
-        backup_path.write_text(original_text, encoding="utf-8")
+        atomic_write_text(backup_path, original_text)
     mods_dir.mkdir(parents=True, exist_ok=True)
-    enabled_mods_path.write_text(json.dumps({"enabledMods": list(mods)}), encoding="utf-8")
+    atomic_write_text(enabled_mods_path, json.dumps({"enabledMods": list(mods)}))
 
     def _restore(keep: bool) -> bool:
         if keep:
@@ -172,7 +174,7 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
             return False
         try:
             if original_text is not None:
-                enabled_mods_path.write_text(original_text, encoding="utf-8")
+                atomic_write_text(enabled_mods_path, original_text)
             else:
                 enabled_mods_path.unlink(missing_ok=True)
         finally:

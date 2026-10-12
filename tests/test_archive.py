@@ -106,3 +106,37 @@ class ArchiveTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_a_second_archive_lists_what_changed_since_the_first_including_classes_inside_jars(self) -> None:
+        """Zorg18 V18+bf.7 shipped without two class-level fixes of an earlier line; the note now shows file and class differences."""
+        import io
+        import zipfile
+
+        def make_jar(path: Path, classes: dict[str, bytes]) -> None:
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w") as jar:
+                for name, data in classes.items():
+                    jar.writestr(name, data)
+            path.write_bytes(buffer.getvalue())
+
+        with resolved_temp_dir() as root:
+            ws = _workspace(root)
+            policy = root / "policy.json"
+            shutil.copy2(REPO_POLICY, policy)
+            record_policy_decision("bf_fixture_radar", local_only=True, reason="author unreachable", policy_path=policy)
+            make_jar(ws / "working" / "jars" / "radar.jar", {"a/Gen.class": b"fixed", "a/Market.class": b"size10", "a/Same.class": b"same"})
+            archive_mod(ws, root / "Done", policy_path=policy, today="2026-10-01")
+            first = (root / "Done" / "Radar" / "ARCHIVE_NOTE.md").read_text(encoding="utf-8")
+            make_jar(ws / "working" / "jars" / "radar.jar", {"a/Gen.class": b"BUGGY", "a/Same.class": b"same", "a/New.class": b"new"})
+            (ws / "working" / "mod_info.json").write_text('{"id": "bf_fixture_radar", "name": "Radar", "version": "3.1", "gameVersion": "0.98a-RC8", "jars": ["jars/radar.jar"]}', encoding="utf-8")
+            result = archive_mod(ws, root / "Done", policy_path=policy, today="2026-10-02", move_aside=True)
+            note = (root / "Done" / "Radar" / "ARCHIVE_NOTE.md").read_text(encoding="utf-8")
+            refreshed = archive_mod(ws, root / "Done", policy_path=policy, today="2026-10-03", refresh=True)
+        self.assertNotIn("Changes since the previous archive", first)  # the first archive has no predecessor
+        diff = result["since_previous"]
+        self.assertEqual(diff["changed"], ["jars/radar.jar", "mod_info.json"])
+        self.assertEqual(diff["jars"]["jars/radar.jar"], {"changed": ["a/Gen.class"], "added": ["a/New.class"], "removed": ["a/Market.class"]})
+        self.assertIn("## Changes since the previous archive (3.0)", note)
+        self.assertIn("a/Market.class", note)
+        self.assertEqual(refreshed["since_previous"]["changed"], [])  # --refresh compares with the archive it replaces: nothing differs
+        self.assertEqual(refreshed["since_previous"]["jars"], {})

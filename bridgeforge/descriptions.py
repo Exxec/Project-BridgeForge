@@ -13,6 +13,8 @@ scratchpad scripts; this is that workflow:
 """
 from __future__ import annotations
 
+from .safeio import safe_rmtree
+
 import csv
 import io
 import re
@@ -46,7 +48,7 @@ def rebuild_original_descriptions_copy(workspace: Path) -> Path | None:
         return None
     alt = workspace / "alt-original-descriptions" / workspace.name
     if alt.exists():
-        shutil.rmtree(alt)
+        safe_rmtree(alt, [workspace])
     for relative, source in _collect(working).items():
         if relative == CREDITS_FILE:
             continue

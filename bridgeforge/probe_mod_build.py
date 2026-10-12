@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .safeio import safe_rmtree
+
 import shutil
 import subprocess
 import zipfile
@@ -120,7 +122,7 @@ def build_probe_mod(repo_root: Path, jdk_dir: Path, core_dir: Path, keep_build_d
     build_dir = mod_root / "build"
     classes_dir = build_dir / "classes"
     if build_dir.exists():
-        shutil.rmtree(build_dir)
+        safe_rmtree(build_dir, [mod_root])
 
     sources = sorted(src_dir.rglob("*.java"))
     if not sources:
@@ -149,7 +151,7 @@ def build_probe_mod(repo_root: Path, jdk_dir: Path, core_dir: Path, keep_build_d
             mission_error = f"Janino (the game's runtime compiler) rejected the loose mission: {janino_error}"
 
     if not keep_build_dir:
-        shutil.rmtree(build_dir, ignore_errors=True)
+        safe_rmtree(build_dir, [mod_root])
 
     return {
         "jar": str(jar_path),
@@ -178,7 +180,7 @@ def install_release(repo_root: Path, core_dir: Path | None = None) -> dict[str, 
     mod_root = repo_root / MOD_ROOT_RELATIVE
     release_dir = repo_root / RELEASE_RELATIVE
     if release_dir.exists():
-        shutil.rmtree(release_dir)
+        safe_rmtree(release_dir, [repo_root])
     release_dir.mkdir(parents=True)
 
     shutil.copy2(mod_root / "mod_info.json", release_dir / "mod_info.json")
@@ -201,7 +203,7 @@ def install_release(repo_root: Path, core_dir: Path | None = None) -> dict[str, 
     if icon_src is not None and icon_src.is_file():
         shutil.copy2(icon_src, icon_dst)
     elif not icon_dst.is_file():
-        shutil.rmtree(release_dir, ignore_errors=True)
+        safe_rmtree(release_dir, [repo_root])
         raise ProbeModBuildError(
             f"the probe mission needs {PROBE_MISSION_ICON.as_posix()} (vanilla art, not in the repo); "
             f"pass --core so it can be copied from {VANILLA_MISSION_ICON.as_posix()}"

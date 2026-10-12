@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .safeio import safe_rmtree
+
 import hashlib
 import json
 import re
@@ -226,7 +228,7 @@ def snapshot_restore(
         raise SaveSnapshotError(f"{dest} already exists; pass replace=True (--replace) to overwrite it.")
 
     if dest.exists():
-        shutil.rmtree(dest)
+        safe_rmtree(dest, [_saves_dir(runtime_dir)])
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(snapshot_save_dir, dest)
 

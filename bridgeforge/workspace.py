@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .safeio import atomic_write_text, safe_rmtree
+
 import hashlib
 import json
 import shutil
@@ -47,7 +49,7 @@ def _read_manifest(workspace: Path) -> dict:
 
 
 def _write_manifest(workspace: Path, manifest: dict) -> None:
-    _manifest_path(workspace).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    atomic_write_text(_manifest_path(workspace), json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
 
 def create_workspace(source: Path, destination: Path) -> Path:
@@ -121,7 +123,7 @@ def rollback(workspace: Path, checkpoint_name: str) -> None:
     checkpoint_path = resolve_inside(workspace, Path("checkpoints") / checkpoint_name)
     if not checkpoint_path.is_dir():
         raise ValueError(f"Checkpoint contents unavailable: {checkpoint_name}")
-    shutil.rmtree(working)
+    safe_rmtree(working, [workspace])
     _copy_tree(checkpoint_path, working)
     manifest["events"].append({"type": "rollback", "checkpoint": checkpoint_name, "at": datetime.now(timezone.utc).isoformat()})
     _write_manifest(workspace, manifest)

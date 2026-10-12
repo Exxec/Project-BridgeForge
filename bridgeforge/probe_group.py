@@ -15,6 +15,8 @@ Refuses to write anywhere but an isolated rig (starsector-core a junction/symlin
 """
 from __future__ import annotations
 
+from .safeio import atomic_write_text, safe_rmtree
+
 import json
 import re
 import shutil
@@ -378,7 +380,11 @@ def merge_configs(configs: list[dict]) -> dict:
         merged["group_members"][c["target_mod_id"]] = {
             "hulls": sorted(c["hulls"]), "variants": sorted(set(c["content_variants"]["ship"]) | set(c["content_variants"]["other"])),
             "wings": sorted(c["content_wings"]), "items": sorted(c["content_special_items"]), "factions": sorted(set(c["factions"]) | set(c.get("patched_factions") or [])),
-            "commodities": sorted(c.get("mod_commodities") or [])}
+            "commodities": sorted(c.get("mod_commodities") or []),
+            # Mission fleet members and jar classes: their FAIL lines name them (mission-variant:<id>, class-sweep|<class>); without
+            # these the group report could not attribute them and every member of the group read UNCLEAR (REG-20261012-G1, Aivon-Republic).
+            "missions": sorted(set((c.get("mission_fleets") or {}).get("ship") or []) | set((c.get("mission_fleets") or {}).get("wing") or [])),
+            "classes": sorted(c.get("class_sweep") or [])}
     return merged
 
 
@@ -418,7 +424,7 @@ def _move_aside_duplicate_ids(rig: Path, members: dict[str, Path]) -> list[dict]
                 aside.mkdir(exist_ok=True)
                 target = aside / folder.name
                 if target.exists():
-                    shutil.rmtree(target)
+                    safe_rmtree(target, [aside])
                 shutil.move(str(folder), str(target))
                 moved.append({"mod_id": mod_id, "folder": folder.name, "kept": keep.name})
     return moved
@@ -574,7 +580,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     common = rig / "saves" / "common"
     common.mkdir(parents=True, exist_ok=True)
     _reset_combat_round(common)
-    (common / CONFIG_FILE).write_text(json.dumps(config, indent=2, sort_keys=True), encoding="utf-8")
+    atomic_write_text(common / CONFIG_FILE, json.dumps(config, indent=2, sort_keys=True))
     if not (common / RIG_MARKER_FILE).is_file():
         (common / RIG_MARKER_FILE).write_text("rig\n", encoding="utf-8")
     if install_probe:
@@ -599,7 +605,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     backup = enabled_path.with_name("enabled_mods.json.pre-bftest.bak")
     if enabled_path.is_file() and not backup.exists():
         shutil.copy2(enabled_path, backup)
-    enabled_path.write_text(json.dumps({"enabledMods": enabled}), encoding="utf-8")
+    atomic_write_text(enabled_path, json.dumps({"enabledMods": enabled}))
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_INSTALL", "group": group_number,
             "members": [m["workspace"] for m in group["members"]], "copied": copied, "staged_providers": staged, "enabled_mods": enabled,
             "dependency_version_conflicts": dependency_version_conflicts(mods_dir, enabled),
@@ -634,6 +640,33 @@ def accepted_probe_findings(queue: Path, mods_dir: Path | None = None) -> dict[s
     return found
 
 
+# Library packages a mod's optional integration classes extend: a NoClassDefFoundError naming one of these, while that library is not
+# enabled in the rig, means the integration is simply inactive. Only well-known libraries are listed; anything else stays a FAIL.
+OPTIONAL_LIBRARY_PACKAGES = {"org/lazywizard/console/": "lw_console", "lunalib/": "lunalib", "org/magiclib/": "MagicLib",
+                             "org/lazywizard/lazylib/": "lw_lazylib", "org/lazywizard/radar/": "lw_radar"}
+_NO_CLASS_DEF = re.compile(r"NoClassDefFoundError: (\S+)")
+
+
+def _enabled_mod_ids(mods_dir: Path | None) -> set[str] | None:
+    """Mod ids in the rig's enabled_mods.json, or None when it cannot be read (then nothing is treated as optional)."""
+    try:
+        data = json.loads((Path(mods_dir) / "enabled_mods.json").read_text(encoding="utf-8")) if mods_dir is not None else None
+    except (OSError, ValueError):
+        return None
+    ids = data.get("enabledMods") if isinstance(data, dict) else None
+    return {i for i in ids if isinstance(i, str)} if isinstance(ids, list) else None
+
+
+def _missing_optional_library(detail: str, enabled: set[str]) -> str | None:
+    found = _NO_CLASS_DEF.search(detail)
+    if not found:
+        return None
+    for prefix, library in OPTIONAL_LIBRARY_PACKAGES.items():
+        if found.group(1).startswith(prefix) and library not in enabled:
+            return library
+    return None
+
+
 def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted: dict[str, list[dict]] | None = None) -> dict:
     """One verdict per member: probe FAIL lines matched by the content id or faction they name, and crashes
     by the mod whose jar threw (log-triage attribution). Unmatched FAILs are reported for the group. `accepted` moves the
@@ -643,15 +676,23 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
     members = config.get("group_members") or {}
     owner: dict[str, str] = {}
     for mod_id, ids in members.items():
-        for kind in ("hulls", "variants", "wings", "items", "factions", "commodities"):
+        for kind in ("hulls", "variants", "wings", "items", "factions", "commodities", "missions", "classes"):
             for item in ids.get(kind, []):
                 owner.setdefault(item, mod_id)
     verdicts = {mod_id: {"failures": [], "crashes": []} for mod_id in members}
-    unattributed, seen_content, filler_sides = [], False, []
+    unattributed, seen_content, filler_sides, optional_integrations = [], False, [], []
+    enabled = _enabled_mod_ids(mods_dir)
     for line in Path(log).read_text(encoding="utf-8", errors="replace").splitlines():
         match = _PROBE_LINE.search(line)
         if not match:
             continue
+        if match["status"] == "FAIL" and match["check"] == "class-sweep" and enabled is not None:
+            library = _missing_optional_library(match["detail"], enabled)
+            if library:
+                # A class of a mod's optional integration (Console Commands commands, LunaLib refit buttons) that extends a library nobody
+                # enabled: the game never loads it, so this is not a defect (REG-20261012-G2, Bionic Alteration).
+                optional_integrations.append({"class": match["subject"], "library": library})
+                continue
         if match["check"] == "content-ids" and match["subject"] == "all-content":
             seen_content = True
         if match["check"] == "combat-filler" and match["status"] == "INFO":
@@ -661,8 +702,8 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
             continue
         subject = match["subject"].split(":", 1)[-1].split("/", 1)[0].split("@", 1)[0]  # market-supply names "commodity@industry"
         mod_id = owner.get(subject)
-        if match["check"] == "market-supply" and match["subject"] == "commodities":
-            continue  # the summary repeats the per-commodity FAIL lines above it
+        if (match["check"], match["subject"]) in (("market-supply", "commodities"), ("mission-fleets", "all-missions"), ("class-sweep", "all-classes")):
+            continue  # a summary line repeating the per-item FAIL lines above it
         if mod_id is None and match["check"] in ("campaign-layout", "combat-perf", "market-supply") and len(members) == 1:
             mod_id = next(iter(members))  # a sector-layout line names a system, not a content id: with one member it is that member's
         entry = f"{match['check']}|{match['subject']}|{match['detail'].strip()[:200]}"
@@ -689,6 +730,7 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_REPORT", "log": str(log),
             "content_ids_ran": seen_content, "fatal": triage["counts"]["FATAL"], "mod_errors": triage["counts"]["MOD-ERROR"],
             "members": verdicts, "unattributed": unattributed, "combat_filler_sides": filler_sides,
+            "optional_integration_classes": optional_integrations,
             "note": "INCOMPLETE means the probe's content-ids check never ran (start a New Game and wait one in-game day)."}
 
 

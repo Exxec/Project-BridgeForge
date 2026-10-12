@@ -13,6 +13,8 @@ overwrites an existing archive or deletes the source workspace.
 """
 from __future__ import annotations
 
+from .safeio import atomic_write_text, safe_rmtree
+
 import hashlib
 import re
 import shutil
@@ -40,6 +42,72 @@ def _version_text(version: object) -> str:
 
 def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+MAX_LISTED = 40
+
+
+def _previous_version(previous_root: Path) -> str:
+    info = _load_lenient_json_file(previous_root / "mod_info.json") if previous_root.is_dir() else None
+    return _version_text(info.get("version")) if isinstance(info, dict) else "unknown version"
+
+
+def _digest_tree(root: Path) -> dict[str, str]:
+    """{relative path: sha256} of every file under a previous archive's mod folder (empty when there is none)."""
+    if not root.is_dir():
+        return {}
+    return {p.relative_to(root).as_posix(): _digest(p) for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+def _jar_entries(source: Path) -> dict[str, str] | None:
+    """{entry name: sha256} of a jar's files, or None when it cannot be read as a zip."""
+    try:
+        with zipfile.ZipFile(source) as archive:
+            return {i.filename: hashlib.sha256(archive.read(i)).hexdigest() for i in archive.infolist() if not i.is_dir()}
+    except (OSError, zipfile.BadZipFile):
+        return None
+
+
+def since_previous(previous_jars: dict[str, dict[str, str] | None], previous: dict[str, str], files: dict[str, Path]) -> dict:
+    """What differs between the previous archive of this mod and the one being written: files changed, added and removed, and for each
+    changed jar the classes inside it. Zorg18 V18+bf.7 was archived without two class-level fixes that an earlier line had carried;
+    nothing showed it because the archive note only compared with the author's original (ROADMAP 70 H1.6)."""
+    current = {relative: _digest(source) for relative, source in files.items()}
+    changed = sorted(r for r in current if r in previous and current[r] != previous[r])
+    added = sorted(set(current) - set(previous))
+    removed = sorted(set(previous) - set(current))
+    jars: dict[str, dict[str, list[str]]] = {}
+    for relative in changed:
+        if not relative.lower().endswith(".jar"):
+            continue
+        before, after = previous_jars.get(relative), _jar_entries(files[relative])
+        if before is None or after is None:
+            jars[relative] = {"changed": ["(a jar could not be read)"], "added": [], "removed": []}
+            continue
+        jars[relative] = {"changed": sorted(n for n in after if n in before and after[n] != before[n]),
+                          "added": sorted(set(after) - set(before)), "removed": sorted(set(before) - set(after))}
+    return {"changed": changed, "added": added, "removed": removed, "jars": jars}
+
+
+def _since_previous_section(previous_version: str, diff: dict) -> str:
+    def listing(items: list[str]) -> str:
+        shown = [f"  - `{i}`" for i in items[:MAX_LISTED]]
+        return "\n".join(shown + ([f"  - ... {len(items) - MAX_LISTED} more"] if len(items) > MAX_LISTED else []))
+
+    lines = [f"\n## Changes since the previous archive ({previous_version})\n"]
+    if not (diff["changed"] or diff["added"] or diff["removed"]):
+        return "".join(lines) + "\nNo shipped file differs from the previous archive.\n"
+    for label, key in (("Changed", "changed"), ("Added", "added"), ("Removed", "removed")):
+        if diff[key]:
+            lines.append(f"\n{label} ({len(diff[key])}):\n{listing(diff[key])}\n")
+    for jar, parts in diff["jars"].items():
+        if any(parts.values()):
+            lines.append(f"\nInside `{jar}`: " + "; ".join(f"{label} {len(items)}" for label, items in parts.items() if items) + "\n")
+            for label, items in parts.items():
+                if items:
+                    lines.append(f"  {label}:\n{listing(items)}\n")
+    lines.append("\nCheck this list against the changelog: a file that changed back to an earlier state, or a class that vanished, is a regression until explained.\n")
+    return "".join(lines)
 
 
 def _original_root(workspace: Path) -> Path | None:
@@ -96,6 +164,10 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
         raise ArchiveError(f"no licence decision for {mod_id}: record one first (bridgeforge release-policy set {mod_id} --local-only|--releasable --reason ...).")
     target = Path(done_dir).expanduser().resolve() / workspace.name
     prepared = prepare_for_audit(workspace)  # a zip original is extracted beside original/, translation records copied
+    previous_root = target / workspace.name
+    previous_digests = _digest_tree(previous_root)  # taken before the previous archive is moved aside or removed
+    previous_version = _previous_version(previous_root)
+    previous_jars = {r: _jar_entries(previous_root / r) for r in previous_digests if r.lower().endswith(".jar")}
     replaced = None
     if target.exists() and move_aside and not refresh:
         replaced = str(_move_aside(target, Path(done_dir).expanduser().resolve(), today or date.today().isoformat()))
@@ -152,7 +224,11 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
     status = _final_status(working / "reports" / "REVIVAL_REPORT.md")
     note = _render_note(info, name, version, licence, status, changed, added, jars_identical, jar_names, original is not None,
                         zip_path.name, workspace.name, today or date.today().isoformat(), _live_line(workspace))
-    (target / "ARCHIVE_NOTE.md").write_text(note, encoding="utf-8")
+    diff = None
+    if previous_digests:
+        diff = since_previous(previous_jars, previous_digests, files)  # read before the previous archive was moved aside or removed
+        note += _since_previous_section(previous_version, diff)
+    atomic_write_text(target / "ARCHIVE_NOTE.md", note)
     # The mods' own changelog, beside Done/ (the repo root in use; a temp folder in tests).
     from .mod_changelog import add_entry
     add_entry(name, f"revived for RC8 and archived ({(status or 'no status').replace('_', ' ').lower()})", version=version,
@@ -163,7 +239,7 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
         master = {"error": str(exc)}
     return {"schema_version": SCHEMA_VERSION, "mode": "ARCHIVE", "archive": str(target), "files": len(files), "zip": str(zip_path),
             "replaced": replaced, "prepared": prepared, "master_log": master,
-            "licence": licence.get("decision"), "status": status, "changed": changed, "added": added,
+            "licence": licence.get("decision"), "status": status, "changed": changed, "added": added, "since_previous": diff,
             "jars_identical": jars_identical, "note": str(target / "ARCHIVE_NOTE.md")}
 
 
@@ -174,7 +250,7 @@ def _remove_previous_archive(target: Path, done_dir: Path) -> None:
         raise ArchiveError(f"refusing to remove {target}: it is not directly inside {done_dir}.")
     if not (target / "ARCHIVE_NOTE.md").is_file():
         raise ArchiveError(f"refusing to remove {target}: it has no ARCHIVE_NOTE.md, so it is not an archive made here.")
-    shutil.rmtree(target)
+    safe_rmtree(target, [done_dir])  # a junction inside an archive is removed as a link, never followed
 
 
 _CONTENTS_SECTION = re.compile(r"(?ms)^## Contents[ \t]*\r?\n.*?(?=^#{1,2} |\Z)")

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Callable
 
 from .progress import Checkpoint, report
+from .safeio import atomic_write_text
 
 LIVE_VALIDATED = "LIVE_VALIDATED"
 _PERF = re.compile(r"BF-PROBE\|[^|]*\|combat-perf\|(?P<status>[^|]*)\|(?P<subject>[^|]*)\|(?P<detail>.*)$")
@@ -92,12 +93,8 @@ def run_regression(queue: Path, rig: Path, out: Path, *, bat: str | None = None,
                 row["live"] = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "rounds": live.rounds}
                 config = json.loads((rig / "saves" / "common" / "bf_probe_config.data").read_text(encoding="utf-8"))
                 if live.log and Path(live.log).is_file():
-                    verdicts = judge(Path(live.log), config)
-                    row["members"] = {mod: v.get("verdict") for mod, v in verdicts["members"].items()}
-                    row["failures"] = {mod: v["failures"] + v["crashes"] for mod, v in verdicts["members"].items() if v["failures"] or v["crashes"]}
-                    row["unattributed"] = verdicts["unattributed"]
-                    row["combat_perf"] = perf_lines(Path(live.log))
-                    row["supply_failures"] = sorted({m["subject"] for m in map(_SUPPLY_FAIL.search, Path(live.log).read_text(encoding="utf-8", errors="replace").splitlines()) if m})
+                    row["workspaces"] = names
+                    _judge_row(row, judge(Path(live.log), config), Path(live.log))
                 row["log"] = str(live.log) if live.log else None
             except Exception as exc:  # one broken group never stops the pass
                 row["error"] = f"{type(exc).__name__}: {exc}"
@@ -111,10 +108,53 @@ def run_regression(queue: Path, rig: Path, out: Path, *, bat: str | None = None,
     result = {"mode": "PROBE_GROUP_REGRESS", "date": f"{date.today():%Y-%m-%d}", "groups": rows,
               "unplaced": plan.get("unplaced", []), "attention": _attention(rows)}
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic_write_text(out, json.dumps(result, indent=2, ensure_ascii=False))
     checkpoint.finish()
     return result
 
+
+def _judge_row(row: dict, verdicts: dict, log: Path) -> None:
+    """Put a group report's verdicts into a regress row (shared by a live pass and a re-judge)."""
+    row["members"] = {mod: v.get("verdict") for mod, v in verdicts["members"].items()}
+    row["failures"] = {mod: v["failures"] + v["crashes"] for mod, v in verdicts["members"].items() if v["failures"] or v["crashes"]}
+    row["unattributed"] = verdicts["unattributed"]
+    text = Path(log).read_text(encoding="utf-8", errors="replace")
+    row["combat_perf"] = perf_lines(Path(log))
+    row["supply_failures"] = sorted({m["subject"] for m in map(_SUPPLY_FAIL.search, text.splitlines()) if m})
+
+
+def rejudge(queue: Path, rig: Path, source: Path, out: Path) -> dict:
+    """Judge the saved logs of a finished (or running) pass again with the current group report, no game started. The report's attribution
+    improved after REG-20261012-G1 (mission and class-sweep lines had no owner, so every member read UNCLEAR); a pass already run is
+    re-read here instead of replayed. `source` is the pass's summary JSON or its partial checkpoint; a group's config is rebuilt from the
+    workspaces that own its mod ids."""
+    from .probe_config import build_probe_config
+    from .probe_group import _workspaces_by_mod_id, accepted_probe_findings, group_report, merge_configs
+
+    queue, rig = Path(queue).expanduser().resolve(), Path(rig).expanduser().resolve()
+    source = Path(source)
+    if source.suffix == ".jsonl":
+        rows = [json.loads(line)["value"] for line in source.read_text(encoding="utf-8").splitlines()[1:] if line.strip()]
+    else:
+        rows = json.loads(source.read_text(encoding="utf-8"))["groups"]
+    owners = _workspaces_by_mod_id(queue, rig / "mods")
+    accepted = accepted_probe_findings(queue, rig / "mods")
+    out_rows: list[dict] = []
+    for row in rows:
+        row = dict(row)
+        members = row.get("members")
+        log = row.get("log")
+        if isinstance(members, dict) and log and Path(log).is_file():
+            workspaces = [owners.get(mod) for mod in members]
+            if all(w is not None for w in workspaces):
+                config = merge_configs([build_probe_config(Path(w) / "working") for w in workspaces])
+                _judge_row(row, group_report(Path(log), config, mods_dir=rig / "mods", accepted=accepted), Path(log))
+                row["summary"] = _summary(row)
+        out_rows.append(row)
+    result = {"mode": "PROBE_GROUP_REGRESS_REJUDGED", "date": f"{date.today():%Y-%m-%d}", "source": str(source), "groups": out_rows,
+              "unplaced": [], "attention": _attention(out_rows)}
+    atomic_write_text(out, json.dumps(result, indent=2, ensure_ascii=False))
+    return result
 
 def _summary(row: dict) -> str:
     if "error" in row:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .safeio import safe_rmtree
+
 import json
 import re
 import shutil
@@ -668,6 +670,6 @@ def _install_probe_mod(runtime_dir: Path) -> dict[str, object]:
         )
     dest = runtime_dir / "mods" / "bridgeforge-probe"
     if dest.exists():
-        shutil.rmtree(dest)
+        safe_rmtree(dest, [runtime_dir / "mods"])
     shutil.copytree(release_dir, dest)
     return {"source": str(release_dir), "destination": str(dest)}

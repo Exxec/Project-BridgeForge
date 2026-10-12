@@ -1,0 +1,205 @@
+{
+  "modules": {
+    "archive_intake.py": {
+      "write_text": 1
+    },
+    "atlas_report.py": {
+      "write_text": 1
+    },
+    "behavior_discovery.py": {
+      "write_text": 4
+    },
+    "bootstrap.py": {
+      "write_text": 1
+    },
+    "build.py": {
+      "write_text": 8
+    },
+    "build_inputs.py": {
+      "write_text": 1
+    },
+    "build_tag.py": {
+      "write_text": 1
+    },
+    "check_impact.py": {
+      "write_text": 1
+    },
+    "checks_index.py": {
+      "write_text": 2
+    },
+    "cli.py": {
+      "write_text": 27
+    },
+    "conflicts.py": {
+      "write_text": 1
+    },
+    "corpus_audit.py": {
+      "write_text": 1
+    },
+    "decompiler.py": {
+      "write_text": 2
+    },
+    "descriptions.py": {
+      "write_text": 2
+    },
+    "done_audit.py": {
+      "write_text": 2
+    },
+    "dossier.py": {
+      "write_text": 4
+    },
+    "duel_run.py": {
+      "write_text": 2
+    },
+    "escalation.py": {
+      "rmtree": 2,
+      "write_text": 5
+    },
+    "escalation_queue.py": {
+      "write_text": 4
+    },
+    "escalation_review.py": {
+      "write_text": 1
+    },
+    "explain_proofs.py": {
+      "write_text": 1
+    },
+    "fixers.py": {
+      "write_text": 1
+    },
+    "fold.py": {
+      "write_text": 3
+    },
+    "intake.py": {
+      "write_text": 8
+    },
+    "interface.py": {
+      "write_text": 1
+    },
+    "jar_batch.py": {
+      "write_text": 4
+    },
+    "jar_patch.py": {
+      "write_text": 2
+    },
+    "java_matrix.py": {
+      "rmtree": 1,
+      "write_text": 5
+    },
+    "live_accept.py": {
+      "write_text": 1
+    },
+    "live_trust.py": {
+      "write_text": 2
+    },
+    "mass_test.py": {
+      "write_text": 2
+    },
+    "master_log.py": {
+      "write_text": 1
+    },
+    "migrate.py": {
+      "write_text": 5
+    },
+    "mods_compat.py": {
+      "write_text": 2
+    },
+    "move_machine.py": {
+      "write_text": 3
+    },
+    "novelty.py": {
+      "write_text": 1
+    },
+    "opportunities.py": {
+      "write_text": 1
+    },
+    "pack_candidate.py": {
+      "write_text": 1
+    },
+    "pipeline.py": {
+      "write_text": 2
+    },
+    "probe_config.py": {
+      "write_text": 3
+    },
+    "probe_group.py": {
+      "write_text": 2
+    },
+    "progress.py": {
+      "write_text": 2
+    },
+    "project_board.py": {
+      "write_text": 1
+    },
+    "promote.py": {
+      "write_text": 1
+    },
+    "provenance.py": {
+      "write_text": 1
+    },
+    "rebuild_reference.py": {
+      "write_text": 1
+    },
+    "reference_rigs.py": {
+      "write_text": 1
+    },
+    "regress.py": {
+      "write_text": 1
+    },
+    "release.py": {
+      "write_text": 2
+    },
+    "report.py": {
+      "write_text": 2
+    },
+    "review.py": {
+      "write_text": 5
+    },
+    "revival_report_draft.py": {
+      "write_text": 2
+    },
+    "revive.py": {
+      "write_text": 5
+    },
+    "revive_queue.py": {
+      "write_text": 1
+    },
+    "rig_doctor.py": {
+      "write_text": 2
+    },
+    "runtime.py": {
+      "write_text": 3
+    },
+    "save_risk.py": {
+      "write_text": 1
+    },
+    "save_snapshot.py": {
+      "write_text": 1
+    },
+    "save_summary.py": {
+      "write_text": 1
+    },
+    "substitutes.py": {
+      "write_text": 3
+    },
+    "supersession.py": {
+      "write_text": 1
+    },
+    "test_guard.py": {
+      "write_text": 1
+    },
+    "translate_batch.py": {
+      "write_text": 4
+    },
+    "validate.py": {
+      "write_text": 2
+    },
+    "working_tree.py": {
+      "write_text": 1
+    },
+    "workspace_tools.py": {
+      "write_text": 4
+    }
+  },
+  "schema_version": 1
+}

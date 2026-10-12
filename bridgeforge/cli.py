@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .safeio import atomic_write_text
+
 import argparse
 import json
 import sys
@@ -402,6 +404,8 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_test_cmd.add_argument("--json", action="store_true")
     from .atlas_report import add_parser as add_atlas_parser
     add_atlas_parser(subcommands)
+    from .baseline_audit import add_parser as add_baseline_audit_parser
+    add_baseline_audit_parser(subcommands)
     from .move_machine import add_parser as add_migrate_parser
     add_migrate_parser(subcommands)
     envc_cmd = subcommands.add_parser("env-check", help="read a launcher .bat (following @argfiles) and report java version, javaagents and their order, Prepatcher last or not, heap, and enabled mods that need Prepatcher the launch lacks; read-only (ROADMAP item 63)")
@@ -958,6 +962,7 @@ def build_parser() -> argparse.ArgumentParser:
     group_regress.add_argument("--only", action="append", default=[], metavar="WORKSPACE", help="only these workspaces; repeatable")
     group_regress.add_argument("--out", type=Path, help="summary JSON (default: <queue>/_regress/regress-<date>.json)")
     group_regress.add_argument("--test-prefix", help="test id prefix (default REG-<date>)")
+    group_regress.add_argument("--rejudge", type=Path, metavar="SOURCE", help="no game: judge a finished (or running) pass's saved logs again with the current report; SOURCE is its summary JSON or .partial.jsonl checkpoint")
     group_regress.add_argument("--quiet", action="store_true", help="no per-group progress lines")
     group_regress.add_argument("--rig", type=Path)
     group_regress.add_argument("--queue", type=Path)
@@ -1670,10 +1675,14 @@ def main(argv: list[str] | None = None) -> int:
             elif args.probe_group_command == "regress":
                 from datetime import date as _date
 
-                from .regress import run_regression
-                print("Starting the regression pass: leave the mouse and keyboard alone until it finishes (about five minutes a group).", file=sys.stderr)
+                from .regress import rejudge, run_regression
                 out = args.out or Path(queue) / "_regress" / f"regress-{_date.today():%Y%m%d}.json"
-                result = run_regression(queue, rig, out, bat=args.bat, size=args.size, limit=args.limit, only=args.only or None,
+                if args.rejudge:
+                    out = args.out or Path(queue) / "_regress" / f"rejudged-{_date.today():%Y%m%d}.json"
+                    result = rejudge(queue, rig, args.rejudge, out)
+                else:
+                    print("Starting the regression pass: leave the mouse and keyboard alone until it finishes (about five minutes a group).", file=sys.stderr)
+                    result = run_regression(queue, rig, out, bat=args.bat, size=args.size, limit=args.limit, only=args.only or None,
                                         quiet=args.quiet, test_prefix=args.test_prefix)
                 if not args.json:
                     print(f"{len(result['groups'])} group(s); {len(result['attention'])} item(s) need a look; summary {out}")
@@ -1712,7 +1721,7 @@ def main(argv: list[str] | None = None) -> int:
                 from .probe_group import bisect_group
                 plan_path = args.plan or queue / "PROBE_GROUPS.json"
                 result = bisect_group(json.loads(plan_path.read_text(encoding="utf-8")), args.group)
-                plan_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+                atomic_write_text(plan_path, json.dumps(result, indent=2))
                 if not args.json:
                     for group in result["groups"][-2:]:
                         print(f"Group {group['group']} ({len(group['members'])} mod(s)): " + ", ".join(m["workspace"] for m in group["members"]))
@@ -1987,7 +1996,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.write_baseline:
             keys = sorted({finding_baseline_key(finding) for finding in result.findings})
             args.write_baseline.parent.mkdir(parents=True, exist_ok=True)
-            args.write_baseline.write_text(json.dumps({"findings": keys}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            atomic_write_text(args.write_baseline, json.dumps({"findings": keys}, indent=2, sort_keys=True) + "\n")
+            from .baseline_audit import stamp_baseline
+
+            stamp_baseline(args.write_baseline, args.mod_directory)  # accepted at this version, today (ROADMAP 70 H1.5)
             print(f"Scanned {len(result.files)} files; found {len(result.findings)} findings.")
             print(f"Report: {report}")
             print(f"Manifest: {manifest}")
@@ -3018,6 +3030,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "atlas":
         from .atlas_report import run_cli as run_atlas
         return run_atlas(args)
+    if args.command in ("baseline-audit", "baseline-accept"):
+        from .baseline_audit import run_cli as run_baseline_audit
+        return run_baseline_audit(args)
     if args.command == "env-check":
         from . import env_check as envc
         try:
