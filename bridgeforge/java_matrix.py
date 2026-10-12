@@ -139,6 +139,35 @@ def describe_log_java(log: Path) -> dict:
     return result
 
 
+VALUE_OPTIONS = {"-classpath", "-cp", "--class-path", "-p", "--module-path"}
+
+
+def _insert_before_main_class(lines: list[str], flag: str) -> list[str]:
+    """`flag` as a JVM option: placed before the main class line (the first line that is not an option or an option's value). Everything
+    after the main class is an application argument, so a -javaagent appended at the end of fr.vmparams (which ends with
+    `-classpath <cp>` and `com.fs.starfarer.StarfarerLauncher`) was never an agent: the Toolbox fork then reported 'Prepatcher javaagent
+    is not installed' (GRP-ARK-AOTD-J27FRP-20261012). With no main class line the flag goes last."""
+    expect_value = False
+    for index, line in enumerate(lines):
+        token = line.strip()
+        if not token or token.startswith("#"):  # blank lines and argument-file comments
+            continue
+        if expect_value:
+            expect_value = False
+        elif token.startswith("-"):
+            expect_value = token in VALUE_OPTIONS
+        else:
+            return [*lines[:index], flag, *lines[index:]]
+    return [*lines, flag]
+
+
+def filtered_vmparams_name(vid: str) -> str:
+    """The filtered Fast Rendering argument file of one variant. One shared fr.filtered.vmparams was overwritten by the variant written
+    last, so every other launcher ran with that JDK's flags, and `--prepatcher` put the Prepatcher agent into every Fast Rendering
+    launcher (found 2026-10-12 setting up Java 27/28 runs). A variant with no id (older callers) keeps the old name."""
+    return f"fr.filtered-{vid}.vmparams" if vid else "fr.filtered.vmparams"
+
+
 def variant_id(major: int, launcher: str, prepatcher: bool = False) -> str:
     return f"j{major}-{launcher}" + ("-prep" if prepatcher else "")
 
@@ -202,8 +231,8 @@ def write_launcher_files(target: Path, variant: dict, core: Path) -> list[str]:
         dropped = unsupported_flags(java_exe, [line.strip() for line in lines])
         kept = [line for line in lines if line.strip() not in dropped]
         if variant.get("prepatcher"):
-            kept = [line for line in kept if PREPATCHER_MARKER not in line] + [PREPATCHER_AGENT_FLAG]  # last agent, after any FR agents
-        (Path(target) / "fr.filtered.vmparams").write_text("\n".join(kept) + "\n", encoding="utf-8", newline="")
+            kept = _insert_before_main_class([line for line in kept if PREPATCHER_MARKER not in line], PREPATCHER_AGENT_FLAG)  # last agent, after any FR agents
+        (Path(target) / filtered_vmparams_name(variant.get("id", ""))).write_text("\n".join(kept) + "\n", encoding="utf-8", newline="")
     variant["dropped_flags"] = dropped
     if variant.get("prepatcher"):
         _link_prepatcher(Path(target), Path(core))
@@ -288,7 +317,7 @@ def build_launcher(jdk_home: str, launcher: str, java_major: int, dropped: list[
     else:
         # fr.bat's own command line; the later -D and -Xmx win, so the log lands in the rig and the heap is ours.
         logs = PATH_FLAGS[-1] + f" -Xms{heap_gb}g -Xmx{heap_gb}g"
-        argfile = "@fr.vmparams" if dropped is None else '"@%RT%fr.filtered.vmparams"'
+        argfile = "@fr.vmparams" if dropped is None else f'"@%RT%{filtered_vmparams_name(vid)}"'
         body = [
             "IF EXIST PatchLibAgent.jar (",
             f"  {java} -javaagent:PatchLibAgent.jar {argfile} {logs}",

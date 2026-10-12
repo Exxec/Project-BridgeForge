@@ -94,3 +94,19 @@ Order is the order I recommend. "Cloud" means it needs no game; "Local" needs th
   mistake above. Add the three-agent chain (resource cache, FR, Prepatcher) as a matrix variant that mirrors the owner's launch.
 - Whether a tester's setup includes Prepatcher: their log (not available) or one question.
 - A Java 28 boot with and without Prepatcher: the 0.18.4 docs do not claim it; the owner reports the author has confirmed it, so this run checks that on the owner's rig.
+
+
+## Live evidence added 2026-10-12 (Java 27 and 28 with Prepatcher)
+
+- **Prepatcher 0.18.4 runs on Java 27+22 and Java 28+13 when it is the last `-javaagent` and a real JVM option.** Two launcher bugs hid
+  this: a hand-made rig bat put the agent on the command line before `@fr.filtered.vmparams`, whose own `-javaagent:fr.agent.jar` then
+  came after it, and Prepatcher refused ("cannot prove a safe configured bytecode route on Java 28 ... Prepatcher is not the last
+  javaagent"); and `java-matrix setup --prepatcher` appended the agent after the main class in the argument file, where Java treats it
+  as an application argument, so the Toolbox fork reported "javaagent is not installed". Fixed in `bridgeforge/java_matrix.py`
+  (agent inserted before the main class, per-variant `fr.filtered-<variant>.vmparams`; tests in `tests/test_aotd_compat.py`).
+  The owner's report that Java 28 works is confirmed.
+- Runs: GRP-ARK-AOTD-J27FRP2-20261012 and GRP-ARK-AOTD-J28FRP-20261012 reach the campaign and combat with Vaults of Knowledge, the
+  Toolbox fork, Prepatcher, BMO and Ashlib. Prepatcher logs three `SKIPPED_ERROR aotdCleanDeficitPath ... BaseIndustry; the preceding
+  class bytes remain active` lines on every Java (25 too): one AoTD transform is skipped safely, so that economy patch is not active.
+  Worth asking the AoTD fork's author about; it does not stop the game.
+- The direct launcher with the agent still fails (ClassFormatError on CampaignState, 2026-10-11); Fast Rendering is the supported route.

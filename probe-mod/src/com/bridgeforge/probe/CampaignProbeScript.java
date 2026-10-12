@@ -253,6 +253,11 @@ public class CampaignProbeScript implements EveryFrameScript {
                 checkMarketSupply();
             }
         });
+        runCheck("faction-economy", new Runnable() {
+            public void run() {
+                checkFactionEconomy();
+            }
+        });
         ProbeLog.end("campaign");
     }
 
@@ -873,6 +878,37 @@ public class CampaignProbeScript implements EveryFrameScript {
         }
         ProbeLog.emit("market-supply", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "commodities",
                 "checked=" + commodities.size() + " expectations=" + config.expectSupply.size() + " failed=" + failed);
+    }
+
+    // ---- 0.2.27: what economy the target mod's factions have --------------------------------------------
+    //
+    // Legacy of Arkgneisis scores its faction's markets from hasIndustry(heavyindustry / orbitalworks); the AoTD sweep predicted those
+    // checks fail when AoTD converts the industries (docs/AOTD_SWEEP_2026-10-12.md). One INFO line per market of each of the mod's own
+    // factions: size, industries, whether the two heavy-industry ids exist, and the fleet quality and fleet size modifiers markets
+    // feed fleet generation. API (javap RC8 starfarer.api.jar, 2026-10-11): MarketAPI.getStats().getDynamic().getMod(String)
+    // (StatBonus.computeEffective(float)), Stats.FLEET_QUALITY_MOD / COMBAT_FLEET_SIZE_MULT, MarketAPI.hasIndustry/getIndustries.
+
+    private void checkFactionEconomy() {
+        for (String factionId : config.factions) {
+            if (VANILLA_FACTIONS.contains(factionId)) {
+                continue;
+            }
+            for (MarketAPI market : Global.getSector().getEconomy().getMarketsCopy()) {
+                if (!factionId.equals(market.getFactionId())) {
+                    continue;
+                }
+                StringBuilder industries = new StringBuilder();
+                for (com.fs.starfarer.api.campaign.econ.Industry industry : market.getIndustries()) {
+                    industries.append(industry.getId()).append(industry.isFunctional() ? "" : "(down)").append(' ');
+                }
+                float quality = market.getStats().getDynamic().getMod(com.fs.starfarer.api.impl.campaign.ids.Stats.FLEET_QUALITY_MOD).computeEffective(0f);
+                float size = market.getStats().getDynamic().getMod(com.fs.starfarer.api.impl.campaign.ids.Stats.COMBAT_FLEET_SIZE_MULT).computeEffective(0f);
+                ProbeLog.emit("faction-economy", ProbeLog.STATUS_INFO, factionId + "/" + market.getId(),
+                        "size=" + market.getSize() + " heavyindustry=" + market.hasIndustry("heavyindustry") + " orbitalworks="
+                                + market.hasIndustry("orbitalworks") + " fleetQualityMod=" + quality + " combatFleetSizeMult=" + size
+                                + " industries: " + industries.toString().trim());
+            }
+        }
     }
 
     /** Why an expected industry supplies nothing: per market running it, whether it is functional, what it supplies and the

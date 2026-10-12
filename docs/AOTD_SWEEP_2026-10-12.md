@@ -52,14 +52,27 @@ Caveats on reading the table:
 
 `loa_spawnRandomMarketsPlugin.EconomyFixer` scores each Anarakis market's "development level" from
 `factionMarket.hasIndustry(Industries.HEAVYINDUSTRY)` and `ORBITALWORKS` (source in
-`In operation/Arkgneisis/scratch/original-extracted`, lines 609-661). With the whole family installed and AoTD converting those
-industries, `highestHeavyIndustryLevel` stays 0 and the faction takes the -0.3 industry bonus penalty. That is a balance effect, not
-a crash, and it is a prediction from reading the code: a live run with AoTD enabled and the market state read back would settle it.
+`In operation/Arkgneisis/scratch/original-extracted`, lines 609-661). The sweep predicted that with AoTD converting those industries
+the faction would lose its development bonus. **The live check did not support that at new game** (probe 0.2.27 `faction-economy`,
+each run is a fresh new game, so the headquarters row is the comparable one):
+
+| Run | Java / launcher | AoTD | HQ `orbitalworks` | `fleetQualityMod` | `combatFleetSizeMult` |
+|---|---|---|---|---|---|
+| GRP-ARK-BASE-J25 | 25 direct | no | true | 0.375 | 1.875 |
+| GRP-ARK-BASE-J28FR | 28 Fast Rendering | no | true | 0.375 | 1.875 |
+| GRP-ARK-AOTD-J25FR | 25 Fast Rendering + Prepatcher | yes | true | 0.375 | 2.125 |
+| GRP-ARK-AOTD-J27FRP2 | 27 Fast Rendering + Prepatcher | yes | true | 0.375 | 2.125 |
+| GRP-ARK-AOTD-J28FRP | 28 Fast Rendering + Prepatcher | yes | true | 0.375 | 2.125 |
+
+AoTD leaves the NPC faction's orbital works alone and only adds a hidden helper industry (`aotd_misc_hidden_industry`) to each
+market; the fleet-size modifier is a little higher, not lower. Java version and Fast Rendering changed nothing for this mod. The
+REVIEW row stays a valid warning for markets AoTD converts later (for example a player-owned market), but for Arkgneisis' own
+NPC markets the prediction was wrong. Lesson: a call-site finding says where to look; only a run says whether it matters.
 
 ## What to do with this
 
-1. Live-check the highest-impact rows the way DNEEP was checked: a probe run with AoTD on and `swap-industry` setups, with a new
-   probe check reading the specific result (for Arkgneisis: the faction's fleet-quality stat). The supply check (probe 0.2.25) only
-   covers commodities.
+1. Live-check the highest-impact rows the way DNEEP and Arkgneisis were checked: a probe run with AoTD on and, where needed,
+   `swap-industry` setups, reading the specific result with a probe check (`market-supply` for commodities, `faction-economy` for a
+   faction's markets, fleet modifiers and industries). Next candidates: the `open_market` submarket readers and Nexerelin.
 2. Fix only what a run shows: a fallback like DNEEP's lookup array is a small, local change.
 3. Re-run `atlas sweep aotd` after any Atlas rule change; `reports/sweep-aotd.json` (local) holds the per-mod rows.

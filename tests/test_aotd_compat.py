@@ -39,9 +39,35 @@ class PrepatcherMatrixTests(unittest.TestCase):
             (core / "fr.vmparams").write_text("-javaagent:fr.agent.jar\n-Xmx2g\n", encoding="utf-8")
             variant = {"id": "j28-fr-prep", "major": 28, "launcher": "fr", "jdk_home": str(tmp / "nojdk"), "bat": "run.bat", "prepatcher": True}
             java_matrix.write_launcher_files(target, variant, core)
-            lines = (target / "fr.filtered.vmparams").read_text(encoding="utf-8").split()
+            lines = (target / "fr.filtered-j28-fr-prep.vmparams").read_text(encoding="utf-8").split()
             self.assertEqual(lines[-1], java_matrix.PREPATCHER_AGENT_FLAG)
             self.assertEqual(lines[0], "-javaagent:fr.agent.jar")
+            self.assertFalse((target / "fr.filtered.vmparams").exists())  # the shared name is not written for an identified variant
+
+    def test_the_agent_is_a_jvm_option_before_the_main_class_not_an_application_argument(self) -> None:
+        """fr.vmparams ends with `-classpath <cp>` and the main class; an agent line after the main class never loaded (2026-10-12)."""
+        lines = ["-Xmx4g", "", "# General config", "-javaagent:fr.agent.jar", "-Xss4m", "-classpath", "fr.jar;a.jar", "com.fs.starfarer.StarfarerLauncher"]
+        out = java_matrix._insert_before_main_class(lines, java_matrix.PREPATCHER_AGENT_FLAG)
+        self.assertEqual(out[-2:], [java_matrix.PREPATCHER_AGENT_FLAG, "com.fs.starfarer.StarfarerLauncher"])
+        self.assertEqual(out[:7], lines[:7])  # a '#' comment line is not mistaken for the main class
+        self.assertEqual(java_matrix._insert_before_main_class(["-Xmx2g", "-cp", "x.jar"], "-javaagent:a")[-1], "-javaagent:a")  # no main class: last
+
+    def test_plain_and_prep_fr_launchers_use_different_argument_files(self) -> None:
+        """Found 2026-10-12: one shared file made every Fast Rendering launcher load the Prepatcher agent."""
+        with resolved_temp_dir() as tmp:
+            core, target = tmp / "core", tmp / "rig"
+            core.mkdir()
+            target.mkdir()
+            (core / "fr.vmparams").write_text("-javaagent:fr.agent.jar\n-Xmx2g\n", encoding="utf-8")
+            for vid, prep in (("j28-fr", False), ("j28-fr-prep", True)):
+                variant = {"id": vid, "major": 28, "launcher": "fr", "jdk_home": str(tmp / "nojdk"), "bat": f"run-{vid}.bat", "prepatcher": prep}
+                java_matrix.write_launcher_files(target, variant, core)
+            plain = (target / "fr.filtered-j28-fr.vmparams").read_text(encoding="utf-8")
+            prep = (target / "fr.filtered-j28-fr-prep.vmparams").read_text(encoding="utf-8")
+            self.assertNotIn("StarsectorPrepatcher", plain)
+            self.assertIn("StarsectorPrepatcher", prep)
+            self.assertIn("fr.filtered-j28-fr.vmparams", (target / "run-j28-fr.bat").read_text(encoding="utf-8"))
+            self.assertIn("fr.filtered-j28-fr-prep.vmparams", (target / "run-j28-fr-prep.bat").read_text(encoding="utf-8"))
 
     def test_known_fail_variant_is_reported_not_booted(self) -> None:
         variants = java_matrix.plan_variants(self.JDKS, ["direct"], prepatcher=True)
