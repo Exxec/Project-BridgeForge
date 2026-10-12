@@ -165,7 +165,10 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--target-java", type=int, default=17)
     doctor_cmd = subcommands.add_parser("save-doctor", help="why a save will not load with what is installed, in one read-only pass: missing mods, classes no installed mod provides, NaN/Infinity values, a file cut off mid-write, version changes; each with how recoverable it usually is")
     doctor_cmd.add_argument("save", type=Path, help="save folder (holding campaign.xml and descriptor.xml)")
-    doctor_cmd.add_argument("--mods", type=Path, required=True, help="the mods folder the save will be loaded with")
+    doctor_cmd.add_argument("--mods", type=Path, help="the mods folder the save will be loaded with (required except with --break-cycle)")
+    doctor_cmd.add_argument("--cycles", action="store_true", help="also look for Memory -> planet -> condition market -> same Memory reference cycles in campaign.xml (the PlanetConditionMarket.readResolve NullPointerException, ROADMAP 60g)")
+    doctor_cmd.add_argument("--break-cycle", action="store_true", help="write a repaired COPY (needs --out): replace each inner <memory cl=\"Memory\" ref=N> reference found by --cycles with an empty memory; the save itself is never changed")
+    doctor_cmd.add_argument("--out", type=Path, help="with --break-cycle: the new folder for the repaired copy")
     doctor_cmd.add_argument("--vanilla-core", type=Path, help="starsector-core, so the game's own classes resolve")
     doctor_cmd.add_argument("--json", action="store_true")
     rplan_cmd = subcommands.add_parser("save-removal-plan", help="for each object of a missing mod's class in a save: droppable (nothing outside refers to it) or blocked (lists the outside references); read-only, the plan for a fix on a copy")
@@ -3209,13 +3212,33 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "save-doctor":
         from .save_doctor import diagnose
-        result = diagnose(args.save, args.mods, args.vanilla_core)
+        if args.break_cycle:
+            from .save_cycles import SaveCycleError, break_cycle
+            if args.out is None:
+                print("bridgeforge: --break-cycle needs --out (a new folder for the repaired copy).", file=sys.stderr)
+                return 2
+            try:
+                result = break_cycle(args.save, args.out)
+            except (SaveCycleError, OSError, ValueError) as exc:
+                print(f"bridgeforge: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else
+                  f"Copy written: {result['copy']} ({len(result['changed_lines'])} line(s) changed; "
+                  f"cycles {result['cycles_before']} -> {result['cycles_after']}). The original is unchanged.")
+            return 0 if result["cycles_after"] == 0 else 1
+        if args.mods is None:
+            print("bridgeforge: save-doctor needs --mods (or --break-cycle).", file=sys.stderr)
+            return 2
+        result = diagnose(args.save, args.mods, args.vanilla_core, cycles=args.cycles)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
             return 0
         print(f"{result['verdict']}: {result['character']} ({result['game_version']}, {result['enabled_mods']} mods)")
         for problem in result["problems"]:
             detail = problem.get("mod") or problem.get("package") or problem.get("file") or f"{problem.get('lines')} line(s)"
+            if problem["class"] == "MEMORY_CYCLE":
+                detail = (f"line {problem['line']}: PCMarket z={problem['pcmarket']} refers back to open memory z={problem['memory']}"
+                          f" via keys {problem['keys']}")
             print(f"  {problem['class']:16} {detail}" + (f"  e.g. {', '.join(problem['examples'])}" if problem.get("examples") else ""))
         for name, text in result["recovery"].items():
             print(f"  recovery {name}: {text}")

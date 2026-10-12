@@ -12,6 +12,9 @@ class, what it found and how recoverable that class usually is:
 - VERSION_CHANGED: an installed mod's version differs from the one the save was made with; usually fine, the usual
   suspect when it is not.
 - NON_FINITE: a NaN or Infinity number in the save (a mod bug wrote it; RingBand orbits are the known case).
+- MEMORY_CYCLE (opt-in, `--cycles`): a PCMarket nested in a Memory that refers back to that open Memory, the shape behind a
+  `PlanetConditionMarket.readResolve` NullPointerException (Station Augments, RC8-31; see save_cycles). It needs only campaign.xml:
+  without descriptor.xml the mod-list checks are skipped and said so. `--break-cycle --out COPY` writes a repaired COPY.
 - TRUNCATED: campaign.xml does not end with its root element's closing tag (a crash or full disk mid-save). Not
   recoverable from the file; look for an older save.
 
@@ -32,6 +35,7 @@ RECOVERY = {
     "MOD_MISSING": "high: reinstall the mod, or remove its content from a copy (Salvor stage 2)",
     "CLASS_UNRESOLVED": "high: reinstall the mod that provides it, or remove those entries from a copy",
     "NON_FINITE": "high for the file (reset the value on a copy); fix the mod bug that wrote it too",
+    "MEMORY_CYCLE": "medium: replace the inner memory reference with an empty memory on a copy (save-doctor --break-cycle --out COPY); then fix the mod that stores the entity (RC8-31)",
     "VERSION_CHANGED": "informational: check this mod first if the save fails",
 }
 _NON_FINITE = re.compile(r">\s*(-?Infinity|NaN)\s*<")
@@ -62,9 +66,14 @@ def _truncated(campaign_xml: Path) -> bool:
     return not root or not tail.endswith(f"</{root.group(1)}>")
 
 
-def diagnose(save: Path, mods_dir: Path, vanilla_core: Path | None = None) -> dict:
+def diagnose(save: Path, mods_dir: Path, vanilla_core: Path | None = None, cycles: bool = False) -> dict:
     campaign_xml = campaign_xml_path(save)
-    descriptor = parse_descriptor(save)
+    skipped = []
+    if (Path(save) / "descriptor.xml").is_file():
+        descriptor = parse_descriptor(save)
+    else:
+        descriptor = {"save_dir": str(save)}  # campaign.xml alone (a save sent without its descriptor): no mod-list checks
+        skipped.append("descriptor.xml is missing: the enabled-mod list, MOD_MISSING and VERSION_CHANGED checks were skipped")
     installed = _installed(mods_dir)
     problems: list[dict] = []
 
@@ -127,10 +136,15 @@ def diagnose(save: Path, mods_dir: Path, vanilla_core: Path | None = None) -> di
     if non_finite:
         problems.append({"class": "NON_FINITE", "lines": non_finite})
 
-    blocking = [p for p in problems if p["class"] in ("TRUNCATED", "MOD_MISSING", "CLASS_UNRESOLVED", "NON_FINITE")]
+    if cycles and not truncated:
+        from .save_cycles import find_cycles
+
+        for cycle in find_cycles(save):
+            problems.append({"class": "MEMORY_CYCLE", **cycle})
+    blocking = [p for p in problems if p["class"] in ("TRUNCATED", "MOD_MISSING", "CLASS_UNRESOLVED", "NON_FINITE", "MEMORY_CYCLE")]
     verdict = "TRUNCATED" if truncated else ("WILL_LIKELY_FAIL" if blocking else "NO_KNOWN_PROBLEM")
     return {"schema_version": SCHEMA_VERSION, "mode": "READ_ONLY_SAVE_DOCTOR", "save": str(descriptor.get("save_dir")),
             "character": descriptor.get("character_name"), "game_version": descriptor.get("game_version"),
             "save_date": descriptor.get("save_date"), "mods_dir": str(mods_dir), "enabled_mods": len(enabled),
             "verdict": verdict, "problems": problems, "recovery": {p["class"]: RECOVERY[p["class"]] for p in problems},
-            "note": "Read-only. A verdict is evidence, not a repair; Salvor's fixes would only ever write a copy."}
+            "skipped": skipped, "note": "Read-only. A verdict is evidence, not a repair; Salvor's fixes would only ever write a copy."}
