@@ -85,7 +85,7 @@ def _java_home_info(java_token: str) -> tuple[int | None, str]:
 
 def read_launch(bat: Path, vmparams: list[Path] | None = None) -> dict:
     """Tokens of the java command line in `bat` with every @argfile and extra vmparams file expanded in place."""
-    bat = Path(bat)
+    bat = Path(bat).expanduser().resolve()  # a relative launcher path left %RT% argument files unresolved (found 2026-10-12)
     bat_dir = bat.parent
     seen: set[Path] = set()
     files: list[str] = []
@@ -141,6 +141,22 @@ def enabled_mods_needing_prepatcher(mods_dir: Path) -> list[dict]:
     return found
 
 
+def main_class_index(tokens: list[str]) -> int | None:
+    """Index of the main class in an expanded java command line: the first token that is not an option, an option's value or an
+    unresolved @argfile. Everything after it is an application argument, never a JVM option."""
+    from .java_matrix import VALUE_OPTIONS
+
+    expect_value = False
+    for index, token in enumerate(tokens):
+        if expect_value:
+            expect_value = False
+        elif token.startswith("-"):
+            expect_value = token in VALUE_OPTIONS
+        elif not token.startswith("@"):
+            return index
+    return None
+
+
 def _finding(fid: str, classification: str, confidence: str, message: str) -> dict:
     return {"id": fid, "classification": classification, "confidence": confidence, "message": message}
 
@@ -148,7 +164,9 @@ def _finding(fid: str, classification: str, confidence: str, message: str) -> di
 def env_check(bat: Path, vmparams: list[Path] | None = None, mods_dir: Path | None = None) -> dict:
     launch = read_launch(bat, vmparams)
     tokens = launch["tokens"]
-    agents = [t.split(":", 1)[1] for t in tokens if t.startswith("-javaagent:")]
+    main_at = main_class_index(tokens)
+    jvm_tokens = tokens[:main_at] if main_at is not None else tokens  # after the main class are application arguments, not JVM options
+    agents = [t.split(":", 1)[1] for t in jvm_tokens if t.startswith("-javaagent:")]
     prepatcher_at = [i for i, a in enumerate(agents) if PREPATCHER_MARKER in a]
     prepatcher_last = bool(prepatcher_at) and prepatcher_at[-1] == len(agents) - 1
     major, version = _java_home_info(launch["java"]) if launch["java"] else (None, "")
@@ -156,6 +174,11 @@ def env_check(bat: Path, vmparams: list[Path] | None = None, mods_dir: Path | No
     heap = f"{heaps[-1].group(1)}{heaps[-1].group(2) or ''}" if heaps else None
     needers = enabled_mods_needing_prepatcher(mods_dir) if mods_dir else []
     findings = []
+    late = [t for t in (tokens[main_at + 1:] if main_at is not None else []) if t.startswith("-javaagent:")]
+    if late:
+        # `-javaagent:` after the main class is an application argument: the JVM never loads it (java-matrix --prepatcher appended the
+        # Prepatcher agent after com.fs.starfarer.StarfarerLauncher in fr.vmparams, 2026-10-12, so the Toolbox fork saw no agent).
+        findings.append(_finding("agent-after-main-class", "REVIEW", "HIGH", f"{len(late)} -javaagent option(s) come after the main class and are never loaded: {', '.join(late)}."))
     if prepatcher_at and not prepatcher_last:
         findings.append(_finding("prepatcher-not-last-agent", "REVIEW", "HIGH", f"Prepatcher is javaagent {prepatcher_at[-1] + 1} of {len(agents)}; it must be the last one."))
     if needers and not prepatcher_at:
@@ -168,6 +191,42 @@ def env_check(bat: Path, vmparams: list[Path] | None = None, mods_dir: Path | No
     return {"schema_version": 1, "launcher": str(bat), "files_read": launch["files"], "java": launch["java"] or None, "java_major": major, "java_version": version or None,
             "javaagents": agents, "prepatcher_present": bool(prepatcher_at), "prepatcher_last": prepatcher_last, "heap": heap,
             "mods_needing_prepatcher": needers, "findings": findings}
+
+
+def verify_rig_launchers(rig: Path, bats: list[str] | None = None) -> list[dict]:
+    """Self-test of generated rig launchers (ROADMAP 70 H1.3): use the text, not just trust it. Per launcher: no -javaagent after the main
+    class, every @argfile exists, a `-prep` launcher has the Prepatcher agent last and a plain one has none; across launchers: a `-prep`
+    and a plain one never share an argument file (one shared fr.filtered.vmparams made every Fast Rendering launcher load the agent).
+    Returns {"bat", "id", "message"} per problem."""
+    rig = Path(rig).expanduser().resolve()
+    names = bats if bats is not None else sorted(p.name for p in rig.glob("run-*.bat"))
+    problems: list[dict] = []
+    users: dict[str, dict[str, set[str]]] = {}
+    for name in names:
+        bat = rig / name
+        if not bat.is_file():
+            problems.append({"bat": name, "id": "launcher-missing", "message": f"{name} was not written"})
+            continue
+        result = env_check(bat)
+        for finding in result["findings"]:
+            if finding["id"] in ("agent-after-main-class", "prepatcher-not-last-agent"):
+                problems.append({"bat": name, "id": finding["id"], "message": finding["message"]})
+        launch = read_launch(bat)
+        for token in launch["tokens"]:
+            if token.startswith("@") and len(token) > 1:
+                problems.append({"bat": name, "id": "argfile-missing", "message": f"argument file {token[1:]} does not exist"})
+        prep_expected = name.endswith("-prep.bat") or "prepatcher" in name
+        if prep_expected and not result["prepatcher_last"]:
+            problems.append({"bat": name, "id": "prep-launcher-without-agent", "message": "a -prep launcher must carry the Prepatcher agent, last"})
+        if not prep_expected and result["prepatcher_present"] and "miko" not in name:
+            problems.append({"bat": name, "id": "plain-launcher-with-agent", "message": "a launcher without -prep loads the Prepatcher agent"})
+        for argfile in launch["files"]:
+            users.setdefault(argfile, {"prep": set(), "plain": set()})["prep" if prep_expected else "plain"].add(name)
+    for argfile, groups in sorted(users.items()):
+        if groups["prep"] and groups["plain"]:
+            problems.append({"bat": ", ".join(sorted(groups["prep"] | groups["plain"])), "id": "argfile-shared-between-variants",
+                             "message": f"{Path(argfile).name} is used by both a -prep and a plain launcher"})
+    return problems
 
 
 def render(result: dict) -> str:

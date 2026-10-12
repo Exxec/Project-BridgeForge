@@ -72,3 +72,43 @@ class SuiteLineTests(unittest.TestCase):
         self.assertIn("NOT RERUN since code changed", stale)
         self.assertIn("bridgeforge/code.py", stale)
         self.assertIn("no recorded run", missing)
+
+
+class KnownFailureTests(unittest.TestCase):
+    """ROADMAP 70 H1.8: an environmental failure may be baselined with an expiry; any other failure still fails the run."""
+
+    KNOWN = [{"test": "test_env", "reason": "this machine", "added": "2026-10-12", "expires": "2026-11-12"}]
+
+    def test_a_known_failure_alone_is_expected_and_a_second_failure_is_not(self):
+        from bridgeforge.test_guard import apply_known_failures
+
+        only = apply_known_failures({"failed_tests": ["test_env"], "failures": 1, "errors": 0}, self.KNOWN, "2026-10-20")
+        self.assertEqual((only["expected"], only["unexpected"], only["uncounted"]), (["test_env"], [], 0))
+        two = apply_known_failures({"failed_tests": ["test_env", "test_real"], "failures": 2, "errors": 0}, self.KNOWN, "2026-10-20")
+        self.assertEqual(two["unexpected"], ["test_real"])
+        unnamed = apply_known_failures({"failed_tests": ["test_env"], "failures": 2, "errors": 0}, self.KNOWN, "2026-10-20")
+        self.assertEqual(unnamed["uncounted"], 1)  # the summary counted a failure no FAIL/ERROR line named
+
+    def test_an_expired_entry_counts_as_a_failure_again_and_a_passing_one_is_reported(self):
+        from bridgeforge.test_guard import apply_known_failures
+
+        expired = apply_known_failures({"failed_tests": ["test_env"], "failures": 1, "errors": 0}, self.KNOWN, "2026-12-01")
+        self.assertEqual((expired["expected"], expired["unexpected"], expired["expired"]), ([], ["test_env"], ["test_env"]))
+        passing = apply_known_failures({"failed_tests": [], "failures": 0, "errors": 0}, self.KNOWN, "2026-10-20")
+        self.assertEqual(passing["now_passing"], ["test_env"])
+
+    def test_the_known_failures_file_names_a_reason_and_an_expiry_for_every_entry(self):
+        from bridgeforge.test_guard import load_known_failures
+
+        entries = load_known_failures(Path(__file__).resolve().parent.parent)
+        self.assertTrue(entries)
+        for entry in entries:
+            self.assertTrue(entry.get("reason") and entry.get("added") and entry.get("expires"), entry)
+
+    def test_the_suite_line_names_a_known_failure_instead_of_counting_it(self):
+        with resolved_temp_dir() as root:
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            (root / "a.py").write_text("x", encoding="utf-8")
+            counts = {"tests": 10, "failures": 1, "errors": 0, "skipped": 0, "failed_tests": ["test_env"], "verdict": "FAILED", "known_failures": ["test_env"]}
+            save_result(root, snapshot(root), counts, 0)
+            self.assertIn("10 tests, OK (skipped=0), 1 known environmental failure(s): test_env", suite_line(root))

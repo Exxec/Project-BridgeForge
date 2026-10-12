@@ -69,6 +69,36 @@ def parse_unittest_output(lines: list[str]) -> dict:
             "failed_tests": failed, "verdict": verdict}
 
 
+KNOWN_FAILURES_FILE = Path("tests") / "known_failures.json"
+
+
+def load_known_failures(repo: Path) -> list[dict]:
+    """Tests allowed to fail on this machine, each with a reason, the date it was added and an expiry date (ROADMAP 70 H1.8). A bare
+    environmental failure on every full run taught everyone to read 'FAILED (failures=1)' as normal, which hides a second failure."""
+    path = repo / KNOWN_FAILURES_FILE
+    if not path.is_file():
+        return []
+    try:
+        entries = json.loads(path.read_text(encoding="utf-8")).get("failures", [])
+    except (OSError, ValueError):
+        return []
+    return [e for e in entries if isinstance(e, dict) and e.get("test")]
+
+
+def apply_known_failures(counts: dict, known: list[dict], today: str) -> dict:
+    """Split a run's failures into expected and unexpected. A known entry that has expired counts as unexpected again; one whose test now
+    passes is listed so it can be removed."""
+    failed = list(counts.get("failed_tests", []))
+    active = {e["test"]: e for e in known if str(e.get("expires", "")) >= today}
+    expired = [e["test"] for e in known if str(e.get("expires", "")) < today and e["test"] in failed]
+    expected = [t for t in failed if t in active]
+    unexpected = [t for t in failed if t not in active]
+    total = counts.get("failures", 0) + counts.get("errors", 0)
+    return {"expected": expected, "unexpected": unexpected, "expired": expired,
+            "now_passing": [e["test"] for e in known if e["test"] not in failed],
+            "uncounted": max(0, total - len(failed))}  # failures the summary reported but no FAIL/ERROR line named
+
+
 def run_recorded_suite(repo: Path, command: list[str]) -> tuple[int, dict]:
     """Run the suite, echo its output as it comes, and return (exit code, parsed counts)."""
     process = subprocess.Popen(command, cwd=repo, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
@@ -98,9 +128,12 @@ def suite_line(repo: Path) -> str:
     now = {name: digest for name, digest in snapshot(repo).items() if not name.startswith("<")}
     moved = changed_paths(saved["files"], now)
     code_moved = [name for name in moved if not name.startswith(RECORD_ONLY_PREFIXES)]
-    failed = saved["failures"] + saved["errors"]
+    known = saved.get("known_failures") or []
+    failed = saved["failures"] + saved["errors"] - len(known)
     text = f"{saved['tests']} tests, {'OK' if not failed else str(failed) + ' failure(s)'} (skipped={saved['skipped']})"
-    if saved["failed_tests"]:
+    if known:
+        text += f", {len(known)} known environmental failure(s): " + ", ".join(known)
+    elif saved["failed_tests"]:
         text += " [" + ", ".join(saved["failed_tests"]) + "]"
     if code_moved:
         shown = ", ".join(code_moved[:4]) + (" ..." if len(code_moved) > 4 else "")
@@ -133,6 +166,16 @@ def main(argv: list[str] | None = None) -> int:
                 print("  " + path, file=sys.stderr)
         else:
             print("Test hermeticity PASS: checkout and probe release unchanged.", flush=True)
+    if counts is not None and code != 0 and not changes:
+        split = apply_known_failures(counts, load_known_failures(repo), time.strftime("%Y-%m-%d"))
+        counts["known_failures"] = split["expected"]
+        if split["expected"] and not split["unexpected"] and not split["uncounted"]:
+            print(f"Known failure(s) only, not counted as a failure: {', '.join(split['expected'])} (tests/known_failures.json).", flush=True)
+            code = 0
+        for name in split["expired"]:
+            print(f"Known failure EXPIRED, counts as a failure again: {name} (fix it or renew the entry with a reason).", file=sys.stderr)
+        for name in split["now_passing"]:
+            print(f"Known failure now passes: remove {name} from tests/known_failures.json.", flush=True)
     if counts is not None and not changes:
         save_result(repo, before, counts, code)
     return 1 if changes else code

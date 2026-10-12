@@ -356,6 +356,12 @@ def setup_rig(rig: Path, variants: list[dict]) -> list[str]:
     for variant in variants:
         write_launcher_files(rig, variant, rig / "starsector-core")
         written.append(variant["bat"])
+    from .env_check import verify_rig_launchers  # lazy: env_check imports this module
+
+    problems = verify_rig_launchers(rig)  # every launcher in the rig, so a stale one is noticed too
+    if problems:
+        shown = "; ".join(f"{p['bat']}: {p['id']} ({p['message']})" for p in problems[:6])
+        raise ValueError(f"launcher self-test failed after writing {len(written)} launcher(s): {shown}")
     return written
 
 

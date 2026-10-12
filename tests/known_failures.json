@@ -1,0 +1,12 @@
+{
+  "failures": [
+    {
+      "added": "2026-10-12",
+      "reason": "psutil does not report the child process's cwd within the test's time budget on this machine (the test takes 17 s and finds no process); fails on a clean checkout, also on 2026-10-06 and 2026-10-11 runs; the game and probe runs add process load",
+      "expires": "2026-11-12",
+      "module": "tests.test_locks",
+      "test": "test_child_with_cwd_inside_target_is_found"
+    }
+  ],
+  "schema_version": 1
+}
