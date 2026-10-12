@@ -7,6 +7,12 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Zorg [BF r8]** V18+bf.8: revived for RC8 and archived (live validated)
 - **Zorg18** V18+bf.8: Zorg Zeta fixed again (corona 0, Zeta I radius 100 at orbit 5000; bf.7 had lost bf.5's fix), Unimatrix size 10 restored (lost in bf.7), and the Zorg start hostile to every faction (20 in vanilla, new games only). Live-tested GRP-ZORG-BF8B-20261012; save checked.
 - **Zorg18** V18+bf.8: Same version, re-archived: a player commissioned with the Zorg at start (Nexerelin) is not made hostile to them (ZorgGen's -1 lifted to neutral). Live GRP-ZORG-BF8C-20261012 (no commission: 20 hostile).
+- **The Silent Armada (Demo) [BF r1]** vD 0.14+bf.2: mission tsa_02_houseparty named a variant RC8 lacks (kite_Interceptor, Fatal at mission start); now vanilla kite_hegemony_Interceptor
+- **The Silent Armada (Demo) [BF r1]** vD 0.14+bf.2: revived for RC8 and archived (live validated)
+- **Aivon Republic** 0.0.4+bf.1: revived for RC8 and archived (live validated)
+- **Sylphon RnD** 1.0+bf.1: revived for RC8 and archived (live validated)
+- **Aivon Republic** 0.0.4+bf.1: mission mir_quicktest named two variants that do not exist (Fatal at mission start); the fleet lines were removed
+- **Sylphon RnD** 1.0+bf.1: mission SRD_encroaching_darkness named two variants that do not exist (Fatal at mission start); the fleet lines were removed
 
 ## 2026-10-11
 

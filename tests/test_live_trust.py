@@ -229,3 +229,13 @@ class AutoExplainWorkFileAndRowsTests(unittest.TestCase):
         explained = sorted(f for files in groups.values() for f in files)
         self.assertEqual(explained, ["data/hulls/a.ship.old", "data/strings/descriptions.csv"])
         self.assertEqual(sorted(after["unexplained"]), ["data/hulls/b.ship.old", "data/strings/changed.csv"])
+
+
+class ExplainNeedsAWorkspaceTests(unittest.TestCase):
+    def test_a_name_that_is_not_a_workspace_is_refused_and_nothing_is_written(self) -> None:
+        with resolved_temp_dir() as root:
+            stray = root / "Silent-Armada"
+            with self.assertRaises(ValueError) as caught:
+                explain_shipped(stray, ["a.txt"], "a reason")
+            self.assertFalse(stray.exists())
+        self.assertIn("not a workspace", str(caught.exception))

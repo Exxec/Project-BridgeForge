@@ -272,6 +272,9 @@ def explain_shipped(workspace: Path, files: list[str], reason: str, today: str |
         raise ValueError("an explanation needs a reason.")
     if not files and not live:
         raise ValueError("name the files to explain, or pass live.")
+    if not (Path(workspace) / "working").is_dir():
+        # a relative name resolved against the wrong folder once created a stray <name>/reports/ in the repository root (2026-10-12)
+        raise ValueError(f"{workspace} is not a workspace (no working/ folder); give the path, e.g. \"In operation/<name>\".")
     path = Path(workspace) / "reports" / SHIPPED_CHANGES
     data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {"schema_version": 1, "files": {}}
     if live:
