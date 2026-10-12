@@ -143,9 +143,6 @@
     "reference_rigs.py": {
       "write_text": 1
     },
-    "regress.py": {
-      "write_text": 1
-    },
     "release.py": {
       "write_text": 2
     },
