@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import zipfile
 from pathlib import Path
 
@@ -461,6 +462,33 @@ def _check_core_integrity(runtime_dir: Path, repo_root: Path, core_baseline: Pat
     return _check(name, "PASS", detail)
 
 
+def _long_paths_enabled() -> bool | None:
+    """Windows `LongPathsEnabled`; None where the question does not apply (not Windows) or the key cannot be read."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\FileSystem") as key:
+            return bool(winreg.QueryValueEx(key, "LongPathsEnabled")[0])
+    except OSError:
+        return None
+
+
+def _check_environment(runtime_dir: Path, repo_root: Path, long_paths: bool | None = None) -> dict[str, object]:
+    """ROADMAP 70 H4: long paths and non-ASCII path hazards (the translator needs ASCII paths; deep mod trees pass 260 characters)."""
+    name = "environment"
+    problems = []
+    long_paths = _long_paths_enabled() if long_paths is None else long_paths
+    if long_paths is False:
+        problems.append("Windows LongPathsEnabled is off: deep mod trees can pass 260 characters and fail to copy or delete")
+    hazards = [str(path) for path in (runtime_dir, repo_root) if not str(path).isascii()]
+    if hazards:
+        problems.append(f"non-ASCII characters in {hazards}: the translator needs ASCII paths")
+    if problems:
+        return _check(name, "WARN", "; ".join(problems) + ".")
+    return _check(name, "PASS", "Long paths are enabled (or not applicable) and the rig and repository paths are ASCII.")
+
+
 def rig_doctor(
     runtime_dir: Path,
     *,
@@ -509,6 +537,7 @@ def rig_doctor(
             _check_core_integrity(runtime_dir, repo_root, core_baseline, write_core_baseline),
         ]
 
+    checks.append(_check_environment(runtime_dir, repo_root))
     checks.append(_check_layout(repo_root, working_copies or {}))
     checks.append(_check_workspace_access(repo_root))
     if any(item["status"] == "FAIL" for item in checks):

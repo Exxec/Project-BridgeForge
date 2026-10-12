@@ -30,6 +30,19 @@ jobs:
       - name: Check uv.lock matches pyproject.toml
         run: uv lock --check
 
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Audit runtime dependencies for known vulnerabilities
+        run: |
+          python -m pip install pip-audit .
+          python -m pip_audit --local --skip-editable
+
   coverage:
     name: Coverage (ubuntu / Python 3.12)
     runs-on: ubuntu-latest
