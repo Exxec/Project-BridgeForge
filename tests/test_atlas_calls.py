@@ -120,7 +120,8 @@ class CallAttributionTests(unittest.TestCase):
         heavy = ClassBuilder("a/HegemonyHeavy")
         heavy.method("run", heavy.ldc("habitable") + heavy.invoke(*PRINT) + ALOAD_0 + heavy.invoke(MARKET, "removeCondition", STRING_CALL, INVOKE_INTERFACE) + RETURN)
         farm = ClassBuilder("a/Farm")
-        farm.method("run", farm.ldc("farming") + farm.invoke(MARKET, "removeIndustry", STRING_CALL, INVOKE_INTERFACE) + RETURN)
+        farm.method("run", farm.ldc("farming") + farm.invoke(MARKET, "removeIndustry", STRING_CALL, INVOKE_INTERFACE)
+                    + farm.ldc("aotd_farm") + farm.invoke(MARKET, "addIndustry", STRING_CALL, INVOKE_INTERFACE) + RETURN)
         java = 'package r;\npublic class R { void go(MarketAPI m) { m.hasCondition("habitable"); m.getIndustry("farming"); } }\n'
         with temp_root() as root:
             make_vanilla(root, {"data/campaign/market_conditions.csv": CONDITIONS})
@@ -134,7 +135,24 @@ class CallAttributionTests(unittest.TestCase):
             self.assertIn(("industry", "farming", "mutates", "REVIEW", "method=removeIndustry (jar call site)"), rows)
             result = forecast(conn, atlas.resolve_mods(conn, ["reader"]), atlas.group_mods(conn, "aotd"))
             replaced = [f for f in result["findings"] if f.rule == "ATLAS-READS-REPLACED"]
-            self.assertEqual([f.ids for f in replaced], [["farming"]])
+            self.assertEqual([f.ids for f in replaced], [["farming", "aotd_farm"]])
+
+    def test_atlas_reads_replaced_needs_an_addition_in_the_same_class(self):
+        """A bare removal (AoTD's terraforming inserter: removeCondition("cold")) is a mutation, not a replacement, even when
+        another class of the mod adds conditions (2026-10-11: cold/hot/very_cold were reported replaced for DNEEP)."""
+        remover = ClassBuilder("a/Inserter")
+        remover.method("run", remover.ldc("habitable") + remover.invoke(MARKET, "removeCondition", STRING_CALL, INVOKE_INTERFACE) + RETURN)
+        adder = ClassBuilder("a/Other")
+        adder.method("run", adder.ldc("aotd_x") + adder.invoke(MARKET, "addCondition", STRING_CALL, INVOKE_INTERFACE) + RETURN)
+        java = 'package r;\npublic class R { void go(MarketAPI m) { m.hasCondition("habitable"); } }\n'
+        with temp_root() as root:
+            make_vanilla(root, {"data/campaign/market_conditions.csv": CONDITIONS})
+            jar_mod(root / "mods", "aotd_vok", {"a/Inserter.class": remover.build(), "a/Other.class": adder.build()}, name="AoTD VoK")
+            make_mod(root / "mods", "reader", {"data/scripts/R.java": java})
+            db, _ = build(root)
+            conn = atlas.connect(db)
+            result = forecast(conn, atlas.resolve_mods(conn, ["reader"]), atlas.group_mods(conn, "aotd"))
+            self.assertEqual([f for f in result["findings"] if f.rule == "ATLAS-READS-REPLACED"], [])
 
     def test_unscanned_class_falls_back_to_unknown_class_level_guess(self):
         b = ClassBuilder("a/Broken")

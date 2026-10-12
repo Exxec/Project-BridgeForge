@@ -494,7 +494,7 @@ def lunalib_advice(enabled: list[str], installed: dict[str, str]) -> str | None:
 
 def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install_probe: bool = True,
                   stage: bool = False, with_lunalib: bool = False, setups: list[str] | None = None,
-                  expect_supply: list[str] | None = None) -> dict:
+                  expect_supply: list[str] | None = None, save_after_checks: bool = False) -> dict:
     """Copy/sync members into the rig, write the merged config, set enabled_mods.json. A group whose members
     need providers from the queue installs only with `stage` (`--stage-providers`), which copies and verifies them.
     `setups` (probe setup specs) and `expect_supply` ("commodity@industry") go into the merged config (probe 0.2.25)."""
@@ -538,6 +538,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     config = merge_configs(configs)
     config["setups"] = [*config["setups"], *setups]
     config["expect_supply"] = sorted(set(config["expect_supply"]) | set(expect_supply))
+    config["save_after_checks"] = bool(save_after_checks)  # probe 0.2.26: save once after the day-1 checks
     common = rig / "saves" / "common"
     common.mkdir(parents=True, exist_ok=True)
     _reset_combat_round(common)

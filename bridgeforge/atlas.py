@@ -100,8 +100,17 @@ def mod_identity(path: Path) -> tuple[str, str, str] | None:
     return info["id"], _version_text(info.get("version")), str(info.get("name") or info["id"])
 
 
+def _extractor_digest() -> str:
+    """The atlas modules' own source: a changed extractor must re-read every mod. 2026-10-11: after 67a-f the build reported
+    all 349 mods unchanged and kept the old class-level facts."""
+    digest = hashlib.sha1(str(SCHEMA_VERSION).encode())
+    for module in sorted(Path(__file__).parent.glob("atlas*.py")):
+        digest.update(module.read_bytes())
+    return digest.hexdigest()
+
+
 def mod_hash(path: Path) -> str:
-    digest = hashlib.sha1()
+    digest = hashlib.sha1(_extractor_digest().encode())
     for current, dirs, files in os.walk(path):
         dirs[:] = sorted(d for d in dirs if d.lower() not in SKIPPED_DIRS)
         for name in sorted(files):

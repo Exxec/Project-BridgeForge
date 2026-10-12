@@ -50,6 +50,9 @@ public final class ProbeConfig {
     // "commodity@industry" a test asks for (DNEEP food through AoTD farms, 2026-10-11).
     public final List<String> modCommodities = new ArrayList<String>();
     public final List<String> expectSupply = new ArrayList<String>();
+    // 0.2.26: save the game once after the first day's checks, so a test can read and reload what a mod writes into a save
+    // (Station Augments' market references, 2026-10-11).
+    public boolean saveAfterChecks = false;
 
     public static ProbeConfig load() throws Exception {
         ProbeConfig config = new ProbeConfig();
@@ -118,6 +121,7 @@ public final class ProbeConfig {
         addAll(root.optJSONArray("class_sweep"), config.classSweep);
         addAll(root.optJSONArray("mod_commodities"), config.modCommodities);
         addAll(root.optJSONArray("expect_supply"), config.expectSupply);
+        config.saveAfterChecks = root.optBoolean("save_after_checks", false);
         JSONObject bodyTypes = root.optJSONObject("mod_body_types");
         if (bodyTypes != null) {
             JSONArray typeNames = bodyTypes.names();

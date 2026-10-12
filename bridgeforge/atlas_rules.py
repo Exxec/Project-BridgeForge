@@ -107,6 +107,7 @@ def build_profile(mod: str, facts: list[AFact]) -> Profile:
     profile = Profile(mod)
     removed: dict[tuple[str, str], list[AFact]] = defaultdict(list)
     added: dict[str, set[str]] = defaultdict(set)
+    added_in: dict[tuple[str, str], set[str]] = defaultdict(set)  # (kind, file/class) -> ids added there
     for fact in (f for f in facts if f.mod == mod):
         if fact.confidence == "UNKNOWN" or fact.evidence.startswith("prefix-resolved"):
             continue  # guesses (unscanned class, id built from a prefix) never decide what a mod replaces
@@ -123,13 +124,23 @@ def build_profile(mod: str, facts: list[AFact]) -> Profile:
             removed[(fact.kind, fact.id)].append(fact)
         elif fact.action == "mutates" and method.startswith("add"):
             added[fact.kind].add(fact.id)
+            added_in[(fact.kind, fact.file)].add(fact.id)
     for (kind, ident), source in removed.items():
         if ident in added.get(kind, set()):
             # removed and added back: a reorder (AoTD's condition reshuffle), not a replacement
             profile.mutates.setdefault(f"{kind}:{ident}", []).extend(source)
             continue
-        by = added.get(kind, set()) - {key[1] for key in removed if key[0] == kind}
-        entry = profile.replaced.setdefault((kind, ident), {"by": set(), "facts": [], "how": "remove" + ("+add in code" if by else " in code")})
+        # A replacement is a removal with an addition in the same class or file. Counting every id the mod adds anywhere made
+        # AoTD's terraforming inserter (removeCondition("cold"), etc.) "replace" cold/hot/very_cold for DNEEP (2026-10-11);
+        # a bare removal is a shared mutation, reported by ATLAS-MUTATE-SHARED, not a replacement.
+        by: set[str] = set()
+        for fact in source:
+            by |= added_in.get((kind, fact.file), set())
+        by -= {key[1] for key in removed if key[0] == kind}
+        if not by:
+            profile.mutates.setdefault(f"{kind}:{ident}", []).extend(source)
+            continue
+        entry = profile.replaced.setdefault((kind, ident), {"by": set(), "facts": [], "how": "remove+add in code"})
         entry["by"] |= by
         entry["facts"] += source
     return profile

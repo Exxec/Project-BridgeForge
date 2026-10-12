@@ -917,6 +917,7 @@ def build_parser() -> argparse.ArgumentParser:
     group_install.add_argument("--stage-providers", action="store_true", help="also copy the queue workspaces that provide missing dependencies into the rig, verifying id, version and files (ROADMAP 36.1)")
     group_install.add_argument("--with-lunalib", action="store_true", help="also enable LunaLib when GraphicsLib is enabled without it (RC8-25: GraphicsLib 1.12.1 needs it under Fast Rendering)")
     group_install.add_argument("--setup", action="append", default=[], metavar="SPEC", help="probe setup applied once per save, as for probe-config --setup; also swap-industry:<from>:<to>:<count>[:<condition-prefix>] (probe 0.2.25); repeatable")
+    group_install.add_argument("--save-after-checks", action="store_true", help="the probe saves the game once after the day-1 checks, so the save can be read and reloaded (probe 0.2.26)")
     group_install.add_argument("--expect-supply", action="append", default=[], metavar="COMMODITY@INDUSTRY", help="the probe's market-supply check FAILs unless INDUSTRY supplies COMMODITY in some market (probe 0.2.25); repeatable")
     group_install.add_argument("--json", action="store_true")
     group_bisect = group_sub.add_parser("bisect", help="split a failed group into two new groups at the end of the plan, each dependency-closed (ROADMAP 36.8)")
@@ -1614,7 +1615,7 @@ def main(argv: list[str] | None = None) -> int:
             elif args.probe_group_command == "install":
                 plan = json.loads((args.plan or queue / "PROBE_GROUPS.json").read_text(encoding="utf-8"))
                 result = install_group(plan, args.group, queue, rig, stage=args.stage_providers, with_lunalib=args.with_lunalib,
-                                       setups=args.setup, expect_supply=args.expect_supply)
+                                       setups=args.setup, expect_supply=args.expect_supply, save_after_checks=args.save_after_checks)
                 if not args.json:
                     print(f"Group {result['group']} installed: {', '.join(result['members'])}")
                     for item in result["staged_providers"]:

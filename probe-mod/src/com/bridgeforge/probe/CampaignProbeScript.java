@@ -124,6 +124,15 @@ public class CampaignProbeScript implements EveryFrameScript {
             firstRunDone = true;
             lastRunTimestamp = clock.getTimestamp();
             runAllChecks();
+            if (config.saveAfterChecks) {
+                // 0.2.26: CampaignUIAPI.cmdSave() (javap RC8 starfarer.api.jar, 2026-10-11).
+                runCheck("save", new Runnable() {
+                    public void run() {
+                        boolean saved = Global.getSector().getCampaignUI().cmdSave();
+                        ProbeLog.emit("save", saved ? ProbeLog.STATUS_INFO : ProbeLog.STATUS_FAIL, "campaign", "cmdSave returned " + saved);
+                    }
+                });
+            }
             return;
         }
 

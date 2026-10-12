@@ -26,6 +26,7 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Seeker [BF r5]** 0.3.0-0.98a+bf.5: Bone-Breaker and Ubique no longer re-run their destruction every frame as wrecks (Liquid Skin and Phased Mainframe hull mods): the field grew to 2,388 wreck hulks and 8 s frames after one Bone-Breaker died; now 8 hulks and 17 ms frames (duel runs DUEL9/DUEL11/DUEL13-20261011); same once-per-ship guard Betelgeuse's Organic Hull already had
 - **Doc's Needless Economic Expansion Pack** 0.2.0 Mann Co+bf.3: revived for RC8 and archived (live validated)
 - **Doc's Needless Economic Expansion Pack** 0.2.0 Mann Co+bf.3: food and fish deposits now feed Ashes of the Domain's farms and fishing harbour too; with AoTD installed DNEEP's meat, vegetables, grain and fruit supply no longer vanishes
+- **Station Augments** 2.4.3+bf.1: Local save-load fix: augments no longer write their market into saves (re-linked on load); old saves load unchanged. Live-tested GRP-SA-PATCHED4, LOAD-SA-NEWSAVE2, LOAD-SA-OLDFORMAT-20261011.
 
 ## 2026-10-06
 
