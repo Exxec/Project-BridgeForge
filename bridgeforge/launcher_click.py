@@ -73,6 +73,31 @@ def click_launcher_once(pids: set[int]) -> str | None:
     return None
 
 
+def java_descendant_pids(root_pid: int) -> set[int]:
+    """The java processes among `descendant_pids(root_pid)`: the game started by a launcher .bat, wherever its JDK lives."""
+    ids = descendant_pids(root_pid)
+    if not ids:
+        return set()
+    try:
+        import psutil  # type: ignore
+
+        return {pid for pid in ids if psutil.Process(pid).name().lower().startswith("java")}
+    except Exception:
+        pass
+    import json
+    import subprocess
+
+    script = ("Get-CimInstance Win32_Process | Where-Object { @(" + ",".join(str(int(i)) for i in sorted(ids)) +
+              ") -contains $_.ProcessId -and $_.Name -like 'java*' } | ForEach-Object { $_.ProcessId } | ConvertTo-Json -Compress")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True, timeout=30).stdout.strip()
+        data = json.loads(out) if out else []
+    except Exception:
+        return ids  # cannot tell: treat the whole tree as started, so the watchdog never fires on a guess
+    data = data if isinstance(data, list) else [data]
+    return {int(x) for x in data}
+
+
 def descendant_pids(root_pid: int) -> set[int]:
     """The process ids below `root_pid` (the cmd.exe that runs a launcher .bat), so a java.exe that lives outside the rig (the java-28
     JDK sits in the real install, not under _rig) is still found; matching the exe path under the rig missed it and the launcher

@@ -13,6 +13,10 @@ from .scanner import _load_lenient_json_file
 BAT_NAME = "run-java25.bat"
 POLL_INTERVAL_SECONDS = 1.0
 
+# Launch watchdog (ROADMAP 60f): no java process after this many seconds means the launcher .bat never started the game
+# (the first Yellowjackets launch wrote nothing and said nothing). Overridable by tests.
+LAUNCH_WATCHDOG_SECONDS = 60.0
+
 FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 MAIN_MENU_MARKER = "Playing music with id [miscallenous_main_menu.ogg]"
 
@@ -35,6 +39,18 @@ def _is_link(path: Path) -> bool:
     except OSError:
         return False
     return bool(getattr(st, "st_file_attributes", 0) & FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def java_started(runtime_dir: Path, wrapper_pid: int) -> bool:
+    """A java process with the rig's path, or one the launcher's cmd.exe started (a JDK outside the rig), is running."""
+    from .launcher_click import java_descendant_pids
+
+    return bool(_running_java_under(runtime_dir)) or bool(java_descendant_pids(wrapper_pid))
+
+
+def watchdog_message(runtime_dir: Path, seconds: float) -> str:
+    return (f"Launch watchdog: no java process for {runtime_dir} appeared within {seconds:.0f} s of launch, so the launcher never "
+            "started the game. Stopped instead of waiting; read the rig's stdout/stderr log and run the bat by hand.")
 
 
 def _running_java_under(runtime_dir: Path) -> list[dict[str, object]]:
@@ -197,6 +213,7 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
     reason: str | None = None
     click_note: str | None = None
     next_click_try = 2.0
+    java_seen = False
     try:
         while True:
             elapsed = time.monotonic() - started
@@ -221,6 +238,12 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
                 status = "FAIL"
                 reason = f"Process exited (code {process.returncode}) before the main-menu marker appeared."
                 break
+            if not java_seen:
+                java_seen = java_started(runtime_dir, process.pid)
+                if not java_seen and elapsed >= LAUNCH_WATCHDOG_SECONDS:
+                    status = "FAIL"
+                    reason = watchdog_message(runtime_dir, LAUNCH_WATCHDOG_SECONDS)
+                    break
             if elapsed >= timeout:
                 if process.poll() is None:
                     status = "SUSPECT_FATAL_DIALOG"
