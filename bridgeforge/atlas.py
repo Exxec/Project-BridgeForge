@@ -20,6 +20,9 @@ from .atlas_data import DATA_KINDS, Fact, extract_data_facts
 from .scanner import _load_lenient_json_file
 
 VANILLA_ID = "vanilla"
+ORIGINAL_SUFFIX = "+original"
+MAX_PREFIX_MATCHES = 40
+MIN_PREFIX_LENGTH = 3
 SCHEMA_VERSION = 1
 DEFAULT_DB = Path("reports") / "atlas.sqlite"
 HASHED_SUFFIXES = {".csv", ".json", ".java", ".faction", ".jar", ".variant", ".skin", ".ship", ".wpn", ".kt"}
@@ -58,6 +61,11 @@ def default_roots(base: Path) -> list[Path]:
     roots += sorted(base.glob("In operation/*/working"))
     roots += [base / "In operation" / "_rig" / "mods", base / "In operation" / "_rig" / "starsector-core"]
     return [root for root in roots if root.is_dir()]
+
+
+def original_roots(base: Path) -> list[Path]:
+    """`In operation/*/original` folders (67c): each holds the untouched mod, usually one folder down."""
+    return sorted(root for root in base.glob("In operation/*/original") if root.is_dir())
 
 
 def _is_vanilla(path: Path) -> bool:
@@ -145,7 +153,7 @@ def resolve_references(conn: sqlite3.Connection) -> int:
     `references`/`reads`/`mutates` (a string constant in code equal to a known id). Returns the literal facts written."""
     kinds = ",".join(f"'{kind}'" for kind in sorted(DATA_KINDS))
     with conn:
-        conn.execute("DELETE FROM facts WHERE evidence LIKE 'literal:%'")
+        conn.execute("DELETE FROM facts WHERE evidence LIKE 'literal:%' OR evidence LIKE 'prefix-resolved:%'")
         conn.execute("UPDATE facts SET action = 'defines' WHERE action = 'overrides'")
         conn.execute(
             f"UPDATE facts SET action = 'overrides' WHERE action = 'defines' AND mod != ? AND kind IN ({kinds}) AND EXISTS ("
@@ -153,7 +161,7 @@ def resolve_references(conn: sqlite3.Connection) -> int:
             (VANILLA_ID, VANILLA_ID))
     known: dict[str, set[str]] = {}
     for row in conn.execute("SELECT DISTINCT kind, id FROM facts WHERE action IN ('defines', 'overrides', 'patches') "
-                            f"AND kind IN ({','.join(repr(k) for k in REFERENCE_KINDS)})"):
+                            f"AND version NOT LIKE '%{ORIGINAL_SUFFIX}' AND kind IN ({','.join(repr(k) for k in REFERENCE_KINDS)})"):
         known.setdefault(row["id"], set()).add(row["kind"])
     own = {(r["mod"], r["version"], r["kind"], r["id"]) for r in conn.execute(
         "SELECT mod, version, kind, id FROM facts WHERE action IN ('defines', 'overrides', 'patches')")}
@@ -166,31 +174,54 @@ def resolve_references(conn: sqlite3.Connection) -> int:
             if (row["mod"], row["version"], kind, row["value"]) in own or (row["mod"], row["version"], row["file"], kind, row["value"]) in direct:
                 continue
             out += _literal_facts(row, kind, methods.get(kind, {}), set(filter(None, row["ctx"].split(","))))
+    out += _prefix_facts(conn, known)
     with conn:
         conn.executemany("INSERT INTO facts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", out)
     return len(out)
 
 
+def _prefix_facts(conn: sqlite3.Connection, known: dict[str, set[str]]) -> list[tuple]:
+    """67f: `getIndustry("aotd_" + x)` resolves to the known ids that start with the literal prefix (REVIEW, not guessed
+    beyond that set); the `<dynamic>` fact itself stays UNKNOWN and keeps the prefix for `atlas show`."""
+    out: list[tuple] = []
+    for row in conn.execute("SELECT mod, version, kind, action, file, line, evidence FROM facts "
+                            "WHERE id = '<dynamic>' AND evidence LIKE '%prefix=%'"):
+        found = re.search(r"method=(\w+).*?prefix=(\S+)", row["evidence"])
+        if not found or len(found.group(2)) < MIN_PREFIX_LENGTH:
+            continue
+        method, prefix = found.groups()
+        ids = sorted(ident for ident, kinds in known.items() if row["kind"] in kinds and ident.startswith(prefix))
+        out += [(row["mod"], row["version"], row["kind"], ident, row["action"], row["file"], row["line"],
+                 f"prefix-resolved: method={method} prefix={prefix} + a variable may name this id"
+                 f"{' (first %d of %d)' % (MAX_PREFIX_MATCHES, len(ids)) if len(ids) > MAX_PREFIX_MATCHES else ''}", "REVIEW")
+                for ident in ids[:MAX_PREFIX_MATCHES]]
+    return out
+
+
 def _literal_facts(row: sqlite3.Row, kind: str, by_action: dict[str, set[str]], ctx: set[str]) -> list[tuple]:
     base = (row["mod"], row["version"], kind, row["value"])
     mutating, reading = sorted(ctx & by_action.get("mutates", set())), sorted(ctx & by_action.get("reads", set()))
+    # ctx is only set for a class whose bytecode could not be scanned (atlas_jar): the weak guess is UNKNOWN, never REVIEW
     if mutating:
-        return [(*base, "mutates", row["file"], row["line"], f"literal: class-level co-occurrence with {m}", "REVIEW") for m in mutating]
+        return [(*base, "mutates", row["file"], row["line"], f"literal: class-level co-occurrence with {m} (bytecode not scanned)", "UNKNOWN") for m in mutating]
     if reading:
-        return [(*base, "reads", row["file"], row["line"], f"literal: class-level co-occurrence with {reading[0]}", "REVIEW")]
+        return [(*base, "reads", row["file"], row["line"], f"literal: class-level co-occurrence with {reading[0]} (bytecode not scanned)", "UNKNOWN")]
     return [(*base, "references", row["file"], row["line"], "literal: string constant equal to a known id", "REVIEW")]
 
 
-def build_atlas(roots: list[Path], db: Path, quiet: bool = False) -> dict:
+def build_atlas(roots: list[Path], db: Path, quiet: bool = False, originals: list[Path] | None = None) -> dict:
+    """Index every mod under `roots`; each mod under `originals` (67c) is indexed too, as version `<v>+original`."""
     started = time.monotonic()
-    folders = [folder for root in roots for folder in discover_mods(root)]
+    folders = [(folder, False) for root in roots for folder in discover_mods(root)]
+    folders += [(folder, True) for root in originals or [] for folder in discover_mods(root)]
     conn = connect(db, create=True)
-    header = {"atlas": SCHEMA_VERSION, "roots": [str(root) for root in roots], "mods": [str(f) for f in folders]}
+    header = {"atlas": SCHEMA_VERSION, "roots": [str(root) for root in roots],
+              "mods": [str(f) + (" (original)" if original else "") for f, original in folders]}
     stats = {"mods": 0, "indexed": 0, "unchanged": 0, "duplicates": 0, "skipped": 0, "facts": 0}
     seen: set[tuple[str, str]] = set()
     with progress.Checkpoint(db.with_suffix(".partial.jsonl"), header) as checkpoint:
-        for number, folder in enumerate(folders, 1):
-            _build_one(conn, checkpoint, folder, number, len(folders), seen, stats, quiet)
+        for number, (folder, original) in enumerate(folders, 1):
+            _build_one(conn, checkpoint, folder, number, len(folders), seen, stats, quiet, original)
         literal_facts = resolve_references(conn)
         stats["facts"] = conn.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
         stats["literal_facts"] = literal_facts
@@ -200,7 +231,7 @@ def build_atlas(roots: list[Path], db: Path, quiet: bool = False) -> dict:
     return stats
 
 
-def _build_one(conn, checkpoint, folder: Path, number: int, total: int, seen: set, stats: dict, quiet: bool) -> None:
+def _build_one(conn, checkpoint, folder: Path, number: int, total: int, seen: set, stats: dict, quiet: bool, original: bool = False) -> None:
     def say(name: str, detail: str, seconds: float | None) -> None:
         if not quiet:
             progress.report(number, total, name, detail, seconds)
@@ -210,6 +241,8 @@ def _build_one(conn, checkpoint, folder: Path, number: int, total: int, seen: se
         stats["skipped"] += 1
         say(folder.name, "skipped: mod_info.json has no id", 0.0)
         return
+    if original:
+        ident = (ident[0], ident[1] + ORIGINAL_SUFFIX, ident[2])
     if ident[:2] in seen:
         stats["duplicates"] += 1
         say(f"{ident[0]} {ident[1]}", f"duplicate copy at {folder} ignored", 0.0)
@@ -236,9 +269,13 @@ def _build_one(conn, checkpoint, folder: Path, number: int, total: int, seen: se
 def latest_mods(conn: sqlite3.Connection) -> list[dict]:
     """One row per mod id: the highest indexed version."""
     best: dict[str, dict] = {}
+
+    def rank(version: str) -> tuple:
+        return (not version.endswith(ORIGINAL_SUFFIX), version_key(version))  # an indexed original never beats the working copy
+
     for row in conn.execute("SELECT id, version, name, path, folder FROM mods"):
         mod = dict(row)
-        if mod["id"] not in best or version_key(mod["version"]) > version_key(best[mod["id"]]["version"]):
+        if mod["id"] not in best or rank(mod["version"]) > rank(best[mod["id"]]["version"]):
             best[mod["id"]] = mod
     return sorted(best.values(), key=lambda m: m["id"])
 

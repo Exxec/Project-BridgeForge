@@ -9,11 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import re
-import zipfile
 from pathlib import Path
 from typing import NamedTuple
 
-from .atlas_classfile import ACC_STATIC, ACC_TRANSIENT, ClassFormatError, ClassInfo, parse_class
 from .atlas_data import Fact
 from .scanner import _blank_java_comments, _loaded_mod_jars
 
@@ -66,12 +64,12 @@ PICK_PRIORITIES = {"HIGHEST", "MOD_SPECIFIC", "MOD_SET", "MOD_GENERAL", "CORE_SP
 SAVED_BASES = {"EveryFrameScript", "EveryFrameScriptWithCleanup", "BaseIntelPlugin"}
 HOOK_ROLES = {"BaseModPlugin", "EveryFrameScript", "EveryFrameScriptWithCleanup", "CampaignPlugin", "BaseCampaignPlugin"}
 CAMPAIGN_PLUGIN_ROLES = {"CampaignPlugin", "BaseCampaignPlugin"}
-REGISTER_METHODS = {"addListener", "addTransientListener", "addScript", "addTransientScript", "addPlugin"}
 
 
 class CodeResult(NamedTuple):
     facts: list[Fact]
-    literals: list[tuple[str, int, str, str]]  # (file, line, value, ctx: call names seen in the same class)
+    literals: list[tuple[str, int, str, str]]  # (file, line, value, ctx: call names, only when a class's bytecode could not be scanned)
+    constants: dict  # (simple class name, field name) -> String constant value, for resolving `getIndustry(Cls.X)`
 
 
 def _digest(data: bytes | str) -> str:
@@ -93,6 +91,43 @@ def _line_of(text: str, offset: int) -> int:
 
 # ---------------------------------------------------------------- loose java
 
+_PREFIX_RE = re.compile(r'\s*"([A-Za-z0-9_]{1,40})"\s*\+')
+_CONSTREF_RE = re.compile(r"\s*(?:([A-Za-z_]\w*)\s*\.\s*)?([A-Z][A-Z0-9_]*)\s*")
+_STRING_CONSTANT_RE = re.compile(r'\b(?:static\s+final|final\s+static)\s+String\s+(\w+)\s*=\s*"([^"\\\n]*)"')
+_EVIDENCE_PREFIX = re.compile(r"prefix=(\S+)")
+_EVIDENCE_CONSTREF = re.compile(r"constref=(\w*)\.(\w+)")
+
+
+def _dynamic_fact(kind: str, action: str, rel: str, line: int, method: str, argument: str, prefix: str = "", constref: str = "") -> Fact:
+    """An id the static scan cannot read; `prefix=` (67f) and `constref=` (67b) let later passes resolve it."""
+    note = f"method={method} non-literal argument: {argument.strip()}"
+    note += f" prefix={prefix}" if prefix else ""
+    note += f" constref={constref}" if constref else ""
+    return Fact(kind, "<dynamic>", action, rel, line, note, "UNKNOWN")
+
+
+def _loose_dynamic(kind: str, action: str, rel: str, line: int, method: str, other: str) -> Fact:
+    prefix = _PREFIX_RE.match(other)
+    constref = _CONSTREF_RE.fullmatch(other)
+    ref = f"{constref.group(1) or Path(rel).stem}.{constref.group(2)}" if constref else ""
+    return _dynamic_fact(kind, action, rel, line, method, other, prefix.group(1) if prefix else "", ref)
+
+
+def resolve_constants(facts: list[Fact], constants: dict) -> list[Fact]:
+    """Replace `<dynamic>` facts that name a mod-defined String constant (`Cls.X`) by the literal it holds (67b)."""
+    out = []
+    for fact in facts:
+        ref = _EVIDENCE_CONSTREF.search(fact.evidence) if fact.id == "<dynamic>" else None
+        value = constants.get((ref.group(1), ref.group(2))) if ref else None
+        if value is None:
+            out.append(fact)
+            continue
+        method = re.match(r"method=(\w+)", fact.evidence).group(1)
+        out.append(Fact(fact.kind, value, fact.action, fact.file, fact.line,
+                        f"method={method} constant {ref.group(1)}.{ref.group(2)} = \"{value}\" (mod-defined)", "REVIEW"))
+    return out
+
+
 def _call_facts(text: str, rel: str) -> list[Fact]:
     facts, dynamic = [], 0
     for match in _CALL_RE.finditer(text):
@@ -106,7 +141,7 @@ def _call_facts(text: str, rel: str) -> list[Fact]:
                               f"method={method} via {const_class}.{const_name} (id lower-cased from the constant name)", "REVIEW"))
         elif dynamic < MAX_DYNAMIC_PER_FILE:
             dynamic += 1
-            facts.append(Fact(kind, "<dynamic>", action, rel, line, f"method={method} non-literal argument: {(other or '').strip()}", "UNKNOWN"))
+            facts.append(_loose_dynamic(kind, action, rel, line, method, other or ""))
     for match in _COLLECTION_RE.finditer(text):
         getter = match.group(1) or match.group(4)
         ident = dict(_COLLECTIONS)[getter]
@@ -124,7 +159,7 @@ def _class_header(text: str, stem: str) -> tuple[int, set[str]] | None:
     return _line_of(text, match.start()), roles
 
 
-def _loose_class_facts(text: str, rel: str, stem: str, scripts: set[str]) -> list[Fact]:
+def _loose_class_facts(text: str, rel: str, stem: str, scripts: set[str], transient: frozenset[str] = frozenset()) -> list[Fact]:
     header = _class_header(text, stem)
     package = _PACKAGE_RE.search(text)
     if not header:
@@ -138,7 +173,7 @@ def _loose_class_facts(text: str, rel: str, stem: str, scripts: set[str]) -> lis
         priority = next(iter(priorities)) if len(priorities) == 1 else "?"
         facts += [Fact("campaign-pick", pick, "registers", rel, _line_of(text, m.start()), f"{fqcn} priority={priority}", "REVIEW")
                   for m in _PICK_RE.finditer(text) for pick in [m.group(1)]]
-    if roles & SAVED_BASES or stem in scripts:
+    if (roles & SAVED_BASES and stem not in transient) or stem in scripts:  # addTransientScript(new X) is not saved (67e)
         for match in _FIELD_RE.finditer(text):
             indent, modifiers, type_name, field_name = match.groups()
             if "static" in modifiers or "transient" in modifiers:
@@ -163,82 +198,33 @@ def extract_loose_java(root: Path) -> CodeResult:
             continue
     scripts = {_simple(m.group(2)) for text in texts.values() for m in _REGISTER_RE.finditer(text)
                if m.group(1) in _PERSISTENT_REGISTER}
+    transient = frozenset(_simple(m.group(2)) for text in texts.values() for m in _REGISTER_RE.finditer(text)
+                          if m.group(1) not in _PERSISTENT_REGISTER) - scripts
+    constants = {(path.stem, m.group(1)): m.group(2) for path, text in texts.items() for m in _STRING_CONSTANT_RE.finditer(text)}
     facts, literals = [], []
     for path, text in texts.items():
         rel = path.relative_to(root).as_posix()
         facts += _call_facts(text, rel)
         facts += [Fact("hook", _simple(m.group(2)), "registers", rel, _line_of(text, m.start()), f"{m.group(1)}(new {m.group(2)})", "REVIEW")
                   for m in _REGISTER_RE.finditer(text)]
-        facts += _loose_class_facts(text, rel, path.stem, scripts)
+        facts += _loose_class_facts(text, rel, path.stem, scripts, transient)
         seen = set()
         for match in LITERAL_RE.finditer(text):
             if match.group(1) not in seen:
                 seen.add(match.group(1))
                 literals.append((rel, _line_of(text, match.start()), match.group(1), ""))
-    return CodeResult(facts, literals)
-
-
-# ---------------------------------------------------------------- jars
-
-def _jar_class_facts(info: ClassInfo, rel: str, digest: str) -> list[Fact]:
-    fqcn = info.name.replace("/", ".")
-    roles = {_simple(info.super_name)} | {_simple(name) for name in info.interfaces}
-    facts = []
-    if "$" not in info.name:
-        facts.append(Fact("class", fqcn, "defines", rel, 0, f"jar sha={digest}", "SAFE"))
-    facts += [Fact("hook", fqcn, "registers", rel, 0, f"declares {role}", "REVIEW") for role in sorted(roles) if _is_role_hook(role)]
-    called = sorted(info.called_methods & REGISTER_METHODS)
-    if called:
-        facts.append(Fact("hook", fqcn, "registers", rel, 0, f"jar: calls {', '.join(called)} (class-level)", "REVIEW"))
-    if roles & CAMPAIGN_PLUGIN_ROLES:
-        priorities = info.field_refs & PICK_PRIORITIES
-        priority = next(iter(priorities)) if len(priorities) == 1 else "?"
-        facts += [Fact("campaign-pick", name, "registers", rel, 0, f"{fqcn} priority={priority}", "REVIEW")
-                  for name in info.methods if re.match(r"pick[A-Z]", name)]
-    if roles & SAVED_BASES:
-        for name, descriptor, flags in info.fields:
-            if descriptor in HEAVY_DESCRIPTORS and not flags & (ACC_STATIC | ACC_TRANSIENT):
-                facts.append(Fact("saved-field", f"{fqcn}.{name}", "persists", rel, 0,
-                                  f"{HEAVY_DESCRIPTORS[descriptor]} held by a saved script/plugin ({'/'.join(sorted(roles & SAVED_BASES))})", "REVIEW"))
-    if "getConditions" in info.called_methods and info.called_methods & set(_MUTATORS):
-        facts.append(Fact("collection", "market.conditions", "mutates", rel, 0,
-                          "jar: getConditions and a clear/sort call in one class (co-occurrence, weaker than a call site)", "REVIEW"))
-    return facts
-
-
-def _jar_literals(info: ClassInfo, rel: str) -> list[tuple[str, int, str, str]]:
-    ctx = ",".join(sorted(info.called_methods & CALLS.keys()))
-    return [(rel, 0, value, ctx) for value in sorted({s for s in info.strings if ID_LIKE.match(s)})]
-
-
-def extract_jar(root: Path, jar: Path) -> CodeResult:
-    jar_rel = jar.relative_to(root).as_posix()
-    facts: list[Fact] = []
-    literals: list[tuple[str, int, str, str]] = []
-    try:
-        with zipfile.ZipFile(jar) as archive:
-            names = [n for n in archive.namelist() if n.endswith(".class")]
-            if len(names) > MAX_JAR_ENTRIES:
-                return CodeResult([Fact("jar", jar_rel, "unreadable", jar_rel, 0, "too many entries", "UNKNOWN")], [])
-            for name in names:
-                try:
-                    data = archive.read(name)
-                    info = parse_class(data)
-                except (ClassFormatError, zipfile.BadZipFile, OSError, RuntimeError, EOFError):
-                    continue
-                rel = f"{jar_rel}!{name}"
-                facts += _jar_class_facts(info, rel, _digest(data))
-                literals += _jar_literals(info, rel)
-    except (zipfile.BadZipFile, OSError) as exc:
-        return CodeResult([Fact("jar", jar_rel, "unreadable", jar_rel, 0, f"{type(exc).__name__}: {exc}", "UNKNOWN")], [])
-    return CodeResult(facts, literals)
+    return CodeResult(facts, literals, constants)
 
 
 def extract_code(root: Path, with_jars: bool = True) -> CodeResult:
+    """Loose java plus loaded jars; mod-defined String constants from both resolve `getIndustry(Cls.X)` call sites (67b)."""
+    from .atlas_jar import extract_jar  # imported late: atlas_jar builds on this module
+
     result = extract_loose_java(root)
-    facts, literals = list(result.facts), list(result.literals)
+    facts, literals, constants = list(result.facts), list(result.literals), dict(result.constants)
     for jar in _loaded_mod_jars(root) if with_jars else []:
         part = extract_jar(root, jar)
         facts += part.facts
         literals += part.literals
-    return CodeResult(facts, literals)
+        constants.update(part.constants)
+    return CodeResult(resolve_constants(facts, constants), literals, constants)

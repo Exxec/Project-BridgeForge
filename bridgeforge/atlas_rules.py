@@ -5,6 +5,7 @@ Nothing here edits a mod: a finding names both sides, the files and lines, and t
 """
 from __future__ import annotations
 
+import difflib
 import re
 import sqlite3
 from collections import defaultdict
@@ -17,6 +18,7 @@ from .atlas_data import DATA_KINDS
 CRASH, SILENT, COSMETIC = "crash-class", "silent-behaviour", "cosmetic"
 CATEGORY_ORDER = {CRASH: 0, SILENT: 1, COSMETIC: 2}
 MISSING_KINDS = {"industry", "condition", "commodity", "faction", "special_item", "hullmod", "weapon", "wing", "hull", "system", "skill", "ability", "submarket"}
+CLOSE_ID_CUTOFF = 0.6
 MAX_SIDE_FACTS = 5
 MAX_NAMED_IDS = 8
 LEVEL_ORDER = {"MANUAL": 0, "REVIEW": 1, "UNKNOWN": 2, "SAFE": 3}
@@ -106,6 +108,8 @@ def build_profile(mod: str, facts: list[AFact]) -> Profile:
     removed: dict[tuple[str, str], list[AFact]] = defaultdict(list)
     added: dict[str, set[str]] = defaultdict(set)
     for fact in (f for f in facts if f.mod == mod):
+        if fact.confidence == "UNKNOWN" or fact.evidence.startswith("prefix-resolved"):
+            continue  # guesses (unscanned class, id built from a prefix) never decide what a mod replaces
         method = _method(fact)
         if fact.action == "replaces":
             entry = profile.replaced.setdefault((fact.kind, fact.id), {"by": set(), "facts": [], "how": "csv upgrade/downgrade chain"})
@@ -211,15 +215,21 @@ def rule_reads_missing(facts: list[AFact]) -> list[Finding]:
     if not any(f.mod == VANILLA_ID for f in facts):
         return []
     defined = {(f.kind, f.id) for f in facts if f.action in ("defines", "overrides", "patches")}
+    defined_ids: dict[str, list[str]] = defaultdict(list)
+    for kind, ident in sorted(defined):
+        defined_ids[kind].append(ident)
     out = []
     for f in facts:
         literal_call = f.evidence.startswith("method=") and " via " not in f.evidence
         method = _method(f)
         if (f.action == "reads" or method.startswith("add")) and f.kind in MISSING_KINDS and literal_call and f.id != "<dynamic>" \
                 and (f.kind, f.id) not in defined:
+            close = difflib.get_close_matches(f.id.lower(), [i.lower() for i in defined_ids[f.kind]], n=1, cutoff=CLOSE_ID_CUTOFF)
+            closest = next((i for i in defined_ids[f.kind] if close and i.lower() == close[0]), "")
+            hint = f"; closest id a provider does define: '{closest}' (a renamed id?)" if closest else ""
             out.append(Finding("ATLAS-READS-MISSING", "REVIEW", CRASH,
                                f"{f.mod} uses {f.kind} '{f.id}' ({_where(f)}) but no mod in this set and not vanilla defines it "
-                               "(often an optional soft dependency)", [f.mod], [_side(f)], [f.id]))
+                               f"(often an optional soft dependency){hint}", [f.mod], [_side(f)], [f.id, *([closest] if closest else [])]))
     return out
 
 

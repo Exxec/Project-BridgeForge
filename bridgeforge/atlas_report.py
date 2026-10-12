@@ -12,8 +12,9 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from .atlas import DEFAULT_DB, AtlasError, build_atlas, connect, default_roots, group_mods, latest_mods, resolve_mods
-from .atlas_rules import build_profile, forecast, load_facts
+from .atlas import (DEFAULT_DB, ORIGINAL_SUFFIX, AtlasError, build_atlas, connect, default_roots, group_mods, latest_mods,
+                    original_roots, resolve_mods)
+from .atlas_rules import AFact, build_profile, forecast, load_facts
 
 DEFAULT_LIMIT = 25
 CSS = ("body{font-family:system-ui,sans-serif;margin:24px auto;max-width:1100px;padding:0 16px;color:#1b1b1b;background:#fff}"
@@ -46,6 +47,41 @@ def id_data(conn: sqlite3.Connection, ident: str) -> dict:
         if latest.get(r["mod"]) == r["version"]:
             by_mod[r["mod"]].append({k: r[k] for k in ("kind", "action", "file", "line", "evidence", "confidence")})
     return {"id": ident, "mods": dict(by_mod)}
+
+
+def diff_data(conn: sqlite3.Connection, mod: dict) -> dict:
+    """Facts only in the working copy, and only in the `+original` copy, of one mod (67c)."""
+    originals = [r["version"] for r in conn.execute("SELECT version FROM mods WHERE id = ? AND version LIKE ?",
+                                                     (mod["id"], "%" + ORIGINAL_SUFFIX))]
+    if not originals:
+        raise AtlasError(f"{mod['id']} has no '{ORIGINAL_SUFFIX}' copy indexed; run `atlas build --include-originals`")
+    original = {"id": mod["id"], "version": sorted(originals)[0]}
+
+    def keyed(source: dict) -> dict[tuple, AFact]:
+        return {(f.kind, f.id, f.action): f for f in load_facts(conn, [source]) if f.id != "<dynamic>"}
+
+    working, before = keyed(mod), keyed(original)
+
+    def rows(only: dict, other: dict) -> list[dict]:
+        return [{"kind": k[0], "id": k[1], "action": k[2], "at": _where_of(f), "evidence": f.evidence, "confidence": f.confidence}
+                for k, f in sorted(only.items()) if k not in other]
+
+    return {"mod": mod["id"], "working": mod["version"], "original": original["version"],
+            "only_working": rows(working, before), "only_original": rows(before, working)}
+
+
+def _where_of(fact: AFact) -> str:
+    return f"{fact.file}:{fact.line}" if fact.line else fact.file
+
+
+def diff_text(data: dict, limit: int) -> str:
+    lines = [f"{data['mod']}: working {data['working']} vs original {data['original']}"]
+    for key, title in (("only_working", "only in the working copy (added or fixed)"), ("only_original", "only in the original (removed or changed)")):
+        lines.append(f"  {title}: {len(data[key])}")
+        lines += [f"    {r['kind']} {r['action']} {r['id']}  {r['at']}  ({r['confidence']})" for r in data[key][:limit]]
+        if len(data[key]) > limit:
+            lines.append(f"    ... {len(data[key]) - limit} more (raise --limit, or use --json)")
+    return "\n".join(lines)
 
 
 def forecast_data(result: dict) -> dict:
@@ -160,8 +196,10 @@ def run_cli(args) -> int:
     conn = None
     try:
         if args.atlas_command == "build":
-            roots = args.roots or default_roots(Path.cwd())
-            stats = build_atlas([Path(r) for r in roots], args.db, args.quiet)
+            base = args.base or Path.cwd()
+            roots = args.roots or default_roots(base)
+            originals = original_roots(base) if args.include_originals else []
+            stats = build_atlas([Path(r) for r in roots], args.db, args.quiet, originals)
             _emit(args, stats, "Atlas built: " + ", ".join(f"{k}={v}" for k, v in stats.items()))
             return 0
         conn = connect(args.db)
@@ -171,6 +209,9 @@ def run_cli(args) -> int:
             if args.html:
                 for entry in data:
                     print("wrote", write_html(args.html, "mod_" + entry["mod"]["id"], show_html(entry)), file=sys.stderr)
+        elif args.atlas_command == "diff":
+            data = [diff_data(conn, mod) for mod in resolve_mods(conn, [args.mod])]
+            _emit(args, data, "\n".join(diff_text(d, args.limit) for d in data))
         elif args.atlas_command == "id":
             data = id_data(conn, args.id)
             _emit(args, data, id_text(data))
@@ -199,7 +240,13 @@ def add_parser(subcommands) -> None:
     build = sub.add_parser("build", help="index mod folders into a SQLite atlas (default roots: Done/, In operation/*/working, the rig's mods and its vanilla starsector-core); a mod is re-read only when its files change")
     build.add_argument("roots", nargs="*", type=Path, help="folders holding mods (a folder with mod_info.json is a mod; a starsector-core folder is indexed as 'vanilla')")
     build.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
+    build.add_argument("--include-originals", action="store_true", help="also index each `In operation/*/original/` copy as version '<v>+original', so `atlas diff MOD` can compare before and after")
+    build.add_argument("--base", type=Path, help="project folder holding Done/ and In operation/ (default: the current folder)")
     build.add_argument("--json", action="store_true")
+    diff = sub.add_parser("diff", help="facts only in a mod's working copy and facts only in its '+original' copy (needs `atlas build --include-originals`)")
+    diff.add_argument("mod", help="mod id, name, folder, acronym or part of one")
+    diff.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="facts shown per side (text only)")
+    diff.add_argument("--json", action="store_true")
     show = sub.add_parser("show", help="everything one mod adds, changes, reads and hooks, plus its replacement profile")
     show.add_argument("mod", help="mod id, name, folder, acronym (DNEEP) or part of one")
     show.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="facts shown per kind/action group (text only)")
@@ -211,5 +258,5 @@ def add_parser(subcommands) -> None:
     for command in (show, ident, fore):
         command.add_argument("--json", action="store_true")
         command.add_argument("--html", type=Path, metavar="DIR", help="also write plain self-contained HTML files into DIR")
-    for command in (build, show, ident, fore):
+    for command in (build, show, diff, ident, fore):
         command.add_argument("--db", type=Path, default=DEFAULT_DB, help=f"atlas file (default: {DEFAULT_DB})")
