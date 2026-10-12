@@ -46,6 +46,10 @@ public final class ProbeConfig {
     public final List<String> missionShips = new ArrayList<String>();
     public final List<String> missionWings = new ArrayList<String>();
     public final List<String> classSweep = new ArrayList<String>();
+    // 0.2.25: commodity ids the mod adds (data/campaign/commodities.csv minus vanilla's), and supply expectations
+    // "commodity@industry" a test asks for (DNEEP food through AoTD farms, 2026-10-11).
+    public final List<String> modCommodities = new ArrayList<String>();
+    public final List<String> expectSupply = new ArrayList<String>();
 
     public static ProbeConfig load() throws Exception {
         ProbeConfig config = new ProbeConfig();
@@ -112,6 +116,8 @@ public final class ProbeConfig {
             addAll(missionFleets.optJSONArray("wing"), config.missionWings);
         }
         addAll(root.optJSONArray("class_sweep"), config.classSweep);
+        addAll(root.optJSONArray("mod_commodities"), config.modCommodities);
+        addAll(root.optJSONArray("expect_supply"), config.expectSupply);
         JSONObject bodyTypes = root.optJSONObject("mod_body_types");
         if (bodyTypes != null) {
             JSONArray typeNames = bodyTypes.names();

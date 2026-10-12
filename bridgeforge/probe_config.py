@@ -52,7 +52,24 @@ _SETUP_PATTERNS = {
     "ship": re.compile(r"^ship:(?P<variant>[A-Za-z0-9_\-]+)(?::(?P<count>\d+))?$"),
     "spawn-fleet": re.compile(r"^spawn-fleet:(?P<faction>[A-Za-z0-9_]+):(?P<fp>\d+(?:\.\d+)?)$"),
     "jump": re.compile(r"^jump:(?P<system>.+)$"),
+    # Probe 0.2.25: replace industry <from> with <to> on up to <count> markets, optionally only those with a condition id
+    # starting <prefix> (DNEEP food through Ashes of the Domain's farms, 2026-10-11).
+    "swap-industry": re.compile(r"^swap-industry:(?P<from>[A-Za-z0-9_]+):(?P<to>[A-Za-z0-9_]+):(?P<count>\d+)(?::(?P<prefix>[A-Za-z0-9_]+))?$"),
 }
+
+# Probe 0.2.25 supply expectation: "<commodity>@<industry>", FAIL in-game unless that industry supplies the commodity somewhere.
+EXPECT_SUPPLY_PATTERN = re.compile(r"^[A-Za-z0-9_]+@[A-Za-z0-9_]+$")
+
+
+def parse_expect_supply(specs: list[str] | None) -> list[str]:
+    """Validate --expect-supply specs (commodity@industry), keeping order."""
+    found = []
+    for spec in specs or []:
+        spec = spec.strip()
+        if not EXPECT_SUPPLY_PATTERN.match(spec):
+            raise ProbeConfigError(f"--expect-supply {spec!r}: expected <commodity>@<industry>.")
+        found.append(spec)
+    return found
 
 
 class ProbeConfigError(ValueError):
@@ -73,7 +90,7 @@ def validate_setup_spec(spec: str) -> str:
     if pattern is None:
         raise ProbeConfigError(
             f"Unrecognized --setup kind in {spec!r}; expected one of "
-            "rep:/credits:/ship:/spawn-fleet:/jump:."
+            "rep:/credits:/ship:/spawn-fleet:/jump:/swap-industry:."
         )
     match = pattern.match(spec)
     if not match:
@@ -417,6 +434,25 @@ def _vanilla_special_items() -> set[str]:
     return {(row.get("id") or "").strip() for row in rows if (row.get("id") or "").strip()}
 
 
+def _csv_ids(path: Path) -> set[str]:
+    import csv
+    import io
+
+    if not path.is_file():
+        return set()
+    rows = csv.DictReader(io.StringIO(path.read_text(encoding="utf-8-sig", errors="replace")))
+    return {i for i in ((row.get("id") or "").strip() for row in rows) if i and not i.startswith("#")}
+
+
+def _mod_commodities(mod_root: Path) -> list[str]:
+    """Commodity ids the mod adds in data/campaign/commodities.csv, minus vanilla's (probe 0.2.25 market-supply): the probe
+    reports where each is supplied and demanded, and FAILs demand with no supply (DNEEP food with AoTD, 2026-10-11)."""
+    from .java_toolchain import REPO_ROOT
+
+    vanilla = _csv_ids(REPO_ROOT / "In operation" / "_rig" / "starsector-core" / "data" / "campaign" / "commodities.csv")
+    return sorted(_csv_ids(mod_root / "data" / "campaign" / "commodities.csv") - vanilla)
+
+
 def _content_ship_hulls(mod_root: Path, deployable_hulls: list[str]) -> dict[str, str]:
     """{variant id: hullId the .variant names} for the variants the probe builds as SHIPs, so it can
     report a built member whose hull differs (the game substituting a default hull: PRB-FIGHTER-01's
@@ -524,6 +560,8 @@ def build_probe_config(
         "content_wings": sorted(_wing_ids_set(mod_root / "data" / "hulls" / "wing_data.csv")),
         "mission_fleets": _mission_fleet_refs(mod_root),
         "class_sweep": _class_sweep(mod_root),
+        "mod_commodities": _mod_commodities(mod_root),
+        "expect_supply": [],
         "campaign_interval_days": campaign_interval_days,
         "combat_seconds": combat_seconds,
         "combat_cap_per_side": combat_cap_per_side,

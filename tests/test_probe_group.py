@@ -699,3 +699,66 @@ class CombatPerfTests(unittest.TestCase):
     def test_a_runaway_in_a_bigger_group_makes_every_member_unclear(self) -> None:
         report = self._report(2)
         self.assertEqual({v["verdict"] for v in report["members"].values()}, {"UNCLEAR"})
+
+
+class MarketSupplyTests(unittest.TestCase):
+    """Probe 0.2.25's market-supply check: DNEEP's food vanished with Ashes of the Domain's farms and nothing noticed (2026-10-11)."""
+
+    CONTENT = "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.25|content-ids|OK|all-content|checked=1 failed=0\n"
+
+    @staticmethod
+    def _member(queue: Path, name: str, mod_id: str, commodities: list[str]) -> Path:
+        working = _workspace(queue, name, mod_id, f"hull_{mod_id}")
+        (working / "data" / "campaign").mkdir(parents=True)
+        (working / "data" / "campaign" / "commodities.csv").write_text("name,id\n" + "".join(f"X,{c}\n" for c in commodities), encoding="utf-8")
+        return working
+
+    def test_the_config_lists_the_mods_commodities_and_a_group_keeps_sweeps(self) -> None:
+        with resolved_temp_dir() as root:
+            a = build_probe_config(self._member(root / "q", "A", "mod_a", ["dneep_grain", "#comment"]))
+            b = build_probe_config(self._member(root / "q", "B", "mod_b", ["zz_ore"]))
+        a["class_sweep"], a["mission_fleets"] = ["data.A"], {"ship": ["v_a"], "wing": []}
+        merged = merge_configs([a, b])
+        self.assertEqual(a["mod_commodities"], ["dneep_grain"])
+        self.assertEqual(merged["mod_commodities"], ["dneep_grain", "zz_ore"])
+        self.assertEqual(merged["class_sweep"], ["data.A"])
+        self.assertEqual(merged["mission_fleets"]["ship"], ["v_a"])
+        self.assertEqual(merged["group_members"]["mod_b"]["commodities"], ["zz_ore"])
+
+    def _report(self, lines: str):
+        with resolved_temp_dir() as root:
+            configs = [build_probe_config(self._member(root / "q", n, f"mod_{n.lower()}", [f"c_{n.lower()}"])) for n in ("A", "B")]
+            log = root / "run.stdout.log"
+            log.write_text(self.CONTENT + lines, encoding="utf-8")
+            return group_report(log, merge_configs(configs))
+
+    def test_demand_without_supply_fails_the_commodity_owner_only(self) -> None:
+        report = self._report("BF-PROBE|0.2.25|market-supply|FAIL|c_a|supplied in 0 market(s); demanded in 4: demand with no supply anywhere\n"
+                              "BF-PROBE|0.2.25|market-supply|FAIL|commodities|checked=2 expectations=0 failed=1\n")
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "FAIL")
+        self.assertEqual(report["members"]["mod_b"]["verdict"], "PASS")
+        self.assertEqual(report["unattributed"], [])
+
+    def test_an_unmet_expectation_is_blamed_on_the_commodity_owner(self) -> None:
+        report = self._report("BF-PROBE|0.2.25|market-supply|FAIL|c_b@aotd_subsidised_farming|no market runs aotd_subsidised_farming\n")
+        self.assertEqual(report["members"]["mod_b"]["verdict"], "FAIL")
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
+
+    def test_install_writes_setups_and_expectations_and_rejects_bad_ones(self) -> None:
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            self._member(queue, "A", "mod_a", ["dneep_grain"])
+            rig = _rig(root)
+            core = root / "core_real"
+            core.mkdir()
+            link_dir(core, rig / "starsector-core")
+            plan = plan_groups(queue, rig)
+            install_group(plan, 1, queue, rig, install_probe=False, setups=["swap-industry:farming:aotd_subsidised_farming:3:DNEEP_grain"],
+                          expect_supply=["dneep_grain@aotd_subsidised_farming"])
+            config = json.loads((rig / "saves" / "common" / "bf_probe_config.data").read_text(encoding="utf-8"))
+            with self.assertRaises(ValueError):
+                install_group(plan, 1, queue, rig, install_probe=False, expect_supply=["dneep_grain"])
+            with self.assertRaises(ValueError):
+                install_group(plan, 1, queue, rig, install_probe=False, setups=["swap-industry:farming:x"])
+        self.assertEqual(config["setups"], ["swap-industry:farming:aotd_subsidised_farming:3:DNEEP_grain"])
+        self.assertEqual(config["expect_supply"], ["dneep_grain@aotd_subsidised_farming"])

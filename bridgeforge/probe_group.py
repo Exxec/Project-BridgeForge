@@ -356,10 +356,15 @@ def merge_configs(configs: list[dict]) -> dict:
         "combat_seconds": max((c["combat_seconds"] for c in configs), default=60.0),
         "combat_cap_per_side": max((c["combat_cap_per_side"] for c in configs), default=12),
         "group_members": {}, "mod_systems": [], "mod_body_types": {},
+        # 2026-10-11: class_sweep and mission_fleets were dropped here, so group runs never swept classes or mission fleets.
+        "class_sweep": [], "mission_fleets": {"ship": [], "wing": []}, "mod_commodities": [], "expect_supply": [],
     }
     for c in configs:
-        for key in ("hulls", "track_entities", "factions", "patched_factions", "content_special_items", "content_wings", "hulls_skipped_no_variant"):
+        for key in ("hulls", "track_entities", "factions", "patched_factions", "content_special_items", "content_wings", "hulls_skipped_no_variant",
+                    "class_sweep", "mod_commodities", "expect_supply"):
             merged[key] = sorted(set(merged[key]) | set(c.get(key) or []))
+        for kind in ("ship", "wing"):
+            merged["mission_fleets"][kind] = sorted(set(merged["mission_fleets"][kind]) | set((c.get("mission_fleets") or {}).get(kind) or []))
         for kind in ("ship", "other"):
             merged["content_variants"][kind] = sorted(set(merged["content_variants"][kind]) | set(c["content_variants"][kind]))
         merged["variants"].update(c.get("variants") or {})
@@ -368,7 +373,8 @@ def merge_configs(configs: list[dict]) -> dict:
         merged["mod_body_types"].update(c.get("mod_body_types") or {})
         merged["group_members"][c["target_mod_id"]] = {
             "hulls": sorted(c["hulls"]), "variants": sorted(set(c["content_variants"]["ship"]) | set(c["content_variants"]["other"])),
-            "wings": sorted(c["content_wings"]), "items": sorted(c["content_special_items"]), "factions": sorted(set(c["factions"]) | set(c.get("patched_factions") or []))}
+            "wings": sorted(c["content_wings"]), "items": sorted(c["content_special_items"]), "factions": sorted(set(c["factions"]) | set(c.get("patched_factions") or [])),
+            "commodities": sorted(c.get("mod_commodities") or [])}
     return merged
 
 
@@ -487,9 +493,15 @@ def lunalib_advice(enabled: list[str], installed: dict[str, str]) -> str | None:
 
 
 def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install_probe: bool = True,
-                  stage: bool = False, with_lunalib: bool = False) -> dict:
+                  stage: bool = False, with_lunalib: bool = False, setups: list[str] | None = None,
+                  expect_supply: list[str] | None = None) -> dict:
     """Copy/sync members into the rig, write the merged config, set enabled_mods.json. A group whose members
-    need providers from the queue installs only with `stage` (`--stage-providers`), which copies and verifies them."""
+    need providers from the queue installs only with `stage` (`--stage-providers`), which copies and verifies them.
+    `setups` (probe setup specs) and `expect_supply` ("commodity@industry") go into the merged config (probe 0.2.25)."""
+    from .probe_config import parse_expect_supply, parse_setups
+
+    setups = parse_setups(setups)
+    expect_supply = parse_expect_supply(expect_supply)
     rig = Path(rig).expanduser().resolve()
     queue = Path(queue).expanduser().resolve()
     _refuse_non_rig(rig)
@@ -524,6 +536,8 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
         installed[member["mod_id"]] = member["workspace"]
     moved_aside = _move_aside_duplicate_ids(rig, {m["mod_id"]: mods_dir / m["workspace"] for m in group["members"]})
     config = merge_configs(configs)
+    config["setups"] = [*config["setups"], *setups]
+    config["expect_supply"] = sorted(set(config["expect_supply"]) | set(expect_supply))
     common = rig / "saves" / "common"
     common.mkdir(parents=True, exist_ok=True)
     _reset_combat_round(common)
@@ -597,7 +611,7 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
     members = config.get("group_members") or {}
     owner: dict[str, str] = {}
     for mod_id, ids in members.items():
-        for kind in ("hulls", "variants", "wings", "items", "factions"):
+        for kind in ("hulls", "variants", "wings", "items", "factions", "commodities"):
             for item in ids.get(kind, []):
                 owner.setdefault(item, mod_id)
     verdicts = {mod_id: {"failures": [], "crashes": []} for mod_id in members}
@@ -613,9 +627,11 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
                 filler_sides.append(match["subject"])  # ROADMAP P15 31.13: vanilla ships stood in for a side
         if match["status"] != "FAIL":
             continue
-        subject = match["subject"].split(":", 1)[-1].split("/", 1)[0]
+        subject = match["subject"].split(":", 1)[-1].split("/", 1)[0].split("@", 1)[0]  # market-supply names "commodity@industry"
         mod_id = owner.get(subject)
-        if mod_id is None and match["check"] in ("campaign-layout", "combat-perf") and len(members) == 1:
+        if match["check"] == "market-supply" and match["subject"] == "commodities":
+            continue  # the summary repeats the per-commodity FAIL lines above it
+        if mod_id is None and match["check"] in ("campaign-layout", "combat-perf", "market-supply") and len(members) == 1:
             mod_id = next(iter(members))  # a sector-layout line names a system, not a content id: with one member it is that member's
         entry = f"{match['check']}|{match['subject']}|{match['detail'].strip()[:200]}"
         if mod_id and any(a["check"] == match["check"] and a["subject"] == match["subject"] for a in (accepted or {}).get(mod_id, [])):
@@ -629,7 +645,7 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
         text = f"{event.get('matched_rule') or event.get('level')}: {str(event.get('message'))[:160]}"
         (verdicts[suspect]["crashes"] if suspect in verdicts else unattributed).append(text)
     # combat-perf FAIL (probe 0.2.24): a runaway field in a group of several members belongs to the group, so it is UNCLEAR.
-    group_crash = any(not item.startswith(("content-ids", "faction", "planet", "rings", "submarket", "fleet", "setup", "combat"))
+    group_crash = any(not item.startswith(("content-ids", "faction", "planet", "rings", "submarket", "fleet", "setup", "combat", "market-supply"))
                       or item.startswith("combat-perf") for item in unattributed) or (triage["counts"]["FATAL"] and not any(v["crashes"] for v in verdicts.values()))
     for mod_id, verdict in verdicts.items():
         if verdict["failures"] or verdict["crashes"]:

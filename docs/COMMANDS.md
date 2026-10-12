@@ -1013,7 +1013,7 @@ write bf_probe_config/bf_probe_rig into a test rig's saves/common, and optionall
 | `--campaign-interval-days` CAMPAIGN_INTERVAL_DAYS | default 5.0 | campaign probe re-run interval in in-game days (default: 5) |
 | `--combat-cap` COMBAT_CAP | default 12 | max hulls per side in the combat probe mission (default: 12) |
 | `--track` ENTITY | repeatable | custom entity id to track position for; repeatable |
-| `--setup` SPEC | repeatable | in-game setup applied once per save via the public API: rep:<faction>=<RepLevel\|n>, credits:<N>, ship:<variant>[:<count>], spawn-fleet:<faction>:<fp>, jump:<system>; repeatable |
+| `--setup` SPEC | repeatable | in-game setup applied once per save via the public API: rep:<faction>=<RepLevel\|n>, credits:<N>, ship:<variant>[:<count>], spawn-fleet:<faction>:<fp>, jump:<system>, swap-industry:<from>:<to>:<count>[:<condition-prefix>]; repeatable |
 | `--profile` NAME\|PATH | - | setup profile (Notepad-friendly .txt): a bundled name (exigency-rep, seeker-betelgeuse, flux-basic) or a path; merged after --setup |
 | `--install` | - | also install/refresh the probe mod into <runtime>/mods/bridgeforge-probe/ from the release copy |
 | `--dry-run` | - | report what would be written without touching the rig |
@@ -1864,6 +1864,8 @@ copy/sync one group's mods into the rig, write the merged probe config, set enab
 | `--rig` RIG | - | - |
 | `--stage-providers` | - | also copy the queue workspaces that provide missing dependencies into the rig, verifying id, version and files (ROADMAP 36.1) |
 | `--with-lunalib` | - | also enable LunaLib when GraphicsLib is enabled without it (RC8-25: GraphicsLib 1.12.1 needs it under Fast Rendering) |
+| `--setup` SPEC | repeatable | probe setup applied once per save, as for probe-config --setup; also swap-industry:<from>:<to>:<count>[:<condition-prefix>] (probe 0.2.25); repeatable |
+| `--expect-supply` COMMODITY@INDUSTRY | repeatable | the probe's market-supply check FAILs unless INDUSTRY supplies COMMODITY in some market (probe 0.2.25); repeatable |
 | `--json` | - | - |
 
 ## probe-group bisect

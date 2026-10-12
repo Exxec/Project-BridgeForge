@@ -495,7 +495,7 @@ def build_parser() -> argparse.ArgumentParser:
     probe_config_cmd.add_argument("--campaign-interval-days", type=float, default=5.0, help="campaign probe re-run interval in in-game days (default: 5)")
     probe_config_cmd.add_argument("--combat-cap", type=int, default=12, help="max hulls per side in the combat probe mission (default: 12)")
     probe_config_cmd.add_argument("--track", action="append", default=[], metavar="ENTITY", help="custom entity id to track position for; repeatable")
-    probe_config_cmd.add_argument("--setup", action="append", default=[], metavar="SPEC", help="in-game setup applied once per save via the public API: rep:<faction>=<RepLevel|n>, credits:<N>, ship:<variant>[:<count>], spawn-fleet:<faction>:<fp>, jump:<system>; repeatable")
+    probe_config_cmd.add_argument("--setup", action="append", default=[], metavar="SPEC", help="in-game setup applied once per save via the public API: rep:<faction>=<RepLevel|n>, credits:<N>, ship:<variant>[:<count>], spawn-fleet:<faction>:<fp>, jump:<system>, swap-industry:<from>:<to>:<count>[:<condition-prefix>]; repeatable")
     probe_config_cmd.add_argument("--profile", metavar="NAME|PATH", help="setup profile (Notepad-friendly .txt): a bundled name (exigency-rep, seeker-betelgeuse, flux-basic) or a path; merged after --setup")
     probe_config_cmd.add_argument("--install", action="store_true", help="also install/refresh the probe mod into <runtime>/mods/bridgeforge-probe/ from the release copy")
     probe_config_cmd.add_argument("--dry-run", action="store_true", help="report what would be written without touching the rig")
@@ -903,6 +903,8 @@ def build_parser() -> argparse.ArgumentParser:
     group_install.add_argument("--rig", type=Path)
     group_install.add_argument("--stage-providers", action="store_true", help="also copy the queue workspaces that provide missing dependencies into the rig, verifying id, version and files (ROADMAP 36.1)")
     group_install.add_argument("--with-lunalib", action="store_true", help="also enable LunaLib when GraphicsLib is enabled without it (RC8-25: GraphicsLib 1.12.1 needs it under Fast Rendering)")
+    group_install.add_argument("--setup", action="append", default=[], metavar="SPEC", help="probe setup applied once per save, as for probe-config --setup; also swap-industry:<from>:<to>:<count>[:<condition-prefix>] (probe 0.2.25); repeatable")
+    group_install.add_argument("--expect-supply", action="append", default=[], metavar="COMMODITY@INDUSTRY", help="the probe's market-supply check FAILs unless INDUSTRY supplies COMMODITY in some market (probe 0.2.25); repeatable")
     group_install.add_argument("--json", action="store_true")
     group_bisect = group_sub.add_parser("bisect", help="split a failed group into two new groups at the end of the plan, each dependency-closed (ROADMAP 36.8)")
     group_bisect.add_argument("group", type=int)
@@ -1587,7 +1589,8 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"Plan written: {target}. Next: bridgeforge probe-group install <N>, then bf-test.ps1 launch <TESTID>.")
             elif args.probe_group_command == "install":
                 plan = json.loads((args.plan or queue / "PROBE_GROUPS.json").read_text(encoding="utf-8"))
-                result = install_group(plan, args.group, queue, rig, stage=args.stage_providers, with_lunalib=args.with_lunalib)
+                result = install_group(plan, args.group, queue, rig, stage=args.stage_providers, with_lunalib=args.with_lunalib,
+                                       setups=args.setup, expect_supply=args.expect_supply)
                 if not args.json:
                     print(f"Group {result['group']} installed: {', '.join(result['members'])}")
                     for item in result["staged_providers"]:

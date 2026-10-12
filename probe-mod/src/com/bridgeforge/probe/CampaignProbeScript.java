@@ -239,6 +239,11 @@ public class CampaignProbeScript implements EveryFrameScript {
                 checkHullModDescriptions();
             }
         });
+        runCheck("market-supply", new Runnable() {
+            public void run() {
+                checkMarketSupply();
+            }
+        });
         ProbeLog.end("campaign");
     }
 
@@ -767,6 +772,147 @@ public class CampaignProbeScript implements EveryFrameScript {
         }
         ProbeLog.emit("hullmod-descriptions", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "all-hullmods",
                 "checked=" + checked + " failed=" + failed);
+    }
+
+    // ---- 0.2.25: does anything supply the mod's commodities? ------------------------------------------
+    //
+    // Doc's Needless Economic Expansion Pack's food (dneep_grain and the rest) vanished with Ashes of the Domain, whose farms
+    // replace vanilla "farming" under other ids; the probe passed because nothing looked at the economy (2026-10-11). For each
+    // commodity the mod adds, count the markets whose functional industries supply and demand it, naming the supplying
+    // industries. Demand with no supply anywhere is a FAIL. An expectation "commodity@industry" FAILs unless some market's
+    // industry of that id supplies it. API (javap RC8 starfarer.api.jar, 2026-10-11): MarketAPI.getIndustries,
+    // Industry.getId/isFunctional/getAllSupply/getAllDemand, MutableCommodityQuantity.getCommodityId/getQuantity.
+
+    private void checkMarketSupply() {
+        Set<String> commodities = new java.util.TreeSet<String>(config.modCommodities);
+        for (String expectation : config.expectSupply) {
+            int at = expectation.indexOf('@');
+            if (at > 0) {
+                commodities.add(expectation.substring(0, at));
+            }
+        }
+        if (commodities.isEmpty()) {
+            return;
+        }
+        java.util.Map<String, java.util.Map<String, Integer>> suppliers = new java.util.HashMap<String, java.util.Map<String, Integer>>();
+        java.util.Map<String, Integer> supplyMarkets = new java.util.HashMap<String, Integer>();
+        java.util.Map<String, Integer> demandMarkets = new java.util.HashMap<String, Integer>();
+        java.util.Map<String, Integer> totals = new java.util.HashMap<String, Integer>();
+        Set<String> industriesPresent = new HashSet<String>();
+        for (MarketAPI market : Global.getSector().getEconomy().getMarketsCopy()) {
+            for (com.fs.starfarer.api.campaign.econ.Industry industry : market.getIndustries()) {
+                industriesPresent.add(industry.getId());
+            }
+            for (String commodity : commodities) {
+                boolean supplied = false;
+                boolean demanded = false;
+                for (com.fs.starfarer.api.campaign.econ.Industry industry : market.getIndustries()) {
+                    int supply = quantity(industry.getAllSupply(), commodity);
+                    if (supply > 0 && industry.isFunctional()) {
+                        supplied = true;
+                        increment(totals, commodity, supply);
+                        java.util.Map<String, Integer> byIndustry = suppliers.get(commodity);
+                        if (byIndustry == null) {
+                            byIndustry = new java.util.TreeMap<String, Integer>();
+                            suppliers.put(commodity, byIndustry);
+                        }
+                        increment(byIndustry, industry.getId(), 1);
+                    }
+                    if (quantity(industry.getAllDemand(), commodity) > 0) {
+                        demanded = true;
+                    }
+                }
+                if (supplied) {
+                    increment(supplyMarkets, commodity, 1);
+                }
+                if (demanded) {
+                    increment(demandMarkets, commodity, 1);
+                }
+            }
+        }
+        int failed = 0;
+        for (String commodity : commodities) {
+            int supplied = count(supplyMarkets, commodity);
+            int demanded = count(demandMarkets, commodity);
+            String detail = "supplied in " + supplied + " market(s), total " + count(totals, commodity) + ", by "
+                    + (suppliers.containsKey(commodity) ? suppliers.get(commodity).toString() : "{}") + "; demanded in " + demanded + " market(s)";
+            if (demanded > 0 && supplied == 0) {
+                failed++;
+                ProbeLog.emit("market-supply", ProbeLog.STATUS_FAIL, commodity, detail + ": demand with no supply anywhere");
+            } else {
+                ProbeLog.emit("market-supply", ProbeLog.STATUS_INFO, commodity, detail);
+            }
+        }
+        for (String expectation : config.expectSupply) {
+            int at = expectation.indexOf('@');
+            if (at <= 0) {
+                continue;
+            }
+            String commodity = expectation.substring(0, at);
+            String industryId = expectation.substring(at + 1);
+            java.util.Map<String, Integer> byIndustry = suppliers.get(commodity);
+            int markets = byIndustry == null ? 0 : count(byIndustry, industryId);
+            if (markets > 0) {
+                ProbeLog.emit("market-supply", ProbeLog.STATUS_OK, expectation, industryId + " supplies " + commodity + " in " + markets + " market(s)");
+            } else {
+                failed++;
+                ProbeLog.emit("market-supply", ProbeLog.STATUS_FAIL, expectation, industriesPresent.contains(industryId)
+                        ? industryId + " runs in the sector but supplies no " + commodity
+                        : "no market runs " + industryId + " (the setup that should add it did not)");
+                diagnoseSupply(industryId);
+            }
+        }
+        ProbeLog.emit("market-supply", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "commodities",
+                "checked=" + commodities.size() + " expectations=" + config.expectSupply.size() + " failed=" + failed);
+    }
+
+    /** Why an expected industry supplies nothing: per market running it, whether it is functional, what it supplies and the
+     *  market's conditions (AoTD's monoculture plots on Eochu Bres supplied no DNEEP vegetables, GRP-DNEEP-SUPPLY-AOTD-20261011). */
+    private static void diagnoseSupply(String industryId) {
+        for (MarketAPI market : Global.getSector().getEconomy().getMarketsCopy()) {
+            com.fs.starfarer.api.campaign.econ.Industry industry = market.getIndustry(industryId);
+            if (industry == null) {
+                continue;
+            }
+            StringBuilder supplies = new StringBuilder();
+            for (com.fs.starfarer.api.campaign.econ.MutableCommodityQuantity q : industry.getAllSupply()) {
+                supplies.append(q.getCommodityId()).append('=').append(q.getQuantity().getModifiedInt()).append(' ');
+            }
+            StringBuilder conditions = new StringBuilder();
+            for (com.fs.starfarer.api.campaign.econ.MarketConditionAPI condition : market.getConditions()) {
+                conditions.append(condition.getId()).append(' ');
+            }
+            StringBuilder industries = new StringBuilder();
+            for (com.fs.starfarer.api.campaign.econ.Industry other : market.getIndustries()) {
+                industries.append(other.getId()).append(' ');
+            }
+            ProbeLog.emit("market-supply-diag", ProbeLog.STATUS_INFO, market.getId() + "/" + industryId,
+                    "functional=" + industry.isFunctional() + " building=" + industry.isBuilding() + " supplies: " + supplies.toString().trim()
+                            + "; industries: " + industries.toString().trim() + "; conditions: " + conditions.toString().trim());
+        }
+    }
+
+    /** Read through getAllSupply/getAllDemand: BaseIndustry.getSupply(id) adds an empty entry for an id it lacks. */
+    private static int quantity(List<com.fs.starfarer.api.campaign.econ.MutableCommodityQuantity> all, String commodity) {
+        if (all == null) {
+            return 0;
+        }
+        for (com.fs.starfarer.api.campaign.econ.MutableCommodityQuantity q : all) {
+            if (q != null && commodity.equals(q.getCommodityId()) && q.getQuantity() != null) {
+                return q.getQuantity().getModifiedInt();
+            }
+        }
+        return 0;
+    }
+
+    private static void increment(java.util.Map<String, Integer> map, String key, int by) {
+        Integer current = map.get(key);
+        map.put(key, current == null ? by : current + by);
+    }
+
+    private static int count(java.util.Map<String, Integer> map, String key) {
+        Integer value = map.get(key);
+        return value == null ? 0 : value;
     }
 
     private static int reportContent(String kind, String id, String problem) {
