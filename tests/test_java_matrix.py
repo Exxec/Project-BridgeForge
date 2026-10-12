@@ -87,8 +87,9 @@ class RunTests(unittest.TestCase):
         outcomes = iter(["PASS", "PASS", "PASS", "FAIL"])
         seen = []
 
-        def fake(rig, mods, timeout, log_name, bat_name):
+        def fake(rig, mods, timeout, log_name, bat_name, auto_click=False):
             seen.append(bat_name)
+            self.assertTrue(auto_click, "the launcher window waits for a click (2026-10-11); the matrix must click it")
             return {"status": next(outcomes), "reason": None, "log": log_name, "elapsed_seconds": 1.0, "triage": None}
 
         with resolved_temp_dir() as root, mock.patch.object(boot_test, "run_boot_test", fake), redirect_stderr(io.StringIO()) as err:
@@ -102,7 +103,7 @@ class RunTests(unittest.TestCase):
     def test_an_interrupted_run_resumes_from_its_checkpoint(self):
         calls = []
 
-        def fake(rig, mods, timeout, log_name, bat_name):
+        def fake(rig, mods, timeout, log_name, bat_name, auto_click=False):
             calls.append(log_name)
             if len(calls) == 2:
                 raise KeyboardInterrupt
@@ -145,7 +146,7 @@ class ParallelTests(unittest.TestCase):
             (rig / "mods" / "ModA" / "mod_info.json").write_text("{}", encoding="utf-8")
             seen = []
 
-            def fake(inst, mods, timeout, log_name, bat_name):
+            def fake(inst, mods, timeout, log_name, bat_name, auto_click=False):
                 seen.append(Path(inst))
                 return self._ok(inst, mods, timeout, log_name, bat_name)
 
@@ -196,7 +197,7 @@ class ParallelTests(unittest.TestCase):
     def test_skip_known_reuses_an_all_pass_for_the_same_mod_set_only(self):
         calls = []
 
-        def fake(rig, mods, timeout, log_name, bat_name):
+        def fake(rig, mods, timeout, log_name, bat_name, auto_click=False):
             calls.append(bat_name)
             return self._ok(rig, mods, timeout, log_name, bat_name)
 

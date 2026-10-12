@@ -537,7 +537,7 @@ def run_java_matrix(rig: Path, mods: list[str], variants: list[dict], repeats: i
                 if inst is not None:
                     _write_instance(inst, variant=variant["id"], launcher=variant["launcher"], java=variant["java_version"], mods=sorted(mods), run=run, of=repeats, state="running", started=time.time(), finished=None, status=None)
                 started = time.monotonic()
-                result = boot_test.run_boot_test(target_rig, mods, timeout=timeout, log_name=f"{base}-{variant['id']}-{run}", bat_name=variant["bat"])
+                result = boot_test.run_boot_test(target_rig, mods, timeout=timeout, log_name=f"{base}-{variant['id']}-{run}", bat_name=variant["bat"], auto_click=True)
                 seconds = time.monotonic() - started
                 triage = result.get("triage") if isinstance(result.get("triage"), dict) else {}
                 row = {"run": run, "status": result["status"], "reason": result.get("reason"), "elapsed_seconds": result.get("elapsed_seconds"), "log": result.get("log"), "triage": triage.get("counts"), "vanilla_shadowing_symptoms": len(triage.get("vanilla_shadowing_symptoms") or [])}
