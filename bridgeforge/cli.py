@@ -399,6 +399,8 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_test_cmd.add_argument("--json", action="store_true")
     from .atlas_report import add_parser as add_atlas_parser
     add_atlas_parser(subcommands)
+    from .move_machine import add_parser as add_migrate_parser
+    add_migrate_parser(subcommands)
     jm_cmd = subcommands.add_parser("java-matrix",help="boot one mod set through every Java version and launcher (direct / Fast Rendering) in a rig; local-only, needs a rig and the game install (ROADMAP item 61)")
     jm_sub = jm_cmd.add_subparsers(dest="java_matrix_command", required=True)
     jm_discover = jm_sub.add_parser("discover", help="list the JDKs found beside the rig's install, in the rig and in the usual install folders")
@@ -2963,6 +2965,9 @@ def main(argv: list[str] | None = None) -> int:
                 boot_result = result["boot_test"]
                 print(f"Boot test: {boot_result.get('status')} {boot_result.get('reason', '')}".rstrip())
         return 0 if result["status"] in {"PASS", "SAME_FOLDER"} else 1
+    if args.command in {"migrate-inventory", "relocate", "migrate-verify"}:
+        from .move_machine import run_cli as run_migrate
+        return run_migrate(args)
     if args.command == "atlas":
         from .atlas_report import run_cli as run_atlas
         return run_atlas(args)
