@@ -28,7 +28,19 @@
       "write_text": 2
     },
     "cli.py": {
-      "write_text": 27
+      "write_text": 9
+    },
+    "cmd_analysis.py": {
+      "write_text": 10
+    },
+    "cmd_bytecode.py": {
+      "write_text": 4
+    },
+    "cmd_scan.py": {
+      "write_text": 2
+    },
+    "cmd_translate.py": {
+      "write_text": 2
     },
     "conflicts.py": {
       "write_text": 1

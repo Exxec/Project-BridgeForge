@@ -22,6 +22,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "cmd_scan": ("mods-compat", "baseline-stats", "docs-index", "preset-check", "scan", "working-tree-layout", "source-authority", "build-input-manifest", "integration-scenarios", "compile-check", "revenantlib-check", "check-impact"),
     "cmd_analysis": ("corpus-audit", "cross-mod-analyze", "campaign-identity-inventory", "campaign-identity-check", "release-lineage", "library-api-inventory", "library-api-match", "dependency-api-check", "corpus-compare", "release-evaluate", "revival-audit", "api-diff"),
     "cmd_bytecode": ("decompile-jar", "port-interfaces", "patch-jar-sources", "decompiler-review", "bytecode-inspect", "bytecode-plan", "bytecode-diff", "bytecode-apply", "copy-drift", "jar-audit", "jar-packets", "port-hullmod-state", "patch-jar-class", "rebuild-jar"),
+    "cmd_translate": ("translate-export", "translate-apply", "translate-tm", "translate-check", "fix", "strip-plan", "descriptions", "translate-batch", "renamed-ids"),
 }
 
 
