@@ -801,6 +801,31 @@
       "reason": "revived for the owner's local archive (live-validated 2026-10-11); not published without the author's permission (owner decision 2026-09-27)",
       "recorded_on": "2026-10-11"
     },
+    "aotd_vok": {
+      "local_only": true,
+      "reason": "AoTD - Vaults of Knowledge is Kaysaar's mod; BridgeForge may patch it for the owner's local use but does not redistribute it (docs/AOTD_COMPAT_PLAN.md, ROADMAP item 63).",
+      "recorded_on": "2026-10-11"
+    },
+    "aotd_sop": {
+      "local_only": true,
+      "reason": "AoTD - Seats of Power is Kaysaar's mod; not redistributed by BridgeForge (docs/AOTD_COMPAT_PLAN.md, ROADMAP item 63).",
+      "recorded_on": "2026-10-11"
+    },
+    "aotd_qol": {
+      "local_only": true,
+      "reason": "AoTD - Question of Loyalty is Kaysaar's mod; not redistributed by BridgeForge (docs/AOTD_COMPAT_PLAN.md, ROADMAP item 63).",
+      "recorded_on": "2026-10-11"
+    },
+    "Cryo_but_better": {
+      "local_only": true,
+      "reason": "AoTD - Dreams of Past is Kaysaar's mod; not redistributed by BridgeForge (docs/AOTD_COMPAT_PLAN.md, ROADMAP item 63).",
+      "recorded_on": "2026-10-11"
+    },
+    "aotd_theory_of_toolbox": {
+      "local_only": true,
+      "reason": "zz AoTD - Theory of Toolbox - Scheduler Fork is a third-party fork (author Kirill, per the owner) of Kaysaar's Toolbox; not redistributed by BridgeForge. A revived mod that needs Toolbox names this fork, not the original (docs/AOTD_COMPAT_PLAN.md, ROADMAP item 63).",
+      "recorded_on": "2026-10-11"
+    },
     "cmutils": {
       "local_only": true,
       "reason": "revived for the owner's local archive (live-validated 2026-10-11); not published without the author's permission (owner decision 2026-09-27)",

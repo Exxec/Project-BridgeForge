@@ -399,6 +399,11 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_test_cmd.add_argument("--json", action="store_true")
     from .atlas_report import add_parser as add_atlas_parser
     add_atlas_parser(subcommands)
+    envc_cmd = subcommands.add_parser("env-check", help="read a launcher .bat (following @argfiles) and report java version, javaagents and their order, Prepatcher last or not, heap, and enabled mods that need Prepatcher the launch lacks; read-only (ROADMAP item 63)")
+    envc_cmd.add_argument("launcher", type=Path, help="the launcher .bat")
+    envc_cmd.add_argument("--vmparams", type=Path, action="append", default=[], help="extra vmparams / fr.vmparams file to read (repeatable)")
+    envc_cmd.add_argument("--mods-dir", type=Path, help="a mods folder with enabled_mods.json: enabled mods that depend on Prepatcher or the Toolbox fork are checked against the launch")
+    envc_cmd.add_argument("--json", action="store_true")
     jm_cmd = subcommands.add_parser("java-matrix",help="boot one mod set through every Java version and launcher (direct / Fast Rendering) in a rig; local-only, needs a rig and the game install (ROADMAP item 61)")
     jm_sub = jm_cmd.add_subparsers(dest="java_matrix_command", required=True)
     jm_discover = jm_sub.add_parser("discover", help="list the JDKs found beside the rig's install, in the rig and in the usual install folders")
@@ -410,6 +415,8 @@ def build_parser() -> argparse.ArgumentParser:
     jm_setup.add_argument("--java", type=int, nargs="+", metavar="MAJOR", help="only these Java majors (default: every JDK found)")
     jm_setup.add_argument("--launcher", nargs="+", choices=["direct", "fr", "miko", "miko-noprep"], help="default: both")
     jm_setup.add_argument("--jdk-root", type=Path, action="append", default=[])
+    jm_setup.add_argument("--prepatcher", action="store_true", help="also write a -prep twin of each direct/fr variant with the Prepatcher javaagent last (direct + Prepatcher is a recorded KNOWN_FAIL)")
+    jm_setup.add_argument("--include-known-fail", action="store_true", help="boot the KNOWN_FAIL variants too instead of only reporting them")
     jm_setup.add_argument("--json", action="store_true")
     jm_run = jm_sub.add_parser("run", help="boot --mods through every variant --repeats times and report a pass rate per variant")
     jm_run.add_argument("rig", type=Path)
@@ -417,6 +424,8 @@ def build_parser() -> argparse.ArgumentParser:
     jm_run.add_argument("--java", type=int, nargs="+", metavar="MAJOR")
     jm_run.add_argument("--launcher", nargs="+", choices=["direct", "fr", "miko", "miko-noprep"])
     jm_run.add_argument("--jdk-root", type=Path, action="append", default=[])
+    jm_run.add_argument("--prepatcher", action="store_true", help="also run a -prep twin of each direct/fr variant with the Prepatcher javaagent last (direct + Prepatcher is a recorded KNOWN_FAIL, reported not booted)")
+    jm_run.add_argument("--include-known-fail", action="store_true", help="boot the KNOWN_FAIL variants too instead of only reporting them")
     jm_run.add_argument("--repeats", type=int, default=3)
     jm_run.add_argument("--timeout", type=int, default=240)
     jm_run.add_argument("--log-name")
@@ -2943,6 +2952,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "atlas":
         from .atlas_report import run_cli as run_atlas
         return run_atlas(args)
+    if args.command == "env-check":
+        from . import env_check as envc
+        try:
+            checked = envc.env_check(args.launcher, args.vmparams, args.mods_dir)
+        except OSError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(checked, indent=2) if args.json else envc.render(checked))
+        return 1 if checked["findings"] else 0
     if args.command == "java-matrix":
         from . import java_matrix as jm
         try:
@@ -2987,7 +3005,7 @@ def main(argv: list[str] | None = None) -> int:
             elif getattr(args, "preset", None) == "real":
                 args.java, args.launcher = [28], ["miko", "miko-noprep"]
                 args.parallel = args.parallel or 2
-            variants = jm.plan_variants(jm.discover_jdks(args.rig, args.jdk_root), args.launcher, args.java)
+            variants = jm.plan_variants(jm.discover_jdks(args.rig, args.jdk_root), args.launcher, args.java, prepatcher=getattr(args, "prepatcher", False), include_known_fail=getattr(args, "include_known_fail", False))
             if not variants:
                 print("bridgeforge: no JDK matched; try `java-matrix discover` or --jdk-root", file=sys.stderr)
                 return 2

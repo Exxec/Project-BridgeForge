@@ -32,6 +32,11 @@ LAUNCHERS = ("direct", "fr", "miko", "miko-noprep")
 DEFAULT_LAUNCHERS = ("direct", "fr")  # miko variants mirror the owner's real launch and are opt-in
 MIKO_ARGS = "Miko_Simple.txt"  # the argument file Miko_Rouge.bat passes to java (@..\Miko_Simple.txt)
 PREPATCHER_MARKER = "StarsectorPrepatcherAgent"
+PREPATCHER_AGENT_REL = "mods\\StarsectorPrepatcher\\agent\\StarsectorPrepatcherAgent.jar"
+PREPATCHER_AGENT_FLAG = "-javaagent:..\\" + PREPATCHER_AGENT_REL  # relative to starsector-core, the bat's working directory
+# Live evidence 2026-10-11 (rig bats run-j25-fr-prepatcher.bat and the direct one): the direct launch with the agent
+# fails with ClassFormatError on CampaignState; the Fast Rendering launch plus the agent works. Not run by default.
+DIRECT_PREPATCHER_KNOWN_FAIL = "direct launch + Prepatcher agent fails with ClassFormatError on CampaignState (live 2026-10-11); Fast Rendering + agent works (run-j25-fr-prepatcher.bat)"
 DEFAULT_HEAP_GB = 4  # 32 GB machine, three instances: 3 x (heap + ~2 GB native) leaves room for the OS (owner 2026-10-10)
 
 # Directories searched for a JDK, in addition to the install the rig links to and the rig itself.
@@ -134,8 +139,8 @@ def describe_log_java(log: Path) -> dict:
     return result
 
 
-def variant_id(major: int, launcher: str) -> str:
-    return f"j{major}-{launcher}"
+def variant_id(major: int, launcher: str, prepatcher: bool = False) -> str:
+    return f"j{major}-{launcher}" + ("-prep" if prepatcher else "")
 
 
 def bat_name(vid: str) -> str:
@@ -196,10 +201,22 @@ def write_launcher_files(target: Path, variant: dict, core: Path) -> list[str]:
         lines = source.read_text(encoding="utf-8", errors="replace").splitlines()
         dropped = unsupported_flags(java_exe, [line.strip() for line in lines])
         kept = [line for line in lines if line.strip() not in dropped]
+        if variant.get("prepatcher"):
+            kept = [line for line in kept if PREPATCHER_MARKER not in line] + [PREPATCHER_AGENT_FLAG]  # last agent, after any FR agents
         (Path(target) / "fr.filtered.vmparams").write_text("\n".join(kept) + "\n", encoding="utf-8", newline="")
     variant["dropped_flags"] = dropped
-    (Path(target) / variant["bat"]).write_text(build_launcher(variant["jdk_home"], variant["launcher"], variant["major"], dropped, variant.get("heap_gb", DEFAULT_HEAP_GB), variant.get("id", "")), encoding="utf-8", newline="")
+    if variant.get("prepatcher"):
+        _link_prepatcher(Path(target), Path(core))
+    (Path(target) / variant["bat"]).write_text(build_launcher(variant["jdk_home"], variant["launcher"], variant["major"], dropped, variant.get("heap_gb", DEFAULT_HEAP_GB), variant.get("id", ""), bool(variant.get("prepatcher"))), encoding="utf-8", newline="")
     return dropped
+
+
+def _link_prepatcher(target: Path, core: Path) -> None:
+    """Make the Prepatcher mod folder reachable at <target>/mods/ for the agent path; the install is only read."""
+    prepatcher = Path(core).resolve().parent / "mods" / "StarsectorPrepatcher"
+    mods = Path(target) / "mods"
+    if prepatcher.is_dir() and mods.is_dir() and not (mods / prepatcher.name).exists():
+        _link(prepatcher, mods / prepatcher.name)
 
 
 def _write_miko_args(target: Path, variant: dict, core: Path, java_exe: Path) -> list[str]:
@@ -241,7 +258,7 @@ def _write_miko_args(target: Path, variant: dict, core: Path, java_exe: Path) ->
     return dropped
 
 
-def build_launcher(jdk_home: str, launcher: str, java_major: int, dropped: list[str] | None = None, heap_gb: int = DEFAULT_HEAP_GB, vid: str = "") -> str:
+def build_launcher(jdk_home: str, launcher: str, java_major: int, dropped: list[str] | None = None, heap_gb: int = DEFAULT_HEAP_GB, vid: str = "", prepatcher: bool = False) -> str:
     """Text of a rig launcher .bat. CWD is the starsector-core junction, as in the proven run-java25.bat.
 
     `dropped` (from write_launcher_files) lists flags to leave out; for Fast Rendering it also switches to the
@@ -259,6 +276,8 @@ def build_launcher(jdk_home: str, launcher: str, java_major: int, dropped: list[
     if launcher == "direct":
         flags = [" ".join(t for t in line.format(heap=heap_gb).split() if t not in (dropped or ())) for line in DIRECT_FLAGS]
         flags = [f for f in flags if f]
+        if prepatcher:
+            flags.append(PREPATCHER_AGENT_FLAG)  # the last javaagent (there is no other on the direct line)
         if java_major < 17:
             flags = [f.replace(" --enable-native-access=ALL-UNNAMED", "") for f in flags]
         body = [java + " ^"]
@@ -280,14 +299,22 @@ def build_launcher(jdk_home: str, launcher: str, java_major: int, dropped: list[
     return "\r\n".join(head + body) + "\r\n"
 
 
-def plan_variants(jdks: list[dict], launchers: list[str] | None = None, majors: list[int] | None = None) -> list[dict]:
+def plan_variants(jdks: list[dict], launchers: list[str] | None = None, majors: list[int] | None = None, prepatcher: bool = False, include_known_fail: bool = False) -> list[dict]:
+    """Variants per JDK x launcher. `prepatcher` adds a `-prep` twin of each direct/fr variant carrying the Prepatcher
+    javaagent as the last agent. The direct twin is KNOWN_FAIL (DIRECT_PREPATCHER_KNOWN_FAIL) and is reported, not
+    booted, unless `include_known_fail` is set."""
     # RC8 targets Java 17+; the install's bundled Java 8 jre cannot take the flag block, so it is opt-in via majors.
     chosen = [j for j in jdks if (j["major"] in majors if majors else j["major"] >= 17)]
     out = []
     for jdk in chosen:
         for launcher in launchers or list(DEFAULT_LAUNCHERS):
-            vid = variant_id(jdk["major"], launcher)
-            out.append({"id": vid, "major": jdk["major"], "launcher": launcher, "jdk_home": jdk["home"], "java_version": jdk["version"], "bat": bat_name(vid), "heap_gb": DEFAULT_HEAP_GB})
+            for prep in (False, True) if prepatcher and launcher in ("direct", "fr") else (False,):
+                vid = variant_id(jdk["major"], launcher, prep)
+                variant = {"id": vid, "major": jdk["major"], "launcher": launcher, "jdk_home": jdk["home"], "java_version": jdk["version"], "bat": bat_name(vid), "heap_gb": DEFAULT_HEAP_GB, "prepatcher": prep}
+                if prep and launcher == "direct":
+                    variant["known_fail"] = DIRECT_PREPATCHER_KNOWN_FAIL
+                    variant["run_known_fail"] = include_known_fail
+                out.append(variant)
     return out
 
 
@@ -448,7 +475,10 @@ def run_java_matrix(rig: Path, mods: list[str], variants: list[dict], repeats: i
     rows: dict[str, list[dict]] = {v["id"]: [] for v in variants}
     reused: dict[str, dict] = {}
     todo = []
+    skipped_known_fail = [v for v in variants if v.get("known_fail") and not v.get("run_known_fail")]
     for variant in variants:
+        if variant in skipped_known_fail:
+            continue
         entry = known.get(_mods_key(variant, mods))
         if entry and entry.get("pass_rate") == 1.0:
             reused[variant["id"]] = entry
@@ -499,6 +529,9 @@ def run_java_matrix(rig: Path, mods: list[str], variants: list[dict], repeats: i
     matrix = []
     for variant in variants:
         meta = {**{k: variant[k] for k in ("id", "major", "launcher", "java_version")}, "dropped_flags": variant.get("dropped_flags", [])}
+        if variant in skipped_known_fail:
+            matrix.append({**meta, "runs": 0, "passed": 0, "pass_rate": None, "statuses": ["KNOWN_FAIL"], "results": [], "known_fail": variant["known_fail"]})
+            continue
         if variant["id"] in reused:
             matrix.append({**meta, "runs": 0, "passed": 0, "pass_rate": 1.0, "statuses": ["KNOWN_PASS"], "results": [], "reused_from": reused[variant["id"]].get("date")})
             continue
@@ -520,6 +553,7 @@ def run_java_matrix(rig: Path, mods: list[str], variants: list[dict], repeats: i
 
 
 def _verdict(matrix: list[dict]) -> str:
+    matrix = [m for m in matrix if m["statuses"] != ["KNOWN_FAIL"]]  # recorded, not booted: no vote
     if not matrix:
         return "NO_VARIANTS"
     if any(m["statuses"] and all(s == "REFUSED" for s in m["statuses"]) for m in matrix):
@@ -538,6 +572,7 @@ def render(result: dict) -> str:
     lines = [f"Verdict: {result['verdict']} ({result['repeats']} run(s) per variant, {result.get('parallel', 1)} at a time)"]
     for m in result["matrix"]:
         known = f"  (reused from {m['reused_from']})" if "reused_from" in m else ""
+        known += f"  ({m['known_fail']})" if "known_fail" in m else ""
         lines.append(f"  {m['id']:<14} Java {m['java_version']:<12} {m['passed']}/{m['runs']} PASS  {' '.join(m['statuses'])}{known}")
     return "\n".join(lines)
 

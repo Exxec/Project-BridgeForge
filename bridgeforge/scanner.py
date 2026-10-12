@@ -1124,6 +1124,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_mission_required_files(root, result)
     _scan_loose_script_janino_risk(root, result, provider_roots)
     _scan_dependency_version_major(root, result, provider_roots)
+    _scan_aotd_toolbox_version(root, result, provider_roots)
     _scan_weapon_effect_static_state(root, result)
     _scan_rules_firebest_populate_options(root, result)
     _scan_hullmod_instance_state(root, result)
@@ -5660,6 +5661,103 @@ def _scan_temporary_market_fleet_source(root: Path, result: ScanResult) -> None:
         )
 
 
+TOOLBOX_ID = "aotd_theory_of_toolbox"
+TOOLBOX_FORK_MINIMUM = (1, 0, 14)  # the Scheduler Fork installed 2026-10-10 is 1.0.14-spp13 (docs/AOTD_COMPAT_PLAN.md)
+
+
+def _version_tuple(text: object) -> tuple[int, ...]:
+    """Leading numeric dotted part of a version string: `1.0.14-spp13` -> (1, 0, 14); no digits -> ()."""
+    match = re.match(r"\s*v?(\d+(?:\.\d+)*)", str(text or ""))
+    return tuple(int(p) for p in match.group(1).split(".")) if match else ()
+
+
+def toolbox_version_gaps(root: Path, provider_roots: list[Path] | None) -> list[dict]:
+    """Declared Toolbox dependency versions below the installed provider, or below the fork's minimum when no
+    provider is found. Seats of Power and Vaults of Knowledge declare 1.0.11; the fork is 1.0.14-spp13."""
+    info = _load_lenient_json_file(Path(root) / "mod_info.json") if (Path(root) / "mod_info.json").is_file() else None
+    declared = [d for d in (info.get("dependencies") if isinstance(info, dict) else None) or [] if isinstance(d, dict) and d.get("id") == TOOLBOX_ID]
+    if not declared:
+        return []
+    installed: tuple[int, ...] = ()
+    if provider_roots:
+        from .substitutes import provider_index
+
+        versions = [_version_tuple(p.version) for p in provider_index([Path(e) for e in provider_roots], exclude=Path(root)) if p.mod_id == TOOLBOX_ID]
+        installed = max(versions, default=())
+    required = installed or TOOLBOX_FORK_MINIMUM
+    gaps = []
+    for dep in declared:
+        wanted = _version_tuple(dep.get("version") if not isinstance(dep.get("version"), dict) else ".".join(str(dep["version"].get(k, 0)) for k in ("major", "minor", "patch")))
+        if wanted and wanted < required:
+            gaps.append({"declared": ".".join(map(str, wanted)), "required": ".".join(map(str, required)), "source": "installed provider" if installed else "fork minimum"})
+    return gaps
+
+
+def _scan_aotd_toolbox_version(root: Path, result: ScanResult, provider_roots: list[Path] | None) -> None:
+    for gap in toolbox_version_gaps(root, provider_roots):
+        result.add(
+            id="aotd-toolbox-version-below-minimum",
+            category="dependencies",
+            severity="medium",
+            classification="REVIEW",
+            confidence="MEDIUM",
+            explanation=(f"mod_info.json asks for Theory of Toolbox {gap['declared']}, below {gap['required']} ({gap['source']}). "
+                         "The Scheduler Fork replaces Kaysaar's Toolbox and rewrites the economy refresh path; whether this mod "
+                         "was tested against it is unproven. Re-test with the fork before raising the declared version."),
+            file="mod_info.json",
+            evidence=[f"dependency:{TOOLBOX_ID}", f"declared:{gap['declared']}", f"required:{gap['required']}", f"source:{gap['source']}"],
+        )
+
+
+_ADVANCE_RE = re.compile(r"\bvoid\s+advance\s*\(\s*(?:final\s+)?float\s+\w+\s*\)\s*\{")
+_MARKET_WORK_RE = re.compile(r"getMarketsCopy\s*\(|\.reapplyIndustries\s*\(|\.reapplyConditions\s*\(")
+_TIMER_GUARD_RE = re.compile(r"IntervalUtil|intervalElapsed|interval|timer|elapsed|cooldown|lastRun|lastCheck|daysSince", re.I)
+
+
+def _brace_body(text: str, open_brace: int) -> str:
+    depth = 0
+    for index in range(open_brace, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_brace:index + 1]
+    return text[open_brace:]
+
+
+def _scan_per_frame_market_work(root: Path, result: ScanResult) -> None:
+    """An EveryFrameScript.advance() that walks the whole economy or re-applies industries/conditions with no
+    timer guard runs that work every frame. The Toolbox fork's changelog records ~50 vs ~90 FPS after a refresh
+    redesign (docs/AOTD_COMPAT_PLAN.md), so economy refresh cost is the known sensitivity. Source only, REVIEW:
+    the guard test is textual and a guard kept in another method is not seen."""
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if "EveryFrameScript" not in text:
+            continue
+        for match in _ADVANCE_RE.finditer(text):
+            body = _brace_body(text, match.end() - 1)
+            work = _MARKET_WORK_RE.search(body)
+            if work and not _TIMER_GUARD_RE.search(body):
+                result.add(
+                    id="per-frame-market-work",
+                    category="performance",
+                    severity="low",
+                    classification="REVIEW",
+                    confidence="LOW",
+                    explanation=("advance() of an EveryFrameScript calls " + work.group(0).rstrip("( ").lstrip(".") + " with no timer or "
+                                 "interval in the method body, so the economy is walked or refreshed every frame. Put the work behind "
+                                 "an IntervalUtil. Not yet measured against the Toolbox fork."),
+                    file=_relative(root, source),
+                    evidence=["found:source", f"call:{work.group(0).rstrip('( ').lstrip('.')}", "guard:none-in-advance"],
+                )
+
+
 def _scan_replace_drops_rc8_entries(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
     """A mod_info `replace` entry for an RC8 file the mod's copy does not fully restate (ROADMAP 42). Ironclads
     replaced commodities.csv, market_conditions.csv and hull_mods.csv with 0.7 copies, dropping `crew`, AI cores, every
@@ -8645,6 +8743,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_faction_known_tags(root, result, vanilla_root)
     _scan_shared_hook_overrides(root, result, vanilla_root)
     _scan_temporary_market_fleet_source(root, result)
+    _scan_per_frame_market_work(root, result)
     _scan_rc8_signature_changed(root, result)
     _scan_replace_drops_rc8_entries(root, result, vanilla_root)
     _scan_retired_vanilla_class_copy(root, result, vanilla_root)

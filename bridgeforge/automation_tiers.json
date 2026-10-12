@@ -184,6 +184,8 @@
     "industry-plugin-override": "code",
     "new-game-plugin-override": "decision",
     "temporary-market-fleet-source": "auto",
+    "aotd-toolbox-version-below-minimum": "decision",
+    "per-frame-market-work": "inspect",
     "rc8-signature-changed": "auto",
     "replace-drops-rc8-entries": "decision",
     "retired-vanilla-class-copy": "code",
