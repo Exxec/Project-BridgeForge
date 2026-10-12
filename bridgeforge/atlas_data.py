@@ -131,7 +131,33 @@ def _settings_facts(root: Path) -> list[Fact]:
         match = re.search(r'"' + re.escape(str(key)) + r'"\s*:', text)
         line = text.count("\n", 0, match.start()) + 1 if match else 0
         facts.append(Fact("setting", str(key), "sets", SETTINGS_PATH, line, _summary(value), "SAFE"))
+        if isinstance(value, list):  # RC8 lists add to vanilla's (CLAUDE.md), so each element is an append, never an override
+            facts += [Fact("setting-list", str(key), "appends", SETTINGS_PATH, line, json.dumps(item, ensure_ascii=False)[:VALUE_SUMMARY_LIMIT], "SAFE")
+                      for item in value]
+    graphics = data.get("graphics")
+    terrain = graphics.get("terrain") if isinstance(graphics, dict) else None
+    if isinstance(terrain, dict):  # settings.json graphics.terrain: the terrain sprite ids a terrain plugin draws with
+        facts += [Fact("terrain", str(key), "defines", SETTINGS_PATH, 0, f"graphics.terrain sprite {_summary(value)}", "SAFE") for key, value in terrain.items()]
     return facts
+
+
+def _file_id_facts(root: Path, folder: str, pattern: str, kind: str, id_key: str) -> list[Fact]:
+    """One fact per `.ship`/`.wpn` file: the id inside the file (hullId / id), else the file stem."""
+    directory = root / folder
+    facts = []
+    for path in sorted(directory.glob(pattern)) if directory.is_dir() else []:
+        data = _load_lenient_json_file(path)
+        ident = data.get(id_key) if isinstance(data, dict) else None
+        facts.append(Fact(kind, ident if isinstance(ident, str) and ident else path.stem, "defines",
+                          path.relative_to(root).as_posix(), 1, f"{pattern} file", "SAFE"))
+    return facts
+
+
+def _planet_facts(root: Path) -> list[Fact]:
+    path = root / "data" / "config" / "planets.json"
+    data = _load_lenient_json_file(path) if path.is_file() else None
+    return [Fact("planet-type", str(key), "defines", "data/config/planets.json", 1, "planets.json key", "SAFE")
+            for key, value in (data.items() if isinstance(data, dict) else []) if isinstance(value, dict)]
 
 
 def _faction_facts(root: Path) -> list[Fact]:
@@ -174,4 +200,7 @@ def extract_data_facts(root: Path) -> list[Fact]:
     facts.extend(_settings_facts(root))
     facts.extend(_faction_facts(root))
     facts.extend(_folder_facts(root))
+    facts.extend(_file_id_facts(root, "data/hulls", "*.ship", "hull-file", "hullId"))
+    facts.extend(_file_id_facts(root, "data/weapons", "*.wpn", "weapon-file", "id"))
+    facts.extend(_planet_facts(root))
     return facts

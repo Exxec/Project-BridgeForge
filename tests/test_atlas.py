@@ -342,11 +342,11 @@ class CodeRuleTests(unittest.TestCase):
             self.assertIn(("hook", "j.Tick", "registers"), facts)
             self.assertIn(("saved-field", "j.Tick.market", "persists"), facts)
             self.assertNotIn(("saved-field", "j.Tick.cache", "persists"), facts)  # transient is not saved
-            self.assertIn(("industry", "farming", "mutates"), facts)  # class-level removeIndustry co-occurrence
-            self.assertIn(("industry", "farming", "references"), facts)  # plain literal in another class
+            self.assertNotIn(("industry", "farming", "mutates"), facts)  # 67a: a removeIndustry elsewhere in the class is no longer a guess
+            self.assertIn(("industry", "farming", "references"), facts)  # plain literal in a class
             self.assertNotIn(("industry", "mine_farming", "references"), facts)  # not a known id: not a fact
-            profile = build_profile("jarmod", load_facts(conn, atlas.latest_mods(conn)[:0] + [m for m in atlas.latest_mods(conn) if m["id"] == "jarmod"]))
-            self.assertIn(("industry", "farming"), profile.replaced)
+            profile = build_profile("jarmod", load_facts(conn, [m for m in atlas.latest_mods(conn) if m["id"] == "jarmod"]))
+            self.assertNotIn(("industry", "farming"), profile.replaced)
 
     def test_unreadable_jar_is_unknown_not_silent(self):
         with temp_root() as root:
