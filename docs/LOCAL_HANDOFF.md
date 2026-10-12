@@ -80,7 +80,10 @@ the test suite while it does (hermeticity check), then commit them.
 
 ## 0a. Java/launcher matrix: first live use (ROADMAP item 61)
 
-Set up 2026-10-09, not yet run. Do this when live testing resumes:
+Set up 2026-10-09; first live run 2026-10-12 (a missing launcher click was fixed first). Result of the 150-mod mass test
+(`--preset compare --bundle 4`, 6,148 s): no mod behaves differently on Java 25 vs 28 or with vs without Fast Rendering, except 13
+mods that need LunaLib on the Fast Rendering variants (RC8-33). The Fast Rendering race hypothesis below is not supported by this run.
+Do this when live testing resumes:
 
 1. `python -m bridgeforge java-matrix discover --rig "In operation/_rig"` (found here: Java 8 jre, 25, 27, 28; **no Java 17**: add one with `--jdk-root`).
 2. `python -m bridgeforge java-matrix setup "In operation/_rig"` writes `run-j25-direct.bat`, `run-j25-fr.bat`, ... (Java 8 is skipped unless `--java 8`).
