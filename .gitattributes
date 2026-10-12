@@ -1,0 +1,11 @@
+# Line endings (ROADMAP 70 H4, owner decision 2026-10-12): LF in the repository and in the working tree; Windows batch files keep CRLF.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.png binary
+*.jpg binary
+*.ogg binary
+*.jar binary
+*.zip binary
+*.7z binary
+*.class binary
