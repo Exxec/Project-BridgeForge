@@ -935,6 +935,17 @@ def build_parser() -> argparse.ArgumentParser:
     group_live.add_argument("--rig", type=Path)
     group_live.add_argument("--queue", type=Path)
     group_live.add_argument("--json", action="store_true")
+    group_regress = group_sub.add_parser("regress", help="unattended regression pass: group every LIVE_VALIDATED workspace, then install, play (`live`) and report each group; never records, writes a summary of what needs a look (ROADMAP 60g)")
+    group_regress.add_argument("--bat", default="run-j25-direct.bat")
+    group_regress.add_argument("--size", type=int, default=8)
+    group_regress.add_argument("--limit", type=int, help="only the first N groups")
+    group_regress.add_argument("--only", action="append", default=[], metavar="WORKSPACE", help="only these workspaces; repeatable")
+    group_regress.add_argument("--out", type=Path, help="summary JSON (default: <queue>/_regress/regress-<date>.json)")
+    group_regress.add_argument("--test-prefix", help="test id prefix (default REG-<date>)")
+    group_regress.add_argument("--quiet", action="store_true", help="no per-group progress lines")
+    group_regress.add_argument("--rig", type=Path)
+    group_regress.add_argument("--queue", type=Path)
+    group_regress.add_argument("--json", action="store_true")
     group_duel = group_sub.add_parser("duel", help="after `install` of the mod that owns the hulls: play the rig-only duel missions (SEEKER's Bone-Breaker against Betelgeuse, and two vanilla Onslaughts as the baseline) unattended and report the frame cost of a destruction; leave the mouse and keyboard alone")
     group_duel.add_argument("test_id", help="log name: writes <rig>/logs/<TESTID>.stdout.log")
     group_duel.add_argument("--bat", default="run-j25-direct.bat")
@@ -1627,6 +1638,18 @@ def main(argv: list[str] | None = None) -> int:
                     if args.json:
                         print(json.dumps(result, indent=2, ensure_ascii=False))
                     return 1
+            elif args.probe_group_command == "regress":
+                from datetime import date as _date
+
+                from .regress import run_regression
+                print("Starting the regression pass: leave the mouse and keyboard alone until it finishes (about five minutes a group).", file=sys.stderr)
+                out = args.out or Path(queue) / "_regress" / f"regress-{_date.today():%Y%m%d}.json"
+                result = run_regression(queue, rig, out, bat=args.bat, size=args.size, limit=args.limit, only=args.only or None,
+                                        quiet=args.quiet, test_prefix=args.test_prefix)
+                if not args.json:
+                    print(f"{len(result['groups'])} group(s); {len(result['attention'])} item(s) need a look; summary {out}")
+                    for item in result["attention"]:
+                        print(f"  group {item['group']}: {item.get('mod') or item.get('members')}: {item['why']}")
             elif args.probe_group_command == "duel":
                 from .duel_run import run_duel
                 print("Starting the duel run: leave the mouse and keyboard alone until it finishes (about ten minutes).", file=sys.stderr)
