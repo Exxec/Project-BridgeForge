@@ -20,8 +20,18 @@ GOLDEN = Path(__file__).with_name("cli_help_golden.json")
 HELP_COLUMNS = "100"
 
 
+def _help_text(parser: argparse.ArgumentParser, prefix: str) -> str:
+    """The --help text; for the top-level parser the command list is sorted, since the order commands register in is not part of the
+    interface (the modules of ROADMAP 70 H2.1 register in their own order)."""
+    if prefix:
+        return parser.format_help()
+    listed = sorted((action.dest, action.help or "") for sub in parser._actions if isinstance(sub, argparse._SubParsersAction)
+                    for action in sub._choices_actions)
+    return json.dumps([parser.prog, parser.description, listed])
+
+
 def _walk(parser: argparse.ArgumentParser, prefix: str, out: dict[str, str]) -> None:
-    out[prefix or "bridgeforge"] = hashlib.sha256(parser.format_help().encode("utf-8")).hexdigest()[:16]
+    out[prefix or "bridgeforge"] = hashlib.sha256(_help_text(parser, prefix).encode("utf-8")).hexdigest()[:16]
     for action in parser._actions:
         if isinstance(action, argparse._SubParsersAction):
             for name, child in sorted(action.choices.items()):
