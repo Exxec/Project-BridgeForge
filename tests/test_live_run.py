@@ -129,6 +129,21 @@ class MissionsBelowProbeTests(unittest.TestCase):
         self.assertAlmostEqual(clicks[0][1], live_run.PROBE_MISSION[1] - 3 * live_run.MISSION_ROW_STEP)
 
 
+class MissionListScrollTests(unittest.TestCase):
+    """REG-20261012 group 10: 58 missions loaded; 40 wheel ticks stopped short of the probe's row."""
+
+    def _scrolled(self, total: int | None) -> int:
+        ticks = []
+        hands = live_run.Hands(click=lambda fx, fy: None, key=lambda v: None, scroll=lambda fx, fy, n: ticks.append(n), sleep=lambda s: None)
+        live_run.play_probe_combat(hands, 0, total)
+        return ticks[0]
+
+    def test_scrolls_at_least_forty_ticks_and_two_per_row_in_a_long_list(self) -> None:
+        self.assertEqual(self._scrolled(None), -40)
+        self.assertEqual(self._scrolled(17), -40)
+        self.assertEqual(self._scrolled(48), -96)
+
+
 class MissionListLayoutTests(unittest.TestCase):
     """GRP10Y2-20261011: Ironclads replaces the mission list (no vanilla missions) and the probe's mission is the last of its eight."""
 

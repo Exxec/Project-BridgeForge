@@ -337,7 +337,9 @@ def probe_mission_y(rows_below: int, total: int | None = None) -> float:
 
 def play_probe_combat(hands: Hands, rows_below: int = 0, total: int | None = None) -> None:
     hands.front()
-    hands.scroll(*MISSION_LIST_SCROLL_POINT, -40)
+    # 40 ticks reached the bottom of lists up to about 50 rows; REG-20261012 group 10 (58 missions loaded, 48 counted) stopped short and
+    # started another mission, so scroll two ticks per counted row, never fewer than 40.
+    hands.scroll(*MISSION_LIST_SCROLL_POINT, -max(40, 2 * (total or 0)))
     hands.sleep(1)
     hands.click(PROBE_MISSION[0], probe_mission_y(rows_below, total))
     hands.sleep(1.5)
