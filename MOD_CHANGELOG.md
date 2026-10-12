@@ -6,6 +6,7 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 
 - **Zorg [BF r8]** V18+bf.8: revived for RC8 and archived (live validated)
 - **Zorg18** V18+bf.8: Zorg Zeta fixed again (corona 0, Zeta I radius 100 at orbit 5000; bf.7 had lost bf.5's fix), Unimatrix size 10 restored (lost in bf.7), and the Zorg start hostile to every faction (20 in vanilla, new games only). Live-tested GRP-ZORG-BF8B-20261012; save checked.
+- **Zorg18** V18+bf.8: Same version, re-archived: a player commissioned with the Zorg at start (Nexerelin) is not made hostile to them (ZorgGen's -1 lifted to neutral). Live GRP-ZORG-BF8C-20261012 (no commission: 20 hostile).
 
 ## 2026-10-11
 
