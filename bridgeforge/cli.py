@@ -50,10 +50,6 @@ def _reconfigure_streams_for_pipes(streams=None) -> list:
 
 
 def main(argv: list[str] | None = None) -> int:
-    if argv and argv[0] == "dependency-graph" and "--repo-root" in argv:
-        argv = ["dependency-graph-local", *argv[1:]]
-    if argv and argv[0] == "rebuild-from-reference" and "--current-core" in argv:
-        argv = ["rebuild-from-reference-local", *argv[1:]]
     _reconfigure_streams_for_pipes()
     args = build_parser().parse_args(argv)
     registered = dispatch(args)
