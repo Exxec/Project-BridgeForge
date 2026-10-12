@@ -1,0 +1,215 @@
+"""Mod Atlas output: text, JSON and local self-contained HTML for `atlas show / id / forecast`, plus the CLI entry point.
+
+HTML is plain files with inline CSS and no external URLs (owner decision 2, 2026-10-11: a local file, no web hosting).
+"""
+from __future__ import annotations
+
+import html
+import json
+import re
+import sqlite3
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+from .atlas import DEFAULT_DB, AtlasError, build_atlas, connect, default_roots, group_mods, latest_mods, resolve_mods
+from .atlas_rules import build_profile, forecast, load_facts
+
+DEFAULT_LIMIT = 25
+CSS = ("body{font-family:system-ui,sans-serif;margin:24px auto;max-width:1100px;padding:0 16px;color:#1b1b1b;background:#fff}"
+       "table{border-collapse:collapse;width:100%;margin:8px 0 20px}td,th{border:1px solid #ccc;padding:4px 8px;text-align:left;"
+       "font-size:13px;vertical-align:top}th{background:#f1f1f1}code{font-size:12px}.MANUAL{color:#a00}.REVIEW{color:#a60}"
+       ".UNKNOWN{color:#555}.SAFE{color:#080}")
+
+
+# ---------------------------------------------------------------- data shapes
+
+def show_data(conn: sqlite3.Connection, mods: list[dict]) -> list[dict]:
+    out = []
+    for mod in mods:
+        facts = load_facts(conn, [mod])
+        groups: dict[str, list[dict]] = defaultdict(list)
+        for f in facts:
+            groups[f"{f.kind} {f.action}"].append({"id": f.id, "at": f.file + (f":{f.line}" if f.line else ""),
+                                                   "evidence": f.evidence, "confidence": f.confidence})
+        out.append({"mod": mod, "fact_count": len(facts), "groups": dict(sorted(groups.items())),
+                    "profile": build_profile(mod["id"], facts).as_dict()})
+    return out
+
+
+def id_data(conn: sqlite3.Connection, ident: str) -> dict:
+    rows = conn.execute("SELECT mod, version, kind, action, file, line, evidence, confidence FROM facts WHERE id = ? "
+                        "ORDER BY mod, kind, action, file, line", (ident,)).fetchall()
+    latest = {m["id"]: m["version"] for m in latest_mods(conn)}
+    by_mod: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        if latest.get(r["mod"]) == r["version"]:
+            by_mod[r["mod"]].append({k: r[k] for k in ("kind", "action", "file", "line", "evidence", "confidence")})
+    return {"id": ident, "mods": dict(by_mod)}
+
+
+def forecast_data(result: dict) -> dict:
+    return {"subjects": result["subjects"], "against": result["against"],
+            "verdicts": result["verdicts"], "findings": [f.as_dict() for f in result["findings"]],
+            "profiles": {m: p.as_dict() for m, p in result["profiles"].items()}}
+
+
+# ---------------------------------------------------------------- text
+
+def show_text(data: list[dict], limit: int) -> str:
+    lines: list[str] = []
+    for entry in data:
+        mod = entry["mod"]
+        lines.append(f"{mod['name']} ({mod['id']} {mod['version']}) - {entry['fact_count']} fact(s)\n  {mod['path']}")
+        for group, items in entry["groups"].items():
+            lines.append(f"  [{group}] {len(items)}")
+            lines += [f"    {i['id']}  {i['at']}  {i['evidence']}  ({i['confidence']})" for i in items[:limit]]
+            if len(items) > limit:
+                lines.append(f"    ... {len(items) - limit} more (raise --limit, or use --json)")
+        lines.append("  replacement profile:")
+        lines += _profile_lines(entry["profile"])
+    return "\n".join(lines)
+
+
+def _profile_lines(profile: dict) -> list[str]:
+    lines = [f"    replaces/removes {r['kind']} '{r['id']}' -> {', '.join(r['by']) or 'nothing'} ({r['how']}; {r['at']})"
+             for r in profile["replaced"]]
+    lines += [f"    overrides {o['kind']} '{o['id']}' ({o['at']})" for o in profile["overrides"][:DEFAULT_LIMIT]]
+    lines += [f"    mutates shared '{key}' ({', '.join(where)})" for key, where in profile["mutates"].items()]
+    return lines or ["    (none)"]
+
+
+def id_text(data: dict) -> str:
+    if not data["mods"]:
+        return f"No indexed mod touches '{data['id']}'."
+    lines = [f"'{data['id']}' is touched by {len(data['mods'])} mod(s):"]
+    for mod, rows in data["mods"].items():
+        lines.append(f"  {mod}")
+        lines += [f"    {r['kind']} {r['action']}  {r['file']}{':' + str(r['line']) if r['line'] else ''}  {r['evidence']}  ({r['confidence']})"
+                  for r in rows]
+    return "\n".join(lines)
+
+
+def forecast_text(data: dict) -> str:
+    lines = [f"Forecast for {', '.join(data['subjects'])}" + (f" against {len(data['against'])} mod(s): {', '.join(data['against'])}" if data["against"] else "")]
+    for mod, verdict in data["verdicts"].items():
+        lines.append(f"  {mod}: {verdict['status']} ({verdict['findings']} finding(s))")
+    for finding in data["findings"]:
+        lines.append(f"\n[{finding['level']}] {finding['rule']} ({finding['category']}): {finding['summary']}")
+        for side in finding["sides"]:
+            where = side["file"] + (f":{side['line']}" if side["line"] else "")
+            lines.append(f"    {side['mod']}: {side['kind']} {side['action']} {side['id']} at {where} - {side['evidence']} ({side['confidence']})")
+    if not data["findings"]:
+        lines.append("\nNo findings.")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------- html
+
+def _table(headers: list[str], rows: list[list[str]]) -> str:
+    head = "".join(f"<th>{html.escape(h)}</th>" for h in headers)
+    body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows)
+    return f"<table><tr>{head}</tr>{body}</table>"
+
+
+def _page(title: str, body: str) -> str:
+    return (f"<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+            f"<title>{html.escape(title)}</title><style>{CSS}</style></head><body><h1>{html.escape(title)}</h1>{body}</body></html>")
+
+
+def show_html(entry: dict) -> str:
+    esc = html.escape
+    body = f"<p><code>{esc(entry['mod']['path'])}</code> - {entry['fact_count']} fact(s)</p><h2>Replacement profile</h2><pre>{esc(chr(10).join(_profile_lines(entry['profile'])))}</pre>"
+    for group, items in entry["groups"].items():
+        rows = [[esc(i["id"]), esc(i["at"]), esc(i["evidence"]), f"<span class=\"{i['confidence']}\">{i['confidence']}</span>"] for i in items]
+        body += f"<h2>{esc(group)} ({len(items)})</h2>" + _table(["id", "at", "evidence", "confidence"], rows)
+    return _page(f"{entry['mod']['name']} {entry['mod']['version']}", body)
+
+
+def id_html(data: dict) -> str:
+    rows = [[html.escape(mod), html.escape(r["kind"]), html.escape(r["action"]), html.escape(r["file"] + (f":{r['line']}" if r["line"] else "")),
+             html.escape(r["evidence"]), r["confidence"]] for mod, items in data["mods"].items() for r in items]
+    return _page(f"Id {data['id']}", _table(["mod", "kind", "action", "at", "evidence", "confidence"], rows))
+
+
+def forecast_html(data: dict) -> str:
+    esc = html.escape
+    body = _table(["mod", "verdict", "findings"], [[esc(m), esc(v["status"]), str(v["findings"])] for m, v in data["verdicts"].items()])
+    for f in data["findings"]:
+        rows = [[esc(s["mod"]), esc(f"{s['kind']} {s['action']} {s['id']}"), esc(s["file"] + (f":{s['line']}" if s["line"] else "")), esc(s["evidence"])]
+                for s in f["sides"]]
+        body += (f"<h3><span class=\"{f['level']}\">{f['level']}</span> {esc(f['rule'])} <small>({esc(f['category'])})</small></h3>"
+                 f"<p>{esc(f['summary'])}</p>" + _table(["mod", "fact", "at", "evidence"], rows))
+    return _page("Atlas forecast: " + ", ".join(data["subjects"]), body or "<p>No findings.</p>")
+
+
+def write_html(folder: Path, name: str, content: str) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / (re.sub(r"[^A-Za-z0-9._-]+", "_", name) + ".html")
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+# ---------------------------------------------------------------- CLI
+
+def _emit(args, data, text: str) -> None:
+    print(json.dumps(data, indent=2, ensure_ascii=False) if args.json else text)
+
+
+def run_cli(args) -> int:
+    conn = None
+    try:
+        if args.atlas_command == "build":
+            roots = args.roots or default_roots(Path.cwd())
+            stats = build_atlas([Path(r) for r in roots], args.db, args.quiet)
+            _emit(args, stats, "Atlas built: " + ", ".join(f"{k}={v}" for k, v in stats.items()))
+            return 0
+        conn = connect(args.db)
+        if args.atlas_command == "show":
+            data = show_data(conn, resolve_mods(conn, [args.mod]))
+            _emit(args, data, show_text(data, args.limit))
+            if args.html:
+                for entry in data:
+                    print("wrote", write_html(args.html, "mod_" + entry["mod"]["id"], show_html(entry)), file=sys.stderr)
+        elif args.atlas_command == "id":
+            data = id_data(conn, args.id)
+            _emit(args, data, id_text(data))
+            if args.html:
+                print("wrote", write_html(args.html, "id_" + args.id, id_html(data)), file=sys.stderr)
+        else:
+            against = group_mods(conn, args.against) if args.against else None
+            if args.against and not against:
+                raise AtlasError(f"no indexed mod belongs to group {args.against!r}")
+            data = forecast_data(forecast(conn, resolve_mods(conn, args.mods), against))
+            _emit(args, data, forecast_text(data))
+            if args.html:
+                print("wrote", write_html(args.html, "forecast_" + "_".join(data["subjects"]), forecast_html(data)), file=sys.stderr)
+        return 0
+    except AtlasError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def add_parser(subcommands) -> None:
+    atlas = subcommands.add_parser("atlas", help="Mod Atlas: index what every mod defines, reads, mutates and hooks, then forecast conflicts between mods (docs/MOD_ATLAS_PLAN.md)")
+    sub = atlas.add_subparsers(dest="atlas_command", required=True)
+    build = sub.add_parser("build", help="index mod folders into a SQLite atlas (default roots: Done/, In operation/*/working, the rig's mods and its vanilla starsector-core); a mod is re-read only when its files change")
+    build.add_argument("roots", nargs="*", type=Path, help="folders holding mods (a folder with mod_info.json is a mod; a starsector-core folder is indexed as 'vanilla')")
+    build.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
+    build.add_argument("--json", action="store_true")
+    show = sub.add_parser("show", help="everything one mod adds, changes, reads and hooks, plus its replacement profile")
+    show.add_argument("mod", help="mod id, name, folder, acronym (DNEEP) or part of one")
+    show.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="facts shown per kind/action group (text only)")
+    ident = sub.add_parser("id", help="every mod that touches an id, and how")
+    ident.add_argument("id")
+    fore = sub.add_parser("forecast", help="run every conflict rule over these mods plus vanilla; --against GROUP checks them against a whole mod family (aotd)")
+    fore.add_argument("mods", nargs="+", metavar="MOD")
+    fore.add_argument("--against", metavar="GROUP", help="a family treated as one set, e.g. aotd (id starts with aotd or name says Ashes of the Domain)")
+    for command in (show, ident, fore):
+        command.add_argument("--json", action="store_true")
+        command.add_argument("--html", type=Path, metavar="DIR", help="also write plain self-contained HTML files into DIR")
+    for command in (build, show, ident, fore):
+        command.add_argument("--db", type=Path, default=DEFAULT_DB, help=f"atlas file (default: {DEFAULT_DB})")

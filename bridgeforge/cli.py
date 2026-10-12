@@ -397,7 +397,9 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_test_cmd.add_argument("--log-name")
     prepare_test_cmd.add_argument("--keep-mods", action="store_true")
     prepare_test_cmd.add_argument("--json", action="store_true")
-    jm_cmd = subcommands.add_parser("java-matrix", help="boot one mod set through every Java version and launcher (direct / Fast Rendering) in a rig; local-only, needs a rig and the game install (ROADMAP item 61)")
+    from .atlas_report import add_parser as add_atlas_parser
+    add_atlas_parser(subcommands)
+    jm_cmd = subcommands.add_parser("java-matrix",help="boot one mod set through every Java version and launcher (direct / Fast Rendering) in a rig; local-only, needs a rig and the game install (ROADMAP item 61)")
     jm_sub = jm_cmd.add_subparsers(dest="java_matrix_command", required=True)
     jm_discover = jm_sub.add_parser("discover", help="list the JDKs found beside the rig's install, in the rig and in the usual install folders")
     jm_discover.add_argument("--rig", type=Path)
@@ -2938,6 +2940,9 @@ def main(argv: list[str] | None = None) -> int:
                 boot_result = result["boot_test"]
                 print(f"Boot test: {boot_result.get('status')} {boot_result.get('reason', '')}".rstrip())
         return 0 if result["status"] in {"PASS", "SAME_FOLDER"} else 1
+    if args.command == "atlas":
+        from .atlas_report import run_cli as run_atlas
+        return run_atlas(args)
     if args.command == "java-matrix":
         from . import java_matrix as jm
         try:

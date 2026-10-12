@@ -117,4 +117,5 @@ LONG_RUNNING_COMMANDS = (
     ("mods-compat",),
     ("java-matrix", "run"),
     ("java-matrix", "mass"),
+    ("atlas", "build"),
 )
