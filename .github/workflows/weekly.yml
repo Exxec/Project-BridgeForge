@@ -1,0 +1,31 @@
+name: Weekly suite health
+
+# ROADMAP 70 H2.5: find test-order dependence and track suite time. The normal CI runs the suite in discovery order only.
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reversed-order:
+    name: Suite in reverse order (ubuntu / Python 3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install Bridgeforge
+        run: python -m pip install ".[archives]"
+      - name: Run every test case in reverse order and record the time
+        run: |
+          start=$(date +%s)
+          python -m bridgeforge.test_guard -- python tests/run_reversed.py
+          echo "Reverse-order suite took $(( $(date +%s) - start )) seconds" >> "$GITHUB_STEP_SUMMARY"
