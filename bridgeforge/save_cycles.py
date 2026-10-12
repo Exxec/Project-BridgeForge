@@ -38,9 +38,17 @@ def _frame(tag: str, attrs: dict[str, str], line: int) -> dict:
 
 def find_cycles(save: Path) -> list[dict]:
     """[{line, memory, pcmarket, keys, text}] for every reference to an open Memory from inside a PCMarket nested in it."""
+    return scan_cycles(save)[0]
+
+
+def scan_cycles(save: Path) -> tuple[list[dict], dict]:
+    """(cycles, base rate). The base rate counts how common the surrounding shape is in the same save: PCMarket elements and how many of
+    them hold a `<memory ref=...>` shared with another market. Six memories were shared three ways in a 577-mod save and only two were
+    fatal; naming a mod from the cycle alone, without this, blamed the wrong one (ROADMAP 68, 70 H3.4)."""
     path = campaign_xml_path(save)
     stack: list[dict] = []
     cycles: list[dict] = []
+    rate = {"pcmarkets": 0, "pcmarkets_sharing_a_memory": 0}
     with open(path, "r", encoding="utf-8", errors="replace", newline="") as handle:
         for number, line in enumerate(handle, 1):
             for match in _TAG.finditer(line):
@@ -51,6 +59,10 @@ def find_cycles(save: Path) -> list[dict]:
                     continue
                 attrs = dict(_ATTR.findall(rest))
                 ref = attrs.get("ref")
+                if attrs.get("cl") == "PCMarket" and not ref:
+                    rate["pcmarkets"] += 1
+                if ref and tag == "memory" and stack and stack[-1]["cl"] == "PCMarket":
+                    rate["pcmarkets_sharing_a_memory"] += 1  # a PCMarket whose memory is a reference to another element's
                 if ref:
                     cycle = _cycle_for(stack, ref, number, line)
                     if cycle:
@@ -61,7 +73,7 @@ def find_cycles(save: Path) -> list[dict]:
                     key = _KEY.search(line, match.start())
                     if key:
                         stack[-2]["key"] = key.group(1)
-    return cycles
+    return cycles, rate
 
 
 def _cycle_for(stack: list[dict], ref: str, number: int, line: str) -> dict | None:

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "predictions": [
+    {
+      "rule": "ATLAS-READS-REPLACED",
+      "mod": "DNEEP",
+      "other": "aotd_vok",
+      "id": "farming",
+      "outcome": "confirmed",
+      "run": "GRP-DNEEP-SUPPLY-BEFORE-20261011",
+      "note": "with the old getIndustry(farming) lookup and AoTD on, dneep_grain, dneep_meat and dneep_fruits were supplied in 0 of 38-39 demanding markets; +bf.3's fallback fixed it (GRP-DNEEP-SUPPLY-AOTD3-20261011)",
+      "date": "2026-10-12"
+    },
+    {
+      "rule": "ATLAS-READS-REPLACED",
+      "mod": "ArkLeg_dev",
+      "other": "aotd_vok",
+      "id": "orbitalworks",
+      "outcome": "refuted",
+      "run": "GRP-ARK-AOTD-J28FRP-20261012",
+      "note": "predicted AoTD would remove the Anarakis HQ's orbital works and zero its development bonus; the HQ kept orbitalworks=true and fleetQualityMod 0.375 on Java 25, 27 and 28 with and without AoTD",
+      "date": "2026-10-12"
+    }
+  ]
+}

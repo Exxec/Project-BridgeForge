@@ -232,6 +232,23 @@ def _emit(args, data, text: str) -> None:
 def run_cli(args) -> int:
     conn = None
     try:
+        if args.atlas_command in ("outcome", "precision"):
+            from . import atlas_predictions as predictions
+
+            if args.atlas_command == "outcome":
+                entry = predictions.record(args.rule, args.mod, args.ident, args.outcome, args.run, args.note, other=args.other)
+                print(f"Recorded: {entry['rule']} {entry['mod']}/{entry['id']} {entry['outcome']} by {entry['run']}")
+                return 0
+            table = predictions.precision(predictions.load())
+            if args.json:
+                print(json.dumps(table, indent=2))
+            else:
+                for rule, row in sorted(table.items()):
+                    rate = "no decided cases" if row["hit_rate"] is None else f"{row['hit_rate']:.0%} held"
+                    print(f"  {rule}: {row['confirmed']} confirmed, {row['refuted']} refuted, {row['inconclusive']} inconclusive ({rate})")
+                if not table:
+                    print("No outcomes recorded yet (atlas outcome ...).")
+            return 0
         if args.atlas_command == "build":
             base = args.base or Path.cwd()
             roots = args.roots or default_roots(base)
@@ -281,7 +298,9 @@ def run_cli(args) -> int:
             against = group_mods(conn, args.against) if args.against else None
             if args.against and not against:
                 raise AtlasError(f"no indexed mod belongs to group {args.against!r}")
-            data = forecast_data(forecast(conn, subjects, against))
+            from .atlas_predictions import load as load_predictions
+
+            data = forecast_data(forecast(conn, subjects, against, predictions=load_predictions()))
             data["pack_missing"] = missing
             if args.pack or len(subjects) > 12:  # a pack: rank the findings instead of listing hundreds
                 data["top_pairs"] = top_pairs(data["findings"], args.top)
@@ -320,6 +339,16 @@ def add_parser(subcommands) -> None:
     fore.add_argument("--against", metavar="GROUP", help="a family treated as one set, e.g. aotd (id starts with aotd or name says Ashes of the Domain)")
     fore.add_argument("--pack", type=Path, metavar="FILE", help="an enabled_mods.json (or a list of mod ids): forecast the whole pack as one load set; ids the atlas does not hold are listed")
     fore.add_argument("--top", type=int, default=15, help="with --pack: how many highest-impact mod groups to show (default 15)")
+    outcome = sub.add_parser("outcome", help="record what a live run showed about a forecast finding (confirmed, refuted, inconclusive) in docs/atlas_predictions.json; needs the run id and a note")
+    outcome.add_argument("rule", help="e.g. ATLAS-READS-REPLACED")
+    outcome.add_argument("--mod", required=True, help="the mod the finding is about")
+    outcome.add_argument("--other", help="the other mod involved, when the finding names two")
+    outcome.add_argument("--id", required=True, dest="ident", help="the content id the finding names (an industry, condition, class ...)")
+    outcome.add_argument("--outcome", required=True, choices=("confirmed", "refuted", "inconclusive"))
+    outcome.add_argument("--run", required=True, help="the live test id that showed it")
+    outcome.add_argument("--note", required=True, help="what was seen")
+    precision = sub.add_parser("precision", help="how often each rule's predictions held when they were live-tested (docs/atlas_predictions.json)")
+    precision.add_argument("--json", action="store_true")
     runtime = sub.add_parser("runtime", help="read probe-group test logs (BF-PROBE lines) into the atlas: live market-supply FAILs then show in forecasts as ATLAS-RUNTIME-SUPPLY and confirm static findings")
     runtime.add_argument("logs", nargs="+", type=Path, help="<rig>/logs/<TESTID>.stdout.log files")
     runtime.add_argument("--json", action="store_true")
@@ -331,5 +360,5 @@ def add_parser(subcommands) -> None:
     for command in (show, ident, fore):
         command.add_argument("--json", action="store_true")
         command.add_argument("--html", type=Path, metavar="DIR", help="also write plain self-contained HTML files into DIR")
-    for command in (build, show, diff, ident, fore, runtime, sweeper):
+    for command in (build, show, diff, ident, fore, runtime, sweeper):  # outcome and precision read the ledger, not the atlas
         command.add_argument("--db", type=Path, default=DEFAULT_DB, help=f"atlas file (default: {DEFAULT_DB})")

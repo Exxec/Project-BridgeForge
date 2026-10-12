@@ -137,10 +137,13 @@ def diagnose(save: Path, mods_dir: Path, vanilla_core: Path | None = None, cycle
         problems.append({"class": "NON_FINITE", "lines": non_finite})
 
     if cycles and not truncated:
-        from .save_cycles import find_cycles
+        from .save_cycles import scan_cycles
 
-        for cycle in find_cycles(save):
-            problems.append({"class": "MEMORY_CYCLE", **cycle})
+        found, rate = scan_cycles(save)
+        for cycle in found:
+            # The base rate keeps a diagnosis honest: the same shape (a condition market sharing its memory) is normal in most colonies.
+            problems.append({"class": "MEMORY_CYCLE", **cycle, "base_rate": f"{len(found)} cycle(s) among {rate['pcmarkets']} condition market(s); "
+                             f"{rate['pcmarkets_sharing_a_memory']} of them share a memory with another element, which is normal on its own"})
     blocking = [p for p in problems if p["class"] in ("TRUNCATED", "MOD_MISSING", "CLASS_UNRESOLVED", "NON_FINITE", "MEMORY_CYCLE")]
     verdict = "TRUNCATED" if truncated else ("WILL_LIKELY_FAIL" if blocking else "NO_KNOWN_PROBLEM")
     return {"schema_version": SCHEMA_VERSION, "mode": "READ_ONLY_SAVE_DOCTOR", "save": str(descriptor.get("save_dir")),

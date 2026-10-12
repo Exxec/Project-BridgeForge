@@ -124,3 +124,23 @@ class BreakCycleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BaseRateTests(unittest.TestCase):
+    """ROADMAP 70 H3.4: a diagnosis says how common the surrounding shape is, so a culprit is never named from one cycle alone."""
+
+    def test_the_scan_counts_condition_markets_and_those_sharing_a_memory(self) -> None:
+        from bridgeforge.save_cycles import scan_cycles
+
+        with resolved_temp_dir() as root:
+            cycles, rate = scan_cycles(_save(root, CYCLE))
+        self.assertEqual(len(cycles), 1)
+        self.assertEqual(rate, {"pcmarkets": 2, "pcmarkets_sharing_a_memory": 1})  # the outer market (own memory) and the inner copy (a reference)
+
+    def test_a_save_doctor_cycle_problem_carries_the_base_rate(self) -> None:
+        from bridgeforge.save_doctor import diagnose
+
+        with resolved_temp_dir() as root:
+            result = diagnose(_save(root, CYCLE), root / "no-mods", cycles=True)
+        cycle = next(p for p in result["problems"] if p["class"] == "MEMORY_CYCLE")
+        self.assertIn("1 cycle(s) among 2 condition market(s)", cycle["base_rate"])

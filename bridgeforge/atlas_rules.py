@@ -315,7 +315,7 @@ def analyze(conn: sqlite3.Connection, mods: list[dict]) -> tuple[list[Finding], 
 
 # ---------------------------------------------------------------- forecast
 
-def forecast(conn: sqlite3.Connection, subjects: list[dict], against: list[dict] | None = None) -> dict:
+def forecast(conn: sqlite3.Connection, subjects: list[dict], against: list[dict] | None = None, predictions: list[dict] | None = None) -> dict:
     """Run every rule over `subjects` (plus `against`, a family treated as one set) and vanilla. With `against`, keep the
     findings that join a subject to the family, plus single-mod findings about a subject."""
     family = [m for m in (against or []) if m["id"] not in {s["id"] for s in subjects}]
@@ -336,6 +336,10 @@ def forecast(conn: sqlite3.Connection, subjects: list[dict], against: list[dict]
 
     kept += runtime_findings(conn, subjects)
     confirmed_by_runtime(kept)
+    if predictions:  # recorded outcomes of earlier live-tested predictions (docs/atlas_predictions.json), passed in by the CLI
+        from .atlas_predictions import annotate
+
+        annotate(kept, predictions)
     verdicts = {s["id"]: _verdict(conn, s, kept) for s in subjects}
     return {"subjects": [s["id"] for s in subjects], "against": sorted(family_ids), "findings": kept,
             "verdicts": verdicts, "profiles": {m: profiles[m] for m in profiles if m in names}}
