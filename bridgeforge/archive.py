@@ -13,6 +13,8 @@ overwrites an existing archive or deletes the source workspace.
 """
 from __future__ import annotations
 
+from .zipsafe import read_limited
+
 from .safeio import atomic_write_text, safe_rmtree
 
 import hashlib
@@ -63,7 +65,7 @@ def _jar_entries(source: Path) -> dict[str, str] | None:
     """{entry name: sha256} of a jar's files, or None when it cannot be read as a zip."""
     try:
         with zipfile.ZipFile(source) as archive:
-            return {i.filename: hashlib.sha256(archive.read(i)).hexdigest() for i in archive.infolist() if not i.is_dir()}
+            return {i.filename: hashlib.sha256(read_limited(archive, i)).hexdigest() for i in archive.infolist() if not i.is_dir()}
     except (OSError, zipfile.BadZipFile):
         return None
 

@@ -811,7 +811,7 @@ def _apply_jar(path: Path, entries: dict, applied: Counter, problems: list) -> N
             break
         except PermissionError:
             if attempt == 7:
-                raise TranslationError(f"{path} stayed locked; the translated jar is at {tmp}")
+                raise TranslationError(f"{path} stayed locked; the translated jar is at {tmp}") from None
             time.sleep(1.0)
     applied["jar"] += count
 

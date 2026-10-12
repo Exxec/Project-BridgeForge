@@ -106,7 +106,7 @@ def validate_setup_spec(spec: str) -> str:
                 raise ProbeConfigError(
                     f"--setup {spec!r}: rep value must be a RepLevel name "
                     f"({sorted(REP_LEVELS)}) or a number."
-                )
+                ) from None
     return spec
 
 

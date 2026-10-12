@@ -412,6 +412,8 @@ def build_parser() -> argparse.ArgumentParser:
     add_live_ledger_parser(subcommands)
     from .roadmap_lint import add_parser as add_roadmap_lint_parser
     add_roadmap_lint_parser(subcommands)
+    from .agent_diff_check import add_parser as add_agent_diff_check_parser
+    add_agent_diff_check_parser(subcommands)
     from .move_machine import add_parser as add_migrate_parser
     add_migrate_parser(subcommands)
     envc_cmd = subcommands.add_parser("env-check", help="read a launcher .bat (following @argfiles) and report java version, javaagents and their order, Prepatcher last or not, heap, and enabled mods that need Prepatcher the launch lacks; read-only (ROADMAP item 63)")
@@ -3037,6 +3039,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "atlas":
         from .atlas_report import run_cli as run_atlas
         return run_atlas(args)
+    if args.command == "agent-diff-check":
+        from .agent_diff_check import run_cli as run_agent_diff_check
+        return run_agent_diff_check(args)
     if args.command == "roadmap-lint":
         from .roadmap_lint import run_cli as run_roadmap_lint
         return run_roadmap_lint(args)

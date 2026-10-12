@@ -29,7 +29,11 @@ extend-exclude = ["probe-mod", "everything-claude-code"]
 [tool.ruff.lint]
 # Pyflakes (unused/undefined names) plus syntax errors.
 # One-line compound statements are house style, so the E7xx family stays off.
-select = ["E9", "F"]
+select = ["E9", "F", "B"]
+# Bugbear for real bug classes (mutable defaults, raise without `from`, blind assertRaises). Its style rules are off: B905 (zip strict),
+# B007 (unused loop variable) and B009 (getattr with a constant) are house style, and B023 flags helper closures that are called inside
+# the same loop iteration (all 10 hits on 2026-10-12 were such false positives). ROADMAP 70 H2.3.
+ignore = ["B905", "B007", "B009", "B023"]
 
 [tool.coverage.run]
 branch = true

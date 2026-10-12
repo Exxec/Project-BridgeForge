@@ -173,7 +173,7 @@ class ParseJsonToleranceTests(unittest.TestCase):
         self.assertIn("single-quotes", tolerances)
 
     def test_unterminated_single_quote_still_fails(self) -> None:
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):  # the malformed-JSON error type, not any exception
             _parse_json("{'id': 'unterminated}")
 
     def test_real_copyplayer_faction_shape_parses(self) -> None:

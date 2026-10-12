@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .zipsafe import MAX_CLASS_BYTES, read_limited
+
 import csv
 import fnmatch
 import hashlib
@@ -634,7 +636,7 @@ def _parse_json(text: str, object_pairs_hook=None) -> tuple[object, set[str]]:
         except ValueError:
             # An unterminated single-quoted string is malformed, not a dialect
             # we tolerate; "repairing" it would hide a genuinely broken file.
-            raise original_error
+            raise original_error from None  # the original parse error is the useful one; the repair attempt's ValueError is noise
         try:
             data = json.loads(without_commas, object_pairs_hook=object_pairs_hook)
         except json.JSONDecodeError as rewritten_error:
@@ -655,7 +657,7 @@ def _parse_json(text: str, object_pairs_hook=None) -> tuple[object, set[str]]:
             if re.search(r'["\w]', stripped[end:]):
                 tolerances.add("trailing-content")
         if not tolerances:
-            raise original_error
+            raise original_error from None  # the original parse error is the useful one; the repair attempt's ValueError is noise
         return data, tolerances
 
 
@@ -869,7 +871,7 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
                     # Every entry is read so its CRC is checked: the Chinese Nightcross jar had entries
                     # whose CRC failed, which used to abort this jar's whole scan as "unreadable".
                     try:
-                        entry_bytes = archive.read(item)
+                        entry_bytes = read_limited(archive, item)
                     except (zipfile.BadZipFile, OSError, NotImplementedError) as exc:
                         bad_entries.append(f"{item.filename}: {exc}")
                         continue
@@ -4948,7 +4950,7 @@ def _vanilla_api_jar_class_info(vanilla_core: Path) -> dict[str, _ClassFileInfo]
                     if fqn in classes:
                         continue
                     try:
-                        data = archive.read(item)
+                        data = read_limited(archive, item, MAX_CLASS_BYTES)
                     except (OSError, zipfile.BadZipFile, KeyError):
                         continue
                     info = _parse_class_file(data)

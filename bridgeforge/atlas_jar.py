@@ -8,6 +8,8 @@ only as UNKNOWN, for a class whose bytecode could not be scanned (`ClassInfo.cod
 """
 from __future__ import annotations
 
+from .zipsafe import MAX_CLASS_BYTES, read_limited
+
 import re
 import zipfile
 from pathlib import Path
@@ -129,7 +131,7 @@ def _read_classes(archive: zipfile.ZipFile, names: list[str]) -> list[tuple[str,
     classes = []
     for name in names:
         try:
-            data = archive.read(name)
+            data = read_limited(archive, name, MAX_CLASS_BYTES)  # bounded: a jar is untrusted input
             classes.append((name, _digest(data), parse_class(data, WATCH)))
         except (ClassFormatError, zipfile.BadZipFile, OSError, RuntimeError, EOFError):
             continue

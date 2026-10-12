@@ -12,6 +12,8 @@ import re
 import sys
 from pathlib import Path
 
+from .safeio import atomic_write_json
+
 HEADER = re.compile(r"^(?P<indent>\s*)(?:- )?(?P<id>\d+[a-z]?(?:\.\d+)?)\. \*\*")
 DONE = re.compile(r"\*\*(?:[A-Za-z0-9 ,()'/\-]*\s)?Done\b|\bDone 20\d\d-\d\d-\d\d|\*\*Done")
 EVIDENCE = (re.compile(r"tests/[\w/]*test_\w+|\bTests?:|`tests\.test_"), re.compile(r"\b[A-Z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*-20\d{6}\b"),
@@ -75,5 +77,5 @@ def run_cli(args: argparse.Namespace) -> int:
 if __name__ == "__main__":
     if "--write-baseline" in sys.argv:
         found = violations(DEFAULT_ROADMAP.read_text(encoding="utf-8"))
-        DEFAULT_BASELINE.write_text(json.dumps({"schema_version": 1, "items": sorted(v["key"] for v in found)}, indent=2) + "\n", encoding="utf-8")
+        atomic_write_json(DEFAULT_BASELINE, {"schema_version": 1, "items": sorted(v["key"] for v in found)})
         print("wrote", DEFAULT_BASELINE, len(found))
