@@ -13,6 +13,8 @@ import json
 import re
 from pathlib import Path
 
+from .scan_json import _load_lenient_json_file
+
 DASH = "-"
 FIELDS = ["mod", "release_version", "archived", "live_validated", "status", "author", "policy", "files_vs_original",
           "what_was_done", "release_zips", "folder"]
@@ -28,23 +30,30 @@ def _read(path: Path) -> str:
         return ""
 
 
+def _version_shown(version) -> str:
+    """A mod_info `version`: a string as written, or the {major, minor, patch} object joined with dots."""
+    if isinstance(version, str):
+        return version
+    if isinstance(version, dict):
+        parts = {key: str(value).strip("\"' ") for key, value in version.items() if key in ("major", "minor", "patch")}
+        return ".".join(parts[key] for key in ("major", "minor", "patch") if key in parts) or DASH
+    return DASH
+
+
 def _mod_info(folder: Path) -> tuple[str, str]:
     """(name, version) from the first mod_info.json one or two levels down."""
     found = sorted(folder.glob("*/mod_info.json")) or sorted(folder.glob("*/*/mod_info.json"))
     for path in found:
         if "original" in path.parts or "workspace" in path.parts:
             continue
-        text = _read(path)
-        name = re.search(r'"name"\s*:\s*"([^"]*)"', text)
-        version = re.search(r'"version"\s*:\s*(?:"([^"]*)"|\{([^}]*)\})', text)
-        shown = DASH
-        if version:
-            if version.group(1) is not None:
-                shown = version.group(1)
-            else:
-                parts = dict(re.findall(r"""["']?(major|minor|patch)["']?\s*:\s*["']?([\w.]+)""", version.group(2)))
-                shown = ".".join(parts[k] for k in ("major", "minor", "patch") if k in parts) or DASH
-        return (name.group(1).strip() if name else DASH), shown
+        # The file's own top-level fields: a regex over the text took the first "name" and "version" anywhere, which in a mod_info that lists
+        # its dependencies first is LazyLib's (17 archives were shown as "LazyLib" with LazyLib's version, found 2026-10-12).
+        info = _load_lenient_json_file(path)
+        if not isinstance(info, dict):
+            continue
+        name = info.get("name") if isinstance(info.get("name"), str) else None
+        shown = _version_shown(info.get("version"))
+        return (name.strip() if name else DASH), shown
     return DASH, DASH
 
 
