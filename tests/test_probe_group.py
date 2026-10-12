@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from bridgeforge.probe_group import (ProbeGroupError, bisect_group, dependency_version_conflicts, group_report, install_group,
                                      merge_configs, plan_groups)
@@ -831,3 +832,46 @@ class OptionalIntegrationTests(unittest.TestCase):
     def test_without_a_readable_enabled_list_nothing_is_treated_as_optional(self) -> None:
         report = self._report(None)
         self.assertEqual(len(report["members"]["mod_a"]["failures"]), 2)
+
+
+class RegressionNoiseTests(unittest.TestCase):
+    """REG-20261012: probe-loader artefacts, Nexerelin/SiC integrations and a mod's ERROR-level debug prints must not fail or blur a group."""
+
+    CONTENT = "9 INFO x - BF-PROBE|0.2.27|content-ids|OK|all-content|checked=1 failed=0\n"
+
+    def _report(self, text: str, enabled: list[str]):
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            config = build_probe_config(_workspace(queue, "A", "mod_a", "hull_a"))
+            mods = root / "rig" / "mods"
+            mods.mkdir(parents=True)
+            (mods / "enabled_mods.json").write_text(json.dumps({"enabledMods": enabled}), encoding="utf-8")
+            log = root / "run.stdout.log"
+            log.write_text(self.CONTENT + text, encoding="utf-8")
+            return group_report(log, merge_configs([config]), mods_dir=mods)
+
+    def test_sandbox_refusals_and_module_info_are_sweep_artefacts_not_failures(self) -> None:
+        report = self._report(
+            "BF-PROBE|0.2.27|class-sweep|FAIL|org.joml.Matrix2d|java.lang.SecurityException: File access and reflection are not allowed to scripts.\n"
+            "BF-PROBE|0.2.27|class-sweep|FAIL|module-info|java.lang.NoClassDefFoundError: module-info is not a class because access_flag ACC_MODULE is set\n", ["mod_a"])
+        self.assertEqual(report["members"]["mod_a"]["failures"], [])
+        self.assertEqual(report["sweep_artefact_classes"], ["org.joml.Matrix2d", "module-info"])
+
+    def test_nexerelin_and_second_in_command_classes_are_optional_when_those_mods_are_off(self) -> None:
+        text = ("BF-PROBE|0.2.27|class-sweep|FAIL|a.Start|java.lang.NoClassDefFoundError: exerelin/campaign/customstart/CustomStart\n"
+                "BF-PROBE|0.2.27|class-sweep|FAIL|a.Apt|java.lang.NoClassDefFoundError: second_in_command/specs/SCBaseAptitudePlugin\n")
+        report = self._report(text, ["mod_a"])
+        self.assertEqual({item["library"] for item in report["optional_integration_classes"]}, {"nexerelin", "second_in_command"})
+        self.assertEqual(report["members"]["mod_a"]["failures"], [])
+
+    def test_a_mods_cloak_ai_debug_prints_do_not_make_the_group_unclear(self) -> None:
+        events = [{"level": "ERROR", "message": "Cloak AI: Running", "suspect": None},
+                  {"level": "ERROR", "message": "Cloak AI: No valid Target.", "suspect": None}]
+        counts = {"FATAL": 0, "MOD-ERROR": 2}
+        with mock.patch("bridgeforge.log_triage.triage_log", return_value={"fatal": [], "mod_errors": events, "counts": counts}):
+            report = self._report("", ["mod_a"])
+        self.assertEqual(report["unattributed"], [])
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
+        other = [{"level": "ERROR", "message": "NullPointerException in something", "suspect": None}]
+        with mock.patch("bridgeforge.log_triage.triage_log", return_value={"fatal": [], "mod_errors": other, "counts": counts}):
+            self.assertEqual(self._report("", ["mod_a"])["members"]["mod_a"]["verdict"], "UNCLEAR")

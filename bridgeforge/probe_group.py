@@ -671,8 +671,14 @@ def accepted_probe_findings(queue: Path, mods_dir: Path | None = None) -> dict[s
 # Library packages a mod's optional integration classes extend: a NoClassDefFoundError naming one of these, while that library is not
 # enabled in the rig, means the integration is simply inactive. Only well-known libraries are listed; anything else stays a FAIL.
 OPTIONAL_LIBRARY_PACKAGES = {"org/lazywizard/console/": "lw_console", "lunalib/": "lunalib", "org/magiclib/": "MagicLib",
-                             "org/lazywizard/lazylib/": "lw_lazylib", "org/lazywizard/radar/": "lw_radar"}
+                             "org/lazywizard/lazylib/": "lw_lazylib", "org/lazywizard/radar/": "lw_radar",
+                             "exerelin/": "nexerelin", "second_in_command/": "second_in_command"}  # last two: REG-20261012 SEEKER, Nightcross
 _NO_CLASS_DEF = re.compile(r"NoClassDefFoundError: (\S+)")
+# Probe-loader artefacts: the class sweep loads jar classes through the script loader, whose sandbox refuses reflection and file access
+# (fast_engine_rendering's org.joml classes, REG-20261012 group 4), and module-info.class is not a class at all.
+_SWEEP_ARTEFACT = re.compile(r"not allowed to scripts|module-info is not a class")
+# A ship AI's own debug prints, logged at ERROR level by the mod; every one of 7 group-13 members read UNCLEAR because of them.
+_DEBUG_CHATTER = re.compile(r"^Cloak AI: (?:Running|No valid Target\.)\s*$")
 
 
 def _enabled_mod_ids(mods_dir: Path | None) -> set[str] | None:
@@ -708,14 +714,17 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
             for item in ids.get(kind, []):
                 owner.setdefault(item, mod_id)
     verdicts = {mod_id: {"failures": [], "crashes": []} for mod_id in members}
-    unattributed, seen_content, filler_sides, optional_integrations = [], False, [], []
+    unattributed, seen_content, filler_sides, optional_integrations, sweep_artefacts = [], False, [], [], []
     enabled = _enabled_mod_ids(mods_dir)
     for line in Path(log).read_text(encoding="utf-8", errors="replace").splitlines():
         match = _PROBE_LINE.search(line)
         if not match:
             continue
-        if match["status"] == "FAIL" and match["check"] == "class-sweep" and enabled is not None:
-            library = _missing_optional_library(match["detail"], enabled)
+        if match["status"] == "FAIL" and match["check"] == "class-sweep":
+            if _SWEEP_ARTEFACT.search(match["detail"]):
+                sweep_artefacts.append(match["subject"])
+                continue
+            library = _missing_optional_library(match["detail"], enabled) if enabled is not None else None
             if library:
                 # A class of a mod's optional integration (Console Commands commands, LunaLib refit buttons) that extends a library nobody
                 # enabled: the game never loads it, so this is not a defect (REG-20261012-G2, Bionic Alteration).
@@ -743,6 +752,8 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
     for event in triage["fatal"] + triage["mod_errors"]:
         # A JVM crash names the mod owning its nearest Java frame (ROADMAP 36.4); a log exception its suspect.
         suspect = event.get("suspect") or event.get("top_mod")
+        if _DEBUG_CHATTER.match(str(event.get("message"))):
+            continue
         text = f"{event.get('matched_rule') or event.get('level')}: {str(event.get('message'))[:160]}"
         (verdicts[suspect]["crashes"] if suspect in verdicts else unattributed).append(text)
     # combat-perf FAIL (probe 0.2.24): a runaway field in a group of several members belongs to the group, so it is UNCLEAR.
@@ -758,7 +769,7 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_REPORT", "log": str(log),
             "content_ids_ran": seen_content, "fatal": triage["counts"]["FATAL"], "mod_errors": triage["counts"]["MOD-ERROR"],
             "members": verdicts, "unattributed": unattributed, "combat_filler_sides": filler_sides,
-            "optional_integration_classes": optional_integrations,
+            "optional_integration_classes": optional_integrations, "sweep_artefact_classes": sweep_artefacts,
             "note": "INCOMPLETE means the probe's content-ids check never ran (start a New Game and wait one in-game day)."}
 
 
