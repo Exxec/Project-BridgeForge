@@ -2803,10 +2803,15 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         compatibility risks without changing an archive's status; compatibility sections in the DNEEP, Adjusted Sector
         and Slightly Better Tech Mining archive notes. Test: `tests/test_shared_hooks.py`. Fixer (tier auto) for
         `temporary-market-fleet-source`: drops `removeMarket` of a market that never entered the economy (RC8-22).
-    39. [ ] **Population-delta fixer** (owner request 2026-10-04): an industries.csv override of a vanilla industry
+    39. [x] **Closed 2026-10-12, not built (owner agreed).** Population-delta fixer (owner request 2026-10-04): an industries.csv override of a vanilla industry
         whose class is RC8's source plus added `demand()`/`supply()` calls and stability effects becomes a market
         condition adding them through `Industry.getDemand/getSupply` (RC8's ResourceDepositsCondition pattern); any
         other change is MANUAL. Proven first by hand on DNEEP (`PopulationNeedsDNEEP`) with AoTD on the rig.
+        **Why closed:** of about 300 working copies only four override a vanilla industry in `industries.csv` (Better Colonies and
+        Slightly Better Tech Mining and SBTM on `techmining`, Cryosleeper 2 on `cryorevival`), and none is the population-needs shape;
+        DNEEP was done by hand and proved live (probe 0.2.25 supply checks, 2026-10-11), and the atlas rules
+        `ATLAS-READS-REPLACED` and `ATLAS-RUNTIME-SUPPLY` flag the conflict. A fixer for one case costs more than the hand fix it
+        saves. Revisit if a third mod with an added `demand()`/`supply()` industry override arrives.
     40. [x] **Crew-tier mapper** (Ironclads, 2026-10-04): `CargoAPI.CrewXPLevel` (removed in RC8) -> one crew; reads of
         REGULAR become `getCrew()`, other tiers 0 (tier sums stay right), add/removeCrew drop the tier. Owner decision
         "one crew". Done by hand in 5 Ironclads files.
@@ -2861,9 +2866,12 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         test_baseline_stats, test_progress, test_revive_queue, test_signature_rewrites.
     44. [x] **Whole-jar rebuild command**: decompile (Vineflower) -> source tree -> javac --release 17 against RC8 ->
         jar, with a class diff against the original (Ironclads' IroncladsEcon.jar was rebuilt by hand).
-    45. [ ] **0.7 economy translators** (decision tier, once a second 0.7 economy mod arrives): Ironclads'
+    45. [ ] **0.7 economy translators** (deferred, measured 2026-10-12: the trigger is not met) (decision tier, once a second 0.7 economy mod arrives): Ironclads'
         `IroncladsMarkets` condition->industry table and its commodity-row conversion (nearest RC8 analogue's
         0.7->RC8 price ratio and RC8-only columns), generalised.
+        **Measured 2026-10-12:** of 16 queue mods declared for 0.6 to 0.8 only AI-War (0.7.2a, 2 to 3 line economy files) and
+        FlowerGod (0.8.1a, already archived) carry economy files; no second Ironclads-style table exists. Count the owner's
+        unprocessed 0.7-era mods before building.
     21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
         escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
         edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next
