@@ -165,7 +165,10 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--target-java", type=int, default=17)
     doctor_cmd = subcommands.add_parser("save-doctor", help="why a save will not load with what is installed, in one read-only pass: missing mods, classes no installed mod provides, NaN/Infinity values, a file cut off mid-write, version changes; each with how recoverable it usually is")
     doctor_cmd.add_argument("save", type=Path, help="save folder (holding campaign.xml and descriptor.xml)")
-    doctor_cmd.add_argument("--mods", type=Path, required=True, help="the mods folder the save will be loaded with")
+    doctor_cmd.add_argument("--mods", type=Path, help="the mods folder the save will be loaded with (required except with --break-cycle)")
+    doctor_cmd.add_argument("--cycles", action="store_true", help="also look for Memory -> planet -> condition market -> same Memory reference cycles in campaign.xml (the PlanetConditionMarket.readResolve NullPointerException, ROADMAP 60g)")
+    doctor_cmd.add_argument("--break-cycle", action="store_true", help="write a repaired COPY (needs --out): replace each inner <memory cl=\"Memory\" ref=N> reference found by --cycles with an empty memory; the save itself is never changed")
+    doctor_cmd.add_argument("--out", type=Path, help="with --break-cycle: the new folder for the repaired copy")
     doctor_cmd.add_argument("--vanilla-core", type=Path, help="starsector-core, so the game's own classes resolve")
     doctor_cmd.add_argument("--json", action="store_true")
     rplan_cmd = subcommands.add_parser("save-removal-plan", help="for each object of a missing mod's class in a save: droppable (nothing outside refers to it) or blocked (lists the outside references); read-only, the plan for a fix on a copy")
@@ -582,7 +585,7 @@ def build_parser() -> argparse.ArgumentParser:
     locks_cmd.add_argument("path", type=Path)
     locks_cmd.add_argument("--json", action="store_true")
     intake_cmd = subcommands.add_parser("intake", help="preserve a ZIP and create a fresh convention-layout assessment copy")
-    intake_cmd.add_argument("archive", type=Path)
+    intake_cmd.add_argument("archive", type=Path, help="a mod ZIP, or a raw mod folder (zipped into In operation/_raw-zips/ first, the folder itself is left alone)")
     intake_cmd.add_argument("--repo-root", type=Path, default=Path.cwd())
     intake_cmd.add_argument("--name", help="portable mod folder name (default: sanitized metadata id)")
     intake_cmd.add_argument("--selected-root", help="exact ZIP mod-root candidate when ambiguous")
@@ -915,7 +918,8 @@ def build_parser() -> argparse.ArgumentParser:
     group_install.add_argument("--queue", type=Path)
     group_install.add_argument("--rig", type=Path)
     group_install.add_argument("--stage-providers", action="store_true", help="also copy the queue workspaces that provide missing dependencies into the rig, verifying id, version and files (ROADMAP 36.1)")
-    group_install.add_argument("--with-lunalib", action="store_true", help="also enable LunaLib when GraphicsLib is enabled without it (RC8-25: GraphicsLib 1.12.1 needs it under Fast Rendering)")
+    group_install.add_argument("--with-lunalib", action="store_true", help="also enable LunaLib whenever GraphicsLib (any version) is enabled without it (RC8-25: GraphicsLib 1.12.1 needs it under Fast Rendering; 1.12.1 gets it automatically)")
+    group_install.add_argument("--no-lunalib", action="store_true", help="do not enable LunaLib automatically for GraphicsLib 1.12.1 (to show the dependency gap, RC8-25)")
     group_install.add_argument("--setup", action="append", default=[], metavar="SPEC", help="probe setup applied once per save, as for probe-config --setup; also swap-industry:<from>:<to>:<count>[:<condition-prefix>] (probe 0.2.25); repeatable")
     group_install.add_argument("--save-after-checks", action="store_true", help="the probe saves the game once after the day-1 checks, so the save can be read and reloaded (probe 0.2.26)")
     group_install.add_argument("--expect-supply", action="append", default=[], metavar="COMMODITY@INDUSTRY", help="the probe's market-supply check FAILs unless INDUSTRY supplies COMMODITY in some market (probe 0.2.25); repeatable")
@@ -989,6 +993,12 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_recheck_cmd.add_argument("--restart", action="store_true", help="ignore an interrupted run's In operation/CORPUS_RECHECK.partial.jsonl and rescan everything")
     corpus_recheck_cmd.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
     corpus_recheck_cmd.add_argument("--json", action="store_true")
+    sibling_cmd = subcommands.add_parser("sibling-assets", help="fill missing sprites and description rows from sibling mods of the same pack, only when every copy is byte-identical (ROADMAP 60c); dry run unless --apply; copies are recorded for audit-explain --auto")
+    sibling_cmd.add_argument("workspace", type=Path, help="a workspace folder (In operation/<Mod>)")
+    sibling_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla files are not reported missing")
+    sibling_cmd.add_argument("--siblings", type=Path, nargs="*", help="mod roots to search instead of the other workspaces beside this one")
+    sibling_cmd.add_argument("--apply", action="store_true", help="write the copies (default: report only)")
+    sibling_cmd.add_argument("--json", action="store_true")
     vendor_copy_cmd = subcommands.add_parser("vendor-copy", help="copy a piece of a provider mod into another mod instead of reviving or depending on the whole provider (ROADMAP P14 item 4): one hullmod by id, or with --plan everything a vendor-plan lists (P15 item 7)")
     vendor_copy_cmd.add_argument("kind", nargs="?", choices=["hullmod"], help="only 'hullmod' is supported without --plan (see the command's own help for why)")
     vendor_copy_cmd.add_argument("id", nargs="?", help="the hullmod id to vendor")
@@ -1444,7 +1454,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "archive":
         from .archive import ArchiveError, archive_mod
         from .substitutes import REPO_ROOT
+        from .explain_proofs import prepare_for_audit
         from .live_trust import archive_gate
+        prepare_for_audit(args.workspace)  # extract a zip original, copy translation records (copy-only steps, ROADMAP 60b)
         gate = archive_gate(args.workspace)
         if not gate["allowed"]:
             # ROADMAP 36.11: no archive for an unaudited or stale-tested mod unless the owner recorded why.
@@ -1604,6 +1616,8 @@ def main(argv: list[str] | None = None) -> int:
                 if not args.json:
                     for group in result["groups"]:
                         print(f"Group {group['group']} ({len(group['members'])} mod(s)): " + ", ".join(m["workspace"] for m in group["members"]))
+                    for item in result.get("raw_folders") or []:
+                        print(f"Not taken in: {item['folder']} is a raw mod folder, no workspace yet. Run: {item['next']}")
                     for item in result["unplaced"]:
                         print(f"Not grouped: {item['workspace']} - {item['reason']}")
                         for problem in item.get("providers") or []:
@@ -1615,7 +1629,8 @@ def main(argv: list[str] | None = None) -> int:
             elif args.probe_group_command == "install":
                 plan = json.loads((args.plan or queue / "PROBE_GROUPS.json").read_text(encoding="utf-8"))
                 result = install_group(plan, args.group, queue, rig, stage=args.stage_providers, with_lunalib=args.with_lunalib,
-                                       setups=args.setup, expect_supply=args.expect_supply, save_after_checks=args.save_after_checks)
+                                       setups=args.setup, expect_supply=args.expect_supply, save_after_checks=args.save_after_checks,
+                                       no_lunalib=args.no_lunalib)
                 if not args.json:
                     print(f"Group {result['group']} installed: {', '.join(result['members'])}")
                     for item in result["staged_providers"]:
@@ -1632,6 +1647,8 @@ def main(argv: list[str] | None = None) -> int:
                     for item in result.get("dependency_version_conflicts", []):
                         print(f"  WARN {item['mod_id']} wants {item['dependency']} {item['wanted']}, rig has {item['installed']}: "
                               "RC8 disables a mod whose dependency major differs (RC8-23); fix its mod_info.json")
+                    if result.get("lunalib"):
+                        print(f"  LunaLib: {result['lunalib']}")
                     if result.get("lunalib_advice"):
                         print(f"  WARN {result['lunalib_advice']}")
                     print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
@@ -1869,6 +1886,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in {"intake", "board"}:
         try:
             if args.command == "intake":
+                if args.archive.expanduser().is_dir():
+                    from .intake import zip_raw_folder
+                    args.archive = zip_raw_folder(args.archive, args.repo_root)
+                    print(f"Zipped the raw folder to {args.archive}", file=sys.stderr)
                 result = intake_archive(args.archive, args.repo_root, name=args.name,
                                         selected_root=args.selected_root, archaeology=args.archaeology)
                 if args.json:
@@ -2022,6 +2043,22 @@ def main(argv: list[str] | None = None) -> int:
             if args.write_markdown:
                 print(f"Roll-up written: {args.write_markdown}")
         return 1 if result["status"] == "REGRESSION" else 0
+    if args.command == "sibling-assets":
+        from .sibling_assets import SiblingAssetsError, fix_sibling_assets
+        try:
+            result = fix_sibling_assets(args.workspace, args.vanilla_core, apply=args.apply, roots=args.siblings or None)
+        except (SiblingAssetsError, OSError, ValueError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            verb = "copied" if args.apply else "would copy"
+            print(f"Searched {result['siblings_searched']} sibling root(s): {verb} {len(result['files'])} file(s) and {len(result['rows'])} description row(s).")
+            for label in ("files_refused", "files_unresolved", "rows_refused", "rows_unresolved"):
+                for item in result[label]:
+                    print(f"  {label.replace('_', ' ')}: {item.get('path') or item.get('id')}: {item['reason']}")
+        return 0
     if args.command == "vendor-copy" and args.plan is not None:
         from .vendor_plan import VendorPlanError, copy_plan
         if args.to is None or any(value is not None for value in (args.kind, args.id, args.from_provider, args.to_mod)):
@@ -3223,13 +3260,33 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "save-doctor":
         from .save_doctor import diagnose
-        result = diagnose(args.save, args.mods, args.vanilla_core)
+        if args.break_cycle:
+            from .save_cycles import SaveCycleError, break_cycle
+            if args.out is None:
+                print("bridgeforge: --break-cycle needs --out (a new folder for the repaired copy).", file=sys.stderr)
+                return 2
+            try:
+                result = break_cycle(args.save, args.out)
+            except (SaveCycleError, OSError, ValueError) as exc:
+                print(f"bridgeforge: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else
+                  f"Copy written: {result['copy']} ({len(result['changed_lines'])} line(s) changed; "
+                  f"cycles {result['cycles_before']} -> {result['cycles_after']}). The original is unchanged.")
+            return 0 if result["cycles_after"] == 0 else 1
+        if args.mods is None:
+            print("bridgeforge: save-doctor needs --mods (or --break-cycle).", file=sys.stderr)
+            return 2
+        result = diagnose(args.save, args.mods, args.vanilla_core, cycles=args.cycles)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
             return 0
         print(f"{result['verdict']}: {result['character']} ({result['game_version']}, {result['enabled_mods']} mods)")
         for problem in result["problems"]:
             detail = problem.get("mod") or problem.get("package") or problem.get("file") or f"{problem.get('lines')} line(s)"
+            if problem["class"] == "MEMORY_CYCLE":
+                detail = (f"line {problem['line']}: PCMarket z={problem['pcmarket']} refers back to open memory z={problem['memory']}"
+                          f" via keys {problem['keys']}")
             print(f"  {problem['class']:16} {detail}" + (f"  e.g. {', '.join(problem['examples'])}" if problem.get("examples") else ""))
         for name, text in result["recovery"].items():
             print(f"  recovery {name}: {text}")

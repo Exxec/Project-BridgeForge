@@ -243,6 +243,7 @@ switch ($Command) {
         $shots = 0
         $menuReached = $false
         $suspectShot = $false
+        $javaSeen = $false
         # The game's launcher window waits for "Play Starsector" and nothing runs until it is clicked (owner, 2026-10-11).
         # Click it for them: first by posting window messages, then, if the game still has not started 8 s later, with a real
         # click. The game has started once its log says "Running with the following mods". BF_NO_AUTOCLICK=1 turns this off.
@@ -253,6 +254,13 @@ switch ($Command) {
         while ($true) {
             $java = @(Get-RigJava)
             foreach ($proc in $java) { $ownedProcesses[$proc.Id] = $proc.StartTime }
+            # Launch watchdog (ROADMAP 60f): the first Yellowjackets launch started nothing and said nothing. No java process
+            # with the rig path 60 s after launch means the bat never started the game: say so and stop instead of waiting.
+            if ($java.Count -gt 0) { $javaSeen = $true }
+            if (-not $javaSeen -and ((Get-Date) - $started).TotalSeconds -gt 60) {
+                Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} watchdog: no java process for the rig 60 s after launch" -f (Get-Date))
+                throw "Launch watchdog: no java process for $Rig appeared within 60 s of launch (see $out and $err). Stopped; nothing was left running."
+            }
             if ($autoClick -and $launcherHandle -ne 0 -and -not $physicalDone -and $postedAt -and ((Get-Date) - $postedAt).TotalSeconds -gt 8) {
                 $physicalDone = $true
                 if (-not (Select-String -Path $out -SimpleMatch "Running with the following mods" -Quiet -ErrorAction SilentlyContinue)) {

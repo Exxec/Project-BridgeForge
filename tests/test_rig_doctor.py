@@ -574,5 +574,44 @@ class RevenantLibContractCheckTests(unittest.TestCase):
         self.assertIn("RevenantLib", broken["detail"])
 
 
+class WorkspaceAccessCheckTests(unittest.TestCase):
+    """ROADMAP 60e(2): workspaces that deny access to a normal session are named, with the unlock command."""
+
+    def _repo(self, root: Path) -> Path:
+        (root / "In operation" / "Open" / "working").mkdir(parents=True)
+        (root / "In operation" / "Locked").mkdir()
+        (root / "In operation" / "loose-file.txt").write_text("x", encoding="utf-8")
+        return root
+
+    def test_denied_workspaces_warn_and_print_the_unlock_command(self) -> None:
+        import os as real_os
+
+        from bridgeforge.rig_doctor import _check_workspace_access
+
+        real_scandir = real_os.scandir
+
+        def scandir(path="."):
+            if Path(path).name == "Locked":
+                raise PermissionError(5, "Access is denied")
+            return real_scandir(path)
+
+        with resolved_temp_dir() as root:
+            repo = self._repo(root)
+            with mock.patch("os.scandir", side_effect=scandir):
+                check = _check_workspace_access(repo)
+        self.assertEqual(check["status"], "WARN")
+        self.assertIn("Locked", check["detail"])
+        self.assertNotIn("Open", check["detail"])
+        self.assertIn(r"tools\unlock-workspaces.ps1 -Apply", check["detail"])
+
+    def test_readable_queue_passes_and_a_missing_queue_is_skipped(self) -> None:
+        from bridgeforge.rig_doctor import _check_workspace_access
+
+        with resolved_temp_dir() as root:
+            self.assertEqual(_check_workspace_access(root)["status"], "SKIPPED")
+            check = _check_workspace_access(self._repo(root))
+        self.assertEqual(check["status"], "PASS")
+
+
 if __name__ == "__main__":
     unittest.main()

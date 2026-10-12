@@ -344,7 +344,7 @@ class GameRefused(RuntimeError):
 def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
     """Start the rig game, click through the launcher, yield (log, hands, vanilla mission rows), then stop the rig's java and the
     launcher's whole tree. Refuses like boot_test: GameRefused with the reason."""
-    from .boot_test import _is_link, _running_java_under, _terminate_tree
+    from .boot_test import LAUNCH_WATCHDOG_SECONDS, _is_link, _running_java_under, _terminate_tree, java_started, watchdog_message
     from .launcher_click import click_launcher_once, descendant_pids
 
     rig = Path(rig).expanduser().resolve()
@@ -370,8 +370,15 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
     hands = real_hands(rig, process.pid)
     base_alive = hands.alive
     clicked = {"done": False}
+    launched_at = time.monotonic()
+    java_seen = {"seen": False}
 
     def alive_and_click() -> bool:
+        # Launch watchdog (ROADMAP 60f): no java process 60 s after launch means the bat never started the game; say so and stop.
+        if not java_seen["seen"]:
+            java_seen["seen"] = java_started(rig, process.pid)
+            if not java_seen["seen"] and time.monotonic() - launched_at >= LAUNCH_WATCHDOG_SECONDS:
+                raise GameRefused(watchdog_message(rig, LAUNCH_WATCHDOG_SECONDS))
         # The launcher window waits for Play before the game logs anything (owner, 2026-10-11).
         if not clicked["done"]:
             pids = {item["pid"] for item in _running_java_under(rig) if isinstance(item.get("pid"), int)} | descendant_pids(process.pid)

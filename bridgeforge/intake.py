@@ -159,3 +159,57 @@ def intake_archive(archive: Path, repo_root: Path, *, name: str | None = None,
             raise
     return {**manifest, "destination": str(destination), "working": str(destination / "working"),
             "reports": str(destination / "reports")}
+
+
+RAW_ZIP_FOLDER = "_raw-zips"
+
+
+def _mod_root_of(folder: Path) -> Path | None:
+    """The folder holding mod_info.json: the folder itself or its only subfolder that does."""
+    if (folder / "mod_info.json").is_file():
+        return folder
+    nested = [p for p in folder.iterdir() if p.is_dir() and (p / "mod_info.json").is_file()] if folder.is_dir() else []
+    return nested[0] if len(nested) == 1 else None
+
+
+def zip_raw_folder(folder: Path, repo_root: Path) -> Path:
+    """Zip a raw mod folder (a mod dropped unpacked in the queue) to `In operation/_raw-zips/<name>.zip` so `intake` can take it
+    in as an archive, as the owner did by hand for Yellowjackets and Neutrino (ROADMAP 65). The folder is only read, nothing is
+    overwritten (an existing zip is reused only when it holds exactly these files), and links are never followed."""
+    import zipfile
+
+    folder = folder.expanduser().resolve()
+    root = _mod_root_of(folder)
+    if root is None:
+        raise ValueError(f"{folder} is not a mod folder: no mod_info.json at its top or in its only subfolder.")
+    name = _folder_name(folder.name)
+    target_dir = operation_root(repo_root, create=True) / RAW_ZIP_FOLDER
+    target_dir.mkdir(exist_ok=True)
+    target = target_dir / f"{name}.zip"
+    files = sorted(p for p in folder.rglob("*") if p.is_file() and not _is_link(p))
+    if target.exists():
+        with zipfile.ZipFile(target) as existing:
+            same = sorted(existing.namelist()) == sorted(f"{name}/{p.relative_to(folder).as_posix()}" for p in files)
+        if not same:
+            raise ValueError(f"{target} already exists with different content; intake never overwrites it.")
+        return target
+    temporary = target.with_suffix(".zip.part")
+    with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in files:
+            archive.write(path, f"{name}/{path.relative_to(folder).as_posix()}")
+    temporary.replace(target)
+    return target
+
+
+def unprocessed_raw_folders(queue: Path) -> list[dict[str, str]]:
+    """Folders in the queue that hold a mod but are no workspace (no working/ copy, no original/): a mod dropped in unpacked
+    and not yet taken in. The planner lists them so they are not forgotten (ROADMAP 65)."""
+    queue = Path(queue)
+    found = []
+    for child in sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_")) if queue.is_dir() else []:
+        if (child / "working").is_dir() or (child / "original").is_dir():
+            continue
+        root = _mod_root_of(child)
+        if root is not None:
+            found.append({"folder": child.name, "mod_root": root.relative_to(child).as_posix(), "next": f'bridgeforge intake "{child}"'})
+    return found

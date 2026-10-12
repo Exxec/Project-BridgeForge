@@ -196,6 +196,14 @@ def _recorded_changes(workspace: Path) -> dict[str, str]:
         relative = backup.relative_to(working).as_posix()
         target, _, rest = relative.partition(".pre-bf-fix-")
         found.setdefault(target, f"fixer {rest.split('.bak', 1)[0]}")
+    # Any other BridgeForge backup (`.pre-bf-<tag>.bak`: declare-providers, the jar-source edits): the file beside it was
+    # edited by that tool (60b). Not `crafted`: that is the descriptions apply backup, proven separately.
+    for backup in working.rglob("*.pre-bf-*"):
+        relative = backup.relative_to(working).as_posix()
+        target, _, rest = relative.partition(".pre-bf-")
+        tag = rest.split(".bak", 1)[0]
+        if target and not tag.startswith(("fix-", "crafted")) and (working / target).is_file():
+            found.setdefault(target, f"tool edit {tag} (backup {backup.name})")
     for record in (workspace / "scratch").glob("jar-patch-*/PATCH-*.json"):
         try:
             data = json.loads(record.read_text(encoding="utf-8"))
@@ -369,8 +377,16 @@ def auto_explain_shipped(workspace: Path, today: str | None = None) -> dict[str,
     - moved work file: a file the original shipped is gone from working/ and a byte-identical copy sits under scratch/work-files/
       (the shippable-work-file fixer's move);
     - rows added: a CSV's header and every original row are unchanged and it only gained rows;
-    - translation: the original holds CJK text, the shipped file less of it, and reports/translation/ exists."""
+    - translation: the original holds CJK text, the shipped file less of it, and reports/translation/ exists;
+    - descriptions: the descriptions.csv `descriptions apply` wrote (saved author file, credits, rows only added);
+    - moved aside: a file gone from working/ with a byte-identical copy in scratch/work-files, translator-workspace or removed-src;
+    - copied: a file recorded in reports/COPIES.json (vendor-copy, sibling-pack fixer) whose bytes and source still match;
+    - patched jar: a jar named by a scratch/jar-patch-* or anchor-fix record.
+    The copy-only archive steps (zip original extracted, translation records copied) run first."""
+    from . import explain_proofs as proofs
+
     workspace = Path(workspace)
+    proofs.prepare_for_audit(workspace)
     audit = audit_shipped(workspace)
     root = original_root(workspace)
     if root is None or not audit.get("unexplained"):
@@ -378,6 +394,7 @@ def auto_explain_shipped(workspace: Path, today: str | None = None) -> dict[str,
     working = workspace / "working"
     scratch = workspace / "scratch"
     kept_names = {p.name for p in scratch.rglob("*") if p.is_file()} if scratch.is_dir() else set()
+    patched_jars = proofs.patched_jar_names(workspace)
     translated = (workspace / "reports" / "translation").is_dir() and any((workspace / "reports" / "translation").glob("*.json"))
     groups: dict[str, list[str]] = {}
     for relative in audit["unexplained"]:
@@ -386,6 +403,14 @@ def auto_explain_shipped(workspace: Path, today: str | None = None) -> dict[str,
         suffix = Path(relative).suffix.lower()
         if relative == "BRIDGEFORGE_CREDITS.txt" and after.is_file() and not before.is_file():
             reason = "revival credits file added by BridgeForge"
+        elif proofs.descriptions_applied(workspace, relative, before, after):
+            reason = "codex descriptions written by `descriptions apply` (author file kept in scratch/descriptions.csv.pre-bf-crafted; rows only added)"
+        elif relative.lower().endswith(".csv") and after.is_file() and proofs.copied_rows_proof(workspace, relative, before, after):
+            reason = proofs.copied_rows_proof(workspace, relative, before, after)
+        elif not before.is_file() and after.is_file() and proofs.copy_proof(workspace, relative, after):
+            reason = proofs.copy_proof(workspace, relative, after)
+        elif relative.lower().endswith(".jar") and after.is_file() and Path(relative).name in patched_jars:
+            reason = f"jar patched in place; the old jar and sources are kept in scratch/{patched_jars[Path(relative).name]}/"
         elif before.is_file() and after.is_file():
             if suffix == ".csv" and _only_rows_added(before, after):
                 reason = "CSV rows added (the header and every original row are unchanged)"
@@ -397,6 +422,8 @@ def auto_explain_shipped(workspace: Path, today: str | None = None) -> dict[str,
                 reason = "Chinese -> English translation (reports/translation/); the original holds the Chinese text"
         elif before.is_file() and not after.is_file() and _kept_in_work_files(scratch, relative, before):
             reason = "an author work file moved out of the shipped copy by the shippable-work-file fixer; a byte-identical copy is kept in scratch/work-files/"
+        elif before.is_file() and not after.is_file() and (folder := proofs.kept_elsewhere(workspace, relative, before)):
+            reason = f"a file moved out of the shipped copy; a byte-identical copy is kept in scratch/{folder}/"
         elif before.is_file() and not after.is_file() and suffix in _UNLOADED_ARCHIVES and before.name in kept_names:
             reason = "an archive the author bundled in the mod, never loaded by the game; kept under scratch/"
         if reason:

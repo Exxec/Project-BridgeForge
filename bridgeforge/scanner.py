@@ -1129,6 +1129,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_rules_firebest_populate_options(root, result)
     _scan_hullmod_instance_state(root, result)
     _scan_hulk_death_effect_repeats(root, result)
+    _scan_saved_object_holds_market_ref(root, result)
     _scan_personality_ids(root, result)
     _scan_faction_trait_weight_legacy_personality_ids(root, result)
     _scan_removed_market_condition_ids(root, result)
@@ -4045,6 +4046,34 @@ def _scan_hulk_death_effect_repeats(root: Path, result: ScanResult) -> None:
         result.add(id="hulk-death-effect-repeats", category="scripts", severity="high", classification="REVIEW", confidence="MEDIUM",
                    explanation=explanation + " Compiled class: decompile it, add the guard, then patch-jar-class.",
                    file=f"{_relative(root, jar)}!{member}", evidence=[f"class:{info.this_class}", "calls:" + ",".join(sorted(_HULK_SPAWN_CALLS & set(info.utf8_values)))])
+
+
+def _scan_saved_object_holds_market_ref(root: Path, result: ScanResult) -> None:
+    """A class stored in a memory/customData or registered as a listener or script that keeps a MarketAPI, SectorEntityToken, PlanetAPI
+    or CampaignFleetAPI in a non-transient field (the Station Augments save-cycle pattern, ROADMAP 60g(4); see saved_object_scan)."""
+    from .saved_object_scan import saved_object_findings
+
+    sources: dict[str, str] = {}
+    for source in sorted(root.rglob("*.java")):
+        relative = _relative(root, source)
+        if "disabled_files" in Path(relative).parts:
+            continue
+        try:
+            sources[relative] = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"), strings=True)
+        except OSError:
+            continue
+    for hit in saved_object_findings(sources):
+        result.add(
+            id="saved-object-holds-market-ref", category="scripts", severity="medium", classification="REVIEW", confidence="MEDIUM",
+            explanation=(f"{hit['class']} is {hit['how']}, so the game saves it with every non-transient field, and it keeps "
+                         f"{', '.join(hit['fields'])}. A saved object that holds a market, planet, entity or fleet ties the save graph to that "
+                         "entity; with a memory that holds the planet back it becomes a reference cycle, and a Modpack 6.3 save with Station "
+                         "Augments failed to load after c212 (NullPointerException in PlanetConditionMarket.readResolve, RC8-31; `save-doctor "
+                         "--cycles` finds the cycle in a save). Safe fix pattern: clear the field in beforeGameSave, restore it in "
+                         "afterGameSave/onGameSaveFailed, and re-link it in onGameLoad. Do NOT mark an already-saved field transient: RC8's "
+                         "XStream throws UnknownFieldException on a saved element whose field is no longer readable, so existing saves would "
+                         "break (RC8-32, bytecode only)."),
+            file=hit["file"], evidence=[f"class:{hit['class']}", f"saved:{hit['how']}", *[f"field:{field}" for field in hit["fields"]]])
 
 
 def _scan_hullmod_instance_state(root: Path, result: ScanResult) -> None:

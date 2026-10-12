@@ -115,6 +115,46 @@ def _check_path_locks(runtime_dir: Path) -> dict[str, object]:
     return _check("path_locks", "SKIPPED" if unavailable else "PASS", "No process found. Limited visibility: " + "; ".join(result["limitations"]))
 
 
+UNLOCK_COMMAND = r"tools\unlock-workspaces.ps1 -Apply"
+
+
+def locked_workspaces(queue: Path) -> list[str]:
+    """Names of folders directly under `queue` (In operation/) that this session cannot list. Twice (2026-10-05, 2026-10-06) workspaces
+    ended up with their permissions stripped to SYSTEM and Administrators, and every board-wide command stopped with 'Access is
+    denied' (ROADMAP 60e); the cause is still unknown."""
+    import os
+
+    denied = []
+    try:
+        entries = sorted(os.scandir(queue), key=lambda entry: entry.name)
+    except OSError:
+        return denied
+    for entry in entries:
+        try:
+            if not entry.is_dir(follow_symlinks=False):
+                continue
+            with os.scandir(entry.path) as inside:
+                for _ in inside:
+                    break
+        except PermissionError:
+            denied.append(entry.name)
+        except OSError:
+            continue
+    return denied
+
+
+def _check_workspace_access(repo_root: Path) -> dict[str, object]:
+    queue = Path(repo_root) / "In operation"
+    if not queue.is_dir():
+        return _check("workspace_access", "SKIPPED", f"{queue} does not exist.")
+    denied = locked_workspaces(queue)
+    if not denied:
+        return _check("workspace_access", "PASS", "Every workspace under In operation/ can be listed by this session.")
+    shown = ", ".join(denied[:12]) + (f" and {len(denied) - 12} more" if len(denied) > 12 else "")
+    return _check("workspace_access", "WARN", f"{len(denied)} workspace(s) under In operation/ deny access to this session ({shown}). "
+                  f"From an Administrator PowerShell run: {UNLOCK_COMMAND} (without -Apply it only lists them).")
+
+
 def _check_layout(repo_root: Path, working_copies: dict[str, Path]) -> dict[str, object]:
     try:
         findings = layout_findings(repo_root, working_copies)
@@ -470,6 +510,7 @@ def rig_doctor(
         ]
 
     checks.append(_check_layout(repo_root, working_copies or {}))
+    checks.append(_check_workspace_access(repo_root))
     if any(item["status"] == "FAIL" for item in checks):
         overall = "FAIL"
     elif any(item["status"] == "WARN" for item in checks):

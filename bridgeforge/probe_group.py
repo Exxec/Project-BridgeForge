@@ -275,6 +275,8 @@ def plan_groups(queue: Path, rig: Path, size: int = 8, workspaces: list[Path] | 
                 extra_sources: list[Path] | tuple = ()) -> dict:
     """Greedy grouping: each member joins the first group it shares no mod or content id with. `exclude` leaves
     workspaces out, `solo` gives each its own group, and large campaign mods run solo unless `auto_solo` is off."""
+    from .intake import unprocessed_raw_folders
+
     exclude, solo = set(exclude or ()), set(solo or ())
     rig = Path(rig).expanduser().resolve()
     installed = rig_mod_ids(rig / "mods")
@@ -323,6 +325,8 @@ def plan_groups(queue: Path, rig: Path, size: int = 8, workspaces: list[Path] | 
         "groups": [{"group": index, "members": [{k: v for k, v in m.items() if k != "config"} for m in group]}
                    for index, group in enumerate(groups, 1)],
         "unplaced": unplaced,
+        # Mods dropped in the queue unpacked and never taken in (ROADMAP 65): listed so they are not forgotten.
+        "raw_folders": unprocessed_raw_folders(queue),
     }
 
 
@@ -492,9 +496,37 @@ def lunalib_advice(enabled: list[str], installed: dict[str, str]) -> str | None:
     return None
 
 
+LUNALIB_ID = "lunalib"
+GRAPHICSLIB_ID = "shaderLib"
+LUNALIB_RULE_VERSION = "1.12.1"
+
+
+def lunalib_rule(enabled: list[str], installed: dict[str, str], mods_dir: Path, *, with_lunalib: bool = False,
+                 no_lunalib: bool = False) -> tuple[bool, str | None, str | None]:
+    """(enable LunaLib?, why, advice). Install rule RC8-25 (ROADMAP 60f): GraphicsLib 1.12.1's ShaderLib.init references LunaLib
+    classes and the unattended runs use Fast Rendering, so when GraphicsLib 1.12.1 is enabled and the rig has LunaLib, LunaLib is
+    enabled automatically ("auto"). `--with-lunalib` keeps its meaning (enable it whenever GraphicsLib is on without it, any
+    version: "forced"); `--no-lunalib` opts out, for a run meant to show the dependency gap. Otherwise only the advice remains."""
+    if with_lunalib and no_lunalib:
+        raise ProbeGroupError("--with-lunalib and --no-lunalib contradict each other.")
+    advice = lunalib_advice(enabled, installed)
+    if advice is None:
+        return False, None, None
+    if no_lunalib:
+        return False, "skipped (--no-lunalib)", advice
+    if with_lunalib:
+        return True, "forced (--with-lunalib)", None
+    from .archive import _version_text
+
+    version = _version_text(_mod_info(Path(mods_dir) / installed[GRAPHICSLIB_ID]).get("version"))
+    if version.startswith(LUNALIB_RULE_VERSION):
+        return True, f"auto: GraphicsLib {version} needs LunaLib under Fast Rendering (RC8-25)", None
+    return False, None, advice
+
+
 def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install_probe: bool = True,
                   stage: bool = False, with_lunalib: bool = False, setups: list[str] | None = None,
-                  expect_supply: list[str] | None = None, save_after_checks: bool = False) -> dict:
+                  expect_supply: list[str] | None = None, save_after_checks: bool = False, no_lunalib: bool = False) -> dict:
     """Copy/sync members into the rig, write the merged config, set enabled_mods.json. A group whose members
     need providers from the queue installs only with `stage` (`--stage-providers`), which copies and verifies them.
     `setups` (probe setup specs) and `expect_supply` ("commodity@industry") go into the merged config (probe 0.2.25)."""
@@ -557,10 +589,9 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
         for mod_id in [*needed, member["mod_id"]]:
             if mod_id not in enabled:
                 enabled.append(mod_id)
-    advice = lunalib_advice(enabled, rig_mod_ids(mods_dir))
-    if advice and with_lunalib:
-        enabled.append("lunalib")
-        advice = None
+    add_lunalib, lunalib_why, advice = lunalib_rule(enabled, rig_mod_ids(mods_dir), mods_dir, with_lunalib=with_lunalib, no_lunalib=no_lunalib)
+    if add_lunalib:
+        enabled.append(LUNALIB_ID)
     enabled.append(PROBE_MOD_ID)
     if SPEEDUP_MOD_ID in rig_mod_ids(mods_dir) and SPEEDUP_MOD_ID not in enabled:
         enabled.append(SPEEDUP_MOD_ID)
@@ -573,7 +604,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
             "members": [m["workspace"] for m in group["members"]], "copied": copied, "staged_providers": staged, "enabled_mods": enabled,
             "dependency_version_conflicts": dependency_version_conflicts(mods_dir, enabled),
             "moved_aside": moved_aside, "incomplete_providers": incomplete_provider_copies(rig, enabled),
-            "probe_mission_added": probe_mission_added, "lunalib_advice": advice,
+            "probe_mission_added": probe_mission_added, "lunalib_advice": advice, "lunalib": lunalib_why,
             "config_path": str(common / CONFIG_FILE), "checked_ids": len(config["content_variants"]["ship"]) + len(config["content_variants"]["other"])
             + len(config["content_wings"]) + len(config["content_special_items"])}
 
@@ -752,7 +783,8 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
         try:
             # `refresh` replaces an earlier archive of this mod in Done/ (`archive --refresh`): the owner's word each time, because
             # it deletes that folder (Omega Trauma 2026-10-06 and six stale archives 2026-10-11 were refreshed by hand).
-            result = archive_mod(workspace, done, policy_path=policy_path, today=today, refresh=refresh)
+            # An existing Done/<Mod> is moved to Done/_replaced-<date>/, never deleted (ROADMAP 60b).
+            result = archive_mod(workspace, done, policy_path=policy_path, today=today, refresh=refresh, move_aside=True)
         except ArchiveError as exc:
             skipped.append({"mod_id": mod_id, "verdict": "PASS", "workspace": workspace.name, "archive": str(exc)})
             continue

@@ -65,6 +65,7 @@
     "hardcoded-terrain-grid-size": "code",
     "hullmod-instance-state": "auto",
     "hulk-death-effect-repeats": "auto",
+    "saved-object-holds-market-ref": "inspect",
     "nexerelin-corvus-mode-import": "auto",
     "jar-linkage-unresolved": "code",
     "jar-interface-method-missing": "code",
