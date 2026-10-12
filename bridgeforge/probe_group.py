@@ -530,9 +530,31 @@ def lunalib_rule(enabled: list[str], installed: dict[str, str], mods_dir: Path, 
     return False, None, advice
 
 
+ENABLE_SETS = {
+    # Named sets for `install --also-enable`, replacing hand edits of enabled_mods.json before AoTD runs (ROADMAP 70 H1.7). The Toolbox
+    # fork needs the Prepatcher javaagent: run those groups with a `-prep` launcher (java-matrix setup --prepatcher).
+    "aotd": ["aotd_vok", "aotd_theory_of_toolbox", "starsector_prepatcher", "bmo", "ashlib"],
+}
+
+
+def expand_also_enable(requested: list[str], installed: dict[str, str]) -> list[str]:
+    """Mod ids for `--also-enable` values: a named set (`aotd`) expands to its ids, anything else is a mod id. Every id must be installed
+    in the rig; the ones that are not are named together, never skipped silently."""
+    ids: list[str] = []
+    for item in requested:
+        for mod_id in ENABLE_SETS.get(item.lower(), [item]):
+            if mod_id not in ids:
+                ids.append(mod_id)
+    missing = [i for i in ids if i not in installed]
+    if missing:
+        raise ProbeGroupError(f"--also-enable names mods that are not in the rig: {', '.join(missing)} (sets: {', '.join(sorted(ENABLE_SETS))}).")
+    return ids
+
+
 def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install_probe: bool = True,
                   stage: bool = False, with_lunalib: bool = False, setups: list[str] | None = None,
-                  expect_supply: list[str] | None = None, save_after_checks: bool = False, no_lunalib: bool = False) -> dict:
+                  expect_supply: list[str] | None = None, save_after_checks: bool = False, no_lunalib: bool = False,
+                  also_enable: list[str] | None = None) -> dict:
     """Copy/sync members into the rig, write the merged config, set enabled_mods.json. A group whose members
     need providers from the queue installs only with `stage` (`--stage-providers`), which copies and verifies them.
     `setups` (probe setup specs) and `expect_supply` ("commodity@industry") go into the merged config (probe 0.2.25)."""
@@ -593,6 +615,12 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
         wanted = [dep for dep in dict.fromkeys([*member["dependencies"], *current]) if dep != member["mod_id"]]
         needed, _ = dependency_closure(mods_dir, wanted)
         for mod_id in [*needed, member["mod_id"]]:
+            if mod_id not in enabled:
+                enabled.append(mod_id)
+    extras = expand_also_enable(also_enable or [], rig_mod_ids(mods_dir))
+    if extras:
+        needed_extra, _ = dependency_closure(mods_dir, extras)
+        for mod_id in [*needed_extra, *extras]:
             if mod_id not in enabled:
                 enabled.append(mod_id)
     add_lunalib, lunalib_why, advice = lunalib_rule(enabled, rig_mod_ids(mods_dir), mods_dir, with_lunalib=with_lunalib, no_lunalib=no_lunalib)

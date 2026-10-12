@@ -406,6 +406,8 @@ def build_parser() -> argparse.ArgumentParser:
     add_atlas_parser(subcommands)
     from .baseline_audit import add_parser as add_baseline_audit_parser
     add_baseline_audit_parser(subcommands)
+    from .rig_reset import add_parser as add_rig_reset_parser
+    add_rig_reset_parser(subcommands)
     from .move_machine import add_parser as add_migrate_parser
     add_migrate_parser(subcommands)
     envc_cmd = subcommands.add_parser("env-check", help="read a launcher .bat (following @argfiles) and report java version, javaagents and their order, Prepatcher last or not, heap, and enabled mods that need Prepatcher the launch lacks; read-only (ROADMAP item 63)")
@@ -925,6 +927,7 @@ def build_parser() -> argparse.ArgumentParser:
     group_install.add_argument("--with-lunalib", action="store_true", help="also enable LunaLib whenever GraphicsLib (any version) is enabled without it (RC8-25: GraphicsLib 1.12.1 needs it under Fast Rendering; 1.12.1 gets it automatically)")
     group_install.add_argument("--no-lunalib", action="store_true", help="do not enable LunaLib automatically for GraphicsLib 1.12.1 (to show the dependency gap, RC8-25)")
     group_install.add_argument("--setup", action="append", default=[], metavar="SPEC", help="probe setup applied once per save, as for probe-config --setup; also swap-industry:<from>:<to>:<count>[:<condition-prefix>] (probe 0.2.25); repeatable")
+    group_install.add_argument("--also-enable", action="append", default=[], metavar="MOD_OR_SET", help="also enable this mod id (with its dependencies) or named set (aotd: Vaults of Knowledge, Toolbox fork, Prepatcher, BMO, Ashlib); repeatable; every id must be in the rig")
     group_install.add_argument("--save-after-checks", action="store_true", help="the probe saves the game once after the day-1 checks, so the save can be read and reloaded (probe 0.2.26)")
     group_install.add_argument("--expect-supply", action="append", default=[], metavar="COMMODITY@INDUSTRY", help="the probe's market-supply check FAILs unless INDUSTRY supplies COMMODITY in some market (probe 0.2.25); repeatable")
     group_install.add_argument("--json", action="store_true")
@@ -1635,7 +1638,7 @@ def main(argv: list[str] | None = None) -> int:
                 plan = json.loads((args.plan or queue / "PROBE_GROUPS.json").read_text(encoding="utf-8"))
                 result = install_group(plan, args.group, queue, rig, stage=args.stage_providers, with_lunalib=args.with_lunalib,
                                        setups=args.setup, expect_supply=args.expect_supply, save_after_checks=args.save_after_checks,
-                                       no_lunalib=args.no_lunalib)
+                                       no_lunalib=args.no_lunalib, also_enable=args.also_enable)
                 if not args.json:
                     print(f"Group {result['group']} installed: {', '.join(result['members'])}")
                     for item in result["staged_providers"]:
@@ -3030,6 +3033,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "atlas":
         from .atlas_report import run_cli as run_atlas
         return run_atlas(args)
+    if args.command == "rig-reset":
+        from .rig_reset import run_cli as run_rig_reset
+        return run_rig_reset(args)
     if args.command in ("baseline-audit", "baseline-accept"):
         from .baseline_audit import run_cli as run_baseline_audit
         return run_baseline_audit(args)
