@@ -402,20 +402,8 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_test_cmd.add_argument("--log-name")
     prepare_test_cmd.add_argument("--keep-mods", action="store_true")
     prepare_test_cmd.add_argument("--json", action="store_true")
-    from .atlas_report import add_parser as add_atlas_parser
-    add_atlas_parser(subcommands)
-    from .baseline_audit import add_parser as add_baseline_audit_parser
-    add_baseline_audit_parser(subcommands)
-    from .rig_reset import add_parser as add_rig_reset_parser
-    add_rig_reset_parser(subcommands)
-    from .live_ledger import add_parser as add_live_ledger_parser
-    add_live_ledger_parser(subcommands)
-    from .roadmap_lint import add_parser as add_roadmap_lint_parser
-    add_roadmap_lint_parser(subcommands)
-    from .agent_diff_check import add_parser as add_agent_diff_check_parser
-    add_agent_diff_check_parser(subcommands)
-    from .move_machine import add_parser as add_migrate_parser
-    add_migrate_parser(subcommands)
+    from .cli_commands import register_all
+    register_all(subcommands)
     envc_cmd = subcommands.add_parser("env-check", help="read a launcher .bat (following @argfiles) and report java version, javaagents and their order, Prepatcher last or not, heap, and enabled mods that need Prepatcher the launch lacks; read-only (ROADMAP item 63)")
     envc_cmd.add_argument("launcher", type=Path, help="the launcher .bat")
     envc_cmd.add_argument("--vmparams", type=Path, action="append", default=[], help="extra vmparams / fr.vmparams file to read (repeatable)")
@@ -3033,27 +3021,10 @@ def main(argv: list[str] | None = None) -> int:
                 boot_result = result["boot_test"]
                 print(f"Boot test: {boot_result.get('status')} {boot_result.get('reason', '')}".rstrip())
         return 0 if result["status"] in {"PASS", "SAME_FOLDER"} else 1
-    if args.command in {"migrate-inventory", "relocate", "migrate-verify"}:
-        from .move_machine import run_cli as run_migrate
-        return run_migrate(args)
-    if args.command == "atlas":
-        from .atlas_report import run_cli as run_atlas
-        return run_atlas(args)
-    if args.command == "agent-diff-check":
-        from .agent_diff_check import run_cli as run_agent_diff_check
-        return run_agent_diff_check(args)
-    if args.command == "roadmap-lint":
-        from .roadmap_lint import run_cli as run_roadmap_lint
-        return run_roadmap_lint(args)
-    if args.command == "live-ledger":
-        from .live_ledger import run_cli as run_live_ledger
-        return run_live_ledger(args)
-    if args.command == "rig-reset":
-        from .rig_reset import run_cli as run_rig_reset
-        return run_rig_reset(args)
-    if args.command in ("baseline-audit", "baseline-accept"):
-        from .baseline_audit import run_cli as run_baseline_audit
-        return run_baseline_audit(args)
+    from .cli_commands import dispatch
+    registered = dispatch(args)
+    if registered is not None:
+        return registered
     if args.command == "env-check":
         from . import env_check as envc
         try:
