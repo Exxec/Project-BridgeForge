@@ -13,6 +13,10 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Sylphon RnD** 1.0+bf.1: revived for RC8 and archived (live validated)
 - **Aivon Republic** 0.0.4+bf.1: mission mir_quicktest named two variants that do not exist (Fatal at mission start); the fleet lines were removed
 - **Sylphon RnD** 1.0+bf.1: mission SRD_encroaching_darkness named two variants that do not exist (Fatal at mission start); the fleet lines were removed
+- **Vayra's Ship Pack** 1.2.3+bf.1: revived for RC8 and archived (live validated)
+- **Kadur Remnant** 3.2.3support6+bf.1: revived for RC8 and archived (live validated)
+- **Kadur Remnant** 3.2.3support6+bf.1: mission vayra_k006 could spawn Vayra's Ship Pack cruisers that do not exist without that mod; they are now added only when it is enabled
+- **Vayra's Ship Pack** 1.2.3+bf.1: declares LazyLib, which the mod plugin requires and stopped at load without (dependencies were empty)
 
 ## 2026-10-11
 

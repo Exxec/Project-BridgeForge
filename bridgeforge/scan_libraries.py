@@ -577,6 +577,18 @@ def _throws_without_library(text: str, dependency_id: str) -> bool:
     return bool(direct.search(text)) or _fails_fast_through_variable(text, dependency_id)
 
 
+def _loads_library_class_or_throws(text: str, library: str) -> bool:
+    """`getScriptClassLoader().loadClass("org.lazywizard.lazylib.ModUtils")` in a try whose catch throws: the standard "library is
+    required" check. Vayra's Ship Pack 1.2.3 declared no dependencies and stopped at load without LazyLib (REG7-20261012)."""
+    needles = [prefix.replace("/", ".").rstrip(".") for prefix in BUNDLED_LIBRARY_PACKAGE_PREFIXES[library] if not prefix.startswith("kotlin")]
+    for needle in needles:
+        for match in re.finditer(r'loadClass\s*\(\s*"' + re.escape(needle) + r'[\w.$]*"\s*\)', text):
+            tail = text[match.end():match.end() + 900]
+            if re.match(r"[^{}]*\}\s*catch\s*\([^)]*\)\s*\{[^}]*throw", tail):  # the catch right after the load, not a later one
+                return True
+    return False
+
+
 def _scan_library_required_by_throw(root: Path, result: ScanResult) -> None:
     """A plugin that throws when a library is missing needs that library whether or not it reaches the library's
     package: HullMods Expansion's "MagicLib is Required to run this mod" and P9 Colony Group's, neither declared.
@@ -592,7 +604,7 @@ def _scan_library_required_by_throw(root: Path, result: ScanResult) -> None:
                 text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
             except OSError:
                 continue
-            if "isModEnabled" in text and _throws_without_library(text, dependency_id):
+            if ("isModEnabled" in text and _throws_without_library(text, dependency_id)) or _loads_library_class_or_throws(text, library):
                 result.add(
                     id="undeclared-library-dependency",
                     category="dependencies",

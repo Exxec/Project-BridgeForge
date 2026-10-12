@@ -860,8 +860,9 @@ class RegressionNoiseTests(unittest.TestCase):
     def test_nexerelin_and_second_in_command_classes_are_optional_when_those_mods_are_off(self) -> None:
         text = ("BF-PROBE|0.2.27|class-sweep|FAIL|a.Start|java.lang.NoClassDefFoundError: exerelin/campaign/customstart/CustomStart\n"
                 "BF-PROBE|0.2.27|class-sweep|FAIL|a.Apt|java.lang.NoClassDefFoundError: second_in_command/specs/SCBaseAptitudePlugin\n")
+        text += "BF-PROBE|0.2.27|class-sweep|FAIL|a.Bar|java.lang.NoClassDefFoundError: data/scripts/campaign/bases/VayraRaiderBaseBarEvent\n"
         report = self._report(text, ["mod_a"])
-        self.assertEqual({item["library"] for item in report["optional_integration_classes"]}, {"nexerelin", "second_in_command"})
+        self.assertEqual({item["library"] for item in report["optional_integration_classes"]}, {"nexerelin", "second_in_command", "vayrasector"})
         self.assertEqual(report["members"]["mod_a"]["failures"], [])
 
     def test_a_mods_cloak_ai_debug_prints_do_not_make_the_group_unclear(self) -> None:

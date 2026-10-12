@@ -350,6 +350,7 @@ def _mission_fleet_refs(mod_root: Path) -> dict[str, list[str]]:
     """Every fleet member the mod's missions name, by kind (ROADMAP 46c): the probe resolves each. Ironclads'
     missions named 21 variants no Ironclads version ever shipped (2026-10-04), which content_variants (the variants the
     mod defines) cannot see."""
+    from .scan_javatext import _blank_mod_guarded_blocks
     from .scanner import MISSION_FLEET_REFERENCE_PATTERN, _blank_java_comments
 
     ships: set[str] = set()
@@ -357,7 +358,7 @@ def _mission_fleet_refs(mod_root: Path) -> dict[str, list[str]]:
     sources = list((mod_root / "data" / "missions").glob("*/MissionDefinition.java")) if (mod_root / "data" / "missions").is_dir() else []
     for source in sources:
         try:
-            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+            text = _blank_mod_guarded_blocks(_blank_java_comments(source.read_text(encoding="utf-8", errors="replace")))
         except OSError:
             continue
         for fleet_id, member_type in MISSION_FLEET_REFERENCE_PATTERN.findall(text):

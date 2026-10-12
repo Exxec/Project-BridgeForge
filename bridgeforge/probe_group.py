@@ -672,7 +672,8 @@ def accepted_probe_findings(queue: Path, mods_dir: Path | None = None) -> dict[s
 # enabled in the rig, means the integration is simply inactive. Only well-known libraries are listed; anything else stays a FAIL.
 OPTIONAL_LIBRARY_PACKAGES = {"org/lazywizard/console/": "lw_console", "lunalib/": "lunalib", "org/magiclib/": "MagicLib",
                              "org/lazywizard/lazylib/": "lw_lazylib", "org/lazywizard/radar/": "lw_radar",
-                             "exerelin/": "nexerelin", "second_in_command/": "second_in_command"}  # last two: REG-20261012 SEEKER, Nightcross
+                             "exerelin/": "nexerelin", "second_in_command/": "second_in_command",
+                             "data/scripts/campaign/bases/VayraRaiderBaseBarEvent": "vayrasector"}  # last three: REG-20261012 SEEKER, Nightcross, Kadur Remnant
 _NO_CLASS_DEF = re.compile(r"NoClassDefFoundError: (\S+)")
 # Probe-loader artefacts: the class sweep loads jar classes through the script loader, whose sandbox refuses reflection and file access
 # (fast_engine_rendering's org.joml classes, REG-20261012 group 4), and module-info.class is not a class at all.

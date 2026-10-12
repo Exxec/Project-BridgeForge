@@ -211,3 +211,28 @@ def _call_argument_count(text: str, index: int) -> int:
         elif depth >= 1 and not char.isspace():
             seen = True
     return 0
+
+
+_MOD_GUARD_VARIABLE = re.compile(r"\bboolean\s+(\w+)\s*=[^;]*isModEnabled\s*\(")
+_IF_BLOCK = re.compile(r"\bif\s*\(([^{};]*)\)\s*\{")
+
+
+def _blank_mod_guarded_blocks(text: str) -> str:
+    """`text` with the body of every `if (...) { }` whose condition tests that another mod is enabled replaced by spaces (newlines kept).
+
+    A mission that names `swp_gryphon_xiv_eli` inside `if (swp) { }`, `swp` being `boolean swp = ...isModEnabled("swp")`, never
+    reaches the game without that mod, so its variants are not this mod's missing references (Vayra's Ship Pack and Kadur Remnant,
+    REG-20261012). A negated test (`!swp`) guards nothing and an `else` branch is left as it is. Call on comment-blanked text."""
+    guard_variables = set(_MOD_GUARD_VARIABLE.findall(text))
+    blanked = list(text)
+    for match in _IF_BLOCK.finditer(text):
+        condition = match.group(1)
+        positive_variable = any(re.search(rf"(?<![!\w]){re.escape(name)}\b", condition) for name in guard_variables)
+        if "isModEnabled" not in condition.replace("!isModEnabled", "") and not positive_variable:
+            continue
+        end = match.end() - 1 + len(_brace_body(text, match.end() - 1)) - 1
+        for index in range(match.end(), end):
+            if blanked[index] != "\n":
+                blanked[index] = " "
+    return "".join(blanked)
+
