@@ -966,6 +966,12 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_recheck_cmd.add_argument("--restart", action="store_true", help="ignore an interrupted run's In operation/CORPUS_RECHECK.partial.jsonl and rescan everything")
     corpus_recheck_cmd.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
     corpus_recheck_cmd.add_argument("--json", action="store_true")
+    sibling_cmd = subcommands.add_parser("sibling-assets", help="fill missing sprites and description rows from sibling mods of the same pack, only when every copy is byte-identical (ROADMAP 60c); dry run unless --apply; copies are recorded for audit-explain --auto")
+    sibling_cmd.add_argument("workspace", type=Path, help="a workspace folder (In operation/<Mod>)")
+    sibling_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, so vanilla files are not reported missing")
+    sibling_cmd.add_argument("--siblings", type=Path, nargs="*", help="mod roots to search instead of the other workspaces beside this one")
+    sibling_cmd.add_argument("--apply", action="store_true", help="write the copies (default: report only)")
+    sibling_cmd.add_argument("--json", action="store_true")
     vendor_copy_cmd = subcommands.add_parser("vendor-copy", help="copy a piece of a provider mod into another mod instead of reviving or depending on the whole provider (ROADMAP P14 item 4): one hullmod by id, or with --plan everything a vendor-plan lists (P15 item 7)")
     vendor_copy_cmd.add_argument("kind", nargs="?", choices=["hullmod"], help="only 'hullmod' is supported without --plan (see the command's own help for why)")
     vendor_copy_cmd.add_argument("id", nargs="?", help="the hullmod id to vendor")
@@ -1421,7 +1427,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "archive":
         from .archive import ArchiveError, archive_mod
         from .substitutes import REPO_ROOT
+        from .explain_proofs import prepare_for_audit
         from .live_trust import archive_gate
+        prepare_for_audit(args.workspace)  # extract a zip original, copy translation records (copy-only steps, ROADMAP 60b)
         gate = archive_gate(args.workspace)
         if not gate["allowed"]:
             # ROADMAP 36.11: no archive for an unaudited or stale-tested mod unless the owner recorded why.
@@ -1987,6 +1995,22 @@ def main(argv: list[str] | None = None) -> int:
             if args.write_markdown:
                 print(f"Roll-up written: {args.write_markdown}")
         return 1 if result["status"] == "REGRESSION" else 0
+    if args.command == "sibling-assets":
+        from .sibling_assets import SiblingAssetsError, fix_sibling_assets
+        try:
+            result = fix_sibling_assets(args.workspace, args.vanilla_core, apply=args.apply, roots=args.siblings or None)
+        except (SiblingAssetsError, OSError, ValueError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            verb = "copied" if args.apply else "would copy"
+            print(f"Searched {result['siblings_searched']} sibling root(s): {verb} {len(result['files'])} file(s) and {len(result['rows'])} description row(s).")
+            for label in ("files_refused", "files_unresolved", "rows_refused", "rows_unresolved"):
+                for item in result[label]:
+                    print(f"  {label.replace('_', ' ')}: {item.get('path') or item.get('id')}: {item['reason']}")
+        return 0
     if args.command == "vendor-copy" and args.plan is not None:
         from .vendor_plan import VendorPlanError, copy_plan
         if args.to is None or any(value is not None for value in (args.kind, args.id, args.from_provider, args.to_mod)):

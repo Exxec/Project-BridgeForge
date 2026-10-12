@@ -751,7 +751,8 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
         try:
             # `refresh` replaces an earlier archive of this mod in Done/ (`archive --refresh`): the owner's word each time, because
             # it deletes that folder (Omega Trauma 2026-10-06 and six stale archives 2026-10-11 were refreshed by hand).
-            result = archive_mod(workspace, done, policy_path=policy_path, today=today, refresh=refresh)
+            # An existing Done/<Mod> is moved to Done/_replaced-<date>/, never deleted (ROADMAP 60b).
+            result = archive_mod(workspace, done, policy_path=policy_path, today=today, refresh=refresh, move_aside=True)
         except ArchiveError as exc:
             skipped.append({"mod_id": mod_id, "verdict": "PASS", "workspace": workspace.name, "archive": str(exc)})
             continue

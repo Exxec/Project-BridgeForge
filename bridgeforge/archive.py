@@ -53,8 +53,36 @@ def _final_status(report: Path) -> str | None:
     return report_status(report)
 
 
+def _live_line(workspace: Path) -> str:
+    """The archive note's live sentence: always the date and test id of the last PASS, or why there are none (ROADMAP 65)."""
+    from .live_trust import live_status
+
+    live = live_status(workspace)
+    if live.get("test_id"):
+        state = "the shipped files are the ones tested" if live["status"] == "CURRENT" else "the shipped files changed after that run"
+        return f"Live-validated {live.get('date') or 'date not recorded'} (test {live['test_id']}); {state}."
+    if live["status"] == "UNKNOWN_BUILD":
+        return "Live-validated, but the date and test id were not recorded (a run before the 2026-10-04 run records)."
+    return "Not live-tested: no passing run is recorded for this mod."
+
+
+def _move_aside(target: Path, done_dir: Path, today: str) -> Path:
+    """Move an existing Done/<Mod> to Done/_replaced-<date>/<Mod>[-N]; nothing is deleted."""
+    holder = done_dir / f"_replaced-{today}"
+    holder.mkdir(parents=True, exist_ok=True)
+    destination = holder / target.name
+    n = 2
+    while destination.exists():
+        destination = holder / f"{target.name}-{n}"
+        n += 1
+    shutil.move(str(target), str(destination))
+    return destination
+
+
 def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = None, today: str | None = None,
-                refresh: bool = False) -> dict:
+                refresh: bool = False, move_aside: bool = False) -> dict:
+    from .explain_proofs import prepare_for_audit
+    from .master_log import write_master_log
     from .substitutes import revival_licence
 
     workspace = Path(workspace).expanduser().resolve()
@@ -67,6 +95,10 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
     if licence.get("decision") not in ("LOCAL_ONLY", "RELEASABLE"):
         raise ArchiveError(f"no licence decision for {mod_id}: record one first (bridgeforge release-policy set {mod_id} --local-only|--releasable --reason ...).")
     target = Path(done_dir).expanduser().resolve() / workspace.name
+    prepared = prepare_for_audit(workspace)  # a zip original is extracted beside original/, translation records copied
+    replaced = None
+    if target.exists() and move_aside and not refresh:
+        replaced = str(_move_aside(target, Path(done_dir).expanduser().resolve(), today or date.today().isoformat()))
     if target.exists():
         if not refresh:
             raise ArchiveError(f"{target} already exists; archive into a fresh folder or remove it first (or pass --refresh).")
@@ -102,7 +134,9 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
             if item.is_file() and (item.suffix.lower() == ".md" or item.name.startswith("baseline")) and not (kept / item.name).exists():
                 shutil.copy2(item, kept / item.name)
 
-    original = _original_root(workspace)
+    from .live_trust import original_root
+
+    original = _original_root(workspace) or original_root(workspace)
     changed, added, jars_identical, jar_names = [], [], None, []
     if original is not None:
         for relative, source in sorted(files.items()):
@@ -117,13 +151,18 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
                 changed.append(relative)
     status = _final_status(working / "reports" / "REVIVAL_REPORT.md")
     note = _render_note(info, name, version, licence, status, changed, added, jars_identical, jar_names, original is not None,
-                        zip_path.name, workspace.name, today or date.today().isoformat())
+                        zip_path.name, workspace.name, today or date.today().isoformat(), _live_line(workspace))
     (target / "ARCHIVE_NOTE.md").write_text(note, encoding="utf-8")
     # The mods' own changelog, beside Done/ (the repo root in use; a temp folder in tests).
     from .mod_changelog import add_entry
     add_entry(name, f"revived for RC8 and archived ({(status or 'no status').replace('_', ' ').lower()})", version=version,
               day=today or date.today().isoformat(), path=target.parent.parent / "MOD_CHANGELOG.md")
+    try:
+        master = write_master_log(target.parent)
+    except OSError as exc:
+        master = {"error": str(exc)}
     return {"schema_version": SCHEMA_VERSION, "mode": "ARCHIVE", "archive": str(target), "files": len(files), "zip": str(zip_path),
+            "replaced": replaced, "prepared": prepared, "master_log": master,
             "licence": licence.get("decision"), "status": status, "changed": changed, "added": added,
             "jars_identical": jars_identical, "note": str(target / "ARCHIVE_NOTE.md")}
 
@@ -164,7 +203,7 @@ def write_readme_copies(target: Path) -> list[str]:
 
 
 def _render_note(info: dict, name: str, version: str, licence: dict, status: str | None, changed: list[str], added: list[str],
-                 jars_identical: bool | None, jar_names: list[str], has_original: bool, zip_name: str, folder: str, today: str) -> str:
+                 jars_identical: bool | None, jar_names: list[str], has_original: bool, zip_name: str, folder: str, today: str, live_line: str = "") -> str:
     author = str(info.get("author") or "").strip() or "not named in the mod"
     local = licence.get("decision") == "LOCAL_ONLY"
     lines = [f"# {name} {version}: archive note", "", f"**Original author: {author}.** Revival for Starsector 0.98a-RC8: BridgeForge by Exxec.", ""]
@@ -174,7 +213,10 @@ def _render_note(info: dict, name: str, version: str, licence: dict, status: str
                   "Do not upload or redistribute this copy.", ""]
     else:
         lines += ["## Status: releasable", "", f"Recorded in `release_policy.json` as `RELEASABLE`: {licence.get('reason') or 'no reason recorded'}.", ""]
-    lines += [f"Revival report status: **{status or 'none recorded'}** (archived {today}).", "", "## What changed from the original", ""]
+    lines += [f"Revival report status: **{status or 'none recorded'}** (archived {today}).", ""]
+    if live_line:
+        lines += [live_line, ""]
+    lines += ["## What changed from the original", ""]
     if not has_original:
         lines.append("`original/` holds no unpacked mod (only the download as archives, or nothing), so the changes cannot be "
                      "listed file by file here; see `workspace/REVIVAL_REPORT.md`.")

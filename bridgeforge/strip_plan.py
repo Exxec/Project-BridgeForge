@@ -161,6 +161,7 @@ def vendor_copy(kind: str, ident: str, from_provider: Path, to_mod: Path, policy
         target_path = Path(entry["target"])
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_bytes(Path(entry["source"]).read_bytes())
+    _record_vendored(to_mod, [(entry["relative"], Path(entry["source"])) for entry in copy_plan], "vendor-copy")
     target_csv.parent.mkdir(parents=True, exist_ok=True)
     write_fieldnames = fieldnames or (list(target_rows[0].keys()) if target_rows else list(row.keys()))
     dropped_columns = sorted(set(row) - set(write_fieldnames))
@@ -172,6 +173,16 @@ def vendor_copy(kind: str, ident: str, from_provider: Path, to_mod: Path, policy
             writer.writeheader()
         writer.writerow({column: row.get(column, "") for column in write_fieldnames})
     return result
+
+
+def _record_vendored(to_mod: Path, copies: list[tuple[str, Path]], by: str) -> None:
+    """When the target is a workspace's working/ folder, record each copy in reports/COPIES.json so `audit-explain --auto`
+    can prove it (ROADMAP 60b)."""
+    from .explain_proofs import record_copies, sha256, workspace_of_working
+
+    workspace = workspace_of_working(Path(to_mod))
+    if workspace is not None and copies:
+        record_copies(workspace, {relative: {"source": source, "sha256": sha256(source)} for relative, source in copies}, by)
 
 
 SCHEMA_VERSION = 1

@@ -466,6 +466,9 @@ def copy_plan(plan: dict, to_mod: Path, *, apply: bool = False, allow_partial: b
         for name in files:
             (target / name).parent.mkdir(parents=True, exist_ok=True)
             (target / name).write_bytes((provider / name).read_bytes())
+        from .strip_plan import _record_vendored
+
+        _record_vendored(target, [(name, provider / name) for name in files], "vendor-copy --plan")
         for table, rows in rows_by_table.items():
             header = list(next(iter(_read_csv_rows_lenient(provider / table) or [{}])).keys())
             lost = _append_rows(target / table, header, rows)
