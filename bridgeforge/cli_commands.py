@@ -23,6 +23,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "cmd_analysis": ("corpus-audit", "cross-mod-analyze", "campaign-identity-inventory", "campaign-identity-check", "release-lineage", "library-api-inventory", "library-api-match", "dependency-api-check", "corpus-compare", "release-evaluate", "revival-audit", "api-diff"),
     "cmd_bytecode": ("decompile-jar", "port-interfaces", "patch-jar-sources", "decompiler-review", "bytecode-inspect", "bytecode-plan", "bytecode-diff", "bytecode-apply", "copy-drift", "jar-audit", "jar-packets", "port-hullmod-state", "patch-jar-class", "rebuild-jar"),
     "cmd_translate": ("translate-export", "translate-apply", "translate-tm", "translate-check", "fix", "strip-plan", "descriptions", "translate-batch", "renamed-ids"),
+    "cmd_save": ("compat-set", "save-compat", "save-removal-plan", "save-doctor", "save-format-survey", "save-content", "save-diff", "save-growth", "save-inspect", "save-provenance", "save-removal", "save-scripts", "save-summary", "save-snapshot", "scenario"),
 }
 
 
