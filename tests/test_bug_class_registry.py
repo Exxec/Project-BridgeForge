@@ -8,7 +8,7 @@ from bridgeforge.fixers import SUPPORTED_FINDINGS
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REGISTRY_PATH = REPO_ROOT / "docs" / "BUG_CLASSES.md"
-SCANNER_PATH = REPO_ROOT / "bridgeforge" / "scanner.py"
+SCANNER_PATH = REPO_ROOT / "bridgeforge" / "scanner.py"  # plus the scan_*.py modules split out of it
 PROBE_MOD_DIR = REPO_ROOT / "probe-mod"
 
 _ID_RE = re.compile(r"`([a-z][a-z0-9-]*)`")
@@ -55,7 +55,8 @@ class BugClassRegistryTests(unittest.TestCase):
             )
 
     def test_every_listed_check_id_exists_somewhere_in_the_codebase(self) -> None:
-        scanner_src = SCANNER_PATH.read_text(encoding="utf-8")
+        scanner_paths = [SCANNER_PATH, *sorted(SCANNER_PATH.parent.glob("scan_*.py"))]
+        scanner_src = "\n".join(path.read_text(encoding="utf-8") for path in scanner_paths)
         probe_src = _probe_source()
         rows = _table_rows(REGISTRY_PATH.read_text(encoding="utf-8"))
         missing: list[str] = []
