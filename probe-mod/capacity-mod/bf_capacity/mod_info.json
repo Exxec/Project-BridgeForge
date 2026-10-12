@@ -1,0 +1,9 @@
+{
+	"id":"bf_capacity",
+	"name":"zz BridgeForge Capacity",
+	"author":"BridgeForge by Exxec",
+	"version":"0.1.0",
+	"description":"Rig-only: sets cargo, fuel and crew below, at and above capacity on three player fleets and logs the fleet's speed and daily supplies (ROADMAP item 57).",
+	"gameVersion":"0.98a-RC8",
+	"modPlugin":"data.scripts.bfcap.BfCapPlugin"
+}
