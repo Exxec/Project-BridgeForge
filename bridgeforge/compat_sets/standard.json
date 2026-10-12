@@ -72,6 +72,17 @@
         "exerelin_vacuum": {"name": "Vacuum", "role": "content", "gameVersion": "0.62a", "required_by": []}
       }
     },
+    "aotd": {
+      "description": "AoTD Vaults of Knowledge with its dependencies, read from the owner's install 2026-10-10 (docs/AOTD_COMPAT_PLAN.md, ROADMAP item 63). aotd_theory_of_toolbox is the third-party Scheduler Fork of Kaysaar's Toolbox and needs the StarsectorPrepatcher javaagent to be active; run `env-check` before booting this set. Boot-test must load a new game and a save, not only the menu.",
+      "extends": ["libs"],
+      "mods": {
+        "aotd_vok": {"name": "AoTD - Vaults of Knowledge", "folder_hint": "AoTD - Vaults of Knowledge", "role": "content", "version": "5.0.7", "gameVersion": "0.98a-RC8", "required_by": [], "notes": "Declares Toolbox 1.0.11, Ashlib 2.2.3, BMO 2.1.0 and LazyLib."},
+        "aotd_theory_of_toolbox": {"name": "zz AoTD - Theory of Toolbox - Scheduler Fork", "folder_hint": "zz AoTD - Theory of Toolbox - Scheduler Fork", "role": "lib", "version": "1.0.14-spp13", "gameVersion": "0.98a-RC8", "required_by": ["aotd_vok", "aotd_sop"], "notes": "Third-party fork (author Kirill per the owner). Needs StarsectorPrepatcher 0.18.3 and an active javaagent."},
+        "starsector_prepatcher": {"name": "StarsectorPrepatcher", "folder_hint": "StarsectorPrepatcher", "role": "lib", "version": "0.18.4", "gameVersion": "0.98a-RC8", "required_by": ["aotd_theory_of_toolbox"], "notes": "A -javaagent that must be the last agent in the launch; the mod folder alone does nothing."},
+        "bmo": {"name": "BMO", "folder_hint": "BMO", "role": "lib", "version": "2.1.0", "gameVersion": "0.98a-RC8", "required_by": ["aotd_vok", "aotd_theory_of_toolbox"]},
+        "ashlib": {"name": "Ashlib", "folder_hint": "Ashlib", "role": "lib", "version": "2.2.3", "gameVersion": "0.98a-RC8", "required_by": ["aotd_vok", "aotd_theory_of_toolbox"]}
+      }
+    },
     "standard": {
       "description": "The standard compatibility pack (roadmap P4): libs plus AI Tweaks, Nexerelin and a handful of widely used content mods, verified present in the owner's real Starsector install at RC8 or a compatible 0.98a.",
       "extends": ["libs"],
