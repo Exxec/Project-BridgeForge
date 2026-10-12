@@ -19,7 +19,7 @@ EXEMPT = {
     # never a skin id, so there is no skin reference to resolve (item 17's audit, 2026-09-20).
     ("scan_ships.py", "_scan_carrier_bays_proposal"): "iterates ship_data.csv base-hull rows",
     ("scan_ships.py", "carrier_bays_without_evidence"): "iterates ship_data.csv base-hull rows (same inputs as _scan_carrier_bays_proposal)",
-    ("scanner.py", "_scan_description_missing"): "iterates ship_data.csv base-hull rows",
+    ("scan_references.py", "_scan_description_missing"): "iterates ship_data.csv base-hull rows",
 }
 
 
