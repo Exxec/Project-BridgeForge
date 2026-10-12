@@ -25,6 +25,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "cmd_translate": ("translate-export", "translate-apply", "translate-tm", "translate-check", "fix", "strip-plan", "descriptions", "translate-batch", "renamed-ids"),
     "cmd_save": ("compat-set", "save-compat", "save-removal-plan", "save-doctor", "save-format-survey", "save-content", "save-diff", "save-growth", "save-inspect", "save-provenance", "save-removal", "save-scripts", "save-summary", "save-snapshot", "scenario"),
     "cmd_rig": ("accept", "soak-report", "log-triage", "prepare-test", "env-check", "java-matrix", "boot-test", "dossier", "build-probe-mod", "probe-config", "bootstrap", "rig-create", "rig-doctor", "who-locks", "test-plan", "perf-gate"),
+    "cmd_probe_group": ("probe-group"),
 }
 
 
