@@ -1926,7 +1926,7 @@ after `install` of the mod that owns the hulls: play the rig-only duel missions 
 |---|---|---|
 | `test_id` | - | log name: writes <rig>/logs/<TESTID>.stdout.log |
 | `--bat` BAT | default run-j25-direct.bat | - |
-| `--only` ONLY | repeatable; one of seeker, baseline, overwhelm | play just this duel (repeatable) |
+| `--only` ONLY | repeatable; one of seeker, baseline, overwhelm, ubique, probestop | play just this duel (repeatable) |
 | `--rig` RIG | - | - |
 | `--queue` QUEUE | - | - |
 | `--json` | - | - |

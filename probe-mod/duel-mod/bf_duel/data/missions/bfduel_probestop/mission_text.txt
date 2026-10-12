@@ -1,0 +1,1 @@
+BridgeForge duel (probestop). Rig only: the overwhelm duel with the probe combat plugin attached, to prove its runaway stop.

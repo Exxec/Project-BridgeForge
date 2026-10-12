@@ -17,7 +17,7 @@ from pathlib import Path
 from . import live_run as lr
 
 DUEL_MOD_ID = "bf_duel"
-DUEL_MISSIONS = ("seeker", "baseline", "overwhelm")
+DUEL_MISSIONS = ("seeker", "baseline", "overwhelm", "ubique", "probestop")
 DUEL_SOURCE = Path(__file__).resolve().parent.parent / "probe-mod" / "duel-mod" / DUEL_MOD_ID
 _LINE = re.compile(r"BF-DUEL\|(?P<label>[^|]+)\|(?P<what>[^|]+)\|(?P<detail>.*)$")
 _FIELD = re.compile(r"(\w+)=(-?\d+(?:\.\d+)?)")

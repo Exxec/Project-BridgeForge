@@ -1,0 +1,1 @@
+BridgeForge duel (ubique). Rig only: SEEKER's Ubique against a fleet that destroys it early; logs the fight timer and the frame cost.

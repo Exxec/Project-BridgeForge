@@ -79,7 +79,7 @@ def add_parser(subcommands) -> None:
     group_duel = group_sub.add_parser("duel", help="after `install` of the mod that owns the hulls: play the rig-only duel missions (SEEKER's Bone-Breaker against Betelgeuse, and two vanilla Onslaughts as the baseline) unattended and report the frame cost of a destruction; leave the mouse and keyboard alone")
     group_duel.add_argument("test_id", help="log name: writes <rig>/logs/<TESTID>.stdout.log")
     group_duel.add_argument("--bat", default="run-j25-direct.bat")
-    group_duel.add_argument("--only", action="append", default=[], choices=["seeker", "baseline", "overwhelm"], help="play just this duel (repeatable)")
+    group_duel.add_argument("--only", action="append", default=[], choices=["seeker", "baseline", "overwhelm", "ubique", "probestop"], help="play just this duel (repeatable)")
     group_duel.add_argument("--rig", type=Path)
     group_duel.add_argument("--queue", type=Path)
     group_duel.add_argument("--json", action="store_true")
