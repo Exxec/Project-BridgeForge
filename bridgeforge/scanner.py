@@ -3,7 +3,6 @@ from __future__ import annotations
 from .zipsafe import MAX_CLASS_BYTES, read_limited
 
 import csv
-import fnmatch
 import hashlib
 import json
 import re
@@ -18,763 +17,161 @@ from .ashlib_compat import scan_ashlib_compat
 from .graphicslib_compat import scan_graphicslib_compat
 from .lazylib_compat import scan_lazylib_compat
 from .magiclib_compat import scan_magiclib_compat
-
-CLASS_MAJOR_TO_JAVA = {51: 7, 52: 8, 55: 11, 61: 17, 65: 21, 69: 25}
-MAX_JAR_ENTRIES = 10_000
-MAX_JAR_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
-MAX_JAR_COMPRESSION_RATIO = 100
-LARGE_BUNDLED_JAR_BYTES = 25 * 1024 * 1024
-LIBRARY_PATTERNS = {
-    "LazyLib": re.compile(r"lazylib", re.I),
-    "MagicLib": re.compile(r"magiclib", re.I),
-    "AshLib": re.compile(r"ashlib", re.I),
-    "GraphicsLib": re.compile(r"graphicslib", re.I),
-    "LunaLib": re.compile(r"lunalib", re.I),
-    "Nexerelin": re.compile(r"nexerelin", re.I),
-    "Kotlin runtime": re.compile(r"kotlin-(stdlib|reflect)|kotlinx-coroutines", re.I),
-    "Gson": re.compile(r"gson", re.I),
-}
-LIBRARY_PACKAGES = {
-    "LazyLib": ("org.lazywizard.lazylib",),
-    # MagicLib's legacy API is data.scripts.util.Magic* (MagicLib 1.5.6 ships 32 such classes); other
-    # data.scripts.util classes belong to whichever mod ships them (AI-War's AIW_StringHelper, 2026-09-15).
-    "MagicLib": ("org.magiclib", "data.scripts.util.Magic"),
-    "Nexerelin": ("exerelin.",),
-}
-EXTERNAL_MOD_API_PACKAGES = {
-    "Console Commands": ("org.lazywizard.console.",),
-    "Industrial Evolution": ("com.fs.starfarer.api.impl.campaign.ids.IndEvo_ids", "indevo.ids."),
-    "MagicLib": ("data.scripts.util.Magic",),
-}
-EXTERNAL_CAMPAIGN_MEMORY_PREFIXES = {
-    "Nexerelin": "$nex_",
-}
-LEGACY_API_RULES = {
-    "com.fs.starfarer.api.util.Misc.getHyperspaceTerrain": (
-        "legacy-api-hyperspace-terrain",
-        "A legacy Starsector utility reference was found. Confirm its replacement against the target API before changing it.",
-    ),
-    "sun.misc": (
-        "internal-jvm-api",
-        "An internal JVM API import was found; it may not be supported by the selected Java runtime.",
-    ),
-    "java.security.SecurityManager": (
-        "security-manager",
-        "SecurityManager APIs are obsolete on modern Java runtimes and require manual review.",
-    ),
-}
-RUNTIME_PLACEHOLDER_PATTERN = re.compile(
-    r"\bthrow\s+new\s+(?:java\.lang\.)?UnsupportedOperationException\s*\(", re.M
+from .scan_common import (  # noqa: F401
+    CLASS_MAJOR_TO_JAVA,
+    MAX_JAR_ENTRIES,
+    MAX_JAR_UNCOMPRESSED_BYTES,
+    MAX_JAR_COMPRESSION_RATIO,
+    LARGE_BUNDLED_JAR_BYTES,
+    LIBRARY_PATTERNS,
+    LIBRARY_PACKAGES,
+    EXTERNAL_MOD_API_PACKAGES,
+    EXTERNAL_CAMPAIGN_MEMORY_PREFIXES,
+    LEGACY_API_RULES,
+    RUNTIME_PLACEHOLDER_PATTERN,
+    PERCENT_MULTIPLIER_PATTERN,
+    HARDCODED_SYSTEM_LOOKUP_PATTERN,
+    HARDCODED_ENTITY_LOOKUP_PATTERN,
+    CAMPAIGN_SYSTEM_CREATION_PATTERN,
+    CAMPAIGN_ENTITY_CREATION_PATTERN,
+    MISSION_FLEET_REFERENCE_PATTERN,
+    CUSTOM_UI_PLUGIN_PATTERN,
+    CUSTOM_DIALOG_DELEGATE_PATTERN,
+    RELEASE_BLOCKING_TODO_PATTERN,
+    ROBOT_INPUT_INJECTION_PATTERN,
+    _INTERFACE_BASE_CLASSES,
+    TARGET_INTERFACE_CONTRACTS,
+    MEMORY_SELF_STORE_PATTERN,
+    FACTION_SPECIAL_ROLE_KEYS,
+    OBSOLETE_FIGHTER_ROLE_NAMES,
+    BLACK_HOLE_HINT_PATTERN,
+    SHADOW_PATH_EXTENSIONS,
+    GAME_VERSION_RC_PATTERN,
+    FORBIDDEN_REFLECT_PREFIX,
+    FORBIDDEN_NIO_FILE_PREFIX,
+    FORBIDDEN_IO_CLASSES,
+    FORBIDDEN_SANDBOX_SOURCE_PATTERN,
+    BUNDLED_LIBRARY_PACKAGE_PREFIXES,
+    LIBRARY_DEPENDENCY_IDS,
+    SETTINGS_ACCEPT_LIMIT,
+    SETTINGS_BASELINE_FILE,
+    DESIGN_TYPE_CSV_TARGETS,
+    _relative,
+    _java_for_major,
 )
-PERCENT_MULTIPLIER_PATTERN = re.compile(
-    r"\.modifyPercent\s*\(\s*[^,]+,\s*1f\s*-\s*[A-Za-z_$][\w$]*\s*\*\s*0\.01f\s*\)"
+from .scan_json import (  # noqa: F401
+    _without_trailing_commas,
+    _strip_line_comments,
+    _convert_single_quoted_strings,
+    _JSON_STRING_TOKEN_PATTERN,
+    _JAVA_NUMBER_SUFFIX_PATTERN,
+    _ORGJSON_UNQUOTED_RUN,
+    _BAREWORD_TOKEN_PATTERN,
+    _LOOSE_NUMBER_PATTERN,
+    _HEX_NUMBER_PATTERN,
+    _RAW_CONTROL_IN_STRING_PATTERN,
+    _JSON_LITERAL_TOKENS,
+    _normalize_string_contents,
+    _fill_empty_array_elements,
+    _strip_java_number_suffixes,
+    _LENIENT_NUMBER_PATTERN,
+    _normalize_lenient_numbers,
+    _orgjson_separators,
+    _quote_barewords_and_keys,
+    _parse_json,
+    _non_strict_json_finding,
+    _hash_comment_json_finding,
+    _slash_comment_json_finding,
+    _single_quote_json_finding,
+    _unquoted_key_json_finding,
+    _bareword_value_json_finding,
+    _java_number_suffix_json_finding,
+    _lenient_number_json_finding,
+    _json_trailing_data_finding,
+    _emit_json_tolerance_findings,
+    _JSON_VALUE_END,
+    _repair_missing_commas,
+    _unverified_json_syntax_finding,
+    _json_encoding_finding,
+    _load_lenient_json_file,
+    _csv_header,
+    _read_csv_rows,
+    _read_csv_rows_lenient,
+    _csv_first_column_ids,
+    _wing_ids_set,
+    _wing_id_variant_map,
 )
-HARDCODED_SYSTEM_LOOKUP_PATTERN = re.compile(r"\bgetStarSystem\s*\(\s*\"([^\"]+)\"\s*\)")
-HARDCODED_ENTITY_LOOKUP_PATTERN = re.compile(r"\bgetEntityById\s*\(\s*\"([^\"]+)\"\s*\)")
-CAMPAIGN_SYSTEM_CREATION_PATTERN = re.compile(r"\b(?:createStarSystem|addStarSystem)\s*\(\s*\"([^\"]+)\"")
-# addPlanet/initStar take the entity id first (javap, RC8 LocationAPI/StarSystemAPI, 2026-10-04).
-CAMPAIGN_ENTITY_CREATION_PATTERN = re.compile(r"\b(?:addCustomEntity|addEntity|addPlanet|initStar)\s*\(\s*\"([^\"]+)\"")
-MISSION_FLEET_REFERENCE_PATTERN = re.compile(
-    r"\baddToFleet\s*\(\s*FleetSide\.(?:PLAYER|ENEMY)\s*,\s*\"([^\"]+)\"\s*,\s*FleetMemberType\.(SHIP|FIGHTER_WING)"
+from .scan_javatext import (  # noqa: F401
+    _method_body,
+    _method_body_with_helpers,
+    _METHOD_SIGNATURE_PATTERN,
+    _extract_call_arguments_text,
+    _split_call_arguments,
+    _enclosing_method_span,
+    _blank_java_comments,
+    _brace_body,
+    _call_argument_count,
 )
-CUSTOM_UI_PLUGIN_PATTERN = re.compile(r"\b(?:implements\s+CustomUIPanelPlugin|new\s+CustomUIPanelPlugin\s*\(\s*\)\s*\{)")
-CUSTOM_DIALOG_DELEGATE_PATTERN = re.compile(r"\bimplements\s+CustomDialogDelegate\b")
-RELEASE_BLOCKING_TODO_PATTERN = re.compile(
-    r"//[^\r\n]*\b(?:TODO|FIXME)\b[^\r\n]*\b(?:remove|delete|disable)\b[^\r\n]*\b(?:final|release)\b",
-    re.I,
+from .scan_classfile import (  # noqa: F401
+    mod_jar_class_names,
+    loose_script_jar_shadowed_class,
+    _iter_class_files_in,
+    _dependency_jar_class_names,
+    _class_pool_u2,
+    _class_pool_u4,
+    _skip_attributes,
+    _ClassFileInfo,
+    _parse_class_file,
+    _OPERAND_BYTES,
+    _instance_fields_written_outside_constructors,
+    NON_MOD_JAR_DIRS,
+    _loaded_mod_jars,
+    _iter_jar_class_files,
+    iter_class_files_in_jars,
 )
-ROBOT_INPUT_INJECTION_PATTERN = re.compile(r"\bnew\s+(?:java\.awt\.)?Robot\s*\(")
-_INTERFACE_BASE_CLASSES = {"HullModEffect": "BaseHullMod", "ShipSystemStatsScript": "BaseShipSystemScript"}
-TARGET_INTERFACE_CONTRACTS = {
-    "LevelupPlugin": {
-        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?LevelupPlugin\b"),
-        "method": re.compile(r"\bpublic\s+int\s+getBonusXPUseMultAtMaxLevel\s*\(\s*\)"),
-        "signature": "int getBonusXPUseMultAtMaxLevel()",
-        "suggestion": "For a settings-driven level-up curve, return (int) Global.getSettings().getFloat(\"bonusXPUseMultAtMaxLevel\").",
-    },
-    "OnHitEffectPlugin.onHit": {
-        "interface": "OnHitEffectPlugin",
-        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?OnHitEffectPlugin\b"),
-        "method": re.compile(r"\bonHit\s*\([^)]*\bApplyDamageResultAPI\b[^)]*\)"),
-        "signature": "void onHit(..., ApplyDamageResultAPI, CombatEngineAPI)",
-        "suggestion": "The target callback inserts ApplyDamageResultAPI before CombatEngineAPI; preserve the existing effect body and validate it in combat.",
-    },
-    "AutofireAIPlugin.getTargetMissile": {
-        "interface": "AutofireAIPlugin",
-        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?AutofireAIPlugin\b"),
-        "method": re.compile(r"\b(?:[\w.]+\.)?MissileAPI\s+getTargetMissile\s*\(\s*\)"),
-        "signature": "MissileAPI getTargetMissile()",
-        "suggestion": "Return the tracked missile target when the legacy AI has one; a null return requires combat validation.",
-    },
-    "ShipSystemStatsScript.getActiveOverride": {
-        "interface": "ShipSystemStatsScript",
-        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?ShipSystemStatsScript\b"),
-        "method": re.compile(r"\bfloat\s+getActiveOverride\s*\(\s*(?:[\w.]+\.)?ShipAPI\s+\w+\s*\)"),
-        "signature": "float getActiveOverride(ShipAPI)",
-        "suggestion": "Establish the intended active duration override; the target default sentinel is behavior-sensitive.",
-    },
-    "ShipSystemStatsScript.getInOverride": {
-        "interface": "ShipSystemStatsScript",
-        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?ShipSystemStatsScript\b"),
-        "method": re.compile(r"\bfloat\s+getInOverride\s*\(\s*(?:[\w.]+\.)?ShipAPI\s+\w+\s*\)"),
-        "signature": "float getInOverride(ShipAPI)",
-        "suggestion": "Establish the intended activation-in duration override; the target default sentinel is behavior-sensitive.",
-    },
-    "ShipSystemStatsScript.getOutOverride": {
-        "interface": "ShipSystemStatsScript",
-        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?ShipSystemStatsScript\b"),
-        "method": re.compile(r"\bfloat\s+getOutOverride\s*\(\s*(?:[\w.]+\.)?ShipAPI\s+\w+\s*\)"),
-        "signature": "float getOutOverride(ShipAPI)",
-        "suggestion": "Establish the intended activation-out duration override; the target default sentinel is behavior-sensitive.",
-    },
-    "ShipSystemStatsScript.getUsesOverride": {
-        "interface": "ShipSystemStatsScript",
-        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?ShipSystemStatsScript\b"),
-        "method": re.compile(r"\bint\s+getUsesOverride\s*\(\s*(?:[\w.]+\.)?ShipAPI\s+\w+\s*\)"),
-        "signature": "int getUsesOverride(ShipAPI)",
-        "suggestion": "Establish the intended uses override; the target default sentinel is behavior-sensitive.",
-    },
-    "ShipSystemStatsScript.getRegenOverride": {
-        "interface": "ShipSystemStatsScript",
-        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?ShipSystemStatsScript\b"),
-        "method": re.compile(r"\bfloat\s+getRegenOverride\s*\(\s*(?:[\w.]+\.)?ShipAPI\s+\w+\s*\)"),
-        "signature": "float getRegenOverride(ShipAPI)",
-        "suggestion": "Establish the intended regeneration override; the target default sentinel is behavior-sensitive.",
-    },
-    "ShipSystemStatsScript.getDisplayNameOverride": {
-        "interface": "ShipSystemStatsScript",
-        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?ShipSystemStatsScript\b"),
-        "method": re.compile(r"\bString\s+getDisplayNameOverride\s*\(\s*(?:[\w.]+\.)?(?:ShipSystemStatsScript\.)?State\s+\w+\s*,\s*float\s+\w+\s*\)"),
-        "signature": "String getDisplayNameOverride(ShipSystemStatsScript.State, float)",
-        "suggestion": "Return the intended dynamic display name or the target default sentinel, then validate combat UI text.",
-    },
-    "HullModEffect.showInRefitScreenModPickerFor": {
-        "interface": "HullModEffect",
-        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?HullModEffect\b"),
-        "method": re.compile(r"\bboolean\s+showInRefitScreenModPickerFor\s*\(\s*(?:[\w.]+\.)?ShipAPI\s+\w+\s*\)"),
-        "signature": "boolean showInRefitScreenModPickerFor(ShipAPI)",
-        "suggestion": "Prefer extending the target BaseHullMod where behavior permits; otherwise establish picker visibility explicitly and run the full compile for all remaining obligations.",
-    },
-    "HullModEffect.isSModEffectAPenalty": {
-        "interface": "HullModEffect",
-        "implements": re.compile(r"\bimplements\s+(?:[\w.]+\.)?HullModEffect\b"),
-        "method": re.compile(r"\bboolean\s+isSModEffectAPenalty\s*\(\s*\)"),
-        "signature": "boolean isSModEffectAPenalty()",
-        "suggestion": "Vanilla's own BaseHullMod returns false (an S-mod of this hullmod is a bonus, not a penalty; javap-verified, 2026-09-22). Prefer extending the target BaseHullMod where behavior permits; otherwise establish this explicitly.",
-    },
-}
-MEMORY_SELF_STORE_PATTERN = re.compile(
-    r"(?:\b\w*(?:memory|mem)\w*\s*|\.getMemoryWithoutUpdate\(\)\s*)\.set\s*\(\s*[^,]+\s*,\s*this\b",
-    re.I,
+from .scan_text import (  # noqa: F401
+    _DESIGN_TYPE_SOURCES,
+    _design_type_color_keys,
+    _scan_design_type_colors,
+    _CJK_TEXT,
+    _PLAYER_TEXT_SUFFIXES,
+    _scan_non_english_text,
+    _WORK_FILE_GLOBS,
+    _scan_shippable_work_files,
+    _SPEC_ID_KEYS,
+    _scan_non_ascii_names,
+    _scan_data_encoding,
+    _FULLWIDTH_NUMBER_CHARS,
+    _NUMBER_CELL,
+    _scan_fullwidth_numbers,
+    _scan_csv_design_type_column,
+    CSV_SLASH_QUOTE,
+    _scan_csv_slash_quote,
+    _scan_working_copy_tool_debris,
 )
-FACTION_SPECIAL_ROLE_KEYS = {"doctrine", "includeDefault", "fallback", "fallback2"}
-OBSOLETE_FIGHTER_ROLE_NAMES = {"interceptor", "fighter", "bomber"}
-BLACK_HOLE_HINT_PATTERN = re.compile(r"black[_\s]?hole|bhole", re.I)
-SHADOW_PATH_EXTENSIONS = {".system", ".ship", ".wpn", ".variant", ".skin", ".java"}
-GAME_VERSION_RC_PATTERN = re.compile(r"^\d+(?:\.\d+)*[a-zA-Z]*-RC\d+$")
-
-# RC8 script-sandbox classloader forbids these at load time (SecurityException:
-# "File access and reflection are not allowed to scripts"). java.lang.ReflectiveOperationException
-# and java.io.IOException are deliberately NOT in these sets/prefixes; they load fine.
-FORBIDDEN_REFLECT_PREFIX = "java/lang/reflect/"
-FORBIDDEN_NIO_FILE_PREFIX = "java/nio/file/"
-FORBIDDEN_IO_CLASSES = {
-    "java/io/File",
-    "java/io/FileInputStream",
-    "java/io/FileOutputStream",
-    "java/io/FileReader",
-    "java/io/FileWriter",
-    "java/io/RandomAccessFile",
-}
-FORBIDDEN_SANDBOX_SOURCE_PATTERN = re.compile(
-    r"\bjava\.lang\.reflect\.[A-Za-z_$][\w$]*"
-    r"|\bjava\.nio\.file\.[A-Za-z_$][\w$]*"
-    r"|\bjava\.io\.(?:File|FileInputStream|FileOutputStream|FileReader|FileWriter|RandomAccessFile)\b"
+from .scan_data_rules import (  # noqa: F401
+    MOD_INFO_TRIAGE_BANNER_PATTERN,
+    _person_names_duplicate_lines,
+    _csv_first_cells,
+    _rules_duplicate_id_cells,
+    _scan_rules_csv_duplicate_id,
+    _csv_record_cells,
+    _rules_whitespace_only_line_cells,
+    _scan_rules_csv_whitespace_only_line,
+    _CURLY_OPEN,
+    _CURLY_CLOSE,
+    _OR_LINE,
+    _alternative_needs_straight_quotes,
+    _rules_curly_quote_cells,
+    _scan_rules_csv_curly_quotes,
+    _scan_person_names_duplicate_row,
+    _DUPLICATE_KEY_SUFFIXES,
+    _json_duplicate_keys,
+    _loaded_faction_paths,
+    _scan_json_duplicate_key,
+    _scan_supplies_legacy_column,
+    _scan_mod_info_triage_banner,
 )
-BUNDLED_LIBRARY_PACKAGE_PREFIXES = {
-    "GraphicsLib": ("org/dark/",),
-    # Only lazylib: org/lazywizard/console/ is Console Commands (lw_console). The wider prefix made
-    # revive declare LazyLib for ClearCommands, whose jar only calls Console Commands (2026-09-27;
-    # every class in LazyLib 3.0.0's LazyLib.jar and LazyLib-Kotlin.jar sits under org/lazywizard/lazylib).
-    # kotlin/ and kotlinx/ too: LazyLib ships the Kotlin runtime (mod_info "jars": jars/internal/Kotlin-Runtime.jar,
-    # which holds kotlin/jvm/internal/Intrinsics; LazyLib 3.0.0, read 2026-09-27). A Kotlin mod that does not
-    # declare LazyLib crashes with NoClassDefFoundError: kotlin/jvm/internal/Intrinsics (Automatic Orders, GRP-4).
-    "LazyLib": ("org/lazywizard/lazylib/", "kotlin/", "kotlinx/"),
-    "Console Commands": ("org/lazywizard/console/",),
-    "MagicLib": ("org/magiclib/", "data/scripts/util/Magic"),
-    "LunaLib": ("lunalib/",),
-    "Nexerelin": ("exerelin/",),
-    "JSON": ("org/json/",),
-    "LWJGL": ("org/lwjgl/",),
-    # CMUtils (Combat Misc Utils, id cmutils): Neutrino (tomatopaste) calls cmu/CMUtils without declaring it, a
-    # NoClassDefFoundError in live GRP4-20261005c (2026-10-05).
-    "CMUtils": ("cmu/",),
-}
-LIBRARY_DEPENDENCY_IDS = {
-    "GraphicsLib": "shaderLib",
-    "LazyLib": "lw_lazylib",
-    "Console Commands": "lw_console",  # Console Commands 4.0.9 mod_info.json
-    "MagicLib": "MagicLib",
-    "LunaLib": "lunalib",
-    "Nexerelin": "nexerelin",
-    "CMUtils": "cmutils",  # CMUtils 0.3.2 mod_info.json
-}
-SETTINGS_ACCEPT_LIMIT = 25  # owner, 2026-09-27 (ROADMAP item 19 held rule)
-SETTINGS_BASELINE_FILE = "SETTINGS_BASELINE.json"
-DESIGN_TYPE_CSV_TARGETS = (
-    ("data", "hulls", "ship_data.csv"),
-    ("data", "weapons", "weapon_data.csv"),
-)
-
-
-def _relative(root: Path, path: Path) -> str:
-    return path.relative_to(root).as_posix()
-
-
-def _java_for_major(major: int) -> str:
-    if major in CLASS_MAJOR_TO_JAVA:
-        return str(CLASS_MAJOR_TO_JAVA[major])
-    return f"class-file major {major}"
-
-
-def _without_trailing_commas(text: str) -> str:
-    result: list[str] = []
-    in_string = False
-    escaped = False
-    index = 0
-    while index < len(text):
-        character = text[index]
-        if in_string:
-            result.append(character)
-            if escaped:
-                escaped = False
-            elif character == "\\":
-                escaped = True
-            elif character == '"':
-                in_string = False
-            index += 1
-            continue
-        if character == '"':
-            in_string = True
-        if character == ",":
-            next_index = index + 1
-            while next_index < len(text) and text[next_index].isspace():
-                next_index += 1
-            if next_index < len(text) and text[next_index] in "}]":
-                index += 1
-                continue
-        result.append(character)
-        index += 1
-    return "".join(result)
-
-
-def _strip_line_comments(text: str) -> tuple[str, set[str]]:
-    """Remove `#` and `//` line comments, quote-aware for both `'` and `"`.
-
-    Single quotes are not valid JSON syntax, but this pass runs before single
-    quotes are converted to double quotes -- at this point a mod's
-    single-quoted scalar (e.g. a URL like `'https://example.com/mod'`, or a
-    value like `'costs #500 credits'`) is still single-quoted, so a `#`/`//`
-    inside it must not be mistaken for the start of a comment. Tracking only
-    double quotes would let exactly that happen.
-    """
-    result: list[str] = []
-    tolerances: set[str] = set()
-    string_delim: str | None = None
-    escaped = False
-    index = 0
-    length = len(text)
-    while index < length:
-        character = text[index]
-        if string_delim is not None:
-            result.append(character)
-            if escaped:
-                escaped = False
-            elif character == "\\":
-                escaped = True
-            elif character == string_delim:
-                string_delim = None
-            index += 1
-            continue
-        if character in "\"'":
-            string_delim = character
-            result.append(character)
-            index += 1
-            continue
-        if character == "#":
-            tolerances.add("hash-comments")
-            while index < length and text[index] not in "\r\n":
-                index += 1
-            continue
-        if character == "/" and index + 1 < length and text[index + 1] == "/":
-            tolerances.add("slash-comments")
-            while index < length and text[index] not in "\r\n":
-                index += 1
-            continue
-        result.append(character)
-        index += 1
-    return "".join(result), tolerances
-
-
-def _convert_single_quoted_strings(text: str) -> str:
-    """Rewrite `'...'` string tokens (outside double-quoted strings) as `"..."`.
-
-    Observed in real mod_info.json files for scalar-looking values, e.g.
-    `{"major": '1', "minor": '5'}`. An apostrophe inside a normal
-    double-quoted string is left untouched because conversion only happens
-    while not already inside a `"..."` span. An unterminated single-quoted
-    token raises ValueError rather than being "repaired" by treating
-    end-of-input as an implicit closing quote.
-    """
-    result: list[str] = []
-    in_double = False
-    index = 0
-    length = len(text)
-    while index < length:
-        character = text[index]
-        if in_double:
-            result.append(character)
-            if character == "\\" and index + 1 < length:
-                result.append(text[index + 1])
-                index += 2
-                continue
-            if character == '"':
-                in_double = False
-            index += 1
-            continue
-        if character == '"':
-            in_double = True
-            result.append(character)
-            index += 1
-            continue
-        if character == "'":
-            cursor = index + 1
-            content: list[str] = []
-            while cursor < length and text[cursor] != "'":
-                if text[cursor] == "\\" and cursor + 1 < length:
-                    escaped_char = text[cursor + 1]
-                    if escaped_char == "'":
-                        # The only escape meaningful to a single-quoted string that isn't
-                        # already valid JSON escape syntax: drop the backslash, since a
-                        # bare "'" needs no escaping inside a double-quoted string.
-                        content.append("'")
-                    elif escaped_char == '"':
-                        content.append('\\"')
-                    else:
-                        # Any other escape (\\, \n, \t, \uXXXX, ...) is already valid JSON
-                        # escape syntax and carries over unchanged.
-                        content.append(text[cursor])
-                        content.append(escaped_char)
-                    cursor += 2
-                    continue
-                if text[cursor] == '"':
-                    content.append('\\"')
-                    cursor += 1
-                    continue
-                content.append(text[cursor])
-                cursor += 1
-            if cursor >= length:
-                raise ValueError(f"Unterminated single-quoted string starting at position {index}")
-            inner = "".join(content)
-            result.append(f'"{inner}"')
-            index = cursor + 1
-            continue
-        result.append(character)
-        index += 1
-    return "".join(result)
-
-
-_JSON_STRING_TOKEN_PATTERN = r'"(?:\\.|[^"\\])*"'
-_JAVA_NUMBER_SUFFIX_PATTERN = re.compile(
-    # 0.5f and 2d, plus the dotted forms Java's Double.valueOf also takes: 1.f and .0f (Magellan engine_styles).
-    _JSON_STRING_TOKEN_PATTERN + r"|(?<![\w.])-?(?:\d+\.?\d*|\.\d+)[fFdD](?![\w.])"
-)
-# org.json's nextValue reads an unquoted value up to one of these delimiters or a control character
-# (spaces included, then trimmed); stringToValue makes it true/false/null in any case, a number, or
-# else the text itself. Every case was run through RC8's json.jar on 2026-09-14.
-_ORGJSON_UNQUOTED_RUN = r'[^\x00-\x1f,:\]}/\\"\[{;=#]*'
-_BAREWORD_TOKEN_PATTERN = re.compile(
-    _JSON_STRING_TOKEN_PATTERN
-    # STATIONS, or Foundation of Borken's displayName:博尔肯基金会（F.O.B）
-    + r"|(?<![\w.$])(?:[A-Za-z_$]|[^\x00-\x7f\s])" + _ORGJSON_UNQUOTED_RUN
-    # A digit-led run that isn't a number stays text: Erexeus Tech Complex's "patch":0b. A leading
-    # '+' is part of a number: SCY's "renderOrderMod":+5.
-    + r"|(?<![\w.$])\+?[0-9]" + _ORGJSON_UNQUOTED_RUN
-)
-_LOOSE_NUMBER_PATTERN = re.compile(r"\d+(?:\.\d*)?(?:[eE][+-]?\d+)?", re.ASCII)
-_HEX_NUMBER_PATTERN = re.compile(r"0[xX][0-9a-fA-F]+")
-_RAW_CONTROL_IN_STRING_PATTERN = re.compile(r'"(?:\\.|[^"\\\r\n])*"')
-_JSON_LITERAL_TOKENS = {"true", "false", "null"}
-
-
-def _normalize_string_contents(text: str) -> tuple[str, set[str]]:
-    """Bring double-quoted string contents that org.json accepts into strict-JSON shape.
-
-    org.json's nextString rejects only NUL, `\\n` and `\\r` inside a string, and it reads `\\'` as an
-    apostrophe (RC8's json.jar, 2026-09-14). Metelson Industries has raw tabs in its description;
-    Magellan and Foundation of Borken escape apostrophes. Strict JSON rejects both. Line breaks and
-    illegal escapes such as `\\%` are left alone, because the game rejects them too.
-    """
-    tolerances: set[str] = set()
-
-    def replace(match: re.Match[str]) -> str:
-        token = match.group(0)
-        unescaped = re.sub(r"\\(.)", lambda escape: "'" if escape.group(1) == "'" else escape.group(0), token, flags=re.S)
-        if unescaped != token:
-            tolerances.add("apostrophe-escapes")
-        escaped = re.sub(r"[\x01-\x09\x0b\x0c\x0e-\x1f]", lambda char: f"\\u{ord(char.group(0)):04x}", unescaped)
-        if escaped != unescaped:
-            tolerances.add("raw-control-chars")
-        return escaped
-
-    return _RAW_CONTROL_IN_STRING_PATTERN.sub(replace, text), tolerances
-
-
-def _fill_empty_array_elements(text: str) -> tuple[str, bool]:
-    """Write `null` for an empty array element, as org.json's JSONArray reads it.
-
-    `["a",,"b"]` and `[,"a"]` load in game with a null element (RC8's json.jar, 2026-09-14; Valhalla
-    Starworks' startShipsCombatLarge). Objects get no such leniency, and a comma before `]` stays a
-    trailing comma, which is dropped later.
-    """
-    out: list[str] = []
-    stack: list[str] = []
-    in_string = escaped = found = False
-    for index, char in enumerate(text):
-        out.append(char)
-        if in_string:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            continue
-        if char == '"':
-            in_string = True
-        elif char in "[{":
-            stack.append(char)
-        elif char in "]}" and stack:
-            stack.pop()
-        if char in "[," and stack and stack[-1] == "[":
-            ahead = index + 1
-            while ahead < len(text) and text[ahead] in " \t\r\n":
-                ahead += 1
-            if ahead < len(text) and text[ahead] == ",":
-                out.append("null")
-                found = True
-    return "".join(out), found
-
-
-def _strip_java_number_suffixes(text: str) -> tuple[str, bool]:
-    """Drop a trailing f/F/d/D from Java-style float/double literals (e.g. `0.5f`, `2d`).
-
-    Restricted to tokens outside double-quoted strings so a legitimate string
-    value ending in one of those letters is never touched.
-    """
-    found = False
-
-    def replace(match: re.Match[str]) -> str:
-        nonlocal found
-        token = match.group(0)
-        if token.startswith('"'):
-            return token
-        found = True
-        return token[:-1]
-
-    return _JAVA_NUMBER_SUFFIX_PATTERN.sub(replace, text), found
-
-
-# org.json reads `098` / `000` (leading zeros) and `.7` (leading dot) as numbers; strict JSON rejects
-# both. Seen in Mirfak Parcel Service colours ([255,098,000,205]) and Blackrock skins ("baseValueMult":.7).
-_LENIENT_NUMBER_PATTERN = re.compile(
-    _JSON_STRING_TOKEN_PATTERN + r"|(?<![\w.])(-?)(?:0+(\d+(?:\.\d+)?)|\.(\d+))(?![\w.])"
-)
-
-
-def _normalize_lenient_numbers(text: str) -> tuple[str, bool]:
-    """Rewrite leading-zero and leading-dot numbers outside strings into strict JSON numbers."""
-    found = False
-
-    def replace(match: re.Match[str]) -> str:
-        nonlocal found
-        token = match.group(0)
-        if token.startswith('"'):
-            return token
-        found = True
-        sign, digits, fraction = match.group(1), match.group(2), match.group(3)
-        return f"{sign}{digits}" if digits is not None else f"{sign}0.{fraction}"
-
-    return _LENIENT_NUMBER_PATTERN.sub(replace, text), found
-
-
-def _orgjson_separators(text: str) -> tuple[str, set[str]]:
-    """org.json also accepts `;` between pairs/elements and `=` or `=>` between key and value.
-
-    Xenoargh's Rebal settings.json has `"baseNumOfficers":45;` and loads in-game (verified against
-    starsector-core/json.jar, 2026-09-14). Rewritten outside double-quoted strings only; single quotes
-    are already converted by the time this runs.
-    """
-    out: list[str] = []
-    tolerances: set[str] = set()
-    in_string = escaped = False
-    index = 0
-    while index < len(text):
-        char = text[index]
-        if in_string:
-            out.append(char)
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            index += 1
-            continue
-        if char == '"':
-            in_string = True
-            out.append(char)
-        elif char == ";":
-            tolerances.add("semicolon-separators")
-            out.append(",")
-        elif char == "=":
-            tolerances.add("equals-key-separators")
-            out.append(":")
-            if index + 1 < len(text) and text[index + 1] == ">":
-                index += 1
-        else:
-            out.append(char)
-        index += 1
-    return "".join(out), tolerances
-
-
-def _quote_barewords_and_keys(text: str) -> tuple[str, set[str]]:
-    """Wrap unquoted identifiers (object keys or bareword scalar values) in double quotes.
-
-    `true`/`false`/`null` are left as literals. Whether a given identifier is
-    followed (ignoring whitespace) by `:` distinguishes an unquoted key from a
-    bareword value for tolerance reporting; both are rewritten the same way.
-    """
-    tolerances: set[str] = set()
-
-    def replace(match: re.Match[str]) -> str:
-        raw = match.group(0)
-        if raw.startswith('"'):
-            return raw
-        token = raw.rstrip(" ")  # org.json trims the unquoted run
-        trailing = raw[len(token):]
-        if token.lower() in _JSON_LITERAL_TOKENS:
-            if token != token.lower():
-                tolerances.add("bareword-values")  # org.json: equalsIgnoreCase("true") and so on
-            return token.lower() + trailing
-        if token[0] == "+" and _LOOSE_NUMBER_PATTERN.fullmatch(token[1:]):
-            tolerances.add("lenient-numbers")  # org.json: new Long("+5"), Double.valueOf("+0.5")
-            token, raw = token[1:], raw[1:]
-        # ASCII digits only: org.json reads a full-width １.0 as text (Traverser Design Bureau).
-        if token[0] in "0123456789":
-            if re.fullmatch(r"[0-9]+\.", token):
-                tolerances.add("lenient-numbers")  # Dassault-Mikoyan's "pitch":1.
-                return token + "0" + trailing
-            if _LOOSE_NUMBER_PATTERN.fullmatch(token):
-                return raw
-            if _HEX_NUMBER_PATTERN.fullmatch(token) and int(token, 16) <= 0x7FFFFFFF:
-                tolerances.add("lenient-numbers")  # org.json: Integer.parseInt(hex, 16)
-                return str(int(token, 16)) + trailing
-        lookahead = match.end()
-        while lookahead < len(text) and text[lookahead] in " \t\r\n":
-            lookahead += 1
-        if lookahead < len(text) and text[lookahead] == ":":
-            tolerances.add("unquoted-keys")
-        else:
-            tolerances.add("bareword-values")
-        return f'"{token}"' + trailing
-
-    return _BAREWORD_TOKEN_PATTERN.sub(replace, text), tolerances
-
-
-def _parse_json(text: str, object_pairs_hook=None) -> tuple[object, set[str]]:
-    """Parse JSON the way Starsector's lenient (org.json-based) loader does.
-
-    Strict `json.loads` is tried first so the common, well-formed case is not
-    slowed down by unnecessary rewriting. On failure, a sequence of
-    string-aware rewrites brings the text into strict-JSON shape: strip `#`/
-    `//` comments, convert single-quoted strings to double-quoted, strip Java
-    float/double suffixes, quote unquoted keys/bareword values, then strip
-    trailing commas. Each tolerance actually used is recorded so callers can
-    report it rather than silently "fixing" the file.
-    """
-    try:
-        return json.loads(text, object_pairs_hook=object_pairs_hook), set()
-    except json.JSONDecodeError as original_error:
-        tolerances: set[str] = set()
-        try:
-            without_comments, comment_tolerances = _strip_line_comments(text)
-            tolerances |= comment_tolerances
-            without_single_quotes = _convert_single_quoted_strings(without_comments)
-            if without_single_quotes != without_comments:
-                tolerances.add("single-quotes")
-            without_number_suffix, suffix_found = _strip_java_number_suffixes(without_single_quotes)
-            if suffix_found:
-                tolerances.add("java-number-suffix")
-            without_number_suffix, lenient_numbers = _normalize_lenient_numbers(without_number_suffix)
-            if lenient_numbers:
-                tolerances.add("lenient-numbers")
-            without_number_suffix, separator_tolerances = _orgjson_separators(without_number_suffix)
-            tolerances |= separator_tolerances
-            without_barewords, bareword_tolerances = _quote_barewords_and_keys(without_number_suffix)
-            tolerances |= bareword_tolerances
-            without_barewords, empty_found = _fill_empty_array_elements(without_barewords)
-            if empty_found:
-                tolerances.add("empty-array-elements")
-            without_commas = _without_trailing_commas(without_barewords)
-            # Starsector also accepts a comma after the root object's closing brace (e.g. Exigency factions).
-            without_commas = re.sub(r"([}\]])\s*,\s*\Z", r"\1", without_commas)
-            if without_commas != without_barewords:
-                tolerances.add("trailing-commas")
-            without_commas, string_tolerances = _normalize_string_contents(without_commas)
-            tolerances |= string_tolerances
-        except ValueError:
-            # An unterminated single-quoted string is malformed, not a dialect
-            # we tolerate; "repairing" it would hide a genuinely broken file.
-            raise original_error from None  # the original parse error is the useful one; the repair attempt's ValueError is noise
-        try:
-            data = json.loads(without_commas, object_pairs_hook=object_pairs_hook)
-        except json.JSONDecodeError as rewritten_error:
-            if rewritten_error.msg != "Extra data":
-                # Say where the lenient rewrite really stopped: Rebal's file failed on a ';' at line 29
-                # while the report only showed the strict parser's complaint about a '#' at line 3.
-                raise json.JSONDecodeError(
-                    f"{original_error.msg} (after lenient rewrites it still fails: {rewritten_error.msg} at line {rewritten_error.lineno} column {rewritten_error.colno})",
-                    original_error.doc,
-                    original_error.pos,
-                ) from rewritten_error
-            # org.json (Starsector's loader) stops after the first complete value and ignores the
-            # rest -- including real keys when an extra '}' closes the root early (Blackrock's
-            # br_consortium.faction loses its factionDoctrine this way).
-            stripped = without_commas.lstrip()
-            data, end = json.JSONDecoder(object_pairs_hook=object_pairs_hook).raw_decode(stripped)
-            tolerances.add("trailing-data")
-            if re.search(r'["\w]', stripped[end:]):
-                tolerances.add("trailing-content")
-        if not tolerances:
-            raise original_error from None  # the original parse error is the useful one; the repair attempt's ValueError is noise
-        return data, tolerances
-
-
-def _non_strict_json_finding(result: ScanResult, category: str, file: str) -> None:
-    result.add(id="non-strict-json-trailing-comma", category=category, severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Trailing-comma JSON was accepted by the verified target parser compatibility path; retain it unchanged and recheck the selected game parser before modifying this file.", file=file)
-
-
-def _hash_comment_json_finding(result: ScanResult, category: str, file: str) -> None:
-    result.add(id="json-hash-comment", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file uses # comments outside JSON strings, matching Starsector 0.98a core data conventions. BridgeForge parsed them structurally and does not recommend removing or rewriting them.", file=file)
-
-
-def _slash_comment_json_finding(result: ScanResult, category: str, file: str) -> None:
-    result.add(id="json-slash-comment", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file uses // comments outside JSON strings. Starsector's lenient (org.json-based) loader accepts them; BridgeForge parsed them structurally and does not recommend removing or rewriting them.", file=file)
-
-
-def _single_quote_json_finding(result: ScanResult, category: str, file: str) -> None:
-    result.add(id="json-single-quoted-string", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file uses single-quoted strings in place of double quotes. Starsector's lenient loader accepts them; BridgeForge parsed them structurally and does not recommend rewriting them to double quotes.", file=file)
-
-
-def _unquoted_key_json_finding(result: ScanResult, category: str, file: str) -> None:
-    result.add(id="json-unquoted-key", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file has one or more unquoted object keys. Starsector's lenient loader accepts them; BridgeForge parsed them structurally and does not recommend adding quotes.", file=file)
-
-
-def _bareword_value_json_finding(result: ScanResult, category: str, file: str) -> None:
-    result.add(id="json-bareword-value", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file has one or more unquoted bareword values, which Starsector's lenient loader reads as plain strings. BridgeForge parsed them structurally and does not recommend adding quotes.", file=file)
-
-
-def _java_number_suffix_json_finding(result: ScanResult, category: str, file: str) -> None:
-    result.add(id="json-java-number-suffix", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file has one or more Java-style numeric literal suffixes (e.g. 0.5f, 2d). Starsector's lenient loader reads them as plain numbers; BridgeForge parsed them structurally and does not recommend rewriting them.", file=file)
-
-
-def _lenient_number_json_finding(result: ScanResult, category: str, file: str) -> None:
-    result.add(id="json-lenient-number", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file has numbers with leading zeros (e.g. 098), a leading or trailing dot (e.g. .7 or 1.), or hex digits (0x1F). Starsector's lenient loader reads them as plain numbers; BridgeForge parsed them structurally and does not recommend rewriting them.", file=file)
-
-
-def _json_trailing_data_finding(result: ScanResult, category: str, file: str, tolerances: set[str]) -> None:
-    if "trailing-content" in tolerances:
-        result.add(id="json-content-after-root", category=category, severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="The root object closes before the end of the file, and keys follow it. Starsector's loader stops at the first complete object, so everything after it never loads. Usually an extra '}' earlier closed the root too soon (Blackrock's br_consortium.faction lost its factionDoctrine this way). Find the stray brace; don't just delete the tail.", file=file)
-    else:
-        result.add(id="json-trailing-brackets", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="Stray closing brackets or commas follow the root object. Starsector's loader ignores anything after the first complete object, so nothing is lost.", file=file)
-
-
-def _emit_json_tolerance_findings(result: ScanResult, category: str, file: str, tolerances: set[str]) -> None:
-    if "lenient-numbers" in tolerances:
-        _lenient_number_json_finding(result, category, file)
-    if tolerances & {"semicolon-separators", "equals-key-separators"}:
-        used = sorted(tolerances & {"semicolon-separators", "equals-key-separators"})
-        result.add(id="json-orgjson-separator", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="The file separates entries with ';' or keys from values with '=' / '=>'. Starsector's org.json loader accepts both (verified against starsector-core/json.jar); BridgeForge parsed them structurally and does not recommend rewriting them, though strict tools will reject the file.", file=file, evidence=used)
-    if "trailing-data" in tolerances:
-        _json_trailing_data_finding(result, category, file, tolerances)
-    if "trailing-commas" in tolerances:
-        _non_strict_json_finding(result, category, file)
-    if "hash-comments" in tolerances:
-        _hash_comment_json_finding(result, category, file)
-    if "slash-comments" in tolerances:
-        _slash_comment_json_finding(result, category, file)
-    if "single-quotes" in tolerances:
-        _single_quote_json_finding(result, category, file)
-    if "unquoted-keys" in tolerances:
-        _unquoted_key_json_finding(result, category, file)
-    if "bareword-values" in tolerances:
-        _bareword_value_json_finding(result, category, file)
-    if "java-number-suffix" in tolerances:
-        _java_number_suffix_json_finding(result, category, file)
-    if "raw-control-chars" in tolerances:
-        result.add(id="json-raw-control-char", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="A string holds a raw tab or other control character. Starsector's org.json loader keeps it (its nextString rejects only NUL and line breaks; verified against starsector-core/json.jar), but strict JSON tools reject the file. BridgeForge parsed it structurally and does not recommend rewriting it.", file=file)
-    if "empty-array-elements" in tolerances:
-        result.add(id="json-empty-array-element", category=category, severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="An array has an empty element, such as [a,,b] or [,a]. Starsector's org.json loader reads it as null (verified against starsector-core/json.jar), so the file loads, but code that reads the list (ship, faction or blueprint lists) may fail on the null or drop the entry. Check what the author meant.", file=file)
-    if "apostrophe-escapes" in tolerances:
-        result.add(id="json-escaped-apostrophe", category=category, severity="info", classification="SAFE", confidence="DETERMINISTIC", explanation="A double-quoted string escapes an apostrophe as \\'. Starsector's org.json loader reads it as a plain apostrophe (verified against starsector-core/json.jar), but strict JSON rejects the escape. BridgeForge parsed it structurally and does not recommend rewriting it.", file=file)
-
-
-_JSON_VALUE_END = re.compile(r"""(?:"|\]|\}|\d|\btrue|\bfalse|\bnull|[A-Za-z_]\w*)\s*$""")
-
-
-def _repair_missing_commas(text: str, limit: int = 20) -> tuple[str, list[int]] | None:
-    """Insert the commas a strict parse says are missing between two lines, until the file parses the way RC8's
-    org.json does (`_parse_json`); None when it still fails or the gap is not line-ended. org.json rejects a missing
-    separator ("Expected a ',' or ']'", JSONArray/JSONObject in starsector-core/json.jar), so this is a real load
-    error, not a tolerance. Hiigaran's polaris.json lacked one after "organics_common" (ROADMAP 34.16, 2026-10-04)."""
-    lines = text.split("\n")
-    fixed: list[int] = []
-    for _ in range(limit):
-        try:
-            _parse_json("\n".join(lines))
-            return ("\n".join(lines), fixed) if fixed else None
-        except json.JSONDecodeError as exc:
-            # _parse_json reports the strict error and, in its message, where the lenient pass failed.
-            inner = re.search(r"Expecting ',' delimiter at line (\d+)", exc.msg)
-            if inner:
-                target = int(inner.group(1)) - 1
-            elif exc.msg.startswith("Expecting ',' delimiter"):
-                target = exc.lineno - 1
-            else:
-                return None
-            if not 0 <= target < len(lines):
-                return None
-            previous = target - 1
-            while previous >= 0 and re.sub(r"(#|//).*$", "", lines[previous]).strip() == "":
-                previous -= 1
-            if previous < 0 or previous in fixed:
-                return None
-            content = re.sub(r"\s*(#|//)[^\"]*$", "", lines[previous].rstrip("\r"))
-            if not _JSON_VALUE_END.search(content):
-                return None
-            tail = lines[previous].rstrip("\r")[len(content):]
-            lines[previous] = content + "," + tail + ("\r" if lines[previous].endswith("\r") else "")
-            fixed.append(previous + 1)
-    return None
-
-
-def _unverified_json_syntax_finding(result: ScanResult, category: str, file: str, exc: Exception) -> None:
-    result.add(id="unverified-json-syntax", category=category, severity="medium", classification="UNKNOWN", confidence="DETERMINISTIC", explanation=f"A strict JSON parser rejected this file ({exc}). This is not proof that the target game parser rejects it; no matching parser-tolerance evidence is available.", file=file)
-
-
-def _json_encoding_finding(result: ScanResult, category: str, file: str, exc: UnicodeDecodeError) -> None:
-    result.add(id="json-encoding-unverified", category=category, severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation=f"JSON could not be decoded as UTF-8 ({exc}). Encoding is separate from JSON structure; verify the target loader before conversion.", file=file)
 
 
 def _scan_metadata(root: Path, result: ScanResult) -> None:
@@ -1180,6 +577,7 @@ def _removed_api_call_spans(matcher, text: str) -> list[tuple[int, int]]:
 # doesn't come out to exactly 7 (RC8's own 8, MissionDefinitionAPI's 5/6, or anything unexpected) is left
 # alone, never guessed at.
 _LEGACY_ADD_PLANET_RECEIVER_PATTERN = re.compile(r"\b([A-Za-z_]\w*)\s*\.\s*addPlanet\s*\(")
+
 
 # RC8's LocationAPI/StarSystemAPI have no addOrbitalStation method at all (javap -p on both, 2026-09-15:
 # no method of that name), so unlike addPlanet there is no RC8 form to avoid conflating with - any call
@@ -1588,112 +986,6 @@ LOOSE_SCRIPT_JANINO_PATTERNS = (
 )
 
 
-def mod_jar_class_names(root: Path) -> set[str]:
-    """Every fully-qualified class name compiled into one of this mod's own jars.
-
-    Factored out of `_scan_loose_script_janino_risk` (ROADMAP P14 items 14/25/26) so "is this loose
-    script actually jar-shadowed" has exactly one real implementation - real jar-class-file parsing
-    via `_iter_jar_class_files`/`_parse_class_file` - reachable outside a full scan. E12 found a
-    `Path.is_file()` path-existence check trusted as proof of jar-shadowing at least once (Rebal's
-    50 `.java` files, none of which were actually jar-shadowed); this is the function any future
-    "is this shadowed" claim should call instead of reimplementing the check.
-    """
-    jar_classes: set[str] = set()
-    for _jar, _member, data in _iter_jar_class_files(root):
-        info = _parse_class_file(data)
-        if info is not None and info.this_class:
-            jar_classes.add(info.this_class.replace("/", "."))
-    return jar_classes
-
-
-def loose_script_jar_shadowed_class(root: Path, source: Path) -> str | None:
-    """The fully-qualified class name `source` shares with one of this mod's own jars, or None.
-
-    `source` may be absolute or relative to `root`. Only the mod's OWN jars are checked (matching
-    `loose-script-shadowed-by-jar`'s existing scope) - a dependency's jar shadowing a mod's own
-    override is the separate, still-open item 12/25 gap, not this one.
-    """
-    try:
-        relative = source.relative_to(root) if source.is_absolute() else source
-    except ValueError:
-        return None
-    class_name = ".".join(relative.with_suffix("").parts)
-    jar_classes = mod_jar_class_names(root)
-    return class_name if class_name in jar_classes else None
-
-
-def _iter_class_files_in(target: Path):
-    """Yield (jar_path, member_name, class_bytes) for readable .class members under `target`.
-
-    `target` may be a single jar file, or a directory searched recursively for jars (e.g. a
-    starsector-core install, a rig's mods folder, or a dependency mod's own directory). Unlike
-    `_iter_jar_class_files`, this does not consult a mod's own `mod_info.json` "jars" list - the
-    caller names the jar set explicitly, which is the whole point of `verify_shadow` (ROADMAP P14
-    item 26): a direct answer for an arbitrary jar-or-core-dir, not just "this mod's loaded jars."
-    """
-    jars = [target] if target.is_file() else sorted(target.rglob("*.jar"))
-    for jar in jars:
-        try:
-            with zipfile.ZipFile(jar) as archive:
-                entries = archive.infolist()
-                if len(entries) > MAX_JAR_ENTRIES:
-                    continue
-                for item in entries:
-                    if not item.filename.endswith(".class"):
-                        continue
-                    member = PurePosixPath(item.filename.replace("\\", "/"))
-                    if member.is_absolute() or ".." in member.parts:
-                        continue
-                    try:
-                        with archive.open(item) as class_file:
-                            data = class_file.read()
-                    except (OSError, zipfile.BadZipFile, KeyError):
-                        continue
-                    yield jar, item.filename.replace("\\", "/"), data
-        except (OSError, zipfile.BadZipFile):
-            continue
-
-
-def _dependency_jar_class_names(root: Path, provider_roots: list[Path] | None = None) -> dict[str, str]:
-    """{fully-qualified class name: provider mod name} for every class in a declared dependency's
-    own jars (ROADMAP P14 item 12). Only declared dependencies are checked - an undeclared mod
-    happening to share a class name is a coincidence, not a real shadowing risk this check should
-    claim (and `undeclared-library-dependency`/`source-import-unresolved` are its own checks).
-
-    Deliberately requires an EXPLICIT `provider_roots` - no default fallback to
-    `java_toolchain.DEFAULT_PROVIDER_ROOTS` here. That default (this repo's own `In operation`
-    folder) is fine for an explicit, single-purpose command like `compile-check`/`fix`, but this
-    function is called from `_scan_loose_script_janino_risk`, which runs on *every* `scan_mod` call
-    unconditionally - a silent fallback here made every scan of a mod with declared dependencies
-    walk this repo's real, ~325-mod `In operation` folder regardless of what was actually being
-    scanned, turning a 75-second test suite into an 8-minute one before this was caught. Pass
-    `scan --providers`/`corpus_recheck`'s own default, etc. explicitly to opt in, same as
-    `compile-check` already requires.
-    """
-    from .substitutes import provider_index
-
-    if not provider_roots:
-        return {}
-    from .java_toolchain import declared_dependencies
-
-    deps = declared_dependencies(root)
-    if not deps:
-        return {}
-    roots = [Path(entry) for entry in provider_roots]
-    providers = provider_index(roots, exclude=root)
-    by_id = {provider.mod_id: provider for provider in providers}
-    classes: dict[str, str] = {}
-    for dep_id in deps:
-        provider = by_id.get(dep_id)
-        if provider is None:
-            continue
-        for _jar, _member, data in _iter_class_files_in(Path(provider.path)):
-            info = _parse_class_file(data)
-            if info is not None and info.this_class:
-                classes.setdefault(info.this_class.replace("/", "."), provider.name)
-    return classes
-
-
 def _version_major_of(version) -> str:
     if isinstance(version, dict):
         return str(version.get("major", "")).strip()
@@ -1871,29 +1163,9 @@ def _scan_core_campaign_plugin_reregistered(root: Path, result: ScanResult) -> N
 
 
 _MEMORY_FLAG_CHECK = re.compile(r"getMemory(?:WithoutUpdate)?\s*\(\s*\)\s*\.\s*(?:getBoolean|contains|is)\s*\(")
+
+
 _PERSISTENT_FLAG_CHECK = re.compile(r"getPersistentData\s*\(\s*\)\s*\.\s*(?:containsKey|get)\s*\(")
-
-
-def _method_body(text: str, name: str) -> str:
-    """Body of the first method called `name` (brace-matched on comment-blanked text), or ''."""
-    match = re.search(rf"\b{re.escape(name)}\s*\([^)]*\)\s*(?:throws[^{{]*)?\{{", text)
-    if not match:
-        return ""
-    depth, index = 1, match.end()
-    while index < len(text) and depth:
-        depth += {"{": 1, "}": -1}.get(text[index], 0)
-        index += 1
-    return text[match.end(): index - 1]
-
-
-def _method_body_with_helpers(text: str, name: str) -> str:
-    """A method's body plus the bodies of same-class methods it calls (one level), e.g. onNewGame -> initExigency."""
-    body = _method_body(text, name)
-    extra = []
-    for called in sorted(set(re.findall(r"\b([a-z_$][\w$]*)\s*\(", body))):
-        if called not in {"if", "for", "while", "switch", "return", "new", "catch", name}:
-            extra.append(_method_body(text, called))
-    return body + "\n" + "\n".join(extra)
 
 
 def _scan_system_generation_unguarded(root: Path, result: ScanResult) -> None:
@@ -2721,98 +1993,6 @@ def _infer_environment(result: ScanResult) -> None:
         result.add(id="version-inference-blocked", category="environment", severity="medium", classification="UNKNOWN", confidence="DETERMINISTIC", explanation="No trustworthy declared Starsector version was available. Do not make confident compatibility or migration claims until metadata or independent target evidence is supplied.")
 
 
-def _load_lenient_json_file(path: Path) -> object | None:
-    """Read a Starsector-legacy JSON file (# comments, trailing commas) or return None."""
-    try:
-        text = path.read_text(encoding="utf-8-sig")
-    except (OSError, UnicodeDecodeError):
-        return None
-    try:
-        data, _ = _parse_json(text)
-    except json.JSONDecodeError:
-        return None
-    return data
-
-
-def _csv_header(path: Path) -> list[str] | None:
-    try:
-        with path.open("r", encoding="utf-8-sig", newline="") as handle:
-            return next(csv.reader(handle), None)
-    except (OSError, UnicodeDecodeError, csv.Error):
-        return None
-
-
-def _read_csv_rows(path: Path) -> list[dict[str, str]] | None:
-    try:
-        with path.open("r", encoding="utf-8-sig", newline="") as handle:
-            return list(csv.DictReader(handle))
-    except (OSError, UnicodeDecodeError, csv.Error):
-        return None
-
-
-def _read_csv_rows_lenient(path: Path) -> list[dict[str, str]] | None:
-    """Like _read_csv_rows, but tolerates non-UTF-8 bytes (errors='replace').
-
-    Vanilla's own data/strings/descriptions.csv is not valid UTF-8 (it has stray CP-1252 curly-quote
-    bytes). Vanilla content is only ever consulted here as fallback lookup data, never audited for
-    its own encoding, so a byte-level decode error must not silently drop the whole file (which would
-    make every id it describes look undescribed).
-    """
-    try:
-        with path.open("r", encoding="utf-8-sig", newline="", errors="replace") as handle:
-            return list(csv.DictReader(handle))
-    except (OSError, csv.Error):
-        return None
-
-
-def _csv_first_column_ids(path: Path) -> set[str]:
-    """IDs from a procgen CSV's first column (data rows only, comments skipped)."""
-    if not path.is_file():
-        return set()
-    ids: set[str] = set()
-    try:
-        with path.open("r", encoding="utf-8-sig", newline="") as handle:
-            rows = csv.reader(handle)
-            next(rows, None)
-            for row in rows:
-                if not row:
-                    continue
-                first = row[0].strip()
-                if not first or first.startswith("#"):
-                    continue
-                ids.add(first)
-    except (OSError, UnicodeDecodeError, csv.Error):
-        return set()
-    return ids
-
-
-def _wing_ids_set(path: Path) -> set[str]:
-    rows = _read_csv_rows(path)
-    if not rows:
-        return set()
-    ids: set[str] = set()
-    for row in rows:
-        wing_id = (row.get("id") or "").strip()
-        if wing_id and not wing_id.startswith("#"):
-            ids.add(wing_id)
-    return ids
-
-
-def _wing_id_variant_map(path: Path) -> dict[str, str]:
-    """wing_data.csv's own `id` -> `variant` columns: the correct `shipRoles` replacement for a
-    wing id (`shiproles-wing-id`'s fixer)."""
-    rows = _read_csv_rows(path)
-    if not rows:
-        return {}
-    mapping: dict[str, str] = {}
-    for row in rows:
-        wing_id = (row.get("id") or "").strip()
-        variant_id = (row.get("variant") or "").strip()
-        if wing_id and variant_id and not wing_id.startswith("#"):
-            mapping[wing_id] = variant_id
-    return mapping
-
-
 def _is_mission_source(root: Path, path: Path) -> bool:
     parts = path.relative_to(root).parts
     if "data" in parts:
@@ -2984,6 +2164,8 @@ def _vanilla_faction_ids(vanilla_core: Path) -> set[str]:
 
 
 _RULES_MERGED_CONDITION = re.compile(r"[A-Za-z0-9_)]\$[A-Za-z_]")
+
+
 _RULES_FACTION_ID_CONDITION = re.compile(r"\$faction\.id\s*==\s*([A-Za-z0-9_]+)")
 
 
@@ -3041,206 +2223,6 @@ def _scan_rules_condition_defects(root: Path, result: ScanResult, vanilla_core: 
             file=relative,
             evidence=unknown,
         )
-
-
-_DESIGN_TYPE_SOURCES = ("data/hulls/ship_data.csv", "data/weapons/weapon_data.csv", "data/hullmods/hull_mods.csv", "data/campaign/special_items.csv")
-
-
-def _design_type_color_keys(settings: Path) -> list[str]:
-    """designTypeColors keys in file order, duplicates kept (a parsed dict would hide them)."""
-    try:
-        text = settings.read_text(encoding="utf-8-sig", errors="replace")
-    except OSError:
-        return []
-    start = re.search(r'"designTypeColors"\s*:\s*\{', text)
-    if not start:
-        return []
-    end = text.find("}", start.end())
-    block = _blank_java_comments(text[start.end(): end if end >= 0 else len(text)])
-    # Starsector JSON also takes '#' line comments; drop them unless the '#' is inside a string.
-    lines = []
-    for line in block.splitlines():
-        in_string = False
-        for index, char in enumerate(line):
-            if char == '"' and (index == 0 or line[index - 1] != "\\"):
-                in_string = not in_string
-            elif char == "#" and not in_string:
-                line = line[:index]
-                break
-        lines.append(line)
-    return [match.group(1) for match in re.finditer(r'"((?:\\.|[^"\\])*)"\s*:\s*\[', "\n".join(lines))]
-
-
-def _scan_design_type_colors(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
-    """designTypeColors keys must equal tech/manufacturer text exactly (found translating Blackrock, 2026-09-13).
-
-    A translated manufacturer with an untranslated colour key (or the reverse) loses its colour silently;
-    two keys translating to the same text become a duplicate key, and only one survives.
-    """
-    keys = _design_type_color_keys(root / "data" / "config" / "settings.json")
-    if not keys:
-        return
-    relative = "data/config/settings.json"
-    duplicates = sorted(key for key, count in Counter(keys).items() if count > 1)
-    if duplicates:
-        result.add(id="design-type-color-duplicate-key", category="assets", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="settings.json designTypeColors repeats a key; only one of the colours survives. Usually two source-language keys translated to the same text.", file=relative, evidence=duplicates)
-    manufacturers: set[str] = set()
-    for rel in _DESIGN_TYPE_SOURCES:
-        for row in _read_csv_rows_lenient(root / rel) or []:
-            value = (row.get("tech/manufacturer") or "").strip()
-            if value and not value.startswith("#"):
-                manufacturers.add(value)
-    vanilla_keys: set[str] = set(_design_type_color_keys(vanilla_core / "data" / "config" / "settings.json")) if vanilla_core is not None else set()
-    unused = sorted(set(keys) - manufacturers - vanilla_keys)
-    if unused:
-        result.add(id="design-type-color-unused", category="assets", severity="low", classification="REVIEW", confidence="HIGH" if vanilla_core is not None else "MEDIUM", explanation="A designTypeColors key matches no tech/manufacturer value in this mod" + (" or vanilla" if vanilla_core is not None else "") + ". Keys must equal the manufacturer text exactly, so a translated or renamed manufacturer loses its colour. It may also be meant for another mod's ships.", file=relative, evidence=unused)
-    if vanilla_core is not None:
-        uncoloured = sorted(manufacturers - set(keys) - vanilla_keys)
-        if uncoloured:
-            result.add(id="design-type-without-color", category="assets", severity="low", classification="REVIEW", confidence="HIGH", explanation="These tech/manufacturer values have no designTypeColors entry here or in vanilla, so the codex and refit screens show them uncoloured. Cosmetic; usually a manufacturer renamed or translated without its colour key.", file=relative, evidence=uncoloured)
-
-
-_CJK_TEXT = re.compile(r"[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uff00-\uffef]")
-_PLAYER_TEXT_SUFFIXES = {".csv", ".json", ".faction", ".ship", ".skin", ".wpn", ".variant", ".system", ".proj"}
-
-
-def _scan_non_english_text(root: Path, result: ScanResult) -> None:
-    """Chinese/Japanese/Korean text in data files, outside comments (P13, non-English intake).
-
-    Not a defect in itself; it tells a reviewer the mod needs translation (translate-export) before
-    English testing, and after a translation it finds what was missed. Jar string constants are not
-    counted here; translate-check covers them.
-    """
-    counts: Counter[str] = Counter()
-    paths = [root / "mod_info.json"] + [path for path in (root / "data").rglob("*") if path.suffix.lower() in _PLAYER_TEXT_SUFFIXES]
-    for path in paths:
-        if not path.is_file():
-            continue
-        try:
-            text = path.read_text(encoding="utf-8-sig", errors="replace")
-        except OSError:
-            continue
-        for line in text.splitlines():
-            stripped = line.lstrip()
-            if stripped.startswith("#") or stripped.startswith("//"):
-                continue
-            hits = len(_CJK_TEXT.findall(line))
-            if hits:
-                counts[_relative(root, path)] += hits
-    if counts:
-        result.add(id="player-text-non-english", category="localization", severity="low", classification="REVIEW", confidence="DETERMINISTIC", explanation=f"{len(counts)} data file(s) hold CJK text outside comments ({sum(counts.values())} characters). RC8's fonts have no CJK glyphs, so it shows as '???' in game (RC8-19, FlowerGod 2026-09-28). Translate with translate-export / translate-apply before English live tests; translate-check also covers jar strings.", evidence=[f"{path}: {count}" for path, count in counts.most_common(15)] + ([f"... {len(counts) - 15} more file(s)"] if len(counts) > 15 else []))
-
-
-# Design docs and IDE files came from the Chinese mods (2026-09-13): .docx/.sai2 notes, IntelliJ .iml.
-# Archives and Windows shortcuts: Omega-Trauma ships a .rar and "... - 快捷方式.lnk" files (2026-09-14).
-_WORK_FILE_GLOBS = ("*.psd", "*.xcf", "*.kra", "*.sai", "*.sai2", "*.blend", "*.blend1", "*.docx", "*.iml", "*.tmp", "*.orig", "*.old", "*.log", "*~", "*.swp", "*.rej", "*.diff", "*.patch", "*.rar", "*.7z", "*.zip", "*.lnk", "*.url")
-
-
-def _scan_shippable_work_files(root: Path, result: ScanResult) -> None:
-    """Editor/work files a release would ship (release packs copy_drift's file set).
-
-    OS litter (Thumbs.db, .DS_Store, __MACOSX, .git...) is excluded from releases outright; these are
-    left to a person because a mod could, rarely, read one on purpose.
-    """
-    from .copy_drift import _collect
-
-    found = sorted(relative for relative in _collect(root) if any(fnmatch.fnmatch(relative.rsplit("/", 1)[-1].lower(), pattern) for pattern in _WORK_FILE_GLOBS))
-    if found:
-        result.add(id="shippable-work-file", category="packaging", severity="low", classification="REVIEW", confidence="DETERMINISTIC", explanation="Editor or work files sit in folders a release ships (image-editor sources, temp/backup copies, logs, patches). The game never loads them; move them out of the working copy before packaging.", evidence=found[:25] + ([f"... {len(found) - 25} more"] if len(found) > 25 else []))
-
-
-_SPEC_ID_KEYS = {".ship": ("hullId",), ".skin": ("skinHullId",), ".variant": ("variantId",), ".wpn": ("id",), ".proj": ("id",), ".faction": ("id",), ".system": ("id",)}
-
-
-def _scan_non_ascii_names(root: Path, result: ScanResult) -> None:
-    """Non-ASCII spec ids and shipped file paths (P13, from the Chinese mods, 2026-09-13).
-
-    The game may accept them, but a translation pass that translates an id breaks every reference to
-    it, and tools BridgeForge drives (Project Go's ssmt-cli.bat, some unzippers and launchers) mangle
-    non-ASCII paths.
-    """
-    ids: list[str] = []
-    data = root / "data"
-    for path in sorted(data.rglob("*.csv")) if data.is_dir() else []:
-        for row in _read_csv_rows_lenient(path) or []:
-            value = (row.get("id") or "").strip()
-            # Whitespace means prose spilled into the id column (Omega-Trauma description.csv); that is
-            # csv-row-extra-columns' finding, not an id.
-            if value and not value.startswith("#") and not value.isascii() and not re.search(r"\s", value):
-                ids.append(f"{_relative(root, path)}: {value}")
-    for suffix, keys in _SPEC_ID_KEYS.items():
-        for path in sorted(data.rglob(f"*{suffix}")) if data.is_dir() else []:
-            spec = _load_lenient_json_file(path)
-            if isinstance(spec, dict):
-                for key in keys:
-                    value = spec.get(key)
-                    if isinstance(value, str) and not value.isascii():
-                        ids.append(f"{_relative(root, path)}: {key}={value}")
-    if ids:
-        result.add(id="non-ascii-identifier", category="localization", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Spec ids contain non-ASCII characters. Ids are references, not player text: never translate them, and keep them identical everywhere they are used (data files, rules.csv, code, saves). Renaming one breaks existing saves.", evidence=ids[:25] + ([f"... {len(ids) - 25} more"] if len(ids) > 25 else []))
-    from .copy_drift import _collect
-
-    paths = sorted(relative for relative in _collect(root) if not relative.isascii())
-    if paths:
-        result.add(id="non-ascii-file-path", category="packaging", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Shipped files have non-ASCII names. Data files that reference them by path must match byte for byte, and some unzippers, launchers and tools (Project Go's CLI) mangle such names. Prefer ASCII file names.", evidence=paths[:25] + ([f"... {len(paths) - 25} more"] if len(paths) > 25 else []))
-
-
-def _scan_data_encoding(root: Path, result: ScanResult) -> None:
-    """Data text files that are not valid UTF-8 (P13). Chinese mods are often saved as GBK.
-
-    Starsector reads its data as UTF-8, so other encodings show as garbled text. Vanilla's own
-    descriptions.csv has a few stray CP-1252 bytes, hence REVIEW/low rather than an error.
-    """
-    bad: list[str] = []
-    data = root / "data"
-    paths = [root / "mod_info.json"] + ([path for path in data.rglob("*") if path.suffix.lower() in _PLAYER_TEXT_SUFFIXES] if data.is_dir() else [])
-    for path in sorted(paths):
-        try:
-            raw = path.read_bytes()
-        except OSError:
-            continue
-        try:
-            raw.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            line = raw.count(b"\n", 0, exc.start) + 1
-            guess = ""
-            for encoding in ("gb18030", "cp1252"):
-                try:
-                    raw.decode(encoding)
-                except UnicodeDecodeError:
-                    continue
-                guess = f", decodes as {encoding}"
-                break
-            bad.append(f"{_relative(root, path)}: line {line}{guess}")
-    if bad:
-        result.add(id="data-file-not-utf8", category="localization", severity="low", classification="REVIEW", confidence="DETERMINISTIC", explanation="Data files contain bytes that are not valid UTF-8. Starsector reads data as UTF-8, so the text renders garbled. Re-save the file as UTF-8 from its real encoding (often GB18030/GBK in Chinese mods) rather than editing the bytes.", evidence=bad[:25] + ([f"... {len(bad) - 25} more"] if len(bad) > 25 else []))
-
-
-_FULLWIDTH_NUMBER_CHARS = re.compile(r"[０-９，．。－＋％]")
-_NUMBER_CELL = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)%?")
-
-
-def _scan_fullwidth_numbers(root: Path, result: ScanResult) -> None:
-    """CSV cells that are numbers written with full-width characters (P13; FlowerGod used '，' in its CSVs).
-
-    "１５" or "0。5" reads as a number to a person but not to the loader, which rejects the row or
-    silently uses a default. Only cells that become a plain number after normalisation are reported,
-    so prose with Chinese punctuation is left alone.
-    """
-    import unicodedata
-
-    hits: list[str] = []
-    data = root / "data"
-    for path in sorted(data.rglob("*.csv")) if data.is_dir() else []:
-        for index, row in enumerate(_read_csv_rows_lenient(path) or [], start=2):
-            for column, value in row.items():
-                if not isinstance(value, str) or not _FULLWIDTH_NUMBER_CHARS.search(value):
-                    continue
-                normalised = unicodedata.normalize("NFKC", value.replace("。", ".")).strip()
-                if _NUMBER_CELL.fullmatch(normalised):
-                    hits.append(f"{_relative(root, path)} row {index} [{column}]: {value!r} -> {normalised}")
-    if hits:
-        result.add(id="csv-fullwidth-number", category="assets", severity="high", classification="SAFE", confidence="DETERMINISTIC", explanation="CSV cells hold numbers written with full-width digits or punctuation. The loader can't parse them; converting to ASCII keeps the value the author wrote.", evidence=hits[:25] + ([f"... {len(hits) - 25} more"] if len(hits) > 25 else []))
 
 
 def _scan_faction_known_lists(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
@@ -3719,134 +2701,6 @@ def _scan_vanilla_path_shadowing(root: Path, result: ScanResult, vanilla_core: P
             )
 
 
-def _class_pool_u2(data: bytes, pos: int) -> tuple[int, int]:
-    return int.from_bytes(data[pos:pos + 2], "big"), pos + 2
-
-
-def _class_pool_u4(data: bytes, pos: int) -> tuple[int, int]:
-    return int.from_bytes(data[pos:pos + 4], "big"), pos + 4
-
-
-def _skip_attributes(data: bytes, pos: int, count: int) -> int:
-    for _ in range(count):
-        pos += 2  # attribute_name_index
-        length, pos = _class_pool_u4(data, pos)
-        pos += length
-    return pos
-
-
-class _ClassFileInfo:
-    """Parsed facts about one .class file, resolved from its constant pool."""
-
-    __slots__ = ("this_class", "referenced_classes", "methods", "super_class", "interfaces", "fields", "string_constants", "utf8_values")
-
-    def __init__(
-        self,
-        this_class: str,
-        referenced_classes: set[str],
-        methods: list[tuple[str, str, bool]],
-        super_class: str = "",
-        interfaces: list[str] | None = None,
-        fields: list[tuple[str, str, bool, bool]] | None = None,
-        string_constants: set[str] | None = None,
-        utf8_values: frozenset[str] = frozenset(),
-    ) -> None:
-        self.this_class = this_class
-        self.referenced_classes = referenced_classes
-        self.methods = methods
-        self.super_class = super_class
-        self.interfaces = interfaces or []
-        # (name, descriptor, is_static, is_final) per declared field
-        self.fields = fields or []
-        # Java string literals (CONSTANT_String), and every Utf8 entry (member names referenced, etc.)
-        self.string_constants = string_constants or set()
-        self.utf8_values = utf8_values
-
-
-def _parse_class_file(data: bytes) -> _ClassFileInfo | None:
-    """Parse a .class file's constant pool and method table.
-
-    Returns the internal (slash-separated) class names referenced via CONSTANT_Class
-    entries and (name, descriptor, is_public) for each declared method. This is a
-    proper constant-pool walk (not a substring search) so that, for example,
-    "java/io/FileSystemNotFoundException" is never confused with "java/io/File".
-    Returns None for anything that is not a well-formed, currently-understood class
-    file; callers must treat that as "unknown", not "no forbidden references".
-    """
-    if len(data) < 10 or data[:4] != b"\xca\xfe\xba\xbe":
-        return None
-    try:
-        pos = 8  # magic(4) + minor_version(2) + major_version(2)
-        constant_pool_count, pos = _class_pool_u2(data, pos)
-        utf8: dict[int, str] = {}
-        class_name_index: dict[int, int] = {}
-        string_indexes: list[int] = []
-        index = 1
-        while index < constant_pool_count:
-            tag = data[pos]
-            pos += 1
-            if tag == 1:  # Utf8
-                length, pos = _class_pool_u2(data, pos)
-                raw = data[pos:pos + length]
-                pos += length
-                utf8[index] = raw.decode("utf-8", errors="replace")
-            elif tag == 7:  # Class
-                name_index, pos = _class_pool_u2(data, pos)
-                class_name_index[index] = name_index
-            elif tag in (9, 10, 11, 12, 17, 18):  # Fieldref/Methodref/IfaceMethodref/NameAndType/Dynamic/InvokeDynamic
-                pos += 4
-            elif tag == 8:  # String
-                string_index, pos = _class_pool_u2(data, pos)
-                string_indexes.append(string_index)
-            elif tag in (3, 4):  # Integer/Float
-                pos += 4
-            elif tag in (5, 6):  # Long/Double (occupies two constant-pool entries)
-                pos += 8
-                index += 1
-            elif tag == 15:  # MethodHandle
-                pos += 3
-            elif tag == 16:  # MethodType
-                pos += 2
-            elif tag in (19, 20):  # Module/Package
-                pos += 2
-            else:
-                return None  # unrecognized constant-pool tag; do not guess
-            index += 1
-        referenced_classes = {utf8[name_index] for name_index in class_name_index.values() if name_index in utf8}
-        pos += 2  # access_flags
-        this_class_index, pos = _class_pool_u2(data, pos)
-        this_class = utf8.get(class_name_index.get(this_class_index, -1), "")
-        super_index, pos = _class_pool_u2(data, pos)
-        super_class = utf8.get(class_name_index.get(super_index, -1), "")
-        interfaces_count, pos = _class_pool_u2(data, pos)
-        interfaces: list[str] = []
-        for _ in range(interfaces_count):
-            interface_index, pos = _class_pool_u2(data, pos)
-            interfaces.append(utf8.get(class_name_index.get(interface_index, -1), ""))
-        fields_count, pos = _class_pool_u2(data, pos)
-        fields: list[tuple[str, str, bool, bool]] = []
-        for _ in range(fields_count):
-            field_flags, pos = _class_pool_u2(data, pos)
-            field_name_index, pos = _class_pool_u2(data, pos)
-            field_descriptor_index, pos = _class_pool_u2(data, pos)
-            attr_count, pos = _class_pool_u2(data, pos)
-            pos = _skip_attributes(data, pos, attr_count)
-            fields.append((utf8.get(field_name_index, ""), utf8.get(field_descriptor_index, ""), bool(field_flags & 0x0008), bool(field_flags & 0x0010)))
-        methods_count, pos = _class_pool_u2(data, pos)
-        methods: list[tuple[str, str, bool]] = []
-        for _ in range(methods_count):
-            access_flags, pos = _class_pool_u2(data, pos)
-            name_index, pos = _class_pool_u2(data, pos)
-            descriptor_index, pos = _class_pool_u2(data, pos)
-            attr_count, pos = _class_pool_u2(data, pos)
-            pos = _skip_attributes(data, pos, attr_count)
-            methods.append((utf8.get(name_index, ""), utf8.get(descriptor_index, ""), bool(access_flags & 0x0001)))
-        string_constants = {utf8[string_index] for string_index in string_indexes if string_index in utf8}
-        return _ClassFileInfo(this_class, referenced_classes, methods, super_class, interfaces, fields, string_constants, frozenset(utf8.values()))
-    except (IndexError, KeyError, UnicodeDecodeError):
-        return None
-
-
 # Plugins Starsector instantiates once PER WEAPON (or per projectile); a static field is shared by
 # every copy in the battle. Live run SK13-1: SEEKER's ART_thrusterRotation kept `static ShipAPI ship`,
 # so Vector-cruiser debris spawned mid-battle overwrote it and a living cruiser's flame weapon read a
@@ -3858,12 +2712,20 @@ PER_WEAPON_PLUGIN_INTERFACES = {
     "com/fs/starfarer/api/combat/OnHitEffectPlugin",
     "com/fs/starfarer/api/combat/WeaponEffectPluginWithInit",
 }
+
+
 COMBAT_STATE_TYPES = ("ShipAPI", "WeaponAPI", "ShipEngineControllerAPI", "ShipSystemAPI", "MissileAPI", "DamagingProjectileAPI", "BeamAPI")
+
+
 _COMBAT_STATE_DESCRIPTORS = {f"Lcom/fs/starfarer/api/combat/{name};" for name in COMBAT_STATE_TYPES}
+
+
 _SOURCE_STATIC_STATE = re.compile(r"\bstatic\s+(?!final\b)(?:(?:private|protected|public|volatile|transient)\s+)*(" + "|".join(COMBAT_STATE_TYPES) + r")\s+(\w+)\s*[;=]")
 
 
 _HULLMOD_BASES = {"com/fs/starfarer/api/combat/BaseHullMod"}
+
+
 # Whitespace inside a declaration is [ \t], not \s: \s crossed lines and backtracked for 13 s on AI War's
 # AIW_Forcefield.java (2026-09-30). A multi-line initializer is still matched by [^;]*.
 _SOURCE_HULLMOD_FIELD = re.compile(r"^[ \t]*(?:private|protected|public)?[ \t]*(?!static\b)(?!final\b)(?:transient[ \t]+|volatile[ \t]+)*([A-Za-z_][\w.<>\[\], ]*?)[ \t]+(\w+)[ \t]*(?:=[^;]*)?;", re.MULTILINE)
@@ -3874,121 +2736,12 @@ def _looks_like_constant(name: str) -> bool:
     return bool(re.fullmatch(r"[A-Z][A-Z0-9_]*", name))
 
 
-# Bytes each opcode's operands take (JVM spec, chapter 6); -1: variable (tableswitch/lookupswitch/wide).
-_OPERAND_BYTES = [0] * 256
-for _op in (0x10, 0x12, 0x15, 0x16, 0x17, 0x18, 0x19, 0x36, 0x37, 0x38, 0x39, 0x3A, 0xA9, 0xBC):
-    _OPERAND_BYTES[_op] = 1
-for _op in (0x11, 0x13, 0x14, 0x84, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xBB, 0xBD, 0xC0, 0xC1, 0xC6, 0xC7) + tuple(range(0x99, 0xA9)):
-    _OPERAND_BYTES[_op] = 2
-for _op in (0xC5,):
-    _OPERAND_BYTES[_op] = 3
-for _op in (0xB9, 0xBA, 0xC8, 0xC9):
-    _OPERAND_BYTES[_op] = 4
-for _op in (0xAA, 0xAB, 0xC4):
-    _OPERAND_BYTES[_op] = -1
-
-
-def _instance_fields_written_outside_constructors(data: bytes) -> set[tuple[str, str]] | None:
-    """(owner class, field name) for every putfield in a method other than <init>.
-
-    A hull mod field written only in its constructor is set once per object (configuration such as
-    RogueSynth's flavourText/rarity), not per-ship state; only writes elsewhere can leak between ships.
-    None when the class file cannot be walked (the caller then keeps the declaration-only rule).
-    """
-    import struct
-
-    try:
-        pos = 8
-        count = struct.unpack_from(">H", data, pos)[0]
-        pos += 2
-        utf8, classes, name_types, fieldrefs = {}, {}, {}, {}
-        index = 1
-        while index < count:
-            tag = data[pos]
-            pos += 1
-            if tag == 1:
-                length = struct.unpack_from(">H", data, pos)[0]
-                utf8[index] = data[pos + 2:pos + 2 + length].decode("utf-8", errors="replace")
-                pos += 2 + length
-            elif tag in (3, 4):
-                pos += 4
-            elif tag in (5, 6):
-                pos += 8
-                index += 1
-            elif tag in (7, 8, 16, 19, 20):
-                if tag == 7:
-                    classes[index] = struct.unpack_from(">H", data, pos)[0]
-                pos += 2
-            elif tag in (9, 10, 11, 12, 17, 18):
-                a, b = struct.unpack_from(">HH", data, pos)
-                if tag == 9:
-                    fieldrefs[index] = (a, b)
-                elif tag == 12:
-                    name_types[index] = (a, b)
-                pos += 4
-            elif tag == 15:
-                pos += 3
-            else:
-                return None
-            index += 1
-        pos += 6  # access_flags, this_class, super_class
-        pos += 2 + 2 * struct.unpack_from(">H", data, pos)[0]
-
-        def skip_attributes(p: int) -> int:
-            n = struct.unpack_from(">H", data, p)[0]
-            p += 2
-            for _ in range(n):
-                p += 6 + struct.unpack_from(">I", data, p + 2)[0]
-            return p
-
-        n_fields = struct.unpack_from(">H", data, pos)[0]
-        pos += 2
-        for _ in range(n_fields):
-            pos = skip_attributes(pos + 6)
-        n_methods = struct.unpack_from(">H", data, pos)[0]
-        pos += 2
-        written: set[tuple[str, str]] = set()
-        for _ in range(n_methods):
-            name = utf8.get(struct.unpack_from(">H", data, pos + 2)[0], "")
-            pos += 6
-            n_attrs = struct.unpack_from(">H", data, pos)[0]
-            pos += 2
-            for _ in range(n_attrs):
-                attr_name = utf8.get(struct.unpack_from(">H", data, pos)[0], "")
-                attr_len = struct.unpack_from(">I", data, pos + 2)[0]
-                body = pos + 6
-                if attr_name == "Code" and name != "<init>":
-                    code_len = struct.unpack_from(">I", data, body + 4)[0]
-                    start = body + 8
-                    i = 0
-                    while i < code_len:
-                        op = data[start + i]
-                        if op == 0xB5:
-                            ref = fieldrefs.get(struct.unpack_from(">H", data, start + i + 1)[0])
-                            if ref and ref[1] in name_types:
-                                written.add((utf8.get(classes.get(ref[0], -1), ""), utf8.get(name_types[ref[1]][0], "")))
-                        size = _OPERAND_BYTES[op]
-                        if size >= 0:
-                            i += 1 + size
-                        elif op == 0xC4:  # wide
-                            i += 6 if data[start + i + 1] == 0x84 else 4
-                        else:
-                            pad = (4 - ((i + 1) % 4)) % 4
-                            j = i + 1 + pad
-                            if op == 0xAA:
-                                low, high = struct.unpack_from(">ii", data, start + j + 4)
-                                i = j + 12 + 4 * (high - low + 1)
-                            else:
-                                pairs = struct.unpack_from(">i", data, start + j + 4)[0]
-                                i = j + 8 + 8 * pairs
-                pos = body + attr_len
-        return written
-    except (IndexError, struct.error):
-        return None
-
-
 _HULK_SPAWN_CALLS = frozenset({"spawnShipOrWing", "spawnProjectile"})
+
+
 _HULK_IF = re.compile(r"if\s*\(\s*(?P<var>\w+)\s*\.\s*isHulk\s*\(\s*\)\s*\)\s*\{")
+
+
 HULK_DEATH_GUARD_KEY_SUFFIX = "_deathDone"
 
 
@@ -4220,7 +2973,11 @@ def _scan_rules_firebest_populate_options(root: Path, result: ScanResult) -> Non
 # leaves the officer's personality null, and the ship AI built on deploy NPEs in Ship.getPersonality ->
 # Fatal dialog (live run SK13-1d, SEEKER's missions).
 VANILLA_PERSONALITY_IDS = frozenset({"timid", "cautious", "steady", "aggressive", "reckless"})
+
+
 LEGACY_PERSONALITY_IDS = {"cowardly": "timid", "suicidal": "reckless", "fearless": "reckless"}
+
+
 _SOURCE_SET_PERSONALITY = re.compile(r'\bsetPersonality\s*\(\s*"([^"\\]+)"\s*\)')
 
 
@@ -4619,6 +3376,8 @@ REMOVED_MARKET_CONDITION_IDS = {
     "TRADE_CENTER": "COMMERCE",
     "HEADQUARTERS": "HIGHCOMMAND",
 }
+
+
 _CONDITIONS_FIELD_REF = re.compile(r"\bConditions\s*\.\s*(" + "|".join(REMOVED_MARKET_CONDITION_IDS) + r")\b")
 
 
@@ -4658,6 +3417,8 @@ def _scan_removed_market_condition_ids(root: Path, result: ScanResult) -> None:
 # A bare Global.getFactory().createMarket(...) has no industries, so the multiplier is 0 and every
 # fleet comes out empty and vanishes (live run EX-7: no Exigency fleets in Tasserus, no error).
 _FLEET_FACTORY_V3 = "com/fs/starfarer/api/impl/campaign/fleets/FleetFactoryV3"
+
+
 _FLEET_SIZE_MULT_KEY = "combat_fleet_size_mult"  # value of Stats.COMBAT_FLEET_SIZE_MULT
 
 
@@ -4772,65 +3533,6 @@ def _scan_weapon_effect_static_state(root: Path, result: ScanResult) -> None:
         shared = sorted(f"{match.group(2)}:{match.group(1)}" for match in _SOURCE_STATIC_STATE.finditer(text))
         if shared:
             result.add(id="weapon-effect-static-combat-state", category="scripts", severity="high", classification="MANUAL", confidence="HEURISTIC", explanation=explanation, file=_relative(root, source), evidence=[f"static:{item}" for item in shared])
-
-
-NON_MOD_JAR_DIRS = {"build", "out", "tmp", "target"}
-
-
-def _loaded_mod_jars(root: Path) -> list[Path]:
-    """Jars Starsector actually loads: mod_info.json's "jars" list, else every jar outside build-output dirs.
-
-    Bytecode checks must not read compile-classpath caches (e.g. build/cp/ holding vanilla's own jar), unloaded
-    legacy jars, or backups; those produced thousands of false findings on real revival working copies.
-    """
-    mod_info = _load_lenient_json_file(root / "mod_info.json")
-    declared = mod_info.get("jars") if isinstance(mod_info, dict) else None
-    if isinstance(declared, list):
-        jars = [root / entry for entry in declared if isinstance(entry, str) and (root / entry).is_file()]
-        if jars:
-            return sorted(jars)
-    return sorted(
-        jar for jar in root.rglob("*.jar")
-        if not NON_MOD_JAR_DIRS.intersection(part.lower() for part in jar.relative_to(root).parts[:-1])
-    )
-
-
-def _iter_jar_class_files(root: Path):
-    """Yield (jar_path, member_name, class_bytes) for readable .class members of the mod's loaded jars."""
-    yield from iter_class_files_in_jars(_loaded_mod_jars(root))
-
-
-def iter_class_files_in_jars(jars, unreadable: list[str] | None = None, max_entries: int = MAX_JAR_ENTRIES):
-    """Yield (jar_path, member_name, class_bytes) for readable .class members of the given jars.
-
-    The one jar-walking loop behind `mod_jar_class_names` and `verify-shadow` (ROADMAP P14 item 26).
-    A jar that cannot be opened or exceeds MAX_JAR_ENTRIES is skipped; pass `unreadable` to learn
-    which, so a "not shadowed" answer can say what it did not look inside.
-    """
-    for jar in jars:
-        try:
-            with zipfile.ZipFile(jar) as archive:
-                entries = archive.infolist()
-                if len(entries) > max_entries:
-                    if unreadable is not None:
-                        unreadable.append(f"{jar}: more than {max_entries} entries")
-                    continue
-                for item in entries:
-                    if not item.filename.endswith(".class"):
-                        continue
-                    member = PurePosixPath(item.filename.replace("\\", "/"))
-                    if member.is_absolute() or ".." in member.parts:
-                        continue
-                    try:
-                        with archive.open(item) as class_file:
-                            data = class_file.read()
-                    except (OSError, zipfile.BadZipFile, KeyError):
-                        continue
-                    yield jar, item.filename.replace("\\", "/"), data
-        except (OSError, zipfile.BadZipFile) as exc:
-            if unreadable is not None:
-                unreadable.append(f"{jar}: {exc}")
-            continue
 
 
 def _scan_script_sandbox_forbidden_api(root: Path, result: ScanResult) -> None:
@@ -5082,35 +3784,6 @@ def _scan_obfuscated_internal_api_use(root: Path, result: ScanResult) -> None:
         )
 
 
-def _scan_csv_design_type_column(root: Path, result: ScanResult) -> None:
-    """0.8a's tech/manufacturer column drives the RC8 UI's design-type label; without it every row shows 'Common'."""
-    for parts in DESIGN_TYPE_CSV_TARGETS:
-        path = root.joinpath(*parts)
-        if not path.is_file():
-            continue
-        header = _csv_header(path)
-        if header is None:
-            continue
-        normalized = [cell.strip().lower() for cell in header]
-        if any("tech" in cell or "manufacturer" in cell for cell in normalized):
-            continue
-        result.add(
-            id="csv-missing-design-type-column",
-            category="assets",
-            severity="low",
-            classification="REVIEW",
-            confidence="DETERMINISTIC",
-            explanation=(
-                f"{path.name} has no 'tech' or 'manufacturer' column, the 0.8a-era design-type source column. "
-                "0.98a reads it to classify each item's design type in the UI; without it, every row in this file "
-                "displays as design type 'Common'. If a custom design type is intended, also add a matching entry "
-                "under the settings.json 'designTypeColors' key."
-            ),
-            file=_relative(root, path),
-            evidence=[f"columns:{len(header)}", f"header:{','.join(header)[:200]}"],
-        )
-
-
 ORBIT_CALL_ARG_INDICES: dict[str, list[int]] = {
     "addRingBand": [8],
     "addAsteroidBelt": [4, 5],
@@ -5118,119 +3791,15 @@ ORBIT_CALL_ARG_INDICES: dict[str, list[int]] = {
     "setCircularOrbitPointingDown": [3],
     "setCircularOrbitWithSpin": [3],
 }
+
+
 _ORBIT_CALL_NAME_PATTERN = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+
+
 _ZERO_LITERAL_PATTERN = re.compile(r"^-?0+(\.0+)?[fFdD]?$")
+
+
 _ORBIT_GUARD_PATTERN = re.compile(r"Math\.max\s*\(|isNaN\s*\(|>\s*0\b")
-_METHOD_SIGNATURE_PATTERN = re.compile(
-    r"(?:public|private|protected|static)[^;{}]*?\b[\w$]+\s*\([^()]*\)\s*(?:throws\s+[\w.,\s]+)?\s*\{"
-)
-
-
-def _extract_call_arguments_text(text: str, open_paren_index: int) -> str | None:
-    """Return the text between a call's matching parens, respecting nesting and quoted strings."""
-    depth = 0
-    in_string: str | None = None
-    index = open_paren_index
-    length = len(text)
-    while index < length:
-        character = text[index]
-        if in_string:
-            if character == "\\" and index + 1 < length:
-                index += 2
-                continue
-            if character == in_string:
-                in_string = None
-            index += 1
-            continue
-        if character in "\"'":
-            in_string = character
-            index += 1
-            continue
-        if character == "(":
-            depth += 1
-        elif character == ")":
-            depth -= 1
-            if depth == 0:
-                return text[open_paren_index + 1:index]
-        index += 1
-    return None
-
-
-def _split_call_arguments(args_text: str) -> list[str]:
-    """Split a call's argument text on top-level commas only (quote/paren/bracket-aware)."""
-    args: list[str] = []
-    current: list[str] = []
-    depth = 0
-    in_string: str | None = None
-    index = 0
-    length = len(args_text)
-    while index < length:
-        character = args_text[index]
-        if in_string:
-            current.append(character)
-            if character == "\\" and index + 1 < length:
-                current.append(args_text[index + 1])
-                index += 2
-                continue
-            if character == in_string:
-                in_string = None
-            index += 1
-            continue
-        if character in "\"'":
-            in_string = character
-            current.append(character)
-            index += 1
-            continue
-        if character in "([{":
-            depth += 1
-            current.append(character)
-            index += 1
-            continue
-        if character in ")]}":
-            depth -= 1
-            current.append(character)
-            index += 1
-            continue
-        if character == "," and depth == 0:
-            args.append("".join(current).strip())
-            current = []
-            index += 1
-            continue
-        current.append(character)
-        index += 1
-    if current or args:
-        args.append("".join(current).strip())
-    return args
-
-
-def _enclosing_method_span(text: str, position: int) -> tuple[int, int]:
-    """Return the (start, end) offsets of the innermost method body enclosing `position`.
-
-    Uses a simple signature regex plus brace counting; falls back to the whole file when no
-    enclosing method is recognized (still safe: guard detection then just looks file-wide).
-    """
-    best: tuple[int, int] | None = None
-    for match in _METHOD_SIGNATURE_PATTERN.finditer(text):
-        body_start = match.end() - 1
-        if body_start > position:
-            continue
-        depth = 0
-        end = None
-        for index in range(body_start, len(text)):
-            if text[index] == "{":
-                depth += 1
-            elif text[index] == "}":
-                depth -= 1
-                if depth == 0:
-                    end = index + 1
-                    break
-        if end is None or not (body_start <= position < end):
-            continue
-        if best is None or match.start() > best[0]:
-            best = (match.start(), end)
-    if best is None:
-        return 0, len(text)
-    return best
 
 
 def _looks_like_division(expr: str) -> bool:
@@ -5253,47 +3822,6 @@ def _classify_orbit_argument(arg_text: str, method_text: str) -> str | None:
     if _ORBIT_GUARD_PATTERN.search(method_text):
         return None
     return "computed-unguarded"
-
-
-def _blank_java_comments(text: str, strings: bool = False) -> str:
-    """Blank out // and /* */ comment text with spaces, keeping newlines so offsets and line numbers hold.
-
-    String and char literals are skipped, so "http://..." survives. Without this, source checks flagged
-    commented-out code (a disabled setCircularOrbit block in Legacy of Arkgneisis's procgen generator).
-    With strings=True the literals' contents are blanked too (quotes kept): declaration matchers need it,
-    since Xenoargh's AI Overhaul logs "couldn't find the class for a System" and archaeology read a class
-    named `for` out of it (2026-09-14).
-    """
-    out = list(text)
-    index, length = 0, len(text)
-    while index < length:
-        char = text[index]
-        if char in "\"'":
-            index += 1
-            while index < length and text[index] != char and text[index] != "\n":
-                step = 2 if text[index] == "\\" else 1
-                if strings:
-                    for position in range(index, min(index + step, length)):
-                        if out[position] != "\n":
-                            out[position] = " "
-                index += step
-            index += 1
-            continue
-        if text.startswith("//", index):
-            while index < length and text[index] != "\n":
-                out[index] = " "
-                index += 1
-            continue
-        if text.startswith("/*", index):
-            end = text.find("*/", index + 2)
-            end = length if end < 0 else end + 2
-            for position in range(index, end):
-                if out[position] != "\n":
-                    out[position] = " "
-            index = end
-            continue
-        index += 1
-    return "".join(out)
 
 
 def _scan_orbit_period_hazards(root: Path, result: ScanResult) -> None:
@@ -5576,6 +4104,8 @@ def _scan_faction_known_tags(root: Path, result: ScanResult, vanilla_core: Path 
 
 
 _NEW_GAME_PLUGIN_KEYS = ("newGameSectorProcGen", "newGameCreationEntryPoint")
+
+
 # RC8 industries whose plugin AoTD sets at load (javap of each mod plugin, 2026-10-04: IndustrySpecAPI.setPluginClass).
 _AOTD_REPLUGGED = {"population": "AoTD Theory of Toolbox", "heavyindustry": "AoTD Vaults of Knowledge",
                    "orbitalworks": "AoTD Vaults of Knowledge", "patrolhq": "AoTD Seats of Power",
@@ -5693,6 +4223,8 @@ def _scan_temporary_market_fleet_source(root: Path, result: ScanResult) -> None:
 
 
 TOOLBOX_ID = "aotd_theory_of_toolbox"
+
+
 TOOLBOX_FORK_MINIMUM = (1, 0, 14)  # the Scheduler Fork installed 2026-10-10 is 1.0.14-spp13 (docs/AOTD_COMPAT_PLAN.md)
 
 
@@ -5741,20 +4273,12 @@ def _scan_aotd_toolbox_version(root: Path, result: ScanResult, provider_roots: l
 
 
 _ADVANCE_RE = re.compile(r"\bvoid\s+advance\s*\(\s*(?:final\s+)?float\s+\w+\s*\)\s*\{")
+
+
 _MARKET_WORK_RE = re.compile(r"getMarketsCopy\s*\(|\.reapplyIndustries\s*\(|\.reapplyConditions\s*\(")
+
+
 _TIMER_GUARD_RE = re.compile(r"IntervalUtil|intervalElapsed|interval|timer|elapsed|cooldown|lastRun|lastCheck|daysSince", re.I)
-
-
-def _brace_body(text: str, open_brace: int) -> str:
-    depth = 0
-    for index in range(open_brace, len(text)):
-        if text[index] == "{":
-            depth += 1
-        elif text[index] == "}":
-            depth -= 1
-            if depth == 0:
-                return text[open_brace:index + 1]
-    return text[open_brace:]
 
 
 def _scan_per_frame_market_work(root: Path, result: ScanResult) -> None:
@@ -5838,6 +4362,8 @@ def _scan_replace_drops_rc8_entries(root: Path, result: ScanResult, vanilla_core
 
 
 _REFERENCE_INSTALLS = ("Starsector62", "Starsector7.2", "Starsector8.1", "Starsector9a", "Starsector9.0", "Starsector9.5.1a")
+
+
 _OLD_VANILLA_CLASSES: dict[str, set[str]] = {}
 
 
@@ -5901,6 +4427,8 @@ def _scan_retired_vanilla_class_copy(root: Path, result: ScanResult, vanilla_cor
 
 
 _SOURCE_ROOTS = ("src", "jars/src", "src/src", "jars/source", "source")
+
+
 _JAVA_METHOD = re.compile(r"\bpublic\s+(?:static\s+|final\s+|synchronized\s+|abstract\s+)*[\w<>\[\],.?\s]+?\s+(\w+)\s*\(")
 
 
@@ -6092,6 +4620,8 @@ def _scan_unguarded_variable_lookup(root: Path, result: ScanResult) -> None:
 
 
 _NEX_SECTOR_MANAGER_IMPORT = re.compile(r"^[ \t]*import\s+exerelin\.campaign\.SectorManager\s*;[ \t]*\r?\n", re.M)
+
+
 _NEX_CORVUS_CALL = re.compile(r"\bSectorManager\s*\.\s*(?:getManager\s*\(\s*\)\s*\.\s*)?getCorvusMode\s*\(\s*\)")
 
 
@@ -6142,28 +4672,6 @@ def _scan_nexerelin_corvus_mode_import(root: Path, result: ScanResult) -> None:
 _SPAWN_SHIP_CALL_PATTERN = re.compile(r"\b(spawnShipOrWing|spawnFleetMember)\s*\(\s*\"([^\"]+)\"")
 
 
-def _call_argument_count(text: str, index: int) -> int:
-    """Top-level arguments of the call whose argument list starts at or after `index` (the first '(' from
-    there); string literals are expected blanked or quote-free. 0 when the list does not close."""
-    open_index = text.find("(", index)
-    if open_index < 0:
-        return 0
-    depth, count, seen = 0, 1, False
-    for i in range(open_index, len(text)):
-        char = text[i]
-        if char in "([{":
-            depth += 1
-        elif char in ")]}":
-            depth -= 1
-            if depth == 0:
-                return count if seen else 0
-        elif char == "," and depth == 1:
-            count += 1
-        elif depth >= 1 and not char.isspace():
-            seen = True
-    return 0
-
-
 def _scan_spawned_ship_captain_personality_risk(root: Path, result: ScanResult) -> None:
     """A ship (not wing) spawned directly via spawnShipOrWing/spawnFleetMember gets an AI captain with no personality."""
     wing_ids = _wing_ids_set(root / "data" / "hulls" / "wing_data.csv")
@@ -6200,430 +4708,9 @@ def _scan_spawned_ship_captain_personality_risk(root: Path, result: ScanResult) 
             )
 
 
-# Banner forms only. A bare, case-insensitive "broken" also matched the real mod name "Broken Star"
-# after its "(BROEKN MAYBE)" banner was removed, so "BROKEN" must be all-caps or parenthesised.
-MOD_INFO_TRIAGE_BANNER_PATTERN = re.compile(
-    r"\bBROKEN\b|(?i:\(\s*broken|BROEKN|UNREVIVED|NEEDS TO BE UPDATED|fetch an old game version)"
-)
-
-
-def _person_names_duplicate_lines(path: Path) -> list[int]:
-    """1-based line numbers of rows that repeat an earlier row of the same file (blank rows ignored)."""
-    try:
-        text = path.read_text(encoding="utf-8-sig", errors="replace")
-    except OSError:
-        return []
-    seen: set[tuple[str, ...]] = set()
-    repeats = []
-    for number, line in enumerate(text.splitlines()[1:], start=2):
-        cells = tuple(cell.strip() for cell in next(csv.reader([line]), []))
-        if not any(cells) or cells[0].startswith("#"):
-            continue
-        if cells in seen:
-            repeats.append(number)
-        seen.add(cells)
-    return repeats
-
-
-def _csv_first_cells(text: str) -> list[tuple[int, int, str, bool]]:
-    """(start, end, value, quoted) of the first cell of every record of a CSV, by text offset. A quoted cell may hold newlines."""
-    cells: list[tuple[int, int, str, bool]] = []
-    i, n = 0, len(text)
-    while i < n:
-        start, quoted, value = i, text[i] == '"', ""
-        if quoted:
-            i += 1
-            chars = []
-            while i < n:
-                if text[i] == '"':
-                    if i + 1 < n and text[i + 1] == '"':
-                        chars.append('"')
-                        i += 2
-                        continue
-                    i += 1
-                    break
-                chars.append(text[i])
-                i += 1
-            value = "".join(chars)
-        else:
-            while i < n and text[i] not in ",\r\n":
-                i += 1
-            value = text[start:i]
-        cells.append((start, i, value, quoted))
-        in_quotes = False
-        while i < n:  # skip the rest of the record
-            c = text[i]
-            if c == '"':
-                in_quotes = not in_quotes
-            elif c == "\n" and not in_quotes:
-                i += 1
-                break
-            i += 1
-    return cells
-
-
-def _rules_duplicate_id_cells(text: str) -> list[tuple[int, int, str, bool, int]]:
-    """Later copies of a rule id in rules.csv: (start, end, id, quoted, occurrence number from 2). The header record and
-    blank or `#` comment ids are not rules."""
-    seen: dict[str, int] = {}
-    repeats = []
-    for index, (start, end, value, quoted) in enumerate(_csv_first_cells(text)):
-        key = value.strip()
-        if index == 0 or not key or key.startswith("#"):
-            continue
-        seen[key] = seen.get(key, 0) + 1
-        if seen[key] > 1:
-            repeats.append((start, end, key, quoted, seen[key]))
-    return repeats
-
-
-def _scan_rules_csv_duplicate_id(root: Path, result: ScanResult) -> None:
-    """RC8 refuses two rules.csv rows with the same id: Fatal 'Duplicate key [marketPostOpenPiratesHostile | ] while loading
-    data/campaign/rules.csv' (Ironclads, GRP10J-20261005). 0.7.2 told same-id rules apart by their conditions, so a mod written
-    then repeats ids (Ironclads: one rule per faction under one id)."""
-    path = root / "data" / "campaign" / "rules.csv"
-    if not path.is_file():
-        return
-    try:
-        text = path.read_text(encoding="utf-8-sig", errors="replace")
-    except OSError:
-        return
-    repeats = _rules_duplicate_id_cells(text)
-    if repeats:
-        result.add(
-            id="rules-csv-duplicate-id",
-            category="content",
-            severity="high",
-            classification="REVIEW",
-            confidence="DETERMINISTIC",
-            explanation=f"{len(repeats)} rules.csv row(s) repeat an earlier row's id. RC8 stops at startup with a Fatal 'Duplicate key' "
-                        "dialog. `fix` renames each later copy to <id>_2, <id>_3; the rule's conditions and text are untouched.",
-            file=_relative(root, path),
-            evidence=sorted({f"id:{key}" for _s, _e, key, _q, _n in repeats})[:20],
-        )
-
-
-def _csv_record_cells(text: str) -> list[list[tuple[int, int, str, bool]]]:
-    """Every record of a CSV as a list of (start, end, value, quoted) cells by text offset. A quoted cell may hold newlines;
-    `""` inside one is a quote. The end offset excludes the delimiter."""
-    records: list[list[tuple[int, int, str, bool]]] = []
-    i, n = 0, len(text)
-    while i < n:
-        record: list[tuple[int, int, str, bool]] = []
-        while True:
-            start, quoted = i, i < n and text[i] == '"'
-            if quoted:
-                i += 1
-                chars = []
-                while i < n:
-                    if text[i] == '"':
-                        if i + 1 < n and text[i + 1] == '"':
-                            chars.append('"')
-                            i += 2
-                            continue
-                        i += 1
-                        break
-                    chars.append(text[i])
-                    i += 1
-                value = "".join(chars)
-            else:
-                while i < n and text[i] not in ",\r\n":
-                    i += 1
-                value = text[start:i]
-            record.append((start, i, value, quoted))
-            if i < n and text[i] == ",":
-                i += 1
-                continue
-            if i < n and text[i] == "\r":
-                i += 1
-            if i < n and text[i] == "\n":
-                i += 1
-            break
-        records.append(record)
-    return records
-
-
-def _rules_whitespace_only_line_cells(text: str) -> list[tuple[int, int, str, str]]:
-    """(start, end, column, fixed value) for each conditions/script cell of a real rule holding a whitespace-only line. RC8 skips
-    an empty line but stops at one holding spaces: RuleException 'No tokens found in string: []' (Ironclads ngcSmugglerOption,
-    GRP10K-20261005); vanilla has none outside a commented-out row."""
-    records = _csv_record_cells(text)
-    if not records:
-        return []
-    header = [cell[2].strip() for cell in records[0]]
-    wanted = [(header.index(name), name) for name in ("conditions", "script") if name in header]
-    found = []
-    for record in records[1:]:
-        rule_id = record[0][2].strip() if record else ""
-        if not rule_id or rule_id.startswith("#"):
-            continue
-        for index, name in wanted:
-            if index >= len(record):
-                continue
-            start, end, value, quoted = record[index]
-            fixed_lines, changed = [], False
-            for line in value.split("\n"):
-                body = line.rstrip("\r")
-                if body and not body.strip(" \t"):
-                    fixed_lines.append(line[len(body):])
-                    changed = True
-                else:
-                    fixed_lines.append(line)
-            if changed:
-                found.append((start, end, name, "\n".join(fixed_lines)))
-    return found
-
-
-def _scan_rules_csv_whitespace_only_line(root: Path, result: ScanResult) -> None:
-    path = root / "data" / "campaign" / "rules.csv"
-    if not path.is_file():
-        return
-    try:
-        text = path.read_text(encoding="utf-8-sig", errors="replace")
-    except OSError:
-        return
-    cells = _rules_whitespace_only_line_cells(text)
-    if cells:
-        result.add(
-            id="rules-csv-whitespace-only-line",
-            category="content",
-            severity="high",
-            classification="SAFE",
-            confidence="DETERMINISTIC",
-            explanation=f"{len(cells)} rules.csv conditions/script cell(s) hold a line of only spaces. RC8 skips an empty line but "
-                        "stops at startup on one with spaces (RuleException 'No tokens found in string: []', Ironclads "
-                        "GRP10K-20261005). `fix` empties those lines; nothing else changes.",
-            file=_relative(root, path),
-            evidence=[f"{name}-cell-at:{start}" for start, _e, name, _v in cells][:20],
-        )
-
-
-_CURLY_OPEN, _CURLY_CLOSE = "\u201c", "\u201d"
-_OR_LINE = re.compile(r"\r?\n[ \t]*OR[ \t]*\r?\n")
-
-
-def _alternative_needs_straight_quotes(alternative: str) -> bool:
-    """A rules.csv text alternative whose curly double quotes RC8 cannot read: an opening quote with no closing one, or a
-    comma between a pair. Metelson Industries' greetingMIHostileWeaker/Stronger (a curly opening quote closed by a straight
-    one, "speaks quickly, <U+201C>If our lives are already written, it would...") stopped RC8 at startup with 'Mismatched
-    quotes in the string' (alternatives bisected on the rig, BIS4E-BIS4H 2026-10-06; the straight-quote version loaded).
-    A balanced pair with no comma inside loads (Faction Relationships Uniquified, live validated), so it is left alone."""
-    opens, closes = alternative.count(_CURLY_OPEN), alternative.count(_CURLY_CLOSE)
-    if opens != closes:
-        return True
-    position = 0
-    while True:
-        start = alternative.find(_CURLY_OPEN, position)
-        if start < 0:
-            return False
-        end = alternative.find(_CURLY_CLOSE, start)
-        if end < 0 or "," in alternative[start:end]:
-            return True
-        position = end + 1
-
-
-def _rules_curly_quote_cells(text: str) -> list[tuple[int, int, str]]:
-    """(start, end, fixed value) for each text cell of a real rule with an alternative that needs straight quotes; the fixed
-    value changes only the curly double quotes of those alternatives to straight ones."""
-    records = _csv_record_cells(text)
-    if not records:
-        return []
-    header = [cell[2].strip() for cell in records[0]]
-    if "text" not in header:
-        return []
-    index = header.index("text")
-    found = []
-    for record in records[1:]:
-        rule_id = record[0][2].strip() if record else ""
-        if not rule_id or rule_id.startswith("#") or index >= len(record):
-            continue
-        start, end, value, _quoted = record[index]
-        pieces, separators, position = [], [], 0
-        for match in _OR_LINE.finditer(value):
-            pieces.append(value[position:match.start()])
-            separators.append(match.group(0))
-            position = match.end()
-        pieces.append(value[position:])
-        changed = False
-        for number, piece in enumerate(pieces):
-            if (_CURLY_OPEN in piece or _CURLY_CLOSE in piece) and _alternative_needs_straight_quotes(piece):
-                pieces[number] = piece.replace(_CURLY_OPEN, '"').replace(_CURLY_CLOSE, '"')
-                changed = True
-        if changed:
-            fixed = pieces[0] + "".join(sep + piece for sep, piece in zip(separators, pieces[1:]))
-            found.append((start, end, fixed))
-    return found
-
-
-def _scan_rules_csv_curly_quotes(root: Path, result: ScanResult) -> None:
-    path = root / "data" / "campaign" / "rules.csv"
-    if not path.is_file():
-        return
-    try:
-        text = path.read_text(encoding="utf-8-sig", errors="replace")
-    except OSError:
-        return
-    cells = _rules_curly_quote_cells(text)
-    if cells:
-        result.add(
-            id="rules-csv-curly-quote-unreadable",
-            category="content",
-            severity="high",
-            classification="REVIEW",
-            confidence="HIGH",
-            explanation=f"{len(cells)} rules.csv text cell(s) hold a curly double quote RC8 cannot read: an opening quote with no "
-                        "closing one, or a comma between a pair. RC8 stops at startup with 'Mismatched quotes in the string' "
-                        "(Metelson Industries' greetingMIHostileWeaker and greetingMIHostileStronger, GRP4A-20261006). `fix` "
-                        "changes only the curly double quotes of those alternatives to straight ones, the same punctuation; "
-                        "balanced pairs without a comma are left alone.",
-            file=_relative(root, path),
-            evidence=[f"text-cell-at:{start}" for start, _e, _v in cells][:20],
-        )
-
-
-def _scan_person_names_duplicate_row(root: Path, result: ScanResult) -> None:
-    """RC8 keys person_names.csv rows by every column and stops at startup on a repeat inside one file:
-    'Duplicate key [Mao |  | f | xle | ] while loading [data/characters/person_names.csv' (Ironclads, a Fatal dialog,
-    GRP10B-20261005). A row also present in vanilla's file is fine: Ironclads shares 1010 rows with it."""
-    path = root / "data" / "characters" / "person_names.csv"
-    if not path.is_file():
-        return
-    repeats = _person_names_duplicate_lines(path)
-    if repeats:
-        result.add(
-            id="person-names-duplicate-row",
-            category="content",
-            severity="high",
-            classification="SAFE",
-            confidence="DETERMINISTIC",
-            explanation=f"{len(repeats)} row(s) repeat an earlier row of person_names.csv. RC8 stops at startup with a "
-                        "Fatal 'Duplicate key' dialog. Removing the repeat keeps the name; `fix` does it.",
-            file=_relative(root, path),
-            evidence=[f"line:{number}" for number in repeats[:20]],
-        )
-
-
-_DUPLICATE_KEY_SUFFIXES = (".json", ".faction", ".ship", ".variant", ".wpn", ".proj", ".skin", ".system")
-
-
-def _json_duplicate_keys(text: str) -> list[str]:
-    """Keys repeated inside one object, in reading order. Empty when the text does not parse."""
-    repeats: list[str] = []
-
-    def hook(pairs):
-        seen = set()
-        for key, _value in pairs:
-            if key in seen:
-                repeats.append(key)
-            seen.add(key)
-        return dict(pairs)
-
-    try:
-        _parse_json(text, object_pairs_hook=hook)
-    except (json.JSONDecodeError, ValueError):
-        return []
-    return repeats
-
-
-def _loaded_faction_paths(root: Path, vanilla_core: Path | None) -> set[str] | None:
-    """data-relative paths of the faction files the game loads for this mod: those its factions.csv lists plus vanilla's
-    (a mod file at a vanilla path replaces it). None when vanilla is unknown, meaning "treat every faction as loaded"."""
-    if vanilla_core is None:
-        return None
-    paths: set[str] = set()
-    for base in (root, Path(vanilla_core)):
-        listing = base / "data" / "world" / "factions" / "factions.csv"
-        if listing.is_file():
-            for line in listing.read_text(encoding="utf-8-sig", errors="replace").splitlines()[1:]:
-                cell = line.split(",")[0].strip().strip('"').replace("\\", "/")
-                if cell:
-                    paths.add(cell.lower())
-    return paths
-
-
-def _scan_json_duplicate_key(root: Path, result: ScanResult, vanilla_core: Path | None = None) -> None:
-    """org.json (RC8's loader) refuses a key repeated in one object: Fatal 'Duplicate key "knownFighters"' on Ironclads'
-    pirates.faction, which BridgeForge's own known-lists fixer had given a second copy (GRP10E-20261005). Python's json
-    keeps the last copy silently, so nothing else here notices."""
-    loaded_factions = _loaded_faction_paths(root, vanilla_core)
-    for path in sorted(root.rglob("*")):
-        if path.suffix.lower() not in _DUPLICATE_KEY_SUFFIXES or not path.is_file():
-            continue
-        if (path.suffix.lower() == ".faction" and loaded_factions is not None
-                and path.relative_to(root).as_posix().lower() not in loaded_factions):
-            continue  # never loaded: GMDA's gmda_patrol.faction is in no factions.csv (checked 2026-10-05)
-        relative = path.relative_to(root)
-        if relative.parts and relative.parts[0].lower() in ("reports", "scratch", "disabled_files"):
-            continue
-        try:
-            text = path.read_text(encoding="utf-8-sig", errors="replace")
-        except OSError:
-            continue
-        if text.count('"') < 4:
-            continue
-        repeats = _json_duplicate_keys(text)
-        if repeats:
-            result.add(
-                id="json-duplicate-key",
-                category="content",
-                severity="high",
-                classification="REVIEW",
-                confidence="DETERMINISTIC",
-                explanation="A key appears twice in one JSON object. RC8's org.json loader stops at startup with a Fatal "
-                            "'Duplicate key' dialog. Keep the copy the mod means and remove the other.",
-                file=_relative(root, path),
-                evidence=[f"key:{key}" for key in repeats[:10]],
-            )
-
-
-def _scan_supplies_legacy_column(root: Path, result: ScanResult) -> None:
-    """A 0.6-era ship_data.csv has `supplies/day`; RC8 reads `supplies/rec` and `supplies/mo`, so every hull would cost
-    nothing to keep fielded. The conversion is the vanilla ratio per hull size (owner rule 2026-10-05), not x30 (SEEKER's
-    first conversion gave 150-600 DP hulls that could never deploy)."""
-    path = root / "data" / "hulls" / "ship_data.csv"
-    header = _csv_header(path) if path.is_file() else None
-    if header and "supplies/day" in header and "supplies/rec" not in header and "supplies/mo" not in header:
-        result.add(
-            id="ship-data-supplies-legacy-column",
-            category="content",
-            severity="medium",
-            classification="REVIEW",
-            confidence="DETERMINISTIC",
-            explanation="ship_data.csv has the 0.6-era supplies/day column and no supplies/rec or supplies/mo, which RC8 reads. "
-                        "`fix` adds them as supplies/day times the vanilla 0.6.2 -> RC8 ratio for the hull's size (frigate 3.0, "
-                        "destroyer 2.0, cruiser 2.65, capital 2.67; owner rule 2026-10-05); never x30.",
-            file=_relative(root, path),
-            evidence=["column:supplies/day"],
-        )
-
-
-def _scan_mod_info_triage_banner(root: Path, result: ScanResult) -> None:
-    """A mod_info.json name/description/author still carrying a pre-release triage banner."""
-    mod_info = _load_lenient_json_file(root / "mod_info.json")
-    if not isinstance(mod_info, dict):
-        return
-    for field in ("name", "description", "author"):
-        value = mod_info.get(field)
-        if not isinstance(value, str) or not value:
-            continue
-        if not MOD_INFO_TRIAGE_BANNER_PATTERN.search(value):
-            continue
-        result.add(
-            id="mod-info-triage-banner",
-            category="metadata",
-            severity="low",
-            classification="REVIEW",
-            confidence="HIGH",
-            explanation=(
-                f"mod_info.json's '{field}' still carries a pre-release triage banner (e.g. BROKEN/BROEKN/"
-                "UNREVIVED/NEEDS TO BE UPDATED/'fetch an old game version'). Clean this up before release."
-            ),
-            file="mod_info.json",
-            evidence=[f"field:{field}", f"value:{value}"],
-        )
-
-
 _EXTERNAL_DEPENDENCY_PREFIXES = ("org.lazywizard", "org.magiclib", "org.dark", "lunalib", "exerelin")
+
+
 _RULE_COMMAND_PATTERN = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)")
 
 
@@ -6841,11 +4928,17 @@ def _scan_data_class_references_missing(root: Path, result: ScanResult, vanilla_
 
 
 _COORDINATE_NUMBER = r"-?\d+(?:\.\d+)?f?"
+
+
 _VECTOR_LITERAL_PATTERN = re.compile(
     rf"(?:new\s+Vector2f\s*\(\s*({_COORDINATE_NUMBER})\s*,\s*({_COORDINATE_NUMBER})\s*\))"
     rf"|(?:getLocation\(\)\.set\s*\(\s*({_COORDINATE_NUMBER})\s*,\s*({_COORDINATE_NUMBER})\s*\))"
 )
+
+
 _HYPERSPACE_TOUCH_PATTERN = re.compile(r"getHyperspace\(\)|getLocationInHyperspace|\bwaypoints?\b", re.I)
+
+
 _TERRAIN_GRID_LITERAL_PATTERN = re.compile(r"(?:[/%]\s*(\d{2,4})\b)|(?:\[\s*(\d{2,4})\s*\])")
 
 
@@ -6985,6 +5078,8 @@ def _scan_revenantlib_fold_conflict(result: ScanResult) -> None:
 # constructor and abstract spawnFleet(), and .../corvus/Corvus.java). The earlier evidence had checked
 # only the jars.
 LEGACY_VANILLA_CLASSES: dict[str, str] = {}
+
+
 def _load_rc8_vanilla_loose_script_classes() -> frozenset[str]:
     """RC8's loose vanilla scripts (all 116: hull mods, ship systems, missions, world generation).
 
@@ -7128,41 +5223,6 @@ def _scan_unregistered_skill_set(root: Path, result: ScanResult, vanilla_core: P
     )
 
 
-# A quoted phrase written with a backslash or slash before each quote (C style) inside a CSV field. Standard CSV
-# escapes a quote by doubling it, so BridgeForge's reader splits the row (SEEKER 0.6.6 special_items.csv
-# `/"brute force/"`: the probe config got a fragment as special item "0"). The game's reader did not make that stray
-# row (getSpecialItemSpec("0") was null, SEEKER-SOLO-20260928), so the harm is tools misreading the file, and the
-# slashes shown in-game. Exotica Technologies' special_items.csv has the backslash form (2026-09-28 sweep).
-CSV_SLASH_QUOTE = re.compile(r'[/\\]"([^",\r\n]{1,80}?)[/\\]"')
-
-
-def _scan_csv_slash_quote(root: Path, result: ScanResult) -> None:
-    data_dir = root / "data"
-    if not data_dir.is_dir():
-        return
-    for path in sorted(data_dir.rglob("*.csv")):
-        try:
-            text = path.read_text(encoding="utf-8-sig", errors="replace")
-        except OSError:
-            continue
-        matches = list(CSV_SLASH_QUOTE.finditer(text))
-        if not matches:
-            continue
-        result.add(
-            id="csv-slash-quote-escape",
-            category="data",
-            severity="medium",
-            classification="SAFE",
-            confidence="HIGH",
-            explanation="A CSV field quotes a phrase with a slash or backslash before each quote. Standard CSV escapes a "
-                        "quote by doubling it, so BridgeForge (and the probe config it builds) splits the row; the game "
-                        "reads past it but shows the slashes. The fix writes the doubled-quote escape vanilla's "
-                        "descriptions.csv uses, so the game and the tools read the same text.",
-            file=_relative(root, path),
-            evidence=[m.group(0) for m in matches[:10]],
-        )
-
-
 def _drop_library_findings_judged_elsewhere(result: ScanResult) -> None:
     """source-library-dependency-undeclared says only "source imports it"; undeclared-library-dependency (declare it:
     standing approval) and optional-library-integration (guarded, no dependency) judge the same library with more
@@ -7250,6 +5310,8 @@ LIBRARY_PROBE_MARKERS = {
     "GraphicsLib": ("dark.shaders", "org.dark."),
     "LazyLib": ("lazywizard.lazylib",),
 }
+
+
 _PRESENCE_PROBE = re.compile(r'\b(?:loadClass|forName)\s*\(\s*"([^"]+)"')
 
 
@@ -7306,6 +5368,8 @@ def _unguarded_library_users(root: Path, source_hits: list[str], library: str, d
 
 
 _GUARD_HEADER = re.compile(r"\b(?:try|catch|synchronized)\b")
+
+
 _MOD_PLUGIN_CLASS = re.compile(r"\bextends\s+BaseModPlugin\b")
 
 
@@ -7525,7 +5589,11 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
 
 
 WEAPON_SLOT_SKIP_TYPES = {"BUILT_IN", "DECORATIVE", "SYSTEM", "LAUNCH_BAY", "STATION_MODULE"}
+
+
 WEAPON_SLOT_SIZE_RANK = {"SMALL": 1, "MEDIUM": 2, "LARGE": 3}
+
+
 HULL_MOD_COST_COLUMN_BY_SIZE = {
     "FRIGATE": "cost_frigate",
     "DESTROYER": "cost_dest",
@@ -7671,6 +5739,7 @@ MOUNT_OVERRIDE_FITS = {
     "SYNERGY": {"ENERGY", "MISSILE", "SYNERGY", "UNIVERSAL"},
     "UNIVERSAL": {"BALLISTIC", "ENERGY", "MISSILE", "HYBRID", "COMPOSITE", "SYNERGY", "UNIVERSAL"},
 }
+
 
 # Hull mods that add fighter bays when present (built-in or installed), e.g. vanilla converted_hangar.
 BAY_ADDING_HULL_MODS = {"converted_hangar": 1}
@@ -8673,36 +6742,6 @@ def _apply_janino_outcome(root: Path, result: ScanResult, janino: dict) -> None:
             explanation="RC8's own runtime compiler (Janino 2.7.8, run offline on the game's janino.jar) rejects this loose script, so the game shows a Fatal dialog before the main menu. javac accepts it. Janino erases generics to Object and has no lambdas: cast values whose type comes from generics before calling their methods, and replace lambdas with anonymous classes.",
             file=rel,
             evidence=[message[:400]],
-        )
-
-
-def _scan_working_copy_tool_debris(root: Path, result: ScanResult) -> None:
-    """A `scratch/` folder belongs beside `working/`/`original/` (this project's own workspace
-    layout - see CLAUDE.md), never inside the mod itself.
-
-    Real case (Leon-Heavy-Industries, found 2026-09-21 building `revival-report-draft`): a refused
-    `scan --output <path inside working/>/scratch` command's stderr/stdout redirection landed at
-    `working/scratch/` anyway (the shell creates the redirect target before the refused command even
-    runs), and only surfaced later as an opaque `unverified-json-syntax` UNKNOWN finding on the
-    resulting empty `scan_before.json` - never as what it actually was: tool debris inside the mod's
-    own copy that a release built straight from `working/` would ship. No real Starsector mod ships
-    a folder literally named `scratch`, so this is safe and generic for any mod root, not just a
-    revival workspace's `working/`.
-    """
-    if (root / "scratch").is_dir():
-        result.add(
-            id="working-copy-tool-debris",
-            category="workspace",
-            severity="medium",
-            classification="MANUAL",
-            confidence="DETERMINISTIC",
-            explanation=(
-                "This mod's own root holds a 'scratch' folder. In this project's workspace layout, scratch/ "
-                "is a sibling of working/ and original/, never inside the mod itself - a release built from "
-                "this copy would ship it. Move its contents to the workspace-root scratch/ folder (never "
-                "delete, log the move in scratch/MOVES.log) and remove this one."
-            ),
-            file="scratch",
         )
 
 

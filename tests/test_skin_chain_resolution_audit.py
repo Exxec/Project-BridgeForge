@@ -6,6 +6,12 @@ from pathlib import Path
 
 SCANNER_PATH = Path(__file__).resolve().parent.parent / "bridgeforge" / "scanner.py"
 
+
+def _scanner_source() -> str:
+    """scanner.py plus the scan_*.py modules its checks were split into (ROADMAP item 70 H2.2)."""
+    paths = [SCANNER_PATH, *sorted(SCANNER_PATH.parent.glob("scan_*.py"))]
+    return "\n".join(path.read_text(encoding="utf-8") for path in paths)
+
 # ROADMAP P14 item 24: every function that builds a hull-id set from *.ship files or
 # _ship_file_index must also resolve a .skin's baseHullId chain, or be on this exemption list
 # with its reasoning written down - never by silent omission. Exemptions confirmed by item 17's
@@ -41,7 +47,7 @@ def find_unresolved_hull_id_builders() -> list[str]:
 
     Empty when every call site either resolves skins or is on EXEMPT_SKIN_CHAIN_RESOLUTION.
     """
-    source = SCANNER_PATH.read_text(encoding="utf-8")
+    source = _scanner_source()
     lines = source.splitlines()
     tree = ast.parse(source)
     offenders: list[str] = []
@@ -82,7 +88,7 @@ class SkinChainResolutionAuditTests(unittest.TestCase):
         )
 
     def test_exemption_list_entries_still_exist_and_are_unresolved_by_design(self) -> None:
-        source = SCANNER_PATH.read_text(encoding="utf-8")
+        source = _scanner_source()
         tree = ast.parse(source)
         func_names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
         for name in EXEMPT_SKIN_CHAIN_RESOLUTION:
@@ -92,7 +98,7 @@ class SkinChainResolutionAuditTests(unittest.TestCase):
         # Guards against the check itself going stale/silent if scanner.py is refactored so no
         # function matches the AST pattern at all (e.g. the call is renamed) - the known-good
         # instances from item 17's audit must still be found and still pass.
-        source = SCANNER_PATH.read_text(encoding="utf-8")
+        source = _scanner_source()
         lines = source.splitlines()
         tree = ast.parse(source)
         known_resolving = {

@@ -24,7 +24,7 @@ from pathlib import Path, PurePath
 
 SCHEMA_VERSION = 1
 REPO_ROOT = Path(__file__).resolve().parent.parent
-HELPER_MODULE = "scanner.py"
+HELPER_MODULE = "scan*.py"  # scanner.py and the scan_*.py modules its checks were split into
 UNTESTED_BASELINE = Path("tests") / "untested_checks_baseline.json"
 NOT_COVERAGE = {"test_checks_index", "test_finding_stats"}
 
@@ -160,10 +160,14 @@ def _merge(table: dict[str, Check], key: str, info: dict) -> None:
     item.explanation = item.explanation or info["explanation"]
 
 
-def collect(source: str, module: str) -> tuple[dict[str, Check], dict[str, Check]]:
-    """(scan findings, revival-audit issues) defined in one module's source."""
+def collect(source: str, module: str, shared_tables: dict[str, list[tuple[str, ...]]] | None = None) -> tuple[dict[str, Check], dict[str, Check]]:
+    """(scan findings, revival-audit issues) defined in one module's source.
+
+    `shared_tables` are the string tables of the whole package, so a loop over a table defined in
+    another module (the scan_*.py split of scanner.py) is still read.
+    """
     tree = ast.parse(source)
-    collector = _Collector(module, _string_tables(tree))
+    collector = _Collector(module, {**(shared_tables or {}), **_string_tables(tree)})
     collector.visit(tree)
     checks: dict[str, Check] = {}
     issues: dict[str, Check] = {}
@@ -197,8 +201,12 @@ def _tests_naming(identifier: str, test_texts: dict[str, str]) -> list[str]:
 def gather(repo_root: Path = REPO_ROOT) -> Catalogue:
     checks: dict[str, Check] = {}
     issues: dict[str, Check] = {}
-    for path in sorted((repo_root / "bridgeforge").glob("*.py")):
-        module_checks, module_issues = collect(path.read_text(encoding="utf-8"), path.name)
+    sources = {path: path.read_text(encoding="utf-8") for path in sorted((repo_root / "bridgeforge").glob("*.py"))}
+    shared_tables: dict[str, list[tuple[str, ...]]] = {}
+    for source in sources.values():
+        shared_tables.update(_string_tables(ast.parse(source)))
+    for path, source in sources.items():
+        module_checks, module_issues = collect(source, path.name, shared_tables)
         for table, found in ((checks, module_checks), (issues, module_issues)):
             for key, item in found.items():
                 merged = table.setdefault(key, Check(key))
@@ -260,7 +268,8 @@ def build_checks_index(repo_root: Path = REPO_ROOT) -> str:
     for key in sorted(issues):
         lines.append(f"| `{_cell(key)}` | {_join(issues[key].severities)} | {_join(catalogue.tests.get(key, []))} | {_cell(issues[key].explanation)} |")
     lines += ["", f"## Scanner helpers (`bridgeforge/{HELPER_MODULE}`)", "", "Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_json_file`.", "", "| Helper | Signature | Purpose |", "|---|---|---|"]
-    for name, signature, doc in _helpers((repo_root / "bridgeforge" / HELPER_MODULE).read_text(encoding="utf-8")):
+    helper_sources = [path.read_text(encoding="utf-8") for path in sorted((repo_root / "bridgeforge").glob(HELPER_MODULE))]
+    for name, signature, doc in sorted(row for source in helper_sources for row in _helpers(source)):
         lines.append(f"| `{name}` | `{_cell(signature)}` | {_cell(doc) or '-'} |")
     return "\n".join(lines) + "\n"
 
