@@ -62,6 +62,9 @@ progress rather than waiting blind.
 - The shipped copy is every root file and every top-level folder except tool/build folders (`copy_drift`); allowlists
   dropped `sun_fr/` (GRP-3) and a root `*.json.default` (GRP-7), both Fatal at startup. Probe groups must enable
   dependencies of dependencies (SPARKLE -> SOTF -> four libraries).
+- A mission whose `MissionDefinition.java` names a variant RC8 lacks is Fatal when that mission is started, not at New Game
+  (found 2026-10-12 in Aivon Republic, Sylphon RnD and Silent Armada; `content-ids|mission-variant:` FAIL in the probe). A
+  mission row listed by both a list-replacing mod and the probe mod is one row (the game loads an id once).
 - `settings.json` lists add to vanilla's, not replace (`ruleCommandPackages`, 2026-09-27; ROADMAP item 19).
 - 0.6-era stations sold from the station's own cargo; RC8 trades only through markets. Give the entity a market;
   for a hostile faction, a submarket with `isBlackMarket()` is reachable with the transponder off (`rules.csv`
@@ -78,18 +81,42 @@ in a cloud session. Build and test what you can, then add an entry to `docs/LOCA
 
 ## Layout
 
-- `bridgeforge/` the package; `cli.py` wires every subcommand; `scanner.py` holds the checks
-  (`scan_mod`); `fixers.py` the `fix` command's rewrites.
+- `bridgeforge/` the package. Commands: `cli.py` is 60 lines; every command's parser and handler lives in a
+  `cmd_*.py` or its own module and is listed in `cli_commands.COMMAND_MODULES` (a module defines
+  `add_parser(subcommands)` and `run_cli(args)`; a new command is a module plus one line there). Checks:
+  `scanner.py` keeps `scan_mod`, `_scan_jars` and re-exports every moved name; the checks live in 20
+  `scan_*.py` modules (no module imports `scanner`). `fixers.py` holds the `fix` command's rewrites.
 - `tests/` unittest suite; `tests/support.py` has `resolved_temp_dir()` and `link_dir()`.
 - `probe-mod/` the in-game probe (Java, public API only); built by `build-probe-mod`.
 - Gitignored and local-only: `In operation/`, `Done/`, `AGENTS.md`, `tools/*.ps1` (except
   `bf-test.ps1`), `.githooks/`. RevenantLib is a separate private repo, `Exxec/RevenantLib`
   (`working/`, `original/`, `reports/`); `revenantlib-check` verifies it provides what the fixers call.
 
+## Hardening rules (ROADMAP item 70, 2026-10-12)
+
+- Write files with `safeio.atomic_write_text`/`atomic_write_json` and delete trees with `safeio.safe_rmtree(path, allowed_roots)`
+  (refuses junctions and paths outside the roots). `tests/test_safeio_ratchet.py` counts bare `write_text`/`rmtree` per file
+  against `tests/safeio_baseline.json`, which may only shrink.
+- Read jar and zip entries of untrusted mods with `zipsafe.read_limited`, never `ZipFile.read`.
+- Accepted-finding baselines are stamped with the mod version and expire on any version change (`baseline-audit`,
+  `baseline-accept`); `archive` refuses a stale baseline unless `reports/SHIPPED_CHANGES.json` carries a written `baseline` reason.
+- `tests/known_failures.json` lists known environmental failures with an expiry; `test_guard` reports them without failing.
+- `tests/test_cli_golden.py` pins the `--help` hash of every command: a change to the command line fails it; if deliberate,
+  `python -m tests.test_cli_golden --write` and review the diff.
+- Before merging an agent's branch run `bridgeforge agent-diff-check BRANCH` (deleted files, files cut by over a fifth).
+- Line endings are LF (`.gitattributes`; batch files CRLF). `state-snapshot --to DIR` keeps an append-only copy of `Done/`,
+  `bridgeforge-state/`, the working copies and the memory folder; `rig-reset` returns a rig to a known state.
+- Live harness: the game launcher waits for a click (`auto_click=True` for any new boot path); the probe row in the mission
+  list is found by unique mission id and the list is scrolled two ticks per row. A LIVE_STUCK with no `combat-round` line in
+  the log means another mission started, not that the probe's combat hung.
+- Run `ruff` from a Python that has it: the project `.venv` does not (use the Python 3.14 install first on `PATH`, see
+  `docs/LOCAL_HANDOFF.md`). It runs pyflakes plus flake8-bugbear (`B`, four noisy rules ignored in `pyproject.toml`).
+- Workspace arguments take a path (`"In operation/<name>"`); `audit-explain` refuses one without `working/`.
+
 ## Checks before committing
 
 ```bash
-ruff check .                              # pyflakes + syntax only; one-line statements are house style
+ruff check .                              # pyflakes + bugbear + syntax; one-line statements are house style
 python -m bridgeforge.test_guard          # full suite; also fails if the checkout changed
 python -m bridgeforge docs-index          # after adding a check or CLI option; commit docs/*.md
 uv lock --check                           # after touching pyproject dependencies

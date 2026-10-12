@@ -18,15 +18,19 @@ Updated 2026-09-27 after the first local pass (ROADMAP P15 item 13): P1, R2, G4 
 tooling entries are done and removed; G2's content expectation and R2's BDS command were wrong.
 Every long command now prints `[n/total]` progress and resumes if interrupted (P15 item 12).
 
-## 0. Resume here: where the 2026-10-11 session stopped
+## 0. Resume here: where the 2026-10-12 session stopped
 
-**State.** `probe-group plan` lists nothing left; `Done/` holds 149 archives (`Done/MASTER_LOG.md`, regenerated 2026-10-11).
-Archived or re-archived on 2026-10-11: Combat-Misc-Utils 0.4.1, Neutrino Corporation 1.8.9 (upstream line, intaken from
-`Neutrino corp older.zip`), Neutrino Corporation: Nostalgia Edition 1.87-RC3, Seeker 0.3.0-0.98a+bf.5 (wreck death-effect fix,
-RC8-27), Yellowjackets 0.1, Fast Engine Rendering 1.1.2+bf.1. Ironclads was re-run on Java 28 with Fast Rendering (PASS,
-GRP10Y3-20261011). Old top-level zips of refreshed archives are in `Done/_replaced-2026-10-11/` (not deleted). The owner's
+**State (2026-10-12).** `probe-group plan` lists nothing left; `Done/` holds 153 archives (`Done/MASTER_LOG.md` is from 2026-10-11).
+Probe is 0.2.27. A full regression pass (`probe-group regress`, 39 groups, REG-20261012) found three archived mods whose missions
+named missing variants (Aivon Republic 0.0.4+bf.1, Sylphon RnD 1.0+bf.1, The Silent Armada vD 0.14+bf.2: fixed, live PASS,
+re-archived) and two harness faults (mission-row count, scroll length), both fixed. Open from that pass: Vayra's Ship Pack
+(`ii_*` variants) and Kadur Remnant (SWP and SEEKER variants) report missing mission variants that look like references to mods
+not in their group (unconfirmed). The Java/launcher mass test (item 62) was re-run once the matrix learned to click the launcher;
+results are in `bridgeforge-state/mass-test/MASS_TEST.md`. `state-snapshot --to DIR` keeps an append-only copy of the
+irreplaceable state (first copy `C:\Users\exxec\BridgeForge-snapshots`; one file was unreadable, `Done/_previous/Fuel-Siphoning-1.2.2/Readme.txt`,
+whose ACL lacks the owner). Old top-level zips of refreshed archives are in `Done/_replaced-2026-10-11/` (not deleted). The owner's
 `.gitignore` edit and the untracked folders (`.goal-transfer/`, `everything-claude-code/`, `ac8-save-editor-research/`, ...)
-are deliberately not committed. Probe is 0.2.23.
+are deliberately not committed.
 
 **Unattended tools (2026-10-11):** `probe-group smoke` (boot to the menu, launcher clicked), `probe-group live TESTID` (whole live
 run with real clicks; leave the PC alone), `probe-group duel TESTID` (rig-only duel missions with a frame/timer meter),
