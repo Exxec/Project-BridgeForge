@@ -164,3 +164,17 @@ class MissionListLayoutTests(unittest.TestCase):
             text = self._log(base, [("BridgeForge Probe", "bridgeforge_probe", 1, False), ("Ironclads", "ironclads", 8, True)])
         self.assertEqual(live_run.new_game_flow_for(text), "ironclads")
         self.assertEqual(live_run.new_game_flow_for("nothing\n"), "default")
+
+    def test_nexerelin_new_game_uses_number_keys_the_fleet_select_and_g(self) -> None:
+        """Nexerelin's own New Game dialog (EXPLORE-NEWGAME-20261011): option keys, then the fleet's Select button, then G."""
+        with resolved_temp_dir() as base:
+            text = self._log(base, [("BridgeForge Probe", "bridgeforge_probe", 1, False), ("Nexerelin", "nexerelin", 4, False)])
+        self.assertEqual(live_run.new_game_flow_for(text), "nexerelin")
+        actions: list[tuple] = []
+        hands = live_run.Hands(click=lambda fx, fy: actions.append(("click", fx, fy)), key=lambda vk: actions.append(("key", vk)),
+                               scroll=lambda *a: None, sleep=lambda _s: None)
+        live_run.new_game(hands, "nexerelin")
+        keys = [a[1] for a in actions if a[0] == "key"]
+        self.assertEqual(keys, [live_run.KEY_1] * 8 + [live_run.KEY_G])
+        self.assertIn(("click", *live_run.NEX_FLEET_SELECT), actions)
+        self.assertLess(actions.index(("click", *live_run.NEX_FLEET_SELECT)), len(actions) - 3)

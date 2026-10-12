@@ -89,6 +89,21 @@ def main_menu_target(buttons: list[tuple[float, float]], name: str) -> tuple[flo
     return tail[order.index(name)]
 
 
+def nexerelin_fleet_select(bitmap: Bitmap, fx: float = 0.627) -> tuple[float, float] | None:
+    """The first starting fleet's Select button on Nexerelin's faction page, as client fractions, or None when the page is not up.
+    The buttons are teal fills in a column right of the dialog (four rows at y 0.31-0.42 of the client, EXPLORE-NEWGAME-20261011); no
+    other New Game page has fills there, so their presence is the test (DEBUG-NEXSELECT: Nexerelin showed one page fewer than the
+    run before, so a fixed number of key presses overshot the page)."""
+    x = int(bitmap.width * fx)
+    top = int(bitmap.height * 0.25)
+    flags = [is_button_fill(*bitmap.pixel(x, y)) for y in range(top, int(bitmap.height * 0.55))]
+    found = bands(flags, max(4, bitmap.height // 240), 3)
+    if len(found) < 2:
+        return None
+    start, end = found[0]
+    return fx, ((start + end) / 2 + top) / bitmap.height
+
+
 def _is_icon_pixel(r: int, g: int, b: int) -> bool:
     """Anything clearly brighter than the list's dark background: the mission thumbnails."""
     return r + g + b >= 90

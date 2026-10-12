@@ -98,7 +98,17 @@ IRONCLADS_RECENT = (0.40, 0.618)
 IRONCLADS_SKILLS_AUTOMATIC = (0.50, 0.618)
 IRONCLADS_CONTINUE = (0.30, 0.618)
 
-NEW_GAME_FLOWS: dict[str, tuple[tuple[tuple[float, float], float], ...]] = {
+# Nexerelin (0.12.2c) replaces New Game with its own dialog, which takes number keys: Next, Next, Start playing, Proceed (sector
+# settings as they are), the faction letter range, the first faction. That faction's page only offers "Go back" as option 1; the
+# starting fleet's Select button on the right moves on. Then Ensign, Done (background) and Start game [G] on the skill screen.
+# Seen on screen at 1920x1440 windowed (GRP-EXI-AVESTA-OLD, EXPLORE-NEWGAME-20261011); Select measured at 803,311 of 1280x960.
+KEY_1 = 0x31
+KEY_G = 0x47
+NEX_FLEET_SELECT = (803 / 1280, 311 / 960)
+
+NEW_GAME_FLOWS: dict[str, tuple[tuple, ...]] = {
+    "nexerelin": ((MAIN_MENU_NEW_GAME, 3), (NEW_CHIP_GENERATE_NAME, 1.5), (NEW_CHIP_CONTINUE, 5),
+                  *((("key", KEY_1), 3),) * 6, (NEX_FLEET_SELECT, 4), (("key", KEY_1), 3), (("key", KEY_1), 3), (("key", KEY_G), 1)),
     "default": ((MAIN_MENU_NEW_GAME, 3), (NEW_CHIP_GENERATE_NAME, 1.5), (NEW_CHIP_CONTINUE, 4), (FIRST_CHOICE, 4), (FIRST_CHOICE, 4),
                 (DIFFICULTY_NORMAL, 4), (SKIP_TUTORIAL, 12), (START_GAME, 1)),
     "ironclads": ((MAIN_MENU_NEW_GAME, 3), (NEW_CHIP_GENERATE_NAME, 1.5), (NEW_CHIP_CONTINUE, 4), (IRONCLADS_OCCUPATION, 4),
@@ -110,7 +120,9 @@ def new_game_flow_for(log_text: str) -> str:
     """The New Game flow the group needs: a mod with its own screens is named in the log's mod list, else the default."""
     block = _MOD_LINE.search(log_text)
     ids = {m.group("id") for m in _MOD_ENTRY.finditer(block.group("body"))} if block else set()
-    return "ironclads" if "ironclads" in ids else "default"
+    if "ironclads" in ids:
+        return "ironclads"
+    return "nexerelin" if "nexerelin" in ids else "default"
 
 
 def _menu_buttons(hands: Hands) -> list[tuple[float, float]] | None:
@@ -165,13 +177,70 @@ def click_menu(hands: Hands, name: str, fallback: tuple[float, float], attempts:
     return False
 
 
+def _screen(hands: Hands):
+    """The game window as a Bitmap, or None when it cannot be read."""
+    if not hands.geometry:
+        return None
+    try:
+        import tempfile
+
+        from . import game_click
+        from .screen_read import Bitmap
+
+        with tempfile.TemporaryDirectory() as directory:
+            shot = Path(directory) / "screen.bmp"
+            if not game_click.capture_client(hands.geometry(), shot):
+                return None
+            return Bitmap.load(shot)
+    except Exception:
+        return None
+
+
+def nexerelin_new_game(hands: Hands, max_pages: int = 12) -> None:
+    """Nexerelin's New Game: press 1 one page at a time until the faction page's fleet Select button is on screen, click it, then
+    Ensign, Done and Start game [G]. The number of pages before the faction page varies between runs (DEBUG-NEXSELECT-20261011:
+    six presses overshot by one, and every later 1 toggled 'Go back' / the faction, the loop the owner saw)."""
+    from .screen_read import nexerelin_fleet_select
+
+    for point, pause in NEW_GAME_FLOWS["nexerelin"][:3]:
+        hands.front()
+        if point == MAIN_MENU_NEW_GAME:
+            click_menu(hands, "New Game", MAIN_MENU_NEW_GAME)
+            hands.sleep(max(0.0, pause - 2.5))
+        else:
+            hands.click(*point)
+            hands.sleep(pause)
+    select = None
+    for _ in range(max_pages):
+        hands.front()
+        bitmap = _screen(hands)
+        select = nexerelin_fleet_select(bitmap) if bitmap is not None else None
+        if select:
+            break
+        hands.key(KEY_1)
+        hands.sleep(3)
+    hands.click(*(select or NEX_FLEET_SELECT))
+    hands.sleep(4)
+    for key in (KEY_1, KEY_1, KEY_G):
+        hands.front()
+        hands.key(key)
+        hands.sleep(3)
+
+
 def new_game(hands: Hands, flow: str = "default") -> None:
     """Main menu to the campaign map's first frame: default chip, first choice everywhere, Normal, skip the tutorial."""
+    if flow == "nexerelin" and hands.geometry:
+        nexerelin_new_game(hands)
+        return
     for point, pause in NEW_GAME_FLOWS[flow]:
         hands.front()
         if point == MAIN_MENU_NEW_GAME:
             click_menu(hands, "New Game", MAIN_MENU_NEW_GAME)
             hands.sleep(max(0.0, pause - 2.5))
+            continue
+        if point[0] == "key":
+            hands.key(point[1])
+            hands.sleep(pause)
             continue
         hands.click(*point)
         hands.sleep(pause)

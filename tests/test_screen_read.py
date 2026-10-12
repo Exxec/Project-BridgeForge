@@ -26,6 +26,20 @@ def _bmp(width: int, height: int, rows_y: list[tuple[int, int]]) -> bytes:
     return header + info + bytes(pixels)
 
 
+class NexerelinSelectTests(unittest.TestCase):
+    """Nexerelin's faction page shows four teal Select buttons at y 0.31-0.42 (EXPLORE-NEWGAME-20261011)."""
+
+    def test_the_first_select_button_is_found_only_when_the_fleet_panel_is_up(self) -> None:
+        from bridgeforge.screen_read import nexerelin_fleet_select
+
+        h = 960
+        rows = [(int(h * y), int(h * y) + 18) for y in (0.30, 0.335, 0.37, 0.405)]
+        found = nexerelin_fleet_select(Bitmap(_bmp(400, h, rows)))
+        self.assertIsNotNone(found)
+        self.assertAlmostEqual(found[1], (rows[0][0] + rows[0][1]) / 2 / h, places=2)
+        self.assertIsNone(nexerelin_fleet_select(Bitmap(_bmp(400, h, []))))
+
+
 class ScreenReadTests(unittest.TestCase):
     def test_bands_bridge_small_gaps_and_drop_short_runs(self) -> None:
         flags = [False, True, True, False, True, True, False, False, False, True]
