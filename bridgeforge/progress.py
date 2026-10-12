@@ -121,6 +121,7 @@ LONG_RUNNING_COMMANDS = (
     ("atlas", "sweep"),
     ("atlas", "build"),
     ("migrate-inventory",),
+    ("state-snapshot",),
     ("migrate-verify", "write"),
     ("migrate-verify", "check"),
 )
