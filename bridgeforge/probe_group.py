@@ -871,9 +871,13 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
             continue
         shutil.copy2(result["zip"], done / Path(result["zip"]).name)
         archived.append(workspace.name)
+    snapshot_note = None
+    if archived:
+        from .state_snapshot import snapshot_after_archive
+        snapshot_note = snapshot_after_archive(done)
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_RECORD", "test_id": test_id, "probe_version": version,
             "recorded": recorded, "archived": archived, "skipped": skipped,
-            "run_record": str(Path(queue) / "_live" / f"{test_id}.json"), "known_noise": run_record["known_noise"]}
+            "run_record": str(Path(queue) / "_live" / f"{test_id}.json"), "known_noise": run_record["known_noise"], "snapshot": snapshot_note}
 
 
 SMOKE_BAT = "run-j25-direct.bat"

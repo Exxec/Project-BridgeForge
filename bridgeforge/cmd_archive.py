@@ -193,6 +193,10 @@ def run_cli(args: argparse.Namespace) -> int:
         else:
             print(f"Archived: {result['archive']} ({result['files']} files, {result['licence']}, status {result['status']})")
             print(f"  {len(result['changed'])} file(s) changed, {len(result['added'])} added vs original; jars identical: {result['jars_identical']}")
+            from .state_snapshot import snapshot_after_archive
+            note = snapshot_after_archive(args.done or REPO_ROOT / "Done")
+            if note:
+                print(f"  {note}")
             print(f"  Note: {result['note']}. The workspace is untouched; remove it yourself once the archive is checked.")
         return 0
     if args.command == "relink":

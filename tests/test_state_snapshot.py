@@ -98,3 +98,24 @@ class RetryTests(unittest.TestCase):
             second = take_snapshot(root, dest, base / "home", quiet=True, stamp="s2")
             self.assertEqual(second["errors"], [])
             self.assertTrue((dest / "current" / "Done" / "ModA" / "a.txt").is_file())
+
+
+class AfterArchiveTests(unittest.TestCase):
+    def test_nothing_happens_without_a_config_and_a_configured_root_snapshots_after_an_archive(self) -> None:
+        import json as _json
+        from bridgeforge.state_snapshot import snapshot_after_archive
+        with resolved_temp_dir() as base:
+            root = _tree(base / "repo")
+            self.assertIsNone(snapshot_after_archive(root / "Done", base / "home"))
+            self.assertFalse((base / "backup").exists())
+            (root / "bridgeforge-state" / "snapshot.json").write_text(_json.dumps({"to": str(base / "backup")}), encoding="utf-8")
+            note = snapshot_after_archive(root / "Done", base / "home")
+            self.assertIn("copied", note)
+            self.assertTrue((base / "backup" / "current" / "Done" / "ModA" / "a.txt").is_file())
+
+    def test_a_broken_config_is_reported_not_raised(self) -> None:
+        from bridgeforge.state_snapshot import snapshot_after_archive
+        with resolved_temp_dir() as base:
+            root = _tree(base / "repo")
+            (root / "bridgeforge-state" / "snapshot.json").write_text("{}", encoding="utf-8")
+            self.assertIn("FAILED", snapshot_after_archive(root / "Done", base / "home"))

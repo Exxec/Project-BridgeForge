@@ -137,3 +137,24 @@ def run_cli(args: argparse.Namespace) -> int:
         for error in result["errors"][:20]:
             print(f"  ERROR {error}", file=sys.stderr)
     return 1 if result["errors"] else 0
+
+
+CONFIG_RELATIVE = Path("bridgeforge-state") / "snapshot.json"
+
+
+def snapshot_after_archive(done_dir: Path, claude_home: Path | None = None) -> str | None:
+    """Owner rule 2026-10-12: snapshot after a major new revision, not on a weekly clock. Called after an archive lands in `done_dir`.
+
+    Opt-in per repository: `<root>/bridgeforge-state/snapshot.json` holds {"to": "<destination folder>"}; with no such file this does nothing
+    (so tests and other checkouts never copy anything). A failure is reported in the returned text and never raised: the archive is done."""
+    root = Path(done_dir).resolve().parent
+    config = root / CONFIG_RELATIVE
+    if not config.is_file():
+        return None
+    try:
+        destination = json.loads(config.read_text(encoding="utf-8"))["to"]
+        result = take_snapshot(root, Path(destination), claude_home or Path.home() / ".claude", quiet=True)
+    except (OSError, ValueError, KeyError) as exc:
+        return f"snapshot after archive FAILED: {exc}"
+    note = f"snapshot {result['stamp']}: {result['copied']} copied, {result['versioned']} older version(s) kept, {len(result['errors'])} error(s)"
+    return note

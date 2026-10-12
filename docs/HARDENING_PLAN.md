@@ -84,7 +84,7 @@ Failures found in these two days, grouped by what kind of defect they are:
 - **Line endings**: a `.gitattributes` policy (LF in the repo, per-file exceptions) to stop the `LF will be replaced by CRLF` warning on every commit and the churn it hides.
 - **Long paths and encodings**: a check in `rig-doctor` for `LongPathsEnabled` and for non-ASCII path hazards (the translator needs ASCII paths).
 - **Dependency hygiene**: `pip-audit` in CI (one runtime dependency, `psutil`); keep the `uv.lock` check.
-- **Backup of irreplaceable state**: wire ROADMAP 64's `migrate-inventory` and `migrate-verify` into a weekly local snapshot of `Done/`, `In operation/*/working`, `bridgeforge-state/` and the memory folder.
+- **Backup of irreplaceable state**: wire ROADMAP 64's `migrate-inventory` and `migrate-verify` into a local snapshot, taken after each major new revision (every archive; owner 2026-10-12: not on a weekly clock), of `Done/`, `In operation/*/working`, `bridgeforge-state/` and the memory folder.
 
 ## Phase H5: working with agents
 

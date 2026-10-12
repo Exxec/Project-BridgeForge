@@ -105,7 +105,9 @@ in a cloud session. Build and test what you can, then add an entry to `docs/LOCA
   `python -m tests.test_cli_golden --write` and review the diff.
 - Before merging an agent's branch run `bridgeforge agent-diff-check BRANCH` (deleted files, files cut by over a fifth).
 - Line endings are LF (`.gitattributes`; batch files CRLF). `state-snapshot --to DIR` keeps an append-only copy of `Done/`,
-  `bridgeforge-state/`, the working copies and the memory folder; `rig-reset` returns a rig to a known state.
+  `bridgeforge-state/`, the working copies and the memory folder. It runs by itself after every archive when
+  `bridgeforge-state/snapshot.json` names a destination (owner rule 2026-10-12: after major new revisions, not on a weekly
+  clock). `rig-reset` returns a rig to a known state.
 - Live harness: the game launcher waits for a click (`auto_click=True` for any new boot path); the probe row in the mission
   list is found by unique mission id and the list is scrolled two ticks per row. A LIVE_STUCK with no `combat-round` line in
   the log means another mission started, not that the probe's combat hung.
