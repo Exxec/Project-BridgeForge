@@ -97,8 +97,8 @@ def take_snapshot(root: Path, destination: Path, claude_home: Path, quiet: bool 
             saved = checkpoint.get(label)
             started = time.monotonic()
             stats = saved if saved is not None else _copy_source(label, folder, current, version_root)
-            if saved is None:
-                checkpoint.add(label, stats)
+            if saved is None and not stats["errors"]:
+                checkpoint.add(label, stats)  # a source with errors is retried on the next run
             per_source[label] = stats
             for key in ("copied", "versioned", "skipped", "bytes"):
                 totals[key] += stats[key]

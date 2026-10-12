@@ -78,3 +78,23 @@ class SnapshotTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RetryTests(unittest.TestCase):
+    def test_a_source_with_an_unreadable_file_is_not_checkpointed_so_the_next_run_retries_it(self) -> None:
+        from unittest import mock
+        with resolved_temp_dir() as base:
+            root, dest = _tree(base / "repo"), base / "backup"
+            real_copy2 = __import__("shutil").copy2
+
+            def failing(src, dst, *a, **k):
+                if str(src).endswith("a.txt"):
+                    raise PermissionError(13, "denied")
+                return real_copy2(src, dst, *a, **k)
+
+            with mock.patch("bridgeforge.state_snapshot.shutil.copy2", side_effect=failing):
+                first = take_snapshot(root, dest, base / "home", quiet=True, stamp="s1")
+            self.assertEqual(len(first["errors"]), 1)
+            second = take_snapshot(root, dest, base / "home", quiet=True, stamp="s2")
+            self.assertEqual(second["errors"], [])
+            self.assertTrue((dest / "current" / "Done" / "ModA" / "a.txt").is_file())
