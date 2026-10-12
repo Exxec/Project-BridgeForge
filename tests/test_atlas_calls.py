@@ -154,6 +154,29 @@ class CallAttributionTests(unittest.TestCase):
             result = forecast(conn, atlas.resolve_mods(conn, ["reader"]), atlas.group_mods(conn, "aotd"))
             self.assertEqual([f for f in result["findings"] if f.rule == "ATLAS-READS-REPLACED"], [])
 
+    def test_atlas_reads_replaced_a_bare_string_in_a_jar_is_a_mention_not_a_use(self):
+        """javac inlines Industries.FARMING as "farming" into every jar that names it; only a call site is a use (AoTD sweep 2026-10-12)."""
+        mention = ClassBuilder("m/Mention")
+        mention.method("run", mention.ldc("farming") + mention.invoke(*PRINT) + RETURN)
+        lookup = ClassBuilder("l/Lookup")
+        lookup.method("run", lookup.ldc("farming") + ALOAD_0 + lookup.invoke(MARKET, "getIndustry", STRING_CALL, INVOKE_INTERFACE) + RETURN)
+        with temp_root() as root:
+            make_vanilla(root)
+            make_mod(root / "mods", "aotd_vok", {"data/campaign/industries.csv": INDUSTRIES_HEADER + "aotd_subsidised_farming,Subsidised Farming,,farming\n"},
+                     name="AoTD VoK")
+            jar_mod(root / "mods", "mentions", {"m/Mention.class": mention.build()})
+            jar_mod(root / "mods", "looks", {"l/Lookup.class": lookup.build()})
+            db, _ = build(root)
+            conn = atlas.connect(db)
+            family = atlas.group_mods(conn, "aotd")
+            by_mod = {}
+            for mod_id in ("mentions", "looks"):
+                result = forecast(conn, atlas.resolve_mods(conn, [mod_id]), family)
+                by_mod[mod_id] = ([f.level for f in result["findings"] if f.rule == "ATLAS-READS-REPLACED"], result["verdicts"][mod_id]["status"])
+            self.assertEqual(by_mod["mentions"][0], ["UNKNOWN"])
+            self.assertTrue(by_mod["mentions"][1].startswith("UNKNOWN"))
+            self.assertEqual(by_mod["looks"], (["REVIEW"], "REVIEW"))
+
     def test_unscanned_class_falls_back_to_unknown_class_level_guess(self):
         b = ClassBuilder("a/Broken")
         b.string("farming")

@@ -97,6 +97,26 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(json.loads(out.getvalue())["tests"], ["T2"])
 
 
+class AddVersusLookupTests(unittest.TestCase):
+    def test_atlas_reads_replaced_flags_lookups_and_removals_but_not_creation(self) -> None:
+        """AoTD sweep 2026-10-12: 80 mods looked like users of an AoTD-replaced industry, nearly all through addIndustry."""
+        java = {"creator": 'package c;\npublic class C { void go(MarketAPI m) { m.addIndustry("farming"); } }\n',
+                "looker": 'package l;\npublic class L { void go(MarketAPI m) { m.getIndustry("farming"); } }\n',
+                "remover": 'package r;\npublic class R { void go(MarketAPI m) { m.removeIndustry("farming", null, false); } }\n'}
+        with temp_root() as root:
+            make_vanilla(root)
+            make_mod(root / "mods", "aotd_vok", {"data/campaign/industries.csv": INDUSTRIES_HEADER + "aotd_subsidised_farming,Subsidised Farming,,farming\n"},
+                     name="AoTD- Vaults of Knowledge")
+            for mod_id, source in java.items():
+                make_mod(root / "mods", mod_id, {f"data/scripts/{mod_id}.java": source})
+            db, _ = build(root)
+            conn = atlas.connect(db)
+            family = atlas.group_mods(conn, "aotd")
+            flagged = {mod_id: bool([f for f in forecast(conn, atlas.resolve_mods(conn, [mod_id]), family)["findings"]
+                                     if f.rule == "ATLAS-READS-REPLACED"]) for mod_id in java}
+            self.assertEqual(flagged, {"creator": False, "looker": True, "remover": True})
+
+
 class PackAndSweepTests(unittest.TestCase):
     def test_a_pack_is_one_load_set_and_unknown_ids_are_listed_not_guessed(self) -> None:
         with temp_root() as root:

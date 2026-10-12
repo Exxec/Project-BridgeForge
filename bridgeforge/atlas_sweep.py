@@ -74,13 +74,18 @@ def sweep(conn: sqlite3.Connection, group: str, checkpoint_path: Path | None = N
 def _summary(rows: list[dict]) -> dict:
     counts: dict[str, int] = {}
     for row in rows:
-        key = "REVIEW or worse" if row["findings"] else row["status"].split(" (")[0]
+        key = row["status"].split(" (")[0]
         counts[key] = counts.get(key, 0) + 1
     return counts
 
 
+def _open(row: dict) -> bool:
+    """REVIEW or NEEDS PATCH: something with a call site or a MANUAL finding (UNKNOWN mentions and fixed history are not)."""
+    return row["status"].startswith(("REVIEW", "NEEDS PATCH"))
+
+
 def sweep_text(data: dict) -> str:
-    flagged = [r for r in data["rows"] if r["findings"]]
+    flagged = [r for r in data["rows"] if _open(r)]
     lines = [f"Sweep against {data['group']} ({len(data['family'])} mod(s)): {len(data['rows'])} mod(s) checked; "
              + ", ".join(f"{n} {k}" for k, n in sorted(data["summary"].items()))]
     for row in sorted(flagged, key=lambda r: (-r["findings"], r["mod"])):

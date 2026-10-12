@@ -208,6 +208,11 @@ def rule_reads_replaced(facts: list[AFact], profiles: dict[str, Profile]) -> lis
     readers: dict[tuple[str, str], list[AFact]] = defaultdict(list)
     for f in facts:
         if f.action in ("reads", "references", "mutates") and f.id != "<dynamic>" and f.mod != VANILLA_ID:
+            if f.action == "mutates" and "method=add" in f.evidence:
+                # Creating an industry/condition/submarket (addIndustry("farming") at generation, which AoTD expects) is not a use of
+                # an existing one: only lookups and removals break when another mod has replaced it. The AoTD sweep of 338 mods
+                # flagged 80 mods that "use" an AoTD-replaced industry, nearly all through addIndustry (2026-10-12).
+                continue
             readers[(f.kind, f.id)].append(f)
     out = []
     for replacer, profile in sorted(profiles.items()):
@@ -216,8 +221,12 @@ def rule_reads_replaced(facts: list[AFact], profiles: dict[str, Profile]) -> lis
                 theirs = [f for f in readers[(kind, ident)] if f.mod == reader]
                 ordered = sorted(info["by"])
                 by = (", ".join(ordered[:MAX_NAMED_IDS]) + (f" (+{len(ordered) - MAX_NAMED_IDS} more)" if len(ordered) > MAX_NAMED_IDS else "")) or "nothing (removed)"
-                out.append(Finding("ATLAS-READS-REPLACED", "REVIEW", SILENT,
-                                   f"{reader} uses {kind} '{ident}' ({_where(theirs[0])}); {replacer} replaces or removes it ({info['how']}); replacing ids: {by}",
+                # A call site (getIndustry, hasIndustry, removeIndustry ...) is a use: REVIEW. A string equal to the id somewhere in a jar's
+                # constant pool is only a mention (javac inlines Industries.FARMING as "farming" into every jar that names it): UNKNOWN.
+                # The AoTD sweep of 338 mods: 57 mods only mentioned "farming" this way, about a dozen called getIndustry/hasIndustry.
+                used = any(f.action != "references" for f in theirs)
+                out.append(Finding("ATLAS-READS-REPLACED", "REVIEW" if used else "UNKNOWN", SILENT,
+                                   f"{reader} {'uses' if used else 'mentions'} {kind} '{ident}' ({_where(theirs[0])}); {replacer} replaces or removes it ({info['how']}); replacing ids: {by}",
                                    [reader, replacer], _sides(theirs) + _sides(info["facts"]), [ident, *sorted(info["by"])]))
     return out
 
@@ -338,8 +347,12 @@ def _verdict(conn: sqlite3.Connection, mod: dict, findings: list[Finding]) -> di
                            (mod["id"], mod["version"])).fetchone()[0]
     if any(f.level == "MANUAL" for f in mine):
         status = "NEEDS PATCH (MANUAL findings)"
-    elif mine:
+    elif any(f.level == "REVIEW" for f in mine):
         status = "REVIEW"
+    elif any(f.level == "UNKNOWN" for f in mine):
+        status = "UNKNOWN (string mentions of ids another mod replaces; no call site found)"
+    elif mine:
+        status = "no open findings (fixed history only)"
     elif dynamic:
         status = "UNKNOWN (non-literal id lookups the static scan cannot resolve)"
     else:
