@@ -126,10 +126,47 @@ def id_text(data: dict) -> str:
     return "\n".join(lines)
 
 
+def top_pairs(findings: list[dict], top: int) -> list[dict]:
+    """Findings grouped by the mods they involve (a pair, or one mod), ranked: crash-class before silent, MANUAL before REVIEW, then by
+    how many findings the group holds. SAFE findings (fixed history) are not ranked. A pack forecast has hundreds of findings; this is
+    the list to read first."""
+    from .atlas_rules import CATEGORY_ORDER, LEVEL_ORDER
+
+    groups: dict[tuple[str, ...], dict] = {}
+    for finding in findings:
+        if finding["level"] == "SAFE":
+            continue
+        key = tuple(sorted(finding["mods"]))
+        group = groups.setdefault(key, {"mods": list(key), "count": 0, "category": finding["category"], "level": finding["level"],
+                                        "rules": set(), "example": finding["summary"]})
+        group["count"] += 1
+        group["rules"].add(finding["rule"])
+        worse = (CATEGORY_ORDER[finding["category"]], LEVEL_ORDER[finding["level"]]) < (CATEGORY_ORDER[group["category"]], LEVEL_ORDER[group["level"]])
+        if worse:
+            group["category"], group["level"], group["example"] = finding["category"], finding["level"], finding["summary"]
+    ranked = sorted(groups.values(), key=lambda g: (CATEGORY_ORDER[g["category"]], LEVEL_ORDER[g["level"]], -g["count"], g["mods"]))
+    return [{**g, "rules": sorted(g["rules"])} for g in ranked[:top]]
+
+
 def forecast_text(data: dict) -> str:
-    lines = [f"Forecast for {', '.join(data['subjects'])}" + (f" against {len(data['against'])} mod(s): {', '.join(data['against'])}" if data["against"] else "")]
+    many = len(data["subjects"]) > 12  # a modpack: name the count, list only the mods with something to say
+    names = f"{len(data['subjects'])} mod(s)" if many else ", ".join(data["subjects"])
+    lines = [f"Forecast for {names}" + (f" against {len(data['against'])} mod(s): {', '.join(data['against'])}" if data["against"] else "")]
     for mod, verdict in data["verdicts"].items():
+        if many and not verdict["findings"]:
+            continue
         lines.append(f"  {mod}: {verdict['status']} ({verdict['findings']} finding(s))")
+    if many:
+        clean = sum(1 for v in data["verdicts"].values() if not v["findings"])
+        lines.append(f"  ({clean} mod(s) with no static finding not listed)")
+    if data.get("pack_missing"):
+        lines.append(f"  not in the atlas, not checked: {len(data['pack_missing'])} mod id(s)")
+    if data.get("top_pairs"):
+        lines.append(f"\nHighest-impact groups ({len(data['top_pairs'])} shown of {len(data['findings'])} finding(s); --top N, or --json for everything):")
+        for pair in data["top_pairs"]:
+            lines.append(f"  {' + '.join(pair['mods'])}: {pair['count']} finding(s), worst {pair['category']} {pair['level']} [{', '.join(pair['rules'])}]")
+            lines.append(f"      e.g. {pair['example'][:170]}")
+        return "\n".join(lines)
     for finding in data["findings"]:
         lines.append(f"\n[{finding['level']}] {finding['rule']} ({finding['category']}): {finding['summary']}")
         for side in finding["sides"]:
@@ -217,11 +254,37 @@ def run_cli(args) -> int:
             _emit(args, data, id_text(data))
             if args.html:
                 print("wrote", write_html(args.html, "id_" + args.id, id_html(data)), file=sys.stderr)
+        elif args.atlas_command == "runtime":
+            from .atlas_runtime import ingest
+
+            stats = ingest(conn, args.logs)
+            _emit(args, stats, f"Read {stats['lines']} probe line(s) from {stats['logs']} log(s): {', '.join(stats['tests'])}")
+        elif args.atlas_command == "sweep":
+            from .atlas_sweep import sweep, sweep_text
+            checkpoint = args.db.with_name(f"sweep-{args.group}.partial.jsonl")
+            data = sweep(conn, args.group, checkpoint, args.quiet, args.limit)
+            _emit(args, data, sweep_text(data))
         else:
+            if args.pack:
+                from .atlas_sweep import read_pack
+
+                subjects, missing = read_pack(conn, args.pack)
+                if not subjects:
+                    raise AtlasError(f"none of the pack's mods is indexed ({len(missing)} id(s) missing)")
+                if missing:
+                    print(f"bridgeforge: {len(missing)} of the pack's mod id(s) are not in the atlas and were not checked: "
+                          + ", ".join(missing[:25]) + (" ..." if len(missing) > 25 else ""), file=sys.stderr)
+            elif args.mods:
+                subjects, missing = resolve_mods(conn, args.mods), []
+            else:
+                raise AtlasError("forecast needs mod names or --pack FILE")
             against = group_mods(conn, args.against) if args.against else None
             if args.against and not against:
                 raise AtlasError(f"no indexed mod belongs to group {args.against!r}")
-            data = forecast_data(forecast(conn, resolve_mods(conn, args.mods), against))
+            data = forecast_data(forecast(conn, subjects, against))
+            data["pack_missing"] = missing
+            if args.pack or len(subjects) > 12:  # a pack: rank the findings instead of listing hundreds
+                data["top_pairs"] = top_pairs(data["findings"], args.top)
             _emit(args, data, forecast_text(data))
             if args.html:
                 print("wrote", write_html(args.html, "forecast_" + "_".join(data["subjects"]), forecast_html(data)), file=sys.stderr)
@@ -253,10 +316,20 @@ def add_parser(subcommands) -> None:
     ident = sub.add_parser("id", help="every mod that touches an id, and how")
     ident.add_argument("id")
     fore = sub.add_parser("forecast", help="run every conflict rule over these mods plus vanilla; --against GROUP checks them against a whole mod family (aotd)")
-    fore.add_argument("mods", nargs="+", metavar="MOD")
+    fore.add_argument("mods", nargs="*", metavar="MOD")
     fore.add_argument("--against", metavar="GROUP", help="a family treated as one set, e.g. aotd (id starts with aotd or name says Ashes of the Domain)")
+    fore.add_argument("--pack", type=Path, metavar="FILE", help="an enabled_mods.json (or a list of mod ids): forecast the whole pack as one load set; ids the atlas does not hold are listed")
+    fore.add_argument("--top", type=int, default=15, help="with --pack: how many highest-impact mod groups to show (default 15)")
+    runtime = sub.add_parser("runtime", help="read probe-group test logs (BF-PROBE lines) into the atlas: live market-supply FAILs then show in forecasts as ATLAS-RUNTIME-SUPPLY and confirm static findings")
+    runtime.add_argument("logs", nargs="+", type=Path, help="<rig>/logs/<TESTID>.stdout.log files")
+    runtime.add_argument("--json", action="store_true")
+    sweeper = sub.add_parser("sweep", help="forecast every indexed mod against a family (aotd) one by one; one progress line per mod and a checkpoint")
+    sweeper.add_argument("group", nargs="?", default="aotd", help="the family (default aotd)")
+    sweeper.add_argument("--limit", type=int, help="only the first N mods")
+    sweeper.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
+    sweeper.add_argument("--json", action="store_true")
     for command in (show, ident, fore):
         command.add_argument("--json", action="store_true")
         command.add_argument("--html", type=Path, metavar="DIR", help="also write plain self-contained HTML files into DIR")
-    for command in (build, show, diff, ident, fore):
+    for command in (build, show, diff, ident, fore, runtime, sweeper):
         command.add_argument("--db", type=Path, default=DEFAULT_DB, help=f"atlas file (default: {DEFAULT_DB})")

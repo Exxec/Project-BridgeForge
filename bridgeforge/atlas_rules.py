@@ -323,6 +323,10 @@ def forecast(conn: sqlite3.Connection, subjects: list[dict], against: list[dict]
             keep = bool(mods & names)
         if keep:
             kept.append(finding)
+    from .atlas_runtime import confirmed_by_runtime, runtime_findings  # lazy: atlas_runtime imports this module
+
+    kept += runtime_findings(conn, subjects)
+    confirmed_by_runtime(kept)
     verdicts = {s["id"]: _verdict(conn, s, kept) for s in subjects}
     return {"subjects": [s["id"] for s in subjects], "against": sorted(family_ids), "findings": kept,
             "verdicts": verdicts, "profiles": {m: profiles[m] for m in profiles if m in names}}
