@@ -5,7 +5,8 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.probe_group import group_report, install_group, merge_configs, plan_groups
+from bridgeforge.probe_group import (ProbeGroupError, bisect_group, dependency_version_conflicts, group_report, install_group,
+                                     merge_configs, plan_groups)
 from bridgeforge.probe_config import build_probe_config
 from tests.support import link_dir, resolved_temp_dir
 
@@ -52,7 +53,8 @@ class PlanTests(unittest.TestCase):
             plan = plan_groups(queue, _rig(root, "lw_lazylib"), size=8)
         groups = [[m["workspace"] for m in g["members"]] for g in plan["groups"]]
         self.assertEqual(groups, [["A", "C"], ["B"], ["T"]])
-        self.assertEqual(plan["unplaced"][0], {"workspace": "D", "reason": "dependencies not in the rig: missing_lib"})
+        self.assertEqual(plan["unplaced"][0]["reason"], "dependencies not in the rig: missing_lib")
+        self.assertEqual(plan["unplaced"][0]["providers"], ["missing_lib: no ready provider (no workspace declares it)"])
         self.assertEqual(plan["unplaced"][1]["workspace"], "V")
         self.assertIn("gameVersion 0.95.1a-RC6", plan["unplaced"][1]["reason"])
 
@@ -105,6 +107,42 @@ class MergeAndReportTests(unittest.TestCase):
         self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
         self.assertEqual(report["members"]["mod_b"]["verdict"], "FAIL")
 
+    def test_an_accepted_probe_finding_is_listed_and_no_longer_fails_the_mod(self) -> None:
+        # Magellan's hidden magellan_startigers builds no patrol and nothing spawns its fleets (GRP5C-20261006); the owner-side
+        # decision lives in the workspace's working/reports/probe_accepted.json with a reason
+        from bridgeforge.probe_group import accepted_probe_findings
+
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            a = build_probe_config(_workspace(queue, "A", "mod_a", "hull_a"))
+            working_b = _workspace(queue, "B", "mod_b", "hull_b")
+            (working_b / "data" / "world" / "factions").mkdir(parents=True)
+            (working_b / "data" / "world" / "factions" / "b_navy.faction").write_text('{"id": "b_navy"}', encoding="utf-8")
+            (working_b / "data" / "world" / "factions" / "b_other.faction").write_text('{"id": "b_other"}', encoding="utf-8")
+            (working_b / "reports").mkdir(exist_ok=True)
+            (working_b / "reports" / "probe_accepted.json").write_text(json.dumps({"accepted": [
+                {"check": "faction-fleet-gen", "subject": "b_navy", "reason": "hidden, nothing spawns its fleets"},
+                {"check": "faction-fleet-gen", "subject": "b_nothing_reason"}]}), encoding="utf-8")
+            merged = merge_configs([a, build_probe_config(working_b)])
+            log = root / "run.stdout.log"
+            log.write_text(
+                "5 [main] INFO  com.fs.starfarer.StarfarerLauncher  - Starting\n"
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.8|content-ids|OK|all-content|checked=2 failed=0 ship-variants built=2\n"
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.8|faction-fleet-gen|FAIL|b_navy|FleetFactoryV3 built an empty patrolMedium\n",
+                encoding="utf-8")
+            accepted = accepted_probe_findings(queue, None)
+            with_accepted = group_report(log, merged, accepted=accepted)
+            without = group_report(log, merged)
+            other_log = root / "other.stdout.log"
+            other_log.write_text(log.read_text(encoding="utf-8").replace("|b_navy|", "|b_other|"), encoding="utf-8")
+            other_faction = group_report(other_log, merged, accepted=accepted)
+        self.assertEqual(list(accepted), ["mod_b"])
+        self.assertEqual(len(accepted["mod_b"]), 1, "an entry without a reason is ignored")
+        self.assertEqual(with_accepted["members"]["mod_b"]["verdict"], "PASS")
+        self.assertIn("faction-fleet-gen|b_navy", with_accepted["members"]["mod_b"]["accepted"][0])
+        self.assertEqual(without["members"]["mod_b"]["verdict"], "FAIL")
+        self.assertEqual(other_faction["members"]["mod_b"]["verdict"], "FAIL", "only the named faction is accepted")
+
     def test_a_patched_vanilla_faction_is_built_and_blamed_on_the_patching_mod(self) -> None:
         # Probe 0.2.9 (GRP-8, 2026-09-28): Amogus-Shipyards' hegemony.faction has no id; it patches the Hegemony.
         with resolved_temp_dir() as root:
@@ -144,6 +182,85 @@ class MergeAndReportTests(unittest.TestCase):
         self.assertEqual(report["members"]["mod_a"]["verdict"], "INCOMPLETE")
 
 
+def _done(workspace: Path) -> None:
+    (workspace / "reports" / "revive").mkdir(parents=True, exist_ok=True)
+    (workspace / "reports" / "revive" / "REVIVE.json").write_text('{"status": "UNATTENDED_DONE"}', encoding="utf-8")
+
+
+class ProviderStagingTests(unittest.TestCase):
+    # ROADMAP 36.1 (2026-10-04): SCY Nation Utility waited on SCY, which was revived in the same queue.
+    def test_a_ready_provider_is_planned_staged_and_verified(self) -> None:
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            _workspace(queue, "Addon", "addon", "hull_addon", deps=["base"])
+            base = _workspace(queue, "Base", "base", "hull_base", status="ESCALATED").parent  # not itself ready to test
+            _done(base)
+            rig = _rig(root)
+            core = root / "core_real"
+            core.mkdir()
+            link_dir(core, rig / "starsector-core")
+            plan = plan_groups(queue, rig)
+            addon_group = next(g for g in plan["groups"] if g["members"][0]["workspace"] == "Addon")
+            with self.assertRaises(ProbeGroupError):
+                install_group(plan, addon_group["group"], queue, rig, install_probe=False)
+            result = install_group(plan, addon_group["group"], queue, rig, install_probe=False, stage=True)
+            enabled = json.loads((rig / "mods" / "enabled_mods.json").read_text(encoding="utf-8"))["enabledMods"]
+            staged_info = (rig / "mods" / "Base" / "mod_info.json").is_file()
+        self.assertEqual(addon_group["members"][0]["stage_providers"], [{"mod_id": "base", "workspace": "Base", "version": ""}])
+        self.assertEqual(result["staged_providers"][0]["action"], "copied")
+        self.assertTrue(staged_info)
+        self.assertEqual(enabled, ["base", "addon", "bridgeforge_probe"])
+
+    def test_an_escalated_provider_is_not_staged(self) -> None:
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            _workspace(queue, "Addon", "addon", "hull_addon", deps=["base"])
+            base = _workspace(queue, "Base", "base", "hull_base").parent
+            (base / "reports" / "revive").mkdir(parents=True)
+            (base / "reports" / "revive" / "REVIVE.json").write_text('{"status": "ESCALATED"}', encoding="utf-8")
+            plan = plan_groups(queue, _rig(root))
+        addon = next(u for u in plan["unplaced"] if u["workspace"] == "Addon")
+        self.assertIn("base: no ready provider (Base=ESCALATED)", addon["providers"])
+
+
+class OutsideProviderTests(unittest.TestCase):
+    # 2026-10-04: 16 blocked addons were provided by mods in the real install, not the queue.
+    def test_a_provider_outside_the_queue_is_staged_from_its_source(self) -> None:
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            _workspace(queue, "Addon", "addon", "hull_addon", deps=["base"])
+            source = root / "install_mods"
+            (source / "Base 1.0").mkdir(parents=True)
+            (source / "Base 1.0" / "mod_info.json").write_text('{"id": "base", "version": "1.0", "gameVersion": "0.98a-RC8"}', encoding="utf-8")
+            (source / "Base 1.0" / "data").mkdir()
+            (source / "Base 1.0" / "data" / "x.csv").write_text("id\n", encoding="utf-8")
+            rig = _rig(root)
+            core = root / "core_real"
+            core.mkdir()
+            link_dir(core, rig / "starsector-core")
+            plan = plan_groups(queue, rig, extra_sources=[source])
+            without = plan_groups(queue, rig)
+            group = next(g for g in plan["groups"] if g["members"][0]["workspace"] == "Addon")
+            result = install_group(plan, group["group"], queue, rig, install_probe=False, stage=True)
+            copied = (rig / "mods" / "Base 1.0" / "data" / "x.csv").is_file()
+            source_untouched = sorted(p.name for p in (source / "Base 1.0").rglob("*"))
+        self.assertEqual(group["members"][0]["stage_providers"][0]["origin"], str(source))
+        self.assertIn("Addon", [u["workspace"] for u in without["unplaced"]])
+        self.assertEqual(result["staged_providers"][0]["action"], "copied")
+        self.assertTrue(copied)
+        self.assertEqual(source_untouched, ["data", "mod_info.json", "x.csv"])
+
+
+class BisectTests(unittest.TestCase):
+    def test_a_group_splits_into_two_new_groups(self) -> None:
+        plan = {"groups": [{"group": 1, "members": [{"workspace": w} for w in "ABCDE"]}, {"group": 2, "members": [{"workspace": "F"}]}]}
+        result = bisect_group(plan, 1)
+        with self.assertRaises(ProbeGroupError):
+            bisect_group(result, 2)
+        self.assertEqual([[m["workspace"] for m in g["members"]] for g in result["groups"][2:]], [["A", "B", "C"], ["D", "E"]])
+        self.assertEqual(result["groups"][0]["bisected_into"], [3, 4])
+
+
 class InstallTests(unittest.TestCase):
     def test_install_copies_members_writes_config_and_enables_dependencies(self) -> None:
         with resolved_temp_dir() as root:
@@ -163,6 +280,19 @@ class InstallTests(unittest.TestCase):
         self.assertTrue(copied)
         self.assertEqual(enabled, ["lw_lazylib", "mod_a", "mod_c", "bridgeforge_probe"])
         self.assertEqual(sorted(config["group_members"]), ["mod_a", "mod_c"])
+
+    def test_install_enables_speedup_when_the_rig_has_it(self) -> None:
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            _workspace(queue, "A", "mod_a", "hull_a")
+            rig = _rig(root, "speedUp")
+            core = root / "core_real"
+            core.mkdir()
+            link_dir(core, rig / "starsector-core")
+            plan = plan_groups(queue, rig)
+            install_group(plan, 1, queue, rig, install_probe=False)
+            enabled = json.loads((rig / "mods" / "enabled_mods.json").read_text(encoding="utf-8"))["enabledMods"]
+        self.assertEqual(enabled, ["mod_a", "bridgeforge_probe", "speedUp"])
 
     def test_dependencies_of_dependencies_are_enabled_and_a_missing_one_blocks_the_plan(self) -> None:
         # GRP-SPARKLE (2026-09-27): SPARKLE -> Secrets of the Frontier -> LazyLib, GraphicsLib, LunaLib, MagicLib.
@@ -211,15 +341,59 @@ class InstallTests(unittest.TestCase):
                 "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|content-ids|FAIL|all-content|checked=2 failed=1" + chr(10) + "", encoding="utf-8")
             policy = root / "policy.json"
             shutil.copy2(Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json", policy)
+            # The archive gate (ROADMAP 36.11) needs original/ to audit against.
+            shutil.copytree(a, queue / "A" / "original" / "A")
             result = record_group(rig / "logs" / "GRP-T.stdout.log", merged, queue, rig, test_id="GRP-T", archive=True,
                                   done_dir=root / "Done", policy_path=policy, today="2026-09-28")
+            from bridgeforge.live_trust import live_status
+            run = json.loads((queue / "_live" / "GRP-T.json").read_text(encoding="utf-8"))
+            live_a = live_status(queue / "A")["status"]
             report_a = (a / "reports" / "REVIVAL_REPORT.md").read_text(encoding="utf-8")
             report_b = (b / "reports" / "REVIVAL_REPORT.md").read_text(encoding="utf-8")
             top_zip = sorted(p.name for p in (root / "Done").glob("*.zip"))
         self.assertEqual((result["recorded"], result["archived"], result["probe_version"]), (["A"], ["A"], "0.2.9"))
+        self.assertEqual({m["workspace"]: m["verdict"] for m in run["members"]}, {"A": "PASS", "B": "FAIL"})
+        self.assertEqual(run["known_noise"]["status"], "NO_PREVIOUS")
+        self.assertEqual(live_a, "CURRENT")
         self.assertTrue(report_a.rstrip().endswith("LIVE_VALIDATED"))
         self.assertNotIn("LIVE_VALIDATED", report_b)
         self.assertEqual(len(top_zip), 1)
+
+    def test_record_refresh_replaces_an_earlier_archive_only_when_asked(self) -> None:
+        # Six archives made as READY_FOR_LIVE_TEST stayed that way after their runs passed (2026-10-11): `record --archive` met
+        # the existing folder and stopped; `--refresh` is the owner's word to replace it.
+        import shutil
+
+        from bridgeforge.probe_group import record_group
+        with resolved_temp_dir() as root:
+            queue = root / "In operation"
+            a = _workspace(queue, "A", "mod_a", "hull_a")
+            merged = merge_configs([build_probe_config(a)])
+            rig = _rig(root)
+            (rig / "logs").mkdir(parents=True)
+            log = rig / "logs" / "GRP-R.stdout.log"
+            log.write_text("5 [main] INFO  com.fs.starfarer.StarfarerLauncher  - Starting" + chr(10)
+                           + "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|content-ids|OK|all-content|checked=1 failed=0" + chr(10),
+                           encoding="utf-8")
+            policy = root / "policy.json"
+            shutil.copy2(Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json", policy)
+            shutil.copytree(a, queue / "A" / "original" / "A")
+            done = root / "Done"
+            first = record_group(log, merged, queue, rig, test_id="GRP-R", archive=True, done_dir=done, policy_path=policy, today="2026-09-28")
+            (done / "A" / "marker.txt").write_text("from the first archive", encoding="utf-8")
+            again = record_group(log, merged, queue, rig, test_id="GRP-R", archive=True, done_dir=done, policy_path=policy, today="2026-10-11")
+            kept = (done / "A" / "marker.txt").is_file()
+            refreshed = record_group(log, merged, queue, rig, test_id="GRP-R", archive=True, done_dir=done, policy_path=policy,
+                                     today="2026-10-11", refresh=True)
+            replaced = not (done / "A" / "marker.txt").exists()
+            note = (done / "A" / "ARCHIVE_NOTE.md").read_text(encoding="utf-8")
+        self.assertEqual(first["archived"], ["A"])
+        self.assertEqual(again["archived"], [])
+        self.assertIn("already exists", again["skipped"][0]["archive"])
+        self.assertTrue(kept)
+        self.assertEqual(refreshed["archived"], ["A"])
+        self.assertTrue(replaced)
+        self.assertIn("archived 2026-10-11", note)
 
     def test_record_picks_the_workspace_installed_in_the_rig(self) -> None:
         # SEEKER-SOLO2-20260928: workspaces SEEKER (0.3.0) and SEEKER-0.6 share mod id SEEKER; the first by name was
@@ -293,3 +467,298 @@ class InstallTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DependencyVersionTests(unittest.TestCase):
+    def test_major_mismatch_is_reported_minor_is_not(self) -> None:
+        # RC8-23: zzz Bingus Sustem declared IndEvo 3.0.c against 4.1.b and was silently disabled (GRP2C-20261005)
+        with resolved_temp_dir() as root:
+            mods = root / "mods"
+            for folder, info in {
+                "IndEvo": {"id": "IndEvo", "version": "4.1.b"},
+                "US": {"id": "US", "version": {"major": "3", "minor": "0", "patch": "3"}},
+                "Lazy": {"id": "lw_lazylib", "version": "3.0.0"},
+                "Bingus": {"id": "bingus", "version": "1", "dependencies": [
+                    {"id": "IndEvo", "version": "3.0.c"}, {"id": "US", "version": "3.0.1"}, {"id": "lw_lazylib"}]},
+            }.items():
+                (mods / folder).mkdir(parents=True)
+                (mods / folder / "mod_info.json").write_text(json.dumps(info), encoding="utf-8")
+            conflicts = dependency_version_conflicts(mods, ["bingus", "IndEvo"])
+        self.assertEqual(conflicts, [{"mod_id": "bingus", "dependency": "IndEvo", "wanted": "3.0.c", "installed": "4.1.b"}])
+
+
+class InstallHygieneTests(unittest.TestCase):
+    def _install(self, root: Path, deps: list[str], rig_ids: tuple[str, ...]):
+        queue = root / "q"
+        _workspace(queue, "A", "mod_a", "hull_a", deps=deps)
+        rig = _rig(root, *rig_ids)
+        core = root / "core_real"
+        core.mkdir()
+        link_dir(core, rig / "starsector-core")
+        return queue, rig, plan_groups(queue, rig)
+
+    def test_second_folder_with_a_members_id_is_moved_aside_and_round_counter_reset(self) -> None:
+        # SEEKER-0.6 beside SEEKER, Legacy-of-Arkgneisis-0.98a beside Arkgneisis (2026-10-05)
+        with resolved_temp_dir() as root:
+            queue, rig, plan = self._install(root, [], ())
+            (rig / "mods" / "A-old").mkdir()
+            (rig / "mods" / "A-old" / "mod_info.json").write_text(json.dumps({"id": "mod_a"}), encoding="utf-8")
+            (rig / "saves" / "common").mkdir(parents=True)
+            (rig / "saves" / "common" / "bf_probe_combat_round.data").write_text("3", encoding="utf-8")
+            result = install_group(plan, 1, queue, rig, install_probe=False)
+            gone = not (rig / "mods" / "A-old").exists()
+            aside = (rig / "mods-disabled-providers" / "A-old").is_dir()
+            counter = (rig / "saves" / "common" / "bf_probe_combat_round.data").exists()
+        self.assertEqual(result["moved_aside"], [{"mod_id": "mod_a", "folder": "A-old", "kept": "A"}])
+        self.assertTrue(gone and aside)
+        self.assertFalse(counter)
+
+    def test_dependency_added_to_mod_info_after_planning_is_enabled(self) -> None:
+        # Hiigaran Descendants declared shaderLib after the group was planned (GRP7B-20261005)
+        with resolved_temp_dir() as root:
+            queue, rig, plan = self._install(root, [], ("shaderLib",))
+            info = queue / "A" / "working" / "mod_info.json"
+            info.write_text(json.dumps({"id": "mod_a", "gameVersion": "0.98a-RC8", "dependencies": [{"id": "shaderLib"}]}), encoding="utf-8")
+            install_group(plan, 1, queue, rig, install_probe=False)
+            enabled = json.loads((rig / "mods" / "enabled_mods.json").read_text(encoding="utf-8"))["enabledMods"]
+        self.assertEqual(enabled, ["shaderLib", "mod_a", "bridgeforge_probe"])
+
+    def test_provider_copy_missing_a_folder_the_real_install_has_is_reported(self) -> None:
+        # Industrial Evolution without its IndEvo/ sounds folder: Fatal on the first Group 2 launch (2026-10-05)
+        with resolved_temp_dir() as root:
+            queue, rig, plan = self._install(root, ["lib"], ("lib",))
+            (rig / "mods" / "lib" / "data").mkdir()
+            (root / "mods" / "lib" / "IndEvo").mkdir(parents=True)
+            (root / "mods" / "lib" / "data").mkdir()
+            (root / "mods" / "lib" / "src").mkdir()
+            result = install_group(plan, 1, queue, rig, install_probe=False)
+        self.assertEqual(result["incomplete_providers"], [{"mod_id": "lib", "folder": "lib", "missing": ["IndEvo"]}])
+
+
+class ProbeMissionInReplacingMemberTests(unittest.TestCase):
+    def test_probe_row_is_appended_to_a_member_that_replaces_the_mission_list(self) -> None:
+        # Ironclads replaces data/missions/mission_list.csv, so the probe mission never showed (GRP10N-20261005)
+        from bridgeforge.probe_group import _add_probe_mission_to_replacing_members
+
+        crlf = b"\r\n"
+        with resolved_temp_dir() as root:
+            rig = root / "rig"
+            (rig / "mods" / "bridgeforge-probe" / "data" / "missions").mkdir(parents=True)
+            (rig / "mods" / "bridgeforge-probe" / "data" / "missions" / "mission_list.csv").write_text("mission,\nbfprobe_combat,\n", encoding="utf-8")
+            conv = rig / "mods" / "Conv"
+            (conv / "data" / "missions").mkdir(parents=True)
+            (conv / "mod_info.json").write_text(json.dumps({"id": "conv", "replace": ["data/missions/mission_list.csv"]}), encoding="utf-8")
+            (conv / "data" / "missions" / "mission_list.csv").write_bytes(b"mission" + crlf + b"conv_one" + crlf)
+            plain = rig / "mods" / "Plain"
+            (plain / "data" / "missions").mkdir(parents=True)
+            (plain / "mod_info.json").write_text(json.dumps({"id": "plain"}), encoding="utf-8")
+            (plain / "data" / "missions" / "mission_list.csv").write_bytes(b"mission" + crlf)
+            first = _add_probe_mission_to_replacing_members(rig, {"conv": conv, "plain": plain})
+            second = _add_probe_mission_to_replacing_members(rig, {"conv": conv, "plain": plain})
+            conv_text = (conv / "data" / "missions" / "mission_list.csv").read_bytes()
+            plain_text = (plain / "data" / "missions" / "mission_list.csv").read_bytes()
+        self.assertEqual(first, ["Conv"])
+        self.assertEqual(second, [])
+        self.assertEqual(conv_text, b"mission" + crlf + b"conv_one" + crlf + b"bfprobe_combat," + crlf)
+        self.assertEqual(plain_text, b"mission" + crlf)
+
+
+class SmokeGroupTests(unittest.TestCase):
+    """probe-group smoke (ROADMAP 60a): boot the installed group unattended and triage the startup log."""
+
+    def _rig(self, base: Path, enabled: list[str]) -> Path:
+        rig, core = base / "rig", base / "core"
+        core.mkdir()
+        (rig / "mods").mkdir(parents=True)
+        link_dir(core, rig / "starsector-core")
+        (rig / "mods" / "enabled_mods.json").write_text(json.dumps({"enabledMods": enabled}), encoding="utf-8")
+        return rig
+
+    def _smoke(self, boot: dict, enabled: list[str] | None = None):
+        from unittest import mock
+
+        from bridgeforge.probe_group import smoke_group
+        with resolved_temp_dir() as base:
+            rig = self._rig(base, ["alpha", "bfprobe"] if enabled is None else enabled)
+            with mock.patch("bridgeforge.boot_test.run_boot_test", return_value=boot) as run:
+                result = smoke_group(rig, timeout=5)
+        return result, run
+
+    def test_clean_boot_is_smoke_pass_and_uses_the_installed_mods(self) -> None:
+        boot = {"status": "PASS", "reason": None, "triage": {"counts": {"FATAL": 0, "MOD-ERROR": 0}}}
+        result, run = self._smoke(boot)
+        self.assertEqual(result["verdict"], "SMOKE_PASS")
+        self.assertEqual(run.call_args.args[1], ["alpha", "bfprobe"])
+        self.assertEqual(run.call_args.kwargs["bat_name"], "run-j25-direct.bat")
+
+    def test_mod_error_in_the_startup_log_is_smoke_errors(self) -> None:
+        boot = {"status": "PASS", "reason": None, "triage": {"counts": {"FATAL": 0, "MOD-ERROR": 2}}}
+        self.assertEqual(self._smoke(boot)[0]["verdict"], "SMOKE_ERRORS")
+
+    def test_process_that_never_reaches_the_menu_is_smoke_fail(self) -> None:
+        boot = {"status": "SUSPECT_FATAL_DIALOG", "reason": "stuck", "triage": None}
+        self.assertEqual(self._smoke(boot)[0]["verdict"], "SMOKE_FAIL")
+
+    def test_nothing_installed_is_refused(self) -> None:
+        with self.assertRaises(ProbeGroupError):
+            self._smoke({"status": "PASS", "triage": None}, enabled=[])
+
+
+class SmokeLoadErrorTests(unittest.TestCase):
+    """Real lines from saved rig logs: Metelson's rules.csv (GRP1-20261005) and a duplicate name row (GRP10B-20261005)."""
+
+    def _errors(self, text: str):
+        from bridgeforge.probe_group import smoke_load_errors
+        with resolved_temp_dir() as base:
+            log = base / "x.stdout.log"
+            log.write_text(text, encoding="utf-8")
+            return smoke_load_errors(log)
+
+    def test_mismatched_quotes_and_duplicate_key_are_found(self) -> None:
+        text = ("8613 [Thread-2] ERROR com.fs.starfarer.combat.CombatMain  - org.json.JSONException: Mismatched quotes in the string; last quote: [,,\n"
+                "13764 [Thread-2] ERROR com.fs.starfarer.combat.CombatMain  - java.lang.RuntimeException: Duplicate key [Mao |  | f | xle | ] while loading [x]\n"
+                "1 [main] INFO  fine line\n")
+        found = self._errors(text)
+        self.assertEqual(len(found), 2)
+        self.assertIn("Mismatched quotes", found[0])
+
+    def test_clean_log_and_missing_log_give_nothing(self) -> None:
+        from bridgeforge.probe_group import smoke_load_errors
+        self.assertEqual(self._errors("1 [main] INFO  Running with the following mods\n"), [])
+        self.assertEqual(smoke_load_errors(Path("does-not-exist.log")), [])
+
+    def test_smoke_group_fails_a_clean_menu_boot_whose_log_has_a_load_error(self) -> None:
+        from unittest import mock
+
+        from bridgeforge.probe_group import smoke_group
+        with resolved_temp_dir() as base:
+            rig = SmokeGroupTests()._rig(base, ["alpha"])
+            log = base / "boot.stdout.log"
+            log.write_text("5 [Thread-2] ERROR x - java.lang.NoClassDefFoundError: lunalib/Foo\n", encoding="utf-8")
+            boot = {"status": "PASS", "reason": None, "log": str(log), "triage": {"counts": {"FATAL": 0, "MOD-ERROR": 0}}}
+            with mock.patch("bridgeforge.boot_test.run_boot_test", return_value=boot):
+                result = smoke_group(rig)
+        self.assertEqual(result["verdict"], "SMOKE_ERRORS")
+        self.assertEqual(len(result["load_errors"]), 1)
+
+
+class LunaLibAdviceTests(unittest.TestCase):
+    """RC8-25: GraphicsLib 1.12.1 enabled without LunaLib."""
+
+    def test_advice_only_when_graphicslib_is_on_and_lunalib_is_installed_but_off(self) -> None:
+        from bridgeforge.probe_group import lunalib_advice
+        installed = {"lunalib": "LunaLib-2.0.5", "shaderLib": "GraphicsLib"}
+        self.assertIn("--with-lunalib", lunalib_advice(["shaderLib", "demo"], installed))
+        self.assertIsNone(lunalib_advice(["shaderLib", "lunalib"], installed))
+        self.assertIsNone(lunalib_advice(["demo"], installed))
+        self.assertIsNone(lunalib_advice(["shaderLib"], {"shaderLib": "GraphicsLib"}))
+
+
+class CampaignLayoutAttributionTests(unittest.TestCase):
+    """GRP1B2-20261011: Neutrino's campaign-layout FAIL lines name a system, not a content id, so they were group-level and made the
+    verdict UNCLEAR. With one member they are that member's, and an accepted entry then applies."""
+
+    def _report(self, accepted):
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            a = build_probe_config(_workspace(queue, "A", "mod_a", "hull_a"))
+            log = root / "run.stdout.log"
+            log.write_text(
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.23|content-ids|OK|all-content|checked=1 failed=0\n"
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.23|campaign-layout|FAIL|mod-systems|systems expected=2 missing=1\n",
+                encoding="utf-8")
+            return group_report(log, merge_configs([a]), accepted=accepted)
+
+    def test_single_member_owns_the_layout_failure(self) -> None:
+        report = self._report(None)
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "FAIL")
+        self.assertEqual(report["unattributed"], [])
+
+    def test_an_accepted_layout_entry_clears_it(self) -> None:
+        report = self._report({"mod_a": [{"check": "campaign-layout", "subject": "mod-systems", "reason": "author disabled Exelion"}]})
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
+
+
+class CombatPerfTests(unittest.TestCase):
+    """Probe 0.2.24 logs combat-perf FAIL when the field runs away (RC8-27: 2,388 wreck hulks after one Bone-Breaker kill)."""
+
+    LINE = "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.24|combat-perf|FAIL|runaway|hulks=412 ships=430 worstFrameMs=2400 at t=150s\n"
+    CONTENT = "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.24|content-ids|OK|all-content|checked=1 failed=0\n"
+
+    def _report(self, members: int):
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            configs = [build_probe_config(_workspace(queue, n, f"mod_{n.lower()}", f"hull_{n.lower()}")) for n in ("A", "B")[:members]]
+            log = root / "run.stdout.log"
+            log.write_text(self.CONTENT + self.LINE, encoding="utf-8")
+            return group_report(log, merge_configs(configs))
+
+    def test_a_runaway_fails_the_only_member(self) -> None:
+        self.assertEqual(self._report(1)["members"]["mod_a"]["verdict"], "FAIL")
+
+    def test_a_runaway_in_a_bigger_group_makes_every_member_unclear(self) -> None:
+        report = self._report(2)
+        self.assertEqual({v["verdict"] for v in report["members"].values()}, {"UNCLEAR"})
+
+
+class MarketSupplyTests(unittest.TestCase):
+    """Probe 0.2.25's market-supply check: DNEEP's food vanished with Ashes of the Domain's farms and nothing noticed (2026-10-11)."""
+
+    CONTENT = "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.25|content-ids|OK|all-content|checked=1 failed=0\n"
+
+    @staticmethod
+    def _member(queue: Path, name: str, mod_id: str, commodities: list[str]) -> Path:
+        working = _workspace(queue, name, mod_id, f"hull_{mod_id}")
+        (working / "data" / "campaign").mkdir(parents=True)
+        (working / "data" / "campaign" / "commodities.csv").write_text("name,id\n" + "".join(f"X,{c}\n" for c in commodities), encoding="utf-8")
+        return working
+
+    def test_the_config_lists_the_mods_commodities_and_a_group_keeps_sweeps(self) -> None:
+        with resolved_temp_dir() as root:
+            a = build_probe_config(self._member(root / "q", "A", "mod_a", ["dneep_grain", "#comment"]))
+            b = build_probe_config(self._member(root / "q", "B", "mod_b", ["zz_ore"]))
+        a["class_sweep"], a["mission_fleets"] = ["data.A"], {"ship": ["v_a"], "wing": []}
+        merged = merge_configs([a, b])
+        self.assertEqual(a["mod_commodities"], ["dneep_grain"])
+        self.assertEqual(merged["mod_commodities"], ["dneep_grain", "zz_ore"])
+        self.assertEqual(merged["class_sweep"], ["data.A"])
+        self.assertEqual(merged["mission_fleets"]["ship"], ["v_a"])
+        self.assertEqual(merged["group_members"]["mod_b"]["commodities"], ["zz_ore"])
+
+    def _report(self, lines: str):
+        with resolved_temp_dir() as root:
+            configs = [build_probe_config(self._member(root / "q", n, f"mod_{n.lower()}", [f"c_{n.lower()}"])) for n in ("A", "B")]
+            log = root / "run.stdout.log"
+            log.write_text(self.CONTENT + lines, encoding="utf-8")
+            return group_report(log, merge_configs(configs))
+
+    def test_demand_without_supply_fails_the_commodity_owner_only(self) -> None:
+        report = self._report("BF-PROBE|0.2.25|market-supply|FAIL|c_a|supplied in 0 market(s); demanded in 4: demand with no supply anywhere\n"
+                              "BF-PROBE|0.2.25|market-supply|FAIL|commodities|checked=2 expectations=0 failed=1\n")
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "FAIL")
+        self.assertEqual(report["members"]["mod_b"]["verdict"], "PASS")
+        self.assertEqual(report["unattributed"], [])
+
+    def test_an_unmet_expectation_is_blamed_on_the_commodity_owner(self) -> None:
+        report = self._report("BF-PROBE|0.2.25|market-supply|FAIL|c_b@aotd_subsidised_farming|no market runs aotd_subsidised_farming\n")
+        self.assertEqual(report["members"]["mod_b"]["verdict"], "FAIL")
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
+
+    def test_install_writes_setups_and_expectations_and_rejects_bad_ones(self) -> None:
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            self._member(queue, "A", "mod_a", ["dneep_grain"])
+            rig = _rig(root)
+            core = root / "core_real"
+            core.mkdir()
+            link_dir(core, rig / "starsector-core")
+            plan = plan_groups(queue, rig)
+            install_group(plan, 1, queue, rig, install_probe=False, setups=["swap-industry:farming:aotd_subsidised_farming:3:DNEEP_grain"],
+                          expect_supply=["dneep_grain@aotd_subsidised_farming"])
+            config = json.loads((rig / "saves" / "common" / "bf_probe_config.data").read_text(encoding="utf-8"))
+            with self.assertRaises(ValueError):
+                install_group(plan, 1, queue, rig, install_probe=False, expect_supply=["dneep_grain"])
+            with self.assertRaises(ValueError):
+                install_group(plan, 1, queue, rig, install_probe=False, setups=["swap-industry:farming:x"])
+        self.assertEqual(config["setups"], ["swap-industry:farming:aotd_subsidised_farming:3:DNEEP_grain"])
+        self.assertEqual(config["expect_supply"], ["dneep_grain@aotd_subsidised_farming"])

@@ -82,6 +82,8 @@ final class ProbeSetup {
                 applySpawnFleet(setup);
             } else if (setup.startsWith("jump:")) {
                 applyJump(setup);
+            } else if (setup.startsWith("swap-industry:")) {
+                applySwapIndustry(setup);
             } else {
                 ProbeLog.emit("setup", ProbeLog.STATUS_FAIL, setup, "Unrecognized setup kind");
             }
@@ -215,6 +217,75 @@ final class ProbeSetup {
         ProbeLog.emit("setup", ProbeLog.STATUS_OK, setup,
                 "faction=" + factionId + " requestedFP=" + targetFp + " actualFP=" + accumulated
                         + " members=" + fleet.getFleetData().getMembersListCopy().size());
+    }
+
+    // ---- swap-industry:<from>:<to>:<count>[:<condition-prefix>] (0.2.25) --------------------------
+    //
+    // Replace industry <from> with <to> on up to <count> markets (by market id order), only on markets with a condition whose
+    // id starts with <condition-prefix> when one is given. Puts a mod's industry where a test needs it on day one: Ashes of
+    // the Domain's farms replace "farming" only as a colony upgrades (DNEEP, 2026-10-11). API (javap RC8, 2026-10-11):
+    // MarketAPI.hasIndustry/removeIndustry(String, MarketInteractionMode, boolean)/addIndustry(String)/reapplyIndustries,
+    // getConditions; SettingsAPI.getIndustrySpec.
+
+    private static void applySwapIndustry(String setup) {
+        String[] parts = setup.substring("swap-industry:".length()).split(":");
+        if (parts.length < 3) {
+            ProbeLog.emit("setup", ProbeLog.STATUS_FAIL, setup, "Expected swap-industry:<from>:<to>:<count>[:<condition-prefix>]");
+            return;
+        }
+        String from = parts[0].trim();
+        String to = parts[1].trim();
+        int count = Integer.parseInt(parts[2].trim());
+        String prefix = parts.length > 3 ? parts[3].trim() : "";
+        Object spec;
+        try {
+            spec = Global.getSettings().getIndustrySpec(to);
+        } catch (Throwable t) {
+            spec = null;
+        }
+        if (spec == null) {
+            ProbeLog.emit("setup", ProbeLog.STATUS_FAIL, setup, "Unknown industry: " + to);
+            return;
+        }
+        List<com.fs.starfarer.api.campaign.econ.MarketAPI> markets = Global.getSector().getEconomy().getMarketsCopy();
+        java.util.Collections.sort(markets, new java.util.Comparator<com.fs.starfarer.api.campaign.econ.MarketAPI>() {
+            public int compare(com.fs.starfarer.api.campaign.econ.MarketAPI a, com.fs.starfarer.api.campaign.econ.MarketAPI b) {
+                return a.getId().compareTo(b.getId());
+            }
+        });
+        StringBuilder swapped = new StringBuilder();
+        int done = 0;
+        for (com.fs.starfarer.api.campaign.econ.MarketAPI market : markets) {
+            if (done >= count) {
+                break;
+            }
+            if (!market.hasIndustry(from) || market.hasIndustry(to) || !hasConditionPrefix(market, prefix)) {
+                continue;
+            }
+            market.removeIndustry(from, null, false);
+            market.addIndustry(to);
+            // Conditions too: a condition that supplies through an industry (DNEEP's deposits) attaches when conditions apply,
+            // so after reapplyIndustries alone the new farm supplied only food (GRP-DNEEP-SUPPLY-AOTD2-20261011, Eochu Bres).
+            market.reapplyConditions();
+            market.reapplyIndustries();
+            done++;
+            swapped.append(done == 1 ? "" : ",").append(market.getId());
+        }
+        ProbeLog.emit("setup", done > 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, setup,
+                done > 0 ? "swapped " + from + " for " + to + " on " + done + " market(s): " + swapped
+                        : "no market has " + from + (prefix.isEmpty() ? "" : " and a condition starting " + prefix));
+    }
+
+    private static boolean hasConditionPrefix(com.fs.starfarer.api.campaign.econ.MarketAPI market, String prefix) {
+        if (prefix.isEmpty()) {
+            return true;
+        }
+        for (com.fs.starfarer.api.campaign.econ.MarketConditionAPI condition : market.getConditions()) {
+            if (condition.getId() != null && condition.getId().startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ---- jump:<star_system_name> ----------------------------------------------------------

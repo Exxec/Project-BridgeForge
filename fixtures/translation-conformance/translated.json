@@ -1,0 +1,236 @@
+{
+  "schema_version": 1,
+  "mode": "TRANSLATION_EXPORT",
+  "mod_id": "p7_fixture",
+  "source_language": "zh",
+  "target_language": "en",
+  "instructions": "Translate each entries[].source into natural Starsector English in entries[].translation (or fill glossary[source] once for repeated strings). Keep %s/%d/$variables/\\u0001 markers, ids, file paths and punctuation structure unchanged. json-key entries are identifiers used as keys (e.g. designTypeColors): translate them exactly like the matching tech/manufacturer text.",
+  "file_hashes": {
+    "ai/en/record.json": "72989886bb5676ccacf9038135e1b6b003a0d3fe8f25059923befa50afce64aa",
+    "data/bare.csv": "271b7c2953675acf5c70c15fed68ccc0e601e0f7aa2e9e6a1f6a67a2d4a95dac",
+    "data/hull_mods.csv": "8b5f3dec75cf3819cb92b32b8e12dd6b56e102654301477865123925204b434d",
+    "data/legacy.csv": "d1500f9dbb7b416f9abc6580f2057cb4c45bb66351f55811ad57bc98abfd6b8d",
+    "data/padded.csv": "d93fd2c482671c78144003aa628c8f455f6d27621e732291aaab6e524a7872da",
+    "data/scripts/Test.java": "f7a33fdb7d3f89a79f2c4c5c96da0aec5ad7077c4b325127804acd46b3525e28",
+    "data/settings.json": "4d135cd922ec24ef1c630a86b34571164d84bf868f6de5cdb7a40537df916956",
+    "jars/test.jar": "e9ee4c076bd7b2161736737d9da196b6ce6e21db34d6eb419a3e04f8ccc02143",
+    "mod_info.json": "0e9768927b69101216cbc0901eec929839cbb0a7c67b1d616906d144b7942ce5"
+  },
+  "unreadable": [],
+  "entry_count": 18,
+  "unique_source_count": 13,
+  "entries": [
+    {
+      "id": "json:ai/en/record.json@0",
+      "file": "ai/en/record.json",
+      "kind": "json",
+      "context": {
+        "path": [
+          0,
+          "zh"
+        ]
+      },
+      "source": "中文厂商",
+      "translation": "Text 12"
+    },
+    {
+      "id": "json:ai/en/record.json@1",
+      "file": "ai/en/record.json",
+      "kind": "json",
+      "context": {
+        "path": [
+          1,
+          "zh"
+        ]
+      },
+      "source": "重复",
+      "translation": "Text 8"
+    },
+    {
+      "id": "csv:data/bare.csv#x:name",
+      "file": "data/bare.csv",
+      "kind": "csv",
+      "context": {
+        "row": "x",
+        "column": "name"
+      },
+      "source": "中文",
+      "translation": "Text 4"
+    },
+    {
+      "id": "csv:data/bare.csv#x~2:name",
+      "file": "data/bare.csv",
+      "kind": "csv",
+      "context": {
+        "row": "x~2",
+        "column": "name"
+      },
+      "source": "重复",
+      "translation": "Text 8"
+    },
+    {
+      "id": "csv:data/hull_mods.csv#x:name",
+      "file": "data/hull_mods.csv",
+      "kind": "csv",
+      "context": {
+        "row": "x",
+        "column": "name"
+      },
+      "source": "中文",
+      "translation": "Text 4"
+    },
+    {
+      "id": "csv:data/hull_mods.csv#x:description",
+      "file": "data/hull_mods.csv",
+      "kind": "csv",
+      "context": {
+        "row": "x",
+        "column": "description"
+      },
+      "source": "增加50％",
+      "translation": "Increase 50%%"
+    },
+    {
+      "id": "csv:data/legacy.csv#x:name",
+      "file": "data/legacy.csv",
+      "kind": "csv",
+      "context": {
+        "row": "x",
+        "column": "name"
+      },
+      "source": "旧编码",
+      "translation": "Legacy CSV"
+    },
+    {
+      "id": "csv:data/padded.csv#a/one:name",
+      "file": "data/padded.csv",
+      "kind": "csv",
+      "context": {
+        "row": "a/one",
+        "column": "name"
+      },
+      "source": "中文,名字",
+      "translation": "Text 6"
+    },
+    {
+      "id": "csv:data/padded.csv#a/one:#3",
+      "file": "data/padded.csv",
+      "kind": "csv",
+      "context": {
+        "row": "a/one",
+        "column": "#3"
+      },
+      "source": "额外",
+      "translation": "Text 7"
+    },
+    {
+      "id": "csv:data/padded.csv#a/one~2:name",
+      "file": "data/padded.csv",
+      "kind": "csv",
+      "context": {
+        "row": "a/one~2",
+        "column": "name"
+      },
+      "source": "重复",
+      "translation": "Text 8"
+    },
+    {
+      "id": "java:data/scripts/Test.java@0",
+      "file": "data/scripts/Test.java",
+      "kind": "java",
+      "context": {
+        "line": 2
+      },
+      "source": "中文\n%s $player.name.\u0001",
+      "translation": "English\n%s $player.name.\u0001"
+    },
+    {
+      "id": "json:data/settings.json@0",
+      "file": "data/settings.json",
+      "kind": "json-key",
+      "context": {
+        "path": [
+          "颜色"
+        ]
+      },
+      "source": "颜色",
+      "translation": "Text 10"
+    },
+    {
+      "id": "json:data/settings.json@1",
+      "file": "data/settings.json",
+      "kind": "json-key",
+      "context": {
+        "path": [
+          "颜色",
+          "中文厂商"
+        ]
+      },
+      "source": "中文厂商",
+      "translation": "Text 12"
+    },
+    {
+      "id": "json:data/settings.json@2",
+      "file": "data/settings.json",
+      "kind": "json",
+      "context": {
+        "path": [
+          "颜色",
+          "中文厂商"
+        ]
+      },
+      "source": "中文厂商",
+      "translation": "Text 12"
+    },
+    {
+      "id": "json:data/settings.json@3",
+      "file": "data/settings.json",
+      "kind": "json",
+      "context": {
+        "path": [
+          "list",
+          0
+        ]
+      },
+      "source": "单引号",
+      "translation": "Text 13"
+    },
+    {
+      "id": "json:data/settings.json@4",
+      "file": "data/settings.json",
+      "kind": "json",
+      "context": {
+        "path": [
+          "list",
+          1
+        ]
+      },
+      "source": "末尾",
+      "translation": "Text 14"
+    },
+    {
+      "id": "jar:jars/test.jar!Fixture#5",
+      "file": "jars/test.jar",
+      "kind": "jar",
+      "context": {
+        "class": "Fixture",
+        "cp_index": 5
+      },
+      "source": "中文字符串",
+      "translation": "Text 15"
+    },
+    {
+      "id": "json:mod_info.json@0",
+      "file": "mod_info.json",
+      "kind": "json",
+      "context": {
+        "path": [
+          "name"
+        ]
+      },
+      "source": "中文模组",
+      "translation": "Text 16"
+    }
+  ],
+  "glossary": {}
+}

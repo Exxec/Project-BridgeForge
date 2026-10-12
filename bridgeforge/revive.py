@@ -41,6 +41,12 @@ _LINE_REFS = re.compile(r"(?::|\bline )(\d{1,6})\b")
 # Where to look for evidence, per finding family. Packets carry these so an agent starts from the
 # right BridgeForge command instead of guessing at the game's API.
 HINTS = {
+    # The recipe used by hand on Unusually Gullible Hullmods, Molecular Replicator and Flu-X (2026-09-29/30).
+    "hullmod-instance-state": ("The game makes ONE instance of a hull mod and shares it across every ship that has it, so a field written "
+                               "during combat or refit leaks between ships. Move each listed field into per-ship state: "
+                               "`ship.getCustomData()` keyed by a constant plus ship.getId() (or one small static inner State class "
+                               "stored there), read and written where the field was. Keep constants and values set only in the "
+                               "declaration as they are. Do not change any formula, timing or effect; only where the value is kept."),
     "removed-api-call": "The replacement is named in the finding. `bridgeforge api-diff` lists what RC8 removed or changed; RevenantLib's bf.legacyfleets/bf.legacyworld hold shims for 0.6 world-gen and fleet calls.",
     "legacy-vanilla-class-import": "Find the RC8 successor with `bridgeforge api-diff` or `javap -cp starfarer.api.jar`; never guess a class name.",
     "loose-script-compile-error": "The javac errors are the evidence. Janino compiles loose scripts at runtime: no generics inference beyond Java 5-era, no lambdas, no enhanced switch.",
@@ -56,6 +62,9 @@ RULES = (
     "Every claim about the game or its API needs evidence (javap output, a vanilla file, a log line); cite it in the note.",
     "Write the note to the path in $BF_NOTE: what you changed, why, the evidence, and any behaviour change a player would notice.",
     "BridgeForge re-verifies your work: the finding must be gone and no new MANUAL/UNKNOWN finding may appear. Compiling is not proof of behaviour, so the result is labelled REVIEW.",
+    # Agents twice rewrote a file in the main session's memory folder (2026-10-01/02, caught by --watch-dir).
+    "Write nothing outside this sandbox: not the project's other folders, not any memory, notes or settings folder. "
+    "Put everything you learned in the note.",
 )
 
 
@@ -77,6 +86,23 @@ def load_policy(path: Path | None) -> dict:
     return {"approved_fixers": dict(data.get("approved_fixers") or {})}
 
 
+PROVIDER_SOURCES_FILE = "PROVIDER_SOURCES.json"
+
+
+def outside_provider_sources(queue: Path) -> list[Path]:
+    """Extra mods/ folders whose copies of a declared dependency count when scanning (ROADMAP 34.25, 2026-10-04):
+    `<queue>/PROVIDER_SOURCES.json` as {"sources": [paths]}. Opt-in per queue so a test or another machine scans the
+    same way; list only 0.98 collections (an install's mods/, a 0.98 modpack): an older archive's copies would make
+    content RC8's version removed look present (Roider Union 1.4.5 still has what 2.3.1 dropped)."""
+    path = Path(queue) / PROVIDER_SOURCES_FILE
+    if not path.is_file():
+        return []
+    try:
+        return [Path(p) for p in json.loads(path.read_text(encoding="utf-8")).get("sources") or []]
+    except (OSError, ValueError):
+        return []
+
+
 def _scan(working: Path, vanilla_core: Path | None) -> list[dict]:
     """Scan findings minus the ones the mod's own baseline accepts (working/reports/baseline*.json):
     an accepted finding is never fixed, packeted or counted against the mod."""
@@ -86,7 +112,10 @@ def _scan(working: Path, vanilla_core: Path | None) -> list[dict]:
     accepted = mod_baseline_keys(working)
     # The rig's mods/ holds the libraries mods depend on; declared-dependency jars resolve class references there.
     rig_mods = Path(working).resolve().parent.parent / "_rig" / "mods"
-    providers = [rig_mods] if rig_mods.is_dir() else None
+    # And the queue itself: a declared dependency revived alongside (Communist Clouds -> Vayra Merged) is not in the
+    # rig, and its content read as unresolved in mods that already declared it (2026-10-01).
+    queue = Path(working).resolve().parent.parent
+    providers = [p for p in (rig_mods, queue, *outside_provider_sources(queue)) if p.is_dir()] or None
     findings = [asdict(f) for f in scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None, provider_roots=providers).findings]
     _record_settings_baseline(working, findings)
     return [f for f in findings if finding_dict_baseline_key(f) not in accepted]
@@ -124,6 +153,31 @@ def _fix_options(finding_id: str, working: Path, target: str, vanilla_core: Path
     base = {"target_game_version": target, "vanilla_core": vanilla_core, "scan_findings": findings}
     if finding_id == "faction-known-lists-missing":
         return [{**base, "faction_file": working / f["file"]} for f in findings if f.get("file")]
+    if finding_id == "csv-missing-design-type-column":
+        return [{**base, "blank_design_type": True}]  # owner ruling 2026-09-30: add the column blank, invent nothing
+    if finding_id in ("procgen-planet-row-missing", "procgen-star-row-missing"):
+        # One run per type, copying the nearest vanilla row by name (owner ruling 2026-09-30); frequency is zeroed.
+        import csv as _csv
+
+        from .fixers import nearest_vanilla_gen_row
+        from .scanner import _load_lenient_json_file
+
+        is_star = finding_id == "procgen-star-row-missing"
+        vanilla_csv = Path(vanilla_core or "") / "data" / "campaign" / "procgen" / ("star_gen_data.csv" if is_star else "planet_gen_data.csv")
+        if vanilla_core is None or not vanilla_csv.is_file():
+            return [base]
+        with vanilla_csv.open(encoding="utf-8", errors="replace") as handle:
+            vanilla_ids = {row[0].strip() for row in _csv.reader(handle) if row and row[0].strip()}
+        planets = _load_lenient_json_file(working / "data" / "config" / "planets.json") if (working / "data" / "config" / "planets.json").is_file() else {}
+        runs = []
+        for finding in findings:
+            type_id = next((e.split(":", 1)[1] for e in finding.get("evidence") or [] if e.startswith("type:")), None)
+            spec = planets.get(type_id) if isinstance(planets, dict) and type_id else None
+            name = str(spec.get("name") or "") if isinstance(spec, dict) else ""
+            source_row = nearest_vanilla_gen_row(type_id or "", name, vanilla_ids, is_star) if type_id else None
+            if type_id and source_row:
+                runs.append({**base, "type_id": type_id, "from_vanilla_id": source_row})
+        return runs or [base]
     if finding_id == "data-file-not-utf8":
         from .fixers import pending_named_encodings
         # A person's earlier `fix --encoding` decisions (<workspace>/NAMED_ENCODINGS.json, ROADMAP P15 20.4).
@@ -154,7 +208,7 @@ def _try_fixers(working: Path, findings: list[dict], *, target: str, vanilla_cor
                 pending.append({"finding": finding_id, "state": "FIXER_REFUSED", "reason": reason, "classifications": classifications})
             diff = "".join(unified_diff_for_change(change) for change in plan.changes)
             # A move (shippable-work-file) writes outside working/: label it relative to working.
-            files = sorted(Path(os.path.relpath(change.path, working)).as_posix() + (" (removed)" if change.removed else "")
+            files = sorted(Path(os.path.relpath(Path(change.path).resolve(), Path(working).resolve())).as_posix() + (" (removed)" if change.removed else "")
                            for change in plan.changes)
             if permitted and apply:
                 apply_fix(plan)
@@ -271,6 +325,18 @@ def _sha256(path: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
+def _informational(finding: dict) -> bool:
+    """A SAFE finding no fixer handles is a note, not work: nothing to fix, approve or decide. Fantastic Furniture's
+    null-guarded getEntityById("gilead") lookups (SAFE) still became an agent packet, and an agent failed twice on
+    it (pilot 4, 2026-09-29)."""
+    from .fixers import SUPPORTED_FINDINGS
+
+    # A lookup the code already null-checks is a note even though its id now has a fixer (the lookup guard,
+    # 2026-09-30): the fixer only touches unguarded ones.
+    handled = bool({"null-guarded", "nothing-reads-lists", "created-in-same-file"} & set(finding.get("evidence") or []))
+    return finding.get("classification") == "SAFE" and (finding.get("id") not in SUPPORTED_FINDINGS or handled)
+
+
 def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dict], *, vanilla_core: Path | None, now=None,
                   options_for=None) -> list[dict]:
     working = workspace / "working"
@@ -280,15 +346,19 @@ def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dic
     groups: dict[tuple[str, str], list[dict]] = {}
     for finding in findings:
         tier = tier_for(finding["id"])
-        if tier not in ACTIONABLE:
+        if tier not in ACTIONABLE or _informational(finding):
             continue
-        per_file = tier in AGENT_TIERS and finding.get("file")
+        # An automatic fixer that refused (a lookup the guard fixer cannot edit, 2026-10-01) leaves code work, not a
+        # decision: it goes to an agent per file like any code finding.
+        refused_auto = tier == "auto" and (fixer_state.get(finding["id"]) or {}).get("state") == "FIXER_REFUSED"
+        per_file = (tier in AGENT_TIERS or refused_auto) and finding.get("file")
         groups.setdefault((finding["id"], (finding.get("file") or "") if per_file else ""), []).append(finding)
     for (finding_id, file), group in sorted(groups.items()):
         tier = tier_for(finding_id)
         fix = fixer_state.get(finding_id)
         files = sorted({f["file"] for f in group if f.get("file")})
-        kind = "agent" if tier in AGENT_TIERS and files else "owner"
+        refused_auto = tier == "auto" and fix is not None and fix["state"] == "FIXER_REFUSED"
+        kind = "agent" if (tier in AGENT_TIERS or refused_auto) and files else "owner"
         if fix is not None and fix["state"] != "FIXER_REFUSED":
             kind = "owner"  # the fix exists; it needs a yes, not a new fix
         packet = {
@@ -303,7 +373,29 @@ def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dic
             "options": options_for() if options_for is not None and finding_id in CONTENT_FINDINGS else None,
         }
         packets.append(packet)
-    return packets
+    return _merge_same_file(packets, working)
+
+
+def _merge_same_file(packets: list[dict], working: Path) -> list[dict]:
+    """One agent packet per file, whatever its findings. Pegasus Belt Council (2026-09-30): an entity packet and a
+    system packet on each generator file each got an agent, and each agent's edit was verified against a file the
+    other had also changed, so the two had to be merged by hand. The first finding id names the packet; `merged`
+    lists every id it covers, and verify requires all of them gone."""
+    by_file: dict[str, list[dict]] = {}
+    for packet in packets:
+        if packet["kind"] == "agent" and packet["file"] and len(packet["allowed_files"]) == 1:
+            by_file.setdefault(packet["file"], []).append(packet)
+    drop = set()
+    for group in by_file.values():
+        if len(group) < 2:
+            continue
+        head = group[0]
+        head["merged"] = [p["finding"] for p in group]
+        head["findings"] = [f for p in group for f in p["findings"]]
+        head["hint"] = "\n\n".join(f"`{p['finding']}`: {p['hint']}" for p in group if p.get("hint")) or None
+        head["excerpts"] = {name: _excerpt(working / name, [e for f in head["findings"] for e in f.get("evidence") or []]) for name in head["allowed_files"]}
+        drop.update(id(p) for p in group[1:])
+    return [p for p in packets if id(p) not in drop]
 
 
 def render_packet(packet: dict) -> str:
@@ -313,6 +405,9 @@ def render_packet(packet: dict) -> str:
              f"- Finding: `{packet['finding']}` ({head['classification']}, {head['severity']}, confidence {head['confidence']}), tier `{packet['tier']}`",
              f"- For: {'an AI agent, verified by BridgeForge' if packet['kind'] == 'agent' else 'the owner'}",
              f"- Mod working copy: `{packet['workspace']}/working`", "", "## What the scanner found", "", head["explanation"], ""]
+    for other in dict.fromkeys(f["id"] for f in packet["findings"][1:] if f["id"] != head["id"]):
+        first = next(f for f in packet["findings"] if f["id"] == other)
+        lines += [f"Also in this file, `{other}` ({first['classification']}): {first['explanation']}", ""]
     for finding in packet["findings"]:
         if finding.get("file"):
             lines.append(f"- `{finding['file']}`")
@@ -336,7 +431,7 @@ def render_packet(packet: dict) -> str:
             if excerpt:
                 lines += ["", f"## `{name}` (numbered excerpt)", "", "```java" if name.endswith(".java") else "```", excerpt, "```"]
         lines += ["", "## Rules", ""] + [f"{n}. {rule}" for n, rule in enumerate(RULES, 1)]
-        lines += ["", "## Done means", "", f"`{packet['verify']}` passes: no `{packet['finding']}` finding remains"
+        lines += ["", "## Done means", "", f"`{packet['verify']}` passes: no " + ", ".join(f"`{i}`" for i in packet.get("merged") or [packet["finding"]]) + " finding remains"
                   + (f" on `{packet['file']}`" if packet["file"] else "") + ", and no new finding of tier decision/inspect/code appears."]
     else:
         lines += ["", "## Decision needed", "",
@@ -385,7 +480,30 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
         if not applied:
             break
         findings = _scan(working, vanilla_core)
-    remaining_tiers = [tier_for(f["id"]) for f in findings]
+    # Relink, when approved in the policy: recompile classes whose game calls RC8 changed only by return type, from
+    # unedited source, patched only when nothing else changes (jar_batch; 19 queued mods by hand, 2026-09-30).
+    if apply and vanilla_core is not None and "jar-linkage-unresolved" in approved and any(f["id"] == "jar-linkage-unresolved" for f in findings):
+        from .jar_batch import relink_workspace
+
+        relinked = relink_workspace(workspace, vanilla_core, apply=True)
+        if relinked["state"] in ("RELINKED", "PARTIAL") and any(j.get("state") == "RELINKED" for j in relinked["jars"]):
+            entry = {"finding": "jar-linkage-unresolved", "files": [j["jar"] for j in relinked["jars"] if j.get("state") == "RELINKED"],
+                     "why": "approved (relink)"}
+            applied_all.append(entry)
+            rounds.append({"round": len(rounds) + 1, "applied": [entry], "findings": len(findings)})
+            findings = _scan(working, vanilla_core)
+    # Interface ports, when approved: known RC8 contract changes on jar classes (jar_batch.port_interfaces).
+    if apply and vanilla_core is not None and "jar-interface-method-missing" in approved and any(f["id"] == "jar-interface-method-missing" for f in findings):
+        from .jar_batch import port_interfaces
+
+        ported = port_interfaces(workspace, vanilla_core, apply=True)
+        done = [j["jar"] for j in ported["jars"] if j.get("state") == "PORTED"]
+        if done:
+            entry = {"finding": "jar-interface-method-missing", "files": done, "why": "approved (port-interfaces)"}
+            applied_all.append(entry)
+            rounds.append({"round": len(rounds) + 1, "applied": [entry], "findings": len(findings)})
+            findings = _scan(working, vanilla_core)
+    remaining_tiers = [tier_for(f["id"]) for f in findings if not _informational(f)]
     roots = providers if providers else [workspace.parent, workspace.parent / "_rig" / "mods"]
     cache: dict = {}
 
@@ -407,7 +525,7 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
         "compile_checked": vanilla_core is not None, "policy": str(policy_path), "approved": sorted(approved),
         "status": status, "hardest_tier": hardest, "rounds": rounds, "applied": applied_all,
         "findings_before": len(first), "findings_after": len(findings),
-        "packets": [{"id": p["id"], "kind": p["kind"], "tier": p["tier"], "finding": p["finding"], "file": p["file"]} for p in packets],
+        "packets": [{"id": p["id"], "kind": p["kind"], "tier": p["tier"], "finding": p["finding"], "merged": p.get("merged"), "file": p["file"]} for p in packets],
         "next": "Live test (the probe) after UNATTENDED_DONE; `bridgeforge escalation run` for agent packets; owner packets need a decision.",
     }
     if draft_report:
@@ -442,7 +560,8 @@ def _draft_report(working: Path, vanilla_core: Path | None, status: str, *, writ
     if status != "UNATTENDED_DONE":
         return {"status": "NOT_DRAFTED", "reason": f"revive ended {status}; a report is drafted only when nothing is left to do"}
     rig_mods = Path(working).resolve().parent.parent / "_rig" / "mods"
-    providers = [rig_mods] if rig_mods.is_dir() else None
+    queue = Path(working).resolve().parent.parent  # declared dependencies revived alongside, as in _scan
+    providers = [p for p in (rig_mods, queue, *outside_provider_sources(queue)) if p.is_dir()] or None
     draft = (write_revival_report_draft(working, vanilla_core, providers) if write
              else draft_revival_report(working, vanilla_core, providers))
     return {key: value for key, value in draft.items() if key not in ("report_text", "plan_text")}

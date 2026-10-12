@@ -1,0 +1,1 @@
+BridgeForge duel (overwhelm). Rig only: Bone-Breaker against a fleet that destroys it early; logs the fight timer and the frame cost.

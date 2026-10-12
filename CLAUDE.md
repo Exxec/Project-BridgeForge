@@ -111,6 +111,13 @@ it when coverage rises, never lower it).
   only shrink (`test_untested_findings_can_only_shrink`).
 - `tests/support.py` is shipped in the sdist (`MANIFEST.in`).
 
+## Mod changelog (owner rule 2026-09-30)
+
+`MOD_CHANGELOG.md` lists bigger updates to revived mods by date, with mod name and version (`archive` adds one per
+archived mod). Add a line with `bridgeforge mod-changelog add MOD "what changed" --version V` for any other bigger
+update: a new revision, a crash fixed, a translation. When a shipped mod changes after archiving, iterate its version
+(`+bf.N`) and record it there.
+
 ## Commits and roadmap
 
 - Commit subjects follow the roadmap: "Fix item N: ...", "Add item N: ...". The body explains

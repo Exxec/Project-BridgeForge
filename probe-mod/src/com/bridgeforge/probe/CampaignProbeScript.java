@@ -2,6 +2,9 @@ package com.bridgeforge.probe;
 
 import com.fs.starfarer.api.EveryFrameScript;
 import com.fs.starfarer.api.Global;
+import com.fs.starfarer.api.combat.ShipAPI;
+import com.fs.starfarer.api.combat.ShipHullSpecAPI;
+import com.fs.starfarer.api.loading.HullModSpecAPI;
 import com.fs.starfarer.api.campaign.CargoAPI;
 import com.fs.starfarer.api.campaign.CargoStackAPI;
 import com.fs.starfarer.api.campaign.SpecialItemData;
@@ -166,6 +169,11 @@ public class CampaignProbeScript implements EveryFrameScript {
 
     private void runAllChecks() {
         ProbeLog.start("campaign");
+        // 0.2.17: a heartbeat of how many campaign days the run has covered, so `bridgeforge soak-report` can tell a
+        // long soak run from a short one (the campaign clock is the only reliable measure; SpeedUp changes how fast
+        // real time passes, not this).
+        ProbeLog.emit("campaign-day", ProbeLog.STATUS_INFO, "clock",
+                "daysSinceStart=" + Global.getSector().getClock().getElapsedDaysSince(startTimestamp));
         runCheck("rings-orbits", new Runnable() {
             public void run() {
                 checkRingsAndOrbits();
@@ -191,6 +199,11 @@ public class CampaignProbeScript implements EveryFrameScript {
                 checkFleetPresence();
             }
         });
+        runCheck("market-star-system", new Runnable() {
+            public void run() {
+                checkMarketStarSystems();
+            }
+        });
         runCheck("tracked-entities", new Runnable() {
             public void run() {
                 checkTrackedEntities();
@@ -209,6 +222,26 @@ public class CampaignProbeScript implements EveryFrameScript {
         runCheck("campaign-layout", new Runnable() {
             public void run() {
                 checkCampaignLayout();
+            }
+        });
+        runCheck("mission-fleets", new Runnable() {
+            public void run() {
+                checkMissionFleets();
+            }
+        });
+        runCheck("class-sweep", new Runnable() {
+            public void run() {
+                checkClassSweep();
+            }
+        });
+        runCheck("hullmod-descriptions", new Runnable() {
+            public void run() {
+                checkHullModDescriptions();
+            }
+        });
+        runCheck("market-supply", new Runnable() {
+            public void run() {
+                checkMarketSupply();
             }
         });
         ProbeLog.end("campaign");
@@ -306,6 +339,21 @@ public class CampaignProbeScript implements EveryFrameScript {
             int ships = faction.getKnownShips().size();
             int weapons = faction.getKnownWeapons().size();
             int fighters = faction.getKnownFighters().size();
+            // 0.2.12: a mod faction knowing only vanilla hulls (Exigency's knownShips [exigency_bp, base_bp] with no
+            // hull tagged exigency_bp, 2026-10-04) has ships > 0 but none of its own: count the mod's own.
+            if (config.factions.contains(factionId) && targetModDefinesHulls()) {
+                int own = 0;
+                for (String hullId : faction.getKnownShips()) {
+                    ShipHullSpecAPI hull = Global.getSettings().getHullSpec(hullId);
+                    if (hull != null && hull.getSourceMod() != null && config.targetModId.equals(hull.getSourceMod().getId())) {
+                        own++;
+                    }
+                }
+                if (own == 0) {
+                    ProbeLog.emit("faction-known-lists", ProbeLog.STATUS_WARN, factionId,
+                            "knows none of " + config.targetModId + "'s own ships (knownShips=" + ships + ")");
+                }
+            }
             if (ships == 0 || weapons == 0 || fighters == 0) {
                 ProbeLog.emit("faction-known-lists", ProbeLog.STATUS_WARN, factionId,
                         "knownShips=" + ships + " knownWeapons=" + weapons + " knownFighters=" + fighters);
@@ -342,28 +390,150 @@ public class CampaignProbeScript implements EveryFrameScript {
                 ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_INFO, factionId, "skipped: the faction knows no ships");
                 continue;
             }
-            FleetParamsV3 params = new FleetParamsV3();
-            params.factionId = factionId;
-            params.fleetType = FleetTypes.PATROL_MEDIUM;
-            params.combatPts = 60f;
-            params.quality = 1f;
-            params.qualityOverride = Float.valueOf(1f);
-            params.ignoreMarketFleetSizeMult = Boolean.TRUE;
-            params.random = new java.util.Random(1L);
+            // 0.2.14: a faction whose cheapest known hull costs more fleet points than the test budget cannot field a
+            // patrol of this size by design (Ironclads' ROCK, one 100-point monster hull; GRP10W-20261005).
+            float cheapest = Float.MAX_VALUE;
+            for (String hullId : generated.getKnownShips()) {
+                ShipHullSpecAPI hull = Global.getSettings().getHullSpec(hullId);
+                if (hull != null && hull.getFleetPoints() > 0 && hull.getFleetPoints() < cheapest) {
+                    cheapest = hull.getFleetPoints();
+                }
+            }
+            if (cheapest != Float.MAX_VALUE && cheapest > 60f) {
+                ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_INFO, factionId, "skipped: the cheapest known hull costs "
+                        + cheapest + " fleet points, more than the 60-point test patrol");
+                continue;
+            }
             try {
-                CampaignFleetAPI fleet = FleetFactoryV3.createFleet(params);
-                int members = fleet == null ? 0 : fleet.getFleetData().getNumMembers();
+                // 0.2.20: a doctrine that favours big ships (Magellan's Star Tigers, shipSize 5) can afford nothing at 60
+                // points and still field fleets in the game; retry with larger budgets before calling the patrol empty
+                // (GRP5A-20261006). The first budget that builds a fleet is reported.
+                float[] budgets = new float[] {60f, 120f, 240f, 480f};
+                int members = 0;
+                float builtAt = 0f;
+                for (float budget : budgets) {
+                    FleetParamsV3 params = new FleetParamsV3();
+                    params.factionId = factionId;
+                    params.fleetType = FleetTypes.PATROL_MEDIUM;
+                    params.combatPts = budget;
+                    params.quality = 1f;
+                    params.qualityOverride = Float.valueOf(1f);
+                    params.ignoreMarketFleetSizeMult = Boolean.TRUE;
+                    params.random = new java.util.Random(1L);
+                    CampaignFleetAPI fleet = FleetFactoryV3.createFleet(params);
+                    members = fleet == null ? 0 : fleet.getFleetData().getNumMembers();
+                    if (members > 0) {
+                        builtAt = budget;
+                        break;
+                    }
+                }
                 if (members == 0) {
                     ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_FAIL, factionId,
-                            "FleetFactoryV3 built an empty " + FleetTypes.PATROL_MEDIUM + " (doctrine or known ships unusable)");
+                            "FleetFactoryV3 built an empty " + FleetTypes.PATROL_MEDIUM + " at 60 to 480 points (doctrine or known ships unusable)");
+                    diagnoseEmptyFleet(generated, factionId);
                 } else {
                     ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_OK, factionId,
-                            members + " member(s) in a generated " + FleetTypes.PATROL_MEDIUM);
+                            members + " member(s) in a generated " + FleetTypes.PATROL_MEDIUM
+                                    + (builtAt > 60f ? " (needed " + (int) builtAt + " points: the doctrine favours large ships)" : ""));
                 }
             } catch (Throwable t) {
                 ProbeLog.emit("faction-fleet-gen", ProbeLog.STATUS_FAIL, factionId,
                         "FleetFactoryV3.createFleet threw " + t.getClass().getName() + ": " + t.getMessage());
             }
+        }
+    }
+
+    /**
+     * 0.2.18: say WHY a faction's generated patrol is empty. Exipirated (Exigency 0.8) built an empty patrol in the probe
+     * while the game's own managers fielded Exipirated fleets from a market. Two causes to separate: the faction's ship
+     * roles have no variants (a role table that never mentions its hulls), or the probe's market-less, quality-1 patrol
+     * differs from a real market patrol. API (javap RC8, 2026-10-06): FactionAPI.getVariantsForRole(String),
+     * getKnownShips(); FleetParamsV3(MarketAPI, Vector2f, String, Float, String, float x7) as the mods call it.
+     */
+    private void diagnoseEmptyFleet(FactionAPI faction, String factionId) {
+        StringBuilder roles = new StringBuilder();
+        for (String role : new String[] {"combatSmall", "combatMedium", "combatLarge", "combatCapital", "fastAttack",
+                "escortSmall", "escortMedium", "carrierSmall", "carrierMedium", "carrierLarge", "freighterSmall"}) {
+            Set<String> variants = faction.getVariantsForRole(role);
+            roles.append(role).append('=').append(variants == null ? 0 : variants.size()).append(' ');
+        }
+        ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                "knownShips=" + faction.getKnownShips().size() + "; variants per role: " + roles.toString().trim());
+        // 0.2.19: name the variants and the known hulls, so a one-variant role table can be traced to its source file.
+        for (String role : new String[] {"combatSmall", "combatMedium", "combatLarge", "fastAttack", "carrierMedium"}) {
+            Set<String> variants = faction.getVariantsForRole(role);
+            ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                    "role " + role + " variants: " + (variants == null ? "none" : variants.toString()));
+        }
+        ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                "known ships: " + new java.util.TreeSet<String>(faction.getKnownShips()).toString());
+        // 0.2.20 (Magellan's Star Tigers, GRP5B-20261006: roles resolve to variants, yet no patrol builds at 60 to 480
+        // points): create every resolved variant as a fleet member on its own, report the doctrine, and try the other
+        // patrol sizes, so the cause is named in one run.
+        try {
+            com.fs.starfarer.api.campaign.FactionDoctrineAPI doctrine = faction.getDoctrine();
+            ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                    "doctrine: warships=" + doctrine.getWarships() + " carriers=" + doctrine.getCarriers() + " phaseShips="
+                            + doctrine.getPhaseShips() + " numShips=" + doctrine.getNumShips() + " shipSize=" + doctrine.getShipSize());
+        } catch (Throwable t) {
+            ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId, "doctrine unreadable: " + t);
+        }
+        Set<String> tried = new java.util.TreeSet<String>();
+        for (String role : new String[] {"combatSmall", "combatMedium", "combatLarge", "combatCapital", "fastAttack",
+                "escortSmall", "escortMedium", "carrierSmall", "carrierMedium", "carrierLarge"}) {
+            Set<String> variants = faction.getVariantsForRole(role);
+            if (variants != null) {
+                tried.addAll(variants);
+            }
+        }
+        for (String variantId : tried) {
+            try {
+                FleetMemberAPI member = Global.getFactory().createFleetMember(FleetMemberType.SHIP, variantId);
+                ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId, "variant " + variantId + " as a fleet member: "
+                        + (member == null ? "null" : "ok, hull " + member.getHullId() + ", fleet points " + member.getFleetPointCost()));
+            } catch (Throwable t) {
+                ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                        "variant " + variantId + " as a fleet member threw " + t.getClass().getName() + ": " + t.getMessage());
+            }
+        }
+        for (String type : new String[] {FleetTypes.PATROL_SMALL, FleetTypes.PATROL_LARGE, FleetTypes.PATROL_MEDIUM}) {
+            try {
+                FleetParamsV3 other = new FleetParamsV3();
+                other.factionId = factionId;
+                other.fleetType = type;
+                other.combatPts = 480f;
+                other.quality = 1f;
+                other.qualityOverride = Float.valueOf(1f);
+                other.ignoreMarketFleetSizeMult = Boolean.TRUE;
+                other.random = new java.util.Random(2L);
+                CampaignFleetAPI fleet = FleetFactoryV3.createFleet(other);
+                ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId, type + " at 480 points: "
+                        + (fleet == null ? 0 : fleet.getFleetData().getNumMembers()) + " member(s)");
+            } catch (Throwable t) {
+                ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                        type + " at 480 points threw " + t.getClass().getName() + ": " + t.getMessage());
+            }
+        }
+        MarketAPI own = null;
+        for (MarketAPI market : Global.getSector().getEconomy().getMarketsCopy()) {
+            if (factionId.equals(market.getFactionId())) {
+                own = market;
+                break;
+            }
+        }
+        if (own == null) {
+            ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId, "no market of this faction to test a market patrol");
+            return;
+        }
+        try {
+            CampaignFleetAPI fleet = FleetFactoryV3.createFleet(new FleetParamsV3(own, null, factionId, Float.valueOf(-1f),
+                    FleetTypes.PATROL_LARGE, 120f, 0f, 0f, 0f, 0f, 0f, 0f));
+            int members = fleet == null ? 0 : fleet.getFleetData().getNumMembers();
+            ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                    "market patrol from " + own.getId() + " (patrolLarge, 120 points, quality -1): " + members + " member(s)");
+        } catch (Throwable t) {
+            ProbeLog.emit("faction-fleet-gen-diag", ProbeLog.STATUS_INFO, factionId,
+                    "market patrol threw " + t.getClass().getName() + ": " + t.getMessage());
         }
     }
 
@@ -446,6 +616,37 @@ public class CampaignProbeScript implements EveryFrameScript {
 
     // ---- tracked custom entities -----------------------------------------------------
 
+    // ---- markets with no star system (0.2.16, ROADMAP item 58) -----------------------------------
+    //
+    // Nexerelin builds every raid/invasion intel from MarketAPI.getStarSystem() and hands it to RaidIntel,
+    // whose getETA reads system.getHyperspaceAnchor(). A market whose entity floats in hyperspace has no star
+    // system, so the intel threw NullPointerException (Exigency's Avesta, owner crash log 2026-10-06; javap of
+    // RaidIntel and Nexerelin 0.12.2d's OffensiveFleetIntel). API evidence (javap RC8, 2026-10-06):
+    // MarketAPI.getStarSystem/getPrimaryEntity/getContainingLocation/isHidden, LocationAPI.isHyperspace,
+    // ModManagerAPI.isModEnabled. FAIL when Nexerelin is enabled (the crash needs it), WARN otherwise.
+
+    private void checkMarketStarSystems() {
+        boolean nexerelin = Global.getSettings().getModManager().isModEnabled("nexerelin");
+        int bad = 0;
+        for (MarketAPI market : Global.getSector().getEconomy().getMarketsCopy()) {
+            if (market.getStarSystem() != null) {
+                continue;
+            }
+            SectorEntityToken entity = market.getPrimaryEntity();
+            LocationAPI location = market.getContainingLocation();
+            String where = entity == null ? "no primary entity"
+                    : "entity " + entity.getId() + " in " + (location == null ? "no location" : location.getName());
+            bad++;
+            ProbeLog.emit("market-star-system", nexerelin ? ProbeLog.STATUS_FAIL : ProbeLog.STATUS_WARN, market.getId(),
+                    where + "; MarketAPI.getStarSystem() is null"
+                    + (nexerelin ? ", so a Nexerelin raid or invasion targeting it throws in RaidIntel.getETA"
+                    : "; harmful if Nexerelin is enabled"));
+        }
+        if (bad == 0) {
+            ProbeLog.emit("market-star-system", ProbeLog.STATUS_OK, "markets", "every market has a star system");
+        }
+    }
+
     private void checkTrackedEntities() {
         for (String entityId : config.trackEntities) {
             SectorEntityToken entity = Global.getSector().getEntityById(entityId);
@@ -494,6 +695,224 @@ public class CampaignProbeScript implements EveryFrameScript {
                 + config.contentSpecialItems.size();
         ProbeLog.emit("content-ids", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "all-content",
                 "checked=" + total + " failed=" + failed + " ship-variants built=" + config.contentShipVariants.size());
+    }
+
+    private Boolean targetDefinesHulls;
+
+    private boolean targetModDefinesHulls() {
+        if (targetDefinesHulls == null) {
+            targetDefinesHulls = Boolean.FALSE;
+            for (ShipHullSpecAPI hull : Global.getSettings().getAllShipHullSpecs()) {
+                if (hull.getSourceMod() != null && config.targetModId.equals(hull.getSourceMod().getId())) {
+                    targetDefinesHulls = Boolean.TRUE;
+                    break;
+                }
+            }
+        }
+        return targetDefinesHulls;
+    }
+
+    // ---- 0.2.12 sweeps (ROADMAP 46) ----------------------------------------------------
+
+    /** Every fleet member the mod's missions name must resolve (Ironclads' missions named 21 variants that never
+     *  shipped: a Fatal at mission start). Existence only: a mission builds them itself. */
+    private void checkMissionFleets() {
+        int failed = 0;
+        for (String variantId : config.missionShips) {
+            failed += reportContent("mission-variant", variantId, Global.getSettings().doesVariantExist(variantId) ? null : "doesVariantExist=false");
+        }
+        for (String wingId : config.missionWings) {
+            failed += reportContent("mission-wing", wingId, wingProblem(wingId));
+        }
+        ProbeLog.emit("mission-fleets", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "all-missions",
+                "checked=" + (config.missionShips.size() + config.missionWings.size()) + " failed=" + failed);
+    }
+
+    /** Load each top-level class of the target jar through the game's own script class loader (public API: the
+     *  sandbox forbids reflection, so no member resolution). A missing superclass, interface or class the jar needs
+     *  to load surfaces here, in the campaign, instead of when a player reaches that code. */
+    private void checkClassSweep() {
+        ClassLoader loader = Global.getSettings().getScriptClassLoader();
+        int failed = 0;
+        for (String name : config.classSweep) {
+            try {
+                loader.loadClass(name);
+            } catch (Throwable t) {
+                failed++;
+                ProbeLog.emit("class-sweep", ProbeLog.STATUS_FAIL, name, t.getClass().getName() + ": " + t.getMessage());
+            }
+        }
+        ProbeLog.emit("class-sweep", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "all-classes",
+                "loaded=" + (config.classSweep.size() - failed) + " failed=" + failed);
+    }
+
+    /** Ask every hull mod the target mod defines for its description parameters at each hull size, the code a
+     *  refit tooltip runs (RogueSynth's tooltip threw NoSuchMethodError only when shown). A full tooltip needs the UI. */
+    private void checkHullModDescriptions() {
+        int checked = 0;
+        int failed = 0;
+        for (HullModSpecAPI spec : Global.getSettings().getAllHullModSpecs()) {
+            if (spec.getSourceMod() == null || !config.targetModId.equals(spec.getSourceMod().getId())) {
+                continue;
+            }
+            checked++;
+            try {
+                if (spec.getEffect() != null) {
+                    for (ShipAPI.HullSize size : new ShipAPI.HullSize[] {ShipAPI.HullSize.FRIGATE, ShipAPI.HullSize.DESTROYER,
+                            ShipAPI.HullSize.CRUISER, ShipAPI.HullSize.CAPITAL_SHIP}) {
+                        for (int i = 0; i < 4; i++) {
+                            spec.getEffect().getDescriptionParam(i, size);
+                        }
+                    }
+                }
+            } catch (Throwable t) {
+                failed++;
+                ProbeLog.emit("hullmod-descriptions", ProbeLog.STATUS_FAIL, spec.getId(), t.getClass().getName() + ": " + t.getMessage());
+            }
+        }
+        ProbeLog.emit("hullmod-descriptions", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "all-hullmods",
+                "checked=" + checked + " failed=" + failed);
+    }
+
+    // ---- 0.2.25: does anything supply the mod's commodities? ------------------------------------------
+    //
+    // Doc's Needless Economic Expansion Pack's food (dneep_grain and the rest) vanished with Ashes of the Domain, whose farms
+    // replace vanilla "farming" under other ids; the probe passed because nothing looked at the economy (2026-10-11). For each
+    // commodity the mod adds, count the markets whose functional industries supply and demand it, naming the supplying
+    // industries. Demand with no supply anywhere is a FAIL. An expectation "commodity@industry" FAILs unless some market's
+    // industry of that id supplies it. API (javap RC8 starfarer.api.jar, 2026-10-11): MarketAPI.getIndustries,
+    // Industry.getId/isFunctional/getAllSupply/getAllDemand, MutableCommodityQuantity.getCommodityId/getQuantity.
+
+    private void checkMarketSupply() {
+        Set<String> commodities = new java.util.TreeSet<String>(config.modCommodities);
+        for (String expectation : config.expectSupply) {
+            int at = expectation.indexOf('@');
+            if (at > 0) {
+                commodities.add(expectation.substring(0, at));
+            }
+        }
+        if (commodities.isEmpty()) {
+            return;
+        }
+        java.util.Map<String, java.util.Map<String, Integer>> suppliers = new java.util.HashMap<String, java.util.Map<String, Integer>>();
+        java.util.Map<String, Integer> supplyMarkets = new java.util.HashMap<String, Integer>();
+        java.util.Map<String, Integer> demandMarkets = new java.util.HashMap<String, Integer>();
+        java.util.Map<String, Integer> totals = new java.util.HashMap<String, Integer>();
+        Set<String> industriesPresent = new HashSet<String>();
+        for (MarketAPI market : Global.getSector().getEconomy().getMarketsCopy()) {
+            for (com.fs.starfarer.api.campaign.econ.Industry industry : market.getIndustries()) {
+                industriesPresent.add(industry.getId());
+            }
+            for (String commodity : commodities) {
+                boolean supplied = false;
+                boolean demanded = false;
+                for (com.fs.starfarer.api.campaign.econ.Industry industry : market.getIndustries()) {
+                    int supply = quantity(industry.getAllSupply(), commodity);
+                    if (supply > 0 && industry.isFunctional()) {
+                        supplied = true;
+                        increment(totals, commodity, supply);
+                        java.util.Map<String, Integer> byIndustry = suppliers.get(commodity);
+                        if (byIndustry == null) {
+                            byIndustry = new java.util.TreeMap<String, Integer>();
+                            suppliers.put(commodity, byIndustry);
+                        }
+                        increment(byIndustry, industry.getId(), 1);
+                    }
+                    if (quantity(industry.getAllDemand(), commodity) > 0) {
+                        demanded = true;
+                    }
+                }
+                if (supplied) {
+                    increment(supplyMarkets, commodity, 1);
+                }
+                if (demanded) {
+                    increment(demandMarkets, commodity, 1);
+                }
+            }
+        }
+        int failed = 0;
+        for (String commodity : commodities) {
+            int supplied = count(supplyMarkets, commodity);
+            int demanded = count(demandMarkets, commodity);
+            String detail = "supplied in " + supplied + " market(s), total " + count(totals, commodity) + ", by "
+                    + (suppliers.containsKey(commodity) ? suppliers.get(commodity).toString() : "{}") + "; demanded in " + demanded + " market(s)";
+            if (demanded > 0 && supplied == 0) {
+                failed++;
+                ProbeLog.emit("market-supply", ProbeLog.STATUS_FAIL, commodity, detail + ": demand with no supply anywhere");
+            } else {
+                ProbeLog.emit("market-supply", ProbeLog.STATUS_INFO, commodity, detail);
+            }
+        }
+        for (String expectation : config.expectSupply) {
+            int at = expectation.indexOf('@');
+            if (at <= 0) {
+                continue;
+            }
+            String commodity = expectation.substring(0, at);
+            String industryId = expectation.substring(at + 1);
+            java.util.Map<String, Integer> byIndustry = suppliers.get(commodity);
+            int markets = byIndustry == null ? 0 : count(byIndustry, industryId);
+            if (markets > 0) {
+                ProbeLog.emit("market-supply", ProbeLog.STATUS_OK, expectation, industryId + " supplies " + commodity + " in " + markets + " market(s)");
+            } else {
+                failed++;
+                ProbeLog.emit("market-supply", ProbeLog.STATUS_FAIL, expectation, industriesPresent.contains(industryId)
+                        ? industryId + " runs in the sector but supplies no " + commodity
+                        : "no market runs " + industryId + " (the setup that should add it did not)");
+                diagnoseSupply(industryId);
+            }
+        }
+        ProbeLog.emit("market-supply", failed == 0 ? ProbeLog.STATUS_OK : ProbeLog.STATUS_FAIL, "commodities",
+                "checked=" + commodities.size() + " expectations=" + config.expectSupply.size() + " failed=" + failed);
+    }
+
+    /** Why an expected industry supplies nothing: per market running it, whether it is functional, what it supplies and the
+     *  market's conditions (AoTD's monoculture plots on Eochu Bres supplied no DNEEP vegetables, GRP-DNEEP-SUPPLY-AOTD-20261011). */
+    private static void diagnoseSupply(String industryId) {
+        for (MarketAPI market : Global.getSector().getEconomy().getMarketsCopy()) {
+            com.fs.starfarer.api.campaign.econ.Industry industry = market.getIndustry(industryId);
+            if (industry == null) {
+                continue;
+            }
+            StringBuilder supplies = new StringBuilder();
+            for (com.fs.starfarer.api.campaign.econ.MutableCommodityQuantity q : industry.getAllSupply()) {
+                supplies.append(q.getCommodityId()).append('=').append(q.getQuantity().getModifiedInt()).append(' ');
+            }
+            StringBuilder conditions = new StringBuilder();
+            for (com.fs.starfarer.api.campaign.econ.MarketConditionAPI condition : market.getConditions()) {
+                conditions.append(condition.getId()).append(' ');
+            }
+            StringBuilder industries = new StringBuilder();
+            for (com.fs.starfarer.api.campaign.econ.Industry other : market.getIndustries()) {
+                industries.append(other.getId()).append(' ');
+            }
+            ProbeLog.emit("market-supply-diag", ProbeLog.STATUS_INFO, market.getId() + "/" + industryId,
+                    "functional=" + industry.isFunctional() + " building=" + industry.isBuilding() + " supplies: " + supplies.toString().trim()
+                            + "; industries: " + industries.toString().trim() + "; conditions: " + conditions.toString().trim());
+        }
+    }
+
+    /** Read through getAllSupply/getAllDemand: BaseIndustry.getSupply(id) adds an empty entry for an id it lacks. */
+    private static int quantity(List<com.fs.starfarer.api.campaign.econ.MutableCommodityQuantity> all, String commodity) {
+        if (all == null) {
+            return 0;
+        }
+        for (com.fs.starfarer.api.campaign.econ.MutableCommodityQuantity q : all) {
+            if (q != null && commodity.equals(q.getCommodityId()) && q.getQuantity() != null) {
+                return q.getQuantity().getModifiedInt();
+            }
+        }
+        return 0;
+    }
+
+    private static void increment(java.util.Map<String, Integer> map, String key, int by) {
+        Integer current = map.get(key);
+        map.put(key, current == null ? by : current + by);
+    }
+
+    private static int count(java.util.Map<String, Integer> map, String key) {
+        Integer value = map.get(key);
+        return value == null ? 0 : value;
     }
 
     private static int reportContent(String kind, String id, String problem) {
@@ -631,13 +1050,31 @@ public class CampaignProbeScript implements EveryFrameScript {
         return Global.getSector().getStarSystem("Corvus") == null;
     }
 
+    /**
+     * 0.2.22: SectorAPI.getStarSystem(String) did not return Nightcross's hidden abyssal system Nix although its save holds
+     * "Nix Star System" (base name Nix, tags system_abyssal, theme_hidden; GRP7A-20261006), so fall back to scanning
+     * getStarSystems() by base name, display name and id before calling a mod's system missing.
+     */
+    private static StarSystemAPI findSystem(String name) {
+        StarSystemAPI direct = Global.getSector().getStarSystem(name);
+        if (direct != null) {
+            return direct;
+        }
+        for (StarSystemAPI system : Global.getSector().getStarSystems()) {
+            if (name.equals(system.getBaseName()) || name.equals(system.getName()) || name.equals(system.getId())) {
+                return system;
+            }
+        }
+        return null;
+    }
+
     private void checkCampaignLayout() {
         if (config.modSystems.isEmpty() && config.modBodyTypes.isEmpty()) {
             return;
         }
         int missing = 0;
         for (String name : config.modSystems) {
-            if (Global.getSector().getStarSystem(name) == null) {
+            if (findSystem(name) == null) {
                 if (nexerelinRandomSector()) {
                     // 0.2.10: in Nexerelin's random sector a mod may skip its own systems by design (Exigency skips
                     // Tasserus unless SectorManager.getCorvusMode(), EXI-SOLO 2026-09-28).
@@ -679,6 +1116,13 @@ public class CampaignProbeScript implements EveryFrameScript {
             }
             float weight = config.modBodyTypes.get(type);
             String listed = where.size() > 8 ? where.subList(0, 8) + " ..." : where.toString();
+            if (nexerelinRandomSector()) {
+                // 0.2.15: a sector without Corvus is generated by the mod (Ironclads' SystemComposer) or by Nexerelin;
+                // systems cannot be attributed, so this is information, not a leak (GRP10X-20261005).
+                ProbeLog.emit("campaign-layout", ProbeLog.STATUS_INFO, "type:" + type,
+                        "in " + where.size() + " system(s) of a sector without Corvus (generated by the mod or Nexerelin; not attributable): " + listed);
+                continue;
+            }
             ProbeLog.emit("campaign-layout", weight > 0 ? ProbeLog.STATUS_WARN : ProbeLog.STATUS_FAIL, "type:" + type,
                     "in " + where.size() + " system(s) the mod did not create" + (weight > 0 ? " (procgen weight " + weight + ")" : " (no procgen weight: should not happen)") + ": " + listed);
             if (weight <= 0) {

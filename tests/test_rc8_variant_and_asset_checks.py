@@ -75,6 +75,17 @@ class VariantWingsExceedBaysTests(unittest.TestCase):
             self.assertIn("fighter-bays:1", hits[0].evidence)
             self.assertIn("wings:2", hits[0].evidence)
 
+    def test_built_in_wings_alone_over_bays_is_a_safe_note(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "data" / "hulls" / "ship_data.csv", SHIP_DATA_HEADER + _ship_data_row("demo_hull", 40, 1))
+            _write_json(root / "data" / "hulls" / "demo_hull.ship", _basic_ship_json("demo_hull", built_in_wings=["w1", "w2"]))
+            _write_json(root / "data" / "variants" / "demo_variant.variant", _basic_variant("demo_hull", "demo_variant", wings=[]))
+            result = scan_mod(root)
+            notes = _findings(result, "variant-built-in-wings-exceed-bays")
+            self.assertEqual([f.classification for f in notes], ["SAFE"])
+            self.assertEqual(_findings(result, "variant-wings-exceed-bays"), [])
+
     def test_built_in_wings_count_toward_bays(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -402,10 +413,22 @@ class DescriptionMissingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _write(root / "data" / "shipsystems" / "ship_systems.csv", "name,id,number\nDemo,demo_system,1\n")
+            _write_json(root / "data" / "shipsystems" / "demo_system.system", {"id": "demo_system", "type": "STAT_MOD"})
             result = scan_mod(root)
             hits = _findings(result, "description-missing")
             self.assertEqual(len(hits), 1)
             self.assertIn("ship-system:demo_system", hits[0].evidence)
+
+    def test_rows_the_game_never_loads_need_no_description(self) -> None:
+        # 2026-09-29 drafting review: RC8 skips a ship_systems.csv row with no .system ("not found in store",
+        # SEEKER-SOLO-20260928), and a weapon row with no .wpn or a DECORATIVE .wpn is never shown either.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "data" / "shipsystems" / "ship_systems.csv", "name,id,number\nOrphan,orphan_system,1\n")
+            _write(root / "data" / "weapons" / "weapon_data.csv", WEAPON_DATA_HEADER + _weapon_data_row("no_spec_gun", "5") + _weapon_data_row("glow", "5"))
+            _write_json(root / "data" / "weapons" / "glow.wpn", {"id": "glow", "type": "DECORATIVE", "size": "SMALL"})
+            hits = _findings(scan_mod(root), "description-missing")
+        self.assertEqual(hits, [])
 
 
 class AssetReferenceMissingTests(unittest.TestCase):

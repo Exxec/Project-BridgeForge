@@ -22,6 +22,16 @@ class RevivalLessonsScannerTests(unittest.TestCase):
             self.assertEqual(finding.file, "data/descriptions.csv")
             self.assertEqual(finding.evidence[:3], ["line:2", "header-columns:3", "row-columns:4"])
 
+    def test_a_comment_row_with_commas_is_not_a_spilled_row(self) -> None:
+        # Magellan Protectorate's indEvo/printing_whitelist.csv (2026-09-30): a "# ..." note line containing commas.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "data" / "config").mkdir(parents=True)
+            (root / "data" / "config" / "printing_whitelist.csv").write_text(
+                'id\n# "This is hard to get working, and lorewise, allows duplication."\nsome_ship\n', encoding="utf-8")
+            hits = [item for item in scan_mod(root).findings if item.id == "csv-row-extra-columns"]
+        self.assertEqual(hits, [])
+
     def test_local_weapon_spec_missing_from_local_registry_is_review(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

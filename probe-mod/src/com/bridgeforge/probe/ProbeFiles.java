@@ -29,6 +29,27 @@ public final class ProbeFiles {
     /** JSON-lines report file the probe appends every check result to. */
     public static final String REPORT = "bf_probe_report";
 
+    /** 0.2.13: the combat mission's round counter, so each start fights the next slice of hulls. */
+    public static final String COMBAT_ROUND = "bf_probe_combat_round";
+
+    /** The round to fight now, advanced for the next start (0 when the file is absent or unreadable). */
+    public static int nextCombatRound() {
+        int round = 0;
+        try {
+            if (com.fs.starfarer.api.Global.getSettings().fileExistsInCommon(COMBAT_ROUND)) {
+                round = Integer.parseInt(com.fs.starfarer.api.Global.getSettings().readTextFileFromCommon(COMBAT_ROUND).trim());
+            }
+        } catch (Throwable t) {
+            round = 0;
+        }
+        try {
+            com.fs.starfarer.api.Global.getSettings().writeTextFileToCommon(COMBAT_ROUND, String.valueOf(round + 1));
+        } catch (Throwable t) {
+            // a missing counter only means the first slice again
+        }
+        return round;
+    }
+
     private ProbeFiles() {
     }
 }

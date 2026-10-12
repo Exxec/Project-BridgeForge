@@ -20,6 +20,7 @@ docs/PERFORMANCE_WORKBENCH_DESIGN.md
 /bridgeforge-state/
 /bridgeforge-dossier/
 /bridgeforge-artifacts/
+/reports/
 
 # Local agent/tooling scaffolding not required by the BridgeForge package.
 /.githooks/

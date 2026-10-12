@@ -93,11 +93,35 @@ class HullmodInstanceStateTests(unittest.TestCase):
                 "    public static float SHARED = 0f;\n"
                 "    public void advanceInCombat(ShipAPI ship, float amount) {\n"
                 "        float local = 1f;\n"
+                "        healTime += amount;\n"
                 "    }\n"
                 "}\n",
                 encoding="utf-8",
             )
             self.assertEqual([f.evidence for f in _findings(root)], [["field:healTime"]])
+
+    def test_only_written_value_fields_count_but_arrays_and_public_fields_stay(self) -> None:
+        # 2026-09-30: a private float set only at its declaration is a constant (Tahlan's runOnce, commented-out
+        # code in AI War); an array changes through its contents (KT_Biter's skull[0]); a public field can be
+        # written from another class (More Planetary Conditions' hybridMult).
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text(json.dumps({"id": "fx"}), encoding="utf-8")
+            src = root / "src" / "H.java"
+            src.parent.mkdir(parents=True)
+            src.write_text(
+                "public class H extends BaseHullMod {\n"
+                "    private float alpha = 0.5f;\n"
+                "    private Seg[] skull = new Seg[1];\n"
+                "    public float hybridMult = 0f;\n"
+                "    public void advanceInCombat(ShipAPI ship, float amount) {\n"
+                "        ship.setExtraAlphaMult(alpha);\n"
+                "        Seg.setup(skull, ship);\n"
+                "    }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            self.assertEqual([f.evidence for f in _findings(root)], [["field:hybridMult", "field:skull"]])
 
 
 if __name__ == "__main__":

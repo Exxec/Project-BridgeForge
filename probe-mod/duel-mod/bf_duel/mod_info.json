@@ -1,0 +1,8 @@
+{
+	"id":"bf_duel",
+	"name":"zz BridgeForge Duel",
+	"author":"BridgeForge by Exxec",
+	"version":"0.1.0",
+	"description":"Rig-only: pits two hulls against each other and logs the frame period and the field every second, to see what a destruction costs.",
+	"gameVersion":"0.98a-RC8"
+}

@@ -33,7 +33,7 @@ from .scanner import _blank_java_comments, _loaded_mod_jars, _parse_class_file, 
 SCHEMA_VERSION = 1
 CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
 JSONLIKE_SUFFIXES = {".json", ".faction", ".ship", ".variant", ".wpn", ".proj", ".skin", ".system"}
-EXCLUDED_DIRS = {"src", "out", "build", "target", ".idea", ".vscode", ".git", "__macosx", "meta-inf"}
+EXCLUDED_DIRS = {"src", "out", "build", "target", ".idea", ".vscode", ".git", "__macosx", "meta-inf", "disabled_files", "reports", "scratch"}
 # Tokens a translation must carry over unchanged: Java format specifiers, Starsector $variables and
 # the \u0001 highlight marker used by getText/format helpers.
 # No space flag and only real conversion letters, so English prose like "50% faster" is not a token.
@@ -55,7 +55,9 @@ def _sha256(path: Path) -> str:
 
 
 def _is_excluded(rel: Path) -> bool:
-    return any(part.lower() in EXCLUDED_DIRS for part in rel.parts[:-1])
+    # src-decompiled*/ is BridgeForge's decompile of a jar, never loaded: its strings are the jar's own, exported from
+    # the jar (FlowerGod 2026-09-29: 960 duplicate entries from src-decompiled/).
+    return any(part.lower() in EXCLUDED_DIRS or part.lower().startswith("src-decompiled") for part in rel.parts[:-1])
 
 
 def _has_cjk(text: str) -> bool:
@@ -71,6 +73,17 @@ def _mod_id(mod_dir: Path) -> str:
 
 
 # ---- CSV -----------------------------------------------------------------------------------------
+
+def _translation_csv_text(raw: bytes) -> tuple[str, str, bool]:
+    """Retain Project Go's established strict UTF-8/GB18030 CSV compatibility."""
+    bom = raw.startswith(b"\xef\xbb\xbf")
+    try:
+        return raw.decode("utf-8-sig"), "utf-8", bom
+    except UnicodeDecodeError:
+        if bom:
+            raise
+        return raw.decode("gb18030"), "gb18030", False
+
 
 def _csv_cells(text: str):
     """Yield (row, col, start, end, value, quoted) for every cell, with raw spans."""
@@ -356,15 +369,18 @@ def _rewrite_class_strings(data: bytes, replacements: dict[int, str]) -> bytes:
 def _units(mod_dir: Path, rel: str, path: Path):
     suffix = path.suffix.lower()
     if suffix == ".csv":
-        text = path.read_bytes().decode("utf-8-sig", "replace")
+        text, _, _ = _translation_csv_text(path.read_bytes())
         cells = list(_csv_cells(text))
         header, keys = _csv_row_keys(cells)
+        # A row whose first cell starts with '#' is a comment the game skips: never player text (FSF's rules.csv
+        # "#通用的舰队招呼" rows came back blank from the agent and blocked the whole mod, 2026-10-04).
+        commented = {row for row, col, s, e, value, q in cells if col == 0 and value.lstrip().startswith("#")}
         for row, col, s, e, value, q in cells:
-            if row and _has_cjk(value):
+            if row and row not in commented and _has_cjk(value):
                 column = header[col] if col < len(header) else f"#{col}"
                 yield {"id": f"csv:{rel}#{keys.get(row, row)}:{column}", "file": rel, "kind": "csv", "context": {"row": keys.get(row), "column": column}, "source": value}
     elif suffix in JSONLIKE_SUFFIXES or rel == "mod_info.json":
-        text = path.read_text(encoding="utf-8-sig", errors="replace")
+        text = path.read_bytes().decode("utf-8-sig", errors="replace")
         ordinal = 0
         for s, e, value, jpath, is_key in _jsonlike_strings(text):
             if _has_cjk(value):
@@ -497,7 +513,7 @@ def prefill_from_reference(document: dict, mod_dir: Path, reference_dir: Path) -
             english = table.get(int(entry["context"]["cp_index"])) if table else None
         elif entry["kind"] == "csv":
             if entry["file"] not in csv_cache:
-                text = ref_path.read_bytes().decode("utf-8-sig", "replace")
+                text, _, _ = _translation_csv_text(ref_path.read_bytes())
                 cells = list(_csv_cells(text))
                 header, keys = _csv_row_keys(cells)
                 table: dict[tuple, str] = {}
@@ -535,7 +551,62 @@ def prefill_from_reference(document: dict, mod_dir: Path, reference_dir: Path) -
 # ---- apply ---------------------------------------------------------------------------------------
 
 def _placeholders(text: str) -> Counter:
-    return Counter(_PLACEHOLDER.findall(text))
+    # "%%" is a literal percent sign, not a value to carry over: Chinese sources write a full-width "％" that English
+    # must write as "%%" where the game runs String.format (hull_mods.csv, as Nexerelin's and SWP's do) and as "%"
+    # elsewhere (FlowerGod, 2026-09-29), so it is left out of the comparison on both sides.
+    # Format specifiers count by the argument each one consumes (_format_arguments), so "%1$s" and "%s" match.
+    return Counter(token for token in _PLACEHOLDER.findall(text) if token != "%%" and not token.startswith("%")) \
+        + Counter(f"%{index}{conversion}" for index, conversion in _format_arguments(text))
+
+
+_FORMAT_SPEC = re.compile(r"%(?:(\d+)\$)?[-#+0,(]*\d*(?:\.\d+)?([sdfxXeEgGcbhno%])")
+
+
+def _format_arguments(text: str) -> list[tuple[int, str]]:
+    """(argument index, conversion) for each String.format specifier, in the order Java reads them: an unindexed
+    one takes the next argument, "%2$s" the second. A reordering translation must index its specifiers;
+    FlowerGod's "%s posts an emergency bounty of %d credits on %s" fed the name to %d and crashed
+    (IllegalFormatConversionException, GRP5B-20261005), which an unordered count of tokens let through."""
+    found, ordinary = [], 0
+    for match in _FORMAT_SPEC.finditer(text):
+        if match.group(2) == "%":
+            continue
+        if match.group(1):
+            found.append((int(match.group(1)), match.group(2)))
+        else:
+            ordinary += 1
+            found.append((ordinary, match.group(2)))
+    return found
+
+
+def reindex_format_slots(source: str, english: str) -> str | None:
+    """The English text with its String.format slots numbered (`%1$s ... %3$d ... %2$s`) so each takes the argument the
+    source's slot of the same conversion takes, or None when no such rewrite is needed or provable. The k-th slot of a
+    conversion in the English maps to the k-th of that conversion in the source. FlowerGod's "%s ... %d ... %s" against
+    the source's "%s ... %s ... %d" fed the person's name to %d (GRP5B-20261005)."""
+    src = [m for m in _FORMAT_SPEC.finditer(source) if m.group(2) != "%"]
+    eng = [m for m in _FORMAT_SPEC.finditer(english) if m.group(2) != "%"]
+    if not src or len(src) != len(eng) or any(m.group(1) for m in eng):
+        return None
+    source_args = _format_arguments(source)
+    used: set[int] = set()
+    mapping = []
+    for match in eng:
+        candidates = [index for index, conversion in source_args if conversion == match.group(2) and index not in used]
+        if not candidates:
+            return None
+        mapping.append(candidates[0])
+        used.add(candidates[0])
+    if mapping == list(range(1, len(mapping) + 1)):
+        return None
+    out, last = [], 0
+    for match, index in zip(eng, mapping):
+        out.append(english[last:match.start()])
+        out.append("%" + str(index) + "$" + match.group(0)[1:])
+        last = match.end()
+    out.append(english[last:])
+    rewritten = "".join(out)
+    return rewritten if _placeholders(rewritten) == _placeholders(source) else None
 
 
 def _resolved(document: dict) -> tuple[dict[str, dict], list[str]]:
@@ -546,6 +617,12 @@ def _resolved(document: dict) -> tuple[dict[str, dict], list[str]]:
         value = entry.get("translation") or glossary.get(entry["source"], "")
         if not value:
             continue
+        if _placeholders(value) != _placeholders(entry["source"]):
+            reindexed = reindex_format_slots(entry["source"], value)
+            if reindexed is not None:
+                if entry["id"] not in document.setdefault("_reindexed", []):
+                    document["_reindexed"].append(entry["id"])
+                value = reindexed
         if _placeholders(value) != _placeholders(entry["source"]):
             problems.append(f"{entry['id']}: placeholders differ ({sorted(_placeholders(entry['source']).elements())} vs {sorted(_placeholders(value).elements())})")
             continue
@@ -597,14 +674,14 @@ def apply_translation(mod_dir: Path, document: dict, out_dir: Path | None = None
         "entries": total,
         "applied": dict(applied),
         "problems": problems,
+        "format_slots_reindexed": document.get("_reindexed", []),
         "leftover_cjk_units": remaining,
     }
 
 
 def _apply_csv(path: Path, rel: str, entries: dict, applied: Counter, problems: list) -> None:
     raw = path.read_bytes()
-    bom = raw.startswith(b"\xef\xbb\xbf")
-    text = raw.decode("utf-8-sig")
+    text, encoding, bom = _translation_csv_text(raw)
     cells = list(_csv_cells(text))
     header, keys = _csv_row_keys(cells)
     edits = []
@@ -625,12 +702,12 @@ def _apply_csv(path: Path, rel: str, entries: dict, applied: Counter, problems: 
     if _csv_shape(new) != _csv_shape(text):
         problems.append(f"{rel}: CSV structure would change; file left untouched")
         return
-    path.write_bytes((b"\xef\xbb\xbf" if bom else b"") + new.encode("utf-8"))
+    path.write_bytes((b"\xef\xbb\xbf" if bom else b"") + new.encode(encoding))
     applied["csv"] += len(edits)
 
 
 def _apply_jsonlike(path: Path, rel: str, entries: dict, applied: Counter, problems: list) -> None:
-    text = path.read_text(encoding="utf-8-sig")
+    text = path.read_bytes().decode("utf-8-sig")
     had_bom = path.read_bytes().startswith(b"\xef\xbb\xbf")
     tokens = list(_jsonlike_strings(text))
     # Keys per object, so a translated key never duplicates a sibling. Blackrock's CN settings.json
@@ -673,7 +750,7 @@ def _apply_jsonlike(path: Path, rel: str, entries: dict, applied: Counter, probl
 
 
 def _apply_java(path: Path, rel: str, entries: dict, applied: Counter, problems: list) -> None:
-    original = path.read_text(encoding="utf-8")
+    original = path.read_bytes().decode("utf-8")
     blanked = _blank_java_comments(original)
     edits, ordinal = [], 0
     for m in _JAVA_STRING.finditer(blanked):
@@ -691,7 +768,7 @@ def _apply_java(path: Path, rel: str, entries: dict, applied: Counter, problems:
     new = original
     for s, e, replacement in sorted(edits, reverse=True):
         new = new[:s] + replacement + new[e:]
-    path.write_text(new, encoding="utf-8")
+    path.write_bytes(new.encode("utf-8"))
     applied["java"] += len(edits)
 
 

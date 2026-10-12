@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from .progress import Checkpoint, report
+from .report_status import is_closed
 
 SCHEMA_VERSION = 1
 RESULT_JSON = "ESCALATIONS_BY_FINDING.json"
@@ -27,13 +28,14 @@ def _workspace_packets(workspace: Path) -> dict | None:
     data = json.loads(revive.read_text(encoding="utf-8"))
     if data.get("status") != "ESCALATED":
         return {"status": data.get("status"), "blockers": []}
-    blockers = sorted({(p.get("finding"), p.get("tier"), p.get("kind")) for p in data.get("packets") or [] if p.get("finding")})
+    blockers = sorted({(finding, p.get("tier"), p.get("kind")) for p in data.get("packets") or [] if p.get("finding")
+                       for finding in p.get("merged") or [p["finding"]]})
     return {"status": "ESCALATED", "blockers": [list(b) for b in blockers]}
 
 
 def summarize_queue(queue: Path, quiet: bool = False) -> dict:
     queue = Path(queue).expanduser().resolve()
-    workspaces = sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_") and (p / "reports" / "revive" / "REVIVE.json").is_file())
+    workspaces = sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_") and (p / "reports" / "revive" / "REVIVE.json").is_file() and not is_closed(p))
     header = {"schema_version": SCHEMA_VERSION, "queue": str(queue),
               "revive_mtimes": {w.name: (w / "reports" / "revive" / "REVIVE.json").stat().st_mtime for w in workspaces}}
     by_finding: dict[tuple, dict] = {}
@@ -106,13 +108,18 @@ def rule(queue: Path, finding_id: str, *, accept: bool = False, approve_fixer: b
         body = "{\n  \"approved_fixers\": {\n" + ",\n".join(f"    {json.dumps(k)}: {json.dumps(v, ensure_ascii=False)}" for k, v in data["approved_fixers"].items()) + "\n  }\n}\n"
         policy.write_text(body, encoding="utf-8")
     else:
-        for workspace in sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_")):
+        for workspace in sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_") and not is_closed(p)):
             record = _workspace_packets(workspace)
             if not record or record["status"] != "ESCALATED":
                 continue
             keys = []
-            for path in (workspace / "reports" / "escalations").glob(f"{finding_id}--*.json"):
-                for finding in json.loads(path.read_text(encoding="utf-8")).get("findings") or []:
+            for path in (workspace / "reports" / "escalations").glob("*--*.json"):
+                packet = json.loads(path.read_text(encoding="utf-8"))
+                if finding_id not in (packet.get("merged") or [packet.get("finding") or path.name.split("--", 1)[0]]):
+                    continue
+                for finding in packet.get("findings") or []:
+                    if finding.get("id") != finding_id:
+                        continue
                     evidence = finding.get("evidence") or []
                     keys.append(f"{finding.get('id')}|{finding.get('file') or ''}|{evidence[0] if evidence else ''}")
             if keys:
@@ -122,3 +129,42 @@ def rule(queue: Path, finding_id: str, *, accept: bool = False, approve_fixer: b
     with (queue / "ESCALATION_RULINGS.jsonl").open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return entry
+
+
+def accept_in_mod(workspace: Path, selectors: list[str], reason: str, today: str | None = None) -> dict:
+    """Accept one mod's findings as authored (ROADMAP 34.12; done by a scratch script for six mods on 2026-10-04).
+    Each selector is `FINDING_ID` or `FINDING_ID:FILE_PART` (a substring of the finding's file). The matching packet
+    findings go into the mod's accepted-findings baseline and the reason, with the keys, is appended to
+    reports/ESCALATION_REVIEW.md. A selector matching nothing is an error, so a typo never passes silently."""
+    from datetime import date
+
+    from .baseline import accept_findings
+
+    if not reason.strip():
+        raise ValueError("accepting a finding as authored needs a reason (the evidence).")
+    workspace = Path(workspace).expanduser().resolve()
+    today = today or date.today().isoformat()
+    parsed = [(s.split(":", 1) + [""])[:2] for s in selectors]
+    keys: list[str] = []
+    matched = {s: 0 for s in selectors}
+    for path in sorted((workspace / "reports" / "escalations").glob("*--*.json")):
+        packet = json.loads(path.read_text(encoding="utf-8"))
+        for finding in packet.get("findings") or []:
+            for selector, (finding_id, file_part) in zip(selectors, parsed):
+                if finding.get("id") == finding_id and file_part in (finding.get("file") or ""):
+                    evidence = finding.get("evidence") or []
+                    key = f"{finding.get('id')}|{finding.get('file') or ''}|{evidence[0] if evidence else ''}"
+                    if key not in keys:
+                        keys.append(key)
+                    matched[selector] += 1
+    missing = [s for s, n in matched.items() if not n]
+    if missing:
+        raise ValueError(f"no packet finding matches: {', '.join(missing)} (see `bridgeforge escalation list`).")
+    baseline = accept_findings(workspace / "working", keys)
+    review = workspace / "reports" / "ESCALATION_REVIEW.md"
+    old = review.read_text(encoding="utf-8").rstrip() if review.is_file() else "# Escalation review"
+    ids = ", ".join(sorted({finding_id for finding_id, _ in parsed}))
+    lines = "\n".join(f"- `{k}`" for k in keys)
+    review.parent.mkdir(parents=True, exist_ok=True)
+    review.write_text(f"{old}\n\n## {today}: {ids} accepted as authored\n\n{reason.strip()}\n\n{lines}\n", encoding="utf-8")
+    return {"date": today, "workspace": str(workspace), "keys": keys, "baseline": str(baseline), "reason": reason}

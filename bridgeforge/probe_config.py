@@ -13,7 +13,7 @@ from .scanner import _load_lenient_json_file, _read_csv_rows, _wing_ids_set
 
 DEFAULT_CAMPAIGN_INTERVAL_DAYS = 5.0
 DEFAULT_COMBAT_SECONDS = 60.0
-DEFAULT_COMBAT_CAP_PER_SIDE = 12
+DEFAULT_COMBAT_CAP_PER_SIDE = 30  # owner 2026-10-05 (was 12)
 
 # On-disk names under <runtime_dir>/saves/common/. Starsector's SettingsAPI common-file methods
 # APPEND ".data" to the name the mod asks for: the probe's Java side reads "bf_probe_rig" and the
@@ -52,7 +52,24 @@ _SETUP_PATTERNS = {
     "ship": re.compile(r"^ship:(?P<variant>[A-Za-z0-9_\-]+)(?::(?P<count>\d+))?$"),
     "spawn-fleet": re.compile(r"^spawn-fleet:(?P<faction>[A-Za-z0-9_]+):(?P<fp>\d+(?:\.\d+)?)$"),
     "jump": re.compile(r"^jump:(?P<system>.+)$"),
+    # Probe 0.2.25: replace industry <from> with <to> on up to <count> markets, optionally only those with a condition id
+    # starting <prefix> (DNEEP food through Ashes of the Domain's farms, 2026-10-11).
+    "swap-industry": re.compile(r"^swap-industry:(?P<from>[A-Za-z0-9_]+):(?P<to>[A-Za-z0-9_]+):(?P<count>\d+)(?::(?P<prefix>[A-Za-z0-9_]+))?$"),
 }
+
+# Probe 0.2.25 supply expectation: "<commodity>@<industry>", FAIL in-game unless that industry supplies the commodity somewhere.
+EXPECT_SUPPLY_PATTERN = re.compile(r"^[A-Za-z0-9_]+@[A-Za-z0-9_]+$")
+
+
+def parse_expect_supply(specs: list[str] | None) -> list[str]:
+    """Validate --expect-supply specs (commodity@industry), keeping order."""
+    found = []
+    for spec in specs or []:
+        spec = spec.strip()
+        if not EXPECT_SUPPLY_PATTERN.match(spec):
+            raise ProbeConfigError(f"--expect-supply {spec!r}: expected <commodity>@<industry>.")
+        found.append(spec)
+    return found
 
 
 class ProbeConfigError(ValueError):
@@ -73,7 +90,7 @@ def validate_setup_spec(spec: str) -> str:
     if pattern is None:
         raise ProbeConfigError(
             f"Unrecognized --setup kind in {spec!r}; expected one of "
-            "rep:/credits:/ship:/spawn-fleet:/jump:."
+            "rep:/credits:/ship:/spawn-fleet:/jump:/swap-industry:."
         )
     match = pattern.match(spec)
     if not match:
@@ -327,6 +344,43 @@ def _variant_by_hull(mod_root: Path, hulls: list[str]) -> dict[str, str]:
     return by_hull
 
 
+def _mission_fleet_refs(mod_root: Path) -> dict[str, list[str]]:
+    """Every fleet member the mod's missions name, by kind (ROADMAP 46c): the probe resolves each. Ironclads'
+    missions named 21 variants no Ironclads version ever shipped (2026-10-04), which content_variants (the variants the
+    mod defines) cannot see."""
+    from .scanner import MISSION_FLEET_REFERENCE_PATTERN, _blank_java_comments
+
+    ships: set[str] = set()
+    wings: set[str] = set()
+    sources = list((mod_root / "data" / "missions").glob("*/MissionDefinition.java")) if (mod_root / "data" / "missions").is_dir() else []
+    for source in sources:
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        for fleet_id, member_type in MISSION_FLEET_REFERENCE_PATTERN.findall(text):
+            (wings if member_type == "FIGHTER_WING" else ships).add(fleet_id)
+    return {"ship": sorted(ships), "wing": sorted(wings)}
+
+
+def _class_sweep(mod_root: Path) -> list[str]:
+    """Top-level class names in the jars mod_info.json loads (ROADMAP 46a): the probe loads each and resolves its
+    members, which surfaces a missing class at the main menu instead of in play. The game's sandbox keeps the probe
+    from listing jars itself, so the list comes from here."""
+    import zipfile
+
+    from .scanner import _loaded_mod_jars
+
+    names: set[str] = set()
+    for jar in _loaded_mod_jars(mod_root):
+        try:
+            with zipfile.ZipFile(jar) as archive:
+                names |= {n[:-6].replace("/", ".") for n in archive.namelist() if n.endswith(".class") and "$" not in n}
+        except (OSError, zipfile.BadZipFile):
+            continue
+    return sorted(names)
+
+
 def _content_variants(mod_root: Path, deployable_hulls: list[str]) -> dict[str, list[str]]:
     """Every variant id the mod defines, split by what the probe may do with it (ROADMAP P14 item 49).
 
@@ -361,7 +415,42 @@ def _content_special_items(mod_root: Path) -> list[str]:
         return []
     rows = csv.DictReader(io.StringIO(path.read_text(encoding="utf-8-sig", errors="replace")))
     ids = {(row.get("id") or "").strip() for row in rows}
-    return sorted(item for item in ids if item and not item.startswith("#"))
+    # A row copying a vanilla item (Aivon Republic's special_items.csv repeats fighter_bp, ship_bp ... 2026-10-05) is
+    # vanilla's item: a blueprint needs its wing/ship id as data, so building it empty threw a false FAIL.
+    vanilla = _vanilla_special_items()
+    return sorted(item for item in ids if item and not item.startswith("#") and item not in vanilla)
+
+
+def _vanilla_special_items() -> set[str]:
+    import csv
+    import io
+
+    from .java_toolchain import REPO_ROOT
+
+    path = REPO_ROOT / "In operation" / "_rig" / "starsector-core" / "data" / "campaign" / "special_items.csv"
+    if not path.is_file():
+        return set()
+    rows = csv.DictReader(io.StringIO(path.read_text(encoding="utf-8-sig", errors="replace")))
+    return {(row.get("id") or "").strip() for row in rows if (row.get("id") or "").strip()}
+
+
+def _csv_ids(path: Path) -> set[str]:
+    import csv
+    import io
+
+    if not path.is_file():
+        return set()
+    rows = csv.DictReader(io.StringIO(path.read_text(encoding="utf-8-sig", errors="replace")))
+    return {i for i in ((row.get("id") or "").strip() for row in rows) if i and not i.startswith("#")}
+
+
+def _mod_commodities(mod_root: Path) -> list[str]:
+    """Commodity ids the mod adds in data/campaign/commodities.csv, minus vanilla's (probe 0.2.25 market-supply): the probe
+    reports where each is supplied and demanded, and FAILs demand with no supply (DNEEP food with AoTD, 2026-10-11)."""
+    from .java_toolchain import REPO_ROOT
+
+    vanilla = _csv_ids(REPO_ROOT / "In operation" / "_rig" / "starsector-core" / "data" / "campaign" / "commodities.csv")
+    return sorted(_csv_ids(mod_root / "data" / "campaign" / "commodities.csv") - vanilla)
 
 
 def _content_ship_hulls(mod_root: Path, deployable_hulls: list[str]) -> dict[str, str]:
@@ -469,6 +558,10 @@ def build_probe_config(
         "mod_systems": mod_created_systems(mod_root),
         "mod_body_types": {t: f["procgen_weight"] for t, f in mod_body_types(mod_root).items()},
         "content_wings": sorted(_wing_ids_set(mod_root / "data" / "hulls" / "wing_data.csv")),
+        "mission_fleets": _mission_fleet_refs(mod_root),
+        "class_sweep": _class_sweep(mod_root),
+        "mod_commodities": _mod_commodities(mod_root),
+        "expect_supply": [],
         "campaign_interval_days": campaign_interval_days,
         "combat_seconds": combat_seconds,
         "combat_cap_per_side": combat_cap_per_side,

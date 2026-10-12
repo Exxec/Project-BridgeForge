@@ -375,10 +375,35 @@ class ScannerTests(unittest.TestCase):
                 encoding="utf-8",
             )
             result = scan_mod(root)
-            findings = {item.evidence[0]: item.evidence[-1] for item in result.findings if item.id.startswith("hard-coded-campaign-")}
-            self.assertEqual(findings["fixture_system"], "ownership: defined-locally")
-            self.assertEqual(findings["fixture_entity"], "ownership: defined-locally")
-            self.assertEqual(findings["Askonia"], "ownership: external-or-core-unresolved")
+            findings = {item.evidence[0]: item for item in result.findings if item.id.startswith("hard-coded-campaign-")}
+            self.assertIn("ownership: defined-locally", findings["fixture_system"].evidence)
+            self.assertIn("ownership: defined-locally", findings["fixture_entity"].evidence)
+            self.assertIn("ownership: external-or-core-unresolved", findings["Askonia"].evidence)
+            # ROADMAP 34.6: a lookup of what the same file creates is a note, not work.
+            self.assertEqual(findings["fixture_entity"].classification, "SAFE")
+            self.assertIn("created-in-same-file", findings["fixture_entity"].evidence)
+            self.assertNotIn("created-in-same-file", findings["Askonia"].evidence)
+
+    def test_scanner_counts_add_planet_and_init_star_as_local_entities(self) -> None:
+        # ROADMAP 34.6 (2026-10-04): Sylphon's SRD_planet_nym1 (addPlanet) and Hiver's Kiztac (initStar) read as
+        # external because only addCustomEntity/addEntity were matched.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "Gen.java").write_text(
+                'class Gen { void generate() { system.initStar("gen_star", "star_red", 500, 300); system.addPlanet("gen_p1", star, "P", "arid", 0, 100, 2000, 90); system.getEntityById("gen_star"); system.getEntityById("gen_p1"); } }',
+                encoding="utf-8",
+            )
+            (root / "src" / "Other.java").write_text('class Other { void x() { sector.getEntityById("gen_p1").getMarket(); } }', encoding="utf-8")
+            result = scan_mod(root)
+            lookups = [item for item in result.findings if item.id == "hard-coded-campaign-entity-reference"]
+            same = {item.evidence[0] for item in lookups if "created-in-same-file" in item.evidence}
+            other = [item for item in lookups if item.file and item.file.endswith("Other.java")]
+            self.assertEqual(same, {"gen_star", "gen_p1"})
+            self.assertTrue(other)
+            self.assertIn("ownership: defined-locally", other[0].evidence)
+            self.assertNotIn("created-in-same-file", other[0].evidence)
 
 
     def test_scanner_reports_runtime_placeholders_in_source_and_compiled_classes(self) -> None:
@@ -523,8 +548,8 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
                 encoding="utf-8",
             )
             result = scan_mod(root)
-            undeclared = [item for item in result.findings if item.id == "source-library-dependency-undeclared"]
-            self.assertEqual([item.evidence[0] for item in undeclared], ["MagicLib", "Nexerelin"])
+            undeclared = [item for item in result.findings if item.id in ("source-library-dependency-undeclared", "undeclared-library-dependency")]
+            self.assertEqual(sorted(item.evidence[0].removeprefix("library:") for item in undeclared), ["MagicLib", "Nexerelin"])
             self.assertTrue(all(item.classification == "REVIEW" for item in undeclared))
             usage = {item["library"]: item for item in result.library_usage}
             self.assertTrue(usage["MagicLib"]["imported"])
@@ -582,9 +607,11 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             usage = {item["library"]: item for item in result.library_usage}
             self.assertFalse(usage["LazyLib"]["bundled"])
             self.assertTrue(usage["LazyLib"]["imported"])
-            undeclared = [item for item in result.findings if item.id == "source-library-dependency-undeclared"]
-            self.assertEqual(len(undeclared), 1)
-            self.assertEqual(undeclared[0].evidence[0], "LazyLib")
+            # Reported once, by undeclared-library-dependency (source-library-dependency-undeclared defers to it,
+            # owner ruling 2026-09-29).
+            undeclared = [item for item in result.findings if item.id == "undeclared-library-dependency"]
+            self.assertEqual([item.evidence[0] for item in undeclared], ["library:LazyLib"])
+            self.assertEqual([item for item in result.findings if item.id == "source-library-dependency-undeclared"], [])
             self.assertEqual(undeclared[0].classification, "REVIEW")
 
     def test_scanner_reports_legacy_custom_ui_and_dialog_callbacks(self) -> None:
@@ -646,6 +673,19 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             self.assertTrue(any(item.id == "campaign-ui-robot-input-injection" for item in result.findings))
 
 
+    def test_a_random_subclass_stored_in_memory_is_not_a_live_object(self) -> None:
+        # KIND-STRANGER Vesperon's SequenceGenerator (2026-09-29): a Random keeps its sequence across reloads.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "Seq.java").write_text(
+                "class Seq extends java.util.Random { void save(MemoryAPI memory) { memory.set(\"$gen\", this); } }",
+                encoding="utf-8",
+            )
+            findings = {item.id for item in scan_mod(root).findings}
+        self.assertNotIn("campaign-memory-live-object", findings)
+
     def test_scanner_reports_live_objects_and_external_keys_in_campaign_memory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -659,6 +699,27 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             findings = {item.id for item in result.findings}
             self.assertIn("campaign-memory-live-object", findings)
             self.assertIn("external-campaign-memory-key", findings)
+            self.assertEqual(next(i for i in result.findings if i.id == "external-campaign-memory-key").classification, "REVIEW")
+
+    def test_external_memory_key_written_or_guarded_is_safe(self) -> None:
+        # ROADMAP 34.17 (2026-10-04): Kadur only writes $nex_ keys; Hiver reads one behind isModEnabled("nexerelin").
+        cases = {
+            "Write.java": 'class Write { void a(MarketAPI m) { m.getMemoryWithoutUpdate().set("$nex_recentlyCapturedByPlayer", true, 365f); } }',
+            "Guard.java": 'class Guard { void b() { boolean haveNexerelin = Global.getSettings().getModManager().isModEnabled("nexerelin");\n'
+                          '  if (!haveNexerelin || !Global.getSector().getMemoryWithoutUpdate().getBoolean("$nex_randomSector")) { } } }',
+            "Read.java": 'class Read { void c() { Global.getSector().getMemoryWithoutUpdate().getBoolean("$nex_randomSector"); } }',
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text("{}", encoding="utf-8")
+            (root / "src").mkdir()
+            for name, body in cases.items():
+                (root / "src" / name).write_text(body, encoding="utf-8")
+            result = scan_mod(root)
+            by_file = {Path(i.file).name: i for i in result.findings if i.id == "external-campaign-memory-key"}
+        self.assertEqual(by_file["Write.java"].classification, "SAFE")
+        self.assertEqual(by_file["Guard.java"].classification, "SAFE")
+        self.assertEqual(by_file["Read.java"].classification, "REVIEW")
 
 
     def test_scanner_reports_campaign_spawning_disabled_only_in_active_source(self) -> None:
@@ -710,6 +771,48 @@ class Fixture { void test(LazyFont.DrawableString text, LazyFont font, Object un
             self.assertIn("hard-coded-campaign-system-reference", findings)
             self.assertIn("hard-coded-campaign-entity-reference", findings)
             self.assertIn("mission-local-fleet-reference-missing", findings)
+
+    def test_a_declared_dependency_supplies_art_and_content(self) -> None:
+        # ROADMAP 34.25 (2026-10-04): the Interstellar Imperium expansion's art was in the installed base mod.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core = root / "core"
+            for rel, text in {"data/hullmods/hull_mods.csv": "name,id\nX,x\n", "data/hulls/wing_data.csv": "id,variant\nw,w\n",
+                              "data/weapons/weapon_data.csv": "name,id\nG,g\n"}.items():
+                (core / rel).parent.mkdir(parents=True, exist_ok=True)
+                (core / rel).write_text(text, encoding="utf-8")
+            providers = root / "installed"
+            base = providers / "Base"
+            (base / "graphics" / "ships").mkdir(parents=True)
+            (base / "graphics" / "ships" / "titan.png").write_bytes(b"png")
+            (base / "mod_info.json").write_text('{"id": "base"}', encoding="utf-8")
+            (base / "data" / "weapons").mkdir(parents=True)
+            (base / "data" / "weapons" / "weapon_data.csv").write_text("name,id\nBig Gun,base_gun\n", encoding="utf-8")
+            mod = root / "addon"
+            (mod / "data" / "hulls").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "addon", "dependencies": [{"id": "base"}]}', encoding="utf-8")
+            (mod / "data" / "hulls" / "a.ship").write_text('{"hullId": "a", "spriteName": "graphics/ships/titan.png", '
+                                                          '"builtInWeapons": {"WS1": "base_gun"}}', encoding="utf-8")
+            alone = {f.id for f in scan_mod(mod, vanilla_core=core).findings}
+            provided = {f.id for f in scan_mod(mod, vanilla_core=core, provider_roots=[providers]).findings}
+        self.assertIn("asset-reference-missing", alone)
+        self.assertIn("content-reference-unresolved", alone)
+        self.assertNotIn("asset-reference-missing", provided)
+        self.assertNotIn("content-reference-unresolved", provided)
+
+    def test_commented_out_mission_fleet_line_is_not_a_reference(self) -> None:
+        # ROADMAP 34.20 (2026-10-04): Scy-Nation's SCY_11 mission escalated on a // line.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"zorg"}', encoding="utf-8")
+            source = root / "data" / "missions" / "fixture"
+            source.mkdir(parents=True)
+            (source / "MissionDefinition.java").write_text(
+                "class MissionDefinition { void define() {\n// api.addToFleet(FleetSide.PLAYER, \"zorg_missing_Configurated\", FleetMemberType.SHIP, \"Z\", true);\n} }",
+                encoding="utf-8",
+            )
+            findings = {item.id for item in scan_mod(root).findings}
+            self.assertNotIn("mission-local-fleet-reference-missing", findings)
 
     def test_scanner_resolves_local_mission_variant_hull_and_weapon_assets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

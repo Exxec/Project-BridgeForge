@@ -1754,6 +1754,66 @@ Progression, each stage feeding the next:
     `tools/build_jar.py`; its first real build is in `docs/LOCAL_HANDOFF.md` item 7). Tests:
     `tests/test_substitutes.py` (`WorkspaceStatusTests`).
 
+55. **Automation from the 2026-10-05 live-test crashes (owner: "apply all these").** **Done 2026-10-05.** Every item below was a manual
+    step or an unpredicted Fatal in groups 1-10.
+    - 55a. **Done.** `probe-group install` resets the combat round counter, moves a second rig folder with a member's mod id to
+      `mods-disabled-providers`, enables dependencies read from the current `mod_info.json`, and warns when a provider copy lacks a folder
+      the real install has (`incomplete_provider_copies`). Tests: `tests/test_probe_group.py` (`InstallHygieneTests`).
+    - 55b. **Done.** `undeclared-library-dependency`: a plugin that throws when a library is missing (stored `isModEnabled` flag, or a
+      library it never references) is a required library (`required:throws-without` evidence); `fix` declares it. Applied to
+      Dassault-Mikoyan Engineering (GraphicsLib, MagicLib), HullMods Expansion and P9 Colony Group (MagicLib). Artefact and Tiandong only use
+      Nexerelin and Console Commands optionally. Tests: `tests/test_batch_lessons.py` (`LibraryRequiredByThrowTests`).
+    - 55c. **Done.** `json-duplicate-key` fixer (tier auto): removes a later copy with an identical value; splits an array element whose keys
+      repeat as whole blocks (two markets without the `},{`); leaves other repeats. A `.faction` file in no `factions.csv` is not flagged
+      (GMDA's `gmda_patrol.faction` is never loaded, so its archive needs nothing). Applied to Arthr's Ships n Shit. Tests: `tests/test_fixers.py`.
+    - 55d. **Done.** `dependency-version-major-mismatch` (RC8-23) as a scanner finding with a fixer (tier input, needs `--providers`).
+      None of 132 archived mods has one; applied to seven workspaces (Arthr's Ships n Shit, Arulite Starworks, Erexeus, Magellan Shenanigans,
+      More Combat Terrain Effects, More Planetary Conditions, Vanidad y Afliction Operation). Tests: `tests/test_fixers.py`.
+    - 55e. **Done.** `bridgeforge/conversion_checks.py`: `conversion-faction-names-removed-hull` (REVIEW; fixer writes replaced vanilla
+      faction copies without the removed variants and lists them in `replace`; reproduces the Ironclads hand fix) and
+      `factions-csv-relists-neutral` (REVIEW, MEDIUM: Ironclads GRP10D failed with neutral relisted, but Vacuum relists it last and passed, so
+      it is a pointer, not a rule). Tests: `tests/test_conversion_checks.py`.
+    - 55f. **Done.** `audit-explain --auto` and `probe-group record --archive` record the provable categories (credits, syntax-only JSON,
+      manufacturer column, unloaded archive, translation); the rest still needs `--reason`. Tests: `tests/test_live_trust.py` (`AutoExplainTests`).
+    - 55g. **Done.** `reindex_format_slots` numbers a translation's reordered `String.format` slots (applied inside `_resolved`; the apply
+      result lists `format_slots_reindexed`); `vanilla-path-shadowing` fixer renames a file saved at a vanilla path under another id (tier
+      input, needs `--vanilla-core`). Tests: `tests/test_translation.py`, `tests/test_fixers.py`.
+    - 55h. **Done.** `ship-data-supplies-legacy-column` (tier auto) adds `supplies/rec` and `supplies/mo` as `supplies/day` times 3.0 (frigate), 2.0
+      (destroyer), 2.65 (cruiser), 2.67 (capital); reproduces SEEKER's values. Applied to Batavia, Firestorm Federation, Ironclads, Qualljom and
+      Renis Imperium, which had no supplies/rec at all. Still open: Zorg18-old-rebuild and the archived Zorg18 (locked; needs `+bf.N`).
+    - 55i. **Done 2026-10-05.** Ironclads (group 10) passed live as GRP10Y after eleven more fixes; checks and fixers from them:
+      `conversion-faction-names-missing-content` (tier input; vanilla factions listing hulls/fighters/weapons a replaced table removed),
+      `conversion-vanilla-lifecycle-plugin` (tier input; writes a coreLifecyclePlugin subclass, Janino-compiled in the test),
+      `star-type-undefined` (tier decision; 0.7 star_red/star_blue that RC8 renamed). The probe is 0.2.15: a faction whose cheapest hull
+      costs more than the 60-point test patrol is skipped, and body types in a sector without Corvus are information, not a leak.
+      Tests: tests/test_conversion_checks.py, tests/test_total_conversion_scans.py (also covers the skill-effect-script check).
+      Ironclads was archived 2026-10-06 after its 98 differences were explained.
+    - 55j. **Done 2026-10-06.** Live groups Kadur Remnant, Free Stars Union, Metelson Industries, the Yunru set with Tritachyon and
+      Magellan Protectorate (plus the revived `yunrucore` library, not yet live tested alone) gave: `undeclared-library-dependency` no
+      longer treats a probe elsewhere in the mod as proof every use is guarded (`probe-present-but-unguarded-use`, Free Stars Union's
+      GraphicsLib); `rules-csv-curly-quote-unreadable` (tier input; RC8 'Mismatched quotes' on an unmatched curly opening quote or a
+      comma inside a pair, Metelson); `audit-shipped` finds the root of a mod extracted from a multi-mod pack by mod id (Yunru Core
+      pack). Probe 0.2.20/0.2.21: an empty patrol is retried at 120/240/480 points, with variant, doctrine and patrol-type
+      diagnostics. `reports/probe_accepted.json` lets a mod carry an accepted probe FAIL line with its reason (Magellan's hidden
+      magellan_startigers: no patrol builds at any size; cause in RC8's FleetFactoryV3 not found). Tests: tests/test_total_conversion_scans.py,
+      tests/test_live_trust.py, tests/test_probe_group.py. Open: `tests/test_locks.py::test_child_with_cwd_inside_target_is_found` fails
+      on a clean HEAD checkout here (environmental); a scanner check for an industry id used in code that the installed library renamed
+      (TASC 9.1.2 -> 10.0.9, Tritachyon) is not written.
+
+56. **Exigency's Avesta hopped between systems instead of flying through hyperspace (owner crash log 2026-10-06).** **Done 2026-10-06; live run AVESTA-HOP-1 passed (owner accepted).** Nexerelin's raid intel threw `NullPointerException` in `RaidIntel.getETA` for Avesta, whose market sat in hyperspace (no star system); the entity is now in a star system and relocates like VRI's Arkship. Exigency 0.8 is +bf.8, re-archived; the old 0.7.2 workspace is left as it was. Evidence: javap of `RaidIntel` (field `system`, `getETA`) and Nexerelin 0.12.2d's `OffensiveFleetIntel` constructor (`target.getStarSystem()`). Details in the mod's REVIVAL_REPORT. No scanner check yet: a market whose primary entity is in hyperspace is a possible new finding (a candidate if a second mod shows it). Live: Avesta orbited and hopped three times, no exception; no raid on Avesta happened, so the original crash path was not exercised.
+57. **Capacity-overage evidence run (owner report 2026-10-06; for VoidSmith's Save Workshop, S5).** **Open, needs the rig and a live session.** Owner reports that carrying more than capacity slows the fleet if the limit is weight based and raises supplies per day; the formula is unknown. Run on a throwaway save with `probe-config --setup` lines (credits, cargo style setups) at, below and above capacity for cargo, fuel and crew, on at least three different fleets; record quantities, observed fleet speed and daily supplies use, the game version and the procedure. Also record whether the capacity figures stored in a save's cargo container are written at save time or derived later (observed attributes on the container: max cargo, space used, max fuel, max personnel). Done when `docs/RC8_BEHAVIOUR.md` has dated rows with the method, or the observations show no rule; VoidSmith's `docs/SAVE_WORKSHOP_IMPLEMENTATION_PLAN.md` then cites the row ids. Add a `docs/LOCAL_HANDOFF.md` entry only if the run cannot be done in the same session.
+58. **A market with no star system crashes Nexerelin raid intel: probe check (2026-10-06).** **Check done; live negative control open.** Exigency's Avesta was the first case (item 56); the class is any market whose entity is in hyperspace. Probe 0.2.16 adds `market-star-system`: for every economy market with `getStarSystem() == null` it logs FAIL when Nexerelin is enabled (WARN otherwise) naming the market, its entity and location, and OK `every market has a star system` otherwise. API evidence: javap of RC8 `MarketAPI`, `LocationAPI.isHyperspace`, `ModManagerAPI.isModEnabled`, 2026-10-06. Tests: `tests/test_probe_log_triage.py` (`MarketStarSystemProbeTests`). **Open (needs a live run):** a negative control with `Exigency.jar.pre-avesta-hop.bak` swapped in must show FAIL for the Avesta market; the current jar must show OK. **Deferred:** a probe setup that forces a Nexerelin raid at a chosen market needs Nexerelin classes, which the public-API-only probe may not use; it would be a separate scenario mod. A static scanner check for `addMarket` on a hyperspace entity in loose scripts, and a corpus sweep, are not done.
+59. **`save-format-survey` (2026-10-06).** **Done.** Read-only survey of where saves keep the player fleet's cargo and credits, for VoidSmith's Save Workshop slice S0 (its parser gate wants a format description with version boundaries). Reports the game version, the player fleet element, the cargo container's attribute names, resource-stack types and whether a credits value is present; never a name, quantity or credit amount, so the output can be shared. Comparison lists the attributes every surveyed save shares. Tests: `tests/test_save_format_survey.py`. Results from the rig's saves are recorded in `docs/SAVE_TOOL_PROPOSAL.md`. Still unproven: whether the capacity attributes are written at save time or derived (item 57).
+60. **Automation and gap coverage after the 2026-10-06 live-test session (owner: "add to roadmap but pause everything for now").** **Proposed, nothing started; paused by the owner.** Every entry below cost real time in the session that archived 17 mods; the order is the order I recommended. Resume notes: `docs/LOCAL_HANDOFF.md` section 0.
+    - 60a. **Startup smoke test (`probe-group smoke`).** About half of the session's failures were load-time errors that need nobody to play: Ironclads' twelve launches, Metelson's `rules.csv` ("Mismatched quotes", found by bisecting alternatives on the rig), Free Stars Union's missing GraphicsLib. A throwaway script did it by hand (launch the rig, wait about 55 s, read the log for `Duplicate key` / `Missing close quote` / a Fatal dialog, close the rig game by killing only java processes whose command line matches `_rig`). Make it a command with a checkpoint and progress lines, and run it on a group before the owner is asked to play. Done means: it reproduces the three cases above from the saved logs and never touches a java process outside the rig. Limit: it cannot cover new-game generation (Tritachyon's missing industry crashed in `onNewGame`), and no way to click through New Game automatically has been built. **Built 2026-10-11 as `probe-group smoke`** (`probe_group.smoke_group`, `launcher_click.py`, `boot_test.run_boot_test(auto_click=True)`): boots the group `install` enabled through `run-j25-direct.bat`, clicks the launcher's Play button through ctypes (the real rig's launcher waits for a click; the log stops after its fonts load, observed on SMOKE-test-20261011 timing out at 240 s, then SMOKE-test3 reaching the menu in 12 s with the click), triages the startup log, stops only java under the rig. Verdicts SMOKE_PASS / SMOKE_ERRORS / SMOKE_FAIL, exit 1 unless PASS. Startup only: no New Game, so Tritachyon-style onNewGame crashes still need the real run; not yet replayed on the three saved cases (Metelson rules.csv, Free Stars Union, Ironclads). Tests: `tests/test_probe_group.py::SmokeGroupTests`, `tests/test_launcher_click.py`. **Replay done 2026-10-11:** `smoke_load_errors` finds the named line in the saved failing logs (Metelson's `Mismatched quotes` in GRP1-20261005 and BIS4G6, `Duplicate key` in GRP10B and GRP4A) and none in a good boot; a menu boot whose log holds one is SMOKE_ERRORS. Those saved runs never reached the menu, so smoke would also report SMOKE_FAIL for them; the log line is the added explanation. Free Stars Union's missing library has no saved log to replay.
+    - 60b. **Auto-explain more archive differences (`audit-explain --auto`, `record --archive`).** Explaining 98 (Ironclads), 66 (the GRP6A batch) and 1,119 (Nightcross) differences by hand was the largest manual cost. These categories are provable from records already on disk: files moved to `scratch/work-files/` (the file exists there), descriptions written by `descriptions apply` (`reports/description-drafts.md` plus `scratch/descriptions.csv.pre-bf-crafted`), files moved to `scratch/translator-workspace/` or `scratch/removed-src/`, `vendor-copy` results, `.pre-bf-*.bak` backups of fixer edits, and a jar with a `jar-patch-*`/`anchor-fix` record. Also automate three archive steps done by hand: extracting a zip original into `scratch/original-extracted/`, copying `scratch/translation/*.json` to `reports/translation/`, and moving an existing `Done/<Mod>` aside to `Done/_replaced-<date>/` (never deleting) when `record --archive` collides. Done means: re-running the audit on Ironclads, Nightcross and the GRP6A mods from before their explanations are recorded leaves fewer than a tenth of the differences for a person.
+    - 60c. **Fixer for assets, descriptions and content a sibling mod of the same pack already holds.** Done by hand for `yunrucore`: 41 missing ship sprites (copies in different sibling mods checked byte-identical), 18 description rows, and 3 items through `vendor-copy`. Search the other workspaces and the pack's `original/extracted/` roots, copy only when every copy of a file is byte-identical, refuse and report otherwise, and record each copy so 60b can explain it. Never writes text or colours that no mod holds (six weapons and five manufacturer colours stayed blank).
+    - 60d. **`content-id-renamed-by-provider` check.** Tritachyon asked for `BOGGLED_AI_STATION`; Terraforming & Station Construction 10.0.9 renamed it `BOGGLED_REMNANT_STATION` (the 9.1.2 and 10.0.9 rows have the same name, plugin class, variant and fleet name). Compare industry, hull mod, commodity and condition ids used in a mod's data and jar string constants with the installed provider's tables; when an id is absent, name the closest id in the provider whose row matches the older version's row (needs the older provider copy, for example the modpack's 9.1.2), with that evidence. REVIEW tier, never auto-applied. **Done 2026-10-11 for industry ids** (`bridgeforge/provider_renamed_ids.py`, scanner `_scan_content_id_renamed_by_provider`, finding `content-id-renamed-by-provider`, REVIEW/MEDIUM, tier decision): reads string constants from loose `.java` and jar classes that call addIndustry/hasIndustry/getIndustry/removeIndustry/isIndustry, and flags an id absent from every table when a declared provider's industries.csv has a close id sharing its first token (ratio 0.75+). Reproduces the real case on Tritachyon's original (BOGGLED_AI_STATION -> BOGGLED_REMNANT_STATION, TASC 10.0.9). A first version that also suggested vanilla ids gave 60 false hits over 312 workspaces (entity ids beside industry calls), so suggestions come only from declared providers: 0 hits over the 182 workspaces that declare one. Not covered: hull mod, commodity and condition ids, and the older-provider row comparison. Tests: `tests/test_provider_renamed_ids.py`.
+    - 60e. **Small tooling fixes.** (1) `tools/precommit-check.ps1` runs `python -m ruff` and fails when the project `.venv` Python has none; fall back to the interpreter that has it or say how to install it. (2) `rig-doctor` should warn when workspaces under `In operation/` deny access to a normal session and print `tools\unlock-workspaces.ps1 -Apply`; the cause of the two lock events (2026-10-05 `Done/` zips and Zorg18, 2026-10-06 fourteen workspaces) is still unknown. (3) A known-failures baseline for `tests/test_locks.py::test_child_with_cwd_inside_target_is_found`, which fails on a clean HEAD here, so it stops hiding real failures. **(1) built 2026-10-11:** `tools/precommit-check.ps1` now picks the first interpreter with ruff and otherwise says how to install it. (3) is moot for now: `test_child_with_cwd_inside_target_is_found` passed in the 2026-10-11 full suite (1601 tests, OK), so it is an intermittent environmental failure, not a clean-HEAD one. (2) not started: the lock cause is unknown.
+    - **Left alone on purpose:** why RC8's `FleetFactoryV3` builds no patrol for Magellan's hidden `magellan_startigers` at any size (nothing found; accepted by a session decision, `probe_accepted.json`), and automating hull mod per-ship-state rewrites inside jars (five classes were done by hand with the bundled sources; it needs judgement).
+    - 60f. **Proposed 2026-10-11 after the launcher auto-click (65g), none started.** (1) 60a gets cheaper: `probe-group smoke` can now start the rig game unattended (the launcher click is automated), so build it on `bf-test.ps1 launch` plus the existing log triage. (2) Click through New Game and the one-day wait with the same window-click helper, so a probe group needs no person; unproven: the in-game screen is not a standard window, so first measure whether posted messages reach it. (3) A scanner/`probe-group install` rule that stages LunaLib whenever GraphicsLib 1.12.1 runs under Fast Rendering (RC8-25), so the mass boot test's 11 NEEDS_LUNALIB mods get the dependency recorded instead of rediscovered. (4) Launch watchdog: no java process 60 s after `launch` says so instead of waiting. (5) Hand work, owner only: the review list in `docs/LOCAL_HANDOFF.md` section 0 (Ironclads removed worlds, Hiver Swarm rule edit, Magellan finding, Yunru weapon text and colours, Combat-Misc-Utils 0.4.1 revive). **(1) built 2026-10-11** (see 60a). **(3) built 2026-10-11 as advice, not automatic:** `probe-group install` warns when GraphicsLib (`shaderLib`) is enabled without LunaLib and the rig has LunaLib, and `--with-lunalib` enables it for that run; adding it silently would hide a real dependency gap in the group. Tests: `tests/test_probe_group.py::LunaLibAdviceTests`. **(2) first attempt 2026-10-11 failed (window behind the owner's windows), superseded below:** with the rig game at its loading/main-menu screen (NGTEST-20261011) the 1280x960 window sat behind the owner's other windows and Windows refused `SetForegroundWindow`, so a screen capture showed the owner's desktop, not the game; without seeing the menu there is nothing to aim a click at, and a posted click to an OpenGL window is unverifiable. Going further needs a real foreground click on the owner's screen (cursor taken over), or driving New Game from inside the game (a probe-side script), which is a design question for the owner. (4) is covered by the smoke timeout. **(2) built 2026-10-11 as `probe-group live TESTID`** (`live_run.py`, `game_click.py`): once the owner left the machine alone (Alt tap lets SetForegroundWindow through), real clicks drove launcher Play, New Game (generate name, default chip, first occupation and fleet choice, Normal, skip tutorial, Start game), the campaign probe's day (it starts and ends by itself, no input), Esc, Exit, Missions, the probe mission, Deploy All, Deploy, Space, once per combat round. Every stage is confirmed from the log (`campaign END`, `combat END`); silence ends it as LIVE_STUCK naming the stage and stops only the rig's java. Live: LIVETEST2-20261011 reached LIVE_DONE (campaign and one combat round logged) after LIVETEST-20261011 stuck at the difficulty screen (a click at x 0.40 missed the short word Normal and the next click took Easy: fixed). Coordinates are DPI-aware client fractions measured on RC8's unmodified screens at the owner's 150% scaling; a mod that adds its own New Game screen or reorders the mission list stops it at that stage, by design. Tests: `tests/test_live_run.py`.
+    - 60g. **Proposed 2026-10-11 after the Seeker and unattended-run work, none started.** In the order recommended: (1) Unattended regression pass: `probe-group live` over every archived mod in groups, now that clicks are reliable, so each archive gets a probe 0.2.24 `combat-perf` record (frame time, peak hulks) and a current live result; about five minutes a group, run overnight. (2) Generic New Game driver: read the option rows on each New Game screen from the screen (screen_read) and pick the first, instead of one hand-measured flow per mod (default and Ironclads exist); Nexerelin and other total conversions need it. (3) Save-cycle tooling for the owner's friend's Modpack 6.3 save (load fails after c212 with PlanetConditionMarket.readResolve NPE, a market memory holding a planet while a Station Augments augment holds that market): a `save-doctor` check that finds Memory -> planet -> condition market -> same Memory cycles in campaign.xml, and a repair that breaks one on a copy. Needs the save. (4) Scanner check for mods that keep MarketAPI or SectorEntityToken references inside objects stored in memory or listeners (the Station Augments pattern), REVIEW. (5) Prove probe 0.2.24's runaway stop live with the broken Seeker jar, and a Ubique duel for the second patched hull mod. (6) Finish 60b (more auto-explain categories) and 60c (sibling-mod asset fixer). (7) Hand work: decide `Done/(bad) SEEKER-0.6-0.6.6.zip` (owner's file), and whether Neutrino 1.8.9 and Nostalgia Edition, which share the mod id `Neutrino`, should ship as alternatives with a note.
+
 ## P15: Unattended revival with verified AI escalation (planned 2026-09-26)
 
 Owner goal (2026-09-26): not to remove AI from revivals but to reduce what reaches it and make what
@@ -2407,6 +2467,494 @@ whether the result passed; recurring agent fixes become deterministic fixers.
         watched that way now), and count combat-filler use in the group report.
 
        **Done:** `combat_filler_sides` in the group report.
+32. **Less hand work in escalation, from the 2026-09-29/30 batches (done 2026-09-30).** Owner-approved list; each
+    replaces a step done by hand at least twice.
+    1. **Review sheet** (`escalation review WS`, also written after every `escalation run`): each packet's newest
+       attempt with its diff and flags for a removed hint or tag, Random/save logic, a rewritten loop, a swallowed
+       exception, a net deletion, a moved baseline, or an agent asking to leave its sandbox. On the real batches it
+       flagged Covert (hint removed), Vesperon (Random) and Arthr (loop), the three caught by hand.
+       Tests: `tests/test_escalation_review.py`.
+    2. **Watched directories** (`escalation run --watch-dir DIR`): what an agent run changed there is reported, for
+       the session's memory folder.
+    3. **One packet per file:** agent packets for different findings on one file merge (`merged` lists the ids;
+       verify needs all gone; queue counts and `escalation rule` see every id). Pegasus's entity and system packets
+       were merged by hand. Test: `SameFilePacketMergeTests`.
+    4. **Run lock:** a second `escalation run` on a workspace refuses while the first's process is alive (the
+       2026-09-29 pilot collisions). Test: `RunLockTests`.
+    5. **`jar-packets WS`:** for each jar-only packet, finds the class's source, copies it to scratch to edit, and
+       says FAITHFUL / SOURCE_DIFFERS / COMPILE_FAILED / NO_SOURCE by compiling the unedited copy with
+       `patch-jar-class`. Too Much Information has no source and there is no decompiler on the machine now
+       (IntelliJ's Fernflower was used for FlowerGod). Tests: `JarPacketsTests`.
+    6. **`ready-list QUEUE`:** the mods ready for live testing (22 on 2026-09-30). Test: `tests/test_ready_list.py`.
+    7. **Campaign lookup guard fixer** (hard-coded-campaign-system/entity-reference): a one-line declaration of a
+       `getStarSystem`/`getEntityById` result directly in a void method gets `if (v == null) { warn; return; }`;
+       every other shape (Pegasus's inline `getEntityById("nomios")` argument, a loop) is refused for an agent. Tier
+       auto, but the findings are REVIEW, so revive applies it only once approved. A null-guarded lookup stays a note.
+       Tests: `tests/test_campaign_lookup_guard_fixer.py`.
+    8. **Faction known lists from `fleetCompositions`:** a 0.6-era faction without shipRoles derives its lists from
+       its fleets' ships, and a wing id in a role or fleet list counts as a known fighter. A faction with no roles,
+       fleets or markets is a SAFE note (`nothing-reads-lists`; hvb_hostile in three mods). Of 14 refusals, 6 now
+       derive, 3 become notes, 5 name variants that do not exist (aurora_Escort, condor_FS, heron_Standard,
+       mole_miner, Thule's own) and stay per-mod work. Tests: `FactionKnownListsMissingTests`.
+    9. **hullmod-instance-state:** a private primitive or String field that no method writes is no longer flagged
+       (9 of 86 source packets: commented-out code in AI War, Tahlan's runOnce); arrays, objects and non-private
+       fields still are (KT_Biter fills an array per ship). Agents get the per-ship `getCustomData()` recipe as the
+       packet hint. Tests: `tests/test_hullmod_instance_state.py`.
+    10. **Not built:** blank values from another version of the mod (`wing-op-cost-blank`): 10 of the 15 mods are
+        pre-0.8, when fighters had no OP cost, so no copy has a value. What RC8 does with a blank cost is not yet
+        proven (vanilla has none blank); a probe row for it is the next step.
+    11. **Decompile for jar-only packets:** `jar-packets` decompiles a jar with no source using Vineflower 1.12.0
+        (the maintained Fernflower fork; `In operation/_tools/`, fetched from Maven Central 2026-09-30, SHA-1
+        checked, never committed) into scratch with a PROVENANCE.txt, then runs the same faithful check. A call whose
+        RC8 return type changed is a relink, not a difference. Too Much Information's five classes are FAITHFUL.
+        Tests: `RelinkAndDecompilerTests`.
+    12. **`jar-linkage-unresolved` (new check):** every Methodref/Fieldref a declared jar makes into a game class,
+        resolved through RC8's core jars and hierarchy (`bridgeforge/linkage.py`); jars other rig mods declare count
+        as providers. Found through Too Much Information: `TooltipMakerAPI.beginTable(...)V` returns `UIPanelAPI` in
+        RC8, a NoSuchMethodError as shipped that nothing flagged. Over the 79 live-validated mods in Done/ it found
+        only `addImageWithText` in four (Arkgneisis, Megastructures Tab, RogueSynth, Slightly Better Tech Mining),
+        the same break on tooltip paths the probe does not open: fixed by recompiling the class. Tier code (a
+        jar-only packet). Test: `tests/test_jar_linkage.py`.
+    13. **Two input fixers run unattended** (owner ruling 2026-09-30): `csv-missing-design-type-column` adds the
+        column blank (no design type invented, no colour), and `procgen-planet/star-row-missing` copies the vanilla
+        row nearest by name (water, lava, gas giant..., else barren / star_yellow) with frequency 0. Tier auto;
+        REVIEW findings, so applied where approved (planets and the design column are). Tests:
+        `UnattendedInputFixerTests`.
+    14. **First queue run with the linkage check (2026-09-30):** 36 queued mods call game members RC8 changed; 30
+        only by return type. 19 were relinked in the main session (unedited shipped or decompiled source, patched
+        only when every changed call is a return-type relink and no member changes); 11 were left: their source or
+        decompile does not compile against RC8 (7), shows other differences (3), or is missing a class (2). 6 need
+        a real port (a removed class or member): Dassault-Mikoyan, Kadur Remnant, More Combat Terrain Effects,
+        Tore-Up-Plenty, Tyrador, Void-Tec. The four live-validated Done/ mods with the same break were relinked at
+        the owner's request, versions iterated (+bf.N), back to READY_FOR_LIVE_TEST (MOD_CHANGELOG.md).
+        Review of the run's 33 lookup guards found the CRLF placement bug fixed in 32.7.
+33. **The 2026-09-30 scratch scripts as commands (done 2026-10-01).** Owner request: automation for hand work.
+    1. `relink QUEUE|WS --vanilla-core [--apply]` (long-running: progress, RELINK.partial.jsonl): the relink path
+       from 32.14, with two fixes that made more classes relinkable: an Object method whose recorded owner changed
+       (`Object.equals` vs `CampaignFleetAPI.equals`) is noise, and a decompile's re-declared variable in a shared
+       switch scope is commented out and recompiled (RogueSynth). Queue dry run: 157 clean, 2 more relinkable
+       (Epta, Scy Nation; applied), 9 left with the reason, 6 need a port. Revive runs it itself when
+       `jar-linkage-unresolved` is approved in AUTOMATION_POLICY.json (not approved yet).
+    2. `patch-jar-sources WS --vanilla-core [--apply]`: edits in a jar's source tree (backups beside them) go into
+       the jar after the pre-edit source is shown to rebuild the shipped class.
+    3. `bump-version WS --note`: +bf.N, a dated report section ending READY_FOR_LIVE_TEST, a MOD_CHANGELOG line.
+    4. `restore-from-done Done/<Mod>`: workspace back from an archive, reports and baseline included; says when
+       the archive kept no baseline (Arkgneisis).
+    5. `revive-review QUEUE --since DATE`: every applied fix diffed against its first backup; flags a misplaced
+       lookup guard or a jar-source edit. Over 2026-09-30: 75 applied, 0 flagged after the repairs.
+    Tests: `tests/test_workspace_tools.py`, `tests/test_progress.py`.
+    6. **`jar-interface-method-missing` (new check, 2026-10-01):** a concrete jar class whose game supertypes declare
+       an abstract method nothing in its hierarchy implements (an AbstractMethodError as shipped), from the class
+       files (`linkage.missing_interface_methods`; access flags now parsed). Found by compiling Polaris Prime, UNGP
+       and Wotani; the check then found nine more Wotani on-hit classes the relink never touched.
+    7. **`port-interfaces QUEUE|WS --vanilla-core [--apply]`** (long-running): ports the known RC8 contract changes
+       in shipped or decompiled source (onHit's ApplyDamageResultAPI, createCustomDialog's callback, an empty
+       buttonPressed) or, for a class implementing HullModEffect, CustomProductionPickerDelegate,
+       CampaignEntityPickerListener, CustomUIPanelPlugin or CustomDialogDelegate directly, `extends` vanilla's base
+       class (each checked concrete and complete for its interface). Patched only when each class changes by exactly
+       that. First run: 85 classes in 9 mods (DME 54, Wotani 10, Grytpype 6). Revive runs it when
+       `jar-interface-method-missing` is approved (not yet).
+    8. **Relink, three more cases:** a shipped source that does not compile (Lombok) falls back to the decompile;
+       Vineflower runs with `--kt-enable=false` (Kotlin classes as Java); an RC8 overload of the same name the
+       unedited source recompiles onto (Void-Tec's addCustom) and a same-descriptor rename (RENAMED_METHODS:
+       pickPortrait -> pickPortraitPreferNonDuplicate, Kadur Remnant) pass the gate. Declared dependencies are found
+       in the queue too (Magellan Shenanigans needs Magellan Protectorate). Scratch copies are keyed by package path
+       (Kadur's seven MissionDefinition classes). Tests: `OverloadGateTests`, `JarInterfaceMethodTests`, `SourcePortTests`.
+    9. **Left for a person (2026-10-01):** Tore-Up-Plenty (addMarket gained a parameter, setBaseSmugglingStabilityValue
+       removed, source does not build), Tyrador (createOfficer's 4-argument form has no RC8 match), DME
+       (BaseSalvageSpecial.setExtraSalvage removed; one mine-strike AI class), More Combat Terrain Effects (calls the
+       obfuscated internal Cloud class), Exotica Technologies (Kotlin decompile does not build), Bounties Expanded and
+       Special Hullmod Upgrades (the rebuild adds or drops a null check), Valkyrians (decompile error), and the
+       anonymous classes the port does not edit.
+    10. **Anonymous classes and source copy-back (2026-10-01):** an anonymous class of a base-class interface is
+        ported in its outer source (`new CampaignEntityPickerListener() {` -> `new ...BaseCampaignEntityPickerListener() {`;
+        Arkships' gate picker, which the full revive run caught, and RogueliteSector's startup dialog). When the
+        source came from the mod's own tree, the edited file is copied back over it (backup beside it) so the shipped
+        source matches the patched jar. Test: `CopyBackTests`.
+    11. **Owner rulings 2026-10-01, done.** DroneLib folded into RevenantLib 1.3.0+bf.1 (whole, names unchanged;
+        `dl_DroneAPI` given the 83 methods RC8 added to ShipAPI as forwarding delegates; RevenantLib builds from
+        source again with the obf jars on its classpath and `setColor` -> `setBaseColor`). More Combat Terrain Effects
+        and Exotica: superseded (0.98 releases in the 0.98 Modpack V6.2), as are both Dassault-Mikoyan copies,
+        Logistics Notifications, ScalarTech and Stinger (name match). Hand ports: Tiandong (three inflater methods,
+        vanilla bodies), Vanidad (two BoundsAPI methods), Tore-Up-Plenty (0.8 markets: industry-conditions ->
+        addIndustry via LEGACY_MARKET_CONDITIONS, addMarket(m, true), smuggling stability dropped), Tyrador
+        (forgeship rebuilt from the author's newer source), Valkyrians (decompile parentheses), Bounties Expanded and
+        Special Hullmod Upgrades (the only extra difference was `requireNonNull(this)`), Explorer Society and
+        Tyrador on-hit (jar kept a stale class the fixer had already ported in source), Neutrino and The Nomads
+        (BaseShipSystemScript added to the base-class table), Xenoargh Rebal TowCable.
+    12. **Tooling from those:** `close WS --status SUPERSEDED|NOT_REVIVABLE --reason` (queue commands now skip closed
+        mods: 102 of 295), `requireNonNull(this)` is not a counted call, port-interfaces builds a source already in
+        RC8's form, and supersession matches by name. Tests: `CloseTests`, `ThisCheckNoiseTests`, `PortTableTests`,
+        `NameMatchTests`.
+34. **Plan: fixers and automation for the hand work of the 2026-10-02/04 agent batches (owner request 2026-10-04).**
+    Each item is work done by hand (or by agents, then reviewed by hand) at least three times. Ordered by how much
+    hand work it removes.
+    1. **Per-ship state fixer for `hullmod-instance-state`** (the largest packet class: 54 source + 44 jar). Done by
+       hand or by agent 12+ times with one recipe: move each written field into a private static `State` class kept in
+       `ship.getCustomData()` (or `member` data for campaign methods), read `State s = state(ship)` at the top of each
+       method that takes the ship, `this.x` -> `s.x`. Fixer applies only when every written field is used solely inside
+       methods that receive a `ShipAPI`/`FleetMemberAPI`, there are no static writers, and the compiled diff is state
+       plumbing only; jar classes go through `patch-jar-class`. SEEKER's organic hull and Nightcross's plasma
+       aggregator are the test cases.
+       **Done 2026-10-04** for loose scripts: `bridgeforge/hullmod_state.py` `port_hullmod_state` (single-field
+       private declarations; refuses a method without exactly one `ShipAPI` parameter, a shadowing local, a use outside
+       a method), the `hullmod-instance-state` fixer, and `port-hullmod-state SOURCE --field F --out PATH` for jar
+       sources (then `patch-jar-class --allow-removed F`). A ported fixture compiles under RC8's Janino. Tests:
+       `HullModInstanceStateFixerTests`, `PortHullModStateCommandTests`. Not yet: `FleetMemberAPI` campaign methods.
+    2. **Entity-lookup "use the variable" fixer** (`hard-coded-campaign-entity-reference`, the next largest: 45). The
+       accepted agent fix in Hegemony, Scion, Mayorate, Gensoukyou, Traverser, Mountain-and-Sea and The Nomads was the
+       same: `system.getEntityById("x")` in the method that created `"x"` with `PlanetAPI v = system.initStar/addPlanet(
+       "x", ...)` -> `v`. Deterministic when exactly one local in the same method was created with that literal id
+       (or a String local holding it, as Traverser's `systemName`).
+    3. **Percent/multiplier fixer** (`suspicious-percent-multiplier`): `modifyPercent(id, 1f - P * 0.01f)` beside a
+       `modifyMult(id, 1f - P * 0.01f)` of the same constant -> `modifyPercent(id, -P)`. Tore-Up-Plenty and Batavia (4
+       hull mods), each confirmed against its description. Applied only with that sibling multiplier present.
+    4. **CSV repairs:** unescaped inner quotes (`the "little" brother` -> `""little""`, New Galactic Order) when
+       doubling them makes every row fit the header; and mixed-layout files (ship_systems rows from a newer header)
+       rewritten by column name into RC8's header when the wide rows match RC8's positions up to the last filled
+       column. Both done by hand 2026-10-02.
+    5. **Missing-dependency for compile errors:** a `loose-script-compile-error` whose missing package belongs to a
+       known library (GraphicsLib `org.dark.shaders`, LazyLib, MagicLib) declares the library instead of an agent
+       rewriting the code (Mountain-and-Sea's agent used reflection, which the script sandbox forbids).
+    6. **Own-system lookups are notes:** `hard-coded-campaign-system-reference` for a system the same mod creates with
+       `createStarSystem("X")` is SAFE (Qualljom's Holotis, accepted by hand).
+       **Done 2026-10-04:** a system or entity lookup whose own file creates the id is SAFE with evidence
+       `created-in-same-file`, a note in revive and skipped by the lookup-guard fixer. `addPlanet`/`initStar` now count
+       as creations (javap: id is the first argument), so Sylphon's Nym and Hiver's Kiztac read as local. Tests:
+       `test_scanner_attributes_local_campaign_identifiers`, `test_scanner_counts_add_planet_and_init_star_as_local_entities`.
+    7. **Agent-result triage before review:** flag automatically what was rejected by hand this week: reflection
+       (`java.lang.reflect`, sandbox-forbidden), a method body emptied or turned into a no-op, `this` hidden behind a
+       local to dodge `campaign-memory-live-object` (ICE), live objects moved to a static map (Void-Tec TimerBar),
+       imports of nested classes at the wrong path (Polaris). Add to `escalation_review.FLAGS`.
+       **Done 2026-10-04:** flags `reflection`, `static-map-state`, `this-hidden-in-local`, `nested-class-import` and
+       `method-emptied` (a method declaration with an empty body, or a net deletion ending in a bare return; an empty
+       `catch` stays `exception-swallowed`). Review prompts only. Test: `test_patterns_rejected_by_hand_are_flagged`.
+    8. **Batch runner as a command:** `escalation batch MODS... [--max-minutes 55]` with the rules the scratch script
+       learned: stop at the first usage-limit message from this run only, skip a mod whose workspace lock is held,
+       kill the agent tree on timeout, stop before the hour cap and print what is left so the next run resumes.
+       Replaces `agent_batch*.sh`.
+    9. **`escalation apply --patch-class` by default** for an attempt that edits jar sources (src/, jars/src/, a
+       mod's own source tree), with the new class diff shown first; refuse only when the source is not faithful.
+    10. **Supersession by content, not id:** a same-id 0.98 release supersedes only when it keeps most of the old
+        content ids (ships, weapons, hull mods); otherwise NEWER_DIFFERENT for a person (SEEKER 0.2 was closed by
+        mistake; only 5 of its 37 ships are in 0.6.6). **Done 2026-10-04:** `supersession.content_overlap` compares
+        `kind:id` rows of ship_data, weapon_data and hull_mods; under 50% of ours kept is `NEWER_DIFFERENT`; an
+        unreadable side keeps the verdict with `content_overlap: null`. Rechecked the 101 SUPERSEDED verdicts in the
+        queue's SUPERSESSION.json: 71 confirmed, 27 unreadable (no content CSVs), 3 NEWER_DIFFERENT: SEEKER (22 of 152,
+        14%), Cebby-Ship-Pack (0 of 5) and prv-Starworks (131 of 267, 49%), all three for the owner to decide.
+        Test: `ContentOverlapTests`.
+    11. **Ready mods to live-test groups automatically:** `probe-group plan` over `ready-list` output, with groups sized
+        by mod weight and conflicts (same id, same vanilla files overridden), so one rig session tests many mods.
+    12. **`escalation accept WORKSPACE ID[:FILE_PART]... --reason`** (the scratch script used for six mods on
+        2026-10-04): packet findings into the mod's baseline, the reason and keys into `ESCALATION_REVIEW.md`; a
+        selector matching nothing is an error. **Done 2026-10-04.** Test: `test_accept_in_mod_by_finding_and_file_part`.
+    13. **`nexerelin-corvus-mode-import` check and fixer:** a loose script importing `exerelin.campaign.SectorManager`
+        only for `getCorvusMode()` fails Janino without Nexerelin (Hiver Swarm). Rewritten to
+        `!getBoolean("$nex_randomSector")`, which Nexerelin 0.12.2d's `ExerelinNewGameSetup` writes (javap and bundled
+        source). Skipped when the mod requires Nexerelin. **Done 2026-10-04.** Tests: `NexerelinCorvusModeImportTests`.
+        Still open: confirm live that the entry point runs before mod `onNewGame` (Hiver Swarm in a Nex random sector).
+    14. **Spawned-ship captain fixer:** `spawnShipOrWing(id, loc, facing)` for a ship -> the overload with a captain from
+        `createPerson()` + `setPersonality(STEADY)` (RC8's `ChiralFigmentStats`); the check then treats that overload as
+        guarded instead of flagging every literal id (Traverser's turrets, by hand 2026-10-04). **Done 2026-10-04:**
+        `_fix_spawned_ship_captain` (loose scripts; 3-arg calls get `0f`, 4-arg keep their burn) adds a `bfSpawnCaptain()`
+        helper; the check skips 5-arg calls (`_call_argument_count`). Fixer output compiles under RC8's Janino. Test:
+        `SpawnedShipCaptainFixerTests`.
+    15. **Orbit-period check follows constants:** when every caller of the helper passes a constant radius, compute the
+        period and drop the finding (ORA's six derelicts, 250-425 days). Deferred 2026-10-04: proving the formula stays
+        positive for every caller needs expression evaluation, not a pattern; a near-miss would hide a save crash.
+    16. **Missing-comma JSON repair:** a list item followed by another item on the next line gets a comma, only when that
+        is the parse error and the file then parses (Hiigaran's `polaris.json`). **Done 2026-10-04:** new finding
+        `json-missing-comma` (REVIEW, replaces `unverified-json-syntax` only when the repair parses; org.json's
+        "Expected a ',' or ']'" / "or '}'" read from RC8's json.jar) and its fixer. On Hiigaran's original it picks
+        line 16, the hand fix. Tests: `JsonMissingCommaTests`.
+    17. **External memory keys, fewer false positives:** a Nexerelin key only written, or read under an
+        `isModEnabled("nexerelin")` guard, is a note (Kadur, Hiver). **Done 2026-10-04:** SAFE with evidence
+        `written-or-guarded` (`_external_memory_keys_harmless`). Test: `test_external_memory_key_written_or_guarded_is_safe`.
+    18. **Stray work archives move automatically:** `shippable-work-file` for a `.rar`/`.zip`/`.7z` in the mod root moves
+        it to `scratch/moved-work-files/` (Hiver's `Replacement Ships.rar`). **Done 2026-10-04:** the fixer already
+        existed; it kept the archive because Hiver's root README named it. Root `.txt`/`.md` no longer count as
+        references. Test: `test_moves_unreferenced_work_files_to_scratch_and_keeps_referenced_ones`.
+    19. **Missing rig providers:** `probe-group plan` copies (or names the command to copy) a ready provider into the rig
+        when a mod is unplaced only for it (SCY, YunruCore, ORA).
+    22. **Wing OP cost fixer and legacy wing_data layout** (owner ruling 2026-10-04: 36 blank wing costs in 7 mods set
+        to the nearest vanilla wing's by hand-run script; 6 of the 7 files were the pre-0.8 layout with no `op cost`
+        column at all). Two parts:
+        1. `wing-op-cost-blank` fixer, approval-gated (the value is a comparison, not a conversion): for a wing a
+           variant or a faction's autofit can fit, set the cost of the nearest vanilla RC8 wing with the same role
+           (nearest fleet pts, then fighter count). Built-in or never-fitted wings stay notes. Edit only that cell
+           (quote-aware raw edit, like the scratch script); write the table it used into the review sheet.
+        2. `wing-data-legacy-layout` check and fixer: a header without `tags`, `tier`, `rarity`, `op cost`, `range`,
+           `attackRunRange` or `attackPositionOffset` is the pre-0.8 layout. Rewrite rows into RC8's header by column
+           name (as done for New Galactic Order's ship_systems). The missing values need the same nearest-vanilla
+           comparison and approval; until then only `op cost` is filled. Needs live evidence first: what RC8 does with
+           a wing that has no `range`/`attackRunRange` (fighters that never leave, or vanilla defaults).
+        **Part 1 done 2026-10-04:** `_fix_wing_op_cost_blank` (tier `input`: needs the owner's approval; needs
+        `--vanilla-core`; only wings a variant fits or a faction knows; appends the column to a pre-0.8 file). Test:
+        `WingOpCostFixerTests`. Same day: `builtin-wing-is-hullmod` check and fixer (a hull mod id under
+        `builtInWings`, The Nomads' nom_komodo_p listed vanilla `advancedcore` there; the key is renamed when every
+        entry is a hull mod and there is no builtInMods yet; test `BuiltinWingIsHullmodTests`), and fresh fixer scans
+        now pass the caller's vanilla core. `probe-group plan --provider-source` (default: the real install's mods/ and
+        the 0.98 modpack) stages providers the queue lacks, copying from them and never writing there
+        (`OutsideProviderTests`).
+    23. **Content references only from files the game loads:** `content-reference-unresolved` read every `.variant`
+        under `data/`, so KIND STRANGER Disassemble-Reassemble's 14 missing `dara_` ids all came from the author's
+        `data/!TEMP_DISABLED_VARIANTS/`, which RC8 never loads (accepted by hand 2026-10-04). Limit variants to
+        `data/variants/**` (and missions' own), hulls and skins to `data/hulls/**`, after confirming RC8's load paths
+        with evidence (a live run with a variant parked outside `data/variants/`). Same day, provider staging gained
+        the Ironclads archive as a source, offering only copies whose gameVersion is 0.98 and the newest version.
+    24. **Renamed ids across versions:** `renamed-ids OLD_COPY NEW_COPY kind:id...` (read-only): RENAMED when the newer copy
+        has one entry with the same display name and description, SIMILAR when only a name word is shared (never
+        enough to remap), reading an old copy's alternate tables such as ship_data_old.csv. **Done 2026-10-04.** It
+        reproduces both hand cases: Xhan Empire 3.0.1's `XHAN_targeting_mast` -> `XHAN_TargetingMast` (remapped in the
+        Maelstrom Xhan expansion), and Traverser's `TDB_chuan_yue_xue_zhe` (only SIMILAR: the Cold Sky Scholar is an
+        unmanned redesign, so the hull was retired). Test: `tests/test_renamed_ids.py`. Next: a remap fixer for
+        RENAMED results, approval-gated.
+    25. **Declared dependencies outside the queue supply content and art.** **Done 2026-10-04:**
+        `scanner._dependency_roots` (every copy of each declared dependency across the provider roots, not one per
+        id), used by `content-reference-unresolved` (union of ids) and `asset-reference-missing` (RC8 resolves graphics
+        across enabled mods); `revive` adds `<queue>/PROVIDER_SOURCES.json` sources (opt-in; `In operation` lists the
+        real install's mods/ and the 0.98 modpack, never the mostly-0.95 Ironclads archive). By hand the same day this
+        cleared 16 addons' content and 6 mods' art. Tests: `test_a_declared_dependency_supplies_art_and_content`,
+        `OutsideProviderSourcesTests`.
+    26. **`find-providers` command:** the 2026-10-04 lookup scripts as one read-only command: missing ids and art of
+        a mod looked up across the install, modpack, queue and corpus index (zips and 7z), with version, gameVersion and
+        "defined" versus "only referenced".
+    27. **`escalation decisions` command:** the decision sheet for the commonest blockers (DECISIONS_2026-10-04.md),
+        with the evidence each recommendation rests on (built-in or fitted wings, fatal or silent missing content,
+        unused referring files, CJK size).
+    28. **`translate-batch` command:** the agent translation pipeline (export, 120-entry chunks, one agent per chunk,
+        strict verify: every entry filled, no CJK left, markers kept; apply only when all pass; checkpointed).
+        **Done 2026-10-04:** `bridgeforge/translate_batch.py`, `translate-batch MOD (--out COPY | --in-place) [--agent CMD]
+        [--reference EN_COPY] [--record REC]`: export, prefill, chunks to the agent (one chunk file each, prompt on stdin),
+        `verify_chunk` (ids/sources unchanged, filled, no CJK, placeholders as apply counts them), one retry, glossary
+        carried between chunks, apply and translate-check; checkpointed and stops at a usage limit. In
+        LONG_RUNNING_COMMANDS. Tests: `tests/test_translate_batch.py`.
+    29. **Supersession across multi-mod packs:** read every root inside a pack zip (the Yunru pack held 9 modules and
+        superseded YunruCore and Old School Expansion at 100% content overlap, found by hand).
+    30. **References from files RC8 never loads are notes** (extends 34.23): a `.ship` or `.wpn` with no ship_data /
+        weapon_data row that nothing mounts (YunruCore's 36 addon hull files, Stardust's smc_leftarm_mech, Terraformers'
+        7 unfinished decorative weapons, all accepted by hand 2026-10-04), an unregistered `.faction`
+        (Traverser's TDB_CN), variants outside data/variants. Needs RC8 evidence that an unregistered spec file loads
+        nothing.
+    31. **Remap fixer for `renamed-ids` RENAMED results**, approval-gated (Xhan's targeting mast, by hand).
+    32. **Definitions index:** a derived table in bridgeforge-state (kind, id or asset path, mod id, version,
+        gameVersion, source, file) built from the corpus index, so "who defines X / ships Y" is one query. Small next to
+        the corpus index (which holds full file text); feeds 34.26 and 34.24.
+    33. **Translation false positives and gaps found by the 2026-10-04 batch:** (a) `player-text-non-english` counted
+        CJK in trailing `#` comments of JSON-like files as player text: all 8,781 of Mirfak Parcel Service's characters
+        are comments (`"displayName":"Mirfak Parcel Service",  # 显示名称`) and translate-export rightly finds 0 units.
+        Count only what translate-export would export. (b) **Done:** translate-export skipped nothing in CSV rows the
+        game ignores (first cell starting `#`); FSF's `rules.csv` comment rows came back blank from the agent and blocked
+        the mod. Test: `CommentedCsvRowTests`. Same day: intake retries a Windows PermissionError on the final rename
+        (the 9-mod Yunru pack's freshly extracted tree, held open briefly; failed twice before).
+    34. **Live crash lessons, 2026-10-04 (owner crash logs in Downloads):** (a) DNEEP crashed on load:
+        `setIndustryOnPlanet(SystemName, ...)` dereferenced `getStarSystem(SystemName)` for vanilla systems a
+        random sector lacks; the literal-name checks never saw a variable. **Done:** `campaign-lookup-dereferenced-unguarded`
+        (a getStarSystem/getEntityById on a variable used directly with no null check earlier in the method) and its
+        fixer (guard and return, only when the lookup is the first statement of a void method; anything else refused).
+        It reproduces the hand fix on the archived DNEEP; DNEEP is now +bf.1. Test: `UnguardedVariableLookupTests`.
+        (b) RogueSynth's tooltip threw NoSuchMethodError on `addImageWithText(F)V`: `jar-linkage-unresolved` had found
+        it and the queue copy was relinked (+bf.2), but Done/ still held +bf.1, as did Arkgneisis, Megastructures Tab
+        and Slightly Better Tech Mining. **Done:** `done-audit` (re-scans every Done/ mod: STALE when the queue copy's
+        shipped files differ from the archive, plus crash-class and MANUAL/UNKNOWN findings the baseline does not
+        accept; Done/DONE_AUDIT.md; long-running). Test: `tests/test_done_audit.py`. The five were re-archived (old
+        archives kept in Done/_previous/<mod>-<version>; a live waiver recorded for each narrow fix); the shipped-copy
+        audit compares against `scratch/original-extracted/` when original/ keeps only zips (Arkgneisis). Next: an
+        `archive --replace` that does the _previous move itself, and a Done/ check after every bump-version.
+    35. **Suspect initStar/addPlanet arguments** (owner request 2026-10-04). Zorg18's archived +bf.4 carried two bugs
+        from the modpack port it was built from: the 0.6 call `initStar("star_zorg", 200f, 10000, -10000)` (last two the
+        hyperspace location in 0.6) became RC8 `initStar(id, type, 200f, -10000)`, a corona of -10000, and Zeta I's
+        `addPlanet(star, "Zeta I", "zorg_planet", 0, 100, 5000, 100)` lost its radius, shifting to `0, 0, 100, 5000`
+        (a radius-0 planet orbiting at 100). Zeta II was ported right. **Done:** `bridgeforge/procgen_args.py` and
+        `procgen-call-argument-suspect` (tier decision: the intended numbers need a person), from sources and, with a
+        JDK, jar classes via javap (float pushes tracked to RC8's signatures; only literals judged: radius <= 0,
+        corona < 0, orbitRadius < 0, orbitDays <= 0). Flags both calls in the archived jar and the modpack source; the
+        owner's rebuild is clean. In `done-audit`'s crash class. Tests: `tests/test_procgen_args.py`.
+    36. **Settings keys no settings.json defines** (owner crash log 2026-10-04): Exigency 0.8's
+        `ExipiratedAvestaSubmarketPlugin` read `getFloat("blackMarketMinSupplies")` (and ...MinFuel, ...MinMarines):
+        vanilla had them in 0.8.1a (50, 50, 30) and dropped them by 0.9a; Exigency never defined them; RC8 threw
+        `JSONException` when Starpocalypse refreshed the Avesta market. Fixed in the jar (patch-jar-class: three
+        getFloat -> `getSettingsJSON().optDouble(key, 0.8.1a value)`), Exigency 0.8 is +bf.1, re-archived. **Done:**
+        `bridgeforge/settings_keys.py` and `settings-key-missing` (tier code: the right default needs the key's history),
+        literal reads in sources and, with a JDK, jar classes via javap, against RC8's, the mod's and its declared
+        dependencies' settings.json. Flags the three in the old Exigency jar, none in +bf.1. In `done-audit`'s crash
+        class. Tests: `tests/test_settings_keys.py`. Same day: Zorg18 V18+bf.6 (Unimatrix size 10, owner request).
+    37. **Faction blueprint tags that match nothing** (owner report 2026-10-04: Exigency's ships could not be bought).
+        exigency.faction knew `knownShips/priorityShips/knownWeapons {tags: [exigency_bp]}` and exipirated.faction
+        `exipirated_bp`, but no hull or weapon carried those tags (only Exigency's wings did), so neither faction knew
+        its own ships or weapons: none in its markets, none from raids. Author's latent bug (original identical, no
+        runtime registration). Fixed: Exigency's 7 ship hulls and 18 sellable weapons tagged exigency_bp (SYSTEM-hinted
+        and fighter-only weapons and fighter hulls left out), Exipirated's 7 hulls exipirated_bp; Exipirated's
+        knownWeapons left as authored (its only own weapons are SYSTEM). Exigency 0.8 is +bf.2, re-archived.
+        **Done:** `faction-known-tag-unmatched` (tier decision: which items belong to the tag is a judgement), against
+        the mod's, RC8's and declared dependencies' ship/weapon/wing tags; in `done-audit`. Test: `FactionKnownTagTests`.
+        Same day, `done-audit` checks packaging too (owner question: are all mods correctly packaged?): the mod's
+        `<folder>-<version>.zip` exists, names the version its mod_info.json declares, holds no entry twice
+        (case-insensitive) and the same files as the folder. Test: `PackagingTests`.
+    38. **Hooks only one mod can own** (owner question 2026-10-04: will AoTD conflict with revived mods?). AoTD sets
+        six RC8 industries' plugins at load (javap, `IndustrySpecAPI.setPluginClass`): population (Theory of Toolbox),
+        heavyindustry and orbitalworks (Vaults of Knowledge), patrolhq, militarybase, highcommand (Seats of Power);
+        Toolbox also replaces the economy object (`AoTDEconomy`, reflection). DNEEP's industries.csv population plugin
+        is therefore silently dropped with Toolbox; Adjusted Sector's new-game plugins collide with Nexerelin, Random
+        Assortment of Things and Wide Horizons (same settings keys); Exigency's and Omega-Trauma's fleet spawners create
+        and remove a market per fleet, which Toolbox turns into a structural economy refresh (RC8's FleetFactoryV3
+        handles `source = null` itself). **Done:** `industry-plugin-override` (names the AoTD mod when it is one of the
+        six), `new-game-plugin-override`, `temporary-market-fleet-source`, all REVIEW; `done-audit` lists them as
+        compatibility risks without changing an archive's status; compatibility sections in the DNEEP, Adjusted Sector
+        and Slightly Better Tech Mining archive notes. Test: `tests/test_shared_hooks.py`. Fixer (tier auto) for
+        `temporary-market-fleet-source`: drops `removeMarket` of a market that never entered the economy (RC8-22).
+    39. [ ] **Population-delta fixer** (owner request 2026-10-04): an industries.csv override of a vanilla industry
+        whose class is RC8's source plus added `demand()`/`supply()` calls and stability effects becomes a market
+        condition adding them through `Industry.getDemand/getSupply` (RC8's ResourceDepositsCondition pattern); any
+        other change is MANUAL. Proven first by hand on DNEEP (`PopulationNeedsDNEEP`) with AoTD on the rig.
+    40. [x] **Crew-tier mapper** (Ironclads, 2026-10-04): `CargoAPI.CrewXPLevel` (removed in RC8) -> one crew; reads of
+        REGULAR become `getCrew()`, other tiers 0 (tier sums stay right), add/removeCrew drop the tier. Owner decision
+        "one crew". Done by hand in 5 Ironclads files.
+    41. [x] **Signature rewrites with exact RC8 equivalents** (Ironclads, javap 2026-10-04): `EconomyAPI.addMarket(m)`
+        -> `addMarket(m, true)` (vanilla passes true); `TileParams(..., 7 args)` -> RC8's 8th `name` argument;
+        `RepActionEnvelope(action, param, CommMessageAPI, boolean)` -> `(action, param, message, null, boolean)`;
+        `MarketAPI.addCondition(id, boolean, Object)` -> `addCondition(id, Object)`.
+    42. [x] **Replaced core file drops RC8 rows** (check): a `replace` entry for an RC8 CSV the mod does not fully
+        restate (Ironclads replaced commodities.csv and market_conditions.csv, losing `crew`, AI cores and every
+        deposit condition RC8's own code adds). Nothing flagged it.
+    43. [x] **Bundled copy of a retired vanilla class** (check): a mod class in a `com.fs.starfarer.api` package that
+        RC8 no longer ships and nothing in the mod starts (Ironclads' `SystemBountyEvent` was vanilla 0.7.2's,
+        unchanged; RC8 replaced it with SystemBountyIntel). `vanilla-duplicated-classes` compares only against
+        classes RC8 still has.
+        **Done 2026-10-05 (40-43):** 40 in `removed-api-call` (the scanner pattern now matches `getCrew(CrewXPLevel.X)`;
+        REGULAR -> `getCrew()`, other tiers `getCrew() * 0`), test `test_tier_reads_become_one_crew`; 41 as
+        `rc8-signature-changed` (check + auto fixer, `bridgeforge/signature_rewrites.py`; RepActionEnvelope left out: RC8
+        also has a 4-argument form with another third type); 42 as `replace-drops-rc8-entries` (it also found Ironclads'
+        vanilla faction copies lacking knownHullMods and doctrine); 43 as `retired-vanilla-class-copy` (classes an
+        older reference install shipped and RC8 does not). Tests: `tests/test_signature_rewrites.py`.
+    46. [x] **Probe: gameplay sweeps, not just load** (owner request 2026-10-05). (a) class sweep: load every class of
+        each enabled mod jar and resolve its methods (catches NoSuchMethodError at the menu, RogueSynth's tooltip);
+        (b) campaign smoke: after a new game and ~30 days, per faction known ships/weapons, market count, fleets alive,
+        ships for sale (Exigency's unbuyable ships and missing fleets read as zeros); (c) mission sweep: each listed
+        mission's fleets resolve; (d) hull mod tooltip and refit render sweep.
+    47. [x] **bundled-source-stale** (check): compile the mod's bundled jar source and compare classes/members with the
+        jar; when they differ, checks judge from the jar (Grytpype's hull mods, Tritachyon's PeachGarden, 2026-10-05).
+    48. [x] **False-positive accounting**: baseline acceptances carry their finding id and reason; `finding-stats`
+        ranks checks by how often findings were accepted as harmless; each acceptance pattern becomes a test.
+    49. [x] **Faster long runs**: a checkpoint resumes when only the workspace list grew (the 2026-10-04 queue pass
+        restarted from 0 because two workspaces were added); scans cached by content hash; parallel workers.
+    50. [x] **mods-compat**: read-only scan of the owner's real mods folder for shared hooks (industry plugins,
+        new-game generators, replaced core files, shadowed vanilla scripts) across every installed mod.
+    51. [x] **Check guard patterns**: persistent-data flags (SLPC's CLASS_MARK) and nested `src/src` roots (Artefact)
+        in system-generation-unguarded.
+    52. [x] **Commit helper**: stage tracked docs only (a `git add docs/*.md` on gitignored files broke a commit
+        chain, 2026-10-04).
+    53. [x] **Crash-log triage outside the rig**: take a pasted crash log, find the owning mod and class in the
+        owner's real mods folder (the EPTA crash took a manual search, 2026-10-04).
+        **Done 2026-10-05 (44, 46-53):** 44 `decompile-jar` (Vineflower -> source tree; `rebuild-jar` already
+        compiled, jarred and diffed). 46 probe 0.2.12: `mission-fleets` (every fleet member the missions name resolves),
+        `class-sweep` (each top-level class of the target jar loads through the game's script class loader; the
+        sandbox forbids reflection, so no member resolution), `hullmod-descriptions` (getDescriptionParam at each hull
+        size for the target mod's hull mods; a full tooltip needs the UI), and `faction-known-lists` warns when a mod
+        faction knows none of the mod's own ships (Exigency's base_bp-only case); probe-config writes
+        `mission_fleets` and `class_sweep`. Live verification with the next live test. 47 `bundled-source-stale`. 48
+        `baseline-stats`. 49 checkpoint resume on a grown list and `revive-queue --jobs N` (scan caching deferred:
+        results also depend on the BridgeForge version). 50 `mods-compat` (on the owner's install: AI-Retrofit,
+        Shadowyards and IndEvo against AoTD, two LevelupPluginImpl shadows). 51 persistent-data flags and qualified
+        generator calls. 52 `docs-index --stage`. 53 `log-triage --mods-dir` indexes loose scripts and names crash
+        classes in no installed mod (the EPTA report). Tests: test_decompile, test_probe_config, test_mods_compat,
+        test_baseline_stats, test_progress, test_revive_queue, test_signature_rewrites.
+    44. [x] **Whole-jar rebuild command**: decompile (Vineflower) -> source tree -> javac --release 17 against RC8 ->
+        jar, with a class diff against the original (Ironclads' IroncladsEcon.jar was rebuilt by hand).
+    45. [ ] **0.7 economy translators** (decision tier, once a second 0.7 economy mod arrives): Ironclads'
+        `IroncladsMarkets` condition->industry table and its commodity-row conversion (nearest RC8 analogue's
+        0.7->RC8 price ratio and RC8-only columns), generalised.
+    21. **Repeat-work report** (owner recommendation 2026-10-04): read-only, local to the corpus. Aggregate verified
+        escalation outcomes by finding id across every workspace's `ledger.jsonl` and review sheets: how often the same
+        edit pattern was accepted, rejected or done by hand, with links to before/after evidence. It ranks the next
+        fixer from real work and never promotes a REVIEW finding to SAFE. Not for CI (private game and mod inputs).
+    **Owner order 2026-10-04 for what is left of item 34:** 34.7 agent-result triage and 34.10 supersession by
+    content first (both prevent costly wrong decisions), then 34.2 entity-lookup fixer (throughput), 34.11 groups from
+    `ready-list`, 34.3 the narrow percent fixer (strict evidence: a matching `modifyMult` and the description), 34.21.
+    20. **Commented-out mission fleet lines:** `mission-local-fleet-reference-missing` matched a `//` line (Scy-Nation's
+        `SCY_11_soldierOfFortune`, MissionDefinition.java:52, 2026-10-04); blank comments first, as other source checks do.
+        **Done 2026-10-04.** Test: `test_commented_out_mission_fleet_line_is_not_a_reference`.
+35. **Plan: features shared with the sister programs, both ways (owner request 2026-10-04).** SPW
+    (`Documents/Starsector project workbench`, `Exxec/SPW`), Project Go (`Documents/Starsector project go`) and
+    Salvor (`Documents/Project Salvor`) stay separate programs with no shared runtime code; ports are copies with
+    their own tests, or versioned JSON files one writes and the other reads. Project Go's and SPW's own
+    interchange designs (`docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md`, `docs/SISTER_REPO_INTERCHANGE_DESIGN.md`,
+    2026-09-27) are the contracts to follow.
+
+    From BridgeForge to the others:
+    1. **Salvor reads per-ship state keys:** `<HullMod>_bfState` / `ART_organicHull_state` in ship custom data are
+       BridgeForge's (34.1); Salvor's diagnose names them instead of reporting unknown objects, and warns when a
+       save from before the patch still holds the mod's old field values.
+    2. **Salvor reads the sector mode:** `$nex_randomSector` / `$nex_corvusMode` in sector memory decide whether a
+       missing Corvus system is a fault (vanilla sector) or expected (Nexerelin random sector) before any removal plan.
+    3. **Salvor uses `progress.py` and checkpoints** for save folders and large saves (the 2026-09-27 rule).
+    4. **Salvor records "keep as is" rulings** with a reason, as `escalation accept` does, so a later run does not
+       flag them again.
+    5. **SPW gets the RC8 org.json leniency rules:** BridgeForge's `_parse_json` (javap-backed, see
+       [[bridgeforge-json-leniency-gap]]) plus the missing-comma repair (34.16) and the early-closing root check
+       (`json-content-after-root`, Holy Covenant's stray brace), so both tools agree on what RC8 loads.
+    6. **SPW compiles loose scripts with RC8's Janino** before it writes one (`compile_check.janino_compile`).
+    7. **Project Go gets BridgeForge's untranslated-text list:** `player-text-non-english` / `non-ascii-identifier`
+       file+key evidence as an input that names what its extractor skipped (it missed 861 strings on Nightcross,
+       108 units on FlowerGod). Fits Project Go's own P7 (`docs/BRIDGEFORGE_METHOD_CONVERSION.md`).
+    8. **Project Go path wrapper:** copy to an ASCII, space-free path, run `ssmt-cli`, copy back; removes the
+       non-ASCII path and `JAVA_HOME`-with-space launcher failures.
+    9. **One evidence-row format for all three:** `docs/RC8_BEHAVIOUR.md` (one row per live-proven fact, cited by id)
+       adopted by Salvor for save-format facts and by SPW for runtime facts.
+
+    From the others to BridgeForge:
+    10. **hs_err crash logs in `log-triage`** (SPW `crash_log.find_crash_logs/parse_crash_log`): a JVM crash
+        (`hs_err_pid*.log`, one sits in this checkout today) is triaged with the problematic frame, the Java frames
+        that belong to a mod (SPW `jar_ownership`), and memory figures, beside the game log and `windows.txt`.
+    11. **Rig core integrity** (SPW `core_integrity.classify_core_integrity`): before `bf-test launch`, hash the rig's
+        `starsector-core` against a recorded RC8 baseline, so "the rig matches vanilla RC8" is checked, not assumed.
+    12. **SPW performance export into `spw_bridge.py`:** read SPW's versioned `performance-report.json` and mod
+        identity inventory instead of guessed key aliases; keep old imports as unverified. The inventory's duplicate
+        ids, renamed-disabled `mod_info`, and stale `enabled_mods.json` feed `probe-group` and the rig preflight.
+    13. **Translated-clone audit** (Project Go `PatchBuilder`'s `TranslatedCloneAudit`): before `archive`/`release`,
+        compare every file of the shipped copy to `original/`; a file may differ only when a recorded fix or
+        translation explains it. Catches stray edits and lost files that today only a probe run would show.
+    14. **Glossary for translations** (Project Go `GLOSSARY_FORMAT.md`, schema v1): `translate-apply` uses a shared
+        term list so a faction, ship or weapon name is translated the same way across files and mods.
+    15. **Project Go's standard CSV text columns** (`StandardCsvSchemas`): which columns of which vanilla CSVs are
+        player-visible text, so `player-text-non-english` and `translate-export` check exactly those columns.
+    16. **Project Go coverage export into the translation review:** join its `localization-coverage.json` on exact
+        source hash and path; a mismatch blocks a "fully translated" claim.
+    17. **Salvor's save fingerprint** (SPW `save_fingerprint`): `save-baseline` records which mods and versions a save
+        was made with, so a probe or a Salvor repair can say a save and a rig do not match before loading it.
+
+36. **Plan: live-test trust (owner priorities 2026-10-04).** Design: `docs/LIVE_TEST_TRUST_DESIGN.md`. Order: 2, 4, 1,
+    3, 5, then 6-11.
+    **Done 2026-10-04** (all eleven): `probe_group._providers_for`/`stage_providers` and `install --stage-providers`
+    (36.1, `ProviderStagingTests`); `rig_doctor._check_core_integrity` with the build read from `StarfarerLauncher`
+    and `bf-test.ps1 launch` refusing on a rig-doctor FAIL (36.2, `RigCoreIntegrityTests`, `RigCoreBuildTests`);
+    `live_trust.audit_shipped`, `audit-shipped`, `audit-explain` (36.3, `ShippedAuditTests`); `crash_log.py`, the
+    launch copying `hs_err_pid*.log` beside the log, crashes attributed in `group_report` (36.4, `tests/test_crash_log.py`);
+    `live_trust.save_made_with`/`compare_made_with`, `made_with` in save baselines (36.5, `SaveMadeWithTests`);
+    `write_run_record` from `probe-group record` into `<queue>/_live/` (36.6), `live_status` (36.7, `RunRecordTests`),
+    `probe-group bisect` (36.8, `BisectTests`), the known-noise check in the run record (36.9), `rig_fingerprint` in
+    `log-triage` (36.10), `archive_gate` in `archive` and `record --archive` (36.11, `ArchiveGateTests`).
+    Left for a local session: record the RC8 core baseline once (`rig-doctor --write-core-baseline`). Mods validated
+    before 2026-10-04 read `UNKNOWN_BUILD`; archive them after a re-run, or with `audit-explain --live --reason`.
+    1. **Missing rig providers staged by `probe-group`** (supersedes 34.19): find the ready workspace that declares the
+       missing id, print or perform the `copy-drift --sync`, verify id, version and zero drift before the probe runs.
+    2. **Core integrity in the launch preflight** (35.11): `rig-doctor` `core_integrity` **built 2026-10-04**
+       (`_check_core_integrity`, `--write-core-baseline`; test `RigCoreIntegrityTests`). Still: record the RC8
+       baseline with its build, run it from `bf-test.ps1 launch` and stop on FAIL, cite the baseline in results.
+    3. **Shipped-copy audit before archive/release** (35.13): every difference from `original/` explained by a
+       recorded change, else the archive fails; `audit-explain` records a person's explanation.
+    4. **JVM crash logs in `log-triage`** (35.10): **built 2026-10-04** (`bridgeforge/crash_log.py` from SPW; FATAL
+       `JVM crash (hs_err)` with mod-owned frames; tests `tests/test_crash_log.py`). Still: `bf-test.ps1` copies the
+       hs_err to `<TESTID>.hs_err.log`; time match where creation time is unknown; `probe-group record` uses it.
+    5. **Save baselines bound to their mod set** (35.17): `made_with` from `descriptor.xml` plus rig versions/jar
+       hashes; a mismatch makes a comparison REVIEW or UNKNOWN, never a pass. Shared reader with Salvor.
+    6. **One run record per live test** (`reports/live/<TESTID>.json`) joining inputs and outputs.
+    7. **Stale-result detection:** a live result holds only while the shipped hash matches its run record.
+    8. **`probe-group bisect N`:** split a failed group into two dependency-closed groups.
+    9. **Known-noise budget per group:** a jump in KNOWN-NOISE between runs of a group is REVIEW.
+    10. **Rig fingerprint in triage output:** enabled mod set and core baseline id printed with the result.
+    11. **Archive gate:** refuse a stale (7) or unaudited (3) mod unless the owner records why.
+
 ## Post-1.0 research and gated automation
 
 ### Deferred migration findings from the 0.98a corpus audit
@@ -2574,6 +3122,42 @@ Bridgeforge modernizes legacy mods. It does not profile performance. The related
 - **V0.9:** modernization-opportunity analysis; no automatic adoption. **Status: static, report-only adoption candidates implemented with explicit high behavioral risk and no automatic change path.**
 - **V1.0:** repeatable scan → diagnose → plan → apply → compile → review → validate → report pipeline. **Status: orchestration command and final workspace modernization report implemented.**
 
+## Idea: Salvor (working name), a save doctor, editor and trainer as a separate program (2026-09-29)
+
+**Started 2026-10-02:** `Documents/Project Salvor` (local git, no remote), v0.1.0 `repair` on a copy; BridgeForge provides `save-doctor` and `save-removal-plan` (read-only).
+
+Owner idea: a separate program that diagnoses and fixes saves, then grows into an editor and trainer. Start small, as
+BridgeForge did. BridgeForge's saves stay read-only (P3b: "the game creates state, BridgeForge reads it"), so
+writing lives in a sibling program that reuses BridgeForge's save reader and `save-*` commands, the RC8 registries
+and `RC8_BEHAVIOUR.md`, the rig and probe patterns, Project Go's GUI and packaging, and SPW's agent-mod and
+crash-log work. Proposal, growth order and owner decisions:
+[docs/SAVE_TOOL_PROPOSAL.md](docs/SAVE_TOOL_PROPOSAL.md).
+
+1. [x] Owner decisions, 2026-09-29: working name Salvor, in its own repository; Python; a trainer independent of
+   the game (offline presets on a save copy, no in-game mod); local-only.
+2. [ ] Diagnose (read-only): package the `save-*` commands and crash reading for players.
+3. [ ] Fix on a copy: plan, write the copy, re-read it, then load-test it in the rig. Original saves are never
+   overwritten.
+4. [ ] Editor, validated against RC8 registries (skills RC8-18, market conditions RC8-16, weapon slots RC8-17, ids).
+   **Moved to VoidSmith (owner, 2026-10-06);** Salvor stays a lightweight save rescue (diagnose and repair a copy). First scope:
+   minor edits to the current state (credits, supplies, fuel, crew, marines, machinery, story points), then fleet repair
+   state, then blueprints, members and relations. Blocked on a VoidSmith charter decision (it is read-only and its
+   campaign-save parsing is decision-gated); capacity behaviour above cargo limits needs live evidence first.
+   Design: [docs/SAVE_TOOL_PROPOSAL.md](docs/SAVE_TOOL_PROPOSAL.md), revision 2026-10-06; VoidSmith side recorded as its phase 57
+   (`docs/SAVE_WORKSHOP_DESIGN.md`, design only). Overage effects (slower fleet, more supplies per day, formula unknown) need a
+   controlled rig run before any rule is written down.
+5. [ ] Trainer: offline presets on a save copy, through the editor's validation and the rig-load gate (follows the editor, in VoidSmith).
+6. [ ] **Migrate (owner goal 2026-10-06; Salvor; may expand it a lot): make a save that a game or mod update broke load again.**
+   Local-only: a public release is **not** a goal (migration data encodes third-party class names, ids and obfuscated game
+   internals, which cannot be shipped, and "loads" is never "plays the same"). Plan: diff the old and new builds (classes, fields,
+   enum values, data ids); classify each delta SAFE (1:1 evidenced rename, default fill for an added field), REVIEW, MANUAL or
+   UNKNOWN, with evidence; apply only SAFE ones to a copy; accept only after a rig load test; keep reusable migration packs as
+   local data per mod or game version pair, hand-written ones for MANUAL cases. Build on `save-compat --compare-old/--compare-new`,
+   `port-interfaces` and the registries. Revived mods that rename things should ship a pack with their `+bf.N` revision. Limits:
+   no generic conversion across major game versions; mods that redesign their stored state need a mod-specific migration. If a
+   public release is ever wanted, only the small safe subset qualifies: drop/remove/default-fill, mapping derived at run time
+   from the player's own old and new installs, nothing third-party bundled, strong disclaimers.
+
 ## Sister repository interoperability (proposed 2026-09-27)
 
 Design and acceptance gates: [docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md](docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md). These are pending, separate from revival completion and release readiness.
@@ -2582,3 +3166,55 @@ Design and acceptance gates: [docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md](docs/
 2. [ ] Consume Project Go localization coverage for an exact mod-root hash; expose uncovered and unknown items without changing source or claiming complete coverage from partial extraction.
 3. [ ] Compare BridgeForge's release evidence fields with VoidSmith and Project Go as a design reference; do not create a shared runtime dependency.
 4. [ ] Consume optional SPW mod inventory with duplicate/disabled identity handling, while preserving BridgeForge's native scan.
+
+## Proposed ideas (2026-10-06, owner asked for per-project ideas; proposed, not approved)
+
+Each idea gives the benefit and where the evidence came from. None is scheduled.
+
+1. [ ] **Rig bring-up in one command (`rig-up`).** Create or refresh a rig, sync its mods from working copies, enable the
+   mods a test needs plus the probe and SpeedUp, write the probe config and run `rig-doctor`. Benefit: the Exigency test needed
+   about ten manual steps (sync, enabled_mods, probe-config, doctor, SpeedUp); one command removes slips such as the
+   `/MIR` path mangling and a stale rig copy.
+2. [ ] **`accept` for a non-group live run.** After a clean run, check the log milestones (main menu, save, no FATAL or
+   MOD-ERROR), append the dated evidence section to the revival report, set LIVE_VALIDATED, and archive. Benefit: this session
+   hand-edited the report status and re-archived by hand; the evidence section would be uniform and checkable.
+3. [ ] **`archive --refresh`.** Replace an existing Done/ folder safely and rebuild its `-with-readme.zip` for that folder
+   only. Benefit: today it means deleting the folder and running a whole-Done script; a mistake could touch other archives.
+4. [ ] **Caught-exception triage.** `log-triage` reported MOD-ERROR=0 on a run whose real risk (Nexerelin's `StrategicAI`
+   logging an NPE and carrying on) is a logged ERROR with a stack trace, not a crash. Attribute each logged stack trace to the
+   mod that owns the top non-vanilla frame and count it per mod. Benefit: finds failures that do not crash, such as the
+   original Avesta error, before a player does.
+5. [ ] **Time-accelerated soak run.** A scenario that lets a campaign run for many in-game months (SpeedUp, or the probe's
+   interval) and then triages the whole log. Benefit: relocation, raids, economy ticks and fleet managers only show up over
+   months; the Avesta hop appeared only after about 60 game days.
+6. [ ] **Raid and invasion scenario mod.** A separate mod, allowed to use Nexerelin classes, that forces a raid at a chosen
+   market. The public-API-only probe cannot. Benefit: turns "raid path unobserved" (item 56) into a test, and covers other
+   target types (no industries, hidden markets).
+7. [ ] **Finish item 58.** Run the live negative control; add a static check for `addMarket` on a hyperspace entity in loose
+   scripts; sweep the corpus for other stations in hyperspace. Benefit: a known crash class found in every mod that has it.
+8. [ ] **Migration packs with revivals.** A revived mod that renames ids or classes ships a local migration pack with its `+bf.N`
+   revision, checked by `save-compat` before archiving. Benefit: the owner's own saves survive revisions; feeds Salvor's Migrate
+   goal.
+9. [ ] **Save-format survey across versions.** Run `save-format-survey` on saves from other game versions when available, to
+   give VoidSmith's Save Workshop the version boundaries its parser gate needs. Benefit: closes the one-version limit of item 59.
+
+**Implemented 2026-10-06 (owner: work in the recommended order):**
+- Item 4 done: `log-triage` reports `caught_exceptions`, logged ERROR/WARN events carrying a Java exception that did not crash, grouped by exception class and first frame with a count, line range and (with `--mods-dir`) the owning mod of the nearest mod frame. The mod whose data caused it is often not on the stack, so `suspect` is where the code threw. Tests: `tests/test_caught_exceptions.py`.
+- Item 5 done: probe 0.2.17 logs a `campaign-day` heartbeat; `bridgeforge soak-report LOG --days N` returns PASS, ATTENTION or INCOMPLETE from days covered, FATAL/MOD-ERROR, probe FAILs and caught exceptions; `bf-test soak <TESTID> <days>` runs it on a rig log. The campaign is sped up with the SpeedUp key; an automated clock skip was not built (`SectorAPI.setInFastAdvance` exists but its effect is unproven). Tests: `tests/test_soak_report.py`.
+- Item 2 done: `bridgeforge accept WORKSPACE --log LOG --test-id ID --note ...` checks the log (main menu, a load or save, no FATAL/MOD-ERROR, enough days with `--days`), refuses probe FAIL lines and caught exceptions unless `--accept-findings` gives a reason, writes the dated evidence section and LIVE_VALIDATED, and writes the run record the archive gate reads. Tests: `tests/test_live_accept.py`.
+- Item 3 done: `archive --refresh` replaces an earlier archive (only a direct child of Done/ holding an ARCHIVE_NOTE.md) and `--readme-copy` writes `<zip>-with-readme.zip` and `readme.txt` for that archive only. Tests: `tests/test_live_accept.py`.
+- **Found by item 2 on first use:** the Exigency 0.8 hop run (AVESTA-HOP-1) has 129 probe FAIL lines that the hand-written acceptance did not account for: `faction-fleet-gen` FAIL for `exipirated` (FleetFactoryV3 built an empty patrolMedium although the faction knows ships and its cheapest hull is within the 60-point budget; `exigency` and `player` build 10-11 members) and `class-sweep` FAIL for `data.scripts.radar.exigency_RepulsorRenderer` (NoClassDefFoundError for the optional Combat Radar integration, which the rig does not have). The run record for AVESTA-HOP-1 is therefore not written (live status UNKNOWN_BUILD) until the owner decides: investigate, or accept with a reason. The save held an Exipirated Heavy Patrol, so fleets do spawn by another path.
+  **Investigation 2026-10-06:** (1) `class-sweep` Combat Radar FAIL is harmless: no class in the 0.8 `Exigency.jar` references `exigency_RepulsorRenderer` or `org/lazywizard/radar` except that class itself (grep of the extracted jar), so nothing loads it; it is an orphan the class sweep loads. Acceptable with that reason. (2) Empty Exipirated patrol: unresolved offline. Facts: `exipirated.faction` is byte-identical to the original; its `knownShips` is the tags `exipirated_bp` and `base_bp` (so vanilla base hulls count as known), `hullFrequency` is empty (the same as `exigency.faction`, which builds 10 members); the mod's `default_ship_roles.json` lists only Exigency variants and none of Exipirated's 17 variants; all three Exipirated fleet managers build with `FleetFactoryV3` from a market. The probe's patrol is market-less, quality 1, patrolMedium, 60 points, so it may differ from a real market patrol. Probe 0.2.18 adds `faction-fleet-gen-diag` INFO lines on an empty fleet: known-ship count, variants per ship role, and a market patrol (patrolLarge, 120 points, quality -1) from the faction's own market. **Needs a live run** (one in-game day after load); then decide a fix or an accepted reason. Escalate to an agent only if the diagnostic shows the role table, since that is a data question the game cannot answer faster.
+  **Result (live runs DIAG-1 and DIAG-2, probe 0.2.18/0.2.19, 2026-10-06): cause found.** Exipirated knows 27 ships (its 7 own hulls plus 20 vanilla `base_bp` hulls) but its ship roles hold only vanilla variants of those vanilla hulls: `combatSmall`, `combatMedium` and `combatLarge` each resolve to the single variant `buffalo2_FS`, `fastAttack` to `hound_Standard`, the carrier roles to four vanilla carrier variants. None of its 17 own variants is in any role, because the mod's `default_ship_roles.json` (byte-identical to the original) names Exigency's variants and no Exipirated ones, and `exipirated.faction` has no `shipRoles`. A patrol from the faction's own market (Avesta, patrolLarge, 120 points) is also empty, so this is not a probe artifact. In the game the managers drop a null fleet, which is why Exipirated fleets are rare (13 samples over 65 days showed none; the one Heavy Patrol in the save probably came via the `addGenericCombatShips` path). Own hulls: rauwel frigate (6 fleet points), azryel destroyer (11), harinder cruiser (17), kafziel light carrier (10), gehenna 'mobile outpost' (26, 4 bays), azazel and saraph (no fleet points: likely modules). **Not changed.** Whether Exipirated was meant to field its own ships is the author's design, not provable here; adding them to the roles is a REVIEW-tier content change (gameplay). Options for the owner: leave as is and accept the finding with this reason; or a `+bf.N` revision adding the variants to roles by hull size and bays, checked by the probe's `faction-fleet-gen` turning OK.
+  **Resolved 2026-10-06 (owner chose the revision):** Exigency 0.8 is `+bf.9`: 24 entries for Exipirated's 17 variants added to nine roles in `default_ship_roles.json` (Azazel and Saraph are FIGHTER hulls behind the wings `exipirated_azazel_wing` and `exipirated_saraph_wing`, not modules, and no Exipirated ship has station modules; they stay out of the roles). Live run DIAG-3 (about 36 campaign days with SpeedUp, probe 0.2.19): the probe's Exipirated patrol went from empty to 8 members in all 8 samples; Exipirated fleets in the sector rose from 0 to 7 (65 days earlier showed none); no FATAL, MOD-ERROR or caught exception; the only FAIL lines were the harmless Combat Radar class sweep (accepted with that reason). Recorded with `bridgeforge accept` (run record `_live/DIAG-3.json`, live status CURRENT for bf.9, which also closes the missing run record for the hop run), `audit-explain` for the roles file, and re-archived with `archive --refresh --readme-copy`. Still unobserved: a raid on Avesta, and Exipirated's own ships in battle.
+61. **Java and launcher test matrix (owner: "set things up, we will test everything again with the new setup", 2026-10-09).** **Built 2026-10-09; no live run yet.** A tester's log (Java 28-beta, Fast Rendering) showed vanilla ids missing at load (`System with id [temporalshell] not found`, `Ship hull spec [afflictor] not found!`, the latter inside `SpecStore.lambda$SpecStore_init$0` on a thread pool, a loader vanilla does not have). The rig could not vary the JVM or launcher. `bridgeforge/java_matrix.py` + `java-matrix discover|setup|run|describe-log`: one `run-j<major>-<direct|fr>.bat` per JDK found (never touches `run-java25.bat`), `run` boots the same mods N times per variant and reports a pass rate (flaky vs fails-everywhere vs varies-by-variant), resumable, `--quiet`, listed in `LONG_RUNNING_COMMANDS`. `run_boot_test` gained `bat_name`. Tests: `tests/test_java_matrix.py`. Hypothesis, not evidence: Fast Rendering's parallel spec loading races on Java 28; record any result in `docs/RC8_BEHAVIOUR.md`. Local follow-up: `docs/LOCAL_HANDOFF.md` section 0a. **Parallel instances added 2026-10-09 (owner: at most 3 at once; vanilla, FR, Java 28, FR + Java 28):** `--parallel N` (1..3) gives each variant its own instance rig, `instances` lists them, `--preset compare`, `--skip-known` + ledger skip re-testing known-good variants for an unchanged mod set.
+62. **Mass test across the Java/launcher environments (owner 2026-10-10: set up everything to mass test mods; observe Seeker lag during the FR / Java 28 runs).** **Built 2026-10-10; no live run yet (owner: no live testing today).** `bridgeforge/mass_test.py` + `java-matrix mass RIG`: one mod per run from `Done/` with its declared dependencies only (instance rigs link just those folders), screened first on the baseline (direct, lowest Java) and the stress variant (Fast Rendering, highest Java), the other variants only on a mismatch; a LIVE_VALIDATED mod's baseline is assumed, not re-booted (`--retest-baseline` overrides). Reports which mods are environment-sensitive (pass in some variants, fail in others) apart from those failing everywhere; resumable, per-mod progress, `--quiet`, in `LONG_RUNNING_COMMANDS`. **Found by a stray boot on 2026-10-10 (no game started):** JDK 28+13 rejects `-noverify` and `fr.vmparams` has `-XX:+UseVectorStubs`, so no launcher could start; `write_launcher_files` now probes each flag with `java -version`, drops what the JVM refuses, records it per variant (`dropped_flags`) and, for Fast Rendering, writes a filtered copy of the install's `fr.vmparams` beside the bat (the install is only read). Logs are kept out of the throwaway instance rigs (`keep_logs`). Cost: about 2 boots per validated mod, so a 300-mod archive is days of boot time, not hours; use `--limit`/`--only`. Tests: `tests/test_mass_test.py`. Local follow-up: `docs/LOCAL_HANDOFF.md` section 0a.
+63. **AoTD / Theory of Toolbox compatibility plan (owner 2026-10-10).** **Plan only: `docs/AOTD_COMPAT_PLAN.md`.** Key finding: StarsectorPrepatcher 0.18.4 validates Java 17 and 27+22 only and must be the last javaagent; the installed Toolbox fork requires it, the plain `vmparams`/`fr.vmparams` carry no Prepatcher agent but the owner's real launcher (`Miko_Simple.txt`) does (corrected 2026-10-10). Seven steps: a Prepatcher axis in the matrix, an `env-check` preflight, an `aotd` compat set, a Toolbox version check, re-proving item 38 against the fork, a per-frame market-work scan, a release-policy note.
+    **Addendum 2026-10-10 (owner: 32 GB machine, optimise as you see fit; Java 17 not needed):** heap fixed at 4 GB per instance (5 GB for a bundle; three instances plus ~2 GB native each leave room for the OS), identical across variants so heap is not a variable. `--bundle N` (default 4) boots unrelated mods together while screening and splits in halves only on a failure; total conversions and core-replacing mods always boot alone; halves that pass alone but fail together are reported as a `bundle_conflict`, not an environment problem. New launchers `miko` and `miko-noprep` copy the owner's `Miko_Simple.txt` (resource-cache agent, Fast Rendering, Prepatcher last, G1) with only the heap, log path and JDK-refused flags changed, and `--preset real` runs both on Java 28: Prepatcher is a variant of the owner's real launch, not a separate matrix. Tests: `BundleTests`, `MikoLauncherTests` in `tests/test_mass_test.py`.
+64. **Migrating everything to another computer (owner 2026-10-10).** **Plan only: `docs/MIGRATION_PLAN.md`.** What is in git, what is gitignored and irreplaceable, what is regenerable, what is game files; the absolute paths that break (git `core.hooksPath`, `config/bridgeforge.local.psd1`, rig junctions and bats, `bridgeforge-state/*.json`, the Claude memory folder key); what Syncthing can and cannot carry (not `.git/`, not junctions, not a working tree in use). Planned: `migrate-inventory`, `relocate`, `migrate-verify`, a cutover checklist.
+
+65. **Yellowjackets intake and the gaps it showed (owner: "investigate and process", then "any more fixers..." 2026-10-10/11).** **Mod done 2026-10-11; items 65a-c built, the rest proposed.** Yellowjackets Mining Conglomerate (a raw 0.6.1a folder dropped in the queue) was zipped and taken in with `intake`, revived, passed `java-matrix run --preset compare` (PASS_ALL) and a full live run (GRP1C-20261011), and archived as 0.1; RC8-24 records that a ship system file named differently from its id loads. Built: 65a. `csv-vanilla-row-override` (tier input) names rows of a mod's ship/weapon/wing tables whose id RC8 defines, skipping tables the mod `replace`s; its fixer removes those records (CSV-aware, multi-line safe) once approved; measured on 304 workspaces: 12 mods have such rows, most deliberately (Xenoargh-Rebal), so it asks. 65b. `fix --finding carrier-bays-proposal --hull-zero-no-evidence` writes 0 bays for hulls with a `hangar` value but no LAUNCH_BAY slot and no variant wings (the one count the data supports); other hulls stay an owner decision. 65c. Probe 0.2.23 logs `combat-launch`: the most drones and fighter wings each ship had out at once (the Yellowjackets drone check had only the owner's word). Six stale archives (Adjusted Sector, Faction Relationships Uniquified, Fuel Siphoning, Legacy of Arkgneisis, Megastructures Tab, RogueSynth: archived READY_FOR_LIVE_TEST, live-tested after) were refreshed to LIVE_VALIDATED with `archive --refresh --readme-copy` (owner approved). `Done/MASTER_LOG.md` + `.csv` (generator `Done/make_master_log.py`) list every archive with release version, dates and what was done. Proposed, not built: `intake` accepting a raw folder and the planner listing unprocessed raw folders; archive notes always carrying the live date and test id, and the master log regenerating on record/archive; a launch watchdog (the first Yellowjackets launch wrote nothing and said nothing); standing approvals for `removed-api-call`, the fighter-bays column and the supplies column (owner decision). Still open: Doc's Needless Economic Expansion Pack and Slightly Better Tech-Mining are archived as READY_FOR_LIVE_TEST with live status UNKNOWN_BUILD (revive status ESCALATED, so the planner skips them): they need a live run before their archives can be refreshed. Tests: `tests/test_vanilla_row_override.py`, `tests/test_carrier_bays_zero.py`. **65g, built 2026-10-11:** `bf-test.ps1 launch` clicks the launcher's Play button itself (posted messages, real-click fallback; proven on CLICKTEST-20261011, `BF_NO_AUTOCLICK=1` disables); `java-matrix mass` gained `--preset`, skips `_` folders, retries LunaLib-signature failures as `NEEDS_LUNALIB` (RC8-25) and retries locked instance-rig cleanup; covered by `tests/test_mass_test.py` and `tests/test_java_matrix.py`. Fast Engine Rendering 1.1.2+bf.1 and the stale archives were refreshed with `record --archive --refresh` (65d). **65h, 2026-10-11 (owner: intake and revive Neutrino older, revive Combat-Misc-Utils, live-test both with the unattended run):** Combat-Misc-Utils 0.4.1 and Neutrino Corporation 1.8.9 (upstream Flashfrozen/Deathfly line, intaken from `Neutrino corp older.zip` as `Neutrino-Corporation-1.8.9`; Nostalgia Edition is a separate balance branch with the same mod id) are archived, both live-run with `probe-group live`. Found and fixed on the way: (1) `revive --apply` gave Combat-Misc-Utils a dependency on itself (scanner now skips a library whose id is the mod's own); (2) `star-type-undefined` read commented-out code (Neutrino's Exelion.java); (3) `probe-group smoke` caught Neutrino's missing GraphicsLib dependency (`ShaderLib.init()` unguarded; the undeclared-library scan misses it because the class also probes `ShaderLibExists`: not fixed, open); (4) `live_run` clicked a Neutrino mission because mods listed after the probe put their missions below it: it now counts those rows from the log's mod list (`missions_below_probe`); (5) `campaign-layout` FAIL lines are attributed to the sole member so an accepted entry applies. Agent packets (13) were run for Neutrino 1.8.9 and reviewed by hand: the convoy-spawn rewrite was rejected and restored (adds unverified runtime behaviour the author had disabled), the rest kept; jar classes patched with `patch-jar-class` (`scratch/jar-patch-2026-10-11`). Tests: `tests/test_live_run.py`, `tests/test_probe_group.py`, `tests/test_intake_scanner_fixes.py`, `tests/test_total_conversion_scans.py`. **65i, 2026-10-11 (owner: continue adding automation, fixers, handwork improvements):** Neutrino Corporation: Nostalgia Edition revived and archived the same way. New fixers: `runtime-placeholder-unsupported-operation` for ShipSystemStatsScript's five *Override hooks (-1, BaseShipSystemScript's answer) and `black-hole-type-missing-flag` (both tier auto; run on Nostalgia's real files). `audit-explain --auto` now proves two more categories: a work file moved to `scratch/work-files/` (byte-identical copy there) and a CSV that only gained rows. The undeclared-library scan no longer treats a probe elsewhere in a file as covering an unguarded call: it tracks enclosing blocks (try/catch or an `if` naming the library) and now flags Neutrino's `ShaderLib.init()` (the 1.8.9 original reports GraphicsLib; the fixed workspace reports nothing). A whole-corpus sweep of that scan change for new false positives timed out at 15 minutes and is not done. Tests: `tests/test_placeholder_hooks_fixer.py`, `tests/test_live_trust.py`, `tests/test_intake_scanner_fixes.py`. **65j, 2026-10-11:** Ironclads re-tested on Java 28 with Fast Rendering through `probe-group live` (GRP10Y3-20261011): new game, one day, all 140 hulls in three combat rounds, report PASS; the only log line was Fast Rendering's startup BaseSpawnPoint ERROR (RC8-26), now known noise, which had made the verdict UNCLEAR. To get there: `probe-group plan --retest WORKSPACE` re-runs an already validated mod; the launcher click finds the game by the launcher's process tree (the java-28 JDK is outside the rig, so the exe-path match never clicked: SMOKE-iron28-20261011); live_run has a New Game flow for Ironclads' own screens and lays the mission list out from the log (a replacing mod such as Ironclads shows only its own missions, short lists are top-anchored). Tests: `tests/test_live_run.py`, `tests/test_launcher_click.py`, `tests/test_log_triage.py`. **65k, 2026-10-11 (owner: diagnose the Bone-Breaker destruction slowdown, measure it with a timer, then package):** `probe-group duel` plays rig-only duel missions (`probe-mod/duel-mod/bf_duel`: Bone-Breaker vs Betelgeuse, Bone-Breaker overwhelmed by four vanilla capitals with a forced kill at 45 s, two vanilla Onslaughts as the baseline) and reads the plugin's per-second frame period, field counts and FIGHT/END timers; stalls (clock frozen, or no lines for 20 s) capture three thread dumps and a game-window screenshot. Cause found: SEEKER's Liquid Skin and Phased Mainframe ran their death effect every frame on the wreck (RC8-27); fixed with the once-per-ship guard Organic Hull already had; Seeker re-archived as +bf.5 (live run GRP-SEEKER5: campaign PASS; its probe combat stage could not reach the probe mission, 10 SEEKER missions below it). Found on the way: with no flagship the game parks a mission at 'shuttle ready for command transfer' about nine seconds in (the duel plugin unpauses it); the duel mod is named 'zz ...' so its missions sit at the bottom of the list. Open: the main-menu and mission-list click positions are fixed fractions and one run found the menu laid out differently (rows 28 px apart instead of 23), so a click can miss; the mission list needs scrolling to rows more than 7 above the bottom. Tests: `tests/test_duel_run.py`. **65m, 2026-10-11 (owner: start all recommendations):** (1) `hulk-death-effect-repeats` check and fixer (65l). (2) Unattended clicks made reliable: Starsector keeps the launcher's resolution in Java preferences shared with the owner's own game (HKCU\Software\JavaSoft\Prefs\com\fs\starfarer; it had 2048x1152), which changed the rig's whole layout; `rig_prefs.pinned_launcher_prefs` pins 1920x1440 windowed for each unattended run and restores the owner's values afterwards, even on error (checked: 2048x1152 back after a killed run). Main-menu buttons are now read from the screen (`screen_read`, BMP of the game window only) once the menu stops sliding, and a click is retried until the menu goes away. The probe mod is named 'zzzz BridgeForge Probe' so the launcher lists it last and its mission is always the bottom row (the list scrolls about a sixth of a row per wheel notch and arrow keys do not move the selection, both measured live). (3) Probe 0.2.24 meters every combat: `combat-perf` INFO (frames, average and worst frame, peak hulks and ships), and FAIL plus an early end when a field runs away (400 hulks or a 2 s frame); `probe-group report` fails the only member or makes a bigger group UNCLEAR; wreck fragments are no longer logged one by one. (4) see (2). (5) the undeclared-library sweep finished (65l). (6) the raw Neutrino folder was removed. Live: GRP-CMU4 and GRP-SEEKER6-20261011 LIVE_DONE with combat (Seeker: 14 hulls, worst frame 39 ms, 2 hulks), Seeker re-recorded. Tests: `tests/test_rig_prefs.py`, `tests/test_screen_read.py`, `tests/test_probe_group.py::CombatPerfTests`.
+
+67. **Mod Atlas: index every mod's additions, overrides, id reads, mutations and hooks; forecast conflicts (owner 2026-10-11, broad AoTD compatibility as the first use).** **Phases 1-3 done 2026-10-11** (`bridgeforge/atlas*.py`, `atlas build/show/id/forecast`, tests `tests/test_atlas.py`): real roots 349 mods, 94,228 facts, ~30 s fresh / 3.8 s unchanged; `atlas forecast DNEEP --against aotd` flags DNEEP's `farming` and `aquaculture` lookups against VoK's industries.csv downgrade chains (REVIEW), plus a `habitable` false positive from class-level jar attribution. Follow-ups found on review (2026-10-11): 67a per-call jar attribution from bytecode (the `habitable` false positive); 67b resolve mod-defined Java constants and index TASC so Tritachyon x TASC reproduces; 67c index `original/` copies to measure precision on known cases; 67d index `.ship`/`.wpn`, planet types, terrain, settings.json lists, collection-typed saved fields in jars; 67e follow jar `addScript(new X)`, drop synthetic fields from saved-field; 67f resolve runtime-built ids where possible. Phases 4-6 open. Plan: `docs/MOD_ATLAS_PLAN.md`. One SQLite fact index (mod, version, kind, id, action, file:line, evidence, confidence) over Done/, the rig, reference installs and the backlog via corpus-index; ten conflict rules (ATLAS-READS-REPLACED reproduces DNEEP x AoTD, ATLAS-SAVE-HOLDS-HEAVY the Station Augments save cycle); `atlas forecast --against aotd` from an AoTD replacement profile; forecasts proven with probe-group swap-industry/expect-supply runs. Six phases; 1-3 cloud-buildable, 4-6 local. Owner decisions 2026-10-11: Done/ + rig first, backlog from phase 4; local HTML/JSON view; a replacement profile for every scanned mod, plus a check against the whole AoTD family.
+
+66. **Commodity supply checks: did a mod's economy actually spawn? (owner 2026-10-11, after DNEEP's food vanished with AoTD).** **Done 2026-10-11.** Probe 0.2.25: `market-supply` lists, per commodity the mod adds (`mod_commodities` from its commodities.csv minus vanilla's), the markets and industries supplying it and the markets demanding it; demand with no supply anywhere is FAIL, blamed on the commodity's mod. `probe-group install --setup swap-industry:<from>:<to>:<count>[:<condition-prefix>]` puts an industry on chosen markets (it reapplies conditions as well as industries: without that DNEEP's deposits never reached a swapped-in farm), and `--expect-supply COMMODITY@INDUSTRY` FAILs unless that industry supplies it; a failed expectation logs `market-supply-diag` per market (functional, building, supplies, industries, conditions). Group configs had dropped `class_sweep` and `mission_fleets`; merged now. Live evidence: GRP-DNEEP-SUPPLY-BEFORE-20261011 (fix reverted in the rig copy, AoTD on) FAIL: grain, meat, fruits supplied in 0 markets of 38-39 demanding; AoTD converts Farming at New Game, so the old lookup found no farm anywhere. GRP-DNEEP-SUPPLY-AOTD3-20261011 (+bf.3, AoTD) PASS: grain from 10 subsidised farms, vegetables from monoculture plots. GRP-DNEEP-SUPPLY-SOLO-20261011 (no AoTD) PASS: Farming supplies all four. Tests: `tests/test_probe_group.py` MarketSupplyTests. Open (REVIEW, owner's own game): whether a farm a player builds mid-game gets DNEEP supply at once or only after the market's conditions reapply.

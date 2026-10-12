@@ -101,6 +101,16 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(faction["context"]["path"], ["ranks", "posts", "patrolCommander", "name"])
         self.assertFalse(any("Ignored.java" in e["file"] for e in doc["entries"]))
 
+    def test_export_skips_decompiled_source_and_tool_folders(self) -> None:
+        # FlowerGod (2026-09-29): src-decompiled/ duplicated 960 of the jar's own strings; the game never loads it.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            for folder in ("src-decompiled/data", "scratch/market-fix/src", "reports"):
+                (mod / folder).mkdir(parents=True, exist_ok=True)
+                (mod / folder / "Copy.java").write_text('class Copy { String s = "花神会"; }\n', encoding="utf-8")
+            doc = export_translation(mod)
+        self.assertFalse(any("Copy.java" in e["file"] for e in doc["entries"]))
+
 
 class ProjectGoMemoryTests(unittest.TestCase):
     def test_tm_export_matches_project_go_schema_and_ranks_author_english(self) -> None:
@@ -130,12 +140,28 @@ class PlaceholderTests(unittest.TestCase):
     def test_memory_key_glued_to_chinese_stays_ascii(self) -> None:
         from bridgeforge.translation import _placeholders
         self.assertEqual(_placeholders("$LTHS_Person1标记的NPC进行此对话"), _placeholders("Talk to the NPC marked by $LTHS_Person1"))
-        self.assertEqual(sorted(_placeholders("获得 %s 点 $player.name").elements()), ["$player.name", "%s"])
+        self.assertEqual(sorted(_placeholders("获得 %s 点 $player.name").elements()), ["$player.name", "%1s"])
+
+    def test_reordered_format_specifiers_must_be_indexed(self) -> None:
+        # FlowerGod FG_PersonBountyEvent: the English swapped %d and %s, so the name reached %d and the game
+        # crashed with IllegalFormatConversionException (GRP5B-20261005). Indexed specifiers keep Java's order.
+        from bridgeforge.translation import _placeholders
+        source = "%s 紧急发布了针对 %s 价值 %d 星币的赏金"
+        self.assertNotEqual(_placeholders(source), _placeholders("%s posts an emergency bounty of %d credits on %s"))
+        self.assertEqual(_placeholders(source), _placeholders("%1$s posts an emergency bounty of %3$d credits on %2$s"))
+        self.assertEqual(_placeholders("%s 和 %s"), _placeholders("%s and %s"))
 
     def test_sentence_period_is_not_part_of_a_variable(self) -> None:
         # Blackrock rules text: "...welcome, $playerName." vs the Chinese "...$playerName。"
         from bridgeforge.translation import _placeholders
         self.assertEqual(_placeholders("欢迎，$playerName。"), _placeholders("Welcome, $playerName."))
+
+    def test_a_literal_percent_is_not_a_placeholder(self) -> None:
+        # FlowerGod hull_mods.csv: "增加 %s ％" becomes "Increases by %s%%" (String.format, as Nexerelin writes it);
+        # the %s must still match.
+        from bridgeforge.translation import _placeholders
+        self.assertEqual(_placeholders("伤害增加 %s ％"), _placeholders("Damage increased by %s%%"))
+        self.assertNotEqual(_placeholders("伤害增加 %s ％"), _placeholders("Damage increased by 5%%"))
 
     def test_stale_reference_english_with_different_placeholders_is_only_a_hint(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -172,6 +198,55 @@ class CorruptJarTests(unittest.TestCase):
 
 
 class ApplyTests(unittest.TestCase):
+    def test_json_apply_preserves_crlf_outside_literal(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "mod"
+            _write(root / "mod_info.json", '{"id":"crlf","name":"CRLF"}')
+            path = root / "data" / "test.json"
+            path.parent.mkdir(parents=True)
+            before = '{\r\n  "text": "中文", // retained\r\n}\r\n'.encode()
+            path.write_bytes(before)
+            document = export_translation(root)
+            document["entries"][0]["translation"] = "English"
+            output = Path(temporary) / "output"
+            apply_translation(root, document, out_dir=output)
+            self.assertEqual((output / "data/test.json").read_bytes(), before.replace("中文".encode(), b"English"))
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_legacy_csv_encoding_preserves_non_target_cells(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "mod"
+            _write(root / "mod_info.json", '{"id":"legacy","name":"Legacy"}')
+            path = root / "data" / "legacy.csv"
+            path.parent.mkdir(parents=True)
+            before = 'id,name,value\r\nx,中文,123.00,extra\r\n'.encode("gb18030")
+            path.write_bytes(before)
+            document = export_translation(root)
+            self.assertEqual(len(document["entries"]), 1)
+            self.assertEqual(document["entries"][0]["source"], "中文")
+            document["entries"][0]["translation"] = "English"
+            output = Path(temporary) / "output"
+            apply_translation(root, document, out_dir=output)
+            self.assertEqual((output / "data/legacy.csv").read_bytes(), before.replace("中文".encode("gb18030"), b"English"))
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_java_apply_preserves_lf_and_crlf_outside_literal(self):
+        for newline in (b"\n", b"\r\n"):
+            with self.subTest(newline=newline), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp) / "mod"
+                _write(root / "mod_info.json", '{"id":"newline","name":"Newline"}')
+                path = root / "data" / "scripts" / "Test.java"
+                path.parent.mkdir(parents=True)
+                before = b'// comment' + newline + 'class Test { String s = "中文"; }'.encode() + newline
+                path.write_bytes(before)
+                document = export_translation(root)
+                for entry in document["entries"]:
+                    entry["translation"] = "English"
+                output = Path(temp) / "output"
+                apply_translation(root, document, out_dir=output)
+                self.assertEqual((output / "data/scripts/Test.java").read_bytes(), before.replace("中文".encode(), b"English"))
+                self.assertEqual(path.read_bytes(), before)
+
     def _translated(self, root: Path) -> dict:
         doc = export_translation(root)
         for entry in doc["entries"]:
@@ -304,3 +379,43 @@ class PrefillTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CommentedCsvRowTests(unittest.TestCase):
+    # 2026-10-04: FSF's rules.csv "#..." rows were exported, came back blank and blocked the whole mod.
+    def test_rows_starting_with_hash_are_not_exported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "mod"
+            (mod / "data" / "campaign").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            (mod / "data" / "campaign" / "rules.csv").write_text(
+                "id,trigger,text\n#通用的舰队招呼,,\ngreet,OpenDialog,你好\n", encoding="utf-8")
+            entries = export_translation(mod)["entries"]
+        self.assertEqual([e["source"] for e in entries], ["你好"])
+
+
+class ReindexFormatSlotsTests(unittest.TestCase):
+    def test_reordered_english_gets_numbered_slots(self) -> None:
+        # FlowerGod: source "%s %s %d", English "%s %d %s" crashed the bounty event (GRP5B-20261005)
+        from bridgeforge.translation import reindex_format_slots
+
+        source = "%s 紧急发布了针对 %s 价值 %d 星币的赏金"
+        english = "%s posts an emergency bounty of %d credits on %s"
+        self.assertEqual(reindex_format_slots(source, english), "%1$s posts an emergency bounty of %3$d credits on %2$s")
+        self.assertEqual(reindex_format_slots("%s 和 %d", "%s and %d"), None)  # already in order
+        self.assertEqual(reindex_format_slots("%s 和 %s", "%s and %s"), None)
+        self.assertEqual(reindex_format_slots("%s 和 %d", "%2$d and %1$s"), None)  # already indexed: left alone
+        self.assertEqual(reindex_format_slots("%s 和 %d", "only %d"), None)  # different count: not provable
+        self.assertEqual(reindex_format_slots("%5.1f 和 %s", "%s and %5.1f"), "%2$s and %1$5.1f")
+
+    def test_apply_reindexes_instead_of_reporting_a_placeholder_difference(self) -> None:
+        from bridgeforge.translation import _placeholders, _resolved
+
+        document = {"entries": [{"id": "e1", "file": "a.csv", "kind": "csv", "source": "%s 在 %d 天",
+                                 "translation": "in %d days, %s"}]}
+        by_file, problems = _resolved(document)
+        value = by_file["a.csv"]["e1"]["translation"]
+        self.assertEqual(problems, [])
+        self.assertEqual(value, "in %2$d days, %1$s")
+        self.assertEqual(_placeholders(value), _placeholders("%s 在 %d 天"))
+        self.assertEqual(document["_reindexed"], ["e1"])

@@ -59,6 +59,9 @@ from .scenarios import ScenarioError, list_scenarios, scenario_check, scenario_p
 from .save_reader import SaveReadError
 from .save_inspect import audit_scripts, diff_saves, growth_trend, inspect_save, save_provenance
 from .save_content_compat import check_save_content, removal_safety
+from .save_format_survey import survey_saves
+from .live_accept import AcceptError, accept_run
+from .soak_report import soak_report
 from .save_summary import redacted_summary
 from .test_plan import TestPlanError, plan_tests
 from .spw_bridge import SpwBridgeError, ingest_spw_report, log_spam, perf_gate
@@ -160,6 +163,16 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("workspace", type=Path)
     validate.add_argument("--target-starsector", default="0.98.x")
     validate.add_argument("--target-java", type=int, default=17)
+    doctor_cmd = subcommands.add_parser("save-doctor", help="why a save will not load with what is installed, in one read-only pass: missing mods, classes no installed mod provides, NaN/Infinity values, a file cut off mid-write, version changes; each with how recoverable it usually is")
+    doctor_cmd.add_argument("save", type=Path, help="save folder (holding campaign.xml and descriptor.xml)")
+    doctor_cmd.add_argument("--mods", type=Path, required=True, help="the mods folder the save will be loaded with")
+    doctor_cmd.add_argument("--vanilla-core", type=Path, help="starsector-core, so the game's own classes resolve")
+    doctor_cmd.add_argument("--json", action="store_true")
+    rplan_cmd = subcommands.add_parser("save-removal-plan", help="for each object of a missing mod's class in a save: droppable (nothing outside refers to it) or blocked (lists the outside references); read-only, the plan for a fix on a copy")
+    rplan_cmd.add_argument("save", type=Path)
+    rplan_cmd.add_argument("--mods", type=Path, required=True)
+    rplan_cmd.add_argument("--vanilla-core", type=Path)
+    rplan_cmd.add_argument("--json", action="store_true")
     save_risk = subcommands.add_parser("save-risk", help="flag changed persistent-identifier-shaped fields")
     save_risk.add_argument("workspace", type=Path)
     pipeline = subcommands.add_parser("pipeline", help="run the auditable Bridgeforge modernization pipeline")
@@ -365,6 +378,7 @@ def build_parser() -> argparse.ArgumentParser:
     fix.add_argument("--type-id", help="required for procgen-planet-row-missing/procgen-star-row-missing")
     fix.add_argument("--from-vanilla-id", help="required for procgen-planet-row-missing/procgen-star-row-missing")
     fix.add_argument("--faction-file", type=Path, help="required for faction-known-lists-missing")
+    fix.add_argument("--hull-zero-no-evidence", action="store_true", help="carrier-bays-proposal: set 0 bays for every hull that has a hangar value but no LAUNCH_BAY slot and no variant wings (nothing can launch from it)")
     fix.add_argument("--hull", action="append", default=[], metavar="ID=N", help="repeatable; required for carrier-bays-proposal, e.g. --hull my_carrier=4 (0-6, vanilla's own maximum)")
     fix.add_argument("--reference-core", type=Path, help="variant-op-over-budget: trim only variants that fit under this older starsector-core's costs (the ones RC8 pushed over)")
     fix.add_argument("--encoding", action="append", default=[], metavar="FILE=ENC", help="repeatable; for data-file-not-utf8: re-encode FILE (relative to the mod) from ENC (cp1252, mac_roman, shift_jis, gbk, gb18030, latin-1) when a person has read it and named the encoding")
@@ -383,6 +397,62 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_test_cmd.add_argument("--log-name")
     prepare_test_cmd.add_argument("--keep-mods", action="store_true")
     prepare_test_cmd.add_argument("--json", action="store_true")
+    from .atlas_report import add_parser as add_atlas_parser
+    add_atlas_parser(subcommands)
+    jm_cmd = subcommands.add_parser("java-matrix",help="boot one mod set through every Java version and launcher (direct / Fast Rendering) in a rig; local-only, needs a rig and the game install (ROADMAP item 61)")
+    jm_sub = jm_cmd.add_subparsers(dest="java_matrix_command", required=True)
+    jm_discover = jm_sub.add_parser("discover", help="list the JDKs found beside the rig's install, in the rig and in the usual install folders")
+    jm_discover.add_argument("--rig", type=Path)
+    jm_discover.add_argument("--jdk-root", type=Path, action="append", default=[], help="extra folder holding JDKs (repeatable)")
+    jm_discover.add_argument("--json", action="store_true")
+    jm_setup = jm_sub.add_parser("setup", help="write one run-j<major>-<launcher>.bat per variant into the rig (never touches run-java25.bat)")
+    jm_setup.add_argument("rig", type=Path)
+    jm_setup.add_argument("--java", type=int, nargs="+", metavar="MAJOR", help="only these Java majors (default: every JDK found)")
+    jm_setup.add_argument("--launcher", nargs="+", choices=["direct", "fr", "miko", "miko-noprep"], help="default: both")
+    jm_setup.add_argument("--jdk-root", type=Path, action="append", default=[])
+    jm_setup.add_argument("--json", action="store_true")
+    jm_run = jm_sub.add_parser("run", help="boot --mods through every variant --repeats times and report a pass rate per variant")
+    jm_run.add_argument("rig", type=Path)
+    jm_run.add_argument("--mods", nargs="+", required=True, metavar="ID")
+    jm_run.add_argument("--java", type=int, nargs="+", metavar="MAJOR")
+    jm_run.add_argument("--launcher", nargs="+", choices=["direct", "fr", "miko", "miko-noprep"])
+    jm_run.add_argument("--jdk-root", type=Path, action="append", default=[])
+    jm_run.add_argument("--repeats", type=int, default=3)
+    jm_run.add_argument("--timeout", type=int, default=240)
+    jm_run.add_argument("--log-name")
+    jm_run.add_argument("--parallel", type=int, default=None, metavar="N", help="boot up to N variants at once, 1..3, each in its own instance rig (default 1, the serial reference; 3 with --preset compare)")
+    jm_run.add_argument("--preset", choices=["compare", "real"], help="compare = Java 25 and 28, direct and Fast Rendering: vanilla, FR, Java 28, FR + Java 28 (4 variants, 3 at a time); real = the owner's Miko launch on Java 28, with and without Prepatcher")
+    jm_run.add_argument("--skip-known", action="store_true", help="reuse a recorded all-pass for the same variant, Java build and mod set instead of booting again (new mod sets always boot)")
+    jm_run.add_argument("--ledger", type=Path, default=Path("bridgeforge-state") / "java-matrix-ledger.json")
+    jm_run.add_argument("--quiet", action="store_true", help="no per-boot progress lines on stderr")
+    jm_run.add_argument("--json", action="store_true")
+    jm_mass = jm_sub.add_parser("mass", help="test every archived mod in Done/ (with its dependencies only) through the variants, screening first; reports which mods behave differently by environment (ROADMAP item 62)")
+    jm_mass.add_argument("rig", type=Path)
+    jm_mass.add_argument("--done-dir", type=Path, default=Path("Done"))
+    jm_mass.add_argument("--only", nargs="+", metavar="NAME", help="only these Done/ folders")
+    jm_mass.add_argument("--limit", type=int, help="test only the first N mods")
+    jm_mass.add_argument("--providers", type=Path, action="append", default=[], help="extra folder of mods that supply dependencies (the rig's mods/ and the install's mods/ are always searched)")
+    jm_mass.add_argument("--java", type=int, nargs="+", metavar="MAJOR", default=[25, 28])
+    jm_mass.add_argument("--launcher", nargs="+", choices=["direct", "fr", "miko", "miko-noprep"])
+    jm_mass.add_argument("--preset", choices=["compare", "real"], help="compare = Java 25 and 28, direct and Fast Rendering (what mass runs by default); real = the owner's Miko launch on Java 28, with and without Prepatcher (2 at a time)")
+    jm_mass.add_argument("--jdk-root", type=Path, action="append", default=[])
+    jm_mass.add_argument("--no-screen", action="store_true", help="boot every variant for every mod (default: baseline and Fast Rendering on the highest Java first; the rest only on a mismatch)")
+    jm_mass.add_argument("--retest-baseline", action="store_true", help="also re-boot the baseline for LIVE_VALIDATED mods (default: assume it passes)")
+    jm_mass.add_argument("--bundle", type=int, default=4, metavar="N", help="boot up to N unrelated mods together while screening and split only on a failure (default 4; 1 = one mod per boot). Total conversions and core-replacing mods always boot alone")
+    jm_mass.add_argument("--repeats", type=int, default=1)
+    jm_mass.add_argument("--parallel", type=int, default=3, metavar="N")
+    jm_mass.add_argument("--timeout", type=int, default=240)
+    jm_mass.add_argument("--skip-known", action="store_true")
+    jm_mass.add_argument("--ledger", type=Path, default=Path("bridgeforge-state") / "java-matrix-ledger.json")
+    jm_mass.add_argument("--output", type=Path, default=Path("bridgeforge-state") / "mass-test")
+    jm_mass.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
+    jm_mass.add_argument("--json", action="store_true")
+    jm_inst = jm_sub.add_parser("instances", help="list the parallel instances of a rig: variant, run, state, whether its java is alive")
+    jm_inst.add_argument("rig", type=Path)
+    jm_inst.add_argument("--json", action="store_true")
+    jm_log = jm_sub.add_parser("describe-log", help="read a tester's starsector.log: Java version and whether Fast Rendering was loaded")
+    jm_log.add_argument("log", type=Path)
+    jm_log.add_argument("--json", action="store_true")
     boot_test_cmd = subcommands.add_parser("boot-test", help="run a boot smoke test of a Starsector runtime with explicit mods enabled")
     boot_test_cmd.add_argument("runtime_dir", type=Path)
     boot_test_cmd.add_argument("--mods", nargs="+", required=True, metavar="ID")
@@ -427,11 +497,27 @@ def build_parser() -> argparse.ArgumentParser:
     probe_config_cmd.add_argument("--campaign-interval-days", type=float, default=5.0, help="campaign probe re-run interval in in-game days (default: 5)")
     probe_config_cmd.add_argument("--combat-cap", type=int, default=12, help="max hulls per side in the combat probe mission (default: 12)")
     probe_config_cmd.add_argument("--track", action="append", default=[], metavar="ENTITY", help="custom entity id to track position for; repeatable")
-    probe_config_cmd.add_argument("--setup", action="append", default=[], metavar="SPEC", help="in-game setup applied once per save via the public API: rep:<faction>=<RepLevel|n>, credits:<N>, ship:<variant>[:<count>], spawn-fleet:<faction>:<fp>, jump:<system>; repeatable")
+    probe_config_cmd.add_argument("--setup", action="append", default=[], metavar="SPEC", help="in-game setup applied once per save via the public API: rep:<faction>=<RepLevel|n>, credits:<N>, ship:<variant>[:<count>], spawn-fleet:<faction>:<fp>, jump:<system>, swap-industry:<from>:<to>:<count>[:<condition-prefix>]; repeatable")
     probe_config_cmd.add_argument("--profile", metavar="NAME|PATH", help="setup profile (Notepad-friendly .txt): a bundled name (exigency-rep, seeker-betelgeuse, flux-basic) or a path; merged after --setup")
     probe_config_cmd.add_argument("--install", action="store_true", help="also install/refresh the probe mod into <runtime>/mods/bridgeforge-probe/ from the release copy")
     probe_config_cmd.add_argument("--dry-run", action="store_true", help="report what would be written without touching the rig")
     probe_config_cmd.add_argument("--json", action="store_true")
+    accept_cmd = subcommands.add_parser("accept", help="record a passing hand-run live test of one workspace: checks the log, writes the dated evidence section and LIVE_VALIDATED to the revival report, and a run record the archive gate reads")
+    accept_cmd.add_argument("workspace", type=Path)
+    accept_cmd.add_argument("--log", required=True, type=Path, help="the run's stdout log")
+    accept_cmd.add_argument("--test-id", required=True)
+    accept_cmd.add_argument("--note", required=True, help="what the owner did and saw")
+    accept_cmd.add_argument("--not-exercised", help="what the run did not cover (for example: no raid on the station happened)")
+    accept_cmd.add_argument("--days", type=float, help="campaign days the run was meant to cover; INCOMPLETE soak is refused")
+    accept_cmd.add_argument("--mods-dir", type=Path, help="the rig's mods/ directory, to attribute errors to mods")
+    accept_cmd.add_argument("--accept-findings", help="reason to accept probe FAIL lines or caught exceptions; written into the report")
+    accept_cmd.add_argument("--record-only", action="store_true", help="write only the run record, not a report section (the report already says it)")
+    accept_cmd.add_argument("--json", action="store_true")
+    soak_cmd = subcommands.add_parser("soak-report", help="judge a long-run campaign session from its log: days covered, FATAL/MOD-ERROR, probe FAILs and caught exceptions (read-only)")
+    soak_cmd.add_argument("log", type=Path)
+    soak_cmd.add_argument("--days", type=float, required=True, help="campaign days the run was meant to cover")
+    soak_cmd.add_argument("--mods-dir", type=Path, help="the rig's mods/ directory, to attribute caught exceptions to mods")
+    soak_cmd.add_argument("--json", action="store_true")
     save_compat_cmd = subcommands.add_parser("save-compat", help="check whether a save's referenced mod classes exist in the build's loaded jars (read-only)")
     save_compat_cmd.add_argument("save", type=Path, help="save directory or its campaign.xml")
     save_compat_cmd.add_argument("mod_dir", type=Path)
@@ -473,6 +559,7 @@ def build_parser() -> argparse.ArgumentParser:
     summary_cmd = _save_tool("save-summary", "write a redacted, shareable save summary with no player data (local file only)", mod_dir="multi")
     summary_cmd.add_argument("--out", required=True, type=Path, help="output JSON path")
     summary_cmd.add_argument("--vanilla-core", type=Path)
+    _save_tool("save-format-survey", "survey where saves keep the player fleet's cargo and credits (structure only, no names or quantities; read-only)", multi_save=True)
     bootstrap_cmd = subcommands.add_parser("bootstrap", help="one-time: write a scan baseline and record the current build manifest for each mod (nothing written inside mods)")
     bootstrap_cmd.add_argument("mod_dirs", nargs="+", type=Path)
     bootstrap_cmd.add_argument("--vanilla-core", required=True, type=Path)
@@ -509,6 +596,8 @@ def build_parser() -> argparse.ArgumentParser:
     rig_doctor_cmd.add_argument("--no-default-working", action="store_true", help="don't use the project's known working-copy mapping")
     rig_doctor_cmd.add_argument("--real-install", type=Path, help="real Starsector install, to confirm its saves are untouched (read-only)")
     rig_doctor_cmd.add_argument("--write-saves-baseline", action="store_true", help="record the real install's saves listing as the baseline (the only write)")
+    rig_doctor_cmd.add_argument("--core-baseline", type=Path, help="core hash baseline (default bridgeforge-state/rig-core-baseline.json)")
+    rig_doctor_cmd.add_argument("--write-core-baseline", action="store_true", help="record the rig starsector-core hashes as the baseline (do this on a known-good RC8 install)")
     rig_doctor_cmd.add_argument("--reference-manifest", type=Path, help="P10 historical rig manifest; verifies the dedicated install and skips the incompatible RC8 probe check")
     rig_doctor_cmd.add_argument("--json", action="store_true")
     rig_create_cmd = subcommands.add_parser("rig-create", help="register a dedicated historical Starsector install as a P10 reference rig")
@@ -675,6 +764,7 @@ def build_parser() -> argparse.ArgumentParser:
     decide_cmd.add_argument("--json", action="store_true")
     docs_cmd = subcommands.add_parser("docs-index", help="regenerate docs/CHECKS.md (every finding id: where it's emitted, tests, bug classes; scanner helpers) and docs/COMMANDS.md (every command and argument) from the source")
     docs_cmd.add_argument("--check", action="store_true", help="don't write; exit 1 if either file is stale")
+    docs_cmd.add_argument("--stage", action="store_true", help="git add the generated docs that git tracks (only those: a glob over docs/ hits gitignored files and fails, ROADMAP 52)")
     docs_cmd.add_argument("--json", action="store_true")
     lookup_cmd = subcommands.add_parser("lookup", help="query a mod's archaeology graph for a class/id/file: definitions, references, related classes, lifecycle, save evidence, source/bytecode status, findings, runtime observations, and an inspection priority")
     lookup_cmd.add_argument("thing", nargs="?", help="class name (full or short), id, file path or symbol; omit with --top for the treasure map")
@@ -731,7 +821,70 @@ def build_parser() -> argparse.ArgumentParser:
     archive_cmd.add_argument("workspace", type=Path)
     archive_cmd.add_argument("--done", type=Path, help="default: <repo>/Done")
     archive_cmd.add_argument("--policy", type=Path)
+    archive_cmd.add_argument("--refresh", action="store_true", help="replace an existing archive of this mod in Done/ (only a folder holding an ARCHIVE_NOTE.md directly inside Done/)")
+    archive_cmd.add_argument("--readme-copy", action="store_true", help="also write <zip>-with-readme.zip and readme.txt for this archive")
     archive_cmd.add_argument("--json", action="store_true")
+    audit_cmd = subcommands.add_parser("audit-shipped", help="compare a workspace's shipped copy with original/: every changed, added or removed file must be explained by a recorded change (ROADMAP 36.3); also shows its live status (36.7)")
+    audit_cmd.add_argument("workspace", type=Path)
+    audit_cmd.add_argument("--json", action="store_true")
+    explain_cmd = subcommands.add_parser("audit-explain", help="record why shipped files differ from original/, or (--live) why the mod may be archived without a current live result")
+    explain_cmd.add_argument("workspace", type=Path)
+    explain_cmd.add_argument("files", nargs="*", help="shipped paths relative to working/")
+    explain_cmd.add_argument("--reason", help="why; required unless --auto")
+    explain_cmd.add_argument("--auto", action="store_true", help="record every difference whose category the files prove (credits, syntax-only JSON, manufacturer column, unloaded archive, translation); no files or reason needed")
+    explain_cmd.add_argument("--live", action="store_true")
+    explain_cmd.add_argument("--json", action="store_true")
+    relink_cmd = subcommands.add_parser("relink", help="recompile classes whose game calls RC8 changed only by return type (jar-linkage-unresolved), from shipped or decompiled source, unedited; patch only when nothing else changes. A queue folder or one workspace")
+    relink_cmd.add_argument("path", type=Path, help="a queue (In operation) or one workspace")
+    relink_cmd.add_argument("--vanilla-core", type=Path, required=True)
+    relink_cmd.add_argument("--apply", action="store_true", help="install (backups in scratch/jar-patch-<date>/); default: report only")
+    relink_cmd.add_argument("--restart", action="store_true", help="ignore an earlier run's checkpoint")
+    relink_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
+    relink_cmd.add_argument("--json", action="store_true")
+    port_cmd = subcommands.add_parser("port-interfaces", help="jar classes missing a method RC8's interfaces require (jar-interface-method-missing): port the known contract changes in shipped or decompiled source and patch only when nothing else changes. A queue or one workspace")
+    port_cmd.add_argument("path", type=Path)
+    port_cmd.add_argument("--vanilla-core", type=Path, required=True)
+    port_cmd.add_argument("--apply", action="store_true")
+    port_cmd.add_argument("--restart", action="store_true", help="ignore an earlier run's checkpoint")
+    port_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
+    port_cmd.add_argument("--json", action="store_true")
+    pjs_cmd = subcommands.add_parser("patch-jar-sources", help="edits in a jar's source tree (with *.pre-bf-* backups) -> the jar: prove the pre-edit source rebuilds the shipped class, then patch the edited class in")
+    pjs_cmd.add_argument("workspace", type=Path)
+    pjs_cmd.add_argument("--vanilla-core", type=Path, required=True)
+    pjs_cmd.add_argument("--apply", action="store_true")
+    pjs_cmd.add_argument("--json", action="store_true")
+    bump_cmd = subcommands.add_parser("bump-version", help="a shipped mod changed after archiving: +bf.N in mod_info, a dated revival-report section ending READY_FOR_LIVE_TEST, and a MOD_CHANGELOG line")
+    bump_cmd.add_argument("workspace", type=Path)
+    bump_cmd.add_argument("--note", required=True, help="what changed and the evidence (first line goes to the mod changelog)")
+    bump_cmd.add_argument("--date")
+    declare_cmd = subcommands.add_parser("declare-providers", help="apply a content-reference-unresolved SWAP: declare the visible 0.98 mods that provide every needed id (nothing else changes); any other strategy is left for a person")
+    declare_cmd.add_argument("workspace", type=Path, nargs="+")
+    declare_cmd.add_argument("--apply", action="store_true")
+    close_cmd = subcommands.add_parser("close", help="end revival work on a mod: a dated report section ending SUPERSEDED or NOT_REVIVABLE; queue commands skip it after")
+    close_cmd.add_argument("workspace", type=Path)
+    close_cmd.add_argument("--status", required=True, choices=["SUPERSEDED", "NOT_REVIVABLE"])
+    close_cmd.add_argument("--reason", required=True, help="the evidence: what supersedes it, or what RC8 removed")
+    restore_cmd = subcommands.add_parser("restore-from-done", help="rebuild an In operation workspace from a Done/ archive (shipped folder, original, reports and baseline)")
+    restore_cmd.add_argument("archive", type=Path, help="Done/<Mod>")
+    restore_cmd.add_argument("--queue", type=Path, help="default: <repo>/In operation")
+    review_cmd = subcommands.add_parser("revive-review", help="every fix revive applied since a date, as diffs against the first backup, with placement checks (lookup guards, jar-source edits)")
+    review_cmd.add_argument("queue", type=Path)
+    review_cmd.add_argument("--since", required=True, help="YYYY-MM-DD")
+    review_cmd.add_argument("--json", action="store_true")
+    modlog_cmd = subcommands.add_parser("mod-changelog", help="MOD_CHANGELOG.md: bigger updates to revived mods by date (archive adds one per archived mod)")
+    modlog_sub = modlog_cmd.add_subparsers(dest="modlog_command", required=True)
+    modlog_add = modlog_sub.add_parser("add", help="add one line under its date")
+    modlog_add.add_argument("mod", help="the mod's display name")
+    modlog_add.add_argument("text", help="what changed, one line")
+    modlog_add.add_argument("--version")
+    modlog_add.add_argument("--date", help="YYYY-MM-DD (default today)")
+    modlog_add.add_argument("--file", type=Path, help="default: <repo>/MOD_CHANGELOG.md")
+    modlog_seed = modlog_sub.add_parser("seed", help="one 'archived' line per Done/*/ARCHIVE_NOTE.md, under its archive date")
+    modlog_seed.add_argument("--done", type=Path, help="default: <repo>/Done")
+    modlog_seed.add_argument("--file", type=Path)
+    ready_cmd = subcommands.add_parser("ready-list", help="the queue's mods ready for live testing (revival report READY_FOR_LIVE_TEST and latest revive UNATTENDED_DONE), with how to launch them")
+    ready_cmd.add_argument("queue", type=Path)
+    ready_cmd.add_argument("--json", action="store_true")
     group_cmd = subcommands.add_parser("probe-group", help="probe several finished mods in one live session: plan compatible groups, install one into the rig, report per mod (ROADMAP P15 item 24)")
     group_sub = group_cmd.add_subparsers(dest="probe_group_command", required=True)
     group_plan = group_sub.add_parser("plan", help="group READY_FOR_LIVE_TEST workspaces that share no mod or content id and whose dependencies are in the rig")
@@ -741,6 +894,8 @@ def build_parser() -> argparse.ArgumentParser:
     group_plan.add_argument("--write", type=Path, help="save the plan as JSON (default: <queue>/PROBE_GROUPS.json)")
     group_plan.add_argument("--exclude", action="append", default=[], metavar="WORKSPACE", help="leave this workspace out; repeatable")
     group_plan.add_argument("--solo", action="append", default=[], metavar="WORKSPACE", help="give this workspace a group of its own; repeatable")
+    group_plan.add_argument("--retest", action="append", default=[], metavar="WORKSPACE", help="add an already live-validated workspace as a group of its own to run again, e.g. under another Java or Fast Rendering; its recorded status is not touched until `record`; repeatable")
+    group_plan.add_argument("--provider-source", action="append", type=Path, default=None, metavar="MODS_DIR", help="a mods/ folder to copy missing providers from when the queue has none (default: the real install's mods/ and the 0.98 modpack in Downloads, when present); repeatable")
     group_plan.add_argument("--no-auto-solo", action="store_true", help="also group large campaign mods (by default a mod that creates systems and has 60+ content ids runs alone)")
     group_plan.add_argument("--json", action="store_true")
     group_install = group_sub.add_parser("install", help="copy/sync one group's mods into the rig, write the merged probe config, set enabled_mods.json")
@@ -748,13 +903,45 @@ def build_parser() -> argparse.ArgumentParser:
     group_install.add_argument("--plan", type=Path, help="default: <queue>/PROBE_GROUPS.json")
     group_install.add_argument("--queue", type=Path)
     group_install.add_argument("--rig", type=Path)
+    group_install.add_argument("--stage-providers", action="store_true", help="also copy the queue workspaces that provide missing dependencies into the rig, verifying id, version and files (ROADMAP 36.1)")
+    group_install.add_argument("--with-lunalib", action="store_true", help="also enable LunaLib when GraphicsLib is enabled without it (RC8-25: GraphicsLib 1.12.1 needs it under Fast Rendering)")
+    group_install.add_argument("--setup", action="append", default=[], metavar="SPEC", help="probe setup applied once per save, as for probe-config --setup; also swap-industry:<from>:<to>:<count>[:<condition-prefix>] (probe 0.2.25); repeatable")
+    group_install.add_argument("--expect-supply", action="append", default=[], metavar="COMMODITY@INDUSTRY", help="the probe's market-supply check FAILs unless INDUSTRY supplies COMMODITY in some market (probe 0.2.25); repeatable")
     group_install.add_argument("--json", action="store_true")
+    group_bisect = group_sub.add_parser("bisect", help="split a failed group into two new groups at the end of the plan, each dependency-closed (ROADMAP 36.8)")
+    group_bisect.add_argument("group", type=int)
+    group_bisect.add_argument("--plan", type=Path, help="default: <queue>/PROBE_GROUPS.json")
+    group_bisect.add_argument("--queue", type=Path)
+    group_bisect.add_argument("--rig", type=Path)
+    group_bisect.add_argument("--json", action="store_true")
     group_record = group_sub.add_parser("record", help="after a run: mark PASS members LIVE_VALIDATED; with --archive also record the standing local-only licence, archive into Done/ and copy each zip to Done/'s top")
     group_record.add_argument("test_id", help="the bf-test.ps1 test id; reads <rig>/logs/<TESTID>.stdout.log")
     group_record.add_argument("--archive", action="store_true")
+    group_record.add_argument("--refresh", action="store_true", help="with --archive: replace an earlier archive of the same mod in Done/ (deletes that folder; Done/ must hold an ARCHIVE_NOTE.md there)")
     group_record.add_argument("--queue", type=Path)
     group_record.add_argument("--rig", type=Path)
     group_record.add_argument("--json", action="store_true")
+    group_smoke = group_sub.add_parser("smoke", help="after `install`: boot the rig unattended to the main menu and triage the startup log (no launcher click, no New Game); catches load-time failures before a person plays")
+    group_smoke.add_argument("--bat", default="run-j25-direct.bat", help="rig launcher to start (default: java 25, started directly)")
+    group_smoke.add_argument("--timeout", type=int, default=240)
+    group_smoke.add_argument("--log-name")
+    group_smoke.add_argument("--rig", type=Path)
+    group_smoke.add_argument("--queue", type=Path)
+    group_smoke.add_argument("--json", action="store_true")
+    group_live = group_sub.add_parser("live", help="after `install`: play the group's live run unattended with real mouse clicks (launcher, New Game, the campaign probe's day, the probe combat mission) and confirm each stage from the log; leave the mouse and keyboard alone")
+    group_live.add_argument("test_id", help="log name: writes <rig>/logs/<TESTID>.stdout.log, readable by `probe-group report` and `record`")
+    group_live.add_argument("--bat", default="run-j25-direct.bat")
+    group_live.add_argument("--menu-timeout", type=int, default=240)
+    group_live.add_argument("--rig", type=Path)
+    group_live.add_argument("--queue", type=Path)
+    group_live.add_argument("--json", action="store_true")
+    group_duel = group_sub.add_parser("duel", help="after `install` of the mod that owns the hulls: play the rig-only duel missions (SEEKER's Bone-Breaker against Betelgeuse, and two vanilla Onslaughts as the baseline) unattended and report the frame cost of a destruction; leave the mouse and keyboard alone")
+    group_duel.add_argument("test_id", help="log name: writes <rig>/logs/<TESTID>.stdout.log")
+    group_duel.add_argument("--bat", default="run-j25-direct.bat")
+    group_duel.add_argument("--only", action="append", default=[], choices=["seeker", "baseline", "overwhelm"], help="play just this duel (repeatable)")
+    group_duel.add_argument("--rig", type=Path)
+    group_duel.add_argument("--queue", type=Path)
+    group_duel.add_argument("--json", action="store_true")
     group_report_cmd = group_sub.add_parser("report", help="per-mod verdicts for a group's run log")
     group_report_cmd.add_argument("log", type=Path, help="the run's stdout log (bf-test launch) or the rig's starsector.log")
     group_report_cmd.add_argument("--rig", type=Path)
@@ -873,6 +1060,22 @@ def build_parser() -> argparse.ArgumentParser:
     ci_cmd.add_argument("--all", action="store_true", help="scan every workspace, not just those with packets for the finding")
     ci_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     ci_cmd.add_argument("--json", action="store_true")
+    dj_cmd = subcommands.add_parser("decompile-jar", help="decompile a jar (Vineflower) into an editable source tree, the first step before rebuild-jar")
+    dj_cmd.add_argument("jar", type=Path)
+    dj_cmd.add_argument("--output", type=Path, required=True, help="folder for the source tree (e.g. a workspace's scratch/decompiled)")
+    dj_cmd.add_argument("--vineflower", type=Path, help="vineflower jar (default: In operation/_tools/vineflower*.jar)")
+    dj_cmd.add_argument("--jdk", type=Path)
+    dj_cmd.add_argument("--json", action="store_true")
+    mc_cmd = subcommands.add_parser("mods-compat", help="read-only: hooks only one mod can own (industry plugins, new-game generators, replaced core files, shadowed vanilla scripts) claimed by two or more mods in a real mods folder")
+    mc_cmd.add_argument("mods_dir", type=Path)
+    mc_cmd.add_argument("--vanilla-core", type=Path, required=True)
+    mc_cmd.add_argument("--output", type=Path, default=Path("In operation"), help="where MODS_COMPAT.json/.md go")
+    mc_cmd.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
+    mc_cmd.add_argument("--json", action="store_true")
+    bs_cmd = subcommands.add_parser("baseline-stats", help="read-only: rank checks by how often their findings were accepted as harmless in workspace baselines (where a check needs refining)")
+    bs_cmd.add_argument("queue", type=Path, nargs="?", default=Path("In operation"))
+    bs_cmd.add_argument("--top", type=int, default=25)
+    bs_cmd.add_argument("--json", action="store_true")
     rq_cmd = subcommands.add_parser("revive-queue", help="run revive across a queue: all workspaces, those never revived, or those with a given last status; progress lines, resumable, writes REVIVE_QUEUE.json")
     rq_cmd.add_argument("queue", type=Path)
     rq_cmd.add_argument("--only-status", action="append", default=[], metavar="STATUS", help="only workspaces whose last revive status is this (e.g. ESCALATED); repeatable")
@@ -881,6 +1084,7 @@ def build_parser() -> argparse.ArgumentParser:
     rq_cmd.add_argument("--draft-report", action="store_true")
     rq_cmd.add_argument("--vanilla-core", type=Path)
     rq_cmd.add_argument("--restart", action="store_true", help="ignore an earlier run's checkpoint")
+    rq_cmd.add_argument("--jobs", type=int, default=1, help="workspaces revived side by side (each writes only its own workspace; default 1)")
     rq_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     rq_cmd.add_argument("--json", action="store_true")
     revive_cmd = subcommands.add_parser("revive", help="run the mechanical part of a revival unattended (scan, permitted fixers, rescan, until nothing changes) and write escalation packets for the rest (roadmap P15 item 2)")
@@ -908,6 +1112,8 @@ def build_parser() -> argparse.ArgumentParser:
     esc_run.add_argument("--timeout", type=int, default=1800, help="seconds per attempt")
     esc_apply = esc_sub.add_parser("apply", help="copy an attempt already VERIFIED (and reviewed) into working/, without re-running the agent")
     esc_apply.add_argument("--attempt", type=int, help="which attempt (default: the newest VERIFIED one)")
+    esc_apply.add_argument("--patch-class", action="store_true", help="the attempt edits jar sources: patch just the edited classes into their jar (patch-jar-class checks) and copy the sources back")
+    esc_apply.add_argument("--allow-removed", action="append", default=[], help="with --patch-class: a member whose removal is intended (fields moved to per-ship state); repeatable")
     esc_apply.add_argument("--rebuild-jar", action="store_true", help="the attempt edits jar sources: rebuild the jar from them (refused on any lost class or member) and install it")
     esc_rule = esc_sub.add_parser("rule", help="record one owner ruling for a finding id across the queue: accept it in every escalated mod's baseline, or approve its fixer as a standing approval")
     esc_rule.add_argument("finding")
@@ -916,7 +1122,12 @@ def build_parser() -> argparse.ArgumentParser:
     esc_rule.add_argument("--approve-fixer", action="store_true")
     esc_rule.add_argument("--reason", required=True)
     esc_rule.add_argument("--json", action="store_true")
-    esc_queue = esc_sub.add_parser("queue", help="across a queue: which findings block the ESCALATED mods, and which mods one decision would clear; writes ESCALATIONS_BY_FINDING.md")
+    esc_accept = esc_sub.add_parser("accept", help="accept one mod's findings as authored: add them to its baseline and the reason (the evidence) to reports/ESCALATION_REVIEW.md")
+    esc_accept.add_argument("workspace", type=Path)
+    esc_accept.add_argument("selectors", nargs="+", help="FINDING_ID or FINDING_ID:FILE_PART (a substring of the finding's file)")
+    esc_accept.add_argument("--reason", required=True, help="why it is right as written, with the evidence")
+    esc_accept.add_argument("--json", action="store_true")
+    esc_queue = esc_sub.add_parser("queue",help="across a queue: which findings block the ESCALATED mods, and which mods one decision would clear; writes ESCALATIONS_BY_FINDING.md")
     esc_queue.add_argument("queue", type=Path)
     esc_queue.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     esc_queue.add_argument("--json", action="store_true")
@@ -926,6 +1137,10 @@ def build_parser() -> argparse.ArgumentParser:
     for command in (esc_show, esc_verify, esc_run, esc_apply):
         command.add_argument("packet", nargs="?" if command is esc_run else None, help="packet id (see `escalation list`)")
     esc_run.add_argument("--all", action="store_true", help="run every agent packet in turn")
+    esc_run.add_argument("--watch-dir", type=Path, action="append", default=[], help="a directory the agent must not touch (e.g. the session's memory folder); what changed in it is reported after the run; repeatable")
+    esc_review = esc_sub.add_parser("review", help="write reports/ESCALATION_REVIEW_SHEET.md: each packet's newest attempt with its diff and flags for changes that need a human (removed hints, Random/save logic, loop rewrites, swallowed exceptions)")
+    esc_review.add_argument("workspace", type=Path)
+    esc_review.add_argument("--json", action="store_true")
     api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
@@ -945,6 +1160,48 @@ def build_parser() -> argparse.ArgumentParser:
     rebuild_jar_cmd.add_argument("--output", type=Path, help="where the rebuilt jar and compiled classes go (default: a new temp directory)")
     rebuild_jar_cmd.add_argument("--install", action="store_true", help="only when status is PASS: move the working copy's current jar to scratch/moved-<date>/ (logged in MOVES.log) and copy the rebuilt jar in")
     rebuild_jar_cmd.add_argument("--json", action="store_true")
+    done_audit_cmd = subcommands.add_parser("done-audit", help="re-scan every archived revival in Done/: STALE when the queue copy changed since archiving, plus crash-class and MANUAL/UNKNOWN findings the baseline does not accept (writes Done/DONE_AUDIT.md)")
+    done_audit_cmd.add_argument("--done", type=Path, help="default: <repo>/Done")
+    done_audit_cmd.add_argument("--queue", type=Path, help="default: <repo>/In operation")
+    done_audit_cmd.add_argument("--vanilla-core", type=Path)
+    done_audit_cmd.add_argument("--quiet", action="store_true", help="no per-mod progress lines")
+    done_audit_cmd.add_argument("--json", action="store_true")
+    tbatch_cmd = subcommands.add_parser("translate-batch", help="a mod's whole translation in one command: export, AI agent per chunk, strict checks (filled, no CJK left, placeholders kept), apply to a complete copy or in place, check (ROADMAP 34.28)")
+    tbatch_cmd.add_argument("mod_dir", type=Path)
+    tbatch_target = tbatch_cmd.add_mutually_exclusive_group(required=True)
+    tbatch_target.add_argument("--out", type=Path, help="new folder for the complete translated copy")
+    tbatch_target.add_argument("--in-place", action="store_true", help="edit mod_dir itself (a working copy only)")
+    tbatch_cmd.add_argument("--agent", default="claude -p --permission-mode acceptEdits --model claude-sonnet-5", help="the agent command; it gets the prompt on stdin and edits one chunk file")
+    tbatch_cmd.add_argument("--work", type=Path, help="folder for chunks and the checkpoint (default: <out or mod>.translate-work beside it)")
+    tbatch_cmd.add_argument("--chunk", type=int, default=120, help="entries per agent call (default 120)")
+    tbatch_cmd.add_argument("--reference", type=Path, help="an English copy of the same mod to prefill from")
+    tbatch_cmd.add_argument("--record", type=Path, action="append", default=[], help="a translator's zh/en record to prefill from; repeatable")
+    tbatch_cmd.add_argument("--quiet", action="store_true", help="no per-chunk progress lines")
+    tbatch_cmd.add_argument("--json", action="store_true")
+    renamed_cmd = subcommands.add_parser("renamed-ids", help="was a missing id renamed in a newer copy of its mod? Same name and description is RENAMED; a shared name word is only SIMILAR (read-only)")
+    renamed_cmd.add_argument("old_copy", type=Path, help="a mod folder that still defines the ids")
+    renamed_cmd.add_argument("new_copy", type=Path, help="the newer copy of the same mod")
+    renamed_cmd.add_argument("ids", nargs="+", help="kind:id (hull, weapon, hullmod, wing)")
+    renamed_cmd.add_argument("--json", action="store_true")
+    port_state_cmd = subcommands.add_parser("port-hullmod-state", help="move a hull mod source's per-ship instance fields into a per-ship State in ship.getCustomData() and write the result (for a jar source, feed it to patch-jar-class --allow-removed)")
+    port_state_cmd.add_argument("source", type=Path, help="the hull mod's .java (a decompiled or bundled jar source)")
+    port_state_cmd.add_argument("--field", action="append", required=True, help="a field to move (the finding's field:NAME); repeatable")
+    port_state_cmd.add_argument("--out", type=Path, required=True, help="where to write the ported source (never the input)")
+    patch_jar_cmd = subcommands.add_parser("patch-jar-class",help="recompile a few edited classes and swap them into a mod jar, checked against the shipped classes with javap (members, calls, null checks)")
+    patch_jar_cmd.add_argument("mod", type=Path, help="mod workspace (holding working/)")
+    patch_jar_cmd.add_argument("--jar", required=True, help="the jar to patch, relative to working/ (e.g. jars/Name.jar)")
+    patch_jar_cmd.add_argument("sources", type=Path, nargs="+", help="the edited .java files (a scratch copy or an escalation attempt's)")
+    patch_jar_cmd.add_argument("--source-root", help="the mod's source tree, relative to working/ (e.g. jars/src); with --install each source is copied there by its package")
+    patch_jar_cmd.add_argument("--allow-removed", action="append", default=[], help="a member name whose removal is intended (a hull-mod field moved to per-ship custom data); repeatable")
+    patch_jar_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, put on the compile classpath")
+    patch_jar_cmd.add_argument("--jdk", type=Path)
+    patch_jar_cmd.add_argument("--install", action="store_true", help="only when PASS: keep the old jar and sources in scratch/jar-patch-<date>/ and swap the classes in")
+    patch_jar_cmd.add_argument("--json", action="store_true")
+    jar_packets_cmd = subcommands.add_parser("jar-packets", help="for each jar-only escalation packet: find the class's source, copy it to scratch/jar-packets/ to edit, and say whether it rebuilds the shipped class unchanged (FAITHFUL) or not")
+    jar_packets_cmd.add_argument("mod", type=Path, help="mod workspace (holding working/)")
+    jar_packets_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, put on the compile classpath")
+    jar_packets_cmd.add_argument("--jdk", type=Path)
+    jar_packets_cmd.add_argument("--json", action="store_true")
     fold_cmd = subcommands.add_parser("fold", help="fold a discontinued library-like mod into a RevenantLib-shaped target directory (roadmap P14 item 10): copy it byte-for-byte, keeping its ids and class names, and record provenance plus a dependency_successors.json entry")
     fold_cmd.add_argument("source", type=Path, help="the library mod's own directory (holding mod_info.json), e.g. a working copy")
     fold_cmd.add_argument("target", type=Path, help="the RevenantLib-shaped target directory (holds/gets original/<source name>/ and reports/PROVENANCE.md)")
@@ -996,6 +1253,28 @@ def main(argv: list[str] | None = None) -> int:
         argv = ["rebuild-from-reference-local", *argv[1:]]
     _reconfigure_streams_for_pipes()
     args = build_parser().parse_args(argv)
+    if args.command == "decompile-jar":
+        from .decompile import decompile_jar
+        try:
+            result = decompile_jar(args.jar, args.output, args.vineflower, args.jdk)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2) if args.json else f"{result['sources']} source file(s) in {result['output']} (exit {result['exit_code']}). Next: {result['next']}")
+        return 0 if result["exit_code"] == 0 else 1
+    if args.command == "mods-compat":
+        from .mods_compat import mods_compat
+        result = mods_compat(args.mods_dir, args.vanilla_core, args.output, quiet=args.quiet)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"{result['mods']} mod(s); {len(result['conflicts'])} hook(s) claimed by two or more. See {args.output / 'MODS_COMPAT.md'}")
+        return 0
+    if args.command == "baseline-stats":
+        from .baseline_stats import baseline_stats, render
+        result = baseline_stats(args.queue)
+        print(json.dumps(result, indent=2) if args.json else render(result, args.top))
+        return 0
     if args.command == "docs-index":
         from .checks_index import write_reference_docs
         result = write_reference_docs(check_only=args.check)
@@ -1005,6 +1284,13 @@ def main(argv: list[str] | None = None) -> int:
             print("Stale (run bridgeforge docs-index): " + ", ".join(result["stale"]))
         else:
             print("Written: " + ", ".join(result["written"]) if result["written"] else "docs/CHECKS.md and docs/COMMANDS.md are up to date")
+        if args.stage and result["status"] != "STALE":
+            import subprocess
+
+            tracked = subprocess.run(["git", "ls-files", "docs/CHECKS.md", "docs/COMMANDS.md"], capture_output=True, text=True).stdout.split()
+            if tracked:
+                subprocess.run(["git", "add", "--", *tracked], check=False)
+                print("Staged: " + ", ".join(tracked))
         return 1 if result["status"] == "STALE" else 0
     if args.command == "lookup":
         from .lookup import lookup
@@ -1098,11 +1384,55 @@ def main(argv: list[str] | None = None) -> int:
         summary = save_provider_index(provider_index(roots), args.output, roots)
         print(f"Provider index: {summary['providers']} mods, {summary['ids']} ids -> {summary['output']}")
         return 0
+    if args.command == "audit-shipped":
+        from .live_trust import audit_shipped, live_status
+        result = {"audit": audit_shipped(args.workspace), "live": live_status(args.workspace)}
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            audit = result["audit"]
+            print(f"Shipped-copy audit: {audit['status']}" + (f" ({audit['reason']})" if audit.get("reason") else ""))
+            for row in audit.get("differences") or []:
+                print(f"  {row['kind']:<8} {row['file']}: {row['explained_by'] or 'UNEXPLAINED'}")
+            live = result["live"]
+            print(f"Live result: {live['status']}" + (f" (last PASS {live['test_id']}, {live.get('date')})" if live.get("test_id") else ""))
+        return 0 if result["audit"]["status"] == "PASS" else 1
+    if args.command == "audit-explain":
+        from .live_trust import auto_explain_shipped, explain_shipped
+        if args.auto:
+            groups = auto_explain_shipped(args.workspace)
+            if args.json:
+                print(json.dumps(groups, indent=2))
+            else:
+                for reason, files in groups.items():
+                    print(f"{len(files)} file(s): {reason}")
+                print("Nothing could be proven; explain the rest with --reason." if not groups else "Anything still unexplained needs --reason.")
+            return 0
+        if not args.reason:
+            print("bridgeforge: --reason is required (or pass --auto).", file=sys.stderr)
+            return 2
+        try:
+            path = explain_shipped(args.workspace, args.files, args.reason, live=args.live)
+        except (ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps({"written": str(path)}) if args.json else f"Recorded in {path}.")
+        return 0
     if args.command == "archive":
         from .archive import ArchiveError, archive_mod
         from .substitutes import REPO_ROOT
+        from .live_trust import archive_gate
+        gate = archive_gate(args.workspace)
+        if not gate["allowed"]:
+            # ROADMAP 36.11: no archive for an unaudited or stale-tested mod unless the owner recorded why.
+            print("bridgeforge: archive refused: " + "; ".join(gate["problems"]), file=sys.stderr)
+            print(f'  explain with: bridgeforge audit-explain "{args.workspace}" FILE... --reason "..." (or --live --reason for the live result)', file=sys.stderr)
+            return 2
         try:
-            result = archive_mod(args.workspace, args.done or REPO_ROOT / "Done", policy_path=args.policy)
+            result = archive_mod(args.workspace, args.done or REPO_ROOT / "Done", policy_path=args.policy, refresh=args.refresh)
+            if args.readme_copy:
+                from .archive import write_readme_copies
+                result["readme_copies"] = write_readme_copies(Path(result["archive"]))
         except (ArchiveError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -1113,6 +1443,122 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {len(result['changed'])} file(s) changed, {len(result['added'])} added vs original; jars identical: {result['jars_identical']}")
             print(f"  Note: {result['note']}. The workspace is untouched; remove it yourself once the archive is checked.")
         return 0
+    if args.command == "relink":
+        from .jar_batch import relink_queue, relink_workspace
+        path = args.path.expanduser().resolve()
+        if (path / "working" / "mod_info.json").is_file():
+            result = relink_workspace(path, args.vanilla_core, apply=args.apply)
+            rows = [result]
+        else:
+            result = relink_queue(path, args.vanilla_core, apply=args.apply, quiet=args.quiet, restart=args.restart)
+            rows = result["workspaces"]
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        for row in rows:
+            print(f"{row['state']:13} {row['workspace']}" + "".join(f"\n  {j['jar']}: {j['state']} ({j['classes']} class(es))" for j in row.get("jars") or [])
+                  + (f"\n  no source: {', '.join(row['missing_source'])}" if row.get("missing_source") else "")
+                  + (f"\n  removed in RC8: {', '.join(row['port'])}" if row.get("port") else ""))
+        if "counts" in result:
+            print("counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())))
+        return 0
+    if args.command == "port-interfaces":
+        from .jar_batch import port_interfaces, port_interfaces_queue
+        path = args.path.expanduser().resolve()
+        if (path / "working" / "mod_info.json").is_file():
+            rows = [port_interfaces(path, args.vanilla_core, apply=args.apply)]
+            result = rows[0]
+        else:
+            result = port_interfaces_queue(path, args.vanilla_core, apply=args.apply, quiet=args.quiet, restart=args.restart)
+            rows = result["workspaces"]
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        for row in rows:
+            print(f"{row['workspace']}: {row['classes']} class(es)" + "".join(f"\n  {j['jar']}: {j['state']} ({j['classes']})" for j in row["jars"])
+                  + "".join(f"\n  not ported: {u['class']} ({u['why']})" for u in row["unported"][:6]))
+        return 0
+    if args.command == "patch-jar-sources":
+        from .jar_batch import patch_jar_sources
+        result = patch_jar_sources(args.workspace, args.vanilla_core, apply=args.apply)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        for row in result["jars"]:
+            print(f"{row['state']:20} {row['jar']}: {', '.join(row['files'])}")
+            for cls, change in (row.get("classes") or {}).items():
+                print(f"  {cls}: null checks {change['null_checks']}, calls {change['calls'] or '{}'}, members {change['members'] or '{}'}")
+        for name in result["not_in_any_jar"]:
+            print(f"NOT IN ANY JAR       {name}")
+        return 0
+    if args.command == "bump-version":
+        from .workspace_tools import bump_version
+        try:
+            result = bump_version(args.workspace, args.note, day=args.date)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"{result['old']} -> {result['new']}\n  {result['changelog']}")
+        return 0
+    if args.command == "declare-providers":
+        from .workspace_tools import declare_providers
+        for workspace in args.workspace:
+            result = declare_providers(workspace, apply=args.apply)
+            print(f"{result['state']:16} {result['workspace']}: " + (", ".join(result["declared"]) or str(result.get("strategy") or "")))
+        return 0
+    if args.command == "close":
+        from .workspace_tools import close_workspace
+        print(f"{args.status}: {close_workspace(args.workspace, args.status, args.reason)}")
+        return 0
+    if args.command == "restore-from-done":
+        from .workspace_tools import restore_from_done
+        try:
+            result = restore_from_done(args.archive, args.queue or Path(__file__).resolve().parent.parent / "In operation")
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(f"restored {result['workspace']} (reports: {', '.join(result['restored_reports']) or 'none'})" + (f"\n  NOTE: {result['note']}" if result["note"] else ""))
+        return 0
+    if args.command == "revive-review":
+        from .workspace_tools import review_applied
+        result = review_applied(args.queue, args.since)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        print(f"{result['applied']} applied fix(es) since {args.since}; {len(result['flagged'])} flagged")
+        for row in result["flagged"]:
+            print(f"  {row['workspace']}: {row['finding']} {row['file']}: {', '.join(row['flags'])}")
+        return 0
+    if args.command == "mod-changelog":
+        from .mod_changelog import DEFAULT_PATH, add_entry, seed_from_archives
+        if args.modlog_command == "add":
+            print(add_entry(args.mod, args.text, version=args.version, day=args.date, path=args.file))
+        else:
+            done_dir = args.done or Path(__file__).resolve().parent.parent / "Done"
+            print(f"{seed_from_archives(done_dir, args.file or DEFAULT_PATH)} line(s) added to {args.file or DEFAULT_PATH}")
+        return 0
+    if args.command == "ready-list":
+        # Replaces the hand tally of "how many need live testing" (2026-09-30).
+        from .probe_group import ProbeGroupError, ready_workspaces
+        try:
+            ready = ready_workspaces(args.queue)
+        except ProbeGroupError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        rows = []
+        for workspace in ready:
+            revive_record = workspace / "reports" / "revive" / "REVIVE.json"
+            compiled = json.loads(revive_record.read_text(encoding="utf-8")).get("compile_checked") if revive_record.is_file() else None
+            rows.append({"workspace": workspace.name, "compile_checked": compiled})
+        if args.json:
+            print(json.dumps({"ready": rows, "count": len(rows)}, indent=2))
+            return 0
+        print(f"{len(rows)} mod(s) ready for live testing:")
+        for row in rows:
+            print(f"  {row['workspace']}" + ("" if row["compile_checked"] else "  (revive did not compile-check it)"))
+        if rows:
+            print(f'Next: bridgeforge probe-group plan "{args.queue}", then install a group and `.\\tools\\bf-test.ps1 launch <TESTID>`.')
+        return 0
     if args.command == "probe-group":
         from .probe_group import ProbeGroupError, group_report, install_group, plan_groups
         from .probe_config import CONFIG_FILE
@@ -1121,7 +1567,15 @@ def main(argv: list[str] | None = None) -> int:
         rig = (args.rig or queue / "_rig").expanduser().resolve()
         try:
             if args.probe_group_command == "plan":
-                result = plan_groups(queue, rig, size=args.size, exclude=set(args.exclude), solo=set(args.solo), auto_solo=not args.no_auto_solo)
+                from .probe_group import DEFAULT_PROVIDER_SOURCES
+                sources = args.provider_source if args.provider_source is not None else [p for p in DEFAULT_PROVIDER_SOURCES if p.is_dir()]
+                from .probe_group import ready_workspaces
+                retest = [Path(queue) / name for name in args.retest]
+                missing = [str(p) for p in retest if not (p / "working" / "mod_info.json").is_file()]
+                if missing:
+                    raise ProbeGroupError("--retest needs a workspace with working/mod_info.json: " + ", ".join(missing))
+                result = plan_groups(queue, rig, size=args.size, exclude=set(args.exclude), solo=set(args.solo) | set(args.retest), auto_solo=not args.no_auto_solo,
+                                     extra_sources=sources, workspaces=[*ready_workspaces(queue), *[p for p in retest if p not in ready_workspaces(queue)]])
                 target = args.write or queue / "PROBE_GROUPS.json"
                 target.write_text(json.dumps(result, indent=2), encoding="utf-8")
                 if not args.json:
@@ -1129,20 +1583,92 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"Group {group['group']} ({len(group['members'])} mod(s)): " + ", ".join(m["workspace"] for m in group["members"]))
                     for item in result["unplaced"]:
                         print(f"Not grouped: {item['workspace']} - {item['reason']}")
+                        for problem in item.get("providers") or []:
+                            print(f"    {problem}")
+                    staging = sorted({f"{p['mod_id']} from {p.get('source') or p['workspace']}" for g in result["groups"] for m in g["members"] for p in m.get("stage_providers") or []})
+                    if staging:
+                        print("Providers to stage (install those groups with --stage-providers): " + "; ".join(staging))
                     print(f"Plan written: {target}. Next: bridgeforge probe-group install <N>, then bf-test.ps1 launch <TESTID>.")
             elif args.probe_group_command == "install":
                 plan = json.loads((args.plan or queue / "PROBE_GROUPS.json").read_text(encoding="utf-8"))
-                result = install_group(plan, args.group, queue, rig)
+                result = install_group(plan, args.group, queue, rig, stage=args.stage_providers, with_lunalib=args.with_lunalib,
+                                       setups=args.setup, expect_supply=args.expect_supply)
                 if not args.json:
                     print(f"Group {result['group']} installed: {', '.join(result['members'])}")
+                    for item in result["staged_providers"]:
+                        print(f"  provider {item['mod_id']} {item['version']} from {item['workspace']}: {item['action']} (id, version and files verified)")
                     for item in result["copied"]:
                         print(f"  {item['workspace']}: {item['action']}")
                     print(f"  enabled_mods.json -> {result['enabled_mods']}")
+                    for folder in result.get("probe_mission_added", []):
+                        print(f"  added the probe mission to {folder}'s mission list (it replaces the list; RC8 would hide the probe)")
+                    for item in result.get("moved_aside", []):
+                        print(f"  moved {item['folder']} to mods-disabled-providers: it shares mod id {item['mod_id']} with {item['kept']}")
+                    for item in result.get("incomplete_providers", []):
+                        print(f"  WARN {item['folder']} lacks {', '.join(item['missing'])} that the real install has; recopy it")
+                    for item in result.get("dependency_version_conflicts", []):
+                        print(f"  WARN {item['mod_id']} wants {item['dependency']} {item['wanted']}, rig has {item['installed']}: "
+                              "RC8 disables a mod whose dependency major differs (RC8-23); fix its mod_info.json")
+                    if result.get("lunalib_advice"):
+                        print(f"  WARN {result['lunalib_advice']}")
                     print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
+            elif args.probe_group_command == "live":
+                from .live_run import live_run
+                print("Starting the live run: leave the mouse and keyboard alone until it finishes (about three minutes after loading).", file=sys.stderr)
+                live = live_run(rig, args.test_id, bat_name=args.bat, menu_timeout=args.menu_timeout)
+                result = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "rounds": live.rounds, "stages": live.stages, "log": live.log}
+                if not args.json:
+                    print(f"{live.verdict}: stages {', '.join(live.stages) or 'none'}; combat rounds {live.rounds}")
+                    if live.verdict != "LIVE_DONE":
+                        print(f"  stuck at {live.stage}: {live.detail}")
+                    else:
+                        print(f"  Next: bridgeforge probe-group report \"{live.log}\", then record --archive.")
+                if live.verdict != "LIVE_DONE":
+                    if args.json:
+                        print(json.dumps(result, indent=2, ensure_ascii=False))
+                    return 1
+            elif args.probe_group_command == "duel":
+                from .duel_run import run_duel
+                print("Starting the duel run: leave the mouse and keyboard alone until it finishes (about ten minutes).", file=sys.stderr)
+                result = run_duel(rig, args.test_id, bat_name=args.bat, only=tuple(args.only) or None)
+                if not args.json:
+                    print(f"played: {', '.join(result['played']) or 'none'}" + (f"; PROBLEM: {result['problem']}" if result["problem"] else ""))
+                    for label, row in result["summary"].items():
+                        print(f"  {label}: fight lasted {row['fight_game_seconds']} game s / {row['fight_real_seconds']} real s before the first kill; avg frame {row['avg_ms_before']} ms before the first destruction, {row['avg_ms_after']} ms after; worst frame {row['worst_frame_ms']} ms "
+                              f"(worst in the 4 s after a destruction {row['worst_after_destruction_ms']} ms); peak hulks {row['peak_hulks']}, ships {row['peak_ships']}, projectiles {row['peak_projectiles']}")
+                    print(f"  log {result['log']}")
+                if result["problem"]:
+                    if args.json:
+                        print(json.dumps(result, indent=2, ensure_ascii=False))
+                    return 1
+            elif args.probe_group_command == "smoke":
+                from .probe_group import smoke_group
+                result = smoke_group(rig, bat_name=args.bat, timeout=args.timeout, log_name=args.log_name)
+                if not args.json:
+                    boot = result["boot"]
+                    print(f"{result['verdict']}: {boot['status']} in {boot['elapsed_seconds'] or 0:.0f}s; FATAL={result['fatal']} MOD-ERROR={result['mod_errors']}; log {boot['log']}")
+                    if boot["status"] != "PASS":
+                        print(f"  {boot['reason']}")
+                    for line in result["load_errors"]:
+                        print(f"  load error: {line}")
+                    print("  Startup only: New Game generation and combat still need the real run.")
+                if result["verdict"] != "SMOKE_PASS":
+                    if args.json:
+                        print(json.dumps(result, indent=2, ensure_ascii=False))
+                    return 1
+            elif args.probe_group_command == "bisect":
+                from .probe_group import bisect_group
+                plan_path = args.plan or queue / "PROBE_GROUPS.json"
+                result = bisect_group(json.loads(plan_path.read_text(encoding="utf-8")), args.group)
+                plan_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+                if not args.json:
+                    for group in result["groups"][-2:]:
+                        print(f"Group {group['group']} ({len(group['members'])} mod(s)): " + ", ".join(m["workspace"] for m in group["members"]))
+                    print(f"Plan updated: {plan_path}. Install and run each half.")
             elif args.probe_group_command == "record":
                 from .probe_group import record_group
                 config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
-                result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive)
+                result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive, refresh=args.refresh)
                 if not args.json:
                     print(f"Recorded LIVE_VALIDATED ({result['probe_version']}): {', '.join(result['recorded']) or 'none'}")
                     if args.archive:
@@ -1151,13 +1677,16 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"  not recorded: {item['mod_id']} ({item['verdict']}) {item.get('archive', '')}")
             else:
                 config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
-                result = group_report(args.log, config, mods_dir=rig / "mods")
+                from .probe_group import accepted_probe_findings
+                result = group_report(args.log, config, mods_dir=rig / "mods", accepted=accepted_probe_findings(queue, rig / "mods"))
                 if not args.json:
                     print(f"FATAL={result['fatal']} MOD-ERROR={result['mod_errors']}; content-ids ran: {result['content_ids_ran']}")
                     for mod_id, verdict in sorted(result["members"].items()):
                         print(f"  {verdict['verdict']:<10} {mod_id}")
                         for item in verdict["failures"] + verdict["crashes"]:
                             print(f"      {item}")
+                        for item in verdict.get("accepted", []):
+                            print(f"      (accepted, not a failure) {item}")
                     for item in result["unattributed"]:
                         print(f"  (group) {item}")
                     if result.get("combat_filler_sides"):
@@ -1175,10 +1704,12 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
         for record in result["mods"]:
-            if record["verdict"] in ("SUPERSEDED", "SAME_RELEASE", "NEWER_ELSEWHERE"):
+            if record["verdict"] in ("SUPERSEDED", "SAME_RELEASE", "NEWER_ELSEWHERE", "NEWER_DIFFERENT"):
                 ref = record["reference"]
                 renamed = f" [named '{ref['name']}' there]" if ref.get("name") and ref["name"].strip().lower() != record["name"].strip().lower() else ""
                 print(f"{record['verdict']:16} {record['workspace']}: ours {record['version']}, theirs {ref['version']} ({ref['game_version'] or 'no gameVersion'}) at {ref['path']}{renamed}")
+                if record["verdict"] == "NEWER_DIFFERENT":
+                    print(f"                 {record['note']}")
         print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())))
         print(f"Written: {result['result_path']}")
         return 0
@@ -2065,6 +2596,37 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(payload)
         return 0
+    if args.command == "accept":
+        try:
+            result = accept_run(args.workspace, args.log, test_id=args.test_id, note=args.note, days=args.days,
+                                not_exercised=args.not_exercised, mods_dir=args.mods_dir,
+                                accept_findings=args.accept_findings, record_only=args.record_only)
+        except (AcceptError, ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(f"Accepted {result['test_id']} for {result['workspace']}: run record {result['run_record']}")
+            if result["report"]:
+                print(f"  report section written: {result['report']}")
+            if result["accepted_findings"]:
+                print(f"  findings accepted: {'; '.join(result['accepted_findings'])}")
+        return 0
+    if args.command == "soak-report":
+        try:
+            result = soak_report(args.log, args.days, mods_dir=args.mods_dir)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(f"Soak: {result['verdict']}: {result['reason']}")
+            for group in result["caught_exceptions"]["groups"][:10]:
+                print(f"  x{group['count']} {group['exception']}: {group['first_frame'] or group['message']}")
+            print(result["caveat"])
+        return 0 if result["verdict"] == "PASS" else 1
     if args.command == "log-triage":
         try:
             result = triage_log(args.log, args.mod_prefix, mods_dir=args.mods_dir, all_mods=args.all_mods, last_sessions=args.last_sessions)
@@ -2079,6 +2641,10 @@ def main(argv: list[str] | None = None) -> int:
                 sessions = result["sessions"]
                 print(f"Sessions: last {sessions['found']} of the log, from line {sessions['first_line']} (line numbers below count from there)")
             print(f"FATAL={counts['FATAL']} MOD-ERROR={counts['MOD-ERROR']} KNOWN-NOISE={counts['KNOWN-NOISE']} OTHER={counts['OTHER']}")
+            if result.get("rig_fingerprint"):
+                fingerprint = result["rig_fingerprint"]
+                core = (fingerprint["core_baseline_sha256"] or "none recorded")[:12]
+                print(f"Rig: {len(fingerprint['enabled_mods'])} enabled mod(s), core baseline {core}: " + ", ".join(f"{k} {v}" for k, v in fingerprint["enabled_mods"].items())[:600])
             milestones = result["milestones"]
             print(f"Main menu reached: {milestones['main_menu_reached']}; campaign loads: {len(milestones['campaign_loads'])}; finished-saving events: {milestones['finished_saving_count']}; mission variant preloads (startup, not play): {len(milestones['mission_variant_preloads'])}")
             for event in result["fatal"]:
@@ -2086,8 +2652,16 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"FATAL {where} [{event['matched_rule']}]: {event['message']}")
                 if event.get("top_mod_frame"):
                     print(f"  top mod frame: {event['top_mod_frame']}")
+                if event.get("kind") == "jvm-crash" and event.get("top_mod"):
+                    print(f"  nearest mod frame: {event['top_mod']} ({event['mod_frames'][0]['class']})")
             for event in result["mod_errors"]:
                 print(f"MOD-ERROR line {event['line']}: {event.get('top_mod_frame') or event['message']}")
+            caught = result["caught_exceptions"]
+            if caught["distinct"]:
+                print(f"Caught exceptions (logged, game carried on): {caught['total_events']} event(s), {caught['distinct']} distinct")
+                for group in caught["groups"][:10]:
+                    owner = f" [{group['suspect']}]" if group.get("suspect") else ""
+                    print(f"  x{group['count']} {group['exception']}{owner} lines {group['first_line']}-{group['last_line']}: {group['first_frame'] or group['message']}")
             for symptom in result["vanilla_shadowing_symptoms"]:
                 print(f"Vanilla-shadowing symptom line {symptom['line']}: ship system [{symptom['ship_system']}] from {symptom['csv']}")
             attribution = result.get("attribution")
@@ -2096,6 +2670,19 @@ def main(argv: list[str] | None = None) -> int:
                 for event in result["fatal"] + result["mod_errors"]:
                     if event.get("suspect"):
                         print(f"  line {event['line']}: suspect {event['suspect']}; on stack: {', '.join(event.get('involved') or [])}")
+                if args.mods_dir is not None and not attribution.get("counts_by_suspect"):
+                    # ROADMAP 53: say so when the crashing mod code is in no mod here (the EPTA report's
+                    # data.scripts.combat.hydrofoil class was in no installed mod: the log came from another folder).
+                    import re
+
+                    from .log_triage import class_owner_index
+                    index = class_owner_index(args.mods_dir, enabled_only=not args.all_mods)
+                    stack = re.findall(r"\bat\s+((?:data|src|org|com)\.[\w.$]+)\.[\w$<>]+\(", args.log.read_text(encoding="utf-8", errors="replace"))
+                    unowned = sorted({c.split("$")[0] for c in stack if not c.startswith(("com.fs.", "org.lwjgl", "org.json", "org.codehaus.", "org.apache.", "com.thoughtworks.", "sun.", "java."))
+                                      and c.split("$")[0] not in index})
+                    if unowned:
+                        print(f"  Not in any mod under {args.mods_dir}: {', '.join(unowned[:5])} -- the log likely came "
+                              "from a different mods folder; pass that folder as --mods-dir.")
             print(result["caveat"])
         return 0 if not result["fatal"] else 1
     if args.command == "copy-drift":
@@ -2279,6 +2866,7 @@ def main(argv: list[str] | None = None) -> int:
             "encodings": dict(item.split("=", 1) for item in (args.encoding or [])),
             "reference_core": args.reference_core,
             "hulls": args.hull,
+            "hull_zero_no_evidence": args.hull_zero_no_evidence,
             "allow_shadowed_edit": args.allow_shadowed_edit,
             "provider_roots": args.providers or None,
         }
@@ -2352,6 +2940,68 @@ def main(argv: list[str] | None = None) -> int:
                 boot_result = result["boot_test"]
                 print(f"Boot test: {boot_result.get('status')} {boot_result.get('reason', '')}".rstrip())
         return 0 if result["status"] in {"PASS", "SAME_FOLDER"} else 1
+    if args.command == "atlas":
+        from .atlas_report import run_cli as run_atlas
+        return run_atlas(args)
+    if args.command == "java-matrix":
+        from . import java_matrix as jm
+        try:
+            if args.java_matrix_command == "describe-log":
+                result = jm.describe_log_java(args.log)
+                print(json.dumps(result, indent=2) if args.json else f"Java {result['java_version']}; Fast Rendering: {result['fast_rendering']}; launcher hint: {result['launcher_hint']}")
+                return 0
+            if args.java_matrix_command == "discover":
+                jdks = jm.discover_jdks(args.rig, args.jdk_root)
+                print(json.dumps(jdks, indent=2) if args.json else "\n".join(f"Java {j['major']:<3} {j['version']:<14} {j['home']}" for j in jdks) or "no JDKs found")
+                return 0 if jdks else 1
+            if args.java_matrix_command == "instances":
+                found = jm.list_instances(args.rig)
+                print(json.dumps(found, indent=2) if args.json else "\n".join(f"{i.get('variant')}: {i.get('state')} run {i.get('run')}/{i.get('of')} status={i.get('status')} java_alive={i['java_alive']}" for i in found) or "no instances")
+                return 0
+            if args.java_matrix_command == "mass":
+                from . import mass_test as mt
+                targets = mt.collect_targets(args.done_dir, args.only)
+                if not targets:
+                    print(f"bridgeforge: no archived mods found under {args.done_dir}", file=sys.stderr)
+                    return 2
+                if args.preset == "compare":
+                    args.java, args.launcher = [25, 28], None
+                elif args.preset == "real":
+                    args.java, args.launcher = [28], ["miko", "miko-noprep"]
+                    args.parallel = min(args.parallel, 2)
+                variants = jm.plan_variants(jm.discover_jdks(args.rig, args.jdk_root), args.launcher, args.java)
+                if not variants:
+                    print("bridgeforge: no JDK matched; try `java-matrix discover` or --jdk-root", file=sys.stderr)
+                    return 2
+                rig_path = Path(args.rig).expanduser().resolve()
+                roots = [*args.providers, rig_path / "mods", (rig_path / "starsector-core").resolve().parent / "mods"]
+                providers = mt.index_providers(roots)
+                for target in targets:
+                    providers.setdefault(target["id"], Path(target["folder"]))
+                result = mt.run_mass(args.rig, targets, variants, providers, args.output, screen=not args.no_screen, skip_baseline_validated=not args.retest_baseline, repeats=args.repeats, timeout=args.timeout, parallel=args.parallel, ledger=args.ledger, skip_known=args.skip_known, quiet=args.quiet, limit=args.limit, bundle=args.bundle)
+                print(json.dumps(result, indent=2) if args.json else "Mass test: " + ", ".join(f"{k}={v}" for k, v in sorted(result["counts"].items())) + f". See {args.output / 'MASS_TEST.md'}")
+                return 0 if not any(k in result["counts"] for k in ("ENVIRONMENT_SENSITIVE", "FLAKY")) else 1
+            if getattr(args, "preset", None) == "compare":
+                args.java, args.launcher = [25, 28], None
+                args.parallel = args.parallel or 3
+            elif getattr(args, "preset", None) == "real":
+                args.java, args.launcher = [28], ["miko", "miko-noprep"]
+                args.parallel = args.parallel or 2
+            variants = jm.plan_variants(jm.discover_jdks(args.rig, args.jdk_root), args.launcher, args.java)
+            if not variants:
+                print("bridgeforge: no JDK matched; try `java-matrix discover` or --jdk-root", file=sys.stderr)
+                return 2
+            if args.java_matrix_command == "setup":
+                written = jm.setup_rig(args.rig, variants)
+                print(json.dumps({"written": written, "variants": variants}, indent=2) if args.json else "Wrote " + ", ".join(written))
+                return 0
+            checkpoint = Path(args.rig) / "logs" / "java-matrix.partial.jsonl"
+            result = jm.run_java_matrix(args.rig, args.mods, variants, repeats=args.repeats, timeout=args.timeout, checkpoint=checkpoint, quiet=args.quiet, log_name=args.log_name, parallel=args.parallel or 1, ledger=args.ledger, skip_known=args.skip_known)
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2, sort_keys=True) if args.json else jm.render(result))
+        return 0 if result["verdict"] == "PASS_ALL" else 1
     if args.command == "boot-test":
         try:
             from . import boot_test as boot_test_module
@@ -2513,6 +3163,44 @@ def main(argv: list[str] | None = None) -> int:
             for spec in config.get("setups", []) or []:
                 print(f"Setup: {spec}")
         return 0
+    if args.command == "save-removal-plan":
+        from .save_removal_plan import plan_removal
+        result = plan_removal(args.save, args.mods, args.vanilla_core)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            return 0
+        print(f"{result['objects']} object(s) of missing classes: {result['droppable']} droppable, {result['blocked']} blocked")
+        for row in result["rows"]:
+            print(f"  {row['state']:9} {row['class']} (in {row['parent']}, line {row['line']})"
+                  + (f"  referenced from {', '.join(row['ref_examples'])}" if row["ref_examples"] else ""))
+        return 0
+    if args.command == "save-doctor":
+        from .save_doctor import diagnose
+        result = diagnose(args.save, args.mods, args.vanilla_core)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            return 0
+        print(f"{result['verdict']}: {result['character']} ({result['game_version']}, {result['enabled_mods']} mods)")
+        for problem in result["problems"]:
+            detail = problem.get("mod") or problem.get("package") or problem.get("file") or f"{problem.get('lines')} line(s)"
+            print(f"  {problem['class']:16} {detail}" + (f"  e.g. {', '.join(problem['examples'])}" if problem.get("examples") else ""))
+        for name, text in result["recovery"].items():
+            print(f"  recovery {name}: {text}")
+        return 0 if result["verdict"] == "NO_KNOWN_PROBLEM" else 1
+    if args.command == "save-format-survey":
+        try:
+            result = survey_saves(args.saves)
+        except (SaveReadError, ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True, default=str))
+        else:
+            print(f"Surveyed {result['saves_surveyed']} save(s); {result['saves_with_player_cargo']} with player cargo")
+            print(f"  game versions: {result['game_versions']}")
+            print(f"  cargo attributes in every save: {result['cargo_attributes_in_every_save']}")
+            print(f"  credits value present in every save: {result['credits_value_present_in_every_save']}")
+        return 0
     if args.command in {"save-inspect", "save-diff", "save-scripts", "save-growth", "save-provenance", "save-content", "save-removal", "save-summary"}:
         try:
             if args.command == "save-inspect":
@@ -2591,7 +3279,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             working[mod_id] = Path(path)
         try:
-            result = rig_doctor(args.runtime_dir, working_copies=working, real_install=args.real_install, write_saves_baseline=args.write_saves_baseline, reference_manifest=args.reference_manifest)
+            result = rig_doctor(args.runtime_dir, working_copies=working, real_install=args.real_install, write_saves_baseline=args.write_saves_baseline, reference_manifest=args.reference_manifest, core_baseline=args.core_baseline, write_core_baseline=args.write_core_baseline)
         except (ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -3028,7 +3716,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "revive-queue":
         from .revive_queue import revive_queue
         result = revive_queue(args.queue, only_status=set(args.only_status) or None, never_revived=args.never_revived, apply=args.apply,
-                              draft_report=args.draft_report, vanilla_core=args.vanilla_core, quiet=args.quiet, restart=args.restart)
+                              draft_report=args.draft_report, vanilla_core=args.vanilla_core, quiet=args.quiet, restart=args.restart,
+                              jobs=args.jobs)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
         else:
@@ -3056,6 +3745,16 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(entry, indent=2, ensure_ascii=False) if args.json else
               f"Ruling recorded ({entry['ruling']}) for {entry['finding']}: {len(entry['mods'])} mod baseline(s) updated. Re-run revive-queue --only-status ESCALATED to apply.")
         return 0
+    if args.command == "escalation" and args.escalation_command == "accept":
+        from .escalation_queue import accept_in_mod
+        try:
+            entry = accept_in_mod(args.workspace, args.selectors, args.reason)
+        except (ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(entry, indent=2, ensure_ascii=False) if args.json else
+              f"Accepted {len(entry['keys'])} finding(s) as authored in {entry['baseline']}. Re-run revive to apply.")
+        return 0
     if args.command == "escalation" and args.escalation_command == "queue":
         from .escalation_queue import summarize_queue
         result = summarize_queue(args.queue, quiet=args.quiet)
@@ -3065,6 +3764,14 @@ def main(argv: list[str] | None = None) -> int:
             for row in result["findings"][:15]:
                 print(f"{len(row['only_blocker']):4} only / {len(row['mods']):4} mods  {row['finding']} ({row['tier']}, {row['kind']})")
             print(f"Escalated mods: {result['escalated']}. Written: {result['result_md']}")
+        return 0
+    if args.command == "escalation" and args.escalation_command == "review":
+        from .escalation_review import review_sheet
+        result = review_sheet(args.workspace)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"{len(result['reviews'])} attempt(s) reviewed; flagged: {', '.join(result['flagged']) or 'none'}" + (f"\n  {result['sheet']}" if result["sheet"] else ""))
         return 0
     if args.command == "escalation":
         from .escalation import EscalationError, list_packets, load_packet, run_packet, verify
@@ -3089,7 +3796,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 0 if result["status"] == "PASS" else 1
             if args.escalation_command == "apply":
                 from .escalation import apply_verified
-                result = apply_verified(args.workspace, args.packet, attempt=args.attempt, rebuild_jar=args.rebuild_jar)
+                result = apply_verified(args.workspace, args.packet, attempt=args.attempt, rebuild_jar=args.rebuild_jar,
+                                        patch_classes=args.patch_class, allow_removed=args.allow_removed)
                 if args.json:
                     print(json.dumps(result, indent=2, ensure_ascii=False))
                 else:
@@ -3097,10 +3805,36 @@ def main(argv: list[str] | None = None) -> int:
                     for item in result["written"]:
                         print(f"  {item['path']}" + (f" (backup {item['backup']})" if item.get("backup") else ""))
                 return 0
-            names = [p["id"] for p in list_packets(args.workspace) if p["kind"] == "agent"] if args.all else [args.packet]
+            from .escalation import jar_only
+
+            local_only = []
+            if args.all:
+                # A packet whose only files are jar entries ("x.jar!path/Cls.class") cannot be fixed in an agent sandbox:
+                # it has no jar, javap or python (Fast Engine Rendering and Magellan Protectorate agents changed nothing,
+                # 2026-09-30). --all leaves them out and lists them for the main session; naming one still runs it.
+                agent_packets = [p for p in list_packets(args.workspace) if p["kind"] == "agent"]
+                local_only = [p["id"] for p in agent_packets if jar_only(p)]
+                names = [p["id"] for p in agent_packets if p["id"] not in local_only]
+                for name in local_only:
+                    print(f"SKIPPED (jar-only, fix in the main session): {name}", file=sys.stderr)
+                if not names and local_only:
+                    return 0
+            else:
+                names = [args.packet]
             if not names or names == [None]:
                 raise EscalationError("Name a packet, or pass --all.")
-            results = [run_packet(args.workspace, name, args.agent, apply=args.apply, retries=args.retries, timeout=args.timeout) for name in names]
+            from .escalation_review import diff_snapshots, review_sheet, snapshot_dir
+            watched = {d: snapshot_dir(d) for d in args.watch_dir}
+            from .escalation import run_lock
+            with run_lock(args.workspace):
+                results = [run_packet(args.workspace, name, args.agent, apply=args.apply, retries=args.retries, timeout=args.timeout) for name in names]
+            for directory, before in watched.items():
+                touched = diff_snapshots(before, snapshot_dir(directory))
+                if any(touched.values()):
+                    print(f"WARNING: the agent run changed {directory}: {json.dumps(touched)}", file=sys.stderr)
+            review = review_sheet(args.workspace)
+            if review["flagged"] and not args.json:
+                print(f"Review first (flagged): {', '.join(review['flagged'])} -> {review['sheet']}", file=sys.stderr)
         except (EscalationError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -3150,6 +3884,105 @@ def main(argv: list[str] | None = None) -> int:
             if args.output:
                 print(f"Written: {args.output}")
         return 0
+    if args.command == "jar-packets":
+        from .jar_patch import JarPatchError, prepare_jar_packets
+        try:
+            result = prepare_jar_packets(args.mod, vanilla_core=args.vanilla_core, jdk=args.jdk)
+        except (JarPatchError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        for row in result["packets"]:
+            print(f"{row['state']:15} {row['class']}  ({row['finding']})\n  {row['next']}")
+        if not result["packets"]:
+            print("No jar-only packets.")
+        return 0
+    if args.command == "done-audit":
+        from .done_audit import RESULT_MD, done_audit
+        from .substitutes import REPO_ROOT
+        done = args.done or REPO_ROOT / "Done"
+        result = done_audit(done, args.queue or REPO_ROOT / "In operation", vanilla_core=args.vanilla_core, quiet=args.quiet)
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())) + f". Report: {Path(done) / RESULT_MD}")
+        return 0
+    if args.command == "translate-batch":
+        from .translate_batch import TranslateBatchError, agent_translator, translate_batch
+        from .translation import TranslationError as TranslateApplyError
+        base = (args.out or args.mod_dir).expanduser().resolve()
+        work = args.work or base.with_name(base.name + ".translate-work")
+        try:
+            result = translate_batch(args.mod_dir, translator=agent_translator(args.agent), work_dir=work, out_dir=args.out,
+                                     in_place=args.in_place, chunk=args.chunk, reference=args.reference, records=args.record, quiet=args.quiet)
+        except (TranslateBatchError, TranslateApplyError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        else:
+            print(f"Entries {result['entries']}, sent to the agent in {result['chunks']} chunk(s), translated {result['translated']}.")
+            if result["stopped"]:
+                print(f"Stopped: {result['stopped']}. Rerun the same command to continue from the checkpoint.")
+            for number, problems in result["failed_chunks"].items():
+                print(f"  chunk {number} rejected twice: {'; '.join(problems[:3])}")
+            if result["applied"] is not None:
+                print(f"Applied -> {args.out or args.mod_dir}; translate-check {result['check']['status']}, leftover non-English units: {result['check']['leftover_count']}")
+            elif not result["stopped"]:
+                print(f"Not applied: fix or rerun the rejected chunks (work folder {result['work_dir']}).")
+        return 0 if result["applied"] is not None else 1
+    if args.command == "renamed-ids":
+        from .renamed_ids import find_renamed
+        results = find_renamed(args.old_copy, args.new_copy, args.ids)
+        if args.json:
+            print(json.dumps(results, indent=2, ensure_ascii=False))
+        else:
+            for r in results:
+                extra = (" -> " + ", ".join(r["renamed_to"])) if r.get("renamed_to") else ""
+                near = ("; similar: " + ", ".join(f"{s['id']} ({s['name']})" for s in r["similar"])) if r.get("similar") else ""
+                print(f"{r['verdict']:<16} {r['id']}{extra}{near}")
+        return 0
+    if args.command == "port-hullmod-state":
+        from .hullmod_state import HullModStateError, port_hullmod_state
+        if args.out.resolve() == args.source.resolve():
+            print("bridgeforge: --out must not be the input source.", file=sys.stderr)
+            return 2
+        try:
+            ported = port_hullmod_state(args.source.read_text(encoding="utf-8"), args.field, args.source.stem)
+        except (HullModStateError, OSError) as exc:
+            print(f"bridgeforge: not ported: {exc}", file=sys.stderr)
+            return 2
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(ported, encoding="utf-8")
+        removed = " ".join(f"--allow-removed {f}" for f in args.field)
+        print(f"Ported: {args.out}\nNext: bridgeforge patch-jar-class MOD {args.out} --jar JAR {removed} --install")
+        return 0
+    if args.command == "patch-jar-class":
+        from .jar_patch import JarPatchError, patch_jar_classes
+        try:
+            result = patch_jar_classes(args.mod, args.jar, args.sources, vanilla_core=args.vanilla_core, jdk=args.jdk,
+                                       source_root=args.source_root, allow_removed=args.allow_removed, install=args.install)
+        except (JarPatchError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"{result['status']}: {args.jar}" + (" (installed)" if result["installed"] else ""))
+            for error in result["compile"]["errors"][:5]:
+                print(f"  compile: {error}")
+            for entry in result["classes"]:
+                bits = [f"null checks {entry['null_checks'][0]}->{entry['null_checks'][1]}"] if "null_checks" in entry else ["new"]
+                if entry.get("members"):
+                    bits.append("members " + json.dumps(entry["members"]))
+                if entry.get("calls_changed"):
+                    bits.append("calls " + json.dumps(entry["calls_changed"]))
+                print(f"  {entry['class']}: " + "; ".join(bits))
+            for refusal in result.get("refusals", []):
+                print(f"  refused: {refusal}")
+        return 0 if result["status"] == "PASS" else 1
     if args.command == "rebuild-jar":
         from .rebuild_jar import RebuildJarError, rebuild_jar
         try:

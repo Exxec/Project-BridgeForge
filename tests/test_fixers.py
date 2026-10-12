@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from bridgeforge.cli import main
@@ -726,6 +729,32 @@ class CrewXPLevelRewriteTests(unittest.TestCase):
             after_scan = scan_mod(root)
             self.assertEqual(_findings(after_scan, "removed-api-call"), [])
 
+    def test_tier_reads_become_one_crew(self) -> None:
+        # ROADMAP 40 (Ironclads, 2026-10-05): REGULAR reads all crew, other tiers read 0.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            path = root / "data" / "scripts" / "Mine.java"
+            _write(path, "package data.scripts;\nimport com.fs.starfarer.api.campaign.CargoAPI.CrewXPLevel;\npublic class Mine {\n"
+                         "    float c(CargoAPI cargo) { return cargo.getCrew(CrewXPLevel.REGULAR) + cargo.getCrew(CargoAPI.CrewXPLevel.ELITE); }\n}\n")
+            apply_fix(compute_fix(root, "removed-api-call"))
+            text = path.read_text(encoding="utf-8")
+        self.assertIn("cargo.getCrew() + cargo.getCrew() * 0", text)
+        self.assertNotIn("CrewXPLevel.", text)
+
+    def test_qualified_cargoapi_crewxplevel_is_dropped_whole(self) -> None:
+        # Ironclads' FleetSpawner (2026-10-04): addCrew(CargoAPI.CrewXPLevel.REGULAR, n) left addCrew(CargoAPI.n).
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            _write(root / "mod_info.json", '{"id":"fixture"}')
+            path = root / "data" / "scripts" / "world" / "Spawner.java"
+            _write(path, "package data.scripts.world;\npublic class Spawner {\n"
+                         "    void crew(CargoAPI cargo) { cargo.addCrew(CargoAPI.CrewXPLevel.REGULAR, (int)(cargo.getMaxPersonnel()/2)); }\n}\n")
+            apply_fix(compute_fix(root, "removed-api-call"))
+            text = path.read_text(encoding="utf-8")
+        self.assertIn("cargo.addCrew((int)(cargo.getMaxPersonnel()/2));", text)
+        self.assertNotIn("CargoAPI.(", text)
+
     def test_addtofleet_trailing_crewxplevel_argument_is_dropped_both_overload_shapes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
@@ -1029,6 +1058,18 @@ class ModInfoGameVersionInexactTests(unittest.TestCase):
             self.assertEqual(data["id"], "fixture")
 
 
+class CsvSpaceBeforeQuoteTests(unittest.TestCase):
+    def test_a_space_before_an_opening_quote_is_dropped_when_that_fits_the_header(self) -> None:
+        # SWP Triumphant's descriptions.csv (2026-10-01): `SHIP, "...` split a multi-line description at its commas.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "data" / "strings" / "descriptions.csv"
+            _write(path, 'id,type,text1,text2\nx,SHIP, "One, two, five\nthree, four",\n')
+            apply_fix(compute_fix(root, "csv-row-extra-columns", {}))
+            rows = list(csv.reader(io.StringIO(path.read_text(encoding="utf-8"))))
+        self.assertEqual(rows[1], ["x", "SHIP", "One, two, five\nthree, four", ""])
+
+
 class CsvRowExtraColumnsTests(unittest.TestCase):
     def test_drops_trailing_empty_extras_and_rescans_clean(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1103,6 +1144,28 @@ class CsvMissingDesignTypeColumnTests(unittest.TestCase):
             # Only the CSV file should be part of the plan; settings.json already has the key.
             self.assertEqual(len(plan.changes), 1)
             self.assertTrue(str(plan.changes[0].path).endswith("ship_data.csv"))
+
+
+class UnattendedInputFixerTests(unittest.TestCase):
+    """Owner ruling 2026-09-30: two input fixers run unattended with defaults that invent nothing."""
+
+    def test_nearest_vanilla_gen_row(self) -> None:
+        from bridgeforge.fixers import nearest_vanilla_gen_row
+        planets = {"barren", "water", "lava", "gas_giant", "frozen", "star_yellow", "star_red_dwarf"}
+        self.assertEqual(nearest_vanilla_gen_row("waterworld", "", planets, False), "water")
+        self.assertEqual(nearest_vanilla_gen_row("em_gas_giant", "", planets, False), "gas_giant")
+        self.assertEqual(nearest_vanilla_gen_row("batavia_shipyards", "Shipyards", planets, False), "barren")
+        self.assertEqual(nearest_vanilla_gen_row("my_sun", "Red Sun", planets, True), "star_red_dwarf")
+
+    def test_blank_design_type_column_needs_no_design_type_or_colour(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "data" / "hulls" / "ship_data.csv", "name,id\nOne,ff_one\n")
+            plan = compute_fix(root, "csv-missing-design-type-column", {"blank_design_type": True})
+            apply_fix(plan)
+            written = (root / "data" / "hulls" / "ship_data.csv").read_text(encoding="utf-8")
+        self.assertEqual(written, "name,id,tech/manufacturer\nOne,ff_one,\n")
+        self.assertEqual(len(plan.changes), 1)  # no settings.json colour
 
 
 class ProcgenRowMissingTests(unittest.TestCase):
@@ -1189,6 +1252,55 @@ class FactionKnownListsMissingTests(unittest.TestCase):
             self.assertNotIn("knownHullMods", data)
             after_scan = scan_mod(root, vanilla_core=vanilla)
             self.assertEqual(_findings(after_scan, "faction-known-lists-missing"), [])
+
+    def test_an_existing_known_list_is_kept_not_repeated(self) -> None:
+        # Ironclads pirates.faction already had knownFighters; the fixer added a second, and RC8 stopped with
+        # Fatal 'Duplicate key "knownFighters"' (GRP10E-20261005).
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
+            root = Path(mod_dir)
+            vanilla = Path(vanilla_dir)
+            faction_path = root / "data" / "world" / "factions" / "newfac.faction"
+            _write(faction_path, '{"id":"newfac","knownFighters":{"fighters":["wing1_wing","wing2_wing"]},'
+                                 '"shipRoles":{"role1":{"variant1":1}}}')
+            _write(vanilla / "data" / "world" / "factions" / "pirates.faction", '{"id":"pirates"}')
+            _write(root / "data" / "variants" / "variant1.variant", '{"hullId":"hull1","weaponGroups":[{"weapons":{"WP0":"weapon1"}}],"wings":["wing1_wing"]}')
+            _write(root / "data" / "hulls" / "ship_data.csv", "id,name\nhull1,Hull One\n")
+            _write(root / "data" / "weapons" / "weapon_data.csv", "id,name\nweapon1,Weapon One\n")
+            _write(root / "data" / "hulls" / "wing_data.csv", "id,role,role desc,op cost\nwing1_wing,FIGHTER,desc,4\nwing2_wing,FIGHTER,desc,4\n")
+            apply_fix(compute_fix(root, "faction-known-lists-missing", {"faction_file": faction_path, "vanilla_core": vanilla}))
+            text = faction_path.read_text(encoding="utf-8")
+            data = json.loads(text)
+        self.assertEqual(text.count('"knownFighters"'), 1)
+        self.assertEqual(data["knownFighters"]["fighters"], ["wing1_wing", "wing2_wing"])
+        self.assertEqual(data["knownShips"]["hulls"], ["hull1"])
+
+    def test_a_0_6_faction_derives_lists_from_fleet_compositions(self) -> None:
+        # Antediluvians' wayfarer.faction (2026-09-30): no shipRoles; fleets name a variant and a wing directly.
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
+            root = Path(mod_dir)
+            vanilla = Path(vanilla_dir)
+            faction_path = root / "data" / "world" / "factions" / "oldfac.faction"
+            _write(faction_path, '{id:"oldfac","fleetCompositions":{"f":{"displayName":"F","ships":{"variant1":[1, 1],"wing1_wing":[6, 6],},},},}')
+            _write(vanilla / "data" / "world" / "factions" / "pirates.faction", '{"id":"pirates"}')
+            _write(root / "data" / "variants" / "variant1.variant", '{"hullId":"hull1","weaponGroups":[{"weapons":{"WP0":"weapon1"}}]}')
+            _write(root / "data" / "hulls" / "ship_data.csv", "id,name\nhull1,Hull One\n")
+            _write(root / "data" / "weapons" / "weapon_data.csv", "id,name\nweapon1,Weapon One\n")
+            _write(root / "data" / "hulls" / "wing_data.csv", "id,role,role desc,op cost\nwing1_wing,FIGHTER,desc,4\n")
+            apply_fix(compute_fix(root, "faction-known-lists-missing", {"faction_file": faction_path, "vanilla_core": vanilla}))
+            data = _load_lenient_json_file(faction_path)
+            self.assertEqual(data["knownShips"]["hulls"], ["hull1"])
+            self.assertEqual(data["knownFighters"]["fighters"], ["wing1_wing"])
+            self.assertEqual(_findings(scan_mod(root, vanilla_core=vanilla), "faction-known-lists-missing"), [])
+
+    def test_a_faction_nothing_reads_is_a_safe_note(self) -> None:
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
+            root = Path(mod_dir)
+            vanilla = Path(vanilla_dir)
+            _write(root / "data" / "world" / "factions" / "hvb_hostile.faction", '{"id":"hvb_hostile","displayName":"hostile"}')
+            _write(vanilla / "data" / "world" / "factions" / "pirates.faction", '{"id":"pirates"}')
+            found = _findings(scan_mod(root, vanilla_core=vanilla), "faction-known-lists-missing")
+        self.assertEqual([f.classification for f in found], ["SAFE"])
+        self.assertIn("nothing-reads-lists", found[0].evidence)
 
     def test_refuses_on_unresolved_id(self) -> None:
         with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
@@ -1615,6 +1727,8 @@ class ShippableWorkFileFixerTests(unittest.TestCase):
             (mod / "sounds/pack.zip").write_bytes(b"PK\x05\x06" + b"\x00" * 18)
             # An IDE file naming a work file is not a runtime reference (Jackundor's .idea, 2026-09-27).
             _write(mod / ".idea/libraries/data.xml", '<root url="jar://$PROJECT_DIR$/graphics/ships/hull.psd" />')
+            # Nor is a root readme (Hiver Swarm's README named its .rar, ROADMAP 34.18).
+            _write(mod / "README.txt", "Unpack hull.psd and notes.old if you like.")
             self.assertTrue(_findings(scan_mod(mod), "shippable-work-file"))
             plan = compute_fix(mod, "shippable-work-file")
             applied = apply_fix(plan)
@@ -1757,3 +1871,409 @@ class DataFileNamedEncodingTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(mac, "id,t\na,it’s Mystère\n")
         self.assertEqual(sjis, "id,t\na,the ship’s hull é\n")
+
+
+class HullModInstanceStateFixerTests(unittest.TestCase):
+    # ROADMAP 34.1 (2026-10-04): the per-ship State port done by hand for SEEKER and Sylphon, as a fixer.
+    SOURCE = (
+        "package data.hullmods;\n\n"
+        "import com.fs.starfarer.api.combat.BaseHullMod;\n"
+        "import com.fs.starfarer.api.combat.ShipAPI;\n\n"
+        "public class Fixture extends BaseHullMod {\n"
+        "    private static final float DELAY = 2f;\n"
+        "    private float timer = 0f;\n\n"
+        "    public void advanceInCombat(ShipAPI ship, float amount) {\n"
+        "        this.timer += amount;\n"
+        "        if (timer > DELAY) { reset(ship); }\n"
+        "    }\n\n"
+        "    private void reset(ShipAPI s) {\n"
+        "        timer = 0f;\n"
+        "    }\n"
+        "}\n"
+    )
+
+    def _mod(self, root: Path, source: str) -> Path:
+        (root / "mod_info.json").write_text('{"id":"fixture","name":"F","version":"1","gameVersion":"0.98a-RC8"}', encoding="utf-8")
+        path = root / "data" / "hullmods" / "Fixture.java"
+        path.parent.mkdir(parents=True)
+        path.write_text(source, encoding="utf-8")
+        return path
+
+    def test_moves_fields_into_per_ship_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(root, self.SOURCE)
+            self.assertEqual(len(_findings(scan_mod(root), "hullmod-instance-state")), 1)
+            apply_fix(compute_fix(root, "hullmod-instance-state"))
+            text = path.read_text(encoding="utf-8")
+            self.assertEqual(_findings(scan_mod(root), "hullmod-instance-state"), [])
+        self.assertIn("private static class State {\n        float timer = 0f;\n    }", text)
+        self.assertIn('ship.getCustomData().get("Fixture_bfState")', text)
+        self.assertIn("if (ship == null) return new State();", text)
+        self.assertEqual(text.count("State bfState = bfState("), 2)
+        self.assertIn("bfState.timer += amount;", text)
+        self.assertIn("State bfState = bfState(s);\n        bfState.timer = 0f;", text)
+        self.assertIn("private static final float DELAY = 2f;", text)
+
+    def test_refuses_a_method_without_a_ship(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, self.SOURCE.replace("private void reset(ShipAPI s) {", "private void reset() {").replace("reset(ship)", "reset()"))
+            with self.assertRaises(FixerError):
+                compute_fix(root, "hullmod-instance-state")
+
+
+class PortHullModStateCommandTests(unittest.TestCase):
+    def test_writes_the_port_and_refuses_overwriting_the_input(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "Fixture.java"
+            source.write_text(HullModInstanceStateFixerTests.SOURCE, encoding="utf-8")
+            out = Path(directory) / "out" / "Fixture.java"
+            with mock.patch("sys.stdout", new_callable=io.StringIO):
+                code = main(["port-hullmod-state", str(source), "--field", "timer", "--out", str(out)])
+            with mock.patch("sys.stderr", new_callable=io.StringIO):
+                same = main(["port-hullmod-state", str(source), "--field", "timer", "--out", str(source)])
+            ported = out.read_text(encoding="utf-8")
+        self.assertEqual(code, 0)
+        self.assertEqual(same, 2)
+        self.assertIn("bfState.timer += amount;", ported)
+
+
+class NexerelinCorvusModeImportTests(unittest.TestCase):
+    # ROADMAP 34.13 (2026-10-04): Hiver Swarm's plugin failed to compile without Nexerelin.
+    def _mod(self, root: Path, dependencies: str = "[]") -> Path:
+        (root / "mod_info.json").write_text('{"id":"fixture","dependencies":' + dependencies + '}', encoding="utf-8")
+        path = root / "data" / "scripts" / "Plugin.java"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            "package data.scripts;\n\nimport com.fs.starfarer.api.BaseModPlugin;\nimport exerelin.campaign.SectorManager;\n\n"
+            "public class Plugin extends BaseModPlugin {\n    public void onNewGame() {\n"
+            "        if (SectorManager.getManager().getCorvusMode()) { }\n    }\n}\n", encoding="utf-8")
+        return path
+
+    def test_reads_sector_memory_instead_of_importing_nexerelin(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = self._mod(root)
+            self.assertEqual(len(_findings(scan_mod(root), "nexerelin-corvus-mode-import")), 1)
+            apply_fix(compute_fix(root, "nexerelin-corvus-mode-import"))
+            text = path.read_text(encoding="utf-8")
+            self.assertEqual(_findings(scan_mod(root), "nexerelin-corvus-mode-import"), [])
+        self.assertNotIn("exerelin", text)
+        self.assertIn('if ((!Global.getSector().getMemoryWithoutUpdate().getBoolean("$nex_randomSector"))) { }', text)
+        self.assertIn("import com.fs.starfarer.api.Global;", text)
+
+    def test_not_flagged_when_a_jar_class_shadows_the_loose_file(self) -> None:
+        # Kadur Remnant ships its plugin both loose and in KadurRemnant.jar; the jar class wins (2026-10-04).
+        import zipfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root)
+            (root / "mod_info.json").write_text('{"id":"fixture","dependencies":[],"jars":["jars/m.jar"]}', encoding="utf-8")
+            (root / "jars").mkdir()
+            with zipfile.ZipFile(root / "jars" / "m.jar", "w") as jar:
+                jar.writestr("data/scripts/Plugin.class", b"\xca\xfe\xba\xbe\x00\x00\x00\x3d")
+            self.assertEqual(_findings(scan_mod(root), "nexerelin-corvus-mode-import"), [])
+
+    def test_not_flagged_when_the_mod_requires_nexerelin(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._mod(root, '[{"id":"nexerelin"}]')
+            self.assertEqual(_findings(scan_mod(root), "nexerelin-corvus-mode-import"), [])
+
+
+class SpawnedShipCaptainFixerTests(unittest.TestCase):
+    # ROADMAP 34.14 (2026-10-04): Traverser's turrets, done by hand, as a fixer; the captain overload is guarded.
+    def test_gives_a_spawned_ship_a_captain_and_the_rescan_is_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            path = root / "data" / "shipsystems" / "Deploy.java"
+            path.parent.mkdir(parents=True)
+            path.write_text(
+                "package data.shipsystems;\n\npublic class Deploy {\n    void go(CombatFleetManagerAPI m, Vector2f at) {\n"
+                '        m.spawnShipOrWing("fx_turret", at, (float) Math.random() * 360f);\n'
+                '        m.spawnShipOrWing("fx_wing", at, 0f);\n    }\n}\n', encoding="utf-8")
+            self.assertEqual(len(_findings(scan_mod(root), "spawned-ship-captain-personality-risk")), 1)
+            apply_fix(compute_fix(root, "spawned-ship-captain-personality-risk"))
+            text = path.read_text(encoding="utf-8")
+            self.assertEqual(_findings(scan_mod(root), "spawned-ship-captain-personality-risk"), [])
+        self.assertIn('m.spawnShipOrWing("fx_turret", at, (float) Math.random() * 360f, 0f, bfSpawnCaptain());', text)
+        self.assertIn('m.spawnShipOrWing("fx_wing", at, 0f);', text)
+        self.assertIn("Personalities.STEADY", text)
+        self.assertTrue(text.rstrip().endswith("}"))
+
+
+class JsonMissingCommaTests(unittest.TestCase):
+    # ROADMAP 34.16 (2026-10-04): Hiigaran's polaris.json; org.json rejects a missing separator.
+    def test_adds_the_comma_and_the_file_then_parses(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            path = root / "data" / "campaign" / "econ" / "x.json"
+            path.parent.mkdir(parents=True)
+            path.write_bytes(b'{\r\n\t"conditions":[\r\n\t\t"a",\r\n\t\t#"b",\r\n\t\t"c"\r\n\t\t"d",\r\n\t],\r\n}\r\n')
+            found = _findings(scan_mod(root), "json-missing-comma")
+            apply_fix(compute_fix(root, "json-missing-comma"))
+            data = path.read_bytes()
+            after = scan_mod(root)
+        self.assertEqual(found[0].evidence, ["line:5"])
+        self.assertIn(b'\t\t"c",\r\n\t\t"d"', data)
+        self.assertEqual(_findings(after, "json-missing-comma"), [])
+        self.assertEqual(_findings(after, "unverified-json-syntax"), [])
+
+    def test_other_syntax_errors_stay_unverified(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mod_info.json").write_text('{"id":"fixture"}', encoding="utf-8")
+            (root / "data").mkdir()
+            (root / "data" / "y.json").write_text('{"a": [1, 2}', encoding="utf-8")
+            result = scan_mod(root)
+        self.assertEqual(_findings(result, "json-missing-comma"), [])
+        self.assertTrue(_findings(result, "unverified-json-syntax"))
+
+
+class BuiltinWingIsHullmodTests(unittest.TestCase):
+    # 2026-10-04: The Nomads' nom_komodo_p.ship listed the vanilla hull mod advancedcore under builtInWings.
+    def test_renames_the_key_when_every_entry_is_a_hull_mod(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core = root / "core"
+            _write(core / "data" / "hullmods" / "hull_mods.csv", "name,id\nAdvanced Targeting Core,advancedcore\n")
+            _write(core / "data" / "hulls" / "wing_data.csv", "id,variant\ntalon_wing,talon_wing\n")
+            _write(core / "data" / "weapons" / "weapon_data.csv", "name,id\nLight Machine Gun,lightmg\n")
+            mod = root / "mod"
+            _write(mod / "mod_info.json", '{"id":"fixture"}')
+            ship = mod / "data" / "hulls" / "fx_p.ship"
+            _write(ship, '{\n  "hullId": "fx_p",\n  "builtInWings": [\n    "advancedcore"\n  ]\n}\n')
+            _write(mod / "data" / "hulls" / "fx_q.ship", '{"hullId": "fx_q", "builtInMods": ["x"], "builtInWings": ["advancedcore"]}')
+            found = _findings(scan_mod(mod, vanilla_core=core), "builtin-wing-is-hullmod")
+            content = _findings(scan_mod(mod, vanilla_core=core), "content-reference-unresolved")
+            apply_fix(compute_fix(mod, "builtin-wing-is-hullmod", {"vanilla_core": core}))
+            text = ship.read_text(encoding="utf-8")
+            after = [f.file for f in _findings(scan_mod(mod, vanilla_core=core), "builtin-wing-is-hullmod")]
+        self.assertEqual(sorted(f.file for f in found), ["data/hulls/fx_p.ship", "data/hulls/fx_q.ship"])
+        self.assertFalse(any("wing:advancedcore" in str(f.evidence) for f in content))
+        self.assertIn('"builtInMods": [\n    "advancedcore"', text)
+        self.assertEqual(after, ["data/hulls/fx_q.ship"])  # it already has builtInMods: left to a person
+
+
+class WingOpCostFixerTests(unittest.TestCase):
+    # ROADMAP 34.22 (2026-10-04): the owner's ruling for 36 wings in 7 mods, as an approval-gated fixer.
+    def _core(self, root: Path) -> Path:
+        core = root / "core"
+        _write(core / "data" / "hulls" / "wing_data.csv", "id,variant,role,fleet pts,num,op cost\n"
+               "talon_wing,talon,INTERCEPTOR,3,4,2\nbroadsword_wing,bs,FIGHTER,6,3,8\n")
+        return core
+
+    def test_legacy_layout_gets_the_column_and_only_fittable_wings_get_a_cost(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core = self._core(root)
+            mod = root / "mod"
+            _write(mod / "mod_info.json", '{"id":"fixture"}')
+            path = mod / "data" / "hulls" / "wing_data.csv"
+            _write(path, "id,variant,fleet pts,num,role\nfx_fighter_wing,fx,6,3,FIGHTER\nfx_spare_wing,fx2,3,4,INTERCEPTOR\n")
+            _write(mod / "data" / "variants" / "fx_carrier.variant", '{"variantId": "fx_carrier", "wings": ["fx_fighter_wing"]}')
+            findings = [SimpleNamespace(id="wing-op-cost-blank", file="data/hulls/wing_data.csv", evidence=[f"wing:{w}"])
+                        for w in ("fx_fighter_wing", "fx_spare_wing")]
+            apply_fix(compute_fix(mod, "wing-op-cost-blank", {"vanilla_core": core, "scan_findings": findings}))
+            text = path.read_text(encoding="utf-8")
+            with self.assertRaises(FixerError):
+                compute_fix(mod, "wing-op-cost-blank", {"scan_findings": findings})  # no vanilla core: refused
+        self.assertEqual(text, "id,variant,fleet pts,num,role,op cost\nfx_fighter_wing,fx,6,3,FIGHTER,8\nfx_spare_wing,fx2,3,4,INTERCEPTOR,\n")
+
+    def test_a_zero_cost_vanilla_wing_is_never_the_match(self) -> None:
+        # Ironclads' su57_wing (SUPPORT, 6 fp) matched RC8's terminator_wing (SUPPORT, 6 fp, 0 OP), 2026-10-05.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core = root / "core"
+            _write(core / "data" / "hulls" / "wing_data.csv", "id,variant,role,fleet pts,num,op cost\n"
+                   "terminator_wing,t,SUPPORT,6,1,0\nmining_wing,m,SUPPORT,5,2,4\n")
+            mod = root / "mod"
+            _write(mod / "mod_info.json", '{"id":"fixture"}')
+            path = mod / "data" / "hulls" / "wing_data.csv"
+            _write(path, "id,variant,fleet pts,num,role,op cost\nfx_support_wing,fx,6,1,SUPPORT,\n")
+            _write(mod / "data" / "variants" / "fx_carrier.variant", '{"variantId": "fx_carrier", "wings": ["fx_support_wing"]}')
+            findings = [SimpleNamespace(id="wing-op-cost-blank", file="data/hulls/wing_data.csv", evidence=["wing:fx_support_wing"])]
+            apply_fix(compute_fix(mod, "wing-op-cost-blank", {"vanilla_core": core, "scan_findings": findings}))
+            text = path.read_text(encoding="utf-8")
+        self.assertIn("fx_support_wing,fx,6,1,SUPPORT,4", text)
+
+
+class UnguardedVariableLookupTests(unittest.TestCase):
+    # 2026-10-04: DNEEP's setIndustryOnPlanet(SystemName, ...) crashed on load in the owner's game.
+    SOURCE = ("package data.plugins;\r\n\r\npublic class P {\r\n"
+              "    public void setIndustryOnPlanet(String SystemName, String Planet) {\r\n"
+              "        List<PlanetAPI> planets = Global.getSector().getStarSystem(SystemName).getPlanets();\r\n"
+              "    }\r\n"
+              "    public int count(String name) {\r\n"
+              "        return Global.getSector().getStarSystem(name).getPlanets().size();\r\n"
+              "    }\r\n"
+              "    public void guarded(String name) {\r\n"
+              "        if (Global.getSector().getStarSystem(name) == null) return;\r\n"
+              "        Global.getSector().getStarSystem(name).getPlanets();\r\n"
+              "    }\r\n}\r\n")
+
+    def test_flags_unguarded_uses_and_guards_the_first_statement_of_a_void_method(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory)
+            _write(mod / "mod_info.json", '{"id": "fx"}')
+            path = mod / "data" / "plugins" / "P.java"
+            path.parent.mkdir(parents=True)
+            path.write_bytes(self.SOURCE.encode("utf-8"))
+            found = _findings(scan_mod(mod), "campaign-lookup-dereferenced-unguarded")
+            apply_fix(compute_fix(mod, "campaign-lookup-dereferenced-unguarded"))
+            text = path.read_bytes().decode("utf-8")
+            left = _findings(scan_mod(mod), "campaign-lookup-dereferenced-unguarded")
+        self.assertEqual(sorted(e for f in found for e in f.evidence if e.startswith("line:")), ["line:5", "line:8"])
+        self.assertIn("    public void setIndustryOnPlanet(String SystemName, String Planet) {\r\n"
+                      "        // BridgeForge: a missing system or entity (random sector, total conversion) is skipped.\r\n"
+                      "        if (Global.getSector().getStarSystem(SystemName) == null) {\r\n", text)
+        self.assertEqual([e for f in left for e in f.evidence if e.startswith("line:")], ["line:12"])  # the int method: refused
+
+
+class JsonDuplicateKeyFixerTests(unittest.TestCase):
+    def _mod(self, directory: str, relative: str, content: bytes) -> Path:
+        root = Path(directory) / "mod"
+        (root / Path(relative).parent).mkdir(parents=True)
+        (root / "mod_info.json").write_text('{"id": "dk"}', encoding="utf-8")
+        (root / relative).write_bytes(content)
+        return root
+
+    def test_identical_repeat_is_removed_and_everything_else_kept(self) -> None:
+        # Ironclads pirates.faction: knownFighters twice (GRP10E-20261005); CRLF and comments must survive
+        content = (b'{\r\n\t# keep this comment\r\n\t"id":"pirates",\r\n\t"knownFighters":{"fighters":["a_wing"]},\r\n'
+                   b'\t"knownShips":{"hulls":["h"]},\r\n\t"knownFighters":{"fighters":["a_wing"]},\r\n}')
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._mod(directory, "data/config/things.json", content)
+            after = compute_fix(root, "json-duplicate-key").changes[0].after
+        self.assertEqual(after, b'{\r\n\t# keep this comment\r\n\t"id":"pirates",\r\n\t"knownFighters":{"fighters":["a_wing"]},\r\n'
+                                b'\t"knownShips":{"hulls":["h"]},\r\n}')
+
+    def test_objects_without_a_separator_in_an_array_are_split(self) -> None:
+        # Arthr's Ships n Shit ass_solace.json: two markets in one object
+        content = (b'{"markets":[\n\t\t{\n\t\t\t"entities":["a"],\n\t\t\t"size":3,\n\t\t\t"industries":["x"],\n'
+                   b'\t\t\t"entities":["b"],\n\t\t\t"size":4,\n\t\t\t"industries":["y"]\n\t\t}\n\t]}')
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._mod(directory, "data/campaign/econ/s.json", content)
+            after = compute_fix(root, "json-duplicate-key").changes[0].after.decode("utf-8")
+        markets = json.loads(after)["markets"]
+        self.assertEqual([(m["entities"], m["size"], m["industries"]) for m in markets], [(["a"], 3, ["x"]), (["b"], 4, ["y"])])
+
+    def test_a_repeat_with_a_different_value_outside_that_pattern_is_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._mod(directory, "data/config/t.json", b'{"a":1,"b":2,"a":3}')
+            with self.assertRaises(FixerError) as caught:
+                compute_fix(root, "json-duplicate-key")
+        self.assertIn("different value", str(caught.exception))
+
+
+class LoadedFactionDuplicateKeyTests(unittest.TestCase):
+    def test_a_faction_file_in_no_factions_csv_is_not_flagged(self) -> None:
+        # GMDA gmda_patrol.faction repeats "gremlin" but is in no factions.csv, so the game never loads it
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
+            root, vanilla = Path(mod_dir), Path(vanilla_dir)
+            _write(vanilla / "data" / "world" / "factions" / "factions.csv", "faction\ndata/world/factions/pirates.faction\n")
+            _write(root / "mod_info.json", '{"id": "lf"}')
+            repeated = '{"id":"x","shipRoles":{"a":{"gremlin":0,"gremlin":0}}}'
+            _write(root / "data" / "world" / "factions" / "unlisted.faction", repeated)
+            _write(root / "data" / "world" / "factions" / "listed.faction", repeated)
+            _write(root / "data" / "world" / "factions" / "factions.csv", "faction\ndata/world/factions/listed.faction\n")
+            files = [f.file for f in scan_mod(root, vanilla_core=vanilla).findings if f.id == "json-duplicate-key"]
+        self.assertEqual(files, ["data/world/factions/listed.faction"])
+
+
+class DependencyVersionMajorTests(unittest.TestCase):
+    def _fixture(self, directory: str, declared: str, provider_version: str):
+        base = Path(directory)
+        mod, mods = base / "mod", base / "mods"
+        _write(mod / "mod_info.json", '{"id": "bingus",\n "dependencies": [{"id": "IndEvo", "name": "Industrial.Evolution", "version": "%s"}]}' % declared)
+        _write(mods / "IndEvo" / "mod_info.json", '{"id": "IndEvo", "version": "%s"}' % provider_version)
+        return mod, mods
+
+    def test_major_mismatch_is_flagged_and_fixed_minor_is_not(self) -> None:
+        # zzz Bingus Sustem: IndEvo 3.0.c against 4.1.b disabled the mod silently (RC8-23, GRP2C-20261005)
+        with tempfile.TemporaryDirectory() as directory:
+            mod, mods = self._fixture(directory, "3.0.c", "4.1.b")
+            found = [f for f in scan_mod(mod, provider_roots=[mods]).findings if f.id == "dependency-version-major-mismatch"]
+            after = compute_fix(mod, "dependency-version-major-mismatch", {"provider_roots": [mods]}).changes[0].after.decode("utf-8")
+            same_major = Path(directory) / "same"
+            _write(same_major / "mod_info.json", '{"id": "x", "dependencies": [{"id": "IndEvo", "version": "4.0.a"}]}')
+            quiet = [f for f in scan_mod(same_major, provider_roots=[mods]).findings if f.id == "dependency-version-major-mismatch"]
+        self.assertEqual(found[0].evidence, ["dependency:IndEvo", "declared:3.0.c", "provider:4.1.b"])
+        self.assertEqual(json.loads(after)["dependencies"][0]["version"], "4.1.b")
+        self.assertEqual(json.loads(after)["dependencies"][0]["name"], "Industrial.Evolution")
+        self.assertEqual(quiet, [])
+
+    def test_object_form_version_is_replaced_by_the_providers_string(self) -> None:
+        # Magellan Shenanigans declares MagicLib as {"major":0,"minor":46,"patch":0}
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            mod, mods = base / "mod", base / "mods"
+            _write(mod / "mod_info.json", '{"id":"m","dependencies":[{"id":"IndEvo","version":{"major":3,"minor":0}},{"id":"keep","version":"1.0"}]}')
+            _write(mods / "IndEvo" / "mod_info.json", '{"id": "IndEvo", "version": "4.1.b"}')
+            after = json.loads(compute_fix(mod, "dependency-version-major-mismatch", {"provider_roots": [mods]}).changes[0].after.decode("utf-8"))
+        self.assertEqual(after["dependencies"], [{"id": "IndEvo", "version": "4.1.b"}, {"id": "keep", "version": "1.0"}])
+
+
+class VanillaPathShadowRenameTests(unittest.TestCase):
+    def test_file_with_another_id_at_a_vanilla_path_is_renamed_and_a_real_override_stays(self) -> None:
+        # Vayra's Ship Pack: its vayra_exemplardrones system was saved as drone_pd.system (GRP2C-20261005)
+        with tempfile.TemporaryDirectory() as mod_dir, tempfile.TemporaryDirectory() as vanilla_dir:
+            root, vanilla = Path(mod_dir), Path(vanilla_dir)
+            _write(vanilla / "data" / "shipsystems" / "drone_pd.system", '{"id":"drone_pd","type":"DRONE_LAUNCHER"}')
+            _write(vanilla / "data" / "shipsystems" / "damper.system", '{"id":"damper","type":"STAT_MOD"}')
+            _write(root / "mod_info.json", '{"id":"vs"}')
+            _write(root / "data" / "shipsystems" / "drone_pd.system", '{"id":"vs_drones","type":"DRONE_LAUNCHER"}')
+            _write(root / "data" / "shipsystems" / "damper.system", '{"id":"damper","type":"STAT_MOD","tweak":1}')
+            apply_fix(compute_fix(root, "vanilla-path-shadowing", {"vanilla_core": vanilla}))
+            names = sorted(p.name for p in (root / "data" / "shipsystems").glob("*.system"))
+            moved = (root / "data" / "shipsystems" / "vs_drones.system").read_text(encoding="utf-8")
+        self.assertEqual(names, ["damper.system", "vs_drones.system"])
+        self.assertIn("vs_drones", moved)
+
+
+class SuppliesLegacyColumnTests(unittest.TestCase):
+    def test_supplies_are_converted_by_hull_size_not_times_thirty(self) -> None:
+        # SEEKER: x30 gave the Guardian 600 DP, undeployable; the owner chose the vanilla ratio per hull size (2026-10-05)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "mod"
+            _write(root / "mod_info.json", '{"id": "sp"}')
+            _write(root / "data" / "hulls" / "ship_data.csv",
+                   "name,id,supplies/day,hints\nGuardian,g,20,\nFrig,f,2,\nTug,t,1,\nWing,w,0.5,\nModule,m,,\nMystery,x,4,\n")
+            for hull, size in (("g", "CAPITAL_SHIP"), ("f", "FRIGATE"), ("t", "DESTROYER"), ("w", "FIGHTER"), ("m", "FRIGATE")):
+                _write(root / "data" / "hulls" / f"{hull}.ship", json.dumps({"hullId": hull, "hullSize": size}))
+            found = [f for f in scan_mod(root).findings if f.id == "ship-data-supplies-legacy-column"]
+            after = compute_fix(root, "ship-data-supplies-legacy-column").changes[0].after.decode("utf-8")
+        rows = {r["id"]: r for r in csv.DictReader(io.StringIO(after))}
+        self.assertEqual(len(found), 1)
+        self.assertEqual({k: (v["supplies/rec"], v["supplies/mo"]) for k, v in rows.items()},
+                         {"g": ("53", "53"), "f": ("6", "6"), "t": ("2", "2"), "w": ("", ""), "m": ("", ""), "x": ("", "")})
+        self.assertEqual(rows["g"]["supplies/day"], "20")
+
+    def test_a_file_that_already_has_the_rc8_columns_is_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "mod"
+            _write(root / "mod_info.json", '{"id": "sp"}')
+            _write(root / "data" / "hulls" / "ship_data.csv", "id,supplies/day,supplies/rec,supplies/mo\nf,2,6,6\n")
+            self.assertEqual([f for f in scan_mod(root).findings if f.id == "ship-data-supplies-legacy-column"], [])
+            with self.assertRaises(FixerError):
+                compute_fix(root, "ship-data-supplies-legacy-column")
+
+
+class NonUtf8RefusalTests(unittest.TestCase):
+    def test_a_fixer_meeting_non_utf8_bytes_refuses_cleanly_and_writes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "mod"
+            _write(root / "mod_info.json", '{"id": "nu"}')
+            target = root / "data" / "config" / "t.json"
+            target.parent.mkdir(parents=True)
+            raw = b'{"a": 1, "a": 1, "name": "Caf\x85"}'
+            target.write_bytes(raw)
+            with self.assertRaises(FixerError) as caught:
+                compute_fix(root, "json-duplicate-key")
+            untouched = target.read_bytes() == raw
+        self.assertIn("data-file-not-utf8", str(caught.exception))
+        self.assertTrue(untouched)

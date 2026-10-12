@@ -1,0 +1,5 @@
+id,type,name
+a,one,"中文,名字",额外
+a,one,重复
+,short
+#注释,row,不翻译

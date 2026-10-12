@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+- **`java-matrix mass --bundle` and the `miko` launchers (ROADMAP item 62 addendum):** unrelated mods boot together while screening and split only on a failure; `miko`/`miko-noprep` copy the owner's `Miko_Simple.txt` (with and without Prepatcher); fixed 4 GB heap per instance. Migration plan in `docs/MIGRATION_PLAN.md` (item 64).
+- **`java-matrix mass` (ROADMAP item 62):** tests each archived mod with its dependencies through the Java/launcher variants, screening first, and reports environment-sensitive mods. Launchers now drop flags the JDK refuses (JDK 28 rejects `-noverify`); AoTD / Toolbox compatibility plan in `docs/AOTD_COMPAT_PLAN.md` (item 63).
+- **`java-matrix` (ROADMAP item 61):** boot one mod set through every Java version and launcher (direct or Fast Rendering) in a rig, with a pass rate per variant; set up, not yet run live.
+- **`jar-interface-method-missing` and `port-interfaces`:** jar classes missing a method RC8's interfaces require
+  (an AbstractMethodError as shipped) are found from the class files and ported where the change is mechanical; 85
+  classes in 9 mods on the first run. Relink also handles Lombok sources, Kotlin classes, same-name overloads and
+  renamed methods.
+- **Scratch scripts as commands (ROADMAP P15 item 33):** `relink` (queue-wide, resumable; Object-owner noise and
+  decompile re-declarations handled; revive runs it when approved), `patch-jar-sources`, `bump-version`,
+  `restore-from-done` and `revive-review`.
+- **Less hand work in escalation (ROADMAP P15 item 32):** `escalation review` sheets with flags, `--watch-dir`, one
+  agent packet per file, a per-workspace run lock, `jar-packets`, `ready-list`, a campaign lookup guard fixer,
+  faction known lists from 0.6-era `fleetCompositions`, and a quieter `hullmod-instance-state` (fields never written
+  are dropped; arrays, objects and non-private fields stay).
+- **`jar-linkage-unresolved`:** a new check resolves every call a declared jar makes into a game class against RC8's
+  core jars. It found Too Much Information's `beginTable(...)V` (RC8 returns `UIPanelAPI`) and the same break for
+  `addImageWithText` in four live-validated mods; recompiling the class fixes it. `jar-packets` decompiles a jar with
+  no source (Vineflower) and treats a return-type relink as faithful.
+- **Unattended defaults for two approved fixers:** the design-type column is added blank; a missing procgen row copies
+  the nearest vanilla row by name with frequency 0.
+- **`patch-jar-class`:** recompile a few edited classes against RC8 and swap them into a jar, compared with javap
+  first. **RC8-20:** `getEntityById` falls back to a case-insensitive scan.
+
+- **Escalation harness, from the 2026-09-29 pilots:**
+  - The agent writes its note inside the sandbox (`BF_NOTE.md`), since Claude Code agents are confined to their
+    working directory. A literal `$BF_NOTE` file, or a stray `NOTE.md` the mod does not ship, is also taken as the
+    note.
+  - The prompt is also written inside the sandbox (`BF_PROMPT.md`), and a `claude -p` agent gets a short argument
+    naming it, because stdin raced ("no stdin data received in 3s").
+  - Every agent fix is reviewed before it is applied. One that passed the verifier still changed behaviour (Vesperon
+    Combine's reload-safe random sequence), and it was not applied.
+- **Descriptions:** 465 drafted descriptions applied across 61 mods, credited, with author-only copies. Rows are
+  keyed by id and type. A mod with no `descriptions.csv` gets one with RC8's header. `description-missing` skips rows
+  the game never shows.
+- **Archive:** the author-only descriptions copy is rebuilt from the current working copy.
+- **New fixers** for variant fit (wings over bays, mismatched and missing slots), as standing approvals.
+- **Broken Star r2:** a guard for markets in hyperspace, a New Game crash in the owner's full mod list.
+
 - **Workflow (ROADMAP item 31, all 13 parts):** `probe-group record TESTID --archive` marks a run's passing mods
   LIVE_VALIDATED and archives them; `plan --solo/--exclude` and auto-solo for large campaign mods; `revive-queue`
   (checkpointed) and `check-impact`; `descriptions sheet|apply` with credits and an author-only descriptions copy;

@@ -184,6 +184,20 @@ class SystemLookupGuardTests(unittest.TestCase):
         self.assertEqual(by_system["corvus"].classification, "REVIEW")
         self.assertEqual(by_system["corvus"].severity, "medium")
 
+    def test_null_guarded_entity_lookups_are_safe_too(self) -> None:
+        # Fantastic Furniture (pilot 4, 2026-09-29): `if (getEntityById("gilead") != null)` before use.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            world = mod / "src" / "data" / "scripts" / "world"
+            world.mkdir(parents=True, exist_ok=True)
+            (world / "Furniture.java").write_text('class Furniture { void a(com.fs.starfarer.api.campaign.SectorAPI s) {\n  if (s.getEntityById("gilead") != null) { s.getEntityById("gilead").getMarket(); }\n  s.getEntityById("jangala").getMarket();\n} }', encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        by_entity = {}
+        for f in _ids(result, "hard-coded-campaign-entity-reference"):
+            by_entity.setdefault(f.evidence[0], []).append(f)
+        self.assertTrue(all(f.classification == "SAFE" for f in by_entity["gilead"]))
+        self.assertEqual(by_entity["jangala"][0].classification, "REVIEW")
+
 
 class FactionTraitWeightLegacyPersonalityIdTests(unittest.TestCase):
     """Real case, 2026-09-21: zorg.faction's traits.captain block weights 0.6-era personality ids
@@ -232,6 +246,25 @@ class FactionTraitWeightLegacyPersonalityIdTests(unittest.TestCase):
             )
             result = scan_mod(mod, TargetProfile())
         self.assertEqual(_ids(result, "faction-trait-weight-legacy-personality-id"), [])
+
+
+
+class SystemGenerationChainTests(unittest.TestCase):
+    def test_generation_reached_only_from_onnewgame_through_a_generator_is_a_note(self) -> None:
+        # Junk Pirates (2026-10-01): plugin.onNewGame -> new JunkGen().generate -> new Brehinni().generate.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            src = mod / "src" / "data" / "scripts" / "world"
+            (src / "Brehinni.java").write_text("public class Brehinni { public void generate(SectorAPI s) { s.createStarSystem(\"Brehinni\"); } }", encoding="utf-8")
+            (src / "JunkGen.java").write_text("public class JunkGen { public void generate(SectorAPI s) { new Brehinni().generate(s); } }", encoding="utf-8")
+            (src / "Plugin.java").write_text("public class Plugin extends BaseModPlugin { public void onNewGame() { new JunkGen().generate(null); } }", encoding="utf-8")
+            note = _ids(scan_mod(mod), "system-generation-unguarded")
+            (src / "Plugin.java").write_text("public class Plugin extends BaseModPlugin { public void onGameLoad(boolean n) { new JunkGen().generate(null); } }", encoding="utf-8")
+            review = _ids(scan_mod(mod), "system-generation-unguarded")
+        self.assertEqual([f.classification for f in note], ["SAFE"])
+        self.assertIn("(called from onNewGame)", note[0].evidence[0])
+        self.assertEqual([f.classification for f in review], ["REVIEW"])
+        self.assertIn("(called from onGameLoad)", review[0].evidence[0])
 
 
 if __name__ == "__main__":

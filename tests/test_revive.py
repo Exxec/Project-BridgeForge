@@ -194,13 +194,98 @@ class ReviveTests(unittest.TestCase):
             self.assertEqual(load_packet(workspace, "content-reference-unresolved--mod")["options"], {"notes": ["stubbed"]})
         self.assertEqual(len(result["packets"]), 1)
 
+    def test_a_safe_finding_with_no_fixer_is_not_a_packet(self):
+        # Fantastic Furniture (pilot 4, 2026-09-29): SAFE, null-guarded getEntityById lookups became an agent packet.
+        with resolved_temp_dir() as root:
+            ws = root / "In operation" / "Guarded"
+            (ws / "working" / "data" / "scripts").mkdir(parents=True)
+            (ws / "working" / "mod_info.json").write_text(json.dumps({"id": "guarded", "name": "Guarded", "version": "1", "gameVersion": "0.98a-RC8"}), encoding="utf-8")
+            (ws / "working" / "data" / "scripts" / "Plugin.java").write_text(
+                'class Plugin { void f(com.fs.starfarer.api.campaign.SectorAPI s) { if (s.getEntityById("gilead") != null) { s.getEntityById("gilead").getMarket(); } } }\n',
+                encoding="utf-8")
+            result = revive(ws)
+        self.assertEqual([p["finding"] for p in result["packets"]], [])
+        self.assertEqual(result["status"], "UNATTENDED_DONE")
+
     def test_refuses_a_non_workspace(self):
         with resolved_temp_dir() as root:
             with self.assertRaises(ReviveError):
                 revive(root)
 
 
+class JarOnlyPacketTests(unittest.TestCase):
+    def test_jar_only_packets_are_recognised(self):
+        # Fast Engine Rendering and Magellan Protectorate (2026-09-30): agents cannot open a jar in their sandbox.
+        from bridgeforge.escalation import jar_only
+        self.assertTrue(jar_only({"allowed_files": ["jars/x.jar!data/Cls.class"]}))
+        self.assertFalse(jar_only({"allowed_files": ["jars/x.jar!data/Cls.class", "src/data/Cls.java"]}))
+        self.assertFalse(jar_only({"allowed_files": []}))
+
+
 class EscalationRunTests(unittest.TestCase):
+    def test_a_timeout_kills_the_agent_and_its_helpers(self):
+        # Hegemony Expeditionary (2026-10-02): a helper the agent started kept the output pipe open and the run
+        # waited 13 hours. Output now goes to a file and the whole tree is killed.
+        import time
+        hang = ("import subprocess, sys, time\n"
+                "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])\n"
+                "time.sleep(120)\n")
+        with resolved_temp_dir() as root:
+            workspace = _workspace(root)
+            revive(workspace)
+            started = time.monotonic()
+            result = run_packet(workspace, AGENT_PACKET, _agent(root, hang), retries=0, timeout=3)
+            elapsed = time.monotonic() - started
+            output = (workspace / "scratch" / "escalations" / AGENT_PACKET / "attempt-1" / "AGENT_OUTPUT.txt").read_text(encoding="utf-8")
+        self.assertLess(elapsed, 60)
+        self.assertEqual(result["outcome"], "FAILED")
+        self.assertIn("timed out", output)
+
+    def test_a_note_written_to_the_literal_variable_name_still_counts(self):
+        # Pilot 2026-09-29: agents using file tools wrote "$BF_NOTE" as a file name in the sandbox, and every
+        # attempt was REJECTED as a change outside the packet. The prompt now names the real path, and a stray
+        # "$BF_NOTE" file is taken as the note.
+        literal_fix = AGENT_FIX.replace("Path(os.environ['BF_NOTE'])", "Path('$BF_NOTE')")
+        with resolved_temp_dir() as root:
+            workspace = _workspace(root)
+            revive(workspace)
+            result = run_packet(workspace, AGENT_PACKET, _agent(root, literal_fix))
+            attempt = workspace / "scratch" / "escalations" / AGENT_PACKET / "attempt-1"
+            prompt = (attempt / "PROMPT.md").read_text(encoding="utf-8")
+            note = (attempt / "NOTE.md").read_text(encoding="utf-8")
+        self.assertEqual(result["outcome"], "VERIFIED")
+        self.assertIn("Removed the empty array element", note)
+        self.assertNotIn("$BF_NOTE", prompt)
+        self.assertIn(str(attempt / "working" / "BF_NOTE.md"), prompt)  # inside the sandbox: agents are confined to it
+
+    def test_a_claude_print_agent_is_pointed_at_the_prompt_file(self):
+        # 2026-09-29: Fast Engine Rendering's agents got "no stdin data received in 3s" and exited. A `claude -p`
+        # command now also gets a short argument naming BF_PROMPT.md, written into the sandbox (and removed after).
+        body = ("import os, sys\nfrom pathlib import Path\n"
+                "assert any('BF_PROMPT.md' in arg for arg in sys.argv[1:]), sys.argv\n"
+                "assert 'settings.json' in Path('BF_PROMPT.md').read_text(encoding='utf-8')\n" + AGENT_FIX)
+        with resolved_temp_dir() as root:
+            workspace = _workspace(root)
+            revive(workspace)
+            script = root / "claude.py"
+            script.write_text(body, encoding="utf-8")
+            result = run_packet(workspace, AGENT_PACKET, f'"{sys.executable}" "{script}" -p')
+            sandbox = workspace / "scratch" / "escalations" / AGENT_PACKET / "attempt-1" / "working"
+            leftover = (sandbox / "BF_PROMPT.md").exists()
+        self.assertEqual(result["outcome"], "VERIFIED")
+        self.assertFalse(leftover)
+
+    def test_a_note_left_as_NOTE_md_inside_the_sandbox_still_counts(self):
+        # Pilot 2026-09-29 (Arthr's Faction Blender): a sandbox-confined agent wrote NOTE.md in its working folder.
+        in_sandbox = AGENT_FIX.replace("Path(os.environ['BF_NOTE'])", "Path('NOTE.md')")
+        with resolved_temp_dir() as root:
+            workspace = _workspace(root)
+            revive(workspace)
+            result = run_packet(workspace, AGENT_PACKET, _agent(root, in_sandbox))
+            note = (workspace / "scratch" / "escalations" / AGENT_PACKET / "attempt-1" / "NOTE.md").read_text(encoding="utf-8")
+        self.assertEqual(result["outcome"], "VERIFIED")
+        self.assertIn("Removed the empty array element", note)
+
     def test_verified_agent_fix_is_applied_with_backup_and_ledger(self):
         with resolved_temp_dir() as root:
             workspace = _workspace(root)
@@ -339,3 +424,37 @@ class EscalationRunTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SameFilePacketMergeTests(unittest.TestCase):
+    """Two agent findings on one file become one packet (Pegasus Belt Council, 2026-09-30)."""
+
+    def test_agent_packets_on_one_file_merge(self) -> None:
+        from bridgeforge.revive import _merge_same_file
+
+        def packet(finding: str, file: str, kind: str = "agent") -> dict:
+            return {"id": packet_id(finding, file), "finding": finding, "kind": kind, "file": file, "allowed_files": [file] if kind == "agent" else [],
+                    "hint": f"hint {finding}", "excerpts": {}, "findings": [{"id": finding, "file": file, "evidence": ["line:3"]}]}
+
+        with resolved_temp_dir() as root:
+            (root / "Gen.java").write_text("a\nb\nc\n", encoding="utf-8")
+            merged = _merge_same_file([packet("x-entity", "Gen.java"), packet("x-system", "Gen.java"), packet("x-entity", "Other.java"),
+                                       packet("x-owner", "Gen.java", kind="owner")], root)
+        self.assertEqual(len(merged), 3)
+        head = merged[0]
+        self.assertEqual(head["merged"], ["x-entity", "x-system"])
+        self.assertEqual([f["id"] for f in head["findings"]], ["x-entity", "x-system"])
+        self.assertIn("hint x-system", head["hint"])
+        self.assertNotIn("merged", merged[1])
+
+
+class RefusedAutoRoutingTests(unittest.TestCase):
+    def test_a_refused_automatic_fix_becomes_an_agent_packet_per_file(self) -> None:
+        from bridgeforge.revive import build_packets
+        finding = {"id": "hard-coded-campaign-entity-reference", "file": "data/scripts/Gen.java", "classification": "REVIEW",
+                   "severity": "medium", "confidence": "DETERMINISTIC", "explanation": "x", "evidence": ["nomios"]}
+        with resolved_temp_dir() as root:
+            (root / "working" / "data" / "scripts").mkdir(parents=True)
+            (root / "working" / "data" / "scripts" / "Gen.java").write_text("class Gen {}", encoding="utf-8")
+            packets = build_packets(root, [finding], [{"finding": finding["id"], "state": "FIXER_REFUSED", "reason": "inline argument"}], vanilla_core=None)
+        self.assertEqual([(p["kind"], p["file"]) for p in packets], [("agent", "data/scripts/Gen.java")])

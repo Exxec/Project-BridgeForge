@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from .build_tag import _NAME_PATTERN, _find_top_level_key, _string_literal_to_text, _structural_depths, _text_to_string_literal
+from .build_tag import _NAME_PATTERN, _STRING_LITERAL, _find_top_level_key, _string_literal_to_text, _structural_depths, _text_to_string_literal
 from .scanner import (
     DESIGN_TYPE_CSV_TARGETS,
     FACTION_SPECIAL_ROLE_KEYS,
@@ -48,6 +48,31 @@ SUPPORTED_FINDINGS = (
     "undeclared-library-dependency",
     "rules-firebest-populate-options",
     "personality-id-unknown",
+    "hullmod-instance-state",
+    "runtime-placeholder-unsupported-operation",
+    "hulk-death-effect-repeats",
+    "black-hole-type-missing-flag",
+    "nexerelin-corvus-mode-import",
+    "spawned-ship-captain-personality-risk",
+    "json-missing-comma",
+    "builtin-wing-is-hullmod",
+    "wing-op-cost-blank",
+    "campaign-lookup-dereferenced-unguarded",
+    "temporary-market-fleet-source",
+    "rc8-signature-changed",
+    "person-names-duplicate-row",
+    "json-duplicate-key",
+    "dependency-version-major-mismatch",
+    "conversion-faction-names-removed-hull",
+    "conversion-faction-names-missing-content",
+    "conversion-vanilla-lifecycle-plugin",
+    "factions-csv-relists-neutral",
+    "vanilla-path-shadowing",
+    "ship-data-supplies-legacy-column",
+    "rules-csv-duplicate-id",
+    "rules-csv-whitespace-only-line",
+    "rules-csv-curly-quote-unreadable",
+    "csv-vanilla-row-override",
     "faction-trait-weight-legacy-personality-id",
     "shiproles-wing-id",
     "csv-fullwidth-number",
@@ -59,6 +84,11 @@ SUPPORTED_FINDINGS = (
     "variant-op-over-budget",
     "procgen-mod-body-leak",
     "csv-slash-quote-escape",
+    "variant-wings-exceed-bays",
+    "variant-weapon-slot-mismatch",
+    "variant-weapon-slot-missing",
+    "hard-coded-campaign-system-reference",
+    "hard-coded-campaign-entity-reference",
 )
 
 
@@ -282,7 +312,7 @@ def _findings_of(root: Path, options: dict, finding_id: str) -> list:
     if supplied is None:
         from .scanner import scan_mod
 
-        return [f for f in scan_mod(root).findings if f.id == finding_id]
+        return [f for f in scan_mod(root, vanilla_core=options.get("vanilla_core")).findings if f.id == finding_id]
     from types import SimpleNamespace
 
     found = [SimpleNamespace(**f) if isinstance(f, dict) else f for f in supplied]
@@ -373,7 +403,11 @@ _CREW_XP_LEVEL_MATCHER = REMOVED_API_CALLS[2][0]
 _CREW_XP_LEVEL_SIGNATURE = REMOVED_API_CALLS[2][1]
 
 
-def _rewrite_crew_xp_level_span(_matched_text: str) -> str:
+def _rewrite_crew_xp_level_span(matched_text: str) -> str:
+    # getCrew(CrewXPLevel.X): REGULAR reads all crew, other tiers 0 (owner decision "one crew", Ironclads 2026-10-05).
+    read = re.match(r"getCrew\s*\(.*CrewXPLevel\s*\.\s*(\w+)\s*\)$", matched_text, re.S)
+    if read:
+        return "getCrew()" if read.group(1) == "REGULAR" else "getCrew() * 0 /* 0.7 non-REGULAR crew tier */"
     return ""
 
 
@@ -756,7 +790,8 @@ def _fix_undeclared_library_dependency(root: Path, options: dict) -> list[FileCh
         raise FixerError("No undeclared-library-dependency finding for this mod.")
 
     to_add: dict[str, str] = {}  # dependency_id -> library display name
-    findings = [f for f in findings if "guard:present" not in (f.evidence or [])]
+    # A guard whose absent branch throws is a required library, not an optional one (Hiigaran Descendants, shaderLib).
+    findings = [f for f in findings if "guard:present" not in (f.evidence or []) or "required:throws-without" in (f.evidence or [])]
     if not findings:
         raise FixerError("Every undeclared-library-dependency finding here is guarded (an optional integration); nothing is declared.")
     for finding in findings:
@@ -893,7 +928,20 @@ def _fix_carrier_bays_proposal(root: Path, options: dict) -> list[FileChange]:
     than an invented 0. Every --hull id must already exist as a ship_data.csv row (comment/blank-id
     rows don't count); an id this file has no row for is refused rather than silently skipped.
     """
-    return _carrier_bays_edit(root, _parse_hull_bay_assignments(options.get("hulls") or []))
+    assignments = _parse_hull_bay_assignments(options.get("hulls") or []) if options.get("hulls") else {}
+    if options.get("hull_zero_no_evidence"):
+        # Hulls with a hangar value but no LAUNCH_BAY slot and no variant wings: 0 is what the data supports (see
+        # scanner.carrier_bays_without_evidence). Explicit --hull values win.
+        from .scanner import carrier_bays_without_evidence
+
+        vanilla_core = Path(options["vanilla_core"]).expanduser().resolve() if options.get("vanilla_core") else None
+        for hull_id in carrier_bays_without_evidence(root, vanilla_core):
+            assignments.setdefault(hull_id, 0)
+        if not assignments:
+            raise FixerError("--hull-zero-no-evidence: no hull has a hangar value without launch-bay slots or variant wings.")
+    elif not assignments:
+        raise FixerError("--hull ID=N is required (repeatable) for carrier-bays-proposal (or --hull-zero-no-evidence).")
+    return _carrier_bays_edit(root, assignments)
 
 
 def _fix_ship_data_missing_fighter_bays_column(root: Path, options: dict) -> list[FileChange]:
@@ -1046,6 +1094,23 @@ def _fix_csv_row_extra_columns(root: Path, options: dict) -> list[FileChange]:
             continue
         header_len = len(header)
 
+        # A space before an opening quote (`SHIP, "text, with commas"`) stops the field being read as quoted: its
+        # commas split it and its line breaks end the record early (SWP Triumphant's descriptions.csv, 2026-10-01).
+        # Dropping that space everywhere, and only when every row then fits the header, restores the rows as authored.
+        try:
+            widths = [len(row) for row in csv.reader(io.StringIO(text))]
+        except csv.Error:
+            widths = []
+        if any(width > header_len for width in widths[1:]):
+            unspaced = re.sub(r'(^|,)[ \t]+"', r'\1"', text, flags=re.M)
+            try:
+                rewidths = [len(row) for row in csv.reader(io.StringIO(unspaced))]
+            except csv.Error:
+                rewidths = []
+            if unspaced != text and rewidths and all(width <= header_len for width in rewidths[1:]):
+                changes.append(FileChange(path=path, before=raw, after=_encode(unspaced, had_bom)))
+                continue
+
         edits: list[tuple[int, int, str]] = []
         for rec_start, rec_end in records[1:]:
             record_text = text[rec_start:rec_end]
@@ -1059,6 +1124,18 @@ def _fix_csv_row_extra_columns(root: Path, options: dict) -> list[FileChange]:
             if len(fields) <= header_len:
                 continue
             extras = fields[header_len:]
+            # A space before an opening quote (`SHIP, "text, with commas"`) stops the field being read as quoted, so
+            # its commas split it (SWP Triumphant's descriptions.csv, 2026-10-01). Dropping that space, and only
+            # when the row then has exactly the header's width, restores the field as authored.
+            unspaced = re.sub(r'(^|,)[ \t]+"', r'\1"', content)
+            if unspaced != content:
+                try:
+                    respaced = next(csv.reader(io.StringIO(unspaced)))
+                except (csv.Error, StopIteration):
+                    respaced = []
+                if len(respaced) == header_len:
+                    edits.append((rec_start, rec_end, unspaced + term))
+                    continue
             if any(value.strip() for value in extras):
                 raise FixerError(
                     f"{_relative(root, path)}: a csv-row-extra-columns row has non-empty extra "
@@ -1091,13 +1168,18 @@ def _fix_csv_missing_design_type_column(root: Path, options: dict) -> list[FileC
     design_type = options.get("design_type")
     prefixes = options.get("id_prefixes") or []
     design_color = options.get("design_color")
-    if not design_type:
+    # Unattended (owner ruling 2026-09-30): add the column with every cell blank, as some vanilla rows are, so the
+    # loader finds it; no design type is invented, so no settings.json colour is needed.
+    blank = bool(options.get("blank_design_type"))
+    if blank:
+        design_type, prefixes = "", []
+    elif not design_type:
         raise FixerError("--design-type is required for csv-missing-design-type-column.")
-    if not prefixes:
+    if not blank and not prefixes:
         raise FixerError("At least one --id-prefix is required for csv-missing-design-type-column.")
-    if not design_color:
+    if not blank and not design_color:
         raise FixerError("--design-color R,G,B is required for csv-missing-design-type-column.")
-    rgb = _parse_rgb(design_color)
+    rgb = _parse_rgb(design_color) if not blank else None
 
     changes: list[FileChange] = []
     any_csv_fixed = False
@@ -1144,7 +1226,7 @@ def _fix_csv_missing_design_type_column(root: Path, options: dict) -> list[FileC
     if not any_csv_fixed:
         raise FixerError("Neither ship_data.csv nor weapon_data.csv is missing a tech/manufacturer column.")
 
-    settings_change = _add_design_type_color(root / "data" / "config" / "settings.json", design_type, rgb)
+    settings_change = None if blank else _add_design_type_color(root / "data" / "config" / "settings.json", design_type, rgb)
     if settings_change is not None:
         changes.append(settings_change)
     return changes
@@ -1181,6 +1263,30 @@ def _add_design_type_color(path: Path, name: str, rgb: list[int]) -> FileChange 
 # ---------------------------------------------------------------------------
 # Fixer: procgen-planet-row-missing / procgen-star-row-missing
 # ---------------------------------------------------------------------------
+
+
+_GEN_ROW_KEYWORDS = (  # first keyword found in the type's id or name picks the vanilla row to copy
+    ("black_hole", "black_hole"), ("blackhole", "black_hole"), ("neutron", "star_neutron"), ("pulsar", "star_neutron"),
+    ("dwarf", "star_browndwarf"), ("blue", "star_blue_giant"), ("red", "star_red_dwarf"), ("orange", "star_orange"),
+    ("white", "star_white"), ("yellow", "star_yellow"),
+    ("ice_giant", "ice_giant"), ("gas", "gas_giant"), ("giant", "gas_giant"), ("lava", "lava"), ("volcan", "lava"),
+    ("toxic", "toxic"), ("acid", "toxic"), ("irradiated", "irradiated"), ("radiat", "irradiated"),
+    ("cryo", "cryovolcanic"), ("frozen", "frozen"), ("ice", "frozen"), ("snow", "frozen"), ("tundra", "tundra"),
+    ("jungle", "jungle"), ("water", "water"), ("ocean", "water"), ("terran", "terran"), ("earth", "terran"),
+    ("desert", "desert"), ("arid", "arid"), ("rock", "rocky_metallic"), ("metal", "rocky_metallic"), ("barren", "barren"),
+)
+
+
+def nearest_vanilla_gen_row(type_id: str, name: str, vanilla_ids: set[str], is_star: bool) -> str | None:
+    """The vanilla procgen row to copy for a mod planet or star type with none: the first keyword of its id or name,
+    else barren / star_yellow. Frequency is zeroed after the copy, so only scripted placement uses it; the category
+    picks the conditions a scripted planet rolls, and the choice is in the reviewed diff."""
+    text = f"{type_id} {name}".lower()
+    for keyword, row in _GEN_ROW_KEYWORDS:
+        if keyword in text and row in vanilla_ids and row.startswith(("star_", "black_hole")) == is_star:
+            return row
+    fallback = "star_yellow" if is_star else "barren"
+    return fallback if fallback in vanilla_ids else None
 
 
 def _fix_procgen_row_missing(root: Path, finding_id: str, options: dict) -> list[FileChange]:
@@ -1316,17 +1422,23 @@ def _fix_faction_known_lists_missing(root: Path, options: dict) -> list[FileChan
     if not isinstance(data, dict):
         raise FixerError(f"{faction_path} could not be parsed as JSON.")
     ship_roles = data.get("shipRoles")
-    if not isinstance(ship_roles, dict):
-        raise FixerError(f"{faction_path} has no 'shipRoles' object to derive known lists from.")
-
     variant_ids: set[str] = set()
-    for block in ship_roles.values():
-        if not isinstance(block, dict):
-            continue
-        for key in block:
-            if key in FACTION_SPECIAL_ROLE_KEYS:
+    if isinstance(ship_roles, dict):
+        for block in ship_roles.values():
+            if not isinstance(block, dict):
                 continue
-            variant_ids.add(key)
+            for key in block:
+                if key in FACTION_SPECIAL_ROLE_KEYS:
+                    continue
+                variant_ids.add(key)
+    else:
+        # A 0.6-era faction lists its fleets in fleetCompositions[*].ships ({"atol_Wayfarer":[1, 1], ...}) instead
+        # of shipRoles (Antediluvians, Batavia, Qualljom and six more, 2026-09-30): the same variant and wing ids.
+        for composition in (data.get("fleetCompositions") or {}).values():
+            if isinstance(composition, dict) and isinstance(composition.get("ships"), dict):
+                variant_ids.update(key for key in composition["ships"] if isinstance(key, str) and key)
+    if not variant_ids:
+        raise FixerError(f"{faction_path} has no shipRoles or fleetCompositions ships to derive known lists from.")
 
     search_roots = [root, vanilla_root]
     valid_hull_ids = _hull_ids(root) | _hull_ids(vanilla_root)
@@ -1341,6 +1453,10 @@ def _fix_faction_known_lists_missing(root: Path, options: dict) -> list[FileChan
     unresolved: list[str] = []
 
     for variant_id in sorted(variant_ids):
+        if variant_id in valid_wing_ids and _load_variant(search_roots, variant_id) is None:
+            # Pre-0.65 role and fleet lists named wings directly ("broadsword_wing"): a known fighter, not a variant.
+            known_fighters.add(variant_id)
+            continue
         variant_data = _load_variant(search_roots, variant_id)
         if variant_data is None:
             unresolved.append(f"variant:{variant_id} (not found)")
@@ -1374,16 +1490,23 @@ def _fix_faction_known_lists_missing(root: Path, options: dict) -> list[FileChan
     if unresolved:
         raise FixerError("Refusing to derive known-lists: unresolved id(s): " + "; ".join(sorted(set(unresolved))))
 
-    insertion = (
-        '"knownShips":{"hulls":[' + ",".join(json.dumps(item) for item in sorted(known_hulls)) + "]},"
-        '"knownWeapons":{"weapons":[' + ",".join(json.dumps(item) for item in sorted(known_weapons)) + "]},"
-        '"knownFighters":{"fighters":[' + ",".join(json.dumps(item) for item in sorted(known_fighters)) + "]},"
-    )
+    # Only the lists the faction lacks: RC8 refuses a repeated key (Fatal 'Duplicate key "knownFighters"', Ironclads
+    # pirates.faction, GRP10E-20261005), and Python's json keeps the last copy silently, so the re-parse below hid it.
+    lists = (("knownShips", "hulls", known_hulls), ("knownWeapons", "weapons", known_weapons), ("knownFighters", "fighters", known_fighters))
+    insertion = "".join(f'"{key}":{{"{inner}":[' + ",".join(json.dumps(item) for item in sorted(items)) + "]},"
+                        for key, inner, items in lists if key not in data)
+    if not insertion:
+        raise FixerError(f"{faction_path} already declares knownShips, knownWeapons and knownFighters.")
 
-    ship_roles_key_pattern = re.compile(r"['\"]shipRoles['\"]\s*:")
-    match = ship_roles_key_pattern.search(text)
+    depths = _structural_depths(text)
+    match = None
+    # Before the top-level key the lists were derived from: shipRoles, or a 0.6-era fleetCompositions.
+    for key in ("shipRoles", "fleetCompositions"):
+        match = _find_top_level_key(text, re.compile(r"(?P<key>['\"]?" + key + r"['\"]?)\s*:"), depths)
+        if match is not None:
+            break
     if match is None:
-        raise FixerError(f"{faction_path} has no 'shipRoles' key text to insert before.")
+        raise FixerError(f"{faction_path} has no top-level 'shipRoles' or 'fleetCompositions' key to insert before.")
     insert_at = match.start()
     new_text = text[:insert_at] + insertion + text[insert_at:]
     try:
@@ -1578,6 +1701,1140 @@ def _fix_personality_id_unknown(root: Path, options: dict) -> list[FileChange]:
             changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
     if not changes:
         raise FixerError("The flagged loose scripts could not be rewritten mechanically; fix them by hand.")
+    return changes
+
+
+# ---------------------------------------------------------------------------
+# Fixer: nexerelin-corvus-mode-import (ROADMAP 34.13)
+# ---------------------------------------------------------------------------
+
+
+def _fix_nexerelin_corvus_mode_import(root: Path, options: dict) -> list[FileChange]:
+    """SectorManager[.getManager()].getCorvusMode() -> (!Global.getSector().getMemoryWithoutUpdate()
+    .getBoolean("$nex_randomSector")) and the Nexerelin import dropped (done by hand for Hiver Swarm, 2026-10-04;
+    evidence in scanner._scan_nexerelin_corvus_mode_import). Without Nexerelin the key is absent and getBoolean
+    returns false, i.e. "Corvus mode", which is the vanilla sector."""
+    from .scanner import _NEX_CORVUS_CALL, _NEX_SECTOR_MANAGER_IMPORT
+
+    replacement = '(!Global.getSector().getMemoryWithoutUpdate().getBoolean("$nex_randomSector"))'
+    changes: list[FileChange] = []
+    for rel in sorted({f.file for f in _findings_of(root, options, "nexerelin-corvus-mode-import") if f.file}):
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        new_text = _NEX_CORVUS_CALL.sub(lambda _m: replacement, _NEX_SECTOR_MANAGER_IMPORT.sub("", text, count=1))
+        if "import com.fs.starfarer.api.Global;" not in new_text and "import com.fs.starfarer.api.*;" not in new_text:
+            package = re.search(r"^package [\w.]+;\s*\n", new_text, re.M)
+            at = package.end() if package else 0
+            new_text = new_text[:at] + "import com.fs.starfarer.api.Global;\n" + new_text[at:]
+        if new_text != text:
+            changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    if not changes:
+        raise FixerError("No loose script imports Nexerelin's SectorManager only for getCorvusMode().")
+    return changes
+
+
+# ---------------------------------------------------------------------------
+# Fixer: campaign-lookup-dereferenced-unguarded (2026-10-04)
+# ---------------------------------------------------------------------------
+
+_VOID_METHOD_HEADER = re.compile(r"\bvoid\s+\w+\s*\([^)]*\)\s*(?:throws[^{]*)?\{\s*$")
+
+
+def _fix_lookup_dereferenced_unguarded(root: Path, options: dict) -> list[FileChange]:
+    """Guard `getStarSystem(name).x()` / `getEntityById(id).x()` with `if (lookup == null) { return; }` when the
+    statement is the first one in a void method (DNEEP's setIndustryOnPlanet, fixed by hand 2026-10-04): the early
+    return skips only what would have thrown. Any other shape (inside a loop, after other statements, in a method that
+    returns a value) is refused and left for a person. Loose scripts only."""
+    from .scanner import _blank_java_comments
+
+    lines_by_file: dict[str, set[int]] = {}
+    for finding in _findings_of(root, options, "campaign-lookup-dereferenced-unguarded"):
+        if finding.file and not finding.file.replace("\\", "/").startswith(("jars/", "src/")) and "!" not in finding.file:
+            lines_by_file.setdefault(finding.file, set()).update(int(e.split(":", 1)[1]) for e in finding.evidence if e.startswith("line:"))
+    changes, refused = [], []
+    for rel, wanted in sorted(lines_by_file.items()):
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        eol = "\r\n" if "\r\n" in text else "\n"
+        # splitlines counts line breaks as the scanner's universal-newline read does (a lone CR included)
+        lines = text.splitlines(keepends=True)
+        blank = _blank_java_comments(text).splitlines(keepends=True)
+        inserts = []
+        for number in sorted(wanted):
+            index = number - 1
+            call = re.search(r"\b(getStarSystem|getEntityById)\s*\(\s*([A-Za-z_]\w*)\s*\)", blank[index])
+            previous = index - 1
+            while previous >= 0 and not blank[previous].strip():
+                previous -= 1
+            if not call or previous < 0 or not _VOID_METHOD_HEADER.search(blank[previous]):
+                refused.append(f"{rel}:{number}")
+                continue
+            receiver = re.search(r"([\w.()]*?)\b" + call.group(1) + r"\s*\(", lines[index])
+            prefix = receiver.group(1) if receiver else ""
+            indent = re.match(r"[ \t]*", lines[index]).group(0)
+            inserts.append((index, [f"{indent}// BridgeForge: a missing system or entity (random sector, total conversion) is skipped.{eol}",
+                                    f"{indent}if ({prefix}{call.group(1)}({call.group(2)}) == null) {{{eol}",
+                                    f"{indent}    return;{eol}", f"{indent}}}{eol}"]))
+        for index, block in sorted(inserts, reverse=True):
+            lines[index:index] = block
+        if inserts:
+            changes.append(FileChange(path=path, before=raw, after=_encode("".join(lines), had_bom)))
+    if not changes:
+        raise FixerError("No unguarded lookup is the first statement of a void method" + (f" (refused: {', '.join(refused[:5])})" if refused else "."))
+    return changes
+
+
+# ---------------------------------------------------------------------------
+# Fixer: temporary-market-fleet-source (ROADMAP 34.38, 2026-10-04)
+# ---------------------------------------------------------------------------
+
+_TEMP_MARKET = re.compile(r"\b([A-Za-z_]\w*)\s*=\s*Global\s*\.\s*getFactory\s*\(\s*\)\s*\.\s*createMarket\s*\(")
+_REMOVE_MARKET_LINE = re.compile(r"^([ \t]*)Global\s*\.\s*getSector\s*\(\s*\)\s*\.\s*getEconomy\s*\(\s*\)\s*\.\s*removeMarket\s*\(\s*([A-Za-z_]\w*)\s*\)\s*;[ \t]*(\r?\n?)$")
+
+
+def _temporary_market_sources(root: Path, options: dict) -> list[Path]:
+    """Source files for the findings: a loose script as is; a jar class through the mod's bundled source
+    (jars/src/ or src/, matched by package path), which patch-jar-class then compiles into the jar."""
+    paths: list[Path] = []
+    for finding in _findings_of(root, options, "temporary-market-fleet-source"):
+        file = (finding.file or "").replace("\\", "/")
+        if "!" in file:
+            class_path = file.split("!", 1)[1].split("$", 1)[0].removesuffix(".class") + ".java"
+            candidates = [root / base / class_path for base in ("jars/src", "src")]
+            found = next((c for c in candidates if c.is_file()), None)
+            if found is None:
+                raise FixerError(f"{file}: no bundled source for this class (jars/src/ or src/); decompile it first")
+            paths.append(found)
+        elif file:
+            paths.append(root / file)
+    return sorted(set(paths))
+
+
+def _fix_temporary_market_fleet_source(root: Path, options: dict) -> list[FileChange]:
+    """Drop `Global.getSector().getEconomy().removeMarket(m);` where `m` came from `createMarket(...)` in the same
+    file and is never `addMarket`-ed: the market never entered the economy, so vanilla only removes it from a list it is
+    not in and marks the location cache stale (ReachEconomy.removeMarket, javap 2026-10-04; RC8-22), and
+    the fleet still builds from the same market (same quality and size). AoTD Theory of Toolbox's economy turns each
+    such call into a structural refresh (AoTDEconomy.removeMarket, 2026-10-04). A market that is also added, or a
+    removeMarket not alone on its line, is refused."""
+    from .scanner import _blank_java_comments
+
+    changes, refused = [], []
+    for path in _temporary_market_sources(root, options):
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        blank = _blank_java_comments(text)
+        created = set(_TEMP_MARKET.findall(blank))
+        lines = text.splitlines(keepends=True)
+        blank_lines = blank.splitlines(keepends=True)
+        changed = False
+        for index, line in enumerate(blank_lines):
+            match = _REMOVE_MARKET_LINE.match(line)
+            if not match:
+                continue
+            name = match.group(2)
+            if name not in created or re.search(r"\baddMarket\s*\(\s*" + re.escape(name) + r"\b", blank):
+                refused.append(f"{_relative_path(root, path)}:{index + 1}")
+                continue
+            eol = match.group(3) or ""
+            lines[index] = (f"{match.group(1)}// BridgeForge: removeMarket({name}) dropped; {name} never entered the economy, "
+                            f"so vanilla only removed it from a list it was not in and marked a cache stale (RC8-22).{eol}")
+            changed = True
+        if changed:
+            changes.append(FileChange(path=path, before=raw, after=_encode("".join(lines), had_bom)))
+    if not changes:
+        raise FixerError("No removeMarket of a never-added temporary market found" + (f" (refused: {', '.join(refused[:5])})" if refused else "."))
+    return changes
+
+
+class _ObjectScan:
+    """Index-based reader of lenient (org.json style) JSON that records every object's entries as
+    (key, key_start, value_start, value_end), so a repeated key can be cut out by its exact text span."""
+
+    def __init__(self, text: str) -> None:
+        self.t = text
+        self.n = len(text)
+        self.objects: list[tuple[int, list[tuple[str, int, int, int]]]] = []
+        self.in_array: set[int] = set()
+
+    def ws(self, i: int) -> int:
+        t = self.t
+        while i < self.n:
+            c = t[i]
+            if c in " \t\r\n﻿":
+                i += 1
+            elif c == "#" or t.startswith("//", i):
+                j = t.find("\n", i)
+                i = self.n if j < 0 else j
+            elif t.startswith("/*", i):
+                j = t.find("*/", i + 2)
+                i = self.n if j < 0 else j + 2
+            else:
+                break
+        return i
+
+    def string(self, i: int) -> int:
+        quote = self.t[i]
+        i += 1
+        while i < self.n:
+            c = self.t[i]
+            if c == "\\":
+                i += 2
+                continue
+            if c == quote:
+                return i + 1
+            i += 1
+        raise ValueError("unterminated string")
+
+    def value(self, i: int) -> int:
+        i = self.ws(i)
+        if i >= self.n:
+            raise ValueError("value expected")
+        c = self.t[i]
+        if c == "{":
+            return self.obj(i)
+        if c == "[":
+            return self.arr(i)
+        if c in "\"'":
+            return self.string(i)
+        while i < self.n and self.t[i] not in ",;}]\n#" and not self.t.startswith("//", i):
+            i += 1
+        while self.t[i - 1] in " \t\r":
+            i -= 1
+        return i
+
+    def arr(self, i: int) -> int:
+        i += 1
+        while True:
+            i = self.ws(i)
+            if i >= self.n:
+                raise ValueError("unterminated array")
+            if self.t[i] == "]":
+                return i + 1
+            if self.t[i] in ",;":
+                i += 1
+                continue
+            if self.t[i] == "{":
+                self.in_array.add(i)
+            i = self.value(i)
+
+    def obj(self, i: int) -> int:
+        entries: list[tuple[str, int, int, int]] = []
+        obj_start = i
+        i += 1
+        while True:
+            i = self.ws(i)
+            if i >= self.n:
+                raise ValueError("unterminated object")
+            c = self.t[i]
+            if c == "}":
+                self.objects.append((obj_start, entries))
+                return i + 1
+            if c in ",;":
+                i += 1
+                continue
+            key_start = i
+            if c in "\"'":
+                key_end = self.string(i)
+                key = self.t[key_start + 1:key_end - 1]
+            else:
+                key_end = key_start
+                while key_end < self.n and (self.t[key_end].isalnum() or self.t[key_end] in "_.-$"):
+                    key_end += 1
+                if key_end == key_start:
+                    raise ValueError("key expected")
+                key = self.t[key_start:key_end]
+            i = self.ws(key_end)
+            if i >= self.n or self.t[i] not in ":=":
+                raise ValueError("':' expected")
+            value_start = self.ws(i + 1)
+            value_end = self.value(value_start)
+            entries.append((key, key_start, value_start, value_end))
+            i = value_end
+
+
+def _repeated_key_edits(text: str) -> tuple[list[tuple[int, int, str]], list[str]]:
+    """Edits (begin, end, replacement) that clear repeated keys, and the keys left alone.
+
+    - A later copy of a key whose value equals the first copy's is removed.
+    - An object inside an array whose keys repeat as whole blocks in the same order (Arthr's Ships n Shit
+      ass_solace.json: two markets without the `},{` between them) is several objects: a separator is inserted
+      before each later block.
+    Anything else (a repeat with a different value) is left for the owner."""
+    from .scanner import _parse_json
+
+    scan = _ObjectScan(text)
+    scan.value(scan.ws(0))
+
+    def parsed(fragment: str):
+        try:
+            return _parse_json(fragment)[0]
+        except (json.JSONDecodeError, ValueError):
+            return fragment.strip()
+
+    edits: list[tuple[int, int, str]] = []
+    differing: list[str] = []
+    for obj_start, entries in scan.objects:
+        keys = [entry[0] for entry in entries]
+        if len(set(keys)) == len(keys):
+            continue
+        starts = [i for i, key in enumerate(keys) if i and key == keys[0]]
+        blocks = [keys[a:b] for a, b in zip([0, *starts], [*starts, len(keys)])]
+        identical_values = all(
+            parsed(text[e[2]:e[3]]) == parsed(text[entries[j][2]:entries[j][3]])
+            for block_start in starts for j, e in enumerate(entries[block_start:block_start + len(blocks[0])]))
+        if (starts and obj_start in scan.in_array and all(block == blocks[0] for block in blocks) and len(blocks[0]) >= 2
+                and not identical_values):
+            for block_start in starts:
+                previous_end = entries[block_start - 1][3]
+                key_start = entries[block_start][1]
+                between = text[previous_end:key_start]
+                edits.append((previous_end, key_start, "\n\t\t},\n\t\t{" + between.replace(",", "", 1)))
+            continue
+        first: dict[str, tuple[int, int]] = {}
+        for key, key_start, value_start, value_end in entries:
+            if key not in first:
+                first[key] = (value_start, value_end)
+                continue
+            f_start, f_end = first[key]
+            if parsed(text[f_start:f_end]) != parsed(text[value_start:value_end]):
+                differing.append(key)
+                continue
+            begin = key_start
+            while begin > 0 and text[begin - 1] in " \t":
+                begin -= 1
+            at_line_start = begin == 0 or text[begin - 1] == "\n"
+            end = value_end
+            while end < len(text) and text[end] in " \t":
+                end += 1
+            if end < len(text) and text[end] in ",;":
+                end += 1
+                while end < len(text) and text[end] in " \t\r":
+                    end += 1
+                if at_line_start and end < len(text) and text[end] == "\n":
+                    end += 1
+            elif not at_line_start:
+                begin = key_start
+            edits.append((begin, end, ""))
+    edits.sort()
+    kept: list[tuple[int, int, str]] = []
+    for edit in edits:
+        if kept and edit[0] < kept[-1][1]:
+            continue
+        kept.append(edit)
+    return kept, differing
+
+
+def _fix_json_duplicate_key(root: Path, options: dict) -> list[FileChange]:
+    """Remove a later copy of a key repeated inside one JSON object when its value equals the first copy's (RC8's
+    org.json stops at startup on any repeat: Ironclads pirates.faction, GRP10E-20261005). A repeat with a different
+    value is left for the owner: which copy the mod meant is not decidable here."""
+    from .scanner import _json_duplicate_keys
+
+    files = sorted({f.file for f in _findings_of(root, options, "json-duplicate-key") if f.file})
+    if not files:
+        raise FixerError("No json-duplicate-key finding for this mod.")
+    changes, left = [], []
+    for relative in files:
+        path = root / relative
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        try:
+            edits, differing = _repeated_key_edits(text)
+        except (ValueError, IndexError):
+            left.append(f"{relative} (could not locate the repeated key)")
+            continue
+        if differing:
+            left.append(f"{relative}: {', '.join(sorted(set(differing)))} repeated with a different value")
+        if not edits:
+            continue
+        new_text = text
+        for begin, end, replacement in reversed(edits):
+            new_text = new_text[:begin] + replacement + new_text[end:]
+        left_repeats = _json_duplicate_keys(new_text)
+        if len(left_repeats) != len(differing):
+            left.append(f"{relative} (the edit left {len(left_repeats)} repeat(s), expected {len(differing)})")
+            continue
+        try:
+            _parse_json(new_text)
+        except json.JSONDecodeError as exc:
+            left.append(f"{relative} (the edit no longer parses: {exc.msg})")
+            continue
+        changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    if not changes:
+        raise FixerError("Nothing removed: " + "; ".join(left or ["no identical repeat found"]))
+    return changes
+
+
+def _matching_brace(text: str, open_at: int) -> int:
+    """Index of the '}' closing the '{' at open_at, skipping strings; -1 when unbalanced."""
+    depth, i, quote = 0, open_at, ""
+    while i < len(text):
+        c = text[i]
+        if quote:
+            if c == "\\":
+                i += 1
+            elif c == quote:
+                quote = ""
+        elif c in "\"'":
+            quote = c
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
+
+
+def _fix_dependency_version_major_mismatch(root: Path, options: dict) -> list[FileChange]:
+    """Set each mismatched dependency's declared version to the provider's (RC8-23: a major mismatch disables the mod
+    silently; zzz Bingus Sustem, GRP2C-20261005). Needs `options["provider_roots"]`. Only a string version is edited;
+    a {"major":..} object is left for the owner."""
+    from .scanner import dependency_version_major_conflicts
+
+    conflicts = dependency_version_major_conflicts(root, options.get("provider_roots"))
+    if not conflicts:
+        raise FixerError("No dependency-version-major-mismatch found (pass provider roots with --providers).")
+    path = root / "mod_info.json"
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    refused = []
+    version_value = re.compile(r'("version"\s*:\s*)(?:"[^"]*"|\{[^{}]*\})')
+    for conflict in conflicts:
+        id_match = re.search(r'"id"\s*:\s*"' + re.escape(conflict["id"]) + '"', text)
+        open_at = text.rfind("{", 0, id_match.start()) if id_match else -1
+        close_at = _matching_brace(text, open_at) if open_at >= 0 else -1
+        entry = text[open_at:close_at + 1] if close_at > open_at else ""
+        if not version_value.search(entry):
+            refused.append(conflict["id"])
+            continue
+        text = (text[:open_at] + version_value.sub(lambda m: m.group(1) + json.dumps(conflict["provider"]), entry, count=1)
+                + text[close_at + 1:])
+    if text == _decode(raw)[0]:
+        raise FixerError("Nothing edited: " + ", ".join(refused) + " (version is not a plain string in the dependency entry).")
+    try:
+        _parse_json(text)
+    except json.JSONDecodeError as exc:
+        raise FixerError(f"Edited {path} failed to re-parse: {exc}") from exc
+    return [FileChange(path=path, before=raw, after=_encode(text, had_bom))]
+
+
+def _fix_conversion_faction_names_removed_hull(root: Path, options: dict) -> list[FileChange]:
+    """Replace each vanilla faction file that names variants of removed hulls with a copy lacking those lines, and list
+    the copies in mod_info.json `replace` (Ironclads, GRP10B-GRP10F 2026-10-05; see bridgeforge.conversion_checks).
+    Copies come from --vanilla-core (read only; the result stays in the mod's workspace, which is never committed). A
+    mod overlay that holds more than a showInIntelTab stub is left for the owner."""
+    from . import conversion_checks as cc
+
+    vanilla_core = options.get("vanilla_core")
+    if not vanilla_core:
+        raise FixerError("--vanilla-core is required for conversion-faction-names-removed-hull.")
+    vanilla_core = Path(vanilla_core).expanduser().resolve()
+    hits = cc.factions_naming_removed_hulls(root, vanilla_core)
+    if not hits:
+        raise FixerError("No faction file names a variant of a removed hull.")
+    replaced = cc.replace_list(root)
+    changes, listed, refused = [], [], []
+    for name, variants in sorted(hits.items()):
+        usable, hidden = cc.stub_value(root, name)
+        if not usable:
+            refused.append(f"{name} (the mod's own file holds more than a showInIntelTab stub)")
+            continue
+        relative = (cc.FACTION_DIR / name).as_posix()
+        mine = root / cc.FACTION_DIR / name
+        source = mine if relative.lower() in replaced and mine.is_file() else vanilla_core / "data" / "world" / "factions" / name
+        import textwrap
+
+        header = textwrap.wrap(f"BridgeForge: RC8's own {name}, REPLACED (mod_info replace) without the lines naming "
+                               + ", ".join(variants) + ": their hulls are not in this mod's ship_data.csv, and RC8 prices every "
+                               "variant a faction names at startup (conversion-faction-names-removed-hull).", 110)
+        try:
+            after = cc.faction_copy_without(source.read_bytes(), variants, header, hidden)
+        except ValueError as exc:
+            refused.append(f"{name} ({exc})")
+            continue
+        before = mine.read_bytes() if mine.is_file() else b""
+        changes.append(FileChange(path=mine, before=before, after=after, existed_before=mine.is_file()))
+        if relative.lower() not in replaced:
+            listed.append(relative)
+    if not changes:
+        raise FixerError("Nothing written: " + "; ".join(refused))
+    if listed:
+        info = root / "mod_info.json"
+        raw = info.read_bytes()
+        text, had_bom = _decode(raw)
+        try:
+            new_text = cc.add_replace_entries(text, listed)
+            _parse_json(new_text)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise FixerError(f"Could not add the files to mod_info.json replace: {exc}") from exc
+        changes.append(FileChange(path=info, before=raw, after=_encode(new_text, had_bom)))
+    return changes
+
+
+def _fix_conversion_faction_names_missing_content(root: Path, options: dict) -> list[FileChange]:
+    """Replace each vanilla faction file that lists hulls, fighters or weapons the mod's replaced tables removed with a copy
+    lacking those ids, and list the copies in mod_info.json `replace` (Ironclads, GRP10U/GRP10V 2026-10-05; see
+    bridgeforge.conversion_checks). Copies come from --vanilla-core (read only). A mod overlay that holds more than a
+    showInIntelTab stub is left for the owner."""
+    import textwrap
+
+    from . import conversion_checks as cc
+
+    vanilla_core = options.get("vanilla_core")
+    if not vanilla_core:
+        raise FixerError("--vanilla-core is required for conversion-faction-names-missing-content.")
+    vanilla_core = Path(vanilla_core).expanduser().resolve()
+    hits = cc.factions_naming_missing_content(root, vanilla_core)
+    if not hits:
+        raise FixerError("No faction file lists a hull, fighter or weapon the mod's replaced tables removed.")
+    tables = cc.replaced_table_ids(root)
+    replaced = cc.replace_list(root)
+    changes, listed, refused = [], [], []
+    for name, kinds in sorted(hits.items()):
+        usable, hidden = cc.stub_value(root, name)
+        if not usable:
+            refused.append(f"{name} (the mod's own file holds more than a showInIntelTab stub)")
+            continue
+        relative = (cc.FACTION_DIR / name).as_posix()
+        mine = root / cc.FACTION_DIR / name
+        source = mine if relative.lower() in replaced and mine.is_file() else vanilla_core / "data" / "world" / "factions" / name
+        header = textwrap.wrap(f"BridgeForge: RC8's own {name}, REPLACED (mod_info replace) without the "
+                               + ", ".join(f"{sum(len(ids) for k, ids in kinds.items() if k == kind)} {kind}" for kind in sorted(kinds))
+                               + " this mod's replaced tables removed: RC8 checks every id a faction knows when a game loads "
+                               "(conversion-faction-names-missing-content).", 110)
+        after, _dropped = cc.faction_copy_without_content(source.read_bytes(), tables, header, hidden)
+        before = mine.read_bytes() if mine.is_file() else b""
+        changes.append(FileChange(path=mine, before=before, after=after, existed_before=mine.is_file()))
+        if relative.lower() not in replaced:
+            listed.append(relative)
+    if not changes:
+        raise FixerError("Nothing written: " + "; ".join(refused))
+    if listed:
+        info = root / "mod_info.json"
+        raw = info.read_bytes()
+        text, had_bom = _decode(raw)
+        try:
+            new_text = cc.add_replace_entries(text, listed)
+            _parse_json(new_text)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise FixerError(f"Could not add the files to mod_info.json replace: {exc}") from exc
+        changes.append(FileChange(path=info, before=raw, after=_encode(new_text, had_bom)))
+    return changes
+
+
+def _fix_conversion_vanilla_lifecycle_plugin(root: Path, options: dict) -> list[FileChange]:
+    """Write a coreLifecyclePlugin subclass that skips RC8's vanilla world generation and register it in settings.json
+    (Ironclads, GRP10P/GRP10T-20261005; see bridgeforge.conversion_checks). Nothing is read from the game install."""
+    from . import conversion_checks as cc
+
+    if not cc.lifecycle_plugin_missing(root):
+        raise FixerError("This mod does not replace ship_data.csv, or already sets plugins.coreLifecyclePlugin.")
+    class_name = cc.lifecycle_plugin_class_name(root)
+    source = root / "data" / "scripts" / "plugins" / f"{class_name}.java"
+    if source.exists():
+        raise FixerError(f"{_relative_path(root, source)} already exists; register it in settings.json by hand.")
+    class_path = f"data.scripts.plugins.{class_name}"
+    settings = root / "data" / "config" / "settings.json"
+    changes = [FileChange(path=source, before=b"", after=(cc.LIFECYCLE_PLUGIN_TEMPLATE % {"class_name": class_name}).encode("utf-8"),
+                          existed_before=False)]
+    if settings.is_file():
+        raw = settings.read_bytes()
+        text, had_bom = _decode(raw)
+        new_text = cc.add_core_lifecycle_plugin_setting(text, class_path)
+        after = _encode(new_text, had_bom)
+    else:
+        raw, new_text = b"", '{\n\t"plugins":{\n\t\t"coreLifecyclePlugin":"%s",\n\t},\n}\n' % class_path
+        after = new_text.encode("utf-8")
+    try:
+        _parse_json(new_text)
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise FixerError(f"Could not add the plugin to settings.json: {exc}") from exc
+    changes.append(FileChange(path=settings, before=raw, after=after, existed_before=settings.is_file()))
+    return changes
+
+
+def _fix_factions_csv_relists_neutral(root: Path, options: dict) -> list[FileChange]:
+    """Remove the neutral.faction row from the mod's factions.csv (Ironclads, GRP10D-20261005)."""
+    from . import conversion_checks as cc
+
+    path = cc.listing_path(root)
+    if not path.is_file():
+        raise FixerError("No factions.csv in this mod.")
+    raw = path.read_bytes()
+    after = cc.remove_neutral_row(raw)
+    if after == raw:
+        raise FixerError("factions.csv does not list neutral.faction.")
+    return [FileChange(path=path, before=raw, after=after)]
+
+
+_SHADOW_ID_KEYS = {".system": "id", ".wpn": "id", ".proj": "id", ".variant": "variantId", ".ship": "hullId", ".skin": "skinHullId"}
+
+
+def _fix_vanilla_path_shadowing(root: Path, options: dict) -> list[FileChange]:
+    """Rename a data file saved at a vanilla path under another id to its own id: Vayra's Ship Pack saved its Shieldwall
+    Drones system (id vayra_exemplardrones) as data/shipsystems/drone_pd.system, which replaced vanilla's drone_pd, so two
+    vanilla hulls lost their system (GRP2C-20261005). Only a file whose content id differs from the vanilla file at the same
+    path is moved; a file that carries vanilla's own id is a deliberate override and stays. Needs --vanilla-core."""
+    vanilla_core = options.get("vanilla_core")
+    if not vanilla_core:
+        raise FixerError("--vanilla-core is required for vanilla-path-shadowing.")
+    vanilla = Path(vanilla_core).expanduser().resolve()
+    changes, refused = [], []
+    data_dir = root / "data"
+    for path in sorted(data_dir.rglob("*")) if data_dir.is_dir() else []:
+        key = _SHADOW_ID_KEYS.get(path.suffix.lower())
+        if key is None or not path.is_file() or "disabled_files" in path.relative_to(root).parts:
+            continue
+        counterpart = vanilla / path.relative_to(root)
+        if not counterpart.is_file():
+            continue
+        mine, theirs = _load_lenient_json_file(path), _load_lenient_json_file(counterpart)
+        own, vanilla_id = (mine or {}).get(key) if isinstance(mine, dict) else None, (theirs or {}).get(key) if isinstance(theirs, dict) else None
+        if not isinstance(own, str) or not own or own == vanilla_id or own == path.stem:
+            continue
+        target = path.with_name(own + path.suffix)
+        if target.exists():
+            refused.append(f"{_relative_path(root, path)} (a file named {target.name} already exists)")
+            continue
+        raw = path.read_bytes()
+        changes.append(FileChange(path=target, before=b"", after=raw, existed_before=False))
+        changes.append(FileChange(path=path, before=raw, after=b"", removed=True))
+    if not changes:
+        raise FixerError("No file saved at a vanilla path under another id" + (f" (refused: {'; '.join(refused)})" if refused else "."))
+    return changes
+
+
+# Owner rule 2026-10-05 ("Vanilla ratio per hull"): the median of RC8 supplies/rec over 0.6.2 supplies/day on the hulls both
+# versions share, by hull size (14 frigates, 13 destroyers, 8 cruisers, 7 capitals). The old x30 gave SEEKER 150-600 DP hulls
+# that could never deploy (RC8 vanilla tops out at 100; maxBattleSize is 400).
+SUPPLY_RATIOS = {"FRIGATE": 3.0, "DESTROYER": 2.0, "CRUISER": 2.65, "CAPITAL_SHIP": 2.67}
+
+
+def _fix_ship_data_supplies_legacy_column(root: Path, options: dict) -> list[FileChange]:
+    """Add `supplies/rec` and `supplies/mo` to a 0.6-era ship_data.csv that has only `supplies/day`: day x the ratio for the
+    hull's size (from its .ship file), rounded and at least 1; rec = mo. Rows without a positive day, fighters and hulls with no
+    readable size are left blank. `supplies/day` stays, as in the revived SEEKER."""
+    import csv as csv_module
+    import io
+
+    path = root / "data" / "hulls" / "ship_data.csv"
+    if not path.is_file():
+        raise FixerError("No data/hulls/ship_data.csv in this mod.")
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    rows = list(csv_module.reader(io.StringIO(text, newline="")))
+    if not rows or "supplies/day" not in rows[0]:
+        raise FixerError("ship_data.csv has no supplies/day column.")
+    header = rows[0]
+    if "supplies/rec" in header or "supplies/mo" in header:
+        raise FixerError("ship_data.csv already has supplies/rec or supplies/mo; nothing to convert.")
+    id_at, day_at = header.index("id"), header.index("supplies/day")
+    width = len(header)
+    sizes = {}
+    for ship in (root / "data" / "hulls").glob("*.ship"):
+        data = _load_lenient_json_file(ship)
+        if isinstance(data, dict) and isinstance(data.get("hullId"), str):
+            sizes[data["hullId"]] = data.get("hullSize")
+    newline = "\r\n" if "\r\n" in text else "\n"
+    out_rows, converted, skipped = [header + ["supplies/rec", "supplies/mo"]], 0, []
+    for row in rows[1:]:
+        if not row or not any(cell.strip() for cell in row):
+            out_rows.append(row)
+            continue
+        row = row + [""] * (width - len(row))
+        value = ""
+        try:
+            day = float(row[day_at]) if row[day_at].strip() else 0.0
+        except ValueError:
+            day = 0.0
+        if day > 0:
+            ratio = SUPPLY_RATIOS.get(sizes.get(row[id_at].strip()) or "")
+            if ratio is None:
+                skipped.append(row[id_at])
+            else:
+                value = str(max(1, round(day * ratio)))
+                converted += 1
+        out_rows.append(row[:width] + [value, value])
+    if not converted:
+        raise FixerError("No hull row could be converted" + (f" (no readable hull size for: {', '.join(skipped[:8])})" if skipped else "."))
+    buffer = io.StringIO()
+    csv_module.writer(buffer, lineterminator=newline).writerows(out_rows)
+    return [FileChange(path=path, before=raw, after=_encode(buffer.getvalue(), had_bom))]
+
+
+def _fix_rules_csv_duplicate_id(root: Path, options: dict) -> list[FileChange]:
+    """Rename each later copy of a repeated rules.csv id to <id>_2, <id>_3 (RC8 'Duplicate key', Ironclads GRP10J-20261005),
+    editing only the id cell so every other byte of the file stays."""
+    from .scanner import _csv_first_cells, _rules_duplicate_id_cells
+
+    path = root / "data" / "campaign" / "rules.csv"
+    if not path.is_file():
+        raise FixerError("No data/campaign/rules.csv in this mod.")
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    repeats = _rules_duplicate_id_cells(text)
+    if not repeats:
+        raise FixerError("No repeated rules.csv id found.")
+    taken = {value.strip() for _s, _e, value, _q in _csv_first_cells(text)}
+    renames = []
+    for start, end, key, quoted, number in repeats:  # names in reading order, edits from the end so offsets hold
+        while f"{key}_{number}" in taken:
+            number += 1
+        new_id = f"{key}_{number}"
+        taken.add(new_id)
+        renames.append((start, end, f'"{new_id}"' if quoted else new_id))
+    new_text = text
+    for start, end, replacement in reversed(renames):
+        new_text = new_text[:start] + replacement + new_text[end:]
+    return [FileChange(path=path, before=raw, after=_encode(new_text, had_bom))]
+
+
+def _fix_rules_csv_whitespace_only_line(root: Path, options: dict) -> list[FileChange]:
+    """Empty the whitespace-only lines of rules.csv conditions/script cells (RC8 'No tokens found in string: []', Ironclads
+    GRP10K-20261005). Only those cells change; the rest of the file keeps its bytes."""
+    from .scanner import _rules_whitespace_only_line_cells
+
+    path = root / "data" / "campaign" / "rules.csv"
+    if not path.is_file():
+        raise FixerError("No data/campaign/rules.csv in this mod.")
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    cells = _rules_whitespace_only_line_cells(text)
+    if not cells:
+        raise FixerError("No whitespace-only line in a rules.csv conditions or script cell.")
+    new_text = text
+    for start, end, _name, value in reversed(cells):
+        cell = '"' + value.replace('"', '""') + '"' if text[start] == '"' else value
+        new_text = new_text[:start] + cell + new_text[end:]
+    return [FileChange(path=path, before=raw, after=_encode(new_text, had_bom))]
+
+
+def _fix_rules_csv_curly_quote_unreadable(root: Path, options: dict) -> list[FileChange]:
+    """Change the curly double quotes of unreadable rules.csv text alternatives to straight ones (Metelson Industries,
+    GRP4A-20261006). Only those cells change; the rest of the file keeps its bytes."""
+    from .scanner import _rules_curly_quote_cells
+
+    path = root / "data" / "campaign" / "rules.csv"
+    if not path.is_file():
+        raise FixerError("No data/campaign/rules.csv in this mod.")
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    cells = _rules_curly_quote_cells(text)
+    if not cells:
+        raise FixerError("No rules.csv text alternative holds an unreadable curly double quote.")
+    new_text = text
+    for start, end, value in reversed(cells):
+        new_text = new_text[:start] + '"' + value.replace('"', '""') + '"' + new_text[end:]
+    return [FileChange(path=path, before=raw, after=_encode(new_text, had_bom))]
+
+
+def _fix_csv_vanilla_row_override(root: Path, options: dict) -> list[FileChange]:
+    """Remove the rows of the mod's ship_data/weapon_data/wing_data whose id RC8 also defines, so RC8's own rows stand
+    (Yellowjackets Mining Conglomerate, 2026-10-10: 12 hull and 3 weapon rows of 0.6-era values). Needs --vanilla-core. Tables
+    the mod replaces in mod_info.json are left alone. Only those records change; the rest of each file keeps its bytes."""
+    from . import conversion_checks as cc
+
+    vanilla_core = options.get("vanilla_core")
+    if not vanilla_core:
+        raise FixerError("--vanilla-core is required for csv-vanilla-row-override.")
+    vanilla_core = Path(vanilla_core).expanduser().resolve()
+    hits = cc.vanilla_row_overrides(root, vanilla_core)
+    if not hits:
+        raise FixerError("No row of the mod's ship, weapon or wing table repeats an id RC8 defines.")
+    changes = []
+    for table in sorted(hits):
+        path = root / table
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        theirs, _bom = _decode((vanilla_core / table).read_bytes())
+        vanilla_ids = {row_id for row_id, _s, _e, _c in cc._table_records(theirs) if row_id and not row_id.startswith("#")}
+        new_text, removed = cc.remove_vanilla_rows(text, vanilla_ids)
+        if removed:
+            changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    return changes
+
+
+def _fix_person_names_duplicate_row(root: Path, options: dict) -> list[FileChange]:
+    """Remove rows of data/characters/person_names.csv that repeat an earlier row (RC8 'Duplicate key' Fatal,
+    Ironclads GRP10B-20261005). The first copy stays; every other byte, line endings included, is kept."""
+    from .scanner import _person_names_duplicate_lines
+
+    path = root / "data" / "characters" / "person_names.csv"
+    repeats = set(_person_names_duplicate_lines(path)) if path.is_file() else set()
+    if not repeats:
+        raise FixerError("No repeated person_names.csv row found.")
+    raw = path.read_bytes()
+    lines = raw.split(b"\n")
+    after = b"\n".join(line for number, line in enumerate(lines, start=1) if number not in repeats)
+    return [FileChange(path=path, before=raw, after=after)]
+
+
+def _fix_rc8_signature_changed(root: Path, options: dict) -> list[FileChange]:
+    """Rewrite old-form calls to RC8's exact form (bridgeforge.signature_rewrites; ROADMAP 41). A file under jars/src
+    or src/ is the jar's bundled source: rebuild the jar (patch-jar-class) after this."""
+    from .scanner import _blank_java_comments
+    from .signature_rewrites import rewrite
+
+    files = sorted({f.file for f in _findings_of(root, options, "rc8-signature-changed") if f.file})
+    changes = []
+    for rel in files:
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        new, count = rewrite(text, _blank_java_comments(text, strings=True))
+        if count:
+            changes.append(FileChange(path=path, before=raw, after=_encode(new, had_bom)))
+    if not changes:
+        raise FixerError("No old-form call with an exact RC8 equivalent found.")
+    return changes
+
+
+def _relative_path(root: Path, path: Path) -> str:
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return str(path)
+
+
+# ---------------------------------------------------------------------------
+# Fixer: wing-op-cost-blank (ROADMAP 34.22; approval-gated: the value is a comparison, not a conversion)
+# ---------------------------------------------------------------------------
+
+
+def _raw_csv_spans(line: str) -> list[tuple[int, int]]:
+    spans, start, quoted = [], 0, False
+    for i, ch in enumerate(line):
+        if ch == '"':
+            quoted = not quoted
+        elif ch == "," and not quoted:
+            spans.append((start, i))
+            start = i + 1
+    spans.append((start, len(line.rstrip("\r\n"))))
+    return spans
+
+
+def _fix_wing_op_cost_blank(root: Path, options: dict) -> list[FileChange]:
+    """Set a blank wing `op cost` to the nearest vanilla RC8 wing's (same role, nearest fleet pts, then fighter
+    count), only for a wing a variant fits or a faction knows (autofit can fit it): built-in or unused wings are never
+    charged and stay as they are. A pre-0.8 file without the column gets an `op cost` column appended, rows padded to
+    the header first. Only the one cell changes. Done by hand for 36 wings in 7 mods on 2026-10-04 (owner ruling)."""
+    import csv as _csv
+    import io as _io
+
+    from .scanner import _load_lenient_json_file
+
+    core = options.get("vanilla_core")
+    if not core:
+        raise FixerError("wing-op-cost-blank needs --vanilla-core: the cost is read from the nearest vanilla wing.")
+    vanilla = [r for r in _csv.DictReader(_io.StringIO((Path(core) / "data/hulls/wing_data.csv").read_text(encoding="utf-8-sig")))
+               if r.get("id") and (r.get("op cost") or "").strip()
+               # A 0-cost RC8 wing is special-purpose, not a price (mining_drone, borer, terminator): Ironclads'
+               # su57_wing was matched to one and charged 0 (2026-10-05).
+               and (r.get("op cost") or "").strip() not in ("0", "0.0")]
+    if not vanilla:
+        raise FixerError("the vanilla core's wing_data.csv has no op costs to compare with.")
+
+    def number(value) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    flagged = {e.split(":", 1)[1] for f in _findings_of(root, options, "wing-op-cost-blank") for e in f.evidence if e.startswith("wing:")}
+    used: set[str] = set()
+    for spec_path in (root / "data" / "variants").rglob("*.variant") if (root / "data" / "variants").is_dir() else []:
+        spec = _load_lenient_json_file(spec_path)
+        if isinstance(spec, dict):
+            used |= {w for w in spec.get("wings") or [] if isinstance(w, str)}
+    factions = " ".join(p.read_text(encoding="utf-8", errors="replace") for p in (root / "data/world/factions").glob("*.faction")) \
+        if (root / "data/world/factions").is_dir() else ""
+    targets = {w for w in flagged if w in used or f'"{w}"' in factions}
+    if not targets:
+        raise FixerError("No blank-cost wing is fitted by a variant or known to a faction: nothing is ever charged, accept as authored.")
+    path = root / "data/hulls/wing_data.csv"
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    lines = text.splitlines(keepends=True)
+    header = next(_csv.reader(_io.StringIO(lines[0])))
+    if "op cost" not in header:
+        width, eol = len(header), ("\r\n" if lines[0].endswith("\r\n") else "\n")
+        lines[0] = lines[0].rstrip("\r\n") + ",op cost" + eol
+        for n, line in enumerate(lines[1:], 1):
+            if line.strip():
+                body = line.rstrip("\r\n") + "," * max(0, width - len(_raw_csv_spans(line)))
+                lines[n] = body + "," + (line[len(line.rstrip("\r\n")):] or eol)
+        header = header + ["op cost"]
+    column = header.index("op cost")
+    changed = 0
+    for n, line in enumerate(lines[1:], 1):
+        row = next(_csv.reader(_io.StringIO(line)), [])
+        if not row or row[0] not in targets or len(row) <= column or row[column].strip():
+            continue
+        fields = dict(zip(header, row))
+        same = [v for v in vanilla if v["role"] == (fields.get("role") or "").strip()] or vanilla
+        best = min(same, key=lambda v: (abs(number(v["fleet pts"]) - number(fields.get("fleet pts"))), abs(number(v["num"]) - number(fields.get("num")))))
+        start, end = _raw_csv_spans(line)[column]
+        lines[n] = line[:start] + best["op cost"].strip() + line[end:]
+        changed += 1
+    if not changed:
+        raise FixerError("The flagged wings' rows could not be edited mechanically.")
+    return [FileChange(path=path, before=raw, after=_encode("".join(lines), had_bom))]
+
+
+# ---------------------------------------------------------------------------
+# Fixer: builtin-wing-is-hullmod (2026-10-04)
+# ---------------------------------------------------------------------------
+
+
+def _fix_builtin_wing_is_hullmod(root: Path, options: dict) -> list[FileChange]:
+    """Rename `builtInWings` to `builtInMods` when every entry under it is a hull mod and the spec has no
+    `builtInMods` yet (The Nomads' nom_komodo_p.ship, fixed by hand 2026-10-04). Mixed lists, or a spec that already
+    has builtInMods, are refused: moving single entries between arrays is left to a person."""
+    from .scanner import _load_lenient_json_file
+
+    files = sorted({f.file for f in _findings_of(root, options, "builtin-wing-is-hullmod") if f.file})
+    flagged: dict[str, set[str]] = {}
+    for finding in _findings_of(root, options, "builtin-wing-is-hullmod"):
+        flagged.setdefault(finding.file, set()).update(e.split(":", 1)[1] for e in finding.evidence if e.startswith("hullmod:"))
+    changes, refused = [], []
+    for rel in files:
+        path = root / rel
+        spec = _load_lenient_json_file(path) or {}
+        wings = [w for w in spec.get("builtInWings") or [] if isinstance(w, str)]
+        if "builtInMods" in spec or set(wings) - flagged.get(rel, set()):
+            refused.append(rel)
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        new_text, count = re.subn(r'(["\'])builtInWings\1(\s*:)', r'\1builtInMods\1\2', text, count=1)
+        if count:
+            changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    if not changes:
+        raise FixerError("No builtInWings list can be renamed mechanically" + (f" (refused: {', '.join(refused[:5])})" if refused else "."))
+    return changes
+
+
+# ---------------------------------------------------------------------------
+# Fixer: json-missing-comma (ROADMAP 34.16)
+# ---------------------------------------------------------------------------
+
+
+def _fix_json_missing_comma(root: Path, options: dict) -> list[FileChange]:
+    """Apply scanner._repair_missing_commas, which only succeeds when the file then parses as RC8 reads it."""
+    from .scanner import _repair_missing_commas
+
+    changes: list[FileChange] = []
+    for rel in sorted({f.file for f in _findings_of(root, options, "json-missing-comma") if f.file}):
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        repaired = _repair_missing_commas(text)
+        if repaired:
+            changes.append(FileChange(path=path, before=raw, after=_encode(repaired[0], had_bom)))
+    if not changes:
+        raise FixerError("No flagged JSON file parses after adding the missing commas.")
+    return changes
+
+
+# ---------------------------------------------------------------------------
+# Fixer: spawned-ship-captain-personality-risk (loose scripts only; ROADMAP 34.14)
+# ---------------------------------------------------------------------------
+
+_SPAWN_THREE_ARGS = re.compile(r"\bspawnShipOrWing\s*\(")
+_BF_SPAWN_CAPTAIN = (
+    "\n    // BridgeForge: a ship spawned without a captain has no personality, and RC8's Ship.getPersonality() NPEs\n"
+    "    // on it. RC8's ChiralFigmentStats spawns ships with createPerson() + setPersonality (ROADMAP 34.14).\n"
+    "    private static com.fs.starfarer.api.characters.PersonAPI bfSpawnCaptain() {\n"
+    "        com.fs.starfarer.api.characters.PersonAPI captain = com.fs.starfarer.api.Global.getSettings().createPerson();\n"
+    "        captain.setPersonality(com.fs.starfarer.api.impl.campaign.ids.Personalities.STEADY);\n"
+    "        return captain;\n"
+    "    }\n"
+)
+
+
+def _fix_spawned_ship_captain(root: Path, options: dict) -> list[FileChange]:
+    """spawnShipOrWing("ship", loc, facing) -> spawnShipOrWing("ship", loc, facing, 0f, bfSpawnCaptain()), the
+    overload with a captain (done by hand for Traverser's turrets, 2026-10-04). The 3-argument form has no
+    travel-drive burn, so 0f keeps it. A 4-argument call keeps its own burn. Only the flagged lines change;
+    wings are never flagged. Jar sources need patch-jar-class and are refused."""
+    from .scanner import _blank_java_comments, _call_argument_count
+
+    lines_by_file: dict[str, set[int]] = {}
+    for finding in _findings_of(root, options, "spawned-ship-captain-personality-risk"):
+        if finding.file and "!" not in finding.file and not finding.file.replace("\\", "/").startswith(("jars/", "src/")):
+            if any(e == "call:spawnShipOrWing" for e in finding.evidence):
+                lines_by_file.setdefault(finding.file, set()).update(
+                    int(e.split(":", 1)[1]) for e in finding.evidence if e.startswith("line:"))
+    changes: list[FileChange] = []
+    for rel, lines in sorted(lines_by_file.items()):
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        blank = _blank_java_comments(text, strings=True)
+        edits = []
+        for match in _SPAWN_THREE_ARGS.finditer(blank):
+            if text.count("\n", 0, match.start()) + 1 not in lines:
+                continue
+            count = _call_argument_count(blank, match.start())
+            if count not in (3, 4):
+                continue
+            depth, close = 0, None
+            for i in range(match.end() - 1, len(blank)):
+                depth += {"(": 1, ")": -1}.get(blank[i], 0)
+                if depth == 0:
+                    close = i
+                    break
+            if close is not None:
+                edits.append((close, (", 0f" if count == 3 else "") + ", bfSpawnCaptain()"))
+        if not edits:
+            continue
+        out = text
+        for at, insert in sorted(edits, reverse=True):
+            out = out[:at] + insert + out[at:]
+        if "bfSpawnCaptain() {" not in out:
+            last = _blank_java_comments(out, strings=True).rstrip().rfind("}")
+            out = out[:last] + _BF_SPAWN_CAPTAIN + out[last:]
+        changes.append(FileChange(path=path, before=raw, after=_encode(out, had_bom)))
+    if not changes:
+        raise FixerError("No flagged loose-script spawnShipOrWing call could be given a captain mechanically.")
+    return changes
+
+
+# ---------------------------------------------------------------------------
+# Fixer: hullmod-instance-state (loose scripts only; ROADMAP 34.1)
+# ---------------------------------------------------------------------------
+
+
+def _fix_black_hole_type_missing_flag(root: Path, options: dict) -> list[FileChange]:
+    """Add `"isBlackHole":true,` after `"isStar":true` in each flagged planets.json star type. RC8's own black_hole entry carries
+    exactly this pair (checked against starsector-core/data/config/planets.json, 2026-10-11); without it 0.98a draws a plain star."""
+    findings = _findings_of(root, options, "black-hole-type-missing-flag")
+    types = sorted({e.split(":", 1)[1] for f in findings for e in f.evidence if e.startswith("type:")})
+    path = root / "data" / "config" / "planets.json"
+    if not types or not path.is_file():
+        raise FixerError("No planets.json star type is flagged as a black hole without isBlackHole.")
+    raw = path.read_bytes()
+    text, had_bom = _decode(raw)
+    done = 0
+    for type_id in types:
+        start = re.search(r"[\"']" + re.escape(type_id) + r"[\"']\s*:\s*\{", text)
+        if not start:
+            continue
+        star = re.compile(r"(?P<indent>[ \t]*)(?P<key>[\"']isStar[\"']\s*:\s*true)(?P<comma>\s*,)?").search(text, start.end())
+        if not star:
+            continue
+        nxt = re.search(r"^[ \t]*[\"'][\w]+[\"']\s*:\s*\{", text[start.end():], re.M)
+        if nxt and star.start() > start.end() + nxt.start():
+            continue  # the isStar found belongs to a later type
+        newline = "\r\n" if "\r\n" in text else "\n"
+        indent = star.group("indent")
+        if star.group("comma"):
+            insert_at = star.end()
+            text = text[:insert_at] + newline + indent + "\"isBlackHole\":true," + text[insert_at:]
+        else:
+            text = text[:star.end("key")] + "," + newline + indent + "\"isBlackHole\":true" + text[star.end("key"):]
+        done += 1
+    if not done:
+        raise FixerError("Could not place isBlackHole in planets.json.")
+    return [FileChange(path=path, before=raw, after=_encode(text, had_bom))]
+
+
+# IDE-generated `throw new UnsupportedOperationException(...)` bodies in ShipSystemStatsScript's override hooks. RC8's
+# BaseShipSystemScript answers -1 / -1 / -1 / -1 / null ("no override": use the .system file), read with javap and
+# starfarer.api.zip on 2026-10-11 (BaseShipSystemScript.getActiveOverride returns -1). Neutrino's two system scripts had
+# ten of these; the game calls the hooks for any system that names the class.
+_PLACEHOLDER_HOOKS = re.compile(
+    r"(?P<head>public\s+(?P<type>float|int)\s+(?P<name>get(?:Active|In|Out|Uses|Regen)Override)\s*\(\s*(?:[\w.]+\.)?ShipAPI\s+\w+\s*\)\s*\{)"
+    r"(?P<gap>\s*)throw\s+new\s+UnsupportedOperationException\s*\([^;]*\)\s*;[^\r\n]*")
+
+
+def _fix_runtime_placeholder_hooks(root: Path, options: dict) -> list[FileChange]:
+    """Replace the throwing bodies of ShipSystemStatsScript's five *Override hooks with BaseShipSystemScript's "no override"
+    answer (-1). Any other placeholder is not mechanical (what it should return depends on the class) and is refused. Edits
+    loose scripts and the `src/` tree alike; a class compiled into a jar still needs patch-jar-class."""
+    files = sorted({f.file for f in _findings_of(root, options, "runtime-placeholder-unsupported-operation")
+                    if f.file and f.file.endswith(".java") and "!" not in f.file})
+    changes: list[FileChange] = []
+    for rel in files:
+        path = root / rel
+        if not path.is_file():
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        new_text, count = _PLACEHOLDER_HOOKS.subn(
+            lambda m: f"{m['head']}{m['gap']}return {'-1f' if m['type'] == 'float' else '-1'};  // BridgeForge: BaseShipSystemScript's \"no override\"", text)
+        if count:
+            changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    if not changes:
+        raise FixerError("No ShipSystemStatsScript override hook throws UnsupportedOperationException; other placeholders need a person or agent.")
+    return changes
+
+
+def _fix_hulk_death_effect_repeats(root: Path, options: dict) -> list[FileChange]:
+    """Run a hull mod's wreck effect once per ship: `if (s.isHulk())` becomes `if (s.isHulk() && bfFirstDeath(s, "<Class>_deathDone"))`
+    and a static helper keeps the flag in the ship's custom data (the guard SEEKER's Organic Hull had; RC8-27). Loose sources only;
+    a class compiled into a jar needs a decompile and patch-jar-class, so those are refused."""
+    from .scanner import _HULK_IF, _hulk_block_spawns
+
+    files = sorted({f.file for f in _findings_of(root, options, "hulk-death-effect-repeats") if f.file and "!" not in f.file and f.file.endswith(".java")})
+    if not files:
+        raise FixerError("No loose hull mod source repeats a wreck effect (jar classes need a decompile and patch-jar-class).")
+    changes: list[FileChange] = []
+    for rel in files:
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        key = path.stem + "_deathDone"
+        edits = [m for m in _HULK_IF.finditer(text) if _hulk_block_spawns(text, m.end())]
+        if not edits:
+            continue
+        for match in reversed(edits):
+            var = match["var"]
+            guarded = f'if ({var}.isHulk() && bfFirstDeath({var}, "{key}")) {{'
+            text = text[:match.start()] + guarded + text[match.end():]
+        helper = ("private static boolean bfFirstDeath(com.fs.starfarer.api.combat.ShipAPI ship, String key) { "
+                  "if (ship.getCustomData().containsKey(key)) { return false; } ship.setCustomData(key, Boolean.TRUE); return true; }")
+        text = _insert_before_class_end(text, [helper], "run the wreck effect once per ship; RC8 calls a hull mod for a wreck every frame (RC8-27)")
+        changes.append(FileChange(path=path, before=raw, after=_encode(text, had_bom)))
+    if not changes:
+        raise FixerError("The flagged wreck checks no longer spawn anything; nothing to guard.")
+    return changes
+
+
+def _fix_hullmod_instance_state(root: Path, options: dict) -> list[FileChange]:
+    """Move a hull mod's flagged instance fields into a per-ship State in ship.getCustomData()
+    (`hullmod_state.port_hullmod_state`, the rewrite done by hand for SEEKER and Sylphon on 2026-10-04). Jar
+    classes and jar sources need patch-jar-class, so they are refused; so is any shape the port refuses."""
+    from .hullmod_state import HullModStateError, port_hullmod_state
+
+    fields_by_file: dict[str, list[str]] = {}
+    for finding in _findings_of(root, options, "hullmod-instance-state"):
+        if finding.file:
+            fields_by_file.setdefault(finding.file, []).extend(
+                e.split(":", 1)[1] for e in finding.evidence if e.startswith("field:"))
+    loose = {rel: names for rel, names in fields_by_file.items()
+             if "!" not in rel and rel.endswith(".java") and not rel.replace("\\", "/").startswith(("jars/", "src/"))}
+    if not loose:
+        raise FixerError("No loose hull mod script keeps per-ship instance fields (jar classes need patch-jar-class).")
+    changes: list[FileChange] = []
+    refused: list[str] = []
+    for rel, names in sorted(loose.items()):
+        path = root / rel
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        try:
+            new_text = port_hullmod_state(text, sorted(set(names)), path.stem)
+        except HullModStateError as exc:
+            refused.append(f"{rel}: {exc}")
+            continue
+        changes.append(FileChange(path=path, before=raw, after=_encode(new_text, had_bom)))
+    if not changes:
+        raise FixerError("Not mechanical: " + "; ".join(refused[:5]))
     return changes
 
 
@@ -1865,6 +3122,10 @@ def _referencing_bytes(root: Path, skip: set[str]) -> bytes:
         if not path.is_file() or relative in skip or _is_excluded(relative):
             continue
         suffix = path.suffix.lower()
+        # A root readme or changelog is for people, never read by the game (Hiver Swarm's README named its
+        # "Replacement Ships.rar", which kept the archive shipping; ROADMAP 34.18, 2026-10-04).
+        if "/" not in relative and suffix in {".txt", ".md"}:
+            continue
         try:
             if suffix in _REFERENCE_SUFFIXES and path.stat().st_size <= 8 * 1024 * 1024:
                 parts.append(path.read_bytes().lower())
@@ -2074,6 +3335,173 @@ def _fix_fleet_type_name_missing(root: Path, options: dict) -> list[FileChange]:
     return changes
 
 
+# ---------------------------------------------------------------------------
+# Bracket-span helpers for the variant-fit fixers below. `.variant` files are lenient JSON (# / //
+# comments, trailing commas), so edits stay surgical text-span rewrites, never a json.dumps
+# round-trip that would reformat the file (as `_fix_variant_op_over_budget` above already does for
+# flux numbers and hullMods entries). These three locate/remove spans inside "wings" and
+# "weaponGroups" the same way, using `_structural_depths` (build_tag.py) so a `{`/`[`/`}`/`]`
+# inside a string or a comment never miscounts.
+# ---------------------------------------------------------------------------
+
+_STRING_PAIR_RE = re.compile(r"(?:" + _STRING_LITERAL + r")\s*:\s*(?:" + _STRING_LITERAL + r")")
+
+
+def _matching_bracket(text: str, depths: list[int], open_pos: int) -> int | None:
+    """Position of the `]`/`}` that closes the `[`/`{` at `open_pos`."""
+    target = depths[open_pos] + 1
+    close_char = "]" if text[open_pos] == "[" else "}"
+    for i in range(open_pos + 1, len(text)):
+        if text[i] == close_char and depths[i] == target:
+            return i
+    return None
+
+
+def _enclosing_bracket(text: str, depths: list[int], pos: int, open_char: str) -> int | None:
+    """Position of the `open_char` one depth level up that directly encloses `pos` (also works when
+    `pos` is itself another bracket's open position, since an open bracket char is recorded at the
+    depth of its own context, same as any other content character there)."""
+    target = depths[pos] - 1
+    for i in range(pos - 1, -1, -1):
+        if text[i] == open_char and depths[i] == target:
+            return i
+    return None
+
+
+def _remove_span_with_comma(text: str, start: int, end: int) -> str:
+    """Remove text[start:end] plus the one adjacent list/object comma: the one after it (with any
+    whitespace) if there is more after, else the one before it (it was last). Mirrors
+    `_fix_variant_op_over_budget`'s hullMods removal so a trimmed array/object still closes exactly
+    like lenient JSON expects, without reformatting anything else."""
+    after = text[end:]
+    after_match = re.match(r"\s*,\s*", after)
+    if after_match:
+        return text[:start] + text[end + after_match.end():]
+    before = text[:start]
+    before_match = re.search(r",\s*\Z", before)
+    if before_match:
+        return text[:before_match.start()] + text[end:]
+    return text[:start] + text[end:]
+
+
+def _fix_variant_wings_exceed_bays(root: Path, options: dict) -> list[FileChange]:
+    """Drop wings from the END of the variant's own "wings" list until the total (plus the hull's
+    built-in wings, which live on the .ship and can never be removed here) fits its fighter bays
+    (owner ruling 2026-09-29: drop only what RC8's changed hulls can no longer fit; keep everything
+    else exactly as the mod author wrote it). The kept wings stay in the author's order; nothing else
+    in the file changes. A variant whose built-in wings alone already exceed the bays has nothing in
+    its own wings list left to trim, and is refused."""
+    string_re = re.compile(_STRING_LITERAL)
+    changes: list[FileChange] = []
+    refused: list[str] = []
+    for finding in _findings_of(root, options, "variant-wings-exceed-bays"):
+        if not finding.file:
+            continue
+        values = {e.split(":", 1)[0]: e.split(":", 1)[1] for e in finding.evidence if ":" in e}
+        try:
+            wings_count = int(values.get("wings", ""))
+            built_in = int(values.get("built-in-wings", ""))
+            bays = int(values.get("fighter-bays", ""))
+        except ValueError:
+            refused.append(f"{finding.file}: wings/built-in-wings/fighter-bays evidence is not numeric")
+            continue
+        excess = wings_count + built_in - bays
+        if excess <= 0:
+            continue
+        path = root / finding.file
+        if not path.is_file():
+            refused.append(f"{finding.file}: file not found")
+            continue
+        if excess > wings_count:
+            refused.append(
+                f"{finding.file}: built-in wings alone ({built_in}) already exceed {bays} bay(s); "
+                "nothing in the variant's own wings list can fix this"
+            )
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        match = re.search(r'"wings"\s*:\s*\[', text)
+        if match is None:
+            refused.append(f"{finding.file}: no \"wings\" array found")
+            continue
+        open_pos = match.end() - 1
+        depths = _structural_depths(text)
+        close_pos = _matching_bracket(text, depths, open_pos)
+        if close_pos is None:
+            refused.append(f"{finding.file}: \"wings\" array has no matching ']'")
+            continue
+        literals = list(string_re.finditer(text, open_pos + 1, close_pos))
+        if len(literals) != wings_count:
+            refused.append(
+                f"{finding.file}: {len(literals)} wing entries found in the file but the scan saw {wings_count}; ambiguous, skipped"
+            )
+            continue
+        for literal in reversed(literals[wings_count - excess:]):
+            text = _remove_span_with_comma(text, literal.start(), literal.end())
+        changes.append(FileChange(path=path, before=raw, after=_encode(text, had_bom)))
+    if refused:
+        if not changes:
+            raise FixerError("No variant-wings-exceed-bays finding could be trimmed: " + "; ".join(refused))
+        options.setdefault("partial_refusals", []).append("Not trimmed (variant-wings-exceed-bays): " + "; ".join(refused))
+    return changes
+
+
+def _fix_variant_weapon_slot_removed(root: Path, options: dict, finding_id: str) -> list[FileChange]:
+    """Shared by variant-weapon-slot-mismatch and variant-weapon-slot-missing (owner ruling
+    2026-09-29): remove the one slot->weapon entry the finding names from its weapon group's
+    "weapons"; if that empties the group's own weapons, remove the whole group object from
+    "weaponGroups" too (rather than leave an empty group behind). Nothing else in the file changes.
+    Several findings against the same file are applied in turn, each against the file as the
+    previous one left it, so two bad weapons in the same group correctly empty (and remove) it.
+    """
+    by_file: dict[str, list] = {}
+    for finding in _findings_of(root, options, finding_id):
+        if finding.file:
+            by_file.setdefault(finding.file, []).append(finding)
+    changes: list[FileChange] = []
+    refused: list[str] = []
+    for relative in sorted(by_file):
+        findings = by_file[relative]
+        path = root / relative
+        if not path.is_file():
+            refused.append(f"{relative}: file not found")
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        for finding in findings:
+            values = {e.split(":", 1)[0]: e.split(":", 1)[1] for e in finding.evidence if ":" in e}
+            slot_id, weapon_id = values.get("slot"), values.get("weapon")
+            if not slot_id or not weapon_id:
+                refused.append(f"{relative}: {finding.id} evidence has no slot/weapon id")
+                continue
+            match = re.search(r'"' + re.escape(slot_id) + r'"\s*:\s*"' + re.escape(weapon_id) + r'"', text)
+            if match is None:
+                refused.append(f"{relative}: slot '{slot_id}' -> weapon '{weapon_id}' not found (already changed?)")
+                continue
+            depths = _structural_depths(text)
+            weapons_open = _enclosing_bracket(text, depths, match.start(), "{")
+            weapons_close = _matching_bracket(text, depths, weapons_open) if weapons_open is not None else None
+            if weapons_open is None or weapons_close is None:
+                refused.append(f"{relative}: could not locate the weapons object enclosing slot '{slot_id}'")
+                continue
+            remaining = len(_STRING_PAIR_RE.findall(text[weapons_open + 1:weapons_close]))
+            if remaining <= 1:
+                group_open = _enclosing_bracket(text, depths, weapons_open, "{")
+                group_close = _matching_bracket(text, depths, group_open) if group_open is not None else None
+                if group_open is None or group_close is None:
+                    refused.append(f"{relative}: could not locate the weapon group enclosing slot '{slot_id}'")
+                    continue
+                text = _remove_span_with_comma(text, group_open, group_close + 1)
+            else:
+                text = _remove_span_with_comma(text, match.start(), match.end())
+        changes.append(FileChange(path=path, before=raw, after=_encode(text, had_bom)))
+    if refused:
+        if not changes:
+            raise FixerError(f"No {finding_id} finding could be fixed: " + "; ".join(refused))
+        options.setdefault("partial_refusals", []).append(f"Not fixed ({finding_id}): " + "; ".join(refused))
+    return changes
+
+
 def _fix_variant_op_over_budget(root: Path, options: dict) -> list[FileChange]:
     """Trim an over-budget variant to its hull's ordnance points (owner ruling 2026-09-27: "trim to fit if
     possible, best estimate"). Order: flux capacitors, then flux vents (1 OP each, the least character-changing),
@@ -2200,11 +3628,96 @@ def _fix_csv_slash_quote_escape(root: Path, options: dict) -> list[FileChange]:
     return changes
 
 
+def _fix_campaign_lookup_guard(root: Path, options: dict, finding_id: str) -> list[FileChange]:
+    """Guard an unguarded `getStarSystem("X")` / `getEntityById("X")` in a void method: right after the declaration
+    that takes the result, `if (v == null) { log a warning; return; }`. Done by hand for Pegasus Belt Council,
+    Vayra's Sector and First Persean Empire (2026-09-29/30): a generator that assumes a vanilla system or entity
+    exists NPEs at New Game in a total conversion or random sector.
+
+    Applied only where the edit cannot change anything else: a one-line local declaration directly in a void
+    method's body (not in a loop, lambda or inner block), so the early return skips only the rest of that method,
+    which would have thrown on the null. Every other shape is refused and stays with an agent."""
+    from .scanner import _blank_java_comments
+
+    method = "getStarSystem" if finding_id == "hard-coded-campaign-system-reference" else "getEntityById"
+    names_by_file: dict[str, set[str]] = {}
+    for finding in _findings_of(root, options, finding_id):
+        if finding.file and finding.evidence and "null-guarded" not in finding.evidence and "created-in-same-file" not in finding.evidence:
+            names_by_file.setdefault(finding.file, set()).add(finding.evidence[0])
+    changes, refused = [], []
+    for relative, names in sorted(names_by_file.items()):
+        path = root / relative
+        # A jar's source tree is not what runs: an edit there changes nothing until the jar is rebuilt, so it is a jar
+        # packet for patch-jar-class (21 of 33 first-run edits were jar sources, 2026-09-30).
+        if not path.is_file() or path.suffix != ".java" or relative.replace("\\", "/").startswith(("src/", "jars/", "jar/")):  # any source under jars/ (Free Stars Union: jars/FSU_source_from_Procyon/)
+            refused.append(relative)
+            continue
+        raw = path.read_bytes()
+        text, had_bom = _decode(raw)
+        newline = "\r\n" if "\r\n" in text else "\n"
+        # Split the real and the comment-blanked text on the same boundaries: the blanker turns "\r" into a space, so
+        # on a CRLF file split(newline) gave the blanked text ONE line and the guard went in at line 1, inside a doc
+        # comment, once per revive round (Scy Nation's SCY_outposts, five times, 2026-09-30). Mixed endings: refuse.
+        if newline == "\r\n" and text.count("\n") != text.count("\r\n"):
+            refused.append(f"{relative} (mixed line endings)")
+            continue
+        lines = text.split(newline)
+        blank = _blank_java_comments(text.replace("\r\n", "\n")).split("\n")
+        if len(blank) != len(lines):
+            refused.append(f"{relative} (line split mismatch)")
+            continue
+        cls = re.search(r"\bclass\s+(\w+)", _blank_java_comments(text))
+        inserts: list[tuple[int, str]] = []
+        for name in sorted(names):
+            call = re.escape(method) + r'\s*\(\s*"' + re.escape(name) + r'"\s*\)'
+            hits = [i for i, line in enumerate(blank) if re.search(call, line)]
+            placed = False
+            for i in hits:
+                decl = re.match(r"^(\s*)(?:final\s+)?[\w.]+(?:<[\w.,\s<>?]*>)?\s+(\w+)\s*=\s*[^;]*" + call + r"\s*;\s*$", blank[i])
+                if not decl or cls is None:
+                    continue
+                # Brace depth from the enclosing method's opening brace must be exactly 1.
+                depth, start = 0, None
+                for j in range(i - 1, -1, -1):
+                    depth += blank[j].count("}") - blank[j].count("{")
+                    if depth < 0:
+                        start = j
+                        break
+                if start is None or depth != -1 or not re.search(r"\bvoid\s+\w+\s*\([^)]*\)\s*(?:throws[^{]*)?\{\s*$", blank[start]):
+                    continue
+                if "->" in blank[start]:
+                    continue
+                indent, variable = decl.group(1), decl.group(2)
+                if i + 1 < len(lines) and f"if ({variable} == null)" in lines[i + 1]:
+                    continue  # already guarded right here: never insert twice
+                what = "star system" if method == "getStarSystem" else "entity"
+                inserts.append((i + 1, newline.join([
+                    f"{indent}if ({variable} == null) {{ // BridgeForge: guard a missing {what} (a total conversion or random sector)",
+                    f'{indent}    com.fs.starfarer.api.Global.getLogger({cls.group(1)}.class).warn("{what} \\"{name}\\" not found, skipping the rest of this generator");',
+                    f"{indent}    return;",
+                    f"{indent}}}"])))
+                placed = True
+            if not placed:
+                refused.append(f"{relative} ({name})")
+        if inserts:
+            for index, block in sorted(inserts, reverse=True):
+                lines.insert(index, block)
+            changes.append(FileChange(path=path, before=raw, after=_encode(newline.join(lines), had_bom)))
+    if refused and not changes:
+        raise FixerError(f"{finding_id}: no lookup is a one-line declaration directly in a void method; left for an agent: " + ", ".join(refused))
+    return changes
+
+
 _FIXER_FUNCS = {
+    "hard-coded-campaign-system-reference": lambda root, options: _fix_campaign_lookup_guard(root, options, "hard-coded-campaign-system-reference"),
+    "hard-coded-campaign-entity-reference": lambda root, options: _fix_campaign_lookup_guard(root, options, "hard-coded-campaign-entity-reference"),
     "csv-slash-quote-escape": _fix_csv_slash_quote_escape,
     "procgen-mod-body-leak": _fix_procgen_mod_body_leak,
     "fleet-type-name-missing": _fix_fleet_type_name_missing,
     "variant-op-over-budget": _fix_variant_op_over_budget,
+    "variant-wings-exceed-bays": _fix_variant_wings_exceed_bays,
+    "variant-weapon-slot-mismatch": lambda root, options: _fix_variant_weapon_slot_removed(root, options, "variant-weapon-slot-mismatch"),
+    "variant-weapon-slot-missing": lambda root, options: _fix_variant_weapon_slot_removed(root, options, "variant-weapon-slot-missing"),
     "data-file-not-utf8": _fix_data_file_not_utf8,
     "shippable-work-file": _fix_shippable_work_file,
     "wing-role-assault-removed": _fix_wing_role_assault_removed,
@@ -2223,6 +3736,31 @@ _FIXER_FUNCS = {
     "undeclared-library-dependency": _fix_undeclared_library_dependency,
     "rules-firebest-populate-options": _fix_rules_firebest_populate_options,
     "personality-id-unknown": _fix_personality_id_unknown,
+    "hullmod-instance-state": _fix_hullmod_instance_state,
+    "runtime-placeholder-unsupported-operation": _fix_runtime_placeholder_hooks,
+    "hulk-death-effect-repeats": _fix_hulk_death_effect_repeats,
+    "black-hole-type-missing-flag": _fix_black_hole_type_missing_flag,
+    "nexerelin-corvus-mode-import": _fix_nexerelin_corvus_mode_import,
+    "spawned-ship-captain-personality-risk": _fix_spawned_ship_captain,
+    "json-missing-comma": _fix_json_missing_comma,
+    "builtin-wing-is-hullmod": _fix_builtin_wing_is_hullmod,
+    "wing-op-cost-blank": _fix_wing_op_cost_blank,
+    "campaign-lookup-dereferenced-unguarded": _fix_lookup_dereferenced_unguarded,
+    "temporary-market-fleet-source": _fix_temporary_market_fleet_source,
+    "person-names-duplicate-row": _fix_person_names_duplicate_row,
+    "json-duplicate-key": _fix_json_duplicate_key,
+    "dependency-version-major-mismatch": _fix_dependency_version_major_mismatch,
+    "conversion-faction-names-removed-hull": _fix_conversion_faction_names_removed_hull,
+    "conversion-faction-names-missing-content": _fix_conversion_faction_names_missing_content,
+    "conversion-vanilla-lifecycle-plugin": _fix_conversion_vanilla_lifecycle_plugin,
+    "factions-csv-relists-neutral": _fix_factions_csv_relists_neutral,
+    "vanilla-path-shadowing": _fix_vanilla_path_shadowing,
+    "ship-data-supplies-legacy-column": _fix_ship_data_supplies_legacy_column,
+    "rules-csv-duplicate-id": _fix_rules_csv_duplicate_id,
+    "rules-csv-whitespace-only-line": _fix_rules_csv_whitespace_only_line,
+    "rules-csv-curly-quote-unreadable": _fix_rules_csv_curly_quote_unreadable,
+    "csv-vanilla-row-override": _fix_csv_vanilla_row_override,
+    "rc8-signature-changed": _fix_rc8_signature_changed,
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
     "shiproles-wing-id": _fix_shiproles_wing_id,
     "csv-fullwidth-number": _fix_csv_fullwidth_number,
@@ -2240,7 +3778,11 @@ def compute_fix(mod_dir: Path, finding_id: str, options: dict | None = None) -> 
         raise FixerError(f"{root} is not an existing directory.")
     options = options or {}
     handler = _FIXER_FUNCS[finding_id]
-    changes = [change for change in handler(root, options) if change.changed]
+    try:
+        changes = [change for change in handler(root, options) if change.changed]
+    except UnicodeDecodeError as exc:
+        # _decode is strict on purpose: a lossy read would write U+FFFD back (seen in Molecular Replicator, 2026-10-04).
+        raise FixerError(f"A file this fix reads is not valid UTF-8 ({exc.reason} at byte {exc.start}); run the data-file-not-utf8 fix first.") from exc
     if not changes:
         raise FixerError(f"No change was computed for finding '{finding_id}'.")
     if not options.get("allow_shadowed_edit"):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sys
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -49,6 +50,7 @@ KNOWN_NOISE = (
     ("Nexerelin quest-skip JSON", re.compile(r"QuestChainSkipEntry"), "Nexerelin quest-skip list JSON parse hiccup; known non-fatal first-run/format issue."),
     ("Nexerelin first-run setup", re.compile(r"ExerelinSetupData"), "Nexerelin first-run setup-data initialization notice; non-fatal."),
     ("MagicLib subsystemInfoKey", re.compile(r"subsystemInfoKey"), "MagicLib subsystem settings key type warning; falls back to a default, non-fatal."),
+    ("Fast Rendering BaseSpawnPoint plugin", re.compile(re.escape("Error while initializing plugin [data.scripts.world.BaseSpawnPoint]")), "Logged by the script store at every Fast Rendering start, for any mod set and on Java 25 and 28 (found in 187 mass-test logs of unrelated mods, 2026-10-11; never at java 25 without FR); vanilla's abstract BaseSpawnPoint is not a plugin, the main menu and campaign are unaffected."),
     ("Vanilla lightmortar_fighter row", re.compile(r"Weapon \[lightmortar_fighter\] from weapon_data\.csv not found in store"), "RC8's own weapon_data.csv keeps a '#'-named Light Mortar (Fighter) row with no .wpn file; logged every run, no effect."),
 )
 
@@ -272,6 +274,17 @@ def class_owner_index(mods_dir: Path, enabled_only: bool = True) -> dict[str, st
                 segments = fqn.split(".")
                 if len(segments) > 1:
                     package_owners.setdefault(".".join(segments[:-1]), set()).add(mod_id)
+        # Loose scripts the game compiles at load (ROADMAP 53): a crash in data/scripts/... named no mod, because
+        # only jar classes were indexed (the EPTA report's data.scripts.combat.hydrofoil class, 2026-10-04).
+        # Exact class names only: the shared data.* packages never feed the package fallback.
+        for source in child.glob("data/**/*.java"):
+            try:
+                head = source.read_text(encoding="utf-8", errors="replace")[:4000]
+            except OSError:
+                continue
+            package = re.search(r"^\s*package\s+([\w.]+)\s*;", head, re.M)
+            if package:
+                index.setdefault(f"{package.group(1)}.{source.stem}", mod_id)
     # Package fallback (for classes a rebuilt jar renamed or a log from another build): only the
     # class's own immediate package, only when exactly one mod uses it, and never the loose-script
     # `data.*` packages (data.scripts, data.hullmods, data.shipsystems...) that nearly every old mod
@@ -346,6 +359,49 @@ def _summarize_attribution(entries: list[dict[str, object]]) -> dict[str, object
     }
 
 
+_EXCEPTION_HEAD_RE = re.compile(r"^\s*(?P<cls>(?:[\w$]+\.)+[\w$]*(?:Exception|Error))\b:?\s*(?P<msg>.*)$")
+
+
+def _caught_exceptions(events: list[_Event], categories: list[str], owner_index: dict[str, str] | None) -> dict[str, object]:
+    """Group the logged-but-survived exceptions (ROADMAP item 4 of the 2026-10-06 ideas).
+
+    A game that logs an ERROR with a stack trace and carries on never shows in a crash check: Nexerelin's
+    `StrategicAI` logged a NullPointerException from `RaidIntel.getETA` every time it planned a raid on a market with no
+    star system. Events classified FATAL or KNOWN-NOISE are left to their own sections. The rest are grouped by
+    (exception class, first stack frame) so a repeating error is one line with a count, not hundreds. The owning mod of the
+    nearest mod frame is given when `owner_index` is known; the mod whose DATA caused the exception is often not on the
+    stack at all, so `suspect` is where the code threw, not necessarily the cause.
+    """
+    groups: dict[tuple[str, str], dict[str, object]] = {}
+    for event, category in zip(events, categories):
+        if category in ("FATAL", "KNOWN-NOISE"):
+            continue
+        exception_line = None
+        for line in (*event.frames[:2], event.head_message):
+            if _EXCEPTION_HEAD_RE.match(line):
+                exception_line = line
+                break
+        if exception_line is None:
+            continue
+        match = _EXCEPTION_HEAD_RE.match(exception_line)
+        first_frame = next((line.strip() for line in event.frames if _STACK_FRAME_RE.match(line)), "")
+        key = (match.group("cls"), first_frame)
+        group = groups.get(key)
+        if group is None:
+            group = {
+                "exception": match.group("cls"), "message": match.group("msg")[:200], "first_frame": first_frame,
+                "logger": event.logger, "context": event.head_message[:200], "count": 0,
+                "first_line": event.line_no, "last_line": event.line_no,
+            }
+            if owner_index is not None:
+                group.update({k: v for k, v in _attribute_event(event, owner_index).items() if k in ("suspect", "involved")})
+            groups[key] = group
+        group["count"] += 1
+        group["last_line"] = event.line_no
+    ordered = sorted(groups.values(), key=lambda g: (-g["count"], g["first_line"]))
+    return {"total_events": sum(g["count"] for g in ordered), "distinct": len(ordered), "groups": ordered}
+
+
 # A Fatal dialog never reaches the redirected log (PRB-CID-FAIL-20260927: "Fatal: Weapon spec
 # [ART_dimention_leftGun_BFTYPO] not found!" appeared only on screen and triage said FATAL=0). bf-test.ps1's
 # window watcher writes each dialog's text to <TESTID>.windows.txt as "HH:mm:ss dialog: '<title>' text: '<text>'".
@@ -378,6 +434,59 @@ def _dialog_fatals(windows_log: Path) -> list[dict[str, object]]:
 SESSION_START = "StarfarerLauncher  - Starting Starsector"
 
 
+def _rig_fingerprint(mods_dir: Path) -> dict[str, object]:
+    """What the triaged run ran on (ROADMAP 36.10): the enabled mods with their versions, and the SHA-256 of the
+    recorded core baseline file (None when no baseline was recorded), so a pasted result describes itself."""
+    import hashlib
+    import json as _json
+
+    from .rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
+
+    enabled = _enabled_mod_ids(mods_dir) or set()
+    versions = {}
+    for child in sorted(p for p in mods_dir.iterdir() if p.is_dir()) if mods_dir.is_dir() else []:
+        try:
+            info = _json.loads((child / "mod_info.json").read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(info, dict) and info.get("id") in enabled:
+            versions[str(info["id"])] = str(info.get("version") or "")
+    baseline = _repo_root() / DEFAULT_CORE_BASELINE_RELATIVE
+    core = hashlib.sha256(baseline.read_bytes()).hexdigest() if baseline.is_file() else None
+    return {"enabled_mods": dict(sorted(versions.items())), "core_baseline_sha256": core}
+
+
+def _jvm_crashes_beside(log: Path, owner_index: dict[str, str] | None) -> list[dict[str, object]]:
+    """hs_err logs in the log's folder (the JVM's working directory, starsector-core for a game launch; ROADMAP
+    35.10). One written after the log was started is a FATAL of this session; older ones are listed, not counted."""
+    from .crash_log import attribute_frames, find_crash_logs, parse_crash_log
+
+    try:
+        info = log.stat()
+    except OSError:
+        return []
+    # When the log file was created: st_birthtime where the OS keeps it, st_ctime on Windows. Without either a
+    # crash is listed but never counted as this session's.
+    started = getattr(info, "st_birthtime", None) or (info.st_ctime if sys.platform == "win32" else None)
+    crashes = []
+    for crash_path in find_crash_logs(log.parent):
+        crash = parse_crash_log(crash_path)
+        try:
+            written = crash_path.stat().st_mtime
+        except OSError:
+            continue
+        entry: dict[str, object] = {
+            "kind": "jvm-crash", "matched_rule": "JVM crash (hs_err)", "source": crash_path.name, "file": crash_path.name, "message": "; ".join(crash.get("problem_summary") or [])[:400],
+            # Without a creation time, a crash ends the session: its file and the log's last write land together.
+            "during_this_log": (written >= started) if started is not None else abs(written - info.st_mtime) <= 300, "command_line": crash.get("command_line"),
+            "time": crash.get("crash_time_raw"), "java_frames": (crash.get("java_frames") or [])[:20],
+        }
+        if owner_index is not None:
+            entry.update(attribute_frames(crash, owner_index))
+        crashes.append(entry)
+    return crashes
+
+
 def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: Path | None = None, all_mods: bool = False,
                last_sessions: int | None = None) -> dict[str, object]:
     """Classify a Starsector log into FATAL / MOD-ERROR / KNOWN-NOISE / OTHER without modifying it.
@@ -402,9 +511,11 @@ def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: 
         lines = lines[first:]
     events, milestones, shadow_symptoms, probe_entries = _iter_events_and_milestones(lines)
     classified: dict[str, list[dict[str, object]]] = {"FATAL": [], "MOD-ERROR": [], "KNOWN-NOISE": [], "OTHER": []}
+    event_categories: list[str] = []
     for event in events:
         outcome = _classify_event(event, prefixes)
         category = outcome.pop("category")
+        event_categories.append(category)
         entry: dict[str, object] = {"line": event.line_no, "level": event.level, "logger": event.logger, "message": event.head_message}
         entry.update(outcome)
         if category in ("FATAL", "MOD-ERROR"):
@@ -415,6 +526,8 @@ def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: 
     windows_log = _windows_log_for(path)
     if windows_log is not None:
         classified["FATAL"].extend(_dialog_fatals(windows_log))
+    jvm_crashes = _jvm_crashes_beside(path, owner_index)
+    classified["FATAL"].extend(crash for crash in jvm_crashes if crash["during_this_log"])
     result = {
         "schema_version": 1,
         "mode": "READ_ONLY_LOG_TRIAGE",
@@ -425,13 +538,16 @@ def triage_log(log_path: Path, mod_prefixes: list[str] | None = None, mods_dir: 
         "mod_errors": classified["MOD-ERROR"],
         "known_noise": classified["KNOWN-NOISE"],
         "other": classified["OTHER"],
+        "caught_exceptions": _caught_exceptions(events, event_categories, owner_index),
         "milestones": milestones,
         "vanilla_shadowing_symptoms": shadow_symptoms,
         "probe": _summarize_probe(probe_entries),
+        "jvm_crash_logs": jvm_crashes,
         "caveat": FATAL_ABSENCE_CAVEAT,
     }
     if owner_index is not None:
         result["mods_dir"] = str(Path(mods_dir).expanduser().resolve())
+        result["rig_fingerprint"] = _rig_fingerprint(Path(mods_dir))
         result["attribution"] = _summarize_attribution(classified["FATAL"] + classified["MOD-ERROR"] + classified["OTHER"])
     if sessions is not None:
         result["sessions"] = sessions  # line numbers count from sessions["first_line"]

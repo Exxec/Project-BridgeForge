@@ -105,7 +105,7 @@ def _result(status: str, reason: str | None, log: Path | None = None, errlog: Pa
     }
 
 
-def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_name: str | None = None, keep_mods: bool = False) -> dict:
+def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_name: str | None = None, keep_mods: bool = False, bat_name: str | None = None, auto_click: bool = False) -> dict:
     """Launch an isolated Starsector runtime rig headlessly and watch its log for a boot milestone.
 
     NEVER call this against a real/shared install: runtime_dir must be a disposable rig whose
@@ -132,7 +132,7 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
             "a new boot test; two overlapping runs would corrupt the shared log/mods rig.",
         )
 
-    bat_path = runtime_dir / BAT_NAME
+    bat_path = runtime_dir / (bat_name or BAT_NAME)
     if not bat_path.is_file():
         return _result("REFUSED", f"Launcher not found: {bat_path}")
 
@@ -173,6 +173,13 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
     err_path = logs_dir / f"{name}.stderr.log"
 
     command_line = f'cmd.exe /c ""{bat_path}" > "{log_path}" 2> "{err_path}""'
+    prefs = None
+    if auto_click:
+        # An unattended boot goes through the launcher: pin its resolution and give the owner's own back afterwards (rig_prefs).
+        from .rig_prefs import pinned_launcher_prefs
+
+        prefs = pinned_launcher_prefs()
+        prefs.__enter__()
     started = time.monotonic()
     try:
         # Passed as a raw command-line string (not a list): on Windows, subprocess uses a string
@@ -182,13 +189,23 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
         process = subprocess.Popen(command_line, cwd=str(runtime_dir))
     except OSError as exc:
         restored = _restore(keep_mods)
+        if prefs is not None:
+            prefs.__exit__(None, None, None)
         return _result("FAIL", f"Failed to launch {bat_path}: {exc}", log_path, err_path, 0.0, None, restored)
 
     status = "FAIL"
     reason: str | None = None
+    click_note: str | None = None
+    next_click_try = 2.0
     try:
         while True:
             elapsed = time.monotonic() - started
+            if auto_click and click_note is None and elapsed >= next_click_try:
+                # The launcher window waits for a click (owner, 2026-10-11); see launcher_click.
+                next_click_try = elapsed + 3.0
+                from .launcher_click import click_launcher_once, descendant_pids
+                pids = {item.get("pid") for item in _running_java_under(runtime_dir) if isinstance(item.get("pid"), int)}
+                click_note = click_launcher_once(pids | descendant_pids(process.pid))
             marker_found = False
             if log_path.is_file():
                 try:
@@ -234,8 +251,12 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
             triage_summary = None
 
     restored = _restore(keep_mods)
+    if prefs is not None:
+        prefs.__exit__(None, None, None)
 
-    return _result(status, reason, log_path, err_path, elapsed, triage_summary, restored)
+    outcome = _result(status, reason, log_path, err_path, elapsed, triage_summary, restored)
+    outcome["launcher_click"] = click_note
+    return outcome
 
 
 def _find_mod_id(runtime_dir: Path, mod_id: str) -> dict | None:

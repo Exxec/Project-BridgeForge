@@ -175,3 +175,27 @@ class ProbeConfigRigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProbeSweepConfigTests(unittest.TestCase):
+    def test_mission_fleets_and_class_sweep_are_listed(self) -> None:
+        # ROADMAP 46 (probe 0.2.12): what the missions name, and the loaded jar's top-level classes.
+        import zipfile
+
+        from bridgeforge.probe_config import build_probe_config
+
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "mod"
+            (mod / "data" / "missions" / "m").mkdir(parents=True)
+            (mod / "jars").mkdir()
+            (mod / "mod_info.json").write_text('{"id": "fx", "jars": ["jars/fx.jar"]}', encoding="utf-8")
+            (mod / "data" / "missions" / "m" / "MissionDefinition.java").write_text(
+                'class M { void d(MissionDefinitionAPI api) {\n'
+                ' api.addToFleet(FleetSide.PLAYER, "never_shipped_variant", FleetMemberType.SHIP, true);\n'
+                ' api.addToFleet(FleetSide.ENEMY, "fx_wing", FleetMemberType.FIGHTER_WING, false); } }', encoding="utf-8")
+            with zipfile.ZipFile(mod / "jars" / "fx.jar", "w") as z:
+                z.writestr("data/scripts/A.class", b"")
+                z.writestr("data/scripts/A$1.class", b"")
+            config = build_probe_config(mod)
+        self.assertEqual(config["mission_fleets"], {"ship": ["never_shipped_variant"], "wing": ["fx_wing"]})
+        self.assertEqual(config["class_sweep"], ["data.scripts.A"])

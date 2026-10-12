@@ -45,10 +45,16 @@ def _find_mod_root(path: Path) -> Path:
 
 def _collect(root: Path) -> dict[str, Path]:
     files: dict[str, Path] = {}
-    extra = sorted(child.name for child in root.iterdir() if child.is_dir() and child.name not in INCLUDED_DIRS
+    # Folder names are matched case-insensitively and walked under their on-disk spelling: on Windows root/"data"
+    # also opens a "Data" folder, which the extra list then walked a second time, so Faction Relationships
+    # Uniquified's rules.csv was listed (and zipped) as both Data/ and data/ (2026-10-04).
+    on_disk = {child.name.lower(): child.name for child in root.iterdir() if child.is_dir()}
+    included_lower = {name.lower() for name in INCLUDED_DIRS}
+    included = [on_disk.get(name.lower(), name) for name in INCLUDED_DIRS]
+    extra = sorted(child.name for child in root.iterdir() if child.is_dir() and child.name.lower() not in included_lower
                    and not child.name.startswith(".") and child.name.lower() not in EXCLUDED_TOP_DIRS
                    and not any(fnmatch.fnmatch(child.name, pattern) for pattern in EXCLUDE_DIR_NAME_GLOBS))
-    for name in (*INCLUDED_DIRS, *extra):
+    for name in (*included, *extra):
         base = root / name
         if not base.is_dir():
             continue

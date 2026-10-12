@@ -65,7 +65,7 @@ class FindingStatsTests(unittest.TestCase):
     def _queue(self, root: Path) -> Path:
         queue = root / "In operation"
         _workspace(queue, "DataOnly", ["json-hash-comment", "mod-info-game-version-inexact"])        # auto
-        _workspace(queue, "Almost", ["removed-api-call", "black-hole-type-missing-flag"])            # mechanical
+        _workspace(queue, "Almost", ["removed-api-call", "json-empty-array-element"])            # mechanical
         _workspace(queue, "OneDecision", ["content-reference-unresolved", "json-hash-comment"])      # decision
         java = _workspace(queue, "Java", ["loose-script-compile-error", "legacy-vanilla-class-import"])  # code
         _workspace(queue, "Odd", ["brand-new-check"])
@@ -88,7 +88,7 @@ class FindingStatsTests(unittest.TestCase):
         self.assertEqual(stats["unscanned"][0]["workspace"], "Unscanned")
         self.assertEqual(stats["unclassified_ids"], ["brand-new-check"])
         unlocks = {row["id"]: row["unlocks"] for row in stats["by_finding"]}
-        self.assertEqual(unlocks["black-hole-type-missing-flag"], 1)   # the only thing between Almost and unattended
+        self.assertEqual(unlocks["json-empty-array-element"], 1)   # the only thing between Almost and unattended
         self.assertEqual(unlocks["content-reference-unresolved"], 1)
         self.assertEqual(unlocks["loose-script-compile-error"], 0)     # Java has two blockers
         self.assertNotIn("json-hash-comment", unlocks)                  # tier none is not listed

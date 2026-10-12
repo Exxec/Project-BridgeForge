@@ -18,6 +18,80 @@ Updated 2026-09-27 after the first local pass (ROADMAP P15 item 13): P1, R2, G4 
 tooling entries are done and removed; G2's content expectation and R2's BDS command were wrong.
 Every long command now prints `[n/total]` progress and resumes if interrupted (P15 item 12).
 
+## 0. Resume here: where the 2026-10-11 session stopped
+
+**State.** `probe-group plan` lists nothing left; `Done/` holds 149 archives (`Done/MASTER_LOG.md`, regenerated 2026-10-11).
+Archived or re-archived on 2026-10-11: Combat-Misc-Utils 0.4.1, Neutrino Corporation 1.8.9 (upstream line, intaken from
+`Neutrino corp older.zip`), Neutrino Corporation: Nostalgia Edition 1.87-RC3, Seeker 0.3.0-0.98a+bf.5 (wreck death-effect fix,
+RC8-27), Yellowjackets 0.1, Fast Engine Rendering 1.1.2+bf.1. Ironclads was re-run on Java 28 with Fast Rendering (PASS,
+GRP10Y3-20261011). Old top-level zips of refreshed archives are in `Done/_replaced-2026-10-11/` (not deleted). The owner's
+`.gitignore` edit and the untracked folders (`.goal-transfer/`, `everything-claude-code/`, `ac8-save-editor-research/`, ...)
+are deliberately not committed. Probe is 0.2.23.
+
+**Unattended tools (2026-10-11):** `probe-group smoke` (boot to the menu, launcher clicked), `probe-group live TESTID` (whole live
+run with real clicks; leave the PC alone), `probe-group duel TESTID` (rig-only duel missions with a frame/timer meter),
+`probe-group plan --retest WORKSPACE`. Known weakness: menu and mission-list clicks are fixed fractions of the window (ROADMAP 65k).
+
+**Open (owner decisions are marked):**
+1. Owner: the review items (Ironclads' replaced vanilla faction files, character-point conversion and removed vanilla worlds;
+   Hiver Swarm's dropped Nexerelin lines; Magellan's accepted `magellan_startigers`; Zorg18's and yunrucore's accepted findings)
+   were checked on 2026-10-11 with the recommendation to keep them as they are; the owner asked for no change but has not
+   explicitly approved each one.
+2. The raw folder `In operation/Neutrino corp older` was deleted on 2026-10-11 at the owner's go-ahead: its files are identical to
+   `Neutrino-Corporation-1.8.9/original/extracted/` (only git's index stat differed) and `Neutrino corp older.zip` stays in Downloads.
+3. Gated roadmap items 39 and 45 are unchanged.
+
+**How a live run works.** Close Starsector first, then from the repo root:
+```powershell
+python -m bridgeforge probe-group plan --no-auto-solo [--solo <Workspace>]   # writes In operation\PROBE_GROUPS.json
+python -m bridgeforge probe-group install 1 --stage-providers
+Set-ExecutionPolicy -Scope Process Bypass; .\tools\bf-test.ps1 launch GRP<N><letter>-<yyyymmdd>   # blocks until the game closes
+python -m bridgeforge probe-group report "In operation\_rig\logs\<TESTID>.stdout.log"
+python -m bridgeforge probe-group record <TESTID> --archive
+```
+A person must play: New Game, a career all the way through, one in-game day, the combat mission to its last round, quit.
+A launch that dies at startup ends by itself in seconds (read `<TESTID>.triage.txt` and `<TESTID>.windows.txt`). `record`
+reads the probe config the last `install` wrote, so record before installing the next group. If the audit blocks an archive,
+`bridgeforge audit-shipped "In operation\<Ws>"` lists each UNEXPLAINED difference; explain with `audit-explain <Ws> <files>
+--reason "<evidence>"` (`--auto` first). Recording writes `MOD_CHANGELOG.md` and `bridgeforge/release_policy.json`: do not run
+the test suite while it does (hermeticity check), then commit them.
+
+**Traps found this session.**
+- **A live launch waits for a click.** `bf-test.ps1 launch` starts the game's launcher window; nothing runs, and no log is
+  written, until the owner clicks "Play Starsector" there (owner, 2026-10-11). A launch that "never started" (GRP1A-20261010,
+  stopped by hand) was this. Since 2026-10-11 `bf-test.ps1 launch` clicks it itself: it finds the launcher window, posts
+  mouse messages at (50%, 68%) of the window, and falls back to a real cursor click 8 s later if the log still lacks "Running
+  with the following mods" (proven on CLICKTEST-20261011: main menu reached with no manual click; the log is in
+  `<id>.windows.txt`). `BF_NO_AUTOCLICK=1` turns it off. `probe-group live TESTID` (after `install N`) plays the whole live run unattended with real clicks (leave the mouse and keyboard alone for about five minutes; then `probe-group report` and `record --archive` on that log). `probe-group smoke` (after `install N`) does the same click from Python and boots to the main menu in about 12 s: run it before asking anyone to play. The mass boot test (`java-matrix`) starts java directly on fresh instance rigs and needs no click.
+- `git commit`'s hook runs `python -m ruff`; the project `.venv` Python has no ruff. Put
+  `C:\Users\exxec\AppData\Local\Python\pythoncore-3.14-64` first on `PATH` for the commit.
+- Workspaces get locked to non-admin sessions (twice: `Done\` zips and 14 workspaces; cause unknown). If `probe-group plan` says
+  "Access is denied", run `tools\unlock-workspaces.ps1 -Apply` from an Administrator PowerShell (dry run without `-Apply`).
+- A mod that already has an archive in `Done/` collides on `record --archive`: move the old folder to
+  `Done\_replaced-<date>\` (never delete an archive without the owner's word), then record again.
+- Edit code with the Write/Edit tools: `\n`, `\\` and `\"` inside shell heredoc Python are unescaped and corrupted files again
+  and again. Run `python -m bridgeforge docs-index` after adding a check, and do not edit tracked files while the suite runs.
+- Provider sources: `probe-group plan` with `--provider-source` set to the real install stages MagicLib 1.5.6 over the rig's 1.5.7
+  and the installer refuses; use the default sources.
+
+## 0a. Java/launcher matrix: first live use (ROADMAP item 61)
+
+Set up 2026-10-09, not yet run. Do this when live testing resumes:
+
+1. `python -m bridgeforge java-matrix discover --rig "In operation/_rig"` (found here: Java 8 jre, 25, 27, 28; **no Java 17**: add one with `--jdk-root`).
+2. `python -m bridgeforge java-matrix setup "In operation/_rig"` writes `run-j25-direct.bat`, `run-j25-fr.bat`, ... (Java 8 is skipped unless `--java 8`).
+3. Check the `fr` bats by hand once: the rig's `starsector-core` junction must expose `fr.vmparams` (and `PatchLibAgent.jar` if used); confirm the log lands in `_rig/logs`, not the real install.
+4. `python -m bridgeforge java-matrix run "In operation/_rig" --mods <ids> --repeats 3` in the background; read its progress lines. "Done" = a pass-rate table per variant. If Java 28 + `fr` fails and `direct` passes, Fast Rendering is the cause; add a row to `docs/RC8_BEHAVIOUR.md`.
+5. For a tester's report: `java-matrix describe-log <their starsector.log>` shows their Java and whether Fast Rendering was loaded.
+
+Parallel (owner 2026-10-09, max 3): `java-matrix run RIG --mods <ids> --preset compare` boots vanilla (Java 25), FR, Java 28 and FR + Java 28, three at once, each in `RIG/instances/<variant>/` (linked mods and core, own logs/saves). `java-matrix instances RIG` shows state. Serial (`--parallel 1`) stays the reference: parallel load changes timing, which matters for a race. `--skip-known` reuses a recorded all-pass (`bridgeforge-state/java-matrix-ledger.json`) for the same variant, Java build and mod set, so only new mods boot everywhere. Check RAM (about 4 GB each) before the first parallel run.
+
+Mass test (item 62): `python -m bridgeforge java-matrix mass "In operation/_rig" --only Ironclads` first (one mod, see the table), then `--limit 20`, then the whole archive in the background. Read `bridgeforge-state/mass-test/MASS_TEST.md`; logs are kept under `bridgeforge-state/mass-test/logs/<mod>/`. Check `dropped_flags` in the JSON: a JDK that refuses a flag is itself an environment difference (JDK 28+13 refuses `-noverify` and `-XX:+UseVectorStubs`). Prepatcher is not in the matrix yet (item 63 step 1).
+
+Optimised mass run (item 62 addendum, 32 GB): `java-matrix mass "In operation/_rig" --preset compare --bundle 4` (vanilla, FR, Java 28, FR + Java 28, three at a time, 4 GB each, bundles of up to 4 unrelated mods). Your real launch: `--preset real` (Miko_Simple.txt copy on Java 28 with and without Prepatcher). Pass Prepatcher in `--mods` when testing the AoTD stack. Reports mark `bundle_conflict` and `dropped_flags`.
+
+Known limit: the stale-process check only sees java.exe under the rig, and these JDKs live outside it; the run kills the launcher's process tree on timeout.
+
 ## 1. Measure and try the unattended pipeline (ROADMAP P15)
 
 ### P2. First real `revive` and agent run (P15 items 2-3, 8-9)

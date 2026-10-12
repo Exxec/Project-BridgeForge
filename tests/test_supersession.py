@@ -72,5 +72,45 @@ class SupersessionTests(unittest.TestCase):
         verdicts = {m["workspace"]: m["verdict"] for m in result["mods"]}
         self.assertEqual(verdicts, {"Pack": "SUPERSEDED", "Void": "NO_MATCH"})
 
+
+class NameMatchTests(unittest.TestCase):
+    def test_a_098_release_under_a_new_id_supersedes_by_name(self) -> None:
+        # Dassault-Mikoyan Engineering (2026-10-01): istl_dam 1.18a queued, istl_dassaultmikoyan 1.9f on 0.98a installed.
+        from bridgeforge.supersession import judge
+        with resolved_temp_dir() as root:
+            ws = root / "DME"
+            (ws / "working").mkdir(parents=True)
+            (ws / "working" / "mod_info.json").write_text('{"id":"istl_dam","name":"Dassault-Mikoyan Engineering","version":"1.18a","gameVersion":"0.9.1a"}', encoding="utf-8")
+            index = {"istl_dassaultmikoyan": [{"path": str(root / "mods" / "DME"), "name": "Dassault-Mikoyan Engineering dev",
+                                               "version": "1.9fHijacked", "game_version": "0.98a-RC5"}]}
+            record = judge(ws, index)
+        self.assertEqual((record["verdict"], record["matched_by"]), ("SUPERSEDED", "name"))
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+def _ships(folder: Path, ids: list[str]) -> None:
+    (folder / "data" / "hulls").mkdir(parents=True, exist_ok=True)
+    (folder / "data" / "hulls" / "ship_data.csv").write_text("name,id\n" + "".join(f"S,{i}\n" for i in ids), encoding="utf-8")
+
+
+class ContentOverlapTests(unittest.TestCase):
+    # ROADMAP 34.10 (2026-10-04): SEEKER 0.2 shares 5 of 37 ships with SEEKER 0.6.6 and was closed as superseded.
+    def test_a_newer_copy_with_little_of_our_content_is_newer_different(self) -> None:
+        with resolved_temp_dir() as root:
+            queue, ref = root / "q", root / "ref"
+            _workspace(queue, "Seeker", "seeker", "0.2")
+            _ships(queue / "Seeker" / "original" / "Seeker", [f"art_{n}" for n in range(10)])
+            _mod(ref / "Seeker066", "seeker", "0.6.6", "0.98a-RC8")
+            _ships(ref / "Seeker066", ["art_0", "art_1", "new_a", "new_b"])
+            _workspace(queue, "Kept", "kept", "1.0")
+            _ships(queue / "Kept" / "original" / "Kept", ["k_a", "k_b"])
+            _mod(ref / "Kept2", "kept", "2.0", "0.98a-RC8")
+            _ships(ref / "Kept2", ["k_a", "k_b", "k_c"])
+            result = find_superseded(queue, [ref], quiet=True)
+        by = {r["workspace"]: r for r in result["mods"]}
+        self.assertEqual(by["Seeker"]["verdict"], "NEWER_DIFFERENT")
+        self.assertEqual(by["Seeker"]["content_overlap"], {"ours": 10, "shared": 2, "share": 0.2})
+        self.assertEqual(by["Kept"]["verdict"], "SUPERSEDED")

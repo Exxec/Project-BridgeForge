@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "mode": "TRANSLATION_APPLY",
+  "status": "OK",
+  "target": "expected-output",
+  "entries": 18,
+  "applied": {
+    "json": 8,
+    "csv": 8,
+    "java": 1,
+    "jar": 1
+  },
+  "problems": [],
+  "format_slots_reindexed": [],
+  "leftover_cjk_units": 0
+}

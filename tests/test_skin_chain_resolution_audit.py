@@ -13,6 +13,7 @@ SCANNER_PATH = Path(__file__).resolve().parent.parent / "bridgeforge" / "scanner
 # ids, so there is nothing to chase.
 EXEMPT_SKIN_CHAIN_RESOLUTION = {
     "_scan_carrier_bays_proposal": "iterates ship_data.csv's own base-hull rows, never skin ids",
+    "carrier_bays_without_evidence": "iterates ship_data.csv's own base-hull rows, never skin ids (same inputs as _scan_carrier_bays_proposal)",
     "_scan_description_missing": "iterates ship_data.csv's own base-hull rows, never skin ids",
 }
 

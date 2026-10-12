@@ -32,6 +32,27 @@ class CheckpointTests(unittest.TestCase):
             nothing.add("x", {})
             nothing.finish()
 
+    def test_a_grown_item_list_resumes_and_a_shrunk_one_restarts(self):
+        # ROADMAP 49: the 2026-10-04 queue pass restarted from 0 because two workspaces had been added.
+        with resolved_temp_dir() as root:
+            path = root / "run.partial.jsonl"
+            with Checkpoint(path, {"queue": "q", "workspaces": ["A", "B"]}) as saved:
+                saved.add("A", {"n": 1})
+            grown = Checkpoint(path, {"queue": "q", "workspaces": ["A", "B", "C"]})
+            self.assertEqual(grown.get("A"), {"n": 1})
+            grown.add("C", {"n": 3})
+            grown.close()
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8").splitlines()[0])["workspaces"], ["A", "B", "C"])
+            again = Checkpoint(path, {"queue": "q", "workspaces": ["A", "B", "C"]})
+            self.assertEqual((again.get("A"), again.get("C")), ({"n": 1}, {"n": 3}))
+            again.close()
+            shrunk = Checkpoint(path, {"queue": "q", "workspaces": ["A"]})  # B dropped: different inputs
+            self.assertIsNone(shrunk.get("A"))
+            shrunk.close()
+            other = Checkpoint(path, {"queue": "other", "workspaces": ["A"]})
+            self.assertIsNone(other.get("A"))
+            other.finish()
+
     def test_report_format(self):
         err = io.StringIO()
         with redirect_stderr(err):

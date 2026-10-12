@@ -29,6 +29,8 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 from .automation import ACTIONABLE, tier_for
@@ -47,6 +49,14 @@ def packets_dir(workspace: Path) -> Path:
 
 def list_packets(workspace: Path) -> list[dict]:
     return [json.loads(path.read_text(encoding="utf-8")) for path in sorted(packets_dir(workspace).glob("*.json"))]
+
+
+def jar_only(packet: dict) -> bool:
+    """True when every file a packet may change is a jar entry ("x.jar!path/Cls.class"). An agent sandbox has no jar,
+    javap or python, so such a packet cannot be fixed there (Fast Engine Rendering, Magellan Protectorate,
+    2026-09-30); it is fixed in the main session by recompiling one class against RC8 and swapping it in."""
+    files = packet.get("allowed_files") or []
+    return bool(files) and all("!" in name for name in files)
 
 
 def load_packet(workspace: Path, packet: str) -> dict:
@@ -72,20 +82,31 @@ def changed_files(before: Path, after: Path) -> list[str]:
 def verify(packet: dict, working: Path) -> dict:
     """Did the packet's finding go away, without new actionable findings? Scans `working` afresh."""
     vanilla = Path(packet["vanilla_core"]) if packet.get("vanilla_core") else None
-    findings = _scan(working, vanilla)
+    from .revive import _informational
+
+    # A SAFE finding no fixer handles is a note, not work: a correct fix (a null guard) turns a REVIEW finding
+    # SAFE, and it must count as fixed (Vayra's Sector, 2026-09-30: guarded getEntityById lookups "remained").
+    findings = [f for f in _scan(working, vanilla) if not _informational(f)]
     target_file = packet.get("file") or ""
-    remaining = [f for f in findings if f["id"] == packet["finding"] and (not target_file or (f.get("file") or "") == target_file)]
+    targets = set(packet.get("merged") or [packet["finding"]])
+    remaining = [f for f in findings if f["id"] in targets and (not target_file or (f.get("file") or "") == target_file)]
     baseline = set(packet.get("baseline_keys") or [])
     new = sorted({"|".join(finding_key(f)) for f in findings if tier_for(f["id"]) in ACTIONABLE} - baseline)
     stale = sorted(name for name, digest in (packet.get("file_sha256") or {}).items()
                    if working.joinpath(name).is_file() and digest and hashlib.sha256(working.joinpath(name).read_bytes()).hexdigest() != digest)
     reasons = []
     if remaining:
-        reasons.append(f"{len(remaining)} `{packet['finding']}` finding(s) remain: " + "; ".join((f.get("evidence") or [f["explanation"]])[0] for f in remaining[:3]))
+        reasons.append(f"{len(remaining)} " + ", ".join(f"`{i}`" for i in sorted({f['id'] for f in remaining})) + " finding(s) remain: " + "; ".join((f.get("evidence") or [f["explanation"]])[0] for f in remaining[:3]))
     if new:
         reasons.append("new findings appeared: " + ", ".join(new[:10]))
     return {"status": "PASS" if not reasons else "FAIL", "reasons": reasons, "remaining": len(remaining), "new_findings": new,
             "compile_checked": vanilla is not None, "changed_since_packet": stale}
+
+
+# Where an agent writes its note: inside the sandbox (an agent may be confined to it), moved out before the diff.
+SANDBOX_NOTE = "BF_NOTE.md"
+# The prompt, also written inside the sandbox for an agent that reads a file rather than stdin.
+SANDBOX_PROMPT = "BF_PROMPT.md"
 
 
 def resolve_agent_command(agent: str, home: Path | None = None) -> str:
@@ -140,6 +161,92 @@ def _copy_back(packet: dict, sandbox: Path, working: Path, changed: list[str]) -
     return written
 
 
+def _remove_tree(path: Path) -> None:
+    """rmtree that clears the read-only flag first: a mod shipping its .git folder has read-only object files, and
+    plain rmtree failed with WinError 5 on Hiigaran Descendants and The Nomads (2026-10-02)."""
+    import stat
+
+    def clear_and_retry(function, target, _info):
+        os.chmod(target, stat.S_IWRITE)
+        function(target)
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=clear_and_retry)
+    else:
+        shutil.rmtree(path, onerror=clear_and_retry)
+
+
+def _kill_tree(process: subprocess.Popen) -> None:
+    """Stop an agent and everything it started (Windows: taskkill /T; elsewhere its process group)."""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)], capture_output=True, check=False, timeout=60)
+        else:
+            import signal
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        process.kill()
+        process.wait(timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+RUN_LOCK = "RUN.lock"
+
+
+def _pid_alive(pid: int) -> bool:
+    if os.name == "nt":
+        # Not os.kill(pid, 0): on Windows that calls TerminateProcess.
+        import ctypes
+
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        code = ctypes.c_ulong()
+        ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return code.value == 259  # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+class run_lock:
+    """One escalation run per workspace. Pilots on 2026-09-29 collided: a stopped task left its agent children
+    running, a second run started on the same workspace, and Git Bash could not see the Windows processes. A run
+    records its PID in scratch/escalations/RUN.lock and a second run refuses while that process is alive."""
+
+    def __init__(self, workspace: Path):
+        self.path = Path(workspace).expanduser().resolve() / "scratch" / "escalations" / RUN_LOCK
+
+    def __enter__(self):
+        if self.path.is_file():
+            try:
+                pid = int(self.path.read_text(encoding="utf-8").split()[0])
+            except (ValueError, IndexError, OSError):
+                pid = 0
+            if pid and pid != os.getpid() and _pid_alive(pid):
+                raise EscalationError(f"another escalation run (PID {pid}) is using this workspace; wait for it or stop it "
+                                      f"(PowerShell: Stop-Process -Id {pid}, and its agent children), then remove {self.path} if it stays.")
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(f"{os.getpid()}\n", encoding="utf-8")
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if self.path.read_text(encoding="utf-8").split()[0] == str(os.getpid()):
+                self.path.unlink()
+        except (OSError, IndexError):
+            pass
+        return False
+
+
 def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, apply: bool = False, retries: int = 1,
                timeout: int = 1800, now=None) -> dict:
     workspace = Path(workspace).expanduser().resolve()
@@ -156,29 +263,73 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
     if not command:
         raise EscalationError("No agent command given.")
     attempts, feedback = [], ""
+    # A new run starts clean: attempts left by an earlier run (a stopped batch's attempt-2 beside this run's attempt-1)
+    # made the review sheet show the stale one, while apply took this run's (Hegemony Expeditionary, 2026-10-02).
+    previous = workspace / "scratch" / "escalations" / packet["id"]
+    if previous.is_dir():
+        for stale in previous.glob("attempt-*"):
+            _remove_tree(stale)
     for number in range(1, retries + 2):
         attempt_dir = workspace / "scratch" / "escalations" / packet["id"] / f"attempt-{number}"
         if attempt_dir.exists():
-            shutil.rmtree(attempt_dir)
+            _remove_tree(attempt_dir)
         sandbox = attempt_dir / "working"
         shutil.copytree(working, sandbox, ignore=shutil.ignore_patterns("*.pre-bf-*"))
         # The sandbox's starting state, so a later apply compares the attempt with its own start, not with a
         # working/ that other packets have changed since (ROADMAP P15 31.8, Angry Periphery 2026-09-28).
         (attempt_dir / START_TREE_FILE).write_text(json.dumps(_tree(sandbox)), encoding="utf-8")
         shown = {**packet, "verify": f'{packet["verify"]} --working "{sandbox}"'}
-        prompt = render_packet(shown).replace(str(workspace / "working"), str(sandbox)) + feedback
-        (attempt_dir / "PROMPT.md").write_text(prompt, encoding="utf-8")
         note = attempt_dir / "NOTE.md"
-        env = {**os.environ, "BF_PACKET": str(packets_dir(workspace) / f"{packet['id']}.json"), "BF_PROMPT": str(attempt_dir / "PROMPT.md"),
-               "BF_NOTE": str(note), "BF_WORKING": str(sandbox)}
+        # The agent writes its note INSIDE the sandbox, under a reserved name that is moved out before the diff.
+        # Pilot 2026-09-29: an agent is confined to its working directory, so a note path one level up was refused
+        # and it wrote NOTE.md in the sandbox (Arthr's Faction Blender); and an agent using file tools never
+        # expands "$BF_NOTE", so it created a file of that name (Fantastic Furniture, Vesperon Combine). Every such
+        # attempt was REJECTED as a change outside the packet. So the prompt names the real in-sandbox path.
+        sandbox_note = sandbox / SANDBOX_NOTE
+        prompt = render_packet(shown).replace(str(workspace / "working"), str(sandbox)).replace("$BF_NOTE", str(sandbox_note)) + feedback
+        (attempt_dir / "PROMPT.md").write_text(prompt, encoding="utf-8")
+        # Also inside the sandbox, removed before the diff: stdin alone raced. Fast Engine Rendering's agents
+        # (2026-09-29) got "no stdin data received in 3s" and exited, so a Claude CLI is also told to read this file.
+        (sandbox / SANDBOX_PROMPT).write_text(prompt, encoding="utf-8")
+        env = {**os.environ, "BF_PACKET": str(packets_dir(workspace) / f"{packet['id']}.json"), "BF_PROMPT": str(sandbox / SANDBOX_PROMPT),
+               "BF_NOTE": str(sandbox_note), "BF_WORKING": str(sandbox)}
+        run_command = command[0] if os.name == "nt" and isinstance(agent, str) else command
+        if isinstance(agent, str) and re.search(r"\bclaude(\.exe)?\b", agent, re.I) and re.search(r"(^|\s)(-p|--print)(\s|$)", agent):
+            pointer = f"Your whole task is in {SANDBOX_PROMPT} in the current directory. Read it and follow it exactly."
+            run_command = f'{run_command} "{pointer}"' if isinstance(run_command, str) else [*run_command, pointer]
+        # Output goes to a file, not a pipe, and a timeout kills the whole process tree: with capture_output, a helper
+        # process the agent started kept the pipe open after the agent was killed, and run() waited 13 hours on a
+        # Hegemony Expeditionary packet (2026-10-02).
+        output_path = attempt_dir / "AGENT_OUTPUT.full.txt"
         try:
-            completed = subprocess.run(command[0] if os.name == "nt" and isinstance(agent, str) else command, cwd=sandbox, input=prompt, env=env, capture_output=True, text=True, timeout=timeout, check=False)
-            agent_rc, agent_tail = completed.returncode, (completed.stdout + completed.stderr)[-4000:]
-        except subprocess.TimeoutExpired:
-            agent_rc, agent_tail = None, f"agent timed out after {timeout}s"
+            with output_path.open("w", encoding="utf-8", errors="replace") as output, tempfile.TemporaryFile("w+", encoding="utf-8") as stdin:
+                stdin.write(prompt)
+                stdin.seek(0)
+                process = subprocess.Popen(run_command, cwd=sandbox, stdin=stdin, stdout=output, stderr=subprocess.STDOUT, env=env, text=True,
+                                           start_new_session=os.name != "nt")
+                try:
+                    agent_rc = process.wait(timeout=timeout)
+                    timed_out = False
+                except subprocess.TimeoutExpired:
+                    _kill_tree(process)
+                    agent_rc, timed_out = None, True
         except OSError as exc:
             raise EscalationError(f"Could not start the agent command {command[0]!r}: {exc}") from exc
+        agent_tail = output_path.read_text(encoding="utf-8", errors="replace")[-4000:]
+        if timed_out:
+            agent_tail += f"\nagent timed out after {timeout}s (process tree killed)"
         (attempt_dir / "AGENT_OUTPUT.txt").write_text(agent_tail, encoding="utf-8")
+        # The note, wherever the agent put it inside the sandbox: the reserved name, an unexpanded variable name,
+        # or a NOTE.md the mod itself does not ship. The first found becomes the attempt's note; the rest go.
+        for name in (SANDBOX_NOTE, "$BF_NOTE", "%BF_NOTE%", "NOTE.md"):
+            stray = sandbox / name
+            if not stray.is_file() or (name == "NOTE.md" and (working / name).exists()):
+                continue
+            if not note.is_file():
+                shutil.move(str(stray), str(note))
+            else:
+                stray.unlink()
+        (sandbox / SANDBOX_PROMPT).unlink(missing_ok=True)
         changed = changed_files(working, sandbox)
         outside = [name for name in changed if name not in packet["allowed_files"]]
         reasons: list[str] = []
@@ -235,7 +386,8 @@ def _rebuild_attempt_jar(workspace: Path, packet: dict, attempt_dir: Path, sourc
             "changed_classes": [c["class"] for c in comparison.get("class_changes") or []], "added_classes": comparison.get("added_classes") or []}
 
 
-def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = None, now=None, rebuild_jar: bool = False) -> dict:
+def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = None, now=None, rebuild_jar: bool = False,
+                   patch_classes: bool = False, allow_removed: list[str] | None = None) -> dict:
     """Copy an attempt already VERIFIED into `working/` without re-running the agent (P15 item 20.12).
 
     `run --apply` re-runs the agent and applies whatever the new attempt produces, which nobody has
@@ -290,6 +442,37 @@ def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = N
         raise EscalationError("the attempt no longer verifies: " + "; ".join(check["reasons"]))
     source_root = next((root for root in JAR_SOURCE_ROOTS if any(name.startswith(root) for name in changed)), None)
     rebuilt = None
+    patched = []
+    if source_root and patch_classes:
+        # Patch only the edited classes into their jar (patch-jar-class: refuses a removed member unless named, a new
+        # top-level class, or a sandbox-forbidden reference), instead of rebuilding the whole jar. Done by hand for
+        # Neutrino (tomatopaste) and The Mayorate, 2026-10-02.
+        import zipfile
+
+        from .jar_patch import patch_jar_classes
+        from .scanner import _load_lenient_json_file
+
+        info = _load_lenient_json_file(working / "mod_info.json") or {}
+        jars = [j for j in info.get("jars") or [] if isinstance(j, str) and (working / j).is_file()]
+        by_jar: dict[str, list[Path]] = {}
+        for name in changed:
+            if not name.endswith(".java"):
+                continue
+            text = (sandbox / name).read_text(encoding="utf-8", errors="replace")
+            package = re.search(r"^\s*package\s+([\w.]+)\s*;", text, re.M)
+            entry = (package.group(1).replace(".", "/") + "/" if package else "") + Path(name).stem + ".class"
+            jar = next((j for j in jars if entry in zipfile.ZipFile(working / j).namelist()), None)
+            if jar is None:
+                raise EscalationError(f"{name}: class {entry} is in no declared jar; nothing to patch.")
+            by_jar.setdefault(jar, []).append(sandbox / name)
+        vanilla = Path(packet["vanilla_core"]) if packet.get("vanilla_core") else None
+        for jar, sources in by_jar.items():
+            check = patch_jar_classes(workspace, jar, sources, vanilla_core=vanilla, allow_removed=allow_removed)
+            if check["status"] != "PASS":
+                raise EscalationError(f"patching {jar} refused: {check.get('refusals') or check['compile']['errors'][:2]}")
+            done = patch_jar_classes(workspace, jar, sources, vanilla_core=vanilla, allow_removed=allow_removed, install=True)
+            patched.append({"jar": jar, "classes": [c["class"] for c in check["classes"]], "backup": done.get("backup_jar")})
+        source_root = None  # the jar is patched; the sources are copied back below
     if source_root and not rebuild_jar:
         raise EscalationError(f"the attempt edits jar sources ({source_root}); the shipped jar keeps the old code until rebuilt. "
                               "Re-run with --rebuild-jar to rebuild it from the attempt and install it.")
@@ -315,4 +498,4 @@ def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = N
                               "runner": "agent", "attempt": attempt, "outcome": "APPLIED", "reasons": [], "changed": changed,
                               "classification": "REVIEW", "applied_without_rerun": True}, now)
     return {"schema_version": SCHEMA_VERSION, "mode": "ESCALATION_APPLY", "packet": packet["id"], "attempt": attempt,
-            "written": written, "verify": check, "rebuilt_jar": rebuilt}
+            "written": written, "verify": check, "rebuilt_jar": rebuilt, "patched_classes": patched}
