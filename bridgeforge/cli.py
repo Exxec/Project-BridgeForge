@@ -408,6 +408,10 @@ def build_parser() -> argparse.ArgumentParser:
     add_baseline_audit_parser(subcommands)
     from .rig_reset import add_parser as add_rig_reset_parser
     add_rig_reset_parser(subcommands)
+    from .live_ledger import add_parser as add_live_ledger_parser
+    add_live_ledger_parser(subcommands)
+    from .roadmap_lint import add_parser as add_roadmap_lint_parser
+    add_roadmap_lint_parser(subcommands)
     from .move_machine import add_parser as add_migrate_parser
     add_migrate_parser(subcommands)
     envc_cmd = subcommands.add_parser("env-check", help="read a launcher .bat (following @argfiles) and report java version, javaagents and their order, Prepatcher last or not, heap, and enabled mods that need Prepatcher the launch lacks; read-only (ROADMAP item 63)")
@@ -3033,6 +3037,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "atlas":
         from .atlas_report import run_cli as run_atlas
         return run_atlas(args)
+    if args.command == "roadmap-lint":
+        from .roadmap_lint import run_cli as run_roadmap_lint
+        return run_roadmap_lint(args)
+    if args.command == "live-ledger":
+        from .live_ledger import run_cli as run_live_ledger
+        return run_live_ledger(args)
     if args.command == "rig-reset":
         from .rig_reset import run_cli as run_rig_reset
         return run_rig_reset(args)
