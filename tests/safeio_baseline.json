@@ -27,14 +27,23 @@
     "checks_index.py": {
       "write_text": 2
     },
-    "cli.py": {
-      "write_text": 9
-    },
     "cmd_analysis.py": {
       "write_text": 10
     },
+    "cmd_archive.py": {
+      "write_text": 1
+    },
+    "cmd_behavior.py": {
+      "write_text": 3
+    },
     "cmd_bytecode.py": {
       "write_text": 4
+    },
+    "cmd_corpus.py": {
+      "write_text": 4
+    },
+    "cmd_probe_group.py": {
+      "write_text": 1
     },
     "cmd_scan.py": {
       "write_text": 2
