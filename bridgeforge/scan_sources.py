@@ -11,7 +11,7 @@ from .magiclib_compat import scan_magiclib_compat
 from .models import ScanResult
 from pathlib import Path
 from .scan_campaign import _lookup_null_guarded, _scan_core_campaign_plugin_reregistered, _scan_removed_market_condition_ids, _scan_system_generation_unguarded, _system_lookup_null_guarded
-from .scan_combat import _scan_hulk_death_effect_repeats, _scan_hullmod_instance_state, _scan_rules_firebest_populate_options, _scan_saved_object_holds_market_ref, _scan_weapon_effect_static_state
+from .scan_combat import _scan_hulk_death_effect_repeats, _scan_hullmod_fleet_dereference, _scan_hullmod_instance_state, _scan_rules_firebest_populate_options, _scan_saved_object_holds_market_ref, _scan_weapon_effect_static_state
 from .scan_common import CUSTOM_DIALOG_DELEGATE_PATTERN, CUSTOM_UI_PLUGIN_PATTERN, EXTERNAL_CAMPAIGN_MEMORY_PREFIXES, EXTERNAL_MOD_API_PACKAGES, HARDCODED_ENTITY_LOOKUP_PATTERN, HARDCODED_SYSTEM_LOOKUP_PATTERN, LEGACY_API_RULES, LIBRARY_PACKAGES, MEMORY_SELF_STORE_PATTERN, PERCENT_MULTIPLIER_PATTERN, RELEASE_BLOCKING_TODO_PATTERN, ROBOT_INPUT_INJECTION_PATTERN, RUNTIME_PLACEHOLDER_PATTERN, TARGET_INTERFACE_CONTRACTS, _INTERFACE_BASE_CLASSES, _relative
 from .scan_compile import _scan_dependency_version_major, _scan_loose_script_janino_risk
 from .scan_factions import _scan_faction_trait_weight_legacy_personality_ids, _scan_personality_ids
@@ -232,6 +232,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_rules_firebest_populate_options(root, result)
     _scan_hullmod_instance_state(root, result)
     _scan_hulk_death_effect_repeats(root, result)
+    _scan_hullmod_fleet_dereference(root, result)
     _scan_saved_object_holds_market_ref(root, result)
     _scan_personality_ids(root, result)
     _scan_faction_trait_weight_legacy_personality_ids(root, result)

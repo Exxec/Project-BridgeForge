@@ -2,6 +2,10 @@
 
 Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; each mod's evidence is in its revival report.
 
+## 2026-10-13
+
+- **Epta Consortium** 2.0.3: the three AI-core refunder hull mods no longer crash when a market is opened: advanceInCampaign read member.getFleetData().getFleet() for ships in a market's stock, which have no fleet (crash report 2026-10-13); jar patched, working copy only (not archived)
+
 ## 2026-10-12
 
 - **Zorg [BF r8]** V18+bf.8: revived for RC8 and archived (live validated)

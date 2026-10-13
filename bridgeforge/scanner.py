@@ -380,6 +380,8 @@ from .scan_combat import (  # noqa: F401
     _scan_hulk_death_effect_repeats,
     _scan_saved_object_holds_market_ref,
     _scan_hullmod_instance_state,
+    _scan_hullmod_fleet_dereference,
+    unguarded_fleet_dereference_lines,
     _scan_rules_firebest_populate_options,
     _scan_weapon_effect_static_state,
 )

@@ -304,3 +304,44 @@ def _scan_weapon_effect_static_state(root: Path, result: ScanResult) -> None:
         shared = sorted(f"{match.group(2)}:{match.group(1)}" for match in _SOURCE_STATIC_STATE.finditer(text))
         if shared:
             result.add(id="weapon-effect-static-combat-state", category="scripts", severity="high", classification="MANUAL", confidence="HEURISTIC", explanation=explanation, file=_relative(root, source), evidence=[f"static:{item}" for item in shared])
+
+
+# A ship in a market's stock (or any fleet data that belongs to no fleet) has getFleetData().getFleet() == null, and RC8 calls a hull mod's
+# advanceInCampaign for such members when it syncs the stock (opening a market sorts it). Epta Consortium's AI-core refunder hull mods
+# read `member.getFleetData().getFleet().equals(...)` there and crashed on opening a market (crash report 2026-10-13; the stack ran
+# FleetData.sort -> syncIfNeeded -> advanceInCampaign).
+_FLEET_DEREFERENCE = re.compile(r"getFleetData\(\)\s*\.\s*getFleet\(\)\s*\.\s*\w+")
+_FLEET_NULL_CHECK = re.compile(r"getFleet\(\)\s*(?:!=|==)\s*null|getFleetData\(\)\s*(?:!=|==)\s*null|\.getFleet\(\)\s*(?:!=|==)")
+
+
+def unguarded_fleet_dereference_lines(body: str) -> list[int]:
+    """1-based line numbers (within `body`) of `getFleetData().getFleet().x` calls with no null check on the fleet or its data before them."""
+    lines = []
+    for match in _FLEET_DEREFERENCE.finditer(body):
+        if not _FLEET_NULL_CHECK.search(body[:match.start()]):
+            lines.append(body.count("\n", 0, match.start()) + 1)
+    return lines
+
+
+def _scan_hullmod_fleet_dereference(root: Path, result: ScanResult) -> None:
+    """A hull mod's advanceInCampaign that calls a method on `member.getFleetData().getFleet()` without a null check crashes when RC8 runs it
+    for a ship in a market's stock (REVIEW; add `getFleetData() != null && getFleet() != null &&`)."""
+    for source in sorted(root.rglob("*.java")):
+        if "disabled_files" in source.relative_to(root).parts:
+            continue
+        try:
+            text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if "advanceInCampaign" not in text or not re.search(r"\bextends\s+BaseHullMod\b|\bimplements\s+HullModEffect\b", text):
+            continue
+        from .scan_javatext import _method_body
+
+        body = _method_body(text, "advanceInCampaign")
+        lines = unguarded_fleet_dereference_lines(body)
+        if lines:
+            result.add(id="hullmod-fleet-dereference-unguarded", category="scripts", severity="high", classification="REVIEW", confidence="HIGH",
+                       explanation="advanceInCampaign calls a method on member.getFleetData().getFleet() with no null check. A ship in a market's stock has "
+                                   "no fleet, and RC8 runs the hull mod for it when the stock is synced, so opening a market throws a NullPointerException. "
+                                   "Guard it: getFleetData() != null && getFleetData().getFleet() != null && ...",
+                       file=_relative(root, source), evidence=[f"line-in-advanceInCampaign:{n}" for n in lines])
