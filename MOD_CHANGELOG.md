@@ -19,6 +19,7 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Vayra's Ship Pack** 1.2.3+bf.1: declares LazyLib, which the mod plugin requires and stopped at load without (dependencies were empty)
 - **Zorg [BF r8]** V18+bf.9: Zorg Zeta looks as in bf.7 again: ZorgGen's star corona -10000 and Zeta I (radius 0, orbit 100, 5000 days) restored, so the ring bands (the superstructure) circle the star ball instead of a planet 5000 away (bf.8's 'fix' of the 0.6 arguments was wrong; owner screenshots 2026-10-12). The Zorg start hostile to every faction with Nexerelin too: Nexerelin's New Game reset relations after the bf.8 hook, so the hook also runs after the time pass and data/config/exerelinFactionConfig/zorg.json sets hostileToAll 3 (Nexerelin DiplomacyManager.handleHostileToAllFaction javap). Live: day-1 relations 23 of 23 hostile, player -1.0 (ZBF9B-NEX-20261012).
 - **Zorg [BF r9]** V18+bf.9: revived for RC8 and archived (live validated)
+- **Zorg [BF r9]** V18+bf.9: Zeta I and Zeta II are colonies with the same market as Unimatrix (size 10, population and spaceport, Hive Exchange submarket); new games only. Live ZBF9E-NEX-20261012: three Zorg markets, stock OK
 
 ## 2026-10-11
 
