@@ -8,6 +8,8 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Epta Consortium** 2.0.3: revived for RC8 and archived (live validated)
 - **Epta Consortium** 2.0.3: the defense funnels, NAS phase and gregariousness spawns give the spawned ship a captain with a personality (RC8's Ship.getPersonality() fails without one); archived at the owner's request although 2.1.2 exists
 - **(KIND STRANGER) The Knights Templar** 0.9.9e: revived for RC8 and archived (live validated)
+- **The Knights Templar** 0.9.8f: revived for RC8 and archived (live validated)
+- **Templars** 0.9.8f: 0.9.8f (April 2018) ported onto the archived Kind Stranger 0.9.9e's RC8 code at the owner's request: its own hulls, weapons, variants, descriptions and missions run with 0.9.9e's campaign code, faction and ship roles; the old Crusade event, submarket and console command are gone with the API they used
 
 ## 2026-10-12
 

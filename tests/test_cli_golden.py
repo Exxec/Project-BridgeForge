@@ -20,13 +20,27 @@ GOLDEN = Path(__file__).with_name("cli_help_golden.json")
 HELP_COLUMNS = "100"
 
 
+REPO = Path(__file__).resolve().parent.parent
+
+
+def _machine_free(text: str) -> str:
+    """Paths spelled the same on every machine: forward slashes, the checkout as <repo>, the working folder as <cwd>, home as ~.
+    CI checks the repository out elsewhere and runs as another user (intake, board, relocate ... defaults, 2026-10-13)."""
+    text = text.replace("\\", "/")
+    for path, name in ((REPO, "<repo>"), (Path.cwd().resolve(), "<cwd>"), (Path.home(), "~")):
+        text = text.replace(path.as_posix(), name)
+    return text
+
+
 def _plain(value: object) -> object:
-    """A default as the same text on every machine: paths with forward slashes and the home folder as ~."""
+    """A default as the same text on every machine."""
     if isinstance(value, PurePath):
-        return value.as_posix().replace(Path.home().as_posix(), "~")
+        return _machine_free(value.as_posix())
+    if isinstance(value, str):
+        return _machine_free(value)
     if isinstance(value, (list, tuple)):
         return [_plain(v) for v in value]
-    return value if isinstance(value, (str, int, float, bool, type(None))) else repr(value)
+    return value if isinstance(value, (int, float, bool, type(None))) else _machine_free(repr(value))
 
 
 def _help_text(parser: argparse.ArgumentParser, prefix: str) -> str:
@@ -44,7 +58,7 @@ def _help_text(parser: argparse.ArgumentParser, prefix: str) -> str:
             continue
         actions.append([list(action.option_strings), action.dest, str(action.nargs), _plain(action.default), _plain(action.const),
                         list(action.choices) if action.choices and not isinstance(action.choices, dict) else None,
-                        bool(action.required), " ".join((action.help or "").split()), _plain(action.metavar),
+                        bool(action.required), _machine_free(" ".join((action.help or "").split())), _plain(action.metavar),
                         type(action).__name__])
     return json.dumps([parser.description, " ".join((parser.epilog or "").split()), actions], sort_keys=True, default=str)
 
