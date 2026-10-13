@@ -58,7 +58,9 @@ def _help_text(parser: argparse.ArgumentParser, prefix: str) -> str:
             continue
         actions.append([list(action.option_strings), action.dest, str(action.nargs), _plain(action.default), _plain(action.const),
                         list(action.choices) if action.choices and not isinstance(action.choices, dict) else None,
-                        bool(action.required), _machine_free(" ".join((action.help or "").split())), _plain(action.metavar),
+                        # Python 3.10/3.11 mark a nargs='*' positional without a default required; 3.12+ do not (CI, 2026-10-13).
+                        bool(action.required) and action.nargs != "*",
+                        _machine_free(" ".join((action.help or "").split())), _plain(action.metavar),
                         type(action).__name__])
     return json.dumps([parser.description, " ".join((parser.epilog or "").split()), actions], sort_keys=True, default=str)
 
