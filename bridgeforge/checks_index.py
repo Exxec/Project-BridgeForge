@@ -309,6 +309,8 @@ def _argument_rows(parser: argparse.ArgumentParser) -> list[str]:
             default = "current directory" if action.default == Path.cwd() else action.default
             if isinstance(default, PurePath):
                 default = default.as_posix()  # one spelling on every OS, so the committed index matches Windows CI
+                # and no one's home folder: CI runs as runneradmin, the owner as exxec (2026-10-13)
+                default = default.replace(Path.home().as_posix(), "~")
             notes.append(f"default {default}")
         help_text = " ".join((action.help or "").split())
         rows.append(f"| {_cell(name)} | {_cell('; '.join(notes)) or '-'} | {_cell(help_text) or '-'} |")

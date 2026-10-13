@@ -89,7 +89,15 @@ def _is_link(path: Path) -> bool:
     if path.is_symlink():
         return True
     is_junction = getattr(path, "is_junction", None)
-    return bool(is_junction and is_junction())
+    if is_junction is not None:
+        return bool(is_junction())
+    # Path.is_junction is Python 3.12+; on 3.10/3.11 a Windows junction is a reparse point that is not a symlink (Windows CI on 3.10
+    # and 3.11 treated the rig's junction as a folder and refused it, 2026-10-13).
+    try:
+        attributes = getattr(os.lstat(path), "st_file_attributes", 0)
+    except OSError:
+        return False
+    return bool(attributes & 0x400)  # FILE_ATTRIBUTE_REPARSE_POINT
 
 
 def safe_unlink(path: Path | str, allowed_roots: Iterable[Path | str], missing_ok: bool = True) -> bool:

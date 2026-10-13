@@ -243,7 +243,7 @@ index mod folders into a SQLite atlas (default roots: Done/, In operation/*/work
 | `--include-originals` | - | also index each `In operation/*/original/` copy as version '<v>+original', so `atlas diff MOD` can compare before and after |
 | `--base` BASE | - | project folder holding Done/ and In operation/ (default: the current folder) |
 | `--json` | - | - |
-| `--db` DB | default reports/atlas.sqlite | atlas file (default: reports\atlas.sqlite) |
+| `--db` DB | default reports/atlas.sqlite | atlas file (default: reports/atlas.sqlite) |
 
 ## atlas diff
 
@@ -254,7 +254,7 @@ facts only in a mod's working copy and facts only in its '+original' copy (needs
 | `mod` | - | mod id, name, folder, acronym or part of one |
 | `--limit` LIMIT | default 25 | facts shown per side (text only) |
 | `--json` | - | - |
-| `--db` DB | default reports/atlas.sqlite | atlas file (default: reports\atlas.sqlite) |
+| `--db` DB | default reports/atlas.sqlite | atlas file (default: reports/atlas.sqlite) |
 
 ## atlas show
 
@@ -266,7 +266,7 @@ everything one mod adds, changes, reads and hooks, plus its replacement profile
 | `--limit` LIMIT | default 25 | facts shown per kind/action group (text only) |
 | `--json` | - | - |
 | `--html` DIR | - | also write plain self-contained HTML files into DIR |
-| `--db` DB | default reports/atlas.sqlite | atlas file (default: reports\atlas.sqlite) |
+| `--db` DB | default reports/atlas.sqlite | atlas file (default: reports/atlas.sqlite) |
 
 ## atlas id
 
@@ -277,7 +277,7 @@ every mod that touches an id, and how
 | `id` | - | - |
 | `--json` | - | - |
 | `--html` DIR | - | also write plain self-contained HTML files into DIR |
-| `--db` DB | default reports/atlas.sqlite | atlas file (default: reports\atlas.sqlite) |
+| `--db` DB | default reports/atlas.sqlite | atlas file (default: reports/atlas.sqlite) |
 
 ## atlas forecast
 
@@ -291,7 +291,7 @@ run every conflict rule over these mods plus vanilla; --against GROUP checks the
 | `--top` TOP | default 15 | with --pack: how many highest-impact mod groups to show (default 15) |
 | `--json` | - | - |
 | `--html` DIR | - | also write plain self-contained HTML files into DIR |
-| `--db` DB | default reports/atlas.sqlite | atlas file (default: reports\atlas.sqlite) |
+| `--db` DB | default reports/atlas.sqlite | atlas file (default: reports/atlas.sqlite) |
 
 ## atlas outcome
 
@@ -323,7 +323,7 @@ read probe-group test logs (BF-PROBE lines) into the atlas: live market-supply F
 |---|---|---|
 | `logs` | nargs + | <rig>/logs/<TESTID>.stdout.log files |
 | `--json` | - | - |
-| `--db` DB | default reports/atlas.sqlite | atlas file (default: reports\atlas.sqlite) |
+| `--db` DB | default reports/atlas.sqlite | atlas file (default: reports/atlas.sqlite) |
 
 ## atlas sweep
 
@@ -335,7 +335,7 @@ forecast every indexed mod against a family (aotd) one by one; one progress line
 | `--limit` LIMIT | - | only the first N mods |
 | `--quiet` | - | no per-mod progress lines on stderr |
 | `--json` | - | - |
-| `--db` DB | default reports/atlas.sqlite | atlas file (default: reports\atlas.sqlite) |
+| `--db` DB | default reports/atlas.sqlite | atlas file (default: reports/atlas.sqlite) |
 
 ## baseline-audit
 
@@ -466,7 +466,7 @@ append-only copy of Done/, bridgeforge-state/, every In operation/*/working and 
 |---|---|---|
 | `--to` TO | required | destination folder, outside every source |
 | `--root` ROOT | default . | repo root (default: current folder) |
-| `--claude-home` CLAUDE_HOME | default C:/Users/exxec/.claude | - |
+| `--claude-home` CLAUDE_HOME | - | Claude config folder holding projects/ (default: ~/.claude) |
 | `--quiet` | - | no per-source progress lines on stderr |
 | `--json` | - | - |
 

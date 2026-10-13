@@ -118,14 +118,14 @@ def add_parser(subcommands) -> None:
     command = subcommands.add_parser("state-snapshot", help="append-only copy of Done/, bridgeforge-state/, every In operation/*/working and the Claude memory folder to --to; changed files keep their older version, nothing is deleted")
     command.add_argument("--to", type=Path, required=True, help="destination folder, outside every source")
     command.add_argument("--root", type=Path, default=Path("."), help="repo root (default: current folder)")
-    command.add_argument("--claude-home", type=Path, default=Path.home() / ".claude")
+    command.add_argument("--claude-home", type=Path, help="Claude config folder holding projects/ (default: ~/.claude)")
     command.add_argument("--quiet", action="store_true", help="no per-source progress lines on stderr")
     command.add_argument("--json", action="store_true")
 
 
 def run_cli(args: argparse.Namespace) -> int:
     try:
-        result = take_snapshot(args.root, args.to, args.claude_home, quiet=args.quiet)
+        result = take_snapshot(args.root, args.to, args.claude_home or Path.home() / ".claude", quiet=args.quiet)
     except ValueError as exc:
         print(f"bridgeforge: {exc}", file=sys.stderr)
         return 2

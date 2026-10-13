@@ -361,4 +361,4 @@ def add_parser(subcommands) -> None:
         command.add_argument("--json", action="store_true")
         command.add_argument("--html", type=Path, metavar="DIR", help="also write plain self-contained HTML files into DIR")
     for command in (build, show, diff, ident, fore, runtime, sweeper):  # outcome and precision read the ledger, not the atlas
-        command.add_argument("--db", type=Path, default=DEFAULT_DB, help=f"atlas file (default: {DEFAULT_DB})")
+        command.add_argument("--db", type=Path, default=DEFAULT_DB, help=f"atlas file (default: {DEFAULT_DB.as_posix()})")
