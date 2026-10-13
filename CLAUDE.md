@@ -127,6 +127,9 @@ uv lock --check                           # after touching pyproject dependencie
 Optional extra: `pip install ".[archives]"` (py7zr) lets `corpus-index` read `.7z`; tests needing it skip
 without it. The web-session hook installs it.
 
+After a push, watch the run (`gh run watch <id> --exit-status`): CI was red for a day unnoticed (2026-10-13) because a local suite on
+one Python passed while argparse output, home and checkout paths, and junction handling differ on the CI matrix.
+
 CI (`.github/workflows/ci.yml`) runs all of these, plus the tests on Windows and Ubuntu with
 Python 3.10–3.13 and a coverage floor (`[tool.coverage.report] fail_under` in pyproject; raise
 it when coverage rises, never lower it).
