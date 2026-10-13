@@ -308,7 +308,10 @@ def _scan_star_type_undefined(root: Path, result: ScanResult, vanilla_core: Path
         except OSError:
             continue
         # Comments are not code: Neutrino's Exelion.java names star_blackhole only in a commented-out initStar (2026-10-11).
-        for literal in set(re.findall(r'"(star_[a-z0-9_]+)"', _blank_java_comments(text))):
+        # A description id is not a star type: Templars' TEM_Antioch makes its star with initStar(..., "star_neutron", ...) and then calls
+        # setCustomDescriptionId("star_antioch") (javap of Templars.jar, 2026-10-13), which this check had reported as an undefined star.
+        code = re.sub(r'setCustomDescriptionId\s*\(\s*"[^"]*"\s*\)', "setCustomDescriptionId()", _blank_java_comments(text))
+        for literal in set(re.findall(r'"(star_[a-z0-9_]+)"', code)):
             if literal not in defined:
                 used.setdefault(literal, []).append(_relative(root, source))
     if not used:

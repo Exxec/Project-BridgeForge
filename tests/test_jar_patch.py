@@ -78,6 +78,18 @@ class JarPatchTests(unittest.TestCase):
         self.assertFalse(refused["installed"])
         self.assertEqual(allowed["status"], "PASS", allowed)
 
+    def test_a_changed_superclass_is_refused(self) -> None:
+        # EPTA-20261013: another mod's data/hullmods/BaseHullMod on the classpath won over `import ...combat.*`.
+        with resolved_temp_dir() as root:
+            ws = self._workspace(root)
+            edited = root / "edit" / "Gantry.java"
+            edited.parent.mkdir()
+            edited.write_text(ORIGINAL.replace("public class Gantry {", "public class Gantry extends java.util.ArrayList<Object> {"), encoding="utf-8")
+            refused = patch_jar_classes(ws, "jars/mod.jar", [edited], install=True)
+        self.assertEqual(refused["status"], "REFUSED")
+        self.assertTrue(any("class header changed" in r for r in refused["refusals"]), refused["refusals"])
+        self.assertFalse(refused["installed"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -134,6 +134,15 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
         removed = sorted(member for member in gone if member not in allowed and not member.startswith(("lambda$", "access$")))
         if removed:
             refusals.append(f"{name}: removed {', '.join(removed)} (name them in allow_removed if intended)")
+        # The class header must not change. Epta's seven_defensefunnels says `extends BaseHullMod` with `import ...combat.*`; another
+        # rig mod's jar on the classpath held a data/hullmods/BaseHullMod, javac preferred that same-package class, and the patched
+        # class extended a class the game did not have: NoClassDefFoundError at startup (EPTA-20261013).
+        from .scan_classfile import _parse_class_file
+        old_header, new_header = _parse_class_file(old), _parse_class_file(data)
+        if old_header is not None and new_header is not None and (
+                old_header.super_class != new_header.super_class or sorted(old_header.interfaces) != sorted(new_header.interfaces)):
+            refusals.append(f"{name}: class header changed (extends {old_header.super_class} -> {new_header.super_class}, implements "
+                            f"{sorted(old_header.interfaces)} -> {sorted(new_header.interfaces)}); import the intended type explicitly")
         with tempfile.TemporaryDirectory() as tmp:
             before, after = Path(tmp) / "before.class", Path(tmp) / "after.class"
             before.write_bytes(old)

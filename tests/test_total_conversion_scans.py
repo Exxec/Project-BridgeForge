@@ -67,6 +67,16 @@ class StarTypeUndefinedTests(unittest.TestCase):
             hits = _findings(scan_mod(mod, vanilla_core=core), "star-type-undefined")
         self.assertEqual(hits, [])
 
+    def test_a_custom_description_id_is_not_a_star_type(self) -> None:
+        # Templars' TEM_Antioch: initStar(..., "star_neutron", ...) then setCustomDescriptionId("star_antioch") (2026-10-13)
+        with tempfile.TemporaryDirectory() as directory:
+            mod, core = self._fixture(directory)
+            _write(mod / "data" / "scripts" / "Gen.java",
+                   'public class Gen { void run(Object s) { Object p = s.initStar("y", "star_white", 1f, 2f);\n'
+                   ' p.setCustomDescriptionId("star_antioch"); } }\n')
+            hits = _findings(scan_mod(mod, vanilla_core=core), "star-type-undefined")
+        self.assertEqual(hits, [])
+
     def test_a_star_type_neither_mod_nor_rc8_defines_is_flagged(self) -> None:
         # Ironclads' SystemComposer asked for 0.7's star_red; RC8 has star_red_dwarf: NPE 'PlanetSpec.getPlanetType()' (GRP10Q)
         with tempfile.TemporaryDirectory() as directory:

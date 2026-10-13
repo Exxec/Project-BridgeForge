@@ -38,6 +38,17 @@ class SignatureRewriteTests(unittest.TestCase):
         self.assertIn('m.addCondition("y", data); econ.addMarket(m, true); // addMarket(m)', text)  # RC8 forms kept
         self.assertEqual(after, [])
 
+    def test_rc8s_own_nine_argument_nebula_overload_is_not_flagged(self) -> None:
+        # Templars 0.9.9e (2026-10-13): addNebulaFromPNG(..., 4, 4, StarAge.YOUNG); RC8 has this overload (javap of Misc).
+        with tempfile.TemporaryDirectory() as directory:
+            mod = Path(directory) / "mod"
+            (mod / "data" / "scripts").mkdir(parents=True)
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            (mod / "data" / "scripts" / "G.java").write_text(
+                'class G { void g() { Misc.addNebulaFromPNG("a.png", 0, 0, system, "terrain", "neb", 4, 4, StarAge.YOUNG); } }\n', encoding="utf-8")
+            found = [f for f in scan_mod(mod).findings if f.id == "rc8-signature-changed"]
+        self.assertEqual(found, [])
+
 
 if __name__ == "__main__":
     unittest.main()

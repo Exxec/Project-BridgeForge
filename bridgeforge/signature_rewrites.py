@@ -6,7 +6,8 @@ Each rule names a call and the argument count of its pre-RC8 form; the RC8 form 
   vanilla passes true (starfarer.api.zip, Misc/SectorGen).
 - `new TileParams(tiles, w, h, cat, key, wide, high)` -> `..., null)`: RC8 added a trailing String name; vanilla
   passes null.
-- `Misc.addNebulaFromPNG(png, x, y, location, cat, key, wide, high, terrain)` -> `..., null)`: same added name.
+- `Misc.addNebulaFromPNG(png, x, y, location, cat, key, wide, high, terrain)` -> `..., null)`: same added name. A 9-argument call
+  ending in a StarAge is RC8's own other overload and is left alone (Templars, 2026-10-13).
 - `MarketAPI.addCondition(id, true|false, param)` -> `addCondition(id, param)`: RC8 has (String) and
   (String, Object) only; 0.7's boolean flag is gone.
 
@@ -24,7 +25,8 @@ RULES = [
     # (name, call pattern ending at '(', old argument count, test on args, rewrite of args)
     ("addMarket", re.compile(r"\.\s*addMarket\s*\("), 1, lambda a: True, lambda a: a + [" true"]),
     ("TileParams", re.compile(r"\bnew\s+(?:[\w.]+\.)?TileParams\s*\("), 7, lambda a: True, lambda a: a + [" null"]),
-    ("addNebulaFromPNG", re.compile(r"\baddNebulaFromPNG\s*\("), 9, lambda a: True, lambda a: a + [" null"]),
+    # RC8 still has a 9-argument addNebulaFromPNG ending in a StarAge (javap 2026-10-13); only 0.7's form, ending in a terrain String, is gone.
+    ("addNebulaFromPNG", re.compile(r"\baddNebulaFromPNG\s*\("), 9, lambda a: "StarAge" not in a[8], lambda a: a + [" null"]),
     ("addCondition", re.compile(r"\.\s*addCondition\s*\("), 3, lambda a: bool(_BOOLEAN.match(a[1])), lambda a: [a[0], a[2]]),
 ]
 

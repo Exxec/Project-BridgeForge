@@ -5,6 +5,9 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 ## 2026-10-13
 
 - **Epta Consortium** 2.0.3: the three AI-core refunder hull mods no longer crash when a market is opened: advanceInCampaign read member.getFleetData().getFleet() for ships in a market's stock, which have no fleet (crash report 2026-10-13); jar patched, working copy only (not archived)
+- **Epta Consortium** 2.0.3: revived for RC8 and archived (live validated)
+- **Epta Consortium** 2.0.3: the defense funnels, NAS phase and gregariousness spawns give the spawned ship a captain with a personality (RC8's Ship.getPersonality() fails without one); archived at the owner's request although 2.1.2 exists
+- **(KIND STRANGER) The Knights Templar** 0.9.9e: revived for RC8 and archived (live validated)
 
 ## 2026-10-12
 
