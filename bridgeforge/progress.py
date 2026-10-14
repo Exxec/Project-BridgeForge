@@ -113,6 +113,7 @@ LONG_RUNNING_COMMANDS = (
     ("relink",),
     ("port-interfaces",),
     ("translate-batch",),
+    ("descriptions", "draft"),
     ("done-audit",),
     ("mods-compat",),
     ("java-matrix", "run"),

@@ -29,7 +29,8 @@ CREDITS_FILE = "BRIDGEFORGE_CREDITS.txt"
 ORIGINAL_BACKUP = "descriptions.csv.pre-bf-crafted"
 # RC8 starsector-core/data/strings/descriptions.csv header (read 2026-09-29).
 VANILLA_DESCRIPTIONS_HEADER = "id,type,text1,text2,text3,text4,text5,notes"
-_ROW = re.compile(r"\|\s*`([^`]+)`\s*\|\s*([A-Z_]+)\s*\|\s*(.+?)\s*\|\s*$")
+# An optional fourth column names the row's source (`descriptions draft`): version/sibling rows are the author's own text.
+_ROW = re.compile(r"\|\s*`([^`]+)`\s*\|\s*([A-Z_]+)\s*\|\s*(.+?)\s*(?:\|\s*((?:version|sibling|crafted)(?::[^|]*)?)\s*)?\|\s*$")
 
 
 class DescriptionsError(ValueError):
@@ -61,7 +62,8 @@ def rebuild_original_descriptions_copy(workspace: Path) -> Path | None:
 
 def _index(path: Path) -> dict[str, dict]:
     try:
-        return {r.get("id", ""): r for r in csv.DictReader(open(path, encoding="utf-8", errors="replace"))}
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            return {r.get("id", ""): r for r in csv.DictReader(handle)}
     except OSError:
         return {}
 
@@ -102,6 +104,11 @@ def build_sheet(queue: Path, vanilla_core: Path | None) -> dict:
 
 def parse_draft(path: Path) -> list[tuple[str, str, str]]:
     return [(m.group(1), m.group(2), m.group(3)) for line in Path(path).read_text(encoding="utf-8").splitlines() if (m := _ROW.match(line))]
+
+
+def parse_draft_sources(path: Path) -> dict[tuple[str, str], str | None]:
+    """{(id, TYPE): source} for each draft row; None when the row has no source column (a hand-written draft)."""
+    return {(m.group(1), m.group(2)): (m.group(4).strip() if m.group(4) else None) for line in Path(path).read_text(encoding="utf-8").splitlines() if (m := _ROW.match(line))}
 
 
 def _credits(working: Path, crafted: list[tuple[str, str]]) -> None:
@@ -162,7 +169,9 @@ def apply_draft(workspace: Path, draft: Path) -> dict:
     joined = text + ("" if text.endswith(("\n", "\r\n")) else newline) + out.getvalue()
     target.write_bytes((b"\xef\xbb\xbf" if raw.startswith(b"\xef\xbb\xbf") else b"") + joined.encode("utf-8"))
     crafted = _crafted_from_credits(working)
-    crafted += [item for item in added if item not in crafted]
+    sources = parse_draft_sources(draft)
+    # A row copied from another version or a sibling mod (draft source column) is the author's text, not crafted.
+    crafted += [item for item in added if item not in crafted and (sources.get(item) or "crafted").startswith("crafted")]
     _credits(working, crafted)
     alt = rebuild_original_descriptions_copy(workspace)
     return {"added": [cid for cid, _ in added], "skipped_existing": [cid for cid, kind, _ in rows if (cid, kind) in existing],
