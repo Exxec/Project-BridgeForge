@@ -14,6 +14,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "atlas_report": ("atlas",),
     "baseline_audit": ("baseline-audit", "baseline-accept"),
     "rig_reset": ("rig-reset",),
+    "rig_up": ("rig-up",),
     "live_ledger": ("live-ledger",),
     "roadmap_lint": ("roadmap-lint",),
     "agent_diff_check": ("agent-diff-check",),
