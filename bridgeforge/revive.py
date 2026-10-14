@@ -376,6 +376,32 @@ def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dic
     return _merge_same_file(packets, working)
 
 
+def attach_precedent(packets: list[dict], workspace: Path) -> None:
+    """Give each decision packet the newest earlier answers to its finding id (ROADMAP item 73 C2): rulings in the queue's
+    ESCALATION_RULINGS.jsonl and baseline reasons of the queue's other mods. The queue is the workspace's parent folder."""
+    from .escalation_precedent import packet_precedent
+
+    queue = workspace.parent
+    for packet in packets:
+        if packet["tier"] != "decision":
+            continue
+        try:
+            earlier = packet_precedent(queue, packet["finding"], exclude=workspace.name)
+        except OSError:
+            continue  # an unreadable queue folder only means no precedent is shown
+        if earlier:
+            packet["precedent"] = earlier
+
+
+def _render_precedent(entries: list[dict]) -> list[str]:
+    lines = ["", "## Answered before", "",
+             "Earlier answers to this finding id in this queue (newest first). `bridgeforge escalation sheet` pre-fills a standing answer when three agree.", ""]
+    for entry in entries:
+        mods = ", ".join(entry.get("mods") or []) or "(standing, no mod baseline)"
+        lines.append(f"- {entry.get('date') or 'undated'}: **{entry['answer']}** for {mods}" + (f" - {entry['reason']}" if entry.get("reason") else ""))
+    return lines
+
+
 def _merge_same_file(packets: list[dict], working: Path) -> list[dict]:
     """One agent packet per file, whatever its findings. Pegasus Belt Council (2026-09-30): an entity packet and a
     system packet on each generator file each got an agent, and each agent's edit was verified against a file the
@@ -425,6 +451,8 @@ def render_packet(packet: dict) -> str:
         lines += ["", "## Fixer refused", "", fix["reason"]]
     if packet.get("options"):
         lines += _render_options(packet["options"])
+    if packet.get("precedent"):
+        lines += _render_precedent(packet["precedent"])
     if packet["kind"] == "agent":
         lines += ["", "## Files you may change", ""] + [f"- `{name}`" for name in packet["allowed_files"]]
         for name, excerpt in packet["excerpts"].items():
@@ -513,6 +541,7 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
         return cache["value"]
 
     packets = build_packets(workspace, findings, pending, vanilla_core=vanilla_core, now=now, options_for=options_for)
+    attach_precedent(packets, workspace)
     hardest = bucket(remaining_tiers)
     if hardest in ("none",):
         status = "UNATTENDED_DONE"

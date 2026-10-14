@@ -173,5 +173,43 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(list(baseline["reasons"].values()), ["authored"])
 
 
+class PacketPrecedentTests(unittest.TestCase):
+    """C2: a decision packet shows "Answered before"."""
+
+    def _packet(self, workspace: Path, tier: str = "decision") -> dict:
+        finding = {"id": FINDING, "classification": "REVIEW", "severity": "low", "confidence": "DETERMINISTIC", "explanation": "e", "file": "f", "evidence": []}
+        return {"id": f"{FINDING}--mod", "workspace": str(workspace), "finding": FINDING, "tier": tier, "kind": "owner", "findings": [finding], "file": None}
+
+    def test_section_lists_at_most_five_rulings_newest_first_and_is_absent_without_any(self) -> None:
+        from bridgeforge.revive import attach_precedent, render_packet
+
+        with resolved_temp_dir() as queue:
+            workspace = queue / "Me"
+            workspace.mkdir()
+            packet = self._packet(workspace)
+            attach_precedent([packet], workspace)
+            bare = render_packet(packet)
+            _rulings(queue, ["accept"] * 7)
+            attach_precedent([packet], workspace)
+            shown = render_packet(packet)
+            agent = self._packet(workspace, tier="code")
+            attach_precedent([agent], workspace)
+        self.assertNotIn("Answered before", bare)
+        self.assertIn("## Answered before", shown)
+        bullets = [line for line in shown.splitlines() if line.startswith("- 2026-")]
+        self.assertEqual(len(bullets), 5)
+        self.assertTrue(bullets[0].startswith("- 2026-10-07: **accept** for Old7 - tuning set is deliberate"))
+        self.assertNotIn("precedent", agent)
+
+    def test_own_baseline_reason_is_not_shown_to_its_own_packet(self) -> None:
+        with resolved_temp_dir() as queue:
+            for name in ("Me", "Other"):
+                reports = queue / name / "working" / "reports"
+                reports.mkdir(parents=True)
+                (reports / "baseline.json").write_text(json.dumps({"findings": [f"{FINDING}|f|e"], "reasons": {f"{FINDING}|f|e": f"why {name}"}}), encoding="utf-8")
+            found = precedents(queue, FINDING, exclude="Me")
+        self.assertEqual([e["reason"] for e in found], ["why Other"])
+
+
 if __name__ == "__main__":
     unittest.main()
