@@ -108,7 +108,7 @@ def diagnose(save: Path, mods_dir: Path, vanilla_core: Path | None = None, cycle
     non_finite = 0
     if not truncated:
         for token, _is_class_attr, sample_path in _scan_save_tokens(campaign_xml):
-            if "." not in token and "_-" not in token:
+            if "." not in token and "_-" not in token and "$" not in token:
                 continue  # bare names are XStream aliases or fields; only dotted class names are judged
             if not re.match(r"[a-z]", token):
                 continue  # `WSR.V`: a dotted XStream alias the game registers (no WSR class exists), not a package

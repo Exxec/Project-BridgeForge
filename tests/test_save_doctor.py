@@ -65,6 +65,24 @@ class SaveDoctorTests(unittest.TestCase):
         self.assertEqual(classes, {"MOD_MISSING", "VERSION_CHANGED", "CLASS_UNRESOLVED", "NON_FINITE"})
         self.assertIn("high", result["recovery"]["MOD_MISSING"])
 
+    def test_xstream_escaped_element_names_resolve_to_the_installed_class(self) -> None:
+        import zipfile
+        with resolved_temp_dir() as root:
+            _mod(root / "mods", "epta", "1.0")
+            (root / "mods" / "epta" / "jars").mkdir()
+            with zipfile.ZipFile(root / "mods" / "epta" / "jars" / "E.jar", "w") as jar:
+                jar.writestr("data/scripts/world/industries_and_buildings/seven_proelefsi_industry.class", b"\xca\xfe")
+                jar.writestr("data/scripts/world/industries_and_buildings/seven_proelefsi_industry$Part.class", b"\xca\xfe")
+            # The game saves `_` as `__` and `$` as `_-` in element names (EPTA213-20261013), never in cl="..." values.
+            body = ('<data.scripts.world.industries__and__buildings.seven__proelefsi__industry z="2">'
+                    '</data.scripts.world.industries__and__buildings.seven__proelefsi__industry>\n'
+                    '<data.scripts.world.industries__and__buildings.seven__proelefsi__industry_-Part z="3">'
+                    '</data.scripts.world.industries__and__buildings.seven__proelefsi__industry_-Part>\n'
+                    '<p cl="data.scripts.world.industries_and_buildings.seven_proelefsi_industry" ref="2"></p>')
+            save = _save(root, [("epta", "1.0")], body)
+            result = diagnose(save, root / "mods")
+        self.assertEqual(result["verdict"], "NO_KNOWN_PROBLEM", result["problems"])
+
     def test_a_save_cut_off_mid_write_is_truncated(self) -> None:
         with resolved_temp_dir() as root:
             (root / "mods").mkdir()

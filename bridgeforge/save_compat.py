@@ -262,6 +262,16 @@ def _sample_path(state: _StreamState, tag: str) -> str:
     return "/" + "/".join([*ancestors, tag])
 
 
+_XSTREAM_ESCAPE = re.compile(r"_([_-])")
+
+
+def _decode_element_name(name: str) -> str:
+    """XStream's XmlFriendlyNameCoder writes `_` as `__` and `$` as `_-` in element names (not in attribute values): Epta's
+    `industries_and_buildings.seven_proelefsi_industry` is saved as `industries__and__buildings.seven__proelefsi__industry`, and
+    reading it literally made save-doctor call the save WILL_LIKELY_FAIL (EPTA213-20261013)."""
+    return _XSTREAM_ESCAPE.sub(lambda m: "_" if m.group(1) == "_" else "$", name)
+
+
 def _scan_save_tokens(campaign_xml: Path):
     """Stream campaign.xml line-by-line, yielding (token, is_cl_attr, sample_path) for each candidate.
 
@@ -279,7 +289,7 @@ def _scan_save_tokens(campaign_xml: Path):
                     if state.stack and state.stack[-1] == name:
                         state.stack.pop()
                     continue
-                yield name, False, _sample_path(state, name)
+                yield _decode_element_name(name), False, _sample_path(state, name)
                 for cl_match in _CL_ATTR_PATTERN.finditer(attrs):
                     yield cl_match.group(1), True, _sample_path(state, name)
                 if not self_closing:
@@ -324,7 +334,7 @@ def check_save_compat(save_path: Path, mod_dir: Path, *, vanilla_core: Path | No
                 entry["aliases"].add(token)
             continue
 
-        if "." in token or "_-" in token:
+        if "." in token or "_-" in token or "$" in token:
             package = _package_of(token.replace("_-", "$"))
             if index.owns_package(package):
                 entry = missing.setdefault(token, {"occurrences": 0, "sample_path": sample_path})
