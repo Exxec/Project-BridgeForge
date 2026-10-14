@@ -1913,6 +1913,8 @@ unattended regression pass: group every LIVE_VALIDATED workspace, then install, 
 | `--out` OUT | - | summary JSON (default: <queue>/_regress/regress-<date>.json) |
 | `--test-prefix` TEST_PREFIX | - | test id prefix (default REG-<date>) |
 | `--rejudge` SOURCE | - | no game: judge a finished (or running) pass's saved logs again with the current report; SOURCE is its summary JSON or .partial.jsonl checkpoint |
+| `--changed-since` COMMIT | - | rerun only the workspaces whose shipped files changed since their last PASS run, or all of them when the probe or harness changed since COMMIT; writes every archive's verdict, prints only the changed ones, never records. A regression (PASS before, not now) writes <queue>/_regress/REGRESSION_HOLD.json and later --changed-since runs refuse to start until --clear-hold (rig must be a junction) |
+| `--clear-hold` | - | with --changed-since: remove an earlier regression hold after looking at it |
 | `--quiet` | - | no per-group progress lines |
 | `--rig` RIG | - | - |
 | `--queue` QUEUE | - | - |
