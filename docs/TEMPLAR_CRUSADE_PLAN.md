@@ -137,10 +137,40 @@ has no Crusade hooks to rely on.
 | C4 | Battle tracking, player reputation, intel texts from `reports.csv` | 2 to 3 hours |
 | C5 | Debug mode, console command, live runs in Corvus and random sector, balance pass | half a day |
 
-## 6. Decisions for the owner
+## 5a. As built (2026-10-13)
 
-1. Companion mod (recommended) or built into the archived Templars versions?
-2. Which Templars it targets: the 0.9.8f port, 0.9.9e, or both (the ids are the same, so one companion can serve both).
-3. Trade effect: accessibility -20% as the stand-in for 0.9.8f's price spike, or a different number?
-4. Should a Templar victory also disrupt an industry (vanilla raid effect), or stay stability-only as in 0.9.8f?
-5. Defenders: spawn response fleets as 0.9.8f did, or try vanilla `MilitaryResponseScript` first?
+Source: `In operation/_shared/TEM_Crusade/src/data/scripts/crusade/` (shipped in each version's `jars/src`), compiled with
+`javac --release 17` against RC8's `starfarer.api.jar`, `json.jar`, `log4j` and `lwjgl_util` only.
+
+- `TemCrusade`: settings (`data/config/tem_crusade_settings.json`), log lines `BF-TEMCRUSADE|stage|...`, and `onGameLoad()`, which
+  adds the scheduler once.
+- `TemCrusadeManager`: section 3.2 as planned.
+- `TemCrusadeFGI extends GenericRaidFGI`: differs from 3.3 in one useful way. RC8's own `FGRaidAction` (read from
+  `starfarer.api.zip`, 2026-10-13) already moves the fleets system to system, fights or autoresolves against the defenders, and
+  has the target's patrols converge on it through `MilitaryResponseScript`. It also calls `GenericRaidFGI.doCustomRaidAction`
+  instead of a ground raid when `hasCustomRaidAction()` is true. So no custom payload action: the Crusade's effects live in that
+  hook (the disruption roll, once per carried market) and in `advance` (the condition and response fleets when the payload starts)
+  and `notifyEnding` (condition off, unrest, ending). The six endings map onto vanilla's result: no market carried and aborted =
+  `end_victory` (defenders win), none carried = `end_good`, under half = `end_normal`, under all = `end_bad`, all carried =
+  `end_defeat`, all carried with no crusader fleet lost = `end_crushed`; unrest 0, 1, 1, 2, 2, 3.
+- Defenders: `defenderMode` `military` is vanilla's built-in patrol response only; `response` (default) adds up to four 0.9.8f
+  response fleets (`TemCrusadeResponse`).
+- `TemCrusadeTarget`: the market condition (section 3.5), row added to each version's `market_conditions.csv`.
+- Hook: one line in `TEMModPlugin.onGameLoad` (`patch-jar-class`, the only call difference in the class), `jars/TEM_Crusade.jar`
+  added to `mod_info.json` `jars`.
+- Not built yet: player reputation (C4), the console command.
+
+## 6. Owner decisions (2026-10-13)
+
+1. **Built into the Templars versions**, not a companion: the 0.9.8f port, 0.9.9e and the newer Maelstrom Templars Expanded (2.5.1,
+   from the 0.98 modpack V6.2). Way it is built: one jar, `jars/TEM_Crusade.jar`, compiled against the RC8 API only (no Templars class),
+   so the same jar serves all three; each version lists it in `mod_info.json` `jars` and its `TEMModPlugin.onGameLoad` calls
+   `data.scripts.crusade.TemCrusade.onGameLoad()` (patched with `patch-jar-class`). Section 3.1's companion layout is superseded; the
+   settings file becomes `data/config/tem_crusade_settings.json` inside each Templars version. Each version is iterated (`+bf.N`).
+2. **Both** archived versions, plus the newer one (above).
+3. **Accessibility -20%** while the Crusade is in the system.
+4. **Stability -3, plus a small chance of disruption**: on a Templar victory each target market has a 5 to 10% chance (rolled per
+   Crusade) of one industry disrupted for 30 to 60 days. Setting `disruptChanceMin`/`Max`.
+5. **Defenders**: owner defers. Recommendation: spawn response fleets as 0.9.8f did (known to give a fight the player can see and join),
+   with vanilla `MilitaryResponseScript` behind a setting `defenderMode` (`response`, `military`, `both`; default `response`). The live
+   runs try `response` and `military` once each and record whether the defence differs in losses and ending.

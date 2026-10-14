@@ -59,6 +59,21 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(plan["unplaced"][1]["workspace"], "V")
         self.assertIn("gameVersion 0.95.1a-RC6", plan["unplaced"][1]["reason"])
 
+    def test_retest_and_solo_take_a_workspace_path_or_a_bare_name(self) -> None:
+        from bridgeforge.cli import main
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            _workspace(queue, "A", "mod_a", "hull_a")
+            _workspace(queue, "B", "mod_b", "hull_b", status="LIVE_VALIDATED")
+            _workspace(queue, "C", "mod_c", "hull_c")  # would share A's group unless A runs solo
+            plan_file = root / "plan.json"
+            with mock.patch("bridgeforge.probe_group.DEFAULT_PROVIDER_SOURCES", ()), mock.patch("sys.stdout"):
+                code = main(["probe-group", "plan", "--queue", str(queue), "--rig", str(_rig(root)), "--write", str(plan_file),
+                             "--retest", "q/B", "--solo", str(queue / "A")])
+            plan = json.loads(plan_file.read_text(encoding="utf-8"))
+        self.assertEqual(code, 0)
+        self.assertEqual(sorted([m["workspace"] for m in g["members"]] for g in plan["groups"]), [["A"], ["B"], ["C"]])
+
     def test_group_size_is_respected(self) -> None:
         with resolved_temp_dir() as root:
             queue = root / "q"

@@ -102,6 +102,11 @@ def run_cli(args: argparse.Namespace) -> int:
                 from .probe_group import DEFAULT_PROVIDER_SOURCES
                 sources = args.provider_source if args.provider_source is not None else [p for p in DEFAULT_PROVIDER_SOURCES if p.is_dir()]
                 from .probe_group import ready_workspaces
+                # Workspace arguments take a path ("In operation/<name>") or a bare name; the plan matches folder names
+                # (`--retest "In operation/X"` was read as In operation/In operation/X, 2026-10-13).
+                args.retest = [Path(name).name for name in args.retest]
+                args.exclude = [Path(name).name for name in args.exclude]
+                args.solo = [Path(name).name for name in args.solo]
                 retest = [Path(queue) / name for name in args.retest]
                 missing = [str(p) for p in retest if not (p / "working" / "mod_info.json").is_file()]
                 if missing:

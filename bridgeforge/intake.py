@@ -182,7 +182,9 @@ def zip_raw_folder(folder: Path, repo_root: Path) -> Path:
     root = _mod_root_of(folder)
     if root is None:
         raise ValueError(f"{folder} is not a mod folder: no mod_info.json at its top or in its only subfolder.")
-    name = _folder_name(folder.name)
+    # A modpack folder may carry a note in its name ("... V2.5.2 (DISABLE UI SCALING OR ELSE ...!)", 2026-10-13): the zip and its
+    # inner folder get a portable spelling of it; the folder itself is not renamed.
+    name = _folder_name(re.sub(r"[^A-Za-z0-9 _.\-]+", "-", folder.name).strip("-._ "))
     target_dir = operation_root(repo_root, create=True) / RAW_ZIP_FOLDER
     target_dir.mkdir(exist_ok=True)
     target = target_dir / f"{name}.zip"

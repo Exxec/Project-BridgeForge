@@ -32,6 +32,15 @@ class RawFolderIntakeTests(unittest.TestCase):
         self.assertEqual(preflight["candidate_mod_roots"], ["Yellow Jackets"])
         self.assertTrue(untouched)
 
+    def test_a_modpack_folder_name_with_a_note_gets_a_portable_zip_name(self) -> None:
+        with resolved_temp_dir() as root:
+            raw = root / "packs" / "Templars Expanded V2.5.2 (DISABLE UI SCALING!)"
+            _write(raw / "mod_info.json", "{}")
+            zipped = zip_raw_folder(raw, root)
+            roots = inspect_zip_archive(zipped)["candidate_mod_roots"]
+        self.assertEqual(zipped.name, "Templars Expanded V2.5.2 -DISABLE UI SCALING.zip")
+        self.assertEqual(roots, ["Templars Expanded V2.5.2 -DISABLE UI SCALING"])
+
     def test_a_folder_without_a_mod_is_refused_and_a_changed_zip_is_never_overwritten(self) -> None:
         with resolved_temp_dir() as root:
             empty = root / "In operation" / "Empty"
