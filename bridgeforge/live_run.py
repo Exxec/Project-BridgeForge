@@ -424,6 +424,10 @@ class GameRefused(RuntimeError):
     """The rig is not safe or ready to run a game (shared install, a game already running, no launcher)."""
 
 
+class LaunchNoProcess(GameRefused):
+    """The launch watchdog fired: no java process appeared (ROADMAP item 73 G4). The live result stage is LAUNCH_NO_PROCESS."""
+
+
 @contextlib.contextmanager
 def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
     """Start the rig game, click through the launcher, yield (log, hands, vanilla mission rows), then stop the rig's java and the
@@ -462,7 +466,7 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
         if not java_seen["seen"]:
             java_seen["seen"] = java_started(rig, process.pid)
             if not java_seen["seen"] and time.monotonic() - launched_at >= LAUNCH_WATCHDOG_SECONDS:
-                raise GameRefused(watchdog_message(rig, LAUNCH_WATCHDOG_SECONDS))
+                raise LaunchNoProcess(watchdog_message(rig, LAUNCH_WATCHDOG_SECONDS))
         # The launcher window waits for Play before the game logs anything (owner, 2026-10-11).
         if not clicked["done"]:
             pids = {item["pid"] for item in _running_java_under(rig) if isinstance(item.get("pid"), int)} | descendant_pids(process.pid)
@@ -488,5 +492,7 @@ def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu
     try:
         with running_game(rig, test_id, bat_name) as (log, hands, vanilla_rows):
             return drive(log, hands, menu_timeout=menu_timeout, vanilla_rows=vanilla_rows)
+    except LaunchNoProcess as exc:
+        return LiveResult("LIVE_STUCK", "LAUNCH_NO_PROCESS", str(exc))
     except GameRefused as exc:
         return LiveResult("LIVE_STUCK", "refused", str(exc))

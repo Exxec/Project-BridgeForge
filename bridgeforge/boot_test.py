@@ -18,6 +18,8 @@ POLL_INTERVAL_SECONDS = 1.0
 # Launch watchdog (ROADMAP 60f): no java process after this many seconds means the launcher .bat never started the game
 # (the first Yellowjackets launch wrote nothing and said nothing). Overridable by tests.
 LAUNCH_WATCHDOG_SECONDS = 60.0
+# The status a run ends with when the watchdog fires (ROADMAP item 73 G4); bf-test.ps1 and live_run use the same word.
+LAUNCH_NO_PROCESS = "LAUNCH_NO_PROCESS"
 
 FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 MAIN_MENU_MARKER = "Playing music with id [miscallenous_main_menu.ogg]"
@@ -51,7 +53,7 @@ def java_started(runtime_dir: Path, wrapper_pid: int) -> bool:
 
 
 def watchdog_message(runtime_dir: Path, seconds: float) -> str:
-    return (f"Launch watchdog: no java process for {runtime_dir} appeared within {seconds:.0f} s of launch, so the launcher never "
+    return (f"Launch watchdog ({LAUNCH_NO_PROCESS}): no java process for {runtime_dir} appeared within {seconds:.0f} s of launch, so the launcher never "
             "started the game. Stopped instead of waiting; read the rig's stdout/stderr log and run the bat by hand.")
 
 
@@ -243,7 +245,7 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
             if not java_seen:
                 java_seen = java_started(runtime_dir, process.pid)
                 if not java_seen and elapsed >= LAUNCH_WATCHDOG_SECONDS:
-                    status = "FAIL"
+                    status = LAUNCH_NO_PROCESS
                     reason = watchdog_message(runtime_dir, LAUNCH_WATCHDOG_SECONDS)
                     break
             if elapsed >= timeout:
