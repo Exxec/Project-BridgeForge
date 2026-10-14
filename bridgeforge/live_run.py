@@ -6,6 +6,7 @@ once per round. Every stage is confirmed from the game's own log, never from the
 come in time ends the run as LIVE_STUCK naming it, and the rig game is stopped. Screen positions were measured on
 2026-10-11 from the unmodified RC8 flow (client-area fractions, see game_click); a mod that adds its own New Game screen
 or reorders the mission list will stop the run at the stage where the log stays silent, which is the intended failure.
+A fixed New Game flow that stops on a mod's own page is continued by the generic screen-reading flow (new_game_generic, item 73 G1) after NEW_GAME_GRACE seconds.
 The owner must leave the mouse and keyboard alone while it runs (about three minutes after loading).
 """
 from __future__ import annotations
@@ -42,6 +43,7 @@ VISIBLE_MISSION_ROWS = 9
 FIRST_MISSION_ROW_Y = 0.248  # centre of the top slot (238 px of 960)
 VANILLA_MISSION_ROWS = 14  # RC8's own mission_list.csv; live_run reads the real count from the rig's core
 
+NEW_GAME_GRACE = 150.0  # seconds a fixed New Game flow gets to reach the campaign before the generic flow continues
 MENU_LOADED = "Reading save data from"
 CAMPAIGN_END = "probe|INFO|campaign|END"
 COMBAT_END = "probe|INFO|combat|END"
@@ -246,6 +248,22 @@ def new_game(hands: Hands, flow: str = "default") -> None:
         hands.sleep(pause)
 
 
+def generic_new_game(hands: Hands, done: Callable[[], bool], shots_dir: Path | None = None, max_pages: int = 12) -> list:
+    """The generic fallback (ROADMAP item 73 G1): continue from the New Game page that is up, reading the screen page by page
+    (new_game_generic.run_pages). One screenshot per page goes to `shots_dir`. Returns the page steps, empty when the screen cannot
+    be read. Used after a fixed flow did not reach the campaign; the default, Ironclads and Nexerelin flows stay first."""
+    from .new_game_generic import run_pages
+
+    if not hands.geometry:
+        return []
+
+    def capture():
+        return _screen(hands)
+
+    hands.front()
+    return run_pages(lambda fx, fy: (hands.front(), hands.click(fx, fy)), hands.sleep, capture, done, max_pages, shots_dir=shots_dir)
+
+
 def to_mission_list(hands: Hands) -> None:
     """From the campaign map (or the combat result) to the main menu's mission list."""
     hands.front()
@@ -353,6 +371,7 @@ def play_probe_combat(hands: Hands, rows_below: int = 0, total: int | None = Non
 
 
 def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: float = 600, combat_timeout: float = 240,
+          generic_fallback: bool = True, new_game_grace: float = NEW_GAME_GRACE,
           vanilla_rows: int = VANILLA_MISSION_ROWS) -> LiveResult:
     """Run the whole live sequence against a started game whose stdout is `log`."""
     result = LiveResult("LIVE_STUCK", log=str(log))
@@ -365,9 +384,21 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
         return stuck("main-menu", "the game never logged that the main menu was up")
     result.stages.append("main-menu")
     hands.sleep(20)  # the menu is drawn some seconds after its log line
-    new_game(hands, new_game_flow_for(_log_text(log)))
-    if not wait_for(log, CAMPAIGN_END, campaign_timeout, hands):
-        return stuck("new-game", "no 'campaign END' probe line: a screen did not take the click, generation failed, or the probe is not enabled")
+    flow = new_game_flow_for(_log_text(log))
+    new_game(hands, flow)
+    # A fixed flow that stops on a page of a mod's own is given NEW_GAME_GRACE seconds, then the generic screen-reading flow continues
+    # from that page (G1). Nexerelin's flow already reads the screen, and a run without a readable screen has nothing to fall back on.
+    grace = min(new_game_grace, campaign_timeout) if (generic_fallback and hands.geometry and flow != "nexerelin") else campaign_timeout
+    reached = wait_for(log, CAMPAIGN_END, grace, hands)
+    fallback_ran = False
+    if not reached and grace < campaign_timeout:
+        fallback_ran = True
+        steps = generic_new_game(hands, lambda: CAMPAIGN_END in _log_text(log), Path(f"{log}.newgame"))
+        result.stages.append(f"new-game-generic({len(steps)} pages)")
+        reached = wait_for(log, CAMPAIGN_END, campaign_timeout - grace, hands)
+    if not reached:
+        tail = "; the generic New Game flow was tried and did not reach the campaign" if fallback_ran else ""
+        return stuck("new-game", "no 'campaign END' probe line: a screen did not take the click, generation failed, or the probe is not enabled" + tail)
     result.stages.append("campaign")
     to_mission_list(hands)
     rounds_total, round_no = 1, 0

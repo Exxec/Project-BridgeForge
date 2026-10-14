@@ -120,3 +120,44 @@ def list_rows(bitmap: Bitmap, x_from: float = 0.235, x_to: float = 0.28, y_from:
         if len(found) > len(best):
             best = found
     return [((s + e) / 2 + top) / bitmap.height for s, e in best]
+
+
+def confirm_button(bitmap: Bitmap) -> tuple[float, float] | None:
+    """The lowest teal button in the lower right of the window, centred, as client fractions; None when there is none.
+
+    New Game pages that carry a confirm button (Nexerelin's Select, a total conversion's own screens) put it right of the dialog and
+    low; the lowest fill wins because the page's Go back / Select pair stacks upward. Looks only at fills, so a text-only page
+    gives None (ROADMAP item 73 G1)."""
+    top, bottom = int(bitmap.height * 0.50), int(bitmap.height * 0.95)
+    best: tuple[int, int] | None = None
+    best_y = -1
+    for step in range(15):
+        x = int(bitmap.width * (0.52 + 0.03 * step))
+        flags = [is_button_fill(*bitmap.pixel(x, y)) for y in range(top, bottom)]
+        for start, end in bands(flags, max(4, bitmap.height // 240), 3):
+            centre = (start + end) // 2 + top
+            if centre > best_y:
+                best, best_y = (x, centre), centre
+    if best is None:
+        return None
+    x, y = best
+    left = right = x
+    while left > 0 and is_button_fill(*bitmap.pixel(left - 1, y)):
+        left -= 1
+    while right < bitmap.width - 1 and is_button_fill(*bitmap.pixel(right + 1, y)):
+        right += 1
+    return (left + right) / 2 / bitmap.width, y / bitmap.height
+
+
+def page_fingerprint(bitmap: Bitmap, columns: int = 24, rows: int = 18) -> tuple[tuple[int, int, int], ...]:
+    """A coarse grid of pixels, to tell whether a click changed the page."""
+    return tuple(bitmap.pixel(int((c + 0.5) * bitmap.width / columns), int((r + 0.5) * bitmap.height / rows))
+                 for r in range(rows) for c in range(columns))
+
+
+def pages_differ(a: tuple, b: tuple, tolerance: int = 30, share: float = 0.04) -> bool:
+    """True when more than `share` of the sampled points differ by more than `tolerance` (summed over r, g, b)."""
+    if len(a) != len(b) or not a:
+        return True
+    changed = sum(1 for p, q in zip(a, b) if sum(abs(i - j) for i, j in zip(p, q)) > tolerance)
+    return changed / len(a) > share
