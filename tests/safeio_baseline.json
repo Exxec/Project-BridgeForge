@@ -79,9 +79,6 @@
     "escalation_queue.py": {
       "write_text": 4
     },
-    "escalation_review.py": {
-      "write_text": 1
-    },
     "explain_proofs.py": {
       "write_text": 1
     },

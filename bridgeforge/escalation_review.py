@@ -20,6 +20,8 @@ import json
 import re
 from pathlib import Path
 
+from .safeio import atomic_write_text
+
 FLAGS = (
     ("hint-or-tag-removed", "-", re.compile(r"\b(SHIP_WITH_MODULES|CARRIER|CIVILIAN|FREIGHTER|TANKER|UNBOARDABLE|HIDE_IN_CODEX|STATION|hints|tags)\b")),
     ("random-or-save-logic", "±", re.compile(r"\b(Random|getSeed|setSeed|getPersistentData|getMemoryWithoutUpdate|MathUtils\.getRandom)\b")),
@@ -84,8 +86,9 @@ def _read(path: Path) -> list[str]:
     return path.read_text(encoding="utf-8", errors="replace").splitlines() if path.is_file() else []
 
 
-def review_attempt(workspace: Path, packet_id: str) -> dict | None:
-    root = Path(workspace) / "scratch" / "escalations" / packet_id
+def review_attempt(workspace: Path, packet_id: str, *, gate: bool = False, before: list[dict] | None = None,
+                   packet: dict | None = None) -> dict | None:
+    root =Path(workspace) / "scratch" / "escalations" / packet_id
     attempts = sorted(root.glob("attempt-*"), key=lambda p: int(p.name.split("-")[1]) if p.name.split("-")[1].isdigit() else 0)
     if not attempts:
         return None
@@ -113,7 +116,19 @@ def review_attempt(workspace: Path, packet_id: str) -> dict | None:
     if "dangerouslyDisableSandbox" in output:
         flags.add("asked-to-leave-sandbox")
     note = (attempt / "NOTE.md").read_text(encoding="utf-8", errors="replace").strip() if (attempt / "NOTE.md").is_file() else ""
-    return {"packet": packet_id, "attempt": attempt.name, "changed": changed, "flags": sorted(flags), "diffs": diffs, "note": note}
+    review = {"packet": packet_id, "attempt": attempt.name, "changed": changed, "flags": sorted(flags), "diffs": diffs, "note": note}
+    if gate:
+        if packet is None:
+            from .escalation import EscalationError, load_packet
+
+            try:
+                packet = load_packet(Path(workspace), packet_id)
+            except (EscalationError, ValueError, OSError):
+                packet = None
+        from .escalation_policy import evaluate_attempt
+
+        review["gate"] = evaluate_attempt(packet, Path(workspace), sandbox, changed, review["flags"], diffs, before=before)
+    return review
 
 
 def _outcomes(workspace: Path) -> dict[str, str]:
@@ -129,26 +144,91 @@ def _outcomes(workspace: Path) -> dict[str, str]:
     return found
 
 
-def review_sheet(workspace: Path, *, write: bool = True) -> dict:
+def _auto_accepted(workspace: Path) -> set[str]:
+    ledger = Path(workspace) / "reports" / "escalations" / "ledger.jsonl"
+    found = set()
+    for line in _read(ledger):
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if entry.get("auto_accepted") and entry.get("packet"):
+            found.add(entry["packet"])
+    return found
+
+
+def _verdict(review: dict) -> str:
+    """One line per packet: ELIGIBLE, NOT ELIGIBLE: <failing gate>, or APPLIED. ELIGIBLE is a report; nothing is applied."""
+    if review["outcome"] == "APPLIED":
+        return "APPLIED (auto-accepted, not live-accepted)" if review.get("auto_accepted") else "APPLIED"
+    gate = review.get("gate")
+    if gate is None:
+        return "NOT ELIGIBLE: not assessed"
+    return "ELIGIBLE" if gate["eligible"] else f"NOT ELIGIBLE: {gate['failed']}"
+
+
+def _gate_lines(gate: dict) -> list[str]:
+    lines = ["Gates (report only: ELIGIBLE applies nothing; only PASS and NOT_APPLICABLE qualify, INCOMPLETE never does):", ""]
+    for c in gate["checks"]:
+        extra = " [signal, not proof]" if c.get("signal") else ""
+        tool = f" tool={json.dumps(c['tool'], sort_keys=True)}" if c.get("tool") else ""
+        hashes = f" in={c['input_sha256'][:12]} out={c['output_sha256'][:12]}" if c.get("input_sha256") and c.get("output_sha256") else ""
+        lines.append(f"- `{c['check']}` {c['status']}{extra}: {c['reason']}{tool}{hashes}")
+    delta = gate.get("scan_delta")
+    if delta:
+        lines += ["", "Scan delta, findings removed: " + (", ".join(f"`{i}` {f}".strip() for i, f in delta["removed"]) or "none"),
+                  "Scan delta, findings added: " + (", ".join(f"`{i}` {f}".strip() for i, f in delta["added"]) or "none")]
+    compiled = gate.get("compile")
+    if compiled:
+        lines += ["Compile-check errors before/after: " + (f"{compiled['errors_before']} / {compiled['errors_after']}" if compiled["checked"] else "not checked (packet has no vanilla core)")]
+    return lines + [""]
+
+
+def review_sheet(workspace: Path, *, write: bool = True, gate: bool = True) -> dict:
+    from .escalation import EscalationError, load_packet
+    from .escalation_policy import evaluate_attempt
+    from .revive import _scan
+
     workspace = Path(workspace).expanduser().resolve()
-    outcomes = _outcomes(workspace)
+    outcomes, accepted = _outcomes(workspace), _auto_accepted(workspace)
     root = workspace / "scratch" / "escalations"
     reviews = [r for r in (review_attempt(workspace, p.name) for p in sorted(root.iterdir()) if p.is_dir()) if r] if root.is_dir() else []
+    before_cache: dict[str, list[dict]] = {}
     for review in reviews:
         review["outcome"] = outcomes.get(review["packet"], "")
+        review["auto_accepted"] = review["packet"] in accepted
+        if not gate or review["outcome"] == "APPLIED":
+            continue
+        try:
+            packet = load_packet(workspace, review["packet"])
+        except (EscalationError, ValueError, OSError):
+            packet = None
+        before = None
+        if packet is not None and review["changed"]:
+            key = packet.get("vanilla_core") or ""
+            if key not in before_cache:
+                before_cache[key] = _scan(workspace / "working", Path(key) if key else None)
+            before = before_cache[key]
+        review["gate"] = evaluate_attempt(packet, workspace, workspace / "scratch" / "escalations" / review["packet"] / review["attempt"] / "working",
+                                      review["changed"], review["flags"], review["diffs"], before=before)
     lines = [f"# Escalation review sheet: {workspace.name}", "",
              "Each packet's newest agent attempt. Flags point at what to read first; they are not verdicts.", ""]
     for r in reviews:
-        lines += [f"## {r['packet']} ({r['attempt']}, {r['outcome'] or 'no ledger entry'})", "",
+        lines += [f"## {r['packet']} ({r['attempt']}, {r['outcome'] or 'no ledger entry'})", "", f"Verdict: **{_verdict(r)}**", "",
                   "Flags: " + (", ".join(r["flags"]) if r["flags"] else "none"), "",
                   "Changed: " + (", ".join(r["changed"]) if r["changed"] else "nothing"), ""]
+        if r.get("gate"):
+            lines += _gate_lines(r["gate"])
         if r["note"]:
             lines += ["Agent note:", "", *[f"> {line}" for line in r["note"].splitlines()], ""]
         for name, diff in r["diffs"].items():
             lines += [f"`{name}`", "", "```diff", *diff, "```", ""]
+    if reviews:
+        lines += ["## Verdicts", "", *[f"- `{r['packet']}`: {_verdict(r)}" for r in reviews], ""]
     path = workspace / "reports" / "ESCALATION_REVIEW_SHEET.md"
     if write and reviews:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("\n".join(lines), encoding="utf-8")
+        atomic_write_text(path, "\n".join(lines))
     return {"workspace": str(workspace), "reviews": reviews, "sheet": str(path) if write and reviews else None,
-            "flagged": [r["packet"] for r in reviews if r["flags"]]}
+            "flagged": [r["packet"] for r in reviews if r["flags"]],
+            "eligible": [r["packet"] for r in reviews if (r.get("gate") or {}).get("eligible")]}
