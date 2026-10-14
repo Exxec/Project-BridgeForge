@@ -260,7 +260,7 @@ def _scan_content_id_renamed_by_provider(root: Path, result: ScanResult, vanilla
     """An industry id the mod's code asks for that no installed table defines while a close sibling id exists (ROADMAP 60d;
     Tritachyon asked for BOGGLED_AI_STATION, Terraforming & Station Construction 10.0.9 calls it BOGGLED_REMNANT_STATION,
     New Game stopped in onNewGame). Only the vanilla table, the mod's own and its declared providers' are consulted."""
-    from .provider_renamed_ids import renamed_industry_ids
+    from .provider_renamed_ids import renamed_ids
 
     provider_dirs: list[Path] = []
     if provider_roots:
@@ -269,7 +269,7 @@ def _scan_content_id_renamed_by_provider(root: Path, result: ScanResult, vanilla
 
         deps = set(declared_dependencies(root))
         provider_dirs = [Path(p.path) for p in provider_index([Path(r) for r in provider_roots], exclude=root) if p.mod_id in deps]
-    hits = renamed_industry_ids(root, vanilla_core, provider_dirs)
+    hits = renamed_ids(root, vanilla_core, provider_dirs)
     if not hits:
         return
     result.add(
@@ -278,12 +278,15 @@ def _scan_content_id_renamed_by_provider(root: Path, result: ScanResult, vanilla
         severity="high",
         classification="REVIEW",
         confidence="MEDIUM",
-        explanation="Code in this mod names industry id(s) " + ", ".join(h["used"] for h in hits) + " that no industries.csv this scan can see "
-                    "defines, while a close id does (" + ", ".join(f"{h['used']} -> {h['suggestion']}" for h in hits) + "). A newer library or "
-                    "RC8 may have renamed it; addIndustry then fails at New Game. Match is by name similarity only, so compare the two rows "
-                    "(and the older provider copy, when you have one) before changing the id. Hull mod, commodity and condition ids are not checked.",
-        file="data/campaign/industries.csv",
-        evidence=[f"{h['used']}->{h['suggestion']} ratio {h['ratio']}" for h in hits] + [f"used-in:{w}" for h in hits for w in h["where"]],
+        explanation="Code in this mod names " + ", ".join(f"{h['kind']} id {h['used']}" for h in hits) + " that no table this scan can see "
+                    "defines, while a close id in a declared provider's table does (" + ", ".join(f"{h['used']} -> {h['suggestion']}" for h in hits) + "). "
+                    "A newer library or RC8 may have renamed it; the add/has call then fails (an industry at New Game, a hull mod or condition "
+                    "when the ship or market is built). Match is by name similarity only, so compare the two rows (and the older provider "
+                    "copy, when you have one) before changing the id. Industries, hull mods, commodities and market conditions are checked.",
+        file={"industry": "data/campaign/industries.csv", "hullmod": "data/hullmods/hull_mods.csv", "commodity": "data/campaign/commodities.csv",
+              "condition": "data/campaign/market_conditions.csv"}[hits[0]["kind"]],
+        evidence=[f"{h['used']}->{h['suggestion']} ratio {h['ratio']}" for h in hits] + [f"kind:{h['kind']}:{h['used']}" for h in hits]
+                 + [f"used-in:{w}" for h in hits for w in h["where"]],
     )
 
 
