@@ -89,6 +89,8 @@ SUPPORTED_FINDINGS = (
     "variant-weapon-slot-missing",
     "hard-coded-campaign-system-reference",
     "hard-coded-campaign-entity-reference",
+    "system-generation-unguarded",
+    "orbit-period-computed-unguarded",
 )
 
 
@@ -3708,7 +3710,11 @@ def _fix_campaign_lookup_guard(root: Path, options: dict, finding_id: str) -> li
     return changes
 
 
+from .fixers_guards import _fix_orbit_period_computed_unguarded, _fix_system_generation_unguarded  # noqa: E402
+
 _FIXER_FUNCS = {
+    "system-generation-unguarded": _fix_system_generation_unguarded,
+    "orbit-period-computed-unguarded": _fix_orbit_period_computed_unguarded,
     "hard-coded-campaign-system-reference": lambda root, options: _fix_campaign_lookup_guard(root, options, "hard-coded-campaign-system-reference"),
     "hard-coded-campaign-entity-reference": lambda root, options: _fix_campaign_lookup_guard(root, options, "hard-coded-campaign-entity-reference"),
     "csv-slash-quote-escape": _fix_csv_slash_quote_escape,
