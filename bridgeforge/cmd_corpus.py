@@ -86,6 +86,7 @@ def add_parser(subcommands) -> None:
     stats_cmd.add_argument("--vanilla-core", type=Path, help="with --scan or --rescan-stale: also compile-check loose scripts")
     stats_cmd.add_argument("--write", type=Path, metavar="DIR", help="write FINDING_STATS.json and FINDING_STATS.md into DIR; with --scan, each workspace's result is also appended to DIR/FINDING_STATS.partial.jsonl as it finishes, so an interrupted run resumes")
     stats_cmd.add_argument("--restart", action="store_true", help="with --write: ignore an earlier run's FINDING_STATS.partial.jsonl and scan everything again")
+    stats_cmd.add_argument("--promotion", type=Path, metavar="DIR", help="also write DIR/PROMOTION_CANDIDATES.md: for each id in the 'write a fixer' list, the verified agent edits grouped by shape, with a before/after example (roadmap item 73 A4)")
     stats_cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     stats_cmd.add_argument("--json", action="store_true")
     sup_cmd = subcommands.add_parser("supersession", help="find queued mods whose author has released a newer version (in the real install's mods/ or a modpack); read-only")
@@ -200,6 +201,11 @@ def run_cli(args: argparse.Namespace) -> int:
             return 2
         if checkpoint and checkpoint.is_file():
             checkpoint.unlink()  # the run finished; FINDING_STATS.json now holds every record
+        if args.promotion:
+            from .finding_stats import discover_workspaces
+            from .promotion import write_candidates
+            workspaces = {w.name: w for w in discover_workspaces(args.roots or [REPO_ROOT / "In operation"])}
+            print(f"Written: {write_candidates(args.promotion, stats['promote_to_fixer'], workspaces)}", file=sys.stderr)
         if args.write:
             args.write.mkdir(parents=True, exist_ok=True)
             from .finding_stats import delta, render_delta

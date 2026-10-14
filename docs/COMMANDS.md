@@ -2329,6 +2329,7 @@ count findings across workspaces by automation tier: how many mods could be revi
 | `--vanilla-core` VANILLA_CORE | - | with --scan or --rescan-stale: also compile-check loose scripts |
 | `--write` DIR | - | write FINDING_STATS.json and FINDING_STATS.md into DIR; with --scan, each workspace's result is also appended to DIR/FINDING_STATS.partial.jsonl as it finishes, so an interrupted run resumes |
 | `--restart` | - | with --write: ignore an earlier run's FINDING_STATS.partial.jsonl and scan everything again |
+| `--promotion` DIR | - | also write DIR/PROMOTION_CANDIDATES.md: for each id in the 'write a fixer' list, the verified agent edits grouped by shape, with a before/after example (roadmap item 73 A4) |
 | `--quiet` | - | no per-workspace progress lines on stderr |
 | `--json` | - | - |
 
