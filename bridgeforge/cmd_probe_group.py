@@ -72,7 +72,9 @@ def add_parser(subcommands) -> None:
     group_regress.add_argument("--out", type=Path, help="summary JSON (default: <queue>/_regress/regress-<date>.json)")
     group_regress.add_argument("--test-prefix", help="test id prefix (default REG-<date>)")
     group_regress.add_argument("--rejudge", type=Path, metavar="SOURCE", help="no game: judge a finished (or running) pass's saved logs again with the current report; SOURCE is its summary JSON or .partial.jsonl checkpoint")
-    group_regress.add_argument("--quiet", action="store_true", help="no per-group progress lines")
+    group_regress.add_argument("--changed-since", metavar="COMMIT", help="rerun only the workspaces whose shipped files changed since their last PASS run, or all of them when the probe or harness changed since COMMIT; writes every archive's verdict, prints only the changed ones, never records. A regression (PASS before, not now) writes <queue>/_regress/REGRESSION_HOLD.json and later --changed-since runs refuse to start until --clear-hold (rig must be a junction)")
+    group_regress.add_argument("--clear-hold", action="store_true", help="with --changed-since: remove an earlier regression hold after looking at it")
+    group_regress.add_argument("--quiet",action="store_true", help="no per-group progress lines")
     group_regress.add_argument("--rig", type=Path)
     group_regress.add_argument("--queue", type=Path)
     group_regress.add_argument("--json", action="store_true")
@@ -177,11 +179,26 @@ def run_cli(args: argparse.Namespace) -> int:
                 if args.rejudge:
                     out = args.out or Path(queue) / "_regress" / f"rejudged-{_date.today():%Y%m%d}.json"
                     result = rejudge(queue, rig, args.rejudge, out)
+                elif args.changed_since:
+                    from .regress_changed import RegressChangedError, run_changed
+                    out = args.out or Path(queue) / "_regress" / f"regress-changed-{_date.today():%Y%m%d}.json"
+                    try:
+                        print("Starting the changed-only regression pass: leave the mouse and keyboard alone until it finishes.", file=sys.stderr)
+                        result = run_changed(queue, rig, out, args.changed_since, repo_root=REPO_ROOT, bat=args.bat, size=args.size, limit=args.limit,
+                                             quiet=args.quiet, test_prefix=args.test_prefix, clear_hold=args.clear_hold)
+                    except RegressChangedError as exc:
+                        raise ProbeGroupError(str(exc)) from exc
+                    if not args.json:
+                        print(f"{len(result['selected'])} workspace(s) rerun, {len(result['changed_verdicts'])} verdict(s) changed; summary {out}")
+                        for name, row in result["changed_verdicts"].items():
+                            print(f"  {name}: {row['previous']} -> {row['verdict']} ({row['why']})")
+                        if result.get("hold"):
+                            print(f"  REGRESSION: later --changed-since runs stop until a person looks ({result['hold']}).")
                 else:
                     print("Starting the regression pass: leave the mouse and keyboard alone until it finishes (about five minutes a group).", file=sys.stderr)
                     result = run_regression(queue, rig, out, bat=args.bat, size=args.size, limit=args.limit, only=args.only or None,
                                         quiet=args.quiet, test_prefix=args.test_prefix)
-                if not args.json:
+                if not args.json and not args.changed_since:
                     print(f"{len(result['groups'])} group(s); {len(result['attention'])} item(s) need a look; summary {out}")
                     for item in result["attention"]:
                         print(f"  group {item['group']}: {item.get('mod') or item.get('members')}: {item['why']}")
