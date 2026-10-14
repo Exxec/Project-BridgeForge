@@ -1,0 +1,12 @@
+{
+	# Inert as shipped: with no targetMarket the mod logs "BF-RAID|idle" and does nothing.
+	# bridgeforge's raid_run.configure_raid() writes the rig copy of this file.
+	"targetMarket":"",
+	"fromMarket":"",
+	"attackerFaction":"",
+	"fleetPoints":120,
+	"organizeDays":2,
+	"startAfterDays":3,
+	"maxDays":120,
+	"forceSpawn":false
+}

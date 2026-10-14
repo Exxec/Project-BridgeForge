@@ -134,3 +134,12 @@ which never need a save round-trip themselves.
 Everything above compiles and self-checks outside the game (`javac`, deterministic jar packing,
 sandbox-clean bytecode scan, `probe-config` writing into a junctioned fixture rig). None of it has
 run inside Starsector yet. See the main repo's final report for the exact command sequence.
+
+## Raid scenario mod (`raid-mod/bf_raid`, ROADMAP item 73 G6)
+
+A rig-only loose-script mod, like `capacity-mod` and `duel-mod`, and the only one allowed Nexerelin classes (it depends on `nexerelin`).
+It creates one `NexRaidIntel` against the market named in `data/config/bf_raid.json` (inert as shipped) and logs `BF-RAID|raid-start|...`
+and `BF-RAID|raid-end|...`. `bridgeforge.raid_run.install_raid_mod(rig, target_market, attacker_faction=...)` copies it into a rig and writes
+the config. There is no jar to build; the game compiles the scripts with Janino. To test-compile them against RC8 core and Nexerelin's jar
+(read-only, from the install's mods folder): `raid_run.check_raid_mod(jdk, core, raid_run.nexerelin_jar(mods_dir), work_dir)`; 2026-10-14
+against Nexerelin 0.12.2d: javac PASS, Janino PASS. Not yet run in the game.
