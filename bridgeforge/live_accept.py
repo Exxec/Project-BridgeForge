@@ -16,10 +16,13 @@ Refuses a test id already recorded in the report. Never touches the original log
 """
 from __future__ import annotations
 
+import json
+import re
 from datetime import date
 from pathlib import Path
 
 from .live_trust import write_run_record
+from .safeio import atomic_write_text
 from .log_triage import triage_log
 from .soak_report import soak_report
 
@@ -37,7 +40,7 @@ def _mod_id(workspace: Path) -> str | None:
 
 def accept_run(workspace: Path | str, log: Path | str, *, test_id: str, note: str, days: float | None = None,
                not_exercised: str | None = None, mods_dir: Path | None = None, accept_findings: str | None = None,
-               record_only: bool = False, today: str | None = None) -> dict[str, object]:
+               record_only: bool = False, today: str | None = None, write_record: bool = True) -> dict[str, object]:
     workspace = Path(workspace).expanduser().resolve()
     log = Path(log).expanduser().resolve()
     report_path = workspace / "working" / "reports" / "REVIVAL_REPORT.md"
@@ -100,10 +103,39 @@ def accept_run(workspace: Path | str, log: Path | str, *, test_id: str, note: st
 
     mod_id = _mod_id(workspace)
     queue = workspace.parent
-    record = write_run_record(queue, test_id, [workspace], triage=triage, verdicts={str(mod_id): "PASS"}, today=today)
+    # `write_record=False`: the caller (probe-group record --accept) already wrote one record for the whole group, and a second
+    # write per member would replace its members list with just this one.
+    record = write_run_record(queue, test_id, [workspace], triage=triage, verdicts={str(mod_id): "PASS"}, today=today) if write_record else None
+    if findings:
+        remember_accepted(workspace, test_id, probe_fail_keys(log), caught, accept_findings or "", today)
     return {
         "schema_version": 1, "mode": "LIVE_ACCEPT", "workspace": workspace.name, "test_id": test_id,
         "report": None if record_only else str(report_path), "run_record": str(queue / "_live" / f"{test_id}.json"),
-        "shipped_sha256": record["members"][0]["shipped_sha256"], "soak": soak["verdict"] if soak else None,
+        "shipped_sha256": record["members"][0]["shipped_sha256"] if record else None, "soak": soak["verdict"] if soak else None,
         "accepted_findings": findings,
     }
+
+
+ACCEPTED_LOG = "live_accepted.jsonl"
+_PROBE_FAIL = re.compile(r"BF-PROBE\|[^|]*\|(?P<check>[^|]*)\|FAIL\|(?P<subject>[^|]*)\|")
+
+
+def probe_fail_keys(log: Path | str) -> list[str]:
+    """Sorted distinct `check|subject` of the probe FAIL lines in a log."""
+    try:
+        text = Path(log).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    return sorted({f"{m['check']}|{m['subject']}" for m in map(_PROBE_FAIL.search, text.splitlines()) if m})
+
+
+def remember_accepted(workspace: Path, test_id: str, keys: list[str], caught: dict, reason: str, today: str) -> None:
+    """Append what the owner accepted for this mod version, so `probe-group record --accept` can carry it to a later run of the same version."""
+    from .scanner import _load_lenient_json_file
+
+    info = _load_lenient_json_file(workspace / "working" / "mod_info.json")
+    entry = {"test_id": test_id, "date": today, "version": str(info.get("version") or "") if isinstance(info, dict) else "",
+             "keys": keys, "caught_distinct": int(caught.get("distinct") or 0), "reason": reason.strip()}
+    path = workspace / "reports" / ACCEPTED_LOG
+    previous = path.read_text(encoding="utf-8") if path.is_file() else ""
+    atomic_write_text(path, previous + json.dumps(entry, ensure_ascii=False) + "\n")

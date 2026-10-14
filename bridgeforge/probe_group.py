@@ -808,7 +808,7 @@ def _newest_save_made_with(rig: Path, reader) -> dict | None:
 
 def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: str, archive: bool = False,
                  done_dir: Path | None = None, policy_path: Path | None = None, today: str | None = None,
-                 refresh: bool = False) -> dict:
+                 refresh: bool = False, accept: bool = False, note: str | None = None) -> dict:
     """After a group run: mark every PASS member LIVE_VALIDATED in its report; with `archive`, record the owner's
     standing local-only licence where none exists, archive it into Done/ and copy its zip to Done/'s top level
     (ROADMAP P15 item 31.1; replaces the session's record_group.py and shell loop)."""
@@ -837,6 +837,20 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
                                   core_baseline=_repo_root() / DEFAULT_CORE_BASELINE_RELATIVE, today=today,
                                   save_made_with=_newest_save_made_with(Path(rig), save_made_with))
     recorded, skipped, archived = [], [], []
+    carry, stopped = None, None
+    if accept:
+        # G5: record through live_accept.accept_run, carrying probe FAIL lines an earlier acceptance of the same mod version covers.
+        from .group_accept import assess_group
+
+        if not (note or "").strip():
+            raise ProbeGroupError("--accept needs --note: say what was run and seen (it is written into each report).")
+        carry = assess_group(log, tested, Path(rig) / "mods")
+        if carry["uncovered_keys"] or carry["uncovered_caught"]:
+            stopped = {"why": "findings no earlier acceptance of the same mod version covers",
+                       "uncovered_probe_fail": carry["uncovered_keys"], "uncovered_caught_exceptions": carry["uncovered_caught"]}
+            return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_RECORD", "test_id": test_id, "probe_version": version,
+                    "recorded": [], "archived": [], "skipped": [], "stopped": stopped,
+                    "run_record": str(Path(queue) / "_live" / f"{test_id}.json"), "known_noise": run_record["known_noise"], "snapshot": None}
     for mod_id, verdict in sorted(report["members"].items()):
         workspace = workspaces.get(mod_id)
         if verdict["verdict"] != "PASS" or workspace is None:
@@ -845,7 +859,18 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
             continue
         path = workspace / "working" / "reports" / "REVIVAL_REPORT.md"
         body = path.read_text(encoding="utf-8").rstrip() if path.is_file() else f"# Revival report: {workspace.name}"
-        if f"## Live probe run {test_id}" not in body:
+        if accept:
+            from .live_accept import AcceptError, accept_run
+
+            try:
+                if f"## Live run {test_id}" not in body:
+                    accept_run(workspace, log, test_id=test_id, note=note or "", mods_dir=Path(rig) / "mods",
+                               accept_findings=carry["reason"] if carry else None, today=today, write_record=False)
+            except AcceptError as exc:  # any other refusal stops the group here; members already recorded stay recorded
+                stopped = {"why": str(exc), "workspace": workspace.name}
+                skipped.append({"mod_id": mod_id, "verdict": "PASS", "workspace": workspace.name, "archive": f"accept refused: {exc}"})
+                break
+        elif f"## Live probe run {test_id}" not in body:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(body + f"\n\n## Live probe run {test_id} (group run, RC8 rig)\n\n`bridgeforge probe-group report`: **PASS** "
                             f"(probe {version}: content-ids ran, no FAIL line for this mod; group triage FATAL={report['fatal']}, "
@@ -877,7 +902,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
         from .state_snapshot import snapshot_after_archive
         snapshot_note = snapshot_after_archive(done)
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_RECORD", "test_id": test_id, "probe_version": version,
-            "recorded": recorded, "archived": archived, "skipped": skipped,
+            "recorded": recorded, "archived": archived, "skipped": skipped, "stopped": stopped,
             "run_record": str(Path(queue) / "_live" / f"{test_id}.json"), "known_noise": run_record["known_noise"], "snapshot": snapshot_note}
 
 

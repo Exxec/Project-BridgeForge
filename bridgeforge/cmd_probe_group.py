@@ -47,6 +47,8 @@ def add_parser(subcommands) -> None:
     group_record.add_argument("test_id", help="the bf-test.ps1 test id; reads <rig>/logs/<TESTID>.stdout.log")
     group_record.add_argument("--archive", action="store_true")
     group_record.add_argument("--refresh", action="store_true", help="with --archive: replace an earlier archive of the same mod in Done/ (deletes that folder; Done/ must hold an ARCHIVE_NOTE.md there)")
+    group_record.add_argument("--accept", action="store_true", help="record each PASS member through the single-mod acceptance checks (main menu, campaign load, no FATAL or MOD-ERROR) and write a dated 'Live run' section; probe FAIL lines and caught exceptions are carried only when an earlier acceptance of the same mod version covers them (reports/live_accepted.jsonl, working/reports/probe_accepted.json), otherwise nothing is recorded and the uncovered ones are listed; needs --note")
+    group_record.add_argument("--note", help="with --accept: what was run and seen, written into each report as the owner's account")
     group_record.add_argument("--queue", type=Path)
     group_record.add_argument("--rig", type=Path)
     group_record.add_argument("--json", action="store_true")
@@ -243,8 +245,11 @@ def run_cli(args: argparse.Namespace) -> int:
             elif args.probe_group_command == "record":
                 from .probe_group import record_group
                 config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
-                result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive, refresh=args.refresh)
+                result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive, refresh=args.refresh,
+                                      accept=args.accept, note=args.note)
                 if not args.json:
+                    if result.get("stopped"):
+                        print(f"STOPPED, not everything recorded: {result['stopped']}")
                     print(f"Recorded LIVE_VALIDATED ({result['probe_version']}): {', '.join(result['recorded']) or 'none'}")
                     if args.archive:
                         print(f"Archived to Done/: {', '.join(result['archived']) or 'none'}")
@@ -271,5 +276,5 @@ def run_cli(args: argparse.Namespace) -> int:
             return 2
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
-        return 0
+        return 1 if args.probe_group_command == "record" and result.get("stopped") else 0
     return 2
