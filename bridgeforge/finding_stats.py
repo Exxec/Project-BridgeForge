@@ -85,9 +85,50 @@ def read_ledger(workspace: Path) -> list[dict]:
 CHECKPOINT_NAME = "FINDING_STATS.partial.jsonl"
 
 
-def _workspace_record(workspace: Path, scan: bool, vanilla_core: Path | None) -> dict:
-    """One workspace's result: a mod row with its finding-id counts, or an `unscanned` reason."""
-    findings, source = _findings(workspace, scan, vanilla_core)
+def stale_scan(workspace: Path, done_root: Path | None = None) -> dict | None:
+    """ROADMAP item 73 A2. A stored scan is stale when something that changes the mod or its open findings is newer than it:
+    a `*.pre-bf-*.bak` under `working/` (a fixer ran), the escalation ledger, a `reports/explain*` record, or the
+    workspace's `Done/<name>/ARCHIVE_NOTE.md`. Returns {"scan", "newer", "kind"} for the newest such file, else None
+    (also None when the workspace has no stored scan at all)."""
+    latest = _latest_scan(workspace)
+    if latest is None:
+        return None
+    scan_time = latest.stat().st_mtime
+    candidates: list[tuple[float, Path, str]] = []
+
+    def consider(path: Path, kind: str) -> None:
+        try:
+            candidates.append((path.stat().st_mtime, path, kind))
+        except OSError:
+            pass
+
+    working = workspace / "working"
+    if working.is_dir():
+        for backup in working.rglob("*.pre-bf-*.bak*"):
+            consider(backup, "fixer backup")
+    consider(workspace / "reports" / "escalations" / "ledger.jsonl", "escalation ledger")
+    for record in (workspace / "reports").glob("explain*"):
+        consider(record, "explain record")
+    if done_root is not None:
+        consider(Path(done_root) / workspace.name / "ARCHIVE_NOTE.md", "archive note")
+    newer = [c for c in candidates if c[0] > scan_time]
+    if not newer:
+        return None
+    _, path, kind = max(newer, key=lambda c: (c[0], str(c[1])))
+    try:
+        shown = path.relative_to(workspace).as_posix()
+    except ValueError:
+        shown = str(path)
+    return {"scan": latest.parent.name, "newer": shown, "kind": kind}
+
+
+def _workspace_record(workspace: Path, scan: bool, vanilla_core: Path | None, *, rescan_stale: bool = False,
+                      done_root: Path | None = None) -> dict:
+    """One workspace's result: a mod row with its finding-id counts, or an `unscanned` reason.
+    `rescan_stale`: scan afresh only when the stored scan is stale (see `stale_scan`)."""
+    stale = stale_scan(workspace, done_root)
+    rescanned = bool(stale) and rescan_stale and not scan
+    findings, source = _findings(workspace, scan or rescanned, vanilla_core)
     if findings is None:
         return {"workspace": workspace.name, "unscanned": source}
     accepted_keys = mod_baseline_keys(workspace / "working")
@@ -99,27 +140,28 @@ def _workspace_record(workspace: Path, scan: bool, vanilla_core: Path | None) ->
             "projected_bucket": bucket(["auto" if t == "mechanical" else t for t in tiers.values()]),
             "blocking": sorted(i for i, t in tiers.items() if t not in ("none", "auto")),
             "accepted_by_baseline": accepted, "tiers": dict(Counter(tiers[i] for i in ids.elements())),
-            "ids": dict(ids)}
+            "ids": dict(ids), **({"stale": {**stale, "rescanned": rescanned}} if stale else {})}
 
 
-def _checkpoint_header(roots: list[Path], scan: bool, vanilla_core: Path | None) -> dict:
+def _checkpoint_header(roots: list[Path], scan: bool, vanilla_core: Path | None, rescan_stale: bool = False) -> dict:
     return {"checkpoint": SCHEMA_VERSION, "roots": [str(Path(r).expanduser().resolve()) for r in roots],
-            "scan": scan, "vanilla_core": str(vanilla_core) if vanilla_core else None}
+            "scan": scan, "vanilla_core": str(vanilla_core) if vanilla_core else None, "rescan_stale": rescan_stale}
 
 
 def finding_stats(roots: list[Path], *, scan: bool = False, vanilla_core: Path | None = None,
-                  checkpoint: Path | None = None, progress=None) -> dict:
+                  checkpoint: Path | None = None, progress=None, rescan_stale: bool = False,
+                  done_root: Path | None = None) -> dict:
     """`checkpoint`: a JSONL file each workspace's record is appended to as it finishes, so an
     interrupted run resumes where it stopped (same roots and options only). `progress(done, total,
     record, seconds, resumed)` is called after each workspace."""
     import time
 
     workspaces = discover_workspaces(roots)
-    mods, unscanned = [], []
+    mods, unscanned, stale_rows = [], [], []
     occurrences: Counter[str] = Counter()
     mods_with: dict[str, set[str]] = defaultdict(set)
     ai_verified: dict[str, list[str]] = defaultdict(list)
-    with Checkpoint(checkpoint, _checkpoint_header(roots, scan, vanilla_core)) as saved:
+    with Checkpoint(checkpoint, _checkpoint_header(roots, scan, vanilla_core, rescan_stale)) as saved:
         for index, workspace in enumerate(workspaces, 1):
             for entry in read_ledger(workspace):
                 if entry.get("outcome") in VERIFIED_OUTCOMES and entry.get("runner") == "agent" and entry.get("finding"):
@@ -128,13 +170,15 @@ def finding_stats(roots: list[Path], *, scan: bool = False, vanilla_core: Path |
             record = saved.get(workspace.name)
             resumed = record is not None
             if record is None:
-                record = _workspace_record(workspace, scan, vanilla_core)
+                record = _workspace_record(workspace, scan, vanilla_core, rescan_stale=rescan_stale, done_root=done_root)
                 saved.add(workspace.name, record)
             if progress:
                 progress(index, len(workspaces), record, time.monotonic() - started, resumed)
             if "unscanned" in record:
                 unscanned.append({"workspace": record["workspace"], "reason": record["unscanned"]})
                 continue
+            if record.get("stale"):
+                stale_rows.append({"workspace": record["workspace"], **record["stale"]})
             for finding_id, count in record.pop("ids").items():
                 occurrences[finding_id] += count
                 mods_with[finding_id].add(workspace.name)
@@ -150,7 +194,8 @@ def finding_stats(roots: list[Path], *, scan: bool = False, vanilla_core: Path |
                for finding_id, names in ai_verified.items() if len(names) >= PROMOTE_AFTER and len(set(names)) >= 2]
     promote.sort(key=lambda row: (-row["verified_fixes"], row["id"]))
     return {
-        "schema_version": SCHEMA_VERSION, "mode": "FINDING_STATS", "source": "fresh scan" if scan else "latest stored scan",
+        "schema_version": SCHEMA_VERSION, "mode": "FINDING_STATS", "source": "fresh scan" if scan else ("latest stored scan, stale ones rescanned" if rescan_stale else "latest stored scan"),
+        "stale": stale_rows,
         "workspaces": len(workspaces), "scanned": len(mods), "unscanned": unscanned,
         "buckets": {tier: buckets.get(tier, 0) for tier in TIER_ORDER},
         "projected_buckets": {tier: projected.get(tier, 0) for tier in TIER_ORDER},
@@ -180,6 +225,11 @@ def render(stats: dict) -> str:
         lines += [f"- `{row['id']}` ({row['tier']}): {row['verified_fixes']} verified fixes in {', '.join(row['mods'])}" for row in stats["promote_to_fixer"]]
     if stats["unclassified_ids"]:
         lines += ["", "## Not in automation_tiers.json", "", ", ".join(f"`{i}`" for i in stats["unclassified_ids"])]
+    if stats.get("stale"):
+        lines += ["", f"## Stale stored scans ({len(stats['stale'])})", "",
+                  "Something changed after the newest stored scan, so these counts may overstate what is open.", "",
+                  "| Mod | Newest scan | Newer file | Kind | Rescanned |", "|---|---|---|---|---|"]
+        lines += [f"| {r['workspace']} | {r['scan']} | `{r['newer']}` | {r['kind']} | {'yes' if r['rescanned'] else 'no'} |" for r in stats["stale"]]
     if stats["unscanned"]:
         lines += ["", f"## Not counted ({len(stats['unscanned'])})", ""]
         lines += [f"- {row['workspace']}: {row['reason']}" for row in stats["unscanned"]]

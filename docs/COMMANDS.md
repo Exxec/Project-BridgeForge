@@ -2311,7 +2311,9 @@ count findings across workspaces by automation tier: how many mods could be revi
 |---|---|---|
 | `roots` | nargs * | queue folders or single workspaces; default <repo>/In operation |
 | `--scan` | - | scan each <ws>/working afresh instead of reading its latest stored scan |
-| `--vanilla-core` VANILLA_CORE | - | with --scan: also compile-check loose scripts |
+| `--rescan-stale` | - | scan afresh only the workspaces whose stored scan is stale (a fixer backup, the escalation ledger, an explain record or the Done/ archive note is newer); keep the stored result for the rest |
+| `--done` DONE | - | the Done/ folder whose ARCHIVE_NOTE.md files count for staleness (default <repo>/Done) |
+| `--vanilla-core` VANILLA_CORE | - | with --scan or --rescan-stale: also compile-check loose scripts |
 | `--write` DIR | - | write FINDING_STATS.json and FINDING_STATS.md into DIR; with --scan, each workspace's result is also appended to DIR/FINDING_STATS.partial.jsonl as it finishes, so an interrupted run resumes |
 | `--restart` | - | with --write: ignore an earlier run's FINDING_STATS.partial.jsonl and scan everything again |
 | `--quiet` | - | no per-workspace progress lines on stderr |
