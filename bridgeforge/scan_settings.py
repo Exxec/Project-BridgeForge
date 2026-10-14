@@ -9,6 +9,7 @@ from .scan_common import SETTINGS_ACCEPT_LIMIT, SETTINGS_BASELINE_FILE, _relativ
 from .scan_fleets import _JDK_FOR_PROCGEN
 from .scan_javatext import _blank_java_comments
 from .scan_json import _load_lenient_json_file
+from .settings_keys import classify_overrides
 
 
 # A mod that ships a modified copy of a vanilla *script* at vanilla's own path (Rebal's 47 hullmod
@@ -185,13 +186,34 @@ def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | Non
             file="mod_info.json",
             evidence=[f"count:{len(stale)}", *stale[:25]],
         )
+    _scan_settings_overrides(root, result, vanilla_core)
+
+
+INFO_KEYS_SHOWN = 25
+
+
+def _scan_settings_overrides(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+    """Keys the mod's settings.json shares with RC8's, classified add / same / change (ROADMAP item 73 C4). Only `change`
+    keys are judged (accepted within the owner's limit, else `settings-json-override-breadth`); `add` and `same` keys are
+    reported once as the informational `settings-json-override-merged`."""
     if vanilla_core is None:
         return
     mod_settings = _load_lenient_json_file(root / "data" / "config" / "settings.json")
     vanilla_settings = _load_lenient_json_file(Path(vanilla_core) / "data" / "config" / "settings.json")
     if not isinstance(mod_settings, dict) or not isinstance(vanilla_settings, dict):
         return
-    overridden = sorted(_settings_value_changes(mod_settings, vanilla_settings))
+    classes = classify_overrides(mod_settings, vanilla_settings)
+    merged = {cls: sorted(k for k, c in classes.items() if c == cls) for cls in ("add", "same")}
+    if merged["add"] or merged["same"]:
+        result.add(
+            id="settings-json-override-merged", category="metadata", severity="info", classification="SAFE", confidence="DETERMINISTIC",
+            explanation=(f"data/config/settings.json shares {len(merged['add']) + len(merged['same'])} key(s) with RC8's that change nothing: "
+                         f"{len(merged['add'])} list(s) that add items (RC8 merges settings.json lists, RC8-02) and {len(merged['same'])} value(s) equal "
+                         "to RC8's or lists vanilla already has. Not an override, so not judged."),
+            file="data/config/settings.json",
+            evidence=[f"add:{len(merged['add'])}", f"same:{len(merged['same'])}",
+                      *[f"add:{k}" for k in merged["add"][:INFO_KEYS_SHOWN]], *[f"same:{k}" for k in merged["same"][:INFO_KEYS_SHOWN]]])
+    overridden = sorted(k for k, c in classes.items() if c == "change")
     if not overridden:
         return
     # Owner's held rule (ROADMAP item 19, 2026-09-27; cleared once list merging was settled the same day): a small,
@@ -202,6 +224,8 @@ def _scan_replace_array(root: Path, result: ScanResult, vanilla_core: Path | Non
     if baseline_path is not None and baseline_path.is_file():
         loaded = _load_lenient_json_file(baseline_path) or {}
         baseline = sorted(loaded.get("keys") or []) if isinstance(loaded, dict) else None
+        # A baseline recorded before C4 also lists list keys that are merged, not changed: they no longer count.
+        baseline = [k for k in baseline if classes.get(k, "change") == "change"] if baseline is not None else None
     if len(overridden) <= SETTINGS_ACCEPT_LIMIT and (baseline is None or baseline == overridden):
         result.add(
             id="settings-json-override-accepted", category="metadata", severity="info", classification="SAFE", confidence="DETERMINISTIC",
@@ -240,18 +264,9 @@ def _settings_value_changes(mod: dict, vanilla: dict, prefix: str = "") -> list[
     settings.json merges objects key by key, so an entry a mod only adds inside `plugins`, `graphics` or
     `designTypeColors` leaves vanilla's own entries alone: SEEKER, Exigency and Flu-X all do this and ran
     normally on the RC8 rig (live runs 2026-09-24). Comparing whole top-level keys counted those additions
-    as overriding the whole block (14 mods blocked, 9 by additions alone; 2026-09-27). Lists and scalars
-    still count as a change when they differ: how a list merges is not evidenced."""
-    changes: list[str] = []
-    for key, value in mod.items():
-        if key not in vanilla:
-            continue
-        path = f"{prefix}{key}"
-        if isinstance(value, dict) and isinstance(vanilla[key], dict):
-            changes.extend(_settings_value_changes(value, vanilla[key], path + "."))
-        elif value != vanilla[key]:
-            changes.append(path)
-    return changes
+    as overriding the whole block (14 mods blocked, 9 by additions alone; 2026-09-27). Scalars count when
+    they differ; lists add to vanilla's (RC8-02) and no longer count (item 73 C4, `classify_overrides`)."""
+    return [path for path, kind in classify_overrides(mod, vanilla, prefix).items() if kind == "change"]
 
 
 def _scan_settings_keys_missing(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:

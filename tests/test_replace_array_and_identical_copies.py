@@ -104,9 +104,39 @@ class SettingsBreadthTests(unittest.TestCase):
             mod, core = _fixture(Path(directory), settings=changed)
             loud = _ids(scan_mod(mod, TargetProfile(), core), "settings-json-override-accepted")
         self.assertEqual(quiet, [])
-        self.assertIn("overridden:2", loud[0].evidence)
+        self.assertIn("overridden:1", loud[0].evidence)  # the list adds to vanilla's (RC8-02): item 73 C4
         self.assertIn("plugins.vanillaPlugin", loud[0].evidence)
-        self.assertIn("ruleCommandPackages", loud[0].evidence)
+        self.assertNotIn("ruleCommandPackages", loud[0].evidence)
+
+    def test_overrides_are_classified_add_same_or_change(self) -> None:
+        # Item 73 C4: one key per class. Only the `change` key is judged; `add` and `same` become the informational
+        # settings-json-override-merged finding.
+        from bridgeforge.settings_keys import classify_overrides
+
+        mod = {"xpGainMult": 4, "ruleCommandPackages": ["com.fs.rulecmd", "mod.rulecmd"], "untouched": "keep", "modOnly": 1}
+        self.assertEqual(classify_overrides(mod, VANILLA_SETTINGS),
+                         {"xpGainMult": "change", "ruleCommandPackages": "add", "untouched": "same"})
+        self.assertEqual(classify_overrides({"ruleCommandPackages": ["com.fs.rulecmd"], "plugins": {"vanillaPlugin": "com.fs.Vanilla"}}, VANILLA_SETTINGS),
+                         {"ruleCommandPackages": "same", "plugins.vanillaPlugin": "same"})
+        with tempfile.TemporaryDirectory() as directory:
+            mod_dir, core = _fixture(Path(directory), settings=mod)
+            result = scan_mod(mod_dir, TargetProfile(), core)
+        judged = _ids(result, "settings-json-override-accepted") + _ids(result, "settings-json-override-breadth")
+        merged = _ids(result, "settings-json-override-merged")
+        self.assertEqual(len(judged), 1)
+        self.assertEqual([e for e in judged[0].evidence if not e.startswith("overridden:")], ["xpGainMult"])
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0].classification, "SAFE")
+        self.assertIn("add:ruleCommandPackages", merged[0].evidence)
+        self.assertIn("same:untouched", merged[0].evidence)
+        self.assertNotIn("xpGainMult", " ".join(merged[0].evidence))
+
+    def test_only_merged_keys_means_nothing_is_judged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            mod_dir, core = _fixture(Path(directory), settings={"ruleCommandPackages": ["com.fs.rulecmd", "mod.rulecmd"]})
+            result = scan_mod(mod_dir, TargetProfile(), core)
+        self.assertEqual(_ids(result, "settings-json-override-accepted") + _ids(result, "settings-json-override-breadth"), [])
+        self.assertEqual(len(_ids(result, "settings-json-override-merged")), 1)
 
     def test_owner_limit_baseline_and_a_changed_baseline(self) -> None:
         # Owner's held rule (ROADMAP 19, 2026-09-27): up to 25 values accepted and recorded; more, or a change, is REVIEW.
