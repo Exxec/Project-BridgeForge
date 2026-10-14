@@ -12,6 +12,7 @@ import json
 import time
 from pathlib import Path
 
+from .escalation_precedent import question_shape
 from .progress import Checkpoint, report
 from .report_status import is_closed
 
@@ -82,11 +83,12 @@ def render(result: dict) -> str:
 
 
 def rule(queue: Path, finding_id: str, *, accept: bool = False, approve_fixer: bool = False, reason: str, policy: Path | None = None,
-         today: str | None = None) -> dict:
+         today: str | None = None, only_mods: set[str] | None = None, shape: str | None = None) -> dict:
     """Record one owner ruling for a finding id across the queue (ROADMAP P15 31.12), instead of rulings typed into
     chat and applied by hand. `accept`: add the finding's packet entries to every ESCALATED mod's accepted-findings
     baseline, with the reason in ESCALATION_RULINGS.jsonl. `approve_fixer`: add the fixer to AUTOMATION_POLICY.json's
-    standing approvals (revive then applies it)."""
+    standing approvals (revive then applies it). `only_mods` / `shape` (decision sheet, item 73 C1) narrow an `accept` to
+    the named workspaces and to findings whose explanation has that question shape."""
     from datetime import date
 
     from .baseline import accept_findings
@@ -110,7 +112,7 @@ def rule(queue: Path, finding_id: str, *, accept: bool = False, approve_fixer: b
     else:
         for workspace in sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_") and not is_closed(p)):
             record = _workspace_packets(workspace)
-            if not record or record["status"] != "ESCALATED":
+            if not record or record["status"] != "ESCALATED" or (only_mods is not None and workspace.name not in only_mods):
                 continue
             keys = []
             for path in (workspace / "reports" / "escalations").glob("*--*.json"):
@@ -118,14 +120,16 @@ def rule(queue: Path, finding_id: str, *, accept: bool = False, approve_fixer: b
                 if finding_id not in (packet.get("merged") or [packet.get("finding") or path.name.split("--", 1)[0]]):
                     continue
                 for finding in packet.get("findings") or []:
-                    if finding.get("id") != finding_id:
+                    if finding.get("id") != finding_id or (shape is not None and question_shape(finding.get("explanation") or "") != shape):
                         continue
                     evidence = finding.get("evidence") or []
                     keys.append(f"{finding.get('id')}|{finding.get('file') or ''}|{evidence[0] if evidence else ''}")
             if keys:
-                accept_findings(workspace / "working", keys)
+                accept_findings(workspace / "working", keys, reason)  # the reason becomes precedent (escalation_precedent)
                 touched.append(workspace.name)
     entry = {"date": today, "finding": finding_id, "ruling": "accept" if accept else "approve-fixer", "reason": reason, "mods": touched}
+    if shape is not None:
+        entry["shape"] = shape
     with (queue / "ESCALATION_RULINGS.jsonl").open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return entry
