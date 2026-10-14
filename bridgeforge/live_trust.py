@@ -81,8 +81,8 @@ def _previous_noise(live_dir: Path, members: list[str], test_id: str) -> tuple[s
 
 def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triage: dict, verdicts: dict[str, str],
                      probe_config: dict | None = None, core_baseline: Path | None = None, save_made_with: dict | None = None,
-                     today: str | None = None) -> dict:
-    """Record one live run (36.6) and its noise check (36.9); returns the record."""
+                     today: str | None = None, rig_state: dict | None = None) -> dict:
+    """Record one live run (36.6) and its noise check (36.9); returns the record. `rig_state` is what `rig-up` last recorded."""
     from datetime import datetime, timezone
 
     queue = Path(queue)
@@ -109,6 +109,7 @@ def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triag
         "core_baseline_sha256": _sha256(core_baseline) if core_baseline and Path(core_baseline).is_file() else None,
         "probe_config_sha256": hashlib.sha256(json.dumps(probe_config, sort_keys=True).encode("utf-8")).hexdigest() if probe_config else None,
         "save_made_with": save_made_with,
+        "rig_state": rig_state,
         "triage": counts,
         "jvm_crashes": [{k: c.get(k) for k in ("file", "message", "top_mod")} for c in triage.get("jvm_crash_logs") or [] if c.get("during_this_log")],
         "known_noise": noise_check,

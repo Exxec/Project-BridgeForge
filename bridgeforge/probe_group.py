@@ -551,6 +551,23 @@ def expand_also_enable(requested: list[str], installed: dict[str, str]) -> list[
     return ids
 
 
+def sync_working_copy(working: Path, target: Path) -> str | None:
+    """Copy a working copy's shipped files into the rig folder `target` (a new folder: all of them; an existing one: the missing and
+    different ones, never deleting extras). "copied", "synced N file(s)", or None when the rig copy already matches."""
+    if not target.exists():
+        for relative, source in _collect(working).items():
+            (target / relative).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target / relative)
+        return "copied"
+    drift = compare_copies(working, target)
+    if not drift["drift_count"]:
+        return None
+    for relative in [*drift["missing_in_deployed"], *(d["path"] for d in drift["different"])]:
+        (target / relative).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(working / relative, target / relative)
+    return f"synced {drift['drift_count']} file(s)"
+
+
 def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install_probe: bool = True,
                   stage: bool = False, with_lunalib: bool = False, setups: list[str] | None = None,
                   expect_supply: list[str] | None = None, save_after_checks: bool = False, no_lunalib: bool = False,
@@ -579,19 +596,9 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     configs, copied = [], []
     for member in group["members"]:
         working = queue / member["workspace"] / "working"
-        target = mods_dir / member["workspace"]
-        if not target.exists():
-            for relative, source in _collect(working).items():
-                (target / relative).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source, target / relative)
-            copied.append({"workspace": member["workspace"], "action": "copied"})
-        else:
-            drift = compare_copies(working, target)
-            if drift["drift_count"]:
-                for relative in [*drift["missing_in_deployed"], *(d["path"] for d in drift["different"])]:
-                    (target / relative).parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(working / relative, target / relative)
-                copied.append({"workspace": member["workspace"], "action": f"synced {drift['drift_count']} file(s)"})
+        action = sync_working_copy(working, mods_dir / member["workspace"])
+        if action:
+            copied.append({"workspace": member["workspace"], "action": action})
         configs.append(build_probe_config(working))
         installed[member["mod_id"]] = member["workspace"]
     moved_aside = _move_aside_duplicate_ids(rig, {m["mod_id"]: mods_dir / m["workspace"] for m in group["members"]})
@@ -828,6 +835,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     # ROADMAP 36.6: one run record joining inputs and outputs, written before any archive so the gate (36.11)
     # sees this run's shipped hashes.
     from .live_trust import archive_gate, auto_explain_shipped, save_made_with, write_run_record
+    from .rig_up import read_rig_state
     from .log_triage import triage_log
     from .rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
 
@@ -835,7 +843,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     run_record = write_run_record(queue, test_id, tested, triage=triage_log(log, mods_dir=Path(rig) / "mods"),
                                   verdicts={m: v["verdict"] for m, v in report["members"].items()}, probe_config=config,
                                   core_baseline=_repo_root() / DEFAULT_CORE_BASELINE_RELATIVE, today=today,
-                                  save_made_with=_newest_save_made_with(Path(rig), save_made_with))
+                                  save_made_with=_newest_save_made_with(Path(rig), save_made_with), rig_state=read_rig_state(Path(rig)))
     recorded, skipped, archived = [], [], []
     carry, stopped = None, None
     if accept:
