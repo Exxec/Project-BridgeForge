@@ -1190,6 +1190,8 @@ a mod's whole translation in one command: export, AI agent per chunk, strict che
 | `--chunk` CHUNK | default 120 | entries per agent call (default 120) |
 | `--reference` REFERENCE | - | an English copy of the same mod to prefill from |
 | `--record` RECORD | repeatable | a translator's zh/en record to prefill from; repeatable |
+| `--memory` MEMORY | - | translation memory file (Project Go TM JSON): known strings are reused, only new ones go to the agent, new pairs are added after the run (default: bridgeforge-state/translations/memory.json when that folder exists) |
+| `--no-memory` | - | do not read or update a translation memory |
 | `--quiet` | - | no per-chunk progress lines |
 | `--json` | - | - |
 

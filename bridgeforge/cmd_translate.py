@@ -43,6 +43,8 @@ def add_parser(subcommands) -> None:
     tbatch_cmd.add_argument("--chunk", type=int, default=120, help="entries per agent call (default 120)")
     tbatch_cmd.add_argument("--reference", type=Path, help="an English copy of the same mod to prefill from")
     tbatch_cmd.add_argument("--record", type=Path, action="append", default=[], help="a translator's zh/en record to prefill from; repeatable")
+    tbatch_cmd.add_argument("--memory", type=Path, help="translation memory file (Project Go TM JSON): known strings are reused, only new ones go to the agent, new pairs are added after the run (default: bridgeforge-state/translations/memory.json when that folder exists)")
+    tbatch_cmd.add_argument("--no-memory", action="store_true", help="do not read or update a translation memory")
     tbatch_cmd.add_argument("--quiet", action="store_true", help="no per-chunk progress lines")
     tbatch_cmd.add_argument("--json", action="store_true")
     desc_cmd = subcommands.add_parser("descriptions", help="missing codex descriptions: build the queue sheet, or apply a reviewed draft table with credits and an original-descriptions copy")
@@ -287,16 +289,21 @@ def run_cli(args: argparse.Namespace) -> int:
         from .translation import TranslationError as TranslateApplyError
         base = (args.out or args.mod_dir).expanduser().resolve()
         work = args.work or base.with_name(base.name + ".translate-work")
+        from .translation_memory import DEFAULT_MEMORY_RELATIVE
+        memory = None if args.no_memory else args.memory or (DEFAULT_MEMORY_RELATIVE if DEFAULT_MEMORY_RELATIVE.parent.is_dir() else None)
         try:
             result = translate_batch(args.mod_dir, translator=agent_translator(args.agent), work_dir=work, out_dir=args.out,
-                                     in_place=args.in_place, chunk=args.chunk, reference=args.reference, records=args.record, quiet=args.quiet)
-        except (TranslateBatchError, TranslateApplyError, OSError) as exc:
+                                     in_place=args.in_place, chunk=args.chunk, reference=args.reference, records=args.record, quiet=args.quiet,
+                                     memory=memory)
+        except (TranslateBatchError, TranslateApplyError, OSError, ValueError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
         else:
             print(f"Entries {result['entries']}, sent to the agent in {result['chunks']} chunk(s), translated {result['translated']}.")
+            if memory is not None:
+                print(f"Translation memory {memory}: {result['prefilled']['memory']['reused']} reused, {result['sent_to_agent']} new string(s) sent, {result['memory_added']} pair(s) added.")
             if result["stopped"]:
                 print(f"Stopped: {result['stopped']}. Rerun the same command to continue from the checkpoint.")
             for number, problems in result["failed_chunks"].items():

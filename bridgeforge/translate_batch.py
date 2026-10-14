@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Callable
 
 from .progress import Checkpoint, report
+from .translation_memory import load_memory, prefill_from_memory, update_memory
 from .translation import _has_cjk, _placeholders, apply_translation, check_translation, export_translation, prefill_from_record, prefill_from_reference
 
 DEFAULT_CHUNK = 120
@@ -56,6 +57,17 @@ def verify_chunk(original: list[dict], returned: list[dict]) -> list[str]:
     return problems
 
 
+def review_table(document: dict) -> str:
+    """REVIEW.md: source and translation side by side, with where each translation came from."""
+    def cell(value: str) -> str:
+        return (value or "").replace("|", "\\|").replace("\r", "").replace("\n", " <br> ")
+
+    lines = ["| File | Source | Translation | From |", "| --- | --- | --- | --- |"]
+    lines += [f"| {cell(e.get('file', ''))} | {cell(e['source'])} | {cell(e.get('translation', ''))} | {e.get('provenance') or 'agent'} |"
+              for e in document["entries"]]
+    return "\n".join(lines) + "\n"
+
+
 def agent_translator(agent: str, timeout: int = 1500) -> Callable[[Path], str]:
     """A translator that runs `agent` (e.g. "claude -p --permission-mode acceptEdits") in the chunk's folder with the
     prompt on stdin; returns its output for the usage-limit check."""
@@ -72,7 +84,7 @@ def agent_translator(agent: str, timeout: int = 1500) -> Callable[[Path], str]:
 
 def translate_batch(mod_dir: Path, *, translator: Callable[[Path], str], work_dir: Path, out_dir: Path | None = None,
                     in_place: bool = False, chunk: int = DEFAULT_CHUNK, reference: Path | None = None,
-                    records: list[Path] | None = None, quiet: bool = False) -> dict:
+                    records: list[Path] | None = None, quiet: bool = False, memory: Path | None = None) -> dict:
     mod_dir = Path(mod_dir).expanduser().resolve()
     if (out_dir is None) == (not in_place):
         raise TranslateBatchError("choose exactly one of --out or --in-place.")
@@ -86,11 +98,14 @@ def translate_batch(mod_dir: Path, *, translator: Callable[[Path], str], work_di
         prefilled["reference"] = prefill_from_reference(document, mod_dir, Path(reference))
     if records:
         prefilled["record"] = prefill_from_record(document, [Path(p) for p in records])
+    memory_entries = load_memory(memory)
+    if memory is not None:
+        prefilled["memory"] = prefill_from_memory(document, memory_entries)
     (work_dir / "export.json").write_text(json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8")
     todo = [e for e in document["entries"] if not (e.get("translation") or "").strip()]
     chunks = [todo[i:i + chunk] for i in range(0, len(todo), chunk)]
     fingerprint = hashlib.sha256(json.dumps(document["file_hashes"], sort_keys=True).encode("utf-8")).hexdigest()
-    header = {"mod": str(mod_dir), "file_hashes": fingerprint, "chunk": chunk}
+    header = {"mod": str(mod_dir), "file_hashes": fingerprint, "chunk": chunk, "todo": len(todo)}
     glossary = dict(document.get("glossary") or {})
     filled: dict[str, str] = {}
     failed: dict[int, list[str]] = {}
@@ -135,7 +150,8 @@ def translate_batch(mod_dir: Path, *, translator: Callable[[Path], str], work_di
                        time.perf_counter() - started)
         result = {"schema_version": 1, "mode": "TRANSLATE_BATCH", "mod": str(mod_dir), "entries": len(document["entries"]),
                   "prefilled": prefilled, "chunks": len(chunks), "translated": len(filled), "failed_chunks": failed,
-                  "stopped": stopped, "applied": None, "check": None, "work_dir": str(work_dir)}
+                  "stopped": stopped, "applied": None, "check": None, "work_dir": str(work_dir),
+                  "sent_to_agent": len(todo), "memory_added": 0}
         if stopped or failed:
             return result  # the checkpoint stays: a rerun redoes only the failed or missing chunks
         for entry in document["entries"]:
@@ -143,6 +159,9 @@ def translate_batch(mod_dir: Path, *, translator: Callable[[Path], str], work_di
                 entry["translation"] = filled[entry["id"]]
         document["glossary"] = glossary
         (work_dir / "translations.json").write_text(json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8")
+        (work_dir / "REVIEW.md").write_text(review_table(document), encoding="utf-8")
+        if memory is not None:
+            result["memory_added"] = update_memory(Path(memory), memory_entries, document)
         applied = apply_translation(mod_dir, document, out_dir=Path(out_dir) if out_dir else None, in_place=in_place)
         result["applied"] = applied
         result["check"] = check_translation(Path(out_dir) if out_dir else mod_dir)
