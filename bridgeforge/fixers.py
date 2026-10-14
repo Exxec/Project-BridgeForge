@@ -89,6 +89,7 @@ SUPPORTED_FINDINGS = (
     "variant-weapon-slot-missing",
     "hard-coded-campaign-system-reference",
     "hard-coded-campaign-entity-reference",
+    "preset-entry-drops-vanilla-fields",
 )
 
 
@@ -3708,7 +3709,10 @@ def _fix_campaign_lookup_guard(root: Path, options: dict, finding_id: str) -> li
     return changes
 
 
+from .fixers_presets import _fix_preset_entry_drops_vanilla_fields  # noqa: E402  (item 73 B4; imports fixers at call time)
+
 _FIXER_FUNCS = {
+    "preset-entry-drops-vanilla-fields": _fix_preset_entry_drops_vanilla_fields,
     "hard-coded-campaign-system-reference": lambda root, options: _fix_campaign_lookup_guard(root, options, "hard-coded-campaign-system-reference"),
     "hard-coded-campaign-entity-reference": lambda root, options: _fix_campaign_lookup_guard(root, options, "hard-coded-campaign-entity-reference"),
     "csv-slash-quote-escape": _fix_csv_slash_quote_escape,
