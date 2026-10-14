@@ -32,7 +32,8 @@ class BootTestWatchdogTests(unittest.TestCase):
             started = time.monotonic()
             result = boot_test.run_boot_test(rig, ["demo_mod"], timeout=20)
             waited = time.monotonic() - started
-        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(result["status"], "LAUNCH_NO_PROCESS")
+        self.assertEqual(result["status"], boot_test.LAUNCH_NO_PROCESS)
         self.assertIn("Launch watchdog", result["reason"])
         self.assertIn("no java process", result["reason"])
         self.assertLess(waited, 15)
@@ -56,6 +57,24 @@ class WatchdogWiringTests(unittest.TestCase):
         script = BF_TEST.read_text(encoding="utf-8")
         self.assertIn("Launch watchdog", script)
         self.assertIn("TotalSeconds -gt 60", script)
+
+    def test_bf_test_launch_names_the_status(self) -> None:
+        self.assertIn("LAUNCH_NO_PROCESS", BF_TEST.read_text(encoding="utf-8"))
+
+    def test_live_run_reports_the_watchdog_as_a_named_stage(self) -> None:
+        import contextlib
+
+        from bridgeforge import live_run
+
+        @contextlib.contextmanager
+        def firing(*_args, **_kwargs):
+            raise live_run.LaunchNoProcess("Launch watchdog: no java process")
+            yield  # pragma: no cover
+
+        with mock.patch.object(live_run, "running_game", firing):
+            result = live_run.live_run(Path("rig"), "T-1")
+        self.assertEqual(result.verdict, "LIVE_STUCK")
+        self.assertEqual(result.stage, "LAUNCH_NO_PROCESS")
 
     def test_live_runner_uses_the_same_watchdog(self) -> None:
         source = (Path(boot_test.__file__).parent / "live_run.py").read_text(encoding="utf-8")

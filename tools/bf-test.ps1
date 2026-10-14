@@ -258,8 +258,8 @@ switch ($Command) {
             # with the rig path 60 s after launch means the bat never started the game: say so and stop instead of waiting.
             if ($java.Count -gt 0) { $javaSeen = $true }
             if (-not $javaSeen -and ((Get-Date) - $started).TotalSeconds -gt 60) {
-                Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} watchdog: no java process for the rig 60 s after launch" -f (Get-Date))
-                throw "Launch watchdog: no java process for $Rig appeared within 60 s of launch (see $out and $err). Stopped; nothing was left running."
+                Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} watchdog: LAUNCH_NO_PROCESS no java process for the rig 60 s after launch" -f (Get-Date))
+                throw "Launch watchdog (LAUNCH_NO_PROCESS): no java process for $Rig appeared within 60 s of launch (see $out and $err). Stopped; nothing was left running."
             }
             if ($autoClick -and $launcherHandle -ne 0 -and -not $physicalDone -and $postedAt -and ((Get-Date) - $postedAt).TotalSeconds -gt 8) {
                 $physicalDone = $true
