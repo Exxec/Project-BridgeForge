@@ -2,8 +2,10 @@
 
 BridgeForge is an offline, evidence-first toolkit for reviving legacy Starsector mods on
 0.98a-RC8 (Java 17). Charter: `docs/PROJECT_CHARTER.md`. Command guide:
-`docs/BRIDGEFORGE_REVIVAL_GUIDE.md`. Plan and history: `ROADMAP.md` (P14 is the live track),
-`CHANGELOG.md`.
+`docs/BRIDGEFORGE_REVIVAL_GUIDE.md`. Plan and history: `ROADMAP.md` (numbered items; the newest, 70 onward,
+are at the end of the file), `CHANGELOG.md`. Direction for fixers, checks and automation: item 73,
+`docs/AUTOMATION_PLAN.md`, including the owner's 2026-10-14 decisions on what may run without a person. Local sessions also
+have `AGENTS.md` (gitignored), the agent contract: who may decide what, escalation rules, sister projects.
 
 ## Non-negotiables
 
