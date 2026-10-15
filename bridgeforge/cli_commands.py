@@ -19,6 +19,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "agent_diff_check": ("agent-diff-check",),
     "move_machine": ("migrate-inventory", "relocate", "migrate-verify"),
     "state_snapshot": ("state-snapshot",),
+    "value_proposals": ("value-proposals",),
     "cmd_workspace": ("workspace", "plan", "apply", "rollback", "build-plan", "compile", "package-jar", "compile-feedback", "review-bundle", "validate", "save-risk", "pipeline", "packs", "migration-pack-candidate", "runtime-profile", "runtime-smoke", "inspect", "export-patch", "opportunities", "doctor", "conflicts", "provenance"),
     "cmd_scan": ("mods-compat", "baseline-stats", "docs-index", "preset-check", "scan", "working-tree-layout", "source-authority", "build-input-manifest", "integration-scenarios", "compile-check", "revenantlib-check", "check-impact"),
     "cmd_analysis": ("corpus-audit", "cross-mod-analyze", "campaign-identity-inventory", "campaign-identity-check", "release-lineage", "library-api-inventory", "library-api-match", "dependency-api-check", "corpus-compare", "release-evaluate", "revival-audit", "api-diff"),
