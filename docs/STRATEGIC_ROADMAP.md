@@ -98,6 +98,9 @@ of reviewed deterministic recipes rather than an ever-growing collection of one-
   invalidation. New contexts abstain; superficially similar finding text is insufficient.
 - Implement portfolio orchestration and resumable jobs over case receipts; indexes are rebuildable views. Agent
   adapters are optional and replaceable. Enable eligible auto-application only after the item 75 R3/R4 gates pass.
+- Extend existing local concurrency with measured analysis reuse, change-driven recomputation, bounded resource
+  scheduling and input-bound recovery. Start with independent read-only mod analysis; preserve ordered mutations and
+  independent qualification. Agent-ready scope and acceptance: [execution efficiency plan](EXECUTION_EFFICIENCY_PLAN.md).
 
 **Dependencies/prerequisites:** S1's usable case/evidence contracts; a fresh baseline; rights to use a representative
 private corpus; maintenance/review capacity; a held-out evaluation set. Reuse item 73 A/C/D/E and selected B work,
@@ -121,6 +124,10 @@ Reserve holdout cases before tuning and record scanner/policy versions in every 
 5. All sampled auto-applied cases survive independent review with no unapproved feature loss; discovered false
    acceptances block expansion and reopen affected cases. Abstention and unsupported cases remain visible.
 6. Qualified-candidate yield, escaped regressions and pending live work are reported separately from scanner clearance.
+7. On the agreed workload/hardware, compare repeated serial, cold/warm and bounded parallel runs. Normalized findings
+   and qualification decisions agree; stale cached inputs are rejected and cancellation/worker failure is recoverable.
+   Report memory, elapsed time and resource contention; the owner sets worthwhile gains from measured baselines before
+   defaults change. Existing `--jobs`/`--parallel` support is a starting point, not proof this acceptance already passes.
 
 **Deferred:** broad autonomous repair of unknown code, automatic gameplay restoration/balance, a public plugin
 marketplace, optimization of every queue outlier, mandatory cloud models, generic distributed workers and universal

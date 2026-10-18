@@ -22,6 +22,8 @@ proposed work and dated evidence. It does not implement the case lifecycle or re
   [completion log](ROADMAP_COMPLETION_LOG.md) are historical tranche records, not competing current backlogs.
 - [Automation plan](AUTOMATION_PLAN.md), [item 75 implementation handoff](ROADMAP_IMPLEMENTATION_HANDOFF.md),
   [hardening plan](HARDENING_PLAN.md): tactical specifications; supporting commands do not prove extensions are built.
+- [Execution efficiency plan](EXECUTION_EFFICIENCY_PLAN.md): S2 bounded concurrency, analysis reuse, resource budgets
+  and recovery; extends implemented workers without changing qualification or live-run policy.
 - Local `docs/REVIVAL_WORKFLOW.md` and revival/escalation templates: complexity, routing and plan requirements.
   Some workflow/templates are local-only; GitHub readers must not infer that their missing local evidence exists.
 

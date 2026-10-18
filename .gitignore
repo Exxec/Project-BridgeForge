@@ -26,8 +26,11 @@ docs/PERFORMANCE_WORKBENCH_DESIGN.md
 /.githooks/
 /AGENTS.md
 /EXAMPLES.md
+/.omp/
 /tools/*.ps1
 !/tools/bf-test.ps1
+!/tools/copy-done-archives-with-readme.ps1
+!/tools/build-done-master-log.ps1
 
 # Vanilla Starsector asset (Fractal Softworks): never redistributed. build-probe-mod copies it
 # from the local --core into the probe's mission folder.

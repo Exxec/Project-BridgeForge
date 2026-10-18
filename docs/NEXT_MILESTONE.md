@@ -104,6 +104,9 @@ Before implementation, record the current commands, manual edits, active review 
 available evidence for the pilot. Exclude time waiting for the owner from active work while still reporting it as elapsed
 delay. Reuse immutable input copies, not already-fixed working copies, to measure repair outcomes.
 
+Also record per-stage serial elapsed time and the identities/ownership needed to resume safely. These are prerequisites
+for S2's [bounded execution and reuse](EXECUTION_EFFICIENCY_PLAN.md), not a scheduler or concurrency expansion within S1.
+
 Completion requires:
 
 - Synthetic contract/integration tests for both layouts, semantic status applicability, traversal/junction boundaries,
