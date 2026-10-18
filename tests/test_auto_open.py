@@ -2,20 +2,19 @@ from __future__ import annotations
 
 import io
 import json
-import os
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
+from bridgeforge import scan_registry
 from bridgeforge.auto_open import auto_open, render
 from bridgeforge.cli import main
 from tests.support import resolved_temp_dir
 
 AUTO_ID = "hullmod-instance-state"  # tier auto, no fixer needed to be real: only the tier matters here
-SCAN_TIME = 1000
 
 
-def _workspace(queue: Path, name: str, classification: str = "REVIEW", finding_id: str = AUTO_ID) -> Path:
+def _workspace(queue: Path, name: str, classification: str = "REVIEW", finding_id: str = AUTO_ID, *, registered: bool = True) -> Path:
     workspace = queue / name
     (workspace / "working").mkdir(parents=True)
     (workspace / "working" / "mod_info.json").write_text('{"id": "%s"}' % name.lower(), encoding="utf-8")
@@ -24,7 +23,8 @@ def _workspace(queue: Path, name: str, classification: str = "REVIEW", finding_i
     finding = {"id": finding_id, "classification": classification, "file": "data/x.java", "evidence": ["e"]}
     scan_file = scan / "bridgeforge.compat.json"
     scan_file.write_text(json.dumps({"findings": [finding]}), encoding="utf-8")
-    os.utime(scan_file, (SCAN_TIME, SCAN_TIME))
+    if registered:  # a CURRENT scan: the registry holds the fingerprint of working/ as it is now
+        scan_registry.register(workspace, scan_file, workspace / "working", {})
     return workspace
 
 
@@ -58,13 +58,13 @@ class AutoOpenTests(unittest.TestCase):
         _packet(refused, {"state": "FIXER_REFUSED", "reason": "field is read in a nested class"})
         stale = _workspace(queue, "Stale")
         _revived(stale)
-        backup = stale / "working" / "x.java.pre-bf-fix-hullmod-instance-state.bak"
-        backup.write_text("old", encoding="utf-8")
-        os.utime(backup, (SCAN_TIME + 500, SCAN_TIME + 500))
+        (stale / "working" / "mod_info.json").write_text('{"id": "stale", "changed": "after the scan"}', encoding="utf-8")
         unexplained = _workspace(queue, "Odd", classification="SAFE")
         _revived(unexplained)
         approved_by_run = _workspace(queue, "RunApproved")
         _revived(approved_by_run, approved=[AUTO_ID])
+        legacy = _workspace(queue, "Legacy", registered=False)  # a scan folder from before the registry
+        _revived(legacy)
         clean = _workspace(queue, "Clean", finding_id="json-hash-comment")  # not auto-tier open work: tier none
         _revived(clean)
         return queue
@@ -73,8 +73,13 @@ class AutoOpenTests(unittest.TestCase):
         with resolved_temp_dir() as root:
             result = auto_open(self._queue(root))
         self.assertEqual(_reasons(result), {"Never": "NEVER_REVIVED", "Approval": "NOT_APPROVED", "Refused": "FIXER_REFUSED",
-                                            "Stale": "STALE_SCAN", "Odd": "UNEXPLAINED", "RunApproved": "UNEXPLAINED"})
-        self.assertEqual(result["totals"], {"NOT_APPROVED": 1, "FIXER_REFUSED": 1, "NEVER_REVIVED": 1, "STALE_SCAN": 1, "UNEXPLAINED": 2})
+                                            "Stale": "STALE_SCAN", "Odd": "UNEXPLAINED", "RunApproved": "UNEXPLAINED",
+                                            "Legacy": "UNKNOWN_SCAN"})
+        self.assertEqual(result["totals"], {"NOT_APPROVED": 1, "FIXER_REFUSED": 1, "NEVER_REVIVED": 1, "STALE_SCAN": 1,
+                                            "UNKNOWN_SCAN": 1, "INCOMPLETE_SCAN": 0, "UNEXPLAINED": 2})
+        legacy = result["mods"]["Legacy"][0]
+        self.assertIn("would otherwise be NOT_APPROVED", legacy["detail"])
+        self.assertEqual(result["mods"]["Stale"][0]["scan_state"], "STALE")
         refused = result["mods"]["Refused"][0]
         self.assertEqual(refused["detail"], "field is read in a nested class")
         self.assertEqual(result["by_finding"][AUTO_ID]["UNEXPLAINED"], 2)
@@ -86,7 +91,6 @@ class AutoOpenTests(unittest.TestCase):
             ledger = queue / "Approval" / "reports" / "escalations" / "ledger.jsonl"
             ledger.parent.mkdir(parents=True)
             ledger.write_text(json.dumps({"finding": AUTO_ID, "state": "FIXER_REFUSED", "reason": "newest wins"}) + "\n", encoding="utf-8")
-            os.utime(ledger, (SCAN_TIME - 10, SCAN_TIME - 10))
             reasons = _reasons(auto_open(queue))
         self.assertEqual(reasons["Approval"], "FIXER_REFUSED")   # the ledger refusal beats the missing approval
         self.assertEqual(reasons["Never"], "NEVER_REVIVED")

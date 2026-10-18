@@ -81,8 +81,7 @@ def add_parser(subcommands) -> None:
     stats_cmd = subcommands.add_parser("finding-stats", help="count findings across workspaces by automation tier: how many mods could be revived unattended, and which finding ids to automate next (roadmap P15 item 1)")
     stats_cmd.add_argument("roots", type=Path, nargs="*", help="queue folders or single workspaces; default <repo>/In operation")
     stats_cmd.add_argument("--scan", action="store_true", help="scan each <ws>/working afresh instead of reading its latest stored scan")
-    stats_cmd.add_argument("--rescan-stale", action="store_true", help="scan afresh only the workspaces whose stored scan is stale (a fixer backup, the escalation ledger, an explain record or the Done/ archive note is newer); keep the stored result for the rest")
-    stats_cmd.add_argument("--done", type=Path, help="the Done/ folder whose ARCHIVE_NOTE.md files count for staleness (default <repo>/Done)")
+    stats_cmd.add_argument("--rescan-stale", action="store_true", help="scan afresh and register every workspace whose registered scan is not CURRENT (STALE, UNKNOWN, INCOMPLETE or missing: compared by input content, not file times); reuse the stored result only where the registry fingerprint still matches")
     stats_cmd.add_argument("--vanilla-core", type=Path, help="with --scan or --rescan-stale: also compile-check loose scripts")
     stats_cmd.add_argument("--write", type=Path, metavar="DIR", help="write FINDING_STATS.json and FINDING_STATS.md into DIR; with --scan, each workspace's result is also appended to DIR/FINDING_STATS.partial.jsonl as it finishes, so an interrupted run resumes")
     stats_cmd.add_argument("--restart", action="store_true", help="with --write: ignore an earlier run's FINDING_STATS.partial.jsonl and scan everything again")
@@ -195,7 +194,7 @@ def run_cli(args: argparse.Namespace) -> int:
 
         try:
             stats = finding_stats(args.roots or [REPO_ROOT / "In operation"], scan=args.scan, vanilla_core=args.vanilla_core,
-                                  rescan_stale=args.rescan_stale, done_root=args.done or REPO_ROOT / "Done", checkpoint=checkpoint, progress=None if args.quiet else progress)
+                                  rescan_stale=args.rescan_stale, checkpoint=checkpoint, progress=None if args.quiet else progress)
         except (FindingStatsError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

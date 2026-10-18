@@ -184,72 +184,6 @@ class FindingStatsTests(unittest.TestCase):
         self.assertIn("| Almost | mechanical | none |", text)
         self.assertTrue(kept)
 
-    def _stale_queue(self, root: Path) -> Path:
-        import os
-
-        queue = root / "q"
-        old = _workspace(queue, "Old", ["json-hash-comment"])
-        fresh = _workspace(queue, "Fresh", ["json-hash-comment"])
-        for workspace in (old, fresh):
-            os.utime(workspace / "reports" / "scan-1" / "bridgeforge.compat.json", (1000, 1000))
-        backup = old / "working" / "mod_info.json.pre-bf-fix-x.bak"
-        backup.write_text("{}", encoding="utf-8")
-        os.utime(backup, (2000, 2000))
-        return queue
-
-    def test_a_scan_older_than_a_fixer_backup_is_stale(self):
-        from bridgeforge.finding_stats import stale_scan
-
-        with resolved_temp_dir() as root:
-            queue = self._stale_queue(root)
-            self.assertEqual(stale_scan(queue / "Old"), {"scan": "scan-1", "newer": "working/mod_info.json.pre-bf-fix-x.bak", "kind": "fixer backup"})
-            self.assertIsNone(stale_scan(queue / "Fresh"))
-            stats = finding_stats([queue])
-        self.assertEqual([row["workspace"] for row in stats["stale"]], ["Old"])
-        self.assertFalse(stats["stale"][0]["rescanned"])
-        self.assertIn("## Stale stored scans (1)", render(stats))
-
-    def test_ledger_explain_record_and_archive_note_also_make_a_scan_stale(self):
-        import os
-
-        from bridgeforge.finding_stats import stale_scan
-
-        with resolved_temp_dir() as root:
-            queue = root / "q"
-            done = root / "Done"
-            kinds = {}
-            for name, make in (("Led", lambda w: _ledger(w, {"finding": "x"})),
-                               ("Exp", lambda w: (w / "reports" / "explain-2026.json").write_text("{}", encoding="utf-8")),
-                               ("Arc", lambda w: (done / w.name).mkdir(parents=True) or (done / w.name / "ARCHIVE_NOTE.md").write_text("x", encoding="utf-8"))):
-                workspace = _workspace(queue, name, ["json-hash-comment"])
-                os.utime(workspace / "reports" / "scan-1" / "bridgeforge.compat.json", (1000, 1000))
-                make(workspace)
-                kinds[name] = (stale_scan(workspace, done) or {}).get("kind")
-        self.assertEqual(kinds, {"Led": "escalation ledger", "Exp": "explain record", "Arc": "archive note"})
-
-    def test_rescan_stale_scans_only_the_stale_workspace(self):
-        from unittest import mock
-
-        import bridgeforge.finding_stats as fs
-
-        with resolved_temp_dir() as root:
-            queue = self._stale_queue(root)
-            with mock.patch.object(fs, "_findings", wraps=fs._findings) as findings:
-                stats = finding_stats([queue], rescan_stale=True)
-            calls = {call.args[0].name: call.args[1] for call in findings.call_args_list}
-        self.assertEqual(calls, {"Old": True, "Fresh": False})
-        self.assertTrue(stats["stale"][0]["rescanned"])
-        self.assertIn("stale ones rescanned", stats["source"])
-
-    def test_cli_rescan_stale(self):
-        with resolved_temp_dir() as root:
-            queue = self._stale_queue(root)
-            err = io.StringIO()
-            with redirect_stdout(io.StringIO()), redirect_stderr(err):
-                self.assertEqual(main(["finding-stats", str(queue), "--rescan-stale", "--write", str(root / "out"), "--done", str(root / "Done")]), 0)
-            self.assertFalse((root / "out" / "FINDING_STATS.partial.jsonl").exists())
-        self.assertIn("[1/2] Fresh:", err.getvalue())
-
     def test_cli(self):
         with resolved_temp_dir() as root:
             queue = self._queue(root)
@@ -259,7 +193,7 @@ class FindingStatsTests(unittest.TestCase):
                 self.assertEqual(main(["finding-stats", str(queue), "--json"]), 0)
                 self.assertEqual(main(["finding-stats", str(root / "missing")]), 2)
             written = (root / "out" / "FINDING_STATS.md").read_text(encoding="utf-8")
-        self.assertIn("# Finding stats (5 of 6 workspaces, latest stored scan)", out.getvalue())
+        self.assertIn("# Finding stats (5 of 6 workspaces, latest registered scan)", out.getvalue())
         self.assertIn("## What to automate next", written)
         with self.assertRaises(FindingStatsError):
             finding_stats([Path("definitely/not/here")])
