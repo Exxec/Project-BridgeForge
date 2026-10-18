@@ -73,6 +73,7 @@ def add_parser(subcommands) -> None:
     fix.add_argument("--faction-file", type=Path, help="required for faction-known-lists-missing")
     fix.add_argument("--hull-zero-no-evidence", action="store_true", help="carrier-bays-proposal: set 0 bays for every hull that has a hangar value but no LAUNCH_BAY slot and no variant wings (nothing can launch from it)")
     fix.add_argument("--hull", action="append", default=[], metavar="ID=N", help="repeatable; required for carrier-bays-proposal, e.g. --hull my_carrier=4 (0-6, vanilla's own maximum)")
+    fix.add_argument("--declare-provider", action="append", default=[], metavar="ID[=NAME]", help="repeatable; undeclared-library-dependency: declare this indexed provider mod (a revive packet's import resolution names it) instead of a known library")
     fix.add_argument("--reference-core", type=Path, help="variant-op-over-budget: trim only variants that fit under this older starsector-core's costs (the ones RC8 pushed over)")
     fix.add_argument("--encoding", action="append", default=[], metavar="FILE=ENC", help="repeatable; for data-file-not-utf8: re-encode FILE (relative to the mod) from ENC (cp1252, mac_roman, shift_jis, gbk, gb18030, latin-1) when a person has read it and named the encoding")
     fix.add_argument("--substitutions", type=Path, metavar="FILE.json", help="content-reference-substitute: the proposals file from substitution-proposals, with \"approved\": true set on the entries to apply")
@@ -183,6 +184,7 @@ def run_cli(args: argparse.Namespace) -> int:
             "encodings": dict(item.split("=", 1) for item in (args.encoding or [])),
             "reference_core": args.reference_core,
             "hulls": args.hull,
+            "declare_providers": [{"id": item.partition("=")[0], "name": item.partition("=")[2] or item.partition("=")[0]} for item in args.declare_provider] or None,
             "hull_zero_no_evidence": args.hull_zero_no_evidence,
             "allow_shadowed_edit": args.allow_shadowed_edit,
             "provider_roots": args.providers or None,
