@@ -23,6 +23,7 @@ from pathlib import Path
 from .automation import ACTIONABLE, TIER_ORDER, bucket, tier_descriptions, tier_for
 from .baseline import finding_dict_baseline_key, mod_baseline_keys
 from .progress import Checkpoint
+from .scan_registry import REGISTRY_NAME, STATES
 
 SCHEMA_VERSION = 1
 PROMOTE_AFTER = 3  # verified AI fixes of one finding id, across at least two mods
@@ -46,27 +47,9 @@ def discover_workspaces(roots: list[Path]) -> list[Path]:
         if not root.is_dir():
             raise FindingStatsError(f"{root} is not a directory.")
         for candidate in [root, *sorted(p for p in root.iterdir() if p.is_dir())]:
-            if (candidate / "working" / "mod_info.json").is_file() or _latest_scan(candidate) is not None:
+            if (candidate / "working" / "mod_info.json").is_file() or _latest_scan(candidate) is not None                     or (candidate / "reports" / REGISTRY_NAME).is_file():
                 found.add(candidate)
     return sorted(found)
-
-
-def _findings(workspace: Path, scan: bool, vanilla_core: Path | None) -> tuple[list[dict] | None, str]:
-    if scan:
-        from dataclasses import asdict
-
-        from .scanner import scan_mod
-
-        working = workspace / "working"
-        if not (working / "mod_info.json").is_file():
-            return None, "no working/mod_info.json to scan"
-        result = scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None)
-        return [asdict(f) for f in result.findings], f"scanned {working}"
-    latest = _latest_scan(workspace)
-    if latest is None:
-        return None, "no stored scan (run `bridgeforge scan`, or pass --scan)"
-    data = json.loads(latest.read_text(encoding="utf-8-sig"))
-    return list(data.get("findings", data) if isinstance(data, dict) else data), str(latest)
 
 
 def read_ledger(workspace: Path) -> list[dict]:
@@ -85,53 +68,160 @@ def read_ledger(workspace: Path) -> list[dict]:
 CHECKPOINT_NAME = "FINDING_STATS.partial.jsonl"
 
 
-def _workspace_record(workspace: Path, scan: bool, vanilla_core: Path | None) -> dict:
-    """One workspace's result: a mod row with its finding-id counts, or an `unscanned` reason."""
-    findings, source = _findings(workspace, scan, vanilla_core)
-    if findings is None:
-        return {"workspace": workspace.name, "unscanned": source}
-    accepted_keys = mod_baseline_keys(workspace / "working")
+NOT_CURRENT = ("STALE", "UNKNOWN", "INCOMPLETE")
+
+
+def _scan_and_register(workspace: Path, vanilla_core: Path | None) -> None:
+    """Scan `working/` afresh and publish the result in the scan registry (item 75 R2), under a name of our own choosing."""
+    import time
+
+    from .report import write_artifacts
+    from .scanner import scan_mod
+
+    working = workspace / "working"
+    result = scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None)
+    stamp = time.strftime("%Y-%m-%d-%H%M%S", time.gmtime())
+    write_artifacts(result, workspace / "reports" / f"scan-{stamp}-stats",
+                    registry={"vanilla_core": vanilla_core, "compile_check": vanilla_core is not None})
+
+
+def _fresh_context(vanilla_core: Path | None) -> dict:
+    return {"vanilla_core": vanilla_core, "compile_check": vanilla_core is not None, "target": "0.98.x/java17"}
+
+
+def _assessment(workspace: Path, scan: bool, vanilla_core: Path | None) -> tuple[dict, str | None]:
+    """(freshness of the stored scan, key). The key identifies the content a record was computed from, so a checkpointed
+    record is reused only for the same content (R2): the registry fingerprint, or for --scan the fingerprint of a fresh scan."""
+    from . import scan_registry
+
+    if scan:
+        fp = scan_registry.fingerprint(workspace / "working", _fresh_context(vanilla_core))
+        return {"state": "FRESH_UNREGISTERED", "detail": "scanned now; not published in the registry", "report": None,
+                "fingerprint": fp["digest"]}, fp["digest"]
+    assessment = scan_registry.assess(workspace)
+    return assessment, _key(assessment)
+
+
+def _key(assessment: dict) -> str | None:
+    """The registry fingerprint; for a legacy scan (no fingerprint) the digest of its report, which is all that record depends on."""
+    from . import scan_registry
+
+    if assessment.get("fingerprint") or not isinstance(assessment.get("report"), Path):
+        return assessment.get("fingerprint")
+    try:
+        return "legacy:" + scan_registry._sha256(assessment["report"])
+    except OSError:
+        return None
+
+
+def _read_report(report: Path) -> list[dict]:
+    data = json.loads(Path(report).read_text(encoding="utf-8-sig"))
+    return list(data.get("findings", data) if isinstance(data, dict) else data)
+
+
+def _workspace_record(workspace: Path, scan: bool, vanilla_core: Path | None, *, rescan_stale: bool = False,
+                      assessment: dict | None = None) -> dict:
+    """One workspace's result: a mod row with its finding-id counts, or an `unscanned` reason.
+    Freshness (R2) comes from the scan registry: CURRENT, STALE, UNKNOWN or INCOMPLETE; `rescan_stale` scans afresh and
+    registers every workspace that is not CURRENT and keeps the stored result of the rest."""
+    from dataclasses import asdict
+
+    from . import scan_registry
+    from .scanner import scan_mod
+
+    working = workspace / "working"
+    if assessment is None:
+        assessment, _ = _assessment(workspace, scan, vanilla_core)
+    rescanned = False
+    findings, source = None, ""
+    try:
+        if scan:
+            if not (working / "mod_info.json").is_file():
+                return {"workspace": workspace.name, "unscanned": "no working/mod_info.json to scan"}
+            result = scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None)
+            findings, source = [asdict(f) for f in result.findings], f"scanned {working}"
+        else:
+            if rescan_stale and assessment["state"] != "CURRENT" and (working / "mod_info.json").is_file():
+                _scan_and_register(workspace, vanilla_core)
+                rescanned = True
+                assessment = scan_registry.assess(workspace)
+            if assessment.get("report") is None:
+                return {"workspace": workspace.name, "unscanned": assessment["detail"] + " (run `bridgeforge scan`, or pass --scan / --rescan-stale)",
+                        "freshness": {"state": assessment["state"], "detail": assessment["detail"]}}
+            findings, source = _read_report(assessment["report"]), str(assessment["report"])
+    except (ValueError, OSError) as exc:
+        return {"workspace": workspace.name, "unscanned": f"scan failed: {exc}",
+                "freshness": {"state": "INCOMPLETE", "detail": str(exc)}}
+    key = _key(assessment)
+    accepted_keys = mod_baseline_keys(working)
     accepted = sum(1 for f in findings if finding_dict_baseline_key(f) in accepted_keys)
     findings = [f for f in findings if finding_dict_baseline_key(f) not in accepted_keys]
     ids = Counter(f.get("id", "?") for f in findings)
     tiers = {finding_id: tier_for(finding_id) for finding_id in ids}
+    report = assessment.get("report")
+    shown = report.relative_to(workspace).as_posix() if isinstance(report, Path) and workspace in report.parents else (str(report) if report else None)
     return {"workspace": workspace.name, "source": source, "bucket": bucket(list(tiers.values())),
             "projected_bucket": bucket(["auto" if t == "mechanical" else t for t in tiers.values()]),
             "blocking": sorted(i for i, t in tiers.items() if t not in ("none", "auto")),
             "accepted_by_baseline": accepted, "tiers": dict(Counter(tiers[i] for i in ids.elements())),
-            "ids": dict(ids)}
+            "ids": dict(ids),
+            "freshness": {"state": assessment["state"], "detail": assessment["detail"], "report": shown, "key": key,
+                          "filter_digest": scan_registry.filter_digest(working), "rescanned": rescanned,
+                          "report_mtime": assessment.get("report_mtime")}}
 
 
-def _checkpoint_header(roots: list[Path], scan: bool, vanilla_core: Path | None) -> dict:
+def _reusable(record: dict, workspace: Path, scan: bool, vanilla_core: Path | None) -> tuple[bool, dict | None]:
+    """A checkpointed record is reused only when the workspace's content and baseline filter are the ones it was computed from."""
+    from . import scan_registry
+
+    freshness = record.get("freshness") or {}
+    assessment, key = _assessment(workspace, scan, vanilla_core)
+    same = bool(key) and freshness.get("key") == key and freshness.get("filter_digest") == scan_registry.filter_digest(workspace / "working")
+    return same or ("unscanned" in record and not key and assessment["state"] == "NONE"), assessment
+
+
+def _checkpoint_header(roots: list[Path], scan: bool, vanilla_core: Path | None, rescan_stale: bool = False) -> dict:
+    from .scan_registry import EXCLUSION_VERSION, SCHEMA_VERSION as REGISTRY_SCHEMA
+
     return {"checkpoint": SCHEMA_VERSION, "roots": [str(Path(r).expanduser().resolve()) for r in roots],
-            "scan": scan, "vanilla_core": str(vanilla_core) if vanilla_core else None}
+            "scan": scan, "vanilla_core": str(vanilla_core) if vanilla_core else None, "rescan_stale": rescan_stale,
+            "registry": [REGISTRY_SCHEMA, EXCLUSION_VERSION]}
 
 
 def finding_stats(roots: list[Path], *, scan: bool = False, vanilla_core: Path | None = None,
-                  checkpoint: Path | None = None, progress=None) -> dict:
+                  checkpoint: Path | None = None, progress=None, rescan_stale: bool = False) -> dict:
     """`checkpoint`: a JSONL file each workspace's record is appended to as it finishes, so an
     interrupted run resumes where it stopped (same roots and options only). `progress(done, total,
     record, seconds, resumed)` is called after each workspace."""
     import time
 
     workspaces = discover_workspaces(roots)
-    mods, unscanned = [], []
+    mods, unscanned, stale_rows = [], [], []
+    freshness_counts: Counter[str] = Counter()
     occurrences: Counter[str] = Counter()
     mods_with: dict[str, set[str]] = defaultdict(set)
     ai_verified: dict[str, list[str]] = defaultdict(list)
-    with Checkpoint(checkpoint, _checkpoint_header(roots, scan, vanilla_core)) as saved:
+    with Checkpoint(checkpoint, _checkpoint_header(roots, scan, vanilla_core, rescan_stale)) as saved:
         for index, workspace in enumerate(workspaces, 1):
             for entry in read_ledger(workspace):
                 if entry.get("outcome") in VERIFIED_OUTCOMES and entry.get("runner") == "agent" and entry.get("finding"):
                     ai_verified[entry["finding"]].append(workspace.name)
             started = time.monotonic()
             record = saved.get(workspace.name)
+            assessment = None
+            if record is not None:
+                reusable, assessment = _reusable(record, workspace, scan, vanilla_core)
+                record = record if reusable else None
             resumed = record is not None
             if record is None:
-                record = _workspace_record(workspace, scan, vanilla_core)
+                record = _workspace_record(workspace, scan, vanilla_core, rescan_stale=rescan_stale, assessment=assessment)
                 saved.add(workspace.name, record)
             if progress:
                 progress(index, len(workspaces), record, time.monotonic() - started, resumed)
+            freshness = record.get("freshness") or {"state": "NONE", "detail": "no stored scan"}
+            freshness_counts[freshness["state"]] += 1
+            if freshness["state"] in NOT_CURRENT:
+                stale_rows.append({"workspace": record["workspace"], **freshness})
             if "unscanned" in record:
                 unscanned.append({"workspace": record["workspace"], "reason": record["unscanned"]})
                 continue
@@ -150,7 +240,9 @@ def finding_stats(roots: list[Path], *, scan: bool = False, vanilla_core: Path |
                for finding_id, names in ai_verified.items() if len(names) >= PROMOTE_AFTER and len(set(names)) >= 2]
     promote.sort(key=lambda row: (-row["verified_fixes"], row["id"]))
     return {
-        "schema_version": SCHEMA_VERSION, "mode": "FINDING_STATS", "source": "fresh scan" if scan else "latest stored scan",
+        "schema_version": SCHEMA_VERSION, "mode": "FINDING_STATS", "source": "fresh scan" if scan else ("registered scans, non-current ones rescanned" if rescan_stale else "latest registered scan"),
+        "freshness": {state: freshness_counts.get(state, 0) for state in (*STATES, "FRESH_UNREGISTERED", "NONE")},
+        "not_current": stale_rows,
         "workspaces": len(workspaces), "scanned": len(mods), "unscanned": unscanned,
         "buckets": {tier: buckets.get(tier, 0) for tier in TIER_ORDER},
         "projected_buckets": {tier: projected.get(tier, 0) for tier in TIER_ORDER},
@@ -180,6 +272,13 @@ def render(stats: dict) -> str:
         lines += [f"- `{row['id']}` ({row['tier']}): {row['verified_fixes']} verified fixes in {', '.join(row['mods'])}" for row in stats["promote_to_fixer"]]
     if stats["unclassified_ids"]:
         lines += ["", "## Not in automation_tiers.json", "", ", ".join(f"`{i}`" for i in stats["unclassified_ids"])]
+    fresh = stats.get("freshness") or {}
+    lines += ["", "## Scan freshness", "", ", ".join(f"{state} {n}" for state, n in fresh.items() if n) or "no scans",
+              "", "CURRENT = the registered scan read these exact inputs, dependencies, options and checks. Anything else is a count to "
+              "re-measure (`--rescan-stale`), not a result to trust."]
+    if stats.get("not_current"):
+        lines += ["", f"### Not current ({len(stats['not_current'])})", "", "| Mod | State | Why | Report | Rescanned |", "|---|---|---|---|---|"]
+        lines += [f"| {r['workspace']} | {r['state']} | {r['detail']} | `{r.get('report') or '-'}` | {'yes' if r.get('rescanned') else 'no'} |" for r in stats["not_current"]]
     if stats["unscanned"]:
         lines += ["", f"## Not counted ({len(stats['unscanned'])})", ""]
         lines += [f"- {row['workspace']}: {row['reason']}" for row in stats["unscanned"]]

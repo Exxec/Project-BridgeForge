@@ -539,7 +539,8 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
             append_ledger(workspace, {"packet": None, "finding": item["finding"], "files": item["files"], "runner": "fixer", "outcome": "APPLIED"}, now)
         stamp = time.strftime("%Y-%m-%d-%H%M%S", time.gmtime(now if now is not None else time.time()))
         if apply and applied_all:
-            write_artifacts(scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None), workspace / "reports" / f"scan-{stamp}-revive")
+            write_artifacts(scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None), workspace / "reports" / f"scan-{stamp}-revive",
+                            registry={"vanilla_core": vanilla_core, "compile_check": vanilla_core is not None})
         run_dir = workspace / "reports" / "revive"
         run_dir.mkdir(parents=True, exist_ok=True)
         (run_dir / "REVIVE.json").write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

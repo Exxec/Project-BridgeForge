@@ -48,7 +48,10 @@ def render_markdown(result: ScanResult) -> str:
     return "\n".join(lines)
 
 
-def write_artifacts(result: ScanResult, output: Path) -> tuple[Path, Path]:
+def write_artifacts(result: ScanResult, output: Path, *, registry: dict | None = None) -> tuple[Path, Path]:
+    """Write the report and manifest. `registry`: the scan's options (vanilla_core, compile_check, provider_roots,
+    removed_content); when given and the input is a workspace's `working/`, the finished scan is registered in
+    `<workspace>/reports/scan-registry.json` (scan_registry, item 75 R2), whatever the output folder is called."""
     output = output.expanduser().resolve()
     try:
         output.relative_to(result.input_path)
@@ -61,4 +64,20 @@ def write_artifacts(result: ScanResult, output: Path) -> tuple[Path, Path]:
     output.mkdir(parents=True, exist_ok=True)
     report_path.write_text(render_markdown(result), encoding="utf-8")
     manifest_path.write_text(json.dumps(result.manifest(), indent=2, sort_keys=True), encoding="utf-8")
+    if registry is not None:
+        register_scan(result, manifest_path, registry)
     return report_path, manifest_path
+
+
+def register_scan(result: ScanResult, manifest_path: Path, options: dict) -> None:
+    import sys
+
+    from .scan_registry import RegistryError, register, workspace_of
+
+    workspace = workspace_of(result.input_path)
+    if workspace is None:
+        return
+    try:
+        register(workspace, manifest_path, result.input_path, {**options, "target": f"{result.target.starsector}/java{result.target.java}"})
+    except RegistryError as exc:
+        print(f"bridgeforge: scan not registered: {exc}", file=sys.stderr)

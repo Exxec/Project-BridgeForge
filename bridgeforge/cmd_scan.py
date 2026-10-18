@@ -139,7 +139,8 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         try:
-            report, manifest = write_artifacts(result, args.output)
+            report, manifest = write_artifacts(result, args.output, registry={"vanilla_core": args.vanilla_core, "compile_check": args.compile_check,
+                                                                                "provider_roots": args.providers or None, "removed_content": args.removed_content})
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

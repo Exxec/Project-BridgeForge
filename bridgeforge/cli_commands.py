@@ -17,6 +17,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "live_ledger": ("live-ledger",),
     "roadmap_lint": ("roadmap-lint",),
     "agent_diff_check": ("agent-diff-check",),
+    "auto_open": ("auto-open",),
     "move_machine": ("migrate-inventory", "relocate", "migrate-verify"),
     "state_snapshot": ("state-snapshot",),
     "snapshot_restore": ("snapshot-restore-check",),

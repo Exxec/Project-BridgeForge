@@ -193,7 +193,7 @@ class FindingStatsTests(unittest.TestCase):
                 self.assertEqual(main(["finding-stats", str(queue), "--json"]), 0)
                 self.assertEqual(main(["finding-stats", str(root / "missing")]), 2)
             written = (root / "out" / "FINDING_STATS.md").read_text(encoding="utf-8")
-        self.assertIn("# Finding stats (5 of 6 workspaces, latest stored scan)", out.getvalue())
+        self.assertIn("# Finding stats (5 of 6 workspaces, latest registered scan)", out.getvalue())
         self.assertIn("## What to automate next", written)
         with self.assertRaises(FindingStatsError):
             finding_stats([Path("definitely/not/here")])
