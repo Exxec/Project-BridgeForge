@@ -1,9 +1,14 @@
 # BridgeForge automation plan: less hand work (ROADMAP item 73)
 
 Owner request 2026-10-14: "design a roadmap plan for further automation, fixers, checks and anything that would let
-bridgeforge do more in terms of hand work", then "write the plan so it can be implemented by any AI". Nothing here is built.
+bridgeforge do more in terms of hand work", then "write the plan so it can be implemented by any AI". Item 73 remains planned;
+existing tools named below are foundations, not evidence that these extensions are complete.
 This file is the specification: each work item names the files to touch, the behaviour, the tests and when it is done. An
 implementer needs this file, `CLAUDE.md` and the code; no chat history.
+
+Revision 2026-10-17: owner "ok add/modify roadmap with these recommendations and if possible a plan on how to implement for other agent."
+See [ROADMAP_IMPLEMENTATION_HANDOFF.md](ROADMAP_IMPLEMENTATION_HANDOFF.md), item 75, for R1-R8 implementation contracts.
+These refine items 70/73. No implementation or live validation is claimed by this planning revision.
 
 ## 1. Owner decisions (recorded 2026-10-14)
 
@@ -61,7 +66,9 @@ BridgeForge verified with no fixer: `loose-script-compile-error` (5 verified fix
    need a tier in `automation_tiers.json`, a test that names them and a `docs-index` run; a new command is a `cmd_*.py` or own
    module listed in `cli_commands.COMMAND_MODULES`, and changes the golden `--help` hashes (`python -m tests.test_cli_golden
    --write`, review the diff).
-2. `MANUAL` and `UNKNOWN` findings are never auto-applied. A fixer is REVIEW tier unless the ledger shows it mechanical.
+2. `MANUAL` and `UNKNOWN` findings are never auto-applied. Confidence (SAFE/REVIEW/MANUAL/UNKNOWN) and automation tier
+   (none/auto/input/mechanical/decision/code/inspect) are separate. Repeated verified applications support promotion;
+   they do not by themselves establish SAFE confidence or authorize balance/save changes.
 3. `bridgeforge/fixers.py` is 3,899 lines (soft ceiling 800). Put new fixers in a new module per family (`fixers_guards.py`,
    `fixers_data.py`, ...). The new module imports helpers at call time (`from . import fixers as _f` inside functions) to avoid an
    import cycle; `fixers.py` imports the new functions immediately above `_FIXER_FUNCS`, adds them there and to
@@ -86,15 +93,15 @@ Run `python -m bridgeforge finding-stats --scan --write bridgeforge-state/findin
 minutes; it checkpoints). Copy the bucket table and top-20 blockers into ROADMAP item 73 as the "before". Done when: the
 dated `FINDING_STATS.md` exists and the roadmap quotes it.
 
-**A2. Stale-scan report.**
-- Files: `bridgeforge/finding_stats.py` (`_workspace_record`, `finding_stats`, `render`), its command module.
-- Behaviour: for each workspace, `stale: true` when the newest stored scan (`_latest_scan`) is older than the newest of: a
-  `*.pre-bf-*.bak` under `working/`, `reports/escalations/ledger.jsonl` mtime, `reports/explain*` records, or the workspace's
-  `Done/` archive note. Output lists stale workspaces with the newer file. New flag `--rescan-stale`: scan only stale
-  workspaces (same code path as `--scan`), keep stored results for the rest.
-- Tests: `tests/test_finding_stats.py`: a temp workspace with an old scan and a newer `.bak` is stale; without the `.bak` it is
-  not; `--rescan-stale` scans only the stale one (patch `scan_mod`).
-- Done when: the report names every stale workspace and `--rescan-stale` refreshes them.
+**A2. Content-based scan freshness (R2).**
+- Files: `bridgeforge/finding_stats.py`, `bridgeforge/cmd_scan.py`, scan report writer; details in item 75.
+- Behaviour: register scans regardless of output-folder name, with hashes of actual scan inputs, dependency/core inputs,
+  target, scanner/check revisions and relevant options. Timestamps are hints, never freshness proof. Legacy scans without
+  fingerprints are UNKNOWN; unreadable inputs are INCOMPLETE. Generated reports must not invalidate their own scan.
+  `--rescan-stale` refreshes stale/unknown inputs and reuses only matching complete records.
+- Tests: changed bytes with unchanged mtime, changed provider/check/options, nonstandard output directory, missing legacy
+  fingerprints, generated-report exclusion and selective rescan.
+- Done when: CURRENT means matching content and analysis context; A1 distinguishes current, stale and unknown results.
 
 **A3. Why an auto-tier finding stays open.**
 - Files: new `bridgeforge/auto_open.py`, command `auto-open QUEUE [--json]` (own module, registered).
@@ -121,9 +128,10 @@ dated `FINDING_STATS.md` exists and the roadmap quotes it.
 
 ### Phase B: fixers from verified agent work
 
-All B fixers: new module per section 3.3, registered, REVIEW tier until the ledger shows three verified applications, tier stays
-recorded in `automation_tiers.json` (move the id from `code` to `auto` only when the fixer covers every shape A4 found;
-otherwise keep `code` and let `revive` try the fixer first, which it already does for refused auto fixers).
+All B fixers: new module per section 3.3, registered, REVIEW confidence until the narrow cause/replacement is evidenced
+and meets the SAFE contract. Three verified applications are promotion evidence, not automatic SAFE classification.
+Automation tier stays recorded separately in `automation_tiers.json` (move an id from `code` to `auto` only when the
+fixer covers every supported A4 shape with explicit refusal boundaries and authorization; otherwise retain `code`).
 
 **B1. Generation and orbit guards** (`system-generation-unguarded`, `orbit-period-computed-unguarded`).
 - Files: `bridgeforge/fixers_guards.py`; scanner checks are in `scan_campaign.py` (read them for the exact evidence fields).
@@ -132,9 +140,12 @@ otherwise keep `code` and let `revive` try the fixer first, which it already doe
   `createStarSystem`, and `sector` is the method's `SectorAPI` parameter name (or `Global.getSector()` if none). Refuse when the
   name is not a single string literal or when the method already contains `getStarSystem(` on that name. (b)
   `orbit-period-computed-unguarded`: wrap the computed period expression `E` as `Math.max(1f, E)`; refuse when the expression
-  spans lines or is already wrapped. Both refuse jar-shadowed loose scripts (handled by `compute_fix`).
+  spans lines or is already wrapped. A clamp is allowed only for a proven finite expression and justified one-day minimum;
+  it does not repair NaN or infinity. Refuse side effects and ambiguous fallbacks. A generation early-return is allowed
+  only when skipping the complete method preserves required setup; otherwise refuse. Both refuse jar-shadowed scripts.
 - Tests: `tests/test_fixers_guards.py`: fixtures from Vacuum and zzz-Bingus-Sustem (`original/`), idempotence, each refusal.
-  After the fix, `compile-check` passes on the fixture where a test core is available (skip otherwise).
+  Add NaN/infinity, side-effect and multi-purpose generation refusal cases. Compilation skipped for lack of a core is
+  incomplete evidence and cannot qualify a code change for E2.
 - Done when: on the 38 + 16 mods, `revive` applies it or records a refusal; `finding-stats` count drops.
 
 **B2. Compile-error rewrites** (`loose-script-compile-error`).
@@ -162,7 +173,8 @@ otherwise keep `code` and let `revive` try the fixer first, which it already doe
 - Files: `bridgeforge/fixers_data.py`; scanner check in `scan_settings.py` or `scan_data_rules.py` (grep the id).
 - Behaviour: for a preset entry that replaces a vanilla entry whole, add back each vanilla field the mod's entry lacks, value
   from RC8's file (`options["vanilla_core"]`), keeping every mod value. Refuse when the vanilla core is not given. Insert with
-  the file's own indentation. Under decision 2 it becomes standing once three mods' rulings agree (C1 does the counting).
+  the file's own indentation. Missing fields may be intentional: apply only a field-specific approved proposal or a C1
+  ruling with matching semantic conditions, never approval based only on the finding id or three arbitrary mods.
 - Tests: fixture with a vanilla entry of five fields and a mod entry of three; result has five, mod values kept; idempotent.
 - Done when: the 20 mods are fixed or refused with a reason.
 
@@ -177,11 +189,12 @@ otherwise keep `code` and let `revive` try the fixer first, which it already doe
 
 **B6. Missing weapon row** (`local-weapon-spec-unregistered`).
 - Files: `bridgeforge/fixers_data.py`.
-- Behaviour: when a `.wpn` exists, its sprites exist, and the mod's `weapon_data.csv` has another weapon of the same `type` and
-  size, add a row with the id, name from the `.wpn` `specClass`/id, and numeric columns copied from that sibling row, every
-  copied value listed in the plan's note. Refuse otherwise. REVIEW (values are a proposal).
-- Tests: fixture with one registered and one unregistered weapon of the same size.
-- Done when: the 9 mods are fixed or refused with a reason.
+- Behaviour: prefer an evidenced original/version/sibling row for the same weapon identity. Otherwise draft a comparable
+  row as a proposal only, listing every copied value and its source. Type/size similarity does not establish balance.
+  Drafting writes reports only; applying needs owner approval of the exact row and an unchanged input fingerprint.
+  `specClass` is not a display-name source. Refuse missing required evidence.
+- Tests: exact-source preference, drafts do not edit data, unapproved/stale proposal refused, approved scoped application.
+- Done when: each mod has an evidenced row or review proposal/refusal; balance inference is never applied unattended.
 
 **B7. Import resolution from the provider index** (`source-import-unresolved`).
 - Files: `bridgeforge/revive.py` (`content_options`, `build_packets`), `bridgeforge/substitutes.py` (`merged_providers`).
@@ -204,8 +217,12 @@ every escalated mod's baseline, or add a standing approval). Build on them; do n
   rulings for the same id from `ESCALATION_RULINGS.jsonl` and baseline reasons in any workspace (`baseline.mod_baseline_path`).
   Columns: `group, finding, shape, mods, precedent_count, precedent_answer, answer (accept|approve-fixer|skip), reason`.
   Pre-fill `answer` and `reason` from precedent when three or more earlier rulings agree (decision 2) and mark the row
-  `prefilled=yes`. `--apply` calls `rule()` per answered row; prefilled rows are applied only if the owner left them unchanged
-  or confirmed them (`confirm=yes`); every application is logged with "standing approval from N prior rulings".
+  `prefilled=yes`. Shape grouping is presentation only. Standing eligibility needs three independent prior mods with the
+  same versioned semantic predicate (target API/provider, relevant fields/values, intent and save/balance risk), no
+  conflicting/revoked ruling, and complete evidence. Missing predicate fields prevent automatic reuse; retain relevant
+  numbers and ids. Apply only explicitly answered rows or eligible standing rulings; untouched suggestions are not
+  approvals. Log source ruling ids, predicates and hashes with "standing approval from N prior rulings". MANUAL/UNKNOWN,
+  gameplay and save decisions remain person-only. Tests also cover contradictory, revoked and superficially similar rulings.
 - Tests: `tests/test_escalation_queue.py`: grouping by shape; prefill only with three agreeing precedents; `--apply` calls `rule`
   once per row and never for `skip`.
 - Done when: one sheet covers all 56 decision-tier mods.
@@ -263,9 +280,10 @@ every escalated mod's baseline, or add a standing approval). Build on them; do n
 - Files: `bridgeforge/fixers.py` (`_fix_vanilla_path_shadowing`), `bridgeforge/reference_rigs.py`.
 - Behaviour: for each shadowed file compare it with the same path in the reference rig the mod targets. If byte-identical (the
   mod shipped an unchanged copy of old vanilla), the fixer moves it to `scratch/removed-shadow/` (explainable by
-  `explain_proofs.kept_elsewhere`); otherwise report the value diff (`data_diff`) and leave it.
-- Tests: identical file moved; changed file kept with a diff.
-- Done when: the 12 mods' identical copies are gone and the rest carry diffs.
+  `explain_proofs.kept_elsewhere`) only after a matching owner/standing approval. Identity to old vanilla establishes
+  provenance, not lack of intent. Show old-vanilla/mod/current-RC8 differences first; retain unapproved files.
+- Tests: identical-but-unapproved retained; approved move backed up; changed file kept; stale approval refused.
+- Done when: each shadow has a reviewed disposition or open proposal, not a target count of removed overrides.
 
 ### Phase E: escalation that reviews itself
 
@@ -286,6 +304,11 @@ Existing: `escalation review` writes `ESCALATION_REVIEW_SHEET.md` (`escalation_r
   flag fires; lines deleted not more than lines added plus ten. Log `auto_accepted: true` with the rules checked in
   `ledger.jsonl`; list them in the run summary and in `revive-review`. Anything else stays for the sheet. The archive gate is
   unchanged (live test still required).
+- Required R3 gates: exclude MANUAL/UNKNOWN, save migrations, gameplay decisions and maintained third-party edits.
+  Record PASS/FAIL/INCOMPLETE/NOT_APPLICABLE plus applicability reasons. Missing tools, timeouts and absent fixtures are
+  INCOMPLETE. Applicable compiler and regression checks must execute on final packaged bytes; data-only work may justify
+  compilation NOT_APPLICABLE. Recheck packet/attempt/policy/tool and working hashes immediately before atomic application,
+  protecting against concurrent edits and partial application. Line-count and regex checks are extra signals, not proof.
 - Tests: one passing attempt is applied; each rule, failing alone, blocks it.
 - Done when: an agent batch applies passing attempts unattended and the sheet lists only the rest.
 
@@ -336,6 +359,9 @@ All need the rig; build and unit-test offline, then a LOCAL_HANDOFF entry for th
   the run with `LAUNCH_NO_PROCESS`.
 - **G5. Group accept**: `probe-group record --accept` calls `live_accept.accept_run` per PASS member, carrying probe FAIL lines
   that match an earlier accepted reason for the same mod version, stopping on any other.
+  R1 applies to group and standalone acceptance: require pre-launch staged-input manifests, final drift checks, run/log
+  identity and scenario-specific milestones. Waivers also need matching finding/check/context evidence, not just version.
+  Legacy runs without manifests stay historical evidence. G2 selects by dependency/probe/launcher hashes as well as Git.
 - **G6. Raid scenario mod**: separate test mod under `probe-mod/raid-mod/` allowed Nexerelin classes; forces a raid on a market
   named in its config; logs `raid-start`/`raid-end`. Turns "raid path unobserved" (item 56) into a test.
 
@@ -345,9 +371,12 @@ All need the rig; build and unit-test offline, then a LOCAL_HANDOFF entry for th
   (`explain_proofs.MOVED_FOLDERS` already lists them; check which are wired), extracted zip originals, `reports/translation/*.json`
   copies, and a colliding `Done/<Mod>` moved to `Done/_replaced-<date>/`. Done when re-running the audit on Ironclads, Nightcross
   and the GRP6A mods leaves under a tenth of their differences.
-- **H2. `revise WORKSPACE "what changed"`**: bump `+bf.N` in `mod_info.json` version, `mod_changelog.add_entry`, run the archive gate,
-  `archive --refresh --readme-copy`, then the snapshot if `snapshot.json` names a destination. One command for what is five today.
-  Tests: version bump rules (`1.0` -> `1.0+bf.1`, `1.0+bf.3` -> `1.0+bf.4`), refuses without a live run record for the new version.
+- **H2. Revision lifecycle (R5):** proposed `revise prepare WORKSPACE "what changed"` bumps once and records a candidate
+  without archiving. Test that candidate through R1. Proposed `revise finalize WORKSPACE --revision ID --test-id ID`
+  never bumps or edits tested files: verify exact candidate/run, gates and outward-action authorization, then refresh
+  archives and snapshot. Use a durable journal for idempotent retries and preserve previous archives.
+  Tests: prepare/test/finalize, repeated calls, post-test drift, stale run and failure/restart at each step. These commands
+  are proposals until implemented; see item 75 for states and recovery.
 - **H3. Migration pack with a revision** (idea 8): when `revise` sees renamed ids or classes against the previous archive
   (`content_diff`), require a migration pack per `docs/MIGRATION_PACK_CONTRACT.md` checked by `save-compat`, or a written reason.
 
@@ -355,16 +384,20 @@ All need the rig; build and unit-test offline, then a LOCAL_HANDOFF entry for th
 
 | Step | Items | Why |
 |---|---|---|
-| 1 | A1, A2, A3 | every later number depends on them; A3 may close auto-tier work for free |
+| 1 | R7 initial audit; R2/A2, then A1/A3; R1 independently | current inputs before authoritative counts; establish live provenance |
 | 2 | D1 | largest blocker (27 mods unlock); decision 1 given |
 | 3 | C1, C2 | 56 mods; decision 2 given |
 | 4 | A4, B1, B2, B7 | ledger-proven, most packets |
-| 5 | E1, E2 | decision 3 given; removes per-packet review |
-| 6 | G3, G4, G5, H2 | small, used every session |
+| 5 | R4 and R3/E1 report-only; E2 after R1-R4 gates pass | standing approval and applicable checks must be evidenced |
+| 6 | G3, G4, G5, R5/H2 | manifest-bound runs; prepare/test/finalize instead of bump-and-archive |
 | 7 | B3-B6, C3, C4, D2, D3, F1-F6 | each smaller, evidence first |
-| 8 | G1, G2, G6, E3/E4, H1, H3 | need live proof or open decisions |
+| 8 | G1, G2, G6, E3/E4, H1, H3/R6, R8 | live scenarios, upgrade proof and restore qualification |
 
 After steps 1, 2, 3 and 4 run `finding-stats --scan --write` again and put the bucket table in ROADMAP item 73 with the date.
+The 2026-10-17 dependency refinement takes precedence over the table: R2/A2 precedes authoritative A1 measurement;
+R1-R4 precede enabling E2 (E1 evidence-only work can proceed earlier); R5 precedes automated revision finalization;
+R6 precedes live acceptance of migrations; R8 precedes snapshot-based machine cutover. R7 reconciles status first.
+Independent drafting/report work can proceed meanwhile. The ordered implementation handoff is in item 75.
 
 ## 6. Left out on purpose
 

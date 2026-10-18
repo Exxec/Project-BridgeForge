@@ -1,7 +1,14 @@
 # BridgeForge hardening plan (ROADMAP item 70)
 
-Plan only (owner request 2026-10-12: "plan any possible hardening for bridgeforge overall"). Nothing here is built. Every item
-cites what it is based on: a measurement of the repository on 2026-10-12, or a failure found in the sessions of 2026-10-11/12.
+Original proposal (owner request 2026-10-12: "plan any possible hardening for bridgeforge overall"). Some sub-items were
+subsequently implemented; see ROADMAP item 70 and [ROADMAP_STATUS.md](ROADMAP_STATUS.md). The measurements below are
+historical observations on 2026-10-12, not current counts or proof that all items are implemented.
+
+Owner-approved specification revision 2026-10-17: [ROADMAP_IMPLEMENTATION_HANDOFF.md](ROADMAP_IMPLEMENTATION_HANDOFF.md),
+item 75, refines H1.5/H1.6 (content identities and all acceptance paths), H3.2/H3.3 (run evidence and current statuses),
+and H4 (isolated restore proof). Its R1-R8 acceptance conditions take precedence over weaker original wording here.
+In particular, an acceptance-time working hash is not launch provenance, a link is not live proof, and snapshot creation
+is not restore qualification. These extensions are planned, not newly implemented by this document update.
 
 ## What the evidence says
 

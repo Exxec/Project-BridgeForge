@@ -169,3 +169,15 @@ python -m bridgeforge revenantlib-check "In operation\RevenantLib"
 ```
 `revenantlib-check` PASS 2026-09-27; `rig-doctor` has nothing to check until RevenantLib is installed in
 the rig (`prepare-test`). Done when `rig-doctor` shows `revenantlib_contract` PASS.
+
+## Owner mod follow-up, 2026-10-17 (ROADMAP 74)
+
+Acceptance steps: [Zorg18 and EPTA follow-up](OWNER_MOD_FOLLOWUP_2026-10-17.md). Test the working copies on the isolated rig, including a copied existing Zorg save with save/reload and an EPTA campaign-map visual check. LIVE TEST NOT PERFORMED; existing archives remain the previously shipped versions.
+
+## Roadmap implementation handoff, 2026-10-17 (item 75)
+
+Start with [current status](ROADMAP_STATUS.md) and [R1-R8 implementation contracts](ROADMAP_IMPLEMENTATION_HANDOFF.md).
+These are specifications, not implemented CLI features. Next agent: inspect dirty state, define shared input/evidence
+schemas, implement R2/A2 and R1, then R4/R3 eligibility reporting. E2 stays off until its prerequisites pass.
+R1 needs a real rig positive/negative drift test; R6 needs copied-save load/save/reload; R8 needs an isolated restore.
+Do not treat this document update or the proxy harness as completion of any of those live gates.

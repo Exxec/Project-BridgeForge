@@ -2,6 +2,11 @@
 
 Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; each mod's evidence is in its revival report.
 
+## 2026-10-17
+
+- **Epta Consortium** 2.1.3+bf.2: Owner follow-up: use the standard orbital-station campaign sprite and correct the base version to 2.1.3; working copy only, live visual check pending.
+- **Zorg18** V18+bf.10: Owner follow-up: reveal Zeta I and II and repair their Hive Exchange colonies on new-game creation and existing-save load; preserve captured and removed colonies. Working copy only; live save/reload pending.
+
 ## 2026-10-13
 
 - **Epta Consortium** 2.0.3: the three AI-core refunder hull mods no longer crash when a market is opened: advanceInCampaign read member.getFleetData().getFleet() for ships in a market's stock, which have no fleet (crash report 2026-10-13); jar patched, working copy only (not archived)
