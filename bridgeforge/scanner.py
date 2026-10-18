@@ -185,6 +185,7 @@ from .scan_missions import (  # noqa: F401
     _scan_mission_variant_assets,
     _is_mission_source,
 )
+from .scan_port import _scan_port_dropped_feature  # noqa: F401
 from .scan_compile import (  # noqa: F401
     LOOSE_SCRIPT_JANINO_PATTERNS,
     _version_major_of,
@@ -612,6 +613,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_description_missing(root, result, vanilla_root)
     _scan_asset_reference_missing(root, result, vanilla_root)
     _scan_preset_whole_entry_replace(root, result, vanilla_root)
+    _scan_port_dropped_feature(root, result)
     if compile_check:
         _scan_compile_check(root, result, vanilla_root, provider_roots)
     return result
