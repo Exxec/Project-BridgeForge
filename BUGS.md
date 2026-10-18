@@ -1,6 +1,6 @@
 # Bridgeforge bug ledger
 
-## Open implementation issues identified during the 2026-10-18 documentation audit
+## Implementation issues identified during the 2026-10-18 documentation audit
 
 ### DOC-001 — Archive refresh contradicts the preservation contract
 
@@ -13,7 +13,15 @@
 - Required implementation: preserve the prior archive before replacement, refuse unsafe/conflicting destinations,
   and recover or clearly report failures without losing the old artifact. Test old bytes surviving success and injected
   failure; qualify against the S1 candidate/acceptance contract. Documentation edits do not close this issue.
-- Status: OPEN. No application source change or archive refresh was performed by this audit.
+- Status: FIXED in the commit "Fix item 75 DOC-001: archive refresh moves the previous archive aside" (`git log --grep DOC-001`).
+  `archive_mod(refresh=True)` now validates the target (directly inside Done/, holds an ARCHIVE_NOTE.md), moves it to
+  `Done/_replaced-<date>/<Mod>[-N]` with the existing move-aside helper (a holder that is a link or a file is refused),
+  and `_remove_previous_archive` is gone. If the new write fails part-way, the partial archive is moved to
+  `Done/_failed-<date>/`, the earlier archive is moved back, and the ArchiveError states where each one is. CLI help for
+  `archive --refresh` and `probe-group record --refresh` no longer says delete. Tests: `tests/test_archive_preserves.py`
+  (old bytes survive success and an injected failure, `-N` suffix on a conflicting destination, unsafe targets refused) and
+  `tests/test_probe_group.py::test_record_refresh_replaces_an_earlier_archive_only_when_asked` (group path). Not
+  live-tested against a real Done/ archive; the S1 candidate/acceptance qualification still applies.
 
 ## Resolved in the historical "1.0 hardening" tranche
 

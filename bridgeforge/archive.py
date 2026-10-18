@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from .zipsafe import read_limited
 
-from .safeio import atomic_write_text, safe_rmtree
+from .safeio import atomic_write_text
 
 import hashlib
 import re
@@ -138,9 +138,13 @@ def _live_line(workspace: Path) -> str:
     return "Not live-tested: no passing run is recorded for this mod."
 
 
-def _move_aside(target: Path, done_dir: Path, today: str) -> Path:
-    """Move an existing Done/<Mod> to Done/_replaced-<date>/<Mod>[-N]; nothing is deleted."""
-    holder = done_dir / f"_replaced-{today}"
+def _move_aside(target: Path, done_dir: Path, today: str, prefix: str = "_replaced") -> Path:
+    """Move an existing Done/<Mod> to Done/_replaced-<date>/<Mod>[-N]; nothing is deleted. Refuses a holder that is a link."""
+    from .boot_test import _is_link
+
+    holder = done_dir / f"{prefix}-{today}"
+    if holder.exists() and (_is_link(holder) or not holder.is_dir()):
+        raise ArchiveError(f"refusing to move {target} into {holder}: it is a link or not a folder.")
     holder.mkdir(parents=True, exist_ok=True)
     destination = holder / target.name
     n = 2
@@ -153,6 +157,30 @@ def _move_aside(target: Path, done_dir: Path, today: str) -> Path:
 
 def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = None, today: str | None = None,
                 refresh: bool = False, move_aside: bool = False) -> dict:
+    """Archive the workspace into done_dir/<workspace>. An earlier archive of the mod is never deleted: `refresh` (or `move_aside`)
+    moves it to Done/_replaced-<date>/<Mod>[-N] first. If writing the new archive fails part-way, the partial one is moved to
+    Done/_failed-<date>/ and the earlier archive is moved back; the ArchiveError says exactly where everything is (DOC-001)."""
+    state: dict = {}
+    try:
+        return _archive_mod(workspace, done_dir, policy_path=policy_path, today=today, refresh=refresh, move_aside=move_aside, _state=state)
+    except Exception as exc:
+        moved = state.get("moved")
+        if moved is None:
+            raise
+        replaced, target, done, day = moved
+        notes = []
+        try:
+            if target.exists():
+                notes.append(f"the partial new archive was moved to {_move_aside(target, done, day, '_failed')}")
+            shutil.move(str(replaced), str(target))
+            notes.append(f"the earlier archive was moved back to {target}")
+        except (OSError, ArchiveError) as restore_error:
+            notes.append(f"RESTORE FAILED ({restore_error}); the earlier archive is intact at {replaced}")
+        raise ArchiveError(f"archiving failed ({type(exc).__name__}: {exc}); " + "; ".join(notes)) from exc
+
+
+def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, today: str | None, refresh: bool, move_aside: bool,
+                 _state: dict) -> dict:
     from .explain_proofs import prepare_for_audit
     from .master_log import write_master_log
     from .substitutes import revival_licence
@@ -173,12 +201,18 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
     previous_version = _previous_version(previous_root)
     previous_jars = {r: _jar_entries(previous_root / r) for r in previous_digests if r.lower().endswith(".jar")}
     replaced = None
-    if target.exists() and move_aside and not refresh:
-        replaced = str(_move_aside(target, Path(done_dir).expanduser().resolve(), today or date.today().isoformat()))
+    done_resolved, day = Path(done_dir).expanduser().resolve(), today or date.today().isoformat()
+    if target.exists() and refresh:
+        if target.parent != done_resolved:
+            raise ArchiveError(f"refusing to replace {target}: it is not directly inside {done_resolved}.")
+        if not (target / "ARCHIVE_NOTE.md").is_file():
+            raise ArchiveError(f"refusing to replace {target}: it has no ARCHIVE_NOTE.md, so it is not an archive made here.")
+    if target.exists() and (move_aside or refresh):
+        moved_to = _move_aside(target, done_resolved, day)
+        replaced = str(moved_to)
+        _state["moved"] = (moved_to, target, done_resolved, day)
     if target.exists():
-        if not refresh:
-            raise ArchiveError(f"{target} already exists; archive into a fresh folder or remove it first (or pass --refresh).")
-        _remove_previous_archive(target, Path(done_dir).expanduser().resolve())
+        raise ArchiveError(f"{target} already exists; archive into a fresh folder or pass --refresh (the old one is moved aside, never deleted).")
     folder = target / workspace.name
     files = _collect(working)
     for relative, source in files.items():
@@ -245,16 +279,6 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
             "replaced": replaced, "prepared": prepared, "master_log": master,
             "licence": licence.get("decision"), "status": status, "changed": changed, "added": added, "since_previous": diff,
             "jars_identical": jars_identical, "note": str(target / "ARCHIVE_NOTE.md")}
-
-
-def _remove_previous_archive(target: Path, done_dir: Path) -> None:
-    """Delete one earlier archive so it can be rebuilt (`--refresh`). Only a direct child of the Done folder that holds
-    an ARCHIVE_NOTE.md, so a wrong path can never remove anything else."""
-    if target.parent != done_dir:
-        raise ArchiveError(f"refusing to remove {target}: it is not directly inside {done_dir}.")
-    if not (target / "ARCHIVE_NOTE.md").is_file():
-        raise ArchiveError(f"refusing to remove {target}: it has no ARCHIVE_NOTE.md, so it is not an archive made here.")
-    safe_rmtree(target, [done_dir])  # a junction inside an archive is removed as a link, never followed
 
 
 _CONTENTS_SECTION = re.compile(r"(?ms)^## Contents[ \t]*\r?\n.*?(?=^#{1,2} |\Z)")

@@ -403,12 +403,14 @@ class InstallTests(unittest.TestCase):
             refreshed = record_group(log, merged, queue, rig, test_id="GRP-R", archive=True, done_dir=done, policy_path=policy,
                                      today="2026-10-11", refresh=True)
             replaced = not (done / "A" / "marker.txt").exists()
+            moved_not_deleted = (done / "_replaced-2026-10-11" / "A-2" / "ARCHIVE_NOTE.md").is_file() and (done / "_replaced-2026-10-11" / "A" / "marker.txt").is_file()
             note = (done / "A" / "ARCHIVE_NOTE.md").read_text(encoding="utf-8")
         self.assertEqual(first["archived"], ["A"])
         self.assertEqual(again["archived"], ["A"])
         self.assertTrue(kept)
         self.assertEqual(refreshed["archived"], ["A"])
         self.assertTrue(replaced)
+        self.assertTrue(moved_not_deleted)  # DOC-001: refresh moves the previous archive aside, never deletes it
         self.assertIn("archived 2026-10-11", note)
 
     def test_record_picks_the_workspace_installed_in_the_rig(self) -> None:

@@ -2047,7 +2047,7 @@ after a run: mark PASS members LIVE_VALIDATED; with --archive also record the st
 |---|---|---|
 | `test_id` | - | the bf-test.ps1 test id; reads <rig>/logs/<TESTID>.stdout.log |
 | `--archive` | - | - |
-| `--refresh` | - | with --archive: replace an earlier archive of the same mod in Done/ (deletes that folder; Done/ must hold an ARCHIVE_NOTE.md there) |
+| `--refresh` | - | with --archive: replace an earlier archive of the same mod in Done/ (the old one is moved to Done/_replaced-<date>/, never deleted; Done/ must hold an ARCHIVE_NOTE.md there) |
 | `--accept` | - | record each PASS member through the single-mod acceptance checks (main menu, campaign load, no FATAL or MOD-ERROR) and write a dated 'Live run' section; probe FAIL lines and caught exceptions are carried only when an earlier acceptance of the same mod version covers them (reports/live_accepted.jsonl, working/reports/probe_accepted.json), otherwise nothing is recorded and the uncovered ones are listed; needs --note |
 | `--note` NOTE | - | with --accept: what was run and seen, written into each report as the owner's account |
 | `--queue` QUEUE | - | - |
@@ -2564,7 +2564,7 @@ package a finished revival into Done/<Mod>/: mod folder, zip, original, reports 
 | `workspace` | - | - |
 | `--done` DONE | - | default: <repo>/Done |
 | `--policy` POLICY | - | - |
-| `--refresh` | - | replace an existing archive of this mod in Done/ (only a folder holding an ARCHIVE_NOTE.md directly inside Done/) |
+| `--refresh` | - | replace an existing archive of this mod in Done/: the old one is moved to Done/_replaced-<date>/<Mod>[-N], never deleted, and put back if the new write fails (only a folder holding an ARCHIVE_NOTE.md directly inside Done/) |
 | `--readme-copy` | - | also write <zip>-with-readme.zip and readme.txt for this archive |
 | `--json` | - | - |
 
