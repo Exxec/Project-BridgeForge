@@ -2279,7 +2279,9 @@ def _fix_vanilla_path_shadowing(root: Path, options: dict) -> list[FileChange]:
     """Rename a data file saved at a vanilla path under another id to its own id: Vayra's Ship Pack saved its Shieldwall
     Drones system (id vayra_exemplardrones) as data/shipsystems/drone_pd.system, which replaced vanilla's drone_pd, so two
     vanilla hulls lost their system (GRP2C-20261005). Only a file whose content id differs from the vanilla file at the same
-    path is moved; a file that carries vanilla's own id is a deliberate override and stays. Needs --vanilla-core."""
+    path is moved; a file that carries vanilla's own id is a deliberate override and stays. Needs --vanilla-core.
+    With a reference core (item 73 D3, shadow_triage) it also writes reports/SHADOW_TRIAGE.md and moves an old-vanilla copy
+    to scratch/removed-shadow/ only when the owner approved that mod and path; unapproved copies stay."""
     vanilla_core = options.get("vanilla_core")
     if not vanilla_core:
         raise FixerError("--vanilla-core is required for vanilla-path-shadowing.")
@@ -2306,7 +2308,7 @@ def _fix_vanilla_path_shadowing(root: Path, options: dict) -> list[FileChange]:
         changes.append(FileChange(path=path, before=raw, after=b"", removed=True))
     from .shadow_triage import plan_changes
 
-    changes += plan_changes(root, vanilla, options, {_relative_path(root, c.path) for c in changes if c.removed}, bool(changes))
+    changes += plan_changes(root, vanilla, options)
     if not changes:
         raise FixerError("No file saved at a vanilla path under another id" + (f" (refused: {'; '.join(refused)})" if refused else "."))
     return changes
