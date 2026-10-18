@@ -153,9 +153,9 @@ def craft(entries: list[dict], crafter: Crafter, work_dir: Path, *, chunk: int =
         chunk_file = work_dir / f"craft{number:03d}.json"
         payload = {"instructions": PROMPT.format(file=chunk_file.name),
                    "entries": [{"id": e["id"], "type": e["type"], "facts": e["facts"], "text": ""} for e in part]}
-        chunk_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_text(chunk_file, json.dumps(payload, ensure_ascii=False, indent=2))
         output = crafter(chunk_file)
-        (work_dir / f"craft{number:03d}.agent.txt").write_text(output or "", encoding="utf-8")
+        atomic_write_text(work_dir / f"craft{number:03d}.agent.txt", output or "")
         try:
             returned = json.loads(chunk_file.read_text(encoding="utf-8")).get("entries") or []
         except (OSError, ValueError) as exc:

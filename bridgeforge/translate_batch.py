@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Callable
 
 from .progress import Checkpoint, report
+from .safeio import atomic_write_text
 from .translation_memory import load_memory, prefill_from_memory, update_memory
 from .translation import _has_cjk, _placeholders, apply_translation, check_translation, export_translation, prefill_from_record, prefill_from_reference
 
@@ -159,7 +160,7 @@ def translate_batch(mod_dir: Path, *, translator: Callable[[Path], str], work_di
                 entry["translation"] = filled[entry["id"]]
         document["glossary"] = glossary
         (work_dir / "translations.json").write_text(json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8")
-        (work_dir / "REVIEW.md").write_text(review_table(document), encoding="utf-8")
+        atomic_write_text(work_dir / "REVIEW.md", review_table(document))
         if memory is not None:
             result["memory_added"] = update_memory(Path(memory), memory_entries, document)
         applied = apply_translation(mod_dir, document, out_dir=Path(out_dir) if out_dir else None, in_place=in_place)
