@@ -132,7 +132,7 @@ def _skip_attributes(data: bytes, pos: int, count: int) -> int:
 class _ClassFileInfo:
     """Parsed facts about one .class file, resolved from its constant pool."""
 
-    __slots__ = ("this_class", "referenced_classes", "methods", "super_class", "interfaces", "fields", "string_constants", "utf8_values")
+    __slots__ = ("this_class", "referenced_classes", "methods", "super_class", "interfaces", "fields", "string_constants", "utf8_values", "transient_fields")
 
     def __init__(
         self,
@@ -152,6 +152,7 @@ class _ClassFileInfo:
         self.interfaces = interfaces or []
         # (name, descriptor, is_static, is_final) per declared field
         self.fields = fields or []
+        self.transient_fields: frozenset[str] = frozenset()
         # Java string literals (CONSTANT_String), and every Utf8 entry (member names referenced, etc.)
         self.string_constants = string_constants or set()
         self.utf8_values = utf8_values
@@ -219,6 +220,7 @@ def _parse_class_file(data: bytes) -> _ClassFileInfo | None:
             interfaces.append(utf8.get(class_name_index.get(interface_index, -1), ""))
         fields_count, pos = _class_pool_u2(data, pos)
         fields: list[tuple[str, str, bool, bool]] = []
+        transient: set[str] = set()
         for _ in range(fields_count):
             field_flags, pos = _class_pool_u2(data, pos)
             field_name_index, pos = _class_pool_u2(data, pos)
@@ -226,6 +228,8 @@ def _parse_class_file(data: bytes) -> _ClassFileInfo | None:
             attr_count, pos = _class_pool_u2(data, pos)
             pos = _skip_attributes(data, pos, attr_count)
             fields.append((utf8.get(field_name_index, ""), utf8.get(field_descriptor_index, ""), bool(field_flags & 0x0008), bool(field_flags & 0x0010)))
+            if field_flags & 0x0080:  # ACC_TRANSIENT
+                transient.add(utf8.get(field_name_index, ""))
         methods_count, pos = _class_pool_u2(data, pos)
         methods: list[tuple[str, str, bool]] = []
         for _ in range(methods_count):
@@ -236,7 +240,9 @@ def _parse_class_file(data: bytes) -> _ClassFileInfo | None:
             pos = _skip_attributes(data, pos, attr_count)
             methods.append((utf8.get(name_index, ""), utf8.get(descriptor_index, ""), bool(access_flags & 0x0001)))
         string_constants = {utf8[string_index] for string_index in string_indexes if string_index in utf8}
-        return _ClassFileInfo(this_class, referenced_classes, methods, super_class, interfaces, fields, string_constants, frozenset(utf8.values()))
+        parsed = _ClassFileInfo(this_class, referenced_classes, methods, super_class, interfaces, fields, string_constants, frozenset(utf8.values()))
+        parsed.transient_fields = frozenset(transient)
+        return parsed
     except (IndexError, KeyError, UnicodeDecodeError):
         return None
 
