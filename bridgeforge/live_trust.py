@@ -38,6 +38,12 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def summary_for_record(manifest: dict) -> dict:
+    from .run_manifest import summary_for_record as summarize
+
+    return summarize(manifest)
+
+
 def shipped_files(working: Path) -> dict[str, Path]:
     from .copy_drift import _collect
 
@@ -81,8 +87,13 @@ def _previous_noise(live_dir: Path, members: list[str], test_id: str) -> tuple[s
 
 def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triage: dict, verdicts: dict[str, str],
                      probe_config: dict | None = None, core_baseline: Path | None = None, save_made_with: dict | None = None,
-                     today: str | None = None) -> dict:
-    """Record one live run (36.6) and its noise check (36.9); returns the record."""
+                     today: str | None = None, rig_state: dict | None = None, evidence: dict | None = None,
+                     manifest: dict | None = None) -> dict:
+    """Record one live run (36.6) and its noise check (36.9); returns the record. `rig_state` is what `rig-up` last recorded.
+
+    `evidence` is `run_manifest.evaluate_run`'s result and `manifest` the run's pre-launch manifest (ROADMAP item 75 R1). A member's
+    provenance is BOUND only when the evaluator found that member's staged bytes, candidate, log and milestones all matching; without
+    them it is UNKNOWN, which `live_status` never reports as CURRENT."""
     from datetime import datetime, timezone
 
     queue = Path(queue)
@@ -92,8 +103,12 @@ def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triag
     for workspace in workspaces:
         working = workspace / "working"
         info = _mod_info(working)
+        digest = shipped_hash(working)
+        judged = ((evidence or {}).get("members") or {}).get(str(info.get("id"))) if (evidence or {}).get("status") == "ACCEPTABLE" else None
+        bound = bool(judged and judged.get("ok") and judged.get("candidate_sha256") == digest)
         members.append({"workspace": workspace.name, "mod_id": info.get("id"), "version": str(info.get("version") or ""),
-                        "shipped_sha256": shipped_hash(working), "verdict": verdicts.get(str(info.get("id")), "UNKNOWN")})
+                        "shipped_sha256": digest, "verdict": verdicts.get(str(info.get("id")), "UNKNOWN"),
+                        "provenance": "BOUND" if bound else "UNKNOWN"})
     counts = dict(triage.get("counts") or {})
     noise = counts.get("KNOWN-NOISE", 0)
     previous = _previous_noise(live_dir, [m["workspace"] for m in members], test_id)
@@ -109,6 +124,10 @@ def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triag
         "core_baseline_sha256": _sha256(core_baseline) if core_baseline and Path(core_baseline).is_file() else None,
         "probe_config_sha256": hashlib.sha256(json.dumps(probe_config, sort_keys=True).encode("utf-8")).hexdigest() if probe_config else None,
         "save_made_with": save_made_with,
+        "rig_state": rig_state,
+        "manifest_id": (manifest or {}).get("manifest_id"),
+        "manifest": summary_for_record(manifest) if manifest else None,
+        "evidence": {k: evidence.get(k) for k in ("status", "run_id", "manifest_id", "log", "milestones", "expected_milestones", "problems")} if evidence else None,
         "triage": counts,
         "jvm_crashes": [{k: c.get(k) for k in ("file", "message", "top_mod")} for c in triage.get("jvm_crash_logs") or [] if c.get("during_this_log")],
         "known_noise": noise_check,
@@ -119,7 +138,8 @@ def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triag
         log.parent.mkdir(parents=True, exist_ok=True)
         with log.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps({"test_id": test_id, "date": record["date"], "verdict": member["verdict"],
-                                     "shipped_sha256": member["shipped_sha256"], "version": member["version"]}) + "\n")
+                                     "shipped_sha256": member["shipped_sha256"], "version": member["version"],
+                                     "provenance": member["provenance"], "manifest_id": record["manifest_id"]}) + "\n")
     return record
 
 
@@ -141,11 +161,19 @@ def live_status(workspace: Path) -> dict:
             except ValueError:
                 continue
     passes = [r for r in runs if r.get("verdict") == "PASS" and r.get("shipped_sha256")]
-    if passes:
+    # R1: a record written since manifests exist says its provenance. BOUND is bound to staged inputs; an explicit UNKNOWN was
+    # accepted without a manifest and is never CURRENT. A line with no provenance key is a legacy run: readable, provenance UNKNOWN.
+    trusted = [r for r in passes if r.get("provenance", "LEGACY") != "UNKNOWN"]
+    if not trusted and passes:
         last = passes[-1]
+        return {"status": "UNBOUND", "test_id": last["test_id"], "tested_version": last.get("version"), "date": last.get("date"),
+                "provenance": "UNKNOWN", "reason": "the run was recorded without a pre-launch manifest binding it to the staged inputs"}
+    if trusted:
+        last = trusted[-1]
         current = shipped_hash(workspace / "working")
         return {"status": "CURRENT" if current == last["shipped_sha256"] else "STALE", "test_id": last["test_id"],
-                "tested_version": last.get("version"), "date": last.get("date")}
+                "tested_version": last.get("version"), "date": last.get("date"),
+                "provenance": "BOUND" if last.get("provenance") == "BOUND" else "UNKNOWN", "manifest_id": last.get("manifest_id")}
     report = workspace / "working" / "reports" / "REVIVAL_REPORT.md"
     if report.is_file() and "LIVE_VALIDATED" in report.read_text(encoding="utf-8", errors="replace"):
         return {"status": "UNKNOWN_BUILD", "test_id": None}

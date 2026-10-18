@@ -229,6 +229,10 @@ switch ($Command) {
         # probe, enabled mods, drift). A FAIL stops the run; there is no override: fix the rig, then launch.
         $doctor = Invoke-Bf @("rig-doctor", $Rig, "--real-install", (Split-Path $Core -Parent))
         if ($doctor -ne 0) { throw "rig-doctor failed (see above); launch refused." }
+        # ROADMAP item 75 R1: record what is staged (versions, file hashes, launcher, probe config) before anything starts, so an
+        # accepted run is bound to these inputs. The rig belongs to this launch until the release below.
+        $manifest = Invoke-Bf @("run-manifest", "prepare", $Rig, $id, "--kind", "campaign", "--expect", "main_menu", "--expect", "campaign_load", "--launcher", $bat)
+        if ($manifest -ne 0) { throw "run-manifest prepare failed (see above); launch refused." }
         Initialize-WindowTools
         $windowLog = Join-Path $Logs "$id.windows.txt"
         # A reused test id must not carry an earlier attempt's dialogs into this run's triage (GRP-3, 2026-09-27).
@@ -258,8 +262,8 @@ switch ($Command) {
             # with the rig path 60 s after launch means the bat never started the game: say so and stop instead of waiting.
             if ($java.Count -gt 0) { $javaSeen = $true }
             if (-not $javaSeen -and ((Get-Date) - $started).TotalSeconds -gt 60) {
-                Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} watchdog: no java process for the rig 60 s after launch" -f (Get-Date))
-                throw "Launch watchdog: no java process for $Rig appeared within 60 s of launch (see $out and $err). Stopped; nothing was left running."
+                Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} watchdog: LAUNCH_NO_PROCESS no java process for the rig 60 s after launch" -f (Get-Date))
+                throw "Launch watchdog (LAUNCH_NO_PROCESS): no java process for $Rig appeared within 60 s of launch (see $out and $err). Stopped; nothing was left running."
             }
             if ($autoClick -and $launcherHandle -ne 0 -and -not $physicalDone -and $postedAt -and ((Get-Date) - $postedAt).TotalSeconds -gt 8) {
                 $physicalDone = $true
@@ -325,6 +329,8 @@ switch ($Command) {
                 }
             }
             $wrapper.Dispose()
+            # R1: re-hash the staged files now the game is closed and give the rig back (writes logs\<TESTID>.completed.json).
+            Invoke-Bf @("run-manifest", "release", $Rig, $id, "--launcher", $bat) | Out-Null
         }
         # ROADMAP 36.4: a JVM crash writes hs_err_pid<PID>.log to the game's working directory, not our log. Copy any
         # written during this launch beside the log as hs_err_pid<PID>.<TESTID>.log, which log-triage reads.

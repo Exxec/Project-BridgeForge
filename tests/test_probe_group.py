@@ -350,11 +350,13 @@ class InstallTests(unittest.TestCase):
             a = _workspace(queue, "A", "mod_a", "hull_a")
             b = _workspace(queue, "B", "mod_b", "hull_b")
             merged = merge_configs([build_probe_config(a), build_probe_config(b)])
-            rig = _rig(root)
-            (rig / "logs").mkdir(parents=True)
-            (rig / "logs" / "GRP-T.stdout.log").write_text("5 [main] INFO  com.fs.starfarer.StarfarerLauncher  - Starting" + chr(10) + ""
-                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|content-ids|FAIL|variant:hull_b_Std|broken" + chr(10) + ""
-                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|content-ids|FAIL|all-content|checked=2 failed=1" + chr(10) + "", encoding="utf-8")
+            # R1: the run is bound to its staged inputs by a pre-launch manifest; without one the record would be UNBOUND, not archivable.
+            from tests.bound_runs import bound_run
+            rig, _ = bound_run(root, {"mod_a": queue / "A", "mod_b": queue / "B"}, "GRP-T", [
+                "5 [main] INFO  com.fs.starfarer.StarfarerLauncher  - Starting",
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|content-ids|FAIL|variant:hull_b_Std|broken",
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|content-ids|FAIL|all-content|checked=2 failed=1"],
+                expected=("content_ids",))
             policy = root / "policy.json"
             shutil.copy2(Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json", policy)
             # The archive gate (ROADMAP 36.11) needs original/ to audit against.
@@ -385,12 +387,11 @@ class InstallTests(unittest.TestCase):
             queue = root / "In operation"
             a = _workspace(queue, "A", "mod_a", "hull_a")
             merged = merge_configs([build_probe_config(a)])
-            rig = _rig(root)
-            (rig / "logs").mkdir(parents=True)
-            log = rig / "logs" / "GRP-R.stdout.log"
-            log.write_text("5 [main] INFO  com.fs.starfarer.StarfarerLauncher  - Starting" + chr(10)
-                           + "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|content-ids|OK|all-content|checked=1 failed=0" + chr(10),
-                           encoding="utf-8")
+            from tests.bound_runs import bound_run
+            rig, log = bound_run(root, {"mod_a": queue / "A"}, "GRP-R", [
+                "5 [main] INFO  com.fs.starfarer.StarfarerLauncher  - Starting",
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.9|content-ids|OK|all-content|checked=1 failed=0"],
+                expected=("content_ids",))
             policy = root / "policy.json"
             shutil.copy2(Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json", policy)
             shutil.copytree(a, queue / "A" / "original" / "A")

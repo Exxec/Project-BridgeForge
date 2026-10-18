@@ -47,6 +47,8 @@ def add_parser(subcommands) -> None:
     group_record.add_argument("test_id", help="the bf-test.ps1 test id; reads <rig>/logs/<TESTID>.stdout.log")
     group_record.add_argument("--archive", action="store_true")
     group_record.add_argument("--refresh", action="store_true", help="with --archive: replace an earlier archive of the same mod in Done/ (deletes that folder; Done/ must hold an ARCHIVE_NOTE.md there)")
+    group_record.add_argument("--accept", action="store_true", help="record each PASS member through the single-mod acceptance checks (main menu, campaign load, no FATAL or MOD-ERROR) and write a dated 'Live run' section; probe FAIL lines and caught exceptions are carried only when an earlier acceptance of the same mod version covers them (reports/live_accepted.jsonl, working/reports/probe_accepted.json), otherwise nothing is recorded and the uncovered ones are listed; needs --note")
+    group_record.add_argument("--note", help="with --accept: what was run and seen, written into each report as the owner's account")
     group_record.add_argument("--queue", type=Path)
     group_record.add_argument("--rig", type=Path)
     group_record.add_argument("--json", action="store_true")
@@ -72,7 +74,9 @@ def add_parser(subcommands) -> None:
     group_regress.add_argument("--out", type=Path, help="summary JSON (default: <queue>/_regress/regress-<date>.json)")
     group_regress.add_argument("--test-prefix", help="test id prefix (default REG-<date>)")
     group_regress.add_argument("--rejudge", type=Path, metavar="SOURCE", help="no game: judge a finished (or running) pass's saved logs again with the current report; SOURCE is its summary JSON or .partial.jsonl checkpoint")
-    group_regress.add_argument("--quiet", action="store_true", help="no per-group progress lines")
+    group_regress.add_argument("--changed-since", metavar="COMMIT", help="rerun only the workspaces whose shipped files changed since their last PASS run, or all of them when the probe or harness changed since COMMIT; writes every archive's verdict, prints only the changed ones, never records. A regression (PASS before, not now) writes <queue>/_regress/REGRESSION_HOLD.json and later --changed-since runs refuse to start until --clear-hold (rig must be a junction)")
+    group_regress.add_argument("--clear-hold", action="store_true", help="with --changed-since: remove an earlier regression hold after looking at it")
+    group_regress.add_argument("--quiet",action="store_true", help="no per-group progress lines")
     group_regress.add_argument("--rig", type=Path)
     group_regress.add_argument("--queue", type=Path)
     group_regress.add_argument("--json", action="store_true")
@@ -177,11 +181,26 @@ def run_cli(args: argparse.Namespace) -> int:
                 if args.rejudge:
                     out = args.out or Path(queue) / "_regress" / f"rejudged-{_date.today():%Y%m%d}.json"
                     result = rejudge(queue, rig, args.rejudge, out)
+                elif args.changed_since:
+                    from .regress_changed import RegressChangedError, run_changed
+                    out = args.out or Path(queue) / "_regress" / f"regress-changed-{_date.today():%Y%m%d}.json"
+                    try:
+                        print("Starting the changed-only regression pass: leave the mouse and keyboard alone until it finishes.", file=sys.stderr)
+                        result = run_changed(queue, rig, out, args.changed_since, repo_root=REPO_ROOT, bat=args.bat, size=args.size, limit=args.limit,
+                                             quiet=args.quiet, test_prefix=args.test_prefix, clear_hold=args.clear_hold)
+                    except RegressChangedError as exc:
+                        raise ProbeGroupError(str(exc)) from exc
+                    if not args.json:
+                        print(f"{len(result['selected'])} workspace(s) rerun, {len(result['changed_verdicts'])} verdict(s) changed; summary {out}")
+                        for name, row in result["changed_verdicts"].items():
+                            print(f"  {name}: {row['previous']} -> {row['verdict']} ({row['why']})")
+                        if result.get("hold"):
+                            print(f"  REGRESSION: later --changed-since runs stop until a person looks ({result['hold']}).")
                 else:
                     print("Starting the regression pass: leave the mouse and keyboard alone until it finishes (about five minutes a group).", file=sys.stderr)
                     result = run_regression(queue, rig, out, bat=args.bat, size=args.size, limit=args.limit, only=args.only or None,
                                         quiet=args.quiet, test_prefix=args.test_prefix)
-                if not args.json:
+                if not args.json and not args.changed_since:
                     print(f"{len(result['groups'])} group(s); {len(result['attention'])} item(s) need a look; summary {out}")
                     for item in result["attention"]:
                         print(f"  group {item['group']}: {item.get('mod') or item.get('members')}: {item['why']}")
@@ -226,8 +245,11 @@ def run_cli(args: argparse.Namespace) -> int:
             elif args.probe_group_command == "record":
                 from .probe_group import record_group
                 config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
-                result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive, refresh=args.refresh)
+                result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive, refresh=args.refresh,
+                                      accept=args.accept, note=args.note)
                 if not args.json:
+                    if result.get("stopped"):
+                        print(f"STOPPED, not everything recorded: {result['stopped']}")
                     print(f"Recorded LIVE_VALIDATED ({result['probe_version']}): {', '.join(result['recorded']) or 'none'}")
                     if args.archive:
                         print(f"Archived to Done/: {', '.join(result['archived']) or 'none'}")
@@ -254,5 +276,5 @@ def run_cli(args: argparse.Namespace) -> int:
             return 2
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
-        return 0
+        return 1 if args.probe_group_command == "record" and result.get("stopped") else 0
     return 2

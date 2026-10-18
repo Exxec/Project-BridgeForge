@@ -18,6 +18,8 @@ POLL_INTERVAL_SECONDS = 1.0
 # Launch watchdog (ROADMAP 60f): no java process after this many seconds means the launcher .bat never started the game
 # (the first Yellowjackets launch wrote nothing and said nothing). Overridable by tests.
 LAUNCH_WATCHDOG_SECONDS = 60.0
+# The status a run ends with when the watchdog fires (ROADMAP item 73 G4); bf-test.ps1 and live_run use the same word.
+LAUNCH_NO_PROCESS = "LAUNCH_NO_PROCESS"
 
 FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 MAIN_MENU_MARKER = "Playing music with id [miscallenous_main_menu.ogg]"
@@ -51,7 +53,7 @@ def java_started(runtime_dir: Path, wrapper_pid: int) -> bool:
 
 
 def watchdog_message(runtime_dir: Path, seconds: float) -> str:
-    return (f"Launch watchdog: no java process for {runtime_dir} appeared within {seconds:.0f} s of launch, so the launcher never "
+    return (f"Launch watchdog ({LAUNCH_NO_PROCESS}): no java process for {runtime_dir} appeared within {seconds:.0f} s of launch, so the launcher never "
             "started the game. Stopped instead of waiting; read the rig's stdout/stderr log and run the bat by hand.")
 
 
@@ -123,7 +125,7 @@ def _result(status: str, reason: str | None, log: Path | None = None, errlog: Pa
     }
 
 
-def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_name: str | None = None, keep_mods: bool = False, bat_name: str | None = None, auto_click: bool = False) -> dict:
+def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_name: str | None = None, keep_mods: bool = False, bat_name: str | None = None, auto_click: bool = False, bind: bool = False) -> dict:
     """Launch an isolated Starsector runtime rig headlessly and watch its log for a boot milestone.
 
     NEVER call this against a real/shared install: runtime_dir must be a disposable rig whose
@@ -191,6 +193,14 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
     err_path = logs_dir / f"{name}.stderr.log"
 
     command_line = f'cmd.exe /c ""{bat_path}" > "{log_path}" 2> "{err_path}""'
+    if bind:
+        # R1: a boot run records its staged inputs too (kind boot: it can show the main menu and nothing more).
+        from .run_manifest import ManifestError, prepare_run
+
+        try:
+            prepare_run(runtime_dir, name, "boot", targets=[], expected=["main_menu"], scenario="boot-test", launcher=bat_path)
+        except ManifestError as exc:
+            return _result("REFUSED", f"no pre-launch manifest: {exc}", log_path, err_path, 0.0, None, _restore(keep_mods))
     prefs = None
     if auto_click:
         # An unattended boot goes through the launcher: pin its resolution and give the owner's own back afterwards (rig_prefs).
@@ -206,6 +216,13 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
         # (Python's list2cmdline re-quoting would corrupt it).
         process = subprocess.Popen(command_line, cwd=str(runtime_dir))
     except OSError as exc:
+        if bind:
+            from .run_manifest import ManifestError, release_run
+
+            try:
+                release_run(runtime_dir, name, bat_path)
+            except (ManifestError, OSError):
+                pass
         restored = _restore(keep_mods)
         if prefs is not None:
             prefs.__exit__(None, None, None)
@@ -243,7 +260,7 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
             if not java_seen:
                 java_seen = java_started(runtime_dir, process.pid)
                 if not java_seen and elapsed >= LAUNCH_WATCHDOG_SECONDS:
-                    status = "FAIL"
+                    status = LAUNCH_NO_PROCESS
                     reason = watchdog_message(runtime_dir, LAUNCH_WATCHDOG_SECONDS)
                     break
             if elapsed >= timeout:
@@ -275,6 +292,13 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
         except ValueError:
             triage_summary = None
 
+    if bind:
+        from .run_manifest import ManifestError, release_run
+
+        try:
+            release_run(runtime_dir, name, bat_path)
+        except (ManifestError, OSError):
+            pass
     restored = _restore(keep_mods)
     if prefs is not None:
         prefs.__exit__(None, None, None)

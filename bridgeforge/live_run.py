@@ -455,6 +455,25 @@ class GameRefused(RuntimeError):
     """The rig is not safe or ready to run a game (shared install, a game already running, no launcher)."""
 
 
+# What a unattended live run must show in its log to count (ROADMAP item 75 R1); `drive` ends LIVE_DONE after a combat round.
+LIVE_EXPECTED_MILESTONES = ("main_menu", "campaign_load", "content_ids", "combat")
+
+
+def _release(rig: Path, test_id: str, bat: Path) -> None:
+    """The run ended: re-hash the staged files and give the rig back. A failure here is left visible (no completion record means the
+    evaluator refuses the run), never swallowed into a pass."""
+    from .run_manifest import ManifestError, release_run
+
+    try:
+        release_run(rig, test_id, bat)
+    except (ManifestError, OSError):
+        pass
+
+
+class LaunchNoProcess(GameRefused):
+    """The launch watchdog fired: no java process appeared (ROADMAP item 73 G4). The live result stage is LAUNCH_NO_PROCESS."""
+
+
 @contextlib.contextmanager
 def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
     """Start the rig game, click through the launcher, yield (log, hands, vanilla mission rows), then stop the rig's java and the
@@ -473,6 +492,14 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
     logs = rig / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     log, err = logs / f"{test_id}.stdout.log", logs / f"{test_id}.stderr.log"
+    from .run_manifest import ManifestError, prepare_run, read_staging_state
+
+    # R1: record what is staged before anything starts; the rig belongs to this run until it is released below.
+    try:
+        prepare_run(rig, test_id, "live", targets=sorted(read_staging_state(rig).get("candidates") or {}), launcher=bat,
+                    expected=list(LIVE_EXPECTED_MILESTONES), scenario="probe-group live")
+    except ManifestError as exc:
+        raise GameRefused(f"no pre-launch manifest: {exc}") from exc
     from .rig_prefs import pinned_launcher_prefs
 
     prefs = pinned_launcher_prefs()  # the click fractions were measured at 1280x960; the owner's own setting comes back afterwards
@@ -481,6 +508,7 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
         process = subprocess.Popen(f'cmd.exe /c ""{bat}" > "{log}" 2> "{err}""', cwd=str(rig))
     except Exception:
         prefs.__exit__(None, None, None)
+        _release(rig, test_id, bat)
         raise
     hands = real_hands(rig, process.pid)
     base_alive = hands.alive
@@ -493,7 +521,7 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
         if not java_seen["seen"]:
             java_seen["seen"] = java_started(rig, process.pid)
             if not java_seen["seen"] and time.monotonic() - launched_at >= LAUNCH_WATCHDOG_SECONDS:
-                raise GameRefused(watchdog_message(rig, LAUNCH_WATCHDOG_SECONDS))
+                raise LaunchNoProcess(watchdog_message(rig, LAUNCH_WATCHDOG_SECONDS))
         # The launcher window waits for Play before the game logs anything (owner, 2026-10-11).
         if not clicked["done"]:
             pids = {item["pid"] for item in _running_java_under(rig) if isinstance(item.get("pid"), int)} | descendant_pids(process.pid)
@@ -512,6 +540,7 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
         if process.poll() is None:
             _terminate_tree(process.pid)
         prefs.__exit__(None, None, None)
+        _release(rig, test_id, bat)
 
 
 def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240) -> LiveResult:
@@ -519,5 +548,7 @@ def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu
     try:
         with running_game(rig, test_id, bat_name) as (log, hands, vanilla_rows):
             return drive(log, hands, menu_timeout=menu_timeout, vanilla_rows=vanilla_rows)
+    except LaunchNoProcess as exc:
+        return LiveResult("LIVE_STUCK", "LAUNCH_NO_PROCESS", str(exc))
     except GameRefused as exc:
         return LiveResult("LIVE_STUCK", "refused", str(exc))

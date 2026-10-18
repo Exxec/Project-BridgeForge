@@ -24,6 +24,15 @@ def _workspace(root: Path, name: str = "Mod") -> Path:
     return ws
 
 
+def _evidence(ws: Path) -> dict:
+    """What run_manifest.evaluate_run returns for a clean run of the fixture's mod `m` (the evaluator itself is tested in test_run_manifest)."""
+    from bridgeforge.live_trust import shipped_hash
+
+    digest = shipped_hash(ws / "working")
+    return {"status": "ACCEPTABLE", "run_id": "T", "manifest_id": "abc", "problems": [],
+            "members": {"m": {"ok": True, "verdict": "PASS", "candidate_sha256": digest, "workspace_sha256_now": digest, "problems": []}}}
+
+
 class ShippedAuditTests(unittest.TestCase):
     def test_identical_and_declared_changes_pass(self) -> None:
         with resolved_temp_dir() as root:
@@ -74,11 +83,43 @@ class RunRecordTests(unittest.TestCase):
         with resolved_temp_dir() as root:
             ws = _workspace(root)
             untested = live_status(ws)["status"]
-            write_run_record(root, "T1", [ws], triage={"counts": {"FATAL": 0, "KNOWN-NOISE": 10}}, verdicts={"m": "PASS"}, today="2026-10-04")
-            current = live_status(ws)["status"]
+            write_run_record(root, "T1", [ws], triage={"counts": {"FATAL": 0, "KNOWN-NOISE": 10}}, verdicts={"m": "PASS"}, today="2026-10-04",
+                             evidence=_evidence(ws))
+            current = live_status(ws)
             _write(ws / "working" / "data" / "hulls" / "ship_data.csv", "id\nm_hull\nfix\n")
             stale = live_status(ws)
-        self.assertEqual((untested, current, stale["status"], stale["test_id"]), ("NOT_TESTED", "CURRENT", "STALE", "T1"))
+        self.assertEqual((untested, current["status"], stale["status"], stale["test_id"]), ("NOT_TESTED", "CURRENT", "STALE", "T1"))
+        self.assertEqual(current["provenance"], "BOUND")
+
+    def test_a_record_without_bound_evidence_is_never_current(self) -> None:
+        # R1: a new record with no manifest evidence says provenance UNKNOWN; refused evidence does not bind either.
+        with resolved_temp_dir() as root:
+            ws = _workspace(root)
+            write_run_record(root, "T1", [ws], triage={"counts": {}}, verdicts={"m": "PASS"}, today="2026-10-04")
+            unbound = live_status(ws)
+            refused = _evidence(ws)
+            refused["status"] = "REFUSED"
+            write_run_record(root, "T2", [ws], triage={"counts": {}}, verdicts={"m": "PASS"}, today="2026-10-05", evidence=refused)
+            still = live_status(ws)
+            wrong_bytes = _evidence(ws)
+            wrong_bytes["members"]["m"]["candidate_sha256"] = "0" * 64
+            write_run_record(root, "T3", [ws], triage={"counts": {}}, verdicts={"m": "PASS"}, today="2026-10-06", evidence=wrong_bytes)
+            different = live_status(ws)
+            gate = archive_gate(ws)
+        self.assertEqual((unbound["status"], unbound["provenance"]), ("UNBOUND", "UNKNOWN"))
+        self.assertEqual(still["status"], "UNBOUND")
+        self.assertEqual(different["status"], "UNBOUND")
+        self.assertIn("live result UNBOUND", " ".join(gate["problems"]))
+
+    def test_a_legacy_run_line_stays_readable_with_provenance_unknown(self) -> None:
+        with resolved_temp_dir() as root:
+            ws = _workspace(root)
+            from bridgeforge.live_trust import shipped_hash
+
+            _write(ws / "reports" / "live_runs.jsonl", json.dumps({"test_id": "OLD", "date": "2026-10-04", "verdict": "PASS",
+                                                                   "shipped_sha256": shipped_hash(ws / "working"), "version": "1"}) + "\n")
+            status = live_status(ws)
+        self.assertEqual((status["status"], status["provenance"]), ("CURRENT", "UNKNOWN"))
 
     def test_validated_before_run_records_is_unknown_build(self) -> None:
         with resolved_temp_dir() as root:

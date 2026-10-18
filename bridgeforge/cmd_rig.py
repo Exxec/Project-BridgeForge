@@ -164,6 +164,7 @@ def add_parser(subcommands) -> None:
     accept_cmd.add_argument("--note", required=True, help="what the owner did and saw")
     accept_cmd.add_argument("--not-exercised", help="what the run did not cover (for example: no raid on the station happened)")
     accept_cmd.add_argument("--days", type=float, help="campaign days the run was meant to cover; INCOMPLETE soak is refused")
+    accept_cmd.add_argument("--rig", type=Path, help="the rig the run used: its logs/<test id>.manifest.json (written before launch by run-manifest prepare) binds the run to the staged files; required, a run without a manifest is not accepted")
     accept_cmd.add_argument("--mods-dir", type=Path, help="the rig's mods/ directory, to attribute errors to mods")
     accept_cmd.add_argument("--accept-findings", help="reason to accept probe FAIL lines or caught exceptions; written into the report")
     accept_cmd.add_argument("--record-only", action="store_true", help="write only the run record, not a report section (the report already says it)")
@@ -209,7 +210,7 @@ def run_cli(args: argparse.Namespace) -> int:
         try:
             result = accept_run(args.workspace, args.log, test_id=args.test_id, note=args.note, days=args.days,
                                 not_exercised=args.not_exercised, mods_dir=args.mods_dir,
-                                accept_findings=args.accept_findings, record_only=args.record_only)
+                                accept_findings=args.accept_findings, record_only=args.record_only, rig=args.rig)
         except (AcceptError, ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

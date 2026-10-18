@@ -16,16 +16,33 @@ Refuses a test id already recorded in the report. Never touches the original log
 """
 from __future__ import annotations
 
+import json
+import re
 from datetime import date
 from pathlib import Path
 
 from .live_trust import write_run_record
+from .safeio import atomic_write_text
 from .log_triage import triage_log
 from .soak_report import soak_report
 
 
 class AcceptError(ValueError):
     """The run does not qualify, or the report already records this test id."""
+
+
+def bound_evidence(rig: Path | None, test_id: str, log: Path, mods_dir: Path | None) -> tuple[dict, dict]:
+    """(evidence, manifest) from the shared evaluator for a standalone acceptance, or AcceptError: no rig, no manifest, no acceptance."""
+    from .run_manifest import ManifestError, evaluate_run, read_manifest
+
+    if rig is None:
+        raise AcceptError("not accepted: give --rig; an accepted run must have the pre-launch manifest `run-manifest prepare` (or the "
+                          "launchers) wrote in <rig>/logs/<test id>.manifest.json. A run without one stays provenance UNKNOWN.")
+    try:
+        manifest = read_manifest(Path(rig), test_id)
+    except ManifestError as exc:
+        raise AcceptError(f"not accepted: {exc}") from exc
+    return evaluate_run(Path(rig), manifest, log, mods_dir=mods_dir), manifest
 
 
 def _mod_id(workspace: Path) -> str | None:
@@ -37,7 +54,11 @@ def _mod_id(workspace: Path) -> str | None:
 
 def accept_run(workspace: Path | str, log: Path | str, *, test_id: str, note: str, days: float | None = None,
                not_exercised: str | None = None, mods_dir: Path | None = None, accept_findings: str | None = None,
-               record_only: bool = False, today: str | None = None) -> dict[str, object]:
+               record_only: bool = False, today: str | None = None, write_record: bool = True,
+               rig: Path | None = None, evidence: dict | None = None, manifest: dict | None = None) -> dict[str, object]:
+    """Accept one workspace's run. Fails closed (ROADMAP item 75 R1): the run needs its pre-launch manifest, found in
+    `<rig>/logs/<test id>.manifest.json`, and `run_manifest.evaluate_run` must show this workspace's mod bound to the run.
+    A group caller passes the `evidence` and `manifest` it already evaluated for the whole group."""
     workspace = Path(workspace).expanduser().resolve()
     log = Path(log).expanduser().resolve()
     report_path = workspace / "working" / "reports" / "REVIVAL_REPORT.md"
@@ -50,6 +71,14 @@ def accept_run(workspace: Path | str, log: Path | str, *, test_id: str, note: st
     triage = triage_log(log, mods_dir=mods_dir)
     milestones = triage["milestones"]
     problems: list[str] = []
+    if evidence is None:
+        evidence, manifest = bound_evidence(rig, test_id, log, mods_dir or (Path(rig) / "mods" if rig else None))
+    mine = (evidence.get("members") or {}).get(str(_mod_id(workspace)))
+    if evidence.get("status") != "ACCEPTABLE":
+        problems.extend(evidence.get("problems") or ["the run is not bound to its staged inputs"])
+    if mine is None or not mine.get("ok"):
+        problems.append(f"{workspace.name} ({_mod_id(workspace)}) is not a bound, passing target of run {test_id}"
+                        + (": " + "; ".join(mine.get("problems") or []) if mine else ""))
     if not milestones["main_menu_reached"]:
         problems.append("the log never reached the main menu")
     if not (milestones["campaign_loads"] or milestones["finished_saving_count"]):
@@ -100,10 +129,42 @@ def accept_run(workspace: Path | str, log: Path | str, *, test_id: str, note: st
 
     mod_id = _mod_id(workspace)
     queue = workspace.parent
-    record = write_run_record(queue, test_id, [workspace], triage=triage, verdicts={str(mod_id): "PASS"}, today=today)
+    # `write_record=False`: the caller (probe-group record --accept) already wrote one record for the whole group, and a second
+    # write per member would replace its members list with just this one.
+    record = write_run_record(queue, test_id, [workspace], triage=triage, verdicts={str(mod_id): "PASS"}, today=today,
+                              evidence=evidence, manifest=manifest) if write_record else None
+    if findings:
+        from .group_accept import context_of
+
+        remember_accepted(workspace, test_id, probe_fail_keys(log), caught, accept_findings or "", today, context_of(manifest))
     return {
         "schema_version": 1, "mode": "LIVE_ACCEPT", "workspace": workspace.name, "test_id": test_id,
         "report": None if record_only else str(report_path), "run_record": str(queue / "_live" / f"{test_id}.json"),
-        "shipped_sha256": record["members"][0]["shipped_sha256"], "soak": soak["verdict"] if soak else None,
+        "shipped_sha256": record["members"][0]["shipped_sha256"] if record else None, "soak": soak["verdict"] if soak else None,
         "accepted_findings": findings,
     }
+
+
+ACCEPTED_LOG = "live_accepted.jsonl"
+_PROBE_FAIL = re.compile(r"BF-PROBE\|[^|]*\|(?P<check>[^|]*)\|FAIL\|(?P<subject>[^|]*)\|")
+
+
+def probe_fail_keys(log: Path | str) -> list[str]:
+    """Sorted distinct `check|subject` of the probe FAIL lines in a log."""
+    try:
+        text = Path(log).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    return sorted({f"{m['check']}|{m['subject']}" for m in map(_PROBE_FAIL.search, text.splitlines()) if m})
+
+
+def remember_accepted(workspace: Path, test_id: str, keys: list[str], caught: dict, reason: str, today: str, context: dict | None = None) -> None:
+    """Append what the owner accepted for this mod version, so `probe-group record --accept` can carry it to a later run of the same version."""
+    from .scanner import _load_lenient_json_file
+
+    info = _load_lenient_json_file(workspace / "working" / "mod_info.json")
+    entry = {"test_id": test_id, "date": today, "version": str(info.get("version") or "") if isinstance(info, dict) else "",
+             "keys": keys, "caught_distinct": int(caught.get("distinct") or 0), "reason": reason.strip(), "context": context}
+    path = workspace / "reports" / ACCEPTED_LOG
+    previous = path.read_text(encoding="utf-8") if path.is_file() else ""
+    atomic_write_text(path, previous + json.dumps(entry, ensure_ascii=False) + "\n")
