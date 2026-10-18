@@ -2919,6 +2919,7 @@ run an AI agent on a packet in a throwaway copy; only a verified result is kept
 |---|---|---|
 | `--agent` AGENT | required | the agent command; it gets the packet on stdin and BF_PACKET/BF_PROMPT/BF_NOTE/BF_WORKING in its environment, e.g. "claude -p --permission-mode acceptEdits" |
 | `--apply` | - | copy a verified result into working/ (backups kept) |
+| `--auto-accept` | - | NOT ENABLED yet: refuses, naming the prerequisites (item 75 R1, R2, R4). The report-only ELIGIBLE / NOT ELIGIBLE verdict is in `escalation review` |
 | `--retries` RETRIES | default 1 | re-runs after a failed attempt, with the failure appended (default 1) |
 | `--timeout` TIMEOUT | default 1800 | seconds per attempt |
 | `workspace` | - | - |

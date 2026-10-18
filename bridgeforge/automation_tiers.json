@@ -142,6 +142,7 @@
     "orbit-period-zero": "input",
     "personality-id-unknown": "auto",
     "player-text-non-english": "decision",
+    "port-dropped-feature": "decision",
     "preset-entry-drops-vanilla-fields": "decision",
     "preset-entry-overrides-vanilla": "decision",
     "preset-whole-entry-replace-changes-vanilla-fields": "decision",

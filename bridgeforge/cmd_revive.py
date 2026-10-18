@@ -58,6 +58,7 @@ def add_parser(subcommands) -> None:
     esc_run = esc_sub.add_parser("run", help="run an AI agent on a packet in a throwaway copy; only a verified result is kept")
     esc_run.add_argument("--agent", required=True, help='the agent command; it gets the packet on stdin and BF_PACKET/BF_PROMPT/BF_NOTE/BF_WORKING in its environment, e.g. "claude -p --permission-mode acceptEdits"')
     esc_run.add_argument("--apply", action="store_true", help="copy a verified result into working/ (backups kept)")
+    esc_run.add_argument("--auto-accept", action="store_true", help="NOT ENABLED yet: refuses, naming the prerequisites (item 75 R1, R2, R4). The report-only ELIGIBLE / NOT ELIGIBLE verdict is in `escalation review`")
     esc_run.add_argument("--retries", type=int, default=1, help="re-runs after a failed attempt, with the failure appended (default 1)")
     esc_run.add_argument("--timeout", type=int, default=1800, help="seconds per attempt")
     esc_apply = esc_sub.add_parser("apply", help="copy an attempt already VERIFIED (and reviewed) into working/, without re-running the agent")
@@ -103,6 +104,10 @@ def run_cli(args: argparse.Namespace) -> int:
         print(f"{result['applied']} applied fix(es) since {args.since}; {len(result['flagged'])} flagged")
         for row in result["flagged"]:
             print(f"  {row['workspace']}: {row['finding']} {row['file']}: {', '.join(row['flags'])}")
+        if result["auto_accepted"]:
+            print(f"{len(result['auto_accepted'])} escalation attempt(s) auto-accepted without a person since {args.since} (review these):")
+            for row in result["auto_accepted"]:
+                print(f"  {row['workspace']}: {row['packet']} ({', '.join(row['changed'])})")
         return 0
     if args.command == "mod-changelog":
         from .mod_changelog import DEFAULT_PATH, add_entry, seed_from_archives
@@ -248,7 +253,7 @@ def run_cli(args: argparse.Namespace) -> int:
             watched = {d: snapshot_dir(d) for d in args.watch_dir}
             from .escalation import run_lock
             with run_lock(args.workspace):
-                results = [run_packet(args.workspace, name, args.agent, apply=args.apply, retries=args.retries, timeout=args.timeout) for name in names]
+                results = [run_packet(args.workspace, name, args.agent, apply=args.apply, retries=args.retries, timeout=args.timeout, auto_accept=args.auto_accept) for name in names]
             for directory, before in watched.items():
                 touched = diff_snapshots(before, snapshot_dir(directory))
                 if any(touched.values()):
@@ -263,6 +268,11 @@ def run_cli(args: argparse.Namespace) -> int:
             print(json.dumps(results, indent=2, ensure_ascii=False))
         for result in [] if args.json else results:
             last = result["attempts"][-1]
-            print(f"{result['outcome']}: {result['packet']} after {len(result['attempts'])} attempt(s)" + "".join(f"\n  {r}" for r in last["reasons"]))
+            print(f"{result['outcome']}: {result['packet']} after {len(result['attempts'])} attempt(s)" + (" [AUTO-ACCEPTED]" if result.get("auto_accepted") else "") + "".join(f"\n  {r}" for r in last["reasons"]))
+            if result.get("auto_accept_blocked"):
+                print(f"  not auto-accepted: {result['auto_accept_blocked']}")
+        accepted = [r["packet"] for r in results if r.get("auto_accepted")]
+        if args.auto_accept and not args.json:
+            print(f"Auto-accepted {len(accepted)} of {len(results)} packet(s)" + (": " + ", ".join(accepted) if accepted else "") + "; the rest wait in the review sheet.")
         return 0 if all(r["outcome"] in ("VERIFIED", "APPLIED") for r in results) else 1
     return 2

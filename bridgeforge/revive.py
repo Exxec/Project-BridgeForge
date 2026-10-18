@@ -219,6 +219,7 @@ def _try_fixers(working: Path, findings: list[dict], *, target: str, vanilla_cor
     return applied, pending
 
 
+RECREATION_FINDINGS = ("port-dropped-feature",)  # packet kind "recreation": a plan skeleton, decided by the owner
 CONTENT_FINDINGS = ("content-reference-unresolved", "content-reference-removed-in-vanilla")
 MAX_VENDOR_PROVIDERS = 2
 
@@ -361,6 +362,8 @@ def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dic
         kind = "agent" if (tier in AGENT_TIERS or refused_auto) and files else "owner"
         if fix is not None and fix["state"] != "FIXER_REFUSED":
             kind = "owner"  # the fix exists; it needs a yes, not a new fix
+        if finding_id in RECREATION_FINDINGS:
+            kind = "recreation"
         packet = {
             "schema_version": SCHEMA_VERSION, "id": packet_id(finding_id, file), "created": _now(now),
             "workspace": str(workspace), "finding": finding_id, "tier": tier, "kind": kind, "file": file or None,
@@ -433,6 +436,11 @@ def render_packet(packet: dict) -> str:
         lines += ["", "## Rules", ""] + [f"{n}. {rule}" for n, rule in enumerate(RULES, 1)]
         lines += ["", "## Done means", "", f"`{packet['verify']}` passes: no " + ", ".join(f"`{i}`" for i in packet.get("merged") or [packet["finding"]]) + " finding remains"
                   + (f" on `{packet['file']}`" if packet["file"] else "") + ", and no new finding of tier decision/inspect/code appears."]
+    elif packet["kind"] == "recreation":
+        lines += ["", "## Decision needed", "",
+                  "A port dropped features the older version had. Either accept them as authored (`bridgeforge escalation accept <workspace> port-dropped-feature --reason ...`) "
+                  "or ask for a re-creation plan: `reports/RECREATION_PLAN.md` is a skeleton with the sections of docs/TEMPLAR_CRUSADE_PLAN.md. "
+                  "Nothing is restored automatically."]
     else:
         lines += ["", "## Decision needed", "",
                   "Record the answer so it applies next time: a fixer approval in the queue's AUTOMATION_POLICY.json, a dependency or content choice in the mod's REVIVAL_PLAN.md, then rerun `bridgeforge revive`."]
@@ -447,6 +455,10 @@ def _write_packets(workspace: Path, packets: list[dict]) -> Path:
     for packet in packets:
         (folder / f"{packet['id']}.json").write_text(json.dumps(packet, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         (folder / f"{packet['id']}.md").write_text(render_packet(packet), encoding="utf-8")
+        if packet["kind"] == "recreation":
+            from .recreation_plan import write_skeleton
+
+            write_skeleton(workspace, packet)
     return folder
 
 
@@ -575,7 +587,7 @@ def render(result: dict) -> str:
     for item in result["applied"]:
         lines.append(f"- fixed `{item['finding']}` ({item['why']}): {', '.join(item['files'])}")
     agent = [p for p in result["packets"] if p["kind"] == "agent"]
-    owner = [p for p in result["packets"] if p["kind"] == "owner"]
+    owner = [p for p in result["packets"] if p["kind"] in ("owner", "recreation")]
     if agent:
         lines += ["", f"## For an AI agent ({len(agent)})", ""] + [f"- {p['id']} ({p['tier']}): `{p['file']}`" for p in agent]
     if owner:

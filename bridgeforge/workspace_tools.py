@@ -114,7 +114,23 @@ def review_applied(queue: Path, since: str) -> dict:
                     if name.replace("\\", "/").startswith(("src/", "jars/src/", "jar/src/")):
                         row["flags"].append("jar-source-edit (no effect until the jar is patched: patch-jar-sources)")
                 rows.append(row)
-    return {"since": since, "applied": len(rows), "flagged": [r for r in rows if r["flags"]], "rows": rows}
+    return {"since": since, "applied": len(rows), "flagged": [r for r in rows if r["flags"]], "rows": rows,
+            "auto_accepted": _auto_accepted_since(queue, since)}
+
+
+def _auto_accepted_since(queue: Path, since: str) -> list[dict]:
+    """Escalation attempts applied without a person (`escalation run --auto-accept`, ROADMAP 73 E2), from each ledger."""
+    found = []
+    for ledger in sorted(Path(queue).glob("*/reports/escalations/ledger.jsonl")):
+        for line in ledger.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            if entry.get("auto_accepted") and str(entry.get("at", ""))[:10] >= since:
+                found.append({"workspace": ledger.parents[2].name, "packet": entry.get("packet"), "finding": entry.get("finding"),
+                              "at": entry.get("at"), "changed": entry.get("changed") or [], "checks": entry.get("auto_accept_checks") or {}})
+    return found
 
 
 def close_workspace(workspace: Path, status: str, reason: str, *, day: str | None = None) -> str:

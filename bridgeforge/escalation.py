@@ -79,14 +79,15 @@ def changed_files(before: Path, after: Path) -> list[str]:
     return sorted(name for name in set(old) | set(new) if old.get(name) != new.get(name))
 
 
-def verify(packet: dict, working: Path) -> dict:
-    """Did the packet's finding go away, without new actionable findings? Scans `working` afresh."""
+def verify(packet: dict, working: Path, scanned: list[dict] | None = None) -> dict:
+    """Did the packet's finding go away, without new actionable findings? Scans `working` afresh, or uses `scanned`
+    (a `revive._scan` result for the same tree, so a caller that needs the findings too scans once)."""
     vanilla = Path(packet["vanilla_core"]) if packet.get("vanilla_core") else None
     from .revive import _informational
 
     # A SAFE finding no fixer handles is a note, not work: a correct fix (a null guard) turns a REVIEW finding
     # SAFE, and it must count as fixed (Vayra's Sector, 2026-09-30: guarded getEntityById lookups "remained").
-    findings = [f for f in _scan(working, vanilla) if not _informational(f)]
+    findings = [f for f in (scanned if scanned is not None else _scan(working, vanilla)) if not _informational(f)]
     target_file = packet.get("file") or ""
     targets = set(packet.get("merged") or [packet["finding"]])
     remaining = [f for f in findings if f["id"] in targets and (not target_file or (f.get("file") or "") == target_file)]
@@ -248,8 +249,15 @@ class run_lock:
 
 
 def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, apply: bool = False, retries: int = 1,
-               timeout: int = 1800, now=None) -> dict:
+               timeout: int = 1800, auto_accept: bool = False, now=None) -> dict:
     workspace = Path(workspace).expanduser().resolve()
+    if auto_accept:
+        from .escalation_policy import AutoAcceptError, require_enabled
+
+        try:
+            require_enabled()
+        except AutoAcceptError as exc:
+            raise EscalationError(str(exc)) from exc
     packet = load_packet(workspace, packet_name)
     if packet["kind"] != "agent":
         raise EscalationError(f"{packet_name} is an owner packet ({packet['tier']}): it needs a decision, not an agent.")
@@ -354,13 +362,27 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
                  "attempt": number, "outcome": outcome, "reasons": reasons, "changed": changed, "agent_exit": agent_rc,
                  "classification": "REVIEW" if outcome in ("VERIFIED", "APPLIED") else None}
         append_ledger(workspace, entry, now)
+        if outcome == "VERIFIED" and auto_accept and not apply:
+            # ROADMAP 73 E2 / item 75 R3: reachable only once escalation_policy.ENABLED is on (it is refused above until then).
+            from .escalation_policy import apply_attempt
+            from .escalation_review import review_attempt
+
+            assessment = review_attempt(workspace, packet["id"], gate=True, packet=packet)["gate"]
+            if assessment["eligible"]:
+                apply_attempt(workspace, packet, number, assessment, now=now)
+                entry = {**entry, "outcome": "APPLIED", "auto_accepted": True}
+                shutil.copyfile(note, packets_dir(workspace) / f"{packet['id']}.NOTE.txt")
+                outcome = "APPLIED"
+            else:
+                entry = {**entry, "auto_accept_blocked": assessment["failed"]}
         attempts.append({**entry, "attempt_dir": str(attempt_dir), "verify": check})
         if outcome in ("VERIFIED", "APPLIED", "REJECTED"):
             break
         feedback = "\n## Previous attempt failed\n\nBridgeForge rejected the last attempt:\n" + "".join(f"- {r}\n" for r in reasons) + "\nStart again from the unchanged files.\n"
     final = attempts[-1]
     return {"schema_version": SCHEMA_VERSION, "mode": "ESCALATION_RUN", "packet": packet["id"], "outcome": final["outcome"],
-            "applied": final["outcome"] == "APPLIED", "attempts": attempts,
+            "applied": final["outcome"] == "APPLIED", "auto_accepted": bool(final.get("auto_accepted")),
+            "auto_accept_blocked": final.get("auto_accept_blocked"), "attempts": attempts,
             "note": "Verified agent changes are REVIEW: they cleared the finding and the scan (and compile check, if any), not a live test."}
 
 
