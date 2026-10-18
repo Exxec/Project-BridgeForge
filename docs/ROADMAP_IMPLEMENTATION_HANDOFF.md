@@ -21,6 +21,9 @@ The 2026-10-17 review found these concrete starting points:
 - Item 73 E2 is still a specification. Existing verifier/review functions provide scan/diff evidence, not a general
   proof of behavior. Missing checks must not become successful unattended acceptance.
 - Item 73 H2's original bump-then-archive operation could require a live run for a version it had just created.
+- Source audit 2026-10-18: DOC-001 in `BUGS.md` establishes that archive `refresh=True` deletes the prior artifact;
+  it does not preserve it as policy requires. R5/S1 must correct preservation before relying on this path. Documentation
+  and helper existence do not satisfy that acceptance criterion; do not refresh known-good archives meanwhile.
 - Zorg bf.10 has a local executable 119-assertion migration harness and a package-entry audit. It has no observed
   campaign load/save/reload for these bytes. EPTA's data audit/full scan also do not establish visual acceptance.
 

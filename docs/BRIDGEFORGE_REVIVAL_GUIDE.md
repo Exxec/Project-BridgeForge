@@ -17,6 +17,11 @@ $rig  = "C:\Users\exxec\Documents\Project BridgeForge\In operation\_rig"  # isol
 
 ## 0. Safety rules (read once)
 
+**Known implementation conflict (2026-10-18, DOC-001 in `BUGS.md`):** the owner contract requires preserving old archives,
+but `archive --refresh` currently deletes the old archive. Do not use standalone or group refresh on a known-good archive
+until the preservation fix is implemented and validated. Ordinary preparation/testing does not require refresh.
+The long-term S1 convergence and the stronger item 75 acceptance contracts remain planned, not guarantees of current tools.
+
 - **Your real Starsector install is read-only.** BridgeForge only ever reads it (`--vanilla-core`, `--source-mods`).
 - **Test rigs must be isolated.** A rig is a folder with `run-java25.bat`, `mods/`, `logs/`, `saves/` and a `starsector-core` **junction** to the real install. The junction is what keeps saves inside the rig. `boot-test`, `probe-config` and `compat-set` refuse to run when it's missing.
 - **Work on working copies** under `In operation/`. Never edit a mod's original archive. Finished mods go to `Done/` only after a passing live test.

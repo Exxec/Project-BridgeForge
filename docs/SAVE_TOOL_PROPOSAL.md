@@ -1,5 +1,9 @@
 # Salvor (working name): save doctor, editor and trainer, a separate program (2026-09-29)
 
+Historical proposal and dated cross-project notes. This audit did not requalify Salvor or VoidSmith's current code,
+permissions or releases. Their own current contracts/status take precedence over the old implementation statements
+below. BridgeForge's role remains read-only evidence and controlled rig qualification; see `VISION.md` for boundaries.
+
 Status: idea, owner-requested. Start small and grow, as BridgeForge did. It will be messy at first, and that is
 expected.
 

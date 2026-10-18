@@ -1,6 +1,9 @@
 # Mod Atlas: index everything a mod adds, changes and hooks, then forecast conflicts
 
-Plan only (owner request 2026-10-11). ROADMAP item 67. Nothing here is built yet.
+Original design (owner request 2026-10-11), ROADMAP item 67. Phases 1-3 and subsequent evidence/refinement tools have
+implementations in `bridgeforge/atlas*.py` and tests. The dated roadmap records local indexing/forecast uses; the complete
+design below is not all implemented or live-qualified. Use `atlas --help`, root ROADMAP 67 and `ROADMAP_STATUS.md` for
+current scope. A forecast remains PREDICTED until its particular runtime behavior is observed. Clarified 2026-10-18.
 
 ## Why
 

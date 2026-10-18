@@ -32,5 +32,6 @@ or invalid policies. Exigency remains local-only under the bundled policy.
 No actual mod promotion or new live validation is implied by tooling tests.
 
 Vacuum's subsequent layout migration is recorded in P12_VACUUM_LAYOUT.md.
-Remaining P12 gate: exact-commit tool release publication. Promotion/layout
-checkpoints do not complete outstanding gameplay or persistence validation.
+Historical exact-source tool publication is recorded in [RELEASE_0_2_0.md](RELEASE_0_2_0.md): v0.2.0 is a published
+pre-release. Current source identifies as 0.3.0; no 0.3.0 release was found on 2026-10-18. Tool publication and
+promotion/layout checkpoints do not complete a mod's outstanding gameplay or persistence validation.

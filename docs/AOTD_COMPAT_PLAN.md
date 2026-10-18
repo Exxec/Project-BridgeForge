@@ -1,8 +1,10 @@
 # AoTD / Theory of Toolbox compatibility: plan (ROADMAP item 63)
 
 Written 2026-10-10 at the owner's request ("plan compatibility changes and improvements for the AoTD toolbox
-etc."). **Plan only, nothing built.** Every fact below was read from the local install on 2026-10-10; claims that
-are not yet proven are marked *unproven*.
+etc."). **Original design, partially implemented.** Matrix/Prepatcher, environment preflight, AoTD set, Toolbox-version,
+per-frame-work and release-policy support exist in code and `tests/test_aotd_compat.py`. Those implementations do not
+complete fork-specific behavior reproof or qualify every launcher configuration. Dated live evidence is appended below.
+Installation facts from 2026-10-10 remain historical; recheck versions before reuse. Clarified 2026-10-18.
 
 ## What is installed (read from `Starsector/mods/`)
 

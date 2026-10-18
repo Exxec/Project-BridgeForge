@@ -4,6 +4,11 @@
 
 This is a design plan to be turned into roadmap entries. Each phase lists its deliverables, acceptance criteria, dependencies and rough effort, so it can be lifted into `ROADMAP.md` directly.
 
+Historical design context: counts, effort labels and UI assumptions below describe 2026-09-11, not current scope.
+Many supporting tools now exist, and the live driver supports some unattended flows. Consult root `ROADMAP.md`,
+`ROADMAP_STATUS.md` and `STRATEGIC_ROADMAP.md` before selecting work. Earlier one-click/manual assumptions do not
+override current code or dated RC8 evidence. Clarified 2026-10-18.
+
 ## 1. Principles
 
 1. **Evidence tiers, cheapest first.** Every issue should be caught at the lowest tier that can catch it:

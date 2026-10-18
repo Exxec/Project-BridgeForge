@@ -7,6 +7,19 @@ are at the end of the file), `CHANGELOG.md`. Direction for fixers, checks and au
 `docs/AUTOMATION_PLAN.md`, including the owner's 2026-10-14 decisions on what may run without a person. Local sessions also
 have `AGENTS.md` (gitignored), the agent contract: who may decide what, escalation rules, sister projects.
 
+## Strategic development policy (owner instructions, 2026-10-17)
+
+Before proposing substantial implementation, read `docs/VISION.md`, `docs/STRATEGIC_ROADMAP.md` and
+`docs/NEXT_MILESTONE.md`. Identify the strategic milestone advanced. Prioritize milestone blockers, critical-path
+capabilities, required architecture, completion validation, then optional improvements/debt. Separate working,
+incomplete, blocked and next work. Necessary small fixes may be bundled; they must not replace milestone progress.
+Strategic direction changes require explicit owner approval and a recorded proposal with supporting evidence.
+The S1-S4 documents are proposed strategy; this policy does not itself approve implementation or publication.
+
+Known mismatch, source-audited 2026-10-18: `archive --refresh` currently deletes the prior archive despite the owner's
+preservation contract. Do not use it or group `--archive --refresh` on known-good archives. Track the required S1 fix
+as DOC-001 in `BUGS.md`; do not weaken the policy to match the implementation.
+
 ## Non-negotiables
 
 - Understand first, modify second, validate always. Never edit an input mod in place; work on

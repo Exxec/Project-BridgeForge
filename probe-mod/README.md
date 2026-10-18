@@ -21,8 +21,8 @@ writes that marker, only into an isolated rig whose `starsector-core` is a junct
 - `data/missions/bfprobe_combat/` — the combat probe mission: `descriptor.json` plus a **loose**
   `MissionDefinition.java`. Vanilla missions (e.g. `data/missions/hornetsnest/`) ship the same way:
   a loose `data.missions.<id>.MissionDefinition` class the game compiles itself (via the bundled
-  Janino compiler) when the mission loads. That means it is **not** part of the jar and is not
-  javac'd by BridgeForge's build step — it is separately test-compiled (see below) against the
+  Janino compiler) when the mission loads. That means it is **not** part of the jar; it is
+  separately test-compiled (see below) against the
   jar's classes to catch API mistakes before a rig run, then shipped as source, same as vanilla.
 - `data/missions/mission_list.csv` — this mod's own copy (`mission,` header + `bfprobe_combat,`),
   merged with vanilla's by the game at load, never edits the base game's file.

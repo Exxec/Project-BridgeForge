@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Documentation and proposed long-term strategy (ROADMAP item 75):** reconcile the README, architecture and operator
+  guides with implemented behavior; add a documentation index and S1-S4 planning documents. S1 starts with a
+  reproducible revival case and shared qualification contracts. DOC-001 records the still-open destructive
+  `archive --refresh` behavior; do not refresh known-good archives. Source version remains 0.3.0; the latest
+  published tool release remains the separate v0.2.0 pre-release. No new runtime release is implied.
+
 - **`java-matrix mass --bundle` and the `miko` launchers (ROADMAP item 62 addendum):** unrelated mods boot together while screening and split only on a failure; `miko`/`miko-noprep` copy the owner's `Miko_Simple.txt` (with and without Prepatcher); fixed 4 GB heap per instance. Migration plan in `docs/MIGRATION_PLAN.md` (item 64).
 - **`java-matrix mass` (ROADMAP item 62):** tests each archived mod with its dependencies through the Java/launcher variants, screening first, and reports environment-sensitive mods. Launchers now drop flags the JDK refuses (JDK 28 rejects `-noverify`); AoTD / Toolbox compatibility plan in `docs/AOTD_COMPAT_PLAN.md` (item 63).
 - **`java-matrix` (ROADMAP item 61):** boot one mod set through every Java version and launcher (direct or Fast Rendering) in a rig, with a pass rate per variant; set up, not yet run live.
