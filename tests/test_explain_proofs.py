@@ -156,6 +156,46 @@ class PrepareForAuditTests(unittest.TestCase):
         self.assertEqual(audit["status"], "PASS")
 
 
+class MixedArchiveDifferencesTests(unittest.TestCase):
+    def test_every_provable_category_together_leaves_under_a_tenth_for_a_person(self) -> None:
+        """ROADMAP item 73 H1 / 60b done-means, on a synthetic Ironclads-shaped workspace: zip original, moved files, translation,
+        backups, a patched jar, a copied file, and one real edit that must stay unexplained."""
+        with resolved_temp_dir() as root:
+            ws = root / "Mixed"
+            (ws / "original").mkdir(parents=True)
+            with zipfile.ZipFile(ws / "original" / "Mixed.zip", "w") as archive:
+                archive.writestr("Mixed/mod_info.json", '{"id": "mx", "version": "1"}')
+                archive.writestr("Mixed/data/config/settings.json", "{}")
+                archive.writestr("Mixed/jars/mx.jar", "old")
+                archive.writestr("Mixed/data/strings/zh.csv", "id,text\na,\u4e2d\u6587\u4e2d\u6587\n")
+                for index in range(8):
+                    archive.writestr(f"Mixed/tools/t{index}.txt", f"tool {index}")
+                    archive.writestr(f"Mixed/src/C{index}.java", f"class C{index} {{}}")
+                archive.writestr("Mixed/data/config/real_edit.json", '{"v": 1}')
+            _write(ws / "working" / "mod_info.json", '{"id": "mx", "version": "1"}')
+            _write(ws / "working" / "data" / "config" / "settings.json", "{}")
+            _write(ws / "working" / "jars" / "mx.jar", "new")
+            _write(ws / "working" / "data" / "strings" / "zh.csv", "id,text\na,Chinese\n")
+            _write(ws / "working" / "data" / "config" / "real_edit.json", '{"v": 2}')
+            _write(ws / "working" / "BRIDGEFORGE_CREDITS.txt", "credits")
+            _write(ws / "scratch" / "jar-patch-2026-10-11" / "PATCH-mx.json", json.dumps({"jar": "C:/x/jars/mx.jar", "installed": True}))
+            _write(ws / "scratch" / "translation" / "zh.json", "{}")
+            for index in range(8):
+                _write(ws / "scratch" / "translator-workspace" / "tools" / f"t{index}.txt", f"tool {index}")
+                _write(ws / "scratch" / "removed-src" / "src" / f"C{index}.java", f"class C{index} {{}}")
+            before = len(prepare_and_audit(ws)["unexplained"])
+            auto_explain_shipped(ws)
+            after = audit_shipped(ws)
+        self.assertGreater(before, 10)
+        self.assertEqual(after["unexplained"], ["data/config/real_edit.json"])
+        self.assertLess(len(after["unexplained"]) / before, 0.1)
+
+
+def prepare_and_audit(ws: Path) -> dict:
+    prepare_for_audit(ws)
+    return audit_shipped(ws)
+
+
 class SiblingAssetsTests(unittest.TestCase):
     def _pack(self, root: Path) -> tuple[Path, Path, Path]:
         ws = _workspace(root, "Core", "core")
