@@ -2304,6 +2304,9 @@ def _fix_vanilla_path_shadowing(root: Path, options: dict) -> list[FileChange]:
         raw = path.read_bytes()
         changes.append(FileChange(path=target, before=b"", after=raw, existed_before=False))
         changes.append(FileChange(path=path, before=raw, after=b"", removed=True))
+    from .shadow_triage import plan_changes
+
+    changes += plan_changes(root, vanilla, options, {_relative_path(root, c.path) for c in changes if c.removed}, bool(changes))
     if not changes:
         raise FixerError("No file saved at a vanilla path under another id" + (f" (refused: {'; '.join(refused)})" if refused else "."))
     return changes
