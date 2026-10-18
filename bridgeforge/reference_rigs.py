@@ -140,3 +140,19 @@ def verify_reference_rig_manifest(path: Path) -> dict[str, object]:
         checks.append({"name": "reference_bundled_java", "status": "WARN", "detail": "No bundled Java executable was found at registration."})
     status = "FAIL" if any(item["status"] == "FAIL" for item in checks) else ("WARN" if any(item["status"] == "WARN" for item in checks) else "PASS")
     return {"schema_version": 1, "mode": "REFERENCE_RIG_VERIFY", "manifest": str(Path(path).resolve()), "runtime_dir": str(install), "game_version": manifest.get("game_version"), "status": status, "checks": checks}
+
+
+def reference_core_for_game_version(game_version: str | None, *, repo_root: Path | None = None) -> Path | None:
+    """The `starsector-core` of the registered reference rig whose game version is exactly the mod's `gameVersion`
+    (a `-RC<n>` suffix ignored: `0.9a-RC8` -> `0.9a`), else None. No nearest-version guess: `0.95a` is not `0.95.1a`."""
+    version = re.sub(r"-RC\d+$", "", str(game_version or "").strip())
+    if not version:
+        return None
+    root = Path(repo_root).resolve() if repo_root is not None else Path(__file__).resolve().parent.parent
+    manifest = root / DEFAULT_REGISTRY_RELATIVE / f"{_safe_version(version)}.json"
+    try:
+        payload = load_reference_rig_manifest(manifest)
+    except ReferenceRigError:
+        return None
+    core = Path(str(payload.get("install", ""))) / "starsector-core"
+    return core if core.is_dir() else None

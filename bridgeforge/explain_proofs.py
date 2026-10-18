@@ -24,7 +24,7 @@ from pathlib import Path
 CREDITS_FILE = "BRIDGEFORGE_CREDITS.txt"
 DESCRIPTIONS_RELATIVE = "data/strings/descriptions.csv"
 DESCRIPTIONS_BACKUP = "descriptions.csv.pre-bf-crafted"
-MOVED_FOLDERS = ("work-files", "translator-workspace", "removed-src")
+MOVED_FOLDERS = ("work-files", "translator-workspace", "removed-src", "removed-shadow")
 COPIES_FILE = "COPIES.json"
 
 

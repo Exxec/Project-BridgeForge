@@ -43,6 +43,8 @@ def add_parser(subcommands) -> None:
     tbatch_cmd.add_argument("--chunk", type=int, default=120, help="entries per agent call (default 120)")
     tbatch_cmd.add_argument("--reference", type=Path, help="an English copy of the same mod to prefill from")
     tbatch_cmd.add_argument("--record", type=Path, action="append", default=[], help="a translator's zh/en record to prefill from; repeatable")
+    tbatch_cmd.add_argument("--memory", type=Path, help="translation memory file (Project Go TM JSON): known strings are reused, only new ones go to the agent, new pairs are added after the run (default: bridgeforge-state/translations/memory.json when that folder exists)")
+    tbatch_cmd.add_argument("--no-memory", action="store_true", help="do not read or update a translation memory")
     tbatch_cmd.add_argument("--quiet", action="store_true", help="no per-chunk progress lines")
     tbatch_cmd.add_argument("--json", action="store_true")
     desc_cmd = subcommands.add_parser("descriptions", help="missing codex descriptions: build the queue sheet, or apply a reviewed draft table with credits and an original-descriptions copy")
@@ -50,6 +52,14 @@ def add_parser(subcommands) -> None:
     desc_sheet = desc_sub.add_parser("sheet", help="write <queue>/DESCRIPTIONS_NEEDED.csv from a live check")
     desc_sheet.add_argument("queue", type=Path)
     desc_sheet.add_argument("--vanilla-core", type=Path)
+    desc_draft = desc_sub.add_parser("draft", help="draft the missing descriptions into <workspace>/reports/description-drafts.md: another version of the mod, then a sibling mod, then (unless --no-crafted) an agent-crafted text marked crafted; review, then `descriptions apply` (ROADMAP 73 D1)")
+    desc_draft.add_argument("target", type=Path, help="a workspace, or a queue folder of workspaces")
+    desc_draft.add_argument("--vanilla-core", type=Path)
+    desc_draft.add_argument("--version-source", type=Path, action="append", default=[], help="a folder of other versions of mods (e.g. Done/ or a reference rig's mods/); repeatable")
+    desc_draft.add_argument("--no-crafted", action="store_true", help="skip step 3: only copy descriptions that already exist elsewhere")
+    desc_draft.add_argument("--agent", default="claude -p --permission-mode acceptEdits --model claude-sonnet-5", help="the agent command for crafted drafts; it gets the prompt on stdin and edits one chunk file")
+    desc_draft.add_argument("--quiet", action="store_true", help="no per-workspace progress lines")
+    desc_draft.add_argument("--json", action="store_true")
     desc_apply = desc_sub.add_parser("apply", help="add a draft table's rows to working/data/strings/descriptions.csv; write BRIDGEFORGE_CREDITS.txt and alt-original-descriptions/")
     desc_apply.add_argument("workspace", type=Path)
     desc_apply.add_argument("draft", type=Path, help="markdown with | `id` | TYPE | text | rows")
@@ -264,6 +274,19 @@ def run_cli(args: argparse.Namespace) -> int:
             if args.descriptions_command == "sheet":
                 result = build_sheet(args.queue, args.vanilla_core)
                 print(f"{result['entries']} missing description(s) in {result['mods']} mod(s). Written: {result['path']}")
+            elif args.descriptions_command == "draft":
+                from .descriptions_draft import agent_crafter, draft_descriptions
+                target = args.target.expanduser().resolve()
+                checkpoint = None if (target / "working").is_dir() else target / "description-drafts.partial.jsonl"
+                result = draft_descriptions(target, vanilla_core=args.vanilla_core, crafter=None if args.no_crafted else agent_crafter(args.agent),
+                                            version_sources=args.version_source, checkpoint_path=checkpoint, quiet=args.quiet)
+                if args.json:
+                    print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+                else:
+                    by = result["by_source"]
+                    print(f"{result['rows']} of {result['missing']} missing description(s) drafted in {result['mods']} mod(s): "
+                          f"{by['version']} from another version, {by['sibling']} from a sibling, {by['crafted']} crafted; "
+                          f"{result['unresolved']} unresolved. Sheets: <workspace>/reports/description-drafts.md")
             else:
                 result = apply_draft(args.workspace, args.draft)
                 print(f"Added {len(result['added'])} row(s); already present: {len(result['skipped_existing'])}.")
@@ -278,16 +301,21 @@ def run_cli(args: argparse.Namespace) -> int:
         from .translation import TranslationError as TranslateApplyError
         base = (args.out or args.mod_dir).expanduser().resolve()
         work = args.work or base.with_name(base.name + ".translate-work")
+        from .translation_memory import DEFAULT_MEMORY_RELATIVE
+        memory = None if args.no_memory else args.memory or (DEFAULT_MEMORY_RELATIVE if DEFAULT_MEMORY_RELATIVE.parent.is_dir() else None)
         try:
             result = translate_batch(args.mod_dir, translator=agent_translator(args.agent), work_dir=work, out_dir=args.out,
-                                     in_place=args.in_place, chunk=args.chunk, reference=args.reference, records=args.record, quiet=args.quiet)
-        except (TranslateBatchError, TranslateApplyError, OSError) as exc:
+                                     in_place=args.in_place, chunk=args.chunk, reference=args.reference, records=args.record, quiet=args.quiet,
+                                     memory=memory)
+        except (TranslateBatchError, TranslateApplyError, OSError, ValueError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
         else:
             print(f"Entries {result['entries']}, sent to the agent in {result['chunks']} chunk(s), translated {result['translated']}.")
+            if memory is not None:
+                print(f"Translation memory {memory}: {result['prefilled']['memory']['reused']} reused, {result['sent_to_agent']} new string(s) sent, {result['memory_added']} pair(s) added.")
             if result["stopped"]:
                 print(f"Stopped: {result['stopped']}. Rerun the same command to continue from the checkpoint.")
             for number, problems in result["failed_chunks"].items():
