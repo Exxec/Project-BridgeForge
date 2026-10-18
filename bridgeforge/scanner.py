@@ -268,6 +268,7 @@ from .scan_jarchecks import (  # noqa: F401
     VANILLA_LOOSE_SCRIPT_CLASSES,
     _console_command_classes,
 )
+from .scan_hyperspace_market import scan_market_on_hyperspace_entity  # noqa: F401
 from .scan_content import (  # noqa: F401
     _scan_assets,
     _scan_wing_roles,
@@ -612,6 +613,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_description_missing(root, result, vanilla_root)
     _scan_asset_reference_missing(root, result, vanilla_root)
     _scan_preset_whole_entry_replace(root, result, vanilla_root)
+    scan_market_on_hyperspace_entity(root, result)
     if compile_check:
         _scan_compile_check(root, result, vanilla_root, provider_roots)
     return result

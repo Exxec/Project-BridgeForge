@@ -122,6 +122,7 @@
     "magiclib-combat-activator": "mechanical",
     "missing-custom-ui-button-pressed-callback": "auto",
     "missing-mod-info": "inspect",
+    "market-on-hyperspace-entity": "code",
     "mission-local-fleet-reference-missing": "decision",
     "mission-local-variant-hull-missing": "decision",
     "mission-local-variant-weapon-missing": "decision",
