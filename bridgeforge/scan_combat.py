@@ -111,6 +111,36 @@ def _scan_hulk_death_effect_repeats(root: Path, result: ScanResult) -> None:
                    file=f"{_relative(root, jar)}!{member}", evidence=[f"class:{info.this_class}", "calls:" + ",".join(sorted(_HULK_SPAWN_CALLS & set(info.utf8_values)))])
 
 
+SAVED_OBJECT_EXPLANATION = (
+    "{subject} is {how}, so the game saves it with every non-transient field, and it keeps {fields}. A saved object that holds a market, "
+    "planet, entity or fleet ties the save graph to that entity; with a memory that holds the planet back it becomes a reference cycle, "
+    "and a Modpack 6.3 save with Station Augments failed to load after c212 (NullPointerException in PlanetConditionMarket.readResolve, "
+    "RC8-31; `save-doctor --cycles` finds the cycle in a save). Safe fix pattern: clear the field in beforeGameSave, restore it in "
+    "afterGameSave/onGameSaveFailed, and re-link it in onGameLoad. Do NOT mark an already-saved field transient: RC8's XStream throws "
+    "UnknownFieldException on a saved element whose field is no longer readable, so existing saves would break (RC8-32, bytecode only)."
+)
+
+
+def _scan_saved_object_compiled(root: Path, result: ScanResult) -> None:
+    """Item 73 F2: the same finding for jar classes that implement a campaign interface the game saves and registers
+    (EveryFrameScript, the listener interfaces) and hold a non-transient MarketAPI/SectorEntityToken/PlanetAPI/CampaignFleetAPI field."""
+    from .saved_object_scan import compiled_entity_fields, saved_interface
+
+    for jar, member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is None or (info.this_class or "").startswith("com/fs/starfarer/"):
+            continue  # a copy of a game class (Salvage Everything ships 50 of them) is the game's own pattern, not the mod's
+        interface = saved_interface(info.interfaces)
+        fields = compiled_entity_fields(info.fields, info.transient_fields) if interface else []
+        if not fields:
+            continue
+        class_name = (info.this_class or member[:-6]).replace("/", ".")
+        result.add(
+            id="saved-object-holds-market-ref", category="scripts", severity="medium", classification="REVIEW", confidence="LOW",
+            explanation=SAVED_OBJECT_EXPLANATION.format(subject=f"{class_name} (compiled)", how=f"a {interface}", fields=", ".join(fields)),
+            file=f"{_relative(root, jar)}!{member}", evidence=[f"class:{class_name}", f"saved:implements {interface}", *[f"field:{f}" for f in fields]])
+
+
 def _scan_saved_object_holds_market_ref(root: Path, result: ScanResult) -> None:
     """A class stored in a memory/customData or registered as a listener or script that keeps a MarketAPI, SectorEntityToken, PlanetAPI
     or CampaignFleetAPI in a non-transient field (the Station Augments save-cycle pattern, ROADMAP 60g(4); see saved_object_scan)."""
@@ -125,6 +155,7 @@ def _scan_saved_object_holds_market_ref(root: Path, result: ScanResult) -> None:
             sources[relative] = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"), strings=True)
         except OSError:
             continue
+    _scan_saved_object_compiled(root, result)
     for hit in saved_object_findings(sources):
         result.add(
             id="saved-object-holds-market-ref", category="scripts", severity="medium", classification="REVIEW", confidence="MEDIUM",

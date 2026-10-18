@@ -84,5 +84,52 @@ class RenamedIndustryIdTests(unittest.TestCase):
         self.assertTrue(any("Gen.jar!a/Gen.class" in e for e in hits[0].evidence))
 
 
+KIND_CASES = (
+    ("hullmod", 'class Gen { void run(Object v) { v.addPermaMod("tasc_old_armor"); } }\n', "data/hullmods/hull_mods.csv", "tasc_new_armor"),
+    ("commodity", 'class Gen { void run(Object c) { c.addCommodity("tasc_rare_ore", 5); } }\n', "data/campaign/commodities.csv", "tasc_rare_ore2"),
+    ("condition", 'class Gen { void run(Object m) { m.addCondition("tasc_ruins_big"); } }\n', "data/campaign/market_conditions.csv", "tasc_ruins_bigger"),
+)
+
+
+class RenamedOtherKindsTests(unittest.TestCase):
+    """Item 73 F3: hull mod, commodity and condition ids get the same declared-provider-only rule."""
+
+    def _build(self, base: Path, code: str, table: str, provider_id: str):
+        mod, core, providers = base / "mod", base / "core", base / "providers"
+        _write(mod / "mod_info.json", MOD_INFO)
+        _write(mod / "data" / "scripts" / "Gen.java", code)
+        _write(core / table, "name,id\nVanilla,vanilla_thing\n")
+        _write(providers / "TASC" / "mod_info.json", PROVIDER_INFO)
+        _write(providers / "TASC" / table, f"name,id\nNew,{provider_id}\n")
+        return mod, core, providers
+
+    def test_renamed_id_of_each_kind_is_flagged_with_its_kind(self) -> None:
+        for kind, code, table, provider_id in KIND_CASES:
+            with self.subTest(kind=kind), resolved_temp_dir() as base:
+                mod, core, providers = self._build(base, code, table, provider_id)
+                hits = _hits(mod, core, providers)
+                self.assertEqual(len(hits), 1)
+                self.assertTrue(any(e.startswith(f"kind:{kind}:") for e in hits[0].evidence))
+
+    def test_id_the_provider_defines_is_quiet_for_each_kind(self) -> None:
+        for kind, code, table, provider_id in KIND_CASES:
+            with self.subTest(kind=kind), resolved_temp_dir() as base:
+                mod, core, providers = self._build(base, code.replace(code.split('"')[1], provider_id), table, provider_id)
+                self.assertEqual(_hits(mod, core, providers), [])
+
+    def test_vanilla_only_sibling_is_not_a_suggestion(self) -> None:
+        with resolved_temp_dir() as base:
+            mod, core, providers = self._build(base, 'class Gen { void run(Object v) { v.addMod("vanilla_thingy"); } }\n',
+                                               "data/hullmods/hull_mods.csv", "other_zzz")
+            self.assertEqual(_hits(mod, core, providers), [])
+
+    def test_id_defined_by_another_kinds_table_is_not_a_hull_mod_candidate(self) -> None:
+        with resolved_temp_dir() as base:
+            mod, core, providers = self._build(base, 'class Gen { void run(Object v) { v.addMod("tasc_old_armor"); } }\n',
+                                               "data/hullmods/hull_mods.csv", "tasc_new_armor")
+            _write(providers / "TASC" / "data" / "weapons" / "weapon_data.csv", "name,id\nW,tasc_old_armor\n")
+            self.assertEqual(_hits(mod, core, providers), [])
+
+
 if __name__ == "__main__":
     unittest.main()

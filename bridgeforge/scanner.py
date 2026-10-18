@@ -268,6 +268,9 @@ from .scan_jarchecks import (  # noqa: F401
     VANILLA_LOOSE_SCRIPT_CLASSES,
     _console_command_classes,
 )
+from .scan_hyperspace_market import scan_market_on_hyperspace_entity  # noqa: F401
+from .scan_mission_map import scan_mission_map_references  # noqa: F401
+from .scan_mission_variants import scan_mission_variants_not_defined  # noqa: F401
 from .scan_content import (  # noqa: F401
     _scan_assets,
     _scan_wing_roles,
@@ -563,7 +566,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_script_sandbox_forbidden_api(root, result)
     _scan_bundled_library_classes(root, result)
     _scan_vanilla_duplicated_classes(root, result, vanilla_root)
-    _scan_obfuscated_internal_api_use(root, result)
+    _scan_obfuscated_internal_api_use(root, result, vanilla_root)
     _scan_csv_design_type_column(root, result)
     _scan_undeclared_library_dependency(root, result)
     _scan_library_required_by_throw(root, result)
@@ -612,6 +615,9 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_description_missing(root, result, vanilla_root)
     _scan_asset_reference_missing(root, result, vanilla_root)
     _scan_preset_whole_entry_replace(root, result, vanilla_root)
+    scan_market_on_hyperspace_entity(root, result)
+    scan_mission_map_references(root, result, vanilla_root)
+    scan_mission_variants_not_defined(root, result, vanilla_root, provider_roots)
     if compile_check:
         _scan_compile_check(root, result, vanilla_root, provider_roots)
     return result

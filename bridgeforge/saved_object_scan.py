@@ -7,7 +7,8 @@ market memory held a planet while an augment held that market, and the load fail
 `PlanetConditionMarket.readResolve` (60g(3); the cycle itself is read from the save by `save-doctor`). This check finds the code
 pattern, not the failure: it is REVIEW, and a reference kept in a `transient` field, or re-found by id when needed, is the usual fix.
 
-Loose `.java` sources only; jar classes are not read. Pure functions over source text so tests need no files.
+Loose `.java` sources are read by the storing-site analysis below; jar classes (item 73 F2) are judged only by interface and field
+(see `saved_interface`). Pure functions over source text so tests need no files.
 """
 from __future__ import annotations
 
@@ -127,3 +128,32 @@ def saved_object_findings(sources: dict[str, str]) -> list[dict]:
                 if fields:
                     findings.append({"file": path, "class": name, "how": stored[name], "fields": fields})
     return findings
+
+
+# Compiled classes (item 73 F2). A jar class cannot show where it is stored, so only a class that implements a campaign
+# interface the game saves and runs by registration (EveryFrameScript, the campaign listener interfaces) is judged.
+_ENTITY_DESCRIPTOR = re.compile(r"^L[\w/$]+/(" + "|".join(ENTITY_TYPES) + r");$")
+_SAVED_INTERFACE_PREFIXES = ("com/fs/starfarer/api/campaign/listeners/",)
+_SAVED_INTERFACES = frozenset({"com/fs/starfarer/api/EveryFrameScript", "com/fs/starfarer/api/campaign/CampaignEventListener",
+                               "com/fs/starfarer/api/campaign/FleetEventListener"})
+
+
+def saved_interface(interfaces: list[str]) -> str | None:
+    """The first implemented interface that makes a class a saved, registered campaign object, or None."""
+    for name in interfaces:
+        if name in _SAVED_INTERFACES or name.startswith(_SAVED_INTERFACE_PREFIXES):
+            return name.rsplit("/", 1)[-1]
+    return None
+
+
+def compiled_entity_fields(fields: list[tuple[str, str, bool, bool]], transient: frozenset[str]) -> list[str]:
+    """['MarketAPI market', ...] for the non-static, non-transient fields whose type is a campaign entity (generic element types are
+    erased in the descriptor and not seen). Empty unless one of them is a MarketAPI or PlanetAPI: the first sweep (160 hits in 38
+    of 316 workspaces) was mostly fleet AIs and scripts holding their own fleet or a token, which is not the market/planet reference
+    cycle of the Station Augments save."""
+    found = []
+    for name, descriptor, is_static, _ in fields:
+        match = _ENTITY_DESCRIPTOR.match(descriptor)
+        if match and not is_static and name not in transient:
+            found.append(f"{match.group(1)} {name}")
+    return found if any(f.startswith(("MarketAPI ", "PlanetAPI ")) for f in found) else []

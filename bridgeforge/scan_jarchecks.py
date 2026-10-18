@@ -316,8 +316,20 @@ def _scan_vanilla_duplicated_classes(root: Path, result: ScanResult, vanilla_cor
             )
 
 
-def _scan_obfuscated_internal_api_use(root: Path, result: ScanResult) -> None:
-    """com.fs.starfarer classes outside the api package are obfuscated internals renamed each release."""
+def _scan_obfuscated_internal_api_use(root: Path, result: ScanResult, vanilla_core: Path | None = None) -> None:
+    """com.fs.starfarer classes outside the api package are obfuscated internals renamed each release.
+
+    With RC8's core jars (item 73 F6) each reference is resolved: a class whose every reference exists is reported as
+    `obfuscated-internal-api-resolved` (informational, with the count); one with a missing class or member keeps this id and
+    names them; references whose hierarchy leaves the core jars stay unverified (this id, nothing claimed)."""
+    from .obfuscated_members import classify_internal_references
+
+    core = None
+    if vanilla_core is not None:
+        from .linkage import core_index
+
+        core = core_index(str(Path(vanilla_core).resolve())) or None
+    own = frozenset(name.replace(".", "/") for name in result.compiled_class_names)
     for jar, member, data in _iter_jar_class_files(root):
         info = _parse_class_file(data)
         if info is None:
@@ -329,6 +341,21 @@ def _scan_obfuscated_internal_api_use(root: Path, result: ScanResult) -> None:
         if not internal_refs:
             continue
         class_name = (info.this_class or member[:-6]).replace("/", ".")
+        verdict = ""
+        if core is not None:
+            checked = classify_internal_references(data, core, own) or {"missing": [], "unverified": [], "resolved": []}
+            # A class named only in a descriptor or cast has no member reference: look it up by name.
+            named = [f"class {n}" for n in internal_refs if n.replace(".", "/") not in core and n.replace(".", "/") not in own]
+            missing = sorted(set(checked["missing"]) | set(named))
+            if not missing and not checked["unverified"]:
+                result.add(
+                    id="obfuscated-internal-api-resolved", category="bytecode", severity="info", classification="REVIEW", confidence="HIGH",
+                    explanation=("Every com.fs.starfarer internal (non-api) class and member this compiled class references exists in RC8's "
+                                 "core jars (name and descriptor, read from the class files). Informational: existence is not proof of "
+                                 "behaviour."),
+                    file=_relative(root, jar), evidence=[f"class:{class_name}", f"resolved:{len(checked['resolved'])}", *[f"internal:{n}" for n in internal_refs[:15]]])
+                continue
+            verdict = [f"missing:{m}" for m in missing[:15]] + [f"unverified:{u}" for u in checked["unverified"][:5]] + [f"resolved:{len(checked['resolved'])}"]
         result.add(
             id="obfuscated-internal-api-use",
             category="bytecode",
@@ -342,7 +369,7 @@ def _scan_obfuscated_internal_api_use(root: Path, result: ScanResult) -> None:
                 "testing."
             ),
             file=_relative(root, jar),
-            evidence=[f"class:{class_name}", *[f"internal:{name}" for name in internal_refs[:15]]],
+            evidence=[f"class:{class_name}", *[f"internal:{name}" for name in internal_refs[:15]], *(verdict or [])],
         )
 
 
