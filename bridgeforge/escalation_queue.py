@@ -12,7 +12,7 @@ import json
 import time
 from pathlib import Path
 
-from .escalation_precedent import question_shape
+from .escalation_precedent import predicate_hash, question_shape, ruling_id
 from .progress import Checkpoint, report
 from .report_status import is_closed
 
@@ -83,12 +83,15 @@ def render(result: dict) -> str:
 
 
 def rule(queue: Path, finding_id: str, *, accept: bool = False, approve_fixer: bool = False, reason: str, policy: Path | None = None,
-         today: str | None = None, only_mods: set[str] | None = None, shape: str | None = None) -> dict:
+         today: str | None = None, only_mods: set[str] | None = None, shape: str | None = None,
+         predicate: dict | None = None, intent: str | None = None, derived_from: list[str] | None = None) -> dict:
     """Record one owner ruling for a finding id across the queue (ROADMAP P15 31.12), instead of rulings typed into
     chat and applied by hand. `accept`: add the finding's packet entries to every ESCALATED mod's accepted-findings
     baseline, with the reason in ESCALATION_RULINGS.jsonl. `approve_fixer`: add the fixer to AUTOMATION_POLICY.json's
     standing approvals (revive then applies it). `only_mods` / `shape` (decision sheet, item 73 C1) narrow an `accept` to
-    the named workspaces and to findings whose explanation has that question shape."""
+    the named workspaces and to findings whose explanation has that question shape. `predicate` / `intent` (item 73 R4) make
+    the ruling reusable as a standing source; `derived_from` marks a standing application of earlier rulings (never a source
+    itself). A ruling without a complete predicate is precedent only."""
     from datetime import date
 
     from .baseline import accept_findings
@@ -101,6 +104,7 @@ def rule(queue: Path, finding_id: str, *, accept: bool = False, approve_fixer: b
     queue = Path(queue).expanduser().resolve()
     today = today or date.today().isoformat()
     touched = []
+    baseline_keys: dict[str, list[str]] = {}
     if approve_fixer:
         if finding_id not in SUPPORTED_FINDINGS:
             raise ValueError(f"{finding_id} has no fixer to approve; use accept.")
@@ -127,9 +131,17 @@ def rule(queue: Path, finding_id: str, *, accept: bool = False, approve_fixer: b
             if keys:
                 accept_findings(workspace / "working", keys, reason)  # the reason becomes precedent (escalation_precedent)
                 touched.append(workspace.name)
+                baseline_keys[workspace.name] = sorted(set(keys))
     entry = {"date": today, "finding": finding_id, "ruling": "accept" if accept else "approve-fixer", "reason": reason, "mods": touched}
     if shape is not None:
         entry["shape"] = shape
+    if baseline_keys:
+        entry["baseline_keys"] = baseline_keys  # so a revocation can take exactly these back out (escalation_precedent.revoke_ruling)
+    if predicate is not None:
+        entry.update({"predicate": predicate, "predicate_hash": predicate_hash(predicate), "intent": intent or ""})
+    if derived_from:
+        entry["derived_from"] = sorted(derived_from)  # a standing application: valid only while every source ruling is
+    entry["id"] = ruling_id(entry)
     with (queue / "ESCALATION_RULINGS.jsonl").open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return entry

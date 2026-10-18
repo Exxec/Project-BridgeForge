@@ -81,13 +81,18 @@ def add_parser(subcommands) -> None:
     esc_queue.add_argument("queue", type=Path)
     esc_queue.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     esc_queue.add_argument("--json", action="store_true")
-    esc_sheet = esc_sub.add_parser("sheet", help="one CSV answering every open decision-tier finding across a queue, grouped by question, with earlier rulings as precedent (three agreeing rulings pre-fill a standing answer); --apply records the answered rows through `escalation rule`")
+    esc_sheet = esc_sub.add_parser("sheet", help="one CSV answering every open decision-tier finding across a queue, grouped by question, with earlier rulings as precedent (three agreeing rulings only suggest an answer); --apply records the answered rows through `escalation rule`, plus standing rulings for mods that meet the versioned-predicate rules")
     esc_sheet.add_argument("queue", type=Path, nargs="?", help="the queue folder (for --apply it is read from the sheet when omitted)")
     esc_sheet_mode = esc_sheet.add_mutually_exclusive_group(required=True)
     esc_sheet_mode.add_argument("--write", type=Path, metavar="SHEET.csv", help="write the decision sheet")
-    esc_sheet_mode.add_argument("--apply", type=Path, metavar="SHEET.csv", help="apply the answered rows; a pre-filled row is applied only if left unchanged or confirm=yes")
+    esc_sheet_mode.add_argument("--apply", type=Path, metavar="SHEET.csv", help="apply the answered rows (an untouched suggestion is not an answer unless confirm=yes) and eligible standing rulings")
     esc_sheet.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     esc_sheet.add_argument("--json", action="store_true")
+    esc_revoke = esc_sub.add_parser("revoke", help="withdraw one ruling by id (see ESCALATION_RULINGS.jsonl); standing applications derived from it fall with it and the baseline keys they added are removed")
+    esc_revoke.add_argument("queue", type=Path)
+    esc_revoke.add_argument("ruling_id")
+    esc_revoke.add_argument("--reason", required=True)
+    esc_revoke.add_argument("--json", action="store_true")
     for command in (esc_list, esc_show, esc_verify, esc_run, esc_apply):
         command.add_argument("workspace", type=Path)
         command.add_argument("--json", action="store_true")
@@ -193,6 +198,15 @@ def run_cli(args: argparse.Namespace) -> int:
                 print(f"{len(row['only_blocker']):4} only / {len(row['mods']):4} mods  {row['finding']} ({row['tier']}, {row['kind']})")
             print(f"Escalated mods: {result['escalated']}. Written: {result['result_md']}")
         return 0
+    if args.command == "escalation" and args.escalation_command == "revoke":
+        from .escalation_precedent import revoke_ruling
+        try:
+            result = revoke_ruling(args.queue, args.ruling_id, args.reason)
+        except (ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2) if args.json else f"Revoked {result['revoked']}; invalidated: {', '.join(result['invalidated']) or 'nothing'}.")
+        return 0
     if args.command == "escalation" and args.escalation_command == "sheet":
         from .escalation_sheet import SheetError, apply_sheet, write_sheet
         try:
@@ -200,7 +214,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 if args.queue is None:
                     raise SheetError("--write needs the queue folder.")
                 result = write_sheet(args.queue, args.write, quiet=args.quiet)
-                text = f"{result['rows']} question(s) for {result['mods']} mod(s), {result['prefilled']} pre-filled from precedent. Written: {result['sheet']}"
+                text = f"{result['rows']} question(s) for {result['mods']} mod(s), {result['prefilled']} suggested from precedent, {result['standing']} mod(s) eligible for a standing ruling. Written: {result['sheet']}"
             else:
                 result = apply_sheet(args.apply, args.queue)
                 text = f"Applied {len(result['applied'])}, left open {len(result['skipped'])}, {len(result['errors'])} error(s)." + "".join(

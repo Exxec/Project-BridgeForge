@@ -398,7 +398,18 @@ def _render_precedent(entries: list[dict]) -> list[str]:
              "Earlier answers to this finding id in this queue (newest first). `bridgeforge escalation sheet` pre-fills a standing answer when three agree.", ""]
     for entry in entries:
         mods = ", ".join(entry.get("mods") or []) or "(standing, no mod baseline)"
-        lines.append(f"- {entry.get('date') or 'undated'}: **{entry['answer']}** for {mods}" + (f" - {entry['reason']}" if entry.get("reason") else ""))
+        if entry.get("revoked"):
+            standing = "revoked"
+        elif entry.get("predicate_problem"):
+            standing = f"precedent only: {entry['predicate_problem']}"
+        elif entry.get("predicate_hash"):
+            predicate = entry["predicate"]
+            standing = (f"predicate {entry['predicate_hash'][:8]}: check revision {predicate['check_revision']}, intent \"{entry.get('intent')}\", "
+                        f"{len(predicate['constraints'])} constraint(s)")
+        else:
+            standing = ""
+        lines.append(f"- {entry.get('date') or 'undated'}: **{entry['answer']}** for {mods}" + (f" - {entry['reason']}" if entry.get("reason") else "")
+                     + (f" [{standing}]" if standing else ""))
     return lines
 
 
