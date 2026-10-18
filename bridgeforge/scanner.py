@@ -270,6 +270,7 @@ from .scan_jarchecks import (  # noqa: F401
 )
 from .scan_hyperspace_market import scan_market_on_hyperspace_entity  # noqa: F401
 from .scan_mission_map import scan_mission_map_references  # noqa: F401
+from .scan_mission_variants import scan_mission_variants_not_defined  # noqa: F401
 from .scan_content import (  # noqa: F401
     _scan_assets,
     _scan_wing_roles,
@@ -616,6 +617,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_preset_whole_entry_replace(root, result, vanilla_root)
     scan_market_on_hyperspace_entity(root, result)
     scan_mission_map_references(root, result, vanilla_root)
+    scan_mission_variants_not_defined(root, result, vanilla_root, provider_roots)
     if compile_check:
         _scan_compile_check(root, result, vanilla_root, provider_roots)
     return result
