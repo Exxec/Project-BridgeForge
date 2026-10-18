@@ -223,7 +223,8 @@ CONTENT_FINDINGS = ("content-reference-unresolved", "content-reference-removed-i
 MAX_VENDOR_PROVIDERS = 2
 
 
-def content_options(working: Path, *, vanilla_core: Path | None, provider_roots: list[Path], index_path: Path | None = None) -> dict:
+def content_options(working: Path, *, vanilla_core: Path | None, provider_roots: list[Path], index_path: Path | None = None,
+                    reference_core: Path | None = None) -> dict:
     """The three ways out of missing content, computed once for a decision packet (P15 item 9):
     swap or revive a provider (`dependency-substitutes`), copy just the piece (`vendor-plan`, then
     `vendor-copy --plan`), or strip the references (`strip-plan`). Advisory only: each part that
@@ -267,6 +268,12 @@ def content_options(working: Path, *, vanilla_core: Path | None, provider_roots:
     if vanilla_core is None:
         options["notes"].append("strip-plan needs --vanilla-core (it proposes vanilla substitutes for emptied slots)")
     else:
+        from .substitution_proposals import propose
+
+        try:  # item 73 C3: a renamed replacement per unresolved id, with its evidence
+            options["proposals"] = propose(working, vanilla_core, reference_core=reference_core, provider_roots=provider_roots, index_path=index_path)
+        except (OSError, ValueError) as exc:
+            options["notes"].append(f"substitution-proposals failed: {exc}")
         try:
             strip = strip_plan(working, vanilla_core)
         except (OSError, StripPlanError) as exc:
@@ -292,6 +299,10 @@ def _render_options(options: dict) -> list[str]:
                      + (f", {plan['compiled_only']} compiled-only class(es)" if plan["compiled_only"] else "")
                      + (f"; resolve {len(plan['suspects'])} SUSPECT and {len(plan['missing'])} MISSING first" if plan["suspects"] or plan["missing"] else ""))
         lines += [f"  - `{command}`" for command in plan["commands"]]
+    if options.get("proposals") and (options["proposals"]["proposals"] or options["proposals"]["unproposed"]):
+        from .substitution_proposals import render_lines
+
+        lines += render_lines(options["proposals"])
     strip = options.get("strip")
     if strip:
         lines.append("- **Strip instead:** " + ", ".join(f"{ident} ({count} edit(s))" for ident, count in sorted(strip["edit_count_by_id"].items())))
@@ -498,7 +509,8 @@ def append_ledger(workspace: Path, entry: dict, now=None) -> None:
 
 def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path | None = None, policy_path: Path | None = None,
            approve: list[str] | None = None, apply: bool = False, max_rounds: int = 5, write: bool = True,
-           draft_report: bool = False, providers: list[Path] | None = None, provider_index: Path | None = None, now=None) -> dict:
+           draft_report: bool = False, providers: list[Path] | None = None, provider_index: Path | None = None, now=None,
+           reference_core: Path | None = None) -> dict:
     workspace = Path(workspace).expanduser().resolve()
     working = workspace / "working"
     if not (working / "mod_info.json").is_file():
@@ -548,7 +560,7 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
 
     def options_for() -> dict:  # once per run, and only if a missing-content packet needs it
         if "value" not in cache:
-            cache["value"] = content_options(working, vanilla_core=vanilla_core, provider_roots=roots, index_path=provider_index)
+            cache["value"] = content_options(working, vanilla_core=vanilla_core, provider_roots=roots, index_path=provider_index, reference_core=reference_core)
         return cache["value"]
 
     packets = build_packets(workspace, findings, pending, vanilla_core=vanilla_core, now=now, options_for=options_for)

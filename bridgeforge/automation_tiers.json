@@ -29,6 +29,7 @@
     "console-command-optional": "none",
     "content-reference-removed-in-vanilla": "decision",
     "content-reference-unresolved": "decision",
+    "content-reference-substitute": "input",
     "core-campaign-plugin-reregistered": "mechanical",
     "csv-encoding-unverified": "inspect",
     "csv-fullwidth-number": "auto",

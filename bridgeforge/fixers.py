@@ -89,6 +89,7 @@ SUPPORTED_FINDINGS = (
     "variant-weapon-slot-missing",
     "hard-coded-campaign-system-reference",
     "hard-coded-campaign-entity-reference",
+    "content-reference-substitute",
 )
 
 
@@ -3708,7 +3709,10 @@ def _fix_campaign_lookup_guard(root: Path, options: dict, finding_id: str) -> li
     return changes
 
 
+from .fixers_substitute import fix_content_reference_substitute  # noqa: E402  (imports fixers lazily, at call time)
+
 _FIXER_FUNCS = {
+    "content-reference-substitute": fix_content_reference_substitute,
     "hard-coded-campaign-system-reference": lambda root, options: _fix_campaign_lookup_guard(root, options, "hard-coded-campaign-system-reference"),
     "hard-coded-campaign-entity-reference": lambda root, options: _fix_campaign_lookup_guard(root, options, "hard-coded-campaign-entity-reference"),
     "csv-slash-quote-escape": _fix_csv_slash_quote_escape,
