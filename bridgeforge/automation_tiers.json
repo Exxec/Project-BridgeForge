@@ -137,6 +137,7 @@
     "non-ascii-identifier": "decision",
     "non-strict-json-trailing-comma": "none",
     "obfuscated-internal-api-use": "code",
+    "obfuscated-internal-api-resolved": "none",
     "orbit-period-computed-unguarded": "code",
     "orbit-period-zero": "input",
     "personality-id-unknown": "auto",

@@ -566,7 +566,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_script_sandbox_forbidden_api(root, result)
     _scan_bundled_library_classes(root, result)
     _scan_vanilla_duplicated_classes(root, result, vanilla_root)
-    _scan_obfuscated_internal_api_use(root, result)
+    _scan_obfuscated_internal_api_use(root, result, vanilla_root)
     _scan_csv_design_type_column(root, result)
     _scan_undeclared_library_dependency(root, result)
     _scan_library_required_by_throw(root, result)
