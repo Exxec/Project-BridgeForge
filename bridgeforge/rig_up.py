@@ -17,9 +17,8 @@ from datetime import date
 from pathlib import Path
 
 from .boot_test import _is_link, _running_java_under
+from .run_manifest import RIG_STATE_FILE, ManifestError, record_candidates, refuse_if_owned
 from .safeio import atomic_write_json, atomic_write_text
-
-RIG_STATE_FILE = "rig_up_state.json"
 
 
 class RigUpError(ValueError):
@@ -74,6 +73,10 @@ def rig_up(rig: Path, queue: Path, mod_ids: list[str], *, probe_config: bool = F
     if _running_java_under(rig):
         raise RigUpError(f"java is already running under {rig}; close the game first")
     _refuse_running_game(rig)
+    try:
+        refuse_if_owned(rig, "rig-up")  # R1: a prepared run owns the staged files until it is released
+    except ManifestError as exc:
+        raise RigUpError(str(exc)) from exc
     if not mod_ids:
         raise RigUpError("--mods needs at least one mod id")
     mods_dir = rig / "mods"
@@ -126,6 +129,7 @@ def rig_up(rig: Path, queue: Path, mod_ids: list[str], *, probe_config: bool = F
                           "shipped_sha256": shipped_hash(mods_dir / installed[mod_id]) if mod_id in members else None} for mod_id in enabled if mod_id in installed],
              "probe_config": probe_note}
     atomic_write_json(rig / RIG_STATE_FILE, state)
+    record_candidates(rig, {mod_id: ws / "working" for mod_id, ws in members.items()})  # the manifest binds these to the staged files
     working_copies = {mod_id: ws / "working" for mod_id, ws in members.items()}
     if doctor is None:
         from .rig_doctor import rig_doctor as doctor

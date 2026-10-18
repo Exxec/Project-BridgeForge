@@ -129,7 +129,9 @@ def _live_line(workspace: Path) -> str:
 
     live = live_status(workspace)
     if live.get("test_id"):
-        state = "the shipped files are the ones tested" if live["status"] == "CURRENT" else "the shipped files changed after that run"
+        state = ("the shipped files are the ones tested" if live["status"] == "CURRENT"
+                 else "the run was not bound to staged inputs by a pre-launch manifest" if live["status"] == "UNBOUND"
+                 else "the shipped files changed after that run")
         return f"Live-validated {live.get('date') or 'date not recorded'} (test {live['test_id']}); {state}."
     if live["status"] == "UNKNOWN_BUILD":
         return "Live-validated, but the date and test id were not recorded (a run before the 2026-10-04 run records)."

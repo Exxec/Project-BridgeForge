@@ -25,7 +25,19 @@ def _current_version(workspace: Path) -> str:
     return str(info.get("version") or "") if isinstance(info, dict) else ""
 
 
-def _earlier_entries(workspace: Path) -> list[dict]:
+def context_of(manifest: dict | None) -> dict | None:
+    """The part of a run's manifest an acceptance waiver depends on: the providers it ran with, the probe config and the launcher files.
+    A waiver given in one environment does not carry to another (ROADMAP item 75 R1)."""
+    if not manifest:
+        return None
+    from .run_manifest import summary_for_record
+
+    summary = summary_for_record(manifest)
+    return {"dependencies": {k: v["staged_sha256"] for k, v in summary["dependencies"].items()},
+            "probe_config_sha256": summary["probe_config_sha256"], "launcher_files": summary["launcher_files"]}
+
+
+def _earlier_entries(workspace: Path, context: dict | None = None) -> list[dict]:
     """Acceptances that still apply to the workspace: same mod version, plus the standing probe_accepted.json lines."""
     from .probe_group import ACCEPTED_PROBE_FILE
 
@@ -38,7 +50,9 @@ def _earlier_entries(workspace: Path) -> list[dict]:
                 item = json.loads(line)
             except ValueError:
                 continue
-            if isinstance(item, dict) and str(item.get("version")) == version and str(item.get("reason") or "").strip():
+            # An entry without a recorded context (written before R1) never matches: a version alone is not the same circumstances.
+            if (isinstance(item, dict) and str(item.get("version")) == version and str(item.get("reason") or "").strip()
+                    and context is not None and item.get("context") == context):
                 entries.append({"keys": set(item.get("keys") or []), "caught": int(item.get("caught_distinct") or 0),
                                 "reason": str(item["reason"]).strip(), "source": f"{workspace.name} {item.get('test_id')}"})
     standing = workspace / "working" / ACCEPTED_PROBE_FILE
@@ -54,7 +68,7 @@ def _earlier_entries(workspace: Path) -> list[dict]:
     return entries
 
 
-def assess_group(log: Path, workspaces: list[Path], mods_dir: Path | None = None) -> dict:
+def assess_group(log: Path, workspaces: list[Path], mods_dir: Path | None = None, context: dict | None = None) -> dict:
     """What `accept_run` will ask a reason for in this log, and whether earlier acceptances of the members cover it.
 
     Returns {"keys", "caught", "uncovered_keys", "uncovered_caught", "reason", "covered_by"}; `reason` is the text to pass as
@@ -63,7 +77,7 @@ def assess_group(log: Path, workspaces: list[Path], mods_dir: Path | None = None
 
     keys = probe_fail_keys(log)
     caught = int(triage_log(log, mods_dir=mods_dir)["caught_exceptions"].get("distinct") or 0)
-    entries = [entry for workspace in workspaces for entry in _earlier_entries(workspace)]
+    entries = [entry for workspace in workspaces for entry in _earlier_entries(workspace, context)]
     covered = {key for entry in entries for key in entry["keys"]}
     uncovered_keys = [key for key in keys if key not in covered]
     caught_cover = max((entry["caught"] for entry in entries), default=0)

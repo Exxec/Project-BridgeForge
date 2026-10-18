@@ -424,6 +424,21 @@ class GameRefused(RuntimeError):
     """The rig is not safe or ready to run a game (shared install, a game already running, no launcher)."""
 
 
+# What a unattended live run must show in its log to count (ROADMAP item 75 R1); `drive` ends LIVE_DONE after a combat round.
+LIVE_EXPECTED_MILESTONES = ("main_menu", "campaign_load", "content_ids", "combat")
+
+
+def _release(rig: Path, test_id: str, bat: Path) -> None:
+    """The run ended: re-hash the staged files and give the rig back. A failure here is left visible (no completion record means the
+    evaluator refuses the run), never swallowed into a pass."""
+    from .run_manifest import ManifestError, release_run
+
+    try:
+        release_run(rig, test_id, bat)
+    except (ManifestError, OSError):
+        pass
+
+
 class LaunchNoProcess(GameRefused):
     """The launch watchdog fired: no java process appeared (ROADMAP item 73 G4). The live result stage is LAUNCH_NO_PROCESS."""
 
@@ -446,6 +461,14 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
     logs = rig / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     log, err = logs / f"{test_id}.stdout.log", logs / f"{test_id}.stderr.log"
+    from .run_manifest import ManifestError, prepare_run, read_staging_state
+
+    # R1: record what is staged before anything starts; the rig belongs to this run until it is released below.
+    try:
+        prepare_run(rig, test_id, "live", targets=sorted(read_staging_state(rig).get("candidates") or {}), launcher=bat,
+                    expected=list(LIVE_EXPECTED_MILESTONES), scenario="probe-group live")
+    except ManifestError as exc:
+        raise GameRefused(f"no pre-launch manifest: {exc}") from exc
     from .rig_prefs import pinned_launcher_prefs
 
     prefs = pinned_launcher_prefs()  # the click fractions were measured at 1280x960; the owner's own setting comes back afterwards
@@ -454,6 +477,7 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
         process = subprocess.Popen(f'cmd.exe /c ""{bat}" > "{log}" 2> "{err}""', cwd=str(rig))
     except Exception:
         prefs.__exit__(None, None, None)
+        _release(rig, test_id, bat)
         raise
     hands = real_hands(rig, process.pid)
     base_alive = hands.alive
@@ -485,6 +509,7 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
         if process.poll() is None:
             _terminate_tree(process.pid)
         prefs.__exit__(None, None, None)
+        _release(rig, test_id, bat)
 
 
 def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240) -> LiveResult:
