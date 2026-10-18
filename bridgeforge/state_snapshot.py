@@ -16,10 +16,12 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from . import __version__
 from .move_machine import claude_memory_dir
 from .progress import Checkpoint, report
 from .safeio import atomic_write_json
 
+SNAPSHOT_FORMAT = 1  # read by snapshot_restore (ROADMAP 75 R8); bump when current/ or the identity file changes shape
 MTIME_SLACK_SECONDS = 2.0  # FAT/exFAT destinations store mtimes to two seconds
 
 
@@ -110,7 +112,7 @@ def take_snapshot(root: Path, destination: Path, claude_home: Path, quiet: bool 
     if not totals["errors"]:
         Checkpoint(destination / "snapshot.partial.jsonl", {}).finish()
     result = {"stamp": stamp, "root": str(root), "destination": str(destination), "sources": per_source, **totals}
-    atomic_write_json(destination / f"snapshot-{stamp}.json", {k: v for k, v in result.items() if k != "sources"} | {"source_labels": sorted(per_source)})
+    atomic_write_json(destination / f"snapshot-{stamp}.json", {k: v for k, v in result.items() if k != "sources"} | {"source_labels": sorted(per_source), "snapshot_format": SNAPSHOT_FORMAT, "tool_version": __version__})
     return result
 
 
