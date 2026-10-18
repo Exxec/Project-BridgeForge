@@ -24,7 +24,8 @@ from pathlib import Path
 from . import safeio
 from .models import ScanResult, TargetProfile
 
-SHEET_COLUMNS = ("kind", "target", "file", "proposed", "basis", "comparison", "approved")
+SHEET_COLUMNS = ("kind", "target", "file", "proposed", "basis", "comparison", "input_sha256", "approved")
+KIND_PRESET = "preset-field"
 KIND_WING = "wing-op-cost"
 KIND_BAYS = "carrier-bays"
 MAX_COMPARISON_ROWS = 6
@@ -182,13 +183,40 @@ def propose_bays(root: Path, vanilla_core: Path | None) -> list[dict[str, str]]:
     return proposals
 
 
-def build_sheet(workspace: Path, vanilla_core: Path | None = None) -> list[dict[str, str]]:
+def propose_preset_fields(root: Path, vanilla_core: Path | None, reference_core: Path | None) -> list[dict[str, str]]:
+    """One row per top-level vanilla field a preset entry lacks, with old-vanilla / mod / RC8 evidence (item 75 R4)."""
+    from .fixers_presets import preset_field_proposals
+
+    if vanilla_core is None:
+        return []
+    rows = []
+    for item in preset_field_proposals(root, vanilla_core, reference_core):
+        old = f"old vanilla: {item['old_value']}" if item["old_value"] else f"old vanilla: {item['old_state']}"
+        rows.append({"kind": KIND_PRESET, "target": f"{item['entry']}.{item['field']}", "file": item["file"], "proposed": item["rc8_value"],
+                     "basis": item["old_state"], "comparison": f"{old}; mod: field absent; RC8: {item['rc8_value']}", "input_sha256": item["file_sha256"],
+                     "approved": ""})
+    return rows
+
+
+def build_sheet(workspace: Path, vanilla_core: Path | None = None, reference_core: Path | None = None) -> list[dict[str, str]]:
     root = mod_root(workspace)
     core = Path(vanilla_core).expanduser().resolve() if vanilla_core else None
-    return propose_wing_costs(root, core) + propose_bays(root, core)
+    old = Path(reference_core).expanduser().resolve() if reference_core else None
+    rows = propose_wing_costs(root, core) + propose_bays(root, core) + propose_preset_fields(root, core, old)
+    # The input each proposal was computed from: an approval of a file that changed since is stale and is refused.
+    return [{**row, "input_sha256": row.get("input_sha256") or _sha(root / row["file"])} for row in rows]
 
 
-def write_sheet(rows: list[dict[str, str]], path: Path) -> Path:
+def _sha(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else ""
+
+
+def write_sheet(rows: list[dict[str, str]], path: Path, mod: Path | None = None) -> Path:
+    """Write the sheet. It is a report: it is never written inside the mod (`mod`), so a proposal cannot modify mod data."""
+    if mod is not None and Path(mod).resolve() in Path(path).expanduser().resolve().parents:
+        raise ValueProposalError(f"the sheet {path} must not be written inside the mod folder {mod}.")
     buffer = io.StringIO()
     writer = csv.DictWriter(buffer, fieldnames=SHEET_COLUMNS, lineterminator="\n")
     writer.writeheader()
@@ -215,7 +243,7 @@ def approved_values(rows: list[dict[str, str]]) -> dict[str, dict[str, str]]:
     for row in rows:
         answer = row["approved"].strip().lower()
         if row["kind"] not in approved or answer in ("", "no", "n", "skip"):
-            continue
+            continue  # preset-field rows are handled by approved_preset_fields
         value = row["proposed"] if answer in ("yes", "y") else answer
         if _whole(value) is None:
             raise ValueProposalError(f"{row['kind']} {row['target']}: approved '{row['approved']}' with proposed '{row['proposed']}' is not a whole number.")
@@ -223,13 +251,49 @@ def approved_values(rows: list[dict[str, str]]) -> dict[str, dict[str, str]]:
     return approved
 
 
-def apply_sheet(workspace: Path, sheet: Path, *, apply: bool = True) -> dict:
+def _is_approved(row: dict[str, str]) -> bool:
+    return row["approved"].strip().lower() not in ("", "no", "n", "skip")
+
+
+def approved_preset_fields(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Approval records for the fixer from approved preset-field rows. Only `yes`: a field is restored with RC8's value or not."""
+    records = []
+    for row in rows:
+        if row["kind"] != KIND_PRESET or not _is_approved(row):
+            continue
+        if row["approved"].strip().lower() not in ("yes", "y"):
+            raise ValueProposalError(f"{row['kind']} {row['target']}: a preset field is approved with yes or not at all (got '{row['approved']}').")
+        entry, _, field = row["target"].rpartition(".")
+        records.append({"file": row["file"], "entry": entry, "field": field, "file_sha256": row["input_sha256"]})
+    return records
+
+
+def refuse_stale(root: Path, rows: list[dict[str, str]]) -> None:
+    """An approved row whose input file changed since the sheet was written (or never recorded it) is refused, whole run."""
+    stale = [f"{r['kind']} {r['target']}" for r in rows if _is_approved(r) and (not r["input_sha256"] or r["input_sha256"] != _sha(root / r["file"]))]
+    if stale:
+        raise ValueProposalError(f"stale approval: {r_file_list(stale)} -- the input file changed since the sheet was written; write a new sheet and approve again.")
+
+
+def r_file_list(items: list[str]) -> str:
+    return ", ".join(items[:8]) + (f" (+{len(items) - 8} more)" if len(items) > 8 else "")
+
+
+def apply_sheet(workspace: Path, sheet: Path, *, apply: bool = True, vanilla_core: Path | None = None) -> dict:
     """Run the fixers with the approved rows. Returns {"approved": {...}, "diffs": {...}, "applied": [...]}."""
     from .fixers import FixerError, apply_fix, compute_fix, unified_diff_for_change
 
     root = mod_root(workspace)
-    approved = approved_values(read_sheet(sheet))
+    rows = read_sheet(sheet)
+    refuse_stale(root, rows)
+    approved = approved_values(rows)
     plans, refused = [], {}
+    fields = approved_preset_fields(rows)
+    if fields:
+        try:
+            plans.append(compute_fix(root, "preset-entry-drops-vanilla-fields", {"approved_fields": fields, "vanilla_core": vanilla_core}))
+        except FixerError as exc:
+            refused[KIND_PRESET] = str(exc)
     if approved[KIND_WING]:
         try:
             plans.append(compute_fix(root, "wing-op-cost-blank", {"proposals": approved[KIND_WING]}))
@@ -252,6 +316,7 @@ def add_parser(subcommands) -> None:
     group.add_argument("--write", type=Path, metavar="SHEET.csv", help="write the proposals sheet; set its approved column to yes (or your own whole number)")
     group.add_argument("--apply", type=Path, metavar="SHEET.csv", help="apply the approved rows through the fixers (add --dry-run to print the diffs only)")
     cmd.add_argument("--vanilla-core", type=Path, help="RC8 starsector-core (read-only), for the RC8 comparison rows")
+    cmd.add_argument("--reference-core", type=Path, help="the older starsector-core the mod was written against: gives preset-field rows their old-vanilla evidence")
     cmd.add_argument("--dry-run", action="store_true", help="with --apply: print the diffs and write nothing")
     cmd.add_argument("--json", action="store_true")
 
@@ -262,13 +327,13 @@ def run_cli(args) -> int:
 
     try:
         if args.write:
-            rows = build_sheet(args.workspace, args.vanilla_core)
-            write_sheet(rows, args.write)
+            rows = build_sheet(args.workspace, args.vanilla_core, args.reference_core)
+            write_sheet(rows, args.write, mod_root(args.workspace))
             filled = sum(1 for r in rows if r["proposed"])
             summary = {"sheet": str(args.write), "rows": len(rows), "with_proposal": filled}
             print(json.dumps(summary, indent=2) if args.json else f"Wrote {args.write}: {len(rows)} row(s), {filled} with a proposal. Set approved to yes (or a whole number), then --apply.")
             return 0
-        outcome = apply_sheet(args.workspace, args.apply, apply=not args.dry_run)
+        outcome = apply_sheet(args.workspace, args.apply, apply=not args.dry_run, vanilla_core=args.vanilla_core)
     except ValueProposalError as exc:
         print(f"bridgeforge: {exc}", file=sys.stderr)
         return 2

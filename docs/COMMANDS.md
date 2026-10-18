@@ -481,6 +481,7 @@ propose a number for a blank wing op cost or a carrier's fighter bays from compa
 | `--write` SHEET.csv | - | write the proposals sheet; set its approved column to yes (or your own whole number) |
 | `--apply` SHEET.csv | - | apply the approved rows through the fixers (add --dry-run to print the diffs only) |
 | `--vanilla-core` VANILLA_CORE | - | RC8 starsector-core (read-only), for the RC8 comparison rows |
+| `--reference-core` REFERENCE_CORE | - | the older starsector-core the mod was written against: gives preset-field rows their old-vanilla evidence |
 | `--dry-run` | - | with --apply: print the diffs and write nothing |
 | `--json` | - | - |
 

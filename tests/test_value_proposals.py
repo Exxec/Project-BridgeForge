@@ -123,6 +123,48 @@ class SheetApplyTests(unittest.TestCase):
             unchanged = (workspace / "working" / "data" / "hulls" / "wing_data.csv").read_text(encoding="utf-8")
         self.assertEqual(unchanged, MOD_WINGS)
 
+    def test_a_stale_approval_is_refused_and_nothing_is_written(self) -> None:
+        with resolved_temp_dir() as root:
+            workspace, core = _wing_workspace(root)
+            sheet = root / "sheet.csv"
+            write_sheet(build_sheet(workspace, core), sheet)
+            sheet.write_text(sheet.read_text(encoding="utf-8").replace(",\n", ",yes\n"), encoding="utf-8")
+            path = workspace / "working" / "data" / "hulls" / "wing_data.csv"
+            path.write_text(MOD_WINGS + "extra_wing,e,,0,,6,5,V,0,500,,3,FIGHTER,Fighter,10,0\n", encoding="utf-8")
+            changed = path.read_bytes()
+            with self.assertRaisesRegex(ValueProposalError, "stale approval"):
+                apply_sheet(workspace, sheet)
+            unchanged = path.read_bytes() == changed
+            # an unapproved sheet over a changed file is not stale: nothing is approved
+            write_sheet(build_sheet(workspace, core), sheet)
+            self.assertEqual(apply_sheet(workspace, sheet)["diffs"], {})
+        self.assertTrue(unchanged)
+
+    def test_the_sheet_cannot_be_written_inside_the_mod(self) -> None:
+        with resolved_temp_dir() as root:
+            workspace, core = _wing_workspace(root)
+            with self.assertRaisesRegex(ValueProposalError, "inside the mod"):
+                write_sheet(build_sheet(workspace, core), workspace / "working" / "sheet.csv", workspace / "working")
+
+    def test_preset_field_rows_restore_only_the_approved_field(self) -> None:
+        relative = "data/config/engine_styles.json"
+        vanilla = {"LOW_TECH": {"a": 1, "b": [1, 2], "c": "x"}}
+        with resolved_temp_dir() as root:
+            workspace, core = root / "ws", root / "core"
+            _write(workspace / "working" / "mod_info.json", '{"id":"f","name":"F","gameVersion":"0.98a"}')
+            _write(workspace / "working" / relative, '{"LOW_TECH": {"a": 5}}')
+            _write(core / relative, json.dumps(vanilla))
+            sheet = root / "sheet.csv"
+            rows = [r for r in build_sheet(workspace, core) if r["kind"] == "preset-field"]
+            self.assertEqual([r["target"] for r in rows], ["LOW_TECH.b", "LOW_TECH.c"])
+            self.assertIn("mod: field absent; RC8: [1, 2]", rows[0]["comparison"])
+            write_sheet(rows, sheet)
+            lines = sheet.read_text(encoding="utf-8").splitlines()
+            sheet.write_text("\n".join(line + ("yes" if "LOW_TECH.b" in line else "") for line in lines) + "\n", encoding="utf-8")
+            apply_sheet(workspace, sheet, vanilla_core=core)
+            data = json.loads((workspace / "working" / relative).read_text(encoding="utf-8"))
+        self.assertEqual(data["LOW_TECH"], {"a": 5, "b": [1, 2]})
+
     def test_a_sheet_without_the_columns_is_refused(self) -> None:
         with resolved_temp_dir() as root:
             bad = root / "bad.csv"
