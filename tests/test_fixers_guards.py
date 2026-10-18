@@ -163,48 +163,124 @@ class SystemGenerationGuardTests(unittest.TestCase):
                 compute_fix(root, SYSTEM_ID, options)
 
 
+    def test_refuses_a_method_that_also_does_unrelated_setup(self) -> None:
+        for extra in ("		sector.getFaction(\"pirates\").setRelationship(\"player\", -1f);",
+                      "		Global.getSector().registerPlugin(null);",
+                      "		Global.getSector().getMemoryWithoutUpdate().set(\"$x\", true);"):
+            with self.subTest(extra=extra):
+                source = BINGUS.replace("		system.setType(StarSystemType.BINARY_FAR);", extra)
+                with resolved_temp_dir() as root:
+                    _mod(root, source, "atheos_custom_system.java")
+                    with self.assertRaisesRegex(FixerError, "initialization an early return would skip"):
+                        compute_fix(root, SYSTEM_ID, {})
+
+    def test_refuses_a_method_that_creates_two_systems(self) -> None:
+        source = BINGUS.replace("		system.setType(StarSystemType.BINARY_FAR);", '		StarSystemAPI second = sector.createStarSystem("Other");')
+        with resolved_temp_dir() as root:
+            _mod(root, source, "atheos_custom_system.java")
+            with self.assertRaisesRegex(FixerError, "more than one star system"):
+                compute_fix(root, SYSTEM_ID, {})
+
+
+PROVEN = """package data.scripts;
+
+import com.fs.starfarer.api.campaign.*;
+
+public class Ring {
+    public void make(SectorEntityToken a, SectorEntityToken focus, float r) {
+        float days = (float) Math.random() * 30f / 4f - 3f;
+        a.setCircularOrbit(focus, 0f, r, days);
+    }
+}
+"""
+
+
+def _ring(expression: str, declaration: str = "float days") -> str:
+    return PROVEN.replace("float days = (float) Math.random() * 30f / 4f - 3f;", f"{declaration} = {expression};")
+
+
 class OrbitPeriodGuardTests(unittest.TestCase):
-    def test_wraps_a_computed_float_variable_at_the_call(self) -> None:
-        with resolved_temp_dir() as root:
-            _mod(root, BINGUS, "atheos_custom_system.java")
-            self.assertEqual(_ids(root, ORBIT_ID), ["REVIEW"])
-            _apply(root, ORBIT_ID)
-            text = (root / "data/scripts/atheos_custom_system.java").read_text(encoding="utf-8")
-            after = _ids(root, ORBIT_ID)
-        self.assertIn("orbitRadius, Math.max(1f, (float) orbitDays));", text)
-        self.assertEqual(after, [])
-
-    def test_wraps_vacuums_int_variable_with_a_cast_and_is_idempotent(self) -> None:
-        with resolved_temp_dir() as root:
-            _mod(root, VACUUM, "VacuumSectorGen.java", "src/vacuum/world")
-            self.assertEqual(_ids(root, ORBIT_ID), ["REVIEW"])
-            _apply(root, ORBIT_ID)
-            text = (root / "src/vacuum/world/VacuumSectorGen.java").read_text(encoding="utf-8")
-            after = _ids(root, ORBIT_ID)
-            with self.assertRaises(FixerError):
-                compute_fix(root, ORBIT_ID, {})
-        self.assertIn("setCircularOrbitPointingDown(planet, angle, orbitRadius, Math.max(1f, (float) orbitDays));", text)
-        self.assertEqual(after, [])
-
-    def test_wraps_an_inline_expression_in_parentheses(self) -> None:
-        source = SPAN.replace("r,\n            r /\n            20f);", "r, r / 20f);")
+    def _fix(self, source: str) -> str:
         with resolved_temp_dir() as root:
             _mod(root, source, "Ring.java")
+            self.assertEqual(_ids(root, ORBIT_ID), ["REVIEW"])
             _apply(root, ORBIT_ID)
             text = (root / "data/scripts/Ring.java").read_text(encoding="utf-8")
-        self.assertIn("r, Math.max(1f, (float) (r / 20f)));", text)
+            self.assertEqual(_ids(root, ORBIT_ID), [])
+            with self.assertRaises(FixerError):
+                compute_fix(root, ORBIT_ID, {})
+        return text
+
+    def _refusal(self, source: str, pattern: str) -> None:
+        with resolved_temp_dir() as root:
+            _mod(root, source, "Ring.java")
+            self.assertEqual(_ids(root, ORBIT_ID), ["REVIEW"])
+            with self.assertRaisesRegex(FixerError, pattern):
+                compute_fix(root, ORBIT_ID, {})
+
+    def test_wraps_a_proven_bounded_expression_whose_range_includes_negatives(self) -> None:
+        text = self._fix(PROVEN)
+        self.assertIn("a.setCircularOrbit(focus, 0f, r, Math.max(1f, (float) days));", text)
+
+    def test_crlf_survives(self) -> None:
+        with resolved_temp_dir() as root:
+            _mod(root, PROVEN.replace("\n", "\r\n"), "Ring.java")
+            _apply(root, ORBIT_ID)
+            data = (root / "data/scripts/Ring.java").read_bytes()
+        self.assertEqual(data.count(b"\n"), data.count(b"\r\n"))
+
+    def test_wraps_an_inline_expression_in_parentheses(self) -> None:
+        source = PROVEN.replace("float days = (float) Math.random() * 30f / 4f - 3f;\n        ", "").replace("r, days", "r, Math.random() * 8f / 2f - 1f")
+        text = self._fix(source)
+        self.assertIn("r, Math.max(1f, (float) (Math.random() * 8f / 2f - 1f))", text)
+
+    def test_refuses_the_real_vacuum_case_whose_range_comes_from_a_library_call(self) -> None:
+        with resolved_temp_dir() as root:
+            _mod(root, VACUUM, "VacuumSectorGen.java", "data/scripts")
+            self.assertEqual(_ids(root, ORBIT_ID), ["REVIEW"])
+            with self.assertRaisesRegex(FixerError, "not provably finite"):
+                compute_fix(root, ORBIT_ID, {})
+
+    def test_refuses_jar_sources_and_hash_folders_for_both_fixers(self) -> None:
+        for folder, pattern in (("src/vacuum/world", "jar's source tree"), ("jars/src/x", "jar's source tree"), ("data/#Under construction", "'#' folder")):
+            with self.subTest(folder=folder), resolved_temp_dir() as root:
+                _mod(root, PROVEN, "Ring.java", folder)
+                with self.assertRaisesRegex(FixerError, pattern):
+                    compute_fix(root, ORBIT_ID, {})
+                _mod(root, BINGUS, "atheos_custom_system.java", folder)
+                with self.assertRaisesRegex(FixerError, pattern):
+                    compute_fix(root, SYSTEM_ID, {})
+
+    def test_refuses_the_real_bingus_case_with_a_float_parameter(self) -> None:
+        with resolved_temp_dir() as root:
+            _mod(root, BINGUS, "atheos_custom_system.java")
+            with self.assertRaisesRegex(FixerError, "orbitRadius.*parameter, field or reassigned"):
+                compute_fix(root, ORBIT_ID, {})
+
+    def test_refuses_nan_and_infinity_producing_divisors(self) -> None:
+        for expression in ("0f / 0f", "1f / 0f", "Math.random() / (Math.random() - 0.5f)", "7f / (Math.random() * 0f)"):
+            with self.subTest(expression=expression):
+                self._refusal(_ring(expression), "divisor may be zero")
+
+    def test_refuses_a_lower_bound_that_needs_no_clamp(self) -> None:
+        self._refusal(_ring("10f + Math.random() * 5f / 2f"), "does not justify a one-day minimum")
+
+    def test_refuses_side_effects_and_unknown_calls(self) -> None:
+        for expression in ("counter++ / 4f", "(counter = 3) / 4f", "helper() / 4f", "Math.sqrt(2f) / 4f", "a.getRadius() / 4f"):
+            with self.subTest(expression=expression):
+                self._refusal(_ring(expression), "not provably finite")
+
+    def test_refuses_a_variable_that_is_reassigned(self) -> None:
+        source = PROVEN.replace("        a.setCircularOrbit", "        days = r;\n        a.setCircularOrbit")
+        self._refusal(source, "reassigned variable")
 
     def test_refuses_an_expression_spanning_lines(self) -> None:
-        with resolved_temp_dir() as root:
-            _mod(root, SPAN, "Ring.java")
-            self.assertEqual(_ids(root, ORBIT_ID), ["REVIEW"])
-            with self.assertRaisesRegex(FixerError, "spans several lines"):
-                compute_fix(root, ORBIT_ID, {})
+        self._refusal(SPAN.replace("r /\n            20f", "(float) Math.random() /\n            20f"), "spans several lines")
 
     def test_refuses_a_loose_script_a_jar_already_shadows(self) -> None:
         with resolved_temp_dir() as root:
-            _mod(root, VACUUM, "VacuumSectorGen.java", "data/scripts")
-            with mock.patch("bridgeforge.scanner.loose_script_jar_shadowed_class", return_value="vacuum.world.VacuumSectorGen"):
+            _mod(root, PROVEN, "Ring.java")
+            with mock.patch("bridgeforge.scanner.loose_script_jar_shadowed_class", return_value="data.scripts.Ring"):
                 with self.assertRaisesRegex(FixerError, "shadowed"):
                     compute_fix(root, ORBIT_ID, {})
 

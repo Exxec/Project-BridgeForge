@@ -1,15 +1,18 @@
 """Guard fixers for campaign generators (ROADMAP item 73, B1). REVIEW tier: each edit is a proposal a person reads.
 
-- `system-generation-unguarded`: a method that calls `createStarSystem("X")` gets
-  `if (<sector>.getStarSystem("X") != null) return;` as its first statement, so loading a save (or a second
-  call) does not create the system twice. Real case: zzz-Bingus-Sustem's `atheos_custom_system.onNewGame`
-  (2026-10-14 fixture from its `original/`).
-- `orbit-period-computed-unguarded`: the flagged orbit-period argument `E` becomes `Math.max(1f, (float) E)`.
-  RC8 serializes orbits as JSON, and a zero, negative-zero or NaN period throws "JSON does not allow non-finite
-  numbers" at the next save. The `(float)` cast keeps the call compiling when `E` is an int or a double (a bare
-  `Math.max(1f, doubleValue)` would return a double). Real cases: Vacuum's `VacuumSectorGen.buildSystem`
-  (`orbitDays` into `setCircularOrbitPointingDown`; its agent fix wrapped the declaration instead, 2026-10-02) and
-  zzz-Bingus-Sustem's `addDerelict` (`orbitRadius / (10f + random * 5f)`).
+Revised 2026-10-18 to ROADMAP item 75 R4 (semantic conditions are part of the fix, not the finding id).
+
+- `system-generation-unguarded`: a void method that calls `createStarSystem("X")` once gets
+  `if (<sector>.getStarSystem("X") != null) return;` as its first statement. Supported shape: the method only creates
+  and fills that one system. Refused: more than one createStarSystem, any other sector/economy/faction/memory/script
+  setup in the method (the early return would skip it), a non-void method, an existing lookup of the name.
+  Real case: zzz-Bingus-Sustem's `atheos_custom_system` (2026-10-14 fixture from its `original/`).
+- `orbit-period-computed-unguarded`: the flagged argument `E` becomes `Math.max(1f, (float) E)` only when
+  `orbit_bounds.prove` shows `E` finite with a finite lower bound below 1 (a clamp repairs zero and negatives, not NaN
+  or infinity: Math.max(1f, NaN) is NaN). Unknown calls, fields, float parameters, side effects (`++`, `=`), a divisor
+  that may be zero and unbounded integers are refused and stay escalated. Both real cases (Vacuum's `orbitDays` from
+  LazyLib `getRandomNumberInRange`, Bingus's `orbitRadius / (10f + random * 5f)` with a float parameter) are
+  therefore refused: their ranges are not evidenced in the source.
 
 Both edit only the located span (line endings, BOM and comments survive) and are idempotent: the scanner reads
 `getStarSystem("X") != null` and `Math.max(` as guards, so a second run finds nothing. A source under `src/`
@@ -17,9 +20,11 @@ belongs to a jar: the edit has no effect until the jar is rebuilt.
 """
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 
+from .orbit_bounds import Unproven, prove
 from .procgen_args import _arguments
 from .scan_javatext import _METHOD_SIGNATURE_PATTERN, _blank_java_comments, _enclosing_method_span
 
@@ -33,6 +38,18 @@ def _fixers():
     from . import fixers as _f
 
     return _f
+
+
+def _not_running_source(relative: str) -> str | None:
+    """Why an edit to this path would change nothing in the game, or None. Sources under src/, jars/ or jar/ belong to a
+    jar (the game runs the jar until it is rebuilt: use patch-jar-class), and a '#'-prefixed folder such as
+    '#Under construction' is never loaded. Sampling 2026-10-18 found both shapes among the applied edits."""
+    parts = relative.replace("\\", "/").split("/")
+    if "src" in parts or "jars" in parts or "jar" in parts:
+        return "a jar's source tree: the edit changes nothing until the jar is rebuilt (patch-jar-class)"
+    if any(part.startswith("#") for part in parts):
+        return "under a '#' folder the game does not load"
+    return None
 
 
 def _java_text(path: Path):
@@ -60,6 +77,9 @@ def _fix_system_generation_unguarded(root: Path, options: dict) -> list:
         path = root / relative
         if not path.is_file() or path.suffix != ".java":
             refused.append(f"{relative} (not a loose java file)")
+            continue
+        if (reason := _not_running_source(relative)) is not None:
+            refused.append(f"{relative}: {reason}")
             continue
         loaded = _java_text(path)
         if loaded is None:
@@ -103,6 +123,9 @@ def _guard_for(text: str, blank: str, blank_strings: str, line: int, name: str, 
         return "the enclosing method does not return void, so an early return would change its result"
     if re.search(r'\bgetStarSystem\s*\(\s*"' + re.escape(name) + r'"', blank[start:end]):
         return "the method already looks the system up by that name"
+    unrelated = _unrelated_initialization(blank_strings[brace:end], header)
+    if unrelated:
+        return unrelated
     body_start = brace + 1
     first = re.match(r"[ \t]*\r?\n", text[body_start:])
     if first is None:
@@ -138,10 +161,13 @@ def _fix_orbit_period_computed_unguarded(root: Path, options: dict) -> list:
         if loaded is None:
             refused.append(f"{relative} (not a loose java file that can be edited)")
             continue
-        raw, text, had_bom, blank, _ = loaded
+        if (reason := _not_running_source(relative)) is not None:
+            refused.append(f"{relative}: {reason}")
+            continue
+        raw, text, had_bom, blank, blank_strings = loaded
         spans = set()
         for line, call, index in sorted(wanted):
-            outcome = _orbit_span(blank, line, call, index)
+            outcome = _orbit_span(blank, blank_strings, line, call, index)
             if isinstance(outcome, str):
                 refused.append(f"{relative}:{line} ({call}): {outcome}")
             else:
@@ -159,8 +185,8 @@ def _fix_orbit_period_computed_unguarded(root: Path, options: dict) -> list:
     return changes
 
 
-def _orbit_span(blank: str, line: int, call: str, index: int):
-    """(start, end) of the argument, or a refusal reason."""
+def _orbit_span(blank: str, blank_strings: str, line: int, call: str, index: int):
+    """(start, end) of the argument, or a refusal reason (including the interval proof's)."""
     for match in re.finditer(r"\b" + re.escape(call) + r"\s*\(", blank):
         if blank.count("\n", 0, match.start()) + 1 != line:
             continue
@@ -175,5 +201,40 @@ def _orbit_span(blank: str, line: int, call: str, index: int):
             return "the period expression spans several lines"
         if re.match(r"\s*Math\s*\.\s*max\s*\(", argument):
             return "the period is already wrapped in Math.max"
+        method = blank[slice(*_enclosing_method_span(blank_strings, start))]
+        try:
+            low, _high = prove(argument, method)
+        except Unproven as exc:
+            return f"not provably finite with a lower bound ({exc}); a clamp alone does not repair NaN or infinity"
+        if not math.isfinite(low) or low >= 1:
+            return f"the proven lower bound {low:g} does not justify a one-day minimum"
         return start, end
     return "the call was not found on that line"
+
+
+# Calls that set up something other than the one star system. Skipping the method when the system exists would skip these too.
+_UNRELATED_CALL = re.compile(
+    r"\b(registerPlugin|addScript|addTransientScript|addListener|addTransientListener|getFaction|getFactionById|getAllFactions|"
+    r"getEconomy|getMemory\w*|getPersistentData|getPlayerFleet|getPlayerPerson|getImportantPeople|getIntelManager|"
+    r"getCharacterData|addMessage|addPing)\s*\("
+)
+_SECTOR_MEMBERS_OK = {"createStarSystem", "getStarSystem", "getHyperspace"}
+_SECTOR_ALIAS = r"\b([A-Za-z_$][\w$]*)\s*=\s*(?:com\.fs\.starfarer\.api\.)?Global\s*\.\s*getSector\s*\(\s*\)\s*;"
+
+
+def _unrelated_initialization(body: str, header: str) -> str | None:
+    """A refusal reason when the method does more than create this one system (an early return would skip it)."""
+    if len(re.findall(r"\bcreateStarSystem\s*\(", body)) != 1:
+        return "the method creates more than one star system, so one guard cannot cover them"
+    found = _UNRELATED_CALL.search(body)
+    if found:
+        return f"the method also calls {found.group(1)}(...), initialization an early return would skip"
+    names = {m.group(1) for m in re.finditer(r"\bSectorAPI\s+([A-Za-z_$][\w$]*)", header + body)}
+    names |= {m.group(1) for m in re.finditer(_SECTOR_ALIAS, body)}
+    receivers = [rf"\b{re.escape(n)}\s*\.\s*(\w+)" for n in sorted(names)] + [r"\bGlobal\s*\.\s*getSector\s*\(\s*\)\s*\.\s*(\w+)"]
+    for pattern in receivers:
+        for member in re.findall(pattern, body):
+            if member not in _SECTOR_MEMBERS_OK:
+                return f"the method also uses the sector ({member}), initialization an early return would skip"
+    return None
+
