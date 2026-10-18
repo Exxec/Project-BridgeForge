@@ -15,6 +15,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "baseline_audit": ("baseline-audit", "baseline-accept"),
     "rig_reset": ("rig-reset",),
     "rig_up": ("rig-up",),
+    "run_manifest": ("run-manifest",),
     "live_ledger": ("live-ledger",),
     "roadmap_lint": ("roadmap-lint",),
     "agent_diff_check": ("agent-diff-check",),

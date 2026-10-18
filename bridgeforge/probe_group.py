@@ -583,6 +583,12 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     queue = Path(queue).expanduser().resolve()
     _refuse_non_rig(rig)
     _refuse_running_game(rig)
+    from .run_manifest import ManifestError, refuse_if_owned
+
+    try:
+        refuse_if_owned(rig, "install")  # R1: a prepared run owns the staged files until it is released
+    except ManifestError as exc:
+        raise ProbeGroupError(str(exc)) from exc
     group = next((g for g in plan.get("groups", []) if g["group"] == group_number), None)
     if group is None:
         raise ProbeGroupError(f"no group {group_number} in the plan (it has {len(plan.get('groups', []))}).")
@@ -601,6 +607,9 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
             copied.append({"workspace": member["workspace"], "action": action})
         configs.append(build_probe_config(working))
         installed[member["mod_id"]] = member["workspace"]
+    from .run_manifest import record_candidates
+
+    record_candidates(rig, {m["mod_id"]: queue / m["workspace"] / "working" for m in group["members"]})  # R1: what the next manifest binds
     moved_aside = _move_aside_duplicate_ids(rig, {m["mod_id"]: mods_dir / m["workspace"] for m in group["members"]})
     config = merge_configs(configs)
     config["setups"] = [*config["setups"], *setups]
@@ -840,19 +849,34 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     from .rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
 
     tested = [workspaces[m] for m in sorted(report["members"]) if workspaces.get(m) is not None]
+    # R1: the one evidence evaluator, shared with `accept`. No manifest, no bound provenance.
+    from .run_manifest import ManifestError, evaluate_run, read_manifest
+
+    try:
+        manifest = read_manifest(Path(rig), test_id)
+    except ManifestError:
+        manifest = None
+    evidence = evaluate_run(Path(rig), manifest, Path(log), mods_dir=Path(rig) / "mods",
+                            member_verdicts={m: v["verdict"] for m, v in report["members"].items()})
     run_record = write_run_record(queue, test_id, tested, triage=triage_log(log, mods_dir=Path(rig) / "mods"),
                                   verdicts={m: v["verdict"] for m, v in report["members"].items()}, probe_config=config,
                                   core_baseline=_repo_root() / DEFAULT_CORE_BASELINE_RELATIVE, today=today,
-                                  save_made_with=_newest_save_made_with(Path(rig), save_made_with), rig_state=read_rig_state(Path(rig)))
+                                  save_made_with=_newest_save_made_with(Path(rig), save_made_with), rig_state=read_rig_state(Path(rig)),
+                                  evidence=evidence, manifest=manifest)
     recorded, skipped, archived = [], [], []
     carry, stopped = None, None
+    if accept and evidence["status"] != "ACCEPTABLE":
+        return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_RECORD", "test_id": test_id, "probe_version": version,
+                "recorded": [], "archived": [], "skipped": [], "run_record": str(Path(queue) / "_live" / f"{test_id}.json"),
+                "stopped": {"why": "the run is not bound to its staged inputs", "evidence_status": evidence["status"], "problems": evidence["problems"]},
+                "known_noise": run_record["known_noise"], "snapshot": None}
     if accept:
         # G5: record through live_accept.accept_run, carrying probe FAIL lines an earlier acceptance of the same mod version covers.
-        from .group_accept import assess_group
+        from .group_accept import assess_group, context_of
 
         if not (note or "").strip():
             raise ProbeGroupError("--accept needs --note: say what was run and seen (it is written into each report).")
-        carry = assess_group(log, tested, Path(rig) / "mods")
+        carry = assess_group(log, tested, Path(rig) / "mods", context=context_of(manifest))
         if carry["uncovered_keys"] or carry["uncovered_caught"]:
             stopped = {"why": "findings no earlier acceptance of the same mod version covers",
                        "uncovered_probe_fail": carry["uncovered_keys"], "uncovered_caught_exceptions": carry["uncovered_caught"]}
@@ -873,7 +897,8 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
             try:
                 if f"## Live run {test_id}" not in body:
                     accept_run(workspace, log, test_id=test_id, note=note or "", mods_dir=Path(rig) / "mods",
-                               accept_findings=carry["reason"] if carry else None, today=today, write_record=False)
+                               accept_findings=carry["reason"] if carry else None, today=today, write_record=False,
+                               rig=rig, evidence=evidence, manifest=manifest)
             except AcceptError as exc:  # any other refusal stops the group here; members already recorded stay recorded
                 stopped = {"why": str(exc), "workspace": workspace.name}
                 skipped.append({"mod_id": mod_id, "verdict": "PASS", "workspace": workspace.name, "archive": f"accept refused: {exc}"})

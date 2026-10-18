@@ -81,10 +81,28 @@ def last_recorded_verdict(workspace: Path) -> str | None:
     return last
 
 
-def select_workspaces(queue: Path, changed: list[str], validated: list[Path] | None = None) -> dict[str, str]:
-    """{workspace name: why it reruns} for the validated workspaces; the others are left out."""
+def last_manifest_summary(queue: Path, workspace: Path) -> dict | None:
+    """The manifest summary of the workspace's newest bound run record in <queue>/_live, or None (legacy runs have none)."""
+    newest = None
+    for path in sorted((Path(queue) / "_live").glob("*.json")):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(record, dict) or not record.get("manifest"):
+            continue
+        if any(m.get("workspace") == workspace.name and m.get("provenance") == "BOUND" for m in record.get("members") or []):
+            if newest is None or str(record.get("recorded_at", "")) >= str(newest.get("recorded_at", "")):
+                newest = record
+    return newest["manifest"] if newest else None
+
+
+def select_workspaces(queue: Path, changed: list[str], validated: list[Path] | None = None, rig: Path | None = None) -> dict[str, str]:
+    """{workspace name: why it reruns} for the validated workspaces; the others are left out. Besides git and the shipped hash,
+    a workspace reruns when the providers, probe config or launcher files of its last bound run differ from the rig now (R1)."""
     from .live_trust import live_status
     from .regress import validated_workspaces
+    from .run_manifest import environment_drift
 
     harness = probe_or_harness_changes(changed)
     chosen: dict[str, str] = {}
@@ -95,6 +113,13 @@ def select_workspaces(queue: Path, changed: list[str], validated: list[Path] | N
         status = live_status(workspace)["status"]
         if status != "CURRENT":
             chosen[workspace.name] = f"shipped files changed since the last PASS run ({status})" if status == "STALE" else f"no recorded run hash ({status})"
+            continue
+        summary = last_manifest_summary(queue, workspace) if rig is not None else None
+        if summary is None:
+            continue  # a legacy run has no recorded environment to compare; git and the shipped hash are all there is
+        drift = environment_drift(rig, summary)
+        if drift:
+            chosen[workspace.name] = "environment changed since the last bound run (" + "; ".join(drift[:3]) + ")"
     return chosen
 
 
@@ -117,7 +142,7 @@ def run_changed(queue: Path, rig: Path, out: Path, commit: str, *, repo_root: Pa
             raise RegressChangedError(f"a regression hold is in place ({hold}); look at it, then rerun with --clear-hold")
         hold.unlink()
     changed = changed_paths(repo_root, commit, git)
-    chosen = select_workspaces(queue, changed)
+    chosen = select_workspaces(queue, changed, rig=rig)
     previous = {name: last_recorded_verdict(queue / name) for name in chosen}
     if runner is None:
         from .regress import run_regression as runner

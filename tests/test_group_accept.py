@@ -5,12 +5,14 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.group_accept import assess_group
+from bridgeforge.group_accept import assess_group, context_of
 from bridgeforge.live_accept import accept_run
 from bridgeforge.probe_config import build_probe_config
+from bridgeforge.run_manifest import read_manifest
 from bridgeforge.probe_group import ProbeGroupError, merge_configs, record_group
+from tests.bound_runs import bound_run
 from tests.support import resolved_temp_dir
-from tests.test_probe_group import _rig, _workspace
+from tests.test_probe_group import _workspace
 
 PREFIX = "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - "
 MENU = "100 [Thread-8] INFO  sound.H  - Playing music with id [miscallenous_main_menu.ogg]"
@@ -26,10 +28,7 @@ class _Fixture:
         self.a = _workspace(self.queue, "A", "mod_a", "hull_a")
         self.b = _workspace(self.queue, "B", "mod_b", "hull_b")
         self.config = merge_configs([build_probe_config(self.a), build_probe_config(self.b)])
-        self.rig = _rig(root)
-        (self.rig / "logs").mkdir(parents=True)
-        self.log = self.rig / "logs" / "GRP-A.stdout.log"
-        self.log.write_text("\n".join([MENU, LOAD, *log_lines]) + "\n", encoding="utf-8")
+        self.rig, self.log = bound_run(root, {"mod_a": self.queue / "A", "mod_b": self.queue / "B"}, "GRP-A", [MENU, LOAD, *log_lines])
 
     def record(self, **kwargs):
         return record_group(self.log, self.config, self.queue, self.rig, test_id="GRP-A", today="2026-10-14", **kwargs)
@@ -84,17 +83,20 @@ class AcceptRecordTests(unittest.TestCase):
     def test_a_remembered_acceptance_covers_the_same_version_only(self) -> None:
         with resolved_temp_dir() as root:
             fx = _Fixture(root, [OK, FAIL_A])
-            accept_run(fx.queue / "A", fx.log, test_id="T-0", note="first run", accept_findings="harmless, checked by hand",
-                       mods_dir=fx.rig / "mods", today="2026-10-01", write_record=False)
+            accept_run(fx.queue / "A", fx.log, test_id="GRP-A", note="first run", accept_findings="harmless, checked by hand",
+                       mods_dir=fx.rig / "mods", today="2026-10-01", write_record=False, rig=fx.rig)
             kept = (fx.queue / "A" / "reports" / "live_accepted.jsonl").read_text(encoding="utf-8")
-            same = assess_group(fx.log, [fx.queue / "A", fx.queue / "B"])
+            context = context_of(read_manifest(fx.rig, "GRP-A"))
+            same = assess_group(fx.log, [fx.queue / "A", fx.queue / "B"], context=context)
+            other = assess_group(fx.log, [fx.queue / "A", fx.queue / "B"], context={**context, "probe_config_sha256": "changed"})
             info = fx.queue / "A" / "working" / "mod_info.json"
             info.write_text(json.dumps({"id": "mod_a", "gameVersion": "0.98a-RC8", "version": "2.0"}), encoding="utf-8")
-            newer = assess_group(fx.log, [fx.queue / "A", fx.queue / "B"])
+            newer = assess_group(fx.log, [fx.queue / "A", fx.queue / "B"], context=context)
         self.assertIn("content-ids|variant:hull_a_Std", kept)
         self.assertEqual(same["uncovered_keys"], [])
         self.assertIn("harmless, checked by hand", same["reason"])
         self.assertEqual(newer["uncovered_keys"], ["content-ids|variant:hull_a_Std"])
+        self.assertEqual(other["uncovered_keys"], ["content-ids|variant:hull_a_Std"])  # same version, other circumstances: not carried
 
     def test_a_log_without_the_main_menu_is_refused_by_accept_run_and_stops(self) -> None:
         with resolved_temp_dir() as root:
@@ -102,7 +104,7 @@ class AcceptRecordTests(unittest.TestCase):
             fx.log.write_text(OK + "\n", encoding="utf-8")
             result = fx.record(accept=True, note="played")
         self.assertEqual(result["recorded"], [])
-        self.assertIn("main menu", result["stopped"]["why"])
+        self.assertIn("main_menu", " ".join(result["stopped"]["problems"]))
 
 
 if __name__ == "__main__":
