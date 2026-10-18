@@ -1,0 +1,10 @@
+{
+	"id":"bf_raid",
+	"name":"zz BridgeForge Raid",
+	"author":"BridgeForge by Exxec",
+	"version":"0.1.0",
+	"description":"Rig-only: forces one Nexerelin raid on the market named in data/config/bf_raid.json and logs raid-start and raid-end (ROADMAP item 73, G6).",
+	"gameVersion":"0.98a-RC8",
+	"dependencies":[{"id":"nexerelin","name":"Nexerelin"}],
+	"modPlugin":"data.scripts.bfraid.BfRaidPlugin"
+}
