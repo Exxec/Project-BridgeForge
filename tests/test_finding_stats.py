@@ -59,7 +59,9 @@ class TierTableTests(unittest.TestCase):
 
         # Item 73 B1/B6 (2026-10-18): REVIEW-tier fixers with refusal rules that stay tier code/input on purpose and run
         # through the `fix` command; whether revive should try them first is an open decision for the coordinator.
-        review_only = {"orbit-period-computed-unguarded", "system-generation-unguarded"}
+        # Item 73 B4 (item 75 R4): the preset field merge applies only an approved field-specific proposal or a matching
+        # semantic ruling, so it is tier decision and runs through `fix` with that approval, never unattended in revive.
+        review_only = {"orbit-period-computed-unguarded", "system-generation-unguarded", "preset-entry-drops-vanilla-fields"}
         stranded = sorted(f for f in SUPPORTED_FINDINGS if tier_for(f) not in ("auto", "input") and f not in review_only)
         self.assertEqual(stranded, [])
 
