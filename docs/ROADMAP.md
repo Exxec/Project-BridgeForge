@@ -1,5 +1,9 @@
 # BridgeForge roadmap
 
+Historical tranche summary, retained for provenance. The authoritative accumulated roadmap is [../ROADMAP.md](../ROADMAP.md);
+current summary is [ROADMAP_STATUS.md](ROADMAP_STATUS.md). Proposed long-term priorities are in
+[STRATEGIC_ROADMAP.md](STRATEGIC_ROADMAP.md). Completed bullets below do not establish fresh live qualification.
+
 ## Completed evidence foundations
 
 - Read-only mod, JAR, bytecode, source, JSON-tolerance, dependency, and

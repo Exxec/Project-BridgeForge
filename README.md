@@ -1,35 +1,50 @@
-# BridgeForge Tooling Pack
+# BridgeForge
 
-Reusable validation tools and Git hooks for Project BridgeForge.
+Offline, evidence-first tooling for reviving legacy Starsector mods: inspect preserved inputs, apply authorized
+repairs on copies, escalate judgment, and qualify candidates with separate static, package and live evidence.
+The reference revival target is Starsector 0.98a-RC8 / Java 17. A clean scan or successful compile is not proof
+that a mod loads, preserves its features or is safe for existing saves.
 
-[Download BridgeForge 0.2.0](https://github.com/Exxec/Project-BridgeForge/releases/tag/v0.2.0).
-See [verified publication evidence](docs/RELEASE_0_2_0.md) for source/asset hashes
-and the separate live-validation limits.
+**Version status, checked 2026-10-18:** this checkout identifies as 0.3.0. The latest published release is
+[0.2.0, a pre-release](https://github.com/Exxec/Project-BridgeForge/releases/tag/v0.2.0), not a published 0.3.0 build.
+The [publication receipt](docs/RELEASE_0_2_0.md) records that release's exact source and artifact hashes.
+Current-main documentation can describe capabilities absent from the older wheel; use the matching tag/source docs.
 
-Included:
-- `tools/hash-baseline.ps1`
-- `tools/compile-diagnostic.ps1`
-- `tools/compile-clean.ps1`
-- `tools/verify-jar-inventory.ps1`
-- `tools/verify-package.ps1`
-- `tools/scope-guard.ps1`
-- `tools/extract-migration-candidates.ps1`
-- `tools/install-githooks.ps1`
-- `.githooks/pre-commit`
-- `.githooks/pre-push`
+Start with the [documentation index](docs/INDEX.md), [revival guide](docs/BRIDGEFORGE_REVIVAL_GUIDE.md),
+[CLI reference](docs/COMMANDS.md) and [current status](docs/ROADMAP_STATUS.md).
+The proposed long-term direction is in [VISION](docs/VISION.md), [STRATEGIC_ROADMAP](docs/STRATEGIC_ROADMAP.md)
+and [NEXT_MILESTONE](docs/NEXT_MILESTONE.md); these are proposals, not implementation claims.
 
-The defaults assume:
-`C:\Users\exxec\Documents\Project BridgeForge`
+Requires Python 3.10+. From a source checkout, create a virtual environment, activate it, then install:
 
-Requires Python 3.10+.
+```powershell
+python -m pip install -e .
+# Optional .7z corpus reader:
+python -m pip install -e ".[archives]"
+python -m bridgeforge --help
+```
+
+Java/API inspection and compilation require the corresponding locally supplied JDK/game/library inputs.
+Live testing additionally requires a configured isolated rig and the supported Windows driver. No game, mod or save
+payload is supplied. Most maintainer PowerShell helpers and `.githooks/` are local/gitignored; a GitHub clone does
+not include or require the owner's private helper scripts or absolute checkout path.
 
 ```powershell
 py -3 -m bridgeforge scan C:\path\to\OldMod --output .\artifacts
 ```
 
-The command writes `MODERNIZATION_REPORT.md` and `bridgeforge.compat.json` to the output directory. Use `--target-starsector` and `--target-java` to change the default `0.98.x` / Java 17 target profile.
+The command writes `MODERNIZATION_REPORT.md` and `bridgeforge.compat.json` to the output directory. Pass
+`--vanilla-core C:\path\to\Starsector\starsector-core` for checks requiring vanilla data; absent inputs mean unavailable
+evidence. `--target-starsector` and `--target-java` select the analysis target (default `0.98.x` / Java 17), not a promise
+that every selected target has been live-qualified.
 
-## V0.2 working-copy workflow
+The convention-layout workflow uses `intake` then `revive` to scan/fix/rescan and prepare unresolved owner/agent packets.
+Only approved finding families can be applied unattended. Live acceptance and publication remain separate gates.
+See the guide before applying or launching anything. Known archive-retention conflict: **do not use `archive --refresh`
+or `probe-group record --archive --refresh` on a known-good archive**; the current implementation deletes the old
+archive rather than preserving it as the owner contract requires. See [open issue DOC-001](BUGS.md).
+
+## Convention-layout intake and revival
 
 For the convention layout, start from the repository root:
 
@@ -56,6 +71,12 @@ prior-release retention, and explicit validation/release gates.
 Vacuum's local layout and outstanding live gates are recorded in
 [P12C layout evidence](docs/P12_VACUUM_LAYOUT.md).
 
+## Manifest-based workspace workflow
+
+The following is a separate implemented workflow. `workspace` creates `original-reference/`, `working-copy/`
+and `workspace-manifest.json`; convention-layout `intake` uses `original/` and `working/`. Their workspace-only
+commands are not interchangeable. Convergence is proposed under strategic S1; it has not been implemented.
+
 ```powershell
 py -3 -m bridgeforge workspace C:\path\to\OldMod --output C:\work\OldMod-bridgeforge
 py -3 -m bridgeforge plan C:\work\OldMod-bridgeforge --target-starsector 0.98a-RC8
@@ -64,7 +85,9 @@ py -3 -m bridgeforge apply C:\work\OldMod-bridgeforge --approve metadata-target-
 
 `workspace` makes an immutable reference and a separate working copy. `plan` creates a diff-backed plan and accepts additional validated JSON rule packs through `--rules`. `apply --safe` modifies only planned `SAFE` rules; `REVIEW` rules always need an explicit `--approve <rule-id>`. `rollback` restores the working copy from a named checkpoint.
 
-Java migration packs can provide a `replace-import` rule. Bridgeforge first parses Java through the selected JDK's compiler API, then replaces only the confirmed import declaration. Method bodies are not rewritten by this V0.3 foundation.
+Java migration packs can provide a `replace-import` rule. This particular rule parses Java through the selected JDK's
+compiler API and replaces the confirmed import declaration. Other explicitly selected fixers/patch tools can change
+method bodies; that is not a general semantic-migration guarantee.
 
 ## Build-environment model
 
@@ -78,7 +101,12 @@ After a successful compile, `package-jar <workspace> <working-copy-relative-jar>
 
 `runtime-profile` records an opt-in command only. `runtime-smoke` inspects that profile unless `--execute` is supplied explicitly. A profile can label user-authored `--scenario` checks as `campaign-load`, `mission-launch`, or `custom-ui`, and records the staged workspace mod path; those labels do not prove that the game loaded it. A profile can constrain validation to a log inside its working directory with `--log-file` and one or more `--expect-log` markers; a zero exit code still fails when an expected marker is absent. This is controlled process/log evidence, not a claim of behavioral or save compatibility.
 
-`validate` verifies the immutable reference, structurally re-scans the working copy, and records runtime validation as unconfigured unless an explicit launch profile exists. For a mod with active Java sources, compile validation is `REQUIRED_NOT_RUN` until a recorded full-project compile exists; a successful one-file probe is reported as `PARTIAL`. A `PASS` requires that the compiler invocation included every active source file. `save-risk` compares original and working content for changed persistent-identifier-shaped fields as review context only; Bridgeforge does not support or claim cross-patch save compatibility.
+`validate` operates on the manifest-based workspace, verifies the reference and structurally re-scans its working copy.
+Its current report sets runtime validation to `NOT_CONFIGURED`; creating a runtime profile does not make `validate`
+execute or import a live run. Use the separately controlled runtime/probe tools and their evidence. For active Java
+sources, compile validation is `REQUIRED_NOT_RUN` until a recorded full-project compile exists; a successful one-file
+probe is `PARTIAL`. Compile PASS requires coverage of all active source files. `save-risk` compares persistent-ID-shaped
+fields as review context; neither that comparison nor class/ID resolution proves cross-patch save compatibility.
 
 ## Integrity and automation artifacts
 
@@ -90,7 +118,9 @@ After a successful compile, `package-jar <workspace> <working-copy-relative-jar>
 
 `dependency-api-check <mod> --inventory <inventory.json>` compares direct optional-mod imports with one or more explicit local API inventories. It only establishes whether imported class names are present in the supplied inventory; versions, methods, runtime load order, and behavior remain unverified.
 
-The scanner also reports `target-interface-method-missing` when active source implements a known 0.98a engine interface but omits a newly required method. This is a load-blocking source contract finding; BridgeForge provides only a review suggestion and never edits interface implementations automatically.
+The scanner reports `target-interface-method-missing` for supported missing RC8 interface-method shapes. A narrow fixer
+exists for evidenced default implementations; it refuses unsupported/shadowed sources and remains subject to the normal
+confidence/approval policy. Other interface changes still require review; successful compilation is not behavior proof.
 
 `cross-mod-analyze <mods...>` builds a read-only graph only for the mod folders supplied on that command line: dependency edges, duplicate class ownership, and source-defined campaign-ID lookup resolution. Use `--alias DIRECTORY_NAME=MOD_ID` when a selected legacy metadata file is deliberately non-strict. `campaign-identity-inventory <mods...>` and `campaign-identity-check <mod> --inventory <ids.json>` create and consume the same kind of explicit, source-defined system/entity registry.
 

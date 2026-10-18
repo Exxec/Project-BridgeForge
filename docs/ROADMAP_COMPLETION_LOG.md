@@ -1,7 +1,7 @@
 # Roadmap completion goal
 
-The active goal is to finish the remaining BridgeForge roadmap in documented,
-validated tranches, committing/pushing each completed tranche. Original mods,
+Historical goal record for the 2026-09 tranches, not a currently active goal or standing authorization to commit/push.
+Current priorities follow the root roadmap, strategic policy and explicit task scope. Original mods,
 historical installs, saves and unrelated checkout changes remain protected.
 No unresolved live/manual or research gate is silently treated as complete.
 

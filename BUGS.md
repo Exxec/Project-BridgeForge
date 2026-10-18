@@ -1,6 +1,24 @@
 # Bridgeforge bug ledger
 
-## Resolved in 1.0 hardening
+## Open implementation issues identified during the 2026-10-18 documentation audit
+
+### DOC-001 — Archive refresh contradicts the preservation contract
+
+- Strategic impact: S1 blocker for safe revision finalization; item 75 R5 also requires prior-archive preservation.
+- Source evidence: `bridgeforge/archive.py:archive_mod` calls `_remove_previous_archive` when `refresh=True`;
+  that helper calls `safe_rmtree(target, [done_dir])`. The CLI help also describes deletion. This is source evidence,
+  not a newly performed destructive/live test. The local agent contract requires moving old archives aside, never deletion.
+- Affected paths: `archive --refresh` and `probe-group record --archive --refresh`. Do not use them on known-good archives.
+  The separate `move_aside=True` path with `refresh=False` does preserve an old archive; it does not make refresh safe.
+- Required implementation: preserve the prior archive before replacement, refuse unsafe/conflicting destinations,
+  and recover or clearly report failures without losing the old artifact. Test old bytes surviving success and injected
+  failure; qualify against the S1 candidate/acceptance contract. Documentation edits do not close this issue.
+- Status: OPEN. No application source change or archive refresh was performed by this audit.
+
+## Resolved in the historical "1.0 hardening" tranche
+
+The tranche name below is historical, not a claim that package version 1.0 has been released. The current package
+identifies as 0.3.0; latest published tool release is the 0.2.0 pre-release (checked 2026-10-18).
 
 | ID | Resolution |
 | --- | --- |

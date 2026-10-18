@@ -10,6 +10,10 @@ Revision 2026-10-17: owner "ok add/modify roadmap with these recommendations and
 See [ROADMAP_IMPLEMENTATION_HANDOFF.md](ROADMAP_IMPLEMENTATION_HANDOFF.md), item 75, for R1-R8 implementation contracts.
 These refine items 70/73. No implementation or live validation is claimed by this planning revision.
 
+2026-10-18 source-audit warning: DOC-001 in `BUGS.md` records that current archive refresh deletes the old artifact,
+contrary to owner policy. R5/H2 finalization must fix preservation before using this path; do not refresh known-good
+archives in the meantime. This is a blocker within S1, not a new strategic direction or completed implementation.
+
 ## 1. Owner decisions (recorded 2026-10-14)
 
 | # | Decision | Answer | Applies to |

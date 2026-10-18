@@ -5,6 +5,17 @@ Cloud sessions have no Starsector install, no test rig, no Windows, and no acces
 local session can pick it up. Each entry says what to run, what "done" looks like, and which
 roadmap item it closes. Delete an entry once it is done (the roadmap keeps the history).
 
+## Current entry point (documentation audit, 2026-10-18)
+
+Read [INDEX.md](INDEX.md), [ROADMAP_STATUS.md](ROADMAP_STATUS.md) and the strategic documents before selecting new work.
+The 2026-10-12 snapshot below is dated history, not a fresh inventory or an instruction to repeat completed runs.
+Zorg bf.10 and EPTA 2.1.3+bf.2 acceptance remains pending in the owner follow-up section; this audit performed no live test.
+S1-S4 and item 75 extensions remain proposals/specifications unless separately evidenced.
+
+**S1 blocker DOC-001:** `archive --refresh` and group `--archive --refresh` currently delete an old archive, contrary to
+the owner preservation contract. Do not use those flags on known-good archives. See `BUGS.md`; the audit records the
+implementation mismatch, not a policy exception or completed fix. Do not manually move/delete archives without scope.
+
 Rewritten 2026-09-27 after the local and cloud histories merged. Closed and removed: the MOVES.log
 shadowing audit (P14 item 27, done locally in `0183ab3`) and the Maelstrom dependency-jar check
 (E8, resolved in P14 item 44). Several local runs used commands that were then folded into one
@@ -43,7 +54,9 @@ run with real clicks; leave the PC alone), `probe-group duel TESTID` (rig-only d
    explicitly approved each one.
 2. The raw folder `In operation/Neutrino corp older` was deleted on 2026-10-11 at the owner's go-ahead: its files are identical to
    `Neutrino-Corporation-1.8.9/original/extracted/` (only git's index stat differed) and `Neutrino corp older.zip` stays in Downloads.
-3. Gated roadmap items 39 and 45 are unchanged.
+3. The older gating note is superseded by the 2026-10-12 roadmap decisions: P15 follow-up 39 (population-delta fixer)
+   was closed **not built** with owner agreement; follow-up 45 (0.7 economy translators) remains deferred because its
+   measured trigger was not met. These are distinct from other sections that reuse the same item numbers.
 
 **How a live run works.** Close Starsector first, then from the repo root:
 ```powershell
@@ -53,7 +66,10 @@ Set-ExecutionPolicy -Scope Process Bypass; .\tools\bf-test.ps1 launch GRP<N><let
 python -m bridgeforge probe-group report "In operation\_rig\logs\<TESTID>.stdout.log"
 python -m bridgeforge probe-group record <TESTID> --archive
 ```
-A person must play: New Game, a career all the way through, one in-game day, the combat mission to its last round, quit.
+The manual route requires New Game, a career all the way through, the campaign checks, the combat mission and quit.
+The existing `probe-group live TESTID` driver can perform its supported default/Nexerelin flow with real clicks;
+unsupported/custom UI flows and visual/gameplay judgments still require a person. A driver finishing is evidence only
+for paths it actually observed, not every feature or an existing-save upgrade.
 A launch that dies at startup ends by itself in seconds (read `<TESTID>.triage.txt` and `<TESTID>.windows.txt`). `record`
 reads the probe config the last `install` wrote, so record before installing the next group. If the audit blocks an archive,
 `bridgeforge audit-shipped "In operation\<Ws>"` lists each UNEXPLAINED difference; explain with `audit-explain <Ws> <files>
@@ -71,8 +87,9 @@ the test suite while it does (hermeticity check), then commit them.
   `C:\Users\exxec\AppData\Local\Python\pythoncore-3.14-64` first on `PATH` for the commit.
 - Workspaces get locked to non-admin sessions (twice: `Done\` zips and 14 workspaces; cause unknown). If `probe-group plan` says
   "Access is denied", run `tools\unlock-workspaces.ps1 -Apply` from an Administrator PowerShell (dry run without `-Apply`).
-- A mod that already has an archive in `Done/` collides on `record --archive`: move the old folder to
-  `Done\_replaced-<date>\` (never delete an archive without the owner's word), then record again.
+- Existing archive handling is path-specific: ordinary group `record --archive` calls the move-aside path;
+  standalone `archive` refuses a collision unless a replacement mode is requested. Do not add `--refresh` as a shortcut:
+  its destructive implementation is the unresolved DOC-001 conflict noted above. Preserve earlier artifacts.
 - Edit code with the Write/Edit tools: `\n`, `\\` and `\"` inside shell heredoc Python are unescaped and corrupted files again
   and again. Run `python -m bridgeforge docs-index` after adding a check, and do not edit tracked files while the suite runs.
 - Provider sources: `probe-group plan` with `--provider-source` set to the real install stages MagicLib 1.5.6 over the rig's 1.5.7
@@ -88,12 +105,12 @@ Do this when live testing resumes:
 1. `python -m bridgeforge java-matrix discover --rig "In operation/_rig"` (found here: Java 8 jre, 25, 27, 28; **no Java 17**: add one with `--jdk-root`).
 2. `python -m bridgeforge java-matrix setup "In operation/_rig"` writes `run-j25-direct.bat`, `run-j25-fr.bat`, ... (Java 8 is skipped unless `--java 8`).
 3. Check the `fr` bats by hand once: the rig's `starsector-core` junction must expose `fr.vmparams` (and `PatchLibAgent.jar` if used); confirm the log lands in `_rig/logs`, not the real install.
-4. `python -m bridgeforge java-matrix run "In operation/_rig" --mods <ids> --repeats 3` in the background; read its progress lines. "Done" = a pass-rate table per variant. If Java 28 + `fr` fails and `direct` passes, Fast Rendering is the cause; add a row to `docs/RC8_BEHAVIOUR.md`.
+4. `python -m bridgeforge java-matrix run "In operation/_rig" --mods <ids> --repeats 3` in the background; read its progress lines. "Done" = a pass-rate table per variant. A variant-associated failure is a hypothesis, not proof of its cause; reproduce with controlled inputs and record only the bounded observed fact in `docs/RC8_BEHAVIOUR.md`.
 5. For a tester's report: `java-matrix describe-log <their starsector.log>` shows their Java and whether Fast Rendering was loaded.
 
 Parallel (owner 2026-10-09, max 3): `java-matrix run RIG --mods <ids> --preset compare` boots vanilla (Java 25), FR, Java 28 and FR + Java 28, three at once, each in `RIG/instances/<variant>/` (linked mods and core, own logs/saves). `java-matrix instances RIG` shows state. Serial (`--parallel 1`) stays the reference: parallel load changes timing, which matters for a race. `--skip-known` reuses a recorded all-pass (`bridgeforge-state/java-matrix-ledger.json`) for the same variant, Java build and mod set, so only new mods boot everywhere. Check RAM (about 4 GB each) before the first parallel run.
 
-Mass test (item 62): `python -m bridgeforge java-matrix mass "In operation/_rig" --only Ironclads` first (one mod, see the table), then `--limit 20`, then the whole archive in the background. Read `bridgeforge-state/mass-test/MASS_TEST.md`; logs are kept under `bridgeforge-state/mass-test/logs/<mod>/`. Check `dropped_flags` in the JSON: a JDK that refuses a flag is itself an environment difference (JDK 28+13 refuses `-noverify` and `-XX:+UseVectorStubs`). Prepatcher is not in the matrix yet (item 63 step 1).
+Mass test (item 62): `python -m bridgeforge java-matrix mass "In operation/_rig" --only Ironclads` first (one mod, see the table), then `--limit 20`, then the whole archive in the background. Read `bridgeforge-state/mass-test/MASS_TEST.md`; logs are kept under `bridgeforge-state/mass-test/logs/<mod>/`. Check `dropped_flags` in the JSON: a JDK that refuses a flag is itself an environment difference (JDK 28+13 refuses `-noverify` and `-XX:+UseVectorStubs`). Prepatcher setup support now exists (`java-matrix setup --prepatcher`); use `--help` for exact options and `AOTD_COMPAT_PLAN.md` for dated, bounded observations.
 
 Optimised mass run (item 62 addendum, 32 GB): `java-matrix mass "In operation/_rig" --preset compare --bundle 4` (vanilla, FR, Java 28, FR + Java 28, three at a time, 4 GB each, bundles of up to 4 unrelated mods). Your real launch: `--preset real` (Miko_Simple.txt copy on Java 28 with and without Prepatcher). Pass Prepatcher in `--mods` when testing the AoTD stack. Reports mark `bundle_conflict` and `dropped_flags`.
 

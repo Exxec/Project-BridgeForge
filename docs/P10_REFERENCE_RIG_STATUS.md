@@ -3,6 +3,10 @@
 Durable handoff for roadmap P10. Update this file after each setup or live-test
 phase so a usage interruption does not erase what is known.
 
+The dated setup/validation log below is historical reference-rig evidence. Later main CI passed at `3342654d`
+(2026-10-17); that does not replay or close this old-game live retry. Do not treat old suite failures as current
+failures, or newer unit tests as original-runtime proof. Cross-check root roadmap/local run records before retrying.
+
 ## Delivered offline tooling
 
 - `rig-create --game-version <v> --install <dir>` registers a dedicated old-game
