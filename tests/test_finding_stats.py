@@ -57,7 +57,10 @@ class TierTableTests(unittest.TestCase):
         # were tiered code/input/decision).
         from bridgeforge.fixers import SUPPORTED_FINDINGS
 
-        stranded = sorted(f for f in SUPPORTED_FINDINGS if tier_for(f) not in ("auto", "input"))
+        # Item 73 B1/B6 (2026-10-18): REVIEW-tier fixers with refusal rules that stay tier code/input on purpose and run
+        # through the `fix` command; whether revive should try them first is an open decision for the coordinator.
+        review_only = {"orbit-period-computed-unguarded", "system-generation-unguarded"}
+        stranded = sorted(f for f in SUPPORTED_FINDINGS if tier_for(f) not in ("auto", "input") and f not in review_only)
         self.assertEqual(stranded, [])
 
 

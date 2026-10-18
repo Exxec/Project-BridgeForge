@@ -11,6 +11,12 @@ Each rule names a call and the argument count of its pre-RC8 form; the RC8 form 
 - `MarketAPI.addCondition(id, true|false, param)` -> `addCondition(id, param)`: RC8 has (String) and
   (String, Object) only; 0.7's boolean flag is gone.
 
+Considered for item 73 B2 on 2026-10-18 and NOT added (no RC8 member is involved, so there is no javap line to cite): the three
+verified agent fixes in Mountain-and-Sea and Smol-Shippack were (1) deleting a stray `@Override` on a private helper
+(SHAGen.initFactionRelationships), (2) renaming a public class to its file name (smol_expansion_ModPlugin -> smol_ModPlugin),
+(3) stripping an unresolvable GraphicsLib integration from SHModPlugin (a judgement about a missing dependency). (1) and (2) are
+Java-language fixes that would need their own fixer with a javac-error trigger; (3) stays with an agent or the owner.
+
 `RepActionEnvelope(action, param, message, boolean)` is not here: RC8 also has a 4-argument form
 (action, param, TextPanelAPI, boolean), so the rewrite depends on the third argument's type.
 """
