@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Less hand work and trust gates (ROADMAP items 73 and 75, offline; live runs pending):** scan registry with content
+  fingerprints (`scan-registry.json`, CURRENT/STALE/UNKNOWN/INCOMPLETE); run manifests binding acceptance to the staged rig
+  inputs (`run-manifest`, `accept --rig`); `revise prepare|finalize` with a journal; `rig-up`; `probe-group regress
+  --changed-since` and `record --accept`; `auto-open`; `finding-stats --promotion`; `value-proposals`; `escalation sheet`
+  with semantic-predicate standing rulings; report-only auto-accept eligibility (`--auto-accept` refuses until R1/R2/R4 are
+  proven); `descriptions draft`; translation-memory reuse; shadowing triage; `save-upgrade plan|evaluate`;
+  `snapshot-restore-check`; new fixers (generation and orbit guards, preset field merge, evidenced weapon rows,
+  content-reference substitute) that refuse anything they cannot prove; new checks `market-on-hyperspace-entity`,
+  `mission-map-reference-missing`, `mission-variant-not-defined`, `port-dropped-feature`, `obfuscated-internal-api-resolved`,
+  compiled saved-object references and provider renames for hull mods, commodities and conditions; generic New Game
+  fallback and the `bf_raid` test mod. DOC-001 fixed: `archive --refresh` keeps the old archive.
+
 - **Documentation and proposed long-term strategy (ROADMAP item 75):** reconcile the README, architecture and operator
   guides with implemented behavior; add a documentation index and S1-S4 planning documents. S1 starts with a
   reproducible revival case and shared qualification contracts. DOC-001 records the still-open destructive

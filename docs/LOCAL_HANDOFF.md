@@ -12,9 +12,46 @@ The 2026-10-12 snapshot below is dated history, not a fresh inventory or an inst
 Zorg bf.10 and EPTA 2.1.3+bf.2 acceptance remains pending in the owner follow-up section; this audit performed no live test.
 S1-S4 and item 75 extensions remain proposals/specifications unless separately evidenced.
 
-**S1 blocker DOC-001:** `archive --refresh` and group `--archive --refresh` currently delete an old archive, contrary to
-the owner preservation contract. Do not use those flags on known-good archives. See `BUGS.md`; the audit records the
-implementation mismatch, not a policy exception or completed fix. Do not manually move/delete archives without scope.
+**DOC-001 fixed 2026-10-18:** `archive --refresh` and group `--archive --refresh` now move the old archive to
+`Done/_replaced-<date>/` and restore it if the new write fails (`tests/test_archive_preserves.py`). Not yet exercised on a
+real `Done/` archive: the first real refresh is the check (old bytes under `_replaced-*`, new archive complete).
+
+## 0b. Item 73 / 75 implementation: what still needs this machine (2026-10-18)
+
+Built and unit-tested offline; nothing below has been run. Order matters: R1 first, because acceptance now needs it.
+
+1. **R1 run binding (live proof).** `rig-up <rig> --mods <id> --probe-config`, then `probe-group live <TESTID>` (prepares and
+   releases the run manifest), then `probe-group record <TESTID> --accept --note "..."`. Done: `live_status` CURRENT with
+   provenance BOUND. Then edit one shipped file of the candidate: `live_status` must turn STALE and acceptance must refuse.
+   Also check `tools/bf-test.ps1 launch` end to end, and that the `\|combat-round\|` milestone regex matches a real log.
+   Note: a player ticking mods in the launcher changes `enabled_mods.json`, which the manifest reports as drift.
+2. **R2 registry.** `finding-stats --rescan-stale --write bridgeforge-state/finding-stats/<date> --vanilla-core $core` in the
+   background (every real workspace reads UNKNOWN until registered). Then `auto-open "In operation"` and
+   `finding-stats --promotion <dir>`; put UNEXPLAINED cases and promotion shapes into ROADMAP 73. Check the EPTA follow-up scan
+   in `reports/owner-followup-scan-20261017/` is discovered without renaming.
+3. **R5 revise.** On a live-qualified candidate: `revise prepare`, the R1 run, `baseline-accept`, `revise finalize` twice
+   (second reports complete). Done: archived bytes equal tested bytes, old archive in `Done/_replaced-*`, one changelog line.
+4. **R6 save upgrade.** Zorg bf.9 to bf.10: a spec with both manifests and a hashed copied rig save; per case load old with new,
+   save to a separate slot, restart, reload, repeat; `save-upgrade evaluate SPEC EVIDENCE --run-id ID --run-hash HASH` VERIFIED
+   for all eight cases. Needs an in-game evidence emitter that does not exist yet.
+5. **R8 restore.** `snapshot-restore-check <snapshot> --to <new empty folder outside the repo> --source-root <repo>`: expect
+   RESTORED_OFFLINE; then rebuild rig junctions in the copy and run a bounded rig scenario there, never in the primary workspace.
+6. **G1 New Game fallback.** `probe-group live` on two total conversions other than Nexerelin and Ironclads; done when both reach
+   `campaign END` with a `new-game-generic(N pages)` stage; screenshots in `<TESTID>.stdout.log.newgame/`.
+7. **G6 raid mod.** `raid_run.install_raid_mod(rig, 'exipirated_avestamarket', attacker_faction='hegemony')` in a group with
+   Nexerelin; done: `check_raid_log` gives RAID_OBSERVED. Confirm Janino compiles the loose scripts against Nexerelin's classes.
+8. **G2/G3.** One `probe-group regress --changed-since <commit>` after the next probe change (a regression writes
+   `_regress/REGRESSION_HOLD.json` and blocks the next run); `rig-up` on the real `_rig`.
+9. **E4 port record.** Write `In operation/Templars-0.9.8f/working/reports/PORT_SOURCE.json` with `old_tree` =
+   `scratch/port-0.9.9e-code/before` and rescan; expect `port-dropped-feature` findings for the Crusade; accept with a reason or
+   ask for a plan.
+10. **H1.** `audit-explain --auto` on Ironclads, Nightcross and the GRP6A mods from their pre-explanation state; report the
+    fraction left for a person.
+11. **B fixers on the real queue.** `revive` over the queue with `finding-stats` before and after; B1 applied to 5 mods in the
+    read-only sample (Hegemony-Expeditionary-Auxiliary, Hiver-Swarm, Scion-Collective, Valhalla-Starworks, Valhalla-Starworks-2.0).
+    Owner decision open: should `revive` try the REVIEW-only fixers (B1, B4) before packeting?
+12. **F checks, optional live proof.** LTA and Tahlan's Legio siege base (`market-on-hyperspace-entity`) with Nexerelin; the
+    `EptaTestMission` `wormhole*` planets (`mission-map-reference-missing`).
 
 Rewritten 2026-09-27 after the local and cloud histories merged. Closed and removed: the MOVES.log
 shadowing audit (P14 item 27, done locally in `0183ab3`) and the Maelstrom dependency-jar check

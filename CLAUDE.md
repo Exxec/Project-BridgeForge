@@ -16,9 +16,9 @@ incomplete, blocked and next work. Necessary small fixes may be bundled; they mu
 Strategic direction changes require explicit owner approval and a recorded proposal with supporting evidence.
 The S1-S4 documents are proposed strategy; this policy does not itself approve implementation or publication.
 
-Known mismatch, source-audited 2026-10-18: `archive --refresh` currently deletes the prior archive despite the owner's
-preservation contract. Do not use it or group `--archive --refresh` on known-good archives. Track the required S1 fix
-as DOC-001 in `BUGS.md`; do not weaken the policy to match the implementation.
+DOC-001 (source-audited 2026-10-18, fixed the same day): `archive --refresh` and group `--archive --refresh` move the prior
+archive to `Done/_replaced-<date>/` and restore it if the new write fails; never delete an archive. Implementation status of
+items 73/75 is in `docs/ROADMAP_STATUS.md`; the runs still needed on this machine are in `docs/LOCAL_HANDOFF.md` section 0b.
 
 ## Non-negotiables
 
