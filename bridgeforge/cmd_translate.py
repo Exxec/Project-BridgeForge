@@ -75,6 +75,7 @@ def add_parser(subcommands) -> None:
     fix.add_argument("--hull", action="append", default=[], metavar="ID=N", help="repeatable; required for carrier-bays-proposal, e.g. --hull my_carrier=4 (0-6, vanilla's own maximum)")
     fix.add_argument("--reference-core", type=Path, help="variant-op-over-budget: trim only variants that fit under this older starsector-core's costs (the ones RC8 pushed over)")
     fix.add_argument("--encoding", action="append", default=[], metavar="FILE=ENC", help="repeatable; for data-file-not-utf8: re-encode FILE (relative to the mod) from ENC (cp1252, mac_roman, shift_jis, gbk, gb18030, latin-1) when a person has read it and named the encoding")
+    fix.add_argument("--substitutions", type=Path, metavar="FILE.json", help="content-reference-substitute: the proposals file from substitution-proposals, with \"approved\": true set on the entries to apply")
     fix.add_argument("--allow-shadowed-edit", action="store_true", help="override the refusal to edit a loose script one of this mod's own jars, or a declared dependency's jar, already shadows (the edit has no effect unless the jar is also being rebuilt from the patched source)")
     fix.add_argument("--providers", type=Path, action="append", default=[], help="mods folder, mod folder or In operation tree to search for declared dependencies, for the dependency-jar shadow check (default: <repo>/In operation and its rig's mods)")
     strip_plan_cmd = subcommands.add_parser("strip-plan", help="the exact edit list for stripping unresolved content (content-reference-unresolved): every file and field each id sits in, with vanilla weapons that fit an emptied slot; edits nothing")
@@ -85,6 +86,14 @@ def add_parser(subcommands) -> None:
     strip_plan_cmd.add_argument("--build", help="build tag the strip lands in (required with --expected), e.g. r3")
     strip_plan_cmd.add_argument("--link", action="append", default=[], help="risk=ID, hyp=ID or test=ID breadcrumb for the expected changes; at least one is required with --expected")
     strip_plan_cmd.add_argument("--json", action="store_true")
+
+
+def _load_substitutions(path: Path | None) -> list[dict] | None:
+    """The `proposals` list of a substitution-proposals file (or a bare list), for content-reference-substitute."""
+    if path is None:
+        return None
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return data.get("proposals") if isinstance(data, dict) else data
 
 
 def run_cli(args: argparse.Namespace) -> int:
@@ -177,6 +186,7 @@ def run_cli(args: argparse.Namespace) -> int:
             "hull_zero_no_evidence": args.hull_zero_no_evidence,
             "allow_shadowed_edit": args.allow_shadowed_edit,
             "provider_roots": args.providers or None,
+            "substitutions": _load_substitutions(args.substitutions),
         }
         try:
             plan = compute_fix(args.mod_dir, args.finding, options)

@@ -46,6 +46,7 @@ def add_parser(subcommands) -> None:
     revive_cmd.add_argument("--target", default="0.98a-RC8", help="target game version for mod_info.json (default: 0.98a-RC8)")
     revive_cmd.add_argument("--max-rounds", type=int, default=5)
     revive_cmd.add_argument("--providers", type=Path, action="append", default=[], help="where to look for mods that provide missing content, for the options in missing-content packets (default: the workspace's queue folder and its _rig/mods); repeatable")
+    revive_cmd.add_argument("--reference-core", type=Path, help="the older starsector-core the mod was made for: lets missing-content packets propose renamed replacements (substitution-proposals)")
     revive_cmd.add_argument("--provider-index", type=Path, help="saved `provider-index build` output, as for dependency-substitutes")
     revive_cmd.add_argument("--draft-report", action="store_true", help="when the run ends UNATTENDED_DONE, draft REVIVAL_REPORT.md/REVIVAL_PLAN.md with revival-report-draft (written only with --apply, never over an existing report; needs --vanilla-core for its compile check)")
     revive_cmd.add_argument("--json", action="store_true")
@@ -82,6 +83,18 @@ def add_parser(subcommands) -> None:
     esc_queue.add_argument("queue", type=Path)
     esc_queue.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     esc_queue.add_argument("--json", action="store_true")
+    esc_sheet = esc_sub.add_parser("sheet", help="one CSV answering every open decision-tier finding across a queue, grouped by question, with earlier rulings as precedent (three agreeing rulings only suggest an answer); --apply records the answered rows through `escalation rule`, plus standing rulings for mods that meet the versioned-predicate rules")
+    esc_sheet.add_argument("queue", type=Path, nargs="?", help="the queue folder (for --apply it is read from the sheet when omitted)")
+    esc_sheet_mode = esc_sheet.add_mutually_exclusive_group(required=True)
+    esc_sheet_mode.add_argument("--write", type=Path, metavar="SHEET.csv", help="write the decision sheet")
+    esc_sheet_mode.add_argument("--apply", type=Path, metavar="SHEET.csv", help="apply the answered rows (an untouched suggestion is not an answer unless confirm=yes) and eligible standing rulings")
+    esc_sheet.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
+    esc_sheet.add_argument("--json", action="store_true")
+    esc_revoke = esc_sub.add_parser("revoke", help="withdraw one ruling by id (see ESCALATION_RULINGS.jsonl); standing applications derived from it fall with it and the baseline keys they added are removed")
+    esc_revoke.add_argument("queue", type=Path)
+    esc_revoke.add_argument("ruling_id")
+    esc_revoke.add_argument("--reason", required=True)
+    esc_revoke.add_argument("--json", action="store_true")
     for command in (esc_list, esc_show, esc_verify, esc_run, esc_apply):
         command.add_argument("workspace", type=Path)
         command.add_argument("--json", action="store_true")
@@ -155,7 +168,7 @@ def run_cli(args: argparse.Namespace) -> int:
         try:
             result = revive(args.workspace, target=args.target, vanilla_core=args.vanilla_core, policy_path=args.policy,
                             approve=args.approve, apply=args.apply, max_rounds=args.max_rounds, draft_report=args.draft_report,
-                            providers=args.providers, provider_index=args.provider_index)
+                            providers=args.providers, provider_index=args.provider_index, reference_core=args.reference_core)
         except (ReviveError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -191,6 +204,32 @@ def run_cli(args: argparse.Namespace) -> int:
                 print(f"{len(row['only_blocker']):4} only / {len(row['mods']):4} mods  {row['finding']} ({row['tier']}, {row['kind']})")
             print(f"Escalated mods: {result['escalated']}. Written: {result['result_md']}")
         return 0
+    if args.command == "escalation" and args.escalation_command == "revoke":
+        from .escalation_precedent import revoke_ruling
+        try:
+            result = revoke_ruling(args.queue, args.ruling_id, args.reason)
+        except (ValueError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2) if args.json else f"Revoked {result['revoked']}; invalidated: {', '.join(result['invalidated']) or 'nothing'}.")
+        return 0
+    if args.command == "escalation" and args.escalation_command == "sheet":
+        from .escalation_sheet import SheetError, apply_sheet, write_sheet
+        try:
+            if args.write:
+                if args.queue is None:
+                    raise SheetError("--write needs the queue folder.")
+                result = write_sheet(args.queue, args.write, quiet=args.quiet)
+                text = f"{result['rows']} question(s) for {result['mods']} mod(s), {result['prefilled']} suggested from precedent, {result['standing']} mod(s) eligible for a standing ruling. Written: {result['sheet']}"
+            else:
+                result = apply_sheet(args.apply, args.queue)
+                text = f"Applied {len(result['applied'])}, left open {len(result['skipped'])}, {len(result['errors'])} error(s)." + "".join(
+                    f"\n  {e['group']}: {e['error']}" for e in result["errors"])
+        except (SheetError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else text)
+        return 1 if args.apply and result["errors"] else 0
     if args.command == "escalation" and args.escalation_command == "review":
         from .escalation_review import review_sheet
         result = review_sheet(args.workspace)

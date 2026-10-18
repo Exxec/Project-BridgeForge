@@ -12,6 +12,7 @@ import importlib
 # module name (in bridgeforge/) -> command names its run_cli handles; the order is the order of the parsers in --help
 COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "atlas_report": ("atlas",),
+    "substitution_proposals": ("substitution-proposals",),
     "baseline_audit": ("baseline-audit", "baseline-accept"),
     "rig_reset": ("rig-reset",),
     "rig_up": ("rig-up",),

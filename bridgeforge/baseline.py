@@ -75,3 +75,19 @@ def accept_findings(working: Path, keys: list[str], reason: str | None = None) -
 
     stamp_baseline(path, working, reason)
     return path
+
+
+def remove_findings(working: Path, keys: list[str]) -> Path | None:
+    """Take finding keys (and their reasons) out of the mod's accepted-findings baseline: the ruling that put them there was
+    revoked (item 73 R4). Keys not in the baseline are ignored; returns the baseline path, or None when the mod keeps none."""
+    path = mod_baseline_path(working)
+    if path is None:
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = payload if isinstance(payload, dict) else {}
+    drop = set(keys)
+    payload["findings"] = sorted(set(payload.get("findings", [])) - drop)
+    if isinstance(payload.get("reasons"), dict):
+        payload["reasons"] = {k: v for k, v in payload["reasons"].items() if k not in drop}
+    atomic_write_text(path, json.dumps(payload, indent=2) + "\n")
+    return path

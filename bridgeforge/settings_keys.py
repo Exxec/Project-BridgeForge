@@ -36,7 +36,32 @@ def settings_keys(*settings_files: Path) -> set[str]:
     return keys
 
 
-_MOD_GUARD = re.compile(r"isModEnabled\s*\(\s*\"[^\"]+\"\s*\)\s*(?:&&|\?)")
+OVERRIDE_CLASSES = ("add", "same", "change")
+
+
+def classify_overrides(mod: dict, vanilla: dict, prefix: str = "") -> dict[str, str]:
+    """Dotted path -> `add` | `same` | `change` for every key the mod shares with vanilla's settings.json (ROADMAP item 73 C4).
+
+    - `add`: a list that RC8 merges (RC8-02, docs/RC8_BEHAVIOUR.md: settings.json lists add to vanilla's list, they do
+      not replace it) and that carries items vanilla's list lacks. It cannot take anything away.
+    - `same`: the value equals RC8's, or a list whose every item vanilla's list already has: nothing changes.
+    - `change`: a scalar or type that differs; it wins over RC8's value for every mod and the base game.
+    Objects are compared value by value (RC8-01: nested keys merge, so a key only the mod has is not listed at all)."""
+    result: dict[str, str] = {}
+    for key, value in mod.items():
+        if key not in vanilla:
+            continue
+        path, theirs = f"{prefix}{key}", vanilla[key]
+        if isinstance(value, dict) and isinstance(theirs, dict):
+            result.update(classify_overrides(value, theirs, path + "."))
+        elif isinstance(value, list) and isinstance(theirs, list):
+            result[path] = "same" if all(item in theirs for item in value) else "add"
+        else:
+            result[path] = "same" if value == theirs else "change"
+    return result
+
+
+_MOD_GUARD =re.compile(r"isModEnabled\s*\(\s*\"[^\"]+\"\s*\)\s*(?:&&|\?)")
 
 
 def source_reads(text: str) -> list[tuple[int, str, str]]:

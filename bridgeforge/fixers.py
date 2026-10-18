@@ -92,6 +92,7 @@ SUPPORTED_FINDINGS = (
     "system-generation-unguarded",
     "orbit-period-computed-unguarded",
     "local-weapon-spec-unregistered",
+    "content-reference-substitute",
 )
 
 
@@ -3713,11 +3714,13 @@ def _fix_campaign_lookup_guard(root: Path, options: dict, finding_id: str) -> li
 
 from .fixers_data import _fix_local_weapon_spec_unregistered  # noqa: E402
 from .fixers_guards import _fix_orbit_period_computed_unguarded, _fix_system_generation_unguarded  # noqa: E402
+from .fixers_substitute import fix_content_reference_substitute  # noqa: E402  (imports fixers lazily, at call time)
 
 _FIXER_FUNCS = {
     "system-generation-unguarded": _fix_system_generation_unguarded,
     "orbit-period-computed-unguarded": _fix_orbit_period_computed_unguarded,
     "local-weapon-spec-unregistered": _fix_local_weapon_spec_unregistered,
+    "content-reference-substitute": fix_content_reference_substitute,
     "hard-coded-campaign-system-reference": lambda root, options: _fix_campaign_lookup_guard(root, options, "hard-coded-campaign-system-reference"),
     "hard-coded-campaign-entity-reference": lambda root, options: _fix_campaign_lookup_guard(root, options, "hard-coded-campaign-entity-reference"),
     "csv-slash-quote-escape": _fix_csv_slash_quote_escape,
