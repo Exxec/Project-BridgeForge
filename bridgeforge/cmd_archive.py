@@ -19,7 +19,7 @@ def add_parser(subcommands) -> None:
     archive_cmd.add_argument("workspace", type=Path)
     archive_cmd.add_argument("--done", type=Path, help="default: <repo>/Done")
     archive_cmd.add_argument("--policy", type=Path)
-    archive_cmd.add_argument("--refresh", action="store_true", help="replace an existing archive of this mod in Done/ (only a folder holding an ARCHIVE_NOTE.md directly inside Done/)")
+    archive_cmd.add_argument("--refresh", action="store_true", help="replace an existing archive of this mod in Done/: the old one is moved to Done/_replaced-<date>/<Mod>[-N], never deleted, and put back if the new write fails (only a folder holding an ARCHIVE_NOTE.md directly inside Done/)")
     archive_cmd.add_argument("--readme-copy", action="store_true", help="also write <zip>-with-readme.zip and readme.txt for this archive")
     archive_cmd.add_argument("--json", action="store_true")
     archive_preflight = subcommands.add_parser("archive-preflight", help="inspect a ZIP archive without extracting it")

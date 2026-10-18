@@ -46,7 +46,7 @@ def add_parser(subcommands) -> None:
     group_record = group_sub.add_parser("record", help="after a run: mark PASS members LIVE_VALIDATED; with --archive also record the standing local-only licence, archive into Done/ and copy each zip to Done/'s top")
     group_record.add_argument("test_id", help="the bf-test.ps1 test id; reads <rig>/logs/<TESTID>.stdout.log")
     group_record.add_argument("--archive", action="store_true")
-    group_record.add_argument("--refresh", action="store_true", help="with --archive: replace an earlier archive of the same mod in Done/ (deletes that folder; Done/ must hold an ARCHIVE_NOTE.md there)")
+    group_record.add_argument("--refresh", action="store_true", help="with --archive: replace an earlier archive of the same mod in Done/ (the old one is moved to Done/_replaced-<date>/, never deleted; Done/ must hold an ARCHIVE_NOTE.md there)")
     group_record.add_argument("--accept", action="store_true", help="record each PASS member through the single-mod acceptance checks (main menu, campaign load, no FATAL or MOD-ERROR) and write a dated 'Live run' section; probe FAIL lines and caught exceptions are carried only when an earlier acceptance of the same mod version covers them (reports/live_accepted.jsonl, working/reports/probe_accepted.json), otherwise nothing is recorded and the uncovered ones are listed; needs --note")
     group_record.add_argument("--note", help="with --accept: what was run and seen, written into each report as the owner's account")
     group_record.add_argument("--queue", type=Path)
