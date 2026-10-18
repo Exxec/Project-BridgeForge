@@ -124,6 +124,7 @@
     "missing-mod-info": "inspect",
     "market-on-hyperspace-entity": "code",
     "mission-local-fleet-reference-missing": "decision",
+    "mission-map-reference-missing": "decision",
     "mission-local-variant-hull-missing": "decision",
     "mission-local-variant-weapon-missing": "decision",
     "mission-required-file-missing": "decision",
