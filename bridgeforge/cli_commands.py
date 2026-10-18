@@ -16,6 +16,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "rig_reset": ("rig-reset",),
     "rig_up": ("rig-up",),
     "run_manifest": ("run-manifest",),
+    "revise": ("revise",),
     "live_ledger": ("live-ledger",),
     "roadmap_lint": ("roadmap-lint",),
     "agent_diff_check": ("agent-diff-check",),
