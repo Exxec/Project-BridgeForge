@@ -278,6 +278,64 @@ def content_options(working: Path, *, vanilla_core: Path | None, provider_roots:
     return options
 
 
+def import_resolution(findings: list[dict], providers: list, catalogue: dict | None = None) -> dict:
+    """Which indexed mod defines each class a `source-import-unresolved` finding names (ROADMAP item 73 B7).
+
+    - exactly one provider defines the class: a `fix_options` entry for the `undeclared-library-dependency` fixer with that
+      provider's id, name and version (the version is shown, not written). One entry per provider, covering its imports;
+    - several providers: no option, every candidate named (a person picks, as a wrong pick declares the wrong mod);
+    - none: the API drift catalogue's entry for the class when `catalogue` (an `api-diff` result) has one, else
+      "not provided by any indexed mod", plus any provider that defines a class in the same package (a lead, not a match).
+    The finding's evidence is capped at 20 imports; the rest are counted in `unexamined`, never guessed.
+    """
+    from .substitutes import KINDS, _covers
+
+    imports, unexamined = [], 0
+    for finding in findings:
+        if finding.get("id") != "source-import-unresolved":
+            continue
+        for item in finding.get("evidence") or []:
+            if str(item).startswith("data.") and " " not in str(item):
+                imports.append(str(item))
+            elif str(item).startswith("... "):
+                unexamined += int(next(iter(re.findall(r"\d+", str(item))), 0))
+    entries, by_provider = [], {}
+    for name in sorted(set(imports)):
+        needed = {kind: set() for kind in KINDS}
+        needed["class"].add(name)
+        found = [p for p in providers if _covers(p, needed)]
+        entry = {"import": name, "providers": [{"mod_id": p.mod_id, "name": p.name, "version": getattr(p, "version", "")} for p in found]}
+        if len(found) == 1:
+            by_provider.setdefault(found[0].mod_id, {"provider": entry["providers"][0], "covers": []})["covers"].append(name)
+        elif not found:
+            package = name.rsplit(".", 1)[0]
+            entry["same_package_leads"] = sorted(p.mod_id for p in providers if any(c.rsplit(".", 1)[0] == package for c in p.provides["class"]))[:5]
+            drift = [row for row in (catalogue or {}).get("removed_classes", []) if row.get("class") == name or row.get("class", "").rsplit(".", 1)[-1] == name.rsplit(".", 1)[-1]]
+            entry["note"] = f"API drift catalogue: {drift[0]}" if drift else "not provided by any indexed mod"
+        else:
+            entry["note"] = "several indexed mods define this class: " + ", ".join(p["mod_id"] for p in entry["providers"]) + "; pick by hand, no automatic option"
+        entries.append(entry)
+    fix_options = [{"fixer": "undeclared-library-dependency", "options": {"declare_providers": [{"id": row["provider"]["mod_id"], "name": row["provider"]["name"]}]},
+                    "provider_version": row["provider"]["version"], "covers": row["covers"],
+                    "command": f'bridgeforge fix "<working>" --finding undeclared-library-dependency --declare-provider "{row["provider"]["mod_id"]}={row["provider"]["name"]}" --apply'}
+                   for row in by_provider.values()]
+    return {"imports": entries, "fix_options": fix_options, "unexamined": unexamined}
+
+
+def _render_import_resolution(resolution: dict) -> list[str]:
+    lines = ["", "## Import resolution (computed from the provider index)", ""]
+    for option in resolution["fix_options"]:
+        provider = option["options"]["declare_providers"][0]
+        lines.append(f"- **Declare `{provider['id']}`** ({provider['name']}, version {option['provider_version'] or 'unknown'}): the only indexed mod defining "
+                     f"{', '.join(option['covers'][:6])}. `{option['command']}`")
+    for entry in resolution["imports"]:
+        if entry.get("note"):
+            lines.append(f"- `{entry['import']}`: {entry['note']}" + (f" (same package in: {', '.join(entry['same_package_leads'])})" if entry.get("same_package_leads") else ""))
+    if resolution["unexamined"]:
+        lines.append(f"- {resolution['unexamined']} more import(s) were beyond the finding's evidence and were not examined.")
+    return lines
+
+
 def _render_options(options: dict) -> list[str]:
     lines = ["", "## Options (computed by BridgeForge)", ""]
     subs = options.get("substitutes")
@@ -338,7 +396,7 @@ def _informational(finding: dict) -> bool:
 
 
 def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dict], *, vanilla_core: Path | None, now=None,
-                  options_for=None) -> list[dict]:
+                  options_for=None, imports_for=None) -> list[dict]:
     working = workspace / "working"
     baseline = sorted({"|".join(finding_key(f)) for f in findings})
     packets = []
@@ -372,6 +430,8 @@ def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dic
             "excerpts": {name: _excerpt(working / name, [e for f in group for e in f.get("evidence") or []]) for name in files} if kind == "agent" else {},
             "options": options_for() if options_for is not None and finding_id in CONTENT_FINDINGS else None,
         }
+        if imports_for is not None and finding_id == "source-import-unresolved":
+            packet["import_resolution"] = imports_for(group)
         packets.append(packet)
     return _merge_same_file(packets, working)
 
@@ -425,6 +485,8 @@ def render_packet(packet: dict) -> str:
         lines += ["", "## Fixer refused", "", fix["reason"]]
     if packet.get("options"):
         lines += _render_options(packet["options"])
+    if packet.get("import_resolution"):
+        lines += _render_import_resolution(packet["import_resolution"])
     if packet["kind"] == "agent":
         lines += ["", "## Files you may change", ""] + [f"- `{name}`" for name in packet["allowed_files"]]
         for name, excerpt in packet["excerpts"].items():
@@ -459,7 +521,8 @@ def append_ledger(workspace: Path, entry: dict, now=None) -> None:
 
 def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path | None = None, policy_path: Path | None = None,
            approve: list[str] | None = None, apply: bool = False, max_rounds: int = 5, write: bool = True,
-           draft_report: bool = False, providers: list[Path] | None = None, provider_index: Path | None = None, now=None) -> dict:
+           draft_report: bool = False, providers: list[Path] | None = None, provider_index: Path | None = None, now=None,
+           api_catalogue: dict | None = None) -> dict:
     workspace = Path(workspace).expanduser().resolve()
     working = workspace / "working"
     if not (working / "mod_info.json").is_file():
@@ -512,7 +575,14 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
             cache["value"] = content_options(working, vanilla_core=vanilla_core, provider_roots=roots, index_path=provider_index)
         return cache["value"]
 
-    packets = build_packets(workspace, findings, pending, vanilla_core=vanilla_core, now=now, options_for=options_for)
+    def imports_for(group: list[dict]) -> dict:  # the provider index is read only when a source-import-unresolved packet exists
+        from .substitutes import merged_providers
+
+        if "providers" not in cache:
+            cache["providers"] = merged_providers(roots, provider_index, exclude=working)
+        return import_resolution(group, cache["providers"], api_catalogue)
+
+    packets = build_packets(workspace, findings, pending, vanilla_core=vanilla_core, now=now, options_for=options_for, imports_for=imports_for)
     hardest = bucket(remaining_tiers)
     if hardest in ("none",):
         status = "UNATTENDED_DONE"

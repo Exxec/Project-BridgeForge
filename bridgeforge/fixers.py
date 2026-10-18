@@ -786,14 +786,20 @@ def _fix_undeclared_library_dependency(root: Path, options: dict) -> list[FileCh
     """
     from .scanner import LIBRARY_DEPENDENCY_IDS
 
-    findings = _findings_of(root, options, "undeclared-library-dependency")
-    if not findings:
-        raise FixerError("No undeclared-library-dependency finding for this mod.")
-
     to_add: dict[str, str] = {}  # dependency_id -> library display name
+    # Providers a person approved (item 73 B7: the one indexed mod that defines an unresolved import's class): declared by
+    # id and name exactly as given. The provider's version is shown in the packet, never written (no evidence yet that the
+    # game's dependency `version` is a minimum rather than an exact match).
+    for provider in options.get("declare_providers") or []:
+        if not isinstance(provider, dict) or not str(provider.get("id") or "").strip():
+            raise FixerError(f"declare_providers entry {provider!r} needs an id.")
+        to_add[str(provider["id"]).strip()] = str(provider.get("name") or provider["id"]).strip()
+    findings = [] if to_add else _findings_of(root, options, "undeclared-library-dependency")
+    if not findings and not to_add:
+        raise FixerError("No undeclared-library-dependency finding for this mod.")
     # A guard whose absent branch throws is a required library, not an optional one (Hiigaran Descendants, shaderLib).
     findings = [f for f in findings if "guard:present" not in (f.evidence or []) or "required:throws-without" in (f.evidence or [])]
-    if not findings:
+    if not findings and not to_add:
         raise FixerError("Every undeclared-library-dependency finding here is guarded (an optional integration); nothing is declared.")
     for finding in findings:
         library = next((item.split(":", 1)[1] for item in finding.evidence if item.startswith("library:")), None)

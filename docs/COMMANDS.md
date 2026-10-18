@@ -1262,6 +1262,7 @@ apply a SAFE, mechanical fixer for one supported finding id (dry-run diff by def
 | `--faction-file` FACTION_FILE | - | required for faction-known-lists-missing |
 | `--hull-zero-no-evidence` | - | carrier-bays-proposal: set 0 bays for every hull that has a hangar value but no LAUNCH_BAY slot and no variant wings (nothing can launch from it) |
 | `--hull` ID=N | repeatable | repeatable; required for carrier-bays-proposal, e.g. --hull my_carrier=4 (0-6, vanilla's own maximum) |
+| `--declare-provider` ID[=NAME] | repeatable | repeatable; undeclared-library-dependency: declare this indexed provider mod (a revive packet's import resolution names it) instead of a known library |
 | `--reference-core` REFERENCE_CORE | - | variant-op-over-budget: trim only variants that fit under this older starsector-core's costs (the ones RC8 pushed over) |
 | `--encoding` FILE=ENC | repeatable | repeatable; for data-file-not-utf8: re-encode FILE (relative to the mod) from ENC (cp1252, mac_roman, shift_jis, gbk, gb18030, latin-1) when a person has read it and named the encoding |
 | `--allow-shadowed-edit` | - | override the refusal to edit a loose script one of this mod's own jars, or a declared dependency's jar, already shadows (the edit has no effect unless the jar is also being rebuilt from the patched source) |
