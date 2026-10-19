@@ -125,8 +125,9 @@ the test suite while it does (hermeticity check), then commit them.
 - Workspaces get locked to non-admin sessions (twice: `Done\` zips and 14 workspaces; cause unknown). If `probe-group plan` says
   "Access is denied", run `tools\unlock-workspaces.ps1 -Apply` from an Administrator PowerShell (dry run without `-Apply`).
 - Existing archive handling is path-specific: ordinary group `record --archive` calls the move-aside path;
-  standalone `archive` refuses a collision unless a replacement mode is requested. Do not add `--refresh` as a shortcut:
-  its destructive implementation is the unresolved DOC-001 conflict noted above. Preserve earlier artifacts.
+  standalone `archive` refuses a collision unless a replacement mode is requested. `--refresh` now moves the old archive
+  aside (DOC-001, fixed 2026-10-18; see the note at the top of this file), but its first use on a real `Done/` archive is still
+  the check. Preserve earlier artifacts.
 - Edit code with the Write/Edit tools: `\n`, `\\` and `\"` inside shell heredoc Python are unescaped and corrupted files again
   and again. Run `python -m bridgeforge docs-index` after adding a check, and do not edit tracked files while the suite runs.
 - Provider sources: `probe-group plan` with `--provider-source` set to the real install stages MagicLib 1.5.6 over the rig's 1.5.7

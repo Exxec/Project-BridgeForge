@@ -125,6 +125,10 @@ the affected standalone/group refresh paths. This is a current implementation co
 enhancement. Do not use refresh on known-good archives; S1 finalization must correct and test preservation before
 relying on that path. The distinct non-refresh `move_aside=True` path does not establish safe refresh behavior.
 
+**Update 2026-10-18:** DOC-001 was fixed the same day: `refresh=True` now moves the old archive to
+`Done/_replaced-<date>/` and restores it if the new write fails (`tests/test_archive_preserves.py`). The text above
+records the state at audit time. It has not been exercised on a real `Done/` archive.
+
 ### G7. Operation still depends materially on one workstation and local state
 
 **Inspected:** E04/E09/E15, absolute local setup/hook conventions, private corpus and ignored rig/state files.

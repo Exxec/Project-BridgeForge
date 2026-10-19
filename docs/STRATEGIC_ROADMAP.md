@@ -5,6 +5,10 @@ Proposed 2026-10-17 for owner review. Read [VISION.md](VISION.md) for the destin
 This document sets direction over approximately 12-24 months; it does not allocate dates or imply approved staffing.
 S1-S4 are substantial product releases, not proposed Semantic Versioning numbers or calendar quarters.
 
+Factual status 2026-10-18 (no change of direction): S1-S4 themselves are not implemented. The item 75 contracts this document
+reuses (R1 run manifests, R2 scan registry, R5 `revise`, R6, R8) and DOC-001 were implemented offline that day with live gates
+pending; see [ROADMAP_STATUS](ROADMAP_STATUS.md).
+
 ## Strategic choice
 
 BridgeForge has accumulated powerful tools faster than it has established a common operator workflow. The next

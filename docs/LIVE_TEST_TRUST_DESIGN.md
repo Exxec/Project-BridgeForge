@@ -3,6 +3,10 @@
 **Built 2026-10-04:** all eleven parts (see ROADMAP item 36). Left for a live session: recording the RC8 core
 baseline (`bf-test.ps1 doctor` once with `rig-doctor --write-core-baseline`) and the first run records.
 
+**Extended 2026-10-18 (item 75 R1, offline; live pending):** a run record's hash of the working files at acceptance time is no
+longer the whole story. `run-manifest` records the staged rig files before launch, and `accept` / `probe-group record --accept`
+refuse a run without that manifest (legacy runs read provenance UNKNOWN). See the revival guide section 12.
+
 Live runs are the only proof of runtime behaviour, so a run is worth only as much as our certainty about what
 was tested. Five owner priorities close the gaps between "the probe passed" and "this mod, in this package,
 on vanilla RC8, with this save, works". Each section gives what exists today, the design, the refusal rules

@@ -1,8 +1,14 @@
 # BridgeForge automation plan: less hand work (ROADMAP item 73)
 
 Owner request 2026-10-14: "design a roadmap plan for further automation, fixers, checks and anything that would let
-bridgeforge do more in terms of hand work", then "write the plan so it can be implemented by any AI". Item 73 remains planned;
+bridgeforge do more in terms of hand work", then "write the plan so it can be implemented by any AI". Item 73 is implemented offline except B3 and E3 (status below);
 existing tools named below are foundations, not evidence that these extensions are complete.
+
+**Implementation status (2026-10-18):** all items except B3 and E3 were built offline on 2026-10-18 (A2 and H2 were
+superseded by R2 and R5; B2 added no rule). Nothing here has had its live acceptance run. The per-item line under each
+heading below summarizes this; the authoritative table is [ROADMAP_STATUS.md](ROADMAP_STATUS.md) and the live to-do list
+is `LOCAL_HANDOFF.md` section 0b. The specification text is unchanged.
+
 This file is the specification: each work item names the files to touch, the behaviour, the tests and when it is done. An
 implementer needs this file, `CLAUDE.md` and the code; no chat history.
 
@@ -10,9 +16,9 @@ Revision 2026-10-17: owner "ok add/modify roadmap with these recommendations and
 See [ROADMAP_IMPLEMENTATION_HANDOFF.md](ROADMAP_IMPLEMENTATION_HANDOFF.md), item 75, for R1-R8 implementation contracts.
 These refine items 70/73. No implementation or live validation is claimed by this planning revision.
 
-2026-10-18 source-audit warning: DOC-001 in `BUGS.md` records that current archive refresh deletes the old artifact,
-contrary to owner policy. R5/H2 finalization must fix preservation before using this path; do not refresh known-good
-archives in the meantime. This is a blocker within S1, not a new strategic direction or completed implementation.
+2026-10-18 source-audit note: DOC-001 in `BUGS.md` recorded that archive refresh deleted the old artifact, contrary to owner
+policy. It was fixed the same day (`archive --refresh` moves the old archive to `Done/_replaced-<date>/`); the first refresh of
+a real `Done/` archive is still the check (LOCAL_HANDOFF 0b).
 
 ## 1. Owner decisions (recorded 2026-10-14)
 
@@ -93,11 +99,15 @@ Each item: **Files**, **Behaviour**, **Tests**, **Done when**. Order is section 
 ### Phase A: measure and close the loop
 
 **A1. Fresh baseline (run, no code).**
+
+*Status: Run once 2026-10-14 (100 of 316 workspaces unattended); re-measure after the next real-queue pass. See ROADMAP_STATUS.*
 Run `python -m bridgeforge finding-stats --scan --write bridgeforge-state/finding-stats/<date>` in the background (about 45
 minutes; it checkpoints). Copy the bucket table and top-20 blockers into ROADMAP item 73 as the "before". Done when: the
 dated `FINDING_STATS.md` exists and the roadmap quotes it.
 
 **A2. Content-based scan freshness (R2).**
+
+*Status: Superseded by R2: `scan_registry.py` compares input content, not file times.*
 - Files: `bridgeforge/finding_stats.py`, `bridgeforge/cmd_scan.py`, scan report writer; details in item 75.
 - Behaviour: register scans regardless of output-folder name, with hashes of actual scan inputs, dependency/core inputs,
   target, scanner/check revisions and relevant options. Timestamps are hints, never freshness proof. Legacy scans without
@@ -108,6 +118,8 @@ dated `FINDING_STATS.md` exists and the roadmap quotes it.
 - Done when: CURRENT means matching content and analysis context; A1 distinguishes current, stale and unknown results.
 
 **A3. Why an auto-tier finding stays open.**
+
+*Status: Implemented offline 2026-10-18; live acceptance pending. `auto-open`.*
 - Files: new `bridgeforge/auto_open.py`, command `auto-open QUEUE [--json]` (own module, registered).
 - Behaviour: for each workspace and each open finding whose tier is `auto`, give one reason: `NOT_APPROVED` (no standing
   approval, not in `--approve` history), `FIXER_REFUSED` (newest ledger entry for that id has state `FIXER_REFUSED`; quote its
@@ -119,6 +131,8 @@ dated `FINDING_STATS.md` exists and the roadmap quotes it.
   with `escalation rule --approve-fixer` (decision 2 allows it when its ledger shows three verified applications).
 
 **A4. Promotion candidates with fixtures.**
+
+*Status: Implemented offline 2026-10-18; live acceptance pending. `finding-stats --promotion DIR`.*
 - Files: `bridgeforge/finding_stats.py` (where `promote_to_fixer` is built), new `bridgeforge/promotion.py`, flag
   `finding-stats --promotion DIR`.
 - Behaviour: for each `promote_to_fixer` id, collect each accepted attempt's diff (attempt folders that `escalation apply`
@@ -138,6 +152,8 @@ Automation tier stays recorded separately in `automation_tiers.json` (move an id
 fixer covers every supported A4 shape with explicit refusal boundaries and authorization; otherwise retain `code`).
 
 **B1. Generation and orbit guards** (`system-generation-unguarded`, `orbit-period-computed-unguarded`).
+
+*Status: Implemented offline 2026-10-18; live acceptance pending. REVIEW tier, approval-gated.*
 - Files: `bridgeforge/fixers_guards.py`; scanner checks are in `scan_campaign.py` (read them for the exact evidence fields).
 - Behaviour: (a) `system-generation-unguarded`: at the start of the flagged generate method, insert
   `if (sector.getStarSystem("<name>") != null) return;` where `<name>` is the system name literal the method passes to
@@ -153,6 +169,8 @@ fixer covers every supported A4 shape with explicit refusal boundaries and autho
 - Done when: on the 38 + 16 mods, `revive` applies it or records a refusal; `finding-stats` count drops.
 
 **B2. Compile-error rewrites** (`loose-script-compile-error`).
+
+*Status: No rule added: no RC8 member was involved (reason in `signature_rewrites.py`).*
 - Files: `bridgeforge/signature_rewrites.py` (`RULES`), `bridgeforge/fixers.py` (`_fix_rc8_signature_changed` already applies
   `RULES`); the API drift catalogue from P14 item 47.
 - Behaviour: add one `RULES` entry per A4 shape that maps a removed or changed RC8 member to its replacement. Each entry carries
@@ -162,6 +180,8 @@ fixer covers every supported A4 shape with explicit refusal boundaries and autho
 - Done when: those two mods compile clean through `revive` without an agent.
 
 **B3. Detach-before-save template** (`campaign-memory-live-object`; ROADMAP 68d).
+
+*Status: Not built (no `detach_template.py`); not listed as implemented in ROADMAP_STATUS.*
 - Files: new `bridgeforge/detach_template.py`, command `detach-template WORKSPACE --finding KEY --out DIR`.
 - Behaviour: from the finding's evidence (class, field names holding `MarketAPI`/`SectorEntityToken`/`CampaignFleetAPI`), write a
   wrapper plugin source `BfDetach<Mod>Plugin.java` that in `beforeGameSave` stores ids in memory and nulls the fields, in
@@ -174,6 +194,8 @@ fixer covers every supported A4 shape with explicit refusal boundaries and autho
   LOCAL_HANDOFF entry.
 
 **B4. Preset field merge** (`preset-entry-drops-vanilla-fields`).
+
+*Status: Implemented offline 2026-10-18; live acceptance pending. Approval-only; stale approvals refused (R4).*
 - Files: `bridgeforge/fixers_data.py`; scanner check in `scan_settings.py` or `scan_data_rules.py` (grep the id).
 - Behaviour: for a preset entry that replaces a vanilla entry whole, add back each vanilla field the mod's entry lacks, value
   from RC8's file (`options["vanilla_core"]`), keeping every mod value. Refuse when the vanilla core is not given. Insert with
@@ -183,6 +205,8 @@ fixer covers every supported A4 shape with explicit refusal boundaries and autho
 - Done when: the 20 mods are fixed or refused with a reason.
 
 **B5. Values from comparable rows** (`wing-op-cost-blank`, `carrier-bays-proposal`).
+
+*Status: Implemented offline 2026-10-18; live acceptance pending. `value-proposals`.*
 - Files: extend `_fix_wing_op_cost_blank` (fixers.py) to accept `options["proposals"]`; new `bridgeforge/value_proposals.py`,
   command `value-proposals WORKSPACE --write SHEET.csv` and `--apply SHEET.csv`.
 - Behaviour: for each blank OP cost, propose the median OP of the mod's own wings with the same role and size, else vanilla's
@@ -192,6 +216,8 @@ fixer covers every supported A4 shape with explicit refusal boundaries and autho
 - Done when: the 7 + 2 mods have a sheet; applying an approved sheet clears the finding.
 
 **B6. Missing weapon row** (`local-weapon-spec-unregistered`).
+
+*Status: Implemented offline 2026-10-18; live acceptance pending. Evidenced or approved rows only.*
 - Files: `bridgeforge/fixers_data.py`.
 - Behaviour: prefer an evidenced original/version/sibling row for the same weapon identity. Otherwise draft a comparable
   row as a proposal only, listing every copied value and its source. Type/size similarity does not establish balance.
@@ -201,6 +227,8 @@ fixer covers every supported A4 shape with explicit refusal boundaries and autho
 - Done when: each mod has an evidenced row or review proposal/refusal; balance inference is never applied unattended.
 
 **B7. Import resolution from the provider index** (`source-import-unresolved`).
+
+*Status: Implemented offline 2026-10-18; live acceptance pending. Used in `revive` packets.*
 - Files: `bridgeforge/revive.py` (`content_options`, `build_packets`), `bridgeforge/substitutes.py` (`merged_providers`).
 - Behaviour: when exactly one provider in the index exports the unresolved package, add a `fix_options` entry that runs the
   `undeclared-library-dependency` fixer with that provider's id and version. When none does, attach to the packet the API drift
@@ -214,6 +242,8 @@ Existing tools: `escalation queue` (which mods one decision would clear) and `es
 every escalated mod's baseline, or add a standing approval). Build on them; do not add a parallel mechanism.
 
 **C1. Decision sheet with precedent.**
+
+*Status: Implemented offline 2026-10-18; live acceptance pending. `escalation sheet`; standing rulings need a versioned semantic predicate (R4).*
 - Files: `bridgeforge/escalation_queue.py`, new subcommands `escalation sheet QUEUE --write SHEET.csv` and `escalation sheet
   --apply SHEET.csv`.
 - Behaviour: group open decision-tier findings across the queue by `(finding id, question shape)`, where the shape is the
@@ -232,12 +262,16 @@ every escalated mod's baseline, or add a standing approval). Build on them; do n
 - Done when: one sheet covers all 56 decision-tier mods.
 
 **C2. Precedent in packets.**
+
+*Status: Implemented offline 2026-10-18; live acceptance pending.*
 - Files: `bridgeforge/revive.py` (`render_packet`).
 - Behaviour: a decision packet gets a "Answered before" section: up to five earlier rulings for the same id (mod, answer, reason,
   date). Uses the C1 lookup function.
 - Tests: rendered packet contains the section when a ruling exists, none otherwise.
 
 **C3. Substitution proposals** (`content-reference-unresolved`).
+
+*Status: Implemented offline 2026-10-18; live acceptance pending. Includes the `content-reference-substitute` fixer.*
 - Files: `bridgeforge/substitutes.py`, `bridgeforge/renamed_ids.py`, `bridgeforge/provider_renamed_ids.py`, the removed-content
   catalogue (P14 item 8; grep `removed` in `bridgeforge/` for its file).
 - Behaviour: for each unresolved id, propose in order: a rename found by `find_renamed` between the reference rig the mod targets
@@ -249,6 +283,8 @@ every escalated mod's baseline, or add a standing approval). Build on them; do n
   Fatal at New Game, so a New Game run is the proof).
 
 **C4. Settings override classification** (`settings-json-override-breadth`).
+
+*Status: Implemented offline 2026-10-18; live acceptance pending.*
 - Files: the check (grep the id under `bridgeforge/scan_settings.py`).
 - Behaviour: classify each overridden key as `add` (a list that RC8 merges, the rule of ROADMAP P15 item 19 and `settings_keys.py`),
   `same` (value equal to RC8's) or `change`. Report only `change` keys at the current severity; `add`/`same` become
@@ -259,6 +295,8 @@ every escalated mod's baseline, or add a standing approval). Build on them; do n
 ### Phase D: input work drafted, owner reviews
 
 **D1. Description drafts** (decision 1: yes).
+
+*Status: Implemented offline 2026-10-18; live acceptance pending. `descriptions draft`.*
 - Files: `bridgeforge/descriptions.py` (`build_sheet`, `apply_draft`), `bridgeforge/sibling_assets.py` (already copies byte-identical
   description rows from sibling mods), new subcommand `descriptions draft WORKSPACE|QUEUE`.
 - Behaviour: for every missing description, fill `reports/description-drafts.md` in the table format `parse_draft` reads, from the
@@ -273,6 +311,8 @@ every escalated mod's baseline, or add a standing approval). Build on them; do n
   blocker.
 
 **D2. Translation with memory.**
+
+*Status: Implemented offline 2026-10-18; live acceptance pending. `translate-batch` reuses the memory.*
 - Files: `bridgeforge/translate_batch.py`, translation memory in `bridgeforge-state/translations` (read its format first).
 - Behaviour: before sending a chunk to the agent, replace every string already in the memory with its stored translation and send
   only new strings; after verification add new pairs to the memory. Report reused/new counts. The review sheet shows source and
@@ -281,6 +321,8 @@ every escalated mod's baseline, or add a standing approval). Build on them; do n
 - Done when: re-translating an already translated mod sends nothing to the agent.
 
 **D3. Shadowing triage** (`vanilla-path-shadowing`).
+
+*Status: Implemented offline 2026-10-18; live acceptance pending. Removal only with owner approval.*
 - Files: `bridgeforge/fixers.py` (`_fix_vanilla_path_shadowing`), `bridgeforge/reference_rigs.py`.
 - Behaviour: for each shadowed file compare it with the same path in the reference rig the mod targets. If byte-identical (the
   mod shipped an unchanged copy of old vanilla), the fixer moves it to `scratch/removed-shadow/` (explainable by
@@ -295,6 +337,8 @@ Existing: `escalation review` writes `ESCALATION_REVIEW_SHEET.md` (`escalation_r
 `escalation.verify` decides VERIFIED.
 
 **E1. Complete review sheet.**
+
+*Status: Implemented offline 2026-10-18; live acceptance pending. Report-only.*
 - Files: `bridgeforge/escalation_review.py`.
 - Behaviour: per attempt add the verifier result, files changed outside the packet's `allowed_files`, the scan delta (finding ids
   removed and added), and the compile-check result before/after. End with one line per packet: `AUTO-ACCEPTABLE` (E2 rules
@@ -302,6 +346,8 @@ Existing: `escalation review` writes `ESCALATION_REVIEW_SHEET.md` (`escalation_r
 - Tests: `tests/test_escalation_review.py`: one attempt per outcome.
 
 **E2. Auto-accept** (decision 3: yes).
+
+*Status: Report-only eligibility sheet built; `--auto-accept` refuses (`ENABLED = False`) until R1, R2 and R4 have live evidence.*
 - Files: `bridgeforge/escalation.py` (`run_packet`, `apply_verified`), flag `escalation run --auto-accept`.
 - Behaviour: apply a verified attempt without a person only when all hold: verifier VERIFIED; no file outside `allowed_files`;
   the packet's finding is gone and no new finding of tier above `none`; compile-check not worse; no `escalation_review.FLAGS`
@@ -317,6 +363,8 @@ Existing: `escalation review` writes `ESCALATION_REVIEW_SHEET.md` (`escalation_r
 - Done when: an agent batch applies passing attempts unattended and the sheet lists only the rest.
 
 **E3/E4. Lost features** (ROADMAP item 72).
+
+*Status: E4 built 2026-10-18 (`port-dropped-feature`, `recreation` packet skeleton); E3 (`legacy-event-system`) not built, it waits for the live proof.*
 - E4 first: finding `port-dropped-feature` (REVIEW) in a new `bridgeforge/scan_port.py`, run by `scan` when the workspace records
   a port source (read how Templars 0.9.8f's port is recorded). Lists classes by package, `events.json` ids, `reports.csv` ids,
   settings keys and `rules.csv` triggers present in the old version and absent in the new.
@@ -327,6 +375,8 @@ Existing: `escalation review` writes `ESCALATION_REVIEW_SHEET.md` (`escalation_r
 - Tests: `tests/test_scan_port.py` with two fixture versions; the packet skeleton has every heading.
 
 ### Phase F: checks for crash classes found by hand
+
+*Status (F1-F6): Implemented offline 2026-10-18; live proof is optional (LOCAL_HANDOFF 0b item 12). Check ids: `market-on-hyperspace-entity`, compiled saved-object references, provider renames for hull mods, commodities and conditions, `mission-variant-not-defined`, `mission-map-reference-missing`, `obfuscated-internal-api-resolved`.*
 
 Each: new id, tier, test naming it, corpus sweep for false positives before merging (`corpus-recheck` or `finding-stats --scan`
 on a sample; ROADMAP 60d found 60 false hits before narrowing). Report the sweep numbers in the commit body.
@@ -348,6 +398,8 @@ on a sample; ROADMAP 60d found 60 false hits before narrowing). Report the sweep
   informational with that evidence, missing ones stay.
 
 ### Phase G: live testing without a person
+
+*Status (G1-G6): Implemented offline 2026-10-18; every live gate pending (LOCAL_HANDOFF 0b items 6-8). G1 is `new_game_generic.py`, G2 `probe-group regress --changed-since`, G3 `rig-up`, G4 the `LAUNCH_NO_PROCESS` watchdog, G5 `probe-group record --accept`, G6 `raid_run.py` and the `bf_raid` test mod.*
 
 All need the rig; build and unit-test offline, then a LOCAL_HANDOFF entry for the live proof.
 

@@ -8,7 +8,8 @@ Owner-approved specification revision 2026-10-17: [ROADMAP_IMPLEMENTATION_HANDOF
 item 75, refines H1.5/H1.6 (content identities and all acceptance paths), H3.2/H3.3 (run evidence and current statuses),
 and H4 (isolated restore proof). Its R1-R8 acceptance conditions take precedence over weaker original wording here.
 In particular, an acceptance-time working hash is not launch provenance, a link is not live proof, and snapshot creation
-is not restore qualification. These extensions are planned, not newly implemented by this document update.
+is not restore qualification. Status 2026-10-18: R1 (run manifests, `run-manifest`, `accept --rig`) and R8 (`snapshot-restore-check`) are implemented
+offline with their live gates pending; see ROADMAP_STATUS. Item 70's own sub-items are not individually re-audited here.
 
 ## What the evidence says
 

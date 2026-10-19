@@ -1,6 +1,20 @@
 # Implementation handoff: trust before unattended mutation
 
-ROADMAP item 75. Planned 2026-10-17; no R1-R8 implementation is claimed here.
+ROADMAP item 75. Planned 2026-10-17. Implementation status 2026-10-18 follows; the contracts below are unchanged.
+New names in the contracts that are listed as implemented here now exist in the code; the live gates are still pending.
+
+| Contract | State 2026-10-18 | Where |
+|---|---|---|
+| R1 run-input provenance | Implemented offline, live pending. `run_manifest.py` (`run-manifest prepare/release/check`); `accept` needs `--rig` and a manifest; legacy runs read provenance UNKNOWN. The startup-marker echo of the manifest id is not built | `tests/test_run_manifest.py` |
+| R2 scan registry | Implemented. `scan_registry.py`, CURRENT/STALE/UNKNOWN/INCOMPLETE; `finding-stats --rescan-stale` registers workspaces | `tests/test_scan_registry.py` |
+| R3 auto-accept policy | Report-only. `escalation_policy.py`; `escalation run --auto-accept` refuses (`ENABLED = False`) | `tests/test_escalation_auto_accept.py` |
+| R4 semantic rulings and refusals | Implemented for C1, B1, B4, B5, B6, D3 | tests named in the item 73 commits |
+| R5 revision lifecycle | Implemented offline, live pending. `revise prepare/finalize/status/migration` | `tests/test_revise.py` |
+| R6 save-upgrade scenarios | Implemented offline. `save-upgrade plan/evaluate`; no in-game evidence emitter yet | `tests/test_save_upgrade.py` |
+| R7 status reconciliation | Initial table in `ROADMAP_STATUS.md`; the per-sub-item audit of item 70 is still open | `ROADMAP_STATUS.md` |
+| R8 restore exercise | Implemented offline. `snapshot-restore-check`; best verdict RESTORED_OFFLINE | `tests/test_snapshot_restore.py` |
+
+Live acceptance of each row is the numbered list in `LOCAL_HANDOFF.md` section 0b; none of it has been run.
 Owner: "ok add/modify roadmap with these recommendations and if possible a plan on how to implement for other agent."
 This authorizes roadmap/specification changes. It does not approve publishing, archiving untested revisions,
 changing gameplay, editing real saves or widening the existing unattended-action policy.
@@ -18,10 +32,10 @@ The 2026-10-17 review found these concrete starting points:
   A log plus the current hash alone does not prove that the run used those bytes. Extend all acceptance paths.
 - `finding_stats._latest_scan` searches `reports/scan-*/bridgeforge.compat.json`. The EPTA follow-up scan was stored
   under `reports/owner-followup-scan-20261017/`; folder-name discovery misses it.
-- Item 73 E2 is still a specification. Existing verifier/review functions provide scan/diff evidence, not a general
+- (State at 2026-10-17; E1/E2 report-only eligibility was built 2026-10-18 and `--auto-accept` refuses.) Item 73 E2 was a specification. Existing verifier/review functions provide scan/diff evidence, not a general
   proof of behavior. Missing checks must not become successful unattended acceptance.
 - Item 73 H2's original bump-then-archive operation could require a live run for a version it had just created.
-- Source audit 2026-10-18: DOC-001 in `BUGS.md` establishes that archive `refresh=True` deletes the prior artifact;
+- (Fixed 2026-10-18: refresh now moves the old archive to `Done/_replaced-<date>/`; see `BUGS.md`.) Source audit 2026-10-18: DOC-001 in `BUGS.md` establishes that archive `refresh=True` deletes the prior artifact;
   it does not preserve it as policy requires. R5/S1 must correct preservation before relying on this path. Documentation
   and helper existence do not satisfy that acceptance criterion; do not refresh known-good archives meanwhile.
 - Zorg bf.10 has a local executable 119-assertion migration harness and a package-entry audit. It has no observed

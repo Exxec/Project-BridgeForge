@@ -1,6 +1,7 @@
 # Next milestone proposal: one reproducible revival case
 
 S1 of the [strategic roadmap](STRATEGIC_ROADMAP.md). Proposed for owner review, 2026-10-17; implementation has not begun.
+Factual status 2026-10-18: S1's shared case/qualification contracts are not built; the item 75 building blocks it reuses (R1, R2, R5) and the DOC-001 fix exist offline with live gates pending ([ROADMAP_STATUS](ROADMAP_STATUS.md)).
 This is the next significant product objective, not a request to finish every item in the tactical backlog.
 
 ## Outcome
@@ -20,6 +21,11 @@ Concrete prerequisite identified 2026-10-18: DOC-001 (`BUGS.md`) records that ar
 previous artifact despite the owner preservation contract. This blocks relying on that path for S1 finalization.
 Fix preservation and its failure/retry tests within the milestone; do not use refresh on known-good archives meanwhile.
 This addendum records evidence and a blocker within S1; it does not change strategic direction or start implementation.
+
+**Update 2026-10-18:** DOC-001 is fixed (`archive --refresh` moves the old archive to `Done/_replaced-<date>/`,
+`tests/test_archive_preserves.py`); it has not been exercised on a real `Done/` archive. The shared case and qualification
+contracts of S1 are still not implemented. Items 73 and 75 (R1-R6, R8) were implemented offline the same day; see
+`ROADMAP_STATUS.md`.
 
 ## Evidence that selects this milestone
 
