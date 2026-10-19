@@ -20,6 +20,31 @@ EVIDENCE = (re.compile(r"tests/[\w/]*test_\w+|\bTests?:|`tests\.test_"), re.comp
             re.compile(r"docs/[\w\-/]+\.md"))
 DEFAULT_ROADMAP = Path("ROADMAP.md")
 DEFAULT_BASELINE = Path("tests") / "roadmap_lint_baseline.json"
+# The roadmap is paged to stay under 64k tokens per file (owner 2026-10-18): ROADMAP.md, ROADMAP-2.md, ... Navigation
+# notes sit between these markers, and a page that starts inside a section repeats its heading with "(continued)".
+NAV = re.compile(r"<!-- page-nav:start -->.*?<!-- page-nav:end -->\n?", re.S)
+CONTINUED_HEADING = re.compile(r"\A\s*## [^\n]* \(continued\)\n\n?")
+
+
+def roadmap_pages(first: Path) -> list[Path]:
+    """`first` and its continuation pages `<stem>-2<suffix>`, `<stem>-3<suffix>`, ... in order."""
+    first = Path(first)
+    pages, n = [first], 2
+    while (page := first.with_name(f"{first.stem}-{n}{first.suffix}")).is_file():
+        pages.append(page)
+        n += 1
+    return pages
+
+
+def roadmap_text(first: Path) -> str:
+    """The whole roadmap as one text: every page joined, navigation notes and repeated '(continued)' headings removed."""
+    parts = []
+    for i, page in enumerate(roadmap_pages(first)):
+        part = NAV.sub("", page.read_text(encoding="utf-8").replace("\r\n", "\n"))
+        if i:
+            part = CONTINUED_HEADING.sub("", part)
+        parts.append(part.strip("\n"))
+    return "\n\n".join(parts) + "\n"
 
 
 def items(text: str) -> list[dict]:
@@ -62,7 +87,7 @@ def add_parser(subcommands) -> None:
 
 
 def run_cli(args: argparse.Namespace) -> int:
-    found = violations(Path(args.roadmap).read_text(encoding="utf-8"))
+    found = violations(roadmap_text(Path(args.roadmap)))
     tolerated = load_baseline(args.baseline)
     new = [v for v in found if v["key"] not in tolerated]
     if args.json:
@@ -76,6 +101,6 @@ def run_cli(args: argparse.Namespace) -> int:
 
 if __name__ == "__main__":
     if "--write-baseline" in sys.argv:
-        found = violations(DEFAULT_ROADMAP.read_text(encoding="utf-8"))
+        found = violations(roadmap_text(DEFAULT_ROADMAP))
         atomic_write_json(DEFAULT_BASELINE, {"schema_version": 1, "items": sorted(v["key"] for v in found)})
         print("wrote", DEFAULT_BASELINE, len(found))

@@ -8,7 +8,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from bridgeforge.cli import main
-from bridgeforge.roadmap_lint import items, load_baseline, violations
+from bridgeforge.roadmap_lint import items, load_baseline, roadmap_pages, roadmap_text, violations
 from tests.support import resolved_temp_dir
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -41,8 +41,24 @@ class RoadmapLintTests(unittest.TestCase):
             with redirect_stdout(io.StringIO()):
                 self.assertEqual(main(["roadmap-lint", "--roadmap", str(roadmap), "--baseline", str(baseline)]), 0)
 
+    def test_a_paged_roadmap_is_read_as_one_text_without_its_navigation_notes(self) -> None:
+        # Owner 2026-10-18: the roadmap is paged under 64k tokens; a Done item without evidence on a later page must
+        # still be found, and the repeated "(continued)" heading must not create an item or a violation of its own.
+        nav = "<!-- page-nav:start -->\n> Page {} of 2.\n<!-- page-nav:end -->\n"
+        with resolved_temp_dir() as root:
+            first = root / "ROADMAP.md"
+            first.write_text("# Roadmap\n\n" + nav.format(1) + "\n## Track\n\n" + SAMPLE.split("3. ")[0], encoding="utf-8")
+            (root / "ROADMAP-2.md").write_text(nav.format(2) + "\n## Track (continued)\n\n3. " + SAMPLE.split("3. ", 1)[1],
+                                               encoding="utf-8")
+            self.assertEqual([p.name for p in roadmap_pages(first)], ["ROADMAP.md", "ROADMAP-2.md"])
+            text = roadmap_text(first)
+            self.assertNotIn("page-nav", text)
+            self.assertNotIn("(continued)", text)
+            self.assertEqual({v["key"].split("|")[0] for v in violations(text)}, {"2", "4b"})
+            self.assertEqual(len(items(text)), 7)
+
     def test_the_real_roadmap_has_no_new_done_item_without_evidence_and_the_baseline_only_shrinks(self) -> None:
-        text = (ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+        text = roadmap_text(ROOT / "ROADMAP.md")  # every page of the paged roadmap
         tolerated = load_baseline(ROOT / "tests" / "roadmap_lint_baseline.json")
         current = {v["key"] for v in violations(text)}
         self.assertEqual(sorted(current - tolerated), [], "a Done item needs a test file, a Tests: line, a live test id or a docs/ file")

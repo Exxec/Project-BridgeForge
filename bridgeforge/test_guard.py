@@ -16,7 +16,7 @@ import time
 
 RESULT_FILE = Path("bridgeforge-state") / "last-suite.json"
 # Changes to these never invalidate a suite result: records and prose, not code the tests exercise.
-RECORD_ONLY_PREFIXES = ("docs/", "ROADMAP.md", "CHANGELOG.md", "MOD_CHANGELOG.md", "README.md", ".gitignore",
+RECORD_ONLY_PREFIXES = ("docs/", "ROADMAP.md", "ROADMAP-", "CHANGELOG.md", "MOD_CHANGELOG.md", "README.md", ".gitignore",
                         "bridgeforge/release_policy.json", "bridgeforge/automation_tiers.json")
 
 
