@@ -40,9 +40,17 @@ that every selected target has been live-qualified.
 
 The convention-layout workflow uses `intake` then `revive` to scan/fix/rescan and prepare unresolved owner/agent packets.
 Only approved finding families can be applied unattended. Live acceptance and publication remain separate gates.
-See the guide before applying or launching anything. Known archive-retention conflict: **do not use `archive --refresh`
-or `probe-group record --archive --refresh` on a known-good archive**; the current implementation deletes the old
-archive rather than preserving it as the owner contract requires. See [open issue DOC-001](BUGS.md).
+See the guide before applying or launching anything. `archive --refresh` and `probe-group record --archive --refresh`
+move the previous archive to `Done/_replaced-<date>/` and put it back if the new write fails (DOC-001, fixed 2026-10-18;
+[BUGS.md](BUGS.md)); this has been tested offline and not yet exercised on a real `Done/` archive.
+
+**Trust gates added 2026-10-18 (offline; live runs pending).** Acceptance of a live run now needs a run manifest that binds
+the run to the staged rig files (`run-manifest prepare|release|check`, `accept --rig`, `probe-group record --accept`).
+Scan freshness is judged by input content through `scan-registry.json` (`finding-stats --rescan-stale`). A revision is
+prepared, tested and then finalized without changing the tested bytes (`revise prepare|finalize`). Auto-acceptance of agent
+changes is report-only: `escalation run --auto-accept` refuses until its prerequisites have live evidence. Details and the
+command sequence are in the [revival guide](docs/BRIDGEFORGE_REVIVAL_GUIDE.md) section 12; status per item is in
+[ROADMAP_STATUS](docs/ROADMAP_STATUS.md).
 
 ## Convention-layout intake and revival
 

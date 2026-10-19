@@ -17,10 +17,11 @@ $rig  = "C:\Users\exxec\Documents\Project BridgeForge\In operation\_rig"  # isol
 
 ## 0. Safety rules (read once)
 
-**Known implementation conflict (2026-10-18, DOC-001 in `BUGS.md`):** the owner contract requires preserving old archives,
-but `archive --refresh` currently deletes the old archive. Do not use standalone or group refresh on a known-good archive
-until the preservation fix is implemented and validated. Ordinary preparation/testing does not require refresh.
-The long-term S1 convergence and the stronger item 75 acceptance contracts remain planned, not guarantees of current tools.
+**Archive refresh (DOC-001, fixed 2026-10-18):** `archive --refresh` and `probe-group record --archive --refresh` move the
+old archive to `Done/_replaced-<date>/<Mod>[-N]` and put it back if the new write fails; nothing is deleted. This is tested
+offline (`tests/test_archive_preserves.py`) and has not yet been exercised on a real `Done/` archive, so check
+`_replaced-*` after the first real refresh. The long-term S1 convergence remains proposed, and the trust gates of
+section 12 are offline-tested with their live runs still pending (`docs/LOCAL_HANDOFF.md` section 0b).
 
 - **Your real Starsector install is read-only.** BridgeForge only ever reads it (`--vanilla-core`, `--source-mods`).
 - **Test rigs must be isolated.** A rig is a folder with `run-java25.bat`, `mods/`, `logs/`, `saves/` and a `starsector-core` **junction** to the real install. The junction is what keeps saves inside the rig. `boot-test`, `probe-config` and `compat-set` refuse to run when it's missing.
@@ -168,7 +169,8 @@ python -m bridgeforge fix "<mod_dir>" --finding <id>            # preview (diff 
 python -m bridgeforge fix "<mod_dir>" --finding <id> --apply    # write + backup + re-scan
 ```
 
-Only SAFE, mechanical fixes are supported. Any other id is refused, with the list:
+Only supported finding ids are accepted; any other id is refused with the full list (`fix --help` prints it too, 64 ids on
+2026-10-18). The original mechanical ones, with their extra options:
 
 | Finding | Extra options |
 |---|---|
@@ -179,6 +181,13 @@ Only SAFE, mechanical fixes are supported. Any other id is refused, with the lis
 | `procgen-planet-row-missing` / `procgen-star-row-missing` | `--vanilla-core $core --type-id <custom_type> --from-vanilla-id <closest_vanilla_type>` (clones vanilla's row with spawn frequency 0) |
 | `faction-known-lists-missing` | `--vanilla-core $core --faction-file <data/world/factions/x.faction>`; refuses if any id is unresolved |
 | `mod-info-triage-banner` | none |
+
+Fixers added by item 73 (offline-tested 2026-10-18) refuse whatever they cannot prove. These are REVIEW tier, so they run
+only with an approval: `system-generation-unguarded` and `orbit-period-computed-unguarded` (guards),
+`preset-entry-drops-vanilla-fields` (field-specific approval, three-way evidence, stale approvals refused),
+`wing-op-cost-blank` and `carrier-bays-proposal` (values come from `value-proposals`, section 12),
+`local-weapon-spec-unregistered` (a row from evidence or an approved sibling) and `content-reference-substitute`
+(from `substitution-proposals`). `--reference-core`, `--substitutions` and `--providers` carry their extra inputs.
 
 Anything else (REVIEW or MANUAL) needs a human or agent decision. Use the dossier.
 
@@ -229,7 +238,8 @@ bridgeforge escalation run  "In operation/MyMod" --all --agent "..." --apply
 The agent works in a copy under `scratch/escalations/`. BridgeForge rejects edits outside the
 packet's files, rescans the copy, and keeps the change only if the finding is gone and nothing new
 appeared. Kept changes are REVIEW: they still need the live test. Every attempt is logged in
-`reports/escalations/ledger.jsonl`.
+`reports/escalations/ledger.jsonl`. `--auto-accept` is not enabled: it refuses and names its prerequisites (item 75 R1, R2, R4).
+`escalation review WORKSPACE` writes the review sheet, including a report-only ELIGIBLE / NOT ELIGIBLE verdict.
 
 `finding-stats` looks across the whole queue. It shows how many mods could run unattended, which
 finding would unlock the most mods if it had a fixer, and which fixes agents keep making (write
@@ -456,6 +466,83 @@ python -m bridgeforge release … --apply                                       
 - Copy good test saves into `In operation/save_corpus/<mod-id>/`.
 - `release` (dry run) shows every gate passing. It covers the baseline scan, jar-audit, the build tag, copy-drift, the save corpus and the licence.
 - Then run `release … --apply`. Exigency is refused by the licence gate (local-only).
+
+## 12. The trust-gated workflow (items 73 and 75)
+
+Everything here was built offline on 2026-10-18 and unit-tested. The live proof of each step is a numbered entry in
+`docs/LOCAL_HANDOFF.md` section 0b and has not been run: treat these as IMPLEMENTED (offline), not VERIFIED (live).
+
+**Scan freshness: scan registry, rescan-stale, auto-open.** Each scan is registered in `<workspace>/reports/scan-registry.json`
+with a fingerprint of every input it read. A stored scan is CURRENT, STALE (inputs changed), UNKNOWN (legacy, no fingerprint)
+or INCOMPLETE; file times never decide. Until a queue is registered, every real workspace reads UNKNOWN.
+
+```powershell
+python -m bridgeforge finding-stats --rescan-stale --write <dir> --vanilla-core $core   # long: run in the background; resumes if interrupted
+python -m bridgeforge auto-open "In operation"            # why each open auto-tier finding is still open (STALE_SCAN ... UNEXPLAINED)
+python -m bridgeforge finding-stats --promotion <dir>     # which verified agent edits share a shape: fixer candidates
+```
+
+**Decisions answered once.** `escalation sheet QUEUE --write SHEET.csv` lists every open decision-tier finding grouped by
+question, with earlier rulings as precedent; answer the rows and run `escalation sheet --apply SHEET.csv`. An untouched
+suggestion is not an answer unless `confirm=yes`. A standing ruling for other mods needs a versioned semantic predicate and
+three agreeing rulings from independent mods; `escalation revoke` withdraws one together with everything derived from it.
+`substitution-proposals WORKSPACE --vanilla-core $core --write FILE.json` proposes replacements for unresolved content ids
+(`approved: false` until a person edits it). `value-proposals WORKSPACE --write SHEET.csv`, then `--apply SHEET.csv`
+(`--dry-run` prints the diffs), fills blank wing op costs and carrier bay counts from comparable rows once a person sets
+`approved`. `shadow-triage WORKSPACE --vanilla-core $core` gives a three-way view of shadowed vanilla files; removal needs
+`--approve PATH --reason ...`.
+
+**Drafted input.** `descriptions draft TARGET` writes `reports/description-drafts.md` from another version of the mod, then a
+sibling mod, then (unless `--no-crafted`) an agent-crafted text marked crafted. Review it, then
+`descriptions apply WORKSPACE DRAFT`. `translate-batch` reuses a translation memory.
+
+**Preparing a rig and a live run.**
+
+```powershell
+python -m bridgeforge rig-up $rig --mods <mod_id> --probe-config   # sync, enable dependencies, write the probe config; records rig_up_state.json
+python -m bridgeforge probe-group plan
+python -m bridgeforge probe-group install <group>                  # or rig-up for an ad-hoc set of mods
+python -m bridgeforge probe-group live <TESTID>                    # plays the run; prepares and releases the run manifest itself
+python -m bridgeforge probe-group record <TESTID> --accept --note "what was run and seen"
+```
+
+`run-manifest prepare|release|check RIG RUN_ID` is the same binding done by hand; `tools/bf-test.ps1 launch`, `boot-test` and
+`probe-group live` call it for you. The manifest hashes the files staged in the rig, the enabled list, the probe config and
+the launcher; the rig belongs to the run until it is released, and `rig-up` and `probe-group install` refuse meanwhile.
+`accept` now needs `--rig` and the manifest: a run without one is not accepted, and legacy runs read as provenance UNKNOWN.
+`record --accept` carries probe FAIL lines or caught exceptions only when an earlier acceptance of the same mod version covers
+them. Changing a shipped file afterwards turns the run STALE (PREDICTED from the design; the live check is LOCAL_HANDOFF 0b
+item 1).
+
+Unattended extras, each with its own live acceptance step: `probe-group regress --changed-since COMMIT` reruns only what
+changed (a regression writes `_regress/REGRESSION_HOLD.json` and blocks the next run until `--clear-hold`); the launch watchdog
+ends a run with no java process as `LAUNCH_NO_PROCESS`; a generic New Game fallback drives total conversions it has no special
+case for; `raid_run` and the `bf_raid` test mod force a raid on a market.
+
+**Revising a shipped mod: revise.** Use this instead of bump-and-archive:
+
+```powershell
+python -m bridgeforge revise prepare "In operation\<Mod>" "what changed"    # bumps the version once; journals the previous archive and the candidate hash
+#   run the live test of exactly that candidate (above); baseline-accept if a baseline is stale
+python -m bridgeforge revise finalize "In operation\<Mod>" --revision <ID> --test-id <TESTID>   # changelog, archive, tested-bytes check, readme copies, snapshot
+python -m bridgeforge revise migration "In operation\<Mod>" --reason "..."   # or --pack FILE: needed when the revision drops ids or classes of the archived build
+python -m bridgeforge revise status "In operation\<Mod>"
+```
+
+`finalize` never edits the tested bytes, refuses if they differ from the candidate, keeps the old archive in
+`Done/_replaced-*`, resumes after a failed step through its journal, and does not push. If the working copy changed after
+`prepare`, use `prepare --refresh-candidate`; the earlier test evidence is then invalidated.
+
+**Saves and backups.** `save-upgrade plan SPEC` shows the ordered stages and per-case expectations of a copied-save upgrade
+(eight cases). `save-upgrade evaluate SPEC EVIDENCE --run-id ID --run-hash HASH` judges a run's evidence; without EVIDENCE the
+answer is LIVE_PENDING. Proxy checks stay PROXY_ONLY and are never reported as VERIFIED; there is no in-game evidence emitter
+yet. `snapshot-restore-check SNAPSHOT --to <new empty folder> --source-root <repo>` restores a `state-snapshot` into a fresh
+folder and hashes it: the best offline verdict is RESTORED_OFFLINE, and `recoverable` stays false until a rig scenario has run
+in the copy.
+
+**Not enabled or not built.** Auto-acceptance of agent changes is report-only (`--auto-accept` refuses). The
+`legacy-event-system` check (item 72 E3) is not built. `port-dropped-feature` (E4, REVIEW) needs a `reports/PORT_SOURCE.json`
+(`docs/PORT_SOURCE_FORMAT.md`) before it reports anything.
 
 ## 11. Troubleshooting
 

@@ -96,10 +96,10 @@ in a cloud session. Build and test what you can, then add an entry to `docs/LOCA
 
 ## Layout
 
-- `bridgeforge/` the package. Commands: `cli.py` is 60 lines; every command's parser and handler lives in a
+- `bridgeforge/` the package. Commands: `cli.py` is 56 lines; every command's parser and handler lives in a
   `cmd_*.py` or its own module and is listed in `cli_commands.COMMAND_MODULES` (a module defines
   `add_parser(subcommands)` and `run_cli(args)`; a new command is a module plus one line there). Checks:
-  `scanner.py` keeps `scan_mod`, `_scan_jars` and re-exports every moved name; the checks live in 20
+  `scanner.py` keeps `scan_mod`, `_scan_jars` and re-exports every moved name; the checks live in 25
   `scan_*.py` modules (no module imports `scanner`). `fixers.py` holds the `fix` command's rewrites.
 - `tests/` unittest suite; `tests/support.py` has `resolved_temp_dir()` and `link_dir()`.
 - `probe-mod/` the in-game probe (Java, public API only); built by `build-probe-mod`.

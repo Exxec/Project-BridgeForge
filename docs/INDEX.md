@@ -10,7 +10,7 @@ proposed work and dated evidence. It does not implement the case lifecycle or re
 - [Revival guide](BRIDGEFORGE_REVIVAL_GUIDE.md): current operator commands; use `--help` for exact options.
 - [Commands](COMMANDS.md) and [checks](CHECKS.md): generated references; validate with `python -m bridgeforge docs-index --check`.
 - [Current status](ROADMAP_STATUS.md) and [local handoff](LOCAL_HANDOFF.md): evidence state and local tasks, not blanket completion claims.
-- [Bug ledger](../BUGS.md): DOC-001 is an open S1 archive-preservation blocker. Do not use refresh on known-good archives.
+- [Bug ledger](../BUGS.md): DOC-001 (archive refresh deleted the old archive) was fixed 2026-10-18 and moves it to `Done/_replaced-<date>/`; not yet exercised on a real `Done/` archive.
 
 ## Direction, governance and implementation plans
 
@@ -21,7 +21,8 @@ proposed work and dated evidence. It does not implement the case lifecycle or re
 - [Root roadmap](../ROADMAP.md): authoritative accumulated decisions/history. [docs/ROADMAP.md](ROADMAP.md) and
   [completion log](ROADMAP_COMPLETION_LOG.md) are historical tranche records, not competing current backlogs.
 - [Automation plan](AUTOMATION_PLAN.md), [item 75 implementation handoff](ROADMAP_IMPLEMENTATION_HANDOFF.md),
-  [hardening plan](HARDENING_PLAN.md): tactical specifications; supporting commands do not prove extensions are built.
+  [hardening plan](HARDENING_PLAN.md): tactical specifications. Items 73 and 75 were implemented offline on 2026-10-18 (per-item
+  status lines in each; table in [ROADMAP_STATUS](ROADMAP_STATUS.md)); their live acceptance is pending.
 - [Execution efficiency plan](EXECUTION_EFFICIENCY_PLAN.md): S2 bounded concurrency, analysis reuse, resource budgets
   and recovery; extends implemented workers without changing qualification or live-run policy.
 - Local `docs/REVIVAL_WORKFLOW.md` and revival/escalation templates: complexity, routing and plan requirements.

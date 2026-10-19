@@ -3,7 +3,8 @@
 This document describes the repository itself. A separate `AGENTS.md` documents how to
 operate this repo (CLI conventions, repo conventions, workflows, tooling).
 
-Status: **source-audited 2026-10-18** at `3342654d`. This is a repository map, not proof that all workflows are
+Status: **source-audited 2026-10-18** at `3342654d`, then command, module and archive notes updated against `c62c82a6`
+(items 73 and 75, offline). This is a repository map, not proof that all workflows are
 integrated or live-qualified. Strategic limitations and evidence are in `docs/ARCHITECTURE_GAPS.md`; S1 convergence
 is proposed in `docs/NEXT_MILESTONE.md`. The committed agent companion is `CLAUDE.md`; `AGENTS.md` is local-only.
 
@@ -29,8 +30,8 @@ top-level command names to modules. `tests/test_cli_golden.py` checks command/su
 
 ## 2. Command catalogue
 
-**164 top-level commands**, counted from `COMMAND_MODULES` on 2026-10-18: 153 in 12 `cmd_*.py` modules and 11 in
-eight other modules. Nested subcommands are a different count. See generated `docs/COMMANDS.md` for current options.
+**173 top-level commands**, counted from `COMMAND_MODULES` at `c62c82a6` (2026-10-18): 154 in 13 `cmd_*.py` modules and 19 in
+16 other modules (the earlier count of 164 predates items 73 and 75). Nested subcommands are a different count. See generated `docs/COMMANDS.md` for current options.
 
 ### 2a. Command groups by topic (`cmd_*.py`)
 
@@ -48,24 +49,44 @@ eight other modules. Nested subcommands are a different count. See generated `do
 | `cmd_corpus.py` | dependency-substitutes, provider-index, supersession, finding-stats, dependency-graph, corpus-recheck, sibling-assets, vendor-copy, revival-report-draft, diff-data, rebuild-from-reference, corpus-index, content-diff, verify-shadow, vendor-plan | 15 |
 | `cmd_archive.py` | audit-shipped, audit-explain, archive, relink, bump-version, declare-providers, close, restore-from-done, promote, board, intake, archive-preflight, archive-stage, build-tag, release, release-policy, done-audit, fold | 18 |
 | `cmd_revive.py` | revive-review, mod-changelog, ready-list, revive-queue, revive, escalation | 6 |
+| `cmd_shadow.py` | shadow-triage | 1 |
 
 Top-level command counts were checked against `COMMAND_MODULES` in `bridgeforge/cli_commands.py`.
 
-### 2b. Other command modules (not all single-command or named `*_report.py`)
+### 2b. Other command modules (each defines its own `add_parser`/`run_cli`)
 
 | Module | Commands | Count |
 |---|---|---|
 | `atlas_report.py` | `atlas` | 1 |
+| `substitution_proposals.py` | `substitution-proposals` | 1 |
 | `baseline_audit.py` | `baseline-audit`, `baseline-accept` | 2 |
 | `rig_reset.py` | `rig-reset` | 1 |
+| `rig_up.py` | `rig-up` | 1 |
+| `run_manifest.py` | `run-manifest` (`prepare`, `release`, `check`) | 1 |
+| `revise.py` | `revise` (`prepare`, `finalize`, `status`, `migration`) | 1 |
 | `live_ledger.py` | `live-ledger` | 1 |
 | `roadmap_lint.py` | `roadmap-lint` | 1 |
 | `agent_diff_check.py` | `agent-diff-check` | 1 |
+| `auto_open.py` | `auto-open` | 1 |
 | `move_machine.py` | `migrate-inventory`, `relocate`, `migrate-verify` | 3 |
 | `state_snapshot.py` | `state-snapshot` | 1 |
+| `snapshot_restore.py` | `snapshot-restore-check` | 1 |
+| `save_upgrade.py` | `save-upgrade` (`plan`, `evaluate`) | 1 |
+| `value_proposals.py` | `value-proposals` | 1 |
 
 `atlas` is a single subcommand that routes to the functions in `bridgeforge/atlas.py`
 (`atlas.py` itself contains no CLI subparser).
+
+### 2c. Trust and evidence modules added by items 73 and 75 (library modules, offline-tested; live gates pending)
+
+- `run_manifest.py` binds a run to the staged rig files; `live_accept.py` and `probe_group.py` consume it through one evaluator.
+- `scan_registry.py` registers scans with input fingerprints (`scan-registry.json`); `finding_stats.py` and `auto_open.py` read it.
+- `escalation_policy.py` holds the report-only auto-accept gates (`ENABLED = False`); `escalation_review.py` writes the review sheet.
+- `new_game_generic.py`, `raid_run.py` (with `probe-mod/raid-mod/bf_raid`) and the `LAUNCH_NO_PROCESS` watchdog in `boot_test.py`
+  support unattended live runs.
+- `descriptions_draft.py`, `translation_memory.py`, `scan_shadowing.py`, `scan_hyperspace_market.py`, `scan_mission_map.py`,
+  `scan_mission_variants.py`, `scan_port.py`, `fixers_guards.py`, `fixers_presets.py`, `fixers_substitute.py` and
+  `signature_rewrites.py` hold the new drafts, checks and fixers.
 
 ## 3. The package (`bridgeforge/`)
 
@@ -103,5 +124,6 @@ Neither layout should be passed blindly to commands expecting the other. Logical
 case are proposed under S1; no physical workspace migration has been implemented by this document.
 
 Qualification/release paths also have different contracts; source/compile/static/package/save/live evidence are
-separate. DOC-001 in `BUGS.md` records the archive-refresh retention conflict. Module reshuffling is not a substitute
+separate. DOC-001 in `BUGS.md` (archive refresh deleted the old archive) was fixed 2026-10-18: refresh now moves it to
+`Done/_replaced-<date>/`; it has not been exercised on a real `Done/` archive. Module reshuffling is not a substitute
 for addressing these S1 workflow blockers. This architecture map does not authorize application changes.
