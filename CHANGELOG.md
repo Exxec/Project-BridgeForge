@@ -7,7 +7,7 @@
   inputs (`run-manifest`, `accept --rig`); `revise prepare|finalize` with a journal; `rig-up`; `probe-group regress
   --changed-since` and `record --accept`; `auto-open`; `finding-stats --promotion`; `value-proposals`; `escalation sheet`
   with semantic-predicate standing rulings; report-only auto-accept eligibility (`--auto-accept` refuses until R1/R2/R4 are
-  proven); `descriptions draft`; translation-memory reuse; shadowing triage; `save-upgrade plan|evaluate`;
+  proven); `descriptions draft`; translation-memory reuse; `shadow-triage`; `substitution-proposals`; `save-upgrade plan|evaluate`;
   `snapshot-restore-check`; new fixers (generation and orbit guards, preset field merge, evidenced weapon rows,
   content-reference substitute) that refuse anything they cannot prove; new checks `market-on-hyperspace-entity`,
   `mission-map-reference-missing`, `mission-variant-not-defined`, `port-dropped-feature`, `obfuscated-internal-api-resolved`,

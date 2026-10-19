@@ -49,7 +49,7 @@ Exit code 1 means a FAIL: fix it before testing.
 
 ## 1. Look at a mod: scan and dossier
 
-**`scan`** runs every static check (about 60) and writes a report.
+**`scan`** runs every static check (about 380 finding ids; the list is `docs/CHECKS.md`) and writes a report.
 
 ```powershell
 python -m bridgeforge scan "<mod_dir>" --vanilla-core $core --output .\scan-out
