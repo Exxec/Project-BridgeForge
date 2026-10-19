@@ -11,7 +11,26 @@ from bridgeforge.locks import _inside, _process_paths, _restart_manager, who_loc
 from tests.support import resolved_temp_dir
 
 
+def _bounded_process_paths(target, pids=(), timeout=30):
+    """Isolate native process queries so a stalled query cannot hang the suite."""
+    import json
+    result = subprocess.run(
+        [sys.executable, "-c",
+         "import json, sys; from pathlib import Path; "
+         "import psutil; from bridgeforge.locks import _process_paths; "
+         "psutil.process_iter = lambda: (psutil.Process(int(pid)) for pid in sys.argv[2:]); "
+         "print(json.dumps(_process_paths(Path(sys.argv[1]))))", str(target),
+         *(str(pid) for pid in pids)],
+        capture_output=True, text=True, timeout=timeout, check=True)
+    return json.loads(result.stdout)
+
+
 class LockTests(unittest.TestCase):
+    def test_process_query_timeout_is_a_failure(self):
+        with patch.object(subprocess, "run", side_effect=subprocess.TimeoutExpired("query", 30)):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                _bounded_process_paths("unused")
+
     @unittest.skipUnless(os.name == "nt", "requires Windows Restart Manager")
     def test_restart_manager_identifies_exclusive_file_owner(self):
         with resolved_temp_dir() as root:
@@ -72,9 +91,13 @@ class LiveProcessPathTests(unittest.TestCase):
             child = subprocess.Popen([sys.executable, "-c", "import sys; sys.stdin.read()"],
                                      cwd=inner, stdin=subprocess.PIPE)
             try:
-                found, _ = _process_paths(root)
+                found, _ = _bounded_process_paths(root, [child.pid])
             finally:
-                child.communicate(b"")
+                try:
+                    child.communicate(b"", timeout=5)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.communicate(timeout=5)
             match = [item for item in found if item["pid"] == child.pid]
             self.assertEqual(len(match), 1, found)
             self.assertIn("cwd", match[0]["sources"])
@@ -86,7 +109,7 @@ class LiveProcessPathTests(unittest.TestCase):
             with path.open("w", encoding="utf-8") as handle:
                 handle.write("fixture")
                 handle.flush()
-                found, _ = _process_paths(root)
+                found, _ = _bounded_process_paths(root, [os.getpid()])
             mine = [item for item in found if item["pid"] == os.getpid()]
             self.assertEqual(len(mine), 1, found)
             self.assertEqual(mine[0]["sources"], ["open_file"])
@@ -97,7 +120,7 @@ class LiveProcessPathTests(unittest.TestCase):
             target.mkdir()
             sibling.mkdir()
             with (sibling / "x.log").open("w", encoding="utf-8"):
-                found, _ = _process_paths(target)
+                found, _ = _bounded_process_paths(target, [os.getpid()])
             self.assertNotIn(os.getpid(), [item["pid"] for item in found])
 
 

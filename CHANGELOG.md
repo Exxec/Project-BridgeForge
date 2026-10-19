@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Lock-test reliability (ROADMAP item 77.3):** isolate native process queries with a 30-second deadline, query fixture
+  PIDs only, and bound fixture-child cleanup. Production lock diagnostics and package version remain unchanged.
+
 - **Less hand work and trust gates (ROADMAP items 73 and 75, offline; live runs pending):** scan registry with content
   fingerprints (`scan-registry.json`, CURRENT/STALE/UNKNOWN/INCOMPLETE); run manifests binding acceptance to the staged rig
   inputs (`run-manifest`, `accept --rig`); `revise prepare|finalize` with a journal; `rig-up`; `probe-group regress
@@ -16,8 +19,8 @@
 
 - **Documentation and proposed long-term strategy (ROADMAP item 75):** reconcile the README, architecture and operator
   guides with implemented behavior; add a documentation index and S1-S4 planning documents. S1 starts with a
-  reproducible revival case and shared qualification contracts. DOC-001 records the still-open destructive
-  `archive --refresh` behavior; do not refresh known-good archives. Source version remains 0.3.0; the latest
+  reproducible revival case and shared qualification contracts. DOC-001's archive preservation fix is implemented
+  offline; its first real archive refresh remains pending. Source version remains 0.3.0; the latest
   published tool release remains the separate v0.2.0 pre-release. No new runtime release is implied.
 
 - **`java-matrix mass --bundle` and the `miko` launchers (ROADMAP item 62 addendum):** unrelated mods boot together while screening and split only on a failure; `miko`/`miko-noprep` copy the owner's `Miko_Simple.txt` (with and without Prepatcher); fixed 4 GB heap per instance. Migration plan in `docs/MIGRATION_PLAN.md` (item 64).
