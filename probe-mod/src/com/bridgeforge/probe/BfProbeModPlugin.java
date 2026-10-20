@@ -20,6 +20,9 @@ public class BfProbeModPlugin extends BaseModPlugin {
     @Override
     public void onGameLoad(boolean newGame) {
         maybeStartCampaignProbe("onGameLoad");
+        if (RigGate.isRigEnabled()) {
+            SaveReloadStage.onGameLoad();
+        }
     }
 
     @Override
