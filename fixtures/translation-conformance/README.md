@@ -19,3 +19,6 @@ and apply against it. Changes to the shared method require a failing
 fixture/test in both repositories first. These fixtures establish only
 their stated conformance boundary; real-mod and live-game validation are
 separate.
+
+The additive [schema-v1 extension profile](SCHEMA_V1_EXTENSIONS.md) and its two JSON fixtures were added on 2026-10-19.
+They cover text lines, loose classes and role/group metadata without changing the original 18-unit corpus.

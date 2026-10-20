@@ -1,0 +1,147 @@
+{
+  "fixture_version": 1,
+  "schema_version": 1,
+  "input_files": {
+    "mod_info.json": "eyJpZCI6ImV4dGVuc2lvbi1maXh0dXJlIiwibmFtZSI6IkV4dGVuc2lvbnMiLCJ2ZXJzaW9uIjoiMSJ9",
+    "data/missions/demo/mission_text.txt": "77u/CeS7u+WKoSAlcyAgDQpFbmdsaXNoCuOAgOWGjeasoQkNCg==",
+    "data/strings/nested/legacy.txt": "ICC+yc7Esb4NCoEwhDKx373ngTCEMgo=",
+    "classes/Loose.class": "yv66vgAAADQACAEADHNhbXBsZS9Mb29zZQcAAQEAEGphdmEvbGFuZy9PYmplY3QHAAMBAA/kuK3mloflrZfnrKbkuLIIAAUBAAzkuI3lupTlr7zlh7oAIQACAAQAAAAAAAAAAA=="
+  },
+  "expected_export": {
+    "entries": [
+      {
+        "id": "class:classes/Loose.class#5",
+        "file": "classes/Loose.class",
+        "kind": "class",
+        "context": {
+          "cp_index": 5
+        },
+        "source": "中文字符串",
+        "translation": ""
+      },
+      {
+        "id": "text:data/missions/demo/mission_text.txt@1",
+        "file": "data/missions/demo/mission_text.txt",
+        "kind": "text-line",
+        "context": {
+          "line": 1
+        },
+        "source": "任务 %s",
+        "translation": ""
+      },
+      {
+        "id": "text:data/missions/demo/mission_text.txt@3",
+        "file": "data/missions/demo/mission_text.txt",
+        "kind": "text-line",
+        "context": {
+          "line": 3
+        },
+        "source": "再次",
+        "translation": ""
+      },
+      {
+        "id": "text:data/strings/nested/legacy.txt@1",
+        "file": "data/strings/nested/legacy.txt",
+        "kind": "text-line",
+        "context": {
+          "line": 1
+        },
+        "source": "旧文本",
+        "translation": ""
+      },
+      {
+        "id": "text:data/strings/nested/legacy.txt@2",
+        "file": "data/strings/nested/legacy.txt",
+        "kind": "text-line",
+        "context": {
+          "line": 2
+        },
+        "source": " 边界 ",
+        "translation": ""
+      }
+    ],
+    "file_hashes": {
+      "classes/Loose.class": "32c5de74cd97ae1db6f807303a7ae789983e656b30f66f23f9ead37985d71c79",
+      "data/missions/demo/mission_text.txt": "2b71fabb82f282376b4c33029950793c295031273c0518a87fd12f26d400e5df",
+      "data/strings/nested/legacy.txt": "532c756c4a24a17fb7efdc26b0ec683ca92a095cf87a45485a962856714a2b66"
+    },
+    "unreadable": [],
+    "entry_count": 5,
+    "unique_source_count": 5
+  },
+  "translated": {
+    "schema_version": 1,
+    "mode": "TRANSLATION_EXPORT",
+    "mod_id": "extension-fixture",
+    "source_language": "zh",
+    "target_language": "en",
+    "instructions": "Translate each entries[].source into natural Starsector English in entries[].translation (or fill glossary[source] once for repeated strings). Keep %s/%d/$variables/\\u0001 markers, ids, file paths and punctuation structure unchanged. json-key entries are identifiers used as keys (e.g. designTypeColors): translate them exactly like the matching tech/manufacturer text.",
+    "file_hashes": {
+      "classes/Loose.class": "32c5de74cd97ae1db6f807303a7ae789983e656b30f66f23f9ead37985d71c79",
+      "data/missions/demo/mission_text.txt": "2b71fabb82f282376b4c33029950793c295031273c0518a87fd12f26d400e5df",
+      "data/strings/nested/legacy.txt": "532c756c4a24a17fb7efdc26b0ec683ca92a095cf87a45485a962856714a2b66"
+    },
+    "unreadable": [],
+    "entry_count": 5,
+    "unique_source_count": 5,
+    "entries": [
+      {
+        "id": "class:classes/Loose.class#5",
+        "file": "classes/Loose.class",
+        "kind": "class",
+        "context": {
+          "cp_index": 5
+        },
+        "source": "中文字符串",
+        "translation": "Literal text"
+      },
+      {
+        "id": "text:data/missions/demo/mission_text.txt@1",
+        "file": "data/missions/demo/mission_text.txt",
+        "kind": "text-line",
+        "context": {
+          "line": 1
+        },
+        "source": "任务 %s",
+        "translation": "Mission %s"
+      },
+      {
+        "id": "text:data/missions/demo/mission_text.txt@3",
+        "file": "data/missions/demo/mission_text.txt",
+        "kind": "text-line",
+        "context": {
+          "line": 3
+        },
+        "source": "再次",
+        "translation": "Again"
+      },
+      {
+        "id": "text:data/strings/nested/legacy.txt@1",
+        "file": "data/strings/nested/legacy.txt",
+        "kind": "text-line",
+        "context": {
+          "line": 1
+        },
+        "source": "旧文本",
+        "translation": "Legacy text"
+      },
+      {
+        "id": "text:data/strings/nested/legacy.txt@2",
+        "file": "data/strings/nested/legacy.txt",
+        "kind": "text-line",
+        "context": {
+          "line": 2
+        },
+        "source": " 边界 ",
+        "translation": "Boundary"
+      }
+    ],
+    "glossary": {}
+  },
+  "expected_output_files": {
+    "classes/Loose.class": "yv66vgAAADQACAEADHNhbXBsZS9Mb29zZQcAAQEAEGphdmEvbGFuZy9PYmplY3QHAAMBAAxMaXRlcmFsIHRleHQIAAUBAAzkuI3lupTlr7zlh7oAIQACAAQAAAAAAAAAAA==",
+    "data/missions/demo/mission_text.txt": "77u/CU1pc3Npb24gJXMgIA0KRW5nbGlzaArjgIBBZ2FpbgkNCg==",
+    "data/strings/nested/legacy.txt": "ICBMZWdhY3kgdGV4dA0KQm91bmRhcnkK",
+    "mod_info.json": "eyJpZCI6ImV4dGVuc2lvbi1maXh0dXJlIiwibmFtZSI6IkV4dGVuc2lvbnMiLCJ2ZXJzaW9uIjoiMSJ9"
+  }
+}
