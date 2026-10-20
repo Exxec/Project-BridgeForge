@@ -51,6 +51,34 @@ counts taken from the candidate's `working/` data before launch; a shortfall FAI
 `original/` (by sub-folder for multi-mod packs): a data or script file in `original/` and absent from the archive needs a
 recorded removal (77.19) or the archive is refused. Run `done-audit --content-parity` once over all 160 `Done/`
 archives; each confirmed loss becomes a BUGS.md entry.
+- First pass done by hand 2026-10-20 (owner: "run a scan over all archived mods including ironclad"; static, offline;
+  each shipped zip against its own `original/`; local report `done-audit/DONE_AUDIT.md` in the session scratch).
+  154 folders: 124 CLEAN, 20 REVIEW, 5 LOSS_SUSPECTED, 5 UNDETERMINED; no `.bak` or orphaned fixer backup shipped.
+  - **All the Domain Drones 0.6: real loss** (FIX-001; restore done in `working/`, live run and refresh pending).
+  - **Templars 0.9.8f:** decided 2026-10-20 (Crusade re-created; reports/submarkets/console CSVs follow 0.9.9e).
+  - **Roider Armatura 0.2: intended retirement, unrecorded.** The Dragline (ship, variant, `ship_data.csv` row,
+    IndEvo whitelists, title-screen variant) was moved together to `scratch/retired/`; nothing shipped references it;
+    its sprite was left in `graphics/`. Needs a REMOVALS.json entry with the reason, and the sprite removed or kept.
+  - **SEEKER 0.3.0: owner decision needed.** The shipped mod lacks the "twig" campaign subsystem (5 classes:
+    `SKR_PersistentRoot`, `SKR_PersistentRootShip`, `SKR_CampaignTWIGEntity`, `SKR_TwigCampaignTracker`, `MemKeys`), the
+    `ART_dimention_armor` weapon and `data/config/twig/`. The workspace escalation flagged the persistent-root class as
+    save-risky; no record says the removal was decided. Compare with `Done/SEEKER-0.6` before deciding.
+  - **Ironclads v.11+bf.1: intended (REVIEW).** SystemBountyEvent replaced by RC8's SystemBountyManager (owner's
+    faithful-route decision 2026-10-04); FleetSpawner/TimeManager dead code reachable only through Barnard, whose
+    generation was already commented out in the original. The 25 rules.csv triggers come from cutting a 0.7 vanilla
+    copy of rules.csv down to Ironclads' own 170 rows; most have the same id in RC8, about 16 do not (comm-relay
+    sniffer, `dialogHegRelayInterference_*`, `cargoScanSuspicious`, `flavorTextMarketUmbra`) and were not reviewed one
+    by one: owner confirmation advised. REVIVAL_PLAN says FleetSpawner/TimeManager were "left as shipped" but they are
+    not in the zip (doc fix). The zip ships a stale `jars/IroncladsEcon - копия.jar` (remove on the next refresh).
+  - REVIEW, likely intended: Xenoargh AI Overhaul (53 classes) and FX Core (52), the RevenantLib fold; EPTA Consortium
+    (36) and 2.1.3 (14), Nomads (3), Neutrino 1.8.9 and Nostalgia (2 each), Another Random SWP and Tritachyon (1);
+    source-only omissions (Flu-X, Bricky Construction, RevenantLib `.java`); junk shipped (`.old`, copy files) in
+    Broken Star, Exigency 0.8, Jackundor's Advanced Arms, Leon Heavy Industries, Maelstrom Superweapons (older), Sylphon,
+    Neutrino 1.8.9.
+  - UNDETERMINED: Arkgneisis (`ArkLeg_dev`), BF-Legacy-Fleets, Nightcross, Omega Trauma (no original with the shipped
+    id); Station Augments 2.4.3+bf.1 has no zip and no ARCHIVE_NOTE.
+  - Next: write REMOVALS.json entries for the intended rows so they stop showing; add the junk-file and
+    copy-of-jar check to `archive-preflight`; turn this pass into `done-audit --content-parity --write DIR`.
 
 **77.19 Recorded removals.** Strip plans, RevenantLib folds, renamed ids and upstream removals (Templars 0.9.9e) write one
 line each to `reports/REMOVALS.json` (item, reason, decision source). The dropped-feature sweep (77.16), archive parity
