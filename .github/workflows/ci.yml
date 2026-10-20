@@ -40,7 +40,7 @@ jobs:
           python-version: "3.15"
       - name: Audit runtime dependencies for known vulnerabilities
         run: |
-          python -m pip install pip-audit .
+          python -m pip install pip-audit -e .
           python -m pip_audit --local --skip-editable
 
   coverage:
