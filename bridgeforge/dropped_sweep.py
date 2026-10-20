@@ -15,10 +15,11 @@ import time
 from pathlib import Path
 
 from .progress import Checkpoint, report
-from .removals import RemovalsError, load_removals, split_explained
+from .file_drops import dropped_files
+from .removals import CATEGORIES, RemovalsError, load_removals, split_explained
 from .safeio import atomic_write_json, atomic_write_text
 from .scan_json import _load_lenient_json_file
-from .scan_port import CATEGORIES, dropped_features, load_port_source, resolve_old_tree
+from .scan_port import dropped_features, load_port_source, resolve_old_tree
 
 VERDICTS = ("DROPS_UNEXPLAINED", "UNDETERMINED", "EXPLAINED", "CLEAN")
 SEARCH_DEPTH = 4
@@ -88,11 +89,11 @@ def _relative(path: Path, base: Path) -> str:
         return str(path)
 
 
-def check_workspace(workspace: Path) -> dict:
+def check_workspace(workspace: Path, vanilla_core: Path | None = None, *, auto_core: bool = False) -> dict:
     """The dropped-feature record of one workspace; reads only."""
     working = workspace / "working"
     row: dict = {"workspace": workspace.name, "verdict": "UNDETERMINED", "old_tree": None, "origin": "", "reason": "",
-                 "dropped": {}, "total": 0, "explained": 0, "unexplained": 0, "removals_error": ""}
+                 "dropped": {}, "files_core": "skipped", "total": 0, "explained": 0, "unexplained": 0, "removals_error": ""}
     choice = select_old_tree(workspace)
     if choice["tree"] is None:
         row["reason"] = choice["reason"]
@@ -102,7 +103,18 @@ def check_workspace(workspace: Path) -> dict:
         removals = load_removals(working)
     except RemovalsError as exc:
         removals, row["removals_error"] = [], str(exc)
-    split = split_explained(dropped_features(choice["tree"], working), removals)
+    core = vanilla_core
+    if core is None and auto_core:
+        from .reference_rigs import reference_core_for_game_version
+
+        info = _load_lenient_json_file(working / "mod_info.json")
+        core = reference_core_for_game_version(info.get("gameVersion") if isinstance(info, dict) else None)
+    row["files_core"] = "checked" if core is not None else "skipped"
+    dropped = dropped_features(choice["tree"], working)
+    files = dropped_files(choice["tree"], working, core)
+    if files:
+        dropped["files"] = files
+    split = split_explained(dropped, removals)
     row["dropped"] = split
     row["explained"] = sum(len(v["explained"]) for v in split.values())
     row["unexplained"] = sum(len(v["unexplained"]) for v in split.values())
@@ -119,7 +131,8 @@ def sort_rows(rows: list[dict]) -> list[dict]:
     return sorted(rows, key=lambda r: (VERDICTS.index(r["verdict"]), -r["unexplained"], -r["total"], r["workspace"].lower()))
 
 
-def sweep_queue(queue: Path, *, checkpoint: Path | None = None, quiet: bool = False) -> dict:
+def sweep_queue(queue: Path, *, checkpoint: Path | None = None, quiet: bool = False, vanilla_core: Path | None = None,
+                auto_core: bool = False) -> dict:
     workspaces = discover(queue)
     header = {"checkpoint": 1, "queue": str(queue.resolve()), "workspaces": [w.name for w in workspaces]}
     rows: list[dict] = []
@@ -128,7 +141,7 @@ def sweep_queue(queue: Path, *, checkpoint: Path | None = None, quiet: bool = Fa
             started, row = time.monotonic(), saved.get(workspace.name)
             resumed = row is not None
             if row is None:
-                row = check_workspace(workspace)
+                row = check_workspace(workspace, vanilla_core, auto_core=auto_core)
                 saved.add(workspace.name, row)
             rows.append(row)
             if not quiet:
@@ -158,6 +171,8 @@ def render_row(row: dict) -> list[str]:
     lines = [f"{head}: old tree {row['old_tree']} ({row['origin']}); {row['unexplained']} unexplained, {row['explained']} explained of {row['total']}"]
     if row["removals_error"]:
         lines.append(f"- REMOVALS.json refused, nothing counted as explained: {row['removals_error']}")
+    if row.get("files_core") == "skipped" and "files" in row["dropped"]:
+        lines.append("- files: no vanilla core given, so files that also exist in vanilla were not excluded (marked)")
     for category, entry in row["dropped"].items():
         lines += _item_lines(category, entry)
     return lines
@@ -180,6 +195,7 @@ def add_parser(subcommands) -> None:
     cmd.add_argument("--queue", type=Path, help="a folder of workspaces (In operation); sorted worst first")
     cmd.add_argument("--write", type=Path, metavar="DIR", help="with --queue: write DROPPED_FEATURES.md and dropped_features.json into DIR; progress is kept in DIR/DROPPED_FEATURES.partial.jsonl so an interrupted run resumes")
     cmd.add_argument("--restart", action="store_true", help="with --write: ignore an earlier interrupted run's partial file")
+    cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core; files under data/ that exist there are not drops (default: the registered reference rig for the mod's gameVersion; without any, file drops are marked unfiltered)")
     cmd.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     cmd.add_argument("--json", action="store_true")
 
@@ -192,7 +208,7 @@ def run_cli(args) -> int:
         if not (args.workspace / "working").is_dir():
             print(f"bridgeforge: {args.workspace} has no working/ folder", file=sys.stderr)
             return 2
-        rows = [check_workspace(args.workspace)]
+        rows = [check_workspace(args.workspace, args.vanilla_core, auto_core=True)]
         result = {"schema": 1, "queue": str(args.workspace), "workspaces": 1, "rows": rows,
                   "verdicts": {v: sum(1 for r in rows if r["verdict"] == v) for v in VERDICTS}}
     else:
@@ -202,7 +218,7 @@ def run_cli(args) -> int:
         checkpoint = args.write / CHECKPOINT_NAME if args.write else None
         if checkpoint and args.restart and checkpoint.is_file():
             checkpoint.unlink()
-        result = sweep_queue(args.queue, checkpoint=checkpoint, quiet=args.quiet)
+        result = sweep_queue(args.queue, checkpoint=checkpoint, quiet=args.quiet, vanilla_core=args.vanilla_core, auto_core=True)
         if args.write:
             atomic_write_text(args.write / "DROPPED_FEATURES.md", render_markdown(result))
             atomic_write_json(args.write / "dropped_features.json", result)

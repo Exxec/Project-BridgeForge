@@ -195,6 +195,16 @@ def _scan_orphaned_fixer_backups(root: Path, result: ScanResult) -> None:
         result.add(id="fixer-backup-orphaned", category="packaging", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation="A fixer backup (.pre-bf-fix-*.bak) has no file beside it, so the file the fixer repaired is missing and the mod would ship without it (All the Domain Drones lost its whole rules.csv this way). Restore the file from the backup, or from scratch/ if it was moved, and run the fix again; archive refuses until this is resolved.", evidence=orphans[:25] + ([f"... {len(orphans) - 25} more"] if len(orphans) > 25 else []))
 
 
+def _scan_removed_without_record(root: Path, result: ScanResult) -> None:
+    """A file under `scratch/removed/` with no `files` REMOVALS entry: a hand removal with no reason (ROADMAP 77.27, FIX-001)."""
+    from .hand_remove import unrecorded_removed_files
+
+    folders = [root] + ([root.parent] if root.name == "working" else [])
+    missing = sorted({path for folder in folders for path in unrecorded_removed_files(folder, root)})
+    if missing:
+        result.add(id="removed-without-record", category="packaging", severity="medium", classification="MANUAL", confidence="DETERMINISTIC", explanation="A file sits under scratch/removed/ but reports/REMOVALS.json has no `files` entry for it, so nobody can tell whether it was removed on purpose (a mistaken hand move shipped All the Domain Drones without rules.csv). Use `bridgeforge remove WORKSPACE PATH --reason TEXT`, or add a `files` entry with the reason, or move the file back.", evidence=missing[:25] + ([f"... {len(missing) - 25} more"] if len(missing) > 25 else []))
+
+
 _FULLWIDTH_NUMBER_CHARS = re.compile(r"[０-９，．。－＋％]")
 
 

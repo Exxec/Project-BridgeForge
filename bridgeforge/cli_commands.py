@@ -24,6 +24,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "agent_diff_check": ("agent-diff-check",),
     "auto_open": ("auto-open",),
     "dropped_sweep": ("dropped-features",),
+    "hand_remove": ("remove",),
     "move_machine": ("migrate-inventory", "relocate", "migrate-verify"),
     "state_snapshot": ("state-snapshot",),
     "snapshot_restore": ("snapshot-restore-check",),

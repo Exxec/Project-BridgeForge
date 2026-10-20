@@ -43,7 +43,7 @@ class OldTreeSelectionTests(unittest.TestCase):
             choice = select_old_tree(ws)
             self.assertEqual(choice["tree"], ws / "original/extracted/beta")
             row = check_workspace(ws)
-            self.assertEqual(sorted(row["dropped"]), ["classes", "rules.csv"])
+            self.assertEqual(sorted(row["dropped"]), ["classes", "files", "rules.csv"])
             self.assertNotIn("data.scripts.AlphaClass", row["dropped"]["classes"]["unexplained"])
 
     def test_multiple_roots_without_an_id_match_is_undetermined(self):
@@ -94,13 +94,14 @@ class RemovalsTests(unittest.TestCase):
     def test_items_and_patterns_explain_drops(self):
         with resolved_temp_dir() as root:
             ws = self._workspace(root)
-            self.assertEqual(check_workspace(ws)["unexplained"], 3)
+            self.assertEqual(check_workspace(ws)["unexplained"], 4)  # incl. the dropped Old.java file
             add_removals(ws / "working", [make_entry("rules.csv", item="CrusadeNews", reason="gone upstream", source="upstream"),
                                           make_entry("rules.csv", pattern="CrusadeE*", reason="gone", source="owner")])
             row = check_workspace(ws)
-            self.assertEqual((row["explained"], row["unexplained"]), (2, 1))
+            self.assertEqual((row["explained"], row["unexplained"]), (2, 2))
             self.assertEqual(row["dropped"]["classes"]["unexplained"], ["data.scripts.Old"])
-            add_removals(ws / "working", [make_entry("classes", pattern="data.scripts.*", reason="stripped", source="strip-plan")])
+            add_removals(ws / "working", [make_entry("classes", pattern="data.scripts.*", reason="stripped", source="strip-plan"),
+                                          make_entry("files", item="data/scripts/Old.java", reason="stripped", source="strip-plan")])
             self.assertEqual(check_workspace(ws)["verdict"], "EXPLAINED")
 
     def test_add_removals_skips_duplicates(self):
@@ -153,7 +154,8 @@ class QueueCommandTests(unittest.TestCase):
         _mod(queue / "Pack/working", "zzz")
         _mod(queue / "Explained/original/E", "e")
         _mod(queue / "Explained/working", "e", rules=None)
-        add_removals(queue / "Explained/working", [make_entry("rules.csv", pattern="*", reason="rules dropped", source="owner")])
+        add_removals(queue / "Explained/working", [make_entry("rules.csv", pattern="*", reason="rules dropped", source="owner"),
+                                              make_entry("files", pattern="*", reason="rules dropped", source="owner")])
         return queue
 
     def test_rules_csv_missing_is_unexplained_and_output_is_worst_first(self):
@@ -167,7 +169,7 @@ class QueueCommandTests(unittest.TestCase):
             data = json.loads((out / "dropped_features.json").read_text(encoding="utf-8"))
             self.assertEqual([r["workspace"] for r in data["rows"]], ["ATDD", "Pack", "Explained", "Clean"])
             self.assertEqual(data["rows"][0]["verdict"], "DROPS_UNEXPLAINED")
-            self.assertEqual(data["rows"][0]["unexplained"], 3)
+            self.assertEqual(data["rows"][0]["unexplained"], 4)
             self.assertEqual(data["verdicts"], {"DROPS_UNEXPLAINED": 1, "UNDETERMINED": 1, "EXPLAINED": 1, "CLEAN": 1})
             self.assertIn("[4/4]", err.getvalue())
             self.assertFalse((out / "DROPPED_FEATURES.partial.jsonl").exists())
