@@ -31,6 +31,69 @@ strip/remove wording, 200 with nothing. Reviewed so far:
   --queue`) that matches sub-folders, records intended removals (strip plans, RevenantLib folds) so they stop showing,
   and runs before `archive`; then review the remaining rows. Every confirmed loss gets a BUGS.md entry and a recreation
   or restore item.
+- Built 2026-10-20: `dropped-features WORKSPACE | --queue DIR [--write DIR]` (old tree: PORT_SOURCE, else the
+  `original/` mod root with the same mod id, else the only root, else UNDETERMINED) and `reports/REMOVALS.json` (77.19).
+  Real queue: 11 DROPS_UNEXPLAINED, 9 UNDETERMINED, 296 CLEAN; all Yunru parts CLEAN; All the Domain Drones CLEAN after
+  the FIX-001 restore. Unexplained to review: Xenoargh AI Overhaul (53 classes), Xenoargh FX Core (52), Templars 0.9.8f
+  (31, decided), Ironclads (4 classes, 25 rules), SEEKER (5), Better Deserving S-mods (4), Mirfak Parcel Service (4),
+  AI-War (2), Blackrock Drive Yards (2 settings), Maelstrom Imperium Unofficial Expansion (2). Not yet run before
+  `archive`; strip and fold emission into REMOVALS.json waits for the code that applies a strip or retires a folded mod.
+
+**Automation, gap coverage and hand-work reduction (proposed 2026-10-20, owner: "if there is further automation, gap
+coverage or things to make hand work easier please add to roadmap").** Each closes a gap this session hit by hand.
+
+**77.17 Live content parity (gap that let FIX-001 ship).** A LIVE_VALIDATED run proved boot and campaign load while the
+mod's whole `rules.csv` was missing. Extend the probe's `content-ids` milestone to count what the game loaded per mod
+(rules triggers, hulls, weapons, wings, industries, conditions, submarkets, planets/systems added) and compare with
+counts taken from the candidate's `working/` data before launch; a shortfall FAILs the run with the missing ids.
+
+**77.18 Archive content parity.** `archive-preflight` compares the archive's file list with `working/` and with
+`original/` (by sub-folder for multi-mod packs): a data or script file in `original/` and absent from the archive needs a
+recorded removal (77.19) or the archive is refused. Run `done-audit --content-parity` once over all 160 `Done/`
+archives; each confirmed loss becomes a BUGS.md entry.
+
+**77.19 Recorded removals.** Strip plans, RevenantLib folds, renamed ids and upstream removals (Templars 0.9.9e) write one
+line each to `reports/REMOVALS.json` (item, reason, decision source). The dropped-feature sweep (77.16), archive parity
+(77.18) and the escalation sheet read it, so intended removals stop showing and unexplained ones stand out.
+
+**77.20 Apply an owner decision draft.** Decisions are drafted as Markdown with checkboxes and then applied by hand
+(baseline keys, the reason in ESCALATION_REVIEW.md, ROADMAP_STATUS and LOCAL_HANDOFF lines). `decision apply DRAFT`
+reads the ticked boxes from a structured block in the draft and performs the matching actions (77.14 accept, schedule a
+roadmap line, add a rig step), printing what it changed. Unticked boxes do nothing.
+
+**77.21 Natural exit everywhere.** `tools/bf-test.ps1 launch` and `boot_test` still end the game with `taskkill /T /F`;
+route them through `exit_observation` so every live record can carry NATURAL/KILLED, not only `probe-group live
+--natural-exit`.
+
+**77.22 Evidence queue and rig-session planner.** `board --live-pending` gathers every LIVE PENDING / NOT_RUN gate from
+BridgeForge, Salvor, VoidSmith, SPW and Project Go status files (via a small machine-readable gate list per repo, R7),
+groups them by rig configuration (install, Java, launcher, LunaLib, enabled set) and prints one session checklist with
+the exact commands. Today the checklist is assembled by hand from five roadmaps.
+
+**77.23 Shared fixtures stay identical and line-ending proof.** The runtime-context fixture hash failed on Ubuntu CI
+because the Windows working copy had CRLF. Mark hashed fixture trees `-text` in `.gitattributes` (both here and in
+Project Go), and add a CI job that fetches Project Go at a pinned commit and fails when the shared
+`fixtures/translation-conformance` and `fixtures/runtime-context` differ by a byte.
+
+**77.24 Post-write verification for every backing-up writer.** FIX-001's guard (a written file must exist with the planned
+bytes, else stop with the backup kept) applies to `relink`, `patch-jar-class`, `translate-apply`, `revise finalize` and
+archive staging too; one shared helper in `safeio` and a ratchet test like the safe-write one.
+
+**77.25 Pre-commit lints what is committed.** The pre-commit hook runs `ruff check .` over the whole folder, so untracked
+agent scratch blocks unrelated commits (2026-10-20 needed `.gitignore` entries). Lint the staged and tracked files in the
+hook and leave whole-directory lint to 77.13's preflight report. Also track `tools/precommit-check.ps1` and
+`tools/prepush-check.ps1`: `/tools/*.ps1` ignores them, so worktrees and fresh clones get hooks that call a missing script.
+
+**77.26 Test hermeticity: reference-rig manifests.** `test_shadow_triage...test_without_a_reference_core_the_fixer_behaves_as_before`
+passes in a fresh worktree and fails in the owner's checkout, because `reference_rigs.reference_core_for_game_version`
+reads the repository's local, ignored reference-rig manifests. Tests must pass `repo_root` (or a fixture root) so local
+rigs cannot change their result; the suite's existing "Test hermeticity FAIL" check should catch this class.
+
+**77.27 Hand removals leave a record (FIX-001's cause).** Files moved into hand-made `scratch/removed/` folders
+(All the Domain Drones' repaired rules.csv, Aivon's special_items.csv, Yellowjackets' tpc.wpn) carry no reason, so a
+mistaken move shipped. Add `remove WORKSPACE PATH --reason` that moves the file to `scratch/removed/<date>/`, writes a
+`REMOVALS.json` entry (77.19) and refuses when the path is a data file the mod's own content references without a
+replacement; `fixer-backup-orphaned`'s sibling check flags any `scratch/removed/` file without a REMOVALS entry.
 
 **77.13 Proposed hygiene preflight (S4 supportability; scope/design still pending).** This audit found 21 Ruff errors in pre-existing untracked agent scripts, including syntax errors, while the isolated tracked checkout passed Ruff. Add a read-only preflight that reports tracked modifications, untracked code, ignored local evidence, interpreter/dependency availability and separate tracked-tree versus whole-directory lint results. It must never delete/move files, suppress whole-directory failures, stage unrelated work, or traverse private mod/save inputs. Reuse Git's file inventory and Ruff rather than inventing a second linter. Validate on synthetic dirty/untracked/ignored fixtures, filenames with spaces and Unicode, and missing tools; unavailable checks report INCOMPLETE. A future cleanup needs explicit file-level scope. This supports item 77.7's worktree rule without discarding agent work or hiding failing scripts.
 
