@@ -37,6 +37,8 @@ LOSS_CATEGORIES = ("rules.csv", "events.json", "reports.csv")  # an unexplained 
 HASH_LIMIT = 64 * 1024 * 1024  # larger files are matched by name only
 JAR_LIMIT = 256 * 1024 * 1024
 ROOT_DEPTH = 5
+READ_HAZARDS = frozenset({"archive-entry-limit", "archive-size-limit", "archive-path-traversal", "archive-symlink-member",
+                          "archive-duplicate-member", "archive-path-collision"})
 _JUNK_SUFFIXES = (".old", "~", ".orig")
 _ARCHIVE_SUFFIXES = (".zip", ".7z", ".rar")
 _JUNK_NAMES = frozenset({"desktop.ini", "thumbs.db", ".ds_store"})
@@ -110,9 +112,9 @@ def open_tree(path: Path) -> Iterator[Tree]:
         sizes = {p.relative_to(path).as_posix(): p.stat().st_size for p in path.rglob("*") if p.is_file()}
         yield Tree(sizes, lambda n: (path / n).read_bytes(), directory=path)
         return
-    preflight = inspect_zip_archive(path)
-    if not preflight["safe_to_stage"]:
-        raise ValueError("archive refused by preflight: " + ", ".join(f["id"] for f in preflight["findings"]))
+    hazards = sorted(f["id"] for f in inspect_zip_archive(path)["findings"] if f["id"] in READ_HAZARDS)
+    if hazards:  # shipped junk is reported by the audit, not a reason to skip it
+        raise ValueError("archive refused by preflight: " + ", ".join(hazards))
     with zipfile.ZipFile(path) as archive:
         members = {}
         for entry in archive.infolist():
@@ -230,7 +232,7 @@ def verdict_of(row: dict) -> str:
     unexplained = row.get("unexplained", {})
     if row["missing"] or row.get("orphans") or any(unexplained.get(c) for c in LOSS_CATEGORIES):
         return "LOSS_SUSPECTED"
-    if unexplained or row["shadow"] or row["renamed"] or row["junk"] or row["src"] or row.get("baks"):
+    if unexplained or row["shadow"] or row["renamed"] or row["junk"] or row["src"] or row.get("baks") or row.get("shipped_junk"):
         return "REVIEW"
     return "CLEAN"
 
@@ -240,7 +242,7 @@ def audit_shipped(shipped_path: Path, original_base: Path | None, *, name: str, 
     """Compare a shipped folder or zip with the originals under `original_base`. Never raises for an unreadable archive."""
     row = {"mod": name, "shipped": Path(shipped_path).name, "verdict": "UNDETERMINED", "notes": [], "roots": [], "determined": False,
            "missing": [], "explained_missing": [], "shadow": [], "renamed": [], "junk": [], "src": [], "unexplained": {}, "explained": {},
-           "baks": [], "orphans": [], "asset_deficit": {}}
+           "baks": [], "orphans": [], "asset_deficit": {}, "shipped_junk": []}
     try:
         with open_tree(Path(shipped_path)) as tree:
             _audit_tree(row, tree, original_base, vanilla_core, list(removals_dirs or []))
@@ -256,6 +258,7 @@ def _audit_tree(row: dict, tree: Tree, original_base: Path | None, vanilla_core:
 
     row["baks"] = [n for n in tree.sizes if _BACKUP.search(n)]
     row["orphans"] = orphaned_backups_in(list(tree.sizes))
+    row["shipped_junk"] = junk_members(list(tree.sizes))
     roots = tree.mod_roots()
     if not roots:
         row["notes"].append("no mod_info.json in the shipped tree")

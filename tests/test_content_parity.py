@@ -98,6 +98,12 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(loss["missing"], ["data/campaign/rules.csv"])
         self.assertIn("original matched as the only mod root (id differs)", wrong_id["notes"])
 
+    def test_shipped_junk_is_review_not_undetermined(self) -> None:
+        with resolved_temp_dir() as root:
+            row = self._audit(root, {"data/a.csv": "1"}, {"data/a.csv": "1", "jars/Foo - Copy.jar": "x"})
+        self.assertEqual(row["verdict"], "REVIEW")
+        self.assertEqual(row["shipped_junk"], ["M/jars/Foo - Copy.jar"])
+
     def test_folder_shipped_tree(self) -> None:
         with resolved_temp_dir() as root:
             original = _original(root, {"data/a.csv": "1", "data/gone.ship": "g"})
