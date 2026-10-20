@@ -23,6 +23,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "roadmap_lint": ("roadmap-lint",),
     "agent_diff_check": ("agent-diff-check",),
     "auto_open": ("auto-open",),
+    "dropped_sweep": ("dropped-features",),
     "move_machine": ("migrate-inventory", "relocate", "migrate-verify"),
     "state_snapshot": ("state-snapshot",),
     "snapshot_restore": ("snapshot-restore-check",),
