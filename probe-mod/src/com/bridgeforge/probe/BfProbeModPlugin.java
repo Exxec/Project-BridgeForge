@@ -39,5 +39,6 @@ public class BfProbeModPlugin extends BaseModPlugin {
             return;
         }
         Global.getSector().addTransientScript(new CampaignProbeScript());
+        Global.getSector().addTransientScript(new CampaignPerfScript());
     }
 }

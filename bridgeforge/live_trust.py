@@ -89,7 +89,7 @@ def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triag
                      probe_config: dict | None = None, core_baseline: Path | None = None, save_made_with: dict | None = None,
                      today: str | None = None, rig_state: dict | None = None, evidence: dict | None = None,
                      manifest: dict | None = None, process_exit_code: int | None = None,
-                     process_exit_observed: str | None = None) -> dict:
+                     process_exit_observed: str | None = None, campaign_perf: dict | None = None) -> dict:
     """Record one live run (36.6) and its noise check (36.9); returns the record. `rig_state` is what `rig-up` last recorded.
 
     `evidence` is `run_manifest.evaluate_run`'s result and `manifest` the run's pre-launch manifest (ROADMAP item 75 R1). A member's
@@ -140,6 +140,8 @@ def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triag
         "jvm_crashes": [{k: c.get(k) for k in ("file", "message", "top_mod")} for c in triage.get("jvm_crash_logs") or [] if c.get("during_this_log")],
         "known_noise": noise_check,
     }
+    if campaign_perf:  # 77.17b: the run's campaign frame-time summary; absent when the probe logged none
+        record["campaign_perf"] = campaign_perf
     if process_exit_observed is not None:
         record["process_exit_observed"] = process_exit_observed
     (live_dir / f"{test_id}.json").write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
