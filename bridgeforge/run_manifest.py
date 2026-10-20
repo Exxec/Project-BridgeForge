@@ -28,6 +28,7 @@ from pathlib import Path
 
 from .boot_test import _is_link
 from .safeio import atomic_write_json
+from .save_fingerprint import parse_fingerprint
 
 MANIFEST_VERSION = 1
 FILESET_ALGORITHM = "copy_drift.collect+sha256/1"
@@ -36,7 +37,7 @@ COMPLETED_SUFFIX = ".completed.json"
 OWNER_FILE = "run_owner.json"
 RIG_STATE_FILE = "rig_up_state.json"
 CONFIG_RELATIVE = Path("saves") / "common" / "bf_probe_config.data"
-MILESTONES = ("main_menu", "campaign_load", "save", "content_ids", "combat")
+MILESTONES = ("main_menu", "campaign_load", "save", "content_ids", "combat", "reload_after_save")
 # What a kind of run can show at all: a smoke boot passes its boot scenario but never a campaign, combat or save requirement.
 KIND_CAPABILITY = {
     "boot": {"main_menu"},
@@ -357,9 +358,10 @@ def _milestones(log: Path, mods_dir: Path | None) -> dict[str, bool]:
     triage = triage_log(log, mods_dir=mods_dir) if mods_dir is not None else triage_log(log)
     text = Path(log).read_text(encoding="utf-8", errors="replace")
     marks = triage["milestones"]
+    fingerprint = parse_fingerprint(text)
     return {"main_menu": bool(marks["main_menu_reached"]), "campaign_load": bool(marks["campaign_loads"]),
             "save": bool(marks["finished_saving_count"]), "content_ids": bool(_CONTENT_IDS.search(text)),
-            "combat": bool(_COMBAT.search(text))}
+            "combat": bool(_COMBAT.search(text)), "reload_after_save": bool(fingerprint and fingerprint["compare_observed"])}
 
 
 def evaluate_run(rig: Path, manifest: dict | None, log: Path, *, member_verdicts: dict[str, str] | None = None,
@@ -378,6 +380,7 @@ def evaluate_run(rig: Path, manifest: dict | None, log: Path, *, member_verdicts
         problems.append(f"log {log} is not the manifest's run log {manifest['log']}")
     log_info: dict = {"path": str(log), "sha256": None, "size": 0}
     milestones: dict[str, bool] = {m: False for m in MILESTONES}
+    fingerprint = None
     if log.is_file():
         stat = log.stat()
         log_info.update(sha256=_sha256_file(log), size=stat.st_size)
@@ -386,6 +389,7 @@ def evaluate_run(rig: Path, manifest: dict | None, log: Path, *, member_verdicts
         if stat.st_mtime + EPOCH_SLACK_SECONDS < float(manifest.get("created_epoch") or 0):
             problems.append("the log is older than the manifest: not written by this run")
         milestones = _milestones(log, mods_dir)
+        fingerprint = parse_fingerprint(log.read_text(encoding="utf-8", errors="replace"))
     else:
         problems.append(f"the run log {log} does not exist")
     for name in manifest["expected_milestones"]:
@@ -425,7 +429,7 @@ def evaluate_run(rig: Path, manifest: dict | None, log: Path, *, member_verdicts
         problems.append("the manifest names no target")
     status = "ACCEPTABLE" if not problems and any(m["ok"] for m in members.values()) else "REFUSED"
     return {"schema_version": 1, "mode": "RUN_EVIDENCE", "status": status, "run_id": manifest["run_id"], "manifest_id": manifest["manifest_id"],
-            "kind": manifest["kind"], "log": log_info, "milestones": milestones, "expected_milestones": manifest["expected_milestones"],
+            "kind": manifest["kind"], "log": log_info, "milestones": milestones, "fingerprint": fingerprint, "expected_milestones": manifest["expected_milestones"],
             "problems": problems, "members": members}
 
 

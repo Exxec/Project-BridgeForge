@@ -571,7 +571,7 @@ def sync_working_copy(working: Path, target: Path) -> str | None:
 def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install_probe: bool = True,
                   stage: bool = False, with_lunalib: bool = False, setups: list[str] | None = None,
                   expect_supply: list[str] | None = None, save_after_checks: bool = False, no_lunalib: bool = False,
-                  also_enable: list[str] | None = None) -> dict:
+                  also_enable: list[str] | None = None, save_reload_after_days: int = 0, save_reload_note: str = "") -> dict:
     """Copy/sync members into the rig, write the merged config, set enabled_mods.json. A group whose members
     need providers from the queue installs only with `stage` (`--stage-providers`), which copies and verifies them.
     `setups` (probe setup specs) and `expect_supply` ("commodity@industry") go into the merged config (probe 0.2.25)."""
@@ -615,6 +615,8 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     config["setups"] = [*config["setups"], *setups]
     config["expect_supply"] = sorted(set(config["expect_supply"]) | set(expect_supply))
     config["save_after_checks"] = bool(save_after_checks)  # probe 0.2.26: save once after the day-1 checks
+    if save_reload_after_days > 0:  # next probe version: fingerprint, save and reload stage (save_reload_run)
+        config["save_reload"] = {"after_days": int(save_reload_after_days), "slot_note": save_reload_note}
     common = rig / "saves" / "common"
     common.mkdir(parents=True, exist_ok=True)
     _reset_combat_round(common)

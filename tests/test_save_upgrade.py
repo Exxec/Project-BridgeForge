@@ -139,6 +139,61 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(evaluate_upgrade(_spec(), evidence, {"run_id": "r", "shipped_hash": H["old"]})["status"], "REFUSED")
 
 
+def _record(equal: bool = True, **over) -> dict:
+    block = {"compare_observed": True, "equal": equal, "diff_sections": [] if equal else ["markets"]}
+    record = {"run_id": "run-1", "status": "ACCEPTABLE", "shipped_hash": NEW, "milestones": {"reload_after_save": True}, "fingerprint": block}
+    return {**record, **over}
+
+
+class FingerprintEvidenceTests(unittest.TestCase):
+    def _status(self, record: dict, kind: str = "serialization", reload_kind: str = "proxy") -> dict:
+        evidence = _evidence(kind=kind)
+        for row in evidence["stages"]:
+            if row["stage"] == "reload_saved":
+                row["evidence_kind"] = reload_kind
+        evidence["fingerprint_records"] = [record]
+        return evaluate_upgrade(_spec(), evidence)
+
+    def test_an_observed_equal_bound_fingerprint_upgrades_a_proxy_reload_to_verified(self) -> None:
+        self.assertEqual(evaluate_upgrade(_spec(), self._proxy_reload())["status"], "PROXY_ONLY")
+        result = self._status(_record())
+        self.assertEqual(result["status"], "VERIFIED")
+        self.assertEqual(result["fingerprint_evidence"]["counted"], ["run-1"])
+
+    def _proxy_reload(self) -> dict:
+        evidence = _evidence()
+        next(r for r in evidence["stages"] if r["stage"] == "reload_saved")["evidence_kind"] = "proxy"
+        return evidence
+
+    def test_a_differing_fingerprint_fails_the_run(self) -> None:
+        result = self._status(_record(equal=False))
+        self.assertEqual(result["status"], "FAIL")
+        self.assertIn("markets", " ".join(result["failures"]))
+
+    def test_records_that_are_not_observed_and_bound_change_nothing(self) -> None:
+        for bad in (_record(status="REFUSED"), _record(run_id="other"), _record(shipped_hash=H["old"]),
+                    _record(milestones={"reload_after_save": False}), _record(fingerprint={"compare_observed": False, "equal": True})):
+            result = self._status(bad)
+            self.assertEqual(result["status"], "PROXY_ONLY", bad)
+            self.assertEqual(result["fingerprint_evidence"]["counted"], [])
+            self.assertTrue(result["fingerprint_evidence"]["rejected"])
+
+    def test_a_fingerprint_alone_is_still_live_pending(self) -> None:
+        result = evaluate_upgrade(_spec(), {"run_id": "run-1", "fingerprint_records": [_record()]})
+        self.assertEqual(result["status"], "LIVE_PENDING")
+        self.assertEqual(result["fingerprint_evidence"]["counted"], ["run-1"])
+
+    def test_cli_accepts_fingerprint_record_files(self) -> None:
+        with resolved_temp_dir() as base:
+            spec, record = base / "spec.json", base / "record.json"
+            spec.write_text(json.dumps(_spec()), encoding="utf-8")
+            record.write_text(json.dumps(_record()), encoding="utf-8")
+            out = io.StringIO()
+            with redirect_stdout(out), redirect_stderr(io.StringIO()):
+                code = main(["save-upgrade", "evaluate", str(spec), "--fingerprint-record", str(record), "--run-id", "run-1", "--run-hash", NEW, "--json"])
+        self.assertEqual((code, json.loads(out.getvalue())["fingerprint_evidence"]["counted"]), (1, ["run-1"]))
+
+
 class CliTests(unittest.TestCase):
     def _run(self, *argv: str) -> tuple[int, str]:
         out = io.StringIO()

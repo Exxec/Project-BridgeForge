@@ -83,6 +83,8 @@ def main_menu_target(buttons: list[tuple[float, float]], name: str) -> tuple[flo
     """The button by name from the RC8 main menu order: [Continue,] Tutorials, Missions, New Game, Load Game, Codex, Settings,
     Credits, Quit. Continue is only there with a save, so the list is read from the bottom."""
     order = ["Tutorials", "Missions", "New Game", "Load Game", "Codex", "Settings", "Credits", "Quit"]
+    if name == "Continue":  # first button, present only with a save (RC8-29: it loads the save the game last wrote or loaded)
+        return buttons[-len(order) - 1] if len(buttons) > len(order) else None
     if len(buttons) < len(order):
         return None
     tail = buttons[-len(order):]

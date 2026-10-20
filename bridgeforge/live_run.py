@@ -47,6 +47,7 @@ NEW_GAME_GRACE = 150.0  # seconds a fixed New Game flow gets to reach the campai
 MENU_LOADED = "Reading save data from"
 CAMPAIGN_END = "probe|INFO|campaign|END"
 COMBAT_END = "probe|INFO|combat|END"
+FINGERPRINT_SAVED = "fingerprint|INFO|save|cmdSave returned true"  # save_reload stage (next probe version)
 ROUND_LINE = re.compile(r"combat-round\|INFO\|round (\d+) of (\d+)")
 
 
@@ -372,7 +373,7 @@ def play_probe_combat(hands: Hands, rows_below: int = 0, total: int | None = Non
 
 def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: float = 600, combat_timeout: float = 240,
           generic_fallback: bool = True, new_game_grace: float = NEW_GAME_GRACE,
-          vanilla_rows: int = VANILLA_MISSION_ROWS) -> LiveResult:
+          vanilla_rows: int = VANILLA_MISSION_ROWS, save_reload: bool = False) -> LiveResult:
     """Run the whole live sequence against a started game whose stdout is `log`."""
     result = LiveResult("LIVE_STUCK", log=str(log))
 
@@ -400,6 +401,10 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
         tail = "; the generic New Game flow was tried and did not reach the campaign" if fallback_ran else ""
         return stuck("new-game", "no 'campaign END' probe line: a screen did not take the click, generation failed, or the probe is not enabled" + tail)
     result.stages.append("campaign")
+    if save_reload:  # the probe fingerprints and saves at day N; the reload is a second launch (save_reload_run)
+        if not wait_for(log, FINGERPRINT_SAVED, campaign_timeout, hands):
+            return stuck("fingerprint-save", "no 'fingerprint|save|cmdSave returned true' probe line: save_reload.after_days not reached or cmdSave failed")
+        result.stages.append("fingerprint-saved")
     to_mission_list(hands)
     rounds_total, round_no = 1, 0
     layout = mission_list_layout(_log_text(log), vanilla_rows)
@@ -493,7 +498,7 @@ def settle_exit(process, wait: float, *, sleep: Callable[[float], None] = time.s
 
 @contextlib.contextmanager
 def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", natural_exit: bool = False, exit_wait: float = 180,
-                 outcome: dict | None = None):
+                 outcome: dict | None = None, expected: tuple[str, ...] | None = None, scenario: str = "probe-group live"):
     """Start the rig game, click through the launcher, yield (log, hands, vanilla mission rows), then stop the rig's java and the
     launcher's whole tree. Refuses like boot_test: GameRefused with the reason.
 
@@ -518,7 +523,7 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
     # R1: record what is staged before anything starts; the rig belongs to this run until it is released below.
     try:
         prepare_run(rig, test_id, "live", targets=sorted(read_staging_state(rig).get("candidates") or {}), launcher=bat,
-                    expected=list(LIVE_EXPECTED_MILESTONES), scenario="probe-group live")
+                    expected=list(expected or LIVE_EXPECTED_MILESTONES), scenario=scenario)
     except ManifestError as exc:
         raise GameRefused(f"no pre-launch manifest: {exc}") from exc
     from .rig_prefs import pinned_launcher_prefs
@@ -572,13 +577,13 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
 
 
 def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240,
-             natural_exit: bool = False, exit_wait: float = 180) -> LiveResult:
+             natural_exit: bool = False, exit_wait: float = 180, save_reload: bool = False) -> LiveResult:
     """Play a group's live run (see drive) on a freshly started rig game, then stop it. With `natural_exit`, a finished run
     (LIVE_DONE) first waits for the game to be quit from its menu and records the observed exit (see running_game)."""
     outcome: dict = {}
     try:
         with running_game(rig, test_id, bat_name, natural_exit=natural_exit, exit_wait=exit_wait, outcome=outcome) as (log, hands, vanilla_rows):
-            result = drive(log, hands, menu_timeout=menu_timeout, vanilla_rows=vanilla_rows)
+            result = drive(log, hands, menu_timeout=menu_timeout, vanilla_rows=vanilla_rows, save_reload=save_reload)
             outcome["await_exit"] = result.verdict == "LIVE_DONE"
             return result
     except LaunchNoProcess as exc:

@@ -35,6 +35,8 @@ def add_parser(subcommands) -> None:
     group_install.add_argument("--setup", action="append", default=[], metavar="SPEC", help="probe setup applied once per save, as for probe-config --setup; also swap-industry:<from>:<to>:<count>[:<condition-prefix>] (probe 0.2.25); repeatable")
     group_install.add_argument("--also-enable", action="append", default=[], metavar="MOD_OR_SET", help="also enable this mod id (with its dependencies) or named set (aotd: Vaults of Knowledge, Toolbox fork, Prepatcher, BMO, Ashlib); repeatable; every id must be in the rig")
     group_install.add_argument("--save-after-checks", action="store_true", help="the probe saves the game once after the day-1 checks, so the save can be read and reloaded (probe 0.2.26)")
+    group_install.add_argument("--save-reload-after-days", type=int, default=0, metavar="N", help="opt in to the save-and-reload fingerprint stage: at in-game day N the probe logs a fingerprint, saves, and stores it; `live --save-reload` then reloads that save (next probe version)")
+    group_install.add_argument("--save-reload-note", default="", help="free text recorded with the fingerprint (slot or scenario note)")
     group_install.add_argument("--expect-supply", action="append", default=[], metavar="COMMODITY@INDUSTRY", help="the probe's market-supply check FAILs unless INDUSTRY supplies COMMODITY in some market (probe 0.2.25); repeatable")
     group_install.add_argument("--json", action="store_true")
     group_bisect = group_sub.add_parser("bisect", help="split a failed group into two new groups at the end of the plan, each dependency-closed (ROADMAP 36.8)")
@@ -66,6 +68,7 @@ def add_parser(subcommands) -> None:
     group_live.add_argument("--menu-timeout", type=int, default=240)
     group_live.add_argument("--natural-exit", action="store_true", help="after the run, do not kill the game: wait for you to quit it from the main menu and record its return code (NATURAL), or KILLED if it is still up after --exit-wait")
     group_live.add_argument("--exit-wait", type=int, default=180, help="with --natural-exit: seconds to wait for the game to exit by itself (default 180)")
+    group_live.add_argument("--save-reload", action="store_true", help="after the live run, start the game a second time, Continue the save the probe wrote at save_reload.after_days and wait for the fingerprint compare line (install with --save-reload-after-days); the reload run gets its own log <TESTID>-reload and manifest")
     group_live.add_argument("--rig", type=Path)
     group_live.add_argument("--queue", type=Path)
     group_live.add_argument("--json", action="store_true")
@@ -139,6 +142,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 plan = json.loads((args.plan or queue / "PROBE_GROUPS.json").read_text(encoding="utf-8"))
                 result = install_group(plan, args.group, queue, rig, stage=args.stage_providers, with_lunalib=args.with_lunalib,
                                        setups=args.setup, expect_supply=args.expect_supply, save_after_checks=args.save_after_checks,
+                                       save_reload_after_days=args.save_reload_after_days, save_reload_note=args.save_reload_note,
                                        no_lunalib=args.no_lunalib, also_enable=args.also_enable)
                 if not args.json:
                     print(f"Group {result['group']} installed: {', '.join(result['members'])}")
@@ -164,9 +168,28 @@ def run_cli(args: argparse.Namespace) -> int:
             elif args.probe_group_command == "live":
                 from .live_run import live_run
                 print("Starting the live run: leave the mouse and keyboard alone until it finishes (about three minutes after loading).", file=sys.stderr)
+                if args.save_reload:
+                    from .save_reload_run import clear_stale_fingerprint, save_reload_configured
+                    if not save_reload_configured(rig):
+                        print("bridgeforge: --save-reload needs the rig probe config's save_reload.after_days (install with --save-reload-after-days N)", file=sys.stderr)
+                        return 2
+                    clear_stale_fingerprint(rig)
                 live = live_run(rig, args.test_id, bat_name=args.bat, menu_timeout=args.menu_timeout,
-                                natural_exit=args.natural_exit, exit_wait=args.exit_wait)
+                                natural_exit=args.natural_exit, exit_wait=args.exit_wait, save_reload=args.save_reload)
                 result = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "rounds": live.rounds, "stages": live.stages, "log": live.log}
+                if args.save_reload and live.verdict == "LIVE_DONE":
+                    from .save_fingerprint import parse_fingerprint
+                    from .save_reload_run import reload_run
+                    reloaded = reload_run(rig, f"{args.test_id}-reload", bat_name=args.bat, menu_timeout=args.menu_timeout)
+                    block = parse_fingerprint(Path(reloaded.log).read_text(encoding="utf-8", errors="replace")) if reloaded.log and Path(reloaded.log).is_file() else None
+                    result["reload"] = {"verdict": reloaded.verdict, "stage": reloaded.stage, "detail": reloaded.detail, "stages": reloaded.stages,
+                                        "log": reloaded.log, "reload_after_save": bool(block and block["compare_observed"]), "fingerprint": block}
+                    if not args.json:
+                        print(f"  reload: {reloaded.verdict}; reload_after_save={result['reload']['reload_after_save']}; "
+                              f"equal={block['equal'] if block else None}; differing sections: {', '.join(block['diff_sections']) if block and block['diff_sections'] else 'none'}")
+                        print(f"  Next: bridgeforge run-manifest evaluate for {args.test_id}-reload (milestones.reload_after_save, fingerprint block).")
+                    if reloaded.verdict != "LIVE_DONE":
+                        live = reloaded
                 if not args.json:
                     print(f"{live.verdict}: stages {', '.join(live.stages) or 'none'}; combat rounds {live.rounds}")
                     if live.verdict != "LIVE_DONE":
