@@ -25,6 +25,7 @@ def add_parser(subcommands) -> None:
     archive_preflight = subcommands.add_parser("archive-preflight", help="inspect a ZIP archive without extracting it")
     archive_preflight.add_argument("archive", type=Path)
     archive_preflight.add_argument("--output", type=Path)
+    archive_preflight.add_argument("--original", type=Path, help="the author's unpacked mod: warn about data/ files it has that the archive lacks")
     archive_stage = subcommands.add_parser("archive-stage", help="extract a preflight-safe ZIP into a new explicit destination")
     archive_stage.add_argument("archive", type=Path)
     archive_stage.add_argument("--output", required=True, type=Path)
@@ -107,6 +108,8 @@ def add_parser(subcommands) -> None:
     done_audit_cmd.add_argument("--vanilla-core", type=Path)
     done_audit_cmd.add_argument("--quiet", action="store_true", help="no per-mod progress lines")
     done_audit_cmd.add_argument("--json", action="store_true")
+    done_audit_cmd.add_argument("--content-parity", action="store_true", help="instead compare each shipped zip with its original/ (77.18): MISSING, SHADOW_REMOVAL, RENAMED, JUNK, SOURCE_OMITTED per mod and a verdict (writes CONTENT_PARITY.md/.json)")
+    done_audit_cmd.add_argument("--write", type=Path, metavar="DIR", help="with --content-parity: write the report to DIR instead of Done/")
     audit_cmd = subcommands.add_parser("audit-shipped", help="compare a workspace's shipped copy with original/: every changed, added or removed file must be explained by a recorded change (ROADMAP 36.3); also shows its live status (36.7)")
     audit_cmd.add_argument("workspace", type=Path)
     audit_cmd.add_argument("--json", action="store_true")
@@ -283,7 +286,7 @@ def run_cli(args: argparse.Namespace) -> int:
         return 0
     if args.command == "archive-preflight":
         try:
-            result = inspect_zip_archive(args.archive)
+            result = inspect_zip_archive(args.archive, original=args.original)
             archive = args.archive.expanduser().resolve()
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
@@ -395,6 +398,18 @@ def run_cli(args: argparse.Namespace) -> int:
         from .done_audit import RESULT_MD, done_audit
         from .substitutes import REPO_ROOT
         done = args.done or REPO_ROOT / "Done"
+        if args.write and not args.content_parity:
+            print("bridgeforge: --write needs --content-parity.", file=sys.stderr)
+            return 2
+        if args.content_parity:
+            from .content_parity import RESULT_MD as PARITY_MD, content_parity
+            out = args.write or done
+            result = content_parity(done, args.queue or REPO_ROOT / "In operation", out, vanilla_core=args.vanilla_core, quiet=args.quiet)
+            if args.json:
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            else:
+                print("Counts: " + ", ".join(f"{k} {v}" for k, v in result["counts"].items()) + f". Report: {Path(out) / PARITY_MD}")
+            return 0
         result = done_audit(done, args.queue or REPO_ROOT / "In operation", vanilla_core=args.vanilla_core, quiet=args.quiet)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))

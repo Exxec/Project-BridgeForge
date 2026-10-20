@@ -2659,6 +2659,7 @@ inspect a ZIP archive without extracting it
 |---|---|---|
 | `archive` | - | - |
 | `--output` OUTPUT | - | - |
+| `--original` ORIGINAL | - | the author's unpacked mod: warn about data/ files it has that the archive lacks |
 
 ## archive-stage
 
@@ -2828,6 +2829,8 @@ re-scan every archived revival in Done/: STALE when the queue copy changed since
 | `--vanilla-core` VANILLA_CORE | - | - |
 | `--quiet` | - | no per-mod progress lines |
 | `--json` | - | - |
+| `--content-parity` | - | instead compare each shipped zip with its original/ (77.18): MISSING, SHADOW_REMOVAL, RENAMED, JUNK, SOURCE_OMITTED per mod and a verdict (writes CONTENT_PARITY.md/.json) |
+| `--write` DIR | - | with --content-parity: write the report to DIR instead of Done/ |
 
 ## audit-shipped
 
