@@ -451,7 +451,7 @@ record the staged inputs of a run before launch and take ownership of the rig
 | `run_id` | - | - |
 | `--kind` KIND | one of boot, campaign, live; default live | - |
 | `--target` MOD_ID | repeatable | a mod under test (default: every candidate rig-up or install recorded); repeatable |
-| `--expect` MILESTONE | repeatable | milestone the log must show (main_menu, campaign_load, save, content_ids, combat); repeatable; default: main_menu |
+| `--expect` MILESTONE | repeatable | milestone the log must show (main_menu, campaign_load, save, content_ids, combat, reload_after_save); repeatable; default: main_menu |
 | `--scenario` SCENARIO | default  | - |
 | `--launcher` LAUNCHER | - | the launcher .bat (hashed with the rig's *.vmparams) |
 | `--json` | - | - |
@@ -705,6 +705,7 @@ judge a run's evidence file against the spec; exit 1 unless VERIFIED
 | `evidence` | - | evidence JSON; omitted means LIVE_PENDING |
 | `--run-id` RUN_ID | - | run identity id (from the R1 run manifest once available) |
 | `--run-hash` RUN_HASH | - | the shipped hash that run identity records |
+| `--fingerprint-record` JSON | repeatable | a `run-manifest evaluate` result of a save-reload run (milestones.reload_after_save, fingerprint block) plus the shipped_hash it ran; repeatable |
 | `--out` OUT | - | also write the verdict JSON here |
 | `--json` | - | - |
 
@@ -2118,6 +2119,8 @@ copy/sync one group's mods into the rig, write the merged probe config, set enab
 | `--setup` SPEC | repeatable | probe setup applied once per save, as for probe-config --setup; also swap-industry:<from>:<to>:<count>[:<condition-prefix>] (probe 0.2.25); repeatable |
 | `--also-enable` MOD_OR_SET | repeatable | also enable this mod id (with its dependencies) or named set (aotd: Vaults of Knowledge, Toolbox fork, Prepatcher, BMO, Ashlib); repeatable; every id must be in the rig |
 | `--save-after-checks` | - | the probe saves the game once after the day-1 checks, so the save can be read and reloaded (probe 0.2.26) |
+| `--save-reload-after-days` N | - | opt in to the save-and-reload fingerprint stage: at in-game day N the probe logs a fingerprint, saves, and stores it; `live --save-reload` then reloads that save (next probe version) |
+| `--save-reload-note` SAVE_RELOAD_NOTE | default  | free text recorded with the fingerprint (slot or scenario note) |
 | `--expect-supply` COMMODITY@INDUSTRY | repeatable | the probe's market-supply check FAILs unless INDUSTRY supplies COMMODITY in some market (probe 0.2.25); repeatable |
 | `--json` | - | - |
 
@@ -2173,6 +2176,7 @@ after `install`: play the group's live run unattended with real mouse clicks (la
 | `--menu-timeout` MENU_TIMEOUT | default 240 | - |
 | `--natural-exit` | - | after the run, do not kill the game: wait for you to quit it from the main menu and record its return code (NATURAL), or KILLED if it is still up after --exit-wait |
 | `--exit-wait` EXIT_WAIT | default 180 | with --natural-exit: seconds to wait for the game to exit by itself (default 180) |
+| `--save-reload` | - | after the live run, start the game a second time, Continue the save the probe wrote at save_reload.after_days and wait for the fingerprint compare line (install with --save-reload-after-days); the reload run gets its own log <TESTID>-reload and manifest |
 | `--rig` RIG | - | - |
 | `--queue` QUEUE | - | - |
 | `--json` | - | - |

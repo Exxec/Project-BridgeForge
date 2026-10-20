@@ -129,6 +129,32 @@ Console-Commands-scripted trigger found. Per the plan, this stays `MANUAL`/T3: a
 clicks Save and Load once per revived mod. Nothing about this blocks P3's campaign/combat probes,
 which never need a save round-trip themselves.
 
+## Save-and-reload fingerprint (opt-in, next probe version, not yet bumped, ROADMAP 75 R6)
+
+`save_reload: {"after_days": N, "slot_note": "..."}` in `bf_probe_config` (written by `probe-group install --save-reload-after-days N
+[--save-reload-note ...]`; 0 or absent = off). Classes: `SaveReloadStage` (EveryFrameScript + the after-load hook, one registration line in
+`BfProbeModPlugin.onGameLoad`), `FingerprintSections` (canonical text and 64-bit FNV-1a; no `java.security`). At in-game day N it logs
+`fingerprint|INFO|phase=before|section=<s>;count=;len=;fnv=` for `markets systems rings fleets player cargo mod totals`, calls
+`CampaignUIAPI.cmdSave()` (RC8-30), logs `fingerprint|INFO|save|cmdSave returned true;ts=` and writes `bf_probe_fingerprint` (digests plus
+each section's text up to 40,000 chars). On a later load whose campaign clock timestamp equals the stored one it logs the stored digests
+(`phase=before`, `source=file`), `phase=after`, `fingerprint|WARN|diff|section=;only_before=;only_after=` per differing section and
+`fingerprint|INFO|compare|equal=true;diff=;sections=8` (`FAIL` when not equal). Verified with javap on RC8: `MarketAPI.getId/getFactionId/
+getSize/getConditions/getIndustries/getSubmarketsCopy`, `MarketConditionAPI.getId`, `Industry.getId`, `SubmarketAPI.getSpecId`,
+`EconomyAPI.getMarketsCopy`, `SectorAPI.getStarSystems/getAllLocations/getPlayerFleet`, `LocationAPI.getFleets/getPlanets/getAllEntities/
+getEntities(Class)`, `RingBandAPI.getBandIndex/getMiddleRadius/getBandWidthInEngine/getOrbitDays`, `CampaignFleetAPI.getFleetData().
+getMembersListCopy/getCargo`, `FleetMemberAPI.getHullId/getVariant/getStatus/getRepairTracker().getCR`, `ShipVariantAPI.getModuleSlots/
+getModuleVariant/getHullVariantId`, `FleetMemberStatusAPI.getHullFraction()/getHullFraction(int)/getNumStatuses/getArmorDamageTaken`,
+`CargoAPI.getMaxCapacity/getMaxFuel/getMaxPersonnel/getSpaceUsed/getFuel/getCrew/getSupplies`. **Not exposed to campaign code:** a module's
+armor grid (cells or average) - only its hull fraction and the member's one aggregate `getArmorDamageTaken()` are recorded. "Per mod" is
+attributed only through the config's own factions, patched factions and `mod_systems` (the `mod` section); there is no API for the owning mod
+of an arbitrary market or fleet.
+
+Harness: `probe-group live <ID> --save-reload` plays the normal live run (the drive also waits for the `fingerprint|save` line), then starts the
+game a second time under manifest `<ID>-reload`, clicks Continue (RC8-29) and waits for the compare line (`bridgeforge/save_reload_run.py`).
+Manual fallback if the click path fails: start the rig game yourself, press Continue (or Load Game and pick the newest save), then run
+`run-manifest evaluate` on that log; `milestones.reload_after_save` is read from the log, never set by hand. The campaign is paused after a
+load (RC8-28), which does not matter here: the compare runs in `onGameLoad`, before any tick.
+
 ## What still needs a live rig run
 
 Everything above compiles and self-checks outside the game (`javac`, deterministic jar packing,

@@ -159,6 +159,38 @@ def _observation_failures(stage: dict, spec: dict, repeat: dict | None) -> list[
     return failures
 
 
+def fingerprint_judgement(spec: dict, evidence: object, run_id: object) -> dict:
+    """Judge probe save-reload fingerprint records (`evidence["fingerprint_records"]`, each a `run-manifest evaluate` result of a reload
+    run, optionally with `shipped_hash`) for the `reload_saved` stage. A record COUNTS only when it is observed and bound: status
+    ACCEPTABLE, the run id the evaluation is bound to, `milestones.reload_after_save` true (the compare line was seen) and a
+    `shipped_hash` equal to the new candidate's. A counted record whose fingerprint is not equal is a FAILURE; a counted equal one is
+    serialization evidence for the stage. Anything else is listed under `rejected` and changes nothing."""
+    records = evidence.get("fingerprint_records") if isinstance(evidence, dict) else None
+    verdict: dict = {"counted": [], "failures": [], "rejected": []}
+    for record in records if isinstance(records, list) else []:
+        label = record.get("run_id") if isinstance(record, dict) else None
+        if not isinstance(record, dict):
+            verdict["rejected"].append("a fingerprint record is not an object")
+            continue
+        block, marks = record.get("fingerprint"), record.get("milestones")
+        why = None
+        if record.get("status") != "ACCEPTABLE":
+            why = f"run evidence status is {record.get('status')!r}, not ACCEPTABLE (not bound to a manifest)"
+        elif not run_id or label != run_id:
+            why = f"record run {label!r} is not the run identity {run_id!r} this evaluation is bound to"
+        elif record.get("shipped_hash") != spec["new_candidate"]["shipped_hash"]:
+            why = "record does not name the new candidate's shipped hash"
+        elif not (isinstance(marks, dict) and marks.get("reload_after_save") is True and isinstance(block, dict) and block.get("compare_observed")):
+            why = "the reload's compare line was not observed (milestones.reload_after_save is not true)"
+        if why:
+            verdict["rejected"].append(f"{label}: {why}")
+        elif block.get("equal") is True:
+            verdict["counted"].append(label)
+        else:
+            verdict["failures"].append(f"reload_saved: fingerprint differs after reload in {', '.join(block.get('diff_sections') or ['(unspecified)'])}")
+    return verdict
+
+
 def evaluate_upgrade(spec: object, evidence: object, run_identity: object = None) -> dict:
     """Judge a run's evidence against the scenario. `evidence` may be None/empty: that is LIVE_PENDING, not a pass."""
     plan = plan_upgrade(spec)
@@ -167,7 +199,12 @@ def evaluate_upgrade(spec: object, evidence: object, run_identity: object = None
               "proxy_stages": [], "stages_seen": []}
     stages = evidence.get("stages") if isinstance(evidence, dict) else None
     if not stages:
-        return {**result, "status": "LIVE_PENDING", "plan": plan["stages"]}
+        pending = {**result, "status": "LIVE_PENDING", "plan": plan["stages"]}
+        if isinstance(evidence, dict) and evidence.get("fingerprint_records"):
+            # A fingerprint alone covers one stage; the other five still need their own evidence, so this stays pending.
+            run_id = (run_identity or {}).get("run_id") if isinstance(run_identity, dict) else evidence.get("run_id")
+            pending["fingerprint_evidence"] = fingerprint_judgement(spec, evidence, run_id)
+        return pending
     if not all(isinstance(s, dict) and s.get("stage") in STAGES for s in stages):
         return {**result, "status": "REFUSED", "refusals": ["evidence has a stage that is missing or unknown"]}
     names = [s["stage"] for s in stages]
@@ -189,11 +226,17 @@ def evaluate_upgrade(spec: object, evidence: object, run_identity: object = None
     if result["refusals"]:
         return {**result, "status": "REFUSED"}
     by_name = {s["stage"]: s for s in stages}
+    run_id = run_identity.get("run_id") if isinstance(run_identity, dict) else evidence.get("run_id")
+    judged = fingerprint_judgement(spec, evidence, run_id)
+    result["fingerprint_evidence"] = judged
+    result["failures"] += judged["failures"]
     previous_out = None
     for name in STAGE_ORDER:
         stage = by_name[name]
         result["failures"] += _stage_problems(stage, spec, previous_out)
         previous_out = stage.get("save_out_hash", previous_out)
+        if name == "reload_saved" and judged["counted"] and not judged["failures"]:
+            continue  # an observed, equal, bound fingerprint compare shows the saved campaign reloads with its state intact
         if stage.get("evidence_kind") != SERIALIZATION and STAGES[name][0] == SERIALIZATION:
             result["proxy_stages"].append(name)
     result["failures"] += _observation_failures(by_name["migration_check"], spec, by_name["repeat_idempotence"])
@@ -219,6 +262,8 @@ def add_parser(subcommands) -> None:
     evaluate.add_argument("evidence", type=Path, nargs="?", help="evidence JSON; omitted means LIVE_PENDING")
     evaluate.add_argument("--run-id", help="run identity id (from the R1 run manifest once available)")
     evaluate.add_argument("--run-hash", help="the shipped hash that run identity records")
+    evaluate.add_argument("--fingerprint-record", type=Path, action="append", default=[], metavar="JSON",
+                          help="a `run-manifest evaluate` result of a save-reload run (milestones.reload_after_save, fingerprint block) plus the shipped_hash it ran; repeatable")
     evaluate.add_argument("--out", type=Path, help="also write the verdict JSON here")
     evaluate.add_argument("--json", action="store_true")
 
@@ -230,6 +275,11 @@ def run_cli(args: argparse.Namespace) -> int:
             result = plan_upgrade(spec)
         else:
             evidence = _load_json(args.evidence) if args.evidence else None
+            if args.fingerprint_record:
+                if evidence is not None and not isinstance(evidence, dict):
+                    raise UpgradeError("evidence must be a JSON object to take fingerprint records")
+                evidence = {**(evidence or {}), "fingerprint_records": [*((evidence or {}).get("fingerprint_records") or []),
+                                                                         *(_load_json(path) for path in args.fingerprint_record)]}
             identity = {"run_id": args.run_id, "shipped_hash": args.run_hash} if args.run_id or args.run_hash else None
             result = evaluate_upgrade(spec, evidence, identity)
             if args.out:

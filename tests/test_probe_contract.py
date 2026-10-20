@@ -7,13 +7,14 @@ checks for weeks), and `probe-group install` once ignored `setups`: each was a k
 from __future__ import annotations
 
 import re
+import json
 import unittest
 from pathlib import Path
 
 from bridgeforge.probe_config import _SETUP_PATTERNS, build_probe_config
-from bridgeforge.probe_group import merge_configs
-from tests.support import resolved_temp_dir
-from tests.test_probe_group import _workspace
+from bridgeforge.probe_group import install_group, merge_configs, plan_groups
+from tests.support import link_dir, resolved_temp_dir
+from tests.test_probe_group import _rig, _workspace
 
 ROOT = Path(__file__).resolve().parent.parent
 PROBE = ROOT / "probe-mod" / "src" / "com" / "bridgeforge" / "probe"
@@ -21,7 +22,7 @@ PROBE = ROOT / "probe-mod" / "src" / "com" / "bridgeforge" / "probe"
 # Keys Python writes that the in-game reader deliberately ignores (reports and bookkeeping only).
 PYTHON_ONLY = {"schema_version", "hulls_skipped_no_variant", "group_members", "apply"}
 # Keys the reader takes that `build_probe_config` does not produce itself: set by `install` or by the profile.
-ADDED_AFTER = {"save_after_checks"}
+ADDED_AFTER = {"save_after_checks", "save_reload"}
 # Keys one member's config carries that a group's merged config rebuilds in its own way rather than copying.
 REBUILT_BY_MERGE = {"target_mod_id", "group_members", "setups", "apply", "campaign_interval_days", "combat_seconds",
                     "combat_cap_per_side", "variants", "content_variants", "content_ship_hulls", "mod_body_types", "mission_fleets"}
@@ -51,6 +52,25 @@ class ProbeConfigContractTests(unittest.TestCase):
     def test_every_key_the_probe_reads_is_written_by_python_or_added_after(self) -> None:
         missing = java_read_keys() - set(self._config()) - ADDED_AFTER - {"setups"}
         self.assertEqual(missing, set(), "the probe reads keys no Python code writes: dead reader code or a forgotten writer")
+
+    def test_install_writes_save_reload_only_when_explicitly_enabled(self) -> None:
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            _workspace(queue, "A", "mod_a", "hull_a")
+            rig = _rig(root)
+            core = root / "core"
+            core.mkdir()
+            link_dir(core, rig / "starsector-core")
+            plan = plan_groups(queue, rig)
+            config_path = rig / "saves/common/bf_probe_config.data"
+            install_group(plan, 1, queue, rig, install_probe=False)
+            self.assertNotIn("save_reload", json.loads(config_path.read_text(encoding="utf-8")))
+            install_group(plan, 1, queue, rig, install_probe=False, save_reload_after_days=3,
+                          save_reload_note="synthetic-check")
+            self.assertEqual(json.loads(config_path.read_text(encoding="utf-8"))["save_reload"],
+                             {"after_days": 3, "slot_note": "synthetic-check"})
+            install_group(plan, 1, queue, rig, install_probe=False)
+            self.assertNotIn("save_reload", json.loads(config_path.read_text(encoding="utf-8")))
 
     def test_a_group_merge_keeps_every_key_a_member_config_has(self) -> None:
         with resolved_temp_dir() as root:

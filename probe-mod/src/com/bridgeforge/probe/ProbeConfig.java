@@ -53,6 +53,9 @@ public final class ProbeConfig {
     // 0.2.26: save the game once after the first day's checks, so a test can read and reload what a mod writes into a save
     // (Station Augments' market references, 2026-10-11).
     public boolean saveAfterChecks = false;
+    // next version (ROADMAP 75 R6): opt-in save-and-reload fingerprint, save_reload: {after_days: N, slot_note: ...}; 0 = off.
+    public int saveReloadAfterDays = 0;
+    public String saveReloadSlotNote = "";
 
     public static ProbeConfig load() throws Exception {
         ProbeConfig config = new ProbeConfig();
@@ -122,6 +125,11 @@ public final class ProbeConfig {
         addAll(root.optJSONArray("mod_commodities"), config.modCommodities);
         addAll(root.optJSONArray("expect_supply"), config.expectSupply);
         config.saveAfterChecks = root.optBoolean("save_after_checks", false);
+        JSONObject saveReload = root.optJSONObject("save_reload");
+        if (saveReload != null) {
+            config.saveReloadAfterDays = saveReload.optInt("after_days", 0);
+            config.saveReloadSlotNote = saveReload.optString("slot_note", "");
+        }
         JSONObject bodyTypes = root.optJSONObject("mod_body_types");
         if (bodyTypes != null) {
             JSONArray typeNames = bodyTypes.names();
