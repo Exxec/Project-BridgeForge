@@ -4,6 +4,10 @@
 
 - Public `save_doctor.installed_mods` provider function for Salvor (`_installed` remains as an alias).
 
+- **Natural-exit observation for live runs (offline; live pending):** `probe-group live --natural-exit [--exit-wait]` waits for
+  the operator to quit the game and records its return code, or KILLED with no code; `probe-group record --observe-exit`
+  writes `process_exit_code` and `process_exit_observed` into the run record. Default behaviour and record shape unchanged.
+
 - **Lock-test reliability (ROADMAP item 77.3):** isolate native process queries with a 30-second deadline, query fixture
   PIDs only, and bound fixture-child cleanup. Production lock diagnostics and package version remain unchanged.
 

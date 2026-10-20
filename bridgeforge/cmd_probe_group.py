@@ -49,6 +49,7 @@ def add_parser(subcommands) -> None:
     group_record.add_argument("--refresh", action="store_true", help="with --archive: replace an earlier archive of the same mod in Done/ (the old one is moved to Done/_replaced-<date>/, never deleted; Done/ must hold an ARCHIVE_NOTE.md there)")
     group_record.add_argument("--accept", action="store_true", help="record each PASS member through the single-mod acceptance checks (main menu, campaign load, no FATAL or MOD-ERROR) and write a dated 'Live run' section; probe FAIL lines and caught exceptions are carried only when an earlier acceptance of the same mod version covers them (reports/live_accepted.jsonl, working/reports/probe_accepted.json), otherwise nothing is recorded and the uncovered ones are listed; needs --note")
     group_record.add_argument("--note", help="with --accept: what was run and seen, written into each report as the owner's account")
+    group_record.add_argument("--observe-exit", action="store_true", help="put the exit `live --natural-exit` observed (<rig>/logs/<TESTID>.exit.json) into the run record's process_exit_code / process_exit_observed; without the file it stays UNKNOWN")
     group_record.add_argument("--queue", type=Path)
     group_record.add_argument("--rig", type=Path)
     group_record.add_argument("--json", action="store_true")
@@ -63,6 +64,8 @@ def add_parser(subcommands) -> None:
     group_live.add_argument("test_id", help="log name: writes <rig>/logs/<TESTID>.stdout.log, readable by `probe-group report` and `record`")
     group_live.add_argument("--bat", default="run-j25-direct.bat")
     group_live.add_argument("--menu-timeout", type=int, default=240)
+    group_live.add_argument("--natural-exit", action="store_true", help="after the run, do not kill the game: wait for you to quit it from the main menu and record its return code (NATURAL), or KILLED if it is still up after --exit-wait")
+    group_live.add_argument("--exit-wait", type=int, default=180, help="with --natural-exit: seconds to wait for the game to exit by itself (default 180)")
     group_live.add_argument("--rig", type=Path)
     group_live.add_argument("--queue", type=Path)
     group_live.add_argument("--json", action="store_true")
@@ -161,7 +164,8 @@ def run_cli(args: argparse.Namespace) -> int:
             elif args.probe_group_command == "live":
                 from .live_run import live_run
                 print("Starting the live run: leave the mouse and keyboard alone until it finishes (about three minutes after loading).", file=sys.stderr)
-                live = live_run(rig, args.test_id, bat_name=args.bat, menu_timeout=args.menu_timeout)
+                live = live_run(rig, args.test_id, bat_name=args.bat, menu_timeout=args.menu_timeout,
+                                natural_exit=args.natural_exit, exit_wait=args.exit_wait)
                 result = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "rounds": live.rounds, "stages": live.stages, "log": live.log}
                 if not args.json:
                     print(f"{live.verdict}: stages {', '.join(live.stages) or 'none'}; combat rounds {live.rounds}")
@@ -246,7 +250,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 from .probe_group import record_group
                 config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
                 result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive, refresh=args.refresh,
-                                      accept=args.accept, note=args.note)
+                                      accept=args.accept, note=args.note, observe_exit=args.observe_exit)
                 if not args.json:
                     if result.get("stopped"):
                         print(f"STOPPED, not everything recorded: {result['stopped']}")
