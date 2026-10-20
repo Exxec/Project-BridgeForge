@@ -69,6 +69,8 @@ public class CampaignProbeScript implements EveryFrameScript {
     private boolean firstRunDone = false;
     // content-ids builds every mod variant once; repeating it each interval adds nothing.
     private boolean contentIdsChecked = false;
+    // content-parity (77.17) compares the loaded game with the config once; it does not change between intervals.
+    private boolean contentParityChecked = false;
 
     @Override
     public boolean isDone() {
@@ -228,6 +230,18 @@ public class CampaignProbeScript implements EveryFrameScript {
                 checkContentIds();
             }
         });
+        if (!contentParityChecked) {
+            contentParityChecked = true;
+            runCheck("content-parity", new Runnable() {
+                public void run() {
+                    try {
+                        ContentParityProbe.run();
+                    } catch (Exception e) {
+                        throw new IllegalStateException(e);
+                    }
+                }
+            });
+        }
         runCheck("campaign-layout", new Runnable() {
             public void run() {
                 checkCampaignLayout();

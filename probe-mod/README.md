@@ -91,6 +91,7 @@ main `README.md` / `docs/REVIVAL_ASSURANCE_PLAN.md` for the full command).
   weapons and hull mods, so no hull/weapon/hull-mod lookup method is relied on. The ids come from
   `probe-config`'s `content_variants` (`ship`: built; `other`: fighter/module/wreck or non-mod hulls,
   existence only) and `content_wings`.
+- Content parity (`content-parity`, 77.17; javap RC8, 2026-10-20): `SettingsAPI.getHullSpec/getWeaponSpec/getFighterWingSpec/getHullModSpec/getIndustrySpec/getMarketConditionSpec(String)`, `getAllSubmarketSpecs()`, `getAllPlanetSpecs()`, `getMergedSpreadsheetData(String idColumn, String path)` (rules.csv ids). `getMergedSpreadsheetDataForMod(String, String, String)` exists, but whether its rows carry a per-row source (`fs_rowSource`) cannot be read from the public interface (that string is only in `starfarer_obf.jar`), so rules are matched by the ids the mod's own rules.csv defines, not by source. Hull, weapon, wing, hull mod, industry, condition and planet specs extend `WithSourceMod.getSourceMod()` (`ModSpecAPI.getId()`), used for the `src_*` counts; `SubmarketSpecAPI` does not.
 - Tracked entities: `SectorAPI.getEntityById(String)`, `SectorEntityToken.getLocation()`
   (`org.lwjgl.util.vector.Vector2f`).
 - Combat probe: `MissionDefinitionAPI.addToFleet(FleetSide, String variantId, FleetMemberType,

@@ -547,9 +547,15 @@ def build_probe_config(
         merged_setups = merged_setups + list(profile.get("setups") or [])
         apply_mode = profile.get("apply", DEFAULT_PROFILE_APPLY)
 
+    from .live_content_parity import expected_content
+
+    mod_systems = mod_created_systems(mod_root)
+    body_types = mod_body_types(mod_root)
     return {
         "schema_version": 1,
         "target_mod_id": target_mod_id,
+        # 77.17: per kind, the ids this mod's data defines, which the probe's content-parity stage looks up in the running game
+        "content_parity": {target_mod_id: expected_content(mod_root, systems=mod_systems, body_types=sorted(body_types))},
         "hulls": hulls_with_variant,
         "variants": variants,
         "track_entities": sorted(set(track_entities or [])),
@@ -558,8 +564,8 @@ def build_probe_config(
         "content_variants": _content_variants(mod_root, hulls),
         "content_ship_hulls": _content_ship_hulls(mod_root, hulls),
         "content_special_items": _content_special_items(mod_root),
-        "mod_systems": mod_created_systems(mod_root),
-        "mod_body_types": {t: f["procgen_weight"] for t, f in mod_body_types(mod_root).items()},
+        "mod_systems": mod_systems,
+        "mod_body_types": {t: f["procgen_weight"] for t, f in body_types.items()},
         "content_wings": sorted(_wing_ids_set(mod_root / "data" / "hulls" / "wing_data.csv")),
         "mission_fleets": _mission_fleet_refs(mod_root),
         "class_sweep": _class_sweep(mod_root),
