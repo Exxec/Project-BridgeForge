@@ -36,16 +36,19 @@ Item 75 work contracts:
 | R8 restore exercise | IMPLEMENTED OFFLINE: `snapshot-restore-check`, best verdict RESTORED_OFFLINE, `recoverable` stays false without the rig step | `tests/test_snapshot_restore.py` (8); real restore to a new folder and rig scenario pending |
 | DOC-001 archive refresh | FIXED 2026-10-18: refresh moves the old archive to `Done/_replaced-<date>/`, restores it on a failed write | `tests/test_archive_preserves.py` (5) plus the group-path assertion; not yet exercised on a real `Done/` archive |
 
-Cross-project follow-ups found 2026-10-18 (BridgeForge code work, not yet started):
-- Project Go's schema-v1 exports may now carry unit kinds `text-line` and `class` and fields `role`/`role_rule`/`group`;
-  `translate-apply` must accept them (and add conformance fixtures) before it can read such exports.
-- Salvor still calls the private `save_doctor._installed`; expose a public installed-mods function and pin it in
-  Salvor's provider contract test.
-- Project Go's `assurance --import-run` now reads the real R1 run record, but leaves every gate NOT_TESTED until the
-  record carries `manifest.java_version` and a top-level `process_exit_code`; add both to `run_manifest`/`write_run_record`.
+Cross-project follow-ups found 2026-10-18 (individual status below):
+- Translation schema alignment implemented offline 2026-10-19: `text-line`, loose `class` and validated role/group metadata,
+  with byte-identical shared extension fixtures. BridgeForge stages linked copies and refuses linked in-place application;
+  it consumes declared roles rather than implementing Go's classifier. See `fixtures/translation-conformance/SCHEMA_V1_EXTENSIONS.md`.
+  Runtime, real-mod acceptance and Project Go P8.10 remain open.
+- Implemented 2026-10-20: public `save_doctor.installed_mods` (Salvor's provider contract; `_installed` kept as an alias);
+  Salvor pinned in its provider contract test.
+- Runtime context fields implemented offline 2026-10-19: `run_manifest` observes selected Java version and `write_run_record`
+  stores an explicit exit code or null; synthetic producer/Go-consumer fixtures cover both. Existing interactive callers
+  do not observe a natural Java exit, so real runtime qualification remains NOT_TESTED. No clean-log-to-zero inference.
 - `tests/test_locks.py::test_own_open_file_inside_target_is_found` can hang on this machine (psutil `open_files()`,
   observed 2026-10-18 with no CPU for 25+ minutes; twelve orphaned suite processes from that morning were found stalled).
-  Give `test_locks` a hard per-test timeout or move the probe into a killable subprocess so a hang fails instead of stalling.
+  Checked 2026-10-20: already bounded. The probe runs in a subprocess via `_bounded_process_paths` with `timeout=30`, so a hang fails instead of stalling; no change needed.
 
 Update this index when implementations or evidence change. Record source, compile, static, package, dependency/API,
 save compatibility, live acceptance and shipping separately; use UNKNOWN/INCOMPLETE/NOT_APPLICABLE where appropriate.

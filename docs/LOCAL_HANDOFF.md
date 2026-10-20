@@ -18,6 +18,15 @@ real `Done/` archive: the first real refresh is the check (old bytes under `_rep
 
 ## 0b. Item 73 / 75 implementation: what still needs this machine (2026-10-18)
 
+**Project Go follow-up 2026-10-19 (owner: "Repeat for all next phases if able").** Translation schema alignment is
+implemented offline. Runtime manifests now record observed selected-Java version, and run records support an explicit
+process exit or null. Current interactive runs terminate Java's process tree, so they do not supply a trusted natural
+exit; do not insert zero or promote Go runtime gates on that basis. Shared fixtures test plumbing, not a live run.
+FlowerGod's copied-source measurement found 908 policy-approved / 1,620 units and 712 review items; no real candidate was
+built or archived. The refreshed GUI checklist has 10 automated passes and 5 manual rows, with all 15 owner statuses
+NOT_TESTED. JSON-key consumer semantics/P8.10 are still open. Details and artifact locations are in Project Go's
+`docs/REMAINING_PHASES_STATUS.md`. None of these static checks closes a live, owner-review or release gate.
+
 Built and unit-tested offline; nothing below has been run. Order matters: R1 first, because acceptance now needs it.
 
 1. **R1 run binding (live proof).** `rig-up <rig> --mods <id> --probe-config`, then `probe-group live <TESTID>` (prepares and
