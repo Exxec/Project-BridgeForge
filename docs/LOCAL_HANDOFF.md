@@ -26,6 +26,7 @@ FlowerGod's copied-source measurement found 908 policy-approved / 1,620 units an
 built or archived. The refreshed GUI checklist has 10 automated passes and 5 manual rows, with all 15 owner statuses
 NOT_TESTED. JSON-key consumer semantics/P8.10 are still open. Details and artifact locations are in Project Go's
 `docs/REMAINING_PHASES_STATUS.md`. None of these static checks closes a live, owner-review or release gate.
+**Project Go runtime gates (owner 2026-10-20):** deferred to the session after next; no translated Go candidate exists yet (FlowerGod is BLOCKED_REVIEW).
 
 Built and unit-tested offline; nothing below has been run. Order matters: R1 first, because acceptance now needs it.
 
@@ -49,7 +50,7 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
    (second reports complete). Done: archived bytes equal tested bytes, old archive in `Done/_replaced-*`, one changelog line.
 4. **R6 save upgrade.** Zorg bf.9 to bf.10: a spec with both manifests and a hashed copied rig save; per case load old with new,
    save to a separate slot, restart, reload, repeat; `save-upgrade evaluate SPEC EVIDENCE --run-id ID --run-hash HASH` VERIFIED
-   for all eight cases. Needs an in-game evidence emitter that does not exist yet.
+   for all eight cases. Needs an in-game evidence emitter that does not exist yet. Owner decision 2026-10-20: the Zorg bf.9 to bf.10 run may use manual evidence (screenshots plus logged steps), recorded as MANUAL, never VERIFIED; the in-game emitter is deferred to S3.
 5. **R8 restore.** `snapshot-restore-check <snapshot> --to <new empty folder outside the repo> --source-root <repo>`: expect
    RESTORED_OFFLINE; then rebuild rig junctions in the copy and run a bounded rig scenario there, never in the primary workspace.
 6. **G1 New Game fallback.** `probe-group live` on two total conversions other than Nexerelin and Ironclads; done when both reach
@@ -60,7 +61,7 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
    `_regress/REGRESSION_HOLD.json` and blocks the next run); `rig-up` on the real `_rig`.
 9. **E4 port record.** Write `In operation/Templars-0.9.8f/working/reports/PORT_SOURCE.json` with `old_tree` =
    `scratch/port-0.9.9e-code/before` and rescan; expect `port-dropped-feature` findings for the Crusade; accept with a reason or
-   ask for a plan.
+   ask for a plan. Done 2026-10-20: written and rescanned; see the decision draft in the workspace `scratch/`.
 10. **H1.** `audit-explain --auto` on Ironclads, Nightcross and the GRP6A mods from their pre-explanation state; report the
     fraction left for a person.
 11. **B fixers on the real queue.** `revive` over the queue with `finding-stats` before and after; B1 applied to 5 mods in the
