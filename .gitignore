@@ -29,6 +29,9 @@ docs/PERFORMANCE_WORKBENCH_DESIGN.md
 /.omp/
 /tools/*.ps1
 !/tools/bf-test.ps1
+# The .githooks scripts call these; tracked so worktrees and fresh clones get working hooks (ROADMAP 77.25).
+!/tools/precommit-check.ps1
+!/tools/prepush-check.ps1
 !/tools/copy-done-archives-with-readme.ps1
 !/tools/build-done-master-log.ps1
 

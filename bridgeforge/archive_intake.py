@@ -10,6 +10,8 @@ import re
 import shutil
 import stat
 
+from .safeio import verify_written
+
 
 def _normalized_member_name(name: str) -> str | None:
     """Return a portable extraction target, or None when the ZIP member is unsafe."""
@@ -28,8 +30,10 @@ def _normalized_member_name(name: str) -> str | None:
     return "/".join(part for part in parts if part not in (".", "/"))
 
 
-def inspect_zip_archive(path: Path, max_entries: int = 20_000, max_uncompressed_bytes: int = 800 * 1024 * 1024) -> dict:
-    """Read ZIP metadata only; identify extraction hazards and mod-root ambiguity."""
+def inspect_zip_archive(path: Path, max_entries: int = 20_000, max_uncompressed_bytes: int = 800 * 1024 * 1024,
+                        original: Path | None = None) -> dict:
+    """Read ZIP metadata only; identify extraction hazards and mod-root ambiguity. With `original` (the author's unpacked mod),
+    also warn about `data/` files it has that the archive lacks (77.18; a warning, never a refusal)."""
     path = path.expanduser().resolve()
     if not path.is_file() or path.suffix.lower() != ".zip":
         raise ValueError(f"Archive is not a readable ZIP file: {path}")
@@ -73,7 +77,20 @@ def inspect_zip_archive(path: Path, max_entries: int = 20_000, max_uncompressed_
     if orphans:
         findings.append({"id": "fixer-backup-orphaned", "classification": "MANUAL", "entries": orphans,
                          "explanation": "A .pre-bf-fix backup has no file beside it: the fixed file is missing from this archive."})
-    blocking_ids = {"fixer-backup-orphaned", "archive-entry-limit", "archive-size-limit", "archive-path-traversal", "archive-symlink-member", "archive-duplicate-member", "archive-path-collision"}
+    from .content_parity import junk_members
+
+    junk = junk_members([name for entry, name in zip(entries, normalized) if name and not entry.is_dir()])
+    if junk:
+        findings.append({"id": "archive-junk-member", "classification": "MANUAL", "entries": junk,
+                         "explanation": "Copies, .old/~ files and desktop.ini do not belong in a mod archive: remove them and re-archive."})
+    if original is not None and not any(item["id"] in ("archive-path-traversal", "archive-symlink-member", "archive-entry-limit", "archive-size-limit") for item in findings):
+        from .content_parity import audit_shipped
+
+        missing = audit_shipped(path, original, name=path.stem)["missing"]
+        if missing:
+            findings.append({"id": "archive-content-missing", "classification": "REVIEW", "entries": missing,
+                             "explanation": "data/ files in original/ are absent from the archive and no removal explains them (a warning)."})
+    blocking_ids = {"archive-junk-member", "fixer-backup-orphaned", "archive-entry-limit", "archive-size-limit", "archive-path-traversal", "archive-symlink-member", "archive-duplicate-member", "archive-path-collision"}
     safe_to_stage = not any(item["id"] in blocking_ids for item in findings)
     return {"schema_version": 1, "mode": "ZIP_PREFLIGHT_ONLY", "archive": path.name, "entry_count": len(entries), "uncompressed_bytes": total, "mod_info_entries": mod_info, "candidate_mod_roots": roots, "findings": findings, "safe_to_stage": safe_to_stage, "safe_to_extract": safe_to_stage}
 
@@ -120,6 +137,7 @@ def stage_zip_archive(path: Path, destination: Path, selected_root: str | None =
             target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(entry) as source, target.open("wb") as output:
                 shutil.copyfileobj(source, output)
+            verify_written(target, archive.read(entry))
     manifest.parent.mkdir(parents=True, exist_ok=True)
     manifest.write_text(json.dumps({"schema_version": 1, "mode": "EXPLICIT_ARCHIVE_STAGE", "archive": path.name, "archive_sha256": archive_sha256, "destination": destination.name, "staged_tree_sha256": _tree_sha256(destination), "selected_mod_root": selected_root, "preflight": report, "input_preserved": archive_sha256 == _sha256(path)}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return destination

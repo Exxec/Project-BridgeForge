@@ -17,6 +17,7 @@ import time
 import zipfile
 from pathlib import Path
 
+from .safeio import verify_written
 from .jar_patch import _decompiled_tree, _only_return_type_relinks, find_decompiler, patch_jar_classes
 from .java_toolchain import find_jdk
 from .linkage import unresolved_references
@@ -306,6 +307,7 @@ def _copy_back_sources(origins: dict[Path, Path], edited: list[Path], working: P
         if not backup.exists():
             shutil.copy2(source, backup)
         shutil.copy2(target, source)
+        verify_written(source, target.read_bytes())
         updated.append(str(source.relative_to(working)))
     return updated
 

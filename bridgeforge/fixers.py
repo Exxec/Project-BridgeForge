@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 from .build_tag import _NAME_PATTERN, _STRING_LITERAL, _find_top_level_key, _string_literal_to_text, _structural_depths, _text_to_string_literal
+from .safeio import WriteVerificationError, verify_removed, verify_written
 from .scanner import (
     DESIGN_TYPE_CSV_TARGETS,
     FACTION_SPECIAL_ROLE_KEYS,
@@ -3961,16 +3962,12 @@ def _verify_applied(plan: FixPlan) -> None:
     """
     problems = []
     for change in plan.changes:
-        if change.removed:
-            if change.path.exists():
-                problems.append(f"{change.path}: planned removal, but the file is still there")
-            continue
         try:
-            written = change.path.read_bytes()
-        except OSError as exc:
-            problems.append(f"{change.path}: missing after the fix was written ({type(exc).__name__}: {exc})")
-            continue
-        if written != change.after:
-            problems.append(f"{change.path}: holds {len(written)} bytes, not the {len(change.after)} planned")
+            if change.removed:
+                verify_removed(change.path)
+            else:
+                verify_written(change.path, change.after)
+        except WriteVerificationError as exc:
+            problems.append(str(exc))
     if problems:
         raise FixerError(f"Fix '{plan.finding_id}' did not leave the planned files; the .pre-bf-fix backups were kept: " + "; ".join(problems))

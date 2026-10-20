@@ -157,3 +157,25 @@ def safe_rmtree(path: Path | str, allowed_roots: Iterable[Path | str], missing_o
                 dirs.remove(name)
     shutil.rmtree(target)
     return True
+
+
+class WriteVerificationError(OSError):
+    """A write or removal did not leave the planned bytes on disk. Callers keep their backups and stop (BUGS.md FIX-001)."""
+
+
+def verify_written(path: Path | str, expected: bytes) -> None:
+    """Re-read `path` right after a write: it must exist and hold exactly `expected`. Raises WriteVerificationError otherwise."""
+    target = Path(path)
+    try:
+        written = target.read_bytes()
+    except OSError as exc:
+        raise WriteVerificationError(f"{target}: missing after the write ({type(exc).__name__}: {exc})") from exc
+    if written != expected:
+        raise WriteVerificationError(f"{target}: holds {len(written)} bytes, not the {len(expected)} planned")
+
+
+def verify_removed(path: Path | str) -> None:
+    """Confirm a planned removal happened: `path` must no longer exist. Raises WriteVerificationError otherwise."""
+    target = Path(path)
+    if target.exists() or target.is_symlink():
+        raise WriteVerificationError(f"{target}: planned removal, but the file is still there")

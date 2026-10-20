@@ -43,7 +43,7 @@ class OldTreeSelectionTests(unittest.TestCase):
             choice = select_old_tree(ws)
             self.assertEqual(choice["tree"], ws / "original/extracted/beta")
             row = check_workspace(ws)
-            self.assertEqual(sorted(row["dropped"]), ["classes", "rules.csv"])
+            self.assertEqual(sorted(row["dropped"]), ["classes", "files", "rules.csv"])
             self.assertNotIn("data.scripts.AlphaClass", row["dropped"]["classes"]["unexplained"])
 
     def test_multiple_roots_without_an_id_match_is_undetermined(self):
@@ -153,7 +153,8 @@ class QueueCommandTests(unittest.TestCase):
         _mod(queue / "Pack/working", "zzz")
         _mod(queue / "Explained/original/E", "e")
         _mod(queue / "Explained/working", "e", rules=None)
-        add_removals(queue / "Explained/working", [make_entry("rules.csv", pattern="*", reason="rules dropped", source="owner")])
+        add_removals(queue / "Explained/working", [make_entry("rules.csv", pattern="*", reason="rules dropped", source="owner"),
+                                              make_entry("files", pattern="*", reason="rules dropped", source="owner")])
         return queue
 
     def test_rules_csv_missing_is_unexplained_and_output_is_worst_first(self):
@@ -167,7 +168,7 @@ class QueueCommandTests(unittest.TestCase):
             data = json.loads((out / "dropped_features.json").read_text(encoding="utf-8"))
             self.assertEqual([r["workspace"] for r in data["rows"]], ["ATDD", "Pack", "Explained", "Clean"])
             self.assertEqual(data["rows"][0]["verdict"], "DROPS_UNEXPLAINED")
-            self.assertEqual(data["rows"][0]["unexplained"], 3)
+            self.assertEqual(data["rows"][0]["unexplained"], 4)
             self.assertEqual(data["verdicts"], {"DROPS_UNEXPLAINED": 1, "UNDETERMINED": 1, "EXPLAINED": 1, "CLEAN": 1})
             self.assertIn("[4/4]", err.getvalue())
             self.assertFalse((out / "DROPPED_FEATURES.partial.jsonl").exists())
