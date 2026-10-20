@@ -2,6 +2,8 @@
 
 ## 0.4.0 (unreleased)
 
+- **Accept named findings into a baseline (ROADMAP item 77.14):** `baseline-accept-finding WORKSPACE SELECTOR... --reason TEXT` accepts the findings a `FINDING_ID[:FILE_PART[:EVIDENCE_PART]]` selector names (not escalation packets only) into the workspace baseline, keeping its stamp; the reason and keys go to `reports/ESCALATION_REVIEW.md`. A selector that matches nothing or a reason under 20 characters is refused; re-running adds nothing.
+
 - Public `save_doctor.installed_mods` provider function for Salvor (`_installed` remains as an alias).
 
 - **Natural-exit observation for live runs (offline; live pending):** `probe-group live --natural-exit [--exit-wait]` waits for
