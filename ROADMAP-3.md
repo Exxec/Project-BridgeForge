@@ -1,5 +1,37 @@
 **Hygiene review 2026-10-19 (owner: "perform hygiene check then check roadmap for any worthwhile additions. implement if able then commit/push").** Item 77.3's lock-test timeout is implemented: the three live psutil scans query only their real fixture PIDs in a disposable subprocess with a 30-second timeout; fixture-child shutdown also has a deadline and kill/reap fallback. A regression verifies timeout propagation as a failure. Focused validation: 11 tests pass. This bounds test execution, not the production `who-locks` command, and supplies no game evidence. See `tests/test_locks.py`.
 
+**78. Probe enhancements (owner 2026-10-20: "add and work them all").** The probe proves boot, id resolution and
+combat, but missed a whole missing rules.csv (FIX-001), never proves a save reloads (R6 has no emitter, Project Go's
+SAVE_RELOAD stays NOT_TESTED) and needs hand-written hooks per feature. In work 2026-10-20, offline (LIVE TEST NOT
+PERFORMED until the next rig session):
+- 78.1 Manifest id echo: the probe logs the run manifest id first; the evaluator refuses a mismatch (R1 trust).
+- 78.2 Save-and-reload fingerprint: per-mod sector fingerprint before `cmdSave()` and after reload, compared; sets
+  `milestones.reload_after_save` only when observed equal; becomes R6's in-game evidence emitter and covers SEEKER SK-6c
+  and part of Salvor R4.
+- 78.3 Live content parity (77.17): per-mod loaded counts against counts taken from the candidate before launch.
+- 78.4 Declarative per-mod scenarios: `reports/PROBE_SCENARIO.json` (settings for the rig copy, steps, expected log
+  lines with deadlines), so rig steps 13-15 and future recreations need no probe code.
+- 78.5 One probe: fold Salvor's `salvor_rig_probe` load/save/day stages into this probe as a `salvor` profile (after
+  78.2 lands); Salvor's `rig-build-probe` builds that profile.
+- 78.6 Clean exit: the probe writes a done marker; the harness closes the window and records a natural exit by default.
+- 78.7 "What was exercised" per mod; a mod with nothing exercised is flagged HOLLOW.
+- 78.8 Campaign frame time under load per day (`campaign_perf`), for the Crusade and SPW.
+
+**79. Same treatment for other components (proposed 2026-10-20).** The probe gaps have counterparts elsewhere:
+- 79.1 Scanner coverage report: per mod, which checks actually ran on which files (a scan can be as hollow as a probe
+  run); unread file types listed instead of silently skipped.
+- 79.2 Offline save fingerprint: Salvor and VoidSmith compute the same fingerprint sections from a save's XML, so a
+  repaired or edited save can be compared with the probe's in-game fingerprint (78.2) and with its own original.
+- 79.3 VoidSmith Save Workshop: every written copy carries an expected-fingerprint file; the probe's reload compares
+  against it, closing "one Workshop copy loaded in game" and the capacity recompute question in one run.
+- 79.4 Duel, raid and capacity sub-mods: the same manifest echo, done marker and scenario format as the main probe.
+- 79.5 Project Go assurance import: read the new record blocks (fingerprint, content parity, scenario, exercised) as
+  gate evidence; a HOLLOW member never passes CAMPAIGN.
+- 79.6 SPW: map `campaign_perf` and combat-perf into `performance-report.json` so revivals carry a performance
+  baseline (SPW roadmap item 5).
+- 79.7 Rig harness: one launcher path (probe-group live, bf-test.ps1, boot-test) with the same manifest, exit and
+  done-marker handling, instead of three.
+
 **Owner follow-ups 2026-10-20 ("add both to roadmap. We should reassess other mods to see if they dropped any features").**
 
 **77.14 Accept a single finding outside a packet.** `escalation accept` only matches findings already in an escalation
