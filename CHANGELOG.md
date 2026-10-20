@@ -3,6 +3,7 @@
 ## 0.4.0 (unreleased)
 
 - **Accept named findings into a baseline (ROADMAP item 77.14):** `baseline-accept-finding WORKSPACE SELECTOR... --reason TEXT` accepts the findings a `FINDING_ID[:FILE_PART[:EVIDENCE_PART]]` selector names (not escalation packets only) into the workspace baseline, keeping its stamp; the reason and keys go to `reports/ESCALATION_REVIEW.md`. A selector that matches nothing or a reason under 20 characters is refused; re-running adds nothing.
+- **Dropped-feature sweep as a command (ROADMAP items 77.16 and 77.19):** `dropped-features WORKSPACE` and `--queue DIR [--write DIR] [--json]` list what the older tree had that `working/` lacks. The old tree is PORT_SOURCE.json's `old_tree`, else the `original/` mod root whose `mod_info.json` id matches (so a multi-mod pack is never compared whole), else the only mod in `original/`, else UNDETERMINED. `working/reports/REMOVALS.json` (`removals.py`: validated, reason required) records deliberate removals; covered drops count as explained. Verdicts: DROPS_UNEXPLAINED, UNDETERMINED, EXPLAINED, CLEAN. Read-only; no new scanner finding.
 
 - Public `save_doctor.installed_mods` provider function for Salvor (`_installed` remains as an alias).
 
