@@ -79,6 +79,24 @@ archives; each confirmed loss becomes a BUGS.md entry.
     id); Station Augments 2.4.3+bf.1 has no zip and no ARCHIVE_NOTE.
   - Next: write REMOVALS.json entries for the intended rows so they stop showing; add the junk-file and
     copy-of-jar check to `archive-preflight`; turn this pass into `done-audit --content-parity --write DIR`.
+  - **Resolved the same day (owner decisions 2026-10-20; REMOVALS.json written in each `working/reports/`, local):**
+    - SEEKER: the "twig" classes were adapters for the external Twig Library, which no longer exists; the Betelgeuse was
+      already rebuilt on vanilla station modules (`docs/fable-solutions/SEEKER-twig-to-ship-modules.SOLUTION.md`,
+      2026-09-09). Owner accepted it as re-created; per-segment supply drain, repair rates and 50% revive left out
+      (can be re-added later; `In operation/SEEKER/working/reports/TWIG_RECREATION_PLAN.md`). Module save/reload check
+      is LOCAL_HANDOFF 0b item 15.
+    - Ironclads: all 25 dropped triggers (161 rows) verified as the 0.7 vanilla copy, 0 Ironclads-specific, none
+      restored; the 33 per-system world scripts were never generated in the original either (its SectorGen.java
+      comments out all but Lomonosov, Shington, Nexus and Centronom). The stray `IroncladsEcon - копия.jar` moved out
+      of `working/`. Now EXPLAINED 87/87.
+    - Xenoargh AI Overhaul and FX Core: lombok runtime classes stripped (no shipped class references `lombok/`), and AI
+      Overhaul's own TravelDriveStats replaced by vanilla's. Not a RevenantLib fold.
+    - Better Deserving S-mods (dead code upstream), AI-War (superseded upstream by AIW_*), Maelstrom Imperium Unofficial
+      Expansion (copies of its dependency's classes), Mirfak/Blackrock/Seafood (design-type keys renamed by the English
+      translation; Mirfak's "rule" was a comment row): all EXPLAINED. Roider's Dragline is file-level, which REMOVALS
+      does not cover yet (77.19 extension: a `files` category).
+    - Queue now: 1 DROPS_UNEXPLAINED (Templars 0.9.8f: exactly the open C4 reputation stages and the console command),
+      9 UNDETERMINED (no original with the shipped id), the rest EXPLAINED or CLEAN.
 
 **77.19 Recorded removals.** Strip plans, RevenantLib folds, renamed ids and upstream removals (Templars 0.9.9e) write one
 line each to `reports/REMOVALS.json` (item, reason, decision source). The dropped-feature sweep (77.16), archive parity
