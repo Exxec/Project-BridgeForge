@@ -11,6 +11,9 @@ drop from a silent one:
 `item` is the exact string `scan_port.dropped_features` returns for the category (class name `pkg.Name`, events.json id,
 `type/stage`, `section.key`, trigger); `pattern` is a shell glob over the same strings. Exactly one of the two is required, as
 are a non-empty `reason`. The file is only ever read by the sweep; the helpers here are for tools that record a removal.
+
+The `files` category (item = path below `working/`, e.g. `data/hulls/raa_dragline.ship`, or a glob over such paths) explains
+file-level drops: a file under `data/` the older tree had and `working/` lacks. `remove` (77.27) writes these entries.
 """
 from __future__ import annotations
 
@@ -21,7 +24,10 @@ from datetime import date
 from pathlib import Path
 
 from .safeio import atomic_write_json
-from .scan_port import CATEGORIES
+from .scan_port import CATEGORIES as FEATURE_CATEGORIES
+
+FILES_CATEGORY = "files"
+CATEGORIES = {**FEATURE_CATEGORIES, FILES_CATEGORY: "files under `data/`"}
 
 REMOVALS_FILE = "reports/REMOVALS.json"
 SCHEMA = 1
