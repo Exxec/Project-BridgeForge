@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from bridgeforge.exit_observation import (ExitObservationError, read_exit_observation, write_exit_observation)
+from bridgeforge.exit_observation import (ExitObservationError, observed_exit, read_exit_observation, write_exit_observation)
 from bridgeforge.live_run import settle_exit
 from bridgeforge.live_trust import write_run_record
 from tests.support import resolved_temp_dir
@@ -53,6 +53,15 @@ class SettleExitTests(unittest.TestCase):
 
     def test_a_java_left_behind_is_killed_not_natural(self) -> None:
         self.assertEqual(self._settle(FakeProcess(0), java_left=lambda: True), ("KILLED", None))
+
+
+class ObservedExitTests(unittest.TestCase):
+    def test_exit_by_itself_with_no_java_left_is_natural(self) -> None:
+        self.assertEqual(observed_exit(0, java_left=False), ("NATURAL", 0))
+
+    def test_still_running_or_java_left_behind_is_killed_with_no_code(self) -> None:
+        self.assertEqual(observed_exit(None, java_left=False), ("KILLED", None))
+        self.assertEqual(observed_exit(0, java_left=True), ("KILLED", None))
 
 
 class ObservationFileAndRecordTests(unittest.TestCase):

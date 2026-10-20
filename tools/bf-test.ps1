@@ -7,7 +7,10 @@
 
 param(
     [Parameter(Position = 0)][string]$Command = "help",
-    [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]]$Rest
+    [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]]$Rest,
+    # ROADMAP 77.21: launch only. Record how the game ended in logs\<TESTID>.exit.json (NATURAL + return code, or KILLED + null).
+    [switch]$NaturalExit,
+    [int]$ExitWait = 180
 )
 $ErrorActionPreference = "Stop"
 
@@ -320,6 +323,14 @@ switch ($Command) {
             break
         }
         } finally {
+            # ROADMAP 77.21: observe the exit before anything is killed. Wait (bounded) for the game to quit by itself.
+            $exitObserved = $null
+            if ($NaturalExit) {
+                $deadline = (Get-Date).AddSeconds($ExitWait)
+                while (((-not $wrapper.HasExited) -or (@(Get-RigJava).Count -gt 0)) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
+                if ($wrapper.HasExited -and @(Get-RigJava).Count -eq 0) { $exitObserved = @("NATURAL", [int]$wrapper.ExitCode) }
+                else { $exitObserved = @("KILLED", $null) }
+            }
             # Only this launch session: pre-flight refused any already-running rig game.
             # Match start time as well as PID, so a reused PID is never terminated.
             foreach ($ownedId in @($ownedProcesses.Keys)) {
@@ -327,6 +338,10 @@ switch ($Command) {
                 if ($ownedProcess -and $ownedProcess.StartTime -eq $ownedProcesses[$ownedId]) {
                     & taskkill.exe /PID $ownedId /T /F 2>&1 | Out-Null
                 }
+            }
+            if ($exitObserved) {
+                $record = [ordered]@{ process_exit_observed = $exitObserved[0]; process_exit_code = $exitObserved[1] }
+                [System.IO.File]::WriteAllText((Join-Path $Logs "$id.exit.json"), (($record | ConvertTo-Json) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
             }
             $wrapper.Dispose()
             # R1: re-hash the staged files now the game is closed and give the rig back (writes logs\<TESTID>.completed.json).
@@ -414,7 +429,9 @@ BridgeForge offline test helper. Commands:
   probe <preset|folder> [profile]  install the probe, write its config + setups, set enabled mods
                               profile: exigency-rep | seeker-betelgeuse | flux-basic | path\to\my.txt
                               presets: $(($Presets.Keys | Sort-Object) -join ', ')
-  launch <TESTID>             start the rig, log to logs\<TESTID>.stdout.log (returns when the game closes)
+  launch <TESTID> [-NaturalExit] [-ExitWait 180]
+                              start the rig, log to logs\<TESTID>.stdout.log (returns when the game closes).
+                              -NaturalExit records the observed exit in logs\<TESTID>.exit.json (NATURAL+code or KILLED+null).
   triage [TESTID] [prefix]    log-triage the log (default: newest) -> logs\<TESTID>.triage.txt
   scenario <name> [TESTID]    scenario check: avesta-near | betelgeuse-damaged | nex-corvus-day1
   savecheck <preset|folder>   read-only checks on the newest save -> logs\savecheck-*.txt
