@@ -28,6 +28,7 @@ from collections import Counter
 from datetime import date
 from pathlib import Path
 
+from .safeio import verify_written
 from .java_toolchain import assemble_classpath, find_jdk, run_javac
 from .rebuild_jar import _diff_class, _parse_class
 
@@ -188,6 +189,7 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
     # Arkgneisis 2026-09-30: WinError 5); retry before giving up, and never leave the temp behind.
     import time
 
+    payload = temp.read_bytes()
     for attempt in range(10):
         try:
             temp.replace(jar_path)
@@ -197,6 +199,7 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
                 temp.unlink(missing_ok=True)
                 raise
             time.sleep(1)
+    verify_written(jar_path, payload)
     copied = []
     if source_root:
         root = (working / source_root).resolve()
@@ -209,6 +212,7 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
                 shutil.copy2(target, backup / "src-before" / target.relative_to(root))
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
+            verify_written(target, source.read_bytes())
             copied.append(str(target.relative_to(working)))
     result.update({"installed": True, "backup_jar": str(kept), "sources_copied": copied})
     (backup / f"PATCH-{jar_path.stem}.json").write_text(json.dumps(result, indent=2), encoding="utf-8")

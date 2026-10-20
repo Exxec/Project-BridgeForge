@@ -295,6 +295,7 @@ def _archived_folder_matches(done_dir: Path, workspace: Path, journal: dict) -> 
 
 def _step_archive(workspace: Path, journal: dict, done_dir: Path, policy_path: Path | None, changelog: Path | None) -> None:
     from .archive import archive_mod, write_readme_copies
+    from .safeio import verify_written
 
     if journal["state"] in ("ARCHIVED", "SNAPSHOTTED"):
         if not _archived_folder_matches(done_dir, workspace, journal):
@@ -306,6 +307,7 @@ def _step_archive(workspace: Path, journal: dict, done_dir: Path, policy_path: P
         result = archive_mod(workspace, done_dir, policy_path=policy_path, today=journal["day"], refresh=False, move_aside=True)
         zip_path = Path(result["zip"])
         shutil.copy2(zip_path, done_dir / zip_path.name)
+        verify_written(done_dir / zip_path.name, zip_path.read_bytes())
         write_readme_copies(Path(result["archive"]))
         if not _archived_folder_matches(done_dir, workspace, journal):
             raise ReviseError("the archived files differ from the tested candidate; the archive was written but not accepted")

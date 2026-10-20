@@ -29,6 +29,7 @@ import zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from .safeio import verify_written
 from .scanner import _blank_java_comments, _loaded_mod_jars, _parse_class_file, _parse_json
 
 SCHEMA_VERSION = 1
@@ -787,7 +788,9 @@ def _apply_csv(path: Path, rel: str, entries: dict, applied: Counter, problems: 
     if _csv_shape(new) != _csv_shape(text):
         problems.append(f"{rel}: CSV structure would change; file left untouched")
         return
-    path.write_bytes((b"\xef\xbb\xbf" if bom else b"") + new.encode(encoding))
+    data = (b"\xef\xbb\xbf" if bom else b"") + new.encode(encoding)
+    path.write_bytes(data)
+    verify_written(path, data)
     applied["csv"] += len(edits)
 
 
@@ -830,7 +833,9 @@ def _apply_jsonlike(path: Path, rel: str, entries: dict, applied: Counter, probl
         except json.JSONDecodeError:
             problems.append(f"{rel}: would no longer parse; file left untouched")
             return
-    path.write_bytes((b"\xef\xbb\xbf" if had_bom else b"") + new.encode("utf-8"))
+    data = (b"\xef\xbb\xbf" if had_bom else b"") + new.encode("utf-8")
+    path.write_bytes(data)
+    verify_written(path, data)
     applied["json"] += len(edits)
 
 
@@ -853,7 +858,9 @@ def _apply_java(path: Path, rel: str, entries: dict, applied: Counter, problems:
     new = original
     for s, e, replacement in sorted(edits, reverse=True):
         new = new[:s] + replacement + new[e:]
-    path.write_bytes(new.encode("utf-8"))
+    data = new.encode("utf-8")
+    path.write_bytes(data)
+    verify_written(path, data)
     applied["java"] += len(edits)
 
 
@@ -890,6 +897,7 @@ def _apply_jar(path: Path, entries: dict, applied: Counter, problems: list) -> N
                 raise TranslationError(f"{info.filename} does not parse after rewriting")
     # A freshly copied jar is often held briefly by antivirus or an indexer on Windows (seen on
     # Nightcross and Blackrock): retry the swap for a few seconds before giving up.
+    expected = tmp.read_bytes()
     for attempt in range(8):
         try:
             tmp.replace(path)
@@ -898,6 +906,7 @@ def _apply_jar(path: Path, entries: dict, applied: Counter, problems: list) -> N
             if attempt == 7:
                 raise TranslationError(f"{path} stayed locked; the translated jar is at {tmp}") from None
             time.sleep(1.0)
+    verify_written(path, expected)
     applied["jar"] += count
 
 
@@ -923,7 +932,9 @@ def _apply_class(path: Path, entries: dict, applied: Counter, problems: list) ->
     if _parse_class_file(new) is None:
         problems.append(f"{path.name}: class would not parse; file left untouched")
         return
-    path.write_bytes(new)
+    data = new
+    path.write_bytes(data)
+    verify_written(path, data)
     applied["class"] += len(replacements)
 
 
@@ -953,7 +964,9 @@ def _apply_text_lines(path: Path, rel: str, entries: dict, applied: Counter, pro
     new = text
     for start, end, translated in sorted(edits, reverse=True):
         new = new[:start] + translated + new[end:]
-    path.write_bytes((b"\xef\xbb\xbf" if bom else b"") + new.encode(encoding))
+    data = (b"\xef\xbb\xbf" if bom else b"") + new.encode(encoding)
+    path.write_bytes(data)
+    verify_written(path, data)
     applied["text"] += len(edits)
 
 
