@@ -113,7 +113,21 @@ class ShadowTriageTests(unittest.TestCase):
         with resolved_temp_dir() as root:
             working, rc8, _reference, _ = _layout(root)
             with self.assertRaises(FixerError):
-                compute_fix(working, "vanilla-path-shadowing", {"vanilla_core": rc8})
+                compute_fix(working, "vanilla-path-shadowing", {"vanilla_core": rc8, "repo_root": root / "empty-repo"})
+
+    def test_a_local_reference_rig_manifest_does_not_reach_a_fixture_run(self) -> None:
+        with resolved_temp_dir() as root:
+            working, rc8, _reference, _ = _layout(root)
+            local_repo = root / "local-repo"
+            install = root / "LocalStarsector"
+            (install / "starsector-core").mkdir(parents=True)
+            registry = local_repo / "bridgeforge-state" / "reference-rigs"
+            registry.mkdir(parents=True)
+            (registry / "0.9a.json").write_text(json.dumps({"schema_version": 1, "mode": "REFERENCE_RIG", "install": str(install)}), encoding="utf-8")
+            with self.assertRaises(FixerError):
+                compute_fix(working, "vanilla-path-shadowing", {"vanilla_core": rc8, "repo_root": root / "empty-repo"})
+            found = reference_core_for_game_version("0.9a-RC8", repo_root=local_repo)
+        self.assertEqual(found, install / "starsector-core")  # the fake manifest is real only under its own repo root
 
     def test_reference_rig_is_found_by_the_mods_game_version(self) -> None:
         with resolved_temp_dir() as root:
