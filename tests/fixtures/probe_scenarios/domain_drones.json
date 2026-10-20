@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "settings": {},
+  "steps": [],
+  "expect": [
+    {"id": "content-parity", "line": "BF-PROBE\\|[^|]*\\|content-parity\\|OK\\|", "within_days": 2},
+    {"id": "drone-rules", "line": "BF-PROBE\\|[^|]*\\|content-parity\\|[^|]*\\|[^|]*\\|.*rules.*[1-9][0-9]*", "within_days": 2}
+  ],
+  "pass_requires": ["content-parity"]
+}

@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "settings": {
+    "data/config/tem_crusade_settings.json": {"debugStartInDays": 1, "shortStages": true}
+  },
+  "steps": [
+    {"step": "advance_days", "days": 12}
+  ],
+  "expect": [
+    {"id": "launch", "line": "BF-TEMCRUSADE\\|launch\\|", "within_days": 4},
+    {"id": "payload", "line": "BF-TEMCRUSADE\\|payload\\|", "within_days": 10, "after": "launch"},
+    {"id": "response", "line": "BF-TEMCRUSADE\\|response\\|", "within_days": 10, "after": "launch"},
+    {"id": "end", "line": "BF-TEMCRUSADE\\|end\\|", "within_days": 14, "after": "payload"}
+  ],
+  "pass_requires": ["launch", "payload", "end"]
+}

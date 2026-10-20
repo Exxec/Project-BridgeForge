@@ -627,6 +627,7 @@ def write_probe_config(
         profile=profile,
     )
 
+    scenario_info = _apply_scenario(mod_dir, runtime_dir, config, dry_run)
     common_dir = runtime_dir / "saves" / "common"
     config_path = common_dir / CONFIG_FILE
     marker_path = common_dir / RIG_MARKER_FILE
@@ -644,6 +645,8 @@ def write_probe_config(
         "written": False,
         "installed": False,
     }
+    if scenario_info is not None:  # absent unless the candidate carries a PROBE_SCENARIO.json
+        result["scenario"] = scenario_info
 
     if dry_run:
         return result
@@ -667,6 +670,30 @@ def write_probe_config(
         result["installed"] = True
 
     return result
+
+
+def _apply_scenario(mod_dir: Path, runtime_dir: Path, config: dict[str, object], dry_run: bool) -> dict[str, object] | None:
+    """A candidate's reports/PROBE_SCENARIO.json (docs/PROBE_SCENARIOS.md): put its steps into `config` and, unless `dry_run`,
+    apply its `settings` to the rig's copy of the mod (found by mod id under <runtime_dir>/mods), never to `mod_dir`."""
+    from .probe_scenario import ScenarioError, load_for_working, probe_config_keys, stage_settings
+
+    mod_root = _mod_root(mod_dir)
+    try:
+        scenario = load_for_working(mod_root)
+        if scenario is None:
+            return None
+        config.update(probe_config_keys([scenario]))
+        staged: list[dict[str, object]] = []
+        if scenario["settings"] and not dry_run:
+            from .probe_group import rig_mod_ids
+
+            folder = rig_mod_ids(runtime_dir / "mods").get(str(config["target_mod_id"]))
+            if folder is None:
+                raise ScenarioError(f"the rig has no copy of mod {config['target_mod_id']} under {runtime_dir / 'mods'} to apply settings to.")
+            staged = stage_settings(scenario, runtime_dir / "mods" / folder, mod_root)
+    except ScenarioError as exc:
+        raise ProbeConfigError(str(exc)) from exc
+    return {"steps": len(scenario["steps"]), "expectations": len(scenario["expect"]), "settings": sorted(scenario["settings"]), "settings_staged": staged}
 
 
 def _install_probe_mod(runtime_dir: Path) -> dict[str, object]:

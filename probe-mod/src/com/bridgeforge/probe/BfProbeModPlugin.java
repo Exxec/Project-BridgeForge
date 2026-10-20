@@ -35,6 +35,7 @@ public class BfProbeModPlugin extends BaseModPlugin {
             Global.getLogger(BfProbeModPlugin.class).info("BF-PROBE disabled: no rig marker");
             return;
         }
+        ScenarioRunner.maybeRegister(); // per-mod PROBE_SCENARIO steps (docs/PROBE_SCENARIOS.md); inert without scenario_steps
         if (Global.getSector().hasTransientScript(CampaignProbeScript.class)) {
             return;
         }
