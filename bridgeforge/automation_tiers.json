@@ -164,6 +164,7 @@
     "runtime-placeholder-unsupported-operation": "auto",
     "script-sandbox-forbidden-api": "code",
     "security-manager": "code",
+    "fixer-backup-orphaned": "inspect",
     "settings-json-override-accepted": "none",
     "settings-json-override-breadth": "decision",
     "settings-json-override-merged": "none",

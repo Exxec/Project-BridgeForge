@@ -12,14 +12,24 @@
   does not notice a missing rules.csv, so the live gate passed.
 - Source evidence: the original fails UTF-8 at byte 286,759 on an isolated CP-1252 apostrophe (`It\x92s`), which
   `_fix_data_file_not_utf8` accepts and re-encodes; `apply_fix` backed the file up but the re-encoded file is absent.
-  Cause not yet determined (the write, a later step, or a hand step removing it). An audit of all 867
-  `.pre-bf-fix-*.bak` files under `In operation/` and `Done/` found this the only backup whose working file is missing
-  (six others sit in `scratch/` folders by design).
-- Required: find the cause and add a regression test; add a check (scan or `archive-preflight`) that fails when a
-  `.pre-bf-fix-*.bak` has no file beside it in `working/`, or when a data file present in `original/` is absent from
-  `working/` without a recorded removal; restore ATDD's rules.csv by re-running the fixer on the backup, rescan, live
-  run that exercises a drone rule, and `archive --refresh` (moves the old archive aside). Correct the archive status.
-- Status: OPEN (ROADMAP-3 item 77.16).
+  An audit of all 867 `.pre-bf-fix-*.bak` files under `In operation/` and `Done/` found this the only backup whose
+  working file is missing (six others sit in `scratch/` folders by design).
+- Cause (2026-10-20): not code. The fixer ran correctly on 2026-09-27 (ledger `data-file-not-utf8 ... APPLIED`
+  2026-09-28T01:24:43Z); the repaired file (1,452,429 bytes, mtime kept 2026-09-27 20:24:38) was moved by hand to
+  `scratch/removed/rules.csv` on 2026-10-05 09:02:58, ten minutes before the archive (09:12:55). Re-running the fix gives
+  bytes identical to that scratch copy. No BridgeForge code writes `scratch/removed/`. The same hand-made folder exists in
+  Aivon-Republic (`special_items.csv`, replaced: `working/` has one) and Yellowjackets-Mining-Conglomerate (`tpc.wpn`, a
+  shadow of the vanilla Thermal Pulse Cannon, so its removal is the vanilla-shadowing clean-up; the ships use vanilla's).
+- Guards (2026-10-20, regardless of cause): `apply_fix` re-reads every written path and raises with the backups kept
+  (`_verify_applied`); new MANUAL finding `fixer-backup-orphaned` (`fixer_backups.py`, scratch backups ignored);
+  `archive_mod` refuses a workspace with an orphaned backup; `archive-preflight` marks a ZIP holding one unsafe to stage.
+  Tests: `tests/test_fixer_backups.py` (9). Hand removals now have a record format (`reports/REMOVALS.json`, item 77.19).
+- Restore (2026-10-20, local): `working/data/campaign/rules.csv` re-created from the backup through the guarded fix;
+  valid UTF-8, differs from the original only at 52 re-encoded CP-1252 bytes; rescan `scratch/bf-scan-fix001/` (16
+  findings, none `fixer-backup-orphaned`; the new `rules-csv-curly-quote-unreadable` REVIEW needs a look).
+- Status: GUARDED; the mod itself stays OPEN until a live run exercises a drone rule (LOCAL_HANDOFF 0b item 14) and
+  `archive --refresh` replaces the 0.6 archive (old one moved aside). Until then its archive status LIVE_VALIDATED is
+  wrong for the shipped bytes.
 
 ## Implementation issues identified during the 2026-10-18 documentation audit
 

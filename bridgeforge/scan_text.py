@@ -186,6 +186,15 @@ def _scan_data_encoding(root: Path, result: ScanResult) -> None:
         result.add(id="data-file-not-utf8", category="localization", severity="low", classification="REVIEW", confidence="DETERMINISTIC", explanation="Data files contain bytes that are not valid UTF-8. Starsector reads data as UTF-8, so the text renders garbled. Re-save the file as UTF-8 from its real encoding (often GB18030/GBK in Chinese mods) rather than editing the bytes.", evidence=bad[:25] + ([f"... {len(bad) - 25} more"] if len(bad) > 25 else []))
 
 
+def _scan_orphaned_fixer_backups(root: Path, result: ScanResult) -> None:
+    """A `.pre-bf-fix-*.bak` with no file beside it: a fixed file was lost afterwards (BUGS.md FIX-001)."""
+    from .fixer_backups import orphaned_backups
+
+    orphans = orphaned_backups(root)
+    if orphans:
+        result.add(id="fixer-backup-orphaned", category="packaging", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation="A fixer backup (.pre-bf-fix-*.bak) has no file beside it, so the file the fixer repaired is missing and the mod would ship without it (All the Domain Drones lost its whole rules.csv this way). Restore the file from the backup, or from scratch/ if it was moved, and run the fix again; archive refuses until this is resolved.", evidence=orphans[:25] + ([f"... {len(orphans) - 25} more"] if len(orphans) > 25 else []))
+
+
 _FULLWIDTH_NUMBER_CHARS = re.compile(r"[０-９，．。－＋％]")
 
 

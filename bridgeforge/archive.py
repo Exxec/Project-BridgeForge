@@ -189,6 +189,13 @@ def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, t
     working = workspace / "working"
     if not (working / "mod_info.json").is_file():
         raise ArchiveError(f"{workspace} has no working/mod_info.json.")
+    from .fixer_backups import orphaned_backups
+
+    orphans = orphaned_backups(working)
+    if orphans:
+        shown = ", ".join(orphans[:5]) + (f" (+{len(orphans) - 5} more)" if len(orphans) > 5 else "")
+        raise ArchiveError(f"refusing to archive {workspace.name}: fixer-backup-orphaned, a fixer backup has no file beside it ({shown}). "
+                           "The fixed file was lost after the fix; restore it and rerun the fix (BUGS.md FIX-001).")
     info = _load_lenient_json_file(working / "mod_info.json") or {}
     mod_id, name, version = info.get("id"), str(info.get("name") or workspace.name), _version_text(info.get("version"))
     licence = revival_licence(mod_id, name, policy_path)

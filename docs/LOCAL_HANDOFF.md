@@ -73,6 +73,9 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
     (`+bf`, with `jars/TEM_Crusade.jar`) and Nexerelin, Corvus and a random sector, `debugStartInDays` and the short-stage mode set
     in `data/config/tem_crusade_settings.json`. Done: `BF-TEMCRUSADE|stage|...` lines for start, fleets, condition on and off, an
     ending with losses and unrest, and a save that reloads. Try `defenderMode` `response` and `military` once each.
+14. **All the Domain Drones rules.csv (BUGS.md FIX-001).** The working copy's rules.csv is restored. `probe-group live` with the
+    mod, open a drone interaction that only its rules.csv defines (a dialogue option from the mod's rules) and screenshot it;
+    then `archive --refresh` (the 0.6 archive without rules.csv moves to `Done/_replaced-<date>/`) and correct the status.
 
 Rewritten 2026-09-27 after the local and cloud histories merged. Closed and removed: the MOVES.log
 shadowing audit (P14 item 27, done locally in `0183ab3`) and the Maelstrom dependency-jar check
