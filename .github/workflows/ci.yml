@@ -96,9 +96,6 @@ jobs:
 
   shared-fixtures:
     name: Shared fixtures match Project Go
-    # Advisory until Project Go's runtime-context copy is updated (its expected shipped_sha256 is still 292fcd...; the
-    # correct one is 5d50ffbb...). Remove this line once Project Go updates, so a drift fails the build again.
-    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
