@@ -9,7 +9,7 @@
       "workspace": "B",
       "mod_id": "mod_b",
       "version": "1.2",
-      "shipped_sha256": "292fcd2c8195c896471a0d1e0cccff7c22958c97d3c69023e126fa86d50e9e93",
+      "shipped_sha256": "5d50ffbb82d40be9ebc957cc9e6bd36ca9ba92a27f72aca7d5ed93ad09ce1fab",
       "verdict": "PASS",
       "provenance": "BOUND"
     }
