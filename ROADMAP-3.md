@@ -2,6 +2,27 @@
 
 **77.13 Proposed hygiene preflight (S4 supportability; scope/design still pending).** This audit found 21 Ruff errors in pre-existing untracked agent scripts, including syntax errors, while the isolated tracked checkout passed Ruff. Add a read-only preflight that reports tracked modifications, untracked code, ignored local evidence, interpreter/dependency availability and separate tracked-tree versus whole-directory lint results. It must never delete/move files, suppress whole-directory failures, stage unrelated work, or traverse private mod/save inputs. Reuse Git's file inventory and Ruff rather than inventing a second linter. Validate on synthetic dirty/untracked/ignored fixtures, filenames with spaces and Unicode, and missing tools; unavailable checks report INCOMPLETE. A future cleanup needs explicit file-level scope. This supports item 77.7's worktree rule without discarding agent work or hiding failing scripts.
 
+## Translation-schema slice of 77.3 (owner continuation, 2026-10-19)
+
+Further owner continuation: "Repeat for all next phases if able." Runtime-context fields in `run_manifest` and
+`write_run_record` are now implemented and fixture-tested against Go, with unknown exits null. Actual interactive exit
+observation and a BOUND live run remain pending. Project Go gained an opt-in copied real-mod measurement task and safe
+explicit evidence capture; FlowerGod requires 712 reviews after 908 policy approvals. GUI owner review and JSON-key
+consumer evidence remain open. No release or archive is authorized by these implementation receipts.
+
+Owner: "If able continue same process in next phase." Implemented the next Project Go schema-alignment slice of 77.3;
+this does not schedule the other recommendations or change S1-S4. It supplies a source-bound, fixture-tested translation
+contract that a later reproducible revival case can consume.
+
+Schema v1 is retained with additive text-line/class kinds and optional role/group metadata. The original conformance
+corpus stays intact; two new shared JSON fixtures cover exact text/class bytes and protected/linked behaviour. BridgeForge
+validates identities before application and stages linked copies; linked in-place use is refused. Project Go validates the
+metadata and tests both shared fixtures. See `fixtures/translation-conformance/SCHEMA_V1_EXTENSIONS.md` for boundaries.
+Tests: `test_translation_extended_kinds`, `test_translation_roles`, `test_translation_extension_conformance` plus the
+existing translation/conformance/batch tests; Project Go `TranslationExtensionConformanceTest` and full Gradle build.
+Source/static/package validation is separate from runtime: LIVE TEST NOT PERFORMED. No schema-2 migration, release,
+real-mod acceptance or runtime-record change is included.
+
 <!-- page-nav:start -->
 > Page 3 of 3 of the BridgeForge roadmap. Previous: [ROADMAP-2.md](ROADMAP-2.md). Newest entries: [ROADMAP-3.md](ROADMAP-3.md).
 <!-- page-nav:end -->

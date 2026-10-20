@@ -88,7 +88,10 @@ class LiveProcessPathTests(unittest.TestCase):
         with resolved_temp_dir() as root:
             inner = root / "logs"
             inner.mkdir()
-            child = subprocess.Popen([sys.executable, "-c", "import sys; sys.stdin.read()"],
+            # A venv's python.exe is a launcher that spawns the real interpreter as a child;
+            # the launcher's own cwd is not the requested one, so query the real interpreter.
+            interpreter = getattr(sys, "_base_executable", sys.executable)
+            child = subprocess.Popen([interpreter, "-c", "import sys; sys.stdin.read()"],
                                      cwd=inner, stdin=subprocess.PIPE)
             try:
                 found, _ = _bounded_process_paths(root, [child.pid])

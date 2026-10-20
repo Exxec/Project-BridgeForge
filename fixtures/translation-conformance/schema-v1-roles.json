@@ -1,0 +1,145 @@
+{
+  "fixture_version": 1,
+  "schema_version": 1,
+  "expected_problem_count": 1,
+  "input_files": {
+    "mod_info.json": "eyJpZCI6InJvbGUtZml4dHVyZSIsIm5hbWUiOiJSb2xlcyIsInZlcnNpb24iOiIxIn0=",
+    "data/a.csv": "aWQsbmFtZSxkZXNpZ24gdHlwZQrkv53nlZks5ZCN5a2XLOiuvuiuoQo=",
+    "data/a.json": "eyJkZXNpZ25UeXBlQ29sb3JzIjp7IuiuvuiuoSI6InJlZCIsIkV4aXN0aW5nIjoiYmx1ZSJ9fQ=="
+  },
+  "expected_export": {
+    "entries": [
+      {
+        "id": "csv:data/a.csv#保留:id",
+        "file": "data/a.csv",
+        "kind": "csv",
+        "context": {
+          "row": "保留",
+          "column": "id"
+        },
+        "source": "保留",
+        "translation": ""
+      },
+      {
+        "id": "csv:data/a.csv#保留:name",
+        "file": "data/a.csv",
+        "kind": "csv",
+        "context": {
+          "row": "保留",
+          "column": "name"
+        },
+        "source": "名字",
+        "translation": ""
+      },
+      {
+        "id": "csv:data/a.csv#保留:design type",
+        "file": "data/a.csv",
+        "kind": "csv",
+        "context": {
+          "row": "保留",
+          "column": "design type"
+        },
+        "source": "设计",
+        "translation": ""
+      },
+      {
+        "id": "json:data/a.json@0",
+        "file": "data/a.json",
+        "kind": "json-key",
+        "context": {
+          "path": [
+            "designTypeColors",
+            "设计"
+          ]
+        },
+        "source": "设计",
+        "translation": ""
+      }
+    ],
+    "file_hashes": {
+      "data/a.csv": "8aab9630b0983039e5b5d0296184670fe137019da8a575bec64061b17d490717",
+      "data/a.json": "44e9cdcc608cbe0ce656794ed04a31b53e737124e2fc804a2e50d8c2b2d11360"
+    },
+    "unreadable": [],
+    "entry_count": 4,
+    "unique_source_count": 3
+  },
+  "translated": {
+    "schema_version": 1,
+    "mode": "TRANSLATION_EXPORT",
+    "mod_id": "role-fixture",
+    "source_language": "zh",
+    "target_language": "en",
+    "instructions": "Translate each entries[].source into natural Starsector English in entries[].translation (or fill glossary[source] once for repeated strings). Keep %s/%d/$variables/\\u0001 markers, ids, file paths and punctuation structure unchanged. json-key entries are identifiers used as keys (e.g. designTypeColors): translate them exactly like the matching tech/manufacturer text.",
+    "file_hashes": {
+      "data/a.csv": "8aab9630b0983039e5b5d0296184670fe137019da8a575bec64061b17d490717",
+      "data/a.json": "44e9cdcc608cbe0ce656794ed04a31b53e737124e2fc804a2e50d8c2b2d11360"
+    },
+    "unreadable": [],
+    "entry_count": 4,
+    "unique_source_count": 3,
+    "entries": [
+      {
+        "id": "csv:data/a.csv#保留:id",
+        "file": "data/a.csv",
+        "kind": "csv",
+        "context": {
+          "row": "保留",
+          "column": "id"
+        },
+        "source": "保留",
+        "translation": "Unsafe id",
+        "role": "IDENTIFIER",
+        "role_rule": "csv-id"
+      },
+      {
+        "id": "csv:data/a.csv#保留:name",
+        "file": "data/a.csv",
+        "kind": "csv",
+        "context": {
+          "row": "保留",
+          "column": "name"
+        },
+        "source": "名字",
+        "translation": "Name"
+      },
+      {
+        "id": "csv:data/a.csv#保留:design type",
+        "file": "data/a.csv",
+        "kind": "csv",
+        "context": {
+          "row": "保留",
+          "column": "design type"
+        },
+        "source": "设计",
+        "translation": "New design",
+        "role": "LINKED",
+        "group": "link:fixture-design",
+        "role_rule": "linked-by-shared-value"
+      },
+      {
+        "id": "json:data/a.json@0",
+        "file": "data/a.json",
+        "kind": "json-key",
+        "context": {
+          "path": [
+            "designTypeColors",
+            "设计"
+          ]
+        },
+        "source": "设计",
+        "translation": "",
+        "role": "LINKED",
+        "group": "link:fixture-design",
+        "role_rule": "linked-by-shared-value"
+      }
+    ],
+    "glossary": {},
+    "roles_version": "fixture-1"
+  },
+  "expected_output_files": {
+    "data/a.csv": "aWQsbmFtZSxkZXNpZ24gdHlwZQrkv53nlZksTmFtZSxOZXcgZGVzaWduCg==",
+    "data/a.json": "eyJkZXNpZ25UeXBlQ29sb3JzIjp7Ik5ldyBkZXNpZ24iOiJyZWQiLCJFeGlzdGluZyI6ImJsdWUifX0=",
+    "mod_info.json": "eyJpZCI6InJvbGUtZml4dHVyZSIsIm5hbWUiOiJSb2xlcyIsInZlcnNpb24iOiIxIn0="
+  }
+}

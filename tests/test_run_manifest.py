@@ -27,6 +27,22 @@ def _evaluate(rig: Path, log: Path, run_id: str, **kwargs):
 
 
 class FullMatchTests(unittest.TestCase):
+    def test_manifest_records_java_version_from_the_selected_runtime_release_file(self) -> None:
+        with resolved_temp_dir() as root:
+            _, targets = _two(root)
+            rig = make_rig(root, {"lib": []})
+            stage(rig, targets, ["lib"])
+            java = rig / "selected JDK" / "bin" / "java.exe"
+            java.parent.mkdir(parents=True)
+            java.write_bytes(b"test executable placeholder")
+            (java.parent.parent / "release").write_text('JAVA_VERSION="25.0.1"\n', encoding="utf-8")
+            launcher = rig / "run-selected.bat"
+            launcher.write_text(f'"{java}" -Xmx2g\n', encoding="utf-8")
+            manifest = prepare_run(rig, "R-JAVA", "campaign", targets=list(targets), expected=["main_menu"], launcher=launcher)
+        self.assertEqual(manifest["runtime"]["java_executable"], str(java))
+        self.assertEqual(manifest["runtime"]["java_version"], "25.0.1")
+        self.assertEqual(manifest["java_version"], "25.0.1")
+
     def test_a_synthetic_full_match_is_acceptable_per_member(self) -> None:
         with resolved_temp_dir() as root:
             _, targets = _two(root)

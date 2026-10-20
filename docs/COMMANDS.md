@@ -2103,6 +2103,7 @@ after a run: mark PASS members LIVE_VALIDATED; with --archive also record the st
 | `--refresh` | - | with --archive: replace an earlier archive of the same mod in Done/ (the old one is moved to Done/_replaced-<date>/, never deleted; Done/ must hold an ARCHIVE_NOTE.md there) |
 | `--accept` | - | record each PASS member through the single-mod acceptance checks (main menu, campaign load, no FATAL or MOD-ERROR) and write a dated 'Live run' section; probe FAIL lines and caught exceptions are carried only when an earlier acceptance of the same mod version covers them (reports/live_accepted.jsonl, working/reports/probe_accepted.json), otherwise nothing is recorded and the uncovered ones are listed; needs --note |
 | `--note` NOTE | - | with --accept: what was run and seen, written into each report as the owner's account |
+| `--observe-exit` | - | put the exit `live --natural-exit` observed (<rig>/logs/<TESTID>.exit.json) into the run record's process_exit_code / process_exit_observed; without the file it stays UNKNOWN |
 | `--queue` QUEUE | - | - |
 | `--rig` RIG | - | - |
 | `--json` | - | - |
@@ -2129,6 +2130,8 @@ after `install`: play the group's live run unattended with real mouse clicks (la
 | `test_id` | - | log name: writes <rig>/logs/<TESTID>.stdout.log, readable by `probe-group report` and `record` |
 | `--bat` BAT | default run-j25-direct.bat | - |
 | `--menu-timeout` MENU_TIMEOUT | default 240 | - |
+| `--natural-exit` | - | after the run, do not kill the game: wait for you to quit it from the main menu and record its return code (NATURAL), or KILLED if it is still up after --exit-wait |
+| `--exit-wait` EXIT_WAIT | default 180 | with --natural-exit: seconds to wait for the game to exit by itself (default 180) |
 | `--rig` RIG | - | - |
 | `--queue` QUEUE | - | - |
 | `--json` | - | - |

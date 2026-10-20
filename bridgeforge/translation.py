@@ -24,6 +24,7 @@ import re
 import shutil
 import stat
 import time
+import unicodedata
 import zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -34,6 +35,7 @@ SCHEMA_VERSION = 1
 CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
 JSONLIKE_SUFFIXES = {".json", ".faction", ".ship", ".variant", ".wpn", ".proj", ".skin", ".system"}
 EXCLUDED_DIRS = {"src", "out", "build", "target", ".idea", ".vscode", ".git", "__macosx", "meta-inf", "disabled_files", "reports", "scratch"}
+MAX_TRANSLATION_BYTES = 64 * 1024 * 1024
 # Tokens a translation must carry over unchanged: Java format specifiers, Starsector $variables and
 # the \u0001 highlight marker used by getText/format helpers.
 # No space flag and only real conversion letters, so English prose like "50% faster" is not a token.
@@ -57,7 +59,7 @@ def _sha256(path: Path) -> str:
 def _is_excluded(rel: Path) -> bool:
     # src-decompiled*/ is BridgeForge's decompile of a jar, never loaded: its strings are the jar's own, exported from
     # the jar (FlowerGod 2026-09-29: 960 duplicate entries from src-decompiled/).
-    return any(part.lower() in EXCLUDED_DIRS or part.lower().startswith("src-decompiled") for part in rel.parts[:-1])
+    return any(part.lower() in EXCLUDED_DIRS or part.lower() == ".ssmt-backup" or part.lower().startswith("src-decompiled") for part in rel.parts[:-1])
 
 
 def _has_cjk(text: str) -> bool:
@@ -394,6 +396,62 @@ def _units(mod_dir: Path, rel: str, path: Path):
             if _has_cjk(value):
                 yield {"id": f"java:{rel}@{ordinal}", "file": rel, "kind": "java", "context": {"line": text.count("\n", 0, m.start()) + 1}, "source": value}
                 ordinal += 1
+    elif suffix == ".txt" and _is_text_line_file(rel):
+        if path.stat().st_size > MAX_TRANSLATION_BYTES:
+            raise OSError("Text exceeds size limit")
+        raw = path.read_bytes()
+        text, _, _ = _translation_text(raw, path)
+        for line, start, end, value in _text_line_units(rel, text):
+            if _has_cjk(value):
+                yield {"id": f"text:{rel}@{line}", "file": rel, "kind": "text-line", "context": {"line": line}, "source": value}
+
+
+def _is_text_line_file(rel: str) -> bool:
+    parts = rel.replace("\\", "/").split("/")
+    if not parts or parts[-1].rsplit(".", 1)[-1].lower() != "txt":
+        return False
+    lower = [part.lower() for part in parts]
+    for index in range(len(lower) - 1):
+        if lower[index:index + 2] == ["data", "strings"] and index + 2 < len(parts):
+            return True
+        if lower[index:index + 2] == ["data", "missions"] and index + 4 == len(parts):
+            return True
+    return False
+
+
+def _translation_text(raw: bytes, path: Path) -> tuple[str, str, bool]:
+    bom = raw.startswith(b"\xef\xbb\xbf")
+    try:
+        return raw.decode("utf-8-sig"), "utf-8", bom
+    except UnicodeDecodeError:
+        if path.suffix.lower() != ".txt" or bom:
+            raise
+        return raw.decode("gb18030"), "gb18030", False
+
+
+def _java_whitespace(ch: str) -> bool:
+    code = ord(ch)
+    return ch in "\t\n\v\f\r\x1c\x1d\x1e\x1f" or (
+        unicodedata.category(ch) in {"Zs", "Zl", "Zp"} and code not in (0x00A0, 0x2007, 0x202F)
+    )
+
+
+def _text_line_units(rel: str, text: str):
+    line_start = 0
+    line = 1
+    while line_start <= len(text):
+        newline = text.find("\n", line_start)
+        line_end = len(text) if newline < 0 else newline
+        start, end = line_start, line_end
+        while start < end and _java_whitespace(text[start]):
+            start += 1
+        while end > start and _java_whitespace(text[end - 1]):
+            end -= 1
+        yield line, start, end, text[start:end]
+        if newline < 0:
+            break
+        line_start = newline + 1
+        line += 1
 
 
 def export_translation(mod_dir: Path) -> dict[str, object]:
@@ -426,11 +484,25 @@ def export_translation(mod_dir: Path) -> dict[str, object]:
                     for index, value in _class_string_constants(data).items():
                         if _has_cjk(value):
                             found.append({"id": f"jar:{rel}!{name[:-6]}#{index}", "file": rel, "kind": "jar", "context": {"class": name[:-6], "cp_index": index}, "source": value})
+        elif path.suffix.lower() == ".class":
+            try:
+                if path.stat().st_size > MAX_TRANSLATION_BYTES:
+                    raise OSError("Class exceeds size limit")
+                data = path.read_bytes()
+                if _parse_class_file(data) is None:
+                    raise ValueError("Invalid class file")
+                for index, value in _class_string_constants(data).items():
+                    if _has_cjk(value):
+                        found.append({"id": f"class:{rel}#{index}", "file": rel, "kind": "class", "context": {"cp_index": index}, "source": value})
+            except (OSError, ValueError, IndexError, KeyError) as exc:
+                unreadable.append(f"{rel}: {exc}")
         else:
             try:
                 found = list(_units(mod_dir, rel, path))
-            except (OSError, UnicodeDecodeError):
+            except (OSError, UnicodeDecodeError) as exc:
                 found = []
+                if path.suffix.lower() == ".txt" and _is_text_line_file(rel):
+                    unreadable.append(f"{rel}: {exc}")
         if found:
             hashes[rel] = _sha256(path)
             entries.extend(found)
@@ -631,6 +703,15 @@ def _resolved(document: dict) -> tuple[dict[str, dict], list[str]]:
 
 
 def apply_translation(mod_dir: Path, document: dict, out_dir: Path | None = None, in_place: bool = False) -> dict[str, object]:
+    """Validate source-bound extensions before applying; linked copies publish as one staged operation."""
+    from .translation_contract import apply_with_contract
+    try:
+        return apply_with_contract(mod_dir, document, out_dir, in_place, export_translation, _apply_translation)
+    except (ValueError, TypeError, KeyError, OSError) as exc:
+        raise TranslationError(str(exc)) from exc
+
+
+def _apply_translation(mod_dir: Path, document: dict, out_dir: Path | None = None, in_place: bool = False) -> dict[str, object]:
     """Write translations into a copy of mod_dir (or into mod_dir itself with in_place=True)."""
     mod_dir = Path(mod_dir).expanduser().resolve()
     if (out_dir is None) == (not in_place):
@@ -658,6 +739,10 @@ def apply_translation(mod_dir: Path, document: dict, out_dir: Path | None = None
         kind = next(iter(entries.values()))["kind"]
         if kind == "jar":
             _apply_jar(path, entries, applied, problems)
+        elif kind == "class":
+            _apply_class(path, entries, applied, problems)
+        elif kind == "text-line":
+            _apply_text_lines(path, rel, entries, applied, problems)
         elif kind == "csv":
             _apply_csv(path, rel, entries, applied, problems)
         elif kind in ("json", "json-key"):
@@ -814,6 +899,62 @@ def _apply_jar(path: Path, entries: dict, applied: Counter, problems: list) -> N
                 raise TranslationError(f"{path} stayed locked; the translated jar is at {tmp}") from None
             time.sleep(1.0)
     applied["jar"] += count
+
+
+def _apply_class(path: Path, entries: dict, applied: Counter, problems: list) -> None:
+    try:
+        if path.stat().st_size > MAX_TRANSLATION_BYTES:
+            raise OSError("Class exceeds size limit")
+        data = path.read_bytes()
+        strings = _class_string_constants(data) if _parse_class_file(data) is not None else {}
+    except (OSError, ValueError, IndexError, KeyError) as exc:
+        problems.append(f"{path.name}: could not read class: {exc}")
+        return
+    replacements = {}
+    for entry in entries.values():
+        index = int(entry["context"]["cp_index"])
+        if strings.get(index) != entry["source"]:
+            problems.append(f"{entry['id']}: constant differs in the class")
+            continue
+        replacements[index] = entry["translation"]
+    if not replacements:
+        return
+    new = _rewrite_class_strings(data, replacements)
+    if _parse_class_file(new) is None:
+        problems.append(f"{path.name}: class would not parse; file left untouched")
+        return
+    path.write_bytes(new)
+    applied["class"] += len(replacements)
+
+
+def _apply_text_lines(path: Path, rel: str, entries: dict, applied: Counter, problems: list) -> None:
+    raw = path.read_bytes()
+    if len(raw) > MAX_TRANSLATION_BYTES:
+        problems.append(f"{rel}: text exceeds size limit; file left untouched")
+        return
+    try:
+        text, encoding, bom = _translation_text(raw, path)
+    except (UnicodeDecodeError, LookupError) as exc:
+        problems.append(f"{rel}: could not decode text: {exc}")
+        return
+    edits = []
+    for line, start, end, value in _text_line_units(rel, text):
+        entry = entries.get(f"text:{rel}@{line}")
+        if entry is None:
+            continue
+        if entry["source"] != value:
+            problems.append(f"{entry['id']}: source text differs in the file")
+            continue
+        translated = entry["translation"]
+        if "\r" in translated or "\n" in translated:
+            problems.append(f"{entry['id']}: text-line translations cannot contain line breaks; file left untouched")
+            return
+        edits.append((start, end, translated))
+    new = text
+    for start, end, translated in sorted(edits, reverse=True):
+        new = new[:start] + translated + new[end:]
+    path.write_bytes((b"\xef\xbb\xbf" if bom else b"") + new.encode(encoding))
+    applied["text"] += len(edits)
 
 
 # ---- Project Go translation-memory export ----------------------------------------------------------

@@ -474,10 +474,34 @@ class LaunchNoProcess(GameRefused):
     """The launch watchdog fired: no java process appeared (ROADMAP item 73 G4). The live result stage is LAUNCH_NO_PROCESS."""
 
 
+EXIT_POLL_SECONDS = 2.0
+
+
+def settle_exit(process, wait: float, *, sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.monotonic,
+                java_left: Callable[[], bool] = lambda: False) -> tuple[str, int | None]:
+    """Wait up to `wait` seconds for the launched process to exit by itself: (NATURAL, its integer return code), or (KILLED, None)
+    when it is still running at the bound or left a java process behind. Never returns a code for a process that was not seen to exit."""
+    from .exit_observation import KILLED, NATURAL
+
+    deadline = clock() + wait
+    while process.poll() is None:
+        if clock() >= deadline:
+            return KILLED, None
+        sleep(EXIT_POLL_SECONDS)
+    code = process.poll()
+    if java_left() or not isinstance(code, int) or isinstance(code, bool):
+        return KILLED, None
+    return NATURAL, code
+
+
 @contextlib.contextmanager
-def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
+def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", natural_exit: bool = False, exit_wait: float = 180,
+                 outcome: dict | None = None):
     """Start the rig game, click through the launcher, yield (log, hands, vanilla mission rows), then stop the rig's java and the
-    launcher's whole tree. Refuses like boot_test: GameRefused with the reason."""
+    launcher's whole tree. Refuses like boot_test: GameRefused with the reason.
+
+    With `natural_exit`, the body sets `outcome["await_exit"] = True` once the run is done; the game is then given `exit_wait`
+    seconds to be quit by the operator and its return code is written to <rig>/logs/<TESTID>.exit.json (NATURAL), else KILLED."""
     from .boot_test import LAUNCH_WATCHDOG_SECONDS, _is_link, _running_java_under, _terminate_tree, java_started, watchdog_message
     from .launcher_click import click_launcher_once, descendant_pids
 
@@ -534,6 +558,13 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
         core_list = rig / "starsector-core" / "data" / "missions" / "mission_list.csv"
         yield log, hands, (_mission_rows(str(core_list.parent.parent.parent)) or VANILLA_MISSION_ROWS)
     finally:
+        if natural_exit:
+            from .exit_observation import KILLED, write_exit_observation
+
+            observed, code = KILLED, None
+            if (outcome or {}).get("await_exit"):
+                observed, code = settle_exit(process, exit_wait, java_left=lambda: bool(_running_java_under(rig)))
+            write_exit_observation(rig, test_id, observed, code)
         for java in _running_java_under(rig):
             if isinstance(java.get("pid"), int):
                 _terminate_tree(java["pid"])
@@ -543,11 +574,16 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat"):
         _release(rig, test_id, bat)
 
 
-def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240) -> LiveResult:
-    """Play a group's live run (see drive) on a freshly started rig game, then stop it."""
+def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240,
+             natural_exit: bool = False, exit_wait: float = 180) -> LiveResult:
+    """Play a group's live run (see drive) on a freshly started rig game, then stop it. With `natural_exit`, a finished run
+    (LIVE_DONE) first waits for the game to be quit from its menu and records the observed exit (see running_game)."""
+    outcome: dict = {}
     try:
-        with running_game(rig, test_id, bat_name) as (log, hands, vanilla_rows):
-            return drive(log, hands, menu_timeout=menu_timeout, vanilla_rows=vanilla_rows)
+        with running_game(rig, test_id, bat_name, natural_exit=natural_exit, exit_wait=exit_wait, outcome=outcome) as (log, hands, vanilla_rows):
+            result = drive(log, hands, menu_timeout=menu_timeout, vanilla_rows=vanilla_rows)
+            outcome["await_exit"] = result.verdict == "LIVE_DONE"
+            return result
     except LaunchNoProcess as exc:
         return LiveResult("LIVE_STUCK", "LAUNCH_NO_PROCESS", str(exc))
     except GameRefused as exc:

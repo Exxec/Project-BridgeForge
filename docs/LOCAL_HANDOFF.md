@@ -18,6 +18,16 @@ real `Done/` archive: the first real refresh is the check (old bytes under `_rep
 
 ## 0b. Item 73 / 75 implementation: what still needs this machine (2026-10-18)
 
+**Project Go follow-up 2026-10-19 (owner: "Repeat for all next phases if able").** Translation schema alignment is
+implemented offline. Runtime manifests now record observed selected-Java version, and run records support an explicit
+process exit or null. Current interactive runs terminate Java's process tree, so they do not supply a trusted natural
+exit; do not insert zero or promote Go runtime gates on that basis. Shared fixtures test plumbing, not a live run.
+FlowerGod's copied-source measurement found 908 policy-approved / 1,620 units and 712 review items; no real candidate was
+built or archived. The refreshed GUI checklist has 10 automated passes and 5 manual rows, with all 15 owner statuses
+NOT_TESTED. JSON-key consumer semantics/P8.10 are still open. Details and artifact locations are in Project Go's
+`docs/REMAINING_PHASES_STATUS.md`. None of these static checks closes a live, owner-review or release gate.
+**Project Go runtime gates (owner 2026-10-20):** deferred to the session after next; no translated Go candidate exists yet (FlowerGod is BLOCKED_REVIEW).
+
 Built and unit-tested offline; nothing below has been run. Order matters: R1 first, because acceptance now needs it.
 
 1. **R1 run binding (live proof).** `rig-up <rig> --mods <id> --probe-config`, then `probe-group live <TESTID>` (prepares and
@@ -25,6 +35,13 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
    provenance BOUND. Then edit one shipped file of the candidate: `live_status` must turn STALE and acceptance must refuse.
    Also check `tools/bf-test.ps1 launch` end to end, and that the `\|combat-round\|` milestone regex matches a real log.
    Note: a player ticking mods in the launcher changes `enabled_mods.json`, which the manifest reports as drift.
+   Natural-exit step (implemented offline 2026-10-20, live pending): run `probe-group live <TESTID> --natural-exit` (optional
+   `--exit-wait 180`); when it prints LIVE_DONE, quit the game yourself from the main menu (Esc, Exit) within the wait. It
+   writes `<rig>/logs/<TESTID>.exit.json` (NATURAL + return code, or KILLED + null if the game was still up at the bound).
+   Then `probe-group record <TESTID> --observe-exit ...` copies it into the run record's `process_exit_code` and
+   `process_exit_observed`. Check the code is the launcher's (`cmd /c run-j25-direct.bat`): it equals Java's only if the bat ends
+   on the java call; confirm that in the bat before Project Go treats it as Java's exit. `bf-test.ps1 launch` and `boot_test`
+   still kill the tree and record nothing.
 2. **R2 registry.** `finding-stats --rescan-stale --write bridgeforge-state/finding-stats/<date> --vanilla-core $core` in the
    background (every real workspace reads UNKNOWN until registered). Then `auto-open "In operation"` and
    `finding-stats --promotion <dir>`; put UNEXPLAINED cases and promotion shapes into ROADMAP 73. Check the EPTA follow-up scan
@@ -33,7 +50,7 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
    (second reports complete). Done: archived bytes equal tested bytes, old archive in `Done/_replaced-*`, one changelog line.
 4. **R6 save upgrade.** Zorg bf.9 to bf.10: a spec with both manifests and a hashed copied rig save; per case load old with new,
    save to a separate slot, restart, reload, repeat; `save-upgrade evaluate SPEC EVIDENCE --run-id ID --run-hash HASH` VERIFIED
-   for all eight cases. Needs an in-game evidence emitter that does not exist yet.
+   for all eight cases. Needs an in-game evidence emitter that does not exist yet. Owner decision 2026-10-20: the Zorg bf.9 to bf.10 run may use manual evidence (screenshots plus logged steps), recorded as MANUAL, never VERIFIED; the in-game emitter is deferred to S3.
 5. **R8 restore.** `snapshot-restore-check <snapshot> --to <new empty folder outside the repo> --source-root <repo>`: expect
    RESTORED_OFFLINE; then rebuild rig junctions in the copy and run a bounded rig scenario there, never in the primary workspace.
 6. **G1 New Game fallback.** `probe-group live` on two total conversions other than Nexerelin and Ironclads; done when both reach
@@ -44,7 +61,7 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
    `_regress/REGRESSION_HOLD.json` and blocks the next run); `rig-up` on the real `_rig`.
 9. **E4 port record.** Write `In operation/Templars-0.9.8f/working/reports/PORT_SOURCE.json` with `old_tree` =
    `scratch/port-0.9.9e-code/before` and rescan; expect `port-dropped-feature` findings for the Crusade; accept with a reason or
-   ask for a plan.
+   ask for a plan. Done 2026-10-20: written and rescanned; see the decision draft in the workspace `scratch/`.
 10. **H1.** `audit-explain --auto` on Ironclads, Nightcross and the GRP6A mods from their pre-explanation state; report the
     fraction left for a person.
 11. **B fixers on the real queue.** `revive` over the queue with `finding-stats` before and after; B1 applied to 5 mods in the

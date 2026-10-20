@@ -46,3 +46,19 @@ docs/PERFORMANCE_WORKBENCH_DESIGN.md
 /docs/REVIVAL_WORKFLOW.md
 /docs/fable-briefs/
 /docs/fable-solutions/
+
+# Local agent scratch, research clones and machine artifacts (2026-10-20): not part of the tool.
+/.goal-transfer/
+/.gradle-user-home/
+/.vscode/settings.json
+/C*Users*
+/Hermes Pipeline Contract
+/_probe*.py
+/ac8-save-editor-research/
+/bridgeforge_scan_tool.py
+/everything-claude-code/
+hs_err_pid*.log
+/scratch-*.zip
+/scratch/
+/scripts/
+/tools/gate_verify.py
