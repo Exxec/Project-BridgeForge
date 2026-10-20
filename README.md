@@ -52,6 +52,10 @@ changes is report-only: `escalation run --auto-accept` refuses until its prerequ
 command sequence are in the [revival guide](docs/BRIDGEFORGE_REVIVAL_GUIDE.md) section 12; status per item is in
 [ROADMAP_STATUS](docs/ROADMAP_STATUS.md).
 
+Project Go extraction observations can be joined to exact selected candidate bytes with the read-only
+[localization coverage API](docs/LOCALIZATION_COVERAGE_IMPORT.md). A hash match does not establish complete coverage,
+approval, rights or runtime compatibility.
+
 ## Convention-layout intake and revival
 
 For the convention layout, start from the repository root:
