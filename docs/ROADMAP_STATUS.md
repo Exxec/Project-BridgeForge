@@ -46,6 +46,9 @@ Cross-project follow-ups found 2026-10-18 (individual status below):
 - Runtime context fields implemented offline 2026-10-19: `run_manifest` observes selected Java version and `write_run_record`
   stores an explicit exit code or null; synthetic producer/Go-consumer fixtures cover both. Existing interactive callers
   do not observe a natural Java exit, so real runtime qualification remains NOT_TESTED. No clean-log-to-zero inference.
+- Natural-exit observation implemented offline 2026-10-20, live pending: `probe-group live --natural-exit` waits (bounded) for
+  the operator to quit the game and writes `<TESTID>.exit.json` (NATURAL + code, or KILLED + null); `record --observe-exit`
+  puts it in the run record (`process_exit_code`, `process_exit_observed`). Tested with fakes only (`tests/test_exit_observation.py`).
 - `tests/test_locks.py::test_own_open_file_inside_target_is_found` can hang on this machine (psutil `open_files()`,
   observed 2026-10-18 with no CPU for 25+ minutes; twelve orphaned suite processes from that morning were found stalled).
   Checked 2026-10-20: already bounded. The probe runs in a subprocess via `_bounded_process_paths` with `timeout=30`, so a hang fails instead of stalling; no change needed.

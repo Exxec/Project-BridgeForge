@@ -824,7 +824,8 @@ def _newest_save_made_with(rig: Path, reader) -> dict | None:
 
 def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: str, archive: bool = False,
                  done_dir: Path | None = None, policy_path: Path | None = None, today: str | None = None,
-                 refresh: bool = False, accept: bool = False, note: str | None = None) -> dict:
+                 refresh: bool = False, accept: bool = False, note: str | None = None,
+                 observe_exit: bool = False) -> dict:
     """After a group run: mark every PASS member LIVE_VALIDATED in its report; with `archive`, record the owner's
     standing local-only licence where none exists, archive it into Done/ and copy its zip to Done/'s top level
     (ROADMAP P15 item 31.1; replaces the session's record_group.py and shell loop)."""
@@ -849,6 +850,11 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     from .rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
 
     tested = [workspaces[m] for m in sorted(report["members"]) if workspaces.get(m) is not None]
+    exit_observed, exit_code = None, None  # no flag: the record is exactly what it was
+    if observe_exit:  # opt-in: the exit `probe-group live --natural-exit` observed; absent file stays UNKNOWN/None
+        from .exit_observation import read_exit_observation
+
+        exit_observed, exit_code = read_exit_observation(Path(rig), test_id)
     # R1: the one evidence evaluator, shared with `accept`. No manifest, no bound provenance.
     from .run_manifest import ManifestError, evaluate_run, read_manifest
 
@@ -862,7 +868,8 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
                                   verdicts={m: v["verdict"] for m, v in report["members"].items()}, probe_config=config,
                                   core_baseline=_repo_root() / DEFAULT_CORE_BASELINE_RELATIVE, today=today,
                                   save_made_with=_newest_save_made_with(Path(rig), save_made_with), rig_state=read_rig_state(Path(rig)),
-                                  evidence=evidence, manifest=manifest)
+                                  evidence=evidence, manifest=manifest,
+                                  process_exit_code=exit_code, process_exit_observed=exit_observed)
     recorded, skipped, archived = [], [], []
     carry, stopped = None, None
     if accept and evidence["status"] != "ACCEPTABLE":

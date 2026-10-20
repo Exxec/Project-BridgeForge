@@ -34,6 +34,13 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
    provenance BOUND. Then edit one shipped file of the candidate: `live_status` must turn STALE and acceptance must refuse.
    Also check `tools/bf-test.ps1 launch` end to end, and that the `\|combat-round\|` milestone regex matches a real log.
    Note: a player ticking mods in the launcher changes `enabled_mods.json`, which the manifest reports as drift.
+   Natural-exit step (implemented offline 2026-10-20, live pending): run `probe-group live <TESTID> --natural-exit` (optional
+   `--exit-wait 180`); when it prints LIVE_DONE, quit the game yourself from the main menu (Esc, Exit) within the wait. It
+   writes `<rig>/logs/<TESTID>.exit.json` (NATURAL + return code, or KILLED + null if the game was still up at the bound).
+   Then `probe-group record <TESTID> --observe-exit ...` copies it into the run record's `process_exit_code` and
+   `process_exit_observed`. Check the code is the launcher's (`cmd /c run-j25-direct.bat`): it equals Java's only if the bat ends
+   on the java call; confirm that in the bat before Project Go treats it as Java's exit. `bf-test.ps1 launch` and `boot_test`
+   still kill the tree and record nothing.
 2. **R2 registry.** `finding-stats --rescan-stale --write bridgeforge-state/finding-stats/<date> --vanilla-core $core` in the
    background (every real workspace reads UNKNOWN until registered). Then `auto-open "In operation"` and
    `finding-stats --promotion <dir>`; put UNEXPLAINED cases and promotion shapes into ROADMAP 73. Check the EPTA follow-up scan

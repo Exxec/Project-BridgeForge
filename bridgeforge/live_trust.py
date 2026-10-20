@@ -88,7 +88,8 @@ def _previous_noise(live_dir: Path, members: list[str], test_id: str) -> tuple[s
 def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triage: dict, verdicts: dict[str, str],
                      probe_config: dict | None = None, core_baseline: Path | None = None, save_made_with: dict | None = None,
                      today: str | None = None, rig_state: dict | None = None, evidence: dict | None = None,
-                     manifest: dict | None = None, process_exit_code: int | None = None) -> dict:
+                     manifest: dict | None = None, process_exit_code: int | None = None,
+                     process_exit_observed: str | None = None) -> dict:
     """Record one live run (36.6) and its noise check (36.9); returns the record. `rig_state` is what `rig-up` last recorded.
 
     `evidence` is `run_manifest.evaluate_run`'s result and `manifest` the run's pre-launch manifest (ROADMAP item 75 R1). A member's
@@ -98,6 +99,10 @@ def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triag
 
     if process_exit_code is not None and (not isinstance(process_exit_code, int) or isinstance(process_exit_code, bool)):
         raise ValueError("process_exit_code must be an observed integer or None")
+    from .exit_observation import check_observation
+
+    if process_exit_observed is not None:  # absent unless the caller observed an exit: the record shape is shared with Project Go
+        check_observation(process_exit_observed, process_exit_code)
     queue = Path(queue)
     live_dir = queue / LIVE_DIR
     live_dir.mkdir(parents=True, exist_ok=True)
@@ -135,6 +140,8 @@ def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triag
         "jvm_crashes": [{k: c.get(k) for k in ("file", "message", "top_mod")} for c in triage.get("jvm_crash_logs") or [] if c.get("during_this_log")],
         "known_noise": noise_check,
     }
+    if process_exit_observed is not None:
+        record["process_exit_observed"] = process_exit_observed
     (live_dir / f"{test_id}.json").write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     for workspace, member in zip(workspaces, members):
         log = workspace / "reports" / RUN_LOG
