@@ -196,6 +196,13 @@ def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, t
         shown = ", ".join(orphans[:5]) + (f" (+{len(orphans) - 5} more)" if len(orphans) > 5 else "")
         raise ArchiveError(f"refusing to archive {workspace.name}: fixer-backup-orphaned, a fixer backup has no file beside it ({shown}). "
                            "The fixed file was lost after the fix; restore it and rerun the fix (BUGS.md FIX-001).")
+    from .content_parity import junk_members
+
+    junk = junk_members(list(_collect(working)))
+    if junk:
+        shown = ", ".join(junk[:8]) + (f" (+{len(junk) - 8} more)" if len(junk) > 8 else "")
+        raise ArchiveError(f"refusing to archive {workspace.name}: junk files in working/ ({shown}). Copies, .old/~ files and desktop.ini "
+                           "do not belong in a mod archive; delete them (or record why they stay) and rerun.")
     info = _load_lenient_json_file(working / "mod_info.json") or {}
     mod_id, name, version = info.get("id"), str(info.get("name") or workspace.name), _version_text(info.get("version"))
     licence = revival_licence(mod_id, name, policy_path)
@@ -255,6 +262,7 @@ def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, t
 
     original = _original_root(workspace) or original_root(workspace)
     changed, added, jars_identical, jar_names = [], [], None, []
+    warnings = _missing_data_warnings(original, folder, working)
     if original is not None:
         for relative, source in sorted(files.items()):
             before = original / relative
@@ -285,7 +293,26 @@ def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, t
     return {"schema_version": SCHEMA_VERSION, "mode": "ARCHIVE", "archive": str(target), "files": len(files), "zip": str(zip_path),
             "replaced": replaced, "prepared": prepared, "master_log": master,
             "licence": licence.get("decision"), "status": status, "changed": changed, "added": added, "since_previous": diff,
-            "jars_identical": jars_identical, "note": str(target / "ARCHIVE_NOTE.md")}
+            "warnings": warnings, "jars_identical": jars_identical, "note": str(target / "ARCHIVE_NOTE.md")}
+
+
+def _missing_data_warnings(original: Path | None, shipped: Path, working: Path) -> list[str]:
+    """`data/` files the author's original has that the archive lacks and no recorded removal explains (77.18): a warning, not a refusal."""
+    if original is None:
+        return []
+    from .content_parity import classify_missing, open_tree
+    from .removals import RemovalsError, load_removals
+
+    try:
+        removals = load_removals(working)
+    except RemovalsError:
+        removals = []
+    with open_tree(shipped) as tree:
+        missing = classify_missing(original, tree, None, removals)["MISSING"]
+    if not missing:
+        return []
+    shown = ", ".join(missing[:5]) + (f" (+{len(missing) - 5} more)" if len(missing) > 5 else "")
+    return [f"{len(missing)} data file(s) in original/ are absent from the archive and not recorded in REMOVALS.json: {shown}"]
 
 
 _CONTENTS_SECTION = re.compile(r"(?ms)^## Contents[ \t]*\r?\n.*?(?=^#{1,2} |\Z)")
