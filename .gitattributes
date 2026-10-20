@@ -9,3 +9,7 @@
 *.zip binary
 *.7z binary
 *.class binary
+
+# Hashed fixture trees (ROADMAP 77.23): their recorded hashes cover the exact bytes, so checkout must not rewrite line endings.
+fixtures/runtime-context/** -text
+fixtures/translation-conformance/** -text
