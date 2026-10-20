@@ -76,6 +76,10 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
 14. **All the Domain Drones rules.csv (BUGS.md FIX-001).** The working copy's rules.csv is restored. `probe-group live` with the
     mod, open a drone interaction that only its rules.csv defines (a dialogue option from the mod's rules) and screenshot it;
     then `archive --refresh` (the 0.6 archive without rules.csv moves to `Done/_replaced-<date>/`) and correct the status.
+15. **SEEKER Betelgeuse modules survive save and reload (SK-6c, owner 2026-10-20).** `probe-group live` with SEEKER, LazyLib and
+    the probe; New Game with the Betelgeuse (`ART_dimention`) in the player fleet; destroy one module and damage another's hull
+    and armor; log hull and armor fractions; 10 campaign days; save, reload, compare. Pass: values match and no
+    `SEEKER.twig.*` class error. Needs the small `BF-SKRTWIG|...` logging hook from `In operation/SEEKER/working/reports/TWIG_RECREATION_PLAN.md`.
 
 Rewritten 2026-09-27 after the local and cloud histories merged. Closed and removed: the MOVES.log
 shadowing audit (P14 item 27, done locally in `0183ab3`) and the Maelstrom dependency-jar check
