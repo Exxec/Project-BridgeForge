@@ -93,7 +93,7 @@ class Tree:
         if self.directory is not None:
             yield self.directory
             return
-        temp = Path(tempfile.mkdtemp(prefix="bf-parity-"))
+        temp = Path(tempfile.mkdtemp(prefix="bf-parity-")).resolve()
         try:
             for name in self.sizes:
                 target = temp.joinpath(*PurePosixPath(name).parts)
@@ -247,6 +247,7 @@ def audit_shipped(shipped_path: Path, original_base: Path | None, *, name: str, 
         with open_tree(Path(shipped_path)) as tree:
             _audit_tree(row, tree, original_base, vanilla_core, list(removals_dirs or []))
     except (ValueError, OSError, zipfile.BadZipFile) as exc:
+        row["determined"] = False
         row["notes"].append(f"unreadable: {str(exc)[:200]}")
     row["verdict"] = verdict_of(row)
     return row

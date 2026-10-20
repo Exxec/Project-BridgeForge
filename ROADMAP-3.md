@@ -83,6 +83,9 @@ counts taken from the candidate's `working/` data before launch; a shortfall FAI
 `original/` (by sub-folder for multi-mod packs): a data or script file in `original/` and absent from the archive needs a
 recorded removal (77.19) or the archive is refused. Run `done-audit --content-parity` once over all 160 `Done/`
 archives; each confirmed loss becomes a BUGS.md entry.
+- Windows portability follow-up, 2026-10-20: resolve tool-owned materialization paths before guarded cleanup, and mark
+  comparison errors UNDETERMINED rather than CLEAN. Both aliased-temp and failed-comparison regressions were reproduced
+  before the fix; `tests.test_content_parity` covers them. Full suite: 2,314 tests, zero failures, 13 skips; hermeticity PASS.
 - First pass done by hand 2026-10-20 (owner: "run a scan over all archived mods including ironclad"; static, offline;
   each shipped zip against its own `original/`; local report `done-audit/DONE_AUDIT.md` in the session scratch).
   154 folders: 124 CLEAN, 20 REVIEW, 5 LOSS_SUSPECTED, 5 UNDETERMINED; no `.bak` or orphaned fixer backup shipped.

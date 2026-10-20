@@ -6,11 +6,12 @@ import json
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from bridgeforge.archive import ArchiveError, archive_mod
 from bridgeforge.archive_intake import inspect_zip_archive
 from bridgeforge.content_parity import audit_shipped, classify_missing, content_parity, is_junk, junk_members, open_tree
-from tests.support import resolved_temp_dir
+from tests.support import link_dir, resolved_temp_dir
 
 INFO = '{"id": "m", "version": "1"}'
 
@@ -97,6 +98,26 @@ class VerdictTests(unittest.TestCase):
                          ["CLEAN", "LOSS_SUSPECTED", "REVIEW", "UNDETERMINED", "LOSS_SUSPECTED", "UNDETERMINED"])
         self.assertEqual(loss["missing"], ["data/campaign/rules.csv"])
         self.assertIn("original matched as the only mod root (id differs)", wrong_id["notes"])
+
+    def test_aliased_temporary_parent_preserves_missing_content_findings(self) -> None:
+        with resolved_temp_dir() as root:
+            temporary = root / "temporary"
+            temporary.mkdir()
+            alias = root / "alias"
+            link_dir(temporary, alias)
+            with patch("bridgeforge.content_parity.tempfile.tempdir", str(alias)):
+                row = self._audit(root, {"data/gone.csv": "gone"}, {})
+            self.assertEqual(row["verdict"], "LOSS_SUSPECTED")
+            self.assertEqual(row["missing"], ["data/gone.csv"])
+            self.assertEqual(list(temporary.iterdir()), [])
+
+    def test_failed_comparison_cannot_report_clean_after_matching_an_original(self) -> None:
+        with resolved_temp_dir() as root:
+            with patch("bridgeforge.content_parity.compare_root", side_effect=OSError("synthetic read failure")):
+                row = self._audit(root, {"data/gone.csv": "gone"}, {})
+        self.assertEqual(row["verdict"], "UNDETERMINED")
+        self.assertFalse(row["determined"])
+        self.assertIn("unreadable: synthetic read failure", row["notes"])
 
     def test_shipped_junk_is_review_not_undetermined(self) -> None:
         with resolved_temp_dir() as root:
