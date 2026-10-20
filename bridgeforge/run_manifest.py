@@ -20,6 +20,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -45,7 +46,9 @@ KIND_CAPABILITY = {
 _RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 _CONTENT_IDS = re.compile(r"BF-PROBE\|[^|]*\|content-ids\|[^|]*\|all-content\|")
 _COMBAT = re.compile(r"BF-PROBE\|[^|]*\|combat-round\|")
-_JAVA_EXE = re.compile(r"[^\s\"']*java\w*\.exe", re.IGNORECASE)
+_JAVA_EXE = re.compile(r'"([^"\r\n]*java\w*\.exe)"|(?<!\S)([^\s"\']*java\w*\.exe)(?=\s|$)', re.IGNORECASE)
+_JAVA_VERSION = re.compile(r'\bJAVA_VERSION\s*=\s*"([^"]+)"')
+_JAVA_VERSION_OUTPUT = re.compile(r'\bversion\s+"([^"]+)"', re.IGNORECASE)
 EPOCH_SLACK_SECONDS = 2.0
 
 
@@ -178,8 +181,50 @@ def _launcher_files(rig: Path, launcher: Path | None) -> tuple[dict[str, str], s
             files[path.name] = _sha256_file(path)
     if launcher and Path(launcher).is_file():
         found = _JAVA_EXE.search(Path(launcher).read_text(encoding="utf-8", errors="replace"))
-        java = found.group(0) if found else None
+        java = next((part for part in found.groups() if part), None) if found else None
     return files, java
+
+
+def _resolve_java_executable(rig: Path, launcher: Path | None, java: str | None) -> Path | None:
+    """Resolve the Java command selected by the launcher without searching for an unrelated installed JDK."""
+    if not java:
+        return None
+    # A batch file may SET these variables/PATH differently from this Python process. Do not substitute the host JDK.
+    if "%" in java or "$" in java:
+        return None
+    candidate = Path(java.strip())
+    if candidate.parent == Path("."):
+        return None
+    candidates = [candidate] if candidate.is_absolute() else [Path(rig) / candidate]
+    if launcher and not candidate.is_absolute():
+        candidates.insert(0, Path(launcher).parent / candidate)
+    for path in candidates:
+        if path.is_file():
+            return path.resolve()
+    return None
+
+
+def _java_version(rig: Path, launcher: Path | None, java: str | None) -> str | None:
+    """Observe the selected JDK version from its release file or bounded `java -version`; never launch mod code."""
+    executable = _resolve_java_executable(rig, launcher, java)
+    if executable is None:
+        return None
+    release = executable.parent.parent / "release"
+    try:
+        match = _JAVA_VERSION.search(release.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        match = None
+    if match:
+        return match.group(1)
+    try:
+        result = subprocess.run([str(executable), "-version"], capture_output=True, text=True, timeout=5, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    output = f"{result.stdout}\n{result.stderr}"
+    match = _JAVA_VERSION_OUTPUT.search(output)
+    return match.group(1) if match else None
 
 
 def runtime_hashes(rig: Path, launcher: Path | None) -> dict:
@@ -190,7 +235,7 @@ def runtime_hashes(rig: Path, launcher: Path | None) -> dict:
     files, java = _launcher_files(rig, launcher)
     return {"enabled_mods_sha256": _sha256_file(enabled) if enabled.is_file() else None,
             "probe_config_sha256": _sha256_file(config) if config.is_file() else None,
-            "launcher_files": files, "java_executable": java}
+            "launcher_files": files, "java_executable": java, "java_version": _java_version(rig, launcher, java)}
 
 
 def prepare_run(rig: Path, run_id: str, kind: str, *, targets: list[str], expected: list[str], scenario: str = "",
@@ -232,6 +277,7 @@ def prepare_run(rig: Path, run_id: str, kind: str, *, targets: list[str], expect
             "enabled": entries, "targets": target_rows, "runtime": runtime_hashes(rig, launcher),
             "core_baseline_sha256": _sha256_file(core_baseline) if core_baseline and Path(core_baseline).is_file() else None,
             "expected_milestones": sorted(set(expected)), "log": str(log)}
+    body["java_version"] = body["runtime"].get("java_version")
     manifest_id = hashlib.sha256(_canonical(body)).hexdigest()
     manifest = {**body, "manifest_id": manifest_id, "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "created_epoch": time.time()}
@@ -390,7 +436,8 @@ def summary_for_record(manifest: dict) -> dict:
             "dependencies": {e["id"]: {"version": e["version"], "staged_sha256": e["staged_sha256"], "folder": e["folder"]}
                              for e in manifest["enabled"] if e["id"] not in targets},
             "launcher_files": manifest["runtime"].get("launcher_files"), "probe_config_sha256": manifest["runtime"].get("probe_config_sha256"),
-            "java_executable": manifest["runtime"].get("java_executable"), "expected_milestones": manifest["expected_milestones"]}
+            "java_executable": manifest["runtime"].get("java_executable"), "java_version": manifest.get("java_version"),
+            "expected_milestones": manifest["expected_milestones"]}
 
 
 def environment_drift(rig: Path, summary: dict | None) -> list[str]:

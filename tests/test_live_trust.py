@@ -79,6 +79,18 @@ class ShippedAuditTests(unittest.TestCase):
 
 
 class RunRecordTests(unittest.TestCase):
+    def test_process_exit_code_is_caller_supplied_and_missing_stays_null(self) -> None:
+        with resolved_temp_dir() as root:
+            ws = _workspace(root)
+            missing = write_run_record(root, "T-MISSING", [ws], triage={"counts": {}}, verdicts={"m": "PASS"})
+            observed = write_run_record(root, "T-EXIT", [ws], triage={"counts": {}}, verdicts={"m": "PASS"}, process_exit_code=7)
+            loaded = json.loads((root / "_live" / "T-EXIT.json").read_text(encoding="utf-8"))
+            with self.assertRaisesRegex(ValueError, "observed integer or None"):
+                write_run_record(root, "T-INVALID", [ws], triage={"counts": {}}, verdicts={"m": "PASS"}, process_exit_code=True)
+        self.assertIsNone(missing["process_exit_code"])
+        self.assertEqual(observed["process_exit_code"], 7)
+        self.assertEqual(loaded["process_exit_code"], 7)
+
     def test_record_marks_current_then_stale_after_a_change(self) -> None:
         with resolved_temp_dir() as root:
             ws = _workspace(root)

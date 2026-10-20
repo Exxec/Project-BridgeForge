@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "mode": "LIVE_RUN_RECORD",
+  "test_id": "CONTEXT",
+  "date": "2026-10-19",
+  "recorded_at": "2026-10-19T00:00:00+00:00",
+  "members": [
+    {
+      "workspace": "B",
+      "mod_id": "mod_b",
+      "version": "1.2",
+      "shipped_sha256": "292fcd2c8195c896471a0d1e0cccff7c22958c97d3c69023e126fa86d50e9e93",
+      "verdict": "PASS",
+      "provenance": "BOUND"
+    }
+  ],
+  "core_baseline_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "probe_config_sha256": null,
+  "save_made_with": null,
+  "rig_state": null,
+  "manifest_id": "synthetic-context-manifest",
+  "manifest": {
+    "manifest_id": "synthetic-context-manifest",
+    "kind": "campaign",
+    "scenario": "synthetic-only",
+    "dependencies": {},
+    "launcher_files": null,
+    "probe_config_sha256": null,
+    "java_executable": "synthetic-jdk/bin/java.exe",
+    "java_version": "17.0.1",
+    "expected_milestones": [
+      "main_menu",
+      "campaign_load"
+    ]
+  },
+  "process_exit_code": null,
+  "evidence": {
+    "status": "ACCEPTABLE",
+    "run_id": "CONTEXT",
+    "manifest_id": "synthetic-context-manifest",
+    "log": {
+      "path": "synthetic.log",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 0
+    },
+    "milestones": {
+      "main_menu": true,
+      "campaign_load": true,
+      "save": false
+    },
+    "expected_milestones": null,
+    "problems": null
+  },
+  "triage": {},
+  "jvm_crashes": [],
+  "known_noise": {
+    "count": 0,
+    "previous_run": null,
+    "previous_count": null,
+    "status": "NO_PREVIOUS"
+  }
+}

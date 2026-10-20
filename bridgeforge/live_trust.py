@@ -88,7 +88,7 @@ def _previous_noise(live_dir: Path, members: list[str], test_id: str) -> tuple[s
 def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triage: dict, verdicts: dict[str, str],
                      probe_config: dict | None = None, core_baseline: Path | None = None, save_made_with: dict | None = None,
                      today: str | None = None, rig_state: dict | None = None, evidence: dict | None = None,
-                     manifest: dict | None = None) -> dict:
+                     manifest: dict | None = None, process_exit_code: int | None = None) -> dict:
     """Record one live run (36.6) and its noise check (36.9); returns the record. `rig_state` is what `rig-up` last recorded.
 
     `evidence` is `run_manifest.evaluate_run`'s result and `manifest` the run's pre-launch manifest (ROADMAP item 75 R1). A member's
@@ -96,6 +96,8 @@ def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triag
     them it is UNKNOWN, which `live_status` never reports as CURRENT."""
     from datetime import datetime, timezone
 
+    if process_exit_code is not None and (not isinstance(process_exit_code, int) or isinstance(process_exit_code, bool)):
+        raise ValueError("process_exit_code must be an observed integer or None")
     queue = Path(queue)
     live_dir = queue / LIVE_DIR
     live_dir.mkdir(parents=True, exist_ok=True)
@@ -127,6 +129,7 @@ def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triag
         "rig_state": rig_state,
         "manifest_id": (manifest or {}).get("manifest_id"),
         "manifest": summary_for_record(manifest) if manifest else None,
+        "process_exit_code": process_exit_code,
         "evidence": {k: evidence.get(k) for k in ("status", "run_id", "manifest_id", "log", "milestones", "expected_milestones", "problems")} if evidence else None,
         "triage": counts,
         "jvm_crashes": [{k: c.get(k) for k in ("file", "message", "top_mod")} for c in triage.get("jvm_crash_logs") or [] if c.get("during_this_log")],
