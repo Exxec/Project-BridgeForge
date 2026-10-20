@@ -67,7 +67,13 @@ def inspect_zip_archive(path: Path, max_entries: int = 20_000, max_uncompressed_
         findings.append({"id": "archive-multiple-mod-info", "classification": "MANUAL", "entries": mod_info, "explanation": "Multiple candidate mod roots require explicit ownership selection."})
     elif roots != ["."]:
         findings.append({"id": "archive-wrapper-directory-layout", "classification": "REVIEW", "mod_root": roots[0], "explanation": "The archive has one wrapper directory; select the nested mod root after staging."})
-    blocking_ids = {"archive-entry-limit", "archive-size-limit", "archive-path-traversal", "archive-symlink-member", "archive-duplicate-member", "archive-path-collision"}
+    from .fixer_backups import orphaned_backups_in
+
+    orphans = orphaned_backups_in([name for entry, name in zip(entries, normalized) if name and not entry.is_dir()])
+    if orphans:
+        findings.append({"id": "fixer-backup-orphaned", "classification": "MANUAL", "entries": orphans,
+                         "explanation": "A .pre-bf-fix backup has no file beside it: the fixed file is missing from this archive."})
+    blocking_ids = {"fixer-backup-orphaned", "archive-entry-limit", "archive-size-limit", "archive-path-traversal", "archive-symlink-member", "archive-duplicate-member", "archive-path-collision"}
     safe_to_stage = not any(item["id"] in blocking_ids for item in findings)
     return {"schema_version": 1, "mode": "ZIP_PREFLIGHT_ONLY", "archive": path.name, "entry_count": len(entries), "uncompressed_bytes": total, "mod_info_entries": mod_info, "candidate_mod_roots": roots, "findings": findings, "safe_to_stage": safe_to_stage, "safe_to_extract": safe_to_stage}
 

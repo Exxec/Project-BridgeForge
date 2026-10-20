@@ -3949,4 +3949,28 @@ def apply_fix(plan: FixPlan) -> list[dict[str, object]]:
         change.path.parent.mkdir(parents=True, exist_ok=True)
         change.path.write_bytes(change.after)
         applied.append({"path": str(change.path), "backup": str(backup) if backup is not None else None})
+    _verify_applied(plan)
     return applied
+
+
+def _verify_applied(plan: FixPlan) -> None:
+    """Re-read every written path: each changed file must hold the planned bytes, each removed one must be gone.
+
+    A fixer's backup is kept either way, so a failure here loses nothing (BUGS.md FIX-001: a data-file-not-utf8 fix
+    once left only `rules.csv.pre-bf-fix-data-file-not-utf8.bak` behind).
+    """
+    problems = []
+    for change in plan.changes:
+        if change.removed:
+            if change.path.exists():
+                problems.append(f"{change.path}: planned removal, but the file is still there")
+            continue
+        try:
+            written = change.path.read_bytes()
+        except OSError as exc:
+            problems.append(f"{change.path}: missing after the fix was written ({type(exc).__name__}: {exc})")
+            continue
+        if written != change.after:
+            problems.append(f"{change.path}: holds {len(written)} bytes, not the {len(change.after)} planned")
+    if problems:
+        raise FixerError(f"Fix '{plan.finding_id}' did not leave the planned files; the .pre-bf-fix backups were kept: " + "; ".join(problems))

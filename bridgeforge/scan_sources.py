@@ -22,7 +22,7 @@ from .scan_libraries import _local_class_names, _mod_info_declares_dependency, _
 from .scan_missions import _scan_campaign_fleet_references, _scan_mission_local_fleet_references, _scan_mission_required_files
 from .scan_settings import _scan_fleet_type_names, _scan_procgen_mod_body_leak, _scan_replace_array
 from .scan_shadowing import _scan_vanilla_script_shadow_repointable
-from .scan_text import _scan_data_encoding, _scan_fullwidth_numbers, _scan_non_ascii_names, _scan_non_english_text, _scan_shippable_work_files
+from .scan_text import _scan_orphaned_fixer_backups, _scan_data_encoding, _scan_fullwidth_numbers, _scan_non_ascii_names, _scan_non_english_text, _scan_shippable_work_files
 
 
 def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = None, provider_roots: list[Path] | None = None) -> None:
@@ -247,6 +247,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_shippable_work_files(root, result)
     _scan_non_ascii_names(root, result)
     _scan_data_encoding(root, result)
+    _scan_orphaned_fixer_backups(root, result)
     _scan_fullwidth_numbers(root, result)
     _scan_source_build_dependencies(root, result, import_locations)
     _scan_removed_api_calls(root, result)
