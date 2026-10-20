@@ -10,6 +10,8 @@ import re
 import shutil
 import stat
 
+from .safeio import verify_written
+
 
 def _normalized_member_name(name: str) -> str | None:
     """Return a portable extraction target, or None when the ZIP member is unsafe."""
@@ -135,6 +137,7 @@ def stage_zip_archive(path: Path, destination: Path, selected_root: str | None =
             target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(entry) as source, target.open("wb") as output:
                 shutil.copyfileobj(source, output)
+            verify_written(target, archive.read(entry))
     manifest.parent.mkdir(parents=True, exist_ok=True)
     manifest.write_text(json.dumps({"schema_version": 1, "mode": "EXPLICIT_ARCHIVE_STAGE", "archive": path.name, "archive_sha256": archive_sha256, "destination": destination.name, "staged_tree_sha256": _tree_sha256(destination), "selected_mod_root": selected_root, "preflight": report, "input_preserved": archive_sha256 == _sha256(path)}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return destination

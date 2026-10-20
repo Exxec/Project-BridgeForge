@@ -204,7 +204,7 @@ def plan_changes(root: Path, vanilla_core: Path, options: dict) -> list:
     reference = options.get("reference_core")
     if not reference:
         info = _load_lenient_json_file(root / "mod_info.json") if (root / "mod_info.json").is_file() else None
-        reference = reference_core_for_game_version(info.get("gameVersion") if isinstance(info, dict) else None)
+        reference = reference_core_for_game_version(info.get("gameVersion") if isinstance(info, dict) else None, repo_root=options.get("repo_root"))
     if not reference:
         return []
     reference = Path(reference).expanduser().resolve()
