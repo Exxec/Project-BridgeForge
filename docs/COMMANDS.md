@@ -1881,6 +1881,7 @@ run a boot smoke test of a Starsector runtime with explicit mods enabled
 | `--timeout` TIMEOUT | default 240 | - |
 | `--log-name` LOG_NAME | - | - |
 | `--keep-mods` | - | - |
+| `--natural-exit` | - | record the observed exit (<rig>/logs/<LOG>.exit.json, ROADMAP 77.21): NATURAL with the launcher's return code if the game quit by itself before the test would kill it, else KILLED with no code. The test does not wait for the game |
 | `--json` | - | - |
 
 ## build-probe-mod

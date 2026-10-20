@@ -7,6 +7,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from .exit_observation import observed_exit, write_exit_observation
 from .log_triage import triage_log
 from .scanner import _load_lenient_json_file
 
@@ -125,7 +126,7 @@ def _result(status: str, reason: str | None, log: Path | None = None, errlog: Pa
     }
 
 
-def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_name: str | None = None, keep_mods: bool = False, bat_name: str | None = None, auto_click: bool = False, bind: bool = False) -> dict:
+def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_name: str | None = None, keep_mods: bool = False, bat_name: str | None = None, auto_click: bool = False, bind: bool = False, natural_exit: bool = False) -> dict:
     """Launch an isolated Starsector runtime rig headlessly and watch its log for a boot milestone.
 
     NEVER call this against a real/shared install: runtime_dir must be a disposable rig whose
@@ -274,6 +275,8 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
             time.sleep(POLL_INTERVAL_SECONDS)
     finally:
         elapsed = time.monotonic() - started
+        # ROADMAP 77.21: observe the exit before anything is killed (NATURAL only if the game quit by itself).
+        observed_exit_state = observed_exit(process.poll(), bool(_running_java_under(runtime_dir))) if natural_exit else None
         if process.poll() is None:
             _terminate_tree(process.pid)
             for java in _running_java_under(runtime_dir):
@@ -284,6 +287,9 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
             process.wait(timeout=10)
         except Exception:
             pass
+
+    if observed_exit_state is not None:
+        write_exit_observation(runtime_dir, name, *observed_exit_state)
 
     triage_summary = None
     if log_path.is_file():

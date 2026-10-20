@@ -31,6 +31,14 @@ def check_observation(observed: str, code: int | None) -> None:
         raise ExitObservationError(f"a {observed} process has no observed exit code; it must be null")
 
 
+def observed_exit(return_code: int | None, java_left: bool) -> tuple[str, int | None]:
+    """(observed, code) for a process already waited on: NATURAL with its integer code only when it exited by itself and
+    no java was left running; KILLED with no code when it is still running or a java was left behind."""
+    if return_code is None or java_left or not isinstance(return_code, int):
+        return KILLED, None
+    return NATURAL, return_code
+
+
 def observation_path(rig: Path, test_id: str) -> Path:
     return Path(rig) / "logs" / f"{test_id}.exit.json"
 

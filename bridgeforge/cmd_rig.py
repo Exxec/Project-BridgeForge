@@ -107,6 +107,7 @@ def add_parser(subcommands) -> None:
     boot_test_cmd.add_argument("--timeout", type=int, default=240)
     boot_test_cmd.add_argument("--log-name")
     boot_test_cmd.add_argument("--keep-mods", action="store_true")
+    boot_test_cmd.add_argument("--natural-exit", action="store_true", help="record the observed exit (<rig>/logs/<LOG>.exit.json, ROADMAP 77.21): NATURAL with the launcher's return code if the game quit by itself before the test would kill it, else KILLED with no code. The test does not wait for the game")
     boot_test_cmd.add_argument("--json", action="store_true")
     build_probe_mod_cmd = subcommands.add_parser("build-probe-mod", help="compile the bridgeforge-probe in-game probe mod (roadmap P3) and pack it deterministically")
     build_probe_mod_cmd.add_argument("--jdk", required=True, type=Path, help="JDK 17+ home directory (containing bin/javac.exe)")
@@ -421,7 +422,7 @@ def run_cli(args: argparse.Namespace) -> int:
                         print(f"    reason: {row['reason']}")
             return 0 if result.get("verdict") == "PASS" else 1
         try:
-            result = boot_test_module.run_boot_test(args.runtime_dir, args.mods, timeout=args.timeout, log_name=args.log_name, keep_mods=args.keep_mods)
+            result = boot_test_module.run_boot_test(args.runtime_dir, args.mods, timeout=args.timeout, log_name=args.log_name, keep_mods=args.keep_mods, natural_exit=args.natural_exit)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from bridgeforge import boot_test
+from bridgeforge.exit_observation import read_exit_observation
 
 
 def _make_rig(directory: Path, link_core: bool = True) -> Path:
@@ -123,6 +124,42 @@ class BootTestLaunchTests(unittest.TestCase):
             self.assertFalse(result["restored"])
             data = json.loads((runtime_dir / "mods" / "enabled_mods.json").read_text(encoding="utf-8"))
             self.assertEqual(data["enabledMods"], ["kept_mod"])
+
+
+@unittest.skipUnless(sys.platform == "win32", "boot-test launches the rig's Windows .bat")
+class BootTestNaturalExitTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._orig_poll = boot_test.POLL_INTERVAL_SECONDS
+        boot_test.POLL_INTERVAL_SECONDS = 0.2
+
+    def tearDown(self) -> None:
+        boot_test.POLL_INTERVAL_SECONDS = self._orig_poll
+
+    def test_game_quitting_by_itself_is_recorded_natural_with_its_code(self) -> None:
+        with resolved_temp_dir() as directory:
+            runtime_dir = _make_rig(Path(directory))
+            _write_fake_launcher(runtime_dir, "import sys\nprint('booting')\nsys.exit(3)\n")
+            with mock.patch.object(boot_test, "_running_java_under", return_value=[]):
+                result = boot_test.run_boot_test(runtime_dir, ["demo_mod"], timeout=5, log_name="natural-case", natural_exit=True)
+            self.assertEqual(result["status"], "FAIL")
+            self.assertEqual(read_exit_observation(runtime_dir, "natural-case"), ("NATURAL", 3))
+
+    def test_game_still_running_when_the_test_stops_it_is_recorded_killed(self) -> None:
+        with resolved_temp_dir() as directory:
+            runtime_dir = _make_rig(Path(directory))
+            _write_fake_launcher(runtime_dir, "import time\ntime.sleep(30)\n")
+            with mock.patch.object(boot_test, "_running_java_under", return_value=[]):
+                result = boot_test.run_boot_test(runtime_dir, ["demo_mod"], timeout=2, log_name="killed-case", natural_exit=True)
+            self.assertEqual(result["status"], "SUSPECT_FATAL_DIALOG")
+            self.assertEqual(read_exit_observation(runtime_dir, "killed-case"), ("KILLED", None))
+
+    def test_no_observation_file_without_the_flag(self) -> None:
+        with resolved_temp_dir() as directory:
+            runtime_dir = _make_rig(Path(directory))
+            _write_fake_launcher(runtime_dir, "print('booting')\n")
+            with mock.patch.object(boot_test, "_running_java_under", return_value=[]):
+                boot_test.run_boot_test(runtime_dir, ["demo_mod"], timeout=5, log_name="plain-case")
+            self.assertEqual(read_exit_observation(runtime_dir, "plain-case"), ("UNKNOWN", None))
 
 
 def _write_fixture_compat_sets(directory: Path) -> Path:

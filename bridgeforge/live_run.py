@@ -481,17 +481,14 @@ def settle_exit(process, wait: float, *, sleep: Callable[[float], None] = time.s
                 java_left: Callable[[], bool] = lambda: False) -> tuple[str, int | None]:
     """Wait up to `wait` seconds for the launched process to exit by itself: (NATURAL, its integer return code), or (KILLED, None)
     when it is still running at the bound or left a java process behind. Never returns a code for a process that was not seen to exit."""
-    from .exit_observation import KILLED, NATURAL
+    from .exit_observation import KILLED, observed_exit
 
     deadline = clock() + wait
     while process.poll() is None:
         if clock() >= deadline:
             return KILLED, None
         sleep(EXIT_POLL_SECONDS)
-    code = process.poll()
-    if java_left() or not isinstance(code, int) or isinstance(code, bool):
-        return KILLED, None
-    return NATURAL, code
+    return observed_exit(process.poll(), java_left())
 
 
 @contextlib.contextmanager
