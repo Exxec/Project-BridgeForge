@@ -1,5 +1,37 @@
 **Hygiene review 2026-10-19 (owner: "perform hygiene check then check roadmap for any worthwhile additions. implement if able then commit/push").** Item 77.3's lock-test timeout is implemented: the three live psutil scans query only their real fixture PIDs in a disposable subprocess with a 30-second timeout; fixture-child shutdown also has a deadline and kill/reap fallback. A regression verifies timeout propagation as a failure. Focused validation: 11 tests pass. This bounds test execution, not the production `who-locks` command, and supplies no game evidence. See `tests/test_locks.py`.
 
+**Owner follow-ups 2026-10-20 ("add both to roadmap. We should reassess other mods to see if they dropped any features").**
+
+**77.14 Accept a single finding outside a packet.** `escalation accept` only matches findings already in an escalation
+packet, and `scan --write-baseline` accepts every current finding at once. The Templars 0.9.8f `port-dropped-feature`
+acceptance had to add its three keys by hand with `baseline.finding_dict_baseline_key`. Add `baseline-accept-finding
+<workspace> <FINDING_ID[:FILE_PART[:EVIDENCE_PART]]> --reason` that adds only the matching keys, writes the reason to
+`reports/ESCALATION_REVIEW.md` like `escalation accept`, and refuses when nothing or more than the named findings match.
+
+**77.15 Templars Requisitions submarket (proposed recreation).** `TEM_MarketPlugin` ("Requisitions": the Templar
+requisitions center, a MilitarySubmarketPlugin with Templar-only stock and commission rules) existed in 0.9.8f and was
+removed upstream in 0.9.9e together with its `submarkets.csv` row, so the Templars 0.9.8f port lost it by inheriting the
+newer base, not by a BridgeForge change. Owner decision pending: re-create it for RC8 (like the Crusade, a separate
+`jars/` class plus the data row) or accept the upstream removal. `TEM_Radiated` (the Irradiated World condition) was
+removed the same way and has no gameplay worth restoring unless a world uses it.
+
+**77.16 Dropped-feature sweep across the queue (2026-10-20, report-only).** `scan_port.dropped_features(old, new)` was run
+against each workspace's `original/` download (308 of 316 had one; local report in the session scratch,
+`dropped-sweep/SWEEP.md`). Results: 19 workspaces with dropped items, 38 with port wording but no drops, 59 with only
+strip/remove wording, 200 with nothing. Reviewed so far:
+- **All the Domain Drones: real loss, shipped (BUGS.md FIX-001).** The whole `rules.csv` (430 triggers) is missing
+  from `working/` and from both archived zips; only the fixer backup remains.
+- **Yunru family (7 workspaces, 119 classes each): false positive.** Each `original/` holds the whole 9-part Yunru Core
+  pack, so one part's working copy looks like it dropped the other eight. The sweep must compare with the matching
+  sub-folder.
+- **Templars 0.9.8f:** the known Crusade loss, which confirms the check works.
+- Still to review by a person: Xenoargh AI Overhaul (53 classes) and FX Core (52), likely the owner-approved fold into
+  RevenantLib; Ironclads (4 classes, 25 rules.csv triggers); SEEKER (5 classes); Better Deserving S-mods (4 classes);
+  Mirfak Parcel Service (3 settings, 1 rule); and the remaining rows. Next: make the sweep a command (`dropped-features
+  --queue`) that matches sub-folders, records intended removals (strip plans, RevenantLib folds) so they stop showing,
+  and runs before `archive`; then review the remaining rows. Every confirmed loss gets a BUGS.md entry and a recreation
+  or restore item.
+
 **77.13 Proposed hygiene preflight (S4 supportability; scope/design still pending).** This audit found 21 Ruff errors in pre-existing untracked agent scripts, including syntax errors, while the isolated tracked checkout passed Ruff. Add a read-only preflight that reports tracked modifications, untracked code, ignored local evidence, interpreter/dependency availability and separate tracked-tree versus whole-directory lint results. It must never delete/move files, suppress whole-directory failures, stage unrelated work, or traverse private mod/save inputs. Reuse Git's file inventory and Ruff rather than inventing a second linter. Validate on synthetic dirty/untracked/ignored fixtures, filenames with spaces and Unicode, and missing tools; unavailable checks report INCOMPLETE. A future cleanup needs explicit file-level scope. This supports item 77.7's worktree rule without discarding agent work or hiding failing scripts.
 
 ## Translation-schema slice of 77.3 (owner continuation, 2026-10-19)

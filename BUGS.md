@@ -1,5 +1,26 @@
 # Bridgeforge bug ledger
 
+## Found by the 2026-10-20 dropped-feature sweep
+
+### FIX-001 — A data-file-not-utf8 fix left a backup and no file: All the Domain Drones shipped without rules.csv
+
+- Impact: shipped content loss. `In operation/All-the-Domain-Drones-New-Drones/working/data/campaign/` holds
+  `rules.csv.pre-bf-fix-data-file-not-utf8.bak` (1,452,325 bytes, 2026-09-27, byte-identical to the downloaded original,
+  sha256 prefix `99016f258998987e`) and no `rules.csv`. Both archived zips in `Done/All-the-Domain-Drones-New-Drones/`
+  (0.6 and 0.6-with-readme) have no `rules.csv` either, so every rule the mod defines (14,297 lines: drone interactions and
+  dialogue) is missing from the archived revival. The archive says LIVE_VALIDATED (2026-10-05): a boot and campaign load
+  does not notice a missing rules.csv, so the live gate passed.
+- Source evidence: the original fails UTF-8 at byte 286,759 on an isolated CP-1252 apostrophe (`It\x92s`), which
+  `_fix_data_file_not_utf8` accepts and re-encodes; `apply_fix` backed the file up but the re-encoded file is absent.
+  Cause not yet determined (the write, a later step, or a hand step removing it). An audit of all 867
+  `.pre-bf-fix-*.bak` files under `In operation/` and `Done/` found this the only backup whose working file is missing
+  (six others sit in `scratch/` folders by design).
+- Required: find the cause and add a regression test; add a check (scan or `archive-preflight`) that fails when a
+  `.pre-bf-fix-*.bak` has no file beside it in `working/`, or when a data file present in `original/` is absent from
+  `working/` without a recorded removal; restore ATDD's rules.csv by re-running the fixer on the backup, rescan, live
+  run that exercises a drone rule, and `archive --refresh` (moves the old archive aside). Correct the archive status.
+- Status: OPEN (ROADMAP-3 item 77.16).
+
 ## Implementation issues identified during the 2026-10-18 documentation audit
 
 ### DOC-001 — Archive refresh contradicts the preservation contract
