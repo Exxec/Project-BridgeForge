@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .safeio import atomic_write_text
+
 NATURAL, KILLED, UNKNOWN = "NATURAL", "KILLED", "UNKNOWN"
 OBSERVATIONS = (NATURAL, KILLED, UNKNOWN)
 
@@ -38,7 +40,7 @@ def write_exit_observation(rig: Path, test_id: str, observed: str, code: int | N
     record = {"process_exit_observed": observed, "process_exit_code": code}
     path = observation_path(rig, test_id)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    atomic_write_text(path, json.dumps(record, indent=2) + "\n")
     return record
 
 
