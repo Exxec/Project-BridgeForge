@@ -157,6 +157,7 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
             reportLaunches();
             ProbeLog.emit("combat-summary", ProbeLog.STATUS_INFO, "combat", "ships logged=" + loggedShips.size());
             ProbeLog.end("combat");
+            ProbeDone.combatEnded();
             engine.endCombat(0f);
         }
     }

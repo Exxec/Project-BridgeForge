@@ -67,6 +67,7 @@ def add_parser(subcommands) -> None:
     group_live.add_argument("--bat", default="run-j25-direct.bat")
     group_live.add_argument("--menu-timeout", type=int, default=240)
     group_live.add_argument("--natural-exit", action="store_true", help="after the run, do not kill the game: wait for you to quit it from the main menu and record its return code (NATURAL), or KILLED if it is still up after --exit-wait")
+    group_live.add_argument("--no-graceful-close", action="store_true", help="do not close the game by itself when the probe's done marker appears; stop it as before (the exit is then not recorded)")
     group_live.add_argument("--exit-wait", type=int, default=180, help="with --natural-exit: seconds to wait for the game to exit by itself (default 180)")
     group_live.add_argument("--save-reload", action="store_true", help="after the live run, start the game a second time, Continue the save the probe wrote at save_reload.after_days and wait for the fingerprint compare line (install with --save-reload-after-days); the reload run gets its own log <TESTID>-reload and manifest")
     group_live.add_argument("--rig", type=Path)
@@ -175,7 +176,8 @@ def run_cli(args: argparse.Namespace) -> int:
                         return 2
                     clear_stale_fingerprint(rig)
                 live = live_run(rig, args.test_id, bat_name=args.bat, menu_timeout=args.menu_timeout,
-                                natural_exit=args.natural_exit, exit_wait=args.exit_wait, save_reload=args.save_reload)
+                                natural_exit=args.natural_exit, exit_wait=args.exit_wait, save_reload=args.save_reload,
+                                graceful_exit=not args.no_graceful_close)
                 result = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "rounds": live.rounds, "stages": live.stages, "log": live.log}
                 if args.save_reload and live.verdict == "LIVE_DONE":
                     from .save_fingerprint import parse_fingerprint

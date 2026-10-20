@@ -498,12 +498,15 @@ def settle_exit(process, wait: float, *, sleep: Callable[[float], None] = time.s
 
 @contextlib.contextmanager
 def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", natural_exit: bool = False, exit_wait: float = 180,
-                 outcome: dict | None = None, expected: tuple[str, ...] | None = None, scenario: str = "probe-group live"):
+                 outcome: dict | None = None, expected: tuple[str, ...] | None = None, scenario: str = "probe-group live",
+                 graceful_exit: bool = True):
     """Start the rig game, click through the launcher, yield (log, hands, vanilla mission rows), then stop the rig's java and the
     launcher's whole tree. Refuses like boot_test: GameRefused with the reason.
 
     With `natural_exit`, the body sets `outcome["await_exit"] = True` once the run is done; the game is then given `exit_wait`
-    seconds to be quit by the operator and its return code is written to <rig>/logs/<TESTID>.exit.json (NATURAL), else KILLED."""
+    seconds to be quit by the operator and its return code is written to <rig>/logs/<TESTID>.exit.json (NATURAL), else KILLED.
+    Without it, `graceful_exit` (the default) closes a finished game by itself once the probe has written its done marker for this
+    manifest (see graceful_exit.py) and records NATURAL with the code, or KILLED when it had to be stopped."""
     from .boot_test import LAUNCH_WATCHDOG_SECONDS, _is_link, _running_java_under, _terminate_tree, java_started, watchdog_message
     from .launcher_click import click_launcher_once, descendant_pids
 
@@ -522,10 +525,13 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
 
     # R1: record what is staged before anything starts; the rig belongs to this run until it is released below.
     try:
-        prepare_run(rig, test_id, "live", targets=sorted(read_staging_state(rig).get("candidates") or {}), launcher=bat,
-                    expected=list(expected or LIVE_EXPECTED_MILESTONES), scenario=scenario)
+        manifest = prepare_run(rig, test_id, "live", targets=sorted(read_staging_state(rig).get("candidates") or {}), launcher=bat,
+                               expected=list(expected or LIVE_EXPECTED_MILESTONES), scenario=scenario)
     except ManifestError as exc:
         raise GameRefused(f"no pre-launch manifest: {exc}") from exc
+    from .graceful_exit import clear_done, graceful_close
+
+    clear_done(rig)
     from .rig_prefs import pinned_launcher_prefs
 
     prefs = pinned_launcher_prefs()  # the click fractions were measured at 1280x960; the owner's own setting comes back afterwards
@@ -567,6 +573,13 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
             if (outcome or {}).get("await_exit"):
                 observed, code = settle_exit(process, exit_wait, java_left=lambda: bool(_running_java_under(rig)))
             write_exit_observation(rig, test_id, observed, code)
+        elif graceful_exit and (outcome or {}).get("await_exit"):
+            from .exit_observation import write_exit_observation
+
+            observed, code = graceful_close(rig, manifest["manifest_id"], process, settle=settle_exit,
+                                            pids=lambda: {j["pid"] for j in _running_java_under(rig) if isinstance(j.get("pid"), int)} | descendant_pids(process.pid),
+                                            java_left=lambda: bool(_running_java_under(rig)))
+            write_exit_observation(rig, test_id, observed, code)
         for java in _running_java_under(rig):
             if isinstance(java.get("pid"), int):
                 _terminate_tree(java["pid"])
@@ -577,12 +590,14 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
 
 
 def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240,
-             natural_exit: bool = False, exit_wait: float = 180, save_reload: bool = False) -> LiveResult:
+             natural_exit: bool = False, exit_wait: float = 180, save_reload: bool = False,
+             graceful_exit: bool = True) -> LiveResult:
     """Play a group's live run (see drive) on a freshly started rig game, then stop it. With `natural_exit`, a finished run
     (LIVE_DONE) first waits for the game to be quit from its menu and records the observed exit (see running_game)."""
     outcome: dict = {}
     try:
-        with running_game(rig, test_id, bat_name, natural_exit=natural_exit, exit_wait=exit_wait, outcome=outcome) as (log, hands, vanilla_rows):
+        with running_game(rig, test_id, bat_name, natural_exit=natural_exit, exit_wait=exit_wait, outcome=outcome,
+                          graceful_exit=graceful_exit) as (log, hands, vanilla_rows):
             result = drive(log, hands, menu_timeout=menu_timeout, vanilla_rows=vanilla_rows, save_reload=save_reload)
             outcome["await_exit"] = result.verdict == "LIVE_DONE"
             return result

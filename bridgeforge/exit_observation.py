@@ -1,6 +1,6 @@
 """Observed process exit of a live run, kept beside its log as `<rig>/logs/<TESTID>.exit.json`.
 
-Only a run started with `probe-group live --natural-exit` writes one. NATURAL carries the integer return code of the
+A run started with `probe-group live` writes one when it finished (`--natural-exit`: after waiting for the operator to quit; by default: after closing the game window itself once the probe's done marker appeared, see graceful_exit.py). NATURAL carries the integer return code of the
 launcher process (`cmd.exe /c <bat>`, so the bat's last errorlevel; equal to Java's only when the bat ends on the java call);
 KILLED means the run had to stop the process tree (timeout, taskkill) and carries no code; UNKNOWN is the absence of a file.
 A code is never inferred from a clean log and never defaulted to 0.

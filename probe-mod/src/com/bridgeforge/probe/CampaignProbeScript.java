@@ -273,6 +273,7 @@ public class CampaignProbeScript implements EveryFrameScript {
             }
         });
         ProbeLog.end("campaign");
+        ProbeDone.campaignEnded();
     }
 
     private void runCheck(String name, Runnable check) {
