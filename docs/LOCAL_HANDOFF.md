@@ -69,6 +69,10 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
     Owner decision open: should `revive` try the REVIEW-only fixers (B1, B4) before packeting?
 12. **F checks, optional live proof.** LTA and Tahlan's Legio siege base (`market-on-hyperspace-entity`) with Nexerelin; the
     `EptaTestMission` `wormhole*` planets (`mission-map-reference-missing`).
+13. **Templar Crusade live run (owner 2026-10-20).** TEMPLAR_CRUSADE_PLAN section 4.3: `probe-group live` with Templars 0.9.8f
+    (`+bf`, with `jars/TEM_Crusade.jar`) and Nexerelin, Corvus and a random sector, `debugStartInDays` and the short-stage mode set
+    in `data/config/tem_crusade_settings.json`. Done: `BF-TEMCRUSADE|stage|...` lines for start, fleets, condition on and off, an
+    ending with losses and unrest, and a save that reloads. Try `defenderMode` `response` and `military` once each.
 
 Rewritten 2026-09-27 after the local and cloud histories merged. Closed and removed: the MOVES.log
 shadowing audit (P14 item 27, done locally in `0183ab3`) and the Maelstrom dependency-jar check
