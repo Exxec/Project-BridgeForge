@@ -5,7 +5,7 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.save_doctor import diagnose
+from bridgeforge.save_doctor import _installed, diagnose, installed_mods
 from tests.support import resolved_temp_dir
 
 DESCRIPTOR = """<?xml version="1.0" ?>
@@ -91,6 +91,18 @@ class SaveDoctorTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "TRUNCATED")
         self.assertIn("low", result["recovery"]["TRUNCATED"])
 
+
+
+class InstalledModsTests(unittest.TestCase):
+    def test_public_provider_matches_private_alias(self) -> None:
+        with resolved_temp_dir() as root:
+            mods = root / "mods"
+            (mods / "alpha").mkdir(parents=True)
+            (mods / "alpha" / "mod_info.json").write_text(
+                json.dumps({"id": "alpha", "version": "1.0", "name": "Alpha"}), encoding="utf-8")
+            found = installed_mods(mods)
+            self.assertEqual(found, _installed(mods))
+        self.assertEqual(found, {"alpha": {"folder": mods / "alpha", "version": "1.0", "name": "Alpha"}})
 
 
 class RemovalPlanTests(unittest.TestCase):

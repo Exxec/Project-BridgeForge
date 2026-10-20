@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (unreleased)
+
+- Public `save_doctor.installed_mods` provider function for Salvor (`_installed` remains as an alias).
 
 - **Lock-test reliability (ROADMAP item 77.3):** isolate native process queries with a 30-second deadline, query fixture
   PIDs only, and bound fixture-child cleanup. Production lock diagnostics and package version remain unchanged.
@@ -20,7 +22,7 @@
 - **Documentation and proposed long-term strategy (ROADMAP item 75):** reconcile the README, architecture and operator
   guides with implemented behavior; add a documentation index and S1-S4 planning documents. S1 starts with a
   reproducible revival case and shared qualification contracts. DOC-001's archive preservation fix is implemented
-  offline; its first real archive refresh remains pending. Source version remains 0.3.0; the latest
+  offline; its first real archive refresh remains pending. Source version was 0.3.0 at that audit (now 0.4.0, see above); the latest
   published tool release remains the separate v0.2.0 pre-release. No new runtime release is implied.
 
 - **`java-matrix mass --bundle` and the `miko` launchers (ROADMAP item 62 addendum):** unrelated mods boot together while screening and split only on a failure; `miko`/`miko-noprep` copy the owner's `Miko_Simple.txt` (with and without Prepatcher); fixed 4 GB heap per instance. Migration plan in `docs/MIGRATION_PLAN.md` (item 64).

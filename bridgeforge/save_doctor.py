@@ -46,13 +46,17 @@ _JAVA_KEYWORDS = frozenset(
     "volatile while".split())
 
 
-def _installed(mods_dir: Path) -> dict[str, dict]:
+def installed_mods(mods_dir: Path) -> dict[str, dict]:
+    """Public provider contract used by Salvor: installed mods keyed by mod id."""
     found: dict[str, dict] = {}
     for info_path in sorted(Path(mods_dir).glob("*/mod_info.json")):
         info = _load_lenient_json_file(info_path) or {}
         if isinstance(info, dict) and info.get("id"):
             found[str(info["id"])] = {"folder": info_path.parent, "version": str(info.get("version") or ""), "name": str(info.get("name") or "")}
     return found
+
+
+_installed = installed_mods
 
 
 def _truncated(campaign_xml: Path) -> bool:
@@ -74,7 +78,7 @@ def diagnose(save: Path, mods_dir: Path, vanilla_core: Path | None = None, cycle
     else:
         descriptor = {"save_dir": str(save)}  # campaign.xml alone (a save sent without its descriptor): no mod-list checks
         skipped.append("descriptor.xml is missing: the enabled-mod list, MOD_MISSING and VERSION_CHANGED checks were skipped")
-    installed = _installed(mods_dir)
+    installed = installed_mods(mods_dir)
     problems: list[dict] = []
 
     enabled = descriptor.get("enabled_mods") or []
