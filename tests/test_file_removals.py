@@ -10,7 +10,7 @@ from pathlib import Path
 
 from bridgeforge.cli import main
 from bridgeforge.dropped_sweep import check_workspace
-from bridgeforge.file_drops import dropped_files
+from bridgeforge.file_drops import dropped_files, is_junk_file, split_dropped_files
 from bridgeforge.hand_remove import RemoveError, remove_files, unrecorded_removed_files
 from bridgeforge.removals import REMOVALS_FILE, RemovalsError, add_removals, load_removals, make_entry
 from bridgeforge.scanner import scan_mod
@@ -70,6 +70,29 @@ class FileDropTests(unittest.TestCase):
             with zipfile.ZipFile(ws / "working/jars/m.jar", "w") as jar:
                 jar.writestr("data/scripts/Shipped.class", b"")
             self.assertEqual(dropped_files(ws / "original/mod", ws / "working"), ["data/scripts/Lost.java"])
+
+    def test_junk_is_split_off_and_never_changes_the_verdict(self) -> None:
+        for name in ("a.ship.old", "x.png~", "a.bak.2", "a.java.pre-bf-fix.bak", "d.log", "s.lnk", "z.rar", "z.zip", "z.7z", "desktop.ini",
+                     "Thumbs.db", "rules - копия.csv", "rules 副本.csv", "a - Copy.csv", "Copy of a.csv", "a (copy).csv"):
+            self.assertTrue(is_junk_file("data/x/" + name), name)
+        self.assertFalse(is_junk_file("data/x/rules.csv"))
+        with resolved_temp_dir() as tmp:
+            ws = _workspace(tmp)
+            _write(ws / "original/mod/data/hulls/a.ship.old")
+            row = check_workspace(ws)
+            self.assertEqual(row["verdict"], "CLEAN")
+            self.assertEqual(row["junk_dropped"], ["data/hulls/a.ship.old"])
+
+    def test_java_and_class_files_inherit_the_classes_category(self) -> None:
+        with resolved_temp_dir() as tmp:
+            ws = _workspace(tmp)
+            _write(ws / "original/mod/data/scripts/Gone.java", "package data.scripts;\nclass Gone {}\n")
+            _write(ws / "original/mod/data/missions/m/MissionDefinition.class")
+            files, _junk = split_dropped_files(ws / "original/mod", ws / "working", None, {"data.scripts.Gone", "data.missions.m.MissionDefinition"})
+            self.assertEqual(files, [])
+            row = check_workspace(ws)
+            self.assertEqual(row["dropped"]["classes"]["unexplained"], ["data.scripts.Gone"])
+            self.assertEqual(row["dropped"]["files"]["unexplained"], ["data/missions/m/MissionDefinition.class"])
 
     def test_files_category_is_accepted_by_validation(self) -> None:
         with self.assertRaises(RemovalsError):

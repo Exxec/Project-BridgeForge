@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 from .progress import Checkpoint, report
-from .file_drops import dropped_files
+from .file_drops import split_dropped_files
 from .removals import CATEGORIES, RemovalsError, load_removals, split_explained
 from .safeio import atomic_write_json, atomic_write_text
 from .scan_json import _load_lenient_json_file
@@ -93,7 +93,7 @@ def check_workspace(workspace: Path, vanilla_core: Path | None = None, *, auto_c
     """The dropped-feature record of one workspace; reads only."""
     working = workspace / "working"
     row: dict = {"workspace": workspace.name, "verdict": "UNDETERMINED", "old_tree": None, "origin": "", "reason": "",
-                 "dropped": {}, "files_core": "skipped", "total": 0, "explained": 0, "unexplained": 0, "removals_error": ""}
+                 "dropped": {}, "files_core": "skipped", "junk_dropped": [], "total": 0, "explained": 0, "unexplained": 0, "removals_error": ""}
     choice = select_old_tree(workspace)
     if choice["tree"] is None:
         row["reason"] = choice["reason"]
@@ -111,7 +111,8 @@ def check_workspace(workspace: Path, vanilla_core: Path | None = None, *, auto_c
         core = reference_core_for_game_version(info.get("gameVersion") if isinstance(info, dict) else None)
     row["files_core"] = "checked" if core is not None else "skipped"
     dropped = dropped_features(choice["tree"], working)
-    files = dropped_files(choice["tree"], working, core)
+    files, junk = split_dropped_files(choice["tree"], working, core, set(dropped.get("classes", ())))
+    row["junk_dropped"] = junk
     if files:
         dropped["files"] = files
     split = split_explained(dropped, removals)
@@ -173,6 +174,9 @@ def render_row(row: dict) -> list[str]:
         lines.append(f"- REMOVALS.json refused, nothing counted as explained: {row['removals_error']}")
     if row.get("files_core") == "skipped" and "files" in row["dropped"]:
         lines.append("- files: no vanilla core given, so files that also exist in vanilla were not excluded (marked)")
+    if row.get("junk_dropped"):
+        shown = row["junk_dropped"][:SHOWN_PER_CATEGORY]
+        lines.append(f"- info, junk not counted ({len(row['junk_dropped'])}): " + ", ".join(shown) + (", ..." if len(row["junk_dropped"]) > len(shown) else ""))
     for category, entry in row["dropped"].items():
         lines += _item_lines(category, entry)
     return lines

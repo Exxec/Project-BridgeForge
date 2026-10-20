@@ -94,14 +94,13 @@ class RemovalsTests(unittest.TestCase):
     def test_items_and_patterns_explain_drops(self):
         with resolved_temp_dir() as root:
             ws = self._workspace(root)
-            self.assertEqual(check_workspace(ws)["unexplained"], 4)  # incl. the dropped Old.java file
+            self.assertEqual(check_workspace(ws)["unexplained"], 3)
             add_removals(ws / "working", [make_entry("rules.csv", item="CrusadeNews", reason="gone upstream", source="upstream"),
                                           make_entry("rules.csv", pattern="CrusadeE*", reason="gone", source="owner")])
             row = check_workspace(ws)
-            self.assertEqual((row["explained"], row["unexplained"]), (2, 2))
+            self.assertEqual((row["explained"], row["unexplained"]), (2, 1))
             self.assertEqual(row["dropped"]["classes"]["unexplained"], ["data.scripts.Old"])
-            add_removals(ws / "working", [make_entry("classes", pattern="data.scripts.*", reason="stripped", source="strip-plan"),
-                                          make_entry("files", item="data/scripts/Old.java", reason="stripped", source="strip-plan")])
+            add_removals(ws / "working", [make_entry("classes", pattern="data.scripts.*", reason="stripped", source="strip-plan")])
             self.assertEqual(check_workspace(ws)["verdict"], "EXPLAINED")
 
     def test_add_removals_skips_duplicates(self):
