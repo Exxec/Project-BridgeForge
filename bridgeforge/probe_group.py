@@ -927,13 +927,17 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
         manifest = None
     evidence = evaluate_run(Path(rig), manifest, Path(log), mods_dir=Path(rig) / "mods",
                             member_verdicts={m: v["verdict"] for m, v in report["members"].items()})
+    from .exercised import hollow_mods, hollow_warnings, parse_exercised
+
+    exercised = parse_exercised(text)
+    hollow = hollow_mods(exercised, sorted(report["members"]))
     run_record = write_run_record(queue, test_id, tested, triage=triage_log(log, mods_dir=Path(rig) / "mods"),
                                   verdicts={m: v["verdict"] for m, v in report["members"].items()}, probe_config=config,
                                   core_baseline=_repo_root() / DEFAULT_CORE_BASELINE_RELATIVE, today=today,
                                   save_made_with=_newest_save_made_with(Path(rig), save_made_with), rig_state=read_rig_state(Path(rig)),
                                   evidence=evidence, manifest=manifest, campaign_perf=report.get("campaign_perf"),
                                   process_exit_code=exit_code, process_exit_observed=exit_observed,
-                                  scenario=scenario_blocks or None)
+                                  scenario=scenario_blocks or None, exercised=exercised or None)
     recorded, skipped, archived = [], [], []
     carry, stopped = None, None
     if accept and evidence["status"] != "ACCEPTABLE":
@@ -1007,7 +1011,8 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
         snapshot_note = snapshot_after_archive(done)
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_RECORD", "test_id": test_id, "probe_version": version,
             "recorded": recorded, "archived": archived, "skipped": skipped, "stopped": stopped,
-            "run_record": str(Path(queue) / "_live" / f"{test_id}.json"), "known_noise": run_record["known_noise"], "snapshot": snapshot_note}
+            "run_record": str(Path(queue) / "_live" / f"{test_id}.json"), "known_noise": run_record["known_noise"], "snapshot": snapshot_note,
+            "exercised": exercised, "hollow": hollow, "warnings": hollow_warnings(hollow)}
 
 
 SMOKE_BAT = "run-j25-direct.bat"

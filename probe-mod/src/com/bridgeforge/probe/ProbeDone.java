@@ -24,12 +24,14 @@ final class ProbeDone {
     }
 
     static void campaignEnded() {
+        ProbeExercised.emitAll();
         campaignDone = true;
         writeIfComplete();
     }
 
     /** Called when a combat round ends; only the last round of the configured slices completes the run. */
     static void combatEnded() {
+        ProbeExercised.emitAll();
         if (isLastRound()) {
             combatDone = true;
         }

@@ -284,6 +284,8 @@ def run_cli(args: argparse.Namespace) -> int:
                         print(f"Archived to Done/: {', '.join(result['archived']) or 'none'}")
                     for item in result["skipped"]:
                         print(f"  not recorded: {item['mod_id']} ({item['verdict']}) {item.get('archive', '')}")
+                    for item in result.get("warnings", []):
+                        print(f"  WARN {item}")
             else:
                 config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
                 from .probe_group import accepted_probe_findings

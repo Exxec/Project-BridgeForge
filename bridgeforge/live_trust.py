@@ -90,7 +90,7 @@ def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triag
                      today: str | None = None, rig_state: dict | None = None, evidence: dict | None = None,
                      manifest: dict | None = None, process_exit_code: int | None = None,
                      process_exit_observed: str | None = None, campaign_perf: dict | None = None,
-                     scenario: dict | None = None) -> dict:
+                     scenario: dict | None = None, exercised: dict | None = None) -> dict:
     """Record one live run (36.6) and its noise check (36.9); returns the record. `rig_state` is what `rig-up` last recorded.
 
     `evidence` is `run_manifest.evaluate_run`'s result and `manifest` the run's pre-launch manifest (ROADMAP item 75 R1). A member's
@@ -147,6 +147,8 @@ def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triag
         record["process_exit_observed"] = process_exit_observed
     if scenario:  # per-mod PROBE_SCENARIO.json results (bridgeforge/probe_scenario.py); absent when no member had one
         record["scenario"] = scenario
+    if exercised is not None:  # absent when the log has no exercised lines (older probe)
+        record["exercised"] = exercised
     (live_dir / f"{test_id}.json").write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     for workspace, member in zip(workspaces, members):
         log = workspace / "reports" / RUN_LOG
