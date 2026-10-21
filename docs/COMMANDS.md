@@ -2934,7 +2934,7 @@ merge pull requests in order with gh: wait for checks, merge, rebase the next br
 | `PR` | nargs + | pull request numbers, in merge order |
 | `--worktree` PR=PATH | repeatable | the worktree where that PR's branch is checked out (needed to rebase it) |
 | `--dry-run` | - | print the plan, run nothing |
-| `--python` PYTHON | default C:\Users\exxec\Documents\Project BridgeForge\.venv\Scripts\python.exe | interpreter for the tests and the regeneration (default: this one) |
+| `--python` PYTHON | - | interpreter for the tests and the regeneration (default: the one running this command) |
 | `--timeout-minutes` TIMEOUT_MINUTES | default 10.0 | how long to wait for checks to register |
 
 ## shadow-triage

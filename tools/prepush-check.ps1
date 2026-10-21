@@ -35,6 +35,9 @@ if($LASTEXITCODE -eq 0){
     }
 }
 $modules=@($modules | Select-Object -Unique)
+# Git runs hooks with GIT_DIR and friends pointing at this repository; tests that `git init` a temp folder would otherwise
+# re-initialise the real one (set core.bare=true, 2026-10-21). Clear them for the test run only.
+Get-ChildItem Env: | Where-Object { $_.Name -like 'GIT_*' } | ForEach-Object { Remove-Item -LiteralPath ("Env:" + $_.Name) }
 Push-Location $root
 try{ & $py -m unittest @modules -q; $testExit=$LASTEXITCODE }finally{Pop-Location}
 if($testExit -ne 0){Write-Error 'Pre-push tests failed; fix them before pushing.'; exit 13}

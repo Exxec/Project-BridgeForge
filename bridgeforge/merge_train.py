@@ -212,7 +212,7 @@ def add_parser(subcommands) -> None:
     train.add_argument("prs", nargs="+", metavar="PR", help="pull request numbers, in merge order")
     train.add_argument("--worktree", action="append", default=[], metavar="PR=PATH", help="the worktree where that PR's branch is checked out (needed to rebase it)")
     train.add_argument("--dry-run", action="store_true", help="print the plan, run nothing")
-    train.add_argument("--python", default=sys.executable, help="interpreter for the tests and the regeneration (default: this one)")
+    train.add_argument("--python", default=None, help="interpreter for the tests and the regeneration (default: the one running this command)")
     train.add_argument("--timeout-minutes", type=float, default=CHECKS_TIMEOUT_SECONDS / 60, help="how long to wait for checks to register")
 
 
@@ -231,7 +231,7 @@ def run_cli(args: argparse.Namespace) -> int:
         print("\n".join(plan(prs, worktrees)))
         return 0
     try:
-        Train(python=args.python, timeout=args.timeout_minutes * 60).go(prs, worktrees)
+        Train(python=args.python or sys.executable, timeout=args.timeout_minutes * 60).go(prs, worktrees)
     except TrainStop as stop:
         print(f"merge-train: stopped: {stop}")
         return 1
