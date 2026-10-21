@@ -556,6 +556,8 @@ def build_probe_config(
         "target_mod_id": target_mod_id,
         # 77.17: per kind, the ids this mod's data defines, which the probe's content-parity stage looks up in the running game
         "content_parity": {target_mod_id: expected_content(mod_root, systems=mod_systems, body_types=sorted(body_types))},
+        # 78.8: a day whose campaign frame-time p95 exceeds this many ms is flagged slow; 0 turns the flag off
+        "campaign_perf_p95_ms": 0,
         "hulls": hulls_with_variant,
         "variants": variants,
         "track_entities": sorted(set(track_entities or [])),

@@ -29,9 +29,14 @@ REBUILT_BY_MERGE = {"target_mod_id", "group_members", "setups", "apply", "campai
 
 
 def java_read_keys() -> set[str]:
-    """Every top-level key ProbeConfig.java reads from the JSON root (calls on `root`)."""
-    text = (PROBE / "ProbeConfig.java").read_text(encoding="utf-8")
-    return set(re.findall(r'root\.(?:opt\w+|get\w+)\("(\w+)"', text)) | set(re.findall(r'addAll\(root\.optJSONArray\("(\w+)"', text))
+    """Every top-level key the probe reads from the config's JSON root (calls on `root`), in any probe source file.
+
+    Stages that own their config block (ContentParityProbe's `content_parity`) read it from the same root object."""
+    keys: set[str] = set()
+    for source in sorted(PROBE.glob("*.java")):
+        text = source.read_text(encoding="utf-8")
+        keys |= set(re.findall(r'root\.(?:opt\w+|get\w+)\("(\w+)"', text)) | set(re.findall(r'addAll\(root\.optJSONArray\("(\w+)"', text))
+    return keys
 
 
 def java_setup_kinds() -> set[str]:
