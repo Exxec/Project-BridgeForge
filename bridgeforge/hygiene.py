@@ -224,15 +224,16 @@ def check(repo: Path, build: str | None = None) -> dict:
     top = Path(_git(Path(repo), "rev-parse", "--show-toplevel").strip())
     tracked = _entries(_git(top, "ls-files", "-z", "--cached"))
     untracked = _entries(_git(top, "ls-files", "-z", "--others", "--exclude-standard"))
+    ignored = _check_ignored(top)
     ruff = _find_ruff()
     tracked_python = [path for path in tracked if path.endswith(".py") and (top / path).is_file()]
     checks = {
         "tracked_modified": _check_modified(top),
         "untracked_code": _check_untracked(top, untracked),
-        "ignored_evidence": _check_ignored(top),
+        "ignored_evidence": ignored,
         "interpreter": _check_interpreter(ruff),
         "lint": _check_lint(top, ruff, tracked_python),
-        "misnamed_paths": _check_misnamed(tracked + untracked),
+        "misnamed_paths": _check_misnamed(tracked + untracked + ignored["entries"]),
         "build": _check_build(top, build),
     }
     return {"repo": top.as_posix(), "status": _overall(checks), "checks": checks}

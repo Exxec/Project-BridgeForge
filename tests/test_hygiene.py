@@ -137,6 +137,14 @@ class HygieneTests(unittest.TestCase):
             self.assertEqual(result["checks"]["misnamed_paths"]["status"], hygiene.FINDING)
             self.assertEqual(result["checks"]["misnamed_paths"]["files"], [f"C{PRIVATE_COLON} Users notes.txt"])
 
+    def test_mis_saved_name_inside_an_ignored_entry_is_still_flagged(self) -> None:
+        with resolved_temp_dir() as root:
+            repo = _repo(root)
+            (repo / f"C{PRIVATE_COLON}Users").mkdir()
+            (repo / f"C{PRIVATE_COLON}Users" / "a.md").write_text("stray\n", encoding="utf-8")
+            (repo / ".gitignore").write_text(f"local/\nC{PRIVATE_COLON}Users/\n", encoding="utf-8")
+            self.assertEqual(self._check(repo)["checks"]["misnamed_paths"]["files"], [f"C{PRIVATE_COLON}Users/"])
+
     def test_missing_ruff_reports_incomplete_and_exit_two_when_nothing_else_is_wrong(self) -> None:
         with resolved_temp_dir() as root:
             repo = _repo(root)
