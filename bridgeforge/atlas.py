@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 
 from . import progress
+from .atlas_census import declared_dependencies, extract_census
 from .atlas_code import CALLS, extract_code
 from .atlas_data import DATA_KINDS, Fact, extract_data_facts
 from .scanner import _load_lenient_json_file
@@ -33,6 +34,10 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS mods (id TEXT, version TEXT, name TEXT, path TEXT, hash TEXT, folder TEXT, PRIMARY KEY (id, version));
 CREATE TABLE IF NOT EXISTS facts (mod TEXT, version TEXT, kind TEXT, id TEXT, action TEXT, file TEXT, line INTEGER, evidence TEXT, confidence TEXT);
 CREATE TABLE IF NOT EXISTS literals (mod TEXT, version TEXT, file TEXT, line INTEGER, value TEXT, ctx TEXT);
+CREATE TABLE IF NOT EXISTS census (mod TEXT, version TEXT, area TEXT, kind TEXT, symbol TEXT, count INTEGER, example TEXT);
+CREATE TABLE IF NOT EXISTS census_deps (mod TEXT, version TEXT, dep_id TEXT, dep_name TEXT, dep_version TEXT);
+CREATE INDEX IF NOT EXISTS census_by_symbol ON census (area, symbol);
+CREATE INDEX IF NOT EXISTS census_by_mod ON census (mod, version);
 CREATE INDEX IF NOT EXISTS facts_by_id ON facts (kind, id);
 CREATE INDEX IF NOT EXISTS facts_by_mod ON facts (mod, version);
 CREATE INDEX IF NOT EXISTS literals_by_value ON literals (value);
@@ -131,15 +136,18 @@ def version_key(version: str) -> tuple:
 # ---------------------------------------------------------------- build
 
 def _store(conn: sqlite3.Connection, ident: tuple[str, str, str], path: Path, digest: str, facts: list[Fact],
-           literals: list[tuple[str, int, str, str]]) -> None:
+           literals: list[tuple[str, int, str, str]], census: tuple | None = None) -> None:
     mod_id, version, name = ident
     with conn:
-        for table in ("facts", "literals"):
+        for table in ("facts", "literals", "census", "census_deps"):
             conn.execute(f"DELETE FROM {table} WHERE mod = ? AND version = ?", (mod_id, version))
         conn.execute("DELETE FROM mods WHERE id = ? AND version = ?", (mod_id, version))
         conn.execute("INSERT INTO mods VALUES (?, ?, ?, ?, ?, ?)", (mod_id, version, name, str(path), digest, path.name))
         conn.executemany("INSERT INTO facts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [(mod_id, version, *fact) for fact in facts])
         conn.executemany("INSERT INTO literals VALUES (?, ?, ?, ?, ?, ?)", [(mod_id, version, *item) for item in literals])
+        rows, deps = census or ([], [])
+        conn.executemany("INSERT INTO census VALUES (?, ?, ?, ?, ?, ?, ?)", [(mod_id, version, *row) for row in rows])
+        conn.executemany("INSERT INTO census_deps VALUES (?, ?, ?, ?, ?)", [(mod_id, version, *dep) for dep in deps])
 
 
 def index_mod(path: Path) -> tuple[list[Fact], list[tuple[str, int, str, str]]]:
@@ -267,7 +275,8 @@ def _build_one(conn, checkpoint, folder: Path, number: int, total: int, seen: se
         say(label, "unchanged", None if previous and previous.get("hash") == digest else time.monotonic() - began)
         return
     facts, literals = index_mod(folder)
-    _store(conn, ident, folder, digest, facts, literals)
+    census = None if ident[0] == VANILLA_ID else (extract_census(folder), declared_dependencies(folder))
+    _store(conn, ident, folder, digest, facts, literals, census)
     checkpoint.add(f"{ident[0]}@{ident[1]}", {"hash": digest, "facts": len(facts)})
     stats["indexed"] += 1
     say(label, f"{len(facts)} fact(s), {len(literals)} literal(s)", time.monotonic() - began)
