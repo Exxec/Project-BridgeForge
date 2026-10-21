@@ -24,6 +24,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "live_ledger": ("live-ledger",),
     "roadmap_lint": ("roadmap-lint",),
     "agent_diff_check": ("agent-diff-check",),
+    "hygiene": ("hygiene",),
     "auto_open": ("auto-open",),
     "dropped_sweep": ("dropped-features",),
     "hand_remove": ("remove",),
