@@ -42,6 +42,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "cmd_corpus": ("dependency-substitutes", "provider-index", "supersession", "finding-stats", "dependency-graph", "corpus-recheck", "sibling-assets", "vendor-copy", "revival-report-draft", "diff-data", "rebuild-from-reference", "corpus-index", "content-diff", "verify-shadow", "vendor-plan"),
     "cmd_archive": ("audit-shipped", "audit-explain", "archive", "relink", "bump-version", "declare-providers", "close", "restore-from-done", "promote", "board", "intake", "archive-preflight", "archive-stage", "build-tag", "release", "release-policy", "done-audit", "fold"),
     "release_notes": ("release-notes",),
+    "merge_train": ("merge-train",),
     "cmd_shadow": ("shadow-triage",),
     "cmd_revive": ("revive-review", "mod-changelog", "ready-list", "revive-queue", "revive", "escalation"),
 }

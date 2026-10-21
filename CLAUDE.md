@@ -173,3 +173,23 @@ update: a new revision, a crash fixed, a translation. When a shipped mod changes
   "Full suite: 966 tests, OK (skipped=10)."
 - When an item is finished, mark it `**Done <date>.**` in `ROADMAP.md` with what was built and
   which tests cover it.
+
+## Changelog fragments (ROADMAP-3 item 80.1)
+
+A pull request adds `changelog.d/<slug>.md` (one bullet) and never edits `CHANGELOG.md`; `bridgeforge release-notes assemble
+[--version V]` moves the fragments under the top `## <version> (unreleased)` heading at release time. See `changelog.d/README.md`.
+
+## Generated files and merges (ROADMAP-3 item 80.1)
+
+`tests/cli_help_golden.json`, `docs/COMMANDS.md` and `docs/CHECKS.md` are generated. `.gitattributes` marks them `merge=bfregen`.
+Enable the driver once per clone (git never runs a repository-supplied driver by itself):
+
+```
+git config merge.bfregen.name "regenerate generated files"
+git config merge.bfregen.driver "python tools/merge-regen.py %O %A %B %P"
+```
+
+On a conflict the driver takes the other side and records the path in `<git-dir>/bf-regen-needed`; then run
+`python tools/regen-generated.py` (reruns `python -m tests.test_cli_golden --write` and `python -m bridgeforge docs-index`),
+review and commit. Without the driver, resolve such a conflict the same way by hand. `test_cli_golden` and `test_checks_index`
+still fail a stale file in CI.
