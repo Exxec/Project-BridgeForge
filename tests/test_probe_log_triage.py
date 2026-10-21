@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -73,8 +74,10 @@ class MarketStarSystemProbeTests(unittest.TestCase):
         source = (root / "src/com/bridgeforge/probe/CampaignProbeScript.java").read_text(encoding="utf-8")
         self.assertIn('runCheck("market-star-system"', source)
         self.assertIn("RaidIntel.getETA", source)
+        # The logged version must be the released one: ProbeLog.VERSION equals mod_info.json's version (no literal to bump).
         version = (root / "src/com/bridgeforge/probe/ProbeLog.java").read_text(encoding="utf-8")
-        self.assertIn('VERSION = "0.2.27"', version)
+        released = json.loads((root / "mod_info.json").read_text(encoding="utf-8-sig"))["version"]
+        self.assertIn(f'VERSION = "{released}"', version)
 
     def test_a_fail_line_for_a_market_without_a_star_system_is_flagged(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
