@@ -27,6 +27,7 @@ import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from .archive_checks import check_reason
 from .safeio import atomic_write_json, atomic_write_text
 
 SCHEMA_VERSION = 1
@@ -232,10 +233,14 @@ def _bound_run(workspace: Path, journal: dict, test_id: str) -> dict:
 
 
 def finalize(workspace: Path, revision_id: str, test_id: str, *, done_dir: Path, policy_path: Path | None = None,
-             changelog: Path | None = None) -> dict:
+             changelog: Path | None = None, allow_unexplained: str | None = None) -> dict:
     from .live_trust import archive_gate, shipped_hash
     from .revision_renames import migration_requirement
 
+    try:
+        reason = check_reason(allow_unexplained)
+    except ValueError as exc:
+        raise ReviseError(str(exc)) from exc
     workspace = Path(workspace).expanduser().resolve()
     working = workspace / "working"
     done_dir = Path(done_dir).expanduser().resolve()
@@ -256,6 +261,7 @@ def finalize(workspace: Path, revision_id: str, test_id: str, *, done_dir: Path,
             problems += requirement["problems"]
             if problems:
                 raise ReviseError("the release gates are not met: " + "; ".join(problems))
+            _content_gates(workspace, reason, journal)
             journal["live"] = {"test_id": test_id, "manifest_id": line.get("manifest_id"), "date": line.get("date")}
             journal["migration"] = _migration_summary(workspace, previous, working)
             _set_state(workspace, journal, "LIVE_ACCEPTED")
@@ -272,6 +278,22 @@ def finalize(workspace: Path, revision_id: str, test_id: str, *, done_dir: Path,
                 raise StepFailed(f"{name} failed after {journal['state']}: {exc}; run finalize again to resume") from exc
         _set_state(workspace, journal, "COMPLETE")
         return {**journal, "mode": "REVISE_FINALIZE", "already_complete": False}
+
+
+def _content_gates(workspace: Path, reason: str | None, journal: dict) -> list[str]:
+    """The dropped-feature and content-parity refusals of `archive`, checked before the changelog or any archive is written.
+    With `--allow-unexplained` they are not refused; the reason and the refused items are kept in the journal (and the archive note)."""
+    from .archive_checks import pre_archive_checks
+    from .explain_proofs import prepare_for_audit
+
+    prepare_for_audit(workspace)  # the same copy-only step `archive` takes first
+    gates = pre_archive_checks(workspace)
+    if gates["problems"] and reason is None:
+        raise ReviseError("refusing to finalize: " + "; ".join(gates["problems"]) + ". Fix the mod, or record why with --allow-unexplained REASON "
+                          "(at least 20 characters).")
+    if gates["problems"]:
+        journal["allowed_unexplained"] = {"reason": reason, "problems": gates["problems"]}
+    return gates["problems"]
 
 
 def _step_changelog(workspace: Path, journal: dict, done_dir: Path, policy_path: Path | None, changelog: Path | None) -> None:
@@ -304,7 +326,8 @@ def _step_archive(workspace: Path, journal: dict, done_dir: Path, policy_path: P
     if _archived_folder_matches(done_dir, workspace, journal) and (done_dir / workspace.name).is_dir():
         result = {"zip": next(iter(sorted((done_dir / workspace.name).glob("*.zip"))), None), "replaced": None, "reconciled": True}
     else:
-        result = archive_mod(workspace, done_dir, policy_path=policy_path, today=journal["day"], refresh=False, move_aside=True)
+        result = archive_mod(workspace, done_dir, policy_path=policy_path, today=journal["day"], refresh=False, move_aside=True,
+                             allow_unexplained=(journal.get("allowed_unexplained") or {}).get("reason"))
         zip_path = Path(result["zip"])
         shutil.copy2(zip_path, done_dir / zip_path.name)
         verify_written(done_dir / zip_path.name, zip_path.read_bytes())
@@ -358,6 +381,7 @@ def add_parser(subcommands) -> None:
     finalize_cmd.add_argument("--revision", required=True, metavar="ID")
     finalize_cmd.add_argument("--test-id", required=True, metavar="ID")
     finalize_cmd.add_argument("--done", type=Path)
+    finalize_cmd.add_argument("--allow-unexplained", metavar="REASON", help="archive past the dropped-feature and content-parity refusals, recording REASON (at least 20 characters) and the refused items in ARCHIVE_NOTE.md")
     finalize_cmd.add_argument("--json", action="store_true")
     status_cmd = sub.add_parser("status", help="list the workspace's revision journals (read-only)")
     status_cmd.add_argument("workspace", type=Path)
@@ -381,7 +405,7 @@ def run_cli(args: argparse.Namespace) -> int:
             text = (f"Revision {result['revision_id']} {'pending (unchanged)' if result.get('reused') else 'prepared'}: {result['previous_version_in_work']} -> "
                     f"{result['new_version']}, candidate {result['candidate']['shipped_sha256'][:12]}. Test exactly these bytes, then `revise finalize`.")
         elif args.revise_command == "finalize":
-            result = finalize(workspace, args.revision, args.test_id, done_dir=done)
+            result = finalize(workspace, args.revision, args.test_id, done_dir=done, allow_unexplained=args.allow_unexplained)
             text = (f"Revision {result['revision_id']} was already complete." if result.get("already_complete")
                     else f"Revision {result['revision_id']} COMPLETE: archived {result['steps']['archive']['folder']}; snapshot: {result['steps']['snapshot']}")
         elif args.revise_command == "migration":

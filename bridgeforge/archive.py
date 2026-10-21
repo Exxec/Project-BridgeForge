@@ -24,6 +24,7 @@ import zipfile
 from datetime import date
 from pathlib import Path
 
+from .archive_checks import ALLOW_MIN_CHARS, check_reason, override_section, pre_archive_checks
 from .copy_drift import _collect
 from .scanner import _load_lenient_json_file
 
@@ -156,13 +157,14 @@ def _move_aside(target: Path, done_dir: Path, today: str, prefix: str = "_replac
 
 
 def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = None, today: str | None = None,
-                refresh: bool = False, move_aside: bool = False) -> dict:
+                refresh: bool = False, move_aside: bool = False, allow_unexplained: str | None = None) -> dict:
     """Archive the workspace into done_dir/<workspace>. An earlier archive of the mod is never deleted: `refresh` (or `move_aside`)
     moves it to Done/_replaced-<date>/<Mod>[-N] first. If writing the new archive fails part-way, the partial one is moved to
     Done/_failed-<date>/ and the earlier archive is moved back; the ArchiveError says exactly where everything is (DOC-001)."""
     state: dict = {}
     try:
-        return _archive_mod(workspace, done_dir, policy_path=policy_path, today=today, refresh=refresh, move_aside=move_aside, _state=state)
+        return _archive_mod(workspace, done_dir, policy_path=policy_path, today=today, refresh=refresh, move_aside=move_aside,
+                            allow_unexplained=allow_unexplained, _state=state)
     except Exception as exc:
         moved = state.get("moved")
         if moved is None:
@@ -179,13 +181,26 @@ def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = N
         raise ArchiveError(f"archiving failed ({type(exc).__name__}: {exc}); " + "; ".join(notes)) from exc
 
 
+def _allow_reason(allow_unexplained: str | None) -> str | None:
+    try:
+        return check_reason(allow_unexplained)
+    except ValueError as exc:
+        raise ArchiveError(str(exc)) from exc
+
+
+def _gate_refusal(workspace: Path, problems: list[str]) -> str:
+    return (f"refusing to archive {workspace.name}: " + "; ".join(problems) + ". Fix the mod, or record why they stay out with "
+            f"--allow-unexplained REASON (at least {ALLOW_MIN_CHARS} characters).")
+
+
 def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, today: str | None, refresh: bool, move_aside: bool,
-                 _state: dict) -> dict:
+                 allow_unexplained: str | None, _state: dict) -> dict:
     from .explain_proofs import prepare_for_audit
     from .master_log import write_master_log
     from .substitutes import revival_licence
 
     workspace = Path(workspace).expanduser().resolve()
+    reason = _allow_reason(allow_unexplained)
     working = workspace / "working"
     if not (working / "mod_info.json").is_file():
         raise ArchiveError(f"{workspace} has no working/mod_info.json.")
@@ -210,6 +225,9 @@ def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, t
         raise ArchiveError(f"no licence decision for {mod_id}: record one first (bridgeforge release-policy set {mod_id} --local-only|--releasable --reason ...).")
     target = Path(done_dir).expanduser().resolve() / workspace.name
     prepared = prepare_for_audit(workspace)  # a zip original is extracted beside original/, translation records copied
+    gates = pre_archive_checks(workspace)  # nothing under Done/ is written before this: a refusal leaves the archive folder untouched
+    if gates["problems"] and reason is None:
+        raise ArchiveError(_gate_refusal(workspace, gates["problems"]))
     previous_root = target / workspace.name
     previous_digests = _digest_tree(previous_root)  # taken before the previous archive is moved aside or removed
     previous_version = _previous_version(previous_root)
@@ -262,7 +280,7 @@ def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, t
 
     original = _original_root(workspace) or original_root(workspace)
     changed, added, jars_identical, jar_names = [], [], None, []
-    warnings = _missing_data_warnings(original, folder, working)
+    warnings = _missing_data_warnings(original, folder, working) + gates["warnings"]
     if original is not None:
         for relative, source in sorted(files.items()):
             before = original / relative
@@ -281,6 +299,8 @@ def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, t
     if previous_digests:
         diff = since_previous(previous_jars, previous_digests, files)  # read before the previous archive was moved aside or removed
         note += _since_previous_section(previous_version, diff)
+    if gates["problems"]:
+        note += override_section(reason, gates["problems"])
     atomic_write_text(target / "ARCHIVE_NOTE.md", note)
     # The mods' own changelog, beside Done/ (the repo root in use; a temp folder in tests).
     from .mod_changelog import add_entry
@@ -293,7 +313,8 @@ def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, t
     return {"schema_version": SCHEMA_VERSION, "mode": "ARCHIVE", "archive": str(target), "files": len(files), "zip": str(zip_path),
             "replaced": replaced, "prepared": prepared, "master_log": master,
             "licence": licence.get("decision"), "status": status, "changed": changed, "added": added, "since_previous": diff,
-            "warnings": warnings, "jars_identical": jars_identical, "note": str(target / "ARCHIVE_NOTE.md")}
+            "warnings": warnings, "jars_identical": jars_identical, "note": str(target / "ARCHIVE_NOTE.md"),
+            "allowed_unexplained": {"reason": reason, "problems": gates["problems"]} if gates["problems"] else None}
 
 
 def _missing_data_warnings(original: Path | None, shipped: Path, working: Path) -> list[str]:

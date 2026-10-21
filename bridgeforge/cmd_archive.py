@@ -21,6 +21,7 @@ def add_parser(subcommands) -> None:
     archive_cmd.add_argument("--policy", type=Path)
     archive_cmd.add_argument("--refresh", action="store_true", help="replace an existing archive of this mod in Done/: the old one is moved to Done/_replaced-<date>/<Mod>[-N], never deleted, and put back if the new write fails (only a folder holding an ARCHIVE_NOTE.md directly inside Done/)")
     archive_cmd.add_argument("--readme-copy", action="store_true", help="also write <zip>-with-readme.zip and readme.txt for this archive")
+    archive_cmd.add_argument("--allow-unexplained", metavar="REASON", help="archive past the dropped-feature and content-parity refusals, recording REASON (at least 20 characters) and the refused items in ARCHIVE_NOTE.md")
     archive_cmd.add_argument("--json", action="store_true")
     archive_preflight = subcommands.add_parser("archive-preflight", help="inspect a ZIP archive without extracting it")
     archive_preflight.add_argument("archive", type=Path)
@@ -186,7 +187,8 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f'  explain with: bridgeforge audit-explain "{args.workspace}" FILE... --reason "..." (or --live --reason for the live result)', file=sys.stderr)
             return 2
         try:
-            result = archive_mod(args.workspace, args.done or REPO_ROOT / "Done", policy_path=args.policy, refresh=args.refresh)
+            result = archive_mod(args.workspace, args.done or REPO_ROOT / "Done", policy_path=args.policy, refresh=args.refresh,
+                                 allow_unexplained=args.allow_unexplained)
             if args.readme_copy:
                 from .archive import write_readme_copies
                 result["readme_copies"] = write_readme_copies(Path(result["archive"]))
@@ -198,6 +200,10 @@ def run_cli(args: argparse.Namespace) -> int:
         else:
             print(f"Archived: {result['archive']} ({result['files']} files, {result['licence']}, status {result['status']})")
             print(f"  {len(result['changed'])} file(s) changed, {len(result['added'])} added vs original; jars identical: {result['jars_identical']}")
+            for warning in result["warnings"]:
+                print(f"  WARN {warning}")
+            if result["allowed_unexplained"]:
+                print(f"  Archived past its checks with --allow-unexplained: {'; '.join(result['allowed_unexplained']['problems'])}")
             from .state_snapshot import snapshot_after_archive
             note = snapshot_after_archive(args.done or REPO_ROOT / "Done")
             if note:

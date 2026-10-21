@@ -12,6 +12,7 @@ from bridgeforge.archive import archive_mod
 from bridgeforge.live_accept import accept_run
 from bridgeforge.live_trust import shipped_hash, write_run_record
 from bridgeforge.release import record_policy_decision
+from bridgeforge.removals import add_removals, make_entry
 from bridgeforge.revise import ReviseError, StepFailed, finalize, prepare
 from tests.bound_runs import BASIC_LOG, bound_run
 from tests.support import resolved_temp_dir
@@ -190,6 +191,7 @@ class FinalizeTests(unittest.TestCase):
             from bridgeforge.revision_renames import migration_requirement, write_evidence
 
             explain_shipped(fx.ws, ["data/hulls/radar_hull.ship", "data/hulls/radar_new.ship"], "the hull was renamed by the revision")
+            add_removals(fx.ws / "working", [make_entry("files", pattern="data/hulls/radar_hull.ship", reason="the hull was renamed by the revision", source="owner")])
             previous = Path(journal["previous"]["root"])
             write_evidence(fx.ws, migration_requirement(fx.ws, previous, fx.ws / "working"),
                            reason="radar_hull was renamed radar_new; no campaign script spawns it, so saves never hold it")

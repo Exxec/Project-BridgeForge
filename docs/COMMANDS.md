@@ -599,6 +599,7 @@ after the accepted live run: changelog, archive (old archive kept in Done/_repla
 | `--revision` ID | required | - |
 | `--test-id` ID | required | - |
 | `--done` DONE | - | - |
+| `--allow-unexplained` REASON | - | archive past the dropped-feature and content-parity refusals, recording REASON (at least 20 characters) and the refused items in ARCHIVE_NOTE.md |
 | `--json` | - | - |
 
 ## revise status
@@ -2771,6 +2772,7 @@ package a finished revival into Done/<Mod>/: mod folder, zip, original, reports 
 | `--policy` POLICY | - | - |
 | `--refresh` | - | replace an existing archive of this mod in Done/: the old one is moved to Done/_replaced-<date>/<Mod>[-N], never deleted, and put back if the new write fails (only a folder holding an ARCHIVE_NOTE.md directly inside Done/) |
 | `--readme-copy` | - | also write <zip>-with-readme.zip and readme.txt for this archive |
+| `--allow-unexplained` REASON | - | archive past the dropped-feature and content-parity refusals, recording REASON (at least 20 characters) and the refused items in ARCHIVE_NOTE.md |
 | `--json` | - | - |
 
 ## archive-preflight
