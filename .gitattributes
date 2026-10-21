@@ -13,3 +13,8 @@
 # Hashed fixture trees (ROADMAP 77.23): their recorded hashes cover the exact bytes, so checkout must not rewrite line endings.
 fixtures/runtime-context/** -text
 fixtures/translation-conformance/** -text
+# Generated files (ROADMAP-3 item 80.1): on a merge conflict take theirs and regenerate (tools/merge-regen.py). Needs the one-time
+# `git config merge.bfregen.driver "python tools/merge-regen.py %O %A %B %P"`, see CLAUDE.md. CI still fails a stale file.
+tests/cli_help_golden.json merge=bfregen
+docs/COMMANDS.md merge=bfregen
+docs/CHECKS.md merge=bfregen
