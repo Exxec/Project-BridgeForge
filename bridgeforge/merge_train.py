@@ -160,9 +160,13 @@ class Train:
             raise TrainStop(f"tests failed in {worktree}; not pushed")
 
     def prepare(self, pr: str, worktree: Path) -> str:
-        """Rebase, regenerate if needed, test, force-push with lease. Returns the pushed head sha."""
-        if self.rebase(worktree):
-            self.regenerate(worktree)
+        """Rebase, regenerate, test, force-push with lease. Returns the pushed head sha.
+
+        Generated files are regenerated after every rebase, not only after a conflict: two PRs that each add a command
+        rebase cleanly yet leave the CLI golden and COMMANDS.md listing only one side's commands (2026-10-21, #42/#43).
+        `regenerate` commits only when the files actually changed."""
+        self.rebase(worktree)
+        self.regenerate(worktree)
         self.test(worktree)
         if self._git(worktree, "push", "--force-with-lease").returncode != 0:
             raise TrainStop(f"PR {pr}: force-push with lease failed")
@@ -188,7 +192,7 @@ def plan(prs: list[str], worktrees: dict[str, Path]) -> list[str]:
         if index > 0:
             if pr in worktrees:
                 lines += [f"PR {pr}: in {worktrees[pr]}: git fetch origin; git rebase origin/main",
-                          "  conflicts: CHANGELOG.md keep both sides; generated files take origin/main then regenerate; anything else stops",
+                          "  conflicts: CHANGELOG.md keep both sides; generated files take origin/main; generated files are regenerated after every rebase; anything else stops",
                           "  run tests: " + ", ".join(CROSS_CUTTING_TESTS) + " + modules of touched bridgeforge/*.py",
                           "  git push --force-with-lease"]
             else:

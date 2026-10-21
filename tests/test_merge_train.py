@@ -124,6 +124,19 @@ class MergeTrainTests(unittest.TestCase):
             self.assertTrue(state["rebase_continued"])
             self.assertTrue(world.ran(r"py -m bridgeforge docs-index"))
             self.assertTrue(world.ran(r"commit -m chore: regenerate"))
+
+    def test_a_clean_rebase_still_regenerates_generated_files(self) -> None:
+        # Two PRs that each add a command rebase without a conflict, yet the generated files list only one side's.
+        with resolved_temp_dir() as tmp:
+            (tmp / "tests").mkdir()
+            world = FakeWorld([
+                (r"git rebase origin/main", Result(0)),
+                (r"diff --cached --quiet", Result(1)),
+                (r"gh pr checks \d --json", Result(0, "[{}]")),
+            ])
+            world.train().go(["1", "2"], {"2": tmp})
+            self.assertTrue(world.ran(r"py -m tests.test_cli_golden --write"))
+            self.assertTrue(world.ran(r"commit -m chore: regenerate"))
             self.assertTrue(world.ran(r"gh pr merge 2"))
 
     def test_other_conflict_stops_before_tests_and_push(self) -> None:
