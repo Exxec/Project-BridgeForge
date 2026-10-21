@@ -60,7 +60,8 @@ def _append_review(review: Path, today: str, selectors: list[str], reason: str, 
     atomic_write_text(review, f"{old}\n\n{section}")
 
 
-def accept_selected(workspace: Path, selectors: list[str], reason: str, findings: list[Finding], today: str | None = None) -> dict:
+def accept_selected(workspace: Path, selectors: list[str], reason: str, findings: list[Finding], today: str | None = None,
+                    dry_run: bool = False) -> dict:
     """Accept the findings the selectors name into the workspace's baseline; idempotent (nothing new, nothing written)."""
     reason = reason.strip()
     if len(reason) < MIN_REASON_LENGTH:
@@ -79,7 +80,7 @@ def accept_selected(workspace: Path, selectors: list[str], reason: str, findings
     added = [key for key in selected if key not in existing]
     result = {"workspace": str(workspace), "baseline": str(path), "selected": selected, "added": added,
               "already_accepted": [key for key in selected if key in existing], "date": today or date.today().isoformat()}
-    if not added:
+    if not added or dry_run:
         return result
     payload["findings"] = sorted(existing | set(added))
     reasons = payload.get("reasons") if isinstance(payload.get("reasons"), dict) else {}
