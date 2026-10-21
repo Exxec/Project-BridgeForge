@@ -1,3 +1,35 @@
+**80. Less hand work across the projects (owner 2026-10-21: "work them all in your preferred order").** Order: 80.1, then
+80.2 with 80.6, 80.3, 80.5, 80.4, 80.7, 80.8.
+- 80.1 Merge-friendly changes: `changelog.d/` fragments assembled at release (no PR edits CHANGELOG.md); generated files
+  (CLI golden, COMMANDS.md, CHECKS.md) regenerated on conflict or by CI; pre-push runs the cross-cutting tests (probe
+  contract, safeio ratchet, docs index, CLI golden) plus the tests of touched modules; a `merge-train` command.
+- 80.2 Rig-session planner: `board --live-pending` gathers pending live gates from every repo, groups them by rig
+  configuration and prints one session plan with commands; results are written back as PASS/FAIL/NOT_TESTED (with 79.7).
+- 80.3 Archive gate wired: `archive` and `revise finalize` run dropped-features, content parity and the orphaned-backup
+  check and refuse unexplained drops; a passing live run with probe 0.3.x offers `archive --refresh`.
+- 80.4 `decision apply DRAFT` (77.20): ticked boxes become baseline keys, REMOVALS entries, roadmap lines and rig steps.
+- 80.5 Pin autopilot: Salvor tests nightly against BridgeForge main and opens a pin-bump PR when green; shared-fixture
+  drift with Project Go turns blocking once Project Go updates.
+- 80.6 Status generated from `gates.json` per repo (R7): status tables and the rig plan come from it; a lint fails CI when
+  a status doc contradicts it.
+- 80.7 Review triage: VoidSmith's 726 calibration rows and BridgeForge's escalation packets grouped by the reason they
+  wait, so one decision clears a group.
+- 80.8 Agent hygiene preflight (77.13): untracked code, unexpected edits to tracked files and broken builds listed before an
+  agent session ends or a commit is made.
+
+**81. Dissection: research from current mods (owner 2026-10-21: "throw current mods at bridgeforge and see if we can
+glean more research").** Read-only over the player's installed mods and any folder given, built on `atlas`, `api-diff`,
+`corpus-index` and `provider-index`; every result is labelled STATIC (what code references, not what runs).
+- 81.1 API usage census: which RC8 API classes/methods each mod's jars and loose scripts call; `api how SYMBOL` links an
+  `api-diff` removal to the replacements working mods use, with example files.
+- 81.2 Migration mining: where two versions of a mod exist, cluster the API replacements between them into candidate
+  rewrite rules with a count of independent mods (R4 needs three before a ruling).
+- 81.3 Save-risk census: persistent-data keys, scripts added on every load (duplicate-script risk), readResolve, transient
+  fields, per mod.
+- 81.4 Library census: LazyLib, MagicLib, GraphicsLib and other library calls and the versions they need.
+- 81.5 Feature exemplar index: working implementations of raids/FGIs, intel, custom entities, rings, station modules,
+  for recreation work.
+
 **Hygiene review 2026-10-19 (owner: "perform hygiene check then check roadmap for any worthwhile additions. implement if able then commit/push").** Item 77.3's lock-test timeout is implemented: the three live psutil scans query only their real fixture PIDs in a disposable subprocess with a 30-second timeout; fixture-child shutdown also has a deadline and kill/reap fallback. A regression verifies timeout propagation as a failure. Focused validation: 11 tests pass. This bounds test execution, not the production `who-locks` command, and supplies no game evidence. See `tests/test_locks.py`.
 
 **78. Probe enhancements (owner 2026-10-20: "add and work them all").** The probe proves boot, id resolution and
