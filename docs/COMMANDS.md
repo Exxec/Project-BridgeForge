@@ -2175,6 +2175,7 @@ after `install`: play the group's live run unattended with real mouse clicks (la
 | `--bat` BAT | default run-j25-direct.bat | - |
 | `--menu-timeout` MENU_TIMEOUT | default 240 | - |
 | `--natural-exit` | - | after the run, do not kill the game: wait for you to quit it from the main menu and record its return code (NATURAL), or KILLED if it is still up after --exit-wait |
+| `--no-graceful-close` | - | do not close the game by itself when the probe's done marker appears; stop it as before (the exit is then not recorded) |
 | `--exit-wait` EXIT_WAIT | default 180 | with --natural-exit: seconds to wait for the game to exit by itself (default 180) |
 | `--save-reload` | - | after the live run, start the game a second time, Continue the save the probe wrote at save_reload.after_days and wait for the fingerprint compare line (install with --save-reload-after-days); the reload run gets its own log <TESTID>-reload and manifest |
 | `--rig` RIG | - | - |

@@ -20,9 +20,9 @@ ROOT = Path(__file__).resolve().parent.parent
 PROBE = ROOT / "probe-mod" / "src" / "com" / "bridgeforge" / "probe"
 
 # Keys Python writes that the in-game reader deliberately ignores (reports and bookkeeping only).
-PYTHON_ONLY = {"schema_version", "hulls_skipped_no_variant", "group_members", "apply"}
+PYTHON_ONLY = {"schema_version", "hulls_skipped_no_variant", "apply"}
 # Keys the reader takes that `build_probe_config` does not produce itself: set by `install` or by the profile.
-ADDED_AFTER = {"save_after_checks", "save_reload", "scenario_steps", "scenario_clock"}  # scenario_*: install, from PROBE_SCENARIO.json
+ADDED_AFTER = {"save_after_checks", "save_reload", "scenario_steps", "scenario_clock", "group_members"}  # scenario_*: install, from PROBE_SCENARIO.json; group_members: merge_configs (ProbeExercised attributes per member)
 # Keys one member's config carries that a group's merged config rebuilds in its own way rather than copying.
 REBUILT_BY_MERGE = {"target_mod_id", "group_members", "setups", "apply", "campaign_interval_days", "combat_seconds",
                     "combat_cap_per_side", "variants", "content_variants", "content_ship_hulls", "mod_body_types", "mission_fleets"}

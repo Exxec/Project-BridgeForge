@@ -45,6 +45,7 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
                 continue;
             }
             String hullId = ship.getHullSpec() != null ? ship.getHullSpec().getHullId() : "?";
+            ProbeExercised.combatShip(ship.getHullSpec());
             ProbeLog.emit("combat-deployment", ProbeLog.STATUS_INFO, ship.getName(),
                     "hull=" + hullId + " owner=" + ship.getOwner());
             PersonAPI captain = ship.getCaptain();
@@ -157,6 +158,7 @@ public class BfProbeCombatPlugin extends BaseEveryFrameCombatPlugin {
             reportLaunches();
             ProbeLog.emit("combat-summary", ProbeLog.STATUS_INFO, "combat", "ships logged=" + loggedShips.size());
             ProbeLog.end("combat");
+            ProbeDone.combatEnded();
             engine.endCombat(0f);
         }
     }

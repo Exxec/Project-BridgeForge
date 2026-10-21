@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .boot_test import _is_link
+from .manifest_echo import echo_state, write_run_file
 from .safeio import atomic_write_json
 from .save_fingerprint import parse_fingerprint
 
@@ -286,9 +287,11 @@ def prepare_run(rig: Path, run_id: str, kind: str, *, targets: list[str], expect
         previous = read_manifest(rig, run_id)
         if previous["manifest_id"] != manifest_id:
             raise ManifestError(f"run id {run_id} already has a different manifest; use a new run id")
+        write_run_file(rig, run_id, manifest_id)
         return previous
     (rig / "logs").mkdir(parents=True, exist_ok=True)
     atomic_write_json(existing, manifest)
+    write_run_file(rig, run_id, manifest_id)  # the probe echoes this id as its first line
     atomic_write_json(rig / "logs" / OWNER_FILE, {"run_id": run_id, "manifest_id": manifest_id, "since": manifest["created_at"]})
     return manifest
 
@@ -381,6 +384,7 @@ def evaluate_run(rig: Path, manifest: dict | None, log: Path, *, member_verdicts
     log_info: dict = {"path": str(log), "sha256": None, "size": 0}
     milestones: dict[str, bool] = {m: False for m in MILESTONES}
     fingerprint = None
+    echo = "NOT_EVALUATED"
     if log.is_file():
         stat = log.stat()
         log_info.update(sha256=_sha256_file(log), size=stat.st_size)
@@ -390,6 +394,9 @@ def evaluate_run(rig: Path, manifest: dict | None, log: Path, *, member_verdicts
             problems.append("the log is older than the manifest: not written by this run")
         milestones = _milestones(log, mods_dir)
         fingerprint = parse_fingerprint(log.read_text(encoding="utf-8", errors="replace"))
+        echo, echo_problem = echo_state(log.read_text(encoding="utf-8", errors="replace"), manifest["manifest_id"])
+        if echo_problem:
+            problems.append(echo_problem)
     else:
         problems.append(f"the run log {log} does not exist")
     for name in manifest["expected_milestones"]:
@@ -429,7 +436,7 @@ def evaluate_run(rig: Path, manifest: dict | None, log: Path, *, member_verdicts
         problems.append("the manifest names no target")
     status = "ACCEPTABLE" if not problems and any(m["ok"] for m in members.values()) else "REFUSED"
     return {"schema_version": 1, "mode": "RUN_EVIDENCE", "status": status, "run_id": manifest["run_id"], "manifest_id": manifest["manifest_id"],
-            "kind": manifest["kind"], "log": log_info, "milestones": milestones, "fingerprint": fingerprint, "expected_milestones": manifest["expected_milestones"],
+            "kind": manifest["kind"], "log": log_info, "milestones": milestones, "manifest_echo": echo, "fingerprint": fingerprint, "expected_milestones": manifest["expected_milestones"],
             "problems": problems, "members": members}
 
 

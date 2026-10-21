@@ -273,11 +273,13 @@ public class CampaignProbeScript implements EveryFrameScript {
             }
         });
         ProbeLog.end("campaign");
+        ProbeDone.campaignEnded();
     }
 
     private void runCheck(String name, Runnable check) {
         try {
             check.run();
+            ProbeExercised.afterCheck(name, config);
         } catch (Throwable t) {
             ProbeLog.emit(name, ProbeLog.STATUS_FAIL, name,
                     t.getClass().getName() + ": " + t.getMessage());
