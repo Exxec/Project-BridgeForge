@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .safeio import atomic_write_text
+
 PROFILE_NAME = "salvor"
 PROBE_MOD_ID = "bridgeforge_probe"
 MARKER_RELATIVE = "data/config/bf_probe_profile.json"
@@ -32,5 +34,5 @@ def write_marker(mod_dir: Path) -> Path:
     """Select the salvor profile in a built probe mod folder (never in the repo's own `probe-mod`)."""
     target = Path(mod_dir) / MARKER_RELATIVE
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(marker_text(), encoding="utf-8")
+    atomic_write_text(target, marker_text())
     return target
