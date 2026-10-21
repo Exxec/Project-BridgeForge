@@ -40,8 +40,10 @@ def add_parser(subcommands) -> None:
     intake_cmd.add_argument("--json", action="store_true")
     board_cmd = subcommands.add_parser("board", help="read-only declared-evidence status board; missing evidence remains unknown")
     board_cmd.add_argument("--repo-root", type=Path, default=Path.cwd())
-    board_cmd.add_argument("--write", action="store_true", help="write STATUS.generated.json/.md; never replaces manual STATUS.md")
+    board_cmd.add_argument("--write", nargs="?", const=True, default=False, type=Path, metavar="FILE", help="write STATUS.generated.json/.md; never replaces manual STATUS.md (with --live-pending: write the plan to FILE)")
     board_cmd.add_argument("--json", action="store_true")
+    board_cmd.add_argument("--live-pending", action="store_true", help="instead of the evidence board: read each --repos DIR's gates.json and print one rig session plan (markdown)")
+    board_cmd.add_argument("--repos", nargs="+", type=Path, default=[], help="repo directories holding gates.json (with --live-pending)")
     promote_cmd = subcommands.add_parser("promote", help="stage/audit a release and retain prior builds; dry-run by default")
     promote_cmd.add_argument("mod", help="folder name under In operation (not a source path)")
     promote_cmd.add_argument("--repo-root", type=Path, default=Path.cwd())
@@ -275,6 +277,15 @@ def run_cli(args: argparse.Namespace) -> int:
                 else:
                     print(f"{result['status']}: {result['destination']}")
                     print("Archive/upstream bytes preserved. Complete and score a revival plan before editing.")
+            elif args.live_pending:
+                from .gates import live_pending_plan
+                from .safeio import atomic_write_text
+                if not args.repos:
+                    raise ValueError("--live-pending needs --repos DIR...")
+                plan = live_pending_plan(args.repos)
+                if isinstance(args.write, Path):
+                    atomic_write_text(args.write, plan + "\n")
+                print(plan)
             else:
                 result = project_board(args.repo_root)
                 if args.write:

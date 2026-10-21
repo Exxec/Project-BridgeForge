@@ -1,0 +1,1 @@
+- Added `gates.json` (schema 1, per repo) with `gates check|lint|record`, and `board --live-pending --repos DIR... [--write FILE]`, which groups open rig gates into the fewest launch configurations and prints one session plan (ROADMAP-3 80.6, 80.2); BridgeForge ships its own `gates.json` from LOCAL_HANDOFF 0b and the item 75 rows.
