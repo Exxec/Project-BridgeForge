@@ -2191,6 +2191,7 @@ after `install`: play the group's live run unattended with real mouse clicks (la
 | `--no-graceful-close` | - | do not close the game by itself when the probe's done marker appears; stop it as before (the exit is then not recorded) |
 | `--exit-wait` EXIT_WAIT | default 180 | with --natural-exit: seconds to wait for the game to exit by itself (default 180) |
 | `--save-reload` | - | after the live run, start the game a second time, Continue the save the probe wrote at save_reload.after_days and wait for the fingerprint compare line (install with --save-reload-after-days); the reload run gets its own log <TESTID>-reload and manifest |
+| `--interactive` | - | start the game with the manifest, window watcher and exit observation but do not touch the mouse or keyboard: you play and close the game; the run records NATURAL with the exit code |
 | `--rig` RIG | - | - |
 | `--queue` QUEUE | - | - |
 | `--json` | - | - |

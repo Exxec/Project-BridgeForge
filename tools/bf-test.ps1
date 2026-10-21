@@ -12,6 +12,8 @@ param(
     [switch]$NaturalExit,
     # ROADMAP-3 79.7: launch through `boot-test` (stop at the main menu) instead of `probe-group live`.
     [switch]$BootOnly,
+    # Play it yourself: the same launch path (manifest, window watcher, exit observation) but no mouse or keyboard driving.
+    [switch]$Interactive,
     [int]$ExitWait = 180
 )
 $ErrorActionPreference = "Stop"
@@ -244,6 +246,7 @@ switch ($Command) {
         } else {
             $bfArgs = @("probe-group", "live", $id, "--rig", $Rig, "--bat", $bat, "--exit-wait", "$ExitWait")
             if ($NaturalExit) { $bfArgs += "--natural-exit" }
+            if ($Interactive) { $bfArgs += "--interactive" }
         }
         $code = Invoke-Bf $bfArgs
         if ($code -ne 0) { Write-Host "The launch command exited with code $code (see above)." }
@@ -329,7 +332,7 @@ BridgeForge offline test helper. Commands:
   probe <preset|folder> [profile]  install the probe, write its config + setups, set enabled mods
                               profile: exigency-rep | seeker-betelgeuse | flux-basic | path\to\my.txt
                               presets: $(($Presets.Keys | Sort-Object) -join ', ')
-  launch <TESTID> [-NaturalExit] [-ExitWait 180] [-BootOnly]
+  launch <TESTID> [-NaturalExit] [-ExitWait 180] [-BootOnly | -Interactive]
                               start the rig, log to logs\<TESTID>.stdout.log (returns when the game closes).
                               -NaturalExit records the observed exit in logs\<TESTID>.exit.json (NATURAL+code or KILLED+null).
   triage [TESTID] [prefix]    log-triage the log (default: newest) -> logs\<TESTID>.triage.txt

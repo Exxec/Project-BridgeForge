@@ -221,6 +221,7 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
             prefs.__exit__(None, None, None)
         return _result("FAIL", f"Failed to launch {bat_path}: {exc}", log_path, err_path, 0.0, None, restored)
 
+    watcher = launch.watch_windows(runtime_dir, name, process)
     status = "FAIL"
     reason: str | None = None
     click_note: str | None = None
@@ -248,7 +249,7 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
                 status = "FAIL"
                 reason = f"Process exited (code {process.returncode}) before the main-menu marker appeared."
                 break
-            if launch.watchdog_tripped(runtime_dir, process, started, java_state):
+            if launch.watchdog_tripped(runtime_dir, process, started, java_state, name):
                 status = LAUNCH_NO_PROCESS
                 reason = watchdog_message(runtime_dir, LAUNCH_WATCHDOG_SECONDS)
                 break
@@ -264,7 +265,7 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
     finally:
         elapsed = time.monotonic() - started
         # ROADMAP 77.21: the exit is observed before anything is killed (NATURAL only if the game quit by itself); the test does not wait.
-        launch.stop_game(runtime_dir, name, process, record_exit=natural_exit, await_exit=True, exit_wait=0)
+        launch.stop_game(runtime_dir, name, process, record_exit=natural_exit, await_exit=True, exit_wait=0, watcher=watcher)
 
     triage_summary = None
     if log_path.is_file():

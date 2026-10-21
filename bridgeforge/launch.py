@@ -69,7 +69,21 @@ def release_manifest(rig: Path, test_id: str, bat: Path) -> None:
         pass
 
 
-def watchdog_tripped(rig: Path, process, launched_at: float, state: dict) -> bool:
+def watch_windows(rig: Path, test_id: str, process):
+    """Start the window watcher for this launch (window_watch): dialog text, window and no-main-menu screenshots. Pass the result to
+    stop_game, which stops it after the game is stopped."""
+    from . import boot_test
+    from .launcher_click import descendant_pids
+    from .window_watch import WindowWatcher
+
+    def pids() -> set[int]:
+        found = {item["pid"] for item in boot_test._running_java_under(rig) if isinstance(item.get("pid"), int)}
+        return found | descendant_pids(process.pid) | {process.pid}
+
+    return WindowWatcher(rig, test_id, pids).start()
+
+
+def watchdog_tripped(rig: Path, process, launched_at: float, state: dict, test_id: str | None = None) -> bool:
     """Launch watchdog (ROADMAP 60f): True when no java process has appeared LAUNCH_WATCHDOG_SECONDS after launch. `state` keeps
     whether java was ever seen."""
     from . import boot_test
@@ -77,6 +91,9 @@ def watchdog_tripped(rig: Path, process, launched_at: float, state: dict) -> boo
     if not state.get("seen"):
         state["seen"] = boot_test.java_started(rig, process.pid)
         if not state["seen"] and time.monotonic() - launched_at >= boot_test.LAUNCH_WATCHDOG_SECONDS:
+            if test_id:
+                with (Path(rig) / "logs" / f"{test_id}.windows.txt").open("a", encoding="utf-8") as handle:
+                    handle.write(f"{time.strftime('%H:%M:%S')} watchdog: LAUNCH_NO_PROCESS no java process for the rig {boot_test.LAUNCH_WATCHDOG_SECONDS:.0f} s after launch\n")
             return True
     return False
 
@@ -91,7 +108,7 @@ def click_launcher(rig: Path, process) -> str | None:
 
 
 def stop_game(rig: Path, test_id: str, process, *, record_exit: bool = False, await_exit: bool = False, exit_wait: float = 0,
-              graceful: bool = False, manifest_id: str | None = None) -> None:
+              graceful: bool = False, manifest_id: str | None = None, watcher=None) -> None:
     """Observe the exit before anything is killed, then stop the rig's java and the launcher's tree.
 
     `record_exit` (natural exit): when `await_exit`, wait up to `exit_wait` seconds for the game to quit by itself and write
@@ -125,3 +142,5 @@ def stop_game(rig: Path, test_id: str, process, *, record_exit: bool = False, aw
         process.wait(timeout=10)
     except Exception:
         pass
+    if watcher is not None:
+        watcher.stop()

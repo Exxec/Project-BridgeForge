@@ -464,7 +464,7 @@ LIVE_EXPECTED_MILESTONES = ("main_menu", "campaign_load", "content_ids", "combat
 @contextlib.contextmanager
 def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", natural_exit: bool = False, exit_wait: float = 180,
                  outcome: dict | None = None, expected: tuple[str, ...] | None = None, scenario: str = "probe-group live",
-                 graceful_exit: bool = True):
+                 graceful_exit: bool = True, pin_prefs: bool = True):
     """Start the rig game, click through the launcher, yield (log, hands, vanilla mission rows), then stop the rig's java and the
     launcher's whole tree. Refuses like boot_test: GameRefused with the reason.
 
@@ -498,7 +498,7 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
     clear_done(rig)
     from .rig_prefs import pinned_launcher_prefs
 
-    prefs = pinned_launcher_prefs()  # the click fractions were measured at 1280x960; the owner's own setting comes back afterwards
+    prefs = pinned_launcher_prefs() if pin_prefs else contextlib.nullcontext()  # the click fractions were measured at 1280x960; the owner's own setting comes back afterwards
     prefs.__enter__()
     try:
         process = launch.start_game(rig, bat, log, err)
@@ -506,6 +506,7 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
         prefs.__exit__(None, None, None)
         launch.release_manifest(rig, test_id, bat)
         raise
+    watcher = launch.watch_windows(rig, test_id, process)
     hands = real_hands(rig, process.pid)
     base_alive = hands.alive
     clicked = {"done": False}
@@ -513,7 +514,7 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
     java_seen: dict = {}
 
     def alive_and_click() -> bool:
-        if launch.watchdog_tripped(rig, process, launched_at, java_seen):
+        if launch.watchdog_tripped(rig, process, launched_at, java_seen, test_id):
             raise LaunchNoProcess(watchdog_message(rig, LAUNCH_WATCHDOG_SECONDS))
         if not clicked["done"] and launch.click_launcher(rig, process):
             clicked["done"] = True
@@ -526,7 +527,7 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
     finally:
         try:
             launch.stop_game(rig, test_id, process, record_exit=natural_exit, await_exit=bool((outcome or {}).get("await_exit")),
-                             exit_wait=exit_wait, graceful=graceful_exit, manifest_id=manifest["manifest_id"])
+                             exit_wait=exit_wait, graceful=graceful_exit, manifest_id=manifest["manifest_id"], watcher=watcher)
         finally:
             prefs.__exit__(None, None, None)
             launch.release_manifest(rig, test_id, bat)
@@ -534,13 +535,18 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
 
 def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240,
              natural_exit: bool = False, exit_wait: float = 180, save_reload: bool = False,
-             graceful_exit: bool = True) -> LiveResult:
+             graceful_exit: bool = True, interactive: bool = False) -> LiveResult:
     """Play a group's live run (see drive) on a freshly started rig game, then stop it. With `natural_exit`, a finished run
     (LIVE_DONE) first waits for the game to be quit from its menu and records the observed exit (see running_game)."""
     outcome: dict = {}
     try:
-        with running_game(rig, test_id, bat_name, natural_exit=natural_exit, exit_wait=exit_wait, outcome=outcome,
-                          graceful_exit=graceful_exit) as (log, hands, vanilla_rows):
+        with running_game(rig, test_id, bat_name, natural_exit=natural_exit or interactive, exit_wait=exit_wait, outcome=outcome,
+                          graceful_exit=graceful_exit, pin_prefs=not interactive) as (log, hands, vanilla_rows):
+            if interactive:  # the operator plays and closes the game; nothing is clicked or typed (launch.py records NATURAL + code)
+                while hands.alive():
+                    hands.sleep(EXIT_POLL_SECONDS)
+                outcome["await_exit"] = True
+                return LiveResult("LIVE_DONE", stages=["interactive"], log=str(log))
             result = drive(log, hands, menu_timeout=menu_timeout, vanilla_rows=vanilla_rows, save_reload=save_reload)
             outcome["await_exit"] = result.verdict == "LIVE_DONE"
             return result
