@@ -1,6 +1,5 @@
 package com.bridgeforge.probe;
 
-import com.fs.starfarer.api.EveryFrameScript;
 import com.fs.starfarer.api.Global;
 import org.json.JSONObject;
 
@@ -47,7 +46,7 @@ public final class SaveReloadStage {
                 ProbeLog.emit("fingerprint", ProbeLog.STATUS_INFO, "skip",
                         "stored fingerprint is for ts=" + stored.optLong("ts", -1L) + ", this load is ts=" + now);
             }
-            Global.getSector().addTransientScript(new BeforeScript(config, now));
+            Global.getSector().addTransientScript(beforeScript(config, now));
         } catch (Throwable t) {
             ProbeLog.emit("fingerprint", ProbeLog.STATUS_FAIL, "stage", "load hook failed: " + t);
         }
@@ -130,62 +129,37 @@ public final class SaveReloadStage {
         return "none";
     }
 
-    /** Counts in-game days from the load, then fingerprints, saves and stores. Runs once. */
-    private static final class BeforeScript implements EveryFrameScript {
-        private final ProbeConfig config;
-        private final long start;
-        private boolean done;
-
-        BeforeScript(ProbeConfig config, long start) {
-            this.config = config;
-            this.start = start;
-        }
-
-        @Override
-        public void advance(float amount) {
-            if (done || Global.getSector().getClock().getElapsedDaysSince(start) < config.saveReloadAfterDays) {
-                return;
+    /** Counts in-game days from the load (shared {@link DayCountScript}), then fingerprints, saves and stores. Runs once. */
+    private static DayCountScript beforeScript(final ProbeConfig config, long start) {
+        return new DayCountScript(start, config.saveReloadAfterDays, "fingerprint", new DayCountScript.Action() {
+            @Override
+            public void run() throws Exception {
+                fingerprintAndSave(config);
             }
-            done = true;
-            try {
-                fingerprintAndSave();
-            } catch (Throwable t) {
-                ProbeLog.emit("fingerprint", ProbeLog.STATUS_FAIL, "save", "before-phase failed: " + t);
-            }
-        }
+        });
+    }
 
-        private void fingerprintAndSave() throws Exception {
-            long ts = Global.getSector().getClock().getTimestamp();
-            Map<String, String> sections = FingerprintSections.compute(config);
-            logComputed("before", sections);
-            boolean saved = Global.getSector().getCampaignUI().cmdSave(); // RC8-30
-            ProbeLog.emit("fingerprint", saved ? ProbeLog.STATUS_INFO : ProbeLog.STATUS_FAIL, "save",
-                    "cmdSave returned " + saved + ";ts=" + ts + ";slot_note=" + config.saveReloadSlotNote);
-            if (!saved) {
-                return;
-            }
-            JSONObject root = new JSONObject();
-            root.put("v", 1);
-            root.put("ts", ts);
-            root.put("slot_note", config.saveReloadSlotNote);
-            root.put("probe", ProbeLog.VERSION);
-            JSONObject stored = new JSONObject();
-            for (Map.Entry<String, String> entry : sections.entrySet()) {
-                stored.put(entry.getKey(), digestOf(entry.getValue()));
-            }
-            root.put("sections", stored);
-            Global.getSettings().writeTextFileToCommon(FILE, root.toString());
-            ProbeLog.emit("fingerprint", ProbeLog.STATUS_INFO, "stored", "file=" + FILE + ";ts=" + ts);
+    private static void fingerprintAndSave(ProbeConfig config) throws Exception {
+        long ts = Global.getSector().getClock().getTimestamp();
+        Map<String, String> sections = FingerprintSections.compute(config);
+        logComputed("before", sections);
+        boolean saved = Global.getSector().getCampaignUI().cmdSave(); // RC8-30
+        ProbeLog.emit("fingerprint", saved ? ProbeLog.STATUS_INFO : ProbeLog.STATUS_FAIL, "save",
+                "cmdSave returned " + saved + ";ts=" + ts + ";slot_note=" + config.saveReloadSlotNote);
+        if (!saved) {
+            return;
         }
-
-        @Override
-        public boolean isDone() {
-            return done;
+        JSONObject root = new JSONObject();
+        root.put("v", 1);
+        root.put("ts", ts);
+        root.put("slot_note", config.saveReloadSlotNote);
+        root.put("probe", ProbeLog.VERSION);
+        JSONObject stored = new JSONObject();
+        for (Map.Entry<String, String> entry : sections.entrySet()) {
+            stored.put(entry.getKey(), digestOf(entry.getValue()));
         }
-
-        @Override
-        public boolean runWhilePaused() {
-            return false;
-        }
+        root.put("sections", stored);
+        Global.getSettings().writeTextFileToCommon(FILE, root.toString());
+        ProbeLog.emit("fingerprint", ProbeLog.STATUS_INFO, "stored", "file=" + FILE + ";ts=" + ts);
     }
 }

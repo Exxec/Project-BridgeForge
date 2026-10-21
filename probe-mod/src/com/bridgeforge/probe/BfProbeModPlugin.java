@@ -19,6 +19,10 @@ public class BfProbeModPlugin extends BaseModPlugin {
 
     @Override
     public void onGameLoad(boolean newGame) {
+        if (SalvorProfile.isSelected()) { // ROADMAP-3 78.5: Salvor's quiet rig stages only, no BridgeForge checks
+            SalvorProfile.onGameLoad(newGame);
+            return;
+        }
         maybeStartCampaignProbe("onGameLoad");
         if (RigGate.isRigEnabled()) {
             SaveReloadStage.onGameLoad();
@@ -27,7 +31,17 @@ public class BfProbeModPlugin extends BaseModPlugin {
 
     @Override
     public void onNewGameAfterTimePass() {
+        if (SalvorProfile.isSelected()) {
+            return;
+        }
         maybeStartCampaignProbe("onNewGameAfterTimePass");
+    }
+
+    @Override
+    public void afterGameSave() {
+        if (SalvorProfile.isSelected()) {
+            SalvorProfile.afterGameSave();
+        }
     }
 
     private void maybeStartCampaignProbe(String hook) {

@@ -156,6 +156,18 @@ Manual fallback if the click path fails: start the rig game yourself, press Cont
 `run-manifest evaluate` on that log; `milestones.reload_after_save` is read from the log, never set by hand. The campaign is paused after a
 load (RC8-28), which does not matter here: the compare runs in `onGameLoad`, before any tick.
 
+## Salvor profile (ROADMAP-3 item 78.5, not yet bumped)
+
+`SalvorProfile` folds Salvor's rig probe (`tools/java/salvor_rig_probe`) into this mod. Selection: the mod folder holds
+`data/config/bf_probe_profile.json` = `{"profile":"salvor"}` (read with `SettingsAPI.loadJSON(path, "bridgeforge_probe")`; no file APIs,
+no common file). Only Salvor's `rig-build-probe --bridgeforge DIR` writes it; BridgeForge's builds and `releases/` never do
+(`bridgeforge/probe_salvor_profile.py`). When selected, `BfProbeModPlugin` skips every BridgeForge check (campaign probe, perf, scenario,
+fingerprint, rig gate: the marker is the gate), and only this runs: on load it logs `salvor-rig|INFO|load|newGame=<b>|ts=<ts>`, a
+`DayCountScript` (shared with `SaveReloadStage`) waits `-Dsalvor.rig.days=N` (default 3) in-game days, then logs `salvor-rig|INFO|days|N` and,
+with `-Dsalvor.rig.mode=save`, `save|requested` plus `cmdSave()` (RC8-30), else `session|complete` (reload, the default); `afterGameSave`
+logs `save|done|ts=<ts>`. Verified at compile time against RC8 `starfarer.api.jar`: `SettingsAPI.loadJSON(String,String)`,
+`BaseModPlugin.afterGameSave`, `CampaignUIAPI.cmdSave`, `Clock.getElapsedDaysSince/getTimestamp`. Needs a live run.
+
 ## What still needs a live rig run
 
 Everything above compiles and self-checks outside the game (`javac`, deterministic jar packing,

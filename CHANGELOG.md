@@ -2,7 +2,10 @@
 
 ## 0.4.0 (unreleased)
 
+- **Probe 0.3.1:** adds the Salvor profile (ROADMAP 78.5); jars rebuilt deterministically (sha256 prefix `1c22736f9e238244`). LIVE TEST NOT PERFORMED.
+
 - **Probe 0.3.0 (ROADMAP item 78):** one release carrying the manifest id echo, save-and-reload fingerprint, live content parity, declarative scenarios, graceful exit marker, exercised report and campaign frame time; jars rebuilt deterministically (sha256 prefix `493158aa15ba9d03`). LIVE TEST NOT PERFORMED.
+- **Probe `salvor` profile (ROADMAP-3 item 78.5, one probe):** Salvor's `salvor_rig_probe` load/day/save/reload stages are folded into the probe as a profile. It is selected only by a marker file `data/config/bf_probe_profile.json` (`{"profile":"salvor"}`) in the built mod folder, which Salvor's `rig-build-probe` adds (`bridgeforge/probe_salvor_profile.py`); when selected, every BridgeForge check is skipped and the probe logs Salvor's exact `salvor-rig|INFO|load|days|save|session` lines, reading Salvor's `-Dsalvor.rig.mode/days` JVM properties. The day counting is shared with the save-and-reload fingerprint (`DayCountScript`). No config key and no version change; compiled only, never run live.
 
 - **Offline save fingerprint (ROADMAP-3 item 79.2):** `save-fingerprint SAVE_DIR [--json] [--compare FILE_OR_LOG]` computes the probe's fingerprint sections from a save folder without the game (`bridgeforge/save_fingerprint_offline.py`, streamed and bounded, read-only; 64-bit FNV-1a over UTF-16 code units and float hundredths ported exactly and cross-checked against the Java on fixed strings). Comparable offline: `markets` and `cargo`; `systems`, `rings`, `fleets`, `player`, `mod` and `totals` are listed as not comparable with the reason, never faked. `--compare` takes another offline fingerprint JSON or a probe log and prints per section equal / differ / not-comparable (exit 1 on a difference). Public `offline_fingerprint` and `compare_fingerprints` for Salvor.
 
