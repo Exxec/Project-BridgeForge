@@ -257,7 +257,15 @@ def run_cli(args) -> int:
             stats = build_atlas([Path(r) for r in roots], args.db, args.quiet, originals)
             _emit(args, stats, "Atlas built: " + ", ".join(f"{k}={v}" for k, v in stats.items()))
             return 0
+        if args.atlas_command == "migrations":
+            from .atlas_migrations import run_migrations
+
+            return run_migrations(args, _emit, lambda text: print(text, file=sys.stderr))
         conn = connect(args.db)
+        if args.atlas_command == "exemplars":
+            from .atlas_exemplars import run_exemplars
+
+            return run_exemplars(args, conn, _emit)
         if args.atlas_command == "show":
             data = show_data(conn, resolve_mods(conn, [args.mod]))
             _emit(args, data, show_text(data, args.limit))
@@ -313,7 +321,7 @@ def run_cli(args) -> int:
             if args.html:
                 print("wrote", write_html(args.html, "forecast_" + "_".join(data["subjects"]), forecast_html(data)), file=sys.stderr)
         return 0
-    except AtlasError as exc:
+    except (AtlasError, ValueError, OSError) as exc:
         print(f"bridgeforge: {exc}", file=sys.stderr)
         return 2
     finally:
@@ -371,8 +379,22 @@ def add_parser(subcommands) -> None:
     risk.add_argument("--top", type=int, default=DEFAULT_LIMIT, help="leaders shown when no MOD is given")
     libs = sub.add_parser("libraries", help="library census (STATIC): calls into LazyLib, MagicLib, GraphicsLib, Nexerelin, LunaLib and other packages, the functions used, which mods use them, and declared dependency versions")
     libs.add_argument("--limit", type=int, default=12, help="libraries and dependencies shown (default 12)")
-    for command in (show, ident, fore, usage, risk, libs):
+    mig = sub.add_parser("migrations", help="migration mining (STATIC, proposals only): per OLD/NEW mod pair the API symbols only in OLD and only in NEW per class, clustered into candidate rewrite rules with independent-mod counts (>= 3 = R4-eligible)")
+    mig.add_argument("old", nargs="?", type=Path, metavar="OLD_DIR", help="older mod folder")
+    mig.add_argument("new", nargs="?", type=Path, metavar="NEW_DIR", help="newer mod folder")
+    mig.add_argument("--pairs-from", type=Path, metavar="QUEUE", help="an `In operation` folder: each workspace's original/ vs working/, and Done/ originals vs shipped zips")
+    mig.add_argument("--old-api", type=Path, help="older starfarer.api.jar (or its folder): only api-diff-removed symbols are kept, and renames are judged signature-compatible or not")
+    mig.add_argument("--new-api", type=Path, help="newer starfarer.api.jar (or its folder)")
+    mig.add_argument("--write", type=Path, metavar="DIR", help="write MIGRATIONS.md and MIGRATIONS.json into DIR")
+    mig.add_argument("--top", type=int, default=DEFAULT_LIMIT, help="rules shown (default %d)" % DEFAULT_LIMIT)
+    mig.add_argument("--quiet", action="store_true", help="no per-pair progress lines on stderr")
+    exem = sub.add_parser("exemplars", help="feature exemplars (STATIC): rank indexed mods by how many of a feature's API symbols they reference, with the classes/files that do (needs `atlas build`)")
+    exem.add_argument("feature", nargs="?", help="raid-fgi, intel, custom-entities, rings-orbits, station-modules, market-industries, rules-commands or combat-plugins")
+    exem.add_argument("--symbols", help="ad-hoc comma-separated symbols (class, member or Class.member) instead of a built-in feature")
+    exem.add_argument("--top", type=int, default=10, help="mods shown (default 10)")
+    for command in (show, ident, fore, usage, risk, libs, mig, exem):
         command.add_argument("--json", action="store_true")
-        command.add_argument("--html", type=Path, metavar="DIR", help="also write plain self-contained HTML files into DIR")
-    for command in (build, show, diff, ident, fore, runtime, sweeper, usage, risk, libs):  # outcome and precision read the ledger, not the atlas
+        if command not in (mig, exem):
+            command.add_argument("--html", type=Path, metavar="DIR", help="also write plain self-contained HTML files into DIR")
+    for command in (build, show, diff, ident, fore, runtime, sweeper, usage, risk, libs, exem):  # outcome and precision read the ledger, not the atlas
         command.add_argument("--db", type=Path, default=DEFAULT_DB, help=f"atlas file (default: {DEFAULT_DB.as_posix()})")
