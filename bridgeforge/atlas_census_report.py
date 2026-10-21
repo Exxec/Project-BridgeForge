@@ -154,6 +154,11 @@ def run_census_cli(args, conn: sqlite3.Connection, emit) -> None:
     if args.atlas_command == "api-usage":
         data = api_usage(conn, args.symbol, args.limit)
         emit(args, data, api_usage_text(data, args.examples))
+    elif args.atlas_command == "libraries":
+        from .atlas_census_libs_report import libraries, libraries_text
+
+        data = libraries(conn)
+        emit(args, data, libraries_text(data, args.limit))
     elif args.atlas_command == "save-risk":
         from .atlas import resolve_mods
 

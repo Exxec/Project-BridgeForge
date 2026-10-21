@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import io
+import json
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 
 from bridgeforge import atlas
+from bridgeforge.atlas_census_libs_report import libraries
 from bridgeforge.atlas_census_report import api_how, api_usage, save_risk
 from bridgeforge.cli import main
 from tests.test_atlas import build, make_mod, make_vanilla, temp_root
@@ -141,6 +143,45 @@ class SaveRiskTests(unittest.TestCase):
             with redirect_stdout(out):
                 self.assertEqual(main(["atlas", "save-risk", "jarmod", "--db", str(db)]), 0)
             self.assertIn("duplicate-script-risk: s.Unguarded", out.getvalue())
+
+
+def lib_class() -> bytes:
+    b = ClassBuilder("m/UsesLibs")
+    b.method("run", b.invoke("org/lazywizard/lazylib/MathUtils", "getDistance", "(II)F", INVOKE_STATIC)
+             + b.invoke("org/magiclib/util/MagicRender", "battlespace", "(I)V", INVOKE_STATIC)
+             + b.invoke("m/Own", "helper", "()V", INVOKE_STATIC) + RETURN)
+    return b.build()
+
+
+class LibraryCensusTests(unittest.TestCase):
+    def test_library_calls_and_declared_versions(self):
+        def info(mod_id: str, deps: list[dict]) -> str:
+            return json.dumps({"id": mod_id, "name": mod_id, "version": "1", "jars": ["jars/x.jar"], "dependencies": deps})
+        java = """package q;
+import org.lazywizard.lazylib.MathUtils;
+import exerelin.utilities.NexUtils;
+public class Q { void go() { MathUtils.clamp(1, 2, 3); } }
+"""
+        with temp_root() as root:
+            make_vanilla(root)
+            jar_mod(root / "mods", "jarmod", {"m/UsesLibs.class": lib_class()},
+                    {"mod_info.json": info("jarmod", [{"id": "lw_lazylib", "name": "LazyLib", "version": "2.8"}, {"id": "MagicLib", "version": "1.0.0"}])})
+            make_mod(root / "mods", "loosemod", {"data/scripts/Q.java": java, "mod_info.json": json.dumps(
+                {"id": "loosemod", "name": "loosemod", "version": "1", "dependencies": [{"id": "lw_lazylib", "version": "3.0.0"}]})})
+            db, _ = build(root)
+            data = libraries(atlas.connect(db))
+            by_name = {lib["library"]: lib for lib in data["libraries"]}
+            self.assertEqual(set(by_name), {"LazyLib", "MagicLib", "Nexerelin", "pkg:m"})  # m/Own is not defined by the mod
+            self.assertEqual(by_name["LazyLib"]["mods"], ["jarmod", "loosemod"])
+            self.assertEqual(by_name["LazyLib"]["declared_versions"], {"2.8": ["jarmod"], "3.0.0": ["loosemod"]})
+            symbols = {f["symbol"] for f in by_name["LazyLib"]["functions"]}
+            self.assertIn("org.lazywizard.lazylib.MathUtils.getDistance", symbols)
+            self.assertIn("org.lazywizard.lazylib.MathUtils.clamp", symbols)
+            self.assertEqual(by_name["Nexerelin"]["undeclared_users"], [])
+            out = io.StringIO()
+            with redirect_stdout(out):
+                self.assertEqual(main(["atlas", "libraries", "--db", str(db)]), 0)
+            self.assertIn("LazyLib: 2 mod(s) call it", out.getvalue())
 
 
 if __name__ == "__main__":
