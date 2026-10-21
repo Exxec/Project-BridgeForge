@@ -53,13 +53,15 @@ class WatchdogWiringTests(unittest.TestCase):
         self.assertIn("60 s", text)
         self.assertIn("never started the game", text)
 
-    def test_bf_test_launch_has_the_watchdog(self) -> None:
+    def test_bf_test_launch_delegates_to_the_one_launcher(self) -> None:
         script = BF_TEST.read_text(encoding="utf-8")
-        self.assertIn("Launch watchdog", script)
-        self.assertIn("TotalSeconds -gt 60", script)
+        self.assertIn('"probe-group", "live"', script)
+        self.assertIn('"boot-test"', script)
+        self.assertIn("--natural-exit", script)
+        self.assertNotIn("Start-Process cmd.exe", script)
 
-    def test_bf_test_launch_names_the_status(self) -> None:
-        self.assertIn("LAUNCH_NO_PROCESS", BF_TEST.read_text(encoding="utf-8"))
+    def test_the_one_launcher_names_the_status(self) -> None:
+        self.assertIn("LAUNCH_NO_PROCESS", (Path(boot_test.__file__).parent / "boot_test.py").read_text(encoding="utf-8"))
 
     def test_live_run_reports_the_watchdog_as_a_named_stage(self) -> None:
         import contextlib
@@ -78,7 +80,7 @@ class WatchdogWiringTests(unittest.TestCase):
 
     def test_live_runner_uses_the_same_watchdog(self) -> None:
         source = (Path(boot_test.__file__).parent / "live_run.py").read_text(encoding="utf-8")
-        self.assertIn("LAUNCH_WATCHDOG_SECONDS", source)
+        self.assertIn("watchdog_tripped", source)
         self.assertIn("watchdog_message", source)
 
 

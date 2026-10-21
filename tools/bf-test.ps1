@@ -10,6 +10,8 @@ param(
     [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]]$Rest,
     # ROADMAP 77.21: launch only. Record how the game ended in logs\<TESTID>.exit.json (NATURAL + return code, or KILLED + null).
     [switch]$NaturalExit,
+    # ROADMAP-3 79.7: launch through `boot-test` (stop at the main menu) instead of `probe-group live`.
+    [switch]$BootOnly,
     [int]$ExitWait = 180
 )
 $ErrorActionPreference = "Stop"
@@ -221,132 +223,30 @@ switch ($Command) {
         }
     }
     "launch" {
-        # Launch the rig with the log captured as logs\<TESTID>.stdout.log. Returns when the game closes.
+        # ROADMAP-3 79.7: one launcher path. The game is started, clicked into, watched (launch watchdog LAUNCH_NO_PROCESS), exit-observed
+        # and stopped by bridgeforge/launch.py, through `probe-group live` (default) or `boot-test` (-BootOnly); this only runs the
+        # pre-flight, passes the parameters on and triages the log. Log: logs\<TESTID>.stdout.log.
         $id = $Rest[0]
         if (-not $id) { throw "Give a test id, e.g. PRB-1" }
-        $bat = Join-Path $Rig "run-java25.bat"
+        $bat = "run-java25.bat"
         $out = Join-Path $Logs "$id.stdout.log"
-        $err = Join-Path $Logs "$id.stderr.log"
         if (Get-RigJava) { throw "A rig game is already running; close it first." }
         # ROADMAP 36.2: pre-flight before every launch (isolation, core integrity against the recorded RC8 baseline,
         # probe, enabled mods, drift). A FAIL stops the run; there is no override: fix the rig, then launch.
         $doctor = Invoke-Bf @("rig-doctor", $Rig, "--real-install", (Split-Path $Core -Parent))
         if ($doctor -ne 0) { throw "rig-doctor failed (see above); launch refused." }
-        # ROADMAP item 75 R1: record what is staged (versions, file hashes, launcher, probe config) before anything starts, so an
-        # accepted run is bound to these inputs. The rig belongs to this launch until the release below.
-        $manifest = Invoke-Bf @("run-manifest", "prepare", $Rig, $id, "--kind", "campaign", "--expect", "main_menu", "--expect", "campaign_load", "--launcher", $bat)
-        if ($manifest -ne 0) { throw "run-manifest prepare failed (see above); launch refused." }
-        Initialize-WindowTools
-        $windowLog = Join-Path $Logs "$id.windows.txt"
-        # A reused test id must not carry an earlier attempt's dialogs into this run's triage (GRP-3, 2026-09-27).
-        if (Test-Path $windowLog) { Move-Item -Force $windowLog (Join-Path $Logs ("$id.windows.{0:yyyyMMdd-HHmmss}.prev.txt" -f (Get-Date))) }
-        Write-Host "Launching; log -> $out. Play, then close the game. Watching for error dialogs..."
-        $wrapper = Start-Process cmd.exe -ArgumentList ('/c ""' + $bat + '" > "' + $out + '" 2> "' + $err + '""') -WindowStyle Hidden -PassThru
-        $ownedProcesses = @{}
-        $ownedProcesses[$wrapper.Id] = $wrapper.StartTime
-        try {
         $started = Get-Date
-        $seen = @{}
-        $shots = 0
-        $menuReached = $false
-        $suspectShot = $false
-        $javaSeen = $false
-        # The game's launcher window waits for "Play Starsector" and nothing runs until it is clicked (owner, 2026-10-11).
-        # Click it for them: first by posting window messages, then, if the game still has not started 8 s later, with a real
-        # click. The game has started once its log says "Running with the following mods". BF_NO_AUTOCLICK=1 turns this off.
-        $autoClick = -not $env:BF_NO_AUTOCLICK
-        $launcherHandle = 0
-        $postedAt = $null
-        $physicalDone = $false
-        while ($true) {
-            $java = @(Get-RigJava)
-            foreach ($proc in $java) { $ownedProcesses[$proc.Id] = $proc.StartTime }
-            # Launch watchdog (ROADMAP 60f): the first Yellowjackets launch started nothing and said nothing. No java process
-            # with the rig path 60 s after launch means the bat never started the game: say so and stop instead of waiting.
-            if ($java.Count -gt 0) { $javaSeen = $true }
-            if (-not $javaSeen -and ((Get-Date) - $started).TotalSeconds -gt 60) {
-                Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} watchdog: LAUNCH_NO_PROCESS no java process for the rig 60 s after launch" -f (Get-Date))
-                throw "Launch watchdog (LAUNCH_NO_PROCESS): no java process for $Rig appeared within 60 s of launch (see $out and $err). Stopped; nothing was left running."
-            }
-            if ($autoClick -and $launcherHandle -ne 0 -and -not $physicalDone -and $postedAt -and ((Get-Date) - $postedAt).TotalSeconds -gt 8) {
-                $physicalDone = $true
-                if (-not (Select-String -Path $out -SimpleMatch "Running with the following mods" -Quiet -ErrorAction SilentlyContinue)) {
-                    $note = [BfWin2]::ClickWindow($launcherHandle, 0.50, 0.68, $true)
-                    Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} auto-click (fallback): {1}" -f (Get-Date), $note)
-                    Write-Host "Launcher still waiting; $note"
-                }
-            }
-            if (-not $wrapper.HasExited -or $java.Count -gt 0) {
-                if (-not $menuReached -and (Test-Path $out)) {
-                    $menuReached = [bool](Select-String -Path $out -SimpleMatch $MainMenuMarker -Quiet)
-                    if ($menuReached) { Write-Host "Main menu reached." }
-                }
-                foreach ($proc in $java) {
-                    foreach ($entry in [BfWin2]::VisibleWindows([uint32]$proc.Id)) {
-                        if ($seen.ContainsKey($entry)) { continue }
-                        $seen[$entry] = $true
-                        $title = $entry.Split("|", 2)[1]
-                        Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} window: '{1}'" -f (Get-Date), $title)
-                        $entryHandle = [long]$entry.Split("|", 2)[0]
-                        if ($autoClick -and -not $postedAt -and $entryHandle -ne 0 -and $title -match "Starsector" -and -not (Select-String -Path $out -SimpleMatch "Running with the following mods" -Quiet -ErrorAction SilentlyContinue)) {
-                            Start-Sleep -Milliseconds 1500   # let the launcher finish drawing before the click
-                            $launcherHandle = $entryHandle
-                            $note = [BfWin2]::ClickWindow($launcherHandle, 0.50, 0.68, $false)
-                            $postedAt = Get-Date
-                            Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} auto-click: {1}" -f (Get-Date), $note)
-                            Write-Host "Launcher window found; $note"
-                        }
-                        $dialogText = [BfWin2]::ChildText([long]$entry.Split("|", 2)[0])
-                        if ($dialogText) {
-                            # log-triage reads these lines: a Fatal dialog never reaches the game log.
-                            Add-Content -Path $windowLog -Value ("{0:HH:mm:ss} dialog: '{1}' text: '{2}'" -f (Get-Date), $title, $dialogText)
-                            Write-Host "Dialog text: $dialogText"
-                        }
-                        # A second window, or one titled like an error, is almost always Starsector's Fatal dialog.
-                        if (($seen.Count -gt 1 -or $title -match "error|fatal|exception") -and $shots -lt 10) {
-                            Start-Sleep -Milliseconds 800
-                            $shot = Join-Path $Logs ("{0}-window{1}.png" -f $id, ++$shots)
-                            Save-Screenshot $shot
-                            Write-Host "New window '$title' -> screenshot $shot"
-                        }
-                    }
-                }
-                if (-not $menuReached -and -not $suspectShot -and $java.Count -gt 0 -and ((Get-Date) - $started).TotalSeconds -gt 180) {
-                    $suspectShot = $true
-                    $shot = Join-Path $Logs "$id-no-main-menu.png"
-                    Save-Screenshot $shot
-                    Write-Host "No main menu after 3 minutes; possible Fatal dialog -> screenshot $shot"
-                }
-                Start-Sleep -Seconds 2
-                continue
-            }
-            break
+        Write-Host "Launching; log -> $out."
+        if ($BootOnly) {
+            $enabled = @((Get-Content (Join-Path $Rig "mods\enabled_mods.json") -Raw | ConvertFrom-Json).enabledMods)
+            $bfArgs = @("boot-test", $Rig, "--mods") + $enabled + @("--keep-mods", "--log-name", $id)
+            if ($NaturalExit) { $bfArgs += "--natural-exit" }
+        } else {
+            $bfArgs = @("probe-group", "live", $id, "--rig", $Rig, "--bat", $bat, "--exit-wait", "$ExitWait")
+            if ($NaturalExit) { $bfArgs += "--natural-exit" }
         }
-        } finally {
-            # ROADMAP 77.21: observe the exit before anything is killed. Wait (bounded) for the game to quit by itself.
-            $exitObserved = $null
-            if ($NaturalExit) {
-                $deadline = (Get-Date).AddSeconds($ExitWait)
-                while (((-not $wrapper.HasExited) -or (@(Get-RigJava).Count -gt 0)) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
-                if ($wrapper.HasExited -and @(Get-RigJava).Count -eq 0) { $exitObserved = @("NATURAL", [int]$wrapper.ExitCode) }
-                else { $exitObserved = @("KILLED", $null) }
-            }
-            # Only this launch session: pre-flight refused any already-running rig game.
-            # Match start time as well as PID, so a reused PID is never terminated.
-            foreach ($ownedId in @($ownedProcesses.Keys)) {
-                $ownedProcess = Get-Process -Id $ownedId -ErrorAction SilentlyContinue
-                if ($ownedProcess -and $ownedProcess.StartTime -eq $ownedProcesses[$ownedId]) {
-                    & taskkill.exe /PID $ownedId /T /F 2>&1 | Out-Null
-                }
-            }
-            if ($exitObserved) {
-                $record = [ordered]@{ process_exit_observed = $exitObserved[0]; process_exit_code = $exitObserved[1] }
-                [System.IO.File]::WriteAllText((Join-Path $Logs "$id.exit.json"), (($record | ConvertTo-Json) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
-            }
-            $wrapper.Dispose()
-            # R1: re-hash the staged files now the game is closed and give the rig back (writes logs\<TESTID>.completed.json).
-            Invoke-Bf @("run-manifest", "release", $Rig, $id, "--launcher", $bat) | Out-Null
-        }
+        $code = Invoke-Bf $bfArgs
+        if ($code -ne 0) { Write-Host "The launch command exited with code $code (see above)." }
         # ROADMAP 36.4: a JVM crash writes hs_err_pid<PID>.log to the game's working directory, not our log. Copy any
         # written during this launch beside the log as hs_err_pid<PID>.<TESTID>.log, which log-triage reads.
         foreach ($dir in @($Rig, $Core)) {
@@ -429,7 +329,7 @@ BridgeForge offline test helper. Commands:
   probe <preset|folder> [profile]  install the probe, write its config + setups, set enabled mods
                               profile: exigency-rep | seeker-betelgeuse | flux-basic | path\to\my.txt
                               presets: $(($Presets.Keys | Sort-Object) -join ', ')
-  launch <TESTID> [-NaturalExit] [-ExitWait 180]
+  launch <TESTID> [-NaturalExit] [-ExitWait 180] [-BootOnly]
                               start the rig, log to logs\<TESTID>.stdout.log (returns when the game closes).
                               -NaturalExit records the observed exit in logs\<TESTID>.exit.json (NATURAL+code or KILLED+null).
   triage [TESTID] [prefix]    log-triage the log (default: newest) -> logs\<TESTID>.triage.txt

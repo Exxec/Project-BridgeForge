@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import contextlib
 import re
-import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
+
+from .launch import EXIT_POLL_SECONDS, GameRefused, LaunchNoProcess, settle_exit  # noqa: F401  (re-exported: callers and tests import them from here)
 
 # Client-area fractions of the game window (1280x960 view), measured 2026-10-11.
 MAIN_MENU_NEW_GAME = (0.7195, 0.4625)
@@ -456,44 +457,8 @@ def real_hands(rig: Path, launcher_pid: int | None = None) -> Hands:
                  alive=lambda: bool(pids()), front=front, geometry=geometry)
 
 
-class GameRefused(RuntimeError):
-    """The rig is not safe or ready to run a game (shared install, a game already running, no launcher)."""
-
-
 # What a unattended live run must show in its log to count (ROADMAP item 75 R1); `drive` ends LIVE_DONE after a combat round.
 LIVE_EXPECTED_MILESTONES = ("main_menu", "campaign_load", "content_ids", "combat")
-
-
-def _release(rig: Path, test_id: str, bat: Path) -> None:
-    """The run ended: re-hash the staged files and give the rig back. A failure here is left visible (no completion record means the
-    evaluator refuses the run), never swallowed into a pass."""
-    from .run_manifest import ManifestError, release_run
-
-    try:
-        release_run(rig, test_id, bat)
-    except (ManifestError, OSError):
-        pass
-
-
-class LaunchNoProcess(GameRefused):
-    """The launch watchdog fired: no java process appeared (ROADMAP item 73 G4). The live result stage is LAUNCH_NO_PROCESS."""
-
-
-EXIT_POLL_SECONDS = 2.0
-
-
-def settle_exit(process, wait: float, *, sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.monotonic,
-                java_left: Callable[[], bool] = lambda: False) -> tuple[str, int | None]:
-    """Wait up to `wait` seconds for the launched process to exit by itself: (NATURAL, its integer return code), or (KILLED, None)
-    when it is still running at the bound or left a java process behind. Never returns a code for a process that was not seen to exit."""
-    from .exit_observation import KILLED, observed_exit
-
-    deadline = clock() + wait
-    while process.poll() is None:
-        if clock() >= deadline:
-            return KILLED, None
-        sleep(EXIT_POLL_SECONDS)
-    return observed_exit(process.poll(), java_left())
 
 
 @contextlib.contextmanager
@@ -507,8 +472,9 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
     seconds to be quit by the operator and its return code is written to <rig>/logs/<TESTID>.exit.json (NATURAL), else KILLED.
     Without it, `graceful_exit` (the default) closes a finished game by itself once the probe has written its done marker for this
     manifest (see graceful_exit.py) and records NATURAL with the code, or KILLED when it had to be stopped."""
-    from .boot_test import LAUNCH_WATCHDOG_SECONDS, _is_link, _running_java_under, _terminate_tree, java_started, watchdog_message
-    from .launcher_click import click_launcher_once, descendant_pids
+    from . import launch
+    from .boot_test import LAUNCH_WATCHDOG_SECONDS, _is_link, _running_java_under, watchdog_message
+    from .run_manifest import ManifestError, read_staging_state
 
     rig = Path(rig).expanduser().resolve()
     if not _is_link(rig / "starsector-core"):
@@ -521,15 +487,13 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
     logs = rig / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     log, err = logs / f"{test_id}.stdout.log", logs / f"{test_id}.stderr.log"
-    from .run_manifest import ManifestError, prepare_run, read_staging_state
-
     # R1: record what is staged before anything starts; the rig belongs to this run until it is released below.
     try:
-        manifest = prepare_run(rig, test_id, "live", targets=sorted(read_staging_state(rig).get("candidates") or {}), launcher=bat,
-                               expected=list(expected or LIVE_EXPECTED_MILESTONES), scenario=scenario)
+        manifest = launch.prepare_manifest(rig, test_id, "live", targets=sorted(read_staging_state(rig).get("candidates") or {}),
+                                           expected=list(expected or LIVE_EXPECTED_MILESTONES), scenario=scenario, bat=bat)
     except ManifestError as exc:
         raise GameRefused(f"no pre-launch manifest: {exc}") from exc
-    from .graceful_exit import clear_done, graceful_close
+    from .graceful_exit import clear_done
 
     clear_done(rig)
     from .rig_prefs import pinned_launcher_prefs
@@ -537,28 +501,22 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
     prefs = pinned_launcher_prefs()  # the click fractions were measured at 1280x960; the owner's own setting comes back afterwards
     prefs.__enter__()
     try:
-        process = subprocess.Popen(f'cmd.exe /c ""{bat}" > "{log}" 2> "{err}""', cwd=str(rig))
+        process = launch.start_game(rig, bat, log, err)
     except Exception:
         prefs.__exit__(None, None, None)
-        _release(rig, test_id, bat)
+        launch.release_manifest(rig, test_id, bat)
         raise
     hands = real_hands(rig, process.pid)
     base_alive = hands.alive
     clicked = {"done": False}
     launched_at = time.monotonic()
-    java_seen = {"seen": False}
+    java_seen: dict = {}
 
     def alive_and_click() -> bool:
-        # Launch watchdog (ROADMAP 60f): no java process 60 s after launch means the bat never started the game; say so and stop.
-        if not java_seen["seen"]:
-            java_seen["seen"] = java_started(rig, process.pid)
-            if not java_seen["seen"] and time.monotonic() - launched_at >= LAUNCH_WATCHDOG_SECONDS:
-                raise LaunchNoProcess(watchdog_message(rig, LAUNCH_WATCHDOG_SECONDS))
-        # The launcher window waits for Play before the game logs anything (owner, 2026-10-11).
-        if not clicked["done"]:
-            pids = {item["pid"] for item in _running_java_under(rig) if isinstance(item.get("pid"), int)} | descendant_pids(process.pid)
-            if click_launcher_once(pids):
-                clicked["done"] = True
+        if launch.watchdog_tripped(rig, process, launched_at, java_seen):
+            raise LaunchNoProcess(watchdog_message(rig, LAUNCH_WATCHDOG_SECONDS))
+        if not clicked["done"] and launch.click_launcher(rig, process):
+            clicked["done"] = True
         return base_alive() or process.poll() is None
 
     hands.alive = alive_and_click
@@ -566,27 +524,12 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
         core_list = rig / "starsector-core" / "data" / "missions" / "mission_list.csv"
         yield log, hands, (_mission_rows(str(core_list.parent.parent.parent)) or VANILLA_MISSION_ROWS)
     finally:
-        if natural_exit:
-            from .exit_observation import KILLED, write_exit_observation
-
-            observed, code = KILLED, None
-            if (outcome or {}).get("await_exit"):
-                observed, code = settle_exit(process, exit_wait, java_left=lambda: bool(_running_java_under(rig)))
-            write_exit_observation(rig, test_id, observed, code)
-        elif graceful_exit and (outcome or {}).get("await_exit"):
-            from .exit_observation import write_exit_observation
-
-            observed, code = graceful_close(rig, manifest["manifest_id"], process, settle=settle_exit,
-                                            pids=lambda: {j["pid"] for j in _running_java_under(rig) if isinstance(j.get("pid"), int)} | descendant_pids(process.pid),
-                                            java_left=lambda: bool(_running_java_under(rig)))
-            write_exit_observation(rig, test_id, observed, code)
-        for java in _running_java_under(rig):
-            if isinstance(java.get("pid"), int):
-                _terminate_tree(java["pid"])
-        if process.poll() is None:
-            _terminate_tree(process.pid)
-        prefs.__exit__(None, None, None)
-        _release(rig, test_id, bat)
+        try:
+            launch.stop_game(rig, test_id, process, record_exit=natural_exit, await_exit=bool((outcome or {}).get("await_exit")),
+                             exit_wait=exit_wait, graceful=graceful_exit, manifest_id=manifest["manifest_id"])
+        finally:
+            prefs.__exit__(None, None, None)
+            launch.release_manifest(rig, test_id, bat)
 
 
 def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240,

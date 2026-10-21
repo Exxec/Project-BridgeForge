@@ -65,7 +65,7 @@ progress rather than waiting blind.
   flagged compile clean.
 - RC8 content behaviour, live-proven 2026-09-27: a variant naming a missing weapon is a Fatal dialog at New
   Game; a missing hull mod in a variant is dropped silently. A Fatal dialog never reaches the redirected log:
-  `bf-test.ps1` records dialog text in `<TESTID>.windows.txt`, and `log-triage` reads it.
+  `log-triage` reads dialog text from `<TESTID>.windows.txt` (no longer written by `bf-test launch` since 79.7, which delegates to `probe-group live`/`boot-test`).
 - `bf-test launch` logs only the session it starts; a player relaunch logs only to the rig's `starsector.log`.
 - Rebuild or patch a jar only with the JDK `jar` tool (or `patch-jar-class`): a jar rewritten with .NET `ZipArchive` Update mode loaded no class at all in RC8 (every class fell back to loose-script compile; Station Augments 2026-10-11).
 - Edit code with Write/Edit, not Python-in-bash heredocs: `
