@@ -6,7 +6,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 
 from bridgeforge import atlas
-from bridgeforge.atlas_census_report import api_how, api_usage
+from bridgeforge.atlas_census_report import api_how, api_usage, save_risk
 from bridgeforge.cli import main
 from tests.test_atlas import build, make_mod, make_vanilla, temp_root
 from tests.test_atlas_calls import INVOKE_INTERFACE, INVOKE_STATIC, RETURN, STRING_CALL, ClassBuilder, jar_mod
@@ -79,6 +79,68 @@ class ApiCensusTests(unittest.TestCase):
             err = io.StringIO()
             with redirect_stderr(err):
                 self.assertEqual(main(["atlas", "api-usage", "x", "--db", str(root / "none.sqlite")]), 2)
+
+
+MAP_PUT = ("java/util/Map", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;")
+ALOAD_0 = b"*"
+
+
+def save_classes() -> dict[str, bytes]:
+    unguarded = ClassBuilder("s/Unguarded", "com/fs/starfarer/api/BaseModPlugin")
+    unguarded.method("onGameLoad", ALOAD_0 + unguarded.new("s/Tick") + unguarded.invoke(SECTOR, "addScript", "(Lcom/fs/starfarer/api/EveryFrameScript;)V", INVOKE_INTERFACE)
+                     + unguarded.invoke("com/fs/starfarer/api/Global", "getPersistentData", "()Ljava/util/Map;", INVOKE_STATIC)
+                     + unguarded.ldc("mymod_state") + unguarded.invoke(*MAP_PUT, INVOKE_INTERFACE) + RETURN, "(Z)V")
+    guarded = ClassBuilder("s/Guarded", "com/fs/starfarer/api/BaseModPlugin")
+    guarded.method("onGameLoad", ALOAD_0 + guarded.invoke(SECTOR, "hasScript", "(Ljava/lang/Class;)Z", INVOKE_INTERFACE)
+                   + ALOAD_0 + guarded.new("s/Tick") + guarded.invoke(SECTOR, "addScript", "(Lcom/fs/starfarer/api/EveryFrameScript;)V", INVOKE_INTERFACE) + RETURN, "(Z)V")
+    tick = ClassBuilder("s/Tick", "java/lang/Object", ("com/fs/starfarer/api/EveryFrameScript",))
+    tick.field("cache", "Ljava/util/Map;", 0x0080).field("kept", "I", 0x0002).field("COUNT", "I", 0x0088)
+    tick.method("readResolve", RETURN)
+    return {"s/Unguarded.class": unguarded.build(), "s/Guarded.class": guarded.build(), "s/Tick.class": tick.build()}
+
+
+LOOSE_SAVE = """package l;
+public class Plug extends BaseModPlugin {
+    public void onGameLoad(boolean newGame) {
+        Global.getSector().addScript(new LTick());
+        Global.getSector().getPersistentData().put("loose_key", 1);
+        Global.getSector().getMemoryWithoutUpdate().set("$loose_flag", true);
+    }
+}
+"""
+
+
+LTICK_JAVA = """package l;
+public class LTick implements EveryFrameScript { private transient int x; }
+"""
+
+
+class SaveRiskTests(unittest.TestCase):
+    def test_save_risk_rows_from_jar_and_loose_script(self):
+        with temp_root() as root:
+            make_vanilla(root)
+            jar_mod(root / "mods", "jarmod", save_classes())
+            make_mod(root / "mods", "loosemod", {"data/scripts/Plug.java": LOOSE_SAVE,
+                                                 "data/scripts/LTick.java": LTICK_JAVA})
+            db, _ = build(root)
+            conn = atlas.connect(db)
+            rows = {(r["mod"], r["kind"], r["symbol"]) for r in conn.execute("SELECT * FROM census WHERE area = 'save'")}
+            self.assertIn(("jarmod", "duplicate-script-risk", "s.Unguarded"), rows)
+            self.assertNotIn(("jarmod", "duplicate-script-risk", "s.Guarded"), rows)
+            self.assertIn(("jarmod", "persistent-key", "mymod_state"), rows)
+            self.assertIn(("jarmod", "serialization-hook", "s.Tick.readResolve"), rows)
+            self.assertIn(("jarmod", "transient-field", "s.Tick.cache"), rows)
+            self.assertNotIn(("jarmod", "transient-field", "s.Tick.COUNT"), rows)
+            self.assertIn(("loosemod", "duplicate-script-risk", "l.Plug"), rows)
+            self.assertIn(("loosemod", "persistent-key", "loose_key"), rows)
+            self.assertIn(("loosemod", "memory-key", "$loose_flag"), rows)
+            self.assertIn(("loosemod", "transient-field", "l.LTick.x"), rows)
+            leaders = save_risk(conn)["mods"]
+            self.assertEqual({e["mod"] for e in leaders}, {"jarmod", "loosemod"})
+            out = io.StringIO()
+            with redirect_stdout(out):
+                self.assertEqual(main(["atlas", "save-risk", "jarmod", "--db", str(db)]), 0)
+            self.assertIn("duplicate-script-risk: s.Unguarded", out.getvalue())
 
 
 if __name__ == "__main__":

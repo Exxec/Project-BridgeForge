@@ -188,11 +188,15 @@ def declared_dependencies(root: Path) -> list[tuple[str, str, str]]:
 
 def extract_census(root: Path) -> list[Row]:
     """All census rows for one mod folder (never executes anything from it)."""
+    from .atlas_census_save import SAVE_WATCH, save_from_jar, save_from_loose  # late: that module builds on this one
+
     tally = Tally()
     classes: list[ClassRefs] = []
     for jar in _loaded_mod_jars(root):
-        classes += read_jar_classes(root, jar, frozenset())
+        classes += read_jar_classes(root, jar, SAVE_WATCH)
     loose = read_loose(root)
     api_from_jar(classes, tally)
     api_from_loose(loose, tally)
+    save_from_jar(classes, tally)
+    save_from_loose(loose, tally)
     return tally.result()

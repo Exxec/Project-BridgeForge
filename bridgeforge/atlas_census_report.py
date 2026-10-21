@@ -154,3 +154,50 @@ def run_census_cli(args, conn: sqlite3.Connection, emit) -> None:
     if args.atlas_command == "api-usage":
         data = api_usage(conn, args.symbol, args.limit)
         emit(args, data, api_usage_text(data, args.examples))
+    elif args.atlas_command == "save-risk":
+        from .atlas import resolve_mods
+
+        data = save_risk(conn, resolve_mods(conn, [args.mod]) if args.mod else None, args.top)
+        emit(args, data, save_risk_text(data))
+
+
+# ---------------------------------------------------------------- save risk (81.3)
+
+SAVE_KINDS = ("duplicate-script-risk", "serialization-hook", "transient-field", "persistent-key", "memory-key")
+RISK_KINDS = ("duplicate-script-risk", "serialization-hook", "transient-field")
+SAVE_DETAIL_LIMIT = 15
+
+
+def save_risk(conn: sqlite3.Connection, mods: list[dict] | None = None, top: int = 20) -> dict:
+    """Save-risk census: per mod the counts of each kind; with `mods` given, the symbols behind them; else the leaders."""
+    latest = {(m["id"], m["version"]): m for m in (mods if mods is not None else latest_mods(conn))}
+    per_mod: dict[str, dict] = {}
+    for row in conn.execute("SELECT * FROM census WHERE area = 'save'"):
+        key = (row["mod"], row["version"])
+        if key not in latest:
+            continue
+        entry = per_mod.setdefault(row["mod"], {"mod": row["mod"], "counts": dict.fromkeys(SAVE_KINDS, 0), "items": {k: [] for k in SAVE_KINDS}})
+        entry["counts"][row["kind"]] += 1
+        entry["items"][row["kind"]].append({"symbol": row["symbol"], "count": row["count"], "example": row["example"]})
+    ranked = sorted(per_mod.values(), key=lambda e: (-e["counts"]["duplicate-script-risk"], -sum(e["counts"][k] for k in RISK_KINDS), e["mod"]))
+    if mods is None:
+        for entry in ranked:
+            entry.pop("items")
+        ranked = ranked[:top]
+    return {"label": "STATIC", "scope": "all" if mods is None else "selected", "mods": ranked,
+            "note": "Heuristic: keys and risks come from constant pools and regexes; a flagged onGameLoad may guard in a helper method."}
+
+
+def save_risk_text(data: dict) -> str:
+    lines = [f"Save-risk census ({data['label']}, {data['scope']} mods)"]
+    for entry in data["mods"]:
+        counts = entry["counts"]
+        lines.append(f"  {entry['mod']}: duplicate-script-risk {counts['duplicate-script-risk']}, transient-field {counts['transient-field']}, "
+                     f"serialization-hook {counts['serialization-hook']}, persistent-key {counts['persistent-key']}, memory-key {counts['memory-key']}")
+        for kind in SAVE_KINDS if "items" in entry else ():
+            for item in sorted(entry["items"][kind], key=lambda i: i["symbol"])[:SAVE_DETAIL_LIMIT]:
+                lines.append(f"      {kind}: {item['symbol']}  e.g. {item['example']}")
+    if not data["mods"]:
+        lines.append("  no save-relevant code found (rebuild the atlas if it was built before the census existed)")
+    lines.append(f"  {data['note']}")
+    return "\n".join(lines)
