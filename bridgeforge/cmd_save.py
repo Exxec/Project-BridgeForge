@@ -29,6 +29,10 @@ def add_parser(subcommands) -> None:
     doctor_cmd.add_argument("--out", type=Path, help="with --break-cycle: the new folder for the repaired copy")
     doctor_cmd.add_argument("--vanilla-core", type=Path, help="starsector-core, so the game's own classes resolve")
     doctor_cmd.add_argument("--json", action="store_true")
+    fingerprint_cmd = subcommands.add_parser("save-fingerprint", help="the probe's save fingerprint sections computed from a save folder without the game (markets and player cargo; the other sections are listed as not comparable offline); --compare another offline fingerprint JSON or a probe log")
+    fingerprint_cmd.add_argument("save", type=Path, help="save folder (holding campaign.xml and descriptor.xml)")
+    fingerprint_cmd.add_argument("--compare", type=Path, metavar="FILE_OR_LOG", help="an offline fingerprint JSON or a probe log with fingerprint| lines; per section equal / differ / not-comparable (exit 1 when any differs)")
+    fingerprint_cmd.add_argument("--json", action="store_true")
     rplan_cmd = subcommands.add_parser("save-removal-plan", help="for each object of a missing mod's class in a save: droppable (nothing outside refers to it) or blocked (lists the outside references); read-only, the plan for a fix on a copy")
     rplan_cmd.add_argument("save", type=Path)
     rplan_cmd.add_argument("--mods", type=Path, required=True)
@@ -172,6 +176,19 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"  {row['state']:9} {row['class']} (in {row['parent']}, line {row['line']})"
                   + (f"  referenced from {', '.join(row['ref_examples'])}" if row["ref_examples"] else ""))
         return 0
+    if args.command == "save-fingerprint":
+        from .save_fingerprint_offline import FingerprintError, compare_with_file, offline_fingerprint, render
+        try:
+            result = offline_fingerprint(args.save)
+            comparison = compare_with_file(result, args.compare) if args.compare else None
+        except (FingerprintError, SaveReadError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps({**result, **({"comparison": comparison} if comparison else {})}, indent=2, ensure_ascii=False))
+        else:
+            print(render(result, comparison))
+        return 1 if comparison and "differ" in comparison.values() else 0
     if args.command == "save-doctor":
         from .save_doctor import diagnose
         if args.break_cycle:
