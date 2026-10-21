@@ -9,9 +9,12 @@ if($bad){Write-Error ("Invalid report status:`n"+($bad -join "`n")); exit 11}
 # Fast cross-cutting tests plus the tests of the modules this branch touched (ROADMAP-3 item 80.1). Keep this list in step with
 # CROSS_CUTTING_TESTS in bridgeforge/merge_train.py (tests/test_merge_train.py checks it).
 $crossCutting=@('tests.test_probe_contract','tests.test_safeio_ratchet','tests.test_checks_index','tests.test_cli_golden','tests.test_test_guard')
-# Same interpreter discovery as precommit-check.ps1, without needing ruff: the first Python that runs.
+# Prefer the project venv (this checkout's, else the main checkout's when this is a worktree): a system Python with an
+# editable bridgeforge install imports that checkout's code ahead of this one, so the tests would check the wrong tree.
 $py=$null
-foreach($c in @('python','py','C:\Users\exxec\AppData\Local\Python\pythoncore-3.14-64\python.exe')){
+$common=(git rev-parse --path-format=absolute --git-common-dir).Trim()
+$venvs=@((Join-Path $root '.venv\Scripts\python.exe'), (Join-Path (Split-Path $common -Parent) '.venv\Scripts\python.exe'))
+foreach($c in @($venvs + @('python','py','C:\Users\exxec\AppData\Local\Python\pythoncore-3.14-64\python.exe'))){
     $cmd=Get-Command $c -ErrorAction SilentlyContinue
     if(-not $cmd){continue}
     & $cmd.Source -c 'import sys' *> $null
