@@ -1,0 +1,426 @@
+{
+  "schema": 1,
+  "repo": "BridgeForge",
+  "gates": [
+    {
+      "id": "bf-75-r1",
+      "title": "R1 run binding: run manifest prepared and released, live_status CURRENT with provenance BOUND, STALE after a one-file edit; natural-exit record",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "<candidate>",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge rig-up <rig> --mods <id> --probe-config",
+        "python -m bridgeforge probe-group live <TESTID> --natural-exit",
+        "python -m bridgeforge probe-group record <TESTID> --accept --note \"...\"",
+        "python -m bridgeforge probe-group record <TESTID> --observe-exit ..."
+      ],
+      "source_doc": {
+        "path": "docs/ROADMAP_STATUS.md",
+        "anchor": "R1 run-input provenance",
+        "status_line": "| R1 run-input provenance |"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-0b-02",
+      "title": "R2 registry: finding-stats --rescan-stale registers the real queue; auto-open and promotion report",
+      "state": "NOT_TESTED",
+      "evidence": [],
+      "needs": {
+        "rig": false,
+        "mods": [],
+        "save": false,
+        "java": null,
+        "launcher": null,
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge finding-stats --rescan-stale --write bridgeforge-state/finding-stats/<date> --vanilla-core $core",
+        "python -m bridgeforge auto-open \"In operation\"",
+        "python -m bridgeforge finding-stats --promotion <dir>"
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**R2 registry.**"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-75-r5",
+      "title": "R5 revise: prepare, R1 run, baseline-accept, finalize twice on a live-qualified candidate",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "<candidate>",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge revise prepare ...",
+        "python -m bridgeforge baseline-accept ...",
+        "python -m bridgeforge revise finalize ...",
+        "python -m bridgeforge revise finalize ..."
+      ],
+      "source_doc": {
+        "path": "docs/ROADMAP_STATUS.md",
+        "anchor": "R5 revision lifecycle",
+        "status_line": "| R5 revision lifecycle |"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-75-r6",
+      "title": "R6 save upgrade: Zorg bf.9 to bf.10, eight cases, manual evidence recorded as MANUAL",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "zorg",
+          "bridgeforge_probe"
+        ],
+        "save": true,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge save-upgrade plan <spec>",
+        "python -m bridgeforge save-upgrade evaluate SPEC EVIDENCE --run-id ID --run-hash HASH"
+      ],
+      "source_doc": {
+        "path": "docs/ROADMAP_STATUS.md",
+        "anchor": "R6 save-upgrade scenarios",
+        "status_line": "| R6 save-upgrade scenarios |"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-75-r8",
+      "title": "R8 restore: snapshot-restore-check to a new folder, then a bounded rig scenario in the copy",
+      "state": "NOT_TESTED",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge snapshot-restore-check <snapshot> --to <new empty folder outside the repo> --source-root <repo>"
+      ],
+      "source_doc": {
+        "path": "docs/ROADMAP_STATUS.md",
+        "anchor": "R8 restore exercise"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-0b-06",
+      "title": "G1 New Game fallback: two total conversions other than Nexerelin and Ironclads reach campaign END with a new-game-generic stage",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "<total-conversion-1>",
+          "<total-conversion-2>",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": "new-game-generic"
+      },
+      "commands": [
+        "python -m bridgeforge probe-group live <TESTID>   # twice, on two total conversions"
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**G1 New Game fallback.**"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-0b-07",
+      "title": "G6 raid mod: check_raid_log gives RAID_OBSERVED with Nexerelin; Janino compiles the loose scripts",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "nexerelin",
+          "lazylib",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": "raid"
+      },
+      "commands": [
+        "python -c \"raid_run.install_raid_mod(rig, 'exipirated_avestamarket', attacker_faction='hegemony')\"",
+        "python -m bridgeforge probe-group live <TESTID>"
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**G6 raid mod.**"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-0b-08",
+      "title": "G2/G3: probe-group regress --changed-since writes REGRESSION_HOLD; rig-up on the real _rig",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge probe-group regress --changed-since <commit>",
+        "python -m bridgeforge rig-up \"In operation/_rig\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**G2/G3.**"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-0b-09",
+      "title": "E4 port record: PORT_SOURCE.json written and rescanned; accept port-dropped-feature findings with a reason",
+      "state": "NOT_TESTED",
+      "evidence": [],
+      "needs": {
+        "rig": false,
+        "mods": [],
+        "save": false,
+        "java": null,
+        "launcher": null,
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge scan \"In operation/Templars-0.9.8f/working\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**E4 port record.**"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-0b-10",
+      "title": "H1: audit-explain --auto on Ironclads, Nightcross and the GRP6A mods; report the fraction left for a person",
+      "state": "NOT_TESTED",
+      "evidence": [],
+      "needs": {
+        "rig": false,
+        "mods": [],
+        "save": false,
+        "java": null,
+        "launcher": null,
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge audit-explain --auto ..."
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**H1.**"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-0b-11",
+      "title": "B fixers on the real queue: revive over the queue with finding-stats before and after; owner decision on REVIEW-only fixers B1/B4 open",
+      "state": "NOT_TESTED",
+      "evidence": [],
+      "needs": {
+        "rig": false,
+        "mods": [],
+        "save": false,
+        "java": null,
+        "launcher": null,
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge finding-stats ...",
+        "python -m bridgeforge revive ...",
+        "python -m bridgeforge finding-stats ..."
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**B fixers on the real queue.**"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-0b-12",
+      "title": "F checks optional live proof: LTA and Tahlan Legio siege base with Nexerelin; EptaTestMission wormhole planets",
+      "state": "NOT_TESTED",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "nexerelin",
+          "lazylib",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge probe-group live <TESTID>"
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**F checks, optional live proof.**"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-0b-13",
+      "title": "Templar Crusade live run: BF-TEMCRUSADE stage lines for start, fleets, condition on/off, ending, and a reloading save",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "templars",
+          "nexerelin",
+          "lazylib",
+          "bridgeforge_probe"
+        ],
+        "save": true,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": "templar-crusade"
+      },
+      "commands": [
+        "python -m bridgeforge probe-group live <TESTID>   # Templars 0.9.8f +bf, Nexerelin, Corvus, random sector; defenderMode response and military once each"
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**Templar Crusade live run"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-0b-14",
+      "title": "All the Domain Drones rules.csv (BUGS.md FIX-001): drone interaction dialogue seen live, then archive --refresh",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "all-the-domain-drones",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": "drone-interaction-screenshot"
+      },
+      "commands": [
+        "python -m bridgeforge probe-group live <TESTID>",
+        "python -m bridgeforge archive --refresh ..."
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**All the Domain Drones rules.csv"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-0b-15",
+      "title": "SEEKER Betelgeuse modules survive save and reload (SK-6c): hull and armor fractions match, no SEEKER.twig.* class error",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "seeker",
+          "lazylib",
+          "bridgeforge_probe"
+        ],
+        "save": true,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": "seeker-betelgeuse-save-reload"
+      },
+      "commands": [
+        "python -m bridgeforge probe-group live <TESTID>   # needs the BF-SKRTWIG logging hook"
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**SEEKER Betelgeuse modules survive save and reload"
+      },
+      "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-75-r3",
+      "title": "R3 auto-accept policy enabled (ENABLED = False today); needs R1/R2/R4 live evidence and an AUTO_ACCEPT_POLICY.json",
+      "state": "BLOCKED",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [],
+        "save": false,
+        "java": null,
+        "launcher": null,
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [],
+      "source_doc": {
+        "path": "docs/ROADMAP_STATUS.md",
+        "anchor": "R3 auto-accept policy"
+      },
+      "updated": "2026-10-21"
+    }
+  ]
+}

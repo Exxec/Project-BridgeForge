@@ -45,6 +45,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "release_notes": ("release-notes",),
     "merge_train": ("merge-train",),
     "cmd_shadow": ("shadow-triage",),
+    "cmd_gates": ("gates",),
     "cmd_revive": ("revive-review", "mod-changelog", "ready-list", "revive-queue", "revive", "escalation"),
 }
 
