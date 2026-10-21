@@ -51,6 +51,7 @@ class ClassInfo:
     code_ok: bool = True  # False when a Code attribute could not be scanned
     calls: list[Call] = field(default_factory=list)  # watched calls with the strings attributed to them
     method_calls: list[set[str]] = field(default_factory=list)  # call names per method body
+    code_methods: list[str] = field(default_factory=list)  # name of the method behind each method_calls entry
     registrations: list[tuple[str, str]] = field(default_factory=list)  # (register method, internal class name of `new X`)
 
 
@@ -157,6 +158,8 @@ def _read_member(data: bytes, pos: int, pool: _Pool, info: ClassInfo, is_field: 
             info.field_signatures[name] = pool.text(struct.unpack_from(">H", data, body)[0])
         elif not is_field and attr_name == "Code":
             _scan_method(data[body:body + length], pool, info, watch)
+            if len(info.method_calls) > len(info.code_methods):
+                info.code_methods.append(name)
         pos = body + length
     if is_field:
         info.fields.append((name, pool.text(desc_idx), flags))

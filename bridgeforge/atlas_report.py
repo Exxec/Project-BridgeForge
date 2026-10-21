@@ -17,6 +17,7 @@ from .atlas import (DEFAULT_DB, ORIGINAL_SUFFIX, AtlasError, build_atlas, connec
 from .atlas_rules import AFact, build_profile, forecast, load_facts
 
 DEFAULT_LIMIT = 25
+CENSUS_COMMANDS = ("api-usage", "save-risk", "libraries")
 CSS = ("body{font-family:system-ui,sans-serif;margin:24px auto;max-width:1100px;padding:0 16px;color:#1b1b1b;background:#fff}"
        "table{border-collapse:collapse;width:100%;margin:8px 0 20px}td,th{border:1px solid #ccc;padding:4px 8px;text-align:left;"
        "font-size:13px;vertical-align:top}th{background:#f1f1f1}code{font-size:12px}.MANUAL{color:#a00}.REVIEW{color:#a60}"
@@ -276,6 +277,10 @@ def run_cli(args) -> int:
 
             stats = ingest(conn, args.logs)
             _emit(args, stats, f"Read {stats['lines']} probe line(s) from {stats['logs']} log(s): {', '.join(stats['tests'])}")
+        elif args.atlas_command in CENSUS_COMMANDS:
+            from .atlas_census_report import run_census_cli
+
+            run_census_cli(args, conn, _emit)
         elif args.atlas_command == "sweep":
             from .atlas_sweep import sweep, sweep_text
             checkpoint = args.db.with_name(f"sweep-{args.group}.partial.jsonl")
@@ -357,8 +362,17 @@ def add_parser(subcommands) -> None:
     sweeper.add_argument("--limit", type=int, help="only the first N mods")
     sweeper.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
     sweeper.add_argument("--json", action="store_true")
-    for command in (show, ident, fore):
+    usage = sub.add_parser("api-usage", help="which indexed mods use an RC8 API symbol (class, method, field or package prefix), how often, with an example file (census, STATIC)")
+    usage.add_argument("symbol", help="dotted prefix, e.g. com.fs.starfarer.api.campaign.SectorAPI or ...SectorAPI.addMessage")
+    usage.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="symbols shown (default %d)" % DEFAULT_LIMIT)
+    usage.add_argument("--examples", type=int, default=3, help="mods listed per symbol")
+    risk = sub.add_parser("save-risk", help="save-risk census (STATIC): persistent-data keys, onGameLoad scripts/listeners added without a guard, readResolve/writeReplace, transient fields in saved classes; leaders, or one MOD in detail")
+    risk.add_argument("mod", nargs="?", help="mod id, name, folder or part of one; omit for the leaders")
+    risk.add_argument("--top", type=int, default=DEFAULT_LIMIT, help="leaders shown when no MOD is given")
+    libs = sub.add_parser("libraries", help="library census (STATIC): calls into LazyLib, MagicLib, GraphicsLib, Nexerelin, LunaLib and other packages, the functions used, which mods use them, and declared dependency versions")
+    libs.add_argument("--limit", type=int, default=12, help="libraries and dependencies shown (default 12)")
+    for command in (show, ident, fore, usage, risk, libs):
         command.add_argument("--json", action="store_true")
         command.add_argument("--html", type=Path, metavar="DIR", help="also write plain self-contained HTML files into DIR")
-    for command in (build, show, diff, ident, fore, runtime, sweeper):  # outcome and precision read the ledger, not the atlas
+    for command in (build, show, diff, ident, fore, runtime, sweeper, usage, risk, libs):  # outcome and precision read the ledger, not the atlas
         command.add_argument("--db", type=Path, default=DEFAULT_DB, help=f"atlas file (default: {DEFAULT_DB.as_posix()})")
