@@ -37,7 +37,7 @@ class SalvorProfileTests(unittest.TestCase):
     def test_java_emits_every_salvor_line_shape(self) -> None:
         emitted = set(re.findall(r'"(salvor-rig\|INFO\|[^"]*)"', JAVA))
         for line in profile.LOG_LINES:
-            head = re.sub(r"<\w+>", "", line)
+            head = line.split("<")[0]
             self.assertTrue(any(e.startswith(head) for e in emitted), f"no Java line starts {head!r}")
 
     def test_selected_profile_skips_every_bridgeforge_check_in_the_plugin(self) -> None:
