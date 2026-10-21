@@ -286,6 +286,11 @@ def run_cli(args: argparse.Namespace) -> int:
                         print(f"  not recorded: {item['mod_id']} ({item['verdict']}) {item.get('archive', '')}")
                     for item in result.get("warnings", []):
                         print(f"  WARN {item}")
+                    if args.accept:
+                        from .archive_checks import archive_offer
+
+                        for line in archive_offer(result, queue):
+                            print(line)
             else:
                 config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
                 from .probe_group import accepted_probe_findings
