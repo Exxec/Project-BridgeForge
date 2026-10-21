@@ -179,10 +179,17 @@ def api_from_loose(files: list[LooseFile], tally: Tally) -> None:
 
 # ---------------------------------------------------------------- driver
 
+def _dependency_version(value: object) -> str:
+    """mod_info.json writes versions as "1.2.3" or as {"major": 1, "minor": 2, "patch": "3"}."""
+    if isinstance(value, dict):
+        return ".".join(str(value[key]) for key in ("major", "minor", "patch") if value.get(key, "") != "")
+    return str(value or "")
+
+
 def declared_dependencies(root: Path) -> list[tuple[str, str, str]]:
     info = _load_lenient_json_file(root / "mod_info.json")
     deps = info.get("dependencies") if isinstance(info, dict) else None
-    return [(str(dep.get("id") or ""), str(dep.get("name") or ""), str(dep.get("version") or ""))
+    return [(str(dep.get("id") or ""), str(dep.get("name") or ""), _dependency_version(dep.get("version")))
             for dep in (deps if isinstance(deps, list) else []) if isinstance(dep, dict) and (dep.get("id") or dep.get("name"))]
 
 

@@ -167,7 +167,7 @@ public class Q { void go() { MathUtils.clamp(1, 2, 3); } }
             jar_mod(root / "mods", "jarmod", {"m/UsesLibs.class": lib_class()},
                     {"mod_info.json": info("jarmod", [{"id": "lw_lazylib", "name": "LazyLib", "version": "2.8"}, {"id": "MagicLib", "version": "1.0.0"}])})
             make_mod(root / "mods", "loosemod", {"data/scripts/Q.java": java, "mod_info.json": json.dumps(
-                {"id": "loosemod", "name": "loosemod", "version": "1", "dependencies": [{"id": "lw_lazylib", "version": "3.0.0"}]})})
+                {"id": "loosemod", "name": "loosemod", "version": "1", "dependencies": [{"id": "lw_lazylib", "version": {"major": "3", "minor": 0, "patch": "0"}}]})})
             db, _ = build(root)
             data = libraries(atlas.connect(db))
             by_name = {lib["library"]: lib for lib in data["libraries"]}

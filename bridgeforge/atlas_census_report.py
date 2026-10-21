@@ -127,7 +127,9 @@ def api_how(conn: sqlite3.Connection, catalogue: dict, old_symbol: str, limit_ex
                          "mods": [{"mod": u["mod"], "count": u["count"], "example": u["example"]} for u in users[:limit_examples]]})
         old_users = census_rows(conn, "api", f"{entry['class']}.{member}" if member else entry["removed"], exact=True) if member else []
         entry_out = {k: entry[k] for k in ("removed", "kind")}
-        entry_out.update(candidates=rows, still_referenced_by=[u["mod"] for u in old_users])
+        # the census is by name, not descriptor: when the class keeps an overload of that name, a user is not evidence of the old signature
+        entry_out.update(candidates=rows, same_name_remains=bool(entry.get("in_class")),
+                         still_referenced_by=[] if entry.get("in_class") else [u["mod"] for u in old_users])
         result["removed"].append(entry_out)
     return result
 
@@ -138,6 +140,8 @@ def api_how_text(data: dict) -> str:
         lines.append("  api-diff lists no removed class/method/field by that name (check the spelling, or it is unchanged)")
     for entry in data["removed"]:
         lines.append(f"  removed: {entry['removed']}")
+        if entry.get("same_name_remains"):
+            lines.append("    the class keeps a same-name overload (signature change): the census counts by name, so users are not listed as stale")
         if entry["still_referenced_by"]:
             lines.append(f"    still referenced by: {', '.join(entry['still_referenced_by'][:10])}")
         for cand in entry["candidates"]:
