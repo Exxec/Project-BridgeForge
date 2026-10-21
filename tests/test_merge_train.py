@@ -139,6 +139,19 @@ class MergeTrainTests(unittest.TestCase):
             self.assertTrue(world.ran(r"commit -m chore: regenerate"))
             self.assertTrue(world.ran(r"gh pr merge 2"))
 
+    def test_the_first_pr_is_rebased_when_its_worktree_is_given(self) -> None:
+        # main can move after a PR is pushed; merging it unrebased failed with a conflict (#48, 2026-10-21).
+        with resolved_temp_dir() as tmp:
+            (tmp / "tests").mkdir()
+            world = FakeWorld([
+                (r"git rebase origin/main", Result(0)),
+                (r"diff --cached --quiet", Result(0)),
+                (r"gh pr checks \d --json", Result(0, "[{}]")),
+            ])
+            world.train().go(["1"], {"1": tmp})
+            self.assertTrue(world.ran(r"git rebase origin/main"))
+            self.assertTrue(world.ran(r"gh pr merge 1"))
+
     def test_other_conflict_stops_before_tests_and_push(self) -> None:
         world = FakeWorld([
             (r"git rebase origin/main", Result(1)),
