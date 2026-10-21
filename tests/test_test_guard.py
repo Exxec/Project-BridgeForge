@@ -100,8 +100,8 @@ class KnownFailureTests(unittest.TestCase):
     def test_the_known_failures_file_names_a_reason_and_an_expiry_for_every_entry(self):
         from bridgeforge.test_guard import load_known_failures
 
+        # An empty list is the goal (the last entry, test_locks' child-cwd test, was fixed 2026-10-20).
         entries = load_known_failures(Path(__file__).resolve().parent.parent)
-        self.assertTrue(entries)
         for entry in entries:
             self.assertTrue(entry.get("reason") and entry.get("added") and entry.get("expires"), entry)
 

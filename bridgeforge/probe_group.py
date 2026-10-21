@@ -23,6 +23,7 @@ import shutil
 from pathlib import Path
 
 from .copy_drift import _collect, compare_copies
+from .live_content_parity import merge_parity, parity_failure_lines, parity_findings
 from .probe_config import CONFIG_FILE, RIG_MARKER_FILE, _install_probe_mod, _refuse_non_rig, build_probe_config
 from .scanner import _load_lenient_json_file
 
@@ -364,7 +365,10 @@ def merge_configs(configs: list[dict]) -> dict:
         "group_members": {}, "mod_systems": [], "mod_body_types": {},
         # 2026-10-11: class_sweep and mission_fleets were dropped here, so group runs never swept classes or mission fleets.
         "class_sweep": [], "mission_fleets": {"ship": [], "wing": []}, "mod_commodities": [], "expect_supply": [],
+        "content_parity": merge_parity(configs),
     }
+    if any("campaign_perf_p95_ms" in c for c in configs):
+        merged["campaign_perf_p95_ms"] = max(c.get("campaign_perf_p95_ms", 0.0) for c in configs)
     for c in configs:
         for key in ("hulls", "track_entities", "factions", "patched_factions", "content_special_items", "content_wings", "hulls_skipped_no_variant",
                     "class_sweep", "mod_commodities", "expect_supply"):
@@ -754,6 +758,8 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
         if match["check"] == "combat-filler" and match["status"] == "INFO":
             if match["subject"] not in filler_sides:
                 filler_sides.append(match["subject"])  # ROADMAP P15 31.13: vanilla ships stood in for a side
+        if match["check"] in ("content-parity", "campaign-perf"):
+            continue  # judged by live_content_parity / campaign_perf below, per mod
         if match["status"] != "FAIL":
             continue
         subject = match["subject"].split(":", 1)[-1].split("/", 1)[0].split("@", 1)[0]  # market-supply names "commodity@industry"
@@ -767,6 +773,14 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
             verdicts[mod_id].setdefault("accepted", []).append(entry)
             continue
         (verdicts[mod_id]["failures"] if mod_id else unattributed).append(entry)
+    # 77.17: a shortfall between what the working copy defines and what the game loaded fails that member (excess is information).
+    parity = parity_findings(log, config)
+    for mod_id, lines in parity_failure_lines(parity).items():
+        if mod_id in verdicts:
+            verdicts[mod_id]["failures"].extend(lines)
+    from .campaign_perf import campaign_perf_summary
+
+    perf = campaign_perf_summary(log, slow_p95_ms=config.get("campaign_perf_p95_ms") or None)
     triage = triage_log(log, mods_dir=mods_dir) if mods_dir is not None else triage_log(log)
     for event in triage["fatal"] + triage["mod_errors"]:
         # A JVM crash names the mod owning its nearest Java frame (ROADMAP 36.4); a log exception its suspect.
@@ -787,7 +801,7 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
             verdict["verdict"] = "PASS" if seen_content else "INCOMPLETE"
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_REPORT", "log": str(log),
             "content_ids_ran": seen_content, "fatal": triage["counts"]["FATAL"], "mod_errors": triage["counts"]["MOD-ERROR"],
-            "members": verdicts, "unattributed": unattributed, "combat_filler_sides": filler_sides,
+            "members": verdicts, "content_parity": parity, "campaign_perf": perf, "unattributed": unattributed, "combat_filler_sides": filler_sides,
             "optional_integration_classes": optional_integrations, "sweep_artefact_classes": sweep_artefacts,
             "note": "INCOMPLETE means the probe's content-ids check never ran (start a New Game and wait one in-game day)."}
 
@@ -870,7 +884,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
                                   verdicts={m: v["verdict"] for m, v in report["members"].items()}, probe_config=config,
                                   core_baseline=_repo_root() / DEFAULT_CORE_BASELINE_RELATIVE, today=today,
                                   save_made_with=_newest_save_made_with(Path(rig), save_made_with), rig_state=read_rig_state(Path(rig)),
-                                  evidence=evidence, manifest=manifest,
+                                  evidence=evidence, manifest=manifest, campaign_perf=report.get("campaign_perf"),
                                   process_exit_code=exit_code, process_exit_observed=exit_observed)
     recorded, skipped, archived = [], [], []
     carry, stopped = None, None
