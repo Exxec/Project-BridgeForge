@@ -8,7 +8,7 @@ from contextlib import redirect_stderr, redirect_stdout
 
 from bridgeforge import atlas
 from bridgeforge.atlas_exemplars import FEATURES, exemplars, parse_symbols
-from bridgeforge.atlas_migrations import Pair, mine, queue_pairs
+from bridgeforge.atlas_migrations import Pair, installed_pairs, mine, queue_pairs
 from bridgeforge.cli import main
 from tests.test_atlas import make_mod, make_vanilla, temp_root, build
 from tests.test_atlas_calls import make_jar
@@ -21,8 +21,8 @@ CATALOGUE = {"note": "n", "removed_classes": [], "changed_classes": {
         "fields_removed": [], "methods_added": []}}}
 
 
-def versioned(folder, mod_id, owner, author="", extra=None):
-    info = {"id": mod_id, "name": mod_id, "version": "1", "jars": ["jars/x.jar"], **({"author": author} if author else {})}
+def versioned(folder, mod_id, owner, author="", extra=None, version="1"):
+    info = {"id": mod_id, "name": mod_id, "version": version, "jars": ["jars/x.jar"], **({"author": author} if author else {})}
     mod = make_mod(folder, mod_id, {"mod_info.json": json.dumps(info), **(extra or {})})
     make_jar(mod / "jars" / "x.jar", {"a/One.class": sector_user("a/One", owner, "addMessage")})
     return mod
@@ -78,6 +78,25 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(json.loads(out.getvalue())["rules"][0]["independent_mods"], 1)
             self.assertIn("proposals only", (root / "out" / "MIGRATIONS.md").read_text(encoding="utf-8").lower())
             self.assertTrue((root / "out" / "MIGRATIONS.json").is_file())
+
+    def test_installed_pairs_need_a_different_version_and_record_both(self):
+        with temp_root() as root:
+            queue = root / "In operation"
+            versioned(queue / "X" / "original", "x", SECTOR, "a", version="1")
+            versioned(queue / "Y" / "original", "y", SECTOR, "b", version="2")
+            versioned(root / "mods", "x", CAMPAIGN_UI, "a", version="1.5")
+            versioned(root / "mods", "y", CAMPAIGN_UI, "b", version="2")  # same version: no pair
+            (pair,) = installed_pairs(queue, root / "mods")
+            self.assertEqual((pair.old_version, pair.new_version), ("1", "1.5"))
+            data = mine([pair], CATALOGUE)
+            self.assertEqual(data["pairs"][0]["new_version"], "1.5")
+            self.assertEqual(len(data["rules"]), 1)
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["atlas", "migrations", "--pairs-installed", str(queue), "--installed", str(root / "mods"),
+                             "--write", str(root / "o"), "--stem", "MIGRATIONS-UPSTREAM", "--json"])
+            self.assertEqual(code, 0)
+            self.assertTrue((root / "o" / "MIGRATIONS-UPSTREAM.md").is_file())
 
 
 class ExemplarTests(unittest.TestCase):

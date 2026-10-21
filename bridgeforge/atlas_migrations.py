@@ -32,6 +32,8 @@ class Pair(NamedTuple):
     label: str
     old: Path
     new: Path
+    old_version: str = ""
+    new_version: str = ""
 
 
 def class_symbols(root: Path) -> dict[str, dict[Symbol, str]]:
@@ -153,7 +155,8 @@ def mine(pairs: list[Pair], catalogue: dict | None = None, progress=None) -> dic
     for index, pair in enumerate(pairs, 1):
         mod_id, family = _identity(pair.old, pair.new)
         rows = pair_replacements(pair.old, pair.new, catalogue)
-        scanned.append({"pair": pair.label, "mod": mod_id, "replacements": len(rows)})
+        scanned.append({"pair": pair.label, "mod": mod_id, "replacements": len(rows),
+                        "old_version": pair.old_version, "new_version": pair.new_version})
         if progress:
             progress(f"[{index}/{len(pairs)}] {pair.label}: {len(rows)} replacement(s)")
         for old, new, symbol_kind, reason, compat, old_example, new_example, cls in rows:
@@ -219,6 +222,34 @@ def queue_pairs(queue: Path, scratch: Path) -> list[Pair]:
     return pairs
 
 
+def queue_originals(queue: Path) -> list[Path]:
+    originals = [m for m in (_first_mod(f / "original") for f in sorted(queue.iterdir())
+                             if f.is_dir() and not f.name.startswith("_")) if m]
+    done = queue.parent / "Done"
+    for folder in sorted(p for p in done.iterdir() if p.is_dir()) if done.is_dir() else []:
+        old = _first_mod(folder / "original" / "extracted") or _first_mod(folder / "original")
+        if old:
+            originals.append(old)
+    return originals
+
+
+def installed_pairs(queue: Path, installed: Path) -> list[Pair]:
+    """Queue/Done originals paired with the INSTALLED mod of the same id when the version strings differ (upstream evolution)."""
+    by_id = {}
+    for root in discover_mods(installed):
+        ident = mod_identity(root)
+        if ident:
+            by_id.setdefault(ident[0], (root, ident[1]))
+    pairs, seen = [], set()
+    for original in queue_originals(queue):
+        ident = mod_identity(original)
+        found = by_id.get(ident[0]) if ident else None
+        if ident and found and found[1] != ident[1] and (ident[0], ident[1]) not in seen:
+            seen.add((ident[0], ident[1]))
+            pairs.append(Pair(f"{ident[0]} {ident[1]} -> installed {found[1]}", original, found[0], ident[1], found[1]))
+    return pairs
+
+
 # ---------------------------------------------------------------- output
 
 def migrations_text(data: dict, top: int = 25) -> str:
@@ -250,9 +281,9 @@ def migrations_markdown(data: dict, top: int = 100) -> str:
 NL = chr(10)
 
 
-def write_outputs(data: dict, folder: Path) -> list[Path]:
+def write_outputs(data: dict, folder: Path, stem: str = "MIGRATIONS") -> list[Path]:
     folder.mkdir(parents=True, exist_ok=True)
-    md, js = folder / "MIGRATIONS.md", folder / "MIGRATIONS.json"
+    md, js = folder / f"{stem}.md", folder / f"{stem}.json"
     atomic_write_text(md, migrations_markdown(data))
     atomic_write_text(js, json.dumps(data, indent=2, ensure_ascii=False) + NL)
     return [md, js]
@@ -268,11 +299,15 @@ def run_migrations(args, emit, say) -> int:
         pairs = [Pair(f"{args.old.name} -> {args.new.name}", args.old, args.new)] if args.old and args.new else []
         if args.pairs_from:
             pairs += queue_pairs(args.pairs_from, Path(scratch))
+        if args.pairs_installed:
+            if not args.installed:
+                raise ValueError("--pairs-installed needs --installed MODS_DIR")
+            pairs += installed_pairs(args.pairs_installed, args.installed)
         if not pairs:
-            raise ValueError("give OLD_DIR NEW_DIR and/or --pairs-from QUEUE (no pairs found)")
+            raise ValueError("give OLD_DIR NEW_DIR, --pairs-from QUEUE or --pairs-installed QUEUE (no pairs found)")
         data = mine(pairs, catalogue, None if args.quiet else say)
     if args.write:
-        for path in write_outputs(data, args.write):
+        for path in write_outputs(data, args.write, args.stem):
             say(f"wrote {path}")
     emit(args, data, migrations_text(data, args.top))
     return 0

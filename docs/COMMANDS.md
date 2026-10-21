@@ -416,6 +416,9 @@ migration mining (STATIC, proposals only): per OLD/NEW mod pair the API symbols 
 | `OLD_DIR` | - | older mod folder |
 | `NEW_DIR` | - | newer mod folder |
 | `--pairs-from` QUEUE | - | an `In operation` folder: each workspace's original/ vs working/, and Done/ originals vs shipped zips |
+| `--pairs-installed` QUEUE | - | upstream evolution: each queue/Done original paired with the INSTALLED mod of the same id (needs --installed) when the version strings differ |
+| `--installed` MODS_DIR | - | the game's mods folder (read only) |
+| `--stem` STEM | default MIGRATIONS | file name stem for --write (default MIGRATIONS) |
 | `--old-api` OLD_API | - | older starfarer.api.jar (or its folder): only api-diff-removed symbols are kept, and renames are judged signature-compatible or not |
 | `--new-api` NEW_API | - | newer starfarer.api.jar (or its folder) |
 | `--write` DIR | - | write MIGRATIONS.md and MIGRATIONS.json into DIR |
