@@ -1,0 +1,1 @@
+- `escalation triage QUEUE [--write DIR] [--json]` (ROADMAP 80.7): open decision packets across a queue grouped by (finding, file pattern, normalized evidence); per group the mods it settles (decision-only and cleared), shared evidence, near-matching standing rulings, and ready-to-run `escalation accept`/`rule` commands printed for the owner, never run.

@@ -83,6 +83,10 @@ def add_parser(subcommands) -> None:
     esc_queue.add_argument("queue", type=Path)
     esc_queue.add_argument("--quiet", action="store_true", help="no per-workspace progress lines on stderr")
     esc_queue.add_argument("--json", action="store_true")
+    esc_triage = esc_sub.add_parser("triage", help="the open decision packets across a queue, grouped by the decision they wait on: mods each group would clear, shared evidence, near-matching standing rulings and ready-to-run commands (printed, never run; ROADMAP 80.7)")
+    esc_triage.add_argument("queue", type=Path)
+    esc_triage.add_argument("--write", type=Path, metavar="DIR", help="write ESCALATION_TRIAGE.json and .md into DIR")
+    esc_triage.add_argument("--json", action="store_true")
     esc_sheet = esc_sub.add_parser("sheet", help="one CSV answering every open decision-tier finding across a queue, grouped by question, with earlier rulings as precedent (three agreeing rulings only suggest an answer); --apply records the answered rows through `escalation rule`, plus standing rulings for mods that meet the versioned-predicate rules")
     esc_sheet.add_argument("queue", type=Path, nargs="?", help="the queue folder (for --apply it is read from the sheet when omitted)")
     esc_sheet_mode = esc_sheet.add_mutually_exclusive_group(required=True)
@@ -203,6 +207,19 @@ def run_cli(args: argparse.Namespace) -> int:
             for row in result["findings"][:15]:
                 print(f"{len(row['only_blocker']):4} only / {len(row['mods']):4} mods  {row['finding']} ({row['tier']}, {row['kind']})")
             print(f"Escalated mods: {result['escalated']}. Written: {result['result_md']}")
+        return 0
+    if args.command == "escalation" and args.escalation_command == "triage":
+        from .escalation_triage import summary, triage, write_result
+        if not args.queue.expanduser().is_dir():
+            print(f"bridgeforge: no queue folder at {args.queue}", file=sys.stderr)
+            return 2
+        result = triage(args.queue)
+        written = write_result(result, args.write) if args.write else None
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        print(summary(result))
+        print(f"{len(result['groups'])} group(s). Written: {written['md']}" if written else f"{len(result['groups'])} group(s); pass --write DIR for the commands.")
         return 0
     if args.command == "escalation" and args.escalation_command == "revoke":
         from .escalation_precedent import revoke_ruling
