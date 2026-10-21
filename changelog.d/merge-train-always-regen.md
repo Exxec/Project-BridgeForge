@@ -1,0 +1,1 @@
+- `merge-train` regenerates the generated files after every rebase, not only after a conflict: two PRs that each add a command rebase cleanly yet left the CLI golden listing one side's commands.
