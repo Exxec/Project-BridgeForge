@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "settings": {},
+  "steps": [
+    {"step": "log_player_modules", "member_hull_id": "ART_dimention_manipulator"},
+    {"step": "destroy_player_module", "member_hull_id": "ART_dimention_manipulator", "module_index": 1},
+    {"step": "damage_player_module", "member_hull_id": "ART_dimention_manipulator", "module_index": 2, "hull_fraction": 0.4},
+    {"step": "log_player_modules", "member_hull_id": "ART_dimention_manipulator"},
+    {"step": "advance_days", "days": 10},
+    {"step": "log_player_modules", "member_hull_id": "ART_dimention_manipulator"}
+  ],
+  "expect": [
+    {"id": "damaged", "line": "BF-PROBE\\|[^|]*\\|scenario\\|INFO\\|step=damage_player_module\\|result=ok", "within_days": 1},
+    {"id": "ten-days", "line": "BF-PROBE\\|[^|]*\\|scenario\\|INFO\\|step=advance_days\\|result=done", "within_days": 12, "after": "damaged"},
+    {"id": "fingerprint-equal", "line": "fingerprint.*compare.*equal=true", "within_days": 14, "after": "ten-days"}
+  ],
+  "pass_requires": ["damaged", "ten-days", "fingerprint-equal"]
+}

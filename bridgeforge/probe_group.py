@@ -572,6 +572,21 @@ def sync_working_copy(working: Path, target: Path) -> str | None:
     return f"synced {drift['drift_count']} file(s)"
 
 
+def _stage_member_scenario(working: Path, rig_copy: Path, workspace: str) -> dict | None:
+    """A member's PROBE_SCENARIO.json: validate it and apply its `settings` to the rig copy only (never to `working`)."""
+    from .probe_scenario import ScenarioError, load_for_working, stage_settings
+
+    try:
+        scenario = load_for_working(working)
+        if scenario is None:
+            return None
+        staged = stage_settings(scenario, rig_copy, working) if scenario["settings"] else []
+    except ScenarioError as exc:
+        raise ProbeGroupError(f"{workspace}: {exc}") from exc
+    return {"workspace": workspace, "settings_staged": staged, "steps": len(scenario["steps"]),
+            "expectations": len(scenario["expect"]), "scenario": scenario}
+
+
 def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install_probe: bool = True,
                   stage: bool = False, with_lunalib: bool = False, setups: list[str] | None = None,
                   expect_supply: list[str] | None = None, save_after_checks: bool = False, no_lunalib: bool = False,
@@ -603,7 +618,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     staged = stage_providers(group, queue, rig) if needed else []
     mods_dir = rig / "mods"
     installed = rig_mod_ids(mods_dir)
-    configs, copied = [], []
+    configs, copied, scenarios = [], [], []
     for member in group["members"]:
         working = queue / member["workspace"] / "working"
         action = sync_working_copy(working, mods_dir / member["workspace"])
@@ -611,6 +626,9 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
             copied.append({"workspace": member["workspace"], "action": action})
         configs.append(build_probe_config(working))
         installed[member["mod_id"]] = member["workspace"]
+        scenario = _stage_member_scenario(working, mods_dir / member["workspace"], member["workspace"])
+        if scenario:
+            scenarios.append(scenario)
     from .run_manifest import record_candidates
 
     record_candidates(rig, {m["mod_id"]: queue / m["workspace"] / "working" for m in group["members"]})  # R1: what the next manifest binds
@@ -621,6 +639,10 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     config["save_after_checks"] = bool(save_after_checks)  # probe 0.2.26: save once after the day-1 checks
     if save_reload_after_days > 0:  # next probe version: fingerprint, save and reload stage (save_reload_run)
         config["save_reload"] = {"after_days": int(save_reload_after_days), "slot_note": save_reload_note}
+    if scenarios:  # PROBE_SCENARIO.json steps for the probe's ScenarioRunner (docs/PROBE_SCENARIOS.md)
+        from .probe_scenario import probe_config_keys
+
+        config.update(probe_config_keys([s["scenario"] for s in scenarios]))
     common = rig / "saves" / "common"
     common.mkdir(parents=True, exist_ok=True)
     _reset_combat_round(common)
@@ -660,6 +682,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
             "members": [m["workspace"] for m in group["members"]], "copied": copied, "staged_providers": staged, "enabled_mods": enabled,
             "dependency_version_conflicts": dependency_version_conflicts(mods_dir, enabled),
             "moved_aside": moved_aside, "incomplete_providers": incomplete_provider_copies(rig, enabled),
+            "scenarios": [{k: v for k, v in s.items() if k != "scenario"} for s in scenarios],
             "probe_mission_added": probe_mission_added, "lunalib_advice": advice, "lunalib": lunalib_why,
             "config_path": str(common / CONFIG_FILE), "checked_ids": len(config["content_variants"]["ship"]) + len(config["content_variants"]["other"])
             + len(config["content_wings"]) + len(config["content_special_items"])}
@@ -838,6 +861,25 @@ def _newest_save_made_with(rig: Path, reader) -> dict | None:
     return reader(saves[-1]) if saves else None
 
 
+def evaluate_member_scenarios(log: Path, workspaces: dict[str, Path]) -> dict[str, dict]:
+    """{mod id: scenario block} for every tested workspace whose working copy has a PROBE_SCENARIO.json, judged against the game log.
+    An invalid scenario file is recorded as an ERROR block (verdict INCOMPLETE) rather than hiding the run."""
+    from .probe_scenario import ScenarioError, evaluate_expectations, load_for_working
+
+    text = Path(log).read_text(encoding="utf-8", errors="replace")
+    blocks: dict[str, dict] = {}
+    for mod_id, workspace in workspaces.items():
+        try:
+            scenario = load_for_working(workspace / "working")
+        except ScenarioError as exc:
+            blocks[mod_id] = {"verdict": "INCOMPLETE", "required": ["scenario-file"], "failed": [], "not_observed": ["scenario-file"],
+                              "expectations": {}, "error": str(exc)}
+            continue
+        if scenario is not None:
+            blocks[mod_id] = {**evaluate_expectations(text, scenario), "settings_staged": sorted(scenario["settings"])}
+    return blocks
+
+
 def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: str, archive: bool = False,
                  done_dir: Path | None = None, policy_path: Path | None = None, today: str | None = None,
                  refresh: bool = False, accept: bool = False, note: str | None = None,
@@ -866,6 +908,11 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     from .rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
 
     tested = [workspaces[m] for m in sorted(report["members"]) if workspaces.get(m) is not None]
+    scenario_blocks = evaluate_member_scenarios(log, {m: workspaces[m] for m in sorted(report["members"]) if workspaces.get(m) is not None})
+    if scenario_blocks:
+        from .probe_scenario import apply_to_verdicts
+
+        apply_to_verdicts(report["members"], scenario_blocks)
     exit_observed, exit_code = None, None  # no flag: the record is exactly what it was
     if observe_exit:  # opt-in: the exit `probe-group live --natural-exit` observed; absent file stays UNKNOWN/None
         from .exit_observation import read_exit_observation
@@ -885,7 +932,8 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
                                   core_baseline=_repo_root() / DEFAULT_CORE_BASELINE_RELATIVE, today=today,
                                   save_made_with=_newest_save_made_with(Path(rig), save_made_with), rig_state=read_rig_state(Path(rig)),
                                   evidence=evidence, manifest=manifest, campaign_perf=report.get("campaign_perf"),
-                                  process_exit_code=exit_code, process_exit_observed=exit_observed)
+                                  process_exit_code=exit_code, process_exit_observed=exit_observed,
+                                  scenario=scenario_blocks or None)
     recorded, skipped, archived = [], [], []
     carry, stopped = None, None
     if accept and evidence["status"] != "ACCEPTABLE":
