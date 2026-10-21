@@ -16,6 +16,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "substitution_proposals": ("substitution-proposals",),
     "baseline_audit": ("baseline-audit", "baseline-accept"),
     "baseline_accept_finding": ("baseline-accept-finding",),
+    "decision": ("decision",),
     "rig_reset": ("rig-reset",),
     "rig_up": ("rig-up",),
     "run_manifest": ("run-manifest",),
