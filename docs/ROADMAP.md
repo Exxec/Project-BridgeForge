@@ -1,6 +1,7 @@
 # BridgeForge roadmap
 
-Historical tranche summary, retained for provenance. The authoritative accumulated roadmap is [../ROADMAP.md](../ROADMAP.md);
+Historical tranche summary, retained for provenance. The active roadmap is [../ROADMAP-3.md](../ROADMAP-3.md); earlier accumulated decisions remain in
+[archived page 1](archive/ROADMAP.md) and [page 2](archive/ROADMAP-2.md);
 current summary is [ROADMAP_STATUS.md](ROADMAP_STATUS.md). Proposed long-term priorities are in
 [STRATEGIC_ROADMAP.md](STRATEGIC_ROADMAP.md). Completed bullets below do not establish fresh live qualification.
 

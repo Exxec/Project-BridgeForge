@@ -1,0 +1,1 @@
+- Archive the first two roadmap pages and the completed October 18 audit, repair navigation, and preserve roadmap-lint's full historical evidence checks and CLI surface.

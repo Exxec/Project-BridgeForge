@@ -1,6 +1,6 @@
 # BridgeForge revival toolkit: how to use it
 
-This guide covers the commands built for reviving old Starsector mods on 0.98a-RC8: what each one does, when to use it, and the workflows that chain them together. For the design behind them, see `docs/REVIVAL_ASSURANCE_PLAN.md`. For progress, see `ROADMAP.md`.
+This guide covers the commands built for reviving old Starsector mods on 0.98a-RC8: what each one does, when to use it, and the workflows that chain them together. For the design behind them, see `docs/REVIVAL_ASSURANCE_PLAN.md`. For progress, see `ROADMAP-3.md`.
 
 All commands run from the repo root:
 

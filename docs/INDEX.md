@@ -18,7 +18,8 @@ proposed work and dated evidence. It does not implement the case lifecycle or re
   The local `AGENTS.md` additionally governs owner decisions/model routing; it is intentionally not shipped in Git.
 - [Vision](VISION.md), [strategic roadmap](STRATEGIC_ROADMAP.md), [next milestone](NEXT_MILESTONE.md) and
   [architecture gaps](ARCHITECTURE_GAPS.md): proposed S1-S4 direction and evidence; no implicit implementation approval.
-- [Root roadmap](../ROADMAP.md): authoritative accumulated decisions/history. [docs/ROADMAP.md](ROADMAP.md) and
+- [Active roadmap](../ROADMAP-3.md): the only current tactical backlog. Earlier decisions/history remain in
+  [archived page 1](archive/ROADMAP.md) and [page 2](archive/ROADMAP-2.md). [docs/ROADMAP.md](ROADMAP.md) and
   [completion log](ROADMAP_COMPLETION_LOG.md) are historical tranche records, not competing current backlogs.
 - [Automation plan](AUTOMATION_PLAN.md), [item 75 implementation handoff](ROADMAP_IMPLEMENTATION_HANDOFF.md),
   [hardening plan](HARDENING_PLAN.md): tactical specifications. Items 73 and 75 were implemented offline on 2026-10-18 (per-item
@@ -64,4 +65,8 @@ corrections and proposed strategy on 2026-10-18. The strategy documents are incl
 ignored local helper documentation remains local. This does not approve strategy implementation or a new runtime
 release, and historical release assets/tags remain unchanged.
 
-The bounded audit scope, exceptions and source-backed corrections are recorded in [DOCS_AUDIT_2026-10-18.md](DOCS_AUDIT_2026-10-18.md).
+B1 archive checkpoint (2026-10-22): the two earlier root roadmap pages and the completed October 18 audit are
+under [archive/](archive/README.md). Archiving preserves pending owner/live/research obligations; it does not mark
+those gates complete. The architecture assessment remains current supporting evidence for S1-S4 and stays here.
+
+The bounded audit scope, exceptions and source-backed corrections are recorded in [DOCS_AUDIT_2026-10-18.md](archive/DOCS_AUDIT_2026-10-18.md).

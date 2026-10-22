@@ -6,7 +6,7 @@ an interrupted agent session.
 
 ## Goal
 
-Implement the behaviour-discovery pipeline described in `ROADMAP.md` without
+Implement the behaviour-discovery pipeline described in `docs/archive/ROADMAP.md` without
 weakening BridgeForge's read-only evidence boundaries or inferring that code or
 data is dead.
 
@@ -41,8 +41,8 @@ data is dead.
 
 - Start commit: `c881d4ef` (`main`, equal to `origin/main`).
 - Working tree was clean at goal creation on 2026-09-11.
-- The authoritative D0-D6 specification is the P9 v2 section in root
-  `ROADMAP.md`; `docs/ROADMAP.md` is an older tranche-level roadmap and does not
+- The authoritative D0-D6 specification is the P9 v2 section in archived
+  `docs/archive/ROADMAP.md`; `docs/ROADMAP.md` is an older tranche-level roadmap and does not
   define the D-series.
 - `docs/EXPECTED_CHANGES_FORMAT.md` is the existing D5 design contract.
 

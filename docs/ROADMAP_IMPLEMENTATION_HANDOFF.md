@@ -210,7 +210,7 @@ save/reload; include negative cases and exact hashes. Without rig/corpus evidenc
 
 ## R7. One current status view, with historical evidence retained
 
-**Files:** `ROADMAP.md`, `docs/HARDENING_PLAN.md`, `docs/LOCAL_HANDOFF.md`, proposed
+**Files:** `ROADMAP-3.md`, `docs/HARDENING_PLAN.md`, `docs/LOCAL_HANDOFF.md`, proposed
 `docs/ROADMAP_STATUS.md`; extend `bridgeforge/roadmap_lint.py` only if the status contract needs machine checks.
 
 Create a compact table keyed by roadmap/sub-item ID: implementation state, source review, compile/static/package,

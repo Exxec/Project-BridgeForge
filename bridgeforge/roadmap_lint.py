@@ -29,6 +29,10 @@ CONTINUED_HEADING = re.compile(r"\A\s*## [^\n]* \(continued\)\n\n?")
 def roadmap_pages(first: Path) -> list[Path]:
     """`first` and its continuation pages `<stem>-2<suffix>`, `<stem>-3<suffix>`, ... in order."""
     first = Path(first)
+    # B1 relocated historical pages; preserve the old default/explicit path and the full evidence ratchet.
+    archived = first.parent / "docs" / "archive" / first.name
+    if first.name == "ROADMAP.md" and not first.is_file() and archived.is_file():
+        return [*roadmap_pages(archived), *roadmap_pages(first.with_name("ROADMAP-3.md"))]
     pages, n = [first], 2
     while (page := first.with_name(f"{first.stem}-{n}{first.suffix}")).is_file():
         pages.append(page)

@@ -2,8 +2,8 @@
 
 BridgeForge is an offline, evidence-first toolkit for reviving legacy Starsector mods on
 0.98a-RC8 (Java 17). Charter: `docs/PROJECT_CHARTER.md`. Command guide:
-`docs/BRIDGEFORGE_REVIVAL_GUIDE.md`. Plan and history: `ROADMAP.md` (numbered items; the newest, 70 onward,
-are at the end of the file), `CHANGELOG.md`. Direction for fixers, checks and automation: item 73,
+`docs/BRIDGEFORGE_REVIVAL_GUIDE.md`. Active plan: [ROADMAP-3.md](ROADMAP-3.md); earlier decisions/history:
+[page 1](docs/archive/ROADMAP.md) and [page 2](docs/archive/ROADMAP-2.md). Release history: `CHANGELOG.md`. Direction for fixers, checks and automation: item 73,
 `docs/AUTOMATION_PLAN.md`, including the owner's 2026-10-14 decisions on what may run without a person. Local sessions also
 have `AGENTS.md` (gitignored), the agent contract: who may decide what, escalation rules, sister projects.
 
@@ -171,7 +171,7 @@ update: a new revision, a crash fixed, a translation. When a shipped mod changes
 - Commit subjects follow the roadmap: "Fix item N: ...", "Add item N: ...". The body explains
   what was found, the evidence, and ends with the full-suite result, e.g.
   "Full suite: 966 tests, OK (skipped=10)."
-- When an item is finished, mark it `**Done <date>.**` in `ROADMAP.md` with what was built and
+- When an item is finished, mark it `**Done <date>.**` in `ROADMAP-3.md` with what was built and
   which tests cover it.
 
 ## Changelog fragments (ROADMAP-3 item 80.1)
