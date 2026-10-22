@@ -74,6 +74,9 @@ conclusions.
   wait, so one decision clears a group.
 - 80.8 **Built offline, merged (#48); live pending where it needs the rig.** Agent hygiene preflight (77.13): untracked code, unexpected edits to tracked files and broken builds listed before an
   agent session ends or a commit is made.
+- 80.9 Real-manifest contract check (2026-10-22, with Project Go H3): next to the shared-fixture comparison, CI imports
+  an actual coverage manifest exported by Project Go from a fixture mod, so a producer change that breaks the consumer
+  fails CI instead of being found by hand.
 
 **81. Dissection: research from current mods (owner 2026-10-21: "throw current mods at bridgeforge and see if we can
 glean more research").** Read-only over the player's installed mods and any folder given, built on `atlas`, `api-diff`,
