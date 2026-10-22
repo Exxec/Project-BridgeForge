@@ -80,6 +80,16 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
     the probe; New Game with the Betelgeuse (`ART_dimention`) in the player fleet; destroy one module and damage another's hull
     and armor; log hull and armor fractions; 10 campaign days; save, reload, compare. Pass: values match and no
     `SEEKER.twig.*` class error. Needs the small `BF-SKRTWIG|...` logging hook from `In operation/SEEKER/working/reports/TWIG_RECREATION_PLAN.md`.
+16. **Ironclads launcher matrix (owner 2026-10-22).** Owner reports a start-up crash on the archived v.11+bf.1 (no crash log
+    found on this machine; the rig copy matches the release except `data/missions/mission_list.csv`). Run Ironclads alone with the
+    probe on six launches: FR (Java 25), FR + Java 28 and Java 28 direct, each without and with the pre-patcher
+    (`In operation/_rig/run-j25-fr.bat`, `run-j25-fr-prep.bat`, `run-j28-fr.bat`, `run-j28-fr-prep.bat`, `run-j28-direct.bat`,
+    `run-j28-direct-prep.bat`). Pass: main menu, New Game reaches the campaign, no FATAL. Keep each `starsector.log`.
+17. **EPTA 2.1.3+bf.2 (owner 2026-10-22).** Revision prepared (candidate d9940ba8af7d): version label 2.1.3 and the Proelefsi
+    station back on its original sprite. Live run with Nexerelin, then `baseline-accept` and `revise finalize`.
+18. **Zorg V18+bf.10 (owner 2026-10-22).** Revision prepared (candidate 1f1499141da6): Zeta I/II visible from the start, Zeta I
+    a size-7 industrial market, Zeta II a size-6 mining market, Unimatrix the size-10 hub. Live run: New Game and an existing
+    bf.9 save; check the planets show on the map and in the intel list, the three markets exist, and the BF-ZORG lines.
 
 Rewritten 2026-09-27 after the local and cloud histories merged. Closed and removed: the MOVES.log
 shadowing audit (P14 item 27, done locally in `0183ab3`) and the Maelstrom dependency-jar check
