@@ -57,6 +57,29 @@ class RoadmapLintTests(unittest.TestCase):
             self.assertEqual({v["key"].split("|")[0] for v in violations(text)}, {"2", "4b"})
             self.assertEqual(len(items(text)), 7)
 
+    def test_archived_pages_preserve_the_default_path_and_all_evidence_checks(self) -> None:
+        with resolved_temp_dir() as root:
+            first = root / "ROADMAP.md"
+            first.write_text(SAMPLE.split("3. ")[0], encoding="utf-8")
+            second = root / "ROADMAP-2.md"
+            second.write_text("3. " + SAMPLE.split("3. ", 1)[1], encoding="utf-8")
+            active = root / "ROADMAP-3.md"
+            active.write_text('70. **Active.** **Done.** No evidence.\n', encoding="utf-8")
+            fourth = root / "ROADMAP-4.md"
+            fourth.write_text('71. **Future.** **Done.** No evidence.\n', encoding="utf-8")
+            before = roadmap_text(first)
+            archive = root / "docs" / "archive"
+            archive.mkdir(parents=True)
+            first.rename(archive / first.name)
+            second.rename(archive / second.name)
+            self.assertEqual(roadmap_pages(first), [archive / "ROADMAP.md", archive / "ROADMAP-2.md", active, fourth])
+            self.assertEqual(roadmap_text(first), before)
+            self.assertEqual({v["key"].split("|")[0] for v in violations(roadmap_text(first))}, {"2", "4b", "70", "71"})
+            baseline = root / "baseline.json"
+            baseline.write_text('{"items": []}', encoding="utf-8")
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main(["roadmap-lint", "--roadmap", str(first), "--baseline", str(baseline)]), 1)
+
     def test_the_real_roadmap_has_no_new_done_item_without_evidence_and_the_baseline_only_shrinks(self) -> None:
         text = roadmap_text(ROOT / "ROADMAP.md")  # every page of the paged roadmap
         tolerated = load_baseline(ROOT / "tests" / "roadmap_lint_baseline.json")

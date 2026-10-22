@@ -1,7 +1,7 @@
 # Project Bridgeforge roadmap
 
 <!-- page-nav:start -->
-> Page 1 of 3 of the BridgeForge roadmap. Next: [ROADMAP-2.md](ROADMAP-2.md). Newest entries: [ROADMAP-3.md](ROADMAP-3.md).
+> Page 1 of 3 of the BridgeForge roadmap. Next: [ROADMAP-2.md](ROADMAP-2.md). Newest entries: [ROADMAP-3.md](../../ROADMAP-3.md).
 <!-- page-nav:end -->
 
 <!-- page-nav:start -->
@@ -11,14 +11,14 @@
 |---|---|---|
 | [1](ROADMAP.md) | Revival assurance track (2026-09-11); P14: Dependency intelligence and queue throughput (planned 2026-09-14); P15: Unattended revival with verified AI escalation (planned 2026-09-26) | items 1-60 |
 | [2](ROADMAP-2.md) | Post-1.0 research and gated automation; Product boundary; Void-Tec working-tree evidence tranche; First 10 implementation phases — V0.1 scanner; Subsequent releases; Idea: Salvor (working name), a save doctor, editor and trainer as a separate program (2026; Sister repository interoperability (proposed 2026-09-27); Proposed ideas (2026-10-06, owner asked for per-project ideas; proposed, not approved) | items 1-69 |
-| [3](ROADMAP-3.md) | (continues the previous section) | items 70-77 |
+| [3](../../ROADMAP-3.md) | (continues the previous section) | items 70-77 |
 <!-- page-nav:end -->
 
 Bridgeforge follows the project charter in `docs/PROJECT_CHARTER.md`: understand first, modify second, validate always. The original mod is never changed in place.
 
-**Long-term strategy proposal (2026-10-17; awaiting owner review):** [vision](docs/VISION.md),
-[four-release strategic roadmap](docs/STRATEGIC_ROADMAP.md), [evidence and architecture gaps](docs/ARCHITECTURE_GAPS.md),
-and [next substantial milestone](docs/NEXT_MILESTONE.md). These distinguish strategic outcomes from the tactical history
+**Long-term strategy proposal (2026-10-17; awaiting owner review):** [vision](../VISION.md),
+[four-release strategic roadmap](../STRATEGIC_ROADMAP.md), [evidence and architecture gaps](../ARCHITECTURE_GAPS.md),
+and [next substantial milestone](../NEXT_MILESTONE.md). These distinguish strategic outcomes from the tactical history
 below; they assign no calendar deadlines or implementation approval and preserve existing owner decisions.
 
 ## Revival assurance track (2026-09-11)

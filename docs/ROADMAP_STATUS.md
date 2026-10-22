@@ -1,12 +1,12 @@
 # Current roadmap view
 
 Reconciled 2026-10-17 for the owner-approved planning update. This is a compact index into the authoritative
-`ROADMAP.md`, not a replacement history. Historical test/run claims below are attributed to their recorded evidence;
+`ROADMAP-3.md`, not a replacement history. Historical test/run claims below are attributed to their recorded evidence;
 this documentation pass did not rerun the suite, launch the game or requalify releases.
 
 Source/GitHub documentation audit 2026-10-18: current source/default branch is `3342654d`, package 0.3.0 then (0.4.0 on 2026-10-21); latest
 published tool is v0.2.0 pre-release (re-checked 2026-10-21). Proposed S1-S4 strategy remains unimplemented. DOC-001 (`archive --refresh`
-deleted the old archive) was fixed 2026-10-18; see `BUGS.md` and [the audit](DOCS_AUDIT_2026-10-18.md). Neither is a
+deleted the old archive) was fixed 2026-10-18; see `BUGS.md` and [the audit](archive/DOCS_AUDIT_2026-10-18.md). Neither is a
 fresh live acceptance.
 
 | Item | Implementation | Validation / shipping evidence | Next step |

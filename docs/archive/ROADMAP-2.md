@@ -1,5 +1,5 @@
 <!-- page-nav:start -->
-> Page 2 of 3 of the BridgeForge roadmap. Previous: [ROADMAP.md](ROADMAP.md). Next: [ROADMAP-3.md](ROADMAP-3.md). Newest entries: [ROADMAP-3.md](ROADMAP-3.md).
+> Page 2 of 3 of the BridgeForge roadmap. Previous: [ROADMAP.md](ROADMAP.md). Next: [ROADMAP-3.md](../../ROADMAP-3.md). Newest entries: [ROADMAP-3.md](../../ROADMAP-3.md).
 <!-- page-nav:end -->
 
 ## P15: Unattended revival with verified AI escalation (planned 2026-09-26) (continued)
@@ -1266,7 +1266,7 @@ These sources are retained as external, user-approved evidence only. Bridgeforge
 
 ## Product boundary
 
-Bridgeforge modernizes legacy mods. It does not profile performance. The related, independent **Starsector Performance Workbench** is specified in [docs/PERFORMANCE_WORKBENCH_DESIGN.md](docs/PERFORMANCE_WORKBENCH_DESIGN.md); the only planned interchange is a small set of versioned JSON schemas.
+Bridgeforge modernizes legacy mods. It does not profile performance. The related, independent **Starsector Performance Workbench** is specified in [docs/PERFORMANCE_WORKBENCH_DESIGN.md](../PERFORMANCE_WORKBENCH_DESIGN.md); the only planned interchange is a small set of versioned JSON schemas.
 
 ## Void-Tec working-tree evidence tranche
 
@@ -1322,7 +1322,7 @@ BridgeForge did. BridgeForge's saves stay read-only (P3b: "the game creates stat
 writing lives in a sibling program that reuses BridgeForge's save reader and `save-*` commands, the RC8 registries
 and `RC8_BEHAVIOUR.md`, the rig and probe patterns, Project Go's GUI and packaging, and SPW's agent-mod and
 crash-log work. Proposal, growth order and owner decisions:
-[docs/SAVE_TOOL_PROPOSAL.md](docs/SAVE_TOOL_PROPOSAL.md).
+[docs/SAVE_TOOL_PROPOSAL.md](../SAVE_TOOL_PROPOSAL.md).
 
 1. [x] Owner decisions, 2026-09-29: working name Salvor, in its own repository; Python; a trainer independent of
    the game (offline presets on a save copy, no in-game mod); local-only.
@@ -1334,7 +1334,7 @@ crash-log work. Proposal, growth order and owner decisions:
    minor edits to the current state (credits, supplies, fuel, crew, marines, machinery, story points), then fleet repair
    state, then blueprints, members and relations. Blocked on a VoidSmith charter decision (it is read-only and its
    campaign-save parsing is decision-gated); capacity behaviour above cargo limits needs live evidence first.
-   Design: [docs/SAVE_TOOL_PROPOSAL.md](docs/SAVE_TOOL_PROPOSAL.md), revision 2026-10-06; VoidSmith side recorded as its phase 57
+   Design: [docs/SAVE_TOOL_PROPOSAL.md](../SAVE_TOOL_PROPOSAL.md), revision 2026-10-06; VoidSmith side recorded as its phase 57
    (`docs/SAVE_WORKSHOP_DESIGN.md`, design only). Overage effects (slower fleet, more supplies per day, formula unknown) need a
    controlled rig run before any rule is written down.
 5. [ ] Trainer: offline presets on a save copy, through the editor's validation and the rig-load gate (follows the editor, in VoidSmith).
@@ -1351,7 +1351,7 @@ crash-log work. Proposal, growth order and owner decisions:
 
 ## Sister repository interoperability (proposed 2026-09-27)
 
-Design and acceptance gates: [docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md](docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md). These are pending, separate from revival completion and release readiness.
+Design and acceptance gates: [docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md](../SISTER_REPO_INTEROPERABILITY_DESIGN.md). These are pending, separate from revival completion and release readiness.
 
 1. [ ] Consume versioned SPW performance evidence with hash, identity, attribution, and comparability gates; retain independent operation and no automatic performance verdict.
 2. [ ] Consume Project Go localization coverage for an exact mod-root hash; expose uncovered and unknown items without changing source or claiming complete coverage from partial extraction.
@@ -1423,5 +1423,5 @@ Each idea gives the benefit and where the evidence came from. None is scheduled.
     - 67/63 live check 2026-10-12 (owner: try Java 28 / FR): probe 0.2.27 `faction-economy` (per market of the target mod's factions: industries, heavyindustry/orbitalworks, fleetQualityMod, combatFleetSizeMult). Arkgneisis x AoTD: the sweep's prediction (AoTD zeroes the Anarakis development bonus) was NOT supported: HQ orbitalworks stays true, quality 0.375 on Java 25 direct, 28 FR, and 25/27/28 FR + Prepatcher with AoTD; fleet size mult 1.875 without AoTD, 2.125 with. Two `java-matrix --prepatcher` bugs found and fixed: the agent was appended after the main class in the argument file (an application argument, so never an agent), and every Fast Rendering variant shared one `fr.filtered.vmparams` (now `fr.filtered-<variant>.vmparams`). Prepatcher 0.18.4 then runs on Java 27 and 28 (GRP-ARK-AOTD-J27FRP2, -J28FRP-20261012); `SKIPPED_ERROR aotdCleanDeficitPath` on every Java. Tests: `tests/test_aotd_compat.py`. Details: `docs/AOTD_SWEEP_2026-10-12.md`, `docs/AOTD_COMPAT_PLAN.md`.
 
 <!-- page-nav:start -->
-> Continued on page 3: [ROADMAP-3.md](ROADMAP-3.md).
+> Continued on page 3: [ROADMAP-3.md](../../ROADMAP-3.md).
 <!-- page-nav:end -->
