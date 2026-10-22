@@ -1,3 +1,8 @@
+**83. Structural refactor across the repos (owner-approved 2026-10-22).** Reorganisation only, no behaviour change: BridgeForge's
+flat 291-module package into subpackages, `fixers.py` split, docs/roadmaps consolidated, command audit and grouping with aliases,
+test-speed split; Project Go GUI shell split; optional VoidSmith splits; Salvor import updates. Plan, rules and review evidence:
+[docs/REFACTOR_PLAN_2026-10.md](docs/REFACTOR_PLAN_2026-10.md). Executed by a separate agent; each PR reviewed against its section 6.
+
 **82. Research that serves revivals: consolidate, compare, promote (owner-approved 2026-10-21).** Not a new research
 architecture. S1 stays the critical path; runtime evidence is the limiting resource. Guiding rule: every research
 capability must resolve a question from an active revival, eliminate repeated manual investigation, or improve the
