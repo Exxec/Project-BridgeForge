@@ -60,7 +60,8 @@ Feature boundary record (T1), JSON, reviewed by a person before any transplant u
  review: {by, date, verdict: AGREED | CHANGES_NEEDED, note}}
 ```
 
-Transplant plan (T3/T4) adds: target workspace, id/namespace remap table, collision list, hook adaptations (each with a
+Transplant plan (T3/T4) adds: target workspace, id/namespace remap table (into the target's namespace), an install manifest
+for uninstalling as a unit, collision list, hook adaptations (each with a
 reviewer), save notes (T5) and the provenance record (T6: source mod, version, file hash, author, licence).
 
 ## Pilots
@@ -68,14 +69,18 @@ reviewer), save notes (T5) and the provenance record (T6: source mod, version, f
 1. T1: Templar Crusade (from the item 82 pilot, `bridgeforge-state/research/templar-crusade/`) and SEEKER station modules.
 2. T2: the Crusade's hooks, scheduled with gate bf-0b-13 (Templar Crusade live run) so one rig session serves both.
 3. T3: one EPTA ship line into a test mod (EPTA is LOCAL_ONLY, so the result stays local).
-4. T4/T5: one small code-backed feature, chosen after T1 (candidates: a single hullmod with its ship system, or one
-   campaign listener).
+4. T4/T5: one small code-backed feature, chosen after T1 as the first proof of a path meant for any feature (candidates: a
+   single hullmod with its ship system, or one campaign listener).
 
-## Open questions for the owner
+## Owner decisions (2026-10-22)
 
-1. Test target for transplants: a new empty test mod, or a real target mod (which one)?
-2. Which code-backed feature should the T4 pilot use?
-3. Id remapping: keep the source prefix (e.g. `seven_`) or re-prefix into the target's namespace?
-4. Should a transplanted feature be removable later as a unit (a recorded uninstall that T5 checks), or is adding enough?
-5. Permission: is LOCAL_ONLY acceptable for every transplant, or should the archive gate also require a recorded
-   permission note before any transplant is shared with anyone else?
+1. Targets: eventually both. Pilots go into a new empty test mod first; real target mods follow once a pilot passes its live
+   gate.
+2. Scope: not one feature. The tooling must handle any feature a mod has; the T4 pilot is only the first proof, chosen after
+   T1 for being small, and later features use the same path.
+3. Id remapping: transplanted ids, packages and memory keys take the target's namespace (prefix), recorded in the remap
+   table so provenance and uninstall can map them back.
+4. Removable: preferably yes. A transplant is installed as a unit with a recorded manifest, so it can be uninstalled as a unit;
+   T5 checks both directions (add and remove) against an existing save.
+5. Permission: no extra permission note. Provenance (T6) is still recorded per file, and release_policy.json keeps the result
+   LOCAL_ONLY by default as for any revival.

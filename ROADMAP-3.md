@@ -4,7 +4,10 @@ mod into another with its dependencies, id remapping, conflict and save checks, 
 note: [docs/FEATURE_TRANSPLANT_PLAN.md](docs/FEATURE_TRANSPLANT_PLAN.md). Rules: bytecode stays authoritative and decompiled
 code is a reading aid; no research finding becomes a migration or transplant rule automatically (item 82's sequence: finding ->
 validated pattern -> candidate -> approved rule); a gate is never upgraded without recorded evidence; starts after item 83's
-refactor (B3 at least), because T0 depends on the package layout. Nothing below is built; LIVE TEST NOT PERFORMED.
+refactor (B3 at least), because T0 depends on the package layout. Owner decisions 2026-10-22: targets are a test mod first,
+then real mods; the tooling covers any feature a mod has, not one; transplanted ids take the target's namespace; a transplant
+is removable as a unit; no extra permission note (provenance recorded, LOCAL_ONLY by default). Nothing below is built; LIVE
+TEST NOT PERFORMED.
 - T0 Feature graph. Builds one queryable per-mod graph joining every id (hull, weapon, hullmod, ship system, faction, market,
   rules.csv entry, sprite, sound, string) to the code that creates, reads or registers it, and to what calls that code.
   Reuses Atlas (census, classfile, exemplars), the D-series (archaeology, behavior-map) and scanner facts, merged per concept
@@ -17,7 +20,8 @@ refactor (B3 at least), because T0 depends on the package layout. Nothing below 
   into the graph (STATIC -> OBSERVED). Reuses the probe mod, `probe-group live`, live records, gates.json scheduling and
   `board --live-pending`. Done when one feature's hooks are OBSERVED in a recorded run.
 - T3 Data-only transplant. Builds dependency closure (assets, CSV rows, settings keys, library dependencies), id and
-  namespace remap, a collision check against the target, and install into a target workspace through `revise`. Reuses
+  namespace remap into the target's namespace, a collision check against the target, and install as a removable unit (install
+  manifest) into a target workspace through `revise`. Reuses
   scanner id indexes, content parity, `revise prepare/finalize`, the archive gate. Done when one EPTA ship line moves into a
   test mod, then builds, boots and passes a live gate.
 - T4 Code transplant planning. Builds the plan for code-backed features: decompile the feature's classes, remap packages,
