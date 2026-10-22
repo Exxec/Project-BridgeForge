@@ -3,6 +3,13 @@ flat 291-module package into subpackages, `fixers.py` split, docs/roadmaps conso
 test-speed split; Project Go GUI shell split; optional VoidSmith splits; Salvor import updates. Plan, rules and review evidence:
 [docs/REFACTOR_PLAN_2026-10.md](docs/REFACTOR_PLAN_2026-10.md). Executed by a separate agent; each PR reviewed against its section 6.
 
+B0 implementation checkpoint 2026-10-22 (pending PR review/merge): recursive source inventories, package-relative
+audit/fingerprint identities and nested test selection are implemented. Covered by
+[tests/test_source_paths.py](tests/test_source_paths.py) and the existing audit/registry/merge-train tests;
+2,602 tests, OK (12 skips unchanged), hermeticity PASS, coverage 83.06% (baseline 82.46%).
+CLI golden/generated docs unchanged. Search inventory, fingerprint refresh and later move obligations:
+[docs/REFACTOR_B0_AUDIT.md](docs/REFACTOR_B0_AUDIT.md). B1 onward remains pending; LIVE TEST NOT PERFORMED.
+
 **82. Research that serves revivals: consolidate, compare, promote (owner-approved 2026-10-21).** Not a new research
 architecture. S1 stays the critical path; runtime evidence is the limiting resource. Guiding rule: every research
 capability must resolve a question from an active revival, eliminate repeated manual investigation, or improve the

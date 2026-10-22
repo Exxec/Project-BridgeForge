@@ -22,6 +22,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path, PurePath
 
+from .source_paths import family_sources, python_sources
+
 SCHEMA_VERSION = 1
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HELPER_MODULE = "scan*.py"  # scanner.py and the scan_*.py modules its checks were split into
@@ -201,12 +203,12 @@ def _tests_naming(identifier: str, test_texts: dict[str, str]) -> list[str]:
 def gather(repo_root: Path = REPO_ROOT) -> Catalogue:
     checks: dict[str, Check] = {}
     issues: dict[str, Check] = {}
-    sources = {path: path.read_text(encoding="utf-8") for path in sorted((repo_root / "bridgeforge").glob("*.py"))}
+    sources = {path: path.read_text(encoding="utf-8") for path in python_sources(repo_root / "bridgeforge")}
     shared_tables: dict[str, list[tuple[str, ...]]] = {}
     for source in sources.values():
         shared_tables.update(_string_tables(ast.parse(source)))
     for path, source in sources.items():
-        module_checks, module_issues = collect(source, path.name, shared_tables)
+        module_checks, module_issues = collect(source, path.relative_to(repo_root / "bridgeforge").as_posix(), shared_tables)
         for table, found in ((checks, module_checks), (issues, module_issues)):
             for key, item in found.items():
                 merged = table.setdefault(key, Check(key))
@@ -216,7 +218,7 @@ def gather(repo_root: Path = REPO_ROOT) -> Catalogue:
                 merged.explanation = merged.explanation or item.explanation
     # The generated docs and this index's own tests don't count as coverage, nor do finding-stats'
     # tests, which name ids only as fake stored-scan data (no check runs).
-    test_texts = {path.stem: path.read_text(encoding="utf-8", errors="replace") for path in sorted((repo_root / "tests").glob("test_*.py"))
+    test_texts = {path.relative_to(repo_root / "tests").with_suffix("").as_posix().replace("/", "."): path.read_text(encoding="utf-8", errors="replace") for path in python_sources(repo_root / "tests") if path.name.startswith("test_")
                   if path.stem not in NOT_COVERAGE}
     tests = {key: _tests_naming(key, test_texts) for key in list(checks) + list(issues)}
     registry = repo_root / "docs" / "BUG_CLASSES.md"
@@ -268,7 +270,7 @@ def build_checks_index(repo_root: Path = REPO_ROOT) -> str:
     for key in sorted(issues):
         lines.append(f"| `{_cell(key)}` | {_join(issues[key].severities)} | {_join(catalogue.tests.get(key, []))} | {_cell(issues[key].explanation)} |")
     lines += ["", f"## Scanner helpers (`bridgeforge/{HELPER_MODULE}`)", "", "Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_json_file`.", "", "| Helper | Signature | Purpose |", "|---|---|---|"]
-    helper_sources = [path.read_text(encoding="utf-8") for path in sorted((repo_root / "bridgeforge").glob(HELPER_MODULE))]
+    helper_sources = [path.read_text(encoding="utf-8") for path in sorted(set(family_sources(repo_root / "bridgeforge", "scan") + family_sources(repo_root / "bridgeforge", "scanner")))]
     for name, signature, doc in sorted(row for source in helper_sources for row in _helpers(source)):
         lines.append(f"| `{name}` | `{_cell(signature)}` | {_cell(doc) or '-'} |")
     return "\n".join(lines) + "\n"

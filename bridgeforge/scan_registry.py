@@ -17,7 +17,7 @@ File times appear only as a diagnostic (`report_mtime`); they never decide a sta
 Fingerprint parts: `inputs` (every file under the scanned folder except the exclusions below), `core` (the read-only core's
 `data/` content, root jars and the names under `graphics/` and `sounds/`; hashed once per process), `dependencies` (the folders
 that provide the mod's declared dependencies, when provider roots were given), `target`, `options`, `scanner` (every
-`bridgeforge/*.py` and `*.json`, so a changed check or rule changes it) and `tools` (Python, and javac when compile-check ran).
+`bridgeforge/**/*.py` and `**/*.json`, so a changed check or rule changes it) and `tools` (Python, and javac when compile-check ran).
 The accepted-baseline filter is a separate identity (`filter_digest`): it never changes a raw scan's state, but a record that
 applied a different filter is not reused.
 
@@ -36,6 +36,7 @@ import time
 from pathlib import Path
 
 from .safeio import atomic_write_json
+from .source_paths import python_sources
 
 SCHEMA_VERSION = 1
 EXCLUSION_VERSION = 1
@@ -124,10 +125,12 @@ def _core_digest(core: Path, incomplete: list[str]) -> str:
 
 
 def scanner_identity() -> str:
-    """Digest of the checks and rules themselves: every `*.py` and `*.json` in the bridgeforge package."""
+    """Digest of the checks and rules themselves: every `*.py` and `**/*.json` in the bridgeforge package."""
     if "value" not in _SCANNER_CACHE:
         package = Path(__file__).resolve().parent
-        _SCANNER_CACHE["value"] = _tree_digest([(p.name, _sha256(p)) for p in sorted(package.iterdir()) if p.suffix in (".py", ".json") and p.is_file()])
+        rules = [p for p in package.rglob("*.json") if p.is_file() and "__pycache__" not in p.relative_to(package).parts]
+        sources = sorted([*python_sources(package), *rules])
+        _SCANNER_CACHE["value"] = _tree_digest([(p.relative_to(package).as_posix(), _sha256(p)) for p in sources])
     return _SCANNER_CACHE["value"]
 
 

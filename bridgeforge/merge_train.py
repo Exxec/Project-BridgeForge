@@ -20,10 +20,12 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from .safeio import atomic_write_text
+from .source_paths import python_sources
 
 CROSS_CUTTING_TESTS = (
     "tests.test_probe_contract",
     "tests.test_safeio_ratchet",
+    "tests.test_source_paths",
     "tests.test_checks_index",
     "tests.test_cli_golden",
     "tests.test_test_guard",
@@ -57,13 +59,15 @@ def subprocess_runner(command: list[str], cwd: Path | None = None) -> Result:
 
 
 def test_modules_for(changed: list[str], tests_dir: Path) -> list[str]:
-    """Cross-cutting modules first, then tests/test_<name>*.py for each changed bridgeforge/<name>.py; only modules that exist."""
+    """Cross-cutting tests plus matching leaves in flat or nested test packages."""
+    tests_dir = Path(tests_dir)
     modules = list(CROSS_CUTTING_TESTS)
     for path in changed:
-        match = re.fullmatch(r"bridgeforge/([A-Za-z0-9_]+)\.py", path.replace("\\", "/"))
+        match = re.fullmatch(r"bridgeforge/(?:[A-Za-z0-9_]+/)*([A-Za-z0-9_]+)\.py", path.replace("\\", "/"))
         if match:
-            modules.extend(f"tests.{p.stem}" for p in sorted(Path(tests_dir).glob(f"test_{match.group(1)}*.py")))
-    present = [m for m in modules if (Path(tests_dir) / (m.split(".", 1)[1] + ".py")).exists()]
+            modules.extend("tests." + p.relative_to(tests_dir).with_suffix("").as_posix().replace("/", ".")
+                           for p in python_sources(tests_dir) if p.name.startswith(f"test_{match.group(1)}"))
+    present = [m for m in modules if (tests_dir / Path(*m.split(".")[1:])).with_suffix(".py").is_file()]
     return list(dict.fromkeys(present))
 
 

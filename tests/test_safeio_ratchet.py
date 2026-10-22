@@ -12,6 +12,8 @@ import sys
 import unittest
 from pathlib import Path
 
+from bridgeforge.source_paths import python_sources
+
 PACKAGE = Path(__file__).resolve().parent.parent / "bridgeforge"
 BASELINE = Path(__file__).resolve().parent / "safeio_baseline.json"
 PATTERNS = {"write_text": re.compile(r"\.write_text\("), "rmtree": re.compile(r"shutil\.rmtree\(")}
@@ -20,13 +22,13 @@ EXEMPT = {"safeio.py"}  # the module that implements the safe versions
 
 def counts() -> dict[str, dict[str, int]]:
     found: dict[str, dict[str, int]] = {}
-    for path in sorted(PACKAGE.glob("*.py")):
-        if path.name in EXEMPT:
+    for path in python_sources(PACKAGE):
+        if path.relative_to(PACKAGE).as_posix() in EXEMPT:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         row = {name: len(pattern.findall(text)) for name, pattern in PATTERNS.items()}
         if any(row.values()):
-            found[path.name] = {k: v for k, v in row.items() if v}
+            found[path.relative_to(PACKAGE).as_posix()] = {k: v for k, v in row.items() if v}
     return found
 
 
