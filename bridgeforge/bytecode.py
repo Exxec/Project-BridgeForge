@@ -55,7 +55,7 @@ def inspect_bytecode(inputs: list[Path]) -> dict[str, object]:
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".inputs", delete=False) as handle:
         handle.write("\n".join(map(str, selected))); inputs_file = Path(handle.name)
     try:
-        done = subprocess.run(["java", "-cp", str(helper) + __import__("os").pathsep + str(asm), "bridgeforge.bytecode.BridgeforgeBytecode", "--inputs-file", str(inputs_file)], capture_output=True, text=True, check=False)
+        done = subprocess.run(["java", "-cp", str(helper) + __import__("os").pathsep + str(asm), "bridgeforge.bytecode.BridgeforgeBytecode", "--inputs-file", str(inputs_file)], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     finally: inputs_file.unlink(missing_ok=True)
     if done.returncode: raise BytecodeUnavailable((done.stderr or done.stdout).strip())
     result = json.loads(done.stdout)

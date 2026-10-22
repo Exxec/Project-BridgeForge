@@ -45,6 +45,15 @@ conclusions.
 - P2 82.9 Readable version diffs: for a migration pair, diff the decompiled text only of methods whose bytecode changed
   (`bytecode-diff` decides what changed; the decompiled diff explains it). No second decompiler (CFR) until two readings
   of one method disagree in a way that matters; Recaf stays a manual tool.
+  - 82.8 and 82.9 progress 2026-10-22: Vineflower 1.12.0 options `-bsm=1` (bytecode-source-mapping) and `-dcl=1` (dump-code-lines) give
+    (original line, decompiled line) pairs, but only in the extra field of an archive entry and only when the input is an archive too, so
+    `research_decompile.run_vineflower` packs, decompiles and unpacks a temporary jar. `research_methods.py` joins the pairs with the bytecode
+    helper's per-method line tables into `<class>.methods.json` (`a/b/C#name descriptor` -> decompiled range, else UNMAPPED with the reason) beside
+    the cached `.java`; `lookup_line` and `lookup_identity` go both ways. `research diff OLD NEW` (a `research` subcommand: it shares the
+    decompiler cache and `--write` rules of `research report`) uses `bytecode_diff.changed_methods` (per-method body digest) to pick the methods
+    and diffs only their decompiled text. Tests: `tests/test_research_diff.py`. Limits found: a constructor Vineflower hides, or a method without a
+    line table, is UNMAPPED; a compiler or debug-info change shows as a bytecode change whose decompiled text is identical (SAME_TEXT) or differs in
+    local variable names only.
 - P1 82.10 Release inventory as a command: `corpus releases ROOT...` scans folders and .zip/.7z/.rar archives for
   mod_info.json, writes releases.csv and RELEASES.md (copies per mod id, versions, game versions, forum thread and repo
   links from .version files) and a pairs queue for `atlas migrations --pairs-from`. Replaces the 2026-10-22 one-off

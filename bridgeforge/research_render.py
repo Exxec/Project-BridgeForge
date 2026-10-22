@@ -4,6 +4,7 @@ from __future__ import annotations
 from .research_reconcile import CATEGORIES
 
 MAX_ROWS = 40
+MAX_IDENTITIES_SHOWN = 3
 
 
 def _cell(value: object) -> str:
@@ -88,7 +89,21 @@ def _decompiled(report: dict) -> list[str]:
             continue
         what = f"{item['excerpt']['methods']} method(s) naming a term" if item["excerpt"]["kind"] == "methods" else "no method names a term, class header only"
         lines += [f"- {head}: {what}", "", "```java"] + [f"{number:>5}  {text}" for number, text in item["excerpt"]["lines"]] + ["```", ""]
+        lines += _bytecode_links(item["excerpt"].get("bytecode", []))
     return lines
+
+
+def _bytecode_links(links: list[dict]) -> list[str]:
+    """Each quoted method's bytecode identity (`class#name descriptor`, as `bytecode-inspect` and Atlas name it), or unmapped; never guessed."""
+    if not links:
+        return []
+    out = ["  Bytecode identity of each quoted method (STATIC):"]
+    for link in links:
+        first, last = link["decompiled_lines"]
+        ids = link["identities"]
+        shown = ", ".join(f"`{i}`" for i in ids[:MAX_IDENTITIES_SHOWN]) + (f" and {len(ids) - MAX_IDENTITIES_SHOWN} more" if len(ids) > MAX_IDENTITIES_SHOWN else "")
+        out.append(f"  - lines {first}-{last}: {shown if ids else 'unmapped (Vineflower or the line tables gave no unique bytecode method)'}")
+    return out + [""]
 
 
 def _changelogs(report: dict) -> list[str]:
