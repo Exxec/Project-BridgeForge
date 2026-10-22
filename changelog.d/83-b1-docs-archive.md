@@ -1,1 +1,1 @@
-- Archive the first two roadmap pages and the completed October 18 audit, repair navigation, and preserve roadmap-lint's full historical evidence checks and CLI surface.
+- Archive the first two roadmap pages and the completed October 18 audit, repair navigation, and preserve roadmap-lint's full historical evidence checks and CLI surface. B0 also includes nested rule/pack JSON files in scan fingerprints, so edits invalidate stored scans; refresh with `finding-stats --rescan-stale`.

@@ -3,7 +3,7 @@ flat 291-module package into subpackages, `fixers.py` split, docs/roadmaps conso
 test-speed split; Project Go GUI shell split; optional VoidSmith splits; Salvor import updates. Plan, rules and review evidence:
 [docs/REFACTOR_PLAN_2026-10.md](docs/REFACTOR_PLAN_2026-10.md). Executed by a separate agent; each PR reviewed against its section 6.
 
-B0 implementation checkpoint 2026-10-22 (pending PR review/merge): recursive source inventories, package-relative
+B0 implementation checkpoint 2026-10-22 (merged in PR #64, `f252b033`): recursive source inventories, package-relative
 audit/fingerprint identities and nested test selection are implemented. Covered by
 [tests/test_source_paths.py](tests/test_source_paths.py) and the existing audit/registry/merge-train tests;
 2,602 tests, OK (12 skips unchanged), hermeticity PASS, coverage 83.06% (baseline 82.46%).
