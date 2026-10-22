@@ -15,7 +15,7 @@ Start with the [documentation index](docs/INDEX.md), [revival guide](docs/BRIDGE
 The proposed long-term direction is in [VISION](docs/VISION.md), [STRATEGIC_ROADMAP](docs/STRATEGIC_ROADMAP.md)
 and [NEXT_MILESTONE](docs/NEXT_MILESTONE.md); these are proposals, not implementation claims.
 
-Requires Python 3.10+. From a source checkout, create a virtual environment, activate it, then install:
+Requires Python 3.15+. From a source checkout, create a virtual environment, activate it, then install:
 
 ```powershell
 python -m pip install -e .

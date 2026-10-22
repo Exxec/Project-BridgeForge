@@ -146,7 +146,7 @@ After a push, watch the run (`gh run watch <id> --exit-status`): CI was red for 
 one Python passed while argparse output, home and checkout paths, and junction handling differ on the CI matrix.
 
 CI (`.github/workflows/ci.yml`) runs all of these, plus the tests on Windows and Ubuntu with
-Python 3.10–3.13 and a coverage floor (`[tool.coverage.report] fail_under` in pyproject; raise
+Python 3.15 and a coverage floor (`[tool.coverage.report] fail_under` in pyproject; raise
 it when coverage rises, never lower it).
 
 ## Test conventions
