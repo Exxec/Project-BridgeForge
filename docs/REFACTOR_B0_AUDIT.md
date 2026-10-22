@@ -76,4 +76,3 @@ CLI headings: 267 unchanged. Golden SHA-256:
 `b384ee0dc6e73a63dcea9f827c3e0859428a8907141f76f180d426f13664175f`.
 Salvor consumer suite against the installed PR wheel: 208 tests, OK (skipped=4).
 Ruff and generated-doc freshness checks pass. B0 does not move files; rename similarity is not applicable.
-

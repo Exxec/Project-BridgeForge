@@ -179,4 +179,3 @@ class SourcePathsTests(unittest.TestCase):
             self.assertIs(cli_commands.handler_for("research"), module.run_cli)
             self.assertEqual(load.call_args_list, [unittest.mock.call("bridgeforge.research.cli")] * 2)
             module.add_parser.assert_called_once_with("subcommands")
-
