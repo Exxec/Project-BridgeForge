@@ -111,3 +111,7 @@ jobs:
         env:
           PROJECT_GO_FIXTURES: ${{ github.workspace }}/project-go
         run: python -m unittest discover -s tests -p test_shared_fixtures.py -v
+      - name: Import Project Go's actual coverage manifest (ROADMAP-3 80.9)
+        env:
+          PROJECT_GO_FIXTURES: ${{ github.workspace }}/project-go
+        run: python -m unittest tests.test_go_coverage_manifest_contract -v

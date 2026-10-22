@@ -1,1 +1,1 @@
-- ROADMAP-3 80.9: real-manifest contract check with Project Go.
+- ROADMAP-3 80.9: the `shared-fixtures` CI job imports the coverage manifest Project Go exports for its fixture mod (`fixtures/coverage-manifest/`) with `localization_coverage.observe`, so a producer change the consumer cannot accept fails CI; deliberate-break tests included. MATCH still claims identity only.
