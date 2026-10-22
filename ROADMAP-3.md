@@ -1,3 +1,37 @@
+**84. Feature tracing and transplanting (owner-approved 2026-10-22; long term).** Goal: BridgeForge can pick a mod apart and
+trace every feature end to end (data ids, assets, code, hooks, runtime behaviour), and can transplant a named feature from one
+mod into another with its dependencies, id remapping, conflict and save checks, live validation and recorded provenance. Design
+note: [docs/FEATURE_TRANSPLANT_PLAN.md](docs/FEATURE_TRANSPLANT_PLAN.md). Rules: bytecode stays authoritative and decompiled
+code is a reading aid; no research finding becomes a migration or transplant rule automatically (item 82's sequence: finding ->
+validated pattern -> candidate -> approved rule); a gate is never upgraded without recorded evidence; starts after item 83's
+refactor (B3 at least), because T0 depends on the package layout. Nothing below is built; LIVE TEST NOT PERFORMED.
+- T0 Feature graph. Builds one queryable per-mod graph joining every id (hull, weapon, hullmod, ship system, faction, market,
+  rules.csv entry, sprite, sound, string) to the code that creates, reads or registers it, and to what calls that code.
+  Reuses Atlas (census, classfile, exemplars), the D-series (archaeology, behavior-map) and scanner facts, merged per concept
+  as item 82.2's reconciliation decides; the 82.8 method map. Done when `research report` answers questions from the graph
+  instead of by re-scanning.
+- T1 Feature boundaries. Builds the named-feature record: its files, classes, ids, memory keys, scripts, listeners and hook
+  points, produced by `research report` and stored as a reviewable record. Reuses T0, `research report` (82.1), REMOVALS
+  records. Done when the Templar Crusade and SEEKER station modules each have a boundary record a person agrees with.
+- T2 Runtime trace. Builds probe stages that confirm a feature's entry points and hooks fire, with the evidence linked back
+  into the graph (STATIC -> OBSERVED). Reuses the probe mod, `probe-group live`, live records, gates.json scheduling and
+  `board --live-pending`. Done when one feature's hooks are OBSERVED in a recorded run.
+- T3 Data-only transplant. Builds dependency closure (assets, CSV rows, settings keys, library dependencies), id and
+  namespace remap, a collision check against the target, and install into a target workspace through `revise`. Reuses
+  scanner id indexes, content parity, `revise prepare/finalize`, the archive gate. Done when one EPTA ship line moves into a
+  test mod, then builds, boots and passes a live gate.
+- T4 Code transplant planning. Builds the plan for code-backed features: decompile the feature's classes, remap packages,
+  list the hook points to adapt (ModPlugin onNewGame/onGameLoad, listeners, rules.csv, economy) and rebuild against the
+  target's classpath. Reuses `decompile-jar`, 82.7-82.9 (readable code, method map, `research diff`), `rebuild-jar`,
+  `bytecode-inspect`. Adapting the hooks is human or agent work that BridgeForge checks; never automatic. Done when one
+  code-backed feature is transplanted into a test mod and passes a live gate.
+- T5 Save safety. Builds the answer to what an existing save needs when a feature is added or removed. Reuses the save tools
+  (save-doctor, save compatibility, fingerprints), migration packs (docs/MIGRATION_PACK_CONTRACT.md), REMOVALS and
+  `revise migration`. Done when adding and removing the T4 feature both load an existing save cleanly in a live run.
+- T6 Provenance and permission. Builds a provenance record for every transplanted file: source mod, version, file hash,
+  author and licence. Reuses release_policy.json and the archive gate; without the author's permission the result stays
+  LOCAL_ONLY. Done when the archive gate refuses a transplant with missing provenance.
+
 **83. Structural refactor across the repos (owner-approved 2026-10-22).** Reorganisation only, no behaviour change: BridgeForge's
 flat 291-module package into subpackages, `fixers.py` split, docs/roadmaps consolidated, command audit and grouping with aliases,
 test-speed split; Project Go GUI shell split; optional VoidSmith splits; Salvor import updates. Plan, rules and review evidence:
