@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge import run_manifest
+from bridgeforge import launch, run_manifest
 from bridgeforge.run_manifest import ManifestError, evaluate_run, prepare_run, read_manifest, release_run
 from tests.bound_runs import BASIC_LOG, COMBAT, CONTENT_IDS, LOAD, MENU, SAVED, bound_run, make_rig, stage
 from tests.support import resolved_temp_dir
@@ -296,7 +296,7 @@ class LegacyAndLiveRunTests(unittest.TestCase):
                     mock.patch("bridgeforge.boot_test._running_java_under", return_value=[]), \
                     mock.patch.object(run_manifest, "prepare_run", prepare), mock.patch.object(run_manifest, "release_run", release), \
                     mock.patch("bridgeforge.rig_prefs.pinned_launcher_prefs", mock.MagicMock()), \
-                    mock.patch.object(live_run.subprocess, "Popen", lambda *a, **k: order.append("launch") or Proc()), \
+                    mock.patch.object(launch.subprocess, "Popen", lambda *a, **k: order.append("launch") or Proc()), \
                     mock.patch.object(live_run, "real_hands", lambda rig_, pid: mock.MagicMock()):
                 with live_run.running_game(rig, "R-14") as (log, hands, rows):
                     order.append("body")

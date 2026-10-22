@@ -7,7 +7,6 @@ import subprocess
 import time
 from pathlib import Path
 
-from .exit_observation import observed_exit, write_exit_observation
 from .log_triage import triage_log
 from .scanner import _load_lenient_json_file
 
@@ -134,6 +133,8 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
     into the rig, never into a real player's save). This function refuses to run otherwise, and also
     refuses if a java.exe already runs from under runtime_dir (stale process from a previous test).
     """
+    from . import launch
+
     runtime_dir = Path(runtime_dir).expanduser().resolve()
 
     core_path = runtime_dir / "starsector-core"
@@ -193,13 +194,13 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
     log_path = logs_dir / f"{name}.stdout.log"
     err_path = logs_dir / f"{name}.stderr.log"
 
-    command_line = f'cmd.exe /c ""{bat_path}" > "{log_path}" 2> "{err_path}""'
     if bind:
         # R1: a boot run records its staged inputs too (kind boot: it can show the main menu and nothing more).
-        from .run_manifest import ManifestError, prepare_run
+        from . import launch
+        from .run_manifest import ManifestError
 
         try:
-            prepare_run(runtime_dir, name, "boot", targets=[], expected=["main_menu"], scenario="boot-test", launcher=bat_path)
+            launch.prepare_manifest(runtime_dir, name, "boot", targets=[], expected=["main_menu"], scenario="boot-test", bat=bat_path)
         except ManifestError as exc:
             return _result("REFUSED", f"no pre-launch manifest: {exc}", log_path, err_path, 0.0, None, _restore(keep_mods))
     prefs = None
@@ -211,38 +212,28 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
         prefs.__enter__()
     started = time.monotonic()
     try:
-        # Passed as a raw command-line string (not a list): on Windows, subprocess uses a string
-        # args verbatim as the CreateProcess command line when shell=False, which is required here
-        # because the leading-quote + redirection trick below only works as a single literal string
-        # (Python's list2cmdline re-quoting would corrupt it).
-        process = subprocess.Popen(command_line, cwd=str(runtime_dir))
+        process = launch.start_game(runtime_dir, bat_path, log_path, err_path)
     except OSError as exc:
         if bind:
-            from .run_manifest import ManifestError, release_run
-
-            try:
-                release_run(runtime_dir, name, bat_path)
-            except (ManifestError, OSError):
-                pass
+            launch.release_manifest(runtime_dir, name, bat_path)
         restored = _restore(keep_mods)
         if prefs is not None:
             prefs.__exit__(None, None, None)
         return _result("FAIL", f"Failed to launch {bat_path}: {exc}", log_path, err_path, 0.0, None, restored)
 
+    watcher = launch.watch_windows(runtime_dir, name, process)
     status = "FAIL"
     reason: str | None = None
     click_note: str | None = None
     next_click_try = 2.0
-    java_seen = False
+    java_state: dict = {}
     try:
         while True:
             elapsed = time.monotonic() - started
             if auto_click and click_note is None and elapsed >= next_click_try:
                 # The launcher window waits for a click (owner, 2026-10-11); see launcher_click.
                 next_click_try = elapsed + 3.0
-                from .launcher_click import click_launcher_once, descendant_pids
-                pids = {item.get("pid") for item in _running_java_under(runtime_dir) if isinstance(item.get("pid"), int)}
-                click_note = click_launcher_once(pids | descendant_pids(process.pid))
+                click_note = launch.click_launcher(runtime_dir, process)
             marker_found = False
             if log_path.is_file():
                 try:
@@ -258,12 +249,10 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
                 status = "FAIL"
                 reason = f"Process exited (code {process.returncode}) before the main-menu marker appeared."
                 break
-            if not java_seen:
-                java_seen = java_started(runtime_dir, process.pid)
-                if not java_seen and elapsed >= LAUNCH_WATCHDOG_SECONDS:
-                    status = LAUNCH_NO_PROCESS
-                    reason = watchdog_message(runtime_dir, LAUNCH_WATCHDOG_SECONDS)
-                    break
+            if launch.watchdog_tripped(runtime_dir, process, started, java_state, name):
+                status = LAUNCH_NO_PROCESS
+                reason = watchdog_message(runtime_dir, LAUNCH_WATCHDOG_SECONDS)
+                break
             if elapsed >= timeout:
                 if process.poll() is None:
                     status = "SUSPECT_FATAL_DIALOG"
@@ -275,21 +264,8 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
             time.sleep(POLL_INTERVAL_SECONDS)
     finally:
         elapsed = time.monotonic() - started
-        # ROADMAP 77.21: observe the exit before anything is killed (NATURAL only if the game quit by itself).
-        observed_exit_state = observed_exit(process.poll(), bool(_running_java_under(runtime_dir))) if natural_exit else None
-        if process.poll() is None:
-            _terminate_tree(process.pid)
-            for java in _running_java_under(runtime_dir):
-                pid = java.get("pid")
-                if isinstance(pid, int):
-                    _terminate_tree(pid)
-        try:
-            process.wait(timeout=10)
-        except Exception:
-            pass
-
-    if observed_exit_state is not None:
-        write_exit_observation(runtime_dir, name, *observed_exit_state)
+        # ROADMAP 77.21: the exit is observed before anything is killed (NATURAL only if the game quit by itself); the test does not wait.
+        launch.stop_game(runtime_dir, name, process, record_exit=natural_exit, await_exit=True, exit_wait=0, watcher=watcher)
 
     triage_summary = None
     if log_path.is_file():
@@ -299,12 +275,7 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
             triage_summary = None
 
     if bind:
-        from .run_manifest import ManifestError, release_run
-
-        try:
-            release_run(runtime_dir, name, bat_path)
-        except (ManifestError, OSError):
-            pass
+        launch.release_manifest(runtime_dir, name, bat_path)
     restored = _restore(keep_mods)
     if prefs is not None:
         prefs.__exit__(None, None, None)

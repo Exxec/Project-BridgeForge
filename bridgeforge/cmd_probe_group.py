@@ -70,6 +70,7 @@ def add_parser(subcommands) -> None:
     group_live.add_argument("--no-graceful-close", action="store_true", help="do not close the game by itself when the probe's done marker appears; stop it as before (the exit is then not recorded)")
     group_live.add_argument("--exit-wait", type=int, default=180, help="with --natural-exit: seconds to wait for the game to exit by itself (default 180)")
     group_live.add_argument("--save-reload", action="store_true", help="after the live run, start the game a second time, Continue the save the probe wrote at save_reload.after_days and wait for the fingerprint compare line (install with --save-reload-after-days); the reload run gets its own log <TESTID>-reload and manifest")
+    group_live.add_argument("--interactive", action="store_true", help="start the game with the manifest, window watcher and exit observation but do not touch the mouse or keyboard: you play and close the game; the run records NATURAL with the exit code")
     group_live.add_argument("--rig", type=Path)
     group_live.add_argument("--queue", type=Path)
     group_live.add_argument("--json", action="store_true")
@@ -168,7 +169,13 @@ def run_cli(args: argparse.Namespace) -> int:
                     print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
             elif args.probe_group_command == "live":
                 from .live_run import live_run
-                print("Starting the live run: leave the mouse and keyboard alone until it finishes (about three minutes after loading).", file=sys.stderr)
+                if args.interactive:
+                    print("Starting the game: play, then close it; nothing is clicked for you after the launcher's Play button.", file=sys.stderr)
+                else:
+                    print("Starting the live run: leave the mouse and keyboard alone until it finishes (about three minutes after loading).", file=sys.stderr)
+                if args.save_reload and args.interactive:
+                    print("bridgeforge: --save-reload cannot be combined with --interactive", file=sys.stderr)
+                    return 2
                 if args.save_reload:
                     from .save_reload_run import clear_stale_fingerprint, save_reload_configured
                     if not save_reload_configured(rig):
@@ -177,7 +184,7 @@ def run_cli(args: argparse.Namespace) -> int:
                     clear_stale_fingerprint(rig)
                 live = live_run(rig, args.test_id, bat_name=args.bat, menu_timeout=args.menu_timeout,
                                 natural_exit=args.natural_exit, exit_wait=args.exit_wait, save_reload=args.save_reload,
-                                graceful_exit=not args.no_graceful_close)
+                                graceful_exit=not args.no_graceful_close, interactive=args.interactive)
                 result = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "rounds": live.rounds, "stages": live.stages, "log": live.log}
                 if args.save_reload and live.verdict == "LIVE_DONE":
                     from .save_fingerprint import parse_fingerprint
