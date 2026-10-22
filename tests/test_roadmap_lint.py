@@ -65,14 +65,16 @@ class RoadmapLintTests(unittest.TestCase):
             second.write_text("3. " + SAMPLE.split("3. ", 1)[1], encoding="utf-8")
             active = root / "ROADMAP-3.md"
             active.write_text('70. **Active.** **Done.** No evidence.\n', encoding="utf-8")
+            fourth = root / "ROADMAP-4.md"
+            fourth.write_text('71. **Future.** **Done.** No evidence.\n', encoding="utf-8")
             before = roadmap_text(first)
             archive = root / "docs" / "archive"
             archive.mkdir(parents=True)
             first.rename(archive / first.name)
             second.rename(archive / second.name)
-            self.assertEqual(roadmap_pages(first), [archive / "ROADMAP.md", archive / "ROADMAP-2.md", active])
+            self.assertEqual(roadmap_pages(first), [archive / "ROADMAP.md", archive / "ROADMAP-2.md", active, fourth])
             self.assertEqual(roadmap_text(first), before)
-            self.assertEqual({v["key"].split("|")[0] for v in violations(roadmap_text(first))}, {"2", "4b", "70"})
+            self.assertEqual({v["key"].split("|")[0] for v in violations(roadmap_text(first))}, {"2", "4b", "70", "71"})
             baseline = root / "baseline.json"
             baseline.write_text('{"items": []}', encoding="utf-8")
             with redirect_stdout(io.StringIO()):

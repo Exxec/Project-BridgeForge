@@ -11,4 +11,5 @@ that every proposal or live/manual gate is complete. Use the [current status](..
 
 The architecture assessment remains at [ARCHITECTURE_GAPS.md](../ARCHITECTURE_GAPS.md) because current strategy and
 milestone documents still rely on its evidence ledger. Other domain receipts remain in place while current guides cite them.
-The legacy default invocation of roadmap-lint still checks both archived pages and the active page.
+The legacy default invocation of roadmap-lint checks the archived chain and resumes root numbering after it,
+including future ROADMAP-4.md and later continuation pages.

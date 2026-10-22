@@ -10,13 +10,16 @@ audit/fingerprint identities and nested test selection are implemented. Covered 
 CLI golden/generated docs unchanged. Search inventory, fingerprint refresh and later move obligations:
 [docs/REFACTOR_B0_AUDIT.md](docs/REFACTOR_B0_AUDIT.md). B1 onward remains pending; LIVE TEST NOT PERFORMED.
 
-B1 implementation checkpoint 2026-10-22 (pending PR review/merge): earlier roadmap pages and the completed October 18
+B1 implementation checkpoint 2026-10-22 (owner-approved after review fixes; merge pending CI): earlier roadmap pages and the completed October 18
 audit moved to [docs/archive/](docs/archive/README.md); ROADMAP-3 is the active backlog. Archive navigation and current
 entry points are repaired; the still-cited architecture assessment stays current. Legacy roadmap-lint paths still check
 all 336 item keys with the unchanged evidence baseline, covered by tests/test_roadmap_lint.py.
-Validation: 2,603 tests, OK (12 skips unchanged), hermeticity PASS; coverage 83.06%; gates lint has zero contradictions.
-Companion citation PRs: [VoidSmith #12](https://github.com/Exxec/Project-VoidSmith/pull/12),
-[Salvor #11](https://github.com/Exxec/Project-Salvor/pull/11), [Go #9](https://github.com/Exxec/Project-Go/pull/9).
+Validation: 2,603 tests, OK (12 skips unchanged), hermeticity PASS; coverage 83.07%; gates lint has zero contradictions.
+Companion citation PRs: [VoidSmith #13](https://github.com/Exxec/Project-VoidSmith/pull/13),
+[Salvor #12](https://github.com/Exxec/Project-Salvor/pull/12), [Go #10](https://github.com/Exxec/Project-Go/pull/10).
+Review fix: root numbering resumes after the archived page count, preserving future ROADMAP-4.md and later pages;
+the relocation test detects an unevidenced Done claim on page 4. Companion follow-ups use the stable hardening plan
+and merge after B1 (the original citation PRs were already merged).
 No pending owner/live/research gate is closed by this archive step.
 
 **82. Research that serves revivals: consolidate, compare, promote (owner-approved 2026-10-21).** Not a new research
