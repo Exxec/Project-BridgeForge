@@ -25,7 +25,7 @@ fresh live acceptance.
 Items 79.7 and 80-81 (ROADMAP-3), merged to `main` 2026-10-21 as PRs #41-#53, offline only (tests, no rig run): 79.7 one launcher path
 (`launch.py`, `window_watch.py`); 80.1 changelog fragments and `merge-train`; 80.2 and 80.6 `gates.json` and `board --live-pending`;
 80.3 archive gate; 80.4 `decision apply`; 80.7 `escalation triage`; 80.8 `hygiene`; 81.1-81.5 atlas census, migrations and exemplars.
-80.5 (Salvor pin autopilot) is not in this repo's history and is unverified. Probe 0.3.1 is built into the probe mod; its
+80.5 (Salvor pin autopilot) lives in the Salvor repo (Project-Salvor PR #7); its first nightly pin PR has not run yet. Probe 0.3.1 is built into the probe mod; its
 live behaviour is not yet recorded in `gates.json`. Item 82 is a proposal only.
 
 Item 75 work contracts:

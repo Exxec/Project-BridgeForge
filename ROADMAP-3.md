@@ -42,7 +42,7 @@ conclusions.
 - 80.3 **Built offline, merged (#45); live pending where it needs the rig.** Archive gate wired: `archive` and `revise finalize` run dropped-features, content parity and the orphaned-backup
   check and refuse unexplained drops; a passing live run with probe 0.3.x offers `archive --refresh`.
 - 80.4 **Built offline, merged (#44); live pending where it needs the rig.** `decision apply DRAFT` (77.20): ticked boxes become baseline keys, REMOVALS entries, roadmap lines and rig steps.
-- 80.5 **Not built here; status unverified from this repo.** Pin autopilot: Salvor tests nightly against BridgeForge main and opens a pin-bump PR when green; shared-fixture
+- 80.5 **Built in Salvor, merged (Project-Salvor PR #7); first nightly pin PR not yet observed.** Pin autopilot: Salvor tests nightly against BridgeForge main and opens a pin-bump PR when green; shared-fixture
   drift with Project Go turns blocking once Project Go updates.
 - 80.6 **Built offline, merged (#43); live pending where it needs the rig.** Status generated from `gates.json` per repo (R7): status tables and the rig plan come from it; a lint fails CI when
   a status doc contradicts it.
