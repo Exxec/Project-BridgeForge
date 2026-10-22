@@ -4,12 +4,14 @@ import ast
 import unittest
 from pathlib import Path
 
+from bridgeforge.source_paths import family_sources
+
 SCANNER_PATH = Path(__file__).resolve().parent.parent / "bridgeforge" / "scanner.py"
 
 
 def _scanner_source() -> str:
     """scanner.py plus the scan_*.py modules its checks were split into (ROADMAP item 70 H2.2)."""
-    paths = [SCANNER_PATH, *sorted(SCANNER_PATH.parent.glob("scan_*.py"))]
+    paths = family_sources(SCANNER_PATH.parent, "scan") + family_sources(SCANNER_PATH.parent, "scanner")
     return "\n".join(path.read_text(encoding="utf-8") for path in paths)
 
 # ROADMAP P14 item 24: every function that builds a hull-id set from *.ship files or

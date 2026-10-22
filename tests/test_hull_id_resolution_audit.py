@@ -12,6 +12,8 @@ import ast
 import unittest
 from pathlib import Path
 
+from bridgeforge.source_paths import python_sources
+
 PACKAGE = Path(__file__).resolve().parent.parent / "bridgeforge"
 SKIN_AWARE = {"_skin_index", "_resolve_hull_id"}
 EXEMPT = {
@@ -44,11 +46,11 @@ def _builds_hull_ids(node: ast.AST) -> bool:
 def hull_id_builders() -> dict[tuple[str, str], bool]:
     """(module file, function) -> whether it is skin-aware, for every function building hull-id sets."""
     found: dict[tuple[str, str], bool] = {}
-    for path in sorted(PACKAGE.glob("*.py")):
+    for path in python_sources(PACKAGE):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and _builds_hull_ids(node):
-                found[(path.name, node.name)] = bool(_called_names(node) & SKIN_AWARE)
+                found[(path.relative_to(PACKAGE).as_posix(), node.name)] = bool(_called_names(node) & SKIN_AWARE)
     return found
 
 

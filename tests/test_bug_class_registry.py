@@ -4,6 +4,8 @@ import re
 import unittest
 from pathlib import Path
 
+from bridgeforge.source_paths import family_sources
+
 from bridgeforge.fixers import SUPPORTED_FINDINGS
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -55,7 +57,7 @@ class BugClassRegistryTests(unittest.TestCase):
             )
 
     def test_every_listed_check_id_exists_somewhere_in_the_codebase(self) -> None:
-        scanner_paths = [SCANNER_PATH, *sorted(SCANNER_PATH.parent.glob("scan_*.py"))]
+        scanner_paths = family_sources(SCANNER_PATH.parent, "scan") + family_sources(SCANNER_PATH.parent, "scanner")
         scanner_src = "\n".join(path.read_text(encoding="utf-8") for path in scanner_paths)
         probe_src = _probe_source()
         rows = _table_rows(REGISTRY_PATH.read_text(encoding="utf-8"))

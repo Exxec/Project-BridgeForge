@@ -33,7 +33,7 @@ def java_read_keys() -> set[str]:
 
     Stages that own their config block (ContentParityProbe's `content_parity`) read it from the same root object."""
     keys: set[str] = set()
-    for source in sorted(PROBE.glob("*.java")):
+    for source in sorted(PROBE.rglob("*.java")):
         text = source.read_text(encoding="utf-8")
         keys |= set(re.findall(r'root\.(?:opt\w+|get\w+)\("(\w+)"', text)) | set(re.findall(r'addAll\(root\.optJSONArray\("(\w+)"', text))
     return keys
