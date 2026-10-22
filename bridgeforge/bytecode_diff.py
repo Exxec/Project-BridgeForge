@@ -39,3 +39,13 @@ def diff_bytecode(before_inputs: list, after_inputs: list) -> dict[str, object]:
         }
         if reference_changes or any(value is False for value in invariants.values()): changed.append({"class_name": name, "reference_changes": reference_changes, "invariants": invariants})
     return {"schema_version": 1, "mode": "SEMANTIC_DIFF_ONLY", "added_classes": sorted(set(new) - set(old)), "removed_classes": sorted(set(old) - set(new)), "changed_classes": changed}
+
+
+def changed_methods(before: dict[str, object], after: dict[str, object]) -> dict[str, list[dict[str, str]]]:
+    """Method-level verdict for one class present in two inspections (ROADMAP-3 82.9): methods keyed by (name, descriptor), compared by `body_digest`
+    (opcodes plus every operand; never line numbers). Bytecode decides here; a decompiled diff only explains."""
+    old = {(m["name"], m["descriptor"]): m for m in before.get("method_details", [])}
+    new = {(m["name"], m["descriptor"]): m for m in after.get("method_details", [])}
+    as_row = lambda key: {"name": key[0], "descriptor": key[1]}
+    return {"changed": [as_row(key) for key in sorted(set(old) & set(new)) if old[key].get("body_digest") != new[key].get("body_digest")],
+            "added": [as_row(key) for key in sorted(set(new) - set(old))], "removed": [as_row(key) for key in sorted(set(old) - set(new))]}

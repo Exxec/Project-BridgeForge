@@ -7,7 +7,7 @@ import io
 import json
 import unittest
 import zipfile
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -42,6 +42,18 @@ public class TemCrusade {
 """
 
 
+# the bytecode helper's view of the fake jar (82.8): original source lines of each method; Vineflower's pairs below map them onto JAVA
+FAKE_INDEX = {"data/scripts/TemCrusade": [{"name": "<init>", "descriptor": "()V", "lines": [], "body_digest": "i"},
+                                          {"name": "advance", "descriptor": "(F)V", "lines": [10, 11], "body_digest": "a"},
+                                          {"name": "startCrusade", "descriptor": "()V", "lines": [30, 31], "body_digest": "s"}],
+              "data/scripts/TemCrusade$1": [{"name": "run", "descriptor": "()V", "lines": [99], "body_digest": "r"}]}
+FAKE_PAIRS = [[10, 7], [11, 8], [30, 13], [31, 14]]
+
+
+def fake_method_index(jar: Path):
+    return FAKE_INDEX, ""
+
+
 def make_jar(path: Path, extra: bytes = b"") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(path, "w") as archive:
@@ -62,16 +74,35 @@ class FakeDecompiler:
         for name in classes:
             if "$" not in name:
                 _write(output / (name[:-len(".class")] + ".java"), JAVA)
+                _write(output / (name[:-len(".class")] + ".lines.json"), json.dumps({"pairs": FAKE_PAIRS}))
         return 0, ""
 
 
 TOOLCHAIN = Toolchain(Path("java"), Path("vineflower-1.12.0.jar"), "1.12.0", "jdk-17 (test)")
 
 
+class _both:
+    """Two patches entered as one; reusable like a `mock.patch`."""
+
+    def __init__(self, first, second) -> None:
+        self.patches = (first, second)
+        self.stack: list[ExitStack] = []
+
+    def __enter__(self) -> None:
+        stack = ExitStack()
+        for patch in self.patches:
+            stack.enter_context(patch)
+        self.stack.append(stack)
+
+    def __exit__(self, *exc) -> None:
+        self.stack.pop().close()
+
+
 def with_fake_tools(decompiler: FakeDecompiler | None):
     found = (TOOLCHAIN, "") if decompiler is not None else (None, "Vineflower not found (test)")
     return (mock.patch.object(research_decompile, "find_toolchain", return_value=found),
-            mock.patch.object(research_decompile, "run_vineflower", decompiler or FakeDecompiler()))
+            _both(mock.patch.object(research_decompile, "run_vineflower", decompiler or FakeDecompiler()),
+                  mock.patch.object(research_decompile, "jar_method_index", fake_method_index)))
 
 
 def workspace_with_jars_and_changelogs(root: Path) -> Path:

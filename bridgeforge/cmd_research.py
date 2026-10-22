@@ -1,4 +1,5 @@
-"""`research report FEATURE --case WORKSPACE --question TEXT [--write DIR]` (ROADMAP-3 82.1, 82.2): read-only comparative research report."""
+"""`research report FEATURE --case WORKSPACE --question TEXT [--write DIR]` (ROADMAP-3 82.1, 82.2): read-only comparative research report;
+`research diff OLD NEW` (82.9): readable diffs of the methods whose bytecode changed."""
 from __future__ import annotations
 
 import argparse
@@ -8,11 +9,15 @@ from pathlib import Path
 
 from .atlas import DEFAULT_DB
 from .research_decompile import DEFAULT_MAX_CLASSES
+from .research_diff import DEFAULT_MAX_LINES, DEFAULT_MAX_METHODS, DiffError, build_diff
+from .research_diff import render_markdown as render_diff_markdown
+from .research_diff import stdout_summary as diff_summary
 from .research_render import render_markdown, stdout_summary
 from .research_report import ResearchError, build_report
 from .safeio import atomic_write_json, atomic_write_text
 
 REPORT_STEM = "research-report"
+DIFF_STEM = "research-diff"
 
 
 def add_parser(subcommands) -> None:
@@ -30,6 +35,15 @@ def add_parser(subcommands) -> None:
     report.add_argument("--no-decompile", action="store_true", help="do not decompile the jar classes the terms touch (82.7); needs Vineflower and a JDK otherwise, reported as missing when absent")
     report.add_argument("--max-classes", type=int, default=DEFAULT_MAX_CLASSES, help=f"decompile at most this many top-level classes (default {DEFAULT_MAX_CLASSES}); the decompiled code is cached by jar hash under DIR/decompiled/")
     report.add_argument("--json", action="store_true", help="print the JSON report instead of the summary")
+    diff = sub.add_parser("diff", help="readable version diff (82.9): the bytecode decides which methods changed, then only those methods' decompiled text is diffed (STATIC); methods carry their bytecode identity (82.8)")
+    diff.add_argument("old", type=Path, help="the older version: a .jar, a mod folder (its loaded jars) or a folder holding one, e.g. a case's original/ or an old/ release folder from pairs.json")
+    diff.add_argument("new", type=Path, help="the newer version, same forms, e.g. a case's working/ folder")
+    diff.add_argument("--classes", default="", help="comma separated class-name terms (same matching as the report's feature terms) limiting which classes are compared")
+    diff.add_argument("--max-methods", type=int, default=DEFAULT_MAX_METHODS, help=f"show at most this many changed methods (default {DEFAULT_MAX_METHODS}); the rest are only counted")
+    diff.add_argument("--max-lines", type=int, default=DEFAULT_MAX_LINES, help=f"at most this many diff lines per method (default {DEFAULT_MAX_LINES})")
+    diff.add_argument("--write", type=Path, metavar="DIR", help=f"write {DIFF_STEM}.md and {DIFF_STEM}.json into DIR and keep the decompiled cache in DIR/decompiled/ (atomic); refused inside OLD or NEW")
+    diff.add_argument("--repo", type=Path, help="checkout holding In operation/_tools (Vineflower) when this one has none, e.g. a git worktree (default: the nearest folder above OLD that has an `In operation/`, else this checkout)")
+    diff.add_argument("--json", action="store_true", help="print the JSON result instead of the summary")
 
 
 def _atlas_db(args: argparse.Namespace) -> Path:
@@ -39,7 +53,38 @@ def _atlas_db(args: argparse.Namespace) -> Path:
     return here if here.is_file() else Path(args.case).expanduser().resolve().parent.parent / DEFAULT_DB
 
 
+def _home_of(path: Path) -> Path | None:
+    """The nearest folder above `path` that holds `In operation/` (where Vineflower is kept), for a run from a git worktree."""
+    return next((p for p in Path(path).expanduser().resolve().parents if (p / "In operation").is_dir()), None)
+
+
+def _run_diff(args: argparse.Namespace) -> int:
+    if args.max_methods < 1 or args.max_lines < 1:
+        print("bridgeforge: --max-methods and --max-lines must be at least 1", file=sys.stderr)
+        return 2
+    target = Path(args.write).expanduser().resolve() if args.write else None
+    for side in (args.old, args.new):
+        root = Path(side).expanduser().resolve()
+        root = root.parent if root.is_file() else root
+        if target and (target == root or root in target.parents):
+            print(f"bridgeforge: --write {target} is inside {root}; the diff never writes into a version tree", file=sys.stderr)
+            return 2
+    try:
+        result = build_diff(args.old, args.new, classes=args.classes, max_methods=args.max_methods, max_lines=args.max_lines,
+                            cache_dir=target / "decompiled" if target else None, home=args.repo or _home_of(args.old))
+    except (DiffError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    written: list[str] = []
+    if target:
+        written = [str(atomic_write_text(target / f"{DIFF_STEM}.md", render_diff_markdown(result), newline="")), str(atomic_write_json(target / f"{DIFF_STEM}.json", result))]
+    print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else diff_summary(result, written))
+    return 0
+
+
 def run_cli(args: argparse.Namespace) -> int:
+    if args.research_command == "diff":
+        return _run_diff(args)
     if args.research_command != "report":
         return 2
     if args.write:

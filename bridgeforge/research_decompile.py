@@ -18,6 +18,7 @@ from pathlib import Path, PurePosixPath
 
 from .decompile import find_vineflower
 from .java_toolchain import find_jdk
+from .research_methods import MethodMap, jar_method_index, parse_line_pairs, resolve_methods, write_map
 from .research_terms import STATIC, Matcher
 from .safeio import atomic_write_bytes, atomic_write_json
 from .zipsafe import MAX_CLASS_BYTES, read_limited
@@ -26,6 +27,7 @@ DEFAULT_MAX_CLASSES = 12
 MAX_EXCERPT_METHODS = 4
 MAX_METHOD_LINES = 25
 MAX_HEADER_LINES = 20
+MAX_JAVA_BYTES = 64 * 1024 * 1024
 VINEFLOWER_TIMEOUT_SECONDS = 300
 HOW_TO_GET = ("put vineflower-*.jar (Vineflower 1.12.0) in In operation/_tools/ and install a JDK 17+ (a rig jdk-*, JAVA_HOME or PATH); "
               "see `python -m bridgeforge decompile-jar --help`")
@@ -61,13 +63,45 @@ def find_toolchain(home: Path | None = None) -> tuple[Toolchain | None, str]:
 
 
 def run_vineflower(toolchain: Toolchain, source: Path, output: Path) -> tuple[int, str]:
-    """Run Vineflower over a folder of .class files into `output`; (exit code, log tail). The one place tests replace."""
-    try:
-        run = subprocess.run([str(toolchain.java), "-jar", str(toolchain.vineflower), "-dgs=1", str(source), str(output)], capture_output=True, text=True,
-                             encoding="utf-8", errors="replace", timeout=VINEFLOWER_TIMEOUT_SECONDS, check=False)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return 1, f"{type(exc).__name__}: {exc}"
-    return run.returncode, (run.stdout + run.stderr)[-400:]
+    """Run Vineflower over a folder of .class files into `output`; (exit code, log tail). The one place tests replace.
+
+    Vineflower 1.12.0 options (checked with `--help`): `-dgs=1` decompile-generics, `-bsm=1` bytecode-source-mapping and `-dcl=1` dump-code-lines.
+    The line mapping is dumped only into an archive's zip entries, and only when the input is an archive too (checked 2026-10-22: a folder of .class
+    files gives an empty mapping), so the classes are packed into a temporary .jar, decompiled into a second .jar and unpacked: each `<class>.java` lands in
+    `output` with its `<class>.lines.json` (the raw (original line, decompiled line) pairs) beside it."""
+    with tempfile.TemporaryDirectory(prefix="bf-research-vf-") as scratch:
+        packed, archive = Path(scratch) / "classes.jar", Path(scratch) / "decompiled.jar"
+        try:
+            _pack(source, packed)
+            run = subprocess.run([str(toolchain.java), "-jar", str(toolchain.vineflower), "-dgs=1", "-bsm=1", "-dcl=1", str(packed), str(archive)], capture_output=True,
+                                 text=True, encoding="utf-8", errors="replace", timeout=VINEFLOWER_TIMEOUT_SECONDS, check=False)
+        except (OSError, subprocess.TimeoutExpired, zipfile.BadZipFile) as exc:
+            return 1, f"{type(exc).__name__}: {exc}"
+        log = (run.stdout + run.stderr)[-400:]
+        if archive.is_file():
+            try:
+                _unpack_archive(archive, output)
+            except (OSError, zipfile.BadZipFile, ValueError) as exc:
+                return 1, f"{type(exc).__name__}: {exc}"
+        return run.returncode, log
+
+
+def _pack(source: Path, archive: Path) -> None:
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_STORED) as packed:
+        for path in sorted(source.rglob("*.class")):
+            packed.write(path, path.relative_to(source).as_posix())
+
+
+def _unpack_archive(archive: Path, output: Path) -> None:
+    with zipfile.ZipFile(archive) as zipped:
+        for info in zipped.infolist():
+            if not _safe_entry(info.filename, ".java"):
+                continue
+            atomic_write_bytes(output / info.filename, read_limited(zipped, info, MAX_JAVA_BYTES))
+            pairs = parse_line_pairs(info.extra)
+            if pairs is not None:
+                stem = info.filename[:-len(".java")]
+                atomic_write_json(output / f"{stem}.lines.json", {"schema_version": 1, "pairs": [list(p) for p in pairs]})
 
 
 def jar_sha256(path: Path) -> str:
@@ -107,9 +141,9 @@ def jar_class_rows(trees: dict[str, dict], analysis: dict[str, dict]) -> list[di
     return sorted(out, key=lambda r: (not r["by_name"], r["class"]))
 
 
-def _safe_entry(name: str) -> bool:
+def _safe_entry(name: str, suffix: str = ".class") -> bool:
     path = PurePosixPath(name)
-    return name.endswith(".class") and not path.is_absolute() and ".." not in path.parts and ":" not in name
+    return name.endswith(suffix) and not path.is_absolute() and ".." not in path.parts and ":" not in name
 
 
 def _extract(jar: Path, outers: list[str], target: Path) -> list[str]:
@@ -145,8 +179,9 @@ def method_spans(lines: list[str]) -> list[tuple[int, int]]:
     return spans
 
 
-def excerpt(source: str, matcher: Matcher) -> dict:
-    """The methods naming a feature term (each bounded), else the class header; `lines` are `(number, text)` pairs of the decompiled file."""
+def excerpt(source: str, matcher: Matcher, method_map: MethodMap | None = None) -> dict:
+    """The methods naming a feature term (each bounded), else the class header; `lines` are `(number, text)` pairs of the decompiled file.
+    `bytecode` gives each quoted method its bytecode identity(ies) from the method map (82.8), or `[]` = unmapped, never a guess."""
     lines = source.splitlines()
     chosen = [(a, b) for a, b in method_spans(lines) if any(matcher.text_hits(lines[i]) for i in range(a, b + 1))][:MAX_EXCERPT_METHODS]
     shown: list[tuple[int, str]] = []
@@ -156,15 +191,31 @@ def excerpt(source: str, matcher: Matcher) -> dict:
             shown += [(i + 1, lines[i]) for i in block]
             if b - a + 1 > MAX_METHOD_LINES:
                 shown.append((block[-1] + 2, f"    // ... {b - a + 1 - MAX_METHOD_LINES} more line(s) of this method not shown"))
-        return {"kind": "methods", "methods": len(chosen), "lines": shown}
+        links = [{"decompiled_lines": [a + 1, b + 1], "identities": method_map.identities_for_range(a + 1, b + 1) if method_map else []} for a, b in chosen]
+        return {"kind": "methods", "methods": len(chosen), "lines": shown, "bytecode": links}
     declared = next((i for i, line in enumerate(lines) if re.search(r"\b(?:class|interface|enum)\s+\w+", line)), 0)
     shown = [(i + 1, lines[i]) for i in range(declared, min(len(lines), declared + MAX_HEADER_LINES))]
-    return {"kind": "header", "methods": 0, "lines": shown}
+    return {"kind": "header", "methods": 0, "lines": shown, "bytecode": []}
 
 
 def _locate(trees: dict[str, dict], location: str) -> Path | None:
     tree_id, _, jar_rel = location.partition(":")
     return trees[tree_id]["path"] / jar_rel if tree_id in trees else None
+
+
+def _link_methods(folder: Path, outer: str, index: dict[str, list[dict]] | None, index_note: str) -> None:
+    """Write the method map beside `<outer>.java` (82.8): bytecode method identity -> decompiled line range, from Vineflower's pairs and the line tables."""
+    lines_file = folder / f"{outer}.lines.json"
+    try:
+        pairs = [(int(a), int(b)) for a, b in json.loads(lines_file.read_text(encoding="utf-8"))["pairs"]]
+    except (OSError, ValueError, KeyError, TypeError):
+        pairs = []
+    spans = method_spans((folder / f"{outer}.java").read_text(encoding="utf-8", errors="replace").splitlines())
+    rows: list[dict] = []
+    for class_name, details in sorted((index or {}).items()):
+        if class_name == outer or class_name.startswith(f"{outer}$"):
+            rows += resolve_methods(class_name, details, pairs, spans)
+    write_map(folder, outer, pairs, rows, index_note if index is None else "ok")
 
 
 def _cache_valid(meta_path: Path, toolchain: Toolchain) -> bool:
@@ -174,7 +225,7 @@ def _cache_valid(meta_path: Path, toolchain: Toolchain) -> bool:
         return False
 
 
-def _decompile_jar_classes(jar: Path, sha: str, outers: list[str], cache: Path, toolchain: Toolchain, runner) -> dict[str, dict]:
+def decompile_jar_classes(jar: Path, sha: str, outers: list[str], cache: Path, toolchain: Toolchain, runner, indexer=None) -> dict[str, dict]:
     """Per outer class: {"status": CACHED|DECOMPILED|FAILED|NOT_IN_JAR, "path", "log"}; only classes not already cached are run."""
     folder = cache / sha
     meta_path = folder / "meta.json"
@@ -183,8 +234,8 @@ def _decompile_jar_classes(jar: Path, sha: str, outers: list[str], cache: Path, 
     todo = []
     for outer in outers:
         target = folder / f"{outer}.java"
-        if fresh_cache and target.is_file():
-            out[outer] = {"status": "CACHED", "path": target, "log": ""}
+        if fresh_cache and target.is_file() and (folder / f"{outer}.methods.json").is_file():
+            out[outer] = {"status": "CACHED", "path": target, "log": "", "map": MethodMap.load(folder, outer)}
         else:
             todo.append(outer)
     if todo:
@@ -193,15 +244,19 @@ def _decompile_jar_classes(jar: Path, sha: str, outers: list[str], cache: Path, 
             present = {outer_name(n) for n in written}
             for outer in todo:
                 if outer not in present:
-                    out[outer] = {"status": "NOT_IN_JAR", "path": None, "log": ""}
+                    out[outer] = {"status": "NOT_IN_JAR", "path": None, "log": "", "map": None}
             runnable = [o for o in todo if o in present]
             if runnable:
                 folder.mkdir(parents=True, exist_ok=True)
                 code, log = runner(toolchain, Path(scratch), folder)
+                index, index_note = (indexer or jar_method_index)(jar)
                 for outer in runnable:
                     target = folder / f"{outer}.java"
                     ok = target.is_file()
-                    out[outer] = {"status": "DECOMPILED" if ok else "FAILED", "path": target if ok else None, "log": "" if ok else f"exit {code}: {log.strip()[-200:]}"}
+                    if ok:
+                        _link_methods(folder, outer, index, index_note)
+                    out[outer] = {"status": "DECOMPILED" if ok else "FAILED", "path": target if ok else None, "log": "" if ok else f"exit {code}: {log.strip()[-200:]}",
+                                  "map": MethodMap.load(folder, outer) if ok else None}
                 atomic_write_json(meta_path, {"schema_version": 1, "jar_sha256": sha, "vineflower": toolchain.vineflower_version, "jdk": toolchain.jdk,
                                               "label": STATIC, "note": "derived reading aid; the bytecode stays authoritative"})
     return out
@@ -247,11 +302,11 @@ def _decompile_selected(trees: dict[str, dict], selected: list[dict], matcher: M
     results = []
     for sha, jar in sorted(jar_of.items()):
         outers = sorted({entry for (entry, s) in versions if s == sha})
-        done = _decompile_jar_classes(jar, sha, outers, base, toolchain, runner)
+        done = decompile_jar_classes(jar, sha, outers, base, toolchain, runner)
         for outer in outers:
             info, row = done[outer], versions[(outer, sha)]["row"]
             text = info["path"].read_text(encoding="utf-8", errors="replace") if info["path"] else ""
-            cut = excerpt(text, matcher) if text else {"kind": "none", "methods": 0, "lines": []}
+            cut = excerpt(text, matcher, info.get("map")) if text else {"kind": "none", "methods": 0, "lines": [], "bytecode": []}
             results.append({"class": row["class"], "trees": versions[(outer, sha)]["trees"], "jar": jar.name, "jar_sha256": sha, "status": info["status"], "log": info["log"],
                             "excerpt": {**cut, "lines": [[n, t] for n, t in cut["lines"]]}, "label": STATIC})
     return sorted(results, key=lambda r: (r["class"], r["jar_sha256"]))
