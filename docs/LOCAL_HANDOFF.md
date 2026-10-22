@@ -149,7 +149,7 @@ the test suite while it does (hermeticity check), then commit them.
   with the following mods" (proven on CLICKTEST-20261011: main menu reached with no manual click; the log is in
   `<id>.windows.txt`). `BF_NO_AUTOCLICK=1` turns it off. `probe-group live TESTID` (after `install N`) plays the whole live run unattended with real clicks (leave the mouse and keyboard alone for about five minutes; then `probe-group report` and `record --archive` on that log). `probe-group smoke` (after `install N`) does the same click from Python and boots to the main menu in about 12 s: run it before asking anyone to play. The mass boot test (`java-matrix`) starts java directly on fresh instance rigs and needs no click.
 - `git commit`'s hook runs `python -m ruff`; the project `.venv` Python has no ruff. Put
-  `C:\Users\exxec\AppData\Local\Python\pythoncore-3.14-64` first on `PATH` for the commit.
+  `C:\Users\exxec\AppData\Local\Python\pythoncore-3.15-64` first on `PATH` for the commit.
 - Workspaces get locked to non-admin sessions (twice: `Done\` zips and 14 workspaces; cause unknown). If `probe-group plan` says
   "Access is denied", run `tools\unlock-workspaces.ps1 -Apply` from an Administrator PowerShell (dry run without `-Apply`).
 - Existing archive handling is path-specific: ordinary group `record --archive` calls the move-aside path;

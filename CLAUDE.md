@@ -126,7 +126,7 @@ in a cloud session. Build and test what you can, then add an entry to `docs/LOCA
 - Live harness: the game launcher waits for a click (`auto_click=True` for any new boot path); the probe row in the mission
   list is found by unique mission id and the list is scrolled two ticks per row. A LIVE_STUCK with no `combat-round` line in
   the log means another mission started, not that the probe's combat hung.
-- Run `ruff` from a Python that has it: the project `.venv` does not (use the Python 3.14 install first on `PATH`, see
+- Run `ruff` from a Python that has it: the project `.venv` does not (use the Python 3.15 install first on `PATH`, see
   `docs/LOCAL_HANDOFF.md`). It runs pyflakes plus flake8-bugbear (`B`, four noisy rules ignored in `pyproject.toml`).
 - Workspace arguments take a path (`"In operation/<name>"`); `audit-explain` refuses one without `working/`.
 

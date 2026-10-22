@@ -11,7 +11,7 @@ Status: **implemented in the D-series command set**. See
 - **One file per mod.** Every entry names the build that introduced it, so the file reads as the mod's change history.
 - **Kept next to the mod's reports, not in `bridgeforge-state/`,** because these are human decisions, not generated data, and they must survive a state wipe.
 - **Never inside `working/`,** so it is never packaged into the mod.
-- **Lenient JSON:** `#` comments and trailing commas are allowed, using the parser the scanner already has. No new dependency, and it works on Python 3.10.
+- **Lenient JSON:** `#` comments and trailing commas are allowed, using the parser the scanner already has. No new dependency.
 
 ## Shape
 

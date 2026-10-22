@@ -1,0 +1,1 @@
+- Documentation refresh 2026-10-21: README quick checks and a list of the new commands, revival guide section 12b (archive gate, REMOVALS, gates.json, merge-train, hygiene, atlas research), ROADMAP-3 and ROADMAP_STATUS marks for merged items 79.7 and 80-81, version lines 0.4.0 / probe 0.3.1, remaining Python 3.14 references.

@@ -540,6 +540,30 @@ yet. `snapshot-restore-check SNAPSHOT --to <new empty folder> --source-root <rep
 folder and hashes it: the best offline verdict is RESTORED_OFFLINE, and `recoverable` stays false until a rig scenario has run
 in the copy.
 
+## 12b. Archive checks, gates and research (ROADMAP-3 items 79-81, offline; no live run yet)
+
+- **Dropped features.** `dropped-features WORKSPACE` (or `--queue "In operation" --write DIR`) lists what the older tree
+  (`PORT_SOURCE.json`, else the matching `original/` mod) had and `working/` lacks, minus `reports/REMOVALS.json`. Remove a file on
+  purpose with `remove WORKSPACE PATH... --reason "..."`: it moves to `scratch/removed/<date>/`, is recorded in `REMOVALS.json`, and
+  is refused while other files still reference it (`--force-dangling` records the references).
+- **Archive gate.** `archive` and `revise finalize` run that sweep plus the content-parity audit first. DROPS_UNEXPLAINED and
+  LOSS_SUSPECTED refuse, UNDETERMINED warns; `--allow-unexplained REASON` (20+ characters) goes ahead and writes the reason to
+  `ARCHIVE_NOTE.md`. On probe 0.3.0 or later (current 0.3.1), `probe-group record --accept` prints the archive command for each
+  passing workspace.
+- **Owner decisions.** `decision template port-dropped-feature` prints a draft; `decision apply DRAFT [--dry-run]` runs the ticked
+  actions and is idempotent. `escalation triage QUEUE` groups open packets by what they wait on.
+- **Live gates.** `gates.json` (schema 1, one per repo) lists each open rig gate with its state, `needs` and commands. `gates check`
+  validates it, `gates lint` fails when a cited status line lacks the gate's state word, and `gates record` writes a result back
+  (only that file). `board --live-pending --repos DIR... [--write FILE]` groups open gates into the fewest rig configurations and
+  prints one session plan. Never change a gate's state without recorded evidence.
+- **Agent sessions and merging.** `hygiene [REPO_DIR]` is a read-only preflight (exit 0 clean, 1 findings, 2 cannot check).
+  `merge-train PR... [--worktree PR=PATH] [--dry-run]` merges pull requests in the given order, rebasing each, regenerating the
+  generated files and waiting for checks; it skips a PR that is already merged.
+- **Research over indexed mods (STATIC, what code references, not what runs).** After `atlas build`: `atlas api-usage PREFIX`,
+  `atlas save-risk [MOD]`, `atlas libraries`, `atlas migrations OLD NEW` (or `--pairs-from QUEUE`, `--pairs-installed QUEUE
+  --installed MODS_DIR`), `atlas exemplars FEATURE`, and `api how OLD_SYMBOL --old-api JAR --new-api JAR`. Findings are proposals,
+  never rules.
+
 **Not enabled or not built.** Auto-acceptance of agent changes is report-only (`--auto-accept` refuses). The
 `legacy-event-system` check (item 72 E3) is not built. `port-dropped-feature` (E4, REVIEW) needs a `reports/PORT_SOURCE.json`
 (`docs/PORT_SOURCE_FORMAT.md`) before it reports anything.

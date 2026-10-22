@@ -5,7 +5,7 @@ repairs on copies, escalate judgment, and qualify candidates with separate stati
 The reference revival target is Starsector 0.98a-RC8 / Java 17. A clean scan or successful compile is not proof
 that a mod loads, preserves its features or is safe for existing saves.
 
-**Version status, checked 2026-10-18:** this checkout identifies as 0.4.0. The latest published release is
+**Version status, checked 2026-10-21:** this checkout identifies as 0.4.0 (the bundled probe mod is 0.3.1). The latest published release is
 [0.2.0, a pre-release](https://github.com/Exxec/Project-BridgeForge/releases/tag/v0.2.0), not a published 0.3.0 or 0.4.0 build.
 The [publication receipt](docs/RELEASE_0_2_0.md) records that release's exact source and artifact hashes.
 Current-main documentation can describe capabilities absent from the older wheel; use the matching tag/source docs.
@@ -23,6 +23,17 @@ python -m pip install -e .
 python -m pip install -e ".[archives]"
 python -m bridgeforge --help
 ```
+
+Run the checks before committing (full suite takes several minutes; CI runs it on Windows and Ubuntu with Python 3.15):
+
+```powershell
+python -m pip install ruff                 # the project .venv does not carry it
+ruff check .
+python -m bridgeforge.test_guard           # full suite; also fails if the checkout changed
+python -m bridgeforge docs-index --check   # docs/COMMANDS.md and docs/CHECKS.md are generated
+```
+
+Add a `changelog.d/<slug>.md` fragment instead of editing `CHANGELOG.md`; see [CLAUDE.md](CLAUDE.md) for the contributor rules.
 
 Java/API inspection and compilation require the corresponding locally supplied JDK/game/library inputs.
 Live testing additionally requires a configured isolated rig and the supported Windows driver. No game, mod or save
@@ -51,6 +62,15 @@ prepared, tested and then finalized without changing the tested bytes (`revise p
 changes is report-only: `escalation run --auto-accept` refuses until its prerequisites have live evidence. Details and the
 command sequence are in the [revival guide](docs/BRIDGEFORGE_REVIVAL_GUIDE.md) section 12; status per item is in
 [ROADMAP_STATUS](docs/ROADMAP_STATUS.md).
+
+**Added 2026-10-21 (offline unless stated).** `archive` and `revise finalize` now run `dropped-features` (what the older tree had
+that `working/` lacks, minus `reports/REMOVALS.json`; record deliberate removals with `remove`) and a content-parity audit, and
+refuse unexplained drops unless `--allow-unexplained REASON` is given. `gates.json` holds each repo's open live gates
+(`gates check|lint|record`); `board --live-pending --repos DIR...` turns them into one rig session plan. `decision apply DRAFT`
+runs the ticked actions of an owner decision draft, `hygiene` is a read-only preflight for agent sessions, `merge-train PR...`
+merges stacked pull requests in order (it skips ones already merged), and `atlas api-usage|save-risk|libraries|migrations|exemplars`
+and `api how` give static research over indexed mods. None of this is live-proven; see the
+[revival guide](docs/BRIDGEFORGE_REVIVAL_GUIDE.md) section 12b.
 
 Project Go extraction observations can be joined to exact selected candidate bytes with the read-only
 [localization coverage API](docs/LOCALIZATION_COVERAGE_IMPORT.md). A hash match does not establish complete coverage,

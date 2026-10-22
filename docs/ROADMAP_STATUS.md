@@ -4,8 +4,8 @@ Reconciled 2026-10-17 for the owner-approved planning update. This is a compact 
 `ROADMAP.md`, not a replacement history. Historical test/run claims below are attributed to their recorded evidence;
 this documentation pass did not rerun the suite, launch the game or requalify releases.
 
-Source/GitHub documentation audit 2026-10-18: current source/default branch is `3342654d`, package 0.3.0; latest
-published tool is v0.2.0 pre-release. Proposed S1-S4 strategy remains unimplemented. DOC-001 (`archive --refresh`
+Source/GitHub documentation audit 2026-10-18: current source/default branch is `3342654d`, package 0.3.0 then (0.4.0 on 2026-10-21); latest
+published tool is v0.2.0 pre-release (re-checked 2026-10-21). Proposed S1-S4 strategy remains unimplemented. DOC-001 (`archive --refresh`
 deleted the old archive) was fixed 2026-10-18; see `BUGS.md` and [the audit](DOCS_AUDIT_2026-10-18.md). Neither is a
 fresh live acceptance.
 
@@ -21,6 +21,12 @@ fresh live acceptance.
 | 73 less hand work | Implemented offline 2026-10-18 except E3: A3, A4, B1, B4-B7, C1-C4, D1-D3, E1/E2 (report-only), E4, F1-F6, G1-G6, H1, H3; B2 added no rule (no RC8 member involved, reason in `signature_rewrites.py`); A2 superseded by R2, H2 by R5 | Merged suite 2026-10-18 (see 75); per-item tests named in each commit; F sweeps over all 316 workspaces in the commit bodies; A1 fresh scan 2026-10-14 (`bridgeforge-state/finding-stats/2026-10-14`, local): 100/316 unattended | Live and real-queue runs in LOCAL_HANDOFF 0b; `revive` reaching code/decision-tier fixers is an open owner decision; B6 drafting has no command yet |
 | 74 Zorg/EPTA | Working revisions implemented | `docs/OWNER_MOD_FOLLOWUP_2026-10-17.md`: Zorg 119 proxy assertions + package audit; EPTA scoped audit + static scan | LIVE PENDING: copied-save upgrade/reload and campaign visuals; new revisions not archived |
 | 75 trust refinements | R1-R6 and R8 implemented offline 2026-10-18, DOC-001 fixed; every live gate pending | Merged suite 2026-10-18: 2211 tests, only the known `test_locks` intermittent failing (see commit `Fix item 73 merge`); no rig run | LOCAL_HANDOFF 0b, R1 first |
+
+Items 79.7 and 80-81 (ROADMAP-3), merged to `main` 2026-10-21 as PRs #41-#53, offline only (tests, no rig run): 79.7 one launcher path
+(`launch.py`, `window_watch.py`); 80.1 changelog fragments and `merge-train`; 80.2 and 80.6 `gates.json` and `board --live-pending`;
+80.3 archive gate; 80.4 `decision apply`; 80.7 `escalation triage`; 80.8 `hygiene`; 81.1-81.5 atlas census, migrations and exemplars.
+80.5 (Salvor pin autopilot) lives in the Salvor repo (Project-Salvor PR #7); its first nightly pin PR has not run yet. Probe 0.3.1 is built into the probe mod; its
+live behaviour is not yet recorded in `gates.json`. Item 82 is a proposal only.
 
 Item 75 work contracts:
 

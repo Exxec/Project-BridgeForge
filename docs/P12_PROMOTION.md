@@ -33,5 +33,5 @@ No actual mod promotion or new live validation is implied by tooling tests.
 
 Vacuum's subsequent layout migration is recorded in P12_VACUUM_LAYOUT.md.
 Historical exact-source tool publication is recorded in [RELEASE_0_2_0.md](RELEASE_0_2_0.md): v0.2.0 is a published
-pre-release. Current source identifies as 0.3.0; no 0.3.0 release was found on 2026-10-18. Tool publication and
+pre-release. Current source identifies as 0.4.0; no 0.3.0 or 0.4.0 release was found on 2026-10-21. Tool publication and
 promotion/layout checkpoints do not complete a mod's outstanding gameplay or persistence validation.
