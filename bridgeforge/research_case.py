@@ -42,6 +42,22 @@ def locate_trees(workspace: Path) -> list[dict]:
     return out
 
 
+def locate_peer(peer: Path) -> dict | None:
+    """One sibling case workspace (its working copy, else its first original mod root) or a bare mod folder, as a `peer` tree; None when it holds none."""
+    peer = Path(peer).expanduser().resolve()
+    path = None
+    if (peer / "working").is_dir():
+        path = peer / "working"
+    elif (peer / "original").is_dir():
+        roots = mod_roots(peer / "original")
+        path = roots[0] if roots else None
+    elif (peer / "mod_info.json").is_file():
+        path = peer
+    if path is None:
+        return None
+    return {"label": "peer", "id": f"peer:{peer.name}", "path": path, "rel": peer.name}
+
+
 def removals(workspace: Path, matcher: Matcher) -> dict:
     """REMOVALS.json entries mentioning a term, each with the artifacts its reason names checked for existence in working/."""
     path = workspace / "working" / REMOVALS_FILE

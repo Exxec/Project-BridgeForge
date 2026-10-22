@@ -5,6 +5,8 @@ identifier characters (`player_*`). A term with a file extension (`commands.csv`
 and, for the data readers, the ids that file defines or references. Matching is case-insensitive substring matching.
 
 Evidence labels (82 guiding rule: nothing is upgraded on the way through):
+  AUTHOR CLAIM  a line of a changelog or readme the mod's author wrote; weaker than STATIC: what the author says changed, a hint to confirm
+             in code, never evidence of what the code or the game does.
   STATIC     read from files, bytecode, an index or a record; says what code and data contain, not what the game does.
   OBSERVED   seen in a recorded live run or captured baseline (a fact about that run only).
   VALIDATED  a gate in gates.json that is PASS with evidence, within that gate's declared scope.
@@ -15,8 +17,8 @@ from __future__ import annotations
 import re
 from typing import Iterable
 
-STATIC, OBSERVED, VALIDATED = "STATIC", "OBSERVED", "VALIDATED"
-LABEL_ORDER = (STATIC, OBSERVED, VALIDATED)
+AUTHOR_CLAIM, STATIC, OBSERVED, VALIDATED = "AUTHOR CLAIM", "STATIC", "OBSERVED", "VALIDATED"
+LABEL_ORDER = (AUTHOR_CLAIM, STATIC, OBSERVED, VALIDATED)
 _FILE_TERM = re.compile(r"\.[A-Za-z0-9]{2,5}\Z")
 
 

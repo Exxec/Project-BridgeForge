@@ -273,7 +273,7 @@ class ReportTests(unittest.TestCase):
             second = build_report("Crusade,commands.csv", ws, QUESTION, atlas_db=db, repo=repo, build=False)
         self.assertEqual(json.dumps(first, sort_keys=True), json.dumps(second, sort_keys=True))
         self.assertEqual(render_markdown(first), render_markdown(second))
-        self.assertEqual(first["schema_version"], 1)
+        self.assertEqual(first["schema_version"], 2)
 
     def test_empty_feature_or_question_and_non_workspaces_are_refused(self) -> None:
         with resolved_temp_dir() as root:
@@ -299,7 +299,7 @@ class CliTests(unittest.TestCase):
             markdown = (target / "research-report.md").read_text(encoding="utf-8")
             leftovers = [p.name for p in target.iterdir() if p.suffix == ".tmp"]
         self.assertEqual(code, 0)
-        self.assertEqual((report["schema_version"], report["read_only"], leftovers), (1, True, []))
+        self.assertEqual((report["schema_version"], report["read_only"], leftovers), (2, True, []))
         self.assertIn("reconciliation:", out)
         self.assertIn("## Summary of what the evidence supports", markdown)
         self.assertIn("## 7. Unknowns and the test that would settle each", markdown)

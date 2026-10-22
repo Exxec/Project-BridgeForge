@@ -10,15 +10,17 @@ from pathlib import Path
 
 from .lookup import default_discovery_dir
 from .research_atlas import ATLAS_BUILD, case_migrations, database_implementers, database_status, tree_concepts
-from .research_case import content_parity_for, dropped, gates_for, live_records, locate_trees, removals
-from .research_claims import Ledger, change_hypotheses, feature_claims, gate_claims, live_claims, parity_claims, removal_claims
+from .research_case import content_parity_for, dropped, gates_for, live_records, locate_peer, locate_trees, removals
+from .research_changelog import tree_changelog_quotes
+from .research_decompile import DEFAULT_MAX_CLASSES, HOW_TO_GET, decompile_report_classes, jar_class_rows
+from .research_claims import Ledger, change_hypotheses, changelog_claims, decompiled_claims, feature_claims, gate_claims, live_claims, parity_claims, removal_claims
 from .research_compare import compare, merge
 from .research_dseries import baselines_and_diffs, behavior_model, graph_concepts, load_graph, scoped_behaviors
 from .research_reconcile import CATEGORIES, reconcile
 from .research_search import search_tree, summarize
-from .research_terms import STATIC, Matcher, parse_terms
+from .research_terms import AUTHOR_CLAIM, STATIC, Matcher, parse_terms
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 TOOL = "bridgeforge research report"
 
 
@@ -27,10 +29,13 @@ class ResearchError(ValueError):
 
 
 def _tree_ids(trees: list[dict]) -> dict[str, dict]:
-    """Stable ids for trees: `working`, `original`, `old-tree` (a second original gets `original-2`)."""
+    """Stable ids for trees: `working`, `original`, `old-tree` (a second original gets `original-2`); a peer keeps its `peer:NAME` id."""
     seen: dict[str, int] = {}
     out = {}
     for tree in trees:
+        if tree.get("id"):
+            out[tree["id"]] = tree
+            continue
         seen[tree["label"]] = seen.get(tree["label"], 0) + 1
         tree_id = tree["label"] if seen[tree["label"]] == 1 else f"{tree['label']}-{seen[tree['label']]}"
         out[tree_id] = {**tree, "id": tree_id}
@@ -121,6 +126,8 @@ def _fill_ledger(ledger: Ledger, parts: dict) -> None:
     parity_claims(ledger, parts["parity"])
     live_claims(ledger, parts["live"])
     gate_claims(ledger, parts["gate"]["gates"])
+    changelog_claims(ledger, parts["changelogs"])
+    decompiled_claims(ledger, parts["decompiled"])
     _reconciliation_claims(ledger, parts["reconciliation"])
     behaviors = parts["behaviors"]
     if behaviors and behaviors["behaviors_total"]:
@@ -134,10 +141,58 @@ def _fill_ledger(ledger: Ledger, parts: dict) -> None:
             ledger.unknown(f"{item['name']} is missing for this case: {item['note']}", {"kind": "command", "gates": [], "commands": [item["command"]], "proposed": None}, [])
 
 
-def build_report(feature: str, case: Path, question: str, *, atlas_db: Path, repo: Path | None = None, build: bool = True) -> dict:
+def _peer_trees(peers: tuple[Path, ...], workspace: Path) -> list[dict]:
+    found = []
+    for peer in peers:
+        tree = locate_peer(peer)
+        if tree is None:
+            raise ResearchError(f"--peer {peer} holds no working/ or original/ folder and no mod_info.json")
+        if Path(peer).expanduser().resolve() == workspace:
+            raise ResearchError(f"--peer {peer} is the case itself")
+        found.append(tree)
+    return found
+
+
+def _check_cache(cache_dir: Path | None, trees: dict[str, dict], workspace: Path) -> Path | None:
+    if cache_dir is None:
+        return None
+    cache = Path(cache_dir).expanduser().resolve()
+    roots = [workspace, *(t["path"].resolve() for t in trees.values())]
+    if any(cache == root or root in cache.parents for root in roots):
+        raise ResearchError(f"decompiled code is never written into a workspace or mod tree ({cache})")
+    return cache
+
+
+def _decompile_input(section: dict, requested: bool) -> dict:
+    record = {"name": "decompiler", "path": "", "command": HOW_TO_GET}
+    if not requested:
+        return {**record, "status": "SKIPPED", "note": "--no-decompile: no jar class was decompiled"}
+    if section["status"] == "MISSING":
+        return {**record, "status": "MISSING", "note": f"{section['note']}: readable code was not produced; the bytecode findings above are unaffected"}
+    if section["status"] == "NO_CLASSES":
+        return {**record, "status": "PRESENT", "note": section["note"]}
+    shown = sum(c["status"] in ("CACHED", "DECOMPILED") for c in section["classes"])
+    return {**record, "status": "PRESENT", "note": f"Vineflower {section['vineflower']}, JDK {section['jdk']}; {shown} of {section['decompiled_classes']} class version(s) readable, {section['candidates']} class(es) found"}
+
+
+def _changelog_section(trees: dict[str, dict], matcher: Matcher) -> tuple[dict, dict]:
+    files, quotes = [], []
+    for tree_id, tree in trees.items():
+        found = tree_changelog_quotes(tree["path"], tree_id, matcher)
+        files += found["files"]
+        quotes += found["quotes"]
+    note = f"{len(files)} changelog file(s)/section(s) in {len({f['tree'] for f in files})} tree(s); {len(quotes)} line(s) name the feature (AUTHOR CLAIM, a hint to confirm in code)" if files else "no changelog file or README changelog section in any tree"
+    return {"label": AUTHOR_CLAIM, "files": files, "quotes": quotes}, {"name": "author-changelogs", "status": "PRESENT" if files else "NONE_FOUND", "path": "", "command": "", "note": note}
+
+
+def build_report(feature: str, case: Path, question: str, *, atlas_db: Path, repo: Path | None = None, build: bool = True, peer_workspaces: tuple[Path, ...] = (),
+                 decompile: bool = True, max_classes: int = DEFAULT_MAX_CLASSES, cache_dir: Path | None = None) -> dict:
     terms, workspace = _check_request(feature, case, question)
+    if max_classes < 1:
+        raise ResearchError("--max-classes must be at least 1")
     matcher = Matcher(terms)
-    trees = _tree_ids(locate_trees(workspace))
+    trees = _tree_ids(locate_trees(workspace) + _peer_trees(peer_workspaces, workspace))
+    cache = _check_cache(cache_dir, trees, workspace)
     if not trees:
         raise ResearchError(f"{workspace} holds no mod tree to search")
     analysis = {tid: _analyze_tree(tree, matcher, build) for tid, tree in trees.items()}
@@ -146,18 +201,21 @@ def build_report(feature: str, case: Path, question: str, *, atlas_db: Path, rep
     mod_ids = _mod_ids(trees)
     removal, drop, parity = removals(workspace, matcher), dropped(workspace, matcher), content_parity_for(workspace, matcher)
     live, gate = live_records(workspace, mod_ids, matcher), gates_for(repo or _find_repo(Path.cwd()), matcher, mod_ids)
-    inputs = d_inputs + a_inputs + [removal["input"], drop["input"], parity["input"], live["input"], gate["input"]]
+    changelogs, changelog_input = _changelog_section(trees, matcher)
+    jar_classes = jar_class_rows(trees, analysis)
+    decompiled = decompile_report_classes(trees, jar_classes, matcher, cache, max_classes, workspace.parent.parent) if decompile else {"status": "SKIPPED", "classes": [], "label": STATIC}
+    inputs = d_inputs + a_inputs + [changelog_input, _decompile_input(decompiled, decompile), removal["input"], drop["input"], parity["input"], live["input"], gate["input"]]
     concepts = {tid: merge(a["atlas"], a["dseries"]) for tid, a in analysis.items()}
     matrix = compare(concepts, {tid: t["label"] for tid, t in trees.items()}, peers["shown"], removal["entries"])
     tree_rows = [{"id": tid, "label": t["label"], "rel": t["rel"], "terms": list(terms), "term_summary": analysis[tid]["term_summary"]} for tid, t in trees.items()]
     reconciliation = _reconciliation(analysis)
     ledger = Ledger()
     _fill_ledger(ledger, {"tree_rows": tree_rows, "removal": removal, "drop": drop, "parity": parity, "live": live, "gate": gate, "reconciliation": reconciliation,
-                          "behaviors": behaviors, "migrations": migrations, "matrix": matrix, "inputs": inputs})
+                          "behaviors": behaviors, "migrations": migrations, "matrix": matrix, "inputs": inputs, "changelogs": changelogs, "decompiled": decompiled})
     return {"schema_version": SCHEMA_VERSION, "tool": TOOL, "read_only": True, "feature": list(terms), "question": question.strip(), "case": {"workspace": workspace.name, "mod_ids": sorted(mod_ids)},
-            "trees": [{k: v for k, v in t.items() if k != "path"} for t in tree_rows], "inputs": sorted(inputs, key=lambda i: (i["name"], i["status"])),
+            "trees": [{k: v for k, v in t.items() if k != "path"} for t in tree_rows], "peer_workspaces": sorted(t["rel"] for t in trees.values() if t["label"] == "peer"), "inputs": sorted(inputs, key=lambda i: (i["name"], i["status"])),
             "search": {tid: {"hits": a["hits"][:200], "hits_total": len(a["hits"])} for tid, a in analysis.items()},
-            "reconciliation": reconciliation, "peers": peers, "comparison": matrix, "migrations": migrations,
+            "jar_classes": jar_classes, "decompiled": decompiled, "changelogs": changelogs, "reconciliation": reconciliation, "peers": peers, "comparison": matrix, "migrations": migrations,
             "dseries": {"behaviors": behaviors, **runtime}, "removals": removal["entries"], "dropped_features": {"verdict": drop["verdict"], "items": drop["items"]}, "content_parity": parity["row"],
             "live_records": live["runs"], "gates": gate["gates"], "claims": ledger.claims, "hypotheses": ledger.hypotheses, "unknowns": ledger.unknowns}
 
@@ -166,7 +224,7 @@ def build_report(feature: str, case: Path, question: str, *, atlas_db: Path, rep
 def _mod_ids(trees: dict[str, dict]) -> set[str]:
     from .scanner import _load_lenient_json_file
     ids = set()
-    for tree in trees.values():
+    for tree in (t for t in trees.values() if t["label"] != "peer"):
         info = _load_lenient_json_file(tree["path"] / "mod_info.json")
         if isinstance(info, dict) and info.get("id"):
             ids.add(str(info["id"]))
