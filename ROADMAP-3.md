@@ -34,34 +34,34 @@ conclusions.
 
 **80. Less hand work across the projects (owner 2026-10-21: "work them all in your preferred order").** Order: 80.1, then
 80.2 with 80.6, 80.3, 80.5, 80.4, 80.7, 80.8.
-- 80.1 Merge-friendly changes: `changelog.d/` fragments assembled at release (no PR edits CHANGELOG.md); generated files
+- 80.1 **Built offline, merged (#41, #47, #51, #53); live pending where it needs the rig.** Merge-friendly changes: `changelog.d/` fragments assembled at release (no PR edits CHANGELOG.md); generated files
   (CLI golden, COMMANDS.md, CHECKS.md) regenerated on conflict or by CI; pre-push runs the cross-cutting tests (probe
   contract, safeio ratchet, docs index, CLI golden) plus the tests of touched modules; a `merge-train` command.
-- 80.2 Rig-session planner: `board --live-pending` gathers pending live gates from every repo, groups them by rig
+- 80.2 **Built offline, merged (#43); live pending where it needs the rig.** Rig-session planner: `board --live-pending` gathers pending live gates from every repo, groups them by rig
   configuration and prints one session plan with commands; results are written back as PASS/FAIL/NOT_TESTED (with 79.7).
-- 80.3 Archive gate wired: `archive` and `revise finalize` run dropped-features, content parity and the orphaned-backup
+- 80.3 **Built offline, merged (#45); live pending where it needs the rig.** Archive gate wired: `archive` and `revise finalize` run dropped-features, content parity and the orphaned-backup
   check and refuse unexplained drops; a passing live run with probe 0.3.x offers `archive --refresh`.
-- 80.4 `decision apply DRAFT` (77.20): ticked boxes become baseline keys, REMOVALS entries, roadmap lines and rig steps.
-- 80.5 Pin autopilot: Salvor tests nightly against BridgeForge main and opens a pin-bump PR when green; shared-fixture
+- 80.4 **Built offline, merged (#44); live pending where it needs the rig.** `decision apply DRAFT` (77.20): ticked boxes become baseline keys, REMOVALS entries, roadmap lines and rig steps.
+- 80.5 **Not built here; status unverified from this repo.** Pin autopilot: Salvor tests nightly against BridgeForge main and opens a pin-bump PR when green; shared-fixture
   drift with Project Go turns blocking once Project Go updates.
-- 80.6 Status generated from `gates.json` per repo (R7): status tables and the rig plan come from it; a lint fails CI when
+- 80.6 **Built offline, merged (#43); live pending where it needs the rig.** Status generated from `gates.json` per repo (R7): status tables and the rig plan come from it; a lint fails CI when
   a status doc contradicts it.
-- 80.7 Review triage: VoidSmith's 726 calibration rows and BridgeForge's escalation packets grouped by the reason they
+- 80.7 **Built offline, merged (#46); live pending where it needs the rig.** Review triage: VoidSmith's 726 calibration rows and BridgeForge's escalation packets grouped by the reason they
   wait, so one decision clears a group.
-- 80.8 Agent hygiene preflight (77.13): untracked code, unexpected edits to tracked files and broken builds listed before an
+- 80.8 **Built offline, merged (#48); live pending where it needs the rig.** Agent hygiene preflight (77.13): untracked code, unexpected edits to tracked files and broken builds listed before an
   agent session ends or a commit is made.
 
 **81. Dissection: research from current mods (owner 2026-10-21: "throw current mods at bridgeforge and see if we can
 glean more research").** Read-only over the player's installed mods and any folder given, built on `atlas`, `api-diff`,
 `corpus-index` and `provider-index`; every result is labelled STATIC (what code references, not what runs).
-- 81.1 API usage census: which RC8 API classes/methods each mod's jars and loose scripts call; `api how SYMBOL` links an
+- 81.1 **Built offline, merged (#42); live pending where it needs the rig.** API usage census: which RC8 API classes/methods each mod's jars and loose scripts call; `api how SYMBOL` links an
   `api-diff` removal to the replacements working mods use, with example files.
-- 81.2 Migration mining: where two versions of a mod exist, cluster the API replacements between them into candidate
+- 81.2 **Built offline, merged (#50); live pending where it needs the rig.** Migration mining: where two versions of a mod exist, cluster the API replacements between them into candidate
   rewrite rules with a count of independent mods (R4 needs three before a ruling).
-- 81.3 Save-risk census: persistent-data keys, scripts added on every load (duplicate-script risk), readResolve, transient
+- 81.3 **Built offline, merged (#42); live pending where it needs the rig.** Save-risk census: persistent-data keys, scripts added on every load (duplicate-script risk), readResolve, transient
   fields, per mod.
-- 81.4 Library census: LazyLib, MagicLib, GraphicsLib and other library calls and the versions they need.
-- 81.5 Feature exemplar index: working implementations of raids/FGIs, intel, custom entities, rings, station modules,
+- 81.4 **Built offline, merged (#42); live pending where it needs the rig.** Library census: LazyLib, MagicLib, GraphicsLib and other library calls and the versions they need.
+- 81.5 **Built offline, merged (#50); live pending where it needs the rig.** Feature exemplar index: working implementations of raids/FGIs, intel, custom entities, rings, station modules,
   for recreation work.
 
 **Hygiene review 2026-10-19 (owner: "perform hygiene check then check roadmap for any worthwhile additions. implement if able then commit/push").** Item 77.3's lock-test timeout is implemented: the three live psutil scans query only their real fixture PIDs in a disposable subprocess with a 30-second timeout; fixture-child shutdown also has a deadline and kill/reap fallback. A regression verifies timeout propagation as a failure. Focused validation: 11 tests pass. This bounds test execution, not the production `who-locks` command, and supplies no game evidence. See `tests/test_locks.py`.
@@ -95,7 +95,7 @@ PERFORMED until the next rig session):
   gate evidence; a HOLLOW member never passes CAMPAIGN.
 - 79.6 SPW: map `campaign_perf` and combat-perf into `performance-report.json` so revivals carry a performance
   baseline (SPW roadmap item 5).
-- 79.7 Rig harness: one launcher path (probe-group live, bf-test.ps1, boot-test) with the same manifest, exit and
+- 79.7 **Built offline, merged (#49); live pending where it needs the rig.** Rig harness: one launcher path (probe-group live, bf-test.ps1, boot-test) with the same manifest, exit and
   done-marker handling, instead of three.
 
 **Owner follow-ups 2026-10-20 ("add both to roadmap. We should reassess other mods to see if they dropped any features").**
@@ -332,7 +332,7 @@ real-mod acceptance or runtime-record change is included.
       - 77.4 **Owner decisions waiting:** whether `revive` should try REVIEW-only fixers (B1 guards, B4 preset merge) before packeting; a command and approval flow for B6 weapon-row drafts; whether to build B3's detach-before-save template now that F2 finds 29 compiled cases.
       - 77.5 **First revision through `revise prepare` -> bound live run -> `revise finalize`**, on Zorg bf.10 or EPTA 2.1.3+bf.2 (item 74), with the R6 save-upgrade scenario for Zorg. That one run exercises R1, R5 and R6 together and closes item 74.
       - 77.6 **Release 0.4.0 after 77.1-77.5.** Source is 0.3.0 with 300+ commits since `v0.3.0` and no GitHub release for it; 0.4.0 is warranted by items 73/75, but tag it only once R1 has live evidence. Salvor pins `bridgeforge>=0.3,<0.4`: widen its range in the same change, after its provider contract test passes on 0.4.0.
-      - 77.7 **Local agent hygiene.** Agents (including Hermes) work in a git worktree, never in the main checkout; run `agent-diff-check` before merging; leave no untracked scripts in the checkout (the 2026-10-18 leftovers made the pre-commit hook fail for every commit there). Keep every document under 64k tokens, paged with next-page notes (owner 2026-10-18; `ROADMAP.md` and VoidSmith's work log were split that day).
+      - 77.7 **Local agent hygiene.** Agents work in a git worktree, never in the main checkout; run `agent-diff-check` before merging; leave no untracked scripts in the checkout (the 2026-10-18 leftovers made the pre-commit hook fail for every commit there). Keep every document under 64k tokens, paged with next-page notes (owner 2026-10-18; `ROADMAP.md` and VoidSmith's work log were split that day).
     - **Long term, by proposed release:**
       - 77.8 **S1, reproducible revival case.** Build the case record on what now exists: R1 manifests (what ran), R2 registry (what was scanned), the escalation ledger and rulings (what was decided), R5 journals (what shipped). The gap is one object that ties them per mod version; `docs/ARCHITECTURE_GAPS.md` G1/G2 describe it. Measure S1 by "a second person can replay why this archive is what it is".
       - 77.9 **S2, bounded production lane.** Item 76's measured parallelism plus item 73's metrics: track review minutes per mod, false-positive and refusal rates per check and fixer, and promotion of recurring agent fixes, not just cleared finding counts. A fixer or check that never fires on real data, or always refuses, should be retired or narrowed.

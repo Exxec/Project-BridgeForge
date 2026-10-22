@@ -55,7 +55,7 @@ The dates and original measurements in these documents are preserved. Recheck im
 
 ## GitHub and local-only scope
 
-GitHub default branch was `main` at `3342654d` when checked on 2026-10-18. Source package version is 0.3.0; latest
+GitHub default branch was `main` at `3342654d` when checked on 2026-10-18 (source package 0.3.0 then; 0.4.0 on 2026-10-21, probe 0.3.1); latest
 published tool release is v0.2.0 **pre-release**. Its GitHub asset digests match the publication receipt. No open GitHub
 issues/PRs were returned; root roadmap/local reports still contain unresolved work. Latest main CI was successful.
 
