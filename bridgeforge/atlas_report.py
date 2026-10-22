@@ -383,6 +383,7 @@ def add_parser(subcommands) -> None:
     mig.add_argument("old", nargs="?", type=Path, metavar="OLD_DIR", help="older mod folder")
     mig.add_argument("new", nargs="?", type=Path, metavar="NEW_DIR", help="newer mod folder")
     mig.add_argument("--pairs-from", type=Path, metavar="QUEUE", help="an `In operation` folder: each workspace's original/ vs working/, and Done/ originals vs shipped zips")
+    mig.add_argument("--pairs-json", type=Path, metavar="FILE", help="a pairs.json written by `corpus releases --write`: each listed old/new mod folder pair")
     mig.add_argument("--pairs-installed", type=Path, metavar="QUEUE", help="upstream evolution: each queue/Done original paired with the INSTALLED mod of the same id (needs --installed) when the version strings differ")
     mig.add_argument("--installed", type=Path, metavar="MODS_DIR", help="the game's mods folder (read only)")
     mig.add_argument("--stem", default="MIGRATIONS", help="file name stem for --write (default MIGRATIONS)")
