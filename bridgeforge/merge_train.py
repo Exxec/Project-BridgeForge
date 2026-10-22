@@ -176,6 +176,10 @@ class Train:
     def go(self, prs: list[str], worktrees: dict[str, Path]) -> None:
         head_sha: str | None = None
         for index, pr in enumerate(prs):
+            # A PR merged by hand while the train ran rebases to no commits; waiting for its head then never ends (#49).
+            if self.run(["gh", "pr", "view", pr, "--json", "state", "-q", ".state"]).stdout.strip() == "MERGED":
+                self.log(f"PR {pr}: already merged, skipped")
+                continue
             # The first PR is rebased too when its worktree is given: main may have moved since it was pushed (#48, 2026-10-21).
             if pr in worktrees:
                 head_sha = self.prepare(pr, worktrees[pr])

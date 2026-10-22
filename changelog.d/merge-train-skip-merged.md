@@ -1,0 +1,1 @@
+- `merge-train` skips a PR that is already merged (for example merged by hand while the train ran) instead of waiting for a head that never appears.
