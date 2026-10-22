@@ -26,7 +26,7 @@ Measured on `main` (`10162977`):
 | `except Exception` / `shell=True` | 23 / 1 |
 | Workspace accepted-finding baselines (`reports/baseline.json`) | 186 (3 with `probe_accepted.json`) |
 | Lint rules | ruff `E9`, `F` only (pyflakes and syntax); no type checker |
-| CI | Ubuntu and Windows, Python 3.10-3.13, coverage floor 80 |
+| CI | Ubuntu and Windows, Python 3.15, coverage floor 80 |
 | Known failing test on a clean checkout here | `test_locks::test_child_with_cwd_inside_target_is_found` |
 
 Failures found in these two days, grouped by what kind of defect they are:

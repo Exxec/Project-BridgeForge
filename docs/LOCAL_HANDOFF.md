@@ -53,7 +53,7 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
    for all eight cases. Needs an in-game evidence emitter that does not exist yet. Owner decision 2026-10-20: the Zorg bf.9 to bf.10 run may use manual evidence (screenshots plus logged steps), recorded as MANUAL, never VERIFIED; the in-game emitter is deferred to S3.
 5. **R8 restore.** `snapshot-restore-check <snapshot> --to <new empty folder outside the repo> --source-root <repo>`: expect
    RESTORED_OFFLINE; then rebuild rig junctions in the copy and run a bounded rig scenario there, never in the primary workspace.
-6. **G1 New Game fallback.** `probe-group live` on two total conversions other than Nexerelin and Ironclads; done when both reach
+6. **G1 New Game fallback.** `probe-group live` on Vacuum (`exerelin_vacuum`, the only other total conversion in the corpus); done when it reaches
    `campaign END` with a `new-game-generic(N pages)` stage; screenshots in `<TESTID>.stdout.log.newgame/`.
 7. **G6 raid mod.** `raid_run.install_raid_mod(rig, 'exipirated_avestamarket', attacker_faction='hegemony')` in a group with
    Nexerelin; done: `check_raid_log` gives RAID_OBSERVED. Confirm Janino compiles the loose scripts against Nexerelin's classes.

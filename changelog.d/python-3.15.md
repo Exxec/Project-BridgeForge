@@ -1,0 +1,2 @@
+- Python 3.15 is now required (`requires-python >=3.15`); CI and the weekly run use 3.15 only.
+- gates.json: R1/R5 use All the Domain Drones as the candidate; G1 uses Vacuum, the only other total conversion in the corpus.
