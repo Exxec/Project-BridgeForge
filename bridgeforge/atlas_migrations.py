@@ -222,6 +222,23 @@ def queue_pairs(queue: Path, scratch: Path) -> list[Pair]:
     return pairs
 
 
+def json_pairs(path: Path) -> list[Pair]:
+    """Pairs listed in a `corpus releases` pairs.json; a pair whose folders are gone or hold no mod_info.json is an error, not skipped."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        rows = data["pairs"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ValueError(f"{path} is not a pairs.json ({exc})") from None
+    pairs = []
+    for row in rows:
+        old, new = Path(row["old"]), Path(row["new"])
+        for folder in (old, new):
+            if not (folder / "mod_info.json").is_file():
+                raise ValueError(f"{path}: {folder} holds no mod_info.json (moved or deleted since the inventory?)")
+        pairs.append(Pair(str(row["label"]), old, new, str(row.get("old_version", "")), str(row.get("new_version", ""))))
+    return pairs
+
+
 def queue_originals(queue: Path) -> list[Path]:
     originals = [m for m in (_first_mod(f / "original") for f in sorted(queue.iterdir())
                              if f.is_dir() and not f.name.startswith("_")) if m]
@@ -299,12 +316,14 @@ def run_migrations(args, emit, say) -> int:
         pairs = [Pair(f"{args.old.name} -> {args.new.name}", args.old, args.new)] if args.old and args.new else []
         if args.pairs_from:
             pairs += queue_pairs(args.pairs_from, Path(scratch))
+        if args.pairs_json:
+            pairs += json_pairs(args.pairs_json)
         if args.pairs_installed:
             if not args.installed:
                 raise ValueError("--pairs-installed needs --installed MODS_DIR")
             pairs += installed_pairs(args.pairs_installed, args.installed)
         if not pairs:
-            raise ValueError("give OLD_DIR NEW_DIR, --pairs-from QUEUE or --pairs-installed QUEUE (no pairs found)")
+            raise ValueError("give OLD_DIR NEW_DIR, --pairs-from QUEUE, --pairs-json FILE or --pairs-installed QUEUE (no pairs found)")
         data = mine(pairs, catalogue, None if args.quiet else say)
     if args.write:
         for path in write_outputs(data, args.write, args.stem):
