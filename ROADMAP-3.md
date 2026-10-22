@@ -13,6 +13,13 @@ conclusions.
   agreement: both detect (corroborating static evidence, not independent validation: same code), Atlas only
   (D-series coverage gap?), D-series only (Atlas blind spot?), both but different (semantic disagreement). Disagreements
   stay as evidence; the counts become the basis for deciding later which stack is authoritative per concept.
+  - 82.1 and 82.2 progress 2026-10-22: `research report FEATURE --case WORKSPACE --question TEXT [--write DIR]` implemented
+    (`bridgeforge/cmd_research.py`, `research_*.py`; `tests/test_research_report.py`, synthetic fixtures only). Read-only (the atlas
+    database is opened `mode=ro`, `--write` inside the workspace is refused). Reuses `atlas.index_mod`, `atlas_migrations.mine`,
+    `lookup.load_graph`, `behavior_discovery.build_behavior_model`, `dropped_sweep.check_workspace`, `removals`, `live_ledger.read_runs`
+    and `gates.load_gates`. Missing inputs are listed with the producing command; archaeology is built in memory (about 25 s per tree)
+    unless `--no-build`. A root-level `reports/` folder of a tree is BridgeForge's own output and is excluded from concept evidence.
+    First pilot (Templar Crusade, 82.3 groundwork): `bridgeforge-state/research/templar-crusade/` (git-ignored).
 - P1 82.3 Active-case pilots: Templar Crusade first (removed vs replaced vs redistributed vs re-created: the
   semantic-classification problem behind the dropped-feature false positives), then SEEKER station modules (does the
   workflow generalize). Stopping condition per investigation, e.g. Templar is complete when the report identifies the
