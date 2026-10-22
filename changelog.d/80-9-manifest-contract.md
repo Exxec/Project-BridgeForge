@@ -1,0 +1,1 @@
+- ROADMAP-3 80.9: real-manifest contract check with Project Go.

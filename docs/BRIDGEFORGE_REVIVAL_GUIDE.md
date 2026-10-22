@@ -149,6 +149,15 @@ python -m bridgeforge corpus-index search shieldbypass                          
 python -m bridgeforge corpus-index search FormShield --names                    # file paths only
 ```
 
+**Which releases of each mod do I have? corpus releases.** `corpus releases ROOT... [--write DIR]` scans folders and
+`.zip`/`.7z`/`.rar` archives for `mod_info.json` (plus the `.version` file beside it) and groups the copies by mod id: versions,
+game versions, forum thread and repository links. `--write DIR` writes `releases.csv`, `RELEASES.md` (ids with one version first,
+revival targets from `--repo-root`'s `In operation/*/working` and `Done/*/*` marked, then ids with two or more versions, then what
+could not be read) and `pairs.json`, which `atlas migrations --pairs-json DIR/pairs.json` mines. Archives are read in memory
+(never extracted), only those two member types, with a size cap; `.rar` needs 7-Zip's `7z.exe` and `.7z` the `archives` extra,
+otherwise they are listed as not read. A pair needs two folders: versions that exist only inside an archive are listed as not
+pairable, so extract them and run the command again.
+
 Every result ends with a `Coverage:` line. Anything listed under `NOT searched` (for example `.7z`
 archives) was not looked inside, so "No hits" only covers the rest.
 
