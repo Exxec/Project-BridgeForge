@@ -176,12 +176,12 @@ class Train:
     def go(self, prs: list[str], worktrees: dict[str, Path]) -> None:
         head_sha: str | None = None
         for index, pr in enumerate(prs):
-            if index > 0:
-                if pr in worktrees:
-                    head_sha = self.prepare(pr, worktrees[pr])
-                else:
-                    self.log(f"PR {pr}: no --worktree given, merging without a rebase")
-                    head_sha = None
+            # The first PR is rebased too when its worktree is given: main may have moved since it was pushed (#48, 2026-10-21).
+            if pr in worktrees:
+                head_sha = self.prepare(pr, worktrees[pr])
+            elif index > 0:
+                self.log(f"PR {pr}: no --worktree given, merging without a rebase")
+                head_sha = None
             self.merge_when_green(pr, head_sha)
             head_sha = None
 
@@ -189,7 +189,7 @@ class Train:
 def plan(prs: list[str], worktrees: dict[str, Path]) -> list[str]:
     lines: list[str] = []
     for index, pr in enumerate(prs):
-        if index > 0:
+        if pr in worktrees or index > 0:
             if pr in worktrees:
                 lines += [f"PR {pr}: in {worktrees[pr]}: git fetch origin; git rebase origin/main",
                           "  conflicts: CHANGELOG.md keep both sides; generated files take origin/main; generated files are regenerated after every rebase; anything else stops",

@@ -1,0 +1,1 @@
+- `merge-train` also rebases the first PR when its worktree is given, so a PR pushed before main moved no longer fails to merge with a conflict.
