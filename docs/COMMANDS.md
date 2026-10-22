@@ -3168,6 +3168,9 @@ answer a stated question about a feature across a case workspace, Atlas-indexed 
 | `--atlas-db` ATLAS_DB | - | atlas database (default: reports/atlas.sqlite here, else under the case's repo root) |
 | `--repo` REPO | - | repo holding gates.json (default: the nearest folder above the working directory that has one) |
 | `--no-build` | - | do not build archaeology in memory (about 25 s per tree); report it as missing with its command instead |
+| `--peer` WS | repeatable | a sibling case workspace (or mod folder) whose own tree is compared too; repeatable; read-only |
+| `--no-decompile` | - | do not decompile the jar classes the terms touch (82.7); needs Vineflower and a JDK otherwise, reported as missing when absent |
+| `--max-classes` MAX_CLASSES | default 12 | decompile at most this many top-level classes (default 12); the decompiled code is cached by jar hash under DIR/decompiled/ |
 | `--json` | - | print the JSON report instead of the summary |
 
 ## revive-review
