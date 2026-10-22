@@ -27,6 +27,30 @@ conclusions.
   --live-pending` batches them with revival gates in the same rig sessions.
 - Later 82.6 Active research selection, once there is enough empirical data to measure uncertainty against; corpus
   acquisition (multiple releases of the same mods) for version timelines.
+- P1 82.7 Readable code in research reports (2026-10-22). `decompile-jar` (Vineflower 1.12.0) and `rebuild-jar` exist but
+  serve revisions only; research reads class files directly (`atlas_classfile`). `research report` decompiles the classes
+  a question touches into git-ignored `bridgeforge-state/research/<case>/decompiled/<jar-sha256>/`, records the jar hash
+  and Vineflower version, and quotes the relevant methods. Bytecode stays authoritative; decompiled Java is a derived
+  reading aid (STATIC), never evidence of runtime behaviour, never copied into a mod.
+- P2 82.8 Method link: run Vineflower with bytecode-source mapping so each decompiled line range maps to the
+  `class#method descriptor` that `bytecode-inspect` and Atlas use; a finding made in readable code points at the exact
+  bytecode method, and vice versa.
+- P2 82.9 Readable version diffs: for a migration pair, diff the decompiled text only of methods whose bytecode changed
+  (`bytecode-diff` decides what changed; the decompiled diff explains it). No second decompiler (CFR) until two readings
+  of one method disagree in a way that matters; Recaf stays a manual tool.
+- P1 82.10 Release inventory as a command: `corpus releases ROOT...` scans folders and .zip/.7z/.rar archives for
+  mod_info.json, writes releases.csv and RELEASES.md (copies per mod id, versions, game versions, forum thread and repo
+  links from .version files) and a pairs queue for `atlas migrations --pairs-from`. Replaces the 2026-10-22 one-off
+  script (`bridgeforge-state/release-inventory/`: 718 mod ids, 200 with two or more versions) and starts 82.6's corpus
+  acquisition now.
+- P2 82.11 Author changelogs as hints: parse the changelog shipped in each mod release (CHANGELOG.txt, changelog.md and
+  similar) per version; `research report` quotes lines naming the feature, labelled AUTHOR CLAIM (weaker than STATIC:
+  what the author says changed, not what the code shows). For Templar, a changelog line saying the Crusade moved or was
+  cut is the fastest hint to confirm or refute in code.
+- P2 82.12 Old game API: `api-diff` and `api how` need an older `starfarer.api.jar`. Owner: locate old starsector-core
+  installs (0.95.1a, 0.96a, 0.97a); then run `api-diff` once per step to RC8 and let `research report` and `atlas
+  migrations --old-api/--new-api` use the results, so migration proposals rest on the authoritative API change, not
+  only on mod-pair co-occurrence.
 - Prohibited: a research conclusion never turns into a migration rule automatically. Sequence: research finding ->
   validated pattern (conditions) -> migration candidate (can it safely guide an intervention?) -> approved deterministic
   rule (explicit approval, safety checks, regression evidence). Learn API patterns from other mods, never copy their code
