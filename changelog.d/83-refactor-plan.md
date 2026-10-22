@@ -1,0 +1,1 @@
+- ROADMAP-3 83 and docs/REFACTOR_PLAN_2026-10.md: cross-repo structural refactor plan.
