@@ -152,6 +152,17 @@ class MergeTrainTests(unittest.TestCase):
             self.assertTrue(world.ran(r"git rebase origin/main"))
             self.assertTrue(world.ran(r"gh pr merge 1"))
 
+    def test_an_already_merged_pr_is_skipped_without_a_rebase(self) -> None:
+        # #49 was merged by hand mid-train; its rebase left no commits and the train waited for a head that never came.
+        world = FakeWorld([
+            (r"gh pr view 1 --json state", Result(0, "MERGED\n")),
+            (r"gh pr checks \d --json", Result(0, "[{}]")),
+        ])
+        world.train().go(["1", "2"], {"1": Path("wt")})
+        self.assertFalse(world.ran(r"git rebase"))
+        self.assertFalse(world.ran(r"gh pr merge 1"))
+        self.assertTrue(world.ran(r"gh pr merge 2"))
+
     def test_other_conflict_stops_before_tests_and_push(self) -> None:
         world = FakeWorld([
             (r"git rebase origin/main", Result(1)),
