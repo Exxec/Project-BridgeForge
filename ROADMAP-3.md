@@ -74,7 +74,7 @@ conclusions.
   wait, so one decision clears a group.
 - 80.8 **Built offline, merged (#48); live pending where it needs the rig.** Agent hygiene preflight (77.13): untracked code, unexpected edits to tracked files and broken builds listed before an
   agent session ends or a commit is made.
-- 80.9 Real-manifest contract check (2026-10-22, with Project Go H3): next to the shared-fixture comparison, CI imports
+- 80.9 **Built (PR pending merge, pairs with Project Go H3); hosted CI proof is this PR's own run.** Real-manifest contract check (2026-10-22): next to the shared-fixture comparison, CI imports
   an actual coverage manifest exported by Project Go from a fixture mod, so a producer change that breaks the consumer
   fails CI instead of being found by hand.
 
