@@ -1,3 +1,37 @@
+**82. Research that serves revivals: consolidate, compare, promote (owner-approved 2026-10-21).** Not a new research
+architecture. S1 stays the critical path; runtime evidence is the limiting resource. Guiding rule: every research
+capability must resolve a question from an active revival, eliminate repeated manual investigation, or improve the
+reliability of existing evidence. Success criterion: a real question that previously needed manual inspection of several
+mods is answered by `research report` with the relevant evidence, contradictions and next test, without invented
+conclusions.
+- P0 82.1 Comparative research report, read-only, with a question contract:
+  `research report FEATURE --case WORKSPACE --question TEXT`. Answers: what feature, which mods implement it and how,
+  which similarities/differences are supported, which conclusions remain hypotheses, which experiment (or existing gate)
+  would resolve the important unknowns. Every claim carries STATIC / OBSERVED / VALIDATED and its evidence location.
+- P0 82.2 Evidence reconciliation before any merge of code: the report consumes Atlas (census, exemplars, migrations)
+  and the D-series (archaeology, behavior-map, hypotheses, probe-baseline/behavior-diff) independently and tabulates
+  agreement: both detect (corroborating static evidence, not independent validation: same code), Atlas only
+  (D-series coverage gap?), D-series only (Atlas blind spot?), both but different (semantic disagreement). Disagreements
+  stay as evidence; the counts become the basis for deciding later which stack is authoritative per concept.
+- P1 82.3 Active-case pilots: Templar Crusade first (removed vs replaced vs redistributed vs re-created: the
+  semantic-classification problem behind the dropped-feature false positives), then SEEKER station modules (does the
+  workflow generalize). Stopping condition per investigation, e.g. Templar is complete when the report identifies the
+  relevant Crusade implementations, explains the apparent feature changes, lists unresolved differences and ties each
+  needed runtime test to an existing gate. No need to explain every class.
+- P1 82.4 Knowledge promotion: extend existing records (R4 standing rulings, the RC8 behaviour facts, REMOVALS,
+  exemplars) with status STATIC / OBSERVED / VALIDATED, an applicability predicate, supporting evidence, counterexamples
+  and invalidation conditions, so the question "does this still apply here?" can be answered. The statuses are not a
+  ladder: an API-signature claim can be VALIDATED from authoritative static evidence; a fleet-spawning claim needs
+  runtime evidence. VALIDATED means a defined acceptance test, including negative cases, within a declared scope.
+- P2 82.5 Runtime scheduling: research experiments are gates in `gates.json` (needs.scenario), so `board
+  --live-pending` batches them with revival gates in the same rig sessions.
+- Later 82.6 Active research selection, once there is enough empirical data to measure uncertainty against; corpus
+  acquisition (multiple releases of the same mods) for version timelines.
+- Prohibited: a research conclusion never turns into a migration rule automatically. Sequence: research finding ->
+  validated pattern (conditions) -> migration candidate (can it safely guide an intervention?) -> approved deterministic
+  rule (explicit approval, safety checks, regression evidence). Learn API patterns from other mods, never copy their code
+  without the usual attribution and permission rules.
+
 **80. Less hand work across the projects (owner 2026-10-21: "work them all in your preferred order").** Order: 80.1, then
 80.2 with 80.6, 80.3, 80.5, 80.4, 80.7, 80.8.
 - 80.1 Merge-friendly changes: `changelog.d/` fragments assembled at release (no PR edits CHANGELOG.md); generated files
