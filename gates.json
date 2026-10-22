@@ -10,7 +10,7 @@
       "needs": {
         "rig": true,
         "mods": [
-          "<candidate>",
+          "all_the_domain_drones+NewDrones",
           "bridgeforge_probe"
         ],
         "save": false,
@@ -65,7 +65,7 @@
       "needs": {
         "rig": true,
         "mods": [
-          "<candidate>",
+          "all_the_domain_drones+NewDrones",
           "bridgeforge_probe"
         ],
         "save": false,
@@ -142,14 +142,16 @@
     },
     {
       "id": "bf-0b-06",
-      "title": "G1 New Game fallback: two total conversions other than Nexerelin and Ironclads reach campaign END with a new-game-generic stage",
+      "title": "G1 New Game fallback: a total conversion other than Nexerelin and Ironclads reaches campaign END with a new-game-generic stage (the corpus has one: Vacuum; add a second when one turns up)",
       "state": "LIVE_PENDING",
       "evidence": [],
       "needs": {
         "rig": true,
         "mods": [
-          "<total-conversion-1>",
-          "<total-conversion-2>",
+          "exerelin_vacuum",
+          "lw_lazylib",
+          "MagicLib",
+          "shaderLib",
           "bridgeforge_probe"
         ],
         "save": false,
@@ -159,7 +161,7 @@
         "scenario": "new-game-generic"
       },
       "commands": [
-        "python -m bridgeforge probe-group live <TESTID>   # twice, on two total conversions"
+        "python -m bridgeforge probe-group live <TESTID>"
       ],
       "source_doc": {
         "path": "docs/LOCAL_HANDOFF.md",
