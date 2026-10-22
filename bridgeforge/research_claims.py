@@ -6,7 +6,7 @@ gate when one matches, else the command or run that would produce the missing ev
 """
 from __future__ import annotations
 
-from .research_terms import OBSERVED, STATIC, VALIDATED, weakest
+from .research_terms import AUTHOR_CLAIM, OBSERVED, STATIC, VALIDATED, weakest
 
 MAX_NAMES = 12
 
@@ -121,6 +121,25 @@ def gate_claims(ledger: Ledger, gates: list[dict]) -> None:
             ledger.claim("gates", f"gate {gate['id']} is PASS with evidence ({', '.join(gate['evidence'])}): {gate['title']}", VALIDATED, [f"gates.json {gate['id']}"], "gates")
         else:
             ledger.claim("gates", f"gate {gate['id']} is {gate['state']}: {gate['title']} (not validated)", STATIC, [f"gates.json {gate['id']}"], "gates")
+
+
+def changelog_claims(ledger: Ledger, changelogs: dict) -> None:
+    """One AUTHOR CLAIM per changelog file naming the feature; a hint to confirm in code, never a basis for a hypothesis or an upgrade."""
+    by_file: dict[tuple[str, str], list[dict]] = {}
+    for quote in changelogs["quotes"]:
+        by_file.setdefault((quote["tree"], quote["file"]), []).append(quote)
+    for (tree, file), quotes in sorted(by_file.items()):
+        versions = sorted({q["version"] for q in quotes if q["version"]})
+        ledger.claim("changelog", f"the author's changelog {file} ({tree} tree) has {len(quotes)} line(s) naming the feature" + (f", under version(s) {_names(versions)}" if versions else ", no version heading found")
+                     + "; what the author says changed, a hint to confirm in code", AUTHOR_CLAIM, [f"{tree}:{q['file']}:{q['line']}" for q in quotes[:3]], "author-changelog")
+
+
+def decompiled_claims(ledger: Ledger, decompiled: dict) -> None:
+    """One STATIC claim for the readable code: derived from bytecode by a decompiler, so a reading aid and not evidence of behaviour."""
+    readable = [c for c in decompiled["classes"] if c["status"] in ("CACHED", "DECOMPILED")]
+    if readable:
+        ledger.claim("code", f"{len(readable)} class version(s) the feature terms touch were decompiled by Vineflower {decompiled['vineflower']} and are quoted below: {_names(sorted({c['class'] for c in readable}))}; "
+                     "a derived reading aid, the bytecode stays authoritative", STATIC, [f"decompiled {c['class']} (jar sha256 {c['jar_sha256'][:12]})" for c in readable[:3]], "decompiler")
 
 
 def change_hypotheses(ledger: Ledger, compare: dict, removal_ids: dict[str, str], gates: list[dict]) -> None:
