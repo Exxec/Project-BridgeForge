@@ -38,6 +38,23 @@ and non-code payload bytes are preserved (apart from generated wheel metadata). 
 cache before comparison; no scratch source is shipped. CLI golden SHA-256 remains
 `b384ee0dc6e73a63dcea9f827c3e0859428a8907141f76f180d426f13664175f`.
 
+## Integration with concurrent main
+
+Merged current main `478605e3` into the branch without rewriting history. Its independent full-suite baseline is
+2,607 tests, 12 skips, 83.07853% coverage and hermeticity PASS. Integrated B2 is 2,610 tests, 12 skips,
+83.10890% coverage and hermeticity PASS. The only test-count addition is the three B2 contract guards.
+Suite times were 427.414 s and 429.673 s, run concurrently on this host; these are receipts, not a speed benchmark.
+
+The recursive source inventory is 294 -> 313 modules, with the B0 guards passing. All 286 pre-push tests across 18 modules
+pass. Current-main and integrated wheels differ only by the five removed paths, 24 package additions and the required
+import edit in `value_proposals.py`; all data payload bytes and other members match. The consumer environment is outside
+the package-discovery tree. Salvor's integrated-wheel check passes 208 tests with the same 4 skips.
+`agent-diff-check` reports only the expected old `bridgeforge/fixers.py` deletion; no unexplained shrinkage.
+
+The four family renames score 98%, 98%, 96% and 96%; the principal split necessarily appears as delete/add at Git's default
+similarity threshold. All original constant and registry expressions also have identical ASTs after the split.
+Changed Markdown links resolve. No sister repository imports a removed `fixers_*` module.
+
 ## Review boundaries
 
 The plan's >=90% rename threshold cannot describe the main 3,973-line file split into modules capped at 800 lines.
