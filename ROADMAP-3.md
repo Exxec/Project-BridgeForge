@@ -14,7 +14,7 @@ built yet; LIVE TEST NOT PERFORMED.
 - 85.4 Crash intake: given a player's starsector.log and enabled_mods.json, name the failing mod and stack, match it to a
   workspace and propose the gate that reproduces it. Done when a recorded crash log is matched to its workspace and gate.
 - Harness fixes from the same batch: BUGS.md LIVE-001 (report attribution), LIVE-002 (total conversions and the combat
-  stage), LIVE-003 (pre-patcher drift).
+  stage), LIVE-003 (pre-patcher drift), LIVE-004 (stale extras in rig copies).
 
 **84. Feature tracing and transplanting (owner-approved 2026-10-22; long term).** Goal: BridgeForge can pick a mod apart and
 trace every feature end to end (data ids, assets, code, hooks, runtime behaviour), and can transplant a named feature from one

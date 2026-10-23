@@ -18,6 +18,15 @@
 - Fix: when the enabled mods replace mission_list.csv and the probe mission is absent, record the combat stage NOT_TESTED
   with that reason instead of failing the run.
 
+### LIVE-004 — `rig-up` leaves stale files from earlier revisions in the rig copy
+
+- Impact: unrecordable run. Zorg's rig copy still held `data/world/factions/player.faction` from a 2026-09-27 revision that was
+  later removed on purpose (package validations record `player_faction_absent: true`). Sync never deletes extras, so the staged
+  copy differed from the candidate and `record --accept` refused ZORGBF10B-20261022 ("staged files differ from the candidate
+  working copy"). The run still tested the stale file. Moved aside by hand to `_rig/scratch/moved-20261022-stale-extras/`.
+- Fix: `rig-up` moves every rig file absent from the candidate into `_rig/scratch/moved-<date>/` (logged, never deleted) before
+  staging, so the staged copy always equals the candidate.
+
 ### LIVE-003 — The pre-patcher edits its own staged files at launch, reported as drift
 
 - Impact: noise. Every `-prep` run's `.completed.json` says `staged files of starsector_prepatcher changed since launch`.
