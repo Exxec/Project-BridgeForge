@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .lookup import default_discovery_dir
+from ..lookup import default_discovery_dir
 from .research_atlas import ATLAS_BUILD, case_migrations, database_implementers, database_status, tree_concepts
 from .research_case import content_parity_for, dropped, gates_for, live_records, locate_peer, locate_trees, removals
 from .research_changelog import tree_changelog_quotes
@@ -222,7 +222,7 @@ def build_report(feature: str, case: Path, question: str, *, atlas_db: Path, rep
 
 
 def _mod_ids(trees: dict[str, dict]) -> set[str]:
-    from .scanner import _load_lenient_json_file
+    from ..scanner import _load_lenient_json_file
     ids = set()
     for tree in (t for t in trees.values() if t["label"] != "peer"):
         info = _load_lenient_json_file(tree["path"] / "mod_info.json")

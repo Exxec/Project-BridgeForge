@@ -1,0 +1,20 @@
+{
+  "moves": {
+    "bridgeforge.research_atlas": "bridgeforge.research.research_atlas",
+    "bridgeforge.research_case": "bridgeforge.research.research_case",
+    "bridgeforge.research_changelog": "bridgeforge.research.research_changelog",
+    "bridgeforge.research_claims": "bridgeforge.research.research_claims",
+    "bridgeforge.research_compare": "bridgeforge.research.research_compare",
+    "bridgeforge.research_decompile": "bridgeforge.research.research_decompile",
+    "bridgeforge.research_diff": "bridgeforge.research.research_diff",
+    "bridgeforge.research_dseries": "bridgeforge.research.research_dseries",
+    "bridgeforge.research_methods": "bridgeforge.research.research_methods",
+    "bridgeforge.research_reconcile": "bridgeforge.research.research_reconcile",
+    "bridgeforge.research_render": "bridgeforge.research.research_render",
+    "bridgeforge.research_report": "bridgeforge.research.research_report",
+    "bridgeforge.research_search": "bridgeforge.research.research_search",
+    "bridgeforge.research_terms": "bridgeforge.research.research_terms",
+    "bridgeforge.cmd_research": "bridgeforge.research.cmd_research"
+  },
+  "shims": []
+}

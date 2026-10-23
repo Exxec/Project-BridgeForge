@@ -7,14 +7,14 @@ import json
 import sys
 from pathlib import Path
 
-from .atlas import DEFAULT_DB
+from ..atlas import DEFAULT_DB
 from .research_decompile import DEFAULT_MAX_CLASSES
 from .research_diff import DEFAULT_MAX_LINES, DEFAULT_MAX_METHODS, DiffError, build_diff
 from .research_diff import render_markdown as render_diff_markdown
 from .research_diff import stdout_summary as diff_summary
 from .research_render import render_markdown, stdout_summary
 from .research_report import ResearchError, build_report
-from .safeio import atomic_write_json, atomic_write_text
+from ..safeio import atomic_write_json, atomic_write_text
 
 REPORT_STEM = "research-report"
 DIFF_STEM = "research-diff"

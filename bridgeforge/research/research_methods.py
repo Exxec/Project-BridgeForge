@@ -14,8 +14,8 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 
-from .bytecode import BytecodeUnavailable, inspect_bytecode
-from .safeio import atomic_write_json
+from ..bytecode import BytecodeUnavailable, inspect_bytecode
+from ..safeio import atomic_write_json
 
 MAPPED, UNMAPPED = "MAPPED", "UNMAPPED"
 MAP_SCHEMA = 1

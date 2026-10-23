@@ -16,12 +16,12 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from .decompile import find_vineflower
-from .java_toolchain import find_jdk
+from ..decompile import find_vineflower
+from ..java_toolchain import find_jdk
 from .research_methods import MethodMap, jar_method_index, parse_line_pairs, resolve_methods, write_map
 from .research_terms import STATIC, Matcher
-from .safeio import atomic_write_bytes, atomic_write_json
-from .zipsafe import MAX_CLASS_BYTES, read_limited
+from ..safeio import atomic_write_bytes, atomic_write_json
+from ..zipsafe import MAX_CLASS_BYTES, read_limited
 
 DEFAULT_MAX_CLASSES = 12
 MAX_EXCERPT_METHODS = 4
