@@ -11,8 +11,8 @@ from pathlib import Path
 from bridgeforge import scanner
 from bridgeforge.scanner import scan_mod
 from bridgeforge.models import TargetProfile
-from bridgeforge.corpus_audit import audit_directories
-from bridgeforge.corpus_audit import write_corpus_audit
+from bridgeforge.corpus.corpus_audit import audit_directories
+from bridgeforge.corpus.corpus_audit import write_corpus_audit
 from bridgeforge.cross_mod import analyze_mod_set
 from bridgeforge.identity_registry import build_campaign_identity_inventory, check_campaign_identity_references
 from bridgeforge.decompiler import create_decompiler_review, run_decompiler_review

@@ -7,7 +7,7 @@ import zipfile
 from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
-from bridgeforge import corpus_releases as cr
+from bridgeforge.corpus import corpus_releases as cr
 from bridgeforge.atlas.atlas_migrations import json_pairs, mine
 from bridgeforge.cli import main
 from tests.support import resolved_temp_dir

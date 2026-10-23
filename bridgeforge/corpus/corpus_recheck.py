@@ -19,11 +19,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .baseline import load_baseline_keys, mod_baseline_path as _mod_baseline_path, split_by_baseline
-from .compile_check import compile_loose_scripts
-from .models import TargetProfile
-from .project_board import project_board
-from .scanner import scan_mod
+from ..baseline import load_baseline_keys, mod_baseline_path as _mod_baseline_path, split_by_baseline
+from ..compile_check import compile_loose_scripts
+from ..models import TargetProfile
+from ..project_board import project_board
+from ..scanner import scan_mod
 
 SCHEMA_VERSION = 1
 
@@ -98,7 +98,7 @@ def corpus_recheck(repo_root: Path, vanilla_core: Path | None = None, require_re
         vanilla_root = None
     import time
 
-    from .progress import Checkpoint
+    from ..progress import Checkpoint
 
     mods = []
     rows = sorted(_qualifying_mods(repo, require_report), key=lambda r: r["folder"])

@@ -39,7 +39,7 @@
     "cmd_bytecode.py": {
       "write_text": 4
     },
-    "cmd_corpus.py": {
+    "corpus/cmd_corpus.py": {
       "write_text": 4
     },
     "cmd_probe_group.py": {
@@ -54,7 +54,7 @@
     "conflicts.py": {
       "write_text": 1
     },
-    "corpus_audit.py": {
+    "corpus/corpus_audit.py": {
       "write_text": 1
     },
     "decompiler.py": {

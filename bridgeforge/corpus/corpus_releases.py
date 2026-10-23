@@ -29,11 +29,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import progress
+from .. import progress
 from .corpus_index import _safe_member
-from .safeio import atomic_write_json, atomic_write_text
-from .scan_json import _parse_json
-from .zipsafe import read_limited
+from ..safeio import atomic_write_json, atomic_write_text
+from ..scan_json import _parse_json
+from ..zipsafe import read_limited
 
 ARCHIVE_SUFFIXES = (".zip", ".7z", ".rar")
 MAX_INFO_BYTES = 1024 * 1024  # a mod_info.json or .version file is a few hundred bytes

@@ -9,7 +9,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from bridgeforge.cli import main
-from bridgeforge.corpus_index import CorpusIndexError, build_index, search_index
+from bridgeforge.corpus.corpus_index import CorpusIndexError, build_index, search_index
 from tests.support import resolved_temp_dir
 
 
@@ -194,7 +194,7 @@ class SevenZipTests(unittest.TestCase):
         self.assertEqual(sum(count for reason, count in result["not_searched"].items() if reason.startswith("unreadable")), 1)
 
     def test_unsafe_member_paths_are_refused(self):
-        from bridgeforge.corpus_index import _safe_member
+        from bridgeforge.corpus.corpus_index import _safe_member
 
         self.assertTrue(_safe_member("Mod/data/x.csv"))
         for bad in ("../evil.csv", "/abs/x.csv", "Mod/../../x.csv", "C:/x.csv", "\\server\\x.csv"):

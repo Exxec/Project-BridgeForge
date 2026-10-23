@@ -31,7 +31,13 @@
     "bridgeforge.atlas_rules": "bridgeforge.atlas.atlas_rules",
     "bridgeforge.atlas_runtime": "bridgeforge.atlas.atlas_runtime",
     "bridgeforge.atlas_sweep": "bridgeforge.atlas.atlas_sweep",
-    "bridgeforge.atlas": "bridgeforge.atlas.atlas"
+    "bridgeforge.atlas": "bridgeforge.atlas.atlas",
+    "bridgeforge.cmd_corpus": "bridgeforge.corpus.cmd_corpus",
+    "bridgeforge.corpus": "bridgeforge.corpus.corpus",
+    "bridgeforge.corpus_audit": "bridgeforge.corpus.corpus_audit",
+    "bridgeforge.corpus_index": "bridgeforge.corpus.corpus_index",
+    "bridgeforge.corpus_recheck": "bridgeforge.corpus.corpus_recheck",
+    "bridgeforge.corpus_releases": "bridgeforge.corpus.corpus_releases"
   },
   "shims": []
 }

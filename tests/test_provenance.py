@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.scanner import scan_mod
-from bridgeforge.corpus import compare_corpus
+from bridgeforge.corpus.corpus import compare_corpus
 from bridgeforge.fixtures import discover_compatibility_fixtures, discover_corpus_baselines
 
 

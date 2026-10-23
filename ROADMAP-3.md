@@ -85,6 +85,11 @@ review worktree, 2612 tests, 12 unchanged skips, coverage 83.1088957%, hermetici
 See [Atlas evidence](docs/REFACTOR_B3_ATLAS_AUDIT.md) and [stack](docs/REFACTOR_STACK.md).
 Review/merge and remaining B3 families are pending; LIVE TEST NOT PERFORMED.
 
+B3 corpus checkpoint 2026-10-23: six modules moved with import-only AST changes, 2612 tests,
+12 unchanged skips, coverage 83.1088957%, hermeticity PASS; Salvor 208 tests (4 unchanged skips).
+See [corpus evidence](docs/REFACTOR_B3_CORPUS_AUDIT.md). Local dependent branch only; escalation
+is the next family. B3 and owner review/merge remain open; LIVE TEST NOT PERFORMED.
+
 **82. Research that serves revivals: consolidate, compare, promote (owner-approved 2026-10-21).** Not a new research
 architecture. S1 stays the critical path; runtime evidence is the limiting resource. Guiding rule: every research
 capability must resolve a question from an active revival, eliminate repeated manual investigation, or improve the

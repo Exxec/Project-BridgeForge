@@ -122,11 +122,11 @@ def add_parser(subcommands) -> None:
 
 def run_cli(args: argparse.Namespace) -> int:
     if args.command == "dependency-substitutes":
-        from .substitutes import REPO_ROOT, dependency_substitutes
+        from ..substitutes import REPO_ROOT, dependency_substitutes
         roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
         result = dependency_substitutes(args.mod, roots, vanilla_core=args.vanilla_core, policy_path=args.policy, index_path=args.provider_index)
         if args.write:
-            from .substitutes import write_dependency_report
+            from ..substitutes import write_dependency_report
             try:
                 print(f"Recorded: {write_dependency_report(result, args.mod)}", file=sys.stderr)
             except ValueError as exc:
@@ -155,13 +155,13 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"  LICENCE: {note}")
         return 0
     if args.command == "provider-index":
-        from .substitutes import REPO_ROOT, provider_index, save_provider_index
+        from ..substitutes import REPO_ROOT, provider_index, save_provider_index
         roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
         summary = save_provider_index(provider_index(roots), args.output, roots)
         print(f"Provider index: {summary['providers']} mods, {summary['ids']} ids -> {summary['output']}")
         return 0
     if args.command == "supersession":
-        from .supersession import find_superseded
+        from ..supersession import find_superseded
         result = find_superseded(args.queue, args.against, quiet=args.quiet, corpus_index=args.corpus_index)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
@@ -177,8 +177,8 @@ def run_cli(args: argparse.Namespace) -> int:
         print(f"Written: {result['result_path']}")
         return 0
     if args.command == "finding-stats":
-        from .finding_stats import CHECKPOINT_NAME, FindingStatsError, finding_stats, render
-        from .substitutes import REPO_ROOT
+        from ..finding_stats import CHECKPOINT_NAME, FindingStatsError, finding_stats, render
+        from ..substitutes import REPO_ROOT
         checkpoint = args.write / CHECKPOINT_NAME if args.write and (args.scan or args.rescan_stale) else None
         if checkpoint and args.restart and checkpoint.is_file():
             checkpoint.unlink()
@@ -201,13 +201,13 @@ def run_cli(args: argparse.Namespace) -> int:
         if checkpoint and checkpoint.is_file():
             checkpoint.unlink()  # the run finished; FINDING_STATS.json now holds every record
         if args.promotion:
-            from .finding_stats import discover_workspaces
-            from .promotion import write_candidates
+            from ..finding_stats import discover_workspaces
+            from ..promotion import write_candidates
             workspaces = {w.name: w for w in discover_workspaces(args.roots or [REPO_ROOT / "In operation"])}
             print(f"Written: {write_candidates(args.promotion, stats['promote_to_fixer'], workspaces)}", file=sys.stderr)
         if args.write:
             args.write.mkdir(parents=True, exist_ok=True)
-            from .finding_stats import delta, render_delta
+            from ..finding_stats import delta, render_delta
             previous_path = args.write / "FINDING_STATS.json"
             try:
                 previous = json.loads(previous_path.read_text(encoding="utf-8")) if previous_path.is_file() else None
@@ -221,11 +221,11 @@ def run_cli(args: argparse.Namespace) -> int:
         print(json.dumps(stats, indent=2, ensure_ascii=False) if args.json else render(stats), end="\n" if args.json else "")
         return 0
     if args.command == "dependency-graph":
-        from .substitutes import REPO_ROOT, dependency_graph
+        from ..substitutes import REPO_ROOT, dependency_graph
         queue = args.queue or REPO_ROOT / "In operation"
         roots = args.providers or [REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods"]
         try:
-            from .progress import report as print_progress
+            from ..progress import report as print_progress
             checkpoint = Path(queue) / "DEPENDENCY_GRAPH.partial.jsonl" if args.write else None
             if checkpoint and args.restart and checkpoint.is_file():
                 checkpoint.unlink()
@@ -238,7 +238,7 @@ def run_cli(args: argparse.Namespace) -> int:
             result = dependency_graph(queue, roots, vanilla_core=args.vanilla_core, index_path=args.provider_index, write_reports=args.write,
                                       checkpoint=checkpoint, progress=None if args.quiet else graph_progress)
             if args.write:
-                from .substitutes import write_dependency_graph
+                from ..substitutes import write_dependency_graph
                 for written in write_dependency_graph(result, queue):
                     print(f"Written: {written}", file=sys.stderr)
                 if checkpoint.is_file():
@@ -261,7 +261,7 @@ def run_cli(args: argparse.Namespace) -> int:
         return 0
     if args.command == "corpus-recheck":
         from .corpus_recheck import corpus_recheck, render_markdown
-        from .progress import report as print_progress
+        from ..progress import report as print_progress
         checkpoint = args.repo_root.expanduser().resolve() / "In operation" / "CORPUS_RECHECK.partial.jsonl"
         if args.restart and checkpoint.is_file():
             checkpoint.unlink()
@@ -295,7 +295,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 print(f"Roll-up written: {args.write_markdown}")
         return 1 if result["status"] == "REGRESSION" else 0
     if args.command == "sibling-assets":
-        from .sibling_assets import SiblingAssetsError, fix_sibling_assets
+        from ..sibling_assets import SiblingAssetsError, fix_sibling_assets
         try:
             result = fix_sibling_assets(args.workspace, args.vanilla_core, apply=args.apply, roots=args.siblings or None)
         except (SiblingAssetsError, OSError, ValueError) as exc:
@@ -311,7 +311,7 @@ def run_cli(args: argparse.Namespace) -> int:
                     print(f"  {label.replace('_', ' ')}: {item.get('path') or item.get('id')}: {item['reason']}")
         return 0
     if args.command == "vendor-copy" and args.plan is not None:
-        from .vendor_plan import VendorPlanError, copy_plan
+        from ..vendor_plan import VendorPlanError, copy_plan
         if args.to is None or any(value is not None for value in (args.kind, args.id, args.from_provider, args.to_mod)):
             print("bridgeforge: with --plan, give only --to (the mod to copy into), no positional arguments", file=sys.stderr)
             return 2
@@ -336,7 +336,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 print(f"  LICENCE: {result['licence_note']}")
         return 0 if result["status"] in ("PLANNED", "APPLIED") else 1
     if args.command == "vendor-copy":
-        from .strip_plan import vendor_copy
+        from ..strip_plan import vendor_copy
         if None in (args.kind, args.id, args.from_provider, args.to_mod):
             print("bridgeforge: vendor-copy needs KIND ID FROM_PROVIDER TO_MOD, or --plan FILE --to DIR", file=sys.stderr)
             return 2
@@ -353,7 +353,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 print(f"  LICENCE: {result['licence_note']}")
         return 0 if result["status"] in ("PLANNED", "APPLIED") else 1
     if args.command == "revival-report-draft":
-        from .revival_report_draft import draft_revival_report, write_revival_report_draft
+        from ..revival_report_draft import draft_revival_report, write_revival_report_draft
         providers = args.providers or None
         if args.apply:
             result = write_revival_report_draft(args.mod, args.vanilla_core, providers, args.force)
@@ -378,7 +378,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 print(result["plan_text"])
         return 0 if result["status"] in ("OK", "WRITTEN") else 1
     if args.command == "diff-data":
-        from .data_diff import DataDiffError, diff_data
+        from ..data_diff import DataDiffError, diff_data
         try:
             result = diff_data(args.a, args.b)
         except DataDiffError as exc:
@@ -400,7 +400,7 @@ def run_cli(args: argparse.Namespace) -> int:
                     print(f"~ {change['path']}: {json.dumps(change['a'], ensure_ascii=False)} -> {json.dumps(change['b'], ensure_ascii=False)}")
         return 0 if result["identical"] else 1
     if args.command == "rebuild-from-reference":
-        from .rebuild_reference import RebuildReferenceError, rebuild_from_reference
+        from ..rebuild_reference import RebuildReferenceError, rebuild_from_reference
         try:
             result = rebuild_from_reference(args.mod, args.reference_core, args.vanilla_core, args.file_classes, args.output)
         except (RebuildReferenceError, OSError) as exc:
@@ -459,7 +459,7 @@ def run_cli(args: argparse.Namespace) -> int:
               + (f"; NOT searched: {not_searched}" if not_searched else "; nothing skipped"))
         return 0 if args.corpus_index_command == "build" or result["content_hits"] or result["name_hits"] else 1
     if args.command == "content-diff":
-        from .content_diff import ContentDiffError, diff_content
+        from ..content_diff import ContentDiffError, diff_content
         try:
             result = diff_content(args.reference_core, args.vanilla_core)
             if args.output:
@@ -483,7 +483,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 print(f"Written: {args.output}")
         return 0
     if args.command == "verify-shadow":
-        from .verify_shadow import VerifyShadowError, verify_shadow
+        from ..verify_shadow import VerifyShadowError, verify_shadow
         try:
             result = verify_shadow(args.scripts, args.against)
         except (VerifyShadowError, OSError) as exc:
@@ -501,8 +501,8 @@ def run_cli(args: argparse.Namespace) -> int:
                 print(f"  NOT checked: {problem}")
         return 0
     if args.command == "vendor-plan":
-        from .substitutes import REPO_ROOT
-        from .vendor_plan import VendorPlanError, dumps, render, vendor_plan
+        from ..substitutes import REPO_ROOT
+        from ..vendor_plan import VendorPlanError, dumps, render, vendor_plan
         target = args.target
         if target is None and (REPO_ROOT / "In operation" / "RevenantLib").is_dir():
             target = REPO_ROOT / "In operation" / "RevenantLib"
