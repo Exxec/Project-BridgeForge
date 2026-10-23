@@ -9,7 +9,7 @@ from .library_registry import LibraryRegistryEntry
 from .migrate import apply_plan, build_plan
 from .models import TargetProfile
 from .review import create_review_bundle
-from .save_risk import analyze_save_risk
+from bridgeforge.save.save_risk import analyze_save_risk
 from .validate import validate_workspace
 from .report import write_artifacts
 from bridgeforge.scan.scanner import scan_mod

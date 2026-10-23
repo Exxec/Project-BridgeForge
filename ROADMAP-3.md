@@ -90,6 +90,11 @@ B3 corpus checkpoint 2026-10-23: six modules moved with import-only AST changes,
 See [corpus evidence](docs/REFACTOR_B3_CORPUS_AUDIT.md). Local dependent branch only; escalation
 is the next family. B3 and owner review/merge remain open; LIVE TEST NOT PERFORMED.
 
+**B3 implementation checkpoint 2026-10-23:** all planned families now live in subpackages on the local stacked branches,
+with consumer facades and preserved history. Full per-family suites, coverage, CLI, wheel and installed Salvor checks pass.
+See [completion evidence](docs/REFACTOR_B3_COMPLETION.md) and [stack](docs/REFACTOR_STACK.md).
+Owner review/merge, B4-B6 and all live gates remain open; LIVE TEST NOT PERFORMED.
+
 **82. Research that serves revivals: consolidate, compare, promote (owner-approved 2026-10-21).** Not a new research
 architecture. S1 stays the critical path; runtime evidence is the limiting resource. Guiding rule: every research
 capability must resolve a question from an active revival, eliminate repeated manual investigation, or improve the

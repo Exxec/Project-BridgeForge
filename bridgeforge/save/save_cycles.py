@@ -13,7 +13,7 @@ original is never opened for writing.
 """
 from __future__ import annotations
 
-from .safeio import safe_rmtree
+from ..safeio import safe_rmtree
 
 import re
 import shutil

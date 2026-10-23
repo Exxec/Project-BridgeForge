@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 
 from bridgeforge import cli
-from bridgeforge.save_fingerprint import SECTIONS
-from bridgeforge.save_fingerprint_offline import (FingerprintError, compare_fingerprints, compare_with_file, fnv64, hundredths,
+from bridgeforge.save.save_fingerprint import SECTIONS
+from bridgeforge.save.save_fingerprint_offline import (FingerprintError, compare_fingerprints, compare_with_file, fnv64, hundredths,
                                                   offline_fingerprint)
 from tests.support import resolved_temp_dir
 

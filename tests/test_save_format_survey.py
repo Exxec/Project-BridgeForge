@@ -1,6 +1,6 @@
 import unittest
 
-from bridgeforge.save_format_survey import survey_save, survey_saves
+from bridgeforge.save.save_format_survey import survey_save, survey_saves
 from tests.support import resolved_temp_dir
 
 _CAMPAIGN = """<CampaignEngine>

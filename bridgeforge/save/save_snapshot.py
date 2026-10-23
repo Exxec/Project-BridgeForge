@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .safeio import safe_rmtree
+from ..safeio import safe_rmtree
 
 import hashlib
 import json
@@ -9,7 +9,7 @@ import shutil
 import time
 from pathlib import Path
 
-from .boot_test import _is_link, _running_java_under
+from ..boot_test import _is_link, _running_java_under
 
 """Roadmap P3b-D: `save-snapshot {tag,list,restore}`.
 

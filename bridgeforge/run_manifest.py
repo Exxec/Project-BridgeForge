@@ -29,7 +29,7 @@ from pathlib import Path
 from .boot_test import _is_link
 from .manifest_echo import echo_state, write_run_file
 from .safeio import atomic_write_json
-from .save_fingerprint import parse_fingerprint
+from bridgeforge.save.save_fingerprint import parse_fingerprint
 
 MANIFEST_VERSION = 1
 FILESET_ALGORITHM = "copy_drift.collect+sha256/1"

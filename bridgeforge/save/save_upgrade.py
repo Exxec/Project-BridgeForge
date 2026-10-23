@@ -24,8 +24,8 @@ import re
 import sys
 from pathlib import Path
 
-from .safeio import atomic_write_json
-from .scenarios import _condition_holds
+from ..safeio import atomic_write_json
+from ..scenarios import _condition_holds
 
 SCHEMA_VERSION = 1
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")

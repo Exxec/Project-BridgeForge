@@ -185,13 +185,13 @@
     "runtime.py": {
       "write_text": 3
     },
-    "save_risk.py": {
+    "save/save_risk.py": {
       "write_text": 1
     },
-    "save_snapshot.py": {
+    "save/save_snapshot.py": {
       "write_text": 1
     },
-    "save_summary.py": {
+    "save/save_summary.py": {
       "write_text": 1
     },
     "substitutes.py": {

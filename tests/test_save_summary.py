@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.save_summary import redacted_summary
+from bridgeforge.save.save_summary import redacted_summary
 from tests.save_fixtures import write_descriptor, write_mod_data, write_mod_info, write_text
 
 SAVE_HEADER = '<?xml version="1.0" ?>\n<CampaignEngine z="1">\n'

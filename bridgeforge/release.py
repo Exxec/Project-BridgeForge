@@ -210,10 +210,10 @@ def _save_corpus_gate(root: Path, mod_id: str | None, corpus_dir: Path | None) -
     if not saves:
         return {"status": "SKIPPED", "not_supplied": True, "reason": f"{corpus} has no save entries"}
 
-    from .save_compat import SaveCompatError, check_save_compat
+    from bridgeforge.save.save_compat import SaveCompatError, check_save_compat
 
     try:
-        from . import save_content_compat as _content_module  # lazy: may not exist yet (P3b-E)
+        from bridgeforge.save import save_content_compat as _content_module  # lazy: may not exist yet (P3b-E)
     except ImportError:
         _content_module = None
 

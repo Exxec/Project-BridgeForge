@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 
-from .workspace import workspace_paths
+from ..workspace import workspace_paths
 
 PERSISTENT_IDENTIFIERS = re.compile(r"\b(factionId|shipId|weaponId|industryId|conditionId|memoryKey|serializedClass|persistent\w*)\b", re.I)
 IDENTIFIER_VALUES = re.compile(r"[\"']?\b(factionId|shipId|weaponId|industryId|conditionId|memoryKey|serializedClass|persistent\w*)\b[\"']?\s*[:=]\s*[\"']?([\w.-]+)", re.I)

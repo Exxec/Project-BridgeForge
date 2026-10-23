@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.save_content_compat import check_save_content
-from bridgeforge.save_reader import campaign_xml_path
+from bridgeforge.save.save_content_compat import check_save_content
+from bridgeforge.save.save_reader import campaign_xml_path
 
 SAVE_XML = """<CampaignEngine>
   <factionManager><relations><e><st>fx_hegemony</st><st>fx_pirates</st></e></relations></factionManager>

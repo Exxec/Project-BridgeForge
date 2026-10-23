@@ -94,3 +94,7 @@ The bounded audit scope, exceptions and source-backed corrections are recorded i
 - [B3 bytecode evidence](REFACTOR_B3_BYTECODE_AUDIT.md): structural move and regression/consumer validation.
 
 - [B3 scan evidence](REFACTOR_B3_SCAN_AUDIT.md): structural move and regression/consumer validation.
+
+- [B3 save evidence](REFACTOR_B3_SAVE_AUDIT.md): structural move and regression/consumer validation.
+
+- [B3 completion evidence](REFACTOR_B3_COMPLETION.md): local implementation complete; owner review/merge pending.

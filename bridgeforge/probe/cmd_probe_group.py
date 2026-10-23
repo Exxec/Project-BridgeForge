@@ -177,7 +177,7 @@ def run_cli(args: argparse.Namespace) -> int:
                     print("bridgeforge: --save-reload cannot be combined with --interactive", file=sys.stderr)
                     return 2
                 if args.save_reload:
-                    from bridgeforge.save_reload_run import clear_stale_fingerprint, save_reload_configured
+                    from bridgeforge.save.save_reload_run import clear_stale_fingerprint, save_reload_configured
                     if not save_reload_configured(rig):
                         print("bridgeforge: --save-reload needs the rig probe config's save_reload.after_days (install with --save-reload-after-days N)", file=sys.stderr)
                         return 2
@@ -187,8 +187,8 @@ def run_cli(args: argparse.Namespace) -> int:
                                 graceful_exit=not args.no_graceful_close, interactive=args.interactive)
                 result = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "rounds": live.rounds, "stages": live.stages, "log": live.log}
                 if args.save_reload and live.verdict == "LIVE_DONE":
-                    from bridgeforge.save_fingerprint import parse_fingerprint
-                    from bridgeforge.save_reload_run import reload_run
+                    from bridgeforge.save.save_fingerprint import parse_fingerprint
+                    from bridgeforge.save.save_reload_run import reload_run
                     reloaded = reload_run(rig, f"{args.test_id}-reload", bat_name=args.bat, menu_timeout=args.menu_timeout)
                     block = parse_fingerprint(Path(reloaded.log).read_text(encoding="utf-8", errors="replace")) if reloaded.log and Path(reloaded.log).is_file() else None
                     result["reload"] = {"verdict": reloaded.verdict, "stage": reloaded.stage, "detail": reloaded.detail, "stages": reloaded.stages,

@@ -97,12 +97,36 @@
     "bridgeforge.scan_ships": "bridgeforge.scan.scan_ships",
     "bridgeforge.scan_sources": "bridgeforge.scan.scan_sources",
     "bridgeforge.scan_text": "bridgeforge.scan.scan_text",
-    "bridgeforge.scanner": "bridgeforge.scan.scanner"
+    "bridgeforge.scanner": "bridgeforge.scan.scanner",
+    "bridgeforge.cmd_save": "bridgeforge.save.cmd_save",
+    "bridgeforge.save_compat": "bridgeforge.save.save_compat",
+    "bridgeforge.save_content_compat": "bridgeforge.save.save_content_compat",
+    "bridgeforge.save_cycles": "bridgeforge.save.save_cycles",
+    "bridgeforge.save_doctor": "bridgeforge.save.save_doctor",
+    "bridgeforge.save_fingerprint": "bridgeforge.save.save_fingerprint",
+    "bridgeforge.save_fingerprint_offline": "bridgeforge.save.save_fingerprint_offline",
+    "bridgeforge.save_format_survey": "bridgeforge.save.save_format_survey",
+    "bridgeforge.save_inspect": "bridgeforge.save.save_inspect",
+    "bridgeforge.save_reader": "bridgeforge.save.save_reader",
+    "bridgeforge.save_reload_run": "bridgeforge.save.save_reload_run",
+    "bridgeforge.save_removal_plan": "bridgeforge.save.save_removal_plan",
+    "bridgeforge.save_risk": "bridgeforge.save.save_risk",
+    "bridgeforge.save_snapshot": "bridgeforge.save.save_snapshot",
+    "bridgeforge.save_summary": "bridgeforge.save.save_summary",
+    "bridgeforge.save_upgrade": "bridgeforge.save.save_upgrade"
   },
   "shims": [
     "bridgeforge.rig_prefs",
     "bridgeforge.live_run",
-    "bridgeforge.scanner"
+    "bridgeforge.scanner",
+    "bridgeforge.save_compat",
+    "bridgeforge.save_content_compat",
+    "bridgeforge.save_cycles",
+    "bridgeforge.save_doctor",
+    "bridgeforge.save_fingerprint_offline",
+    "bridgeforge.save_inspect",
+    "bridgeforge.save_reader",
+    "bridgeforge.save_removal_plan"
   ],
   "non_python_symbols": [
     "bridgeforge.bytecode.BridgeforgeBytecode",

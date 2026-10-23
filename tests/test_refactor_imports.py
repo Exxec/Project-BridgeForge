@@ -52,6 +52,8 @@ class RefactorImportTests(unittest.TestCase):
             names = [name for name in vars(implementation) if not name.startswith("_")]
             if old == "bridgeforge.scan.scanner":
                 names.append("_load_lenient_json_file")
+            if old == "bridgeforge.save_doctor":
+                names.append("_installed")
             for name in names:
                 with self.subTest(module=old, name=name):
                     self.assertIs(getattr(shim, name), getattr(implementation, name))

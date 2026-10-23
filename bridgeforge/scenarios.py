@@ -213,7 +213,7 @@ def _evaluate_save_assertion(assertion: dict[str, object], inspection: dict[str,
     """Best-effort evaluation of a {class, field, condition} assertion against save-inspect's output.
 
     save-inspect's exact return shape is owned by another in-flight roadmap slice
-    (bridgeforge.save_inspect.inspect_save, P3b-A); this only assumes the inspection dict has a
+    (bridgeforge.save.save_inspect.inspect_save, P3b-A); this only assumes the inspection dict has a
     top-level section per class name, holding a {field: value} mapping. Anything that doesn't match
     that shape (a missing section/field, or an inspection dict shaped differently than expected) is
     reported as FAIL with a stated reason rather than raising, since the module this leans on may
@@ -248,7 +248,7 @@ def scenario_check(name: str, log_path: Path, save_path: Path | None = None) -> 
     save_note: str | None = None
     if save_assertions:
         try:
-            from .save_inspect import inspect_save  # lazy: bridgeforge.save_inspect is owned/written by another in-flight agent
+            from bridgeforge.save.save_inspect import inspect_save  # lazy: bridgeforge.save.save_inspect is owned/written by another in-flight agent
         except ImportError:
             save_note = "save assertions skipped: module unavailable"
         else:

@@ -63,3 +63,7 @@ Update this index when implementations or evidence change. Record source, compil
 save compatibility, live acceptance and shipping separately; use UNKNOWN/INCOMPLETE/NOT_APPLICABLE where appropriate.
 An implemented command does not prove its live acceptance criterion. Local-only reports must be labeled as such.
 The detailed per-sub-item status audit and any machine-readable status/lint extension remain R7 work.
+
+Item 83 B3 implementation checkpoint 2026-10-23: all prefix families implemented and validated locally;
+review/merge pending. See [completion evidence](REFACTOR_B3_COMPLETION.md). This does not complete item 83, B4-B6,
+or any live/release gate.

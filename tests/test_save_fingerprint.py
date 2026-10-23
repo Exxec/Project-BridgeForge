@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.live import live_run
-from bridgeforge import save_reload_run
-from bridgeforge.save_fingerprint import SECTIONS, parse_fingerprint
+from bridgeforge.save import save_reload_run
+from bridgeforge.save.save_fingerprint import SECTIONS, parse_fingerprint
 from bridgeforge.run_manifest import evaluate_run, read_manifest
 from tests.bound_runs import LOAD, MENU, bound_run
 from tests.support import resolved_temp_dir

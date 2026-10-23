@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.save_content_compat import check_save_content, removal_safety
+from bridgeforge.save.save_content_compat import check_save_content, removal_safety
 from tests.save_fixtures import write_mod_data, write_mod_info, write_text
 
 SAVE_HEADER = '<?xml version="1.0" ?>\n<CampaignEngine z="1">\n'

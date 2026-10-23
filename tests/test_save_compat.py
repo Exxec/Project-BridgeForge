@@ -5,7 +5,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from bridgeforge.save_compat import check_save_compat, compare_builds
+from bridgeforge.save.save_compat import check_save_compat, compare_builds
 
 
 # ---------------------------------------------------------------------------

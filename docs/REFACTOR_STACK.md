@@ -19,7 +19,7 @@ with full tests/coverage, CLI, path-safety, wheel and consumer evidence. The own
 | B3 live | refactor/b3-live | refactor/b3-rig | Implemented and locally validated; review/merge pending |
 | B3 bytecode | refactor/b3-bytecode | refactor/b3-live | Implemented and locally validated; review/merge pending |
 | B3 scan | refactor/b3-scan | refactor/b3-bytecode | Implemented and locally validated; review/merge pending |
-| Remaining B3 families | pending | preceding family branch | save next; not implemented |
+| B3 save | refactor/b3-save | refactor/b3-scan | Implemented and locally validated; review/merge pending |
 | B4 report | pending | preceding B3 branch | Report only; owner decides candidates/grouping |
 | B4 grouping | pending owner decision | pending | Decision gate open |
 | B5/B6 | pending | pending | Not complete |
@@ -30,3 +30,5 @@ mutating merge-train command unattended here: it merges PRs and rebases/force-pu
 
 B4's report does not authorize command grouping/deprecation decisions. B6 must not mark item 83 done until its required
 implementation, review/merge and validation gates have actually closed. Live, rights and release gates remain independent.
+
+B3 implementation complete locally, 2026-10-23: [completion evidence](REFACTOR_B3_COMPLETION.md). All family reviews/merges remain pending.

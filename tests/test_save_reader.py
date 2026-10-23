@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.save_reader import (
+from bridgeforge.save.save_reader import (
     PeekableElements,
     SaveReadError,
     campaign_xml_path,

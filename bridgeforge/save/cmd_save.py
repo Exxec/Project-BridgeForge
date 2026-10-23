@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from .compat_sets import CompatSetError, install_compat_set
+from ..compat_sets import CompatSetError, install_compat_set
 from .save_compat import check_save_compat, compare_builds, SaveCompatError
 from .save_content_compat import check_save_content, removal_safety
 from .save_format_survey import survey_saves
@@ -14,7 +14,7 @@ from .save_inspect import audit_scripts, diff_saves, growth_trend, inspect_save,
 from .save_reader import SaveReadError
 from .save_snapshot import SaveSnapshotError, snapshot_list, snapshot_restore, snapshot_tag
 from .save_summary import redacted_summary
-from .scenarios import list_scenarios, scenario_check, scenario_plan, ScenarioError
+from ..scenarios import list_scenarios, scenario_check, scenario_plan, ScenarioError
 
 # Save-tool statuses that mean "look at this" (non-zero exit).
 _SAVE_ATTENTION_STATUSES = {"WILL_FAIL", "DUPLICATES_FOUND", "GROWTH_WARNING", "STALE_BUILD", "UNSAFE"}

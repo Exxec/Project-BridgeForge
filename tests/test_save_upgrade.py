@@ -8,7 +8,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 
 from bridgeforge.cli import main
-from bridgeforge.save_upgrade import CASES, STAGE_ORDER, UpgradeError, evaluate_upgrade, plan_upgrade
+from bridgeforge.save.save_upgrade import CASES, STAGE_ORDER, UpgradeError, evaluate_upgrade, plan_upgrade
 from tests.support import resolved_temp_dir
 
 H = {name: format(i, "x") * 64 for i, name in enumerate(["old", "new", "orig", "mid", "out1", "out2", "state", "state2"], 1)}
