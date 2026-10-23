@@ -607,8 +607,12 @@
     {
       "id": "bf-epta-213-bf2",
       "title": "EPTA 2.1.3+bf.2: version label and original Proelefsi sprite, live run then finalize",
-      "state": "LIVE_PENDING",
-      "evidence": [],
+      "state": "PASS",
+      "evidence": [
+        "In operation/_live/EPTA213BF2C-20261022.json",
+        "In operation/_rig/logs/EPTA213BF2C-20261022.stdout.log",
+        "Done/Epta-Consortium-2.1.3/ARCHIVE_NOTE.md"
+      ],
       "needs": {
         "rig": true,
         "mods": [
@@ -638,8 +642,12 @@
     {
       "id": "bf-zorg-bf10",
       "title": "Zorg V18+bf.10: Zeta I/II visible with their own markets (7 and 6) on New Game and an existing bf.9 save",
-      "state": "LIVE_PENDING",
-      "evidence": [],
+      "state": "PASS",
+      "evidence": [
+        "In operation/_live/ZORGBF10C-20261022.json",
+        "In operation/_rig/logs/ZORGBF10C-20261022.stdout.log",
+        "Done/Zorg18/ARCHIVE_NOTE.md"
+      ],
       "needs": {
         "rig": true,
         "mods": [

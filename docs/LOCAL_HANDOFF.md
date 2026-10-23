@@ -90,10 +90,13 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
     hides the probe's combat mission (combat NOT_TESTED). The owner's start-up crash does not reproduce with Ironclads alone;
     it needs the owner's own `starsector.log` and `enabled_mods.json`.
 17. **EPTA 2.1.3+bf.2 (owner 2026-10-22).** Revision prepared (candidate d9940ba8af7d): version label 2.1.3 and the Proelefsi
-    station back on its original sprite. Live run with Nexerelin, then `baseline-accept` and `revise finalize`.
+    station back on its original sprite. **Done 2026-10-22:** run EPTA213BF2C-20261022 (probe 0.3.2) recorded: entity-state OK
+    (original sprite), bounties Artifact 667 / Masamune / Sever OK; archived as `Epta-Consortium-2.1.3-2.1.3+bf.2.zip`.
 18. **Zorg V18+bf.10 (owner 2026-10-22).** Revision prepared (candidate 1f1499141da6): Zeta I/II visible from the start, Zeta I
     a size-7 industrial market, Zeta II a size-6 mining market, Unimatrix the size-10 hub. Live run: New Game and an existing
     bf.9 save; check the planets show on the map and in the intel list, the three markets exist, and the BF-ZORG lines.
+    **Done 2026-10-22 (New Game):** run ZORGBF10C-20261022 (probe 0.3.2) recorded: entity-state OK for both planets, no FAIL;
+    archived as `Zorg18-V18+bf.10.zip`. Loading an existing bf.9 save stays untested.
 
 Rewritten 2026-09-27 after the local and cloud histories merged. Closed and removed: the MOVES.log
 shadowing audit (P14 item 27, done locally in `0183ab3`) and the Maelstrom dependency-jar check
