@@ -23,7 +23,7 @@ from ..baseline import load_baseline_keys, mod_baseline_path as _mod_baseline_pa
 from ..compile_check import compile_loose_scripts
 from ..models import TargetProfile
 from ..project_board import project_board
-from ..scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 SCHEMA_VERSION = 1
 

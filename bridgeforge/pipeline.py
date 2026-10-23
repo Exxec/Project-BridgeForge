@@ -12,7 +12,7 @@ from .review import create_review_bundle
 from .save_risk import analyze_save_risk
 from .validate import validate_workspace
 from .report import write_artifacts
-from .scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from .workspace import checkpoint, workspace_paths
 from .workspace import resolve_inside
 from bridgeforge.bytecode.bytecode_rules import apply_bytecode_class, apply_bytecode_jar

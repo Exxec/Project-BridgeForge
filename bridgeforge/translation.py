@@ -30,7 +30,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from .safeio import verify_written
-from .scanner import _blank_java_comments, _loaded_mod_jars, _parse_class_file, _parse_json
+from bridgeforge.scan.scanner import _blank_java_comments, _loaded_mod_jars, _parse_class_file, _parse_json
 
 SCHEMA_VERSION = 1
 CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿]")

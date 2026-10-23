@@ -1,7 +1,7 @@
 """Vanilla shadowing and override checks: preset entries, path shadowing, shared hooks, replace-drops."""
 from __future__ import annotations
 
-from .models import ScanResult
+from ..models import ScanResult
 from pathlib import Path
 from .scan_classfile import NON_MOD_JAR_DIRS
 from .scan_common import SHADOW_PATH_EXTENSIONS, _relative
@@ -30,7 +30,7 @@ def _scan_preset_entry_overrides(root: Path, result: ScanResult, vanilla_core: P
     """
     if vanilla_core is None:
         return
-    from .data_diff import _diff  # data_diff imports this module
+    from ..data_diff import _diff  # data_diff imports this module
 
     for name in PRESET_MERGE_FILES:
         mod_path, vanilla_path = root / "data" / "config" / name, vanilla_core / "data" / "config" / name

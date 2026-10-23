@@ -19,7 +19,7 @@ from bridgeforge.live.live_accept import ACCEPTED_LOG, probe_fail_keys
 
 
 def _current_version(workspace: Path) -> str:
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(workspace / "working" / "mod_info.json")
     return str(info.get("version") or "") if isinstance(info, dict) else ""

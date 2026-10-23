@@ -6,7 +6,7 @@ from pathlib import Path
 
 from bridgeforge.bytecode.jar_audit import _is_jar_zip, _resolve_jar_classes
 from .build_tag import BuildTagError, _find_mod_info
-from .scanner import _load_lenient_json_file, _loaded_mod_jars
+from bridgeforge.scan.scanner import _load_lenient_json_file, _loaded_mod_jars
 
 """Save/build class-reference compatibility check (roadmap P3b-B).
 

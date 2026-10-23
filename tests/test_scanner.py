@@ -8,8 +8,8 @@ from contextlib import redirect_stderr
 from unittest.mock import patch
 from pathlib import Path
 
-from bridgeforge import scanner
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan import scanner
+from bridgeforge.scan.scanner import scan_mod
 from bridgeforge.models import TargetProfile
 from bridgeforge.corpus.corpus_audit import audit_directories
 from bridgeforge.corpus.corpus_audit import write_corpus_audit

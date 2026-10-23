@@ -11,7 +11,7 @@ from bridgeforge.behavior_discovery import write_archaeology
 from bridgeforge.copy_drift import _collect
 from bridgeforge.models import TargetProfile
 from bridgeforge.revival_audit import REQUIRED_VALIDATIONS, audit_revival
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 
 def _mod(root: Path, **mod_info) -> Path:

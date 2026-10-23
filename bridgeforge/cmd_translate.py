@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from .fixers import apply_fix, compute_fix, FixerError, SUPPORTED_FINDINGS, unified_diff_for_change
-from .scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from .translation import apply_translation, check_translation, export_project_go_tm, export_translation, prefill_from_record, prefill_from_reference, TranslationError
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from .models import ScanResult
+from ..models import ScanResult
 from pathlib import Path
 from .scan_classfile import NON_MOD_JAR_DIRS, _iter_jar_class_files, _parse_class_file
 from .scan_common import CAMPAIGN_ENTITY_CREATION_PATTERN, CAMPAIGN_SYSTEM_CREATION_PATTERN, _relative

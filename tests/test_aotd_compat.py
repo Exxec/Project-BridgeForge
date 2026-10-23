@@ -8,7 +8,7 @@ from pathlib import Path
 from bridgeforge.bytecode import java_matrix
 from bridgeforge.compat_sets import load_compat_sets, set_mod_ids
 from bridgeforge.env_check import env_check
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
 
 AGENT = "StarsectorPrepatcherAgent.jar"

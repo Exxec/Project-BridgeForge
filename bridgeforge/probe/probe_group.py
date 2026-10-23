@@ -25,7 +25,7 @@ from pathlib import Path
 from bridgeforge.copy_drift import _collect, compare_copies
 from bridgeforge.live.live_content_parity import merge_parity, parity_failure_lines, parity_findings
 from bridgeforge.probe.probe_config import CONFIG_FILE, RIG_MARKER_FILE, _install_probe_mod, _refuse_non_rig, build_probe_config
-from bridgeforge.scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 SCHEMA_VERSION = 1
 PROBE_MOD_ID = "bridgeforge_probe"

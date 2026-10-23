@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .models import ScanResult
-from .provider_renamed_ids import ids_in_csv
+from ..models import ScanResult
+from ..provider_renamed_ids import ids_in_csv
 from .scan_campaign import _declared_spec_ids
 from .scan_common import MISSION_FLEET_REFERENCE_PATTERN, _relative
 from .scan_javatext import _blank_java_comments, _blank_mod_guarded_blocks

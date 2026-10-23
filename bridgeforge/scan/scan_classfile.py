@@ -89,7 +89,7 @@ def _dependency_jar_class_names(root: Path, provider_roots: list[Path] | None = 
     `scan --providers`/`corpus_recheck`'s own default, etc. explicitly to opt in, same as
     `compile-check` already requires.
     """
-    from .substitutes import provider_index
+    from ..substitutes import provider_index
 
     if not provider_roots:
         return {}

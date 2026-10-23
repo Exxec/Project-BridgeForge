@@ -4,8 +4,8 @@ from __future__ import annotations
 import json
 import re
 import zipfile
-from .models import ScanResult
-from .zipsafe import MAX_CLASS_BYTES, read_limited
+from ..models import ScanResult
+from ..zipsafe import MAX_CLASS_BYTES, read_limited
 from collections import Counter
 from pathlib import Path
 from .scan_classfile import _ClassFileInfo, _iter_jar_class_files, _loaded_mod_jars, _parse_class_file
@@ -23,7 +23,7 @@ def _scan_jar_linkage(root: Path, result: ScanResult, vanilla_core: Path | None)
     declared = result.metadata.get("jars")
     if vanilla_core is None or not isinstance(declared, list):
         return
-    from .linkage import unresolved_references
+    from ..linkage import unresolved_references
 
     jars = [root / entry for entry in declared if isinstance(entry, str) and (root / entry).is_file()]
     if not jars:
@@ -69,7 +69,7 @@ def _scan_jar_interface_methods(root: Path, result: ScanResult, vanilla_core: Pa
     declared = result.metadata.get("jars")
     if vanilla_core is None or not isinstance(declared, list):
         return
-    from .linkage import missing_interface_methods
+    from ..linkage import missing_interface_methods
 
     jars = [root / entry for entry in declared if isinstance(entry, str) and (root / entry).is_file()]
     if not jars:
@@ -322,11 +322,11 @@ def _scan_obfuscated_internal_api_use(root: Path, result: ScanResult, vanilla_co
     With RC8's core jars (item 73 F6) each reference is resolved: a class whose every reference exists is reported as
     `obfuscated-internal-api-resolved` (informational, with the count); one with a missing class or member keeps this id and
     names them; references whose hierarchy leaves the core jars stay unverified (this id, nothing claimed)."""
-    from .obfuscated_members import classify_internal_references
+    from ..obfuscated_members import classify_internal_references
 
     core = None
     if vanilla_core is not None:
-        from .linkage import core_index
+        from ..linkage import core_index
 
         core = core_index(str(Path(vanilla_core).resolve())) or None
     own = frozenset(name.replace(".", "/") for name in result.compiled_class_names)
@@ -513,7 +513,7 @@ def _scan_bundled_source_stale(root: Path, result: ScanResult) -> None:
 
 def _scan_rc8_signature_changed(root: Path, result: ScanResult) -> None:
     """Old-form calls with an exact RC8 equivalent (bridgeforge.signature_rewrites; ROADMAP 41, Ironclads 2026-10-04)."""
-    from .signature_rewrites import suspects
+    from ..signature_rewrites import suspects
 
     for source in sorted(root.rglob("*.java")):
         if "disabled_files" in source.relative_to(root).parts:
@@ -556,7 +556,7 @@ def _load_rc8_vanilla_loose_script_classes() -> frozenset[str]:
     from RC8's starsector-core, because the import check runs without a vanilla core path.
     """
     try:
-        data = json.loads(Path(__file__).with_name("vanilla_loose_scripts_rc8.json").read_text(encoding="utf-8"))
+        data = json.loads((Path(__file__).parent.parent / "vanilla_loose_scripts_rc8.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return frozenset()
     return frozenset(str(name) for name in data.get("classes", []))

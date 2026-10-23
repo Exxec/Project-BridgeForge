@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from .models import ScanResult
+from ..models import ScanResult
 from collections import Counter
 from pathlib import Path
 from .scan_classfile import _dependency_jar_class_names
@@ -244,7 +244,7 @@ def _dependency_roots(root: Path, provider_roots: list[Path] | None) -> list[Pat
     key = (str(Path(root).resolve()), tuple(str(Path(r)) for r in provider_roots))
     if key not in _DEPENDENCY_ROOTS_CACHE:
         from bridgeforge.bytecode.java_toolchain import declared_dependencies
-        from .substitutes import provider_index
+        from ..substitutes import provider_index
 
         deps = set(declared_dependencies(root) or [])
         _DEPENDENCY_ROOTS_CACHE[key] = [Path(p.path) for p in provider_index([Path(r) for r in provider_roots], exclude=root)
@@ -351,7 +351,7 @@ def _scan_unresolved_content_references(root: Path, result: ScanResult, vanilla_
     # so a plain scan gets the same evidence a person running dependency-substitutes separately
     # would have had to look up by hand otherwise). Local import: substitutes.py imports from
     # scanner.py, so a module-level import here would be circular.
-    from .substitutes import load_successors
+    from ..substitutes import load_successors
 
     known_removed = {entry.get("match"): entry for entry in load_successors() if entry.get("kind") == "removed-vanilla-content"}
 

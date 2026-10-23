@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.models import TargetProfile
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 
 def _write(path: Path, text: str) -> None:
@@ -41,7 +41,7 @@ class FleetTypeNameTests(unittest.TestCase):
 
     def test_fixer_adds_title_cased_names_and_keeps_the_file_readable(self) -> None:
         from bridgeforge.fixers import apply_fix, compute_fix
-        from bridgeforge.scanner import _load_lenient_json_file
+        from bridgeforge.scan.scanner import _load_lenient_json_file
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -56,7 +56,7 @@ class FleetTypeNameTests(unittest.TestCase):
     def test_fixer_names_a_vanilla_factions_type_in_the_mods_own_defaults_file(self) -> None:
         # The Mayorate (2026-09-27): createEmptyFleet("luddic_path", "pathFleet", ...) with no faction file of its own.
         from bridgeforge.fixers import apply_fix, compute_fix
-        from bridgeforge.scanner import _load_lenient_json_file
+        from bridgeforge.scan.scanner import _load_lenient_json_file
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

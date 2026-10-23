@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 from ..build_tag import _structural_depths
-from ..scanner import FACTION_SPECIAL_ROLE_KEYS, LEGACY_PERSONALITY_IDS, _load_lenient_json_file, _parse_json, _wing_id_variant_map, _wing_ids_set
+from bridgeforge.scan.scanner import FACTION_SPECIAL_ROLE_KEYS, LEGACY_PERSONALITY_IDS, _load_lenient_json_file, _parse_json, _wing_id_variant_map, _wing_ids_set
 from .common import FileChange, FixerError, _decode, _encode
 from .encoding import _referencing_bytes
 
@@ -252,7 +252,7 @@ def _fix_shippable_work_file(root: Path, options: dict) -> list[FileChange]:
     rarely, read one on purpose.
     """
     from ..copy_drift import _collect
-    from ..scanner import _WORK_FILE_GLOBS
+    from bridgeforge.scan.scanner import _WORK_FILE_GLOBS
 
     found = sorted(relative for relative in _collect(root)
                    if any(fnmatch.fnmatch(relative.rsplit("/", 1)[-1].lower(), pattern) for pattern in _WORK_FILE_GLOBS))

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
 from pathlib import Path
-from ..scanner import _parse_json
+from bridgeforge.scan.scanner import _parse_json
 from .common import FileChange, FixerError, _decode, _encode, _findings_of
 
 
@@ -119,7 +119,7 @@ def _repeated_key_edits(text: str) -> tuple[list[tuple[int, int, str]], list[str
       ass_solace.json: two markets without the `},{` between them) is several objects: a separator is inserted
       before each later block.
     Anything else (a repeat with a different value) is left for the owner."""
-    from ..scanner import _parse_json
+    from bridgeforge.scan.scanner import _parse_json
 
     scan = _ObjectScan(text)
     scan.value(scan.ws(0))
@@ -187,7 +187,7 @@ def _fix_json_duplicate_key(root: Path, options: dict) -> list[FileChange]:
     """Remove a later copy of a key repeated inside one JSON object when its value equals the first copy's (RC8's
     org.json stops at startup on any repeat: Ironclads pirates.faction, GRP10E-20261005). A repeat with a different
     value is left for the owner: which copy the mod meant is not decidable here."""
-    from ..scanner import _json_duplicate_keys
+    from bridgeforge.scan.scanner import _json_duplicate_keys
 
     files = sorted({f.file for f in _findings_of(root, options, "json-duplicate-key") if f.file})
     if not files:

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 
 def _write(path: Path, text: str) -> None:
@@ -112,7 +112,7 @@ class LifecyclePluginTests(unittest.TestCase):
     def test_a_total_conversion_without_a_lifecycle_plugin_is_flagged_and_fixed(self) -> None:
         # Ironclads: vanilla black site, then Nameless Rock, built fleets from removed hulls (GRP10P, GRP10T-20261005)
         from bridgeforge.fixers import apply_fix, compute_fix
-        from bridgeforge.scanner import _load_lenient_json_file
+        from bridgeforge.scan.scanner import _load_lenient_json_file
 
         check = "conversion-vanilla-lifecycle-plugin"
         with tempfile.TemporaryDirectory() as directory:
@@ -132,7 +132,7 @@ class LifecyclePluginTests(unittest.TestCase):
 
     def test_the_fix_creates_settings_json_when_the_mod_has_none(self) -> None:
         from bridgeforge.fixers import apply_fix, compute_fix
-        from bridgeforge.scanner import _load_lenient_json_file
+        from bridgeforge.scan.scanner import _load_lenient_json_file
 
         with tempfile.TemporaryDirectory() as directory:
             mod = self._mod(directory)

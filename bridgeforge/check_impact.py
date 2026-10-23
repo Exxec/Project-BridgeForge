@@ -28,7 +28,7 @@ def _before(workspace: Path, finding_id: str) -> int:
 
 def check_impact(queue: Path, finding_id: str, *, vanilla_core: Path | None = None, all_workspaces: bool = False,
                  quiet: bool = False, scan=None) -> dict:
-    from .scanner import scan_mod
+    from bridgeforge.scan.scanner import scan_mod
 
     scan = scan or (lambda working: scan_mod(working, vanilla_core=vanilla_core).findings)
     queue = Path(queue).expanduser().resolve()

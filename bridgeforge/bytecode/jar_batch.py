@@ -22,7 +22,7 @@ from bridgeforge.bytecode.jar_patch import _decompiled_tree, _only_return_type_r
 from bridgeforge.bytecode.java_toolchain import find_jdk
 from bridgeforge.linkage import unresolved_references
 from bridgeforge.report_status import is_closed
-from bridgeforge.scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 SCHEMA_VERSION = 1
 JAR_SOURCE_ROOTS = ("src", "jars/src", "jar/src")

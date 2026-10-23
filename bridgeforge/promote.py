@@ -13,7 +13,7 @@ from .intake import _folder_name, operation_root
 from .project_board import NON_RELEASE_FOLDERS
 from .release import _release_basename, release_mod
 from .revival_audit import audit_revival
-from .scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 
 def _physical(path: Path):

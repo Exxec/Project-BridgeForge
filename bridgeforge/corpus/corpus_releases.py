@@ -32,7 +32,7 @@ from typing import Callable
 from .. import progress
 from .corpus_index import _safe_member
 from ..safeio import atomic_write_json, atomic_write_text
-from ..scan_json import _parse_json
+from bridgeforge.scan.scan_json import _parse_json
 from ..zipsafe import read_limited
 
 ARCHIVE_SUFFIXES = (".zip", ".7z", ".rar")

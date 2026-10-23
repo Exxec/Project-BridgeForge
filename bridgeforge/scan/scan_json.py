@@ -4,7 +4,7 @@ from __future__ import annotations
 import csv
 import json
 import re
-from .models import ScanResult
+from ..models import ScanResult
 from pathlib import Path
 
 

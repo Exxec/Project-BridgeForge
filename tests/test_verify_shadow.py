@@ -89,7 +89,7 @@ class GameJarEntryLimitTests(unittest.TestCase):
     def test_game_core_jars_get_a_higher_entry_cap_than_mod_jars(self):
         from unittest.mock import patch
 
-        import bridgeforge.scanner as scanner_module
+        import bridgeforge.scan.scanner as scanner_module
 
         with resolved_temp_dir() as root:
             mod, core = _mod(root), _core(root)
@@ -100,7 +100,7 @@ class GameJarEntryLimitTests(unittest.TestCase):
             write_jar(mod / "jars" / "rebal.jar", {f"y/D{n}.class": build_class_file(f"y/D{n}") for n in range(5)}
                       | {"data/scripts/Owned.class": build_class_file("data/scripts/Owned")})
             with patch.object(scanner_module, "MAX_JAR_ENTRIES", 3), \
-                 patch("bridgeforge.scanner.iter_class_files_in_jars.__defaults__", (None, 3)):
+                 patch("bridgeforge.scan.scanner.iter_class_files_in_jars.__defaults__", (None, 3)):
                 result = verify_shadow([mod / "data/scripts/Owned.java", mod / "data/shipsystems/NoPackage.java"], [mod, core])
         owned, no_package = result["results"]
         self.assertEqual(no_package["status"], "SHADOWED")   # the 6-entry game jar was still read

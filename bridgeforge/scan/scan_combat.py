@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from .models import ScanResult
+from ..models import ScanResult
 from pathlib import Path
 from .scan_classfile import NON_MOD_JAR_DIRS, _ClassFileInfo, _instance_fields_written_outside_constructors, _iter_jar_class_files, _parse_class_file
 from .scan_common import _relative
@@ -124,7 +124,7 @@ SAVED_OBJECT_EXPLANATION = (
 def _scan_saved_object_compiled(root: Path, result: ScanResult) -> None:
     """Item 73 F2: the same finding for jar classes that implement a campaign interface the game saves and registers
     (EveryFrameScript, the listener interfaces) and hold a non-transient MarketAPI/SectorEntityToken/PlanetAPI/CampaignFleetAPI field."""
-    from .saved_object_scan import compiled_entity_fields, saved_interface
+    from ..saved_object_scan import compiled_entity_fields, saved_interface
 
     for jar, member, data in _iter_jar_class_files(root):
         info = _parse_class_file(data)
@@ -144,7 +144,7 @@ def _scan_saved_object_compiled(root: Path, result: ScanResult) -> None:
 def _scan_saved_object_holds_market_ref(root: Path, result: ScanResult) -> None:
     """A class stored in a memory/customData or registered as a listener or script that keeps a MarketAPI, SectorEntityToken, PlanetAPI
     or CampaignFleetAPI in a non-transient field (the Station Augments save-cycle pattern, ROADMAP 60g(4); see saved_object_scan)."""
-    from .saved_object_scan import saved_object_findings
+    from ..saved_object_scan import saved_object_findings
 
     sources: dict[str, str] = {}
     for source in sorted(root.rglob("*.java")):

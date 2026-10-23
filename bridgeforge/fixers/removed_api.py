@@ -3,7 +3,7 @@ import json
 import re
 from pathlib import Path
 from typing import Callable
-from ..scanner import REMOVED_API_CALLS, _blank_java_comments, _load_lenient_json_file, _parse_json, _relative, _removed_api_call_spans
+from bridgeforge.scan.scanner import REMOVED_API_CALLS, _blank_java_comments, _load_lenient_json_file, _parse_json, _relative, _removed_api_call_spans
 from .common import FileChange, FixerError, _decode, _encode
 
 
@@ -11,7 +11,7 @@ from .common import FileChange, FixerError, _decode, _encode
 # Fixer: removed-api-call (loose scripts only)
 # ---------------------------------------------------------------------------
 #
-# Each bridgeforge.scanner.REMOVED_API_CALLS entry can have its own mechanical rewrite here, keyed by
+# Each bridgeforge.scan.scanner.REMOVED_API_CALLS entry can have its own mechanical rewrite here, keyed by
 # that entry's `signature` string. An entry with no key in _REMOVED_API_CALL_REWRITES is detected by the
 # scanner but never rewritten by this fixer; it is left for the owner to fix by hand (every entry as of
 # 2026-09-15 has a rewrite; the mechanism stays generic for a future entry that doesn't).
@@ -77,7 +77,7 @@ _CREW_XP_LEVEL_DECLARATION_PATTERN = re.compile(r"\bCrewXPLevel\s+[A-Za-z_$][\w$
 # REMOVED_API_CALLS[3]/[4]: the 0.6 7-argument LocationAPI.addPlanet(...) and the 6-argument
 # LocationAPI.addOrbitalStation(...) both become a call to bf.legacyworld.LegacyWorld (RevenantLib),
 # with the old receiver forwarded as this static method's new first argument and every other argument
-# unchanged. The scanner's finder functions (bridgeforge.scanner._find_legacy_add_planet_calls /
+# unchanged. The scanner's finder functions (bridgeforge.scan.scanner._find_legacy_add_planet_calls /
 # _find_legacy_add_orbital_station_calls) already return the *whole* call span (receiver through the
 # matching close paren), so the rewrite only needs to re-split that same text at the same "receiver .
 # methodName (" boundary - it never re-parses arguments, since the call's own argument text (already
@@ -119,7 +119,7 @@ _REMOVED_API_CALL_REWRITES: dict[str, Callable[[str], str]] = {
 
 
 def _fix_removed_api_call(root: Path, options: dict) -> list[FileChange]:
-    """Rewrite every `bridgeforge.scanner.REMOVED_API_CALLS` rule that has a mechanical rewrite.
+    """Rewrite every `bridgeforge.scan.scanner.REMOVED_API_CALLS` rule that has a mechanical rewrite.
 
     Most rules match (comments and disabled_files ignored, same as the scanner) on the receiver+method-
     name text only, leaving the call's own arguments untouched; the addPlanet/addOrbitalStation rules
@@ -133,7 +133,7 @@ def _fix_removed_api_call(root: Path, options: dict) -> list[FileChange]:
     rewrote something in this run (not, for example, when only addMessage or CrewXPLevel did).
     """
     # (matcher, rewrite, signature) for every rule this fixer knows how to rewrite. `matcher` is whatever
-    # bridgeforge.scanner._removed_api_call_spans accepts (a compiled regex or a text -> spans function).
+    # bridgeforge.scan.scanner._removed_api_call_spans accepts (a compiled regex or a text -> spans function).
     rewrite_rules: list[tuple[object, Callable[[str], str], str]] = [
         (matcher, _REMOVED_API_CALL_REWRITES[signature], signature)
         for matcher, signature, _explanation in REMOVED_API_CALLS

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .build_tag import compute_working_copy_hashes, default_manifests_dir
 from .copy_drift import _find_mod_root
-from .scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 """Change-impact test selection (roadmap P5).
 

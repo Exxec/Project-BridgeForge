@@ -95,7 +95,7 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
     # declared (Vayra's Sector and LazyLib, 2026-09-30). Only declared jars: FlowerGod's build/cp held a game jar copy.
     import os
 
-    from bridgeforge.scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
     extra = []
     for root in provider_roots:
         for info_path in sorted(Path(root).glob("*/mod_info.json")):
@@ -138,7 +138,7 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
         # The class header must not change. Epta's seven_defensefunnels says `extends BaseHullMod` with `import ...combat.*`; another
         # rig mod's jar on the classpath held a data/hullmods/BaseHullMod, javac preferred that same-package class, and the patched
         # class extended a class the game did not have: NoClassDefFoundError at startup (EPTA-20261013).
-        from bridgeforge.scan_classfile import _parse_class_file
+        from bridgeforge.scan.scan_classfile import _parse_class_file
         old_header, new_header = _parse_class_file(old), _parse_class_file(data)
         if old_header is not None and new_header is not None and (
                 old_header.super_class != new_header.super_class or sorted(old_header.interfaces) != sorted(new_header.interfaces)):

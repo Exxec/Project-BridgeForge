@@ -8,7 +8,7 @@ import re
 from .boot_test import _is_link
 from .intake import operation_root
 from .revival_audit import COMPLETION_STATUSES, _completion_statuses
-from .scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 
 NON_RELEASE_FOLDERS = {"original", "working", "reports", "builds", "scratch", "workspace"}

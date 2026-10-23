@@ -3,7 +3,7 @@ import json
 import re
 from pathlib import Path
 from ..build_tag import _find_top_level_key, _structural_depths
-from ..scanner import FACTION_SPECIAL_ROLE_KEYS, _load_lenient_json_file, _parse_json, _read_csv_rows, _wing_ids_set
+from bridgeforge.scan.scanner import FACTION_SPECIAL_ROLE_KEYS, _load_lenient_json_file, _parse_json, _read_csv_rows, _wing_ids_set
 from .common import FileChange, FixerError, _decode, _encode
 
 

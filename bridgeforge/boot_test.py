@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from .log_triage import triage_log
-from .scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 # Overridable by tests: point at a fake launcher .bat and shrink the poll interval so a boot test
 # runs in seconds instead of minutes. Production code should never need to change these.

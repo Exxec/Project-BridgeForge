@@ -1,7 +1,7 @@
 from __future__ import annotations
 import re
 from pathlib import Path
-from ..scanner import CUSTOM_UI_PLUGIN_PATTERN, _blank_java_comments
+from bridgeforge.scan.scanner import CUSTOM_UI_PLUGIN_PATTERN, _blank_java_comments
 from .common import FileChange, FixerError, _decode, _encode, _findings_of
 
 

@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import csv
 import re
-from .models import ScanResult
+from ..models import ScanResult
 from pathlib import Path
 from .scan_common import SETTINGS_ACCEPT_LIMIT, SETTINGS_BASELINE_FILE, _relative
 from .scan_fleets import _JDK_FOR_PROCGEN
 from .scan_javatext import _blank_java_comments
 from .scan_json import _load_lenient_json_file
-from .settings_keys import classify_overrides
+from ..settings_keys import classify_overrides
 
 
 # A mod that ships a modified copy of a vanilla *script* at vanilla's own path (Rebal's 47 hullmod
@@ -121,7 +121,7 @@ def _scan_procgen_mod_body_leak(root: Path, result: ScanResult) -> None:
     type the mod places by id and also weights in `star_gen_data.csv`/`planet_gen_data.csv` spawns in both
     places; REVIEW because a planet pack may want that.
     """
-    from .campaign_layout import mod_body_types, mod_placed_types
+    from ..campaign_layout import mod_body_types, mod_placed_types
 
     types = mod_body_types(root)
     weighted = {t for t, facts in types.items() if facts["procgen_weight"] > 0}
@@ -274,7 +274,7 @@ def _scan_settings_keys_missing(root: Path, result: ScanResult, vanilla_core: Pa
     opening a market reading blackMarketMinSupplies, 2026-10-04). Needs the vanilla core to know RC8's keys."""
     if vanilla_core is None:
         return
-    from .settings_keys import guarded_keys, jar_reads, settings_keys, source_reads
+    from ..settings_keys import guarded_keys, jar_reads, settings_keys, source_reads
 
     known = settings_keys(vanilla_core / "data" / "config" / "settings.json", root / "data" / "config" / "settings.json",
                           *[Path(d) / "data" / "config" / "settings.json" for d in result.migration_context.get("dependency_roots") or []])

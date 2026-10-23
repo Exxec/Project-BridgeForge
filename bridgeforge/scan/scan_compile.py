@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from .models import ScanResult
+from ..models import ScanResult
 from pathlib import Path
 from .scan_classfile import _dependency_jar_class_names, mod_jar_class_names
 from .scan_common import _relative
@@ -27,7 +27,7 @@ def dependency_version_major_conflicts(root: Path, provider_roots: list[Path] | 
     """Declared dependencies whose version has another major than every provider with that id (RC8-23: the launcher
     drops the mod without a log line; zzz Bingus Sustem wanted IndEvo 3.0.c and US 0.43 against 4.1.b and 3.0.3).
     A provider with the same major counts as a match, so a mods folder holding several versions does not flag."""
-    from .substitutes import provider_index
+    from ..substitutes import provider_index
 
     if not provider_roots:
         return []
@@ -172,7 +172,7 @@ def _scan_compile_check(root: Path, result: ScanResult, vanilla_core: Path | Non
             explanation="--compile-check was requested but no --vanilla-core was given, so loose scripts could not be compiled against RC8's API.",
         )
         return
-    from .compile_check import compile_loose_scripts  # local: avoids a scanner<->compile_check<->java_toolchain import cycle
+    from ..compile_check import compile_loose_scripts  # local: avoids a scanner<->compile_check<->java_toolchain import cycle
 
     outcome = compile_loose_scripts(root, vanilla_core=vanilla_core, provider_roots=provider_roots)
     if outcome["status"] == "UNAVAILABLE":

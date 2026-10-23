@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 
 from bridgeforge.models import TargetProfile
-from bridgeforge.scanner import _parse_class_file, scan_mod
+from bridgeforge.scan.scanner import _parse_class_file, scan_mod
 
 
 def _utf8(text: str) -> bytes:

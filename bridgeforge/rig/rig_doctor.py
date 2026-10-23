@@ -12,7 +12,7 @@ from bridgeforge.locks import who_locks
 from bridgeforge.project_board import layout_findings
 from bridgeforge.probe.probe_mod_build import RELEASE_RELATIVE
 from bridgeforge.reference_rigs import verify_reference_rig_manifest
-from bridgeforge.scanner import _base_game_version, _load_lenient_json_file
+from bridgeforge.scan.scanner import _base_game_version, _load_lenient_json_file
 
 TARGET_BASE_GAME_VERSION = "0.98a"
 DEFAULT_BASELINE_RELATIVE = Path("bridgeforge-state") / "real-saves-baseline.json"

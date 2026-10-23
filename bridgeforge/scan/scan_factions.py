@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import csv
 import re
-from .models import ScanResult
+from ..models import ScanResult
 from pathlib import Path
 from .scan_classfile import NON_MOD_JAR_DIRS, _iter_jar_class_files, _parse_class_file
 from .scan_common import BLACK_HOLE_HINT_PATTERN, FACTION_SPECIAL_ROLE_KEYS, OBSOLETE_FIGHTER_ROLE_NAMES, _relative

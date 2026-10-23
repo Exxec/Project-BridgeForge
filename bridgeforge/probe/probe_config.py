@@ -12,7 +12,7 @@ from bridgeforge.build_tag import _find_mod_info
 from bridgeforge.campaign_layout import mod_body_types, mod_systems_by_reach
 from bridgeforge.probe.probe_expectations import bounty_ids, entity_checks
 from bridgeforge.probe.probe_mod_build import RELEASE_RELATIVE
-from bridgeforge.scanner import _load_lenient_json_file, _read_csv_rows, _wing_ids_set
+from bridgeforge.scan.scanner import _load_lenient_json_file, _read_csv_rows, _wing_ids_set
 
 DEFAULT_CAMPAIGN_INTERVAL_DAYS = 5.0
 DEFAULT_COMBAT_SECONDS = 60.0
@@ -351,8 +351,8 @@ def _mission_fleet_refs(mod_root: Path) -> dict[str, list[str]]:
     """Every fleet member the mod's missions name, by kind (ROADMAP 46c): the probe resolves each. Ironclads'
     missions named 21 variants no Ironclads version ever shipped (2026-10-04), which content_variants (the variants the
     mod defines) cannot see."""
-    from bridgeforge.scan_javatext import _blank_mod_guarded_blocks
-    from bridgeforge.scanner import MISSION_FLEET_REFERENCE_PATTERN, _blank_java_comments
+    from bridgeforge.scan.scan_javatext import _blank_mod_guarded_blocks
+    from bridgeforge.scan.scanner import MISSION_FLEET_REFERENCE_PATTERN, _blank_java_comments
 
     ships: set[str] = set()
     wings: set[str] = set()
@@ -373,7 +373,7 @@ def _class_sweep(mod_root: Path) -> list[str]:
     from listing jars itself, so the list comes from here."""
     import zipfile
 
-    from bridgeforge.scanner import _loaded_mod_jars
+    from bridgeforge.scan.scanner import _loaded_mod_jars
 
     names: set[str] = set()
     for jar in _loaded_mod_jars(mod_root):

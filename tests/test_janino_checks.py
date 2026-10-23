@@ -7,7 +7,7 @@ from pathlib import Path
 
 from bridgeforge.log_triage import triage_log
 from bridgeforge.models import TargetProfile
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

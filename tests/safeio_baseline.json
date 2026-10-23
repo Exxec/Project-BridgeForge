@@ -45,7 +45,7 @@
     "probe/cmd_probe_group.py": {
       "write_text": 1
     },
-    "cmd_scan.py": {
+    "scan/cmd_scan.py": {
       "write_text": 2
     },
     "cmd_translate.py": {

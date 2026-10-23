@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from bridgeforge.bytecode.jar_audit import _resolve_jar_classes
-from .scanner import _load_lenient_json_file, _loaded_mod_jars
+from bridgeforge.scan.scanner import _load_lenient_json_file, _loaded_mod_jars
 
 DEFAULT_MOD_PREFIXES = ("data.scripts", "exigency")
 

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from .models import ScanResult
+from ..models import ScanResult
 from pathlib import Path
 from .scan_classfile import NON_MOD_JAR_DIRS, _iter_jar_class_files, _parse_class_file
 from .scan_common import _relative
@@ -268,7 +268,7 @@ _JDK_FOR_PROCGEN: list = []
 def _scan_procgen_call_arguments(root: Path, result: ScanResult) -> None:
     """Suspect literal initStar / addPlanet arguments in sources and jar classes (bridgeforge.procgen_args):
     Zorg18's archived build had corona -10000 and a radius-0 planet from a 0.6-to-RC8 port (2026-10-04)."""
-    from .procgen_args import jar_suspects, source_suspects
+    from ..procgen_args import jar_suspects, source_suspects
 
     def add(file: str, where: str, method: str, problems: list[str]) -> None:
         result.add(

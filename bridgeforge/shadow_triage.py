@@ -24,7 +24,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from .scan_common import SHADOW_PATH_EXTENSIONS
+from bridgeforge.scan.scan_common import SHADOW_PATH_EXTENSIONS
 
 MAX_DIFF_LINES = 15
 REMOVED_SHADOW_FOLDER = "removed-shadow"
@@ -198,7 +198,7 @@ def plan_changes(root: Path, vanilla_core: Path, options: dict) -> list:
     whose version is the mod's gameVersion; with neither there is nothing to triage and nothing is returned."""
     from .fixers import FileChange, FixerError
     from .reference_rigs import reference_core_for_game_version
-    from .scan_json import _load_lenient_json_file
+    from bridgeforge.scan.scan_json import _load_lenient_json_file
 
     root = Path(root)
     reference = options.get("reference_core")

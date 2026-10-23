@@ -5,7 +5,7 @@ import json
 import re
 from pathlib import Path
 
-from .scanner import _parse_json
+from bridgeforge.scan.scanner import _parse_json
 
 DEFAULT_LABEL = "BF"
 

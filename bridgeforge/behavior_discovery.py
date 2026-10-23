@@ -10,11 +10,11 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from . import __version__
-from .scanner import _blank_java_comments, _load_lenient_json_file, scan_mod
+from bridgeforge.scan.scanner import _blank_java_comments, _load_lenient_json_file, scan_mod
 from .models import TargetProfile
 from bridgeforge.bytecode.jar_audit import ClassFileError, parse_constant_pool, referenced_class_names, referenced_members
 from .save_inspect import inspect_save
-from .scanner import _parse_class_file
+from bridgeforge.scan.scanner import _parse_class_file
 
 
 SCHEMA_VERSION = 1

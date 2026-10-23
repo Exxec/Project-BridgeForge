@@ -101,7 +101,7 @@ def add_parser(subcommands) -> None:
 
 
 def run_cli(args: argparse.Namespace) -> int:
-    from .scanner import scan_mod
+    from bridgeforge.scan.scanner import scan_mod
 
     try:
         findings = scan_mod(Path(args.workspace) / "working").findings

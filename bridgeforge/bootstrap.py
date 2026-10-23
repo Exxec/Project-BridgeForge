@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .baseline import finding_baseline_key
 from .build_tag import record_current_manifest
-from .scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 
 def _repo_root() -> Path:

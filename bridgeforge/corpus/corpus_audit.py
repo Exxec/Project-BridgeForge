@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from ..models import TargetProfile
-from ..scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 
 def _source_layout(inventory: list[dict], finding_counts: Counter) -> dict:

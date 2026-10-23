@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from ..scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 
 def compare_corpus(mod_directory: Path, baseline_path: Path) -> dict:

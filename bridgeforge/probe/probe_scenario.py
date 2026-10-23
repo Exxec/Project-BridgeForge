@@ -199,7 +199,7 @@ def stage_settings(scenario: dict[str, object], rig_copy: Path | str, working: P
     escapes the rig copy, and a target file that does not exist there (a scenario edits settings, it does not create files).
     Each file is read leniently (RC8 settings may carry comments) and rewritten as strict JSON; only the named top-level keys change.
     Returns one record per file: path, keys, before/after values of the changed keys."""
-    from bridgeforge.scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     rig_copy, working = Path(rig_copy).resolve(), Path(working).resolve()
     if rig_copy == working or working in rig_copy.parents or rig_copy in working.parents:

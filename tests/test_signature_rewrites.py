@@ -7,7 +7,7 @@ import zipfile
 from pathlib import Path
 
 from bridgeforge.fixers import apply_fix, compute_fix
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 OLD = ('class G {\n  void g() {\n'
        '    Global.getSector().getEconomy().addMarket(market);\n'
@@ -74,7 +74,7 @@ class RetiredVanillaClassTests(unittest.TestCase):
         # Ironclads' jar bundled 0.7.2's SystemBountyEvent, which RC8 no longer ships (2026-10-05).
         import zipfile
 
-        from bridgeforge import scanner
+        from bridgeforge.scan import scanner
 
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)

@@ -19,7 +19,7 @@ from typing import NamedTuple
 from .atlas import discover_mods, mod_identity
 from .atlas_census import API_PREFIX, dotted, member_symbol, qualified_uses, read_jar_classes, read_loose
 from ..safeio import atomic_write_text
-from ..scanner import _load_lenient_json_file, _loaded_mod_jars
+from bridgeforge.scan.scanner import _load_lenient_json_file, _loaded_mod_jars
 from ..zipsafe import read_limited
 
 R4_MIN_MODS = 3

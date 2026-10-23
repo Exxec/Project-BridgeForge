@@ -6,15 +6,15 @@ import json
 import sys
 from pathlib import Path
 
-from .baseline import finding_baseline_key, load_baseline_keys, split_by_baseline
-from .build_inputs import build_input_manifest, write_build_input_manifest
-from .copy_drift import compare_copies
-from .integration_scenarios import suggest_integration_scenarios
-from .models import TargetProfile
-from .report import write_artifacts
-from .safeio import atomic_write_text
+from ..baseline import finding_baseline_key, load_baseline_keys, split_by_baseline
+from ..build_inputs import build_input_manifest, write_build_input_manifest
+from ..copy_drift import compare_copies
+from ..integration_scenarios import suggest_integration_scenarios
+from ..models import TargetProfile
+from ..report import write_artifacts
+from ..safeio import atomic_write_text
 from .scanner import scan_mod
-from .working_tree import analyze_working_tree, write_source_authority_selection
+from ..working_tree import analyze_working_tree, write_source_authority_selection
 
 
 def add_parser(subcommands) -> None:
@@ -85,7 +85,7 @@ def add_parser(subcommands) -> None:
 
 def run_cli(args: argparse.Namespace) -> int:
     if args.command == "mods-compat":
-        from .mods_compat import mods_compat
+        from ..mods_compat import mods_compat
         result = mods_compat(args.mods_dir, args.vanilla_core, args.output, quiet=args.quiet)
         if args.json:
             print(json.dumps(result, indent=2))
@@ -93,12 +93,12 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"{result['mods']} mod(s); {len(result['conflicts'])} hook(s) claimed by two or more. See {args.output / 'MODS_COMPAT.md'}")
         return 0
     if args.command == "baseline-stats":
-        from .baseline_stats import baseline_stats, render
+        from ..baseline_stats import baseline_stats, render
         result = baseline_stats(args.queue)
         print(json.dumps(result, indent=2) if args.json else render(result, args.top))
         return 0
     if args.command == "docs-index":
-        from .checks_index import write_reference_docs
+        from ..checks_index import write_reference_docs
         result = write_reference_docs(check_only=args.check)
         if args.json:
             print(json.dumps(result, indent=2))
@@ -115,7 +115,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 print("Staged: " + ", ".join(tracked))
         return 1 if result["status"] == "STALE" else 0
     if args.command == "preset-check":
-        from .preset_check import check_presets
+        from ..preset_check import check_presets
         result = check_presets(args.script, args.rig_mods)
         if args.json:
             print(json.dumps(result, indent=2))
@@ -133,7 +133,7 @@ def run_cli(args: argparse.Namespace) -> int:
         try:
             result = scan_mod(args.mod_directory, TargetProfile(args.target_starsector, args.target_java), args.vanilla_core, compile_check=args.compile_check, provider_roots=args.providers or None)
             if args.removed_content:
-                from .content_diff import annotate_removed_content
+                from ..content_diff import annotate_removed_content
                 annotate_removed_content(result, json.loads(args.removed_content.read_text(encoding="utf-8")))
         except (ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
@@ -148,7 +148,7 @@ def run_cli(args: argparse.Namespace) -> int:
             keys = sorted({finding_baseline_key(finding) for finding in result.findings})
             args.write_baseline.parent.mkdir(parents=True, exist_ok=True)
             atomic_write_text(args.write_baseline, json.dumps({"findings": keys}, indent=2, sort_keys=True) + "\n")
-            from .baseline_audit import stamp_baseline
+            from ..baseline_audit import stamp_baseline
 
             stamp_baseline(args.write_baseline, args.mod_directory)  # accepted at this version, today (ROADMAP 70 H1.5)
             print(f"Scanned {len(result.files)} files; found {len(result.findings)} findings.")
@@ -225,11 +225,11 @@ def run_cli(args: argparse.Namespace) -> int:
             print(payload)
         return 0
     if args.command == "compile-check":
-        from .compile_check import compile_loose_scripts
+        from ..compile_check import compile_loose_scripts
         try:
             result = compile_loose_scripts(args.mod, vanilla_core=args.vanilla_core, jdk=args.jdk, provider_roots=args.providers)
             if args.api_diff:
-                from .api_diff import annotate_errors
+                from ..api_diff import annotate_errors
                 result["api_diff_annotated"] = annotate_errors(result.get("errors", []), json.loads(args.api_diff.read_text(encoding="utf-8")))
         except (ValueError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
@@ -266,7 +266,7 @@ def run_cli(args: argparse.Namespace) -> int:
                           + (f"; candidates: {', '.join(leads)}" if leads else "; no same-named candidate"))
         return 0 if result["status"] == "PASS" else 1
     if args.command == "revenantlib-check":
-        from .revenantlib_contract import RevenantLibCheckError, check_revenantlib
+        from ..revenantlib_contract import RevenantLibCheckError, check_revenantlib
         import zipfile
         try:
             result = check_revenantlib(args.path)
@@ -297,7 +297,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 print(f"  snapshot {snapshot['status']}: {snapshot['path']}" + (f" ({snapshot['drift_count']} file(s) differ: {', '.join((snapshot['different'] + snapshot['missing_in_snapshot'] + snapshot['extra_in_snapshot'])[:5])}) - refresh the archive" if snapshot["status"] == "STALE" else ""))
         return 0 if result["status"] == "PASS" else 1
     if args.command == "check-impact":
-        from .check_impact import check_impact
+        from ..check_impact import check_impact
         result = check_impact(args.queue, args.finding, vanilla_core=args.vanilla_core, all_workspaces=args.all, quiet=args.quiet)
         if args.json:
             print(json.dumps(result, indent=2))

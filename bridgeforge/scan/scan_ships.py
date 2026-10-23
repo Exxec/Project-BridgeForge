@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from .models import ScanResult
+from ..models import ScanResult
 from collections import Counter
 from pathlib import Path
 from .scan_classfile import _iter_jar_class_files, _parse_class_file

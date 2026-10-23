@@ -59,7 +59,7 @@ def shipped_hash(working: Path) -> str:
 
 
 def _mod_info(working: Path) -> dict:
-    from bridgeforge.scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(Path(working) / "mod_info.json") if (Path(working) / "mod_info.json").is_file() else {}
     return info if isinstance(info, dict) else {}
@@ -217,7 +217,7 @@ def original_root(workspace: Path) -> Path | None:
     # One download that holds a whole pack (the Yunru Core pack: Core, Arsenal, Hullmods, Worlds, ...): the original is the
     # root whose mod_info id is the working copy's id (yunruhullmods and yunruworlds, GRP1B-20261006).
     if len(extracted_in_original) > 1:
-        from bridgeforge.scanner import _load_lenient_json_file
+        from bridgeforge.scan.scanner import _load_lenient_json_file
 
         wanted = _load_lenient_json_file(Path(workspace) / "working" / "mod_info.json")
         wanted_id = wanted.get("id") if isinstance(wanted, dict) else None
@@ -347,7 +347,7 @@ def _text(path: Path) -> str:
 
 
 def _same_parsed_json(before: Path, after: Path) -> bool:
-    from bridgeforge.scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     a, b = _load_lenient_json_file(before), _load_lenient_json_file(after)
     return a is not None and a == b

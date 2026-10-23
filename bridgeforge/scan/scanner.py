@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from .zipsafe import read_limited
+from ..zipsafe import read_limited
 
 import zipfile
 from collections import Counter
 from pathlib import Path
 from pathlib import PurePosixPath
 
-from .models import ScanResult, TargetProfile
+from ..models import ScanResult, TargetProfile
 from .scan_common import (  # noqa: F401
     CLASS_MAJOR_TO_JAVA,
     MAX_JAR_ENTRIES,
@@ -594,7 +594,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_rules_csv_curly_quotes(root, result)
     _scan_supplies_legacy_column(root, result)
     _scan_json_duplicate_key(root, result, vanilla_root)
-    from .conversion_checks import (
+    from ..conversion_checks import (
         scan_factions_csv_relists_neutral,
         scan_factions_naming_missing_content,
         scan_factions_naming_removed_hulls,

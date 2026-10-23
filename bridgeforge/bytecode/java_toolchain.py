@@ -19,7 +19,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from bridgeforge.scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 from bridgeforge.substitutes import provider_index
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

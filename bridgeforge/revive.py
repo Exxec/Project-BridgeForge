@@ -107,7 +107,7 @@ def _scan(working: Path, vanilla_core: Path | None) -> list[dict]:
     """Scan findings minus the ones the mod's own baseline accepts (working/reports/baseline*.json):
     an accepted finding is never fixed, packeted or counted against the mod."""
     from .baseline import finding_dict_baseline_key, mod_baseline_keys
-    from .scanner import scan_mod
+    from bridgeforge.scan.scanner import scan_mod
 
     accepted = mod_baseline_keys(working)
     # The rig's mods/ holds the libraries mods depend on; declared-dependency jars resolve class references there.
@@ -124,7 +124,7 @@ def _scan(working: Path, vanilla_core: Path | None) -> list[dict]:
 def _record_settings_baseline(working: Path, findings: list[dict]) -> None:
     """First acceptance of a small settings.json tuning set (owner's held rule, ROADMAP item 19): record the exact
     keys in <workspace>/SETTINGS_BASELINE.json so a later change turns the finding back into REVIEW."""
-    from .scanner import SETTINGS_BASELINE_FILE
+    from bridgeforge.scan.scanner import SETTINGS_BASELINE_FILE
 
     path = Path(working).parent / SETTINGS_BASELINE_FILE
     if Path(working).name != "working" or path.exists():
@@ -160,7 +160,7 @@ def _fix_options(finding_id: str, working: Path, target: str, vanilla_core: Path
         import csv as _csv
 
         from .fixers import nearest_vanilla_gen_row
-        from .scanner import _load_lenient_json_file
+        from bridgeforge.scan.scanner import _load_lenient_json_file
 
         is_star = finding_id == "procgen-star-row-missing"
         vanilla_csv = Path(vanilla_core or "") / "data" / "campaign" / "procgen" / ("star_gen_data.csv" if is_star else "planet_gen_data.csv")
@@ -665,7 +665,7 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
         result["report_draft"] = _draft_report(working, vanilla_core, status, write=write and apply)
     if write:
         from .report import write_artifacts
-        from .scanner import scan_mod
+        from bridgeforge.scan.scanner import scan_mod
 
         _write_packets(workspace, packets)
         for item in applied_all:

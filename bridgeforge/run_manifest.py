@@ -144,7 +144,7 @@ def _enabled_ids(rig: Path) -> list[str]:
 
 
 def _rig_folders(rig: Path) -> dict[str, list[Path]]:
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     found: dict[str, list[Path]] = {}
     mods = Path(rig) / "mods"
@@ -157,7 +157,7 @@ def _rig_folders(rig: Path) -> dict[str, list[Path]]:
 
 
 def _staged_entries(rig: Path, enabled: list[str]) -> list[dict]:
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     folders = _rig_folders(rig)
     entries = []

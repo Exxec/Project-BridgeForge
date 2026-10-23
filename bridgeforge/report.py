@@ -72,7 +72,7 @@ def write_artifacts(result: ScanResult, output: Path, *, registry: dict | None =
 def register_scan(result: ScanResult, manifest_path: Path, options: dict) -> None:
     import sys
 
-    from .scan_registry import RegistryError, register, workspace_of
+    from bridgeforge.scan.scan_registry import RegistryError, register, workspace_of
 
     workspace = workspace_of(result.input_path)
     if workspace is None:

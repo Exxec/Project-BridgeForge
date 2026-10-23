@@ -25,7 +25,7 @@ _SETTINGS_CALL = re.compile(r"invokeinterface\s+#\d+,\s*\d+\s+// InterfaceMethod
 
 def settings_keys(*settings_files: Path) -> set[str]:
     """Top-level keys of the given settings.json files (lenient: RC8 org.json rules)."""
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     keys: set[str] = set()
     for path in settings_files:

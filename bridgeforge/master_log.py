@@ -13,7 +13,7 @@ import json
 import re
 from pathlib import Path
 
-from .scan_json import _load_lenient_json_file
+from bridgeforge.scan.scan_json import _load_lenient_json_file
 
 DASH = "-"
 FIELDS = ["mod", "release_version", "archived", "live_validated", "status", "author", "policy", "files_vs_original",

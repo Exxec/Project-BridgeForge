@@ -297,7 +297,7 @@ def _mission_rows(mod_path: str) -> int:
 
 
 def _replaces_mission_list(mod_path: str) -> bool:
-    from bridgeforge.scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(Path(mod_path) / "mod_info.json")
     replace = info.get("replace") if isinstance(info, dict) else None

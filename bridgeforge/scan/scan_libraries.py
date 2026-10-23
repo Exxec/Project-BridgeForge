@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from .models import ScanResult
+from ..models import ScanResult
 from pathlib import Path
 from .scan_classfile import _iter_jar_class_files, _parse_class_file
 from .scan_common import BUNDLED_LIBRARY_PACKAGE_PREFIXES, GAME_VERSION_RC_PATTERN, LIBRARY_DEPENDENCY_IDS, LIBRARY_PACKAGES, LIBRARY_PATTERNS, _java_for_major, _relative
@@ -284,7 +284,7 @@ def toolbox_version_gaps(root: Path, provider_roots: list[Path] | None) -> list[
         return []
     installed: tuple[int, ...] = ()
     if provider_roots:
-        from .substitutes import provider_index
+        from ..substitutes import provider_index
 
         versions = [_version_tuple(p.version) for p in provider_index([Path(e) for e in provider_roots], exclude=Path(root)) if p.mod_id == TOOLBOX_ID]
         installed = max(versions, default=())
@@ -338,8 +338,8 @@ def _scan_revenantlib_fold_conflict(result: ScanResult) -> None:
     """
     if not _mod_info_declares_dependency(result, "revenantlib"):
         return
-    from .fold import FOLD_KIND
-    from .substitutes import load_successors
+    from ..fold import FOLD_KIND
+    from ..substitutes import load_successors
 
     folded_ids = {
         str(entry.get("match") or "").strip().lower()

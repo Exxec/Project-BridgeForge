@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix
-from bridgeforge.scanner import carrier_bays_without_evidence
+from bridgeforge.scan.scanner import carrier_bays_without_evidence
 
 SHIP_DATA = ("name,id,designation,system id,hangar,hints\r\n"
              "Termite,yj_termite,Frigate,,5,\r\n"          # hangar value, no bay slot, no wings: nothing can launch

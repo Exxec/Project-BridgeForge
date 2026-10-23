@@ -393,7 +393,7 @@ def _rebuild_attempt_jar(workspace: Path, packet: dict, attempt_dir: Path, sourc
     """Rebuild the mod's jar from the attempt's own sources, in the attempt folder (ROADMAP P15 31.7). A source edit in a
     compiled mod changes nothing until the jar is rebuilt; refuse unless the build passes and loses no class or member."""
     from bridgeforge.rebuild_jar import rebuild_jar
-    from bridgeforge.scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     jars = (_load_lenient_json_file(workspace / "working" / "mod_info.json") or {}).get("jars") or []
     if len(jars) != 1:
@@ -472,7 +472,7 @@ def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = N
         import zipfile
 
         from bridgeforge.bytecode.jar_patch import patch_jar_classes
-        from bridgeforge.scanner import _load_lenient_json_file
+        from bridgeforge.scan.scanner import _load_lenient_json_file
 
         info = _load_lenient_json_file(working / "mod_info.json") or {}
         jars = [j for j in info.get("jars") or [] if isinstance(j, str) and (working / j).is_file()]

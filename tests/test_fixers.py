@@ -11,7 +11,7 @@ from unittest import mock
 
 from bridgeforge.cli import main
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix
-from bridgeforge.scanner import _load_lenient_json_file, scan_mod
+from bridgeforge.scan.scanner import _load_lenient_json_file, scan_mod
 from tests.save_fixtures import _class_entry, _u2, _utf8_entry, build_class_file, write_jar
 
 
@@ -1615,7 +1615,7 @@ if __name__ == "__main__":
 class CsvFullwidthNumberFixerTests(unittest.TestCase):
     def test_rewrites_reported_cells_and_keeps_prose_and_quoting(self) -> None:
         from bridgeforge.fixers import apply_fix, compute_fix
-        from bridgeforge.scanner import scan_mod
+        from bridgeforge.scan.scanner import scan_mod
 
         with tempfile.TemporaryDirectory() as directory:
             mod = Path(directory)
@@ -1696,7 +1696,7 @@ class SuppliedFindingsTests(unittest.TestCase):
             _write(mod / "data/scripts/Panel.java", source)
             findings = scan_mod(mod).findings
             scanned = compute_fix(mod, "missing-custom-ui-button-pressed-callback")
-            with mock.patch("bridgeforge.scanner.scan_mod", side_effect=AssertionError("rescanned")):
+            with mock.patch("bridgeforge.scan.scanner.scan_mod", side_effect=AssertionError("rescanned")):
                 as_objects = compute_fix(mod, "missing-custom-ui-button-pressed-callback", {"scan_findings": findings})
                 as_dicts = compute_fix(mod, "missing-custom-ui-button-pressed-callback", {"scan_findings": [asdict(f) for f in findings]})
                 with self.assertRaises(FixerError):  # the caller's scan has none: nothing to fix, no fallback scan

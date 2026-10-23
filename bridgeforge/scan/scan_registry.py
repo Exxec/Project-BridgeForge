@@ -35,8 +35,8 @@ import sys
 import time
 from pathlib import Path
 
-from .safeio import atomic_write_json
-from .source_paths import python_sources
+from ..safeio import atomic_write_json
+from ..source_paths import python_sources
 
 SCHEMA_VERSION = 1
 EXCLUSION_VERSION = 1
@@ -127,7 +127,7 @@ def _core_digest(core: Path, incomplete: list[str]) -> str:
 def scanner_identity() -> str:
     """Digest of the checks and rules themselves: every `*.py` and `**/*.json` in the bridgeforge package."""
     if "value" not in _SCANNER_CACHE:
-        package = Path(__file__).resolve().parent
+        package = Path(__file__).resolve().parent.parent
         rules = [p for p in package.rglob("*.json") if p.is_file() and "__pycache__" not in p.relative_to(package).parts]
         sources = sorted([*python_sources(package), *rules])
         _SCANNER_CACHE["value"] = _tree_digest([(p.relative_to(package).as_posix(), _sha256(p)) for p in sources])
@@ -195,7 +195,7 @@ def fingerprint(working: Path, context: dict | None = None) -> dict:
 
 def filter_digest(working: Path) -> str:
     """Identity of the accepted-baseline filter finding-stats applies on top of a raw scan."""
-    from .baseline import mod_baseline_path
+    from ..baseline import mod_baseline_path
 
     path = mod_baseline_path(Path(working))
     if path is None:

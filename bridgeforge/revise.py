@@ -112,7 +112,7 @@ class _Lock:
 
 
 def _info(working: Path) -> dict:
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(working / "mod_info.json") if (working / "mod_info.json").is_file() else None
     if not isinstance(info, dict):

@@ -380,7 +380,7 @@ def growth_trend(saves: list[Path | str], *, mod_dir: Path | str | None = None, 
 
 def _mod_version_lookup(mod_dirs: list[Path | str]) -> dict[str, dict[str, object]]:
     from .build_tag import BuildTagError, _find_mod_info
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     lookup: dict[str, dict[str, object]] = {}
     for mod_dir in mod_dirs:

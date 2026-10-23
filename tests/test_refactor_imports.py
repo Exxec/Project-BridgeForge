@@ -50,7 +50,7 @@ class RefactorImportTests(unittest.TestCase):
             shim = importlib.import_module(old)
             implementation = importlib.import_module(MOVES["moves"][old])
             names = [name for name in vars(implementation) if not name.startswith("_")]
-            if old == "bridgeforge.scanner":
+            if old == "bridgeforge.scan.scanner":
                 names.append("_load_lenient_json_file")
             for name in names:
                 with self.subTest(module=old, name=name):

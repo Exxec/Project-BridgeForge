@@ -205,7 +205,7 @@ def _findings_of(root: Path, options: dict, finding_id: str) -> list:
     """
     supplied = options.get("scan_findings")
     if supplied is None:
-        from ..scanner import scan_mod
+        from bridgeforge.scan.scanner import scan_mod
 
         return [f for f in scan_mod(root, vanilla_core=options.get("vanilla_core")).findings if f.id == finding_id]
     from types import SimpleNamespace

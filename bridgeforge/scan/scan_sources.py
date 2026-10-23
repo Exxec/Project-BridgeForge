@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import hashlib
 import re
-from .ashlib_compat import scan_ashlib_compat
-from .graphicslib_compat import scan_graphicslib_compat
+from ..ashlib_compat import scan_ashlib_compat
+from ..graphicslib_compat import scan_graphicslib_compat
 from bridgeforge.bytecode.java_ast import AstUnavailable, analyze_sources
-from .lazylib_compat import scan_lazylib_compat
-from .magiclib_compat import scan_magiclib_compat
-from .models import ScanResult
+from ..lazylib_compat import scan_lazylib_compat
+from ..magiclib_compat import scan_magiclib_compat
+from ..models import ScanResult
 from pathlib import Path
 from .scan_campaign import _lookup_null_guarded, _scan_core_campaign_plugin_reregistered, _scan_removed_market_condition_ids, _scan_system_generation_unguarded, _system_lookup_null_guarded
 from .scan_combat import _scan_hulk_death_effect_repeats, _scan_hullmod_fleet_dereference, _scan_hullmod_instance_state, _scan_rules_firebest_populate_options, _scan_saved_object_holds_market_ref, _scan_weapon_effect_static_state

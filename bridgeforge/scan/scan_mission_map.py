@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .models import ScanResult
+from ..models import ScanResult
 from .scan_common import _relative
 from .scan_javatext import _blank_java_comments
 from .scan_json import _load_lenient_json_file

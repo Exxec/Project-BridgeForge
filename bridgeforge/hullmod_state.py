@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 
-from .scanner import _blank_java_comments
+from bridgeforge.scan.scanner import _blank_java_comments
 
 _TYPES = r"(?:float|int|boolean|double|long|short|byte|char|String|Vector2f|Color)"
 _FIELD = re.compile(r"^(?P<indent>[ \t]*)(?:private\s+|protected\s+|public\s+)?(?P<type>" + _TYPES +

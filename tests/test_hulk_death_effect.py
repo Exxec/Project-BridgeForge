@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 
 from bridgeforge.fixers import FixerError, _fix_hulk_death_effect_repeats
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
 
 UNGUARDED = """package data.hullmods;

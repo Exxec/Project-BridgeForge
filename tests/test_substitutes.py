@@ -348,7 +348,7 @@ class RequiredFromScanTruncationTests(unittest.TestCase):
     """
 
     def test_more_than_25_unresolved_content_ids_are_all_returned(self) -> None:
-        from bridgeforge.scanner import scan_mod
+        from bridgeforge.scan.scanner import scan_mod
         from bridgeforge.models import TargetProfile
 
         with tempfile.TemporaryDirectory() as directory:
@@ -368,7 +368,7 @@ class RequiredFromScanTruncationTests(unittest.TestCase):
         self.assertEqual(files["missing_15"], 1)
 
     def test_more_than_20_unresolved_imports_are_all_returned(self) -> None:
-        from bridgeforge.scanner import scan_mod
+        from bridgeforge.scan.scanner import scan_mod
         from bridgeforge.models import TargetProfile
 
         with tempfile.TemporaryDirectory() as directory:

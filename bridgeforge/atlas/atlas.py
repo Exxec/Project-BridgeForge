@@ -20,7 +20,7 @@ from .. import progress
 from .atlas_census import declared_dependencies, extract_census
 from .atlas_code import CALLS, extract_code
 from .atlas_data import DATA_KINDS, Fact, extract_data_facts
-from ..scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 VANILLA_ID = "vanilla"
 ORIGINAL_SUFFIX = "+original"

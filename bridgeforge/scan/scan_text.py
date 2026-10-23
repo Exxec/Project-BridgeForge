@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
-from .models import ScanResult
+from ..models import ScanResult
 from collections import Counter
 from pathlib import Path
 from .scan_common import DESIGN_TYPE_CSV_TARGETS, _relative
@@ -112,7 +112,7 @@ def _scan_shippable_work_files(root: Path, result: ScanResult) -> None:
     OS litter (Thumbs.db, .DS_Store, __MACOSX, .git...) is excluded from releases outright; these are
     left to a person because a mod could, rarely, read one on purpose.
     """
-    from .copy_drift import _collect
+    from ..copy_drift import _collect
 
     found = sorted(relative for relative in _collect(root) if any(fnmatch.fnmatch(relative.rsplit("/", 1)[-1].lower(), pattern) for pattern in _WORK_FILE_GLOBS))
     if found:
@@ -148,7 +148,7 @@ def _scan_non_ascii_names(root: Path, result: ScanResult) -> None:
                         ids.append(f"{_relative(root, path)}: {key}={value}")
     if ids:
         result.add(id="non-ascii-identifier", category="localization", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Spec ids contain non-ASCII characters. Ids are references, not player text: never translate them, and keep them identical everywhere they are used (data files, rules.csv, code, saves). Renaming one breaks existing saves.", evidence=ids[:25] + ([f"... {len(ids) - 25} more"] if len(ids) > 25 else []))
-    from .copy_drift import _collect
+    from ..copy_drift import _collect
 
     paths = sorted(relative for relative in _collect(root) if not relative.isascii())
     if paths:
@@ -188,7 +188,7 @@ def _scan_data_encoding(root: Path, result: ScanResult) -> None:
 
 def _scan_orphaned_fixer_backups(root: Path, result: ScanResult) -> None:
     """A `.pre-bf-fix-*.bak` with no file beside it: a fixed file was lost afterwards (BUGS.md FIX-001)."""
-    from .fixer_backups import orphaned_backups
+    from ..fixer_backups import orphaned_backups
 
     orphans = orphaned_backups(root)
     if orphans:
@@ -197,7 +197,7 @@ def _scan_orphaned_fixer_backups(root: Path, result: ScanResult) -> None:
 
 def _scan_removed_without_record(root: Path, result: ScanResult) -> None:
     """A file under `scratch/removed/` with no `files` REMOVALS entry: a hand removal with no reason (ROADMAP 77.27, FIX-001)."""
-    from .hand_remove import unrecorded_removed_files
+    from ..hand_remove import unrecorded_removed_files
 
     folders = [root] + ([root.parent] if root.name == "working" else [])
     missing = sorted({path for folder in folders for path in unrecorded_removed_files(folder, root)})

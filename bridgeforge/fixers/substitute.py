@@ -20,7 +20,7 @@ _SAFE_ID = re.compile(r"^[A-Za-z0-9_.\-]+$")
 
 
 def _declared(root: Path) -> set[str]:
-    from ..scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(root / "mod_info.json")
     return {str(d.get("id")) for d in (info.get("dependencies") or []) if isinstance(d, dict) and d.get("id")} if isinstance(info, dict) else set()

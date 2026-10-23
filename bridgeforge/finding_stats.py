@@ -23,7 +23,7 @@ from pathlib import Path
 from .automation import ACTIONABLE, TIER_ORDER, bucket, tier_descriptions, tier_for
 from .baseline import finding_dict_baseline_key, mod_baseline_keys
 from .progress import Checkpoint
-from .scan_registry import REGISTRY_NAME, STATES
+from bridgeforge.scan.scan_registry import REGISTRY_NAME, STATES
 
 SCHEMA_VERSION = 1
 PROMOTE_AFTER = 3  # verified AI fixes of one finding id, across at least two mods
@@ -76,7 +76,7 @@ def _scan_and_register(workspace: Path, vanilla_core: Path | None) -> None:
     import time
 
     from .report import write_artifacts
-    from .scanner import scan_mod
+    from bridgeforge.scan.scanner import scan_mod
 
     working = workspace / "working"
     result = scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None)
@@ -92,7 +92,7 @@ def _fresh_context(vanilla_core: Path | None) -> dict:
 def _assessment(workspace: Path, scan: bool, vanilla_core: Path | None) -> tuple[dict, str | None]:
     """(freshness of the stored scan, key). The key identifies the content a record was computed from, so a checkpointed
     record is reused only for the same content (R2): the registry fingerprint, or for --scan the fingerprint of a fresh scan."""
-    from . import scan_registry
+    from bridgeforge.scan import scan_registry
 
     if scan:
         fp = scan_registry.fingerprint(workspace / "working", _fresh_context(vanilla_core))
@@ -104,7 +104,7 @@ def _assessment(workspace: Path, scan: bool, vanilla_core: Path | None) -> tuple
 
 def _key(assessment: dict) -> str | None:
     """The registry fingerprint; for a legacy scan (no fingerprint) the digest of its report, which is all that record depends on."""
-    from . import scan_registry
+    from bridgeforge.scan import scan_registry
 
     if assessment.get("fingerprint") or not isinstance(assessment.get("report"), Path):
         return assessment.get("fingerprint")
@@ -126,8 +126,8 @@ def _workspace_record(workspace: Path, scan: bool, vanilla_core: Path | None, *,
     registers every workspace that is not CURRENT and keeps the stored result of the rest."""
     from dataclasses import asdict
 
-    from . import scan_registry
-    from .scanner import scan_mod
+    from bridgeforge.scan import scan_registry
+    from bridgeforge.scan.scanner import scan_mod
 
     working = workspace / "working"
     if assessment is None:
@@ -172,7 +172,7 @@ def _workspace_record(workspace: Path, scan: bool, vanilla_core: Path | None, *,
 
 def _reusable(record: dict, workspace: Path, scan: bool, vanilla_core: Path | None) -> tuple[bool, dict | None]:
     """A checkpointed record is reused only when the workspace's content and baseline filter are the ones it was computed from."""
-    from . import scan_registry
+    from bridgeforge.scan import scan_registry
 
     freshness = record.get("freshness") or {}
     assessment, key = _assessment(workspace, scan, vanilla_core)
@@ -181,7 +181,7 @@ def _reusable(record: dict, workspace: Path, scan: bool, vanilla_core: Path | No
 
 
 def _checkpoint_header(roots: list[Path], scan: bool, vanilla_core: Path | None, rescan_stale: bool = False) -> dict:
-    from .scan_registry import EXCLUSION_VERSION, SCHEMA_VERSION as REGISTRY_SCHEMA
+    from bridgeforge.scan.scan_registry import EXCLUSION_VERSION, SCHEMA_VERSION as REGISTRY_SCHEMA
 
     return {"checkpoint": SCHEMA_VERSION, "roots": [str(Path(r).expanduser().resolve()) for r in roots],
             "scan": scan, "vanilla_core": str(vanilla_core) if vanilla_core else None, "rescan_stale": rescan_stale,

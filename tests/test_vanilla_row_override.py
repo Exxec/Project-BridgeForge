@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 CHECK = "csv-vanilla-row-override"
 INFO = '{"id":"demo","name":"Demo","version":"1.0","gameVersion":"0.98a-RC8"%s}'

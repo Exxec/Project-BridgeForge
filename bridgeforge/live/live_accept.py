@@ -46,7 +46,7 @@ def bound_evidence(rig: Path | None, test_id: str, log: Path, mods_dir: Path | N
 
 
 def _mod_id(workspace: Path) -> str | None:
-    from bridgeforge.scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(workspace / "working" / "mod_info.json")
     return info.get("id") if isinstance(info, dict) else None
@@ -160,7 +160,7 @@ def probe_fail_keys(log: Path | str) -> list[str]:
 
 def remember_accepted(workspace: Path, test_id: str, keys: list[str], caught: dict, reason: str, today: str, context: dict | None = None) -> None:
     """Append what the owner accepted for this mod version, so `probe-group record --accept` can carry it to a later run of the same version."""
-    from bridgeforge.scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(workspace / "working" / "mod_info.json")
     entry = {"test_id": test_id, "date": today, "version": str(info.get("version") or "") if isinstance(info, dict) else "",

@@ -96,7 +96,7 @@ def _csv_ids(path: Path, id_column: str = "id") -> set[str]:
 def _faction_ids(directory: Path) -> set[str]:
     if not directory.is_dir():
         return set()
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     ids: set[str] = set()
     for path in directory.glob("*.faction"):
@@ -112,7 +112,7 @@ def _faction_ids(directory: Path) -> set[str]:
 def _skin_hull_ids(directory: Path) -> set[str]:
     if not directory.is_dir():
         return set()
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     ids: set[str] = set()
     for path in directory.rglob("*.skin"):

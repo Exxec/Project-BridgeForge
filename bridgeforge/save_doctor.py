@@ -27,7 +27,7 @@ from pathlib import Path
 
 from .save_compat import ModClassIndex, SaveCompatError, _package_of, _scan_save_tokens
 from .save_reader import campaign_xml_path, parse_descriptor
-from .scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 SCHEMA_VERSION = 1
 RECOVERY = {

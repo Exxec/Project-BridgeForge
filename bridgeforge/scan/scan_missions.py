@@ -5,7 +5,7 @@ import csv
 import json
 import re
 import zipfile
-from .models import ScanResult
+from ..models import ScanResult
 from pathlib import Path
 from .scan_campaign import _declared_spec_ids
 from .scan_classfile import _loaded_mod_jars

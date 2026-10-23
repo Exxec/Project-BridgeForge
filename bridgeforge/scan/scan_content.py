@@ -4,7 +4,7 @@ from __future__ import annotations
 import csv
 import json
 import re
-from .models import ScanResult
+from ..models import ScanResult
 from pathlib import Path
 from .scan_campaign import _declared_spec_ids
 from .scan_common import _relative
@@ -260,12 +260,12 @@ def _scan_content_id_renamed_by_provider(root: Path, result: ScanResult, vanilla
     """An industry id the mod's code asks for that no installed table defines while a close sibling id exists (ROADMAP 60d;
     Tritachyon asked for BOGGLED_AI_STATION, Terraforming & Station Construction 10.0.9 calls it BOGGLED_REMNANT_STATION,
     New Game stopped in onNewGame). Only the vanilla table, the mod's own and its declared providers' are consulted."""
-    from .provider_renamed_ids import renamed_ids
+    from ..provider_renamed_ids import renamed_ids
 
     provider_dirs: list[Path] = []
     if provider_roots:
         from bridgeforge.bytecode.java_toolchain import declared_dependencies
-        from .substitutes import provider_index
+        from ..substitutes import provider_index
 
         deps = set(declared_dependencies(root))
         provider_dirs = [Path(p.path) for p in provider_index([Path(r) for r in provider_roots], exclude=root) if p.mod_id in deps]

@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix
-from bridgeforge.scanner import _load_lenient_json_file, scan_mod
+from bridgeforge.scan.scanner import _load_lenient_json_file, scan_mod
 
 
 def _write(path: Path, text: str) -> None:

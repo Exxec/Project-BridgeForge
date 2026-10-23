@@ -13,7 +13,7 @@ from bridgeforge.dropped_sweep import check_workspace
 from bridgeforge.file_drops import dropped_files, is_junk_file, split_dropped_files
 from bridgeforge.hand_remove import RemoveError, remove_files, unrecorded_removed_files
 from bridgeforge.removals import REMOVALS_FILE, RemovalsError, add_removals, load_removals, make_entry
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
 
 MOD_INFO = '{"id": "bf_files", "name": "Files", "author": "A", "version": "1.0", "gameVersion": "0.98a-RC8"}'

@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 from bridgeforge.atlas import atlas
 from bridgeforge import checks_index
 from bridgeforge import cli_commands
-from bridgeforge import scan_registry
+from bridgeforge.scan import scan_registry
 from bridgeforge import source_paths
 from bridgeforge.merge_train import test_modules_for
 from tests import test_bug_class_registry as bug_audit
@@ -112,7 +112,7 @@ class SourcePathsTests(unittest.TestCase):
             path.parent.mkdir()
             path.write_text("x = 1\n", encoding="utf-8")
             def identity():
-                with patch.object(scan_registry, "__file__", str(root / "scan_registry.py")), patch.object(scan_registry, "_SCANNER_CACHE", {}):
+                with patch.object(scan_registry, "__file__", str(root / "scan" / "scan_registry.py")), patch.object(scan_registry, "_SCANNER_CACHE", {}):
                     return scan_registry.scanner_identity()
             first = identity()
             path.write_text("x = 2\n", encoding="utf-8")

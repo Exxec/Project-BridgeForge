@@ -27,7 +27,7 @@ import re
 import zipfile
 from pathlib import Path
 
-from .models import ScanResult
+from ..models import ScanResult
 from .scan_classfile import NON_MOD_JAR_DIRS
 from .scan_common import MAX_JAR_ENTRIES
 from .scan_json import _load_lenient_json_file

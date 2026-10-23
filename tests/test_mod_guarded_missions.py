@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 
 from bridgeforge.probe.probe_config import _mission_fleet_refs
-from bridgeforge.scan_javatext import _blank_java_comments, _blank_mod_guarded_blocks
+from bridgeforge.scan.scan_javatext import _blank_java_comments, _blank_mod_guarded_blocks
 from tests.support import resolved_temp_dir
 
 SOURCE = """
@@ -59,7 +59,7 @@ class LoadClassOrThrowTests(unittest.TestCase):
     """REG7-20261012: Vayra's Ship Pack stopped at load without LazyLib but declared no dependency."""
 
     def test_a_loadclass_check_whose_catch_throws_makes_the_library_required(self) -> None:
-        from bridgeforge.scan_libraries import _loads_library_class_or_throws
+        from bridgeforge.scan.scan_libraries import _loads_library_class_or_throws
         required = 'try { Global.getSettings().getScriptClassLoader().loadClass("org.lazywizard.lazylib.ModUtils"); } catch (ClassNotFoundException e) { throw new ClassNotFoundException("LazyLib is required"); }'
         optional = 'try { Global.getSettings().getScriptClassLoader().loadClass("org.lazywizard.lazylib.ModUtils"); } catch (ClassNotFoundException e) { log.info("no lazylib"); }'
         self.assertTrue(_loads_library_class_or_throws(required, "LazyLib"))

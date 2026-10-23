@@ -92,3 +92,5 @@ The bounded audit scope, exceptions and source-backed corrections are recorded i
 - [B3 live evidence](REFACTOR_B3_LIVE_AUDIT.md): structural move and regression/consumer validation.
 
 - [B3 bytecode evidence](REFACTOR_B3_BYTECODE_AUDIT.md): structural move and regression/consumer validation.
+
+- [B3 scan evidence](REFACTOR_B3_SCAN_AUDIT.md): structural move and regression/consumer validation.

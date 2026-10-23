@@ -19,9 +19,9 @@ SKIN_AWARE = {"_skin_index", "_resolve_hull_id"}
 EXEMPT = {
     # Both iterate ship_data.csv's own base-hull rows and look each up in the .ship index; a row id is
     # never a skin id, so there is no skin reference to resolve (item 17's audit, 2026-09-20).
-    ("scan_ships.py", "_scan_carrier_bays_proposal"): "iterates ship_data.csv base-hull rows",
-    ("scan_ships.py", "carrier_bays_without_evidence"): "iterates ship_data.csv base-hull rows (same inputs as _scan_carrier_bays_proposal)",
-    ("scan_references.py", "_scan_description_missing"): "iterates ship_data.csv base-hull rows",
+    ("scan/scan_ships.py", "_scan_carrier_bays_proposal"): "iterates ship_data.csv base-hull rows",
+    ("scan/scan_ships.py", "carrier_bays_without_evidence"): "iterates ship_data.csv base-hull rows (same inputs as _scan_carrier_bays_proposal)",
+    ("scan/scan_references.py", "_scan_description_missing"): "iterates ship_data.csv base-hull rows",
     # Item 73 B5 (2026-10-18): hull ids come from _scan_carrier_bays_proposal's evidence (exempt above) and RC8's
     # ship_data.csv rows, both base-hull ids, never skin ids.
     ("value_proposals.py", "propose_bays"): "hull ids from _scan_carrier_bays_proposal and RC8 ship_data.csv base-hull rows",

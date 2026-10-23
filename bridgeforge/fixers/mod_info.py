@@ -3,7 +3,7 @@ import json
 import re
 from pathlib import Path
 from ..build_tag import _NAME_PATTERN, _find_top_level_key, _string_literal_to_text, _structural_depths, _text_to_string_literal
-from ..scanner import MOD_INFO_TRIAGE_BANNER_PATTERN, _parse_json
+from bridgeforge.scan.scanner import MOD_INFO_TRIAGE_BANNER_PATTERN, _parse_json
 from .common import FileChange, FixerError, _decode, _encode
 
 

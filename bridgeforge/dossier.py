@@ -13,7 +13,7 @@ from .fixers import SUPPORTED_FINDINGS
 from bridgeforge.bytecode.jar_audit import audit_jar
 from .log_triage import triage_log
 from .models import Finding, TargetProfile
-from .scanner import (
+from bridgeforge.scan.scanner import (
     CAMPAIGN_SYSTEM_CREATION_PATTERN,
     FACTION_SPECIAL_ROLE_KEYS,
     _load_lenient_json_file,

@@ -16,7 +16,7 @@ from ..dropped_sweep import mod_roots
 from .research_decompile import HOW_TO_GET, decompile_jar_classes, find_toolchain, jar_sha256, outer_name, run_vineflower
 from .research_methods import MethodMap, jar_method_index
 from .research_terms import STATIC, Matcher, parse_terms
-from ..scan_classfile import _loaded_mod_jars
+from bridgeforge.scan.scan_classfile import _loaded_mod_jars
 
 DEFAULT_MAX_METHODS = 20
 DEFAULT_MAX_LINES = 60
