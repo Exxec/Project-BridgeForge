@@ -1,3 +1,24 @@
+**86. Re-check the archive across environments and against AoTD (owner 2026-10-22; after item 83, uses 85.1).** Everything
+archived was live-validated on Java 25 direct, alone or in small groups. Scope (Done/ 2026-10-22): 112 archives carry code (jars
+or loose scripts) and are re-checked; 42 are data-only (portraits, sprites, CSV) and are skipped, since launcher, Java and the
+pre-patcher only change how code loads and runs. Runs are grouped (`probe-group regress` grouping: no shared mod or content
+ids, dependencies present), about 15-25 groups per environment; a failing group is split with `probe-group bisect`. Order:
+- 86.1 Forecast first, offline: `atlas sweep aotd` over every indexed archive (Mod Atlas, item 67's first use) ranks each mod's
+  predicted conflicts with Ashes of the Domain (Vaults of Knowledge, Theory of Toolbox fork, Building Menu Overhaul, Ashlib)
+  and refreshes the census. Done when every code archive has a forecast and a risk rank.
+- 86.2 AoTD alone: the `aotd` set with the probe on the pre-patcher launchers (AoTD's Toolbox fork needs the Prepatcher
+  javaagent), Java 25 direct-prep and FR Java 28 prep. Its own FAIL lines become the AoTD baseline, so later group runs only
+  report what a revived mod adds. Done when the AoTD baseline is recorded.
+- 86.3 Environment pass 1, Java 28 direct (furthest from the original validation), code archives in groups, no AoTD. Done when
+  every group is PASS or bisected to named mods.
+- 86.4 Environment pass 2, FR Java 28, same groups.
+- 86.5 AoTD pass: the code archives grouped with `--also-enable aotd` on Java 25 direct-prep; mods 86.1 ranks high-risk run
+  first, in small groups (2-3), the rest in normal groups. Then FR Java 28 prep for the groups that passed. Done when every
+  code archive has an AoTD verdict (PASS, FAIL with a named cause, or an accepted incompatibility recorded in its workspace).
+- 86.6 Pre-patcher variants of passes 1-2 only for archives that patch game classes or depend on the Prepatcher.
+- Results go into each workspace's live record and gates.json; an archive is re-archived (`revise`) only when a fix is needed.
+  New and revised mods are not part of this item: they get the `standard` bundle before archiving (85.1).
+
 **85. Automation and fewer tokens per task (owner-approved 2026-10-22).** From this session's hand work. Nothing below is
 built yet; LIVE TEST NOT PERFORMED.
 - 85.1 Live-batch command: `live-batch plan` turns LIVE_PENDING gates (`gates.json` needs, `board --live-pending` blocks) into
