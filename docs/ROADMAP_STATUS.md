@@ -67,3 +67,5 @@ The detailed per-sub-item status audit and any machine-readable status/lint exte
 Item 83 B3 implementation checkpoint 2026-10-23: all prefix families implemented and validated locally;
 review/merge pending. See [completion evidence](REFACTOR_B3_COMPLETION.md). This does not complete item 83, B4-B6,
 or any live/release gate.
+
+B4 report implemented locally, 2026-10-23: [command-reference audit](REFACTOR_B4_COMMAND_AUDIT.md), based on B3 tip `6a843117`. Report only; owner grouping/deprecation decision and review/merge pending. No command behavior changed.

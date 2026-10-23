@@ -20,7 +20,7 @@ with full tests/coverage, CLI, path-safety, wheel and consumer evidence. The own
 | B3 bytecode | refactor/b3-bytecode | refactor/b3-live | Implemented and locally validated; review/merge pending |
 | B3 scan | refactor/b3-scan | refactor/b3-bytecode | Implemented and locally validated; review/merge pending |
 | B3 save | refactor/b3-save | refactor/b3-scan | Implemented and locally validated; review/merge pending |
-| B4 report | pending | preceding B3 branch | Report only; owner decides candidates/grouping |
+| B4 report | docs/b4-command-audit | refactor/b3-save | Report implemented and locally validated; owner review pending |
 | B4 grouping | pending owner decision | pending | Decision gate open |
 | B5/B6 | pending | pending | Not complete |
 

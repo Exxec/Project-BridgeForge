@@ -98,3 +98,5 @@ The bounded audit scope, exceptions and source-backed corrections are recorded i
 - [B3 save evidence](REFACTOR_B3_SAVE_AUDIT.md): structural move and regression/consumer validation.
 
 - [B3 completion evidence](REFACTOR_B3_COMPLETION.md): local implementation complete; owner review/merge pending.
+
+- [B4 command-reference audit](REFACTOR_B4_COMMAND_AUDIT.md): complete parser inventory and bounded static consumer references; grouping/deprecation decisions remain with the owner.
