@@ -1,0 +1,1 @@
+- gates.json: Ironclads launcher matrix (FR Java 25, FR Java 28, Java 28 direct; each with and without the pre-patcher), EPTA 2.1.3+bf.2 and Zorg V18+bf.10 live gates.
