@@ -82,7 +82,7 @@
     "explain_proofs.py": {
       "write_text": 1
     },
-    "fixers.py": {
+    "fixers/encoding.py": {
       "write_text": 1
     },
     "fold.py": {

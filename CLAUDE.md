@@ -100,7 +100,7 @@ in a cloud session. Build and test what you can, then add an entry to `docs/LOCA
   `cmd_*.py` or its own module and is listed in `cli_commands.COMMAND_MODULES` (a module defines
   `add_parser(subcommands)` and `run_cli(args)`; a new command is a module plus one line there). Checks:
   `scanner.py` keeps `scan_mod`, `_scan_jars` and re-exports every moved name; the checks live in 25
-  `scan_*.py` modules (no module imports `scanner`). `fixers.py` holds the `fix` command's rewrites.
+  `scan_*.py` modules (no module imports `scanner`). `fixers/` holds the `fix` command's rewrites, with its existing API re-exported by `fixers/__init__.py`.
 - `tests/` unittest suite; `tests/support.py` has `resolved_temp_dir()` and `link_dir()`.
 - `probe-mod/` the in-game probe (Java, public API only); built by `build-probe-mod`.
 - Gitignored and local-only: `In operation/`, `Done/`, `AGENTS.md`, `tools/*.ps1` (except

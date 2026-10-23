@@ -1,0 +1,1 @@
+- Reorganize fixers into family modules while preserving the existing fixer API, supported findings, and dispatch order. Stored scan fingerprints become stale; refresh with `finding-stats --rescan-stale`.

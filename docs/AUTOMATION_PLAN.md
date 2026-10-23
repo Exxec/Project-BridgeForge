@@ -79,10 +79,10 @@ BridgeForge verified with no fixer: `loose-script-compile-error` (5 verified fix
 2. `MANUAL` and `UNKNOWN` findings are never auto-applied. Confidence (SAFE/REVIEW/MANUAL/UNKNOWN) and automation tier
    (none/auto/input/mechanical/decision/code/inspect) are separate. Repeated verified applications support promotion;
    they do not by themselves establish SAFE confidence or authorize balance/save changes.
-3. `bridgeforge/fixers.py` is 3,899 lines (soft ceiling 800). Put new fixers in a new module per family (`fixers_guards.py`,
-   `fixers_data.py`, ...). The new module imports helpers at call time (`from . import fixers as _f` inside functions) to avoid an
-   import cycle; `fixers.py` imports the new functions immediately above `_FIXER_FUNCS`, adds them there and to
-   `SUPPORTED_FINDINGS`. A fixer has the signature `(root: Path, options: dict) -> list[FileChange]`, raises `FixerError` to
+3. Put new fixers in the matching family under `bridgeforge/fixers/` (soft ceiling 800 lines per module).
+   Shared models/text helpers live in `common.py`; family modules import their helpers directly. The folded `data.py`,
+   `guards.py`, `presets.py` and `substitute.py` retain their call-time facade imports (`from .. import fixers as _f`).
+   `fixers/__init__.py` re-exports the existing API and registers functions in `_FIXER_FUNCS` and `SUPPORTED_FINDINGS`. A fixer has the signature `(root: Path, options: dict) -> list[FileChange]`, raises `FixerError` to
    refuse, edits only the located spans (line endings, BOM, comments survive), and must be idempotent (a second run computes no
    change, which `compute_fix` turns into `FixerError("No change ...")`).
 4. Fixtures come from real cases: copy the smallest file excerpt that reproduces the finding from the named mod's `original/`
@@ -154,7 +154,7 @@ fixer covers every supported A4 shape with explicit refusal boundaries and autho
 **B1. Generation and orbit guards** (`system-generation-unguarded`, `orbit-period-computed-unguarded`).
 
 *Status: Implemented offline 2026-10-18; live acceptance pending. REVIEW tier, approval-gated.*
-- Files: `bridgeforge/fixers_guards.py`; scanner checks are in `scan_campaign.py` (read them for the exact evidence fields).
+- Files: `bridgeforge/fixers/guards.py`; scanner checks are in `scan_campaign.py` (read them for the exact evidence fields).
 - Behaviour: (a) `system-generation-unguarded`: at the start of the flagged generate method, insert
   `if (sector.getStarSystem("<name>") != null) return;` where `<name>` is the system name literal the method passes to
   `createStarSystem`, and `sector` is the method's `SectorAPI` parameter name (or `Global.getSector()` if none). Refuse when the
@@ -171,7 +171,7 @@ fixer covers every supported A4 shape with explicit refusal boundaries and autho
 **B2. Compile-error rewrites** (`loose-script-compile-error`).
 
 *Status: No rule added: no RC8 member was involved (reason in `signature_rewrites.py`).*
-- Files: `bridgeforge/signature_rewrites.py` (`RULES`), `bridgeforge/fixers.py` (`_fix_rc8_signature_changed` already applies
+- Files: `bridgeforge/signature_rewrites.py` (`RULES`), `bridgeforge/fixers/interfaces.py` (`_fix_rc8_signature_changed` already applies
   `RULES`); the API drift catalogue from P14 item 47.
 - Behaviour: add one `RULES` entry per A4 shape that maps a removed or changed RC8 member to its replacement. Each entry carries
   a comment with the javap line for the RC8 member and the date (house rule). After rewriting, the fixer's verifier is
@@ -196,7 +196,7 @@ fixer covers every supported A4 shape with explicit refusal boundaries and autho
 **B4. Preset field merge** (`preset-entry-drops-vanilla-fields`).
 
 *Status: Implemented offline 2026-10-18; live acceptance pending. Approval-only; stale approvals refused (R4).*
-- Files: `bridgeforge/fixers_data.py`; scanner check in `scan_settings.py` or `scan_data_rules.py` (grep the id).
+- Files: `bridgeforge/fixers/data.py`; scanner check in `scan_settings.py` or `scan_data_rules.py` (grep the id).
 - Behaviour: for a preset entry that replaces a vanilla entry whole, add back each vanilla field the mod's entry lacks, value
   from RC8's file (`options["vanilla_core"]`), keeping every mod value. Refuse when the vanilla core is not given. Insert with
   the file's own indentation. Missing fields may be intentional: apply only a field-specific approved proposal or a C1
@@ -207,7 +207,7 @@ fixer covers every supported A4 shape with explicit refusal boundaries and autho
 **B5. Values from comparable rows** (`wing-op-cost-blank`, `carrier-bays-proposal`).
 
 *Status: Implemented offline 2026-10-18; live acceptance pending. `value-proposals`.*
-- Files: extend `_fix_wing_op_cost_blank` (fixers.py) to accept `options["proposals"]`; new `bridgeforge/value_proposals.py`,
+- Files: extend `_fix_wing_op_cost_blank` (`fixers/wing_costs.py`) to accept `options["proposals"]`; new `bridgeforge/value_proposals.py`,
   command `value-proposals WORKSPACE --write SHEET.csv` and `--apply SHEET.csv`.
 - Behaviour: for each blank OP cost, propose the median OP of the mod's own wings with the same role and size, else vanilla's
   (`wing_data.csv` in the core); the sheet shows the comparison rows. The owner fills or confirms the `approved` column;
@@ -218,7 +218,7 @@ fixer covers every supported A4 shape with explicit refusal boundaries and autho
 **B6. Missing weapon row** (`local-weapon-spec-unregistered`).
 
 *Status: Implemented offline 2026-10-18; live acceptance pending. Evidenced or approved rows only.*
-- Files: `bridgeforge/fixers_data.py`.
+- Files: `bridgeforge/fixers/data.py`.
 - Behaviour: prefer an evidenced original/version/sibling row for the same weapon identity. Otherwise draft a comparable
   row as a proposal only, listing every copied value and its source. Type/size similarity does not establish balance.
   Drafting writes reports only; applying needs owner approval of the exact row and an unchanged input fingerprint.
@@ -323,7 +323,7 @@ every escalated mod's baseline, or add a standing approval). Build on them; do n
 **D3. Shadowing triage** (`vanilla-path-shadowing`).
 
 *Status: Implemented offline 2026-10-18; live acceptance pending. Removal only with owner approval.*
-- Files: `bridgeforge/fixers.py` (`_fix_vanilla_path_shadowing`), `bridgeforge/reference_rigs.py`.
+- Files: `bridgeforge/fixers/conversion.py` (`_fix_vanilla_path_shadowing`), `bridgeforge/reference_rigs.py`.
 - Behaviour: for each shadowed file compare it with the same path in the reference rig the mod targets. If byte-identical (the
   mod shipped an unchanged copy of old vanilla), the fixer moves it to `scratch/removed-shadow/` (explainable by
   `explain_proofs.kept_elsewhere`) only after a matching owner/standing approval. Identity to old vanilla establishes

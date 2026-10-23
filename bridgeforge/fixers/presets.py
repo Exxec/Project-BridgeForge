@@ -59,7 +59,7 @@ def _line_end(text: str, index: int) -> int:
 
 def _entry_edits(text: str, key: str, missing: dict[str, object], depths: list[int]) -> list[tuple[int, str]] | None:
     """Insertions (position, text) that add `missing` to the top-level entry `key`, or None when it cannot be placed."""
-    from . import fixers as _f
+    from .. import fixers as _f
 
     pattern = re.compile(r"(?P<key>[\"']" + re.escape(key) + r"[\"'])\s*:\s*\{")
     match = _f._find_top_level_key(text, pattern, depths)
@@ -108,8 +108,8 @@ def preset_field_proposals(root: Path, vanilla_core: Path, old_core: Path | None
     """One row per top-level vanilla field a mod entry lacks, with three-way evidence (R4): the old vanilla copy the mod was
     written against (`old_core`, optional), the mod's entry, and RC8's. A field old vanilla lacked too is a stale template
     (RC8 added it later); a field old vanilla had and the mod removed may be deliberate. Reads only; nothing is modified."""
-    from .scan_json import _load_lenient_json_file
-    from .scan_shadowing import PRESET_MERGE_FILES
+    from ..scan_json import _load_lenient_json_file
+    from ..scan_shadowing import PRESET_MERGE_FILES
 
     rows = []
     for name in PRESET_MERGE_FILES:
@@ -144,7 +144,7 @@ def preset_field_proposals(root: Path, vanilla_core: Path, old_core: Path | None
 
 def _approved_fields(raw, root: Path) -> dict[str, dict[str, set[str]]]:
     """{file: {entry: {fields}}} from the approval records; unknown keys, a missing key or a changed file are refusals."""
-    from . import fixers as _f
+    from .. import fixers as _f
 
     if not raw:
         raise _f.FixerError("preset-entry-drops-vanilla-fields restores nothing without field-specific approval: a missing field may be "
@@ -162,10 +162,10 @@ def _approved_fields(raw, root: Path) -> dict[str, dict[str, set[str]]]:
 
 
 def _fix_preset_entry_drops_vanilla_fields(root: Path, options: dict) -> list:
-    from . import fixers as _f
-    from .build_tag import _structural_depths
-    from .scan_json import _load_lenient_json_file
-    from .scan_shadowing import PRESET_MERGE_FILES
+    from .. import fixers as _f
+    from ..build_tag import _structural_depths
+    from ..scan_json import _load_lenient_json_file
+    from ..scan_shadowing import PRESET_MERGE_FILES
 
     core = options.get("vanilla_core")
     if not core:
@@ -215,8 +215,8 @@ def _fix_preset_entry_drops_vanilla_fields(root: Path, options: dict) -> list:
 
 def _verify(new_text: str, mod_data: dict, entries: dict[str, set[str]], vanilla_data: dict, relative: str) -> None:
     """The edited text parses, keeps every mod value, and has exactly the approved fields added (no other new field)."""
-    from . import fixers as _f
-    from .scan_json import _parse_json
+    from .. import fixers as _f
+    from ..scan_json import _parse_json
 
     try:
         parsed, _ = _parse_json(new_text)
