@@ -28,3 +28,13 @@ LIVE TEST NOT PERFORMED. B4-B6 and owner review/merge remain independent.
 AST comparison excluding imports checked 27 moved modules. Other differences: bridgeforge.scan_jarchecks, bridgeforge.scan_registry.
 Non-import differences are limited to module-relative resource locations and implementation-path references; resource guards cover their retained meaning.
 History uses a move commit followed by a compatibility-facade commit, so `git log --follow` reaches original sources. Validation covers the final combined snapshot.
+
+## Diff audit explanations
+
+`agent-diff-check` reports the intentional old `scanner.py` facade and two non-shrinking changes:
+`docs/CHECKS.md` replaces 195 source-location rows with 195 regenerated rows (same line count), and
+`tests/test_preset_entry_overrides.py` normalizes existing mixed line endings to repository-required LF
+while updating its scanner import. Its AST excluding imports is identical to the parent. The audit
+counts removed lines rather than net shrinkage. No implementation or test body was removed.
+`git diff --ignore-space-at-eol` and the AST comparison provide the review for that test. Generated
+references pass `docs-index --check`; the complete scanner suite and installed consumer suite passed.
