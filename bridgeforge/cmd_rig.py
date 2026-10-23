@@ -482,6 +482,7 @@ def run_cli(args: argparse.Namespace) -> int:
         else:
             print(f"Jar: {result['jar']} ({result['class_count']} classes)")
             print(f"Mission source compiles: {result['mission_compiles']}")
+            print(f"Bounty check (loose, MagicLib): {result.get('bounty_check')}")
             if result.get("mission_error"):
                 print(f"Mission compile error: {result['mission_error']}")
             if "release" in result:

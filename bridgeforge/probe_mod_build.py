@@ -150,6 +150,10 @@ def build_probe_mod(repo_root: Path, jdk_dir: Path, core_dir: Path, keep_build_d
             mission_ok = False
             mission_error = f"Janino (the game's runtime compiler) rejected the loose mission: {janino_error}"
 
+    bounty_status, bounty_error = _bounty_check(javac, core_dir, classpath, classes_dir, jar_path, mod_root, build_dir, repo_root)
+    if bounty_status == "FAIL":
+        raise ProbeModBuildError(f"the loose bounty check {BOUNTY_CHECK_SOURCE_RELATIVE} does not compile: {bounty_error}")
+
     if not keep_build_dir:
         safe_rmtree(build_dir, [mod_root])
 
@@ -161,7 +165,34 @@ def build_probe_mod(repo_root: Path, jdk_dir: Path, core_dir: Path, keep_build_d
         "mission_compiles": mission_ok,
         "mission_error": mission_error,
         "mission_janino": janino_status,
+        "bounty_check": bounty_status,
     }
+
+
+# Probe 0.3.2: the loose MagicLib bounty check (data/scripts/bfprobe/MagicBountyCheck.java) is compiled by the game only when
+# MagicLib is enabled, so it is checked here with javac and Janino against the MagicLib jar beside --core's install
+# (<core>/../mods/MagicLib/jars). SKIPPED when that jar is absent; a FAIL stops the build.
+BOUNTY_CHECK_SOURCE_RELATIVE = Path("probe-mod") / "data" / "scripts" / "bfprobe" / "MagicBountyCheck.java"
+BOUNTY_CHECK_CLASS_NAME = "data.scripts.bfprobe.MagicBountyCheck"
+
+
+def _bounty_check(javac: Path, core_dir: Path, classpath: str, classes_dir: Path, jar_path: Path, mod_root: Path,
+                  build_dir: Path, repo_root: Path) -> tuple[str, str | None]:
+    source = repo_root / BOUNTY_CHECK_SOURCE_RELATIVE
+    if not source.is_file():
+        return "SKIPPED", None
+    # A rig's starsector-core is a junction: look beside the path as given before following it to the real install.
+    core = Path(core_dir).expanduser()
+    mods_dirs = list(dict.fromkeys([core.absolute().parent / "mods", core.resolve().parent / "mods"]))
+    magiclib = next((jar for mods in mods_dirs for jar in sorted(mods.glob("*/jars/MagicLib.jar"))), None)
+    if magiclib is None:
+        return "SKIPPED", f"no */jars/MagicLib.jar under {', '.join(map(str, mods_dirs))}"
+    try:
+        _run_javac(javac, f"{classpath};{classes_dir};{magiclib}", [source], build_dir / "bounty-check")
+    except ProbeModBuildError as exc:
+        return "FAIL", str(exc)
+    status, error = _janino_check(javac, core_dir, f"{classpath};{jar_path};{magiclib}", mod_root, BOUNTY_CHECK_CLASS_NAME, build_dir)
+    return ("PASS", None) if status == "PASS" else (status, error)
 
 
 # The probe mission's icon is vanilla art (Fractal Softworks), so the public repo never carries it
