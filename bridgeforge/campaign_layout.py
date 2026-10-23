@@ -21,6 +21,7 @@ import zipfile
 from pathlib import Path
 
 from .scanner import _load_lenient_json_file, _loaded_mod_jars
+from .system_reachability import entry_names, jar_classes, loadable_source, reachable_classes
 
 _CREATE_SYSTEM_SOURCE = re.compile(r'createStarSystem\(\s*"([^"]+)"\s*\)')
 _OP_LDC, _OP_LDC_W = 0x12, 0x13
@@ -97,38 +98,39 @@ def _jar_system_names(data: bytes) -> list[str]:
 
 
 def mod_created_systems(root: Path) -> list[str]:
+    return mod_systems_by_reach(root)[0]
+
+
+def mod_systems_by_reach(root: Path) -> tuple[list[str], list[str]]:
+    """(systems the mod's reachable code creates, systems only unreachable jar code creates); see system_reachability."""
     root = Path(root)
+    classes = jar_classes(root)
     names: set[str] = set()
     for source in root.rglob("*.java"):
         if "disabled_files" in source.relative_to(root).parts:
+            continue
+        # With jars, bytecode is authoritative: a source the game cannot load (src/...) or a class the jar ships is skipped.
+        if classes and (not loadable_source(root, source) or source.relative_to(root).with_suffix("").as_posix() in classes):
             continue
         try:
             names.update(_CREATE_SYSTEM_SOURCE.findall(source.read_text(encoding="utf-8", errors="replace")))
         except OSError:
             continue
+    mod_info = _load_lenient_json_file(root / "mod_info.json") if (root / "mod_info.json").is_file() else None
+    reachable = reachable_classes({n: (refs, strings) for n, (_, refs, strings) in classes.items()},
+                                  entry_names(root, mod_info if isinstance(mod_info, dict) else {},
+                                              {n.replace("/", ".") for n in classes}))
     string_values = _strings_json_values(root)
-    for jar in _loaded_mod_jars(root):
-        try:
-            with zipfile.ZipFile(jar) as archive:
-                for member in archive.namelist():
-                    if member.endswith(".class"):
-                        data = archive.read(member)
-                        names.update(_jar_system_names(data))
-                        # Names read at runtime from data/strings/strings.json (Outer Rim Alliance's ORA_godunov:
-                        # getString("ORA", "gdnv_system") -> "Godunov"; the probe saw no ORA systems, 2026-10-05).
-                        # Through any wrapper (ORA_txt.txt(key)): a *_system key constant is specific enough.
-                        if string_values and b"createStarSystem" in data:
-                            parsed = _constant_pool(data)
-                            if parsed is not None:
-                                pool, _ = parsed
-                                for entry in pool.values():
-                                    if entry[0] == 8:
-                                        key = _utf8(pool, entry[1])
-                                        if key in string_values:
-                                            names.add(string_values[key])
-        except (OSError, zipfile.BadZipFile):
-            continue
-    return sorted(names)
+    unreached: set[str] = set()
+    for name, (data, _, strings) in classes.items():
+        created = set(_jar_system_names(data))
+        # Names read at runtime from data/strings/strings.json (Outer Rim Alliance's ORA_godunov:
+        # getString("ORA", "gdnv_system") -> "Godunov"; the probe saw no ORA systems, 2026-10-05).
+        # Through any wrapper (ORA_txt.txt(key)): a *_system key constant is specific enough.
+        if string_values and b"createStarSystem" in data:
+            created.update(string_values[s] for s in strings if s in string_values)
+        (names if reachable is None or name in reachable else unreached).update(created)
+    return sorted(names), sorted(unreached - names)
 
 
 def _strings_json_values(root: Path) -> dict[str, str]:

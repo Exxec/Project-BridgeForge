@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PROBE = ROOT / "probe-mod" / "src" / "com" / "bridgeforge" / "probe"
 
 # Keys Python writes that the in-game reader deliberately ignores (reports and bookkeeping only).
-PYTHON_ONLY = {"schema_version", "hulls_skipped_no_variant", "apply"}
+PYTHON_ONLY = {"schema_version", "hulls_skipped_no_variant", "apply", "mod_systems_unreached"}
 # Keys the reader takes that `build_probe_config` does not produce itself: set by `install` or by the profile.
 ADDED_AFTER = {"save_after_checks", "save_reload", "scenario_steps", "scenario_clock", "group_members"}  # scenario_*: install, from PROBE_SCENARIO.json; group_members: merge_configs (ProbeExercised attributes per member)
 # Keys one member's config carries that a group's merged config rebuilds in its own way rather than copying.

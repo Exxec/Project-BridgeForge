@@ -9,7 +9,8 @@ from pathlib import Path
 
 from .boot_test import _is_link
 from .build_tag import _find_mod_info
-from .campaign_layout import mod_body_types, mod_created_systems
+from .campaign_layout import mod_body_types, mod_systems_by_reach
+from .probe_expectations import bounty_ids, entity_checks
 from .probe_mod_build import RELEASE_RELATIVE
 from .scanner import _load_lenient_json_file, _read_csv_rows, _wing_ids_set
 
@@ -549,7 +550,7 @@ def build_probe_config(
 
     from .live_content_parity import expected_content
 
-    mod_systems = mod_created_systems(mod_root)
+    mod_systems, unreached_systems = mod_systems_by_reach(mod_root)
     body_types = mod_body_types(mod_root)
     return {
         "schema_version": 1,
@@ -567,6 +568,11 @@ def build_probe_config(
         "content_ship_hulls": _content_ship_hulls(mod_root, hulls),
         "content_special_items": _content_special_items(mod_root),
         "mod_systems": mod_systems,
+        # systems only unreachable jar code creates (EPTA's retired Alicerce): not expected in the sector; for the report
+        "mod_systems_unreached": unreached_systems,
+        # probe 0.3.2: spawn the mod's MagicLib bounties; confirm owner-approved entity state (PROBE_EXPECTATIONS.json)
+        "bounty_checks": {target_mod_id: ids} if (ids := bounty_ids(mod_root)) else {},
+        "entity_checks": entity_checks(mod_root),
         "mod_body_types": {t: f["procgen_weight"] for t, f in body_types.items()},
         "content_wings": sorted(_wing_ids_set(mod_root / "data" / "hulls" / "wing_data.csv")),
         "mission_fleets": _mission_fleet_refs(mod_root),

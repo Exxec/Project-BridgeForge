@@ -2,6 +2,13 @@
 
 Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; each mod's evidence is in its revival report.
 
+## 2026-10-22
+
+- **Epta Consortium** 2.1.3+bf.2: Version label corrected to 2.1.3 (the upstream 2.1.3 package called itself 2.1.2); Proelefsi station keeps its original sprite.
+- **Epta Consortium** 2.1.3+bf.2: revived for RC8 and archived (live validated)
+- **Zorg [BF r10]** V18+bf.10: Zeta I and Zeta II are visible from the start and have their own Zorg markets: Zeta I an industrial world (size 7), Zeta II a mining world (size 6); Unimatrix stays the size-10 hub. Faction hostility at new game (bf.10).
+- **Zorg [BF r10]** V18+bf.10: revived for RC8 and archived (live validated)
+
 ## 2026-10-17
 
 - **Epta Consortium** 2.1.3+bf.2: Owner follow-up: use the standard orbital-station campaign sprite and correct the base version to 2.1.3; working copy only, live visual check pending.

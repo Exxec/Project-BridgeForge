@@ -423,6 +423,339 @@
         "anchor": "R3 auto-accept policy"
       },
       "updated": "2026-10-21"
+    },
+    {
+      "id": "bf-ic-j25-fr",
+      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on fr Java 25 (start-up and campaign day PASS, FATAL 0; combat stage NOT_TESTED: Ironclads replaces mission_list.csv)",
+      "state": "PASS",
+      "evidence": [
+        "In operation/_rig/logs/IC-J25-FR-20261022.stdout.log",
+        "In operation/_rig/logs/IC-J25-FR-20261022.completed.json"
+      ],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "ironclads",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "fr",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge rig-up <rig> --mods ironclads,bridgeforge_probe --probe-config",
+        "\"In operation\\_rig\\run-j25-fr.bat\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**Ironclads launcher matrix (owner 2026-10-22).**"
+      },
+      "updated": "2026-10-22"
+    },
+    {
+      "id": "bf-ic-j25-fr-prep",
+      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on fr-prepatcher Java 25 (start-up and campaign day PASS, FATAL 0; combat stage NOT_TESTED: Ironclads replaces mission_list.csv)",
+      "state": "PASS",
+      "evidence": [
+        "In operation/_rig/logs/IC-J25-FR-PREP-20261022.stdout.log",
+        "In operation/_rig/logs/IC-J25-FR-PREP-20261022.completed.json"
+      ],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "ironclads",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "fr-prepatcher",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge rig-up <rig> --mods ironclads,bridgeforge_probe --probe-config",
+        "\"In operation\\_rig\\run-j25-fr-prep.bat\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**Ironclads launcher matrix (owner 2026-10-22).**"
+      },
+      "updated": "2026-10-22"
+    },
+    {
+      "id": "bf-ic-j28-fr",
+      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on fr Java 28 (start-up and campaign day PASS, FATAL 0; combat stage NOT_TESTED: Ironclads replaces mission_list.csv)",
+      "state": "PASS",
+      "evidence": [
+        "In operation/_rig/logs/IC-J28-FR-20261022.stdout.log",
+        "In operation/_rig/logs/IC-J28-FR-20261022.completed.json"
+      ],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "ironclads",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "28",
+        "launcher": "fr",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge rig-up <rig> --mods ironclads,bridgeforge_probe --probe-config",
+        "\"In operation\\_rig\\run-j28-fr.bat\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**Ironclads launcher matrix (owner 2026-10-22).**"
+      },
+      "updated": "2026-10-22"
+    },
+    {
+      "id": "bf-ic-j28-fr-prep",
+      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on fr-prepatcher Java 28 (start-up and campaign day PASS, FATAL 0; combat stage NOT_TESTED: Ironclads replaces mission_list.csv)",
+      "state": "PASS",
+      "evidence": [
+        "In operation/_rig/logs/IC-J28-FR-PREP-20261022.stdout.log",
+        "In operation/_rig/logs/IC-J28-FR-PREP-20261022.completed.json"
+      ],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "ironclads",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "28",
+        "launcher": "fr-prepatcher",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge rig-up <rig> --mods ironclads,bridgeforge_probe --probe-config",
+        "\"In operation\\_rig\\run-j28-fr-prep.bat\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**Ironclads launcher matrix (owner 2026-10-22).**"
+      },
+      "updated": "2026-10-22"
+    },
+    {
+      "id": "bf-ic-j28-direct",
+      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on direct Java 28 (start-up and campaign day PASS, FATAL 0; combat stage NOT_TESTED: Ironclads replaces mission_list.csv)",
+      "state": "PASS",
+      "evidence": [
+        "In operation/_rig/logs/IC-J28-DIRECT-20261022.stdout.log",
+        "In operation/_rig/logs/IC-J28-DIRECT-20261022.completed.json"
+      ],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "ironclads",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "28",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge rig-up <rig> --mods ironclads,bridgeforge_probe --probe-config",
+        "\"In operation\\_rig\\run-j28-direct.bat\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**Ironclads launcher matrix (owner 2026-10-22).**"
+      },
+      "updated": "2026-10-22"
+    },
+    {
+      "id": "bf-ic-j28-direct-prep",
+      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on direct-prepatcher Java 28 (start-up and campaign day PASS, FATAL 0; combat stage NOT_TESTED: Ironclads replaces mission_list.csv)",
+      "state": "PASS",
+      "evidence": [
+        "In operation/_rig/logs/IC-J28-DIRECT-PREP-20261022.stdout.log",
+        "In operation/_rig/logs/IC-J28-DIRECT-PREP-20261022.completed.json"
+      ],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "ironclads",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "28",
+        "launcher": "direct-prepatcher",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge rig-up <rig> --mods ironclads,bridgeforge_probe --probe-config",
+        "\"In operation\\_rig\\run-j28-direct-prep.bat\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**Ironclads launcher matrix (owner 2026-10-22).**"
+      },
+      "updated": "2026-10-22"
+    },
+    {
+      "id": "bf-epta-213-bf2",
+      "title": "EPTA 2.1.3+bf.2: version label and original Proelefsi sprite, live run then finalize",
+      "state": "PASS",
+      "evidence": [
+        "In operation/_live/EPTA213BF2C-20261022.json",
+        "In operation/_rig/logs/EPTA213BF2C-20261022.stdout.log",
+        "Done/Epta-Consortium-2.1.3/ARCHIVE_NOTE.md"
+      ],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "seven_nexus",
+          "nexerelin",
+          "lw_lazylib",
+          "MagicLib",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge probe-group live <TESTID>",
+        "python -m bridgeforge baseline-accept ...",
+        "python -m bridgeforge revise finalize \"In operation/Epta-Consortium-2.1.3\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**EPTA 2.1.3+bf.2 (owner 2026-10-22).**"
+      },
+      "updated": "2026-10-22"
+    },
+    {
+      "id": "bf-zorg-bf10",
+      "title": "Zorg V18+bf.10: Zeta I/II visible with their own markets (7 and 6) on New Game and an existing bf.9 save",
+      "state": "PASS",
+      "evidence": [
+        "In operation/_live/ZORGBF10C-20261022.json",
+        "In operation/_rig/logs/ZORGBF10C-20261022.stdout.log",
+        "Done/Zorg18/ARCHIVE_NOTE.md"
+      ],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "zorg",
+          "bridgeforge_probe"
+        ],
+        "save": true,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge probe-group live <TESTID>",
+        "python -m bridgeforge baseline-accept ...",
+        "python -m bridgeforge revise finalize \"In operation/Zorg18\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**Zorg V18+bf.10 (owner 2026-10-22).**"
+      },
+      "updated": "2026-10-22"
+    },
+    {
+      "id": "bf-strag-station-augments",
+      "title": "Station Augments 2.4.3+bf.1: bring the hand-placed Done/ copy into the standard archive (workspace from Downloads/Station.Augments.7z, live run with save reload, record --archive --refresh)",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "niko_stationAugments",
+          "lw_lazylib",
+          "lunalib",
+          "MagicLib",
+          "bridgeforge_probe"
+        ],
+        "save": true,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "create the workspace: original/ from Downloads/Station.Augments.7z, working/ = Done/Station.Augments-2.4.3+bf.1/Station Augments",
+        "python -m bridgeforge probe-group live <TESTID> --save-reload",
+        "python -m bridgeforge probe-group record <TESTID> --accept --archive --refresh --note \"...\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**Straggler archives (owner 2026-10-22, queued).**"
+      },
+      "updated": "2026-10-22"
+    },
+    {
+      "id": "bf-strag-clearcommands",
+      "title": "ClearCommands [BF r1] 1.0.e+bf.1: archived before any live run; live run and record",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "clearCommands",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge probe-group live <TESTID>",
+        "python -m bridgeforge probe-group record <TESTID> --accept --note \"...\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**Straggler archives (owner 2026-10-22, queued).**"
+      },
+      "updated": "2026-10-22"
+    },
+    {
+      "id": "bf-strag-revenantlib",
+      "title": "RevenantLib 1.2.0+bf.1: archived before any live run; live run and record",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "revenantlib",
+          "lw_lazylib",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge probe-group live <TESTID>",
+        "python -m bridgeforge probe-group record <TESTID> --accept --note \"...\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**Straggler archives (owner 2026-10-22, queued).**"
+      },
+      "updated": "2026-10-22"
     }
   ]
 }

@@ -24,6 +24,8 @@ proposed work and dated evidence. It does not implement the case lifecycle or re
 - [Automation plan](AUTOMATION_PLAN.md), [item 75 implementation handoff](ROADMAP_IMPLEMENTATION_HANDOFF.md),
   [hardening plan](HARDENING_PLAN.md): tactical specifications. Items 73 and 75 were implemented offline on 2026-10-18 (per-item
   status lines in each; table in [ROADMAP_STATUS](ROADMAP_STATUS.md)); their live acceptance is pending.
+- [Feature tracing and transplant plan](FEATURE_TRANSPLANT_PLAN.md): ROADMAP-3 item 84 design note (long term,
+  not built; starts after item 83 B3).
 - [Execution efficiency plan](EXECUTION_EFFICIENCY_PLAN.md): S2 bounded concurrency, analysis reuse, resource budgets
   and recovery; extends implemented workers without changing qualification or live-run policy.
 - Local `docs/REVIVAL_WORKFLOW.md` and revival/escalation templates: complexity, routing and plan requirements.
