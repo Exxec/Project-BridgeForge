@@ -496,7 +496,7 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
     from .graceful_exit import clear_done
 
     clear_done(rig)
-    from .rig_prefs import pinned_launcher_prefs
+    from bridgeforge.rig.rig_prefs import pinned_launcher_prefs
 
     prefs = pinned_launcher_prefs() if pin_prefs else contextlib.nullcontext()  # the click fractions were measured at 1280x960; the owner's own setting comes back afterwards
     prefs.__enter__()

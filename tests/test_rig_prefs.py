@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from bridgeforge import rig_prefs
+from bridgeforge.rig import rig_prefs
 
 
 class PinnedPrefsTests(unittest.TestCase):

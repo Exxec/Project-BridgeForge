@@ -46,7 +46,7 @@ class OneLauncherTests(unittest.TestCase):
             with mock.patch.object(launch, "start_game", return_value=_Process()) as start, \
                     mock.patch("bridgeforge.boot_test._running_java_under", return_value=[]), \
                     mock.patch("bridgeforge.boot_test._terminate_tree"), \
-                    mock.patch("bridgeforge.rig_prefs.pinned_launcher_prefs", mock.MagicMock()), \
+                    mock.patch("bridgeforge.rig.rig_prefs.pinned_launcher_prefs", mock.MagicMock()), \
                     mock.patch.object(live_run, "real_hands", lambda rig_, pid: mock.MagicMock()):
                 with live_run.running_game(rig, "ONE-1"):
                     pass
@@ -115,7 +115,7 @@ class InteractiveTests(unittest.TestCase):
                 def poll(self):
                     return 7
 
-            with mock.patch.object(launch, "start_game", return_value=Proc()),                     mock.patch.object(launch, "watch_windows", return_value=mock.MagicMock()) as watch,                     mock.patch("bridgeforge.boot_test._running_java_under", return_value=[]),                     mock.patch("bridgeforge.boot_test._terminate_tree"),                     mock.patch("bridgeforge.rig_prefs.pinned_launcher_prefs") as prefs,                     mock.patch.object(live_run, "real_hands", lambda rig_, pid: hands),                     mock.patch.object(live_run, "EXIT_POLL_SECONDS", 0):
+            with mock.patch.object(launch, "start_game", return_value=Proc()),                     mock.patch.object(launch, "watch_windows", return_value=mock.MagicMock()) as watch,                     mock.patch("bridgeforge.boot_test._running_java_under", return_value=[]),                     mock.patch("bridgeforge.boot_test._terminate_tree"),                     mock.patch("bridgeforge.rig.rig_prefs.pinned_launcher_prefs") as prefs,                     mock.patch.object(live_run, "real_hands", lambda rig_, pid: hands),                     mock.patch.object(live_run, "EXIT_POLL_SECONDS", 0):
                 result = live_run.live_run(rig, "INT-1", interactive=True)
             self.assertEqual(result.verdict, "LIVE_DONE")
             self.assertEqual(read_exit_observation(rig, "INT-1"), ("NATURAL", 7))

@@ -227,12 +227,12 @@ class NegativeTests(unittest.TestCase):
 
 class OwnershipTests(unittest.TestCase):
     def test_a_run_owns_the_rig_so_staging_is_refused_until_release(self) -> None:
-        from bridgeforge.rig_up import RigUpError, rig_up
+        from bridgeforge.rig.rig_up import RigUpError, rig_up
 
         with resolved_temp_dir() as root:
             queue, targets = _two(root)
             rig, _ = bound_run(root, {"mod_b": targets["mod_b"]}, "R-10", release=False)
-            with mock.patch("bridgeforge.rig_up._running_java_under", return_value=[]):
+            with mock.patch("bridgeforge.rig.rig_up._running_java_under", return_value=[]):
                 with self.assertRaisesRegex(RigUpError, "owns the rig"):
                     rig_up(rig, queue, ["mod_b"], doctor=lambda *a, **k: {"status": "PASS", "checks": []})
                 with self.assertRaises(ManifestError):
@@ -295,7 +295,7 @@ class LegacyAndLiveRunTests(unittest.TestCase):
             with mock.patch.object(live_run, "_running_java_under", create=True), \
                     mock.patch("bridgeforge.boot_test._running_java_under", return_value=[]), \
                     mock.patch.object(run_manifest, "prepare_run", prepare), mock.patch.object(run_manifest, "release_run", release), \
-                    mock.patch("bridgeforge.rig_prefs.pinned_launcher_prefs", mock.MagicMock()), \
+                    mock.patch("bridgeforge.rig.rig_prefs.pinned_launcher_prefs", mock.MagicMock()), \
                     mock.patch.object(launch.subprocess, "Popen", lambda *a, **k: order.append("launch") or Proc()), \
                     mock.patch.object(live_run, "real_hands", lambda rig_, pid: mock.MagicMock()):
                 with live_run.running_game(rig, "R-14") as (log, hands, rows):

@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from bridgeforge.rig_doctor import _check_environment
+from bridgeforge.rig.rig_doctor import _check_environment
 
 
 class EnvironmentCheckTests(unittest.TestCase):

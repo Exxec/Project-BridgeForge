@@ -440,7 +440,7 @@ def _rig_fingerprint(mods_dir: Path) -> dict[str, object]:
     import hashlib
     import json as _json
 
-    from .rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
+    from bridgeforge.rig.rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
 
     enabled = _enabled_mod_ids(mods_dir) or set()
     versions = {}

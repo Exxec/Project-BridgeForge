@@ -15,8 +15,8 @@ import time
 from datetime import date
 from pathlib import Path
 
-from .boot_test import _is_link
-from .safeio import atomic_write_text, safe_unlink
+from bridgeforge.boot_test import _is_link
+from bridgeforge.safeio import atomic_write_text, safe_unlink
 
 BACKUP_NAME = "enabled_mods.json.pre-bftest.bak"
 DEFAULT_KEEP_DAYS = 7

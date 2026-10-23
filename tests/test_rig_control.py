@@ -7,7 +7,7 @@ import time
 import unittest
 
 from bridgeforge.probe.probe_group import ProbeGroupError, expand_also_enable, install_group, plan_groups
-from bridgeforge.rig_reset import apply_reset, plan_reset
+from bridgeforge.rig.rig_reset import apply_reset, plan_reset
 from tests.support import link_dir, resolved_temp_dir
 from tests.test_probe_group import _rig, _workspace
 

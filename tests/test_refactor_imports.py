@@ -45,5 +45,17 @@ class RefactorImportTests(unittest.TestCase):
         self.assertEqual(problems, [], "internal code must import the moved implementation, not a compatibility path")
 
 
+    def test_consumer_shims_reexport_implementation_objects(self) -> None:
+        for old in MOVES["shims"]:
+            shim = importlib.import_module(old)
+            implementation = importlib.import_module(MOVES["moves"][old])
+            names = [name for name in vars(implementation) if not name.startswith("_")]
+            if old == "bridgeforge.scanner":
+                names.append("_load_lenient_json_file")
+            for name in names:
+                with self.subTest(module=old, name=name):
+                    self.assertIs(getattr(shim, name), getattr(implementation, name))
+
+
 if __name__ == "__main__":
     unittest.main()

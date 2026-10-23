@@ -179,7 +179,7 @@
     "revive_queue.py": {
       "write_text": 1
     },
-    "rig_doctor.py": {
+    "rig/rig_doctor.py": {
       "write_text": 2
     },
     "runtime.py": {

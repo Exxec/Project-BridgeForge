@@ -51,7 +51,14 @@
     "bridgeforge.probe_group": "bridgeforge.probe.probe_group",
     "bridgeforge.probe_mod_build": "bridgeforge.probe.probe_mod_build",
     "bridgeforge.probe_salvor_profile": "bridgeforge.probe.probe_salvor_profile",
-    "bridgeforge.probe_scenario": "bridgeforge.probe.probe_scenario"
+    "bridgeforge.probe_scenario": "bridgeforge.probe.probe_scenario",
+    "bridgeforge.cmd_rig": "bridgeforge.rig.cmd_rig",
+    "bridgeforge.rig_doctor": "bridgeforge.rig.rig_doctor",
+    "bridgeforge.rig_prefs": "bridgeforge.rig.rig_prefs",
+    "bridgeforge.rig_reset": "bridgeforge.rig.rig_reset",
+    "bridgeforge.rig_up": "bridgeforge.rig.rig_up"
   },
-  "shims": []
+  "shims": [
+    "bridgeforge.rig_prefs"
+  ]
 }

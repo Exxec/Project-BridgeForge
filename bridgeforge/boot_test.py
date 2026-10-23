@@ -206,7 +206,7 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
     prefs = None
     if auto_click:
         # An unattended boot goes through the launcher: pin its resolution and give the owner's own back afterwards (rig_prefs).
-        from .rig_prefs import pinned_launcher_prefs
+        from bridgeforge.rig.rig_prefs import pinned_launcher_prefs
 
         prefs = pinned_launcher_prefs()
         prefs.__enter__()

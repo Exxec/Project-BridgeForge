@@ -16,9 +16,9 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from .boot_test import _is_link, _running_java_under
-from .run_manifest import RIG_STATE_FILE, ManifestError, record_candidates, refuse_if_owned
-from .safeio import atomic_write_json, atomic_write_text
+from bridgeforge.boot_test import _is_link, _running_java_under
+from bridgeforge.run_manifest import RIG_STATE_FILE, ManifestError, record_candidates, refuse_if_owned
+from bridgeforge.safeio import atomic_write_json, atomic_write_text
 
 
 class RigUpError(ValueError):
@@ -61,7 +61,7 @@ def _declared_dependencies(members: dict[str, Path]) -> list[str]:
 
 def rig_up(rig: Path, queue: Path, mod_ids: list[str], *, probe_config: bool = False, also_enable: list[str] | None = None,
            with_lunalib: bool = False, no_lunalib: bool = False, doctor=None, today: str | None = None) -> dict:
-    from .live_trust import shipped_hash
+    from bridgeforge.live_trust import shipped_hash
     from bridgeforge.probe.probe_config import CONFIG_FILE, RIG_MARKER_FILE, _install_probe_mod, build_probe_config
     from bridgeforge.probe.probe_group import (LUNALIB_ID, PROBE_MOD_ID, SPEEDUP_MOD_ID, _mod_info, _move_aside_duplicate_ids, _refuse_running_game,
                               _reset_combat_round, dependency_closure, dependency_version_conflicts, expand_also_enable, lunalib_rule,
@@ -132,7 +132,7 @@ def rig_up(rig: Path, queue: Path, mod_ids: list[str], *, probe_config: bool = F
     record_candidates(rig, {mod_id: ws / "working" for mod_id, ws in members.items()})  # the manifest binds these to the staged files
     working_copies = {mod_id: ws / "working" for mod_id, ws in members.items()}
     if doctor is None:
-        from .rig_doctor import rig_doctor as doctor
+        from bridgeforge.rig.rig_doctor import rig_doctor as doctor
     report = doctor(rig, working_copies=working_copies, real_install=Path((rig / "starsector-core").resolve()).parent)
     return {"schema_version": 1, "mode": "RIG_UP", "rig": str(rig), "members": {m: w.name for m, w in members.items()}, "providers": providers,
             "synced": {m: a for m, a in synced.items() if a}, "moved_aside": moved_aside, "enabled_mods": enabled, "lunalib": lunalib_why,
@@ -164,7 +164,7 @@ def add_parser(subcommands) -> None:
 def run_cli(args: argparse.Namespace) -> int:
     from bridgeforge.probe.probe_config import ProbeConfigError
     from bridgeforge.probe.probe_group import ProbeGroupError
-    from .substitutes import REPO_ROOT
+    from bridgeforge.substitutes import REPO_ROOT
 
     queue = (args.queue or REPO_ROOT / "In operation").expanduser().resolve()
     try:

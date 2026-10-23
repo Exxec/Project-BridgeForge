@@ -13,7 +13,7 @@ from bridgeforge.reference_rigs import (
     verify_reference_rig_manifest,
     write_reference_rig_manifest,
 )
-from bridgeforge.rig_doctor import rig_doctor
+from bridgeforge.rig.rig_doctor import rig_doctor
 
 
 def _make_install(root: Path, *, java_release: bool = True) -> Path:
@@ -82,8 +82,8 @@ class ReferenceRigTests(unittest.TestCase):
             root = Path(directory)
             install = _make_install(root)
             manifest = write_reference_rig_manifest(install, game_version="0.7.2a", output=root / "rig.json")
-            with mock.patch("bridgeforge.rig_doctor._repo_root", return_value=root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]), mock.patch(
-                "bridgeforge.rig_doctor.who_locks", return_value={"processes": [], "limitations": []}
+            with mock.patch("bridgeforge.rig.rig_doctor._repo_root", return_value=root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]), mock.patch(
+                "bridgeforge.rig.rig_doctor.who_locks", return_value={"processes": [], "limitations": []}
             ):
                 result = rig_doctor(install, reference_manifest=manifest)
             self.assertEqual(result["status"], "PASS")

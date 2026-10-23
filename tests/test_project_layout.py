@@ -10,7 +10,7 @@ from bridgeforge.archive_intake import inspect_zip_archive, _tree_sha256
 from bridgeforge.cli import main
 from bridgeforge.intake import intake_archive
 from bridgeforge.project_board import layout_findings, project_board, render_board, write_board
-from bridgeforge.rig_doctor import _check_layout
+from bridgeforge.rig.rig_doctor import _check_layout
 from tests.support import resolved_temp_dir
 
 

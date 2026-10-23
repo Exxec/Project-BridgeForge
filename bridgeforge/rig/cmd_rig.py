@@ -6,21 +6,21 @@ import json
 import sys
 from pathlib import Path
 
-from .bootstrap import bootstrap_mods
-from .build_tag import BuildTagError, DEFAULT_LABEL
-from .compat_sets import CompatSetError
-from .dossier import DEFAULT_CONTEXT_LINES, DEFAULT_MAX_KB, DossierError, write_dossier
-from .live_accept import accept_run, AcceptError
-from .locks import who_locks
-from .log_triage import triage_log
-from .prepare_test import prepare_test, PrepareTestError
+from bridgeforge.bootstrap import bootstrap_mods
+from bridgeforge.build_tag import BuildTagError, DEFAULT_LABEL
+from bridgeforge.compat_sets import CompatSetError
+from bridgeforge.dossier import DEFAULT_CONTEXT_LINES, DEFAULT_MAX_KB, DossierError, write_dossier
+from bridgeforge.live_accept import accept_run, AcceptError
+from bridgeforge.locks import who_locks
+from bridgeforge.log_triage import triage_log
+from bridgeforge.prepare_test import prepare_test, PrepareTestError
 from bridgeforge.probe.probe_config import load_profile, ProbeConfigError, write_probe_config
 from bridgeforge.probe.probe_mod_build import build_probe_mod, install_release, ProbeModBuildError
-from .reference_rigs import ReferenceRigError, write_reference_rig_manifest
-from .rig_doctor import default_working_copies, rig_doctor
-from .soak_report import soak_report
-from .spw_bridge import ingest_spw_report, log_spam, perf_gate, SpwBridgeError
-from .test_plan import plan_tests, TestPlanError
+from bridgeforge.reference_rigs import ReferenceRigError, write_reference_rig_manifest
+from bridgeforge.rig.rig_doctor import default_working_copies, rig_doctor
+from bridgeforge.soak_report import soak_report
+from bridgeforge.spw_bridge import ingest_spw_report, log_spam, perf_gate, SpwBridgeError
+from bridgeforge.test_plan import plan_tests, TestPlanError
 
 
 def add_parser(subcommands) -> None:
@@ -286,7 +286,7 @@ def run_cli(args: argparse.Namespace) -> int:
                     # data.scripts.combat.hydrofoil class was in no installed mod: the log came from another folder).
                     import re
 
-                    from .log_triage import class_owner_index
+                    from bridgeforge.log_triage import class_owner_index
                     index = class_owner_index(args.mods_dir, enabled_only=not args.all_mods)
                     stack = re.findall(r"\bat\s+((?:data|src|org|com)\.[\w.$]+)\.[\w$<>]+\(", args.log.read_text(encoding="utf-8", errors="replace"))
                     unowned = sorted({c.split("$")[0] for c in stack if not c.startswith(("com.fs.", "org.lwjgl", "org.json", "org.codehaus.", "org.apache.", "com.thoughtworks.", "sun.", "java."))
@@ -333,7 +333,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 print(f"Boot test: {boot_result.get('status')} {boot_result.get('reason', '')}".rstrip())
         return 0 if result["status"] in {"PASS", "SAME_FOLDER"} else 1
     if args.command == "env-check":
-        from . import env_check as envc
+        from bridgeforge import env_check as envc
         try:
             checked = envc.env_check(args.launcher, args.vmparams, args.mods_dir)
         except OSError as exc:
@@ -342,7 +342,7 @@ def run_cli(args: argparse.Namespace) -> int:
         print(json.dumps(checked, indent=2) if args.json else envc.render(checked))
         return 1 if checked["findings"] else 0
     if args.command == "java-matrix":
-        from . import java_matrix as jm
+        from bridgeforge import java_matrix as jm
         try:
             if args.java_matrix_command == "describe-log":
                 result = jm.describe_log_java(args.log)
@@ -357,7 +357,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 print(json.dumps(found, indent=2) if args.json else "\n".join(f"{i.get('variant')}: {i.get('state')} run {i.get('run')}/{i.get('of')} status={i.get('status')} java_alive={i['java_alive']}" for i in found) or "no instances")
                 return 0
             if args.java_matrix_command == "mass":
-                from . import mass_test as mt
+                from bridgeforge import mass_test as mt
                 targets = mt.collect_targets(args.done_dir, args.only)
                 if not targets:
                     print(f"bridgeforge: no archived mods found under {args.done_dir}", file=sys.stderr)
@@ -402,7 +402,7 @@ def run_cli(args: argparse.Namespace) -> int:
         return 0 if result["verdict"] == "PASS_ALL" else 1
     if args.command == "boot-test":
         try:
-            from . import boot_test as boot_test_module
+            from bridgeforge import boot_test as boot_test_module
         except ImportError:
             print("bridgeforge: boot-test module unavailable", file=sys.stderr)
             return 2
@@ -469,7 +469,7 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"Open questions: {summary['open_question_count']}")
         return 0
     if args.command == "build-probe-mod":
-        repo_root = Path(__file__).resolve().parent.parent
+        repo_root = Path(__file__).resolve().parents[2]
         try:
             result = build_probe_mod(repo_root, args.jdk, args.core)
             if args.install_release:
@@ -549,11 +549,11 @@ def run_cli(args: argparse.Namespace) -> int:
         # working copies would suggest a `prepare-test --sync` that overwrites the reference. Only
         # explicit --working entries are compared there.
         use_defaults = not (args.no_default_working or args.reference_manifest)
-        working: dict[str, Path] = dict(default_working_copies(Path(__file__).resolve().parent.parent)) if use_defaults else {}
+        working: dict[str, Path] = dict(default_working_copies(Path(__file__).resolve().parents[2])) if use_defaults else {}
         if use_defaults:
             # Defaults cover every project mod, but each rig holds only some (Vacuum has its own rig), so
             # compare only the ones installed in THIS rig. Explicit --working entries are never filtered.
-            from .rig_doctor import _mods_by_id
+            from bridgeforge.rig.rig_doctor import _mods_by_id
             installed = _mods_by_id(Path(args.runtime_dir) / "mods") if (Path(args.runtime_dir) / "mods").is_dir() else {}
             working = {mod_id: path for mod_id, path in working.items() if mod_id in installed}
         for item in args.working:

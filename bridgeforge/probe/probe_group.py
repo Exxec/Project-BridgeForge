@@ -906,9 +906,9 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     # ROADMAP 36.6: one run record joining inputs and outputs, written before any archive so the gate (36.11)
     # sees this run's shipped hashes.
     from bridgeforge.live_trust import archive_gate, auto_explain_shipped, save_made_with, write_run_record
-    from bridgeforge.rig_up import read_rig_state
+    from bridgeforge.rig.rig_up import read_rig_state
     from bridgeforge.log_triage import triage_log
-    from bridgeforge.rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
+    from bridgeforge.rig.rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
 
     tested = [workspaces[m] for m in sorted(report["members"]) if workspaces.get(m) is not None]
     scenario_blocks = evaluate_member_scenarios(log, {m: workspaces[m] for m in sorted(report["members"]) if workspaces.get(m) is not None})

@@ -9,7 +9,7 @@ from unittest import mock
 
 from bridgeforge.probe.probe_mod_build import RELEASE_RELATIVE
 from tests.support import link_dir, resolved_temp_dir
-from bridgeforge.rig_doctor import (
+from bridgeforge.rig.rig_doctor import (
     _check_revenantlib_contract,
     _check_path_locks,
     default_working_copies,
@@ -56,15 +56,15 @@ def _make_isolated_rig(root: Path) -> Path | None:
 @contextmanager
 def _patch_repo_root(repo_root: Path):
     # Machine process state is not part of these filesystem fixtures.
-    with mock.patch("bridgeforge.rig_doctor._repo_root", return_value=repo_root), mock.patch(
-        "bridgeforge.rig_doctor.who_locks", return_value={"processes": [], "limitations": []}
+    with mock.patch("bridgeforge.rig.rig_doctor._repo_root", return_value=repo_root), mock.patch(
+        "bridgeforge.rig.rig_doctor.who_locks", return_value={"processes": [], "limitations": []}
     ):
         yield
 
 
 class IsolationCheckTests(unittest.TestCase):
     def test_lock_candidate_warns_without_stopping_process(self):
-        with mock.patch("bridgeforge.rig_doctor.who_locks", return_value={
+        with mock.patch("bridgeforge.rig.rig_doctor.who_locks", return_value={
             "processes": [{"pid": 42, "name": "tail", "sources": ["cwd"]}], "limitations": []
         }):
             result = _check_path_locks(Path("fixture"))
@@ -102,7 +102,7 @@ class GameNotRunningCheckTests(unittest.TestCase):
             rig = _make_isolated_rig(root)
             if rig is None:
                 self.skipTest("Could not create an NTFS junction in this environment.")
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig)
             check = next(c for c in result["checks"] if c["name"] == "game_not_running")
             self.assertEqual(check["status"], "PASS")
@@ -114,7 +114,7 @@ class GameNotRunningCheckTests(unittest.TestCase):
             if rig is None:
                 self.skipTest("Could not create an NTFS junction in this environment.")
             with _patch_repo_root(root), mock.patch(
-                "bridgeforge.rig_doctor._running_java_under",
+                "bridgeforge.rig.rig_doctor._running_java_under",
                 return_value=[{"pid": 4321, "exe": str(rig / "jre" / "java.exe")}],
             ):
                 result = rig_doctor(rig)
@@ -138,7 +138,7 @@ class ProbeInstalledCheckTests(unittest.TestCase):
             rig = _make_isolated_rig(root)
             if rig is None:
                 self.skipTest("Could not create an NTFS junction in this environment.")
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig)
             check = next(c for c in result["checks"] if c["name"] == "probe_installed")
             self.assertEqual(check["status"], "FAIL")
@@ -151,7 +151,7 @@ class ProbeInstalledCheckTests(unittest.TestCase):
             if rig is None:
                 self.skipTest("Could not create an NTFS junction in this environment.")
             self._repo_with_release(root)
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig)
             check = next(c for c in result["checks"] if c["name"] == "probe_installed")
             self.assertEqual(check["status"], "WARN")
@@ -170,7 +170,7 @@ class ProbeInstalledCheckTests(unittest.TestCase):
             _write_json(rig_probe / "mod_info.json", {"id": "bridgeforge-probe", "gameVersion": "0.98a-RC8"})
             (rig_probe / "data").mkdir()
             (rig_probe / "data" / "probe.txt").write_text("old-content", encoding="utf-8")
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig)
             check = next(c for c in result["checks"] if c["name"] == "probe_installed")
             self.assertEqual(check["status"], "WARN")
@@ -188,7 +188,7 @@ class ProbeInstalledCheckTests(unittest.TestCase):
             _write_json(rig_probe / "mod_info.json", {"id": "bridgeforge-probe", "gameVersion": "0.98a-RC8"})
             (rig_probe / "data").mkdir()
             (rig_probe / "data" / "probe.txt").write_text("same-content", encoding="utf-8")
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig)
             check = next(c for c in result["checks"] if c["name"] == "probe_installed")
             self.assertEqual(check["status"], "PASS")
@@ -204,7 +204,7 @@ class EnabledModsResolveCheckTests(unittest.TestCase):
             mods_dir = rig / "mods"
             _make_mod(mods_dir, "Known", "known_id")
             _write_json(mods_dir / "enabled_mods.json", {"enabledMods": ["known_id", "ghost_id"]})
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig)
             check = next(c for c in result["checks"] if c["name"] == "enabled_mods_resolve")
             self.assertEqual(check["status"], "FAIL")
@@ -221,7 +221,7 @@ class EnabledModsResolveCheckTests(unittest.TestCase):
             _make_mod(mods_dir, "Needs", "needs_id", dependencies=[{"id": "missing_lib"}])
             _make_mod(mods_dir, "OldVer", "old_ver_id", gameVersion="0.97a")
             _write_json(mods_dir / "enabled_mods.json", {"enabledMods": ["needs_id", "old_ver_id"]})
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig)
             check = next(c for c in result["checks"] if c["name"] == "enabled_mods_resolve")
             self.assertEqual(check["status"], "WARN")
@@ -238,7 +238,7 @@ class EnabledModsResolveCheckTests(unittest.TestCase):
             _make_mod(mods_dir, "Lib", "lib_id")
             _make_mod(mods_dir, "Content", "content_id", dependencies=[{"id": "lib_id"}])
             _write_json(mods_dir / "enabled_mods.json", {"enabledMods": ["lib_id", "content_id"]})
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig)
             check = next(c for c in result["checks"] if c["name"] == "enabled_mods_resolve")
             self.assertEqual(check["status"], "PASS")
@@ -253,7 +253,7 @@ class EnabledModsResolveCheckTests(unittest.TestCase):
             if rig is None:
                 self.skipTest("Could not create an NTFS junction in this environment.")
             (rig / "mods").mkdir(exist_ok=True)
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig)
             check = next(c for c in result["checks"] if c["name"] == "enabled_mods_resolve")
             self.assertEqual(check["status"], "PASS")
@@ -269,7 +269,7 @@ class EnabledModsResolveCheckTests(unittest.TestCase):
                 self.skipTest("Could not create an NTFS junction in this environment.")
             mods_dir = rig / "mods"
             _make_mod(mods_dir, "Known", "known_id")
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig)
             check = next(c for c in result["checks"] if c["name"] == "enabled_mods_resolve")
             self.assertEqual(check["status"], "FAIL")
@@ -295,7 +295,7 @@ class EnabledModsResolveCheckTests(unittest.TestCase):
             (mod / "data").mkdir()
             (mod / "data" / "file.txt").write_text("x", encoding="utf-8")
             _write_json(mods_dir / "enabled_mods.json", {"enabledMods": ["lenient_id"]})
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig)
             check = next(c for c in result["checks"] if c["name"] == "enabled_mods_resolve")
             self.assertEqual(check["status"], "PASS")
@@ -308,7 +308,7 @@ class WorkingCopyDriftCheckTests(unittest.TestCase):
             rig = _make_isolated_rig(root)
             if rig is None:
                 self.skipTest("Could not create an NTFS junction in this environment.")
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig)
             check = next(c for c in result["checks"] if c["name"] == "working_copy_drift")
             self.assertEqual(check["status"], "SKIPPED")
@@ -325,7 +325,7 @@ class WorkingCopyDriftCheckTests(unittest.TestCase):
             _write_json(working / "mod_info.json", {"id": "content_id", "name": "Content", "gameVersion": "0.98a-RC8"})
             (working / "data").mkdir()
             (working / "data" / "file.txt").write_text("content", encoding="utf-8")
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig, working_copies={"content_id": working})
             check = next(c for c in result["checks"] if c["name"] == "working_copy_drift")
             self.assertEqual(check["status"], "PASS", check["detail"])
@@ -342,7 +342,7 @@ class WorkingCopyDriftCheckTests(unittest.TestCase):
             _write_json(working / "mod_info.json", {"id": "content_id", "gameVersion": "0.98a-RC8"})
             (working / "data").mkdir()
             (working / "data" / "file.txt").write_text("different-content", encoding="utf-8")
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig, working_copies={"content_id": working})
             check = next(c for c in result["checks"] if c["name"] == "working_copy_drift")
             self.assertEqual(check["status"], "WARN")
@@ -361,7 +361,7 @@ class WorkingCopyDriftCheckTests(unittest.TestCase):
             _write_json(working / "mod_info.json", {"id": "ghost_id", "gameVersion": "0.98a-RC8"})
             (working / "data").mkdir()
             (working / "data" / "file.txt").write_text("content", encoding="utf-8")
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig, working_copies={"ghost_id": working})
             check = next(c for c in result["checks"] if c["name"] == "working_copy_drift")
             self.assertEqual(check["status"], "FAIL")
@@ -376,7 +376,7 @@ class WorkingCopyDriftCheckTests(unittest.TestCase):
             linked_rig_mod = rig / "mods" / "Content"
             if not _junction(working, linked_rig_mod):
                 self.skipTest("Could not create an NTFS junction in this environment.")
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig, working_copies={"content_id": working})
             check = next(c for c in result["checks"] if c["name"] == "working_copy_drift")
             self.assertEqual(check["status"], "PASS")
@@ -390,7 +390,7 @@ class RealInstallSavesCheckTests(unittest.TestCase):
             rig = _make_isolated_rig(root)
             if rig is None:
                 self.skipTest("Could not create an NTFS junction in this environment.")
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig)
             check = next(c for c in result["checks"] if c["name"] == "real_install_saves_untouched")
             self.assertEqual(check["status"], "SKIPPED")
@@ -404,7 +404,7 @@ class RealInstallSavesCheckTests(unittest.TestCase):
             real_install = root / "real_install"
             (real_install / "saves" / "MySave").mkdir(parents=True)
             (real_install / "saves" / "MySave" / "campaign.xml").write_text("<x/>", encoding="utf-8")
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig, real_install=real_install)
             check = next(c for c in result["checks"] if c["name"] == "real_install_saves_untouched")
             self.assertEqual(check["status"], "SKIPPED")
@@ -422,7 +422,7 @@ class RealInstallSavesCheckTests(unittest.TestCase):
             (real_install / "saves" / "MySave" / "campaign.xml").write_text("<x/>", encoding="utf-8")
             baseline_path = root / "state" / "baseline.json"
 
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 write_result = rig_doctor(
                     rig, real_install=real_install, saves_baseline=baseline_path, write_saves_baseline=True
                 )
@@ -430,7 +430,7 @@ class RealInstallSavesCheckTests(unittest.TestCase):
             self.assertEqual(write_check["status"], "PASS")
             self.assertTrue(baseline_path.is_file())
 
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 compare_result = rig_doctor(rig, real_install=real_install, saves_baseline=baseline_path)
             compare_check = next(c for c in compare_result["checks"] if c["name"] == "real_install_saves_untouched")
             self.assertEqual(compare_check["status"], "PASS")
@@ -446,13 +446,13 @@ class RealInstallSavesCheckTests(unittest.TestCase):
             (real_install / "saves" / "MySave" / "campaign.xml").write_text("<x/>", encoding="utf-8")
             baseline_path = root / "state" / "baseline.json"
 
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 rig_doctor(rig, real_install=real_install, saves_baseline=baseline_path, write_saves_baseline=True)
 
             # Simulate a rig accidentally writing into the real install's saves.
             (real_install / "saves" / "MySave" / "campaign.xml").write_text("<tampered/>", encoding="utf-8")
 
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig, real_install=real_install, saves_baseline=baseline_path)
             check = next(c for c in result["checks"] if c["name"] == "real_install_saves_untouched")
             self.assertEqual(check["status"], "FAIL")
@@ -470,13 +470,13 @@ class RealInstallSavesCheckTests(unittest.TestCase):
             (real_install / "saves" / "MySave" / "campaign.xml").write_text("<x/>", encoding="utf-8")
             baseline_path = root / "state" / "baseline.json"
 
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 rig_doctor(rig, real_install=real_install, saves_baseline=baseline_path, write_saves_baseline=True)
 
             (real_install / "saves" / "NewSave").mkdir(parents=True)
             (real_install / "saves" / "NewSave" / "campaign.xml").write_text("<new/>", encoding="utf-8")
 
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig, real_install=real_install, saves_baseline=baseline_path)
             check = next(c for c in result["checks"] if c["name"] == "real_install_saves_untouched")
             self.assertEqual(check["status"], "FAIL")
@@ -502,7 +502,7 @@ class OverallStatusTests(unittest.TestCase):
             (rig_probe / "data" / "probe.txt").write_text("content", encoding="utf-8")
             _write_json(rig / "mods" / "enabled_mods.json", {"enabledMods": []})
 
-            with _patch_repo_root(root), mock.patch("bridgeforge.rig_doctor._running_java_under", return_value=[]):
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
                 result = rig_doctor(rig)
             self.assertEqual(result["status"], "PASS")
             for check in result["checks"]:
@@ -586,7 +586,7 @@ class WorkspaceAccessCheckTests(unittest.TestCase):
     def test_denied_workspaces_warn_and_print_the_unlock_command(self) -> None:
         import os as real_os
 
-        from bridgeforge.rig_doctor import _check_workspace_access
+        from bridgeforge.rig.rig_doctor import _check_workspace_access
 
         real_scandir = real_os.scandir
 
@@ -605,7 +605,7 @@ class WorkspaceAccessCheckTests(unittest.TestCase):
         self.assertIn(r"tools\unlock-workspaces.ps1 -Apply", check["detail"])
 
     def test_readable_queue_passes_and_a_missing_queue_is_skipped(self) -> None:
-        from bridgeforge.rig_doctor import _check_workspace_access
+        from bridgeforge.rig.rig_doctor import _check_workspace_access
 
         with resolved_temp_dir() as root:
             self.assertEqual(_check_workspace_access(root)["status"], "SKIPPED")

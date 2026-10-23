@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge import rig_up as rig_up_module
-from bridgeforge.rig_up import RigUpError, read_rig_state, rig_up
+from bridgeforge.rig import rig_up as rig_up_module
+from bridgeforge.rig.rig_up import RigUpError, read_rig_state, rig_up
 from tests.support import link_dir, resolved_temp_dir
 from tests.test_probe_group import _rig, _workspace
 

@@ -6,13 +6,13 @@ import sys
 import zipfile
 from pathlib import Path
 
-from .boot_test import _is_link, _running_java_under
-from .copy_drift import compare_copies
-from .locks import who_locks
-from .project_board import layout_findings
+from bridgeforge.boot_test import _is_link, _running_java_under
+from bridgeforge.copy_drift import compare_copies
+from bridgeforge.locks import who_locks
+from bridgeforge.project_board import layout_findings
 from bridgeforge.probe.probe_mod_build import RELEASE_RELATIVE
-from .reference_rigs import verify_reference_rig_manifest
-from .scanner import _base_game_version, _load_lenient_json_file
+from bridgeforge.reference_rigs import verify_reference_rig_manifest
+from bridgeforge.scanner import _base_game_version, _load_lenient_json_file
 
 TARGET_BASE_GAME_VERSION = "0.98a"
 DEFAULT_BASELINE_RELATIVE = Path("bridgeforge-state") / "real-saves-baseline.json"
@@ -32,7 +32,7 @@ def _repo_root() -> Path:
     A separate function (rather than inlining this in rig_doctor()) so tests can monkeypatch it to
     point at a throwaway fixture tree instead of the real repo.
     """
-    return Path(__file__).resolve().parent.parent
+    return Path(__file__).resolve().parents[2]
 
 
 def _declared_id(folder: Path) -> str | None:
@@ -263,7 +263,7 @@ def _check_enabled_mods_resolve(runtime_dir: Path, target_base_game_version: str
 
 def _check_revenantlib_contract(runtime_dir: Path) -> dict[str, object]:
     """The rig's RevenantLib must still provide every bf.* method the removed-api-call fixer emits."""
-    from .revenantlib_contract import RevenantLibCheckError, check_revenantlib
+    from bridgeforge.revenantlib_contract import RevenantLibCheckError, check_revenantlib
 
     folder = _mods_by_id(runtime_dir / "mods").get("revenantlib")
     if folder is None:
