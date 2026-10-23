@@ -5,7 +5,7 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.live_trust import (archive_gate, audit_shipped, auto_explain_shipped, explain_shipped, live_status, original_root,
+from bridgeforge.live.live_trust import (archive_gate, audit_shipped, auto_explain_shipped, explain_shipped, live_status, original_root,
                                     write_run_record)
 from tests.support import resolved_temp_dir
 
@@ -26,7 +26,7 @@ def _workspace(root: Path, name: str = "Mod") -> Path:
 
 def _evidence(ws: Path) -> dict:
     """What run_manifest.evaluate_run returns for a clean run of the fixture's mod `m` (the evaluator itself is tested in test_run_manifest)."""
-    from bridgeforge.live_trust import shipped_hash
+    from bridgeforge.live.live_trust import shipped_hash
 
     digest = shipped_hash(ws / "working")
     return {"status": "ACCEPTABLE", "run_id": "T", "manifest_id": "abc", "problems": [],
@@ -126,7 +126,7 @@ class RunRecordTests(unittest.TestCase):
     def test_a_legacy_run_line_stays_readable_with_provenance_unknown(self) -> None:
         with resolved_temp_dir() as root:
             ws = _workspace(root)
-            from bridgeforge.live_trust import shipped_hash
+            from bridgeforge.live.live_trust import shipped_hash
 
             _write(ws / "reports" / "live_runs.jsonl", json.dumps({"test_id": "OLD", "date": "2026-10-04", "verdict": "PASS",
                                                                    "shipped_sha256": shipped_hash(ws / "working"), "version": "1"}) + "\n")
@@ -186,7 +186,7 @@ DESCRIPTOR = """<?xml version="1.0" ?>
 class SaveMadeWithTests(unittest.TestCase):
     # ROADMAP 36.5 (2026-10-04): a save baseline names the mods it was made with.
     def test_reads_enabled_mods_through_refs_and_numeric_versions(self) -> None:
-        from bridgeforge.live_trust import save_made_with
+        from bridgeforge.live.live_trust import save_made_with
 
         with resolved_temp_dir() as root:
             _write(root / "save_x" / "descriptor.xml", DESCRIPTOR)
@@ -196,7 +196,7 @@ class SaveMadeWithTests(unittest.TestCase):
         self.assertIsNone(none)
 
     def test_comparison_is_never_a_pass_by_default(self) -> None:
-        from bridgeforge.live_trust import compare_made_with
+        from bridgeforge.live.live_trust import compare_made_with
 
         made = {"game_version": "0.98a-RC8", "mods": {"lib": "1.5.6", "mod_a": "2.0"}}
         self.assertEqual(compare_made_with(made, made)["status"], "COMPARABLE")

@@ -23,7 +23,7 @@ import shutil
 from pathlib import Path
 
 from bridgeforge.copy_drift import _collect, compare_copies
-from bridgeforge.live_content_parity import merge_parity, parity_failure_lines, parity_findings
+from bridgeforge.live.live_content_parity import merge_parity, parity_failure_lines, parity_findings
 from bridgeforge.probe.probe_config import CONFIG_FILE, RIG_MARKER_FILE, _install_probe_mod, _refuse_non_rig, build_probe_config
 from bridgeforge.scanner import _load_lenient_json_file
 
@@ -905,7 +905,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     workspaces = _workspaces_by_mod_id(queue, Path(rig) / "mods")
     # ROADMAP 36.6: one run record joining inputs and outputs, written before any archive so the gate (36.11)
     # sees this run's shipped hashes.
-    from bridgeforge.live_trust import archive_gate, auto_explain_shipped, save_made_with, write_run_record
+    from bridgeforge.live.live_trust import archive_gate, auto_explain_shipped, save_made_with, write_run_record
     from bridgeforge.rig.rig_up import read_rig_state
     from bridgeforge.log_triage import triage_log
     from bridgeforge.rig.rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
@@ -970,7 +970,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
         path = workspace / "working" / "reports" / "REVIVAL_REPORT.md"
         body = path.read_text(encoding="utf-8").rstrip() if path.is_file() else f"# Revival report: {workspace.name}"
         if accept:
-            from bridgeforge.live_accept import AcceptError, accept_run
+            from bridgeforge.live.live_accept import AcceptError, accept_run
 
             try:
                 if f"## Live run {test_id}" not in body:

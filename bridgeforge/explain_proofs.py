@@ -37,7 +37,7 @@ def sha256(path: Path) -> str:
 def descriptions_applied(workspace: Path, relative: str, before: Path, after: Path) -> bool:
     """True when `after` is the descriptions.csv `descriptions apply` wrote: the saved author file is what the original
     holds (or the original has none and the saved file is header-only), credits exist, and `after` only gained rows."""
-    from .live_trust import _only_rows_added, _text
+    from bridgeforge.live.live_trust import _only_rows_added, _text
 
     if relative != DESCRIPTIONS_RELATIVE or not after.is_file():
         return False
@@ -132,7 +132,7 @@ def _row_cells(row: list[str]) -> list[str]:
 def copied_rows_proof(workspace: Path, relative: str, before: Path, after: Path) -> str | None:
     """The reason a CSV is the original plus recorded copied rows, else None: same header, every original row kept, and
     every new row is one the ledger recorded with exactly those cells."""
-    from .live_trust import _text
+    from bridgeforge.live.live_trust import _text
 
     recorded = [_row_cells(r["cells"]) for r in _read_ledger(workspace)["rows"] if r.get("file") == relative]
     if not recorded or not after.is_file():

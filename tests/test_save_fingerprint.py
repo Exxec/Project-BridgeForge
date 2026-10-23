@@ -5,7 +5,8 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge import live_run, save_reload_run
+from bridgeforge.live import live_run
+from bridgeforge import save_reload_run
 from bridgeforge.save_fingerprint import SECTIONS, parse_fingerprint
 from bridgeforge.run_manifest import evaluate_run, read_manifest
 from tests.bound_runs import LOAD, MENU, bound_run

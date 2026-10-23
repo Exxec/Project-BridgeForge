@@ -141,7 +141,7 @@ def add_parser(subcommands) -> None:
 
 def run_cli(args: argparse.Namespace) -> int:
     if args.command == "audit-shipped":
-        from .live_trust import audit_shipped, live_status
+        from bridgeforge.live.live_trust import audit_shipped, live_status
         result = {"audit": audit_shipped(args.workspace), "live": live_status(args.workspace)}
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
@@ -154,7 +154,7 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"Live result: {live['status']}" + (f" (last PASS {live['test_id']}, {live.get('date')})" if live.get("test_id") else ""))
         return 0 if result["audit"]["status"] == "PASS" else 1
     if args.command == "audit-explain":
-        from .live_trust import auto_explain_shipped, explain_shipped
+        from bridgeforge.live.live_trust import auto_explain_shipped, explain_shipped
         if args.auto:
             groups = auto_explain_shipped(args.workspace)
             if args.json:
@@ -178,7 +178,7 @@ def run_cli(args: argparse.Namespace) -> int:
         from .archive import ArchiveError, archive_mod
         from .substitutes import REPO_ROOT
         from .explain_proofs import prepare_for_audit
-        from .live_trust import archive_gate
+        from bridgeforge.live.live_trust import archive_gate
         prepare_for_audit(args.workspace)  # extract a zip original, copy translation records (copy-only steps, ROADMAP 60b)
         gate = archive_gate(args.workspace)
         if not gate["allowed"]:

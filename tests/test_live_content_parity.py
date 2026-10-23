@@ -5,7 +5,7 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.live_content_parity import expected_content, parity_findings
+from bridgeforge.live.live_content_parity import expected_content, parity_findings
 from bridgeforge.probe.probe_config import build_probe_config
 from bridgeforge.probe.probe_group import group_report, merge_configs
 from tests.support import resolved_temp_dir

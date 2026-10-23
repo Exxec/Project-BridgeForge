@@ -67,7 +67,7 @@ def _sha256_file(path: Path) -> str:
 
 
 def _tree_hash(folder: Path) -> str:
-    from .live_trust import shipped_hash
+    from bridgeforge.live.live_trust import shipped_hash
 
     try:
         return shipped_hash(folder)

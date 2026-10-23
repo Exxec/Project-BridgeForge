@@ -21,10 +21,10 @@ import re
 from datetime import date
 from pathlib import Path
 
-from .live_trust import write_run_record
-from .safeio import atomic_write_text
-from .log_triage import triage_log
-from .soak_report import soak_report
+from bridgeforge.live.live_trust import write_run_record
+from bridgeforge.safeio import atomic_write_text
+from bridgeforge.log_triage import triage_log
+from bridgeforge.soak_report import soak_report
 
 
 class AcceptError(ValueError):
@@ -33,7 +33,7 @@ class AcceptError(ValueError):
 
 def bound_evidence(rig: Path | None, test_id: str, log: Path, mods_dir: Path | None) -> tuple[dict, dict]:
     """(evidence, manifest) from the shared evaluator for a standalone acceptance, or AcceptError: no rig, no manifest, no acceptance."""
-    from .run_manifest import ManifestError, evaluate_run, read_manifest
+    from bridgeforge.run_manifest import ManifestError, evaluate_run, read_manifest
 
     if rig is None:
         raise AcceptError("not accepted: give --rig; an accepted run must have the pre-launch manifest `run-manifest prepare` (or the "
@@ -46,7 +46,7 @@ def bound_evidence(rig: Path | None, test_id: str, log: Path, mods_dir: Path | N
 
 
 def _mod_id(workspace: Path) -> str | None:
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(workspace / "working" / "mod_info.json")
     return info.get("id") if isinstance(info, dict) else None
@@ -134,7 +134,7 @@ def accept_run(workspace: Path | str, log: Path | str, *, test_id: str, note: st
     record = write_run_record(queue, test_id, [workspace], triage=triage, verdicts={str(mod_id): "PASS"}, today=today,
                               evidence=evidence, manifest=manifest) if write_record else None
     if findings:
-        from .group_accept import context_of
+        from bridgeforge.group_accept import context_of
 
         remember_accepted(workspace, test_id, probe_fail_keys(log), caught, accept_findings or "", today, context_of(manifest))
     return {
@@ -160,7 +160,7 @@ def probe_fail_keys(log: Path | str) -> list[str]:
 
 def remember_accepted(workspace: Path, test_id: str, keys: list[str], caught: dict, reason: str, today: str, context: dict | None = None) -> None:
     """Append what the owner accepted for this mod version, so `probe-group record --accept` can carry it to a later run of the same version."""
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(workspace / "working" / "mod_info.json")
     entry = {"test_id": test_id, "date": today, "version": str(info.get("version") or "") if isinstance(info, dict) else "",

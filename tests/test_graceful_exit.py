@@ -6,7 +6,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge import graceful_exit, launch, live_run
+from bridgeforge import graceful_exit
+from bridgeforge import launch
+from bridgeforge.live import live_run
 from bridgeforge.exit_observation import KILLED, NATURAL, read_exit_observation
 from tests.bound_runs import make_rig, stage
 from tests.support import resolved_temp_dir

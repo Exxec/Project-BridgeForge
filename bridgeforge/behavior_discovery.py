@@ -649,7 +649,7 @@ def write_probe_baseline(observation_input: Path, output: Path, *, build: str, s
 
 
 def _save_made_with(save_dir: Path) -> dict | None:
-    from .live_trust import save_made_with
+    from bridgeforge.live.live_trust import save_made_with
 
     return save_made_with(save_dir)
 

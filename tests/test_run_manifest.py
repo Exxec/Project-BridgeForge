@@ -268,7 +268,7 @@ class LegacyAndLiveRunTests(unittest.TestCase):
         self.assertIn("provenance UNKNOWN", evidence["problems"][0])
 
     def test_running_game_prepares_the_manifest_before_launch_and_releases_after(self) -> None:
-        from bridgeforge import live_run
+        from bridgeforge.live import live_run
 
         with resolved_temp_dir() as root:
             queue, targets = _two(root)
@@ -310,7 +310,7 @@ class LegacyAndLiveRunTests(unittest.TestCase):
 
 class SelectionTests(unittest.TestCase):
     def test_regress_changed_reruns_a_workspace_whose_provider_or_launcher_changed(self) -> None:
-        from bridgeforge.live_trust import write_run_record
+        from bridgeforge.live.live_trust import write_run_record
         from bridgeforge.regress_changed import select_workspaces
 
         with resolved_temp_dir() as root:

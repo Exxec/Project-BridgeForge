@@ -548,7 +548,7 @@ def build_probe_config(
         merged_setups = merged_setups + list(profile.get("setups") or [])
         apply_mode = profile.get("apply", DEFAULT_PROFILE_APPLY)
 
-    from bridgeforge.live_content_parity import expected_content
+    from bridgeforge.live.live_content_parity import expected_content
 
     mod_systems, unreached_systems = mod_systems_by_reach(mod_root)
     body_types = mod_body_types(mod_root)

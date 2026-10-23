@@ -10,7 +10,7 @@ from bridgeforge.bootstrap import bootstrap_mods
 from bridgeforge.build_tag import BuildTagError, DEFAULT_LABEL
 from bridgeforge.compat_sets import CompatSetError
 from bridgeforge.dossier import DEFAULT_CONTEXT_LINES, DEFAULT_MAX_KB, DossierError, write_dossier
-from bridgeforge.live_accept import accept_run, AcceptError
+from bridgeforge.live.live_accept import accept_run, AcceptError
 from bridgeforge.locks import who_locks
 from bridgeforge.log_triage import triage_log
 from bridgeforge.prepare_test import prepare_test, PrepareTestError

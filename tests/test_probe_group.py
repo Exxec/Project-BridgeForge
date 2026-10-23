@@ -363,7 +363,7 @@ class InstallTests(unittest.TestCase):
             shutil.copytree(a, queue / "A" / "original" / "A")
             result = record_group(rig / "logs" / "GRP-T.stdout.log", merged, queue, rig, test_id="GRP-T", archive=True,
                                   done_dir=root / "Done", policy_path=policy, today="2026-09-28")
-            from bridgeforge.live_trust import live_status
+            from bridgeforge.live.live_trust import live_status
             run = json.loads((queue / "_live" / "GRP-T.json").read_text(encoding="utf-8"))
             live_a = live_status(queue / "A")["status"]
             report_a = (a / "reports" / "REVIVAL_REPORT.md").read_text(encoding="utf-8")

@@ -56,9 +56,15 @@
     "bridgeforge.rig_doctor": "bridgeforge.rig.rig_doctor",
     "bridgeforge.rig_prefs": "bridgeforge.rig.rig_prefs",
     "bridgeforge.rig_reset": "bridgeforge.rig.rig_reset",
-    "bridgeforge.rig_up": "bridgeforge.rig.rig_up"
+    "bridgeforge.rig_up": "bridgeforge.rig.rig_up",
+    "bridgeforge.live_accept": "bridgeforge.live.live_accept",
+    "bridgeforge.live_content_parity": "bridgeforge.live.live_content_parity",
+    "bridgeforge.live_ledger": "bridgeforge.live.live_ledger",
+    "bridgeforge.live_run": "bridgeforge.live.live_run",
+    "bridgeforge.live_trust": "bridgeforge.live.live_trust"
   },
   "shims": [
-    "bridgeforge.rig_prefs"
+    "bridgeforge.rig_prefs",
+    "bridgeforge.live_run"
   ]
 }

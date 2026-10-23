@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .live_accept import ACCEPTED_LOG, probe_fail_keys
+from bridgeforge.live.live_accept import ACCEPTED_LOG, probe_fail_keys
 
 
 def _current_version(workspace: Path) -> str:

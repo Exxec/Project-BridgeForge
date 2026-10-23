@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.group_accept import assess_group, context_of
-from bridgeforge.live_accept import accept_run
+from bridgeforge.live.live_accept import accept_run
 from bridgeforge.probe.probe_config import build_probe_config
 from bridgeforge.run_manifest import read_manifest
 from bridgeforge.probe.probe_group import ProbeGroupError, merge_configs, record_group

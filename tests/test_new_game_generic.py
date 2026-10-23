@@ -5,7 +5,7 @@ import struct
 import unittest
 from unittest import mock
 
-from bridgeforge import live_run
+from bridgeforge.live import live_run
 from bridgeforge.new_game_generic import OPTION_ROWS, run_pages
 from bridgeforge.screen_read import Bitmap, confirm_button, page_fingerprint, pages_differ
 from tests.support import resolved_temp_dir

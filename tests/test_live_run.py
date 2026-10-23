@@ -5,7 +5,7 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge import live_run
+from bridgeforge.live import live_run
 from tests.support import resolved_temp_dir
 
 

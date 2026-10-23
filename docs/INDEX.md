@@ -88,3 +88,5 @@ The bounded audit scope, exceptions and source-backed corrections are recorded i
 - [B3 probe evidence](REFACTOR_B3_PROBE_AUDIT.md): structural move and regression/consumer validation.
 
 - [B3 rig evidence](REFACTOR_B3_RIG_AUDIT.md): structural move and regression/consumer validation.
+
+- [B3 live evidence](REFACTOR_B3_LIVE_AUDIT.md): structural move and regression/consumer validation.

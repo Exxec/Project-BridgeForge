@@ -126,7 +126,7 @@ def _final_status(report: Path) -> str | None:
 
 def _live_line(workspace: Path) -> str:
     """The archive note's live sentence: always the date and test id of the last PASS, or why there are none (ROADMAP 65)."""
-    from .live_trust import live_status
+    from bridgeforge.live.live_trust import live_status
 
     live = live_status(workspace)
     if live.get("test_id"):
@@ -276,7 +276,7 @@ def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, t
             if item.is_file() and (item.suffix.lower() == ".md" or item.name.startswith("baseline")) and not (kept / item.name).exists():
                 shutil.copy2(item, kept / item.name)
 
-    from .live_trust import original_root
+    from bridgeforge.live.live_trust import original_root
 
     original = _original_root(workspace) or original_root(workspace)
     changed, added, jars_identical, jar_names = [], [], None, []

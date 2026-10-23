@@ -61,7 +61,7 @@ def _declared_dependencies(members: dict[str, Path]) -> list[str]:
 
 def rig_up(rig: Path, queue: Path, mod_ids: list[str], *, probe_config: bool = False, also_enable: list[str] | None = None,
            with_lunalib: bool = False, no_lunalib: bool = False, doctor=None, today: str | None = None) -> dict:
-    from bridgeforge.live_trust import shipped_hash
+    from bridgeforge.live.live_trust import shipped_hash
     from bridgeforge.probe.probe_config import CONFIG_FILE, RIG_MARKER_FILE, _install_probe_mod, build_probe_config
     from bridgeforge.probe.probe_group import (LUNALIB_ID, PROBE_MOD_ID, SPEEDUP_MOD_ID, _mod_info, _move_aside_duplicate_ids, _refuse_running_game,
                               _reset_combat_round, dependency_closure, dependency_version_conflicts, expand_also_enable, lunalib_rule,

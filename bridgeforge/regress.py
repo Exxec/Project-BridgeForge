@@ -60,7 +60,7 @@ def run_regression(queue: Path, rig: Path, out: Path, *, bat: str | None = None,
 
     queue, rig, out = Path(queue).expanduser().resolve(), Path(rig).expanduser().resolve(), Path(out)
     if play is None:
-        from .live_run import live_run as play
+        from bridgeforge.live.live_run import live_run as play
     install = install or (lambda plan, n: install_group(plan, n, queue, rig, stage=True))
     judge = judge or (lambda log, config: group_report(log, config, mods_dir=rig / "mods",
                                                        accepted=accepted_probe_findings(queue, rig / "mods")))

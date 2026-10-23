@@ -104,10 +104,10 @@
       "rmtree": 1,
       "write_text": 5
     },
-    "live_accept.py": {
+    "live/live_accept.py": {
       "write_text": 1
     },
-    "live_trust.py": {
+    "live/live_trust.py": {
       "write_text": 2
     },
     "mass_test.py": {

@@ -5,7 +5,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge import boot_test, launch, live_run, log_triage, window_watch
+from bridgeforge import boot_test
+from bridgeforge import launch
+from bridgeforge.live import live_run
+from bridgeforge import log_triage
+from bridgeforge import window_watch
 from bridgeforge.exit_observation import read_exit_observation
 from tests.bound_runs import make_rig, stage
 from tests.support import resolved_temp_dir

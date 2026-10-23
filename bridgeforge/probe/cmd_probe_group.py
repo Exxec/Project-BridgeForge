@@ -168,7 +168,7 @@ def run_cli(args: argparse.Namespace) -> int:
                         print(f"  WARN {result['lunalib_advice']}")
                     print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
             elif args.probe_group_command == "live":
-                from bridgeforge.live_run import live_run
+                from bridgeforge.live.live_run import live_run
                 if args.interactive:
                     print("Starting the game: play, then close it; nothing is clicked for you after the launcher's Play button.", file=sys.stderr)
                 else:

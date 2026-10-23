@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .live_run import (GameRefused, Hands, LaunchNoProcess, LiveResult, MENU_LOADED, _log_text, click_menu, running_game, wait_for)
+from bridgeforge.live.live_run import (GameRefused, Hands, LaunchNoProcess, LiveResult, MENU_LOADED, _log_text, click_menu, running_game, wait_for)
 
 RELOAD_EXPECTED = ("main_menu", "campaign_load", "reload_after_save")
 COMPARE_MARKER = "|compare|equal="

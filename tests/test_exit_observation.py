@@ -5,8 +5,8 @@ import json
 import unittest
 
 from bridgeforge.exit_observation import (ExitObservationError, observed_exit, read_exit_observation, write_exit_observation)
-from bridgeforge.live_run import settle_exit
-from bridgeforge.live_trust import write_run_record
+from bridgeforge.live.live_run import settle_exit
+from bridgeforge.live.live_trust import write_run_record
 from tests.support import resolved_temp_dir
 from tests.test_live_trust import _workspace
 

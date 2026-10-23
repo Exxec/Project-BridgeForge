@@ -39,13 +39,13 @@ def _sha256(path: Path) -> str:
 
 
 def summary_for_record(manifest: dict) -> dict:
-    from .run_manifest import summary_for_record as summarize
+    from bridgeforge.run_manifest import summary_for_record as summarize
 
     return summarize(manifest)
 
 
 def shipped_files(working: Path) -> dict[str, Path]:
-    from .copy_drift import _collect
+    from bridgeforge.copy_drift import _collect
 
     return dict(sorted(_collect(Path(working)).items()))
 
@@ -59,7 +59,7 @@ def shipped_hash(working: Path) -> str:
 
 
 def _mod_info(working: Path) -> dict:
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(Path(working) / "mod_info.json") if (Path(working) / "mod_info.json").is_file() else {}
     return info if isinstance(info, dict) else {}
@@ -100,7 +100,7 @@ def write_run_record(queue: Path, test_id: str, workspaces: list[Path], *, triag
 
     if process_exit_code is not None and (not isinstance(process_exit_code, int) or isinstance(process_exit_code, bool)):
         raise ValueError("process_exit_code must be an observed integer or None")
-    from .exit_observation import check_observation
+    from bridgeforge.exit_observation import check_observation
 
     if process_exit_observed is not None:  # absent unless the caller observed an exit: the record shape is shared with Project Go
         check_observation(process_exit_observed, process_exit_code)
@@ -217,7 +217,7 @@ def original_root(workspace: Path) -> Path | None:
     # One download that holds a whole pack (the Yunru Core pack: Core, Arsenal, Hullmods, Worlds, ...): the original is the
     # root whose mod_info id is the working copy's id (yunruhullmods and yunruworlds, GRP1B-20261006).
     if len(extracted_in_original) > 1:
-        from .scanner import _load_lenient_json_file
+        from bridgeforge.scanner import _load_lenient_json_file
 
         wanted = _load_lenient_json_file(Path(workspace) / "working" / "mod_info.json")
         wanted_id = wanted.get("id") if isinstance(wanted, dict) else None
@@ -347,7 +347,7 @@ def _text(path: Path) -> str:
 
 
 def _same_parsed_json(before: Path, after: Path) -> bool:
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scanner import _load_lenient_json_file
 
     a, b = _load_lenient_json_file(before), _load_lenient_json_file(after)
     return a is not None and a == b
@@ -431,7 +431,7 @@ def auto_explain_shipped(workspace: Path, today: str | None = None) -> dict[str,
     - copied: a file recorded in reports/COPIES.json (vendor-copy, sibling-pack fixer) whose bytes and source still match;
     - patched jar: a jar named by a scratch/jar-patch-* or anchor-fix record.
     The copy-only archive steps (zip original extracted, translation records copied) run first."""
-    from . import explain_proofs as proofs
+    from bridgeforge import explain_proofs as proofs
 
     workspace = Path(workspace)
     proofs.prepare_for_audit(workspace)
@@ -557,7 +557,7 @@ def archive_gate(workspace: Path) -> dict:
             problems.append(f"live result {live['status']}" + (f" (last PASS {live['test_id']})" if live.get("test_id") else ""))
     # An accepted-findings baseline that was not re-justified since the mod's version changed (owner decision 2026-10-12: any version
     # change expires it). Override: a written reason under "baseline" in reports/SHIPPED_CHANGES.json, like the live waiver above.
-    from .baseline_audit import audit_workspace
+    from bridgeforge.baseline_audit import audit_workspace
 
     baseline = audit_workspace(Path(workspace))
     if baseline["status"] in ("STALE_VERSION", "UNSTAMPED"):

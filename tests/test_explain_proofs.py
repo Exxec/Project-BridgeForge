@@ -10,7 +10,7 @@ from pathlib import Path
 
 from bridgeforge.archive import ArchiveError, archive_mod
 from bridgeforge.explain_proofs import prepare_for_audit, read_copies, record_copies, sha256
-from bridgeforge.live_trust import audit_shipped, auto_explain_shipped
+from bridgeforge.live.live_trust import audit_shipped, auto_explain_shipped
 from bridgeforge.master_log import write_master_log
 from bridgeforge.release import record_policy_decision
 from bridgeforge.sibling_assets import fix_sibling_assets
@@ -292,7 +292,7 @@ class ArchiveStepsTests(unittest.TestCase):
     def test_note_always_carries_live_date_and_test_id_and_master_log_is_regenerated(self) -> None:
         with resolved_temp_dir() as root:
             ws, policy = self._ready(root)
-            from bridgeforge.live_trust import shipped_hash
+            from bridgeforge.live.live_trust import shipped_hash
 
             _write(ws / "reports" / "live_runs.jsonl", json.dumps({"verdict": "PASS", "test_id": "GRP1-20261011", "date": "2026-10-11",
                                                                   "shipped_sha256": shipped_hash(ws / "working")}) + "\n")

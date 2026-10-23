@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from .launch import EXIT_POLL_SECONDS, GameRefused, LaunchNoProcess, settle_exit  # noqa: F401  (re-exported: callers and tests import them from here)
+from bridgeforge.launch import EXIT_POLL_SECONDS, GameRefused, LaunchNoProcess, settle_exit  # noqa: F401  (re-exported: callers and tests import them from here)
 
 # Client-area fractions of the game window (1280x960 view), measured 2026-10-11.
 MAIN_MENU_NEW_GAME = (0.7195, 0.4625)
@@ -136,8 +136,8 @@ def _menu_buttons(hands: Hands) -> list[tuple[float, float]] | None:
     try:
         import tempfile
 
-        from . import game_click
-        from .screen_read import Bitmap, main_menu_buttons
+        from bridgeforge import game_click
+        from bridgeforge.screen_read import Bitmap, main_menu_buttons
 
         with tempfile.TemporaryDirectory() as directory:
             shot = Path(directory) / "menu.bmp"
@@ -152,7 +152,7 @@ def menu_point(hands: Hands, name: str, fallback: tuple[float, float]) -> tuple[
     """Where the main menu's `name` button is, read from the screen once the menu has stopped moving (it slides in after a return
     from the campaign, and a reading taken mid-slide sent a click to the wrong row, GRP-CMU3-20261011); the measured fraction when
     the screen cannot be read."""
-    from .screen_read import main_menu_target
+    from bridgeforge.screen_read import main_menu_target
 
     previous = None
     for _ in range(10):
@@ -169,7 +169,7 @@ def menu_point(hands: Hands, name: str, fallback: tuple[float, float]) -> tuple[
 def click_menu(hands: Hands, name: str, fallback: tuple[float, float], attempts: int = 3) -> bool:
     """Click a main menu button and check the menu went away; try again if it is still there. True once it has gone (or when the
     screen cannot be read, so the old blind click stands)."""
-    from .screen_read import main_menu_target
+    from bridgeforge.screen_read import main_menu_target
 
     for _ in range(attempts):
         hands.front()
@@ -188,8 +188,8 @@ def _screen(hands: Hands):
     try:
         import tempfile
 
-        from . import game_click
-        from .screen_read import Bitmap
+        from bridgeforge import game_click
+        from bridgeforge.screen_read import Bitmap
 
         with tempfile.TemporaryDirectory() as directory:
             shot = Path(directory) / "screen.bmp"
@@ -204,7 +204,7 @@ def nexerelin_new_game(hands: Hands, max_pages: int = 12) -> None:
     """Nexerelin's New Game: press 1 one page at a time until the faction page's fleet Select button is on screen, click it, then
     Ensign, Done and Start game [G]. The number of pages before the faction page varies between runs (DEBUG-NEXSELECT-20261011:
     six presses overshot by one, and every later 1 toggled 'Go back' / the faction, the loop the owner saw)."""
-    from .screen_read import nexerelin_fleet_select
+    from bridgeforge.screen_read import nexerelin_fleet_select
 
     for point, pause in NEW_GAME_FLOWS["nexerelin"][:3]:
         hands.front()
@@ -254,7 +254,7 @@ def generic_new_game(hands: Hands, done: Callable[[], bool], shots_dir: Path | N
     """The generic fallback (ROADMAP item 73 G1): continue from the New Game page that is up, reading the screen page by page
     (new_game_generic.run_pages). One screenshot per page goes to `shots_dir`. Returns the page steps, empty when the screen cannot
     be read. Used after a fixed flow did not reach the campaign; the default, Ironclads and Nexerelin flows stay first."""
-    from .new_game_generic import run_pages
+    from bridgeforge.new_game_generic import run_pages
 
     if not hands.geometry:
         return []
@@ -297,7 +297,7 @@ def _mission_rows(mod_path: str) -> int:
 
 
 def _replaces_mission_list(mod_path: str) -> bool:
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(Path(mod_path) / "mod_info.json")
     replace = info.get("replace") if isinstance(info, dict) else None
@@ -434,9 +434,9 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
 def real_hands(rig: Path, launcher_pid: int | None = None) -> Hands:
     """Hands on the game under `rig`: foreground and click through game_click, aliveness from the rig's java processes and, when the
     launcher's process id is given, everything it started (the java-28 JDK sits outside the rig)."""
-    from . import game_click
-    from .boot_test import _running_java_under
-    from .launcher_click import descendant_pids
+    from bridgeforge import game_click
+    from bridgeforge.boot_test import _running_java_under
+    from bridgeforge.launcher_click import descendant_pids
 
     def pids() -> set[int]:
         found = {item["pid"] for item in _running_java_under(rig) if isinstance(item.get("pid"), int)}
@@ -472,9 +472,9 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
     seconds to be quit by the operator and its return code is written to <rig>/logs/<TESTID>.exit.json (NATURAL), else KILLED.
     Without it, `graceful_exit` (the default) closes a finished game by itself once the probe has written its done marker for this
     manifest (see graceful_exit.py) and records NATURAL with the code, or KILLED when it had to be stopped."""
-    from . import launch
-    from .boot_test import LAUNCH_WATCHDOG_SECONDS, _is_link, _running_java_under, watchdog_message
-    from .run_manifest import ManifestError, read_staging_state
+    from bridgeforge import launch
+    from bridgeforge.boot_test import LAUNCH_WATCHDOG_SECONDS, _is_link, _running_java_under, watchdog_message
+    from bridgeforge.run_manifest import ManifestError, read_staging_state
 
     rig = Path(rig).expanduser().resolve()
     if not _is_link(rig / "starsector-core"):
@@ -493,7 +493,7 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
                                            expected=list(expected or LIVE_EXPECTED_MILESTONES), scenario=scenario, bat=bat)
     except ManifestError as exc:
         raise GameRefused(f"no pre-launch manifest: {exc}") from exc
-    from .graceful_exit import clear_done
+    from bridgeforge.graceful_exit import clear_done
 
     clear_done(rig)
     from bridgeforge.rig.rig_prefs import pinned_launcher_prefs

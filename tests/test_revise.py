@@ -9,8 +9,8 @@ from unittest import mock
 
 from bridgeforge import revise
 from bridgeforge.archive import archive_mod
-from bridgeforge.live_accept import accept_run
-from bridgeforge.live_trust import shipped_hash, write_run_record
+from bridgeforge.live.live_accept import accept_run
+from bridgeforge.live.live_trust import shipped_hash, write_run_record
 from bridgeforge.release import record_policy_decision
 from bridgeforge.removals import add_removals, make_entry
 from bridgeforge.revise import ReviseError, StepFailed, finalize, prepare
@@ -187,7 +187,7 @@ class FinalizeTests(unittest.TestCase):
             fx.test_and_accept()
             with self.assertRaisesRegex(ReviseError, "migration pack or a written reason"):
                 fx.finalize(journal["revision_id"])
-            from bridgeforge.live_trust import explain_shipped
+            from bridgeforge.live.live_trust import explain_shipped
             from bridgeforge.revision_renames import migration_requirement, write_evidence
 
             explain_shipped(fx.ws, ["data/hulls/radar_hull.ship", "data/hulls/radar_new.ship"], "the hull was renamed by the revision")

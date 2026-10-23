@@ -7,7 +7,7 @@ import unittest
 from contextlib import redirect_stdout
 
 from bridgeforge.cli import main
-from bridgeforge.live_ledger import last_runs, read_runs
+from bridgeforge.live.live_ledger import last_runs, read_runs
 from tests.support import resolved_temp_dir
 
 

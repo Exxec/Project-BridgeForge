@@ -8,8 +8,8 @@ import zipfile
 from pathlib import Path
 
 from bridgeforge.archive import ArchiveError, archive_mod, write_readme_copies
-from bridgeforge.live_accept import AcceptError, accept_run
-from bridgeforge.live_trust import live_status
+from bridgeforge.live.live_accept import AcceptError, accept_run
+from bridgeforge.live.live_trust import live_status
 from bridgeforge.release import record_policy_decision
 from tests.bound_runs import bound_run
 from tests.support import resolved_temp_dir

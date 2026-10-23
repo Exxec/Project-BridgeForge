@@ -126,7 +126,7 @@ class RigUpTests(unittest.TestCase):
                     rig_up(rig, queue, ["mod_a"], doctor=_fake_doctor())
 
     def test_the_run_record_carries_the_rig_state(self) -> None:
-        from bridgeforge.live_trust import write_run_record
+        from bridgeforge.live.live_trust import write_run_record
 
         with resolved_temp_dir() as root:
             queue = root / "q"
