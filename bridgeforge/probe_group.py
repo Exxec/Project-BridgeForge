@@ -362,7 +362,7 @@ def merge_configs(configs: list[dict]) -> dict:
         "campaign_interval_days": min((c["campaign_interval_days"] for c in configs), default=5.0),
         "combat_seconds": max((c["combat_seconds"] for c in configs), default=60.0),
         "combat_cap_per_side": max((c["combat_cap_per_side"] for c in configs), default=12),
-        "group_members": {}, "mod_systems": [], "mod_body_types": {},
+        "group_members": {}, "mod_systems": [], "mod_systems_unreached": [], "bounty_checks": {}, "entity_checks": [], "mod_body_types": {},
         # 2026-10-11: class_sweep and mission_fleets were dropped here, so group runs never swept classes or mission fleets.
         "class_sweep": [], "mission_fleets": {"ship": [], "wing": []}, "mod_commodities": [], "expect_supply": [],
         "content_parity": merge_parity(configs),
@@ -380,6 +380,9 @@ def merge_configs(configs: list[dict]) -> dict:
         merged["variants"].update(c.get("variants") or {})
         merged["content_ship_hulls"].update(c.get("content_ship_hulls") or {})
         merged["mod_systems"] = sorted(set(merged["mod_systems"]) | set(c.get("mod_systems") or []))
+        merged["mod_systems_unreached"] = sorted(set(merged["mod_systems_unreached"]) | set(c.get("mod_systems_unreached") or []))
+        merged["bounty_checks"].update(c.get("bounty_checks") or {})
+        merged["entity_checks"] += [check for check in c.get("entity_checks") or [] if check not in merged["entity_checks"]]
         merged["mod_body_types"].update(c.get("mod_body_types") or {})
         merged["group_members"][c["target_mod_id"]] = {
             "hulls": sorted(c["hulls"]), "variants": sorted(set(c["content_variants"]["ship"]) | set(c["content_variants"]["other"])),
