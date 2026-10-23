@@ -20,14 +20,14 @@ _SAFE_ID = re.compile(r"^[A-Za-z0-9_.\-]+$")
 
 
 def _declared(root: Path) -> set[str]:
-    from .scanner import _load_lenient_json_file
+    from ..scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(root / "mod_info.json")
     return {str(d.get("id")) for d in (info.get("dependencies") or []) if isinstance(d, dict) and d.get("id")} if isinstance(info, dict) else set()
 
 
 def _check(root: Path, entry: dict, options: dict, defined: dict) -> list[Path]:
-    from .fixers import FixerError
+    from . import FixerError
 
     kind, old, new, source = entry.get("kind"), entry.get("id"), entry.get("replacement"), entry.get("source")
     label = f"{kind}:{old}"
@@ -38,7 +38,7 @@ def _check(root: Path, entry: dict, options: dict, defined: dict) -> list[Path]:
         if core is None:
             raise FixerError(f"{label}: a {source} replacement is checked against RC8; pass the vanilla core.")
         if "ids" not in defined:
-            from .content_diff import content_ids
+            from ..content_diff import content_ids
 
             defined["ids"] = content_ids(Path(core).expanduser().resolve())
         if new not in defined["ids"].get(kind, set()):
@@ -62,7 +62,7 @@ def _check(root: Path, entry: dict, options: dict, defined: dict) -> list[Path]:
 
 
 def fix_content_reference_substitute(root: Path, options: dict) -> list:
-    from . import fixers as _f
+    from .. import fixers as _f
 
     approved = [e for e in options.get("substitutions") or [] if isinstance(e, dict) and e.get("approved") is True]
     if not approved:

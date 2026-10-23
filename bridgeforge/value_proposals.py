@@ -185,7 +185,7 @@ def propose_bays(root: Path, vanilla_core: Path | None) -> list[dict[str, str]]:
 
 def propose_preset_fields(root: Path, vanilla_core: Path | None, reference_core: Path | None) -> list[dict[str, str]]:
     """One row per top-level vanilla field a preset entry lacks, with old-vanilla / mod / RC8 evidence (item 75 R4)."""
-    from .fixers_presets import preset_field_proposals
+    from .fixers.presets import preset_field_proposals
 
     if vanilla_core is None:
         return []

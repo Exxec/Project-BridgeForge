@@ -24,9 +24,9 @@ import math
 import re
 from pathlib import Path
 
-from .orbit_bounds import Unproven, prove
-from .procgen_args import _arguments
-from .scan_javatext import _METHOD_SIGNATURE_PATTERN, _blank_java_comments, _enclosing_method_span
+from ..orbit_bounds import Unproven, prove
+from ..procgen_args import _arguments
+from ..scan_javatext import _METHOD_SIGNATURE_PATTERN, _blank_java_comments, _enclosing_method_span
 
 _EVIDENCE_LINE = re.compile(r"^(?P<file>.+?):(?P<line>\d+): (?P<name>.+) \(called from [^)]*\)$")
 _IDENTIFIER = re.compile(r"^[A-Za-z_$][\w$]*$")
@@ -35,7 +35,7 @@ _MIN_ORBIT_DAYS = "1f"
 
 
 def _fixers():
-    from . import fixers as _f
+    from .. import fixers as _f
 
     return _f
 

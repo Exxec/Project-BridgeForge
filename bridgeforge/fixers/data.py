@@ -26,7 +26,7 @@ import json
 import re
 from pathlib import Path
 
-from .safeio import atomic_write_json
+from ..safeio import atomic_write_json
 
 _SPRITE_KEY = re.compile(r"Sprite$")
 _NUMBER = re.compile(r"^-?\d+(?:\.\d+)?$")
@@ -37,13 +37,13 @@ _NEVER_COPIED = ("id", "name")
 
 
 def _fixers():
-    from . import fixers as _f
+    from .. import fixers as _f
 
     return _f
 
 
 def _read_wpn(path: Path):
-    from .scanner import _parse_json
+    from ..scanner import _parse_json
 
     try:
         data, _ = _parse_json(path.read_text(encoding="utf-8-sig"))
@@ -197,7 +197,7 @@ def draft_weapon_row_proposals(root: Path, out_dir: Path, options: dict | None =
     """Write `weapon-row-proposals.json` (reports only, never the mod) and return its path. Nothing is applied."""
     options = options or {}
     ctx = _Context(Path(root), options)
-    from .scan_campaign import _declared_spec_ids
+    from ..scan_campaign import _declared_spec_ids
 
     sibling_specs = {}
     for identifier, path in _declared_spec_ids(ctx.root / "data" / "weapons", "*.wpn", "id").items():

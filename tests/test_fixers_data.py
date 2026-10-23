@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.fixers import SUPPORTED_FINDINGS, FixerError, compute_fix
-from bridgeforge.fixers_data import PROPOSALS_NAME, draft_weapon_row_proposals
+from bridgeforge.fixers.data import PROPOSALS_NAME, draft_weapon_row_proposals
 from bridgeforge.scanner import scan_mod
 from tests.support import resolved_temp_dir
 
