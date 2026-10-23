@@ -71,6 +71,7 @@ public class CampaignProbeScript implements EveryFrameScript {
     private boolean contentIdsChecked = false;
     // content-parity (77.17) compares the loaded game with the config once; it does not change between intervals.
     private boolean contentParityChecked = false;
+    private boolean stateAndBountiesChecked = false;  // 0.3.2: entity-state and bounty run once (bounty spawns fleets)
 
     @Override
     public boolean isDone() {
@@ -247,6 +248,27 @@ public class CampaignProbeScript implements EveryFrameScript {
                 checkCampaignLayout();
             }
         });
+        if (!stateAndBountiesChecked) {
+            stateAndBountiesChecked = true;
+            runCheck("entity-state", new Runnable() {
+                public void run() {
+                    try {
+                        EntityStateProbe.run();
+                    } catch (Exception e) {
+                        throw new IllegalStateException(e);
+                    }
+                }
+            });
+            runCheck("bounty", new Runnable() {
+                public void run() {
+                    try {
+                        BountyProbe.run();
+                    } catch (Exception e) {
+                        throw new IllegalStateException(e);
+                    }
+                }
+            });
+        }
         runCheck("mission-fleets", new Runnable() {
             public void run() {
                 checkMissionFleets();

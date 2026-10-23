@@ -9,7 +9,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from bridgeforge.campaign_layout import mod_body_types, mod_created_systems, mod_placed_types
+from bridgeforge.campaign_layout import mod_body_types, mod_created_systems, mod_placed_types, mod_systems_by_reach
 from bridgeforge.fixers import apply_fix, compute_fix
 from bridgeforge.probe_config import build_probe_config
 from bridgeforge.scanner import scan_mod
@@ -63,6 +63,39 @@ class CampaignLayoutFactsTests(unittest.TestCase):
             with zipfile.ZipFile(mod / "jars" / "m.jar", "w") as jar:
                 jar.write(out / "gen" / "Gen.class", "gen/Gen.class")
             self.assertEqual(mod_created_systems(mod), ["Zorg Zeta"])
+
+    def test_only_generators_reachable_from_entry_points_are_expected(self) -> None:
+        # EPTA 2.1.x: the plugin no longer calls sevencorpGenEpta -> sevencorp_alicerceGen, so "Alicerce" never exists
+        # (probe FAIL on EPTA213-20261013 and EPTA213BF2-20261022). A generator named only in a data file still counts,
+        # and an unloadable src/ copy of the dead generator is ignored because the mod ships jars.
+        javac = shutil.which("javac") or next(iter(Path("In operation/_rig").glob("jdk-*/bin/javac.exe")), None)
+        if javac is None:
+            self.skipTest("no javac")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root / "src" / "api" / "SectorAPI.java", "package api; public interface SectorAPI { Object createStarSystem(String name); }")
+            _write(root / "src" / "m" / "Plugin.java", "package m; public class Plugin { void g(api.SectorAPI s) { new LiveGen().g(s); } }")
+            _write(root / "src" / "m" / "LiveGen.java", 'package m; public class LiveGen { void g(api.SectorAPI s) { s.createStarSystem("Proelefsi"); } }')
+            _write(root / "src" / "m" / "DeadGen.java", "package m; public class DeadGen { void g(api.SectorAPI s) { new AlicerceGen().g(s); } }")
+            _write(root / "src" / "m" / "AlicerceGen.java", 'package m; public class AlicerceGen { void g(api.SectorAPI s) { s.createStarSystem("Alicerce"); } }')
+            _write(root / "src" / "m" / "DataGen.java", 'package m; public class DataGen { void g(api.SectorAPI s) { s.createStarSystem("Meiyo"); } }')
+            out = root / "classes"
+            subprocess.run([str(javac), "-d", str(out), *map(str, (root / "src").rglob("*.java"))], check=True, capture_output=True)
+            mod = root / "mod"
+            _write(mod / "mod_info.json", '{"id": "m", "jars": ["jars/m.jar"], "modPlugin": "m.Plugin"}')
+            _write(mod / "data" / "config" / "settings.json", '{"plugins": {"meiyoGen": "m.DataGen"}}')
+            _write(mod / "src" / "m" / "AlicerceGen.java", (root / "src" / "m" / "AlicerceGen.java").read_text(encoding="utf-8"))
+            (mod / "jars").mkdir()
+            with zipfile.ZipFile(mod / "jars" / "m.jar", "w") as jar:
+                for name in ("Plugin", "LiveGen", "DeadGen", "AlicerceGen", "DataGen"):
+                    jar.write(out / "m" / f"{name}.class", f"m/{name}.class")
+            self.assertEqual(mod_systems_by_reach(mod), (["Meiyo", "Proelefsi"], ["Alicerce"]))
+            self.assertEqual(mod_created_systems(mod), ["Meiyo", "Proelefsi"])
+            config = build_probe_config(mod)
+            self.assertEqual((config["mod_systems"], config["mod_systems_unreached"]), (["Meiyo", "Proelefsi"], ["Alicerce"]))
+            # The plugin calling the old generator instead: Alicerce is expected and the now-unreached Proelefsi is not.
+            _write(mod / "mod_info.json", '{"id": "m", "jars": ["jars/m.jar"], "modPlugin": "m.DeadGen"}')
+            self.assertEqual(mod_systems_by_reach(mod), (["Alicerce", "Meiyo"], ["Proelefsi"]))
 
 
 class ProcgenLeakTests(unittest.TestCase):
