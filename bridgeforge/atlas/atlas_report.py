@@ -12,8 +12,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from .atlas import (DEFAULT_DB, ORIGINAL_SUFFIX, AtlasError, build_atlas, connect, default_roots, group_mods, latest_mods,
-                    original_roots, resolve_mods)
+from .atlas import DEFAULT_DB, ORIGINAL_SUFFIX, AtlasError, build_atlas, connect, default_roots, group_mods, latest_mods, original_roots, resolve_mods
 from .atlas_rules import AFact, build_profile, forecast, load_facts
 
 DEFAULT_LIMIT = 25

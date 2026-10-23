@@ -14,7 +14,24 @@
     "bridgeforge.research_report": "bridgeforge.research.research_report",
     "bridgeforge.research_search": "bridgeforge.research.research_search",
     "bridgeforge.research_terms": "bridgeforge.research.research_terms",
-    "bridgeforge.cmd_research": "bridgeforge.research.cmd_research"
+    "bridgeforge.cmd_research": "bridgeforge.research.cmd_research",
+    "bridgeforge.atlas_census": "bridgeforge.atlas.atlas_census",
+    "bridgeforge.atlas_census_libs": "bridgeforge.atlas.atlas_census_libs",
+    "bridgeforge.atlas_census_libs_report": "bridgeforge.atlas.atlas_census_libs_report",
+    "bridgeforge.atlas_census_report": "bridgeforge.atlas.atlas_census_report",
+    "bridgeforge.atlas_census_save": "bridgeforge.atlas.atlas_census_save",
+    "bridgeforge.atlas_classfile": "bridgeforge.atlas.atlas_classfile",
+    "bridgeforge.atlas_code": "bridgeforge.atlas.atlas_code",
+    "bridgeforge.atlas_data": "bridgeforge.atlas.atlas_data",
+    "bridgeforge.atlas_exemplars": "bridgeforge.atlas.atlas_exemplars",
+    "bridgeforge.atlas_jar": "bridgeforge.atlas.atlas_jar",
+    "bridgeforge.atlas_migrations": "bridgeforge.atlas.atlas_migrations",
+    "bridgeforge.atlas_predictions": "bridgeforge.atlas.atlas_predictions",
+    "bridgeforge.atlas_report": "bridgeforge.atlas.atlas_report",
+    "bridgeforge.atlas_rules": "bridgeforge.atlas.atlas_rules",
+    "bridgeforge.atlas_runtime": "bridgeforge.atlas.atlas_runtime",
+    "bridgeforge.atlas_sweep": "bridgeforge.atlas.atlas_sweep",
+    "bridgeforge.atlas": "bridgeforge.atlas.atlas"
   },
   "shims": []
 }

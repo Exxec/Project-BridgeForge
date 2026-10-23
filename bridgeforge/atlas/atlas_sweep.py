@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .atlas import VANILLA_ID, AtlasError, group_mods, latest_mods
 from .atlas_rules import forecast
-from .progress import Checkpoint, report
+from ..progress import Checkpoint, report
 
 
 def read_pack(conn: sqlite3.Connection, path: Path) -> tuple[list[dict], list[str]]:

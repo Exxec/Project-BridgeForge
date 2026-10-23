@@ -80,6 +80,11 @@ the relocation test detects an unevidenced Done claim on page 4. Companion follo
 and merge after B1 (the original citation PRs were already merged).
 No pending owner/live/research gate is closed by this archive step.
 
+B3 checkpoint 2026-10-23: research independently rechecked (78 tests); Atlas continued in an isolated
+review worktree, 2612 tests, 12 unchanged skips, coverage 83.1088957%, hermeticity PASS.
+See [Atlas evidence](docs/REFACTOR_B3_ATLAS_AUDIT.md) and [stack](docs/REFACTOR_STACK.md).
+Review/merge and remaining B3 families are pending; LIVE TEST NOT PERFORMED.
+
 **82. Research that serves revivals: consolidate, compare, promote (owner-approved 2026-10-21).** Not a new research
 architecture. S1 stays the critical path; runtime evidence is the limiting resource. Guiding rule: every research
 capability must resolve a question from an active revival, eliminate repeated manual investigation, or improve the

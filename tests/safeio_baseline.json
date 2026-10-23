@@ -3,7 +3,7 @@
     "archive_intake.py": {
       "write_text": 1
     },
-    "atlas_report.py": {
+    "atlas/atlas_report.py": {
       "write_text": 1
     },
     "behavior_discovery.py": {

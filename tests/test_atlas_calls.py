@@ -8,10 +8,11 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from bridgeforge import atlas, atlas_code
-from bridgeforge.atlas_classfile import ACC_FINAL, ACC_STATIC, ACC_SYNTHETIC, parse_class
-from bridgeforge.atlas_rules import analyze, build_profile, forecast, load_facts
-from bridgeforge.atlas_report import show_data, show_text
+from bridgeforge.atlas import atlas
+from bridgeforge.atlas import atlas_code
+from bridgeforge.atlas.atlas_classfile import ACC_FINAL, ACC_STATIC, ACC_SYNTHETIC, parse_class
+from bridgeforge.atlas.atlas_rules import analyze, build_profile, forecast, load_facts
+from bridgeforge.atlas.atlas_report import show_data, show_text
 from bridgeforge.cli import main
 from tests.test_atlas import HEAVY_MARKET, INDUSTRIES_HEADER, build, make_jar, make_mod, make_vanilla, temp_root
 

@@ -6,9 +6,9 @@ import json
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 
-from bridgeforge import atlas
-from bridgeforge.atlas_exemplars import FEATURES, exemplars, parse_symbols
-from bridgeforge.atlas_migrations import Pair, installed_pairs, mine, queue_pairs
+from bridgeforge.atlas import atlas
+from bridgeforge.atlas.atlas_exemplars import FEATURES, exemplars, parse_symbols
+from bridgeforge.atlas.atlas_migrations import Pair, installed_pairs, mine, queue_pairs
 from bridgeforge.cli import main
 from tests.test_atlas import make_mod, make_vanilla, temp_root, build
 from tests.test_atlas_calls import make_jar

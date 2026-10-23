@@ -78,3 +78,5 @@ The bounded audit scope, exceptions and source-backed corrections are recorded i
 
 - [PR stack and owner merge order](REFACTOR_STACK.md)
 - [B3 research validation](REFACTOR_B3_RESEARCH_AUDIT.md)
+
+- [B3 Atlas review evidence](REFACTOR_B3_ATLAS_AUDIT.md): package moves and fresh validation; live gates unchanged.

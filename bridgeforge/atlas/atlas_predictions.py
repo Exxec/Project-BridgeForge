@@ -14,9 +14,9 @@ import json
 from datetime import date
 from pathlib import Path
 
-from .safeio import atomic_write_text
+from ..safeio import atomic_write_text
 
-DEFAULT_PATH = Path(__file__).resolve().parent.parent / "docs" / "atlas_predictions.json"
+DEFAULT_PATH = Path(__file__).resolve().parents[2] / "docs" / "atlas_predictions.json"
 OUTCOMES = ("confirmed", "refuted", "inconclusive")
 
 

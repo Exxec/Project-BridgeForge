@@ -18,8 +18,8 @@ from pathlib import Path
 from typing import NamedTuple
 
 from .atlas_classfile import ClassFormatError, ClassInfo, _read_pool, parse_class
-from .scanner import _blank_java_comments, _load_lenient_json_file, _loaded_mod_jars
-from .zipsafe import MAX_CLASS_BYTES, read_limited
+from ..scanner import _blank_java_comments, _load_lenient_json_file, _loaded_mod_jars
+from ..zipsafe import MAX_CLASS_BYTES, read_limited
 
 API_PREFIX = "com/fs/"
 MAX_JAR_ENTRIES = 200_000

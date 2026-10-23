@@ -8,18 +8,15 @@ only as UNKNOWN, for a class whose bytecode could not be scanned (`ClassInfo.cod
 """
 from __future__ import annotations
 
-from .zipsafe import MAX_CLASS_BYTES, read_limited
+from ..zipsafe import MAX_CLASS_BYTES, read_limited
 
 import re
 import zipfile
 from pathlib import Path
 from typing import NamedTuple
 
-from .atlas_classfile import (ACC_STATIC, ACC_SYNTHETIC, ACC_TRANSIENT, REGISTER_METHODS, ClassFormatError, ClassInfo,
-                              parse_class)
-from .atlas_code import (_MUTATORS, _PERSISTENT_REGISTER, CALLS, CAMPAIGN_PLUGIN_ROLES, CONSTANT_CLASSES, HEAVY_DESCRIPTORS,
-                         ID_LIKE, MAX_DYNAMIC_PER_FILE, MAX_JAR_ENTRIES, PICK_PRIORITIES, SAVED_BASES, CodeResult, _digest,
-                         _dynamic_fact, _is_role_hook, _simple)
+from .atlas_classfile import ACC_STATIC, ACC_SYNTHETIC, ACC_TRANSIENT, REGISTER_METHODS, ClassFormatError, ClassInfo, parse_class
+from .atlas_code import _MUTATORS, _PERSISTENT_REGISTER, CALLS, CAMPAIGN_PLUGIN_ROLES, CONSTANT_CLASSES, HEAVY_DESCRIPTORS, ID_LIKE, MAX_DYNAMIC_PER_FILE, MAX_JAR_ENTRIES, PICK_PRIORITIES, SAVED_BASES, CodeResult, _digest, _dynamic_fact, _is_role_hook, _simple
 from .atlas_data import Fact
 
 WATCH = frozenset(CALLS) | REGISTER_METHODS

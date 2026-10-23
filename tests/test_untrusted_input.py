@@ -5,8 +5,8 @@ import io
 import unittest
 import zipfile
 
-from bridgeforge import atlas
-from bridgeforge.atlas_classfile import ClassFormatError, parse_class
+from bridgeforge.atlas import atlas
+from bridgeforge.atlas.atlas_classfile import ClassFormatError, parse_class
 from bridgeforge.zipsafe import ZipEntryTooLarge, read_limited
 from tests.test_atlas import build, make_mod, make_vanilla, temp_root
 

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from .atlas_data import Fact
-from .scanner import _blank_java_comments, _loaded_mod_jars
+from ..scanner import _blank_java_comments, _loaded_mod_jars
 
 MAX_JAR_ENTRIES = 200_000
 MAX_DYNAMIC_PER_FILE = 20

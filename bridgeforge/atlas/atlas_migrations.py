@@ -18,9 +18,9 @@ from typing import NamedTuple
 
 from .atlas import discover_mods, mod_identity
 from .atlas_census import API_PREFIX, dotted, member_symbol, qualified_uses, read_jar_classes, read_loose
-from .safeio import atomic_write_text
-from .scanner import _load_lenient_json_file, _loaded_mod_jars
-from .zipsafe import read_limited
+from ..safeio import atomic_write_text
+from ..scanner import _load_lenient_json_file, _loaded_mod_jars
+from ..zipsafe import read_limited
 
 R4_MIN_MODS = 3
 EXAMPLES = 3
@@ -307,7 +307,7 @@ def write_outputs(data: dict, folder: Path, stem: str = "MIGRATIONS") -> list[Pa
 
 
 def run_migrations(args, emit, say) -> int:
-    from .api_diff import diff_api_jars
+    from ..api_diff import diff_api_jars
 
     if bool(args.old_api) != bool(args.new_api):
         raise ValueError("give both --old-api and --new-api, or neither")

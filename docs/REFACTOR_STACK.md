@@ -11,7 +11,8 @@ with full tests/coverage, CLI, path-safety, wheel and consumer evidence. The own
 | B1 | docs/b1-roadmap-archive | main | Merged #65 |
 | B2 | refactor/b2-fixers-package | main | Merged #72 |
 | B3 research | refactor/b3-research-package | main | Implemented; review/merge pending |
-| B3 Atlas, then remaining families | pending | preceding family branch | Not yet implemented |
+| B3 Atlas | refactor/b3-atlas-reviewed | refactor/b3-research-package | Implemented and locally validated; review/merge pending |
+| B3 corpus, then remaining families | pending | preceding family branch | Not yet implemented |
 | B4 report | pending | preceding B3 branch | Report only; owner decides candidates/grouping |
 | B4 grouping | pending owner decision | pending | Decision gate open |
 | B5/B6 | pending | pending | Not complete |

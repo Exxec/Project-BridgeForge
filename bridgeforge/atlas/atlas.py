@@ -7,7 +7,7 @@ A mod is re-read only when its hash (relative path, size and mtime of its data, 
 """
 from __future__ import annotations
 
-from .source_paths import family_sources
+from ..source_paths import family_sources
 
 import hashlib
 import os
@@ -16,11 +16,11 @@ import sqlite3
 import time
 from pathlib import Path
 
-from . import progress
+from .. import progress
 from .atlas_census import declared_dependencies, extract_census
 from .atlas_code import CALLS, extract_code
 from .atlas_data import DATA_KINDS, Fact, extract_data_facts
-from .scanner import _load_lenient_json_file
+from ..scanner import _load_lenient_json_file
 
 VANILLA_ID = "vanilla"
 ORIGINAL_SUFFIX = "+original"
@@ -111,7 +111,7 @@ def _extractor_digest() -> str:
     """The atlas modules' own source: a changed extractor must re-read every mod. 2026-10-11: after 67a-f the build reported
     all 349 mods unchanged and kept the old class-level facts."""
     digest = hashlib.sha1(str(SCHEMA_VERSION).encode())
-    for module in family_sources(Path(__file__).parent, "atlas"):
+    for module in family_sources(Path(__file__).parent.parent, "atlas"):
         digest.update(module.read_bytes())
     return digest.hexdigest()
 

@@ -6,8 +6,9 @@ import json
 import unittest
 from contextlib import redirect_stdout
 
-from bridgeforge import atlas, atlas_predictions
-from bridgeforge.atlas_rules import forecast
+from bridgeforge.atlas import atlas
+from bridgeforge.atlas import atlas_predictions
+from bridgeforge.atlas.atlas_rules import forecast
 from bridgeforge.cli import main
 from tests.support import resolved_temp_dir
 from tests.test_atlas import INDUSTRIES_HEADER, build, make_mod, make_vanilla, temp_root

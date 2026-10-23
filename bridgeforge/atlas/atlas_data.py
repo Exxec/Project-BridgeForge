@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import NamedTuple
 
-from .scanner import _load_lenient_json_file
+from ..scanner import _load_lenient_json_file
 
 
 class Fact(NamedTuple):

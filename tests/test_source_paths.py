@@ -9,7 +9,11 @@ import subprocess
 import unittest
 from unittest.mock import Mock, patch
 
-from bridgeforge import atlas, checks_index, cli_commands, scan_registry, source_paths
+from bridgeforge.atlas import atlas
+from bridgeforge import checks_index
+from bridgeforge import cli_commands
+from bridgeforge import scan_registry
+from bridgeforge import source_paths
 from bridgeforge.merge_train import test_modules_for
 from tests import test_bug_class_registry as bug_audit
 from tests import test_hull_id_resolution_audit as hull_audit
@@ -132,7 +136,7 @@ class SourcePathsTests(unittest.TestCase):
             package.mkdir()
             path = package / "reader.py"
             path.write_text("x = 1\n", encoding="utf-8")
-            with patch.object(atlas, "__file__", str(root / "atlas.py")):
+            with patch.object(atlas, "__file__", str(root / "atlas" / "atlas.py")):
                 before = atlas._extractor_digest()
                 path.write_text("x = 2\n", encoding="utf-8")
                 self.assertNotEqual(before, atlas._extractor_digest())
