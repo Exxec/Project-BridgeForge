@@ -5,10 +5,10 @@ import json
 import re
 from pathlib import Path
 
-from .dropped_sweep import check_workspace, mod_roots, select_old_tree
-from .gates import RECORDABLE, load_gates
-from .live_ledger import read_runs
-from .removals import REMOVALS_FILE, RemovalsError, load_removals
+from ..dropped_sweep import check_workspace, mod_roots, select_old_tree
+from ..gates import RECORDABLE, load_gates
+from ..live_ledger import read_runs
+from ..removals import REMOVALS_FILE, RemovalsError, load_removals
 from .research_terms import OBSERVED, STATIC, VALIDATED, Matcher
 
 OPEN_STATES = ("LIVE_PENDING", "NOT_TESTED", "BLOCKED")

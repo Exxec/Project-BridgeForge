@@ -5,7 +5,7 @@ import zipfile
 from pathlib import Path
 
 from .research_terms import Matcher
-from .zipsafe import MAX_CLASS_BYTES, read_limited
+from ..zipsafe import MAX_CLASS_BYTES, read_limited
 
 TEXT_SUFFIXES = {".java", ".kt", ".csv", ".json", ".faction", ".variant", ".ship", ".wpn", ".skin", ".system", ".ini", ".txt",
                  ".md", ".properties", ".version", ".jsonc"}

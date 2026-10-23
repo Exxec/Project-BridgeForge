@@ -10,8 +10,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from .atlas import index_mod
-from .atlas_migrations import Pair, mine
+from ..atlas import index_mod
+from ..atlas_migrations import Pair, mine
 from .research_reconcile import Concept
 from .research_terms import Matcher, concept_key
 

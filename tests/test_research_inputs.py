@@ -11,13 +11,19 @@ from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge import research_decompile
+from bridgeforge.research import research_decompile
 from bridgeforge.cli import main
-from bridgeforge.research_changelog import tree_changelog_quotes
-from bridgeforge.research_decompile import Toolchain, excerpt, method_spans
-from bridgeforge.research_render import render_markdown
-from bridgeforge.research_report import ResearchError, build_report
-from bridgeforge.research_terms import AUTHOR_CLAIM, Matcher, parse_terms, weakest
+from bridgeforge.research.research_changelog import tree_changelog_quotes
+from bridgeforge.research.research_decompile import Toolchain
+from bridgeforge.research.research_decompile import excerpt
+from bridgeforge.research.research_decompile import method_spans
+from bridgeforge.research.research_render import render_markdown
+from bridgeforge.research.research_report import ResearchError
+from bridgeforge.research.research_report import build_report
+from bridgeforge.research.research_terms import AUTHOR_CLAIM
+from bridgeforge.research.research_terms import Matcher
+from bridgeforge.research.research_terms import parse_terms
+from bridgeforge.research.research_terms import weakest
 from tests.support import resolved_temp_dir
 from tests.test_research_report import QUESTION, _tree_digest, _write, make_atlas, make_live, make_repo, make_workspace
 

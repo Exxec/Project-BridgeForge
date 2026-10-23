@@ -16,12 +16,25 @@ from unittest import mock
 from bridgeforge.bytecode import inspect_bytecode
 from bridgeforge.bytecode_diff import changed_methods
 from bridgeforge.cli import main
-from bridgeforge.research_decompile import excerpt, jar_sha256, method_spans
-from bridgeforge.research_diff import DiffError, build_diff, render_markdown, side_jars
-from bridgeforge.research_methods import (MAPPED, UNMAPPED, MethodMap, lookup_identity, lookup_line, method_identity, parse_line_pairs, resolve_methods,
-                                          split_identity)
-from bridgeforge.research_render import render_markdown as render_report
-from bridgeforge.research_terms import Matcher, parse_terms
+from bridgeforge.research.research_decompile import excerpt
+from bridgeforge.research.research_decompile import jar_sha256
+from bridgeforge.research.research_decompile import method_spans
+from bridgeforge.research.research_diff import DiffError
+from bridgeforge.research.research_diff import build_diff
+from bridgeforge.research.research_diff import render_markdown
+from bridgeforge.research.research_diff import side_jars
+from bridgeforge.research.research_methods import MAPPED
+from bridgeforge.research.research_methods import UNMAPPED
+from bridgeforge.research.research_methods import MethodMap
+from bridgeforge.research.research_methods import lookup_identity
+from bridgeforge.research.research_methods import lookup_line
+from bridgeforge.research.research_methods import method_identity
+from bridgeforge.research.research_methods import parse_line_pairs
+from bridgeforge.research.research_methods import resolve_methods
+from bridgeforge.research.research_methods import split_identity
+from bridgeforge.research.research_render import render_markdown as render_report
+from bridgeforge.research.research_terms import Matcher
+from bridgeforge.research.research_terms import parse_terms
 from tests.support import resolved_temp_dir
 from tests.test_research_inputs import (FAKE_INDEX, FAKE_PAIRS, JAVA, TOOLCHAIN, FakeDecompiler, run_report, workspace_with_jars_and_changelogs)
 
@@ -73,7 +86,7 @@ def fake_indexer(jar: Path):
 
 
 def diff(old: Path, new: Path, runner=None, **kwargs) -> dict:
-    with mock.patch("bridgeforge.research_diff.find_toolchain", return_value=(TOOLCHAIN, "")):
+    with mock.patch('bridgeforge.research.research_diff.find_toolchain', return_value=(TOOLCHAIN, "")):
         return build_diff(old, new, indexer=fake_indexer, runner=runner or SideRunner(), **kwargs)
 
 
@@ -252,7 +265,7 @@ class DiffTests(unittest.TestCase):
     def test_a_missing_decompiler_still_gives_the_bytecode_verdict(self) -> None:
         with resolved_temp_dir() as root:
             old, new = self.sides(root)
-            with mock.patch("bridgeforge.research_diff.find_toolchain", return_value=(None, "Vineflower not found (test)")):
+            with mock.patch('bridgeforge.research.research_diff.find_toolchain', return_value=(None, "Vineflower not found (test)")):
                 result = build_diff(old, new, indexer=fake_indexer, runner=SideRunner())
         self.assertEqual(result["status"], "DECOMPILER_MISSING")
         self.assertEqual({m["status"] for m in result["methods"]}, {"NOT_DECOMPILED"})
@@ -290,8 +303,8 @@ class CliTests(unittest.TestCase):
             old = make_jar(root / "old" / "jars" / "M.jar", "old")
             new = make_jar(root / "new" / "jars" / "M.jar", "new")
             target = root / "out"
-            with mock.patch("bridgeforge.research_diff.find_toolchain", return_value=(TOOLCHAIN, "")), mock.patch("bridgeforge.research_diff.jar_method_index", fake_indexer), \
-                    mock.patch("bridgeforge.research_diff.run_vineflower", SideRunner()):
+            with mock.patch('bridgeforge.research.research_diff.find_toolchain', return_value=(TOOLCHAIN, "")), mock.patch('bridgeforge.research.research_diff.jar_method_index', fake_indexer), \
+                    mock.patch('bridgeforge.research.research_diff.run_vineflower', SideRunner()):
                 code, out, _ = self.run_cli(["research", "diff", str(old), str(new), "--write", str(target)])
                 refused = self.run_cli(["research", "diff", str(old), str(new), "--write", str(old.parent)])
             written = json.loads((target / "research-diff.json").read_text(encoding="utf-8"))

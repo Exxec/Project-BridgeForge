@@ -11,10 +11,10 @@ import json
 import tempfile
 from pathlib import Path
 
-from .behavior_discovery import DiscoveryError, build_archaeology, build_behavior_model
-from .lookup import _sha256, default_discovery_dir
+from ..behavior_discovery import DiscoveryError, build_archaeology, build_behavior_model
+from ..lookup import _sha256, default_discovery_dir
 from .research_reconcile import Concept
-from .safeio import atomic_write_json
+from ..safeio import atomic_write_json
 from .research_terms import FILE_EXTENSIONS, STATIC, Matcher, concept_key
 
 MAX_ITEMS = 40

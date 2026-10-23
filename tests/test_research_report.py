@@ -11,10 +11,14 @@ from pathlib import Path
 
 from bridgeforge.atlas import connect
 from bridgeforge.cli import main
-from bridgeforge.research_reconcile import Concept, reconcile
-from bridgeforge.research_render import render_markdown
-from bridgeforge.research_report import build_report
-from bridgeforge.research_terms import Matcher, concept_key, parse_terms, weakest
+from bridgeforge.research.research_reconcile import Concept
+from bridgeforge.research.research_reconcile import reconcile
+from bridgeforge.research.research_render import render_markdown
+from bridgeforge.research.research_report import build_report
+from bridgeforge.research.research_terms import Matcher
+from bridgeforge.research.research_terms import concept_key
+from bridgeforge.research.research_terms import parse_terms
+from bridgeforge.research.research_terms import weakest
 from tests.support import resolved_temp_dir
 
 QUESTION = "Was the Crusade removed or replaced?"

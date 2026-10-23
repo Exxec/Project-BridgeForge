@@ -72,3 +72,9 @@ under [archive/](archive/README.md). Archiving preserves pending owner/live/rese
 those gates complete. The architecture assessment remains current supporting evidence for S1-S4 and stays here.
 
 The bounded audit scope, exceptions and source-backed corrections are recorded in [DOCS_AUDIT_2026-10-18.md](archive/DOCS_AUDIT_2026-10-18.md).
+
+
+## Structural refactor execution
+
+- [PR stack and owner merge order](REFACTOR_STACK.md)
+- [B3 research validation](REFACTOR_B3_RESEARCH_AUDIT.md)

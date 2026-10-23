@@ -1,0 +1,45 @@
+"""B3 guard: internal code must use moved implementations, never consumer shims."""
+from __future__ import annotations
+
+import ast
+import importlib.util
+import json
+from pathlib import Path
+import unittest
+
+from bridgeforge.source_paths import python_sources
+
+ROOT = Path(__file__).resolve().parent.parent
+MOVES = json.loads(Path(__file__).with_name("refactor_module_moves.json").read_text(encoding="utf-8"))
+
+
+class RefactorImportTests(unittest.TestCase):
+    def test_internal_imports_never_use_moved_paths_or_consumer_shims(self) -> None:
+        old_modules = set(MOVES["moves"])
+        shims = set(MOVES["shims"])
+        problems = []
+        for path in python_sources(ROOT / "bridgeforge"):
+            relative = path.relative_to(ROOT).with_suffix("")
+            module = ".".join(relative.parts)
+            if module in shims:
+                continue
+            package = ".".join(relative.parent.parts)
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8-sig"))):
+                names = []
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    target = importlib.util.resolve_name("." * node.level + (node.module or ""), package) if node.level else node.module
+                    if target:
+                        names = [target, *(target + "." + alias.name for alias in node.names)]
+                elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                    if node.value.startswith("bridgeforge."):
+                        names = [node.value]
+                for name in names:
+                    if any(name == old or name.startswith(old + ".") for old in old_modules):
+                        problems.append(f"{path.relative_to(ROOT)}:{node.lineno}: {name}")
+        self.assertEqual(problems, [], "internal code must import the moved implementation, not a compatibility path")
+
+
+if __name__ == "__main__":
+    unittest.main()
