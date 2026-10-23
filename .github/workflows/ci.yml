@@ -71,12 +71,13 @@ jobs:
           python -m coverage report --format=total
 
   test:
-    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }} / ${{ matrix.partition }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        partition: [fast, slow]
         python-version: ["3.15"]
     steps:
       - uses: actions/checkout@v7
@@ -91,8 +92,8 @@ jobs:
           java-version: "17"
       - name: Install Bridgeforge
         run: python -m pip install .
-      - name: Run unit tests
-        run: python -m bridgeforge.test_guard
+      - name: Run ${{ matrix.partition }} unit tests
+        run: python -m bridgeforge.test_guard -- python -m tests.run_partitioned --partition ${{ matrix.partition }} --timings "${{ runner.temp }}/test-timings-${{ matrix.partition }}.json"
 
   shared-fixtures:
     name: Shared fixtures match Project Go

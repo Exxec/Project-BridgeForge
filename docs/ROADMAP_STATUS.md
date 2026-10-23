@@ -69,3 +69,5 @@ review/merge pending. See [completion evidence](REFACTOR_B3_COMPLETION.md). This
 or any live/release gate.
 
 B4 report implemented locally, 2026-10-23: [command-reference audit](REFACTOR_B4_COMMAND_AUDIT.md), based on B3 tip `6a843117`. Report only; owner grouping/deprecation decision and review/merge pending. No command behavior changed.
+
+Owner decision 2026-10-23: retain the current CLI; B4 grouping/deprecations declined. B5 implemented locally: measured unittest fast/slow CI partitions, full suite and coverage preserved. See [B5 evidence](REFACTOR_B5_TEST_SPEED.md). Owner review/merge and hosted CI pending; B6 remains open.

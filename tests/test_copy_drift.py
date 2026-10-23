@@ -1,5 +1,5 @@
 import tempfile
-import time
+import os
 import unittest
 from pathlib import Path
 
@@ -36,16 +36,20 @@ class CopyDriftTests(unittest.TestCase):
             # missing in deployed
             (working / "data" / "scripts" / "Extra.java").write_text("class Extra {}", encoding="utf-8")
             # different content, working newer
-            time.sleep(0.02)
             (working / "jars" / "mod.jar").write_bytes(b"jar-bytes-updated")
             # extra in deployed only
             (deployed / "data" / "scripts" / "OnlyDeployed.java").write_text("class OnlyDeployed {}", encoding="utf-8")
-            result = compare_copies(working, deployed)
-            self.assertEqual(result["status"], "DRIFT")
-            self.assertIn("data/scripts/Extra.java", result["missing_in_deployed"])
-            self.assertIn("data/scripts/OnlyDeployed.java", result["extra_in_deployed"])
-            different = {item["path"]: item["newer_side"] for item in result["different"]}
-            self.assertEqual(different["jars/mod.jar"], "working")
+            # Explicit mtimes exercise every direction without relying on filesystem clock resolution.
+            for working_time, deployed_time, expected in ((200, 100, "working"), (100, 200, "deployed"), (100, 100, "equal")):
+                with self.subTest(newer_side=expected):
+                    os.utime(working / "jars" / "mod.jar", (working_time, working_time))
+                    os.utime(deployed / "jars" / "mod.jar", (deployed_time, deployed_time))
+                    result = compare_copies(working, deployed)
+                    self.assertEqual(result["status"], "DRIFT")
+                    self.assertIn("data/scripts/Extra.java", result["missing_in_deployed"])
+                    self.assertIn("data/scripts/OnlyDeployed.java", result["extra_in_deployed"])
+                    different = {item["path"]: item["newer_side"] for item in result["different"]}
+                    self.assertEqual(different["jars/mod.jar"], expected)
 
     def test_detects_root_runtime_payload_drift(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

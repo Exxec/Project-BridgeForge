@@ -95,6 +95,8 @@ with consumer facades and preserved history. Full per-family suites, coverage, C
 See [completion evidence](docs/REFACTOR_B3_COMPLETION.md) and [stack](docs/REFACTOR_STACK.md).
 Owner review/merge, B4-B6 and all live gates remain open; LIVE TEST NOT PERFORMED.
 
+B4/B5 checkpoint 2026-10-23: owner chose to retain the current CLI; grouping/deprecations declined. B5 fast/slow unittest CI partitions implemented and locally validated; [evidence](docs/REFACTOR_B5_TEST_SPEED.md). Owner review/merge, hosted CI and B6 remain open.
+
 **82. Research that serves revivals: consolidate, compare, promote (owner-approved 2026-10-21).** Not a new research
 architecture. S1 stays the critical path; runtime evidence is the limiting resource. Guiding rule: every research
 capability must resolve a question from an active revival, eliminate repeated manual investigation, or improve the

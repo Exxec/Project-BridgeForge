@@ -21,8 +21,9 @@ with full tests/coverage, CLI, path-safety, wheel and consumer evidence. The own
 | B3 scan | refactor/b3-scan | refactor/b3-bytecode | Implemented and locally validated; review/merge pending |
 | B3 save | refactor/b3-save | refactor/b3-scan | Implemented and locally validated; review/merge pending |
 | B4 report | docs/b4-command-audit | refactor/b3-save | Report implemented and locally validated; owner review pending |
-| B4 grouping | pending owner decision | pending | Decision gate open |
-| B5/B6 | pending | pending | Not complete |
+| B4 grouping | owner declined 2026-10-23 | n/a | Keep current CLI; no grouping or deprecations |
+| B5 | perf/b5-test-speed | docs/b4-command-audit | Implemented and locally validated; review/merge pending |
+| B6 | pending | pending | Not complete |
 
 After a parent merges, retarget its following PR to main and rerun its checks; integrate changed main with ordinary merges,
 not rebases/force-pushes. The existing merge-train selector is used to preserve touched-test coverage. Do not execute the
