@@ -10,7 +10,7 @@ from .baseline import load_baseline_keys, split_by_baseline
 from .build_tag import DEFAULT_LABEL, BuildTagError, build_tag
 from .copy_drift import _find_mod_root, compare_copies
 from .fixers import SUPPORTED_FINDINGS
-from .jar_audit import audit_jar
+from bridgeforge.bytecode.jar_audit import audit_jar
 from .log_triage import triage_log
 from .models import Finding, TargetProfile
 from .scanner import (

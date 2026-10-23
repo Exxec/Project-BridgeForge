@@ -21,7 +21,7 @@ class RefactorResourceTests(unittest.TestCase):
             ("probe_mod_build", "_JANINO_HARNESS", False, "bridgeforge/java/JaninoCheck.java"),
             ("rig_doctor", "_repo_root", True, "."),
             ("bytecode", "_source", True, "bridgeforge/java/BridgeforgeBytecode.java"),
-            ("java_ast", "_source", True, "bridgeforge/java/BridgeforgeAst.java"),
+            ("java_ast", "_helper_source", True, "bridgeforge/java/BridgeforgeAst.java"),
             ("java_toolchain", "REPO_ROOT", False, "."),
         ]
         for leaf, attr, call, relative in resources:

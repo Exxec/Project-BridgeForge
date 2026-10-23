@@ -608,7 +608,7 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
     # Relink, when approved in the policy: recompile classes whose game calls RC8 changed only by return type, from
     # unedited source, patched only when nothing else changes (jar_batch; 19 queued mods by hand, 2026-09-30).
     if apply and vanilla_core is not None and "jar-linkage-unresolved" in approved and any(f["id"] == "jar-linkage-unresolved" for f in findings):
-        from .jar_batch import relink_workspace
+        from bridgeforge.bytecode.jar_batch import relink_workspace
 
         relinked = relink_workspace(workspace, vanilla_core, apply=True)
         if relinked["state"] in ("RELINKED", "PARTIAL") and any(j.get("state") == "RELINKED" for j in relinked["jars"]):
@@ -619,7 +619,7 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
             findings = _scan(working, vanilla_core)
     # Interface ports, when approved: known RC8 contract changes on jar classes (jar_batch.port_interfaces).
     if apply and vanilla_core is not None and "jar-interface-method-missing" in approved and any(f["id"] == "jar-interface-method-missing" for f in findings):
-        from .jar_batch import port_interfaces
+        from bridgeforge.bytecode.jar_batch import port_interfaces
 
         ported = port_interfaces(workspace, vanilla_core, apply=True)
         done = [j["jar"] for j in ported["jars"] if j.get("state") == "PORTED"]

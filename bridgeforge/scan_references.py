@@ -243,7 +243,7 @@ def _dependency_roots(root: Path, provider_roots: list[Path] | None) -> list[Pat
         return []
     key = (str(Path(root).resolve()), tuple(str(Path(r)) for r in provider_roots))
     if key not in _DEPENDENCY_ROOTS_CACHE:
-        from .java_toolchain import declared_dependencies
+        from bridgeforge.bytecode.java_toolchain import declared_dependencies
         from .substitutes import provider_index
 
         deps = set(declared_dependencies(root) or [])

@@ -295,7 +295,7 @@ def _scan_settings_keys_missing(root: Path, result: ScanResult, vanilla_core: Pa
     jars = [p for p in root.rglob("*.jar") if "disabled_files" not in p.relative_to(root).parts]
     if jars:
         if not _JDK_FOR_PROCGEN:
-            from .java_toolchain import find_jdk
+            from bridgeforge.bytecode.java_toolchain import find_jdk
 
             _JDK_FOR_PROCGEN.append(find_jdk())
         if _JDK_FOR_PROCGEN[0] is not None:

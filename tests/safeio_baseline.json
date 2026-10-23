@@ -94,13 +94,13 @@
     "interface.py": {
       "write_text": 1
     },
-    "jar_batch.py": {
+    "bytecode/jar_batch.py": {
       "write_text": 4
     },
-    "jar_patch.py": {
+    "bytecode/jar_patch.py": {
       "write_text": 2
     },
-    "java_matrix.py": {
+    "bytecode/java_matrix.py": {
       "rmtree": 1,
       "write_text": 5
     },

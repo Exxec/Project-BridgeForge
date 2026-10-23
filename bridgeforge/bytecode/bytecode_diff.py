@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .bytecode import inspect_bytecode
+from bridgeforge.bytecode.bytecode import inspect_bytecode
 
 
 def _shape(reference: dict[str, object]) -> tuple[object, object]:

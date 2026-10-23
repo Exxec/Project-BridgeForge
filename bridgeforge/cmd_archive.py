@@ -211,7 +211,7 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"  Note: {result['note']}. The workspace is untouched; remove it yourself once the archive is checked.")
         return 0
     if args.command == "relink":
-        from .jar_batch import relink_queue, relink_workspace
+        from bridgeforge.bytecode.jar_batch import relink_queue, relink_workspace
         path = args.path.expanduser().resolve()
         if (path / "working" / "mod_info.json").is_file():
             result = relink_workspace(path, args.vanilla_core, apply=args.apply)

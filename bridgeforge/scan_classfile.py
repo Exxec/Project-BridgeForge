@@ -93,7 +93,7 @@ def _dependency_jar_class_names(root: Path, provider_roots: list[Path] | None = 
 
     if not provider_roots:
         return {}
-    from .java_toolchain import declared_dependencies
+    from bridgeforge.bytecode.java_toolchain import declared_dependencies
 
     deps = declared_dependencies(root)
     if not deps:

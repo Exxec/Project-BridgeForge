@@ -90,7 +90,7 @@ class JarInterfaceMethodTests(unittest.TestCase):
 
 class SourcePortTests(unittest.TestCase):
     def test_onhit_dialog_button_and_base_class_ports(self) -> None:
-        from bridgeforge.jar_batch import _port_base, _port_button, _port_dialog, _port_onhit
+        from bridgeforge.bytecode.jar_batch import _port_base, _port_button, _port_dialog, _port_onhit
         onhit = "public void onHit(DamagingProjectileAPI p, CombatEntityAPI t, Vector2f v, boolean s, CombatEngineAPI e) {}"
         self.assertIn("boolean s, com.fs.starfarer.api.combat.listeners.ApplyDamageResultAPI damageResult, CombatEngineAPI e)", _port_onhit(onhit))
         self.assertIsNone(_port_onhit(_port_onhit(onhit)))  # never twice
@@ -104,7 +104,7 @@ class SourcePortTests(unittest.TestCase):
 
 class PortTableTests(unittest.TestCase):
     def test_ship_system_scripts_extend_base_ship_system_script(self) -> None:
-        from bridgeforge.jar_batch import BASE_CLASSES
+        from bridgeforge.bytecode.jar_batch import BASE_CLASSES
         self.assertEqual(BASE_CLASSES["com/fs/starfarer/api/plugins/ShipSystemStatsScript"], "com.fs.starfarer.api.impl.combat.BaseShipSystemScript")
 
 

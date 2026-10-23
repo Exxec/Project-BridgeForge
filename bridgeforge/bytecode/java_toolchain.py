@@ -19,10 +19,10 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .scanner import _load_lenient_json_file
-from .substitutes import provider_index
+from bridgeforge.scanner import _load_lenient_json_file
+from bridgeforge.substitutes import provider_index
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PROVIDER_ROOTS = (REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods")
 
 # A mod's own jar discovery mirrors scanner._loaded_mod_jars (mod_info.json's "jars" list first,

@@ -429,7 +429,7 @@ def _vanilla_special_items() -> set[str]:
     import csv
     import io
 
-    from bridgeforge.java_toolchain import REPO_ROOT
+    from bridgeforge.bytecode.java_toolchain import REPO_ROOT
 
     path = REPO_ROOT / "In operation" / "_rig" / "starsector-core" / "data" / "campaign" / "special_items.csv"
     if not path.is_file():
@@ -451,7 +451,7 @@ def _csv_ids(path: Path) -> set[str]:
 def _mod_commodities(mod_root: Path) -> list[str]:
     """Commodity ids the mod adds in data/campaign/commodities.csv, minus vanilla's (probe 0.2.25 market-supply): the probe
     reports where each is supplied and demanded, and FAILs demand with no supply (DNEEP food with AoTD, 2026-10-11)."""
-    from bridgeforge.java_toolchain import REPO_ROOT
+    from bridgeforge.bytecode.java_toolchain import REPO_ROOT
 
     vanilla = _csv_ids(REPO_ROOT / "In operation" / "_rig" / "starsector-core" / "data" / "campaign" / "commodities.csv")
     return sorted(_csv_ids(mod_root / "data" / "campaign" / "commodities.csv") - vanilla)

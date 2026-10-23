@@ -17,7 +17,7 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-from .java_toolchain import assemble_classpath, find_jdk, run_javac
+from bridgeforge.bytecode.java_toolchain import assemble_classpath, find_jdk, run_javac
 
 SCHEMA_VERSION = 1
 

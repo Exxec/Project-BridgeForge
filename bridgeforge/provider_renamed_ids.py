@@ -13,7 +13,7 @@ import re
 import zipfile
 from pathlib import Path
 
-from .jar_audit import ClassFileError, parse_constant_pool
+from bridgeforge.bytecode.jar_audit import ClassFileError, parse_constant_pool
 
 # kind -> (API method names whose string argument is an id of that kind, table relative to the mod root)
 KIND_APIS: dict[str, tuple[frozenset[str], str]] = {

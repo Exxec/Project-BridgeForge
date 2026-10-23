@@ -21,7 +21,7 @@ import re
 import time
 from pathlib import Path
 
-from . import java_matrix
+from bridgeforge.bytecode import java_matrix
 from .progress import Checkpoint, report
 from .scanner import _load_lenient_json_file
 

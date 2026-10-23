@@ -8,8 +8,8 @@ import zipfile
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
-from .bytecode import inspect_bytecode, rewrite_class
-from .bytecode_diff import diff_bytecode
+from bridgeforge.bytecode.bytecode import inspect_bytecode, rewrite_class
+from bridgeforge.bytecode.bytecode_diff import diff_bytecode
 
 
 @dataclass(frozen=True)

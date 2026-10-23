@@ -17,12 +17,12 @@ import time
 import zipfile
 from pathlib import Path
 
-from .safeio import verify_written
-from .jar_patch import _decompiled_tree, _only_return_type_relinks, find_decompiler, patch_jar_classes
-from .java_toolchain import find_jdk
-from .linkage import unresolved_references
-from .report_status import is_closed
-from .scanner import _load_lenient_json_file
+from bridgeforge.safeio import verify_written
+from bridgeforge.bytecode.jar_patch import _decompiled_tree, _only_return_type_relinks, find_decompiler, patch_jar_classes
+from bridgeforge.bytecode.java_toolchain import find_jdk
+from bridgeforge.linkage import unresolved_references
+from bridgeforge.report_status import is_closed
+from bridgeforge.scanner import _load_lenient_json_file
 
 SCHEMA_VERSION = 1
 JAR_SOURCE_ROOTS = ("src", "jars/src", "jar/src")
@@ -118,7 +118,7 @@ def relink_workspace(workspace: Path, vanilla_core: Path, *, apply: bool = False
     # An RC8 overload of the same name may still take the old arguments (Void-Tec: addCustom(CustomPanelAPI, float)
     # became addCustom(UIComponentAPI, float), and CustomPanelAPI is a UIComponentAPI): the unedited source then
     # recompiles onto it. Tried only when every such reference has a same-name RC8 candidate; checked after compiling.
-    from .linkage import core_index
+    from bridgeforge.linkage import core_index
     core = core_index(str(Path(vanilla_core).resolve()))
     renames = {}
     for p in hard:
@@ -208,7 +208,7 @@ def relink_workspace(workspace: Path, vanilla_core: Path, *, apply: bool = False
 
 
 def relink_queue(queue: Path, vanilla_core: Path, *, apply: bool = False, quiet: bool = False, restart: bool = False) -> dict:
-    from .progress import Checkpoint, report
+    from bridgeforge.progress import Checkpoint, report
 
     queue = Path(queue).expanduser().resolve()
     workspaces = [p for p in sorted(queue.iterdir()) if p.is_dir() and not p.name.startswith("_") and (p / "working" / "mod_info.json").is_file()
@@ -316,7 +316,7 @@ def port_interfaces(workspace: Path, vanilla_core: Path, *, apply: bool = False)
     """Port jar classes `jar-interface-method-missing` names when every missing method has a known mechanical port:
     edit the shipped or decompiled source, compile, and patch only if each class changes by exactly those
     signatures (plus return-type relinks). Anything else is left with the reason."""
-    from .linkage import missing_interface_methods
+    from bridgeforge.linkage import missing_interface_methods
 
     ws = Path(workspace).expanduser().resolve()
     working = ws / "working"
@@ -475,7 +475,7 @@ def patch_jar_sources(workspace: Path, vanilla_core: Path, *, apply: bool = Fals
 
 
 def port_interfaces_queue(queue: Path, vanilla_core: Path, *, apply: bool = False, quiet: bool = False, restart: bool = False) -> dict:
-    from .progress import Checkpoint, report
+    from bridgeforge.progress import Checkpoint, report
 
     queue = Path(queue).expanduser().resolve()
     workspaces = [p for p in sorted(queue.iterdir()) if p.is_dir() and not p.name.startswith("_") and (p / "working" / "mod_info.json").is_file()

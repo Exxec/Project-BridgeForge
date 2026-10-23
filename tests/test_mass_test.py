@@ -7,7 +7,8 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge import java_matrix, mass_test
+from bridgeforge.bytecode import java_matrix
+from bridgeforge import mass_test
 from tests.support import resolved_temp_dir
 
 VARIANTS = [

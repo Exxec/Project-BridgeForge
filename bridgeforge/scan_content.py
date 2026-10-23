@@ -264,7 +264,7 @@ def _scan_content_id_renamed_by_provider(root: Path, result: ScanResult, vanilla
 
     provider_dirs: list[Path] = []
     if provider_roots:
-        from .java_toolchain import declared_dependencies
+        from bridgeforge.bytecode.java_toolchain import declared_dependencies
         from .substitutes import provider_index
 
         deps = set(declared_dependencies(root))

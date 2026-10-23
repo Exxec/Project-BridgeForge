@@ -300,7 +300,7 @@ def _scan_procgen_call_arguments(root: Path, result: ScanResult) -> None:
     if not jars:
         return
     if not _JDK_FOR_PROCGEN:
-        from .java_toolchain import find_jdk
+        from bridgeforge.bytecode.java_toolchain import find_jdk
 
         _JDK_FOR_PROCGEN.append(find_jdk())
     jdk = _JDK_FOR_PROCGEN[0]

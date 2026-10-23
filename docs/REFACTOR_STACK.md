@@ -17,7 +17,8 @@ with full tests/coverage, CLI, path-safety, wheel and consumer evidence. The own
 | B3 probe | refactor/b3-probe | refactor/b3-escalation | Implemented and locally validated; review/merge pending |
 | B3 rig | refactor/b3-rig | refactor/b3-probe | Implemented and locally validated; review/merge pending |
 | B3 live | refactor/b3-live | refactor/b3-rig | Implemented and locally validated; review/merge pending |
-| Remaining B3 families | pending | preceding family branch | bytecode next; not implemented |
+| B3 bytecode | refactor/b3-bytecode | refactor/b3-live | Implemented and locally validated; review/merge pending |
+| Remaining B3 families | pending | preceding family branch | scan next; not implemented |
 | B4 report | pending | preceding B3 branch | Report only; owner decides candidates/grouping |
 | B4 grouping | pending owner decision | pending | Decision gate open |
 | B5/B6 | pending | pending | Not complete |

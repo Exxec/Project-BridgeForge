@@ -61,10 +61,23 @@
     "bridgeforge.live_content_parity": "bridgeforge.live.live_content_parity",
     "bridgeforge.live_ledger": "bridgeforge.live.live_ledger",
     "bridgeforge.live_run": "bridgeforge.live.live_run",
-    "bridgeforge.live_trust": "bridgeforge.live.live_trust"
+    "bridgeforge.live_trust": "bridgeforge.live.live_trust",
+    "bridgeforge.bytecode": "bridgeforge.bytecode.bytecode",
+    "bridgeforge.bytecode_diff": "bridgeforge.bytecode.bytecode_diff",
+    "bridgeforge.bytecode_rules": "bridgeforge.bytecode.bytecode_rules",
+    "bridgeforge.jar_audit": "bridgeforge.bytecode.jar_audit",
+    "bridgeforge.jar_batch": "bridgeforge.bytecode.jar_batch",
+    "bridgeforge.jar_patch": "bridgeforge.bytecode.jar_patch",
+    "bridgeforge.java_ast": "bridgeforge.bytecode.java_ast",
+    "bridgeforge.java_matrix": "bridgeforge.bytecode.java_matrix",
+    "bridgeforge.java_toolchain": "bridgeforge.bytecode.java_toolchain"
   },
   "shims": [
     "bridgeforge.rig_prefs",
     "bridgeforge.live_run"
+  ],
+  "non_python_symbols": [
+    "bridgeforge.bytecode.BridgeforgeBytecode",
+    "bridgeforge.bytecode.BridgeforgeBytecodeRewrite"
   ]
 }

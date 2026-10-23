@@ -342,7 +342,7 @@ def run_cli(args: argparse.Namespace) -> int:
         print(json.dumps(checked, indent=2) if args.json else envc.render(checked))
         return 1 if checked["findings"] else 0
     if args.command == "java-matrix":
-        from bridgeforge import java_matrix as jm
+        from bridgeforge.bytecode import java_matrix as jm
         try:
             if args.java_matrix_command == "describe-log":
                 result = jm.describe_log_java(args.log)

@@ -14,11 +14,11 @@ class BytecodeUnavailable(RuntimeError):
 
 
 def _source() -> Path:
-    return Path(__file__).with_name("java") / "BridgeforgeBytecode.java"
+    return (Path(__file__).parent.parent / "java") / "BridgeforgeBytecode.java"
 
 
 def _asm() -> Path:
-    jar = Path(__file__).with_name("java-tools") / "bytecode" / "lib" / "asm-9.7.1.jar"
+    jar = (Path(__file__).parent.parent / "java-tools") / "bytecode" / "lib" / "asm-9.7.1.jar"
     if not jar.is_file() or hashlib.sha256(jar.read_bytes()).hexdigest() != ASM_SHA256:
         raise BytecodeUnavailable("Pinned ASM dependency is missing or has an unexpected SHA-256.")
     return jar
@@ -36,7 +36,7 @@ def _helper() -> Path:
 
 
 def _rewrite_helper() -> Path:
-    source, asm = Path(__file__).with_name("java") / "BridgeforgeBytecodeRewrite.java", _asm()
+    source, asm = (Path(__file__).parent.parent / "java") / "BridgeforgeBytecodeRewrite.java", _asm()
     output = Path(tempfile.gettempdir()) / "bridgeforge-bytecode-rewrite" / hashlib.sha256(source.read_bytes() + asm.read_bytes()).hexdigest()[:16]
     marker = output / "bridgeforge" / "bytecode" / "BridgeforgeBytecodeRewrite.class"
     if marker.is_file(): return output

@@ -7,7 +7,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge import boot_test, java_matrix
+from bridgeforge import boot_test
+from bridgeforge.bytecode import java_matrix
 from bridgeforge.cli import main
 from tests.support import link_dir, resolved_temp_dir
 

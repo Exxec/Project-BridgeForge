@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from bridgeforge.api_diff import ApiDiffError, annotate_errors, diff_api_jars, render_method, resolve_api_jar
 from bridgeforge.cli import main
-from bridgeforge.java_toolchain import DEFAULT_JAVAC_ARGS, parse_javac_errors
+from bridgeforge.bytecode.java_toolchain import DEFAULT_JAVAC_ARGS, parse_javac_errors
 from tests.support import resolved_temp_dir
 
 # A miniature of the real drift: SectorAPI.addMessage moved to CampaignUIAPI (RC8), createFleet was

@@ -11,7 +11,7 @@ import difflib
 import tempfile
 from pathlib import Path
 
-from ..bytecode_diff import changed_methods
+from bridgeforge.bytecode.bytecode_diff import changed_methods
 from ..dropped_sweep import mod_roots
 from .research_decompile import HOW_TO_GET, decompile_jar_classes, find_toolchain, jar_sha256, outer_name, run_vineflower
 from .research_methods import MethodMap, jar_method_index

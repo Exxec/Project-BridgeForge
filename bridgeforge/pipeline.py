@@ -15,7 +15,7 @@ from .report import write_artifacts
 from .scanner import scan_mod
 from .workspace import checkpoint, workspace_paths
 from .workspace import resolve_inside
-from .bytecode_rules import apply_bytecode_class, apply_bytecode_jar
+from bridgeforge.bytecode.bytecode_rules import apply_bytecode_class, apply_bytecode_jar
 
 
 def run_pipeline(workspace: Path, target: TargetProfile, rules: list[Path] | None = None, approved: set[str] | None = None, apply_safe: bool = False, jdk: Path | None = None, api_jars: list[Path] | None = None, dependency_jars: list[Path] | None = None, compile_requested: bool = False, bytecode_file: str | None = None, bytecode_rules: Path | None = None, bytecode_approved: set[str] | None = None, library_registry: dict[str, LibraryRegistryEntry] | None = None, starsector_install: Path | None = None) -> dict:

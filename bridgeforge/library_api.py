@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .models import TargetProfile
 from .scanner import scan_mod
-from .bytecode import BytecodeUnavailable, inspect_bytecode
+from bridgeforge.bytecode.bytecode import BytecodeUnavailable, inspect_bytecode
 
 
 DEPENDENCY_ID_ALIASES = {

@@ -35,7 +35,7 @@ class RefactorImportTests(unittest.TestCase):
                         imported = [target + "." + alias.name for alias in node.names]
                         names = imported if all(name in new_modules for name in imported) else [target, *imported]
                 elif isinstance(node, ast.Constant) and isinstance(node.value, str):
-                    if node.value.startswith("bridgeforge."):
+                    if node.value.startswith("bridgeforge.") and node.value not in MOVES.get("non_python_symbols", []):
                         names = [node.value]
                 for name in names:
                     if any(name == new or name.startswith(new + ".") for new in new_modules):

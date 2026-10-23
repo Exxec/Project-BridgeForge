@@ -5,7 +5,7 @@ import hashlib
 import re
 from .ashlib_compat import scan_ashlib_compat
 from .graphicslib_compat import scan_graphicslib_compat
-from .java_ast import AstUnavailable, analyze_sources
+from bridgeforge.bytecode.java_ast import AstUnavailable, analyze_sources
 from .lazylib_compat import scan_lazylib_compat
 from .magiclib_compat import scan_magiclib_compat
 from .models import ScanResult

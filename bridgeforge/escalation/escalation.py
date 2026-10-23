@@ -471,7 +471,7 @@ def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = N
         # Neutrino (tomatopaste) and The Mayorate, 2026-10-02.
         import zipfile
 
-        from bridgeforge.jar_patch import patch_jar_classes
+        from bridgeforge.bytecode.jar_patch import patch_jar_classes
         from bridgeforge.scanner import _load_lenient_json_file
 
         info = _load_lenient_json_file(working / "mod_info.json") or {}

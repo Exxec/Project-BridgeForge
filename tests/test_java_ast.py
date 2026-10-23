@@ -6,9 +6,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from bridgeforge.bytecode import inspect_bytecode, rewrite_class
-from bridgeforge.bytecode_diff import diff_bytecode
-from bridgeforge.bytecode_rules import apply_bytecode_class, apply_bytecode_jar, load_bytecode_rules, plan_bytecode
+from bridgeforge.bytecode.bytecode import inspect_bytecode, rewrite_class
+from bridgeforge.bytecode.bytecode_diff import diff_bytecode
+from bridgeforge.bytecode.bytecode_rules import apply_bytecode_class, apply_bytecode_jar, load_bytecode_rules, plan_bytecode
 from bridgeforge.scanner import scan_mod
 from bridgeforge.migrate import apply_plan, build_plan
 from bridgeforge.models import TargetProfile

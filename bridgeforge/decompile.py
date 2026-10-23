@@ -10,7 +10,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from .java_toolchain import REPO_ROOT, find_jdk
+from bridgeforge.bytecode.java_toolchain import REPO_ROOT, find_jdk
 
 
 def find_vineflower(explicit: Path | None = None) -> Path | None:

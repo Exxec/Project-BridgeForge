@@ -7,7 +7,7 @@ from pathlib import Path
 from . import build_tag as build_tag_module
 from .baseline import load_baseline_keys, split_by_baseline
 from .copy_drift import _collect, _find_mod_root, compare_copies
-from .jar_audit import audit_jar
+from bridgeforge.bytecode.jar_audit import audit_jar
 from .models import TargetProfile
 from .scanner import _load_lenient_json_file, scan_mod
 from .behavior_discovery import check_expected_changes, evaluate_behavior_release

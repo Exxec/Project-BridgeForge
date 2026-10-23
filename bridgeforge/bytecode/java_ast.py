@@ -23,7 +23,7 @@ def utf16_offset_to_index(text: str, offset: int) -> int:
 
 
 def _helper_source() -> Path:
-    return Path(__file__).with_name("java") / "BridgeforgeAst.java"
+    return (Path(__file__).parent.parent / "java") / "BridgeforgeAst.java"
 
 
 def _helper_directory() -> Path:

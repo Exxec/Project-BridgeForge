@@ -7,7 +7,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from bridgeforge.jar_patch import patch_jar_classes
+from bridgeforge.bytecode.jar_patch import patch_jar_classes
 from tests.support import resolved_temp_dir
 
 ORIGINAL = (
@@ -106,7 +106,7 @@ class JarPacketsTests(JarPatchTests):
             {"id": "hullmod-instance-state--1", "finding": "hullmod-instance-state", "kind": "agent", "allowed_files": [entry]}), encoding="utf-8")
 
     def test_matching_source_is_faithful_and_copied_to_edit(self) -> None:
-        from bridgeforge.jar_patch import prepare_jar_packets
+        from bridgeforge.bytecode.jar_patch import prepare_jar_packets
         with resolved_temp_dir() as root:
             ws = self._workspace(root)
             self._packet(ws, "jars/mod.jar!data/hullmods/Gantry.class")
@@ -117,7 +117,7 @@ class JarPacketsTests(JarPatchTests):
         self.assertIn("--install", row["next"])
 
     def test_a_source_that_is_not_what_shipped_differs(self) -> None:
-        from bridgeforge.jar_patch import prepare_jar_packets
+        from bridgeforge.bytecode.jar_patch import prepare_jar_packets
         with resolved_temp_dir() as root:
             ws = self._workspace(root)
             (ws / "working" / "src" / "data" / "hullmods" / "Gantry.java").write_text(PER_SHIP, encoding="utf-8")
@@ -126,7 +126,7 @@ class JarPacketsTests(JarPatchTests):
         self.assertEqual(row["state"], "SOURCE_DIFFERS", row)
 
     def test_no_source_says_so(self) -> None:
-        from bridgeforge.jar_patch import prepare_jar_packets
+        from bridgeforge.bytecode.jar_patch import prepare_jar_packets
         with resolved_temp_dir() as root:
             ws = self._workspace(root)
             self._packet(ws, "jars/mod.jar!data/hullmods/Missing.class")
@@ -136,7 +136,7 @@ class JarPacketsTests(JarPatchTests):
 
 class RelinkAndDecompilerTests(unittest.TestCase):
     def test_a_return_type_change_alone_is_a_relink(self) -> None:
-        from bridgeforge.jar_patch import _only_return_type_relinks
+        from bridgeforge.bytecode.jar_patch import _only_return_type_relinks
         # Too Much Information (2026-09-30): RC8's TooltipMakerAPI.beginTable returns UIPanelAPI, the jar expects void.
         self.assertEqual(_only_return_type_relinks({"T.beginTable:(F)V": -2, "T.beginTable:(F)LUIPanelAPI;": 2}),
                          ["T.beginTable:(F)V -> LUIPanelAPI;"])
@@ -144,7 +144,7 @@ class RelinkAndDecompilerTests(unittest.TestCase):
         self.assertEqual(_only_return_type_relinks({"T.a:(F)V": -1}), [])
 
     def test_decompiler_is_found_beside_the_queue(self) -> None:
-        from bridgeforge.jar_patch import find_decompiler
+        from bridgeforge.bytecode.jar_patch import find_decompiler
         with resolved_temp_dir() as root:
             (root / "_tools").mkdir()
             (root / "_tools" / "vineflower-1.12.0.jar").write_bytes(b"")
@@ -154,7 +154,7 @@ class RelinkAndDecompilerTests(unittest.TestCase):
 
 class NestCallTests(unittest.TestCase):
     def test_calls_inside_the_class_nest_are_separated(self) -> None:
-        from bridgeforge.jar_patch import _in_nest
+        from bridgeforge.bytecode.jar_patch import _in_nest
         # VayraGhostShip (2026-09-30): an old javac's access$000 bridge vs a Java 17 direct nestmate call.
         entry = "data/scripts/hullmods/VayraGhostShip.class"
         self.assertTrue(_in_nest("data/scripts/hullmods/VayraGhostShip$NanobotData.access$000:(I)V", entry))
