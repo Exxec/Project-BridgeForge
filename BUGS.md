@@ -1,5 +1,28 @@
 # Bridgeforge bug ledger
 
+## Found by the 2026-10-22 live batch (Ironclads, EPTA, Zorg)
+
+### LIVE-001 — `probe-group report` attributes a run's verdicts with the rig's current state
+
+- Impact: wrong attribution. Re-reading EPTA213BF2-20261022 and the six IC-*-20261022 logs after the batch labelled every
+  verdict "zorg": the report took group membership from `<rig>/rig_up_state.json`, which the last run of the batch (Zorg)
+  had overwritten. A run's own `<TESTID>.manifest.json` already binds its mods and files.
+- Fix: read membership from the run's manifest (rig state only when no manifest exists), and say "same findings as accepted
+  run X" when a FAIL matches the workspace's accepted baseline (the EPTA comparison with EPTA213-20261013 was done by hand).
+
+### LIVE-002 — A total conversion that replaces `data/missions/mission_list.csv` fails the live driver
+
+- Impact: false FAIL. Ironclads replaces mission_list.csv, so the probe's own `bfprobe_combat` mission is never listed; all six
+  Ironclads launches (FR and direct, Java 25 and 28, with and without the pre-patcher) reached the campaign with FATAL 0 and
+  `campaign|END`, but `probe-group live` exited 1 because the combat stage could not start.
+- Fix: when the enabled mods replace mission_list.csv and the probe mission is absent, record the combat stage NOT_TESTED
+  with that reason instead of failing the run.
+
+### LIVE-003 — The pre-patcher edits its own staged files at launch, reported as drift
+
+- Impact: noise. Every `-prep` run's `.completed.json` says `staged files of starsector_prepatcher changed since launch`.
+- Fix: exclude the pre-patcher's self-managed files (its cache/patched output) from the run's drift check, keep the rest.
+
 ## Found by the 2026-10-20 dropped-feature sweep
 
 ### FIX-001 — A data-file-not-utf8 fix left a backup and no file: All the Domain Drones shipped without rules.csv
