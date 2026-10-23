@@ -12,9 +12,9 @@ import json
 import time
 from pathlib import Path
 
-from .escalation_precedent import predicate_hash, question_shape, ruling_id
-from .progress import Checkpoint, report
-from .report_status import is_closed
+from bridgeforge.escalation.escalation_precedent import predicate_hash, question_shape, ruling_id
+from bridgeforge.progress import Checkpoint, report
+from bridgeforge.report_status import is_closed
 
 SCHEMA_VERSION = 1
 RESULT_JSON = "ESCALATIONS_BY_FINDING.json"
@@ -94,8 +94,8 @@ def rule(queue: Path, finding_id: str, *, accept: bool = False, approve_fixer: b
     itself). A ruling without a complete predicate is precedent only."""
     from datetime import date
 
-    from .baseline import accept_findings
-    from .fixers import SUPPORTED_FINDINGS
+    from bridgeforge.baseline import accept_findings
+    from bridgeforge.fixers import SUPPORTED_FINDINGS
 
     if accept == approve_fixer:
         raise ValueError("choose exactly one of accept or approve_fixer.")
@@ -154,7 +154,7 @@ def accept_in_mod(workspace: Path, selectors: list[str], reason: str, today: str
     reports/ESCALATION_REVIEW.md. A selector matching nothing is an error, so a typo never passes silently."""
     from datetime import date
 
-    from .baseline import accept_findings
+    from bridgeforge.baseline import accept_findings
 
     if not reason.strip():
         raise ValueError("accepting a finding as authored needs a reason (the evidence).")

@@ -1,7 +1,7 @@
 """ROADMAP P15 item 20.14: an agent's LF-only edit of a CRLF file keeps CRLF when copied back."""
 import unittest
 
-from bridgeforge.escalation import _keep_line_endings
+from bridgeforge.escalation.escalation import _keep_line_endings
 
 
 class KeepLineEndingsTests(unittest.TestCase):
@@ -25,11 +25,11 @@ class ResolveAgentCommandTests(unittest.TestCase):
         import os
         from unittest import mock
 
-        from bridgeforge.escalation import resolve_agent_command
+        from bridgeforge.escalation.escalation import resolve_agent_command
         from tests.support import resolved_temp_dir
 
         binary = "claude.exe" if os.name == "nt" else "claude"
-        with resolved_temp_dir() as home, mock.patch("bridgeforge.escalation.shutil.which", return_value=None):
+        with resolved_temp_dir() as home, mock.patch("bridgeforge.escalation.escalation.shutil.which", return_value=None):
             for version in ("2.1.9", "2.1.283"):
                 target = home / ".vscode" / "extensions" / f"anthropic.claude-code-{version}-win32-x64" / "resources" / "native-binary" / binary
                 target.parent.mkdir(parents=True)

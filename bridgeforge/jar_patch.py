@@ -290,7 +290,7 @@ def prepare_jar_packets(workspace: Path, *, vanilla_core: Path | None = None, pr
     `faithful` means the source rebuilds the shipped class with no member or call change, so an edit there is
     safe to patch in; otherwise the bundled source is older or newer than the jar (VayraGhostShip, 2026-09-30)
     and the class must be edited from a decompile. Replaces the per-packet lookup done by hand for nine mods."""
-    from .escalation import jar_only, list_packets
+    from bridgeforge.escalation.escalation import jar_only, list_packets
 
     workspace = Path(workspace).expanduser().resolve()
     working = workspace / "working"

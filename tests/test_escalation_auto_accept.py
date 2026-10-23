@@ -8,13 +8,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge import escalation_policy as policy_module
-from bridgeforge.escalation import EscalationError, load_packet, run_packet
-from bridgeforge.escalation_policy import (
+from bridgeforge.escalation import escalation_policy as policy_module
+from bridgeforge.escalation.escalation import EscalationError, load_packet, run_packet
+from bridgeforge.escalation.escalation_policy import (
     FAIL, INCOMPLETE, NOT_APPLICABLE, PASS, POLICY_NAME, AutoAcceptError, _regression_check, _scope_check, apply_attempt,
     bindings, evaluate_attempt, recover, workspace_apply_lock,
 )
-from bridgeforge.escalation_review import review_attempt, review_sheet
+from bridgeforge.escalation.escalation_review import review_attempt, review_sheet
 from bridgeforge.revive import append_ledger, revive
 from bridgeforge.workspace_tools import review_applied
 from tests.support import resolved_temp_dir

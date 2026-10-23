@@ -72,7 +72,7 @@ def review_table(document: dict) -> str:
 def agent_translator(agent: str, timeout: int = 1500) -> Callable[[Path], str]:
     """A translator that runs `agent` (e.g. "claude -p --permission-mode acceptEdits") in the chunk's folder with the
     prompt on stdin; returns its output for the usage-limit check."""
-    from .escalation import resolve_agent_command
+    from bridgeforge.escalation.escalation import resolve_agent_command
 
     command = resolve_agent_command(agent)
 

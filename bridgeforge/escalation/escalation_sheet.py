@@ -23,11 +23,11 @@ import json
 import time
 from pathlib import Path
 
-from .baseline import finding_dict_baseline_key, mod_baseline_keys
-from .escalation_precedent import precedents, question_predicate, question_shape, standing_answer, standing_eligibility
-from .progress import Checkpoint, report
-from .report_status import is_closed
-from .safeio import atomic_write_text
+from bridgeforge.baseline import finding_dict_baseline_key, mod_baseline_keys
+from bridgeforge.escalation.escalation_precedent import precedents, question_predicate, question_shape, standing_answer, standing_eligibility
+from bridgeforge.progress import Checkpoint, report
+from bridgeforge.report_status import is_closed
+from bridgeforge.safeio import atomic_write_text
 
 SCHEMA_VERSION = 2
 CHECKPOINT_FILE = "ESCALATION_SHEET.partial.jsonl"
@@ -181,7 +181,7 @@ def _apply_standing(queue: Path, row: dict, today: str | None, rule) -> tuple[li
 
 def apply_sheet(sheet: Path, queue: Path | None = None, today: str | None = None) -> dict:
     """Apply the explicitly answered rows, then standing rulings for mods the owner left open (see the module docstring)."""
-    from .escalation_queue import rule
+    from bridgeforge.escalation.escalation_queue import rule
 
     rows = read_sheet(sheet)
     applied, skipped, errors, refused = [], [], [], []

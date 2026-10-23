@@ -82,3 +82,5 @@ The bounded audit scope, exceptions and source-backed corrections are recorded i
 - [B3 Atlas review evidence](REFACTOR_B3_ATLAS_AUDIT.md): package moves and fresh validation; live gates unchanged.
 
 - [B3 corpus evidence](REFACTOR_B3_CORPUS_AUDIT.md): package moves and full validation; live gates unchanged.
+
+- [B3 escalation evidence](REFACTOR_B3_ESCALATION_AUDIT.md): structural move and regression/consumer validation.

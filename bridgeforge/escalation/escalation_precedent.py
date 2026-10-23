@@ -176,8 +176,8 @@ def standing_eligibility(queue: Path, findings: list[dict], mod: str, operation:
 def revoke_ruling(queue: Path, target_id: str, reason: str, today: str | None = None) -> dict:
     """Withdraw one ruling. Every standing application derived from it (transitively) falls with it, and the accepted-finding
     keys any of them put into mod baselines are taken back out; a revoked fixer approval leaves AUTOMATION_POLICY.json."""
-    from .baseline import remove_findings
-    from .safeio import atomic_write_text
+    from bridgeforge.baseline import remove_findings
+    from bridgeforge.safeio import atomic_write_text
 
     queue = Path(queue)
     if not reason.strip():
@@ -209,7 +209,7 @@ def revoke_ruling(queue: Path, target_id: str, reason: str, today: str | None = 
 
 def baseline_precedents(queue: Path, finding_id: str, *, exclude: str | None = None) -> list[dict]:
     """Reasons recorded in workspace baselines for keys of `finding_id`, one precedent per mod and reason."""
-    from .baseline import mod_baseline_path
+    from bridgeforge.baseline import mod_baseline_path
 
     queue = Path(queue)
     found = []

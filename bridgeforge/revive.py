@@ -453,7 +453,7 @@ def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dic
 def attach_precedent(packets: list[dict], workspace: Path) -> None:
     """Give each decision packet the newest earlier answers to its finding id (ROADMAP item 73 C2): rulings in the queue's
     ESCALATION_RULINGS.jsonl and baseline reasons of the queue's other mods. The queue is the workspace's parent folder."""
-    from .escalation_precedent import packet_precedent
+    from bridgeforge.escalation.escalation_precedent import packet_precedent
 
     queue = workspace.parent
     for packet in packets:

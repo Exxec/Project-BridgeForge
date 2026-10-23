@@ -20,7 +20,7 @@ import json
 import re
 from pathlib import Path
 
-from .safeio import atomic_write_text
+from bridgeforge.safeio import atomic_write_text
 
 FLAGS = (
     ("hint-or-tag-removed", "-", re.compile(r"\b(SHIP_WITH_MODULES|CARRIER|CIVILIAN|FREIGHTER|TANKER|UNBOARDABLE|HIDE_IN_CODEX|STATION|hints|tags)\b")),
@@ -119,13 +119,13 @@ def review_attempt(workspace: Path, packet_id: str, *, gate: bool = False, befor
     review = {"packet": packet_id, "attempt": attempt.name, "changed": changed, "flags": sorted(flags), "diffs": diffs, "note": note}
     if gate:
         if packet is None:
-            from .escalation import EscalationError, load_packet
+            from bridgeforge.escalation.escalation import EscalationError, load_packet
 
             try:
                 packet = load_packet(Path(workspace), packet_id)
             except (EscalationError, ValueError, OSError):
                 packet = None
-        from .escalation_policy import evaluate_attempt
+        from bridgeforge.escalation.escalation_policy import evaluate_attempt
 
         review["gate"] = evaluate_attempt(packet, Path(workspace), sandbox, changed, review["flags"], diffs, before=before)
     return review
@@ -185,9 +185,9 @@ def _gate_lines(gate: dict) -> list[str]:
 
 
 def review_sheet(workspace: Path, *, write: bool = True, gate: bool = True) -> dict:
-    from .escalation import EscalationError, load_packet
-    from .escalation_policy import evaluate_attempt
-    from .revive import _scan
+    from bridgeforge.escalation.escalation import EscalationError, load_packet
+    from bridgeforge.escalation.escalation_policy import evaluate_attempt
+    from bridgeforge.revive import _scan
 
     workspace = Path(workspace).expanduser().resolve()
     outcomes, accepted = _outcomes(workspace), _auto_accepted(workspace)

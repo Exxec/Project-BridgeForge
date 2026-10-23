@@ -32,8 +32,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from . import __version__
-from .safeio import atomic_write_json
+from bridgeforge import __version__
+from bridgeforge.safeio import atomic_write_json
 
 PASS, FAIL, INCOMPLETE, NOT_APPLICABLE = "PASS", "FAIL", "INCOMPLETE", "NOT_APPLICABLE"
 QUALIFYING = (PASS, NOT_APPLICABLE)
@@ -102,7 +102,7 @@ def load_policy(workspace: Path) -> tuple[dict | None, str | None]:
 
 
 def _finding_keys(findings: list[dict]) -> set[tuple[str, str, str]]:
-    from .revive import _informational
+    from bridgeforge.revive import _informational
 
     return {(f["id"], f.get("file") or "", (f.get("evidence") or [""])[0]) for f in findings if not _informational(f)}
 
@@ -112,7 +112,7 @@ def _is_code(name: str) -> bool:
 
 
 def _scope_check(packet: dict, workspace: Path, changed: list[str], policy: dict | None, policy_sha: str | None) -> dict:
-    from .automation import tier_for
+    from bridgeforge.automation import tier_for
 
     finding = packet["finding"]
     ids = set(packet.get("merged") or [finding])
@@ -205,9 +205,9 @@ def evaluate_attempt(packet: dict | None, workspace: Path, sandbox: Path, change
     if not sandbox.is_dir() or not changed:
         c = _check("attempt", FAIL, "the attempt changed nothing" if sandbox.is_dir() else "the attempt folder has no working copy")
         return _result([c], None, None)
-    from .automation import tier_for
-    from .escalation import verify
-    from .revive import _informational, _scan
+    from bridgeforge.automation import tier_for
+    from bridgeforge.escalation.escalation import verify
+    from bridgeforge.revive import _informational, _scan
 
     workspace = Path(workspace)
     policy, policy_sha = load_policy(workspace)
@@ -271,7 +271,7 @@ class workspace_apply_lock:
         self.path = Path(workspace) / "scratch" / "escalations" / LOCK_NAME
 
     def __enter__(self):
-        from .escalation import _pid_alive
+        from bridgeforge.escalation.escalation import _pid_alive
 
         self.path.parent.mkdir(parents=True, exist_ok=True)
         for _ in range(2):
@@ -348,8 +348,8 @@ def recover(workspace: Path, packet_name: str) -> dict:
 def apply_attempt(workspace: Path, packet: dict, attempt: int, assessment: dict, *, now=None) -> dict:
     """Apply an ELIGIBLE attempt: under the workspace lock, recheck every bound hash, stage all new content, journal,
     then commit file by file; any failure rolls everything back. Never called while `ENABLED` is False."""
-    from .escalation import _keep_line_endings
-    from .revive import append_ledger
+    from bridgeforge.escalation.escalation import _keep_line_endings
+    from bridgeforge.revive import append_ledger
 
     workspace = Path(workspace).expanduser().resolve()
     if not assessment.get("eligible") or not assessment.get("bindings"):

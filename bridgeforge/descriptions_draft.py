@@ -49,7 +49,7 @@ Crafter = Callable[[Path], str]
 
 def agent_crafter(agent: str, timeout: int = 1500) -> Crafter:
     """A crafter that runs `agent` (e.g. "claude -p --permission-mode acceptEdits") in the chunk's folder with PROMPT on stdin."""
-    from .escalation import resolve_agent_command
+    from bridgeforge.escalation.escalation import resolve_agent_command
 
     command = resolve_agent_command(agent)
 

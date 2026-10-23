@@ -72,11 +72,11 @@
     "duel_run.py": {
       "write_text": 2
     },
-    "escalation.py": {
+    "escalation/escalation.py": {
       "rmtree": 2,
       "write_text": 5
     },
-    "escalation_queue.py": {
+    "escalation/escalation_queue.py": {
       "write_text": 4
     },
     "explain_proofs.py": {

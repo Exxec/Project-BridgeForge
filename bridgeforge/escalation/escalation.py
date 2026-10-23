@@ -33,8 +33,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from .automation import ACTIONABLE, tier_for
-from .revive import _scan, append_ledger, finding_key, render_packet
+from bridgeforge.automation import ACTIONABLE, tier_for
+from bridgeforge.revive import _scan, append_ledger, finding_key, render_packet
 
 SCHEMA_VERSION = 1
 
@@ -83,7 +83,7 @@ def verify(packet: dict, working: Path, scanned: list[dict] | None = None) -> di
     """Did the packet's finding go away, without new actionable findings? Scans `working` afresh, or uses `scanned`
     (a `revive._scan` result for the same tree, so a caller that needs the findings too scans once)."""
     vanilla = Path(packet["vanilla_core"]) if packet.get("vanilla_core") else None
-    from .revive import _informational
+    from bridgeforge.revive import _informational
 
     # A SAFE finding no fixer handles is a note, not work: a correct fix (a null guard) turns a REVIEW finding
     # SAFE, and it must count as fixed (Vayra's Sector, 2026-09-30: guarded getEntityById lookups "remained").
@@ -252,7 +252,7 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
                timeout: int = 1800, auto_accept: bool = False, now=None) -> dict:
     workspace = Path(workspace).expanduser().resolve()
     if auto_accept:
-        from .escalation_policy import AutoAcceptError, require_enabled
+        from bridgeforge.escalation.escalation_policy import AutoAcceptError, require_enabled
 
         try:
             require_enabled()
@@ -364,8 +364,8 @@ def run_packet(workspace: Path, packet_name: str, agent: str | list[str], *, app
         append_ledger(workspace, entry, now)
         if outcome == "VERIFIED" and auto_accept and not apply:
             # ROADMAP 73 E2 / item 75 R3: reachable only once escalation_policy.ENABLED is on (it is refused above until then).
-            from .escalation_policy import apply_attempt
-            from .escalation_review import review_attempt
+            from bridgeforge.escalation.escalation_policy import apply_attempt
+            from bridgeforge.escalation.escalation_review import review_attempt
 
             assessment = review_attempt(workspace, packet["id"], gate=True, packet=packet)["gate"]
             if assessment["eligible"]:
@@ -392,8 +392,8 @@ JAR_SOURCE_ROOTS = ("jars/src/", "jar/src/", "src/")
 def _rebuild_attempt_jar(workspace: Path, packet: dict, attempt_dir: Path, source_root: str) -> dict:
     """Rebuild the mod's jar from the attempt's own sources, in the attempt folder (ROADMAP P15 31.7). A source edit in a
     compiled mod changes nothing until the jar is rebuilt; refuse unless the build passes and loses no class or member."""
-    from .rebuild_jar import rebuild_jar
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.rebuild_jar import rebuild_jar
+    from bridgeforge.scanner import _load_lenient_json_file
 
     jars = (_load_lenient_json_file(workspace / "working" / "mod_info.json") or {}).get("jars") or []
     if len(jars) != 1:
@@ -471,8 +471,8 @@ def apply_verified(workspace: Path, packet_name: str, *, attempt: int | None = N
         # Neutrino (tomatopaste) and The Mayorate, 2026-10-02.
         import zipfile
 
-        from .jar_patch import patch_jar_classes
-        from .scanner import _load_lenient_json_file
+        from bridgeforge.jar_patch import patch_jar_classes
+        from bridgeforge.scanner import _load_lenient_json_file
 
         info = _load_lenient_json_file(working / "mod_info.json") or {}
         jars = [j for j in info.get("jars") or [] if isinstance(j, str) and (working / j).is_file()]

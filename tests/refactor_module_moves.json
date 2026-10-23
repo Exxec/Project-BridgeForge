@@ -37,7 +37,14 @@
     "bridgeforge.corpus_audit": "bridgeforge.corpus.corpus_audit",
     "bridgeforge.corpus_index": "bridgeforge.corpus.corpus_index",
     "bridgeforge.corpus_recheck": "bridgeforge.corpus.corpus_recheck",
-    "bridgeforge.corpus_releases": "bridgeforge.corpus.corpus_releases"
+    "bridgeforge.corpus_releases": "bridgeforge.corpus.corpus_releases",
+    "bridgeforge.escalation": "bridgeforge.escalation.escalation",
+    "bridgeforge.escalation_policy": "bridgeforge.escalation.escalation_policy",
+    "bridgeforge.escalation_precedent": "bridgeforge.escalation.escalation_precedent",
+    "bridgeforge.escalation_queue": "bridgeforge.escalation.escalation_queue",
+    "bridgeforge.escalation_review": "bridgeforge.escalation.escalation_review",
+    "bridgeforge.escalation_sheet": "bridgeforge.escalation.escalation_sheet",
+    "bridgeforge.escalation_triage": "bridgeforge.escalation.escalation_triage"
   },
   "shims": []
 }

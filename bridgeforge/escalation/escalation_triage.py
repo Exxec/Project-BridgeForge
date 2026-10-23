@@ -13,10 +13,10 @@ import json
 from collections import defaultdict
 from pathlib import Path, PurePosixPath
 
-from .baseline import finding_dict_baseline_key, mod_baseline_keys
-from .escalation_precedent import invalid_ids, load_log, load_rulings, predicate_hash, predicate_problem, question_predicate, question_shape
-from .report_status import is_closed
-from .safeio import atomic_write_text
+from bridgeforge.baseline import finding_dict_baseline_key, mod_baseline_keys
+from bridgeforge.escalation.escalation_precedent import invalid_ids, load_log, load_rulings, predicate_hash, predicate_problem, question_predicate, question_shape
+from bridgeforge.report_status import is_closed
+from bridgeforge.safeio import atomic_write_text
 
 SCHEMA_VERSION = 1
 RESULT_JSON = "ESCALATION_TRIAGE.json"
