@@ -1,3 +1,27 @@
+**85. Automation and fewer tokens per task (owner-approved 2026-10-22).** From this session's hand work. Nothing below is
+built yet; LIVE TEST NOT PERFORMED.
+- 85.1 Live-batch command: `live-batch plan` turns LIVE_PENDING gates (`gates.json` needs, `board --live-pending` blocks) into
+  a run plan; `live-batch run` performs it unattended (rig-up, probe-group live with the gate's launcher, report); `live-batch
+  summary` writes a compact per-run verdict file with the next `record` / `baseline-accept` / `revise finalize` commands, and
+  can notify when done. Replaces hand-written PowerShell runners (the 2026-10-22 runner skipped every run through a
+  return-value bug). Done when the 2026-10-22 batch can be reproduced from gates.json alone.
+  Environment bundles (owner 2026-10-22: "going forward we will need to bundle the various environments in live testing"):
+  a named bundle is a list of launch environments (launcher, Java, pre-patcher on/off), e.g. `standard` = FR Java 25, FR Java
+  28 and direct Java 28, each with and without the pre-patcher (the six-launch Ironclads matrix of 2026-10-22). A gate names
+  a bundle instead of one launcher; `live-batch plan` expands it, stages each candidate once and runs it through every
+  environment before moving on, and records the gate PASS only when every environment passes (per-environment results kept
+  in the run records). Archive-eligible runs use the `standard` bundle unless the gate says otherwise.
+- 85.2 Refactor-review evidence: one command that produces item 83 section 6's evidence for a PR as JSON (test counts
+  before/after, skips, coverage, CLI golden hash, rename similarity, wheel file list, Salvor suite against the branch). Done
+  when a refactor PR's review reads that one file.
+- 85.3 Workspace brief: one page per workspace (versions, changed files, open findings, accepted baselines, past live runs,
+  earlier reviews and decisions such as reports/ASTRA_LIVE_REVIEW.md), printed before any investigation. Done when the EPTA
+  Alicerce/narcepolis question would have been answered from the brief.
+- 85.4 Crash intake: given a player's starsector.log and enabled_mods.json, name the failing mod and stack, match it to a
+  workspace and propose the gate that reproduces it. Done when a recorded crash log is matched to its workspace and gate.
+- Harness fixes from the same batch: BUGS.md LIVE-001 (report attribution), LIVE-002 (total conversions and the combat
+  stage), LIVE-003 (pre-patcher drift), LIVE-004 (stale extras in rig copies).
+
 **84. Feature tracing and transplanting (owner-approved 2026-10-22; long term).** Goal: BridgeForge can pick a mod apart and
 trace every feature end to end (data ids, assets, code, hooks, runtime behaviour), and can transplant a named feature from one
 mod into another with its dependencies, id remapping, conflict and save checks, live validation and recorded provenance. Design
