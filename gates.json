@@ -426,9 +426,12 @@
     },
     {
       "id": "bf-ic-j25-fr",
-      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on fr Java 25",
-      "state": "LIVE_PENDING",
-      "evidence": [],
+      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on fr Java 25 (start-up and campaign day PASS, FATAL 0; combat stage NOT_TESTED: Ironclads replaces mission_list.csv)",
+      "state": "PASS",
+      "evidence": [
+        "In operation/_rig/logs/IC-J25-FR-20261022.stdout.log",
+        "In operation/_rig/logs/IC-J25-FR-20261022.completed.json"
+      ],
       "needs": {
         "rig": true,
         "mods": [
@@ -453,9 +456,12 @@
     },
     {
       "id": "bf-ic-j25-fr-prep",
-      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on fr-prepatcher Java 25",
-      "state": "LIVE_PENDING",
-      "evidence": [],
+      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on fr-prepatcher Java 25 (start-up and campaign day PASS, FATAL 0; combat stage NOT_TESTED: Ironclads replaces mission_list.csv)",
+      "state": "PASS",
+      "evidence": [
+        "In operation/_rig/logs/IC-J25-FR-PREP-20261022.stdout.log",
+        "In operation/_rig/logs/IC-J25-FR-PREP-20261022.completed.json"
+      ],
       "needs": {
         "rig": true,
         "mods": [
@@ -480,9 +486,12 @@
     },
     {
       "id": "bf-ic-j28-fr",
-      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on fr Java 28",
-      "state": "LIVE_PENDING",
-      "evidence": [],
+      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on fr Java 28 (start-up and campaign day PASS, FATAL 0; combat stage NOT_TESTED: Ironclads replaces mission_list.csv)",
+      "state": "PASS",
+      "evidence": [
+        "In operation/_rig/logs/IC-J28-FR-20261022.stdout.log",
+        "In operation/_rig/logs/IC-J28-FR-20261022.completed.json"
+      ],
       "needs": {
         "rig": true,
         "mods": [
@@ -507,9 +516,12 @@
     },
     {
       "id": "bf-ic-j28-fr-prep",
-      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on fr-prepatcher Java 28",
-      "state": "LIVE_PENDING",
-      "evidence": [],
+      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on fr-prepatcher Java 28 (start-up and campaign day PASS, FATAL 0; combat stage NOT_TESTED: Ironclads replaces mission_list.csv)",
+      "state": "PASS",
+      "evidence": [
+        "In operation/_rig/logs/IC-J28-FR-PREP-20261022.stdout.log",
+        "In operation/_rig/logs/IC-J28-FR-PREP-20261022.completed.json"
+      ],
       "needs": {
         "rig": true,
         "mods": [
@@ -534,9 +546,12 @@
     },
     {
       "id": "bf-ic-j28-direct",
-      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on direct Java 28",
-      "state": "LIVE_PENDING",
-      "evidence": [],
+      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on direct Java 28 (start-up and campaign day PASS, FATAL 0; combat stage NOT_TESTED: Ironclads replaces mission_list.csv)",
+      "state": "PASS",
+      "evidence": [
+        "In operation/_rig/logs/IC-J28-DIRECT-20261022.stdout.log",
+        "In operation/_rig/logs/IC-J28-DIRECT-20261022.completed.json"
+      ],
       "needs": {
         "rig": true,
         "mods": [
@@ -561,9 +576,12 @@
     },
     {
       "id": "bf-ic-j28-direct-prep",
-      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on direct-prepatcher Java 28",
-      "state": "LIVE_PENDING",
-      "evidence": [],
+      "title": "Ironclads v.11+bf.1 starts and reaches the campaign on direct-prepatcher Java 28 (start-up and campaign day PASS, FATAL 0; combat stage NOT_TESTED: Ironclads replaces mission_list.csv)",
+      "state": "PASS",
+      "evidence": [
+        "In operation/_rig/logs/IC-J28-DIRECT-PREP-20261022.stdout.log",
+        "In operation/_rig/logs/IC-J28-DIRECT-PREP-20261022.completed.json"
+      ],
       "needs": {
         "rig": true,
         "mods": [

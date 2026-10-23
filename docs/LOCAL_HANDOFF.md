@@ -85,6 +85,10 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
     probe on six launches: FR (Java 25), FR + Java 28 and Java 28 direct, each without and with the pre-patcher
     (`In operation/_rig/run-j25-fr.bat`, `run-j25-fr-prep.bat`, `run-j28-fr.bat`, `run-j28-fr-prep.bat`, `run-j28-direct.bat`,
     `run-j28-direct-prep.bat`). Pass: main menu, New Game reaches the campaign, no FATAL. Keep each `starsector.log`.
+    **Result 2026-10-22 (batch IC-*-20261022, probe 0.3.1): all six PASS** - New Game reached the campaign, the probe's campaign
+    day ended (`campaign|END`), FATAL 0. The live driver reported exit 1 only because Ironclads replaces `mission_list.csv`, which
+    hides the probe's combat mission (combat NOT_TESTED). The owner's start-up crash does not reproduce with Ironclads alone;
+    it needs the owner's own `starsector.log` and `enabled_mods.json`.
 17. **EPTA 2.1.3+bf.2 (owner 2026-10-22).** Revision prepared (candidate d9940ba8af7d): version label 2.1.3 and the Proelefsi
     station back on its original sprite. Live run with Nexerelin, then `baseline-accept` and `revise finalize`.
 18. **Zorg V18+bf.10 (owner 2026-10-22).** Revision prepared (candidate 1f1499141da6): Zeta I/II visible from the start, Zeta I
