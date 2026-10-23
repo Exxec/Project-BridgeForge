@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge.probe_mod_build import RELEASE_RELATIVE
+from bridgeforge.probe.probe_mod_build import RELEASE_RELATIVE
 from tests.support import link_dir, resolved_temp_dir
 from bridgeforge.rig_doctor import (
     _check_revenantlib_contract,

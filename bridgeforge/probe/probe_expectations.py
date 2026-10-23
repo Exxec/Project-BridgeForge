@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .scanner import _load_lenient_json_file
+from bridgeforge.scanner import _load_lenient_json_file
 
 BOUNTY_FILE = Path("data") / "config" / "modFiles" / "magicBounty_data.json"
 EXPECTATIONS_FILE = "PROBE_EXPECTATIONS.json"

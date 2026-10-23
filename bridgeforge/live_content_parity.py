@@ -37,7 +37,7 @@ _MISSING = re.compile(r"kind=(?P<kind>\w+) missing (?P<have>\d+)/(?P<expected>\d
 
 def expected_content(mod_root: Path, *, systems: list[str] | None = None, body_types: list[str] | None = None) -> dict[str, list[str]]:
     """{kind: sorted ids} the mod's own data files define; kinds with no ids are left out."""
-    from .probe_config import _csv_ids
+    from bridgeforge.probe.probe_config import _csv_ids
 
     found: dict[str, list[str]] = {}
     for kind, parts in CSV_KINDS.items():

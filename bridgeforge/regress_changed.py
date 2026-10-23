@@ -164,7 +164,7 @@ def run_changed(queue: Path, rig: Path, out: Path, commit: str, *, repo_root: Pa
 
 def _archive_verdicts(queue: Path, rig: Path, result: dict, chosen: dict[str, str], previous: dict[str, str | None]) -> dict[str, dict]:
     """Per selected workspace: its verdict now, the one before, and whether it changed or regressed (was PASS, is not)."""
-    from .probe_group import _workspaces_by_mod_id
+    from bridgeforge.probe.probe_group import _workspaces_by_mod_id
 
     owners = {mod: ws.name for mod, ws in _workspaces_by_mod_id(queue, rig / "mods").items() if ws is not None}
     now: dict[str, str] = {}

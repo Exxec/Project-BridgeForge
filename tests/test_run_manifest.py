@@ -251,7 +251,7 @@ class OwnershipTests(unittest.TestCase):
                 prepare_run(rig, "R-12", "campaign", targets=["mod_b"], expected=["main_menu"])
 
     def test_install_group_refuses_while_a_run_owns_the_rig(self) -> None:
-        from bridgeforge.probe_group import ProbeGroupError, install_group, plan_groups
+        from bridgeforge.probe.probe_group import ProbeGroupError, install_group, plan_groups
 
         with resolved_temp_dir() as root:
             queue, targets = _two(root)

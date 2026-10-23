@@ -14,8 +14,8 @@ from .live_accept import accept_run, AcceptError
 from .locks import who_locks
 from .log_triage import triage_log
 from .prepare_test import prepare_test, PrepareTestError
-from .probe_config import load_profile, ProbeConfigError, write_probe_config
-from .probe_mod_build import build_probe_mod, install_release, ProbeModBuildError
+from bridgeforge.probe.probe_config import load_profile, ProbeConfigError, write_probe_config
+from bridgeforge.probe.probe_mod_build import build_probe_mod, install_release, ProbeModBuildError
 from .reference_rigs import ReferenceRigError, write_reference_rig_manifest
 from .rig_doctor import default_working_copies, rig_doctor
 from .soak_report import soak_report

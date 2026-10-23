@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from bridgeforge.probe_group import sync_working_copy
+from bridgeforge.probe.probe_group import sync_working_copy
 from bridgeforge.run_manifest import prepare_run, record_candidates, release_run
 from tests.support import link_dir
 

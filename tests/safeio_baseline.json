@@ -42,7 +42,7 @@
     "corpus/cmd_corpus.py": {
       "write_text": 4
     },
-    "cmd_probe_group.py": {
+    "probe/cmd_probe_group.py": {
       "write_text": 1
     },
     "cmd_scan.py": {
@@ -137,10 +137,10 @@
     "pipeline.py": {
       "write_text": 2
     },
-    "probe_config.py": {
+    "probe/probe_config.py": {
       "write_text": 3
     },
-    "probe_group.py": {
+    "probe/probe_group.py": {
       "write_text": 2
     },
     "progress.py": {

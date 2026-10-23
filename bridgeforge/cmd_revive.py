@@ -136,7 +136,7 @@ def run_cli(args: argparse.Namespace) -> int:
         return 0
     if args.command == "ready-list":
         # Replaces the hand tally of "how many need live testing" (2026-09-30).
-        from .probe_group import ProbeGroupError, ready_workspaces
+        from bridgeforge.probe.probe_group import ProbeGroupError, ready_workspaces
         try:
             ready = ready_workspaces(args.queue)
         except ProbeGroupError as exc:

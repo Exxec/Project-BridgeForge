@@ -44,7 +44,14 @@
     "bridgeforge.escalation_queue": "bridgeforge.escalation.escalation_queue",
     "bridgeforge.escalation_review": "bridgeforge.escalation.escalation_review",
     "bridgeforge.escalation_sheet": "bridgeforge.escalation.escalation_sheet",
-    "bridgeforge.escalation_triage": "bridgeforge.escalation.escalation_triage"
+    "bridgeforge.escalation_triage": "bridgeforge.escalation.escalation_triage",
+    "bridgeforge.cmd_probe_group": "bridgeforge.probe.cmd_probe_group",
+    "bridgeforge.probe_config": "bridgeforge.probe.probe_config",
+    "bridgeforge.probe_expectations": "bridgeforge.probe.probe_expectations",
+    "bridgeforge.probe_group": "bridgeforge.probe.probe_group",
+    "bridgeforge.probe_mod_build": "bridgeforge.probe.probe_mod_build",
+    "bridgeforge.probe_salvor_profile": "bridgeforge.probe.probe_salvor_profile",
+    "bridgeforge.probe_scenario": "bridgeforge.probe.probe_scenario"
   },
   "shims": []
 }

@@ -6,8 +6,8 @@ import json
 import sys
 from pathlib import Path
 
-from .probe_config import ProbeConfigError
-from .safeio import atomic_write_text
+from bridgeforge.probe.probe_config import ProbeConfigError
+from bridgeforge.safeio import atomic_write_text
 
 
 def add_parser(subcommands) -> None:
@@ -104,16 +104,16 @@ def add_parser(subcommands) -> None:
 
 def run_cli(args: argparse.Namespace) -> int:
     if args.command == "probe-group":
-        from .probe_group import ProbeGroupError, group_report, install_group, plan_groups
-        from .probe_config import CONFIG_FILE
-        from .substitutes import REPO_ROOT
+        from bridgeforge.probe.probe_group import ProbeGroupError, group_report, install_group, plan_groups
+        from bridgeforge.probe.probe_config import CONFIG_FILE
+        from bridgeforge.substitutes import REPO_ROOT
         queue = (args.queue or REPO_ROOT / "In operation").expanduser().resolve()
         rig = (args.rig or queue / "_rig").expanduser().resolve()
         try:
             if args.probe_group_command == "plan":
-                from .probe_group import DEFAULT_PROVIDER_SOURCES
+                from bridgeforge.probe.probe_group import DEFAULT_PROVIDER_SOURCES
                 sources = args.provider_source if args.provider_source is not None else [p for p in DEFAULT_PROVIDER_SOURCES if p.is_dir()]
-                from .probe_group import ready_workspaces
+                from bridgeforge.probe.probe_group import ready_workspaces
                 # Workspace arguments take a path ("In operation/<name>") or a bare name; the plan matches folder names
                 # (`--retest "In operation/X"` was read as In operation/In operation/X, 2026-10-13).
                 args.retest = [Path(name).name for name in args.retest]
@@ -168,7 +168,7 @@ def run_cli(args: argparse.Namespace) -> int:
                         print(f"  WARN {result['lunalib_advice']}")
                     print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
             elif args.probe_group_command == "live":
-                from .live_run import live_run
+                from bridgeforge.live_run import live_run
                 if args.interactive:
                     print("Starting the game: play, then close it; nothing is clicked for you after the launcher's Play button.", file=sys.stderr)
                 else:
@@ -177,7 +177,7 @@ def run_cli(args: argparse.Namespace) -> int:
                     print("bridgeforge: --save-reload cannot be combined with --interactive", file=sys.stderr)
                     return 2
                 if args.save_reload:
-                    from .save_reload_run import clear_stale_fingerprint, save_reload_configured
+                    from bridgeforge.save_reload_run import clear_stale_fingerprint, save_reload_configured
                     if not save_reload_configured(rig):
                         print("bridgeforge: --save-reload needs the rig probe config's save_reload.after_days (install with --save-reload-after-days N)", file=sys.stderr)
                         return 2
@@ -187,8 +187,8 @@ def run_cli(args: argparse.Namespace) -> int:
                                 graceful_exit=not args.no_graceful_close, interactive=args.interactive)
                 result = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "rounds": live.rounds, "stages": live.stages, "log": live.log}
                 if args.save_reload and live.verdict == "LIVE_DONE":
-                    from .save_fingerprint import parse_fingerprint
-                    from .save_reload_run import reload_run
+                    from bridgeforge.save_fingerprint import parse_fingerprint
+                    from bridgeforge.save_reload_run import reload_run
                     reloaded = reload_run(rig, f"{args.test_id}-reload", bat_name=args.bat, menu_timeout=args.menu_timeout)
                     block = parse_fingerprint(Path(reloaded.log).read_text(encoding="utf-8", errors="replace")) if reloaded.log and Path(reloaded.log).is_file() else None
                     result["reload"] = {"verdict": reloaded.verdict, "stage": reloaded.stage, "detail": reloaded.detail, "stages": reloaded.stages,
@@ -212,13 +212,13 @@ def run_cli(args: argparse.Namespace) -> int:
             elif args.probe_group_command == "regress":
                 from datetime import date as _date
 
-                from .regress import rejudge, run_regression
+                from bridgeforge.regress import rejudge, run_regression
                 out = args.out or Path(queue) / "_regress" / f"regress-{_date.today():%Y%m%d}.json"
                 if args.rejudge:
                     out = args.out or Path(queue) / "_regress" / f"rejudged-{_date.today():%Y%m%d}.json"
                     result = rejudge(queue, rig, args.rejudge, out)
                 elif args.changed_since:
-                    from .regress_changed import RegressChangedError, run_changed
+                    from bridgeforge.regress_changed import RegressChangedError, run_changed
                     out = args.out or Path(queue) / "_regress" / f"regress-changed-{_date.today():%Y%m%d}.json"
                     try:
                         print("Starting the changed-only regression pass: leave the mouse and keyboard alone until it finishes.", file=sys.stderr)
@@ -241,7 +241,7 @@ def run_cli(args: argparse.Namespace) -> int:
                     for item in result["attention"]:
                         print(f"  group {item['group']}: {item.get('mod') or item.get('members')}: {item['why']}")
             elif args.probe_group_command == "duel":
-                from .duel_run import run_duel
+                from bridgeforge.duel_run import run_duel
                 print("Starting the duel run: leave the mouse and keyboard alone until it finishes (about ten minutes).", file=sys.stderr)
                 result = run_duel(rig, args.test_id, bat_name=args.bat, only=tuple(args.only) or None)
                 if not args.json:
@@ -255,7 +255,7 @@ def run_cli(args: argparse.Namespace) -> int:
                         print(json.dumps(result, indent=2, ensure_ascii=False))
                     return 1
             elif args.probe_group_command == "smoke":
-                from .probe_group import smoke_group
+                from bridgeforge.probe.probe_group import smoke_group
                 result = smoke_group(rig, bat_name=args.bat, timeout=args.timeout, log_name=args.log_name)
                 if not args.json:
                     boot = result["boot"]
@@ -270,7 +270,7 @@ def run_cli(args: argparse.Namespace) -> int:
                         print(json.dumps(result, indent=2, ensure_ascii=False))
                     return 1
             elif args.probe_group_command == "bisect":
-                from .probe_group import bisect_group
+                from bridgeforge.probe.probe_group import bisect_group
                 plan_path = args.plan or queue / "PROBE_GROUPS.json"
                 result = bisect_group(json.loads(plan_path.read_text(encoding="utf-8")), args.group)
                 atomic_write_text(plan_path, json.dumps(result, indent=2))
@@ -279,7 +279,7 @@ def run_cli(args: argparse.Namespace) -> int:
                         print(f"Group {group['group']} ({len(group['members'])} mod(s)): " + ", ".join(m["workspace"] for m in group["members"]))
                     print(f"Plan updated: {plan_path}. Install and run each half.")
             elif args.probe_group_command == "record":
-                from .probe_group import record_group
+                from bridgeforge.probe.probe_group import record_group
                 config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
                 result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive, refresh=args.refresh,
                                       accept=args.accept, note=args.note, observe_exit=args.observe_exit)
@@ -294,13 +294,13 @@ def run_cli(args: argparse.Namespace) -> int:
                     for item in result.get("warnings", []):
                         print(f"  WARN {item}")
                     if args.accept:
-                        from .archive_checks import archive_offer
+                        from bridgeforge.archive_checks import archive_offer
 
                         for line in archive_offer(result, queue):
                             print(line)
             else:
                 config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
-                from .probe_group import accepted_probe_findings
+                from bridgeforge.probe.probe_group import accepted_probe_findings
                 result = group_report(args.log, config, mods_dir=rig / "mods", accepted=accepted_probe_findings(queue, rig / "mods"))
                 if not args.json:
                     print(f"FATAL={result['fatal']} MOD-ERROR={result['mod_errors']}; content-ids ran: {result['content_ids_ran']}")

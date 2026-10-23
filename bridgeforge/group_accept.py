@@ -39,7 +39,7 @@ def context_of(manifest: dict | None) -> dict | None:
 
 def _earlier_entries(workspace: Path, context: dict | None = None) -> list[dict]:
     """Acceptances that still apply to the workspace: same mod version, plus the standing probe_accepted.json lines."""
-    from .probe_group import ACCEPTED_PROBE_FILE
+    from bridgeforge.probe.probe_group import ACCEPTED_PROBE_FILE
 
     entries: list[dict] = []
     version = _current_version(workspace)

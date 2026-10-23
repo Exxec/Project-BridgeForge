@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from .safeio import safe_rmtree
+from bridgeforge.safeio import safe_rmtree
 
 import json
 import re
 import shutil
 from pathlib import Path
 
-from .boot_test import _is_link
-from .build_tag import _find_mod_info
-from .campaign_layout import mod_body_types, mod_systems_by_reach
-from .probe_expectations import bounty_ids, entity_checks
-from .probe_mod_build import RELEASE_RELATIVE
-from .scanner import _load_lenient_json_file, _read_csv_rows, _wing_ids_set
+from bridgeforge.boot_test import _is_link
+from bridgeforge.build_tag import _find_mod_info
+from bridgeforge.campaign_layout import mod_body_types, mod_systems_by_reach
+from bridgeforge.probe.probe_expectations import bounty_ids, entity_checks
+from bridgeforge.probe.probe_mod_build import RELEASE_RELATIVE
+from bridgeforge.scanner import _load_lenient_json_file, _read_csv_rows, _wing_ids_set
 
 DEFAULT_CAMPAIGN_INTERVAL_DAYS = 5.0
 DEFAULT_COMBAT_SECONDS = 60.0
@@ -31,7 +31,7 @@ PROFILE_FILE = "bf_probe_profile" + COMMON_FILE_SUFFIX
 PROBE_MOD_ID = "bridgeforge_probe"
 
 # Bundled profiles live under bridgeforge/probe_profiles/<name>.txt (roadmap P3c-1).
-PROFILE_DIR = Path(__file__).resolve().parent / "probe_profiles"
+PROFILE_DIR = Path(__file__).resolve().parent.parent / "probe_profiles"
 
 PROFILE_APPLY_MODES = frozenset({"once-per-save", "every-load"})
 DEFAULT_PROFILE_APPLY = "once-per-save"
@@ -351,8 +351,8 @@ def _mission_fleet_refs(mod_root: Path) -> dict[str, list[str]]:
     """Every fleet member the mod's missions name, by kind (ROADMAP 46c): the probe resolves each. Ironclads'
     missions named 21 variants no Ironclads version ever shipped (2026-10-04), which content_variants (the variants the
     mod defines) cannot see."""
-    from .scan_javatext import _blank_mod_guarded_blocks
-    from .scanner import MISSION_FLEET_REFERENCE_PATTERN, _blank_java_comments
+    from bridgeforge.scan_javatext import _blank_mod_guarded_blocks
+    from bridgeforge.scanner import MISSION_FLEET_REFERENCE_PATTERN, _blank_java_comments
 
     ships: set[str] = set()
     wings: set[str] = set()
@@ -373,7 +373,7 @@ def _class_sweep(mod_root: Path) -> list[str]:
     from listing jars itself, so the list comes from here."""
     import zipfile
 
-    from .scanner import _loaded_mod_jars
+    from bridgeforge.scanner import _loaded_mod_jars
 
     names: set[str] = set()
     for jar in _loaded_mod_jars(mod_root):
@@ -429,7 +429,7 @@ def _vanilla_special_items() -> set[str]:
     import csv
     import io
 
-    from .java_toolchain import REPO_ROOT
+    from bridgeforge.java_toolchain import REPO_ROOT
 
     path = REPO_ROOT / "In operation" / "_rig" / "starsector-core" / "data" / "campaign" / "special_items.csv"
     if not path.is_file():
@@ -451,7 +451,7 @@ def _csv_ids(path: Path) -> set[str]:
 def _mod_commodities(mod_root: Path) -> list[str]:
     """Commodity ids the mod adds in data/campaign/commodities.csv, minus vanilla's (probe 0.2.25 market-supply): the probe
     reports where each is supplied and demanded, and FAILs demand with no supply (DNEEP food with AoTD, 2026-10-11)."""
-    from .java_toolchain import REPO_ROOT
+    from bridgeforge.java_toolchain import REPO_ROOT
 
     vanilla = _csv_ids(REPO_ROOT / "In operation" / "_rig" / "starsector-core" / "data" / "campaign" / "commodities.csv")
     return sorted(_csv_ids(mod_root / "data" / "campaign" / "commodities.csv") - vanilla)
@@ -548,7 +548,7 @@ def build_probe_config(
         merged_setups = merged_setups + list(profile.get("setups") or [])
         apply_mode = profile.get("apply", DEFAULT_PROFILE_APPLY)
 
-    from .live_content_parity import expected_content
+    from bridgeforge.live_content_parity import expected_content
 
     mod_systems, unreached_systems = mod_systems_by_reach(mod_root)
     body_types = mod_body_types(mod_root)
@@ -681,7 +681,7 @@ def write_probe_config(
 def _apply_scenario(mod_dir: Path, runtime_dir: Path, config: dict[str, object], dry_run: bool) -> dict[str, object] | None:
     """A candidate's reports/PROBE_SCENARIO.json (docs/PROBE_SCENARIOS.md): put its steps into `config` and, unless `dry_run`,
     apply its `settings` to the rig's copy of the mod (found by mod id under <runtime_dir>/mods), never to `mod_dir`."""
-    from .probe_scenario import ScenarioError, load_for_working, probe_config_keys, stage_settings
+    from bridgeforge.probe.probe_scenario import ScenarioError, load_for_working, probe_config_keys, stage_settings
 
     mod_root = _mod_root(mod_dir)
     try:
@@ -691,7 +691,7 @@ def _apply_scenario(mod_dir: Path, runtime_dir: Path, config: dict[str, object],
         config.update(probe_config_keys([scenario]))
         staged: list[dict[str, object]] = []
         if scenario["settings"] and not dry_run:
-            from .probe_group import rig_mod_ids
+            from bridgeforge.probe.probe_group import rig_mod_ids
 
             folder = rig_mod_ids(runtime_dir / "mods").get(str(config["target_mod_id"]))
             if folder is None:
@@ -704,7 +704,7 @@ def _apply_scenario(mod_dir: Path, runtime_dir: Path, config: dict[str, object],
 
 def _install_probe_mod(runtime_dir: Path) -> dict[str, object]:
     """Copy the built runtime-only release copy of bridgeforge-probe into <runtime_dir>/mods/."""
-    repo_root = Path(__file__).resolve().parent.parent
+    repo_root = Path(__file__).resolve().parents[2]
     release_dir = repo_root / RELEASE_RELATIVE
     if not release_dir.is_dir():
         raise ProbeConfigError(

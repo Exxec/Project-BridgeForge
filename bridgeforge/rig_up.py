@@ -27,7 +27,7 @@ class RigUpError(ValueError):
 
 def _resolve_ids(queue: Path, mods_dir: Path, mod_ids: list[str]) -> tuple[dict[str, Path], list[str]]:
     """({mod id: workspace} for ids a queue workspace provides, [ids that are providers already in the rig])."""
-    from .probe_group import _workspaces_by_mod_id, rig_mod_ids
+    from bridgeforge.probe.probe_group import _workspaces_by_mod_id, rig_mod_ids
 
     owners = _workspaces_by_mod_id(queue, mods_dir) if Path(queue).is_dir() else {}
     installed = rig_mod_ids(mods_dir)
@@ -49,7 +49,7 @@ def _resolve_ids(queue: Path, mods_dir: Path, mod_ids: list[str]) -> tuple[dict[
 
 
 def _declared_dependencies(members: dict[str, Path]) -> list[str]:
-    from .probe_group import _mod_info
+    from bridgeforge.probe.probe_group import _mod_info
 
     found: list[str] = []
     for mod_id, workspace in members.items():
@@ -62,8 +62,8 @@ def _declared_dependencies(members: dict[str, Path]) -> list[str]:
 def rig_up(rig: Path, queue: Path, mod_ids: list[str], *, probe_config: bool = False, also_enable: list[str] | None = None,
            with_lunalib: bool = False, no_lunalib: bool = False, doctor=None, today: str | None = None) -> dict:
     from .live_trust import shipped_hash
-    from .probe_config import CONFIG_FILE, RIG_MARKER_FILE, _install_probe_mod, build_probe_config
-    from .probe_group import (LUNALIB_ID, PROBE_MOD_ID, SPEEDUP_MOD_ID, _mod_info, _move_aside_duplicate_ids, _refuse_running_game,
+    from bridgeforge.probe.probe_config import CONFIG_FILE, RIG_MARKER_FILE, _install_probe_mod, build_probe_config
+    from bridgeforge.probe.probe_group import (LUNALIB_ID, PROBE_MOD_ID, SPEEDUP_MOD_ID, _mod_info, _move_aside_duplicate_ids, _refuse_running_game,
                               _reset_combat_round, dependency_closure, dependency_version_conflicts, expand_also_enable, lunalib_rule,
                               merge_configs, rig_mod_ids, sync_working_copy)
 
@@ -162,8 +162,8 @@ def add_parser(subcommands) -> None:
 
 
 def run_cli(args: argparse.Namespace) -> int:
-    from .probe_config import ProbeConfigError
-    from .probe_group import ProbeGroupError
+    from bridgeforge.probe.probe_config import ProbeConfigError
+    from bridgeforge.probe.probe_group import ProbeGroupError
     from .substitutes import REPO_ROOT
 
     queue = (args.queue or REPO_ROOT / "In operation").expanduser().resolve()

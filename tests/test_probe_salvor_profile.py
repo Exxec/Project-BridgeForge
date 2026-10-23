@@ -6,7 +6,7 @@ import re
 import unittest
 from pathlib import Path
 
-from bridgeforge import probe_salvor_profile as profile
+from bridgeforge.probe import probe_salvor_profile as profile
 from tests.support import resolved_temp_dir
 
 PROBE = Path(__file__).resolve().parent.parent / "probe-mod" / "src" / "com" / "bridgeforge" / "probe"

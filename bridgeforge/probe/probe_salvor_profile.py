@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .safeio import atomic_write_text
+from bridgeforge.safeio import atomic_write_text
 
 PROFILE_NAME = "salvor"
 PROBE_MOD_ID = "bridgeforge_probe"

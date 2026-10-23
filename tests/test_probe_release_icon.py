@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.probe_mod_build import PROBE_MISSION_ICON, VANILLA_MISSION_ICON, ProbeModBuildError, install_release
+from bridgeforge.probe.probe_mod_build import PROBE_MISSION_ICON, VANILLA_MISSION_ICON, ProbeModBuildError, install_release
 
 
 def _repo(root: Path) -> Path:

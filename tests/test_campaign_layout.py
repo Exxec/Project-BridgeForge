@@ -11,7 +11,7 @@ from pathlib import Path
 
 from bridgeforge.campaign_layout import mod_body_types, mod_created_systems, mod_placed_types, mod_systems_by_reach
 from bridgeforge.fixers import apply_fix, compute_fix
-from bridgeforge.probe_config import build_probe_config
+from bridgeforge.probe.probe_config import build_probe_config
 from bridgeforge.scanner import scan_mod
 
 

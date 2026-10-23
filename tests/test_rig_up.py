@@ -87,7 +87,7 @@ class RigUpTests(unittest.TestCase):
                 (runtime / "mods" / "bridgeforge-probe" / "mod_info.json").write_text(json.dumps({"id": "bridgeforge_probe", "version": "0.2.9"}), encoding="utf-8")
                 return {}
 
-            with mock.patch("bridgeforge.probe_config._install_probe_mod", fake_install):
+            with mock.patch("bridgeforge.probe.probe_config._install_probe_mod", fake_install):
                 rig_up(rig, queue, ["mod_a"], probe_config=True, doctor=_fake_doctor())
             enabled = json.loads((rig / "mods" / "enabled_mods.json").read_text(encoding="utf-8"))["enabledMods"]
             config = json.loads((rig / "saves" / "common" / "bf_probe_config.data").read_text(encoding="utf-8"))

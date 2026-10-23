@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from .log_triage import PROBE_LINE_RE
-from .probe_config import build_probe_config
+from bridgeforge.probe.probe_config import build_probe_config
 
 """Roadmap P3b-K: named, versioned scenario fixtures (`docs/P3B_SAVE_TOOLING_RECOMMENDATIONS.md`).
 

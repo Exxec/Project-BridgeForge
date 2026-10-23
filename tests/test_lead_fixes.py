@@ -9,7 +9,7 @@ from pathlib import Path
 from tests.support import link_dir
 
 from bridgeforge.log_triage import class_owner_index
-from bridgeforge.probe_config import PROFILE_FILE, parse_profile, write_probe_config
+from bridgeforge.probe.probe_config import PROFILE_FILE, parse_profile, write_probe_config
 
 
 

@@ -6,9 +6,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge.probe_group import (ProbeGroupError, bisect_group, dependency_version_conflicts, group_report, install_group,
+from bridgeforge.probe.probe_group import (ProbeGroupError, bisect_group, dependency_version_conflicts, group_report, install_group,
                                      merge_configs, plan_groups)
-from bridgeforge.probe_config import build_probe_config
+from bridgeforge.probe.probe_config import build_probe_config
 from tests.support import link_dir, resolved_temp_dir
 
 
@@ -67,7 +67,7 @@ class PlanTests(unittest.TestCase):
             _workspace(queue, "B", "mod_b", "hull_b", status="LIVE_VALIDATED")
             _workspace(queue, "C", "mod_c", "hull_c")  # would share A's group unless A runs solo
             plan_file = root / "plan.json"
-            with mock.patch("bridgeforge.probe_group.DEFAULT_PROVIDER_SOURCES", ()), mock.patch("sys.stdout"):
+            with mock.patch("bridgeforge.probe.probe_group.DEFAULT_PROVIDER_SOURCES", ()), mock.patch("sys.stdout"):
                 code = main(["probe-group", "plan", "--queue", str(queue), "--rig", str(_rig(root)), "--write", str(plan_file),
                              "--retest", "q/B", "--solo", str(queue / "A")])
             plan = json.loads(plan_file.read_text(encoding="utf-8"))
@@ -126,7 +126,7 @@ class MergeAndReportTests(unittest.TestCase):
     def test_an_accepted_probe_finding_is_listed_and_no_longer_fails_the_mod(self) -> None:
         # Magellan's hidden magellan_startigers builds no patrol and nothing spawns its fleets (GRP5C-20261006); the owner-side
         # decision lives in the workspace's working/reports/probe_accepted.json with a reason
-        from bridgeforge.probe_group import accepted_probe_findings
+        from bridgeforge.probe.probe_group import accepted_probe_findings
 
         with resolved_temp_dir() as root:
             queue = root / "q"
@@ -344,7 +344,7 @@ class InstallTests(unittest.TestCase):
         # ROADMAP P15 31.1: one command replaces the per-group record script and archive loop.
         import shutil
 
-        from bridgeforge.probe_group import record_group
+        from bridgeforge.probe.probe_group import record_group
         with resolved_temp_dir() as root:
             queue = root / "In operation"
             a = _workspace(queue, "A", "mod_a", "hull_a")
@@ -382,7 +382,7 @@ class InstallTests(unittest.TestCase):
         # the existing folder and stopped; `--refresh` is the owner's word to replace it.
         import shutil
 
-        from bridgeforge.probe_group import record_group
+        from bridgeforge.probe.probe_group import record_group
         with resolved_temp_dir() as root:
             queue = root / "In operation"
             a = _workspace(queue, "A", "mod_a", "hull_a")
@@ -418,7 +418,7 @@ class InstallTests(unittest.TestCase):
         # recorded and archived, not the SEEKER-0.6 the rig ran. With neither in the rig, the id is ambiguous.
         import shutil
 
-        from bridgeforge.probe_group import _workspaces_by_mod_id
+        from bridgeforge.probe.probe_group import _workspaces_by_mod_id
         with resolved_temp_dir() as root:
             queue = root / "In operation"
             _workspace(queue, "SEEKER", "SEEKER", "hull_a")
@@ -439,7 +439,7 @@ class InstallTests(unittest.TestCase):
             for name in ("A", "B", "C", "D"):
                 _workspace(queue, name, f"mod_{name.lower()}", f"hull_{name.lower()}")
             rig = _rig(root)
-            real_member = __import__("bridgeforge.probe_group", fromlist=["_member"])._member
+            real_member = __import__("bridgeforge.probe.probe_group", fromlist=["_member"])._member
 
             def member(workspace):
                 found = real_member(workspace)
@@ -448,7 +448,7 @@ class InstallTests(unittest.TestCase):
                     found["config"]["mod_systems"] = ["C Prime"]
                 return found
 
-            with mock.patch("bridgeforge.probe_group._member", side_effect=member):
+            with mock.patch("bridgeforge.probe.probe_group._member", side_effect=member):
                 plan = plan_groups(queue, rig, exclude={"D"}, solo={"B"})
                 grouped = plan_groups(queue, rig, exclude={"D"}, auto_solo=False)
         names = [[m["workspace"] for m in g["members"]] for g in plan["groups"]]
@@ -459,7 +459,7 @@ class InstallTests(unittest.TestCase):
         # ROADMAP P15 31.9: WinError 32 midway through an install, 2026-09-28.
         from unittest import mock
 
-        from bridgeforge.probe_group import ProbeGroupError, _refuse_running_game
+        from bridgeforge.probe.probe_group import ProbeGroupError, _refuse_running_game
         with resolved_temp_dir() as root:
             jar = root / "mods" / "bridgeforge-probe" / "jars" / "bridgeforge-probe.jar"
             jar.parent.mkdir(parents=True)
@@ -472,7 +472,7 @@ class InstallTests(unittest.TestCase):
         self.assertIn("close Starsector", str(caught.exception))
 
     def test_install_refuses_a_non_isolated_rig(self) -> None:
-        from bridgeforge.probe_config import ProbeConfigError
+        from bridgeforge.probe.probe_config import ProbeConfigError
 
         with resolved_temp_dir() as root:
             queue = root / "q"
@@ -556,7 +556,7 @@ class InstallHygieneTests(unittest.TestCase):
 class ProbeMissionInReplacingMemberTests(unittest.TestCase):
     def test_probe_row_is_appended_to_a_member_that_replaces_the_mission_list(self) -> None:
         # Ironclads replaces data/missions/mission_list.csv, so the probe mission never showed (GRP10N-20261005)
-        from bridgeforge.probe_group import _add_probe_mission_to_replacing_members
+        from bridgeforge.probe.probe_group import _add_probe_mission_to_replacing_members
 
         crlf = b"\r\n"
         with resolved_temp_dir() as root:
@@ -595,7 +595,7 @@ class SmokeGroupTests(unittest.TestCase):
     def _smoke(self, boot: dict, enabled: list[str] | None = None):
         from unittest import mock
 
-        from bridgeforge.probe_group import smoke_group
+        from bridgeforge.probe.probe_group import smoke_group
         with resolved_temp_dir() as base:
             rig = self._rig(base, ["alpha", "bfprobe"] if enabled is None else enabled)
             with mock.patch("bridgeforge.boot_test.run_boot_test", return_value=boot) as run:
@@ -626,7 +626,7 @@ class SmokeLoadErrorTests(unittest.TestCase):
     """Real lines from saved rig logs: Metelson's rules.csv (GRP1-20261005) and a duplicate name row (GRP10B-20261005)."""
 
     def _errors(self, text: str):
-        from bridgeforge.probe_group import smoke_load_errors
+        from bridgeforge.probe.probe_group import smoke_load_errors
         with resolved_temp_dir() as base:
             log = base / "x.stdout.log"
             log.write_text(text, encoding="utf-8")
@@ -641,14 +641,14 @@ class SmokeLoadErrorTests(unittest.TestCase):
         self.assertIn("Mismatched quotes", found[0])
 
     def test_clean_log_and_missing_log_give_nothing(self) -> None:
-        from bridgeforge.probe_group import smoke_load_errors
+        from bridgeforge.probe.probe_group import smoke_load_errors
         self.assertEqual(self._errors("1 [main] INFO  Running with the following mods\n"), [])
         self.assertEqual(smoke_load_errors(Path("does-not-exist.log")), [])
 
     def test_smoke_group_fails_a_clean_menu_boot_whose_log_has_a_load_error(self) -> None:
         from unittest import mock
 
-        from bridgeforge.probe_group import smoke_group
+        from bridgeforge.probe.probe_group import smoke_group
         with resolved_temp_dir() as base:
             rig = SmokeGroupTests()._rig(base, ["alpha"])
             log = base / "boot.stdout.log"
@@ -664,7 +664,7 @@ class LunaLibAdviceTests(unittest.TestCase):
     """RC8-25: GraphicsLib 1.12.1 enabled without LunaLib."""
 
     def test_advice_only_when_graphicslib_is_on_and_lunalib_is_installed_but_off(self) -> None:
-        from bridgeforge.probe_group import lunalib_advice
+        from bridgeforge.probe.probe_group import lunalib_advice
         installed = {"lunalib": "LunaLib-2.0.5", "shaderLib": "GraphicsLib"}
         self.assertIn("--with-lunalib", lunalib_advice(["shaderLib", "demo"], installed))
         self.assertIsNone(lunalib_advice(["shaderLib", "lunalib"], installed))

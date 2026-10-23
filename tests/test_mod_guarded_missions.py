@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import unittest
 
-from bridgeforge.probe_config import _mission_fleet_refs
+from bridgeforge.probe.probe_config import _mission_fleet_refs
 from bridgeforge.scan_javatext import _blank_java_comments, _blank_mod_guarded_blocks
 from tests.support import resolved_temp_dir
 

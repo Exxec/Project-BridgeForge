@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .safeio import safe_rmtree
+from bridgeforge.safeio import safe_rmtree
 
 import shutil
 import subprocess
@@ -36,7 +36,7 @@ MISSION_CLASS_NAME = "data.missions.bfprobe_combat.MissionDefinition"
 # The game compiles loose scripts at runtime with Janino, which ignores generics; javac does not, so a
 # javac-only check once let a Fatal-at-startup mission ship (live bug PRB-MISSION-02).
 _JANINO_JAR_NAMES = ("janino.jar", "commons-compiler.jar")
-_JANINO_HARNESS = Path(__file__).with_name("java") / "JaninoCheck.java"
+_JANINO_HARNESS = (Path(__file__).parent.parent / "java") / "JaninoCheck.java"
 
 
 class ProbeModBuildError(ValueError):

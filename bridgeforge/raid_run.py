@@ -16,7 +16,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .probe_mod_build import ProbeModBuildError, _core_classpath, _find_javac, _janino_check, _run_javac
+from bridgeforge.probe.probe_mod_build import ProbeModBuildError, _core_classpath, _find_javac, _janino_check, _run_javac
 from .safeio import atomic_write_text, safe_rmtree
 
 RAID_MOD_ID = "bf_raid"

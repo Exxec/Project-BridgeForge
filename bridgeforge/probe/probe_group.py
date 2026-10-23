@@ -15,17 +15,17 @@ Refuses to write anywhere but an isolated rig (starsector-core a junction/symlin
 """
 from __future__ import annotations
 
-from .safeio import atomic_write_text, safe_rmtree
+from bridgeforge.safeio import atomic_write_text, safe_rmtree
 
 import json
 import re
 import shutil
 from pathlib import Path
 
-from .copy_drift import _collect, compare_copies
-from .live_content_parity import merge_parity, parity_failure_lines, parity_findings
-from .probe_config import CONFIG_FILE, RIG_MARKER_FILE, _install_probe_mod, _refuse_non_rig, build_probe_config
-from .scanner import _load_lenient_json_file
+from bridgeforge.copy_drift import _collect, compare_copies
+from bridgeforge.live_content_parity import merge_parity, parity_failure_lines, parity_findings
+from bridgeforge.probe.probe_config import CONFIG_FILE, RIG_MARKER_FILE, _install_probe_mod, _refuse_non_rig, build_probe_config
+from bridgeforge.scanner import _load_lenient_json_file
 
 SCHEMA_VERSION = 1
 PROBE_MOD_ID = "bridgeforge_probe"
@@ -40,7 +40,7 @@ class ProbeGroupError(ValueError):
 
 
 def _report_status(workspace: Path) -> str | None:
-    from .report_status import report_status
+    from bridgeforge.report_status import report_status
 
     return report_status(workspace / "working" / "reports" / "REVIVAL_REPORT.md")
 
@@ -208,8 +208,8 @@ def _providers_for(queue: Path, missing: list[str], extra_sources: list[Path] | 
         if not ready and not candidates:
             # Every source holding exactly one copy offers it; the newest version wins (Roider Union: 2.3.1 installed,
             # 2.6 in the archive, and Roider Armatura needs 2.6's items, 2026-10-04).
-            from .archive import _version_text
-            from .supersession import version_key
+            from bridgeforge.archive import _version_text
+            from bridgeforge.supersession import version_key
 
             # Only a copy built for 0.98 can run in the RC8 rig (the archive's Roider Union is 1.4.5 for 0.95.1a).
             offers = [(source, folders) for source, index in zip(extra_sources, extra) if len(folders := index.get(mod_id) or []) == 1
@@ -278,7 +278,7 @@ def plan_groups(queue: Path, rig: Path, size: int = 8, workspaces: list[Path] | 
                 extra_sources: list[Path] | tuple = ()) -> dict:
     """Greedy grouping: each member joins the first group it shares no mod or content id with. `exclude` leaves
     workspaces out, `solo` gives each its own group, and large campaign mods run solo unless `auto_solo` is off."""
-    from .intake import unprocessed_raw_folders
+    from bridgeforge.intake import unprocessed_raw_folders
 
     exclude, solo = set(exclude or ()), set(solo or ())
     rig = Path(rig).expanduser().resolve()
@@ -473,7 +473,7 @@ def _add_probe_mission_to_replacing_members(rig: Path, members: dict[str, Path])
     """A total conversion that lists data/missions/mission_list.csv in mod_info `replace` wipes every earlier mod's missions,
     and the probe loads before it (Ironclads GRP10N-20261005: the owner could not reach the probe mission). Append the probe's row
     to that member's rig copy, which `install` rewrites on every sync. Returns the folders changed."""
-    from .conversion_checks import replace_list
+    from bridgeforge.conversion_checks import replace_list
 
     probe_list = Path(rig) / "mods" / "bridgeforge-probe" / "data" / "missions" / "mission_list.csv"
     if not probe_list.is_file():
@@ -529,7 +529,7 @@ def lunalib_rule(enabled: list[str], installed: dict[str, str], mods_dir: Path, 
         return False, "skipped (--no-lunalib)", advice
     if with_lunalib:
         return True, "forced (--with-lunalib)", None
-    from .archive import _version_text
+    from bridgeforge.archive import _version_text
 
     version = _version_text(_mod_info(Path(mods_dir) / installed[GRAPHICSLIB_ID]).get("version"))
     if version.startswith(LUNALIB_RULE_VERSION):
@@ -577,7 +577,7 @@ def sync_working_copy(working: Path, target: Path) -> str | None:
 
 def _stage_member_scenario(working: Path, rig_copy: Path, workspace: str) -> dict | None:
     """A member's PROBE_SCENARIO.json: validate it and apply its `settings` to the rig copy only (never to `working`)."""
-    from .probe_scenario import ScenarioError, load_for_working, stage_settings
+    from bridgeforge.probe.probe_scenario import ScenarioError, load_for_working, stage_settings
 
     try:
         scenario = load_for_working(working)
@@ -597,7 +597,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     """Copy/sync members into the rig, write the merged config, set enabled_mods.json. A group whose members
     need providers from the queue installs only with `stage` (`--stage-providers`), which copies and verifies them.
     `setups` (probe setup specs) and `expect_supply` ("commodity@industry") go into the merged config (probe 0.2.25)."""
-    from .probe_config import parse_expect_supply, parse_setups
+    from bridgeforge.probe.probe_config import parse_expect_supply, parse_setups
 
     setups = parse_setups(setups)
     expect_supply = parse_expect_supply(expect_supply)
@@ -605,7 +605,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     queue = Path(queue).expanduser().resolve()
     _refuse_non_rig(rig)
     _refuse_running_game(rig)
-    from .run_manifest import ManifestError, refuse_if_owned
+    from bridgeforge.run_manifest import ManifestError, refuse_if_owned
 
     try:
         refuse_if_owned(rig, "install")  # R1: a prepared run owns the staged files until it is released
@@ -632,7 +632,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
         scenario = _stage_member_scenario(working, mods_dir / member["workspace"], member["workspace"])
         if scenario:
             scenarios.append(scenario)
-    from .run_manifest import record_candidates
+    from bridgeforge.run_manifest import record_candidates
 
     record_candidates(rig, {m["mod_id"]: queue / m["workspace"] / "working" for m in group["members"]})  # R1: what the next manifest binds
     moved_aside = _move_aside_duplicate_ids(rig, {m["mod_id"]: mods_dir / m["workspace"] for m in group["members"]})
@@ -643,7 +643,7 @@ def install_group(plan: dict, group_number: int, queue: Path, rig: Path, install
     if save_reload_after_days > 0:  # next probe version: fingerprint, save and reload stage (save_reload_run)
         config["save_reload"] = {"after_days": int(save_reload_after_days), "slot_note": save_reload_note}
     if scenarios:  # PROBE_SCENARIO.json steps for the probe's ScenarioRunner (docs/PROBE_SCENARIOS.md)
-        from .probe_scenario import probe_config_keys
+        from bridgeforge.probe.probe_scenario import probe_config_keys
 
         config.update(probe_config_keys([s["scenario"] for s in scenarios]))
     common = rig / "saves" / "common"
@@ -754,7 +754,7 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
     """One verdict per member: probe FAIL lines matched by the content id or faction they name, and crashes
     by the mod whose jar threw (log-triage attribution). Unmatched FAILs are reported for the group. `accepted` moves the
     named FAIL lines of a member to its `accepted` list (see accepted_probe_findings); they no longer fail it."""
-    from .log_triage import triage_log
+    from bridgeforge.log_triage import triage_log
 
     members = config.get("group_members") or {}
     owner: dict[str, str] = {}
@@ -804,7 +804,7 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
     for mod_id, lines in parity_failure_lines(parity).items():
         if mod_id in verdicts:
             verdicts[mod_id]["failures"].extend(lines)
-    from .campaign_perf import campaign_perf_summary
+    from bridgeforge.campaign_perf import campaign_perf_summary
 
     perf = campaign_perf_summary(log, slow_p95_ms=config.get("campaign_perf_p95_ms") or None)
     triage = triage_log(log, mods_dir=mods_dir) if mods_dir is not None else triage_log(log)
@@ -867,7 +867,7 @@ def _newest_save_made_with(rig: Path, reader) -> dict | None:
 def evaluate_member_scenarios(log: Path, workspaces: dict[str, Path]) -> dict[str, dict]:
     """{mod id: scenario block} for every tested workspace whose working copy has a PROBE_SCENARIO.json, judged against the game log.
     An invalid scenario file is recorded as an ERROR block (verdict INCOMPLETE) rather than hiding the run."""
-    from .probe_scenario import ScenarioError, evaluate_expectations, load_for_working
+    from bridgeforge.probe.probe_scenario import ScenarioError, evaluate_expectations, load_for_working
 
     text = Path(log).read_text(encoding="utf-8", errors="replace")
     blocks: dict[str, dict] = {}
@@ -894,9 +894,9 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     import shutil
     from datetime import date
 
-    from .archive import ArchiveError, archive_mod
-    from .release import record_policy_decision
-    from .substitutes import revival_licence
+    from bridgeforge.archive import ArchiveError, archive_mod
+    from bridgeforge.release import record_policy_decision
+    from bridgeforge.substitutes import revival_licence
 
     today = today or date.today().isoformat()
     report = group_report(log, config, mods_dir=Path(rig) / "mods", accepted=accepted_probe_findings(queue, Path(rig) / "mods"))
@@ -905,24 +905,24 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     workspaces = _workspaces_by_mod_id(queue, Path(rig) / "mods")
     # ROADMAP 36.6: one run record joining inputs and outputs, written before any archive so the gate (36.11)
     # sees this run's shipped hashes.
-    from .live_trust import archive_gate, auto_explain_shipped, save_made_with, write_run_record
-    from .rig_up import read_rig_state
-    from .log_triage import triage_log
-    from .rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
+    from bridgeforge.live_trust import archive_gate, auto_explain_shipped, save_made_with, write_run_record
+    from bridgeforge.rig_up import read_rig_state
+    from bridgeforge.log_triage import triage_log
+    from bridgeforge.rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
 
     tested = [workspaces[m] for m in sorted(report["members"]) if workspaces.get(m) is not None]
     scenario_blocks = evaluate_member_scenarios(log, {m: workspaces[m] for m in sorted(report["members"]) if workspaces.get(m) is not None})
     if scenario_blocks:
-        from .probe_scenario import apply_to_verdicts
+        from bridgeforge.probe.probe_scenario import apply_to_verdicts
 
         apply_to_verdicts(report["members"], scenario_blocks)
     exit_observed, exit_code = None, None  # no flag: the record is exactly what it was
     if observe_exit:  # opt-in: the exit `probe-group live --natural-exit` observed; absent file stays UNKNOWN/None
-        from .exit_observation import read_exit_observation
+        from bridgeforge.exit_observation import read_exit_observation
 
         exit_observed, exit_code = read_exit_observation(Path(rig), test_id)
     # R1: the one evidence evaluator, shared with `accept`. No manifest, no bound provenance.
-    from .run_manifest import ManifestError, evaluate_run, read_manifest
+    from bridgeforge.run_manifest import ManifestError, evaluate_run, read_manifest
 
     try:
         manifest = read_manifest(Path(rig), test_id)
@@ -930,7 +930,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
         manifest = None
     evidence = evaluate_run(Path(rig), manifest, Path(log), mods_dir=Path(rig) / "mods",
                             member_verdicts={m: v["verdict"] for m, v in report["members"].items()})
-    from .exercised import hollow_mods, hollow_warnings, parse_exercised
+    from bridgeforge.exercised import hollow_mods, hollow_warnings, parse_exercised
 
     exercised = parse_exercised(text)
     hollow = hollow_mods(exercised, sorted(report["members"]))
@@ -950,7 +950,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
                 "known_noise": run_record["known_noise"], "snapshot": None}
     if accept:
         # G5: record through live_accept.accept_run, carrying probe FAIL lines an earlier acceptance of the same mod version covers.
-        from .group_accept import assess_group, context_of
+        from bridgeforge.group_accept import assess_group, context_of
 
         if not (note or "").strip():
             raise ProbeGroupError("--accept needs --note: say what was run and seen (it is written into each report).")
@@ -970,7 +970,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
         path = workspace / "working" / "reports" / "REVIVAL_REPORT.md"
         body = path.read_text(encoding="utf-8").rstrip() if path.is_file() else f"# Revival report: {workspace.name}"
         if accept:
-            from .live_accept import AcceptError, accept_run
+            from bridgeforge.live_accept import AcceptError, accept_run
 
             try:
                 if f"## Live run {test_id}" not in body:
@@ -1010,7 +1010,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
         archived.append(workspace.name)
     snapshot_note = None
     if archived:
-        from .state_snapshot import snapshot_after_archive
+        from bridgeforge.state_snapshot import snapshot_after_archive
         snapshot_note = snapshot_after_archive(done)
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_RECORD", "test_id": test_id, "probe_version": version,
             "recorded": recorded, "archived": archived, "skipped": skipped, "stopped": stopped,
@@ -1050,7 +1050,7 @@ def smoke_group(rig: Path, bat_name: str = SMOKE_BAT, timeout: int = 240, log_na
     """
     import time
 
-    from .boot_test import run_boot_test
+    from bridgeforge.boot_test import run_boot_test
 
     rig = Path(rig)
     _refuse_non_rig(rig)

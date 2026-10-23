@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.live_content_parity import expected_content, parity_findings
-from bridgeforge.probe_config import build_probe_config
-from bridgeforge.probe_group import group_report, merge_configs
+from bridgeforge.probe.probe_config import build_probe_config
+from bridgeforge.probe.probe_group import group_report, merge_configs
 from tests.support import resolved_temp_dir
 
 _LINE = "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.2.27|content-parity|{status}|mod={mod}|{detail}\n"

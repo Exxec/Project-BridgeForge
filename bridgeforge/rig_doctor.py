@@ -10,7 +10,7 @@ from .boot_test import _is_link, _running_java_under
 from .copy_drift import compare_copies
 from .locks import who_locks
 from .project_board import layout_findings
-from .probe_mod_build import RELEASE_RELATIVE
+from bridgeforge.probe.probe_mod_build import RELEASE_RELATIVE
 from .reference_rigs import verify_reference_rig_manifest
 from .scanner import _base_game_version, _load_lenient_json_file
 
