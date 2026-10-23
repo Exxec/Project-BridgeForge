@@ -5,6 +5,12 @@ built yet; LIVE TEST NOT PERFORMED.
   summary` writes a compact per-run verdict file with the next `record` / `baseline-accept` / `revise finalize` commands, and
   can notify when done. Replaces hand-written PowerShell runners (the 2026-10-22 runner skipped every run through a
   return-value bug). Done when the 2026-10-22 batch can be reproduced from gates.json alone.
+  Environment bundles (owner 2026-10-22: "going forward we will need to bundle the various environments in live testing"):
+  a named bundle is a list of launch environments (launcher, Java, pre-patcher on/off), e.g. `standard` = FR Java 25, FR Java
+  28 and direct Java 28, each with and without the pre-patcher (the six-launch Ironclads matrix of 2026-10-22). A gate names
+  a bundle instead of one launcher; `live-batch plan` expands it, stages each candidate once and runs it through every
+  environment before moving on, and records the gate PASS only when every environment passes (per-environment results kept
+  in the run records). Archive-eligible runs use the `standard` bundle unless the gate says otherwise.
 - 85.2 Refactor-review evidence: one command that produces item 83 section 6's evidence for a PR as JSON (test counts
   before/after, skips, coverage, CLI golden hash, rename similarity, wheel file list, Salvor suite against the branch). Done
   when a refactor PR's review reads that one file.
