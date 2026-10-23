@@ -97,6 +97,13 @@ Built and unit-tested offline; nothing below has been run. Order matters: R1 fir
     bf.9 save; check the planets show on the map and in the intel list, the three markets exist, and the BF-ZORG lines.
     **Done 2026-10-22 (New Game):** run ZORGBF10C-20261022 (probe 0.3.2) recorded: entity-state OK for both planets, no FAIL;
     archived as `Zorg18-V18+bf.10.zip`. Loading an existing bf.9 save stays untested.
+19. **Straggler archives (owner 2026-10-22, queued).** A structural check of Done/ (2026-10-22) found three archives below the
+    standard: (a) `Done/Station.Augments-2.4.3+bf.1/` is a hand-placed patched copy (the 2026-10-11 save-load fix) with no
+    ARCHIVE_NOTE.md, original/, workspace/ or zip, so MASTER_LOG lists it only in the changelog; evidence: rig logs
+    GRP-SA-PATCHED4-20261011 and LOAD-SA-NEWSAVE(2)-20261011, original `Downloads/Station.Augments.7z`; (b) ClearCommands
+    [BF r1] 1.0.e+bf.1 and (c) RevenantLib 1.2.0+bf.1 were archived before any live run. BF-Legacy-Fleets has no original/ by
+    design (BridgeForge's own mod). No LIVE_VALIDATED workspace lacks an archive; no prepared revision is unfinished. Gates
+    bf-strag-*.
 
 Rewritten 2026-09-27 after the local and cloud histories merged. Closed and removed: the MOVES.log
 shadowing audit (P14 item 27, done locally in `0183ab3`) and the Maelstrom dependency-jar check

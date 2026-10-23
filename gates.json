@@ -670,6 +670,92 @@
         "anchor": "**Zorg V18+bf.10 (owner 2026-10-22).**"
       },
       "updated": "2026-10-22"
+    },
+    {
+      "id": "bf-strag-station-augments",
+      "title": "Station Augments 2.4.3+bf.1: bring the hand-placed Done/ copy into the standard archive (workspace from Downloads/Station.Augments.7z, live run with save reload, record --archive --refresh)",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "niko_stationAugments",
+          "lw_lazylib",
+          "lunalib",
+          "MagicLib",
+          "bridgeforge_probe"
+        ],
+        "save": true,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "create the workspace: original/ from Downloads/Station.Augments.7z, working/ = Done/Station.Augments-2.4.3+bf.1/Station Augments",
+        "python -m bridgeforge probe-group live <TESTID> --save-reload",
+        "python -m bridgeforge probe-group record <TESTID> --accept --archive --refresh --note \"...\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**Straggler archives (owner 2026-10-22, queued).**"
+      },
+      "updated": "2026-10-22"
+    },
+    {
+      "id": "bf-strag-clearcommands",
+      "title": "ClearCommands [BF r1] 1.0.e+bf.1: archived before any live run; live run and record",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "clearCommands",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge probe-group live <TESTID>",
+        "python -m bridgeforge probe-group record <TESTID> --accept --note \"...\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**Straggler archives (owner 2026-10-22, queued).**"
+      },
+      "updated": "2026-10-22"
+    },
+    {
+      "id": "bf-strag-revenantlib",
+      "title": "RevenantLib 1.2.0+bf.1: archived before any live run; live run and record",
+      "state": "LIVE_PENDING",
+      "evidence": [],
+      "needs": {
+        "rig": true,
+        "mods": [
+          "revenantlib",
+          "lw_lazylib",
+          "bridgeforge_probe"
+        ],
+        "save": false,
+        "java": "25",
+        "launcher": "direct",
+        "lunalib": null,
+        "scenario": null
+      },
+      "commands": [
+        "python -m bridgeforge probe-group live <TESTID>",
+        "python -m bridgeforge probe-group record <TESTID> --accept --note \"...\""
+      ],
+      "source_doc": {
+        "path": "docs/LOCAL_HANDOFF.md",
+        "anchor": "**Straggler archives (owner 2026-10-22, queued).**"
+      },
+      "updated": "2026-10-22"
     }
   ]
 }
