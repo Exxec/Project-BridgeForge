@@ -52,7 +52,8 @@ S1 may implement offline contracts before pilot selection. Before mutating integ
 | S1.1 | Contract map recorded; qualification profile DESIGN_PENDING | S1_CONTRACT_MAP.md; review exact obligations before enforcement |
 | S1.2 | Initial read-only adapter IMPLEMENTED OFFLINE | `bridgeforge/case_workspace.py`, synthetic `tests/test_case_workspace.py`; results in S1_PROGRESS.md |
 | S1.3 | Case/candidate/receipt store IMPLEMENTED OFFLINE and validated | S1_CASE_RECORDS.md and S1_PROGRESS.md; generic receipts remain unverified |
-| S1.4-S1.6 | NOT_IMPLEMENTED | Implement qualification/evidence adapters next; do not wire mutation commands prematurely |
+| S1.4 | Read-only evaluator IMPLEMENTED OFFLINE and validated | S1_CASE_RECORDS.md; no legacy caller policy change |
+| S1.5-S1.6 | NOT_IMPLEMENTED | Integrate prepare/run/finalize then operator pilot; preserve legacy callers |
 | S2-S4 | PLANNED | Require preceding acceptance and the per-slice prerequisites above |
 
 Keep S1_PROGRESS.md updated with exact branch, checks, limits and resume instructions so another maintainer can continue without this chat. Every slice gets focused acceptance/refusal tests, full guarded regression, unchanged legacy CLI goldens, coverage/no-weakened-baseline checks, lint and an evidence receipt. No minimum automation percentage or speedup is invented. LIVE TEST NOT PERFORMED.

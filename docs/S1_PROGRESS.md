@@ -26,12 +26,12 @@ Raw suite/coverage/build/consumer logs and `s1-result.json` remain ignored in th
 ## Resume next
 
 1. Read S_SERIES_IMPLEMENTATION_PLAN.md and S1_CONTRACT_MAP.md. Inspect current Git state and this evidence before editing.
-2. Continue S1.4: implement explicit qualification obligations and independently verified evidence adapters over the S1.3 store. Read S1_CASE_RECORDS.md first; generic recorded PASS receipts must not manufacture qualification.
+2. Continue S1.5: integrate explicit prepare/run/finalize operations over the S1.3 store and S1.4 evaluator. Read S1_CASE_RECORDS.md first; persisted result labels must never replace fresh qualification before finalization.
 3. Review exact supported operator entry points/profile before S1.4 enforcement; preserve legacy caller distinctions and missing/unknown evidence.
 4. Add interruption/stale-input/refusal tests before mutation/finalization integration. Candidate freezing must revalidate payload paths and concurrent changes; this read-only view checks selected boundaries only.
 5. Select real P1-P6 pilots, permissions and rig/reviewer capacity with the owner before operational acceptance. Save-changing cases retain higher-capability/person routing. New-game proof cannot become save-upgrade proof.
 
-S1 is IN_PROGRESS. S1.3 records are IMPLEMENTED OFFLINE and validated (evidence below); S1.4-S1.6 are NOT_IMPLEMENTED; S2-S4 are PLANNED. The B-series review/merge gates remain independent. This slice is local-only; no push, PR creation, main merge, archive or release is authorized by this checkpoint. LIVE TEST NOT PERFORMED.
+S1 is IN_PROGRESS. S1.3 records are IMPLEMENTED OFFLINE and validated (evidence below); S1.4 read-only qualification is IMPLEMENTED OFFLINE; caller integration and S1.5-S1.6 are NOT_IMPLEMENTED; S2-S4 are PLANNED. The B-series review/merge gates remain independent. This slice is local-only; no push, PR creation, main merge, archive or release is authorized by this checkpoint. LIVE TEST NOT PERFORMED.
 
 ## Try the library boundary
 
@@ -65,3 +65,16 @@ Content-bound candidates and generic observation receipts plus atomic append-onl
 ### Next action: S1.4
 
 Implement a shared, explicit obligation evaluator plus caller-specific evidence adapters. Start with a read-only local-new-game qualification view; do not mutate archive/release/accept callers until their compatibility obligations are proven. Required observations must include source authority/review, candidate/package, static, applicable compile, dependency/API, and bound applicable live scenarios. Missing/unsupported/legacy observations stay INCOMPLETE/UNKNOWN; recorded PASS labels alone never satisfy obligations. Re-evaluate candidate/context/artifact identity on every qualification, and retain separate per-dimension results. In particular, reuse `run_manifest.evaluate_run` plus the existing log/probe refusal checks; require the specific candidate/member and scenario scope, not an unrelated passing member or a clean startup log.
+
+
+## S1.4 implementation checkpoint, 2026-10-24
+
+Read-only `case_qualification.qualify_case` and isolated `case_evidence` scan/compile worker implement the local-new-game profile described in S1_CASE_RECORDS.md. No legacy command, archive/release policy or import changes. Exact candidate/context rechecks, explicit dependency closure, source/review authority, fresh static/API/compile observations, rights restrictions and exact bound R1 live evidence retain separate results. Generic receipts never become qualification; missing evidence stays INCOMPLETE. Matching manifest echo is required even where legacy evidence accepts older logs.
+
+13 new tests pass, including actual fresh worker plus synthetic R1 integration, exact enabled closure mismatch, legacy echo refusal, post-test staged drift, concurrent working mutation, unsupported target schema, bound owner policy changes, missing declared jars and incomplete Janino/source coverage. Synthetic logs and dummy runtime fixtures are regression tests only, not real game observations.
+
+Final full guarded suite: **2673 tests, OK (12 unchanged skips), 277.013s**; hermeticity PASS. Coverage **83.1173723%**, down 0.0766824 percentage points from S1.3, above the unchanged 80% ratchet. Qualification module 77.56%; isolated worker executes in a child process outside parent coverage collection (reported 0%, with real subprocess integration tests passing). No coverage threshold, safety baseline or test skips changed. Wheel adds only case_evidence.py/case_qualification.py; every existing runtime/payload byte matches S1.3. Installed-wheel Salvor **208 tests/4 skips PASS**. Ruff, docs-index, gates lint and whitespace PASS. Raw logs/coverage/wheel/consumer evidence: ignored `bridgeforge-state/s14-*`; initial intermediate suite also passed 2668/12 before the final additional tests. No live game, source mod/save mutation, archive, push, PR or main merge occurred.
+
+### Resume S1.5 next
+
+Inspect current branch/status and active goal, then design the minimal supported prepare/run/finalize library flow before public CLI integration. Reuse R1 rig ownership/manifests and R5 revise concepts where their convention-only paths and policy semantics match; do not silently wrap permissive archive primitives or change legacy release behavior. Keep operation records outside frozen payloads. Prepare fixes the bytes/version once; finalization must independently requalify, verify exact staged/archive bytes, preserve prior artifacts and handle interruption/retry/concurrency without duplicate writes. Synthetic success must not bypass owner review for real changes or create publication authority. Then implement the minimal operator flow and S1.6 real pilot positive/drift negative in an isolated rig instance. Dedicated rig discovered at `C:/Users/exxec/Documents/Project BridgeForge/In operation/_rig`; existing instances/configurations/saves are preserved, ownership must be checked before any staging. All S1-S4 work remains the active goal; S1 operational acceptance, S2-S4 and independent operator/support gates are still open.
