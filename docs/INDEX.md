@@ -17,7 +17,7 @@ proposed work and dated evidence. It does not implement the case lifecycle or re
 - [Charter](PROJECT_CHARTER.md) and [CLAUDE.md](../CLAUDE.md): purpose and committed repository/agent rules.
   The local `AGENTS.md` additionally governs owner decisions/model routing; it is intentionally not shipped in Git.
 - [Vision](VISION.md), [strategic roadmap](STRATEGIC_ROADMAP.md), [next milestone](NEXT_MILESTONE.md) and
-  [architecture gaps](ARCHITECTURE_GAPS.md): proposed S1-S4 direction and evidence; no implicit implementation approval.
+  [architecture gaps](ARCHITECTURE_GAPS.md): S1-S4 direction and dated evidence; current S1 authorization/scope is recorded in the implementation plan, while later acceptance and publication remain gated.
 - [Active roadmap](../ROADMAP-3.md): the only current tactical backlog. Earlier decisions/history remain in
   [archived page 1](archive/ROADMAP.md) and [page 2](archive/ROADMAP-2.md). [docs/ROADMAP.md](ROADMAP.md) and
   [completion log](ROADMAP_COMPLETION_LOG.md) are historical tranche records, not competing current backlogs.
@@ -104,3 +104,6 @@ The bounded audit scope, exceptions and source-backed corrections are recorded i
 - [B5 test-speed evidence](REFACTOR_B5_TEST_SPEED.md): measured unittest markers, complete CI partitions and local validation.
 
 - [B6 close-out evidence](REFACTOR_B6_CLOSEOUT.md): current architecture/companion paths and the explicit distinction between documentation implementation and remaining item-83 review/merge gates.
+
+- [S-series implementation plan](S_SERIES_IMPLEMENTATION_PLAN.md): owner-authorized S1 start, S1-S4 dependency order and acceptance gates.
+- [S1 contract map](S1_CONTRACT_MAP.md) and [progress/handoff](S1_PROGRESS.md): existing policy compatibility, read-only workspace adapter and next implementation slice.

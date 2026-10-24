@@ -75,3 +75,7 @@ Owner decision 2026-10-23: retain the current CLI; B4 grouping/deprecations decl
 B6 architecture/handoff documentation implemented locally, 2026-10-23: [close-out evidence](REFACTOR_B6_CLOSEOUT.md). Item 83 stays open pending the stack review/merge and applicable cross-repository obligations. Research #73 is merged; other B3 family merges are pending at this checkpoint.
 
 Publication checkpoint 2026-10-23: the eleven B3-B5 branch tips are pushed with green hosted push CI (run links in [the stack ledger](REFACTOR_STACK.md)). B6 full local suite: 2,619 tests, 12 unchanged skips, hermeticity PASS. Draft PR creation awaits explicit owner approval; review/merge and item 83 completion remain open.
+
+Strategic implementation checkpoint 2026-10-24: owner authorized S-series planning and S1 start. The compatibility/policy map is recorded and a read-only workspace adapter is implemented for both dialects; [plan](S_SERIES_IMPLEMENTATION_PLAN.md), [progress](S1_PROGRESS.md). S1 case/candidate/receipt persistence, qualification integration, finalization and operational pilot remain unimplemented; S1 is IN_PROGRESS, not accepted. S2-S4 remain planned. No existing live, archive or auto-acceptance gate is closed.
+
+S1 initial slice validated 2026-10-24: 2,635 tests, 12 unchanged skips, hermeticity PASS; branch coverage 83.1451218%; installed-wheel Salvor 208 tests/4 skips PASS. Existing runtime/payload bytes and CLI golden unchanged; only the read-only adapter is added. S1 remains IN_PROGRESS; [evidence and next slice](S1_PROGRESS.md).

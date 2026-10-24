@@ -103,6 +103,8 @@ in a cloud session. Build and test what you can, then add an entry to `docs/LOCA
   Scanner orchestration is `scan/scanner.py`; checks and shared parsing live beside it. Internal imports use those
   implementations, not the 11 root Salvor compatibility facades. `tests/refactor_module_moves.json` and
   `tests/test_refactor_imports.py` pin those boundaries. Do not remove a facade before its consumer pin/import migration.
+- `case_workspace.py` is the S1 read-only adapter for both workspace dialects; it grants no mutation or qualification rights.
+  Its implementation/status and next slice are in `docs/S1_PROGRESS.md`.
 - `tests/` unittest suite; `tests/support.py` has `resolved_temp_dir()` and `link_dir()`. B5 CI partitions use
   `tests/run_partitioned.py` and measured `tests/slow_tests.json`; normal full discovery and the full coverage job remain.
 - `probe-mod/` the in-game probe (Java, public API only); built by `build-probe-mod`.

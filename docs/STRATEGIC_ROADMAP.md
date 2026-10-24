@@ -1,5 +1,7 @@
 # Strategic roadmap: four outcome-gated releases
 
+**Implementation instruction, 2026-10-24:** owner requested "plan S series implementation then proceed to start S1". The [implementation plan](S_SERIES_IMPLEMENTATION_PLAN.md) orders S1-S4; S1 has started with the compatibility map and offline read-only workspace adapter. The earlier proposal/baseline text below is dated history. Qualification profile enforcement, real pilot/rig access, save/gameplay changes, publication and milestone acceptance retain their explicit gates; S2-S4 are planned, not implemented.
+
 Proposed 2026-10-17 for owner review. Read [VISION.md](VISION.md) for the destination and boundaries and
 [ARCHITECTURE_GAPS.md](ARCHITECTURE_GAPS.md) for the inspected evidence behind the choices.
 This document sets direction over approximately 12-24 months; it does not allocate dates or imply approved staffing.

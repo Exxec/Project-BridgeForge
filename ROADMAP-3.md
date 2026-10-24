@@ -1,3 +1,6 @@
+**S-series implementation (owner 2026-10-24: "plan S series implementation then proceed to start S1").**
+[Implementation plan](docs/S_SERIES_IMPLEMENTATION_PLAN.md) translates S1-S4 into dependency-ordered slices. S1 starts with the compatibility/policy map and read-only workspace boundary; [progress and handoff](docs/S1_PROGRESS.md) records evidence and next work. S1 remains IN_PROGRESS; qualification, real pilot/live, rights, save changes and finalization gates stay open. S2-S4 are planned, not implemented.
+
 **85. Automation and fewer tokens per task (owner-approved 2026-10-22).** From this session's hand work. Nothing below is
 built yet; LIVE TEST NOT PERFORMED.
 - 85.1 Live-batch command: `live-batch plan` turns LIVE_PENDING gates (`gates.json` needs, `board --live-pending` blocks) into
