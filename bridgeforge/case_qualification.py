@@ -187,15 +187,7 @@ def _compile(observed: dict, sources: list[Path], requested: bool, core: Path | 
     return result('PASS', 'Current full loose-source javac and RC8 Janino checks passed', compile=value)
 
 
-def _live(body: dict, working: Path, info: dict, reference: tuple[Path, str] | None) -> dict:
-    if reference is None:
-        return result('INCOMPLETE', 'No bound live scenario supplied')
-    rig, run_id = reference
-    rig = Path(rig).resolve()
-    manifest = read_manifest(rig, run_id)
-    log = Path(manifest['log'])
-    artifacts = [rig / 'logs' / (run_id + '.manifest.json'), rig / 'logs' / (run_id + '.completed.json'), log]
-    before = {str(path): file_digest(path) for path in artifacts}
+def _run_context(body: dict, working: Path, info: dict, manifest: dict, rig: Path) -> dict | None:
     core = _binding(body, 'core', 'starsector', 'tree')
     launcher = _binding(body, 'launcher', 'game', 'file')
     jdk = _binding(body, 'tools', 'jdk', 'tree')
@@ -239,6 +231,22 @@ def _live(body: dict, working: Path, info: dict, reference: tuple[Path, str] | N
     target = manifest['targets'].get(info.get('id'))
     if not target or Path(target['working']).resolve() != working or target['candidate_sha256'] != body['payload']['sha256']:
         return result('FAIL', 'This candidate is not the exact bound target of this run')
+    return None
+
+
+def _live(body: dict, working: Path, info: dict, reference: tuple[Path, str] | None) -> dict:
+    if reference is None:
+        return result('INCOMPLETE', 'No bound live scenario supplied')
+    rig, run_id = reference
+    rig = Path(rig).resolve()
+    manifest = read_manifest(rig, run_id)
+    log = Path(manifest['log'])
+    artifacts = [rig / 'logs' / (run_id + '.manifest.json'), rig / 'logs' / (run_id + '.completed.json'), log]
+    before = {str(path): file_digest(path) for path in artifacts}
+    mismatch = _run_context(body, working, info, manifest, rig)
+    if mismatch is not None:
+        return mismatch
+    launcher = _binding(body, 'launcher', 'game', 'file')
     evidence = evaluate_run(rig, manifest, log, mods_dir=rig / 'mods', launcher=launcher)
     member = evidence['members'].get(info.get('id')) or {}
     triage = triage_log(log, mods_dir=rig / 'mods')
