@@ -81,3 +81,7 @@ Strategic implementation checkpoint 2026-10-24: owner authorized S-series planni
 S1 initial slice validated 2026-10-24: 2,635 tests, 12 unchanged skips, hermeticity PASS; branch coverage 83.1451218%; installed-wheel Salvor 208 tests/4 skips PASS. Existing runtime/payload bytes and CLI golden unchanged; only the read-only adapter is added. S1 remains IN_PROGRESS; [evidence and next slice](S1_PROGRESS.md).
 
 Owner goal 2026-10-24: implement/validate all S1-S4 in dependency order; automated live tests authorized when needed on the dedicated isolated rig under existing ownership/evidence/safety rules. S1.3 is next. Operational and human acceptance gates remain explicit; no live run was performed by this goal-activation checkpoint.
+
+S1.3 checkpoint 2026-10-24: case/candidate/receipt identities and append-only store implemented offline; exact payload/context binding, drift/refusal/replay/retry/lock tests pass. Generic receipts are RECORDED_NOT_VERIFIED; qualification adapters and active profile remain S1.4 work. [Contracts](S1_CASE_RECORDS.md), [validation/handoff](S1_PROGRESS.md).
+
+S1.3 validated 2026-10-24: 2,660 full-suite tests, 12 unchanged skips, hermeticity PASS, coverage 83.1940548%; installed-wheel Salvor 208 tests/4 skips PASS. Next S1.4: qualification obligations and independently verified evidence adapters. S1-S4 goal remains active; operational/live/owner gates are not closed.

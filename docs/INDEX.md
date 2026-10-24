@@ -107,3 +107,5 @@ The bounded audit scope, exceptions and source-backed corrections are recorded i
 
 - [S-series implementation plan](S_SERIES_IMPLEMENTATION_PLAN.md): owner-authorized S1 start, S1-S4 dependency order and acceptance gates.
 - [S1 contract map](S1_CONTRACT_MAP.md) and [progress/handoff](S1_PROGRESS.md): existing policy compatibility, read-only workspace adapter and next implementation slice.
+
+- [S1 case and receipt contracts](S1_CASE_RECORDS.md): content-bound candidates, context identities, append-only persistence and explicit integrity/provenance limits.
