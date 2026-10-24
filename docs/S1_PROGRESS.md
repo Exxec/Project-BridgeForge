@@ -46,3 +46,12 @@ print(view.layout, view.original, view.working, view.unavailable, view.provenanc
 ```
 
 This is a library slice; no `case` CLI command has been added or implied.
+
+
+## Active S1-S4 goal (owner instruction, 2026-10-24)
+
+"set goal for all S series, if need be run automated live test."
+
+The active goal now covers implementation and validation of all S1-S4 in dependency order, not only S1. Automated live testing is authorized where required, using the dedicated isolated rig with its ownership, staged-input/run-manifest and existing policy checks. Inspect current rig/process ownership before staging; serialize GUI/live resources. Preserve originals, primary saves and prior archives. Ordinary implementation/verification may continue without per-slice confirmation; gameplay/save-content decisions, licence/publication, PR creation, main merges, second-operator evidence and owner support/acceptance commitments remain distinct gates. A synthetic/automated test does not impersonate an independent human operator.
+
+Next: S1.3's content-bound candidate/receipt spine, followed by durable case records and qualification adapters. Reuse `copy_drift._collect`/`run_manifest.FILESET_ALGORITHM` for the shipped set only after validating physical payload boundaries. Retain scan-registry's broader analysis-input identity separately; generated reports must not invalidate shipped payload identity. Bind receipts to candidate AND explicit dependency/core/tool/rule/policy context; missing context/provenance cannot become acceptance. Keep decisions and evidence outside frozen payloads and test stale inputs, same-version drift, tampering, unsupported schemas, interruptions and retries before wiring mutations.
