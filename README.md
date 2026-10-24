@@ -207,3 +207,6 @@ changes that did not occur block packaging. See
 Scanning is read-only with respect to the selected mod directory. Generated artifacts are written only to `--output`.
 
 These tools enforce reproducibility, scope, packaging, and evidence discipline. They do not automatically resolve REVIEW or MANUAL findings.
+
+
+S1 local case workflow: see [the operator guide](docs/S1_OPERATOR_GUIDE.md) for the opt-in `case` commands, explicit input bindings, resumable local operations and remaining pilot gates. Existing commands retain their contracts; offline tests do not establish live or save-upgrade qualification.

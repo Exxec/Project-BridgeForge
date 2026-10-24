@@ -21,6 +21,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "rig.rig_up": ("rig-up",),
     "run_manifest": ("run-manifest",),
     "revise": ("revise",),
+    "cmd_case": ("case",),
     "live.live_ledger": ("live-ledger",),
     "roadmap_lint": ("roadmap-lint",),
     "agent_diff_check": ("agent-diff-check",),

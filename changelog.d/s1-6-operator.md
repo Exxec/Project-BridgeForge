@@ -1,0 +1,1 @@
+S1: add opt-in case commands and a resumable operator guide for capture/status, fresh qualification, preparation, live-harness run binding and local finalization. Historical checkpoints do not imply current qualification. Existing commands remain unchanged; real pilot acceptance is pending.

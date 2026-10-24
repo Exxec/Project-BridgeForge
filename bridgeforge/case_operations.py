@@ -247,7 +247,9 @@ def finalize_case(store: CaseStore, case_id: str, operation_id: str, *, run_comp
 def prepare_case_run(store: CaseStore, case_id: str, operation_id: str, *, rig: Path, run_id: str,
                      run_compile: bool = False) -> dict:
     """Bind an already staged isolated rig; do not launch or overwrite staged mods/configs."""
-    from .case_qualification import LIVE_MILESTONES, _binding, _run_context
+    from .case_qualification import _binding, _run_context
+    from .live.live_run import LIVE_EXPECTED_MILESTONES
+    from .run_manifest import read_staging_state
     from .run_manifest import (_enabled_ids, _staged_entries, check_run_id, prepare_run, read_manifest,
                                OWNER_FILE, manifest_path, refuse_if_owned, rig_owner, runtime_hashes,
                                _launcher_files, _resolve_java_executable)
@@ -296,16 +298,19 @@ def prepare_case_run(store: CaseStore, case_id: str, operation_id: str, *, rig: 
             expected_java = jdk / 'bin' / ('java.exe' if os.name == 'nt' else 'java')
             if _resolve_java_executable(rig, launcher, java) != expected_java:
                 raise OperationError('Launcher selects an unbound Java executable')
+            staged_candidates = read_staging_state(rig).get('candidates') or {}
+            if set(staged_candidates) != {info['id']} or Path(staged_candidates[info['id']]['working']).resolve() != working:
+                raise OperationError('Staging state must select only this case candidate for the live harness')
             expected = {'rig_core': str((rig / 'starsector-core').resolve()),
                         'runtime': runtime_hashes(rig, launcher),
                         'enabled': _staged_entries(rig, _enabled_ids(rig)),
                         'targets': {info['id']: {'working': str(working), 'candidate_sha256': body['payload']['sha256']}},
-                        'expected_milestones': list(LIVE_MILESTONES)}
+                        'expected_milestones': list(LIVE_EXPECTED_MILESTONES)}
             mismatch = _run_context(body, working, info, expected, rig)
             if mismatch is not None:
                 return {'state': 'REFUSED', 'operation_id': operation_id, 'run_context': mismatch}
             _current(store, case_id, plan['candidate_id'])
-            manifest = prepare_run(rig, run_id, 'live', targets=[info['id']], expected=list(LIVE_MILESTONES),
+            manifest = prepare_run(rig, run_id, 'live', targets=[info['id']], expected=list(LIVE_EXPECTED_MILESTONES), scenario='probe-group live',
                                    candidates={info['id']: working}, launcher=launcher)
         mismatch = _run_context(body, working, info, manifest, rig)
         if mismatch is not None:
