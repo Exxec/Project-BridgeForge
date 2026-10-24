@@ -71,3 +71,7 @@ or any live/release gate.
 B4 report implemented locally, 2026-10-23: [command-reference audit](REFACTOR_B4_COMMAND_AUDIT.md), based on B3 tip `6a843117`. Report only; owner grouping/deprecation decision and review/merge pending. No command behavior changed.
 
 Owner decision 2026-10-23: retain the current CLI; B4 grouping/deprecations declined. B5 implemented locally: measured unittest fast/slow CI partitions, full suite and coverage preserved. See [B5 evidence](REFACTOR_B5_TEST_SPEED.md). Owner review/merge and hosted CI pending; B6 remains open.
+
+B6 architecture/handoff documentation implemented locally, 2026-10-23: [close-out evidence](REFACTOR_B6_CLOSEOUT.md). Item 83 stays open pending the stack review/merge and applicable cross-repository obligations. Research #73 is merged; other B3 family merges are pending at this checkpoint.
+
+Publication checkpoint 2026-10-23: the eleven B3-B5 branch tips are pushed with green hosted push CI (run links in [the stack ledger](REFACTOR_STACK.md)). B6 full local suite: 2,619 tests, 12 unchanged skips, hermeticity PASS. Draft PR creation awaits explicit owner approval; review/merge and item 83 completion remain open.

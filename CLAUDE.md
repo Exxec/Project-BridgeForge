@@ -96,12 +96,15 @@ in a cloud session. Build and test what you can, then add an entry to `docs/LOCA
 
 ## Layout
 
-- `bridgeforge/` the package. Commands: `cli.py` is 56 lines; every command's parser and handler lives in a
-  `cmd_*.py` or its own module and is listed in `cli_commands.COMMAND_MODULES` (a module defines
-  `add_parser(subcommands)` and `run_cli(args)`; a new command is a module plus one line there). Checks:
-  `scanner.py` keeps `scan_mod`, `_scan_jars` and re-exports every moved name; the checks live in 25
-  `scan_*.py` modules (no module imports `scanner`). `fixers/` holds the `fix` command's rewrites, with its existing API re-exported by `fixers/__init__.py`.
-- `tests/` unittest suite; `tests/support.py` has `resolved_temp_dir()` and `link_dir()`.
+- `bridgeforge/` the package. `cli.py` builds/dispatches through `cli_commands.COMMAND_MODULES`; each owner module
+  defines `add_parser(subcommands)` and `run_cli(args)`. Domain implementations live in `research/`, `atlas/`, `corpus/`,
+  `escalation/`, `probe/`, `rig/`, `live/`, `bytecode/`, `scan/` and `save/`; B2 rewrites live in `fixers/` with its public API
+  exported by `fixers/__init__.py`. Full placement and shim rules: [ARCHITECTURE.md](ARCHITECTURE.md).
+  Scanner orchestration is `scan/scanner.py`; checks and shared parsing live beside it. Internal imports use those
+  implementations, not the 11 root Salvor compatibility facades. `tests/refactor_module_moves.json` and
+  `tests/test_refactor_imports.py` pin those boundaries. Do not remove a facade before its consumer pin/import migration.
+- `tests/` unittest suite; `tests/support.py` has `resolved_temp_dir()` and `link_dir()`. B5 CI partitions use
+  `tests/run_partitioned.py` and measured `tests/slow_tests.json`; normal full discovery and the full coverage job remain.
 - `probe-mod/` the in-game probe (Java, public API only); built by `build-probe-mod`.
 - Gitignored and local-only: `In operation/`, `Done/`, `AGENTS.md`, `tools/*.ps1` (except
   `bf-test.ps1`), `.githooks/`. RevenantLib is a separate private repo, `Exxec/RevenantLib`
@@ -145,8 +148,8 @@ without it. The web-session hook installs it.
 After a push, watch the run (`gh run watch <id> --exit-status`): CI was red for a day unnoticed (2026-10-13) because a local suite on
 one Python passed while argparse output, home and checkout paths, and junction handling differ on the CI matrix.
 
-CI (`.github/workflows/ci.yml`) runs all of these, plus the tests on Windows and Ubuntu with
-Python 3.15 and a coverage floor (`[tool.coverage.report] fail_under` in pyproject; raise
+CI (`.github/workflows/ci.yml`) runs all of these, plus disjoint fast/slow test jobs on Windows and Ubuntu with
+Python 3.15, a separate full coverage job and a coverage floor (`[tool.coverage.report] fail_under` in pyproject; raise
 it when coverage rises, never lower it).
 
 ## Test conventions

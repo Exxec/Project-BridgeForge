@@ -102,3 +102,5 @@ The bounded audit scope, exceptions and source-backed corrections are recorded i
 - [B4 command-reference audit](REFACTOR_B4_COMMAND_AUDIT.md): complete parser inventory and bounded static consumer references; grouping/deprecation decisions remain with the owner.
 
 - [B5 test-speed evidence](REFACTOR_B5_TEST_SPEED.md): measured unittest markers, complete CI partitions and local validation.
+
+- [B6 close-out evidence](REFACTOR_B6_CLOSEOUT.md): current architecture/companion paths and the explicit distinction between documentation implementation and remaining item-83 review/merge gates.
