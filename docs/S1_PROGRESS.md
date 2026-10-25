@@ -169,3 +169,8 @@ S2.1 begins with byte-verified private copies and shared exact core/JDK/Python/e
 
 
 S2 measurement continuation completed three serial 12-case passes: full raw-response and resolution-decision equivalence PASS, 3196 findings each, zero worker errors, two explicit unresolved dependency contexts. Summed worker times 150.579/145.195/147.767 seconds; first invocation was resumed, so its elapsed is not whole-run timing. Source/provider preservation per round and final core/JDK/Python/engine checks PASS. Training-only AI War profile preserves raw findings and identifies repeated parsing/inventory work; no optimization/default change is yet claimed. Sessions 26440 and 51222 are terminal exit 0. See S2_PROGRESS.md for exact receipts, limitations and the next reuse/resource measurement work. No product source or safety baseline changed in this measurement slice.
+
+
+## Owner-directed S3 continuation, 2026-10-25
+
+Owner requested "continue on to S3". The initial read-only case-bound D-series obligation planner is implemented and validated; see S3_PROGRESS.md. Full guarded suite 2707/12 PASS, coverage 83.1039060%, package/consumer checks PASS. This does not close S1 reviewed-compile/independent-handoff acceptance or S2 optimization/resource/threshold gates. Preserve historical engine-bound operations/archives; prepare a fresh operation after implementation changes. No saved-upgrade or live execution was performed for the S3 slice.

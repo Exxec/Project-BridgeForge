@@ -122,7 +122,7 @@ def _load_save_aliases(path: Path | None) -> set[str]:
     return aliases
 
 
-def build_archaeology(mod_directory: Path, *, save_aliases: Path | None = None, vanilla_core: Path | None = None) -> dict[str, object]:
+def build_archaeology(mod_directory: Path, *, save_aliases: Path | None = None, vanilla_core: Path | None = None, provider_roots: list[Path] | None = None) -> dict[str, object]:
     root = _resolved_directory(mod_directory, "mod directory")
     aliases = _load_save_aliases(save_aliases)
     mod_info = _load_lenient_json_file(root / "mod_info.json") if (root / "mod_info.json").is_file() else None
@@ -142,7 +142,8 @@ def build_archaeology(mod_directory: Path, *, save_aliases: Path | None = None, 
     persistent_candidates: list[dict[str, object]] = []
     # With vanilla_core, assets a mod borrows from vanilla resolve instead of reading as missing
     # (Flu-X: 9 false HIGH "asset-reference-missing" risks without it).
-    scan_result = scan_mod(root, TargetProfile(), vanilla_core)
+    scan_result = (scan_mod(root, TargetProfile(), vanilla_core) if provider_roots is None
+                   else scan_mod(root, TargetProfile(), vanilla_core, provider_roots=provider_roots))
 
     def add_node(node_id: str, kind: str, **extra: object) -> None:
         existing = nodes.setdefault(node_id, {"id": node_id, "kind": kind})

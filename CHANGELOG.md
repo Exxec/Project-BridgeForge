@@ -2,6 +2,8 @@
 
 ## 0.4.0 (unreleased)
 
+- S3 initial read-only behavior obligation planning binds D-series hypotheses to current S1 candidate/context identities, retains missing/original-only features and unavailable runtime references, and emits conservative scenario obligations and residual human tests. Static plans grant no qualification, deviation or save-upgrade authority.
+
 - **Probe 0.3.1:** adds the Salvor profile (ROADMAP 78.5); jars rebuilt deterministically (sha256 prefix `1c22736f9e238244`). LIVE TEST NOT PERFORMED.
 
 - **Probe 0.3.0 (ROADMAP item 78):** one release carrying the manifest id echo, save-and-reload fingerprint, live content parity, declarative scenarios, graceful exit marker, exercised report and campaign frame time; jars rebuilt deterministically (sha256 prefix `493158aa15ba9d03`). LIVE TEST NOT PERFORMED.
