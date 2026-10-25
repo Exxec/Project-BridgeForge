@@ -23,10 +23,19 @@ from .scan.scan_registry import _excluded
 from .scan.scanner import _load_lenient_json_file
 from .source_paths import python_sources
 
-PROFILE_ID = 'rc8-local-new-game/v1'
+PROFILE_ID = 'rc8-local-new-game/v2'
 TARGET = {'target': '0.98a-RC8', 'java': 17, 'scope': 'new-game', 'qualification_profile': PROFILE_ID}
 REQUIRED = ('candidate', 'context', 'target', 'review', 'source_authority', 'dependencies', 'static', 'api', 'compile', 'rights', 'live')
-LIVE_MILESTONES = ('main_menu', 'campaign_load', 'combat')
+LIVE_MILESTONES = ('main_menu', 'campaign_checks', 'content_ids', 'combat')
+LEGACY_TARGET = {**TARGET, 'qualification_profile': 'rc8-local-new-game/v1'}
+
+
+def profile_milestones(body: dict) -> tuple[str, ...]:
+    if body['target_profile'] == LEGACY_TARGET:
+        return ('main_menu', 'campaign_load', 'combat')
+    if body['target_profile'] == TARGET:
+        return LIVE_MILESTONES
+    raise ValueError('Unsupported declared target/profile')
 
 
 def result(status: str, reason: str, **details) -> dict:
@@ -73,7 +82,7 @@ def _review(body: dict, candidate: dict, working: Path, original: Path) -> tuple
     decision = _json(path)
     valid = (decision.get('schema') == 'bridgeforge.owner-review' and type(decision.get('schema_version')) is int
              and decision['schema_version'] == 1 and decision.get('actor') == 'owner'
-             and decision.get('decision') == 'APPROVE_FOR_DECLARED_NEW_GAME' and decision.get('scope') == PROFILE_ID
+             and decision.get('decision') == 'APPROVE_FOR_DECLARED_NEW_GAME' and decision.get('scope') == body['target_profile']['qualification_profile']
              and decision.get('subject_id') == review_subject(candidate)
              and isinstance(decision.get('reason'), str) and bool(decision['reason'].strip()))
     if not valid:
@@ -226,7 +235,7 @@ def _run_context(body: dict, working: Path, info: dict, manifest: dict, rig: Pat
             return result('FAIL', 'Probe configuration does not match selected context')
     if not runtime.get('java_version'):
         return result('INCOMPLETE', 'Selected Java version was not observed')
-    if not set(LIVE_MILESTONES).issubset(manifest['expected_milestones']):
+    if not set(profile_milestones(body)).issubset(manifest['expected_milestones']):
         return result('INCOMPLETE', 'Run was not prepared for every required scenario milestone')
     target = manifest['targets'].get(info.get('id'))
     if not target or Path(target['working']).resolve() != working or target['candidate_sha256'] != body['payload']['sha256']:
@@ -256,7 +265,7 @@ def _live(body: dict, working: Path, info: dict, reference: tuple[Path, str] | N
     if (evidence['status'] != 'ACCEPTABLE' or evidence.get('manifest_echo') != 'MATCH' or not member.get('ok') or triage['counts']['FATAL'] or triage['counts']['MOD-ERROR']
             or triage['probe']['counts_by_status'].get('FAIL', 0) or triage['caught_exceptions']['distinct']):
         return result('FAIL', 'Bound live evidence has target, provenance, fatal or probe failures', evidence=evidence)
-    if not all(evidence['milestones'].get(name) for name in LIVE_MILESTONES):
+    if not all(evidence['milestones'].get(name) for name in profile_milestones(body)):
         return result('INCOMPLETE', 'Required live observations are missing')
     return result('PASS', 'Required bound new-game/campaign/combat log observations passed; no save-upgrade claim',
                   manifest_id=manifest['manifest_id'], run_id=run_id, artifacts=after)
@@ -275,9 +284,9 @@ def qualify_case(store: CaseStore, case_id: str, candidate_id: str, *, run_compi
         statuses = [dimensions[name]['status'] for name in REQUIRED]
         state = 'REFUSED' if 'FAIL' in statuses else ('INCOMPLETE' if 'INCOMPLETE' in statuses else 'QUALIFIED_FOR_DECLARED_SCOPE')
         return {'schema': 'bridgeforge.qualification', 'schema_version': 1, 'case_id': case_id, 'candidate_id': candidate_id,
-                'profile': PROFILE_ID, 'scope': 'new-game', 'unsupported_scopes': ['existing-save-upgrade'], 'state': state,
+                'profile': body['target_profile'].get('qualification_profile'), 'scope': 'new-game', 'unsupported_scopes': ['existing-save-upgrade'], 'state': state,
                 'dimensions': dimensions, 'engine_id': engine, 'authority': 'EVIDENCE_EVALUATED_NOT_RELEASE_APPROVAL'}
-    if body['target_profile'] != TARGET or case['declared_scope'] != 'local-new-game':
+    if body['target_profile'] not in (TARGET, LEGACY_TARGET) or case['declared_scope'] != 'local-new-game':
         dimensions['target'] = result('INCOMPLETE', 'Unsupported declared target/scope profile')
         return finish()
     try:

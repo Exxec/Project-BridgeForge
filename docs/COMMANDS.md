@@ -593,7 +593,7 @@ record the staged inputs of a run before launch and take ownership of the rig
 | `run_id` | - | - |
 | `--kind` KIND | one of boot, campaign, live; default live | - |
 | `--target` MOD_ID | repeatable | a mod under test (default: every candidate rig-up or install recorded); repeatable |
-| `--expect` MILESTONE | repeatable | milestone the log must show (main_menu, campaign_load, save, content_ids, combat, reload_after_save); repeatable; default: main_menu |
+| `--expect` MILESTONE | repeatable | milestone the log must show (main_menu, campaign_load, save, content_ids, combat, reload_after_save, campaign_checks); repeatable; default: main_menu |
 | `--scenario` SCENARIO | default  | - |
 | `--launcher` LAUNCHER | - | the launcher .bat (hashed with the rig's *.vmparams) |
 | `--json` | - | - |

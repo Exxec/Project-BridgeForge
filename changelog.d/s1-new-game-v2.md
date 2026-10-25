@@ -1,0 +1,1 @@
+Add explicit campaign_checks START/END observations and rc8-local-new-game/v2 for actual new-game scenarios. Preserve historical v1 campaign-load requirements and saved-load/save/reload semantics. The unattended new-game driver and case run adapter share the new expected campaign milestone; exact context and whole-log refusal gates remain.

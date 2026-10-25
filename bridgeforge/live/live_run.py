@@ -464,7 +464,7 @@ def real_hands(rig: Path, launcher_pid: int | None = None) -> Hands:
 
 
 # What a unattended live run must show in its log to count (ROADMAP item 75 R1); `drive` ends LIVE_DONE after a combat round.
-LIVE_EXPECTED_MILESTONES = ("main_menu", "campaign_load", "content_ids", "combat")
+LIVE_EXPECTED_MILESTONES = ("main_menu", "campaign_checks", "content_ids", "combat")
 
 
 @contextlib.contextmanager

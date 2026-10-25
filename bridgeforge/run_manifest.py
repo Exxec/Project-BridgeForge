@@ -38,11 +38,11 @@ COMPLETED_SUFFIX = ".completed.json"
 OWNER_FILE = "run_owner.json"
 RIG_STATE_FILE = "rig_up_state.json"
 CONFIG_RELATIVE = Path("saves") / "common" / "bf_probe_config.data"
-MILESTONES = ("main_menu", "campaign_load", "save", "content_ids", "combat", "reload_after_save")
+MILESTONES = ("main_menu", "campaign_load", "save", "content_ids", "combat", "reload_after_save", "campaign_checks")
 # What a kind of run can show at all: a smoke boot passes its boot scenario but never a campaign, combat or save requirement.
 KIND_CAPABILITY = {
     "boot": {"main_menu"},
-    "campaign": {"main_menu", "campaign_load", "save", "content_ids"},
+    "campaign": {"main_menu", "campaign_load", "save", "content_ids", "campaign_checks"},
     "live": set(MILESTONES),
 }
 _RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
@@ -355,6 +355,18 @@ def release_run(rig: Path, run_id: str, launcher: Path | None = None) -> dict:
 
 # ---- the evaluator ----------------------------------------------------------------------------------------------
 
+def campaign_checks_observed(text: str) -> bool:
+    """Observe ordered probe START/END, not save loading or merely startup references."""
+    events = re.finditer(r"BF-PROBE\|[^|\r\n]+\|probe\|INFO\|campaign\|(START|END)(?=\s|$)", text, re.MULTILINE)
+    started = False
+    for event in events:
+        if event.group(1) == 'START':
+            started = True
+        elif started:
+            return True
+    return False
+
+
 def _milestones(log: Path, mods_dir: Path | None) -> dict[str, bool]:
     from .log_triage import triage_log
 
@@ -364,7 +376,8 @@ def _milestones(log: Path, mods_dir: Path | None) -> dict[str, bool]:
     fingerprint = parse_fingerprint(text)
     return {"main_menu": bool(marks["main_menu_reached"]), "campaign_load": bool(marks["campaign_loads"]),
             "save": bool(marks["finished_saving_count"]), "content_ids": bool(_CONTENT_IDS.search(text)),
-            "combat": bool(_COMBAT.search(text)), "reload_after_save": bool(fingerprint and fingerprint["compare_observed"])}
+            "combat": bool(_COMBAT.search(text)), "reload_after_save": bool(fingerprint and fingerprint["compare_observed"]),
+            "campaign_checks": campaign_checks_observed(text)}
 
 
 def evaluate_run(rig: Path, manifest: dict | None, log: Path, *, member_verdicts: dict[str, str] | None = None,

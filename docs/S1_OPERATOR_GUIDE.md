@@ -1,6 +1,6 @@
 # S1 local case operator guide
 
-Status: operator commands implemented; real pilot and independent handoff acceptance are not yet established. Scope is RC8 local-maintainer **new-game** qualification and a local archive. Existing-save upgrades and publication require separate evidence/authority. Original sources, primary saves and prior archives are preserved. `CURRENT_INPUTS`, `CAPTURED`, `PREPARED` and `RUN_PREPARED` do not mean qualified.
+Status: operator commands and a real two-layout data-only pilot are validated; the remaining pilot matrix and independent handoff acceptance are still open. Scope is RC8 local-maintainer **new-game** qualification and a local archive. Existing-save upgrades and publication require separate evidence/authority. Original sources, primary saves and prior archives are preserved. `CURRENT_INPUTS`, `CAPTURED`, `PREPARED` and `RUN_PREPARED` do not mean qualified.
 
 ## Inputs and setup
 
@@ -96,4 +96,9 @@ Pilot acceptance remains open: P1 data-only baseline, P2 narrow reviewed loose-J
 
 Fresh rigs do not enumerate existing save descriptors. The driver now accepts the same actual main-menu playback marker as log triage, retaining the historical descriptor signal; preload-only and unrelated music do not qualify as readiness. Private probe packaging must use `probe_mod_build.install_release(..., core_dir=...)` (the `build-probe-mod --install-release` path), which supplies the local vanilla mission icon. Copying only tracked probe files omits that ignored asset and causes a startup fatal. Do not commit or fabricate that vanilla asset.
 
-The first real P1 session after the readiness fix reached main-menu/campaign/combat and performed a rig-only save, with zero fatal/mod/probe/caught-exception failures and unchanged primary inputs. Its process exit was KILLED, not naturally observed. Current profile v1 still refuses it because it requires saved-campaign `campaign_load`, which this new-game session never emitted. Do not override/relabel that result. A versioned new-game campaign obligation and renewed bound run are needed; existing-save load/upgrade semantics must remain separate. S1 operational pilot acceptance remains open.
+The first real P1 session after the readiness fix reached main-menu/campaign/combat and performed a rig-only save, with zero fatal/mod/probe/caught-exception failures and unchanged primary inputs. Its process exit was KILLED, not naturally observed. Current profile v1 still refuses it because it requires saved-campaign `campaign_load`, which this new-game session never emitted. Do not override/relabel that result. V2 now supplies the versioned campaign-check obligation, with fresh D1/E1 runs validated; existing-save load/upgrade semantics remain separate. S1 operational pilot acceptance remains open; see the later D1/E1 evidence for the current v2 lane.
+
+
+## Profile v2 capture
+
+New `case open` captures v2, whose campaign requirement is completed probe campaign START/END, plus menu/content-ID/combat observations and all prior non-live obligations. Saved-load/upgrade semantics remain separate. A fresh case/profile identity and newly prepared operation/run are required after upgrading; do not use `open --case-id OLD_V1_ID` to change its immutable target. V1 records remain evaluable under v1 and are not promoted by v2 observations. The current v2 real-pilot result and remaining acceptance gates are tracked in S1_PILOT_EVIDENCE.md.

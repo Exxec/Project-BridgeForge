@@ -37,7 +37,7 @@ Next is S1.4: profile/obligation evaluation and evidence adapters. Do not let ge
 
 ## S1.4 read-only qualification boundary
 
-`case_qualification.qualify_case(store, case_id, candidate_id, run_compile=False, live=None)` evaluates only `rc8-local-new-game/v1`. Its exact target dictionary is exported as `TARGET`; declared scope is `local-new-game`. No legacy CLI/caller is switched to this profile. Caller/mutation integration remains S1.5.
+`case_qualification.qualify_case(store, case_id, candidate_id, run_compile=False, live=None)` evaluates the declared `rc8-local-new-game/v1` or `/v2` profile. Its exact target dictionary is exported as `TARGET`; declared scope is `local-new-game`. The opt-in case commands and S1.5 operations use this evaluator; legacy archive/release gates retain their own contracts.
 
 Required dimensions are candidate, context, target, review, source authority, dependencies, static, API, compile, rights and live. Any FAIL yields REFUSED; any INCOMPLETE yields INCOMPLETE; otherwise QUALIFIED_FOR_DECLARED_SCOPE. Existing-save upgrades stay outside the profile. The result is evidence evaluation, never release/publication approval or a signature. Generic stored receipts cannot satisfy these dimensions.
 
@@ -63,3 +63,14 @@ Synthetic fixture runs exercise these adapters without launching a game. They ar
 Journal progression is PREPARED -> PACKAGED -> COMPLETE, atomically written in the case store. PACKAGED records exact full archive inventory and qualification identity before publication to `<archive_root>/<operation_id>`. The mod tree, preserved original and every main ZIP entry are verified against the candidate; ZIP sizes/streams are bounded by the actual tested files. Run artifacts, candidate/context and evaluator are rechecked before publication. Qualification/run/artifact changes after packaging cannot silently reuse an old bundle. Unknown destination collisions and damaged/missing completed output refuse; only a matching journaled move can reconcile an interruption after publication. Exclusive case-store writes serialize cooperating operations; local hashes/locks are integrity controls, not malicious-author authentication or a general filesystem transaction. An OS/process interruption can leave a PREPARED partial attempt or a PACKAGED move to reconcile. Preserve such files and retry the same API; never delete locks or partial outputs automatically. A stale evaluator/subject requires a newly prepared operation/candidate, not manual status edits.
 
 The archive includes CASE_QUALIFICATION.json as separate evidence; tested mod bytes/version remain unchanged. This is local archive scope only, with existing licence/local-only restrictions in the archive note; publication and existing-save upgrades remain outside this API. S1 operational acceptance and the real pilot matrix are still open. No public CLI or legacy command policy is changed by this library slice.
+
+
+## Versioned new-game obligation, v2 (2026-10-24)
+
+New cases default to `rc8-local-new-game/v2` (`TARGET`). Historical `LEGACY_TARGET` v1 remains readable/evaluable with its original required menu/campaign_load/combat obligations; completed campaign checks never substitute for v1 saved-load evidence. No stored manifest or receipt is relabeled or migrated automatically.
+
+V2 requires main_menu, campaign_checks, content_ids and combat. `campaign_checks` observes ordered probe INFO campaign START then END events; an isolated/reversed event, preload reference or FAIL event cannot substitute. It records completed campaign checks, not feature equivalence or save loading. Whole-log fatal/mod/probe/caught-exception refusals and exact subject/context/artifact checks still apply. Existing campaign_load, save and reload_after_save milestones retain their meanings. Saved-game upgrade support is still outside this profile.
+
+The unattended driver actually creates a new game, so its default expected campaign milestone is now campaign_checks. Explicit run-manifest saved-load requirements are unchanged. Case run preparation follows that exact shared driver contract. V2 captures a new target/profile identity and operation; use a fresh case identity after upgrading from v1 rather than editing immutable records or retrying an old open with a different target. Existing v1 decisions remain scoped to their old subject/profile. Matching v2 owner authority is required where edits need review.
+
+Implementation controls and independent real v2 runs for both workspace layouts pass, including local archival/retry and a post-qualification drift refusal. C1's historical v1 refusal remains intact. No operational acceptance is inferred merely from the new profile definition.

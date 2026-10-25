@@ -328,3 +328,15 @@ class SelectionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CampaignChecksMilestoneTests(unittest.TestCase):
+    def test_only_ordered_complete_probe_campaign_events_count(self):
+        from bridgeforge.run_manifest import campaign_checks_observed
+        start = '1 INFO BF-PROBE|0.3.2|probe|INFO|campaign|START'
+        end = '2 INFO BF-PROBE|0.3.2|probe|INFO|campaign|END'
+        self.assertTrue(campaign_checks_observed(start + '\n' + end))
+        for text in (start, end, end + '\n' + start,
+                     'Loading rule: campaign', start + '\n' + end.replace('|INFO|', '|FAIL|')):
+            with self.subTest(text=text):
+                self.assertFalse(campaign_checks_observed(text))

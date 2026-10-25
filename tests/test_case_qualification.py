@@ -13,7 +13,7 @@ from tests.support import resolved_temp_dir
 from tests.test_case_workspace import mod
 
 
-def fixture(root):
+def fixture(root, target_profile=None):
     workspace = root / 'workspace'; workspace.mkdir()
     for name in ('original', 'working'):
         path = mod(workspace / name)
@@ -31,7 +31,7 @@ def fixture(root):
                   policy={'target': target, 'release': release})
     view = open_workspace_view(workspace)
     store = CaseStore(root / 'state')
-    case = store.create_case(view, target_profile=q.TARGET, declared_scope='local-new-game')['content']['case_id']
+    case = store.create_case(view, target_profile=target_profile or q.TARGET, declared_scope='local-new-game')['content']['case_id']
     return store, case, view, inputs
 
 
@@ -108,10 +108,10 @@ class QualificationTests(unittest.TestCase):
 
 
 class BoundLiveQualificationTests(unittest.TestCase):
-    def prepare(self, root, extra=False, echo=True):
-        from tests.bound_runs import make_rig, stage, MENU, LOAD, COMBAT
+    def prepare(self, root, extra=False, echo=True, profile=None):
+        from tests.bound_runs import make_rig, stage, MENU, LOAD, COMBAT, CONTENT_IDS
         from bridgeforge.run_manifest import prepare_run, release_run
-        store, case, view, inputs = fixture(root)
+        store, case, view, inputs = fixture(root, target_profile=profile)
         rig = make_rig(root, {'unbound': []} if extra else None)
         inputs['core'] = {'starsector': (root / 'core_real')}
         target = inputs['policy']['target']
@@ -128,8 +128,9 @@ class BoundLiveQualificationTests(unittest.TestCase):
         candidate = store.add_candidate(case, inputs=inputs)
         stage(rig, {'synthetic-s1': view.root}, ['unbound'] if extra else [])
         manifest = prepare_run(rig, 'synthetic-qualification', 'live', targets=['synthetic-s1'],
-            expected=list(q.LIVE_MILESTONES), launcher=launcher)
-        lines = [MENU, LOAD, COMBAT]
+            expected=list(q.profile_milestones(candidate['content'])), launcher=launcher)
+        lines = [MENU, LOAD, CONTENT_IDS, COMBAT, 'BF-PROBE|0.3.2|probe|INFO|campaign|START',
+                 'BF-PROBE|0.3.2|probe|INFO|campaign|END']
         if echo:
             lines.append('BF-PROBE|0.2.9|run|manifest_id=' + manifest['manifest_id'])
         Path(manifest['log']).write_text('\n'.join(lines) + '\n')
@@ -193,3 +194,38 @@ class ReviewQualificationTests(unittest.TestCase):
                 report = q.qualify_case(store, case, candidate['record_id'])
             self.assertEqual(report['state'], 'REFUSED', report)
             self.assertEqual(report['dimensions']['candidate']['status'], 'FAIL')
+
+
+class VersionedCampaignObligationTests(unittest.TestCase):
+    def test_v2_campaign_checks_do_not_require_or_imply_saved_load(self):
+        from tests.bound_runs import LOAD
+        with resolved_temp_dir() as root:
+            store, case, candidate, view, rig, manifest = BoundLiveQualificationTests().prepare(root)
+            log = Path(manifest['log'])
+            log.write_text(log.read_text().replace(LOAD + '\n', ''))
+            report = q.qualify_case(store, case, candidate['record_id'], live=(rig, manifest['run_id']))
+            self.assertEqual(report['state'], 'QUALIFIED_FOR_DECLARED_SCOPE', report)
+            self.assertEqual(report['profile'], 'rc8-local-new-game/v2')
+            self.assertIn('existing-save-upgrade', report['unsupported_scopes'])
+
+    def test_v1_still_requires_saved_load_even_with_completed_campaign_checks(self):
+        from tests.bound_runs import LOAD
+        with resolved_temp_dir() as root:
+            store, case, candidate, view, rig, manifest = BoundLiveQualificationTests().prepare(root, profile=q.LEGACY_TARGET)
+            log = Path(manifest['log'])
+            original = log.read_text()
+            legacy_only = '\n'.join(line for line in original.splitlines() if '|probe|INFO|campaign|' not in line and '|content-ids|' not in line) + '\n'
+            log.write_text(legacy_only)
+            self.assertEqual(q.qualify_case(store, case, candidate['record_id'], live=(rig, manifest['run_id']))['state'],
+                             'QUALIFIED_FOR_DECLARED_SCOPE')
+            log.write_text(original.replace(LOAD + '\n', ''))
+            report = q.qualify_case(store, case, candidate['record_id'], live=(rig, manifest['run_id']))
+            self.assertEqual(report['state'], 'REFUSED')
+            self.assertEqual(report['profile'], 'rc8-local-new-game/v1')
+
+    def test_v2_saved_load_does_not_replace_missing_campaign_completion(self):
+        with resolved_temp_dir() as root:
+            store, case, candidate, view, rig, manifest = BoundLiveQualificationTests().prepare(root)
+            log = Path(manifest['log'])
+            log.write_text(log.read_text().replace('BF-PROBE|0.3.2|probe|INFO|campaign|END', 'not a completion'))
+            self.assertEqual(q.qualify_case(store, case, candidate['record_id'], live=(rig, manifest['run_id']))['state'], 'REFUSED')
