@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from bridgeforge.log_triage import MAIN_MENU_RE
 from bridgeforge.launch import EXIT_POLL_SECONDS, GameRefused, LaunchNoProcess, settle_exit  # noqa: F401  (re-exported: callers and tests import them from here)
 
 # Client-area fractions of the game window (1280x960 view), measured 2026-10-11.
@@ -46,6 +47,8 @@ VANILLA_MISSION_ROWS = 14  # RC8's own mission_list.csv; live_run reads the real
 
 NEW_GAME_GRACE = 150.0  # seconds a fixed New Game flow gets to reach the campaign before the generic flow continues
 MENU_LOADED = "Reading save data from"
+# Fresh rigs have no save descriptors to enumerate; actual playback also confirms the menu.
+MENU_READY = re.compile(re.escape(MENU_LOADED) + "|" + MAIN_MENU_RE.pattern)
 CAMPAIGN_END = "probe|INFO|campaign|END"
 COMBAT_END = "probe|INFO|combat|END"
 FINGERPRINT_SAVED = "fingerprint|INFO|save|cmdSave returned true"  # save_reload stage (next probe version)
@@ -82,16 +85,19 @@ def _log_text(log: Path) -> str:
         return ""
 
 
-def wait_for(log: Path, marker: str, timeout: float, hands: Hands, since: int = 0, poll: float = 1.0) -> bool:
+def wait_for(log: Path, marker: str | re.Pattern[str], timeout: float, hands: Hands, since: int = 0, poll: float = 1.0) -> bool:
     """True once `marker` is in the log after offset `since`; False on timeout or when the game has exited."""
+    def observed() -> bool:
+        text = _log_text(log)[since:]
+        return bool(marker.search(text)) if isinstance(marker, re.Pattern) else marker in text
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if marker in _log_text(log)[since:]:
+        if observed():
             return True
         if not hands.alive():
             return False
         hands.sleep(poll)
-    return marker in _log_text(log)[since:]
+    return observed()
 
 
 # Ironclads (a total conversion with its own New Game rules.csv rows) asks occupation, territory, a recent event and how the skills
@@ -382,7 +388,7 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
         result.stage, result.detail = stage, detail
         return result
 
-    if not wait_for(log, MENU_LOADED, menu_timeout, hands):
+    if not wait_for(log, MENU_READY, menu_timeout, hands):
         return stuck("main-menu", "the game never logged that the main menu was up")
     result.stages.append("main-menu")
     hands.sleep(20)  # the menu is drawn some seconds after its log line

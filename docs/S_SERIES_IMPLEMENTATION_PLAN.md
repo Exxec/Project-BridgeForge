@@ -54,7 +54,7 @@ S1 may implement offline contracts before pilot selection. Before mutating integ
 | S1.3 | Case/candidate/receipt store IMPLEMENTED OFFLINE and validated | S1_CASE_RECORDS.md and S1_PROGRESS.md; generic receipts remain unverified |
 | S1.4 | Read-only evaluator IMPLEMENTED OFFLINE and validated | S1_CASE_RECORDS.md; no legacy caller policy change |
 | S1.5 | Prepare/run/finalize library IMPLEMENTED OFFLINE and validated | S1_CASE_RECORDS.md; private legacy archive adapter, exact retries/preservation |
-| S1.6 | Operator commands/guide IMPLEMENTED OFFLINE and validated; real pilot pending | S1_OPERATOR_GUIDE.md; real pilot and measured independent resume remain open |
+| S1.6 | Operator commands/guide validated; real P1 driver observed, qualification mismatch OPEN | S1_OPERATOR_GUIDE.md and S1_PILOT_EVIDENCE.md; correct new-game obligation and finish pilot |
 | S2-S4 | PLANNED | Require preceding acceptance and the per-slice prerequisites above |
 
 Keep S1_PROGRESS.md updated with exact branch, checks, limits and resume instructions so another maintainer can continue without this chat. Every slice gets focused acceptance/refusal tests, full guarded regression, unchanged legacy CLI goldens, coverage/no-weakened-baseline checks, lint and an evidence receipt. No minimum automation percentage or speedup is invented. LIVE TEST NOT PERFORMED.

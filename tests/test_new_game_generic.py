@@ -140,8 +140,9 @@ class DriveFallbackTests(unittest.TestCase):
 
     @staticmethod
     def _fake_wait(log):
+        observe = live_run.wait_for
         def wait(_log, marker, _timeout, _hands, since=0, poll=1.0):
-            return marker in log.read_text(encoding="utf-8")[since:]
+            return observe(log, marker, 0, _hands, since=since, poll=poll)
         return wait
 
     def test_the_generic_flow_runs_after_the_fixed_flow_and_its_stage_is_recorded(self) -> None:
