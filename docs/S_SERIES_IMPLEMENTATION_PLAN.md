@@ -55,7 +55,8 @@ S1 may implement offline contracts before pilot selection. Before mutating integ
 | S1.4 | Read-only evaluator IMPLEMENTED OFFLINE and validated | S1_CASE_RECORDS.md; no legacy caller policy change |
 | S1.5 | Prepare/run/finalize library IMPLEMENTED OFFLINE and validated | S1_CASE_RECORDS.md; private legacy archive adapter, exact retries/preservation |
 | S1.6 | V2 validated with real P1 both-layout archives and P6 drift refusal; remaining pilot OPEN | S1_OPERATOR_GUIDE.md and S1_PILOT_EVIDENCE.md; finish reviewed repair/refusal/save-routing and independent pilot gates |
-| S2-S4 | PLANNED | Require preceding acceptance and the per-slice prerequisites above |
+| S2.1 | READ-ONLY BASELINE STARTED, owner-approved 2026-10-25 | S2_COHORT_PROPOSAL.md and S2_PROGRESS.md; three serial baseline passes verified, defaults unchanged, threshold deferred; S1 acceptance remains open |
+| S2.2-S2.4, S3-S4 | PLANNED | Require measured baselines and the per-slice prerequisites above |
 
 Keep S1_PROGRESS.md updated with exact branch, checks, limits and resume instructions so another maintainer can continue without this chat. Every slice gets focused acceptance/refusal tests, full guarded regression, unchanged legacy CLI goldens, coverage/no-weakened-baseline checks, lint and an evidence receipt. No minimum automation percentage or speedup is invented. LIVE TEST NOT PERFORMED.
 

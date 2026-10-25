@@ -1,6 +1,6 @@
-# S2 cohort proposal: owner selection pending
+# S2 cohort: approved read-only measurement scope
 
-2026-10-24. This is a concrete proposal, not an approved cohort, fresh scan baseline or release commitment. It selects 12 distinct existing local mods: 8 training and 4 prospective holdouts. No S2 implementation/tuning has begun. Raw metadata fingerprints and source locations are recorded in ignored bridgeforge-state/s2-cohort-proposal.json; full payload/context snapshots follow scope approval.
+Proposed 2026-10-24; explicitly approved by the owner on 2026-10-25. This approval is not a fresh scan baseline or release commitment. It selects 12 distinct existing local mods: 8 training and 4 prospective holdouts. S2.1 read-only baseline collection has started under the owner decision below. Raw metadata fingerprints and source locations are recorded in ignored bridgeforge-state/s2-cohort-proposal.json; full payload/context snapshots follow scope approval.
 
 | Split | Workspace | Active loose Java | Declared JAR bytes | Declared dependencies |
 |---|---|---:|---:|---|
@@ -27,11 +27,11 @@ Holdouts are reserved before prospective S2 tuning and must not be used to choos
 
 Report three repeatable serial/application-cold/application-warm/bounded-parallel runs, normalized findings/decisions, elapsed time, memory/contention and cancellation/recovery. OS cache state is uncontrolled unless explicitly measured. Qualified yield, unresolved/manual work and live gates remain separate. No performance percentage is invented. S1 timings are diagnostic command/wait timings; independent human review time is not yet measured.
 
-## Owner decisions needed before S2 implementation
+## Owner decision, 2026-10-25
 
 1. Approve this named read-only cohort and holdout split, or replace cases before tuning.
 2. Set a worthwhile improvement threshold, or explicitly authorize measurement-first work with existing defaults unchanged and defer the acceptance threshold until measured results are reviewed. The latter changes the original ordering only if the owner explicitly chooses it; it does not close S2 acceptance.
 
-The strategic roadmap requires: "Before implementation, agree a cohort" and says "Human approval is required for release/cohort scope". It also assigns the improvement threshold to the owner. See [S2 objective acceptance](STRATEGIC_ROADMAP.md) and [resource/default measurement gates](EXECUTION_EFFICIENCY_PLAN.md). Required decisions remain pending; preselection or elapsed time is not approval.
+The strategic roadmap requires: "Before implementation, agree a cohort" and says "Human approval is required for release/cohort scope". It also assigns the improvement threshold to the owner. See [S2 objective acceptance](STRATEGIC_ROADMAP.md) and [resource/default measurement gates](EXECUTION_EFFICIENCY_PLAN.md). The explicit owner replies resolve these two prerequisites: "Approve proposed cohort" and "Measurement first; keep defaults". The owner authorized measurement before choosing the worthwhile threshold. Threshold acceptance is deferred until measured results are reviewed; no default may expand under this decision.
 
-S1 remaining pilot/independent-operator/owner gates are not waived by a cohort selection. Continue unaffected S1 work while these decisions are pending.
+S1 remaining pilot/independent-operator/owner gates are not waived by a cohort selection. S1 acceptance remains open while the expressly approved read-only S2 measurement proceeds. No S1 gate is relabeled complete by this ordering decision.

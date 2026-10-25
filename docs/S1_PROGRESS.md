@@ -159,3 +159,13 @@ No product code, baseline or test was changed by these pilot runs. The last full
 ### Follow-up provider and guide check, 2026-10-25
 
 P2 explicit-provider diagnostic completed terminally: LazyLib search-root selection alone leaves the 39/31 original/repaired compile errors unchanged because it does not amend declared closure. Inputs/provider inventories match before/after; no metadata, classpath override or acceptance change. See the private provider-compile-observation.json and pilot evidence. Corrected an obsolete saved-load sentence in the operator guide to the actual v2 menu/campaign_checks/content_ids/combat contract; historical v1 remains unchanged. S2 cohort/threshold and independent owner/maintainer gates remain pending. Do not repeat this diagnostic expecting a different declared closure.
+
+
+## Owner unblocks S2 measurement, 2026-10-25
+
+Explicit replies approve the exact S2_COHORT_PROPOSAL.md cohort (8 training/4 prospective holdouts, proposal ID 8c910c7a5c26ab3837c904b7948ad14c1fcb20c262fcdf0beaf6acbf1947df4c) and authorize measurement-first with defaults unchanged. The worthwhile threshold is deferred until owner review of results. Scope remains read-only baseline/cache/portfolio measurement, not repairs, live expansion, publication or support. Prior pending-decision statements above are historical. S1 compile/review/independent-operator gates remain open.
+
+S2.1 begins with byte-verified private copies and shared exact core/JDK/Python/engine/provider context. Raw observations stay under bridgeforge-state/s2-baseline-20261025-a1. Do not infer that merely selecting provider roots repairs missing dependency declarations; missing providers stay unresolved. Holdout observations are baseline-only and must not select or promote recipes. Existing S1 live receipts are not S2 qualification/yield evidence.
+
+
+S2 measurement continuation completed three serial 12-case passes: full raw-response and resolution-decision equivalence PASS, 3196 findings each, zero worker errors, two explicit unresolved dependency contexts. Summed worker times 150.579/145.195/147.767 seconds; first invocation was resumed, so its elapsed is not whole-run timing. Source/provider preservation per round and final core/JDK/Python/engine checks PASS. Training-only AI War profile preserves raw findings and identifies repeated parsing/inventory work; no optimization/default change is yet claimed. Sessions 26440 and 51222 are terminal exit 0. See S2_PROGRESS.md for exact receipts, limitations and the next reuse/resource measurement work. No product source or safety baseline changed in this measurement slice.
