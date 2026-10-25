@@ -27,7 +27,7 @@ python -m bridgeforge --help
 Run the checks before committing (full suite takes several minutes; CI runs it on Windows and Ubuntu with Python 3.15):
 
 ```powershell
-python -m pip install ruff                 # the project .venv does not carry it
+python -m pip install ruff "setuptools>=68" # lint and the real-backend packaging regression
 ruff check .
 python -m bridgeforge.test_guard           # full suite; also fails if the checkout changed
 python -m bridgeforge docs-index --check   # docs/COMMANDS.md and docs/CHECKS.md are generated
