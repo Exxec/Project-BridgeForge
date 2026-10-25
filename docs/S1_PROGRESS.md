@@ -174,3 +174,6 @@ S2 measurement continuation completed three serial 12-case passes: full raw-resp
 ## Owner-directed S3 continuation, 2026-10-25
 
 Owner requested "continue on to S3". The initial read-only case-bound D-series obligation planner is implemented and validated; see S3_PROGRESS.md. Full guarded suite 2707/12 PASS, coverage 83.1039060%, package/consumer checks PASS. This does not close S1 reviewed-compile/independent-handoff acceptance or S2 optimization/resource/threshold gates. Preserve historical engine-bound operations/archives; prepare a fresh operation after implementation changes. No saved-upgrade or live execution was performed for the S3 slice.
+
+
+S3 observation continuation: strict candidate/plan/scenario/R1 assertion adapter implemented; synthetic healthy/planted-bug/refusal controls validated. Full guarded suite 2715/12 PASS, coverage 83.1194927%, wheel namespace/payload and installed Salvor 208/4 PASS. Preserved E1 positive correctly refuses use as an unbound unrelated behavior scenario; no historical acceptance changed. See S3_PROGRESS.md and S3_COHORT_PROPOSAL.md for terminal receipts and pending owner representative-set selection. No new live or saved-upgrade test occurred; S1/S2 operational gaps remain open.
