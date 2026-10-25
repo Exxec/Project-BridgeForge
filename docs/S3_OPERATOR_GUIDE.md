@@ -29,3 +29,8 @@ observation = observe_behavior_scenario(
 ```
 
 Omit definition_directory only for the packaged catalog. The definition must be explicitly bound even there. Fresh case/plan, artifact identity, R1 echo/closure/milestones and scenario assertions are rechecked. ASSERTIONS_OBSERVED covers only those candidate assertions. It is not feature equivalence, reference-runtime evidence, deviation approval, family support or whole-case qualification. REGRESSION_DETECTED identifies failed assertions; REFUSED/INCOMPLETE preserves identity/evidence gaps. Keep residual human tests and unavailable reference evidence visible. New-game observations never prove existing-save load/migration/save/restart/reload/repeat semantics.
+
+
+## Real control checkpoint
+
+S3_GENERATION_CONTROL_EVIDENCE.md records the first actual paired callback-control runs. The healthy case's scenario catalog was intentionally changed afterward to exercise rule invalidation; its prior positive is historical and its current candidate STALE. The duplicate case remains CURRENT with REGRESSION_DETECTED, not accepted. Preserve both. These controlled fixtures do not close real-mod feature, reference/deviation, broader-family, independent-operator or saved-upgrade obligations.
