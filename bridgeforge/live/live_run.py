@@ -541,13 +541,13 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
 
 def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240,
              natural_exit: bool = False, exit_wait: float = 180, save_reload: bool = False,
-             graceful_exit: bool = True, interactive: bool = False) -> LiveResult:
+             graceful_exit: bool = True, interactive: bool = False, scenario: str = "probe-group live") -> LiveResult:
     """Play a group's live run (see drive) on a freshly started rig game, then stop it. With `natural_exit`, a finished run
     (LIVE_DONE) first waits for the game to be quit from its menu and records the observed exit (see running_game)."""
     outcome: dict = {}
     try:
         with running_game(rig, test_id, bat_name, natural_exit=natural_exit or interactive, exit_wait=exit_wait, outcome=outcome,
-                          graceful_exit=graceful_exit, pin_prefs=not interactive) as (log, hands, vanilla_rows):
+                          graceful_exit=graceful_exit, pin_prefs=not interactive, scenario=scenario) as (log, hands, vanilla_rows):
             if interactive:  # the operator plays and closes the game; nothing is clicked or typed (launch.py records NATURAL + code)
                 while hands.alive():
                     hands.sleep(EXIT_POLL_SECONDS)

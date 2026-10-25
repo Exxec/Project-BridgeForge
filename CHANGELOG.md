@@ -2,6 +2,8 @@
 
 ## 0.4.0 (unreleased)
 
+- Case-specific S3 scenario catalogs can now be selected explicitly and remain bound to exact candidate rule files. The live-run library forwards an optional named scenario to R1 preparation; existing catalog and launch defaults stay unchanged.
+
 - S3 candidate scenario observations now require current case/plan identity, a bound nonempty named definition and matching R1 live evidence; empty assertions, stale/altered plans, drift and unsupported save/setup scope refuse. Matching assertions remain separate from feature equivalence and whole-case acceptance.
 
 - S3 initial read-only behavior obligation planning binds D-series hypotheses to current S1 candidate/context identities, retains missing/original-only features and unavailable runtime references, and emits conservative scenario obligations and residual human tests. Static plans grant no qualification, deviation or save-upgrade authority.

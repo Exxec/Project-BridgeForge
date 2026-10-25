@@ -14,14 +14,14 @@ from .run_manifest import read_manifest
 from .scan.scanner import _load_lenient_json_file
 
 
-def _definition(name: str, plan: dict, candidate: dict) -> tuple[Path, dict]:
+def _definition(name: str, plan: dict, candidate: dict, directory: Path | None = None) -> tuple[Path, dict]:
     if not isinstance(name, str) or re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', name) is None:
         raise ValueError('Invalid behavior scenario name')
-    path = _physical(scenarios.SCENARIOS_DIR / f'{name}.json')
+    path = _physical((Path(directory) if directory is not None else scenarios.SCENARIOS_DIR) / f'{name}.json')
     bound = (candidate['content']['context']['inputs']['rules'] or {}).get('scenario.' + name)
     if not bound or bound['kind'] != 'file' or Path(bound['path']) != path:
         raise ValueError('Scenario definition must be bound in candidate rules')
-    definition = scenarios.load_scenario(name)
+    definition = scenarios.load_scenario(name) if directory is None else scenarios.load_scenario(name, directory=directory)
     if (type(definition.get('schema_version')) is not int or definition['schema_version'] != 1
             or definition.get('name') != name or definition.get('family') not in FAMILIES):
         raise ValueError('Unsupported behavior scenario definition/family')
@@ -61,7 +61,7 @@ def _definition(name: str, plan: dict, candidate: dict) -> tuple[Path, dict]:
 
 
 def observe_behavior_scenario(store: CaseStore, case_id: str, candidate_id: str, plan: dict,
-                              *, scenario: str, rig: Path, run_id: str) -> dict:
+                              *, scenario: str, rig: Path, run_id: str, definition_directory: Path | None = None) -> dict:
     """Recheck R1 identity and named assertions without launching or accepting anything.
 
     Rebuild the plan so a forged/rehashed plan or obsolete hypothesis cannot select
@@ -72,7 +72,7 @@ def observe_behavior_scenario(store: CaseStore, case_id: str, candidate_id: str,
     if plan != current:
         raise ValueError('Behavior plan is stale, altered or belongs to another candidate')
     candidate = store.load_candidate(case_id, candidate_id)
-    path, definition = _definition(scenario, plan, candidate)
+    path, definition = _definition(scenario, plan, candidate, definition_directory)
     rig = Path(rig).resolve()
     manifest = read_manifest(rig, run_id)
     if manifest['scenario'] != scenario:
@@ -97,7 +97,8 @@ def observe_behavior_scenario(store: CaseStore, case_id: str, candidate_id: str,
     live = _live(candidate['content'], view.working, info, (rig, run_id))
     checked = None
     if live['status'] == 'PASS':
-        checked = scenarios.scenario_check(scenario, Path(manifest['log']))
+        checked = (scenarios.scenario_check(scenario, Path(manifest['log'])) if definition_directory is None
+                   else scenarios.scenario_check(scenario, Path(manifest['log']), directory=definition_directory))
     after = {str(item): file_digest(item) for item in paths}
     if (before != after or store.assess_candidate(case_id, candidate_id)['state'] != 'CURRENT'
             or engine_identity() != plan['engine_id']):

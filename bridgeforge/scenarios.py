@@ -34,10 +34,12 @@ def list_scenarios() -> list[str]:
     return sorted(p.stem for p in SCENARIOS_DIR.glob("*.json"))
 
 
-def load_scenario(name: str) -> dict[str, object]:
-    path = SCENARIOS_DIR / f"{name}.json"
+def load_scenario(name: str, *, directory: Path | None = None) -> dict[str, object]:
+    catalog = Path(directory) if directory is not None else SCENARIOS_DIR
+    path = catalog / f"{name}.json"
     if not path.is_file():
-        raise ScenarioError(f"Unknown scenario {name!r}; known scenarios: {list_scenarios()}")
+        known = sorted(p.stem for p in catalog.glob("*.json"))
+        raise ScenarioError(f"Unknown scenario {name!r}; known scenarios: {known}")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -233,11 +235,12 @@ def _evaluate_save_assertion(assertion: dict[str, object], inspection: dict[str,
         return {"assertion": assertion, "status": "FAIL", "reason": f"{type(exc).__name__}: {exc}"}
 
 
-def scenario_check(name: str, log_path: Path, save_path: Path | None = None) -> dict[str, object]:
+def scenario_check(name: str, log_path: Path, save_path: Path | None = None, *,
+                   directory: Path | None = None) -> dict[str, object]:
     """Evaluate a named scenario's expected results against a produced probe log (and, optionally, a
     produced save). Read-only: never launches anything and never modifies the log or the save.
     """
-    scenario = load_scenario(name)
+    scenario = load_scenario(name) if directory is None else load_scenario(name, directory=directory)
     expect = scenario.get("expect", {}) if isinstance(scenario.get("expect"), dict) else {}
 
     entries = _read_probe_entries(Path(log_path))

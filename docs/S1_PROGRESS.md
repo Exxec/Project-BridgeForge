@@ -177,3 +177,6 @@ Owner requested "continue on to S3". The initial read-only case-bound D-series o
 
 
 S3 observation continuation: strict candidate/plan/scenario/R1 assertion adapter implemented; synthetic healthy/planted-bug/refusal controls validated. Full guarded suite 2715/12 PASS, coverage 83.1194927%, wheel namespace/payload and installed Salvor 208/4 PASS. Preserved E1 positive correctly refuses use as an unbound unrelated behavior scenario; no historical acceptance changed. See S3_PROGRESS.md and S3_COHORT_PROPOSAL.md for terminal receipts and pending owner representative-set selection. No new live or saved-upgrade test occurred; S1/S2 operational gaps remain open.
+
+
+S3 cohort approval is now explicit (2026-10-25); prior pending-selection statements are historical. Fresh immutable baseline eligibility: Faction Relationships ready for rig binding; All the Domain Drones passes full compile but remains statically refused; Adjusted Sector and AI War retain source/static/provider gates. Explicit per-case scenario catalogs and named live-run forwarding are implemented and validated: guarded 2717/12 PASS, coverage 83.1289257%, whole-wheel and installed Salvor 208/4 PASS. See S3_PROGRESS.md and S3_OPERATOR_GUIDE.md for current scope, terminal artifacts and next fresh-qualification/control work. No new live/save-upgrade run and no S1/S2 acceptance waiver.

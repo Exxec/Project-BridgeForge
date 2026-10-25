@@ -58,7 +58,7 @@ S1 may implement offline contracts before pilot selection. Before mutating integ
 | S2.1 | READ-ONLY BASELINE STARTED, owner-approved 2026-10-25 | S2_COHORT_PROPOSAL.md and S2_PROGRESS.md; three serial baseline passes verified, defaults unchanged, threshold deferred; S1 acceptance remains open |
 | S2.2-S2.4 | OPEN | Baseline/profile recorded; cache/resource/parallel/owner threshold gates remain |
 | S3.1 | INITIAL READ-ONLY IMPLEMENTATION, owner-directed 2026-10-25 | S3_PROGRESS.md; exact case-bound static obligations, not operational acceptance |
-| S3.2 | INITIAL OBSERVATION ADAPTER | S3_PROGRESS.md; exact named candidate-log assertions, synthetic controls; real family support remains open |
+| S3.2 | INITIAL OBSERVATION ADAPTER | S3_PROGRESS.md and S3_OPERATOR_GUIDE.md; approved cohort eligibility, bound external catalogs/named runs, synthetic controls; real family support remains open |
 | S3.3-S3.4, S4 | PLANNED | Keep save/operator/support gates separate |
 
 Keep S1_PROGRESS.md updated with exact branch, checks, limits and resume instructions so another maintainer can continue without this chat. Every slice gets focused acceptance/refusal tests, full guarded regression, unchanged legacy CLI goldens, coverage/no-weakened-baseline checks, lint and an evidence receipt. No minimum automation percentage or speedup is invented. LIVE TEST NOT PERFORMED.

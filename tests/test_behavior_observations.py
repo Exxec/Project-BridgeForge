@@ -51,9 +51,8 @@ def prepare(root, *, healthy=True, definition_edit=None, named=True):
 
 def observe(parts):
     store, case, candidate, plan, rig, manifest, defs = parts
-    with patch.object(scenarios, 'SCENARIOS_DIR', defs):
-        return observations.observe_behavior_scenario(store, case, candidate['record_id'], plan,
-                    scenario='synthetic-s3', rig=rig, run_id=manifest['run_id'])
+    return observations.observe_behavior_scenario(store, case, candidate['record_id'], plan,
+                scenario='synthetic-s3', rig=rig, run_id=manifest['run_id'], definition_directory=defs)
 
 
 class BehaviorObservationTests(unittest.TestCase):
@@ -125,7 +124,33 @@ class BehaviorObservationTests(unittest.TestCase):
     def test_artifact_mutation_during_assertion_check_refuses(self):
         with resolved_temp_dir() as root:
             parts = prepare(root); actual = scenarios.scenario_check
-            def mutate(*args):
-                report = actual(*args); Path(parts[5]['log']).write_text('concurrent log edit'); return report
+            def mutate(*args, **kwargs):
+                report = actual(*args, **kwargs); Path(parts[5]['log']).write_text('concurrent log edit'); return report
             with patch.object(scenarios, 'scenario_check', side_effect=mutate):
                 with self.assertRaisesRegex(ValueError, 'changed during evaluation'): observe(parts)
+
+
+class ExternalCatalogTests(unittest.TestCase):
+    def test_external_catalog_is_explicit_and_cannot_override_bound_definition(self):
+        with resolved_temp_dir() as root:
+            parts = prepare(root); store, case, candidate, plan, rig, manifest, defs = parts
+            with self.assertRaisesRegex(ValueError, 'bound in candidate rules'):
+                observations.observe_behavior_scenario(store, case, candidate['record_id'], plan,
+                    scenario='synthetic-s3', rig=rig, run_id=manifest['run_id'])
+            other = root / 'other'; other.mkdir()
+            (other / 'synthetic-s3.json').write_text((defs / 'synthetic-s3.json').read_text())
+            with self.assertRaisesRegex(ValueError, 'bound in candidate rules'):
+                observations.observe_behavior_scenario(store, case, candidate['record_id'], plan,
+                    scenario='synthetic-s3', rig=rig, run_id=manifest['run_id'], definition_directory=other)
+            self.assertEqual(observe(parts)['state'], 'ASSERTIONS_OBSERVED')
+
+    def test_live_runner_forwards_explicit_named_scenario(self):
+        from contextlib import contextmanager
+        from bridgeforge.live import live_run
+        @contextmanager
+        def running(*args, **kwargs):
+            self.assertEqual(kwargs['scenario'], 'synthetic-s3')
+            yield Path('unused.log'), None, 14
+        result = live_run.LiveResult('LIVE_DONE')
+        with patch.object(live_run, 'running_game', running), patch.object(live_run, 'drive', return_value=result):
+            self.assertIs(live_run.live_run(Path('unused-rig'), 'R-S3', scenario='synthetic-s3'), result)

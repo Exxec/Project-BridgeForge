@@ -62,3 +62,35 @@ Whole-wheel namespace/payload audit PASS: behavior_observations.py is the only a
 The concrete S3_COHORT_PROPOSAL.md selects four existing S2 training cases for owner review: content-only Faction Relationships, loose-script All the Domain Drones, JAR/source Adjusted Sector and persistence-risk AI War. Approval was requested in this thread under S3 roadmap objective acceptance item 1; response is pending at this checkpoint. It does not approve repairs, unblock missing providers/source authority, authorize existing-save migration or consume S2 holdouts. Continue library/operator/observation/reference/deviation work while pending; do not start dependent real qualification trials by treating preselection or elapsed time as approval.
 
 Next: connect admitted observations to an operator flow with exact named-run setup, add bound reference/deviation comparisons without generic receipt authority, and implement real healthy/known-bug controls after scope selection and eligibility. Current adapter covers setup-free candidate-log assertions only; it is not completed S3.1/S3.2 operational acceptance. S3.3 copied-save lineage and S3.4 maintained qualification/regression feedback remain open. Preserve all S1/S2 gaps rather than substituting these S3 fixtures for prior acceptance.
+
+
+## S3 representative set approved, 2026-10-25
+
+The owner explicitly replied "Approve proposed S3 set" to S3_COHORT_PROPOSAL.md: Faction Relationships, All the Domain Drones, Adjusted Sector and AI War, under its limited exact-input/eligible isolated new-game/campaign/combat scope. Prior pending-selection statements above are historical. This is not repair approval, a provider/source authority ruling, existing-save migration authorization or operational acceptance. Begin fresh eligibility for these exact selected versions with immutable copies and explicit provider/core/tool/policy context; do not consume S2 holdouts or borrow old S1 observations into a new scenario.
+
+
+## Approved cohort eligibility and external catalogs
+
+Fresh exact-context prelaunch checks completed for all four approved baseline versions without any repair or launch. Private immutable copies, owner receipt, full inputs, case records and reports are under bridgeforge-state/s3-cohort-20261025-a1/; helper scratch/s3-cohort-eligibility.py and log s3-cohort-eligibility.log. Original here explicitly means the selected working baseline, not historical legacy-before-repair behavior. All mod/provider input copies were preserved. Elapsed per case: 44.6/54.5/51.1/186.6 seconds; these include repeated identity verification and are diagnostic, not throughput improvements.
+
+| Case | Non-live eligibility result | Main remaining gates |
+|---|---|---|
+| Faction Relationships | READY_FOR_RIG_BINDING | Fresh exact named scenario, staged/runtime binding and actual feature observations; no behavior equivalence established |
+| All the Domain Drones | REFUSED_BEFORE_LAUNCH | Static review findings include high rules encoding and variant OP budget; full javac and RC8 Janino compilation PASS |
+| Adjusted Sector | REFUSED_BEFORE_LAUNCH | Mixed source/JAR authority plus static review/high findings |
+| AI War | REFUSED_BEFORE_LAUNCH | Mixed source/JAR authority, version-constrained provider closure; static/API/compile remain INCOMPLETE |
+
+No authority/ruling/balance changes are inferred from cohort selection. The eligibility reports bind the engine before the subsequent catalog interface extension; retain them historically and run current qualification again before any launch. Do not rewrite their evaluator identity. Main/player saves were not loaded or migrated.
+
+Workflow gap: per-case behavior IDs cannot reasonably require editing the installed package's scenario catalog. Added optional explicit directory to scenario loading/checking and definition_directory to strict S3 observation. The exact chosen file must still match the candidate's rules binding; a same-named identical file elsewhere cannot override it. No external catalog is auto-discovered. Default packaged scenario behavior and outputs remain unchanged. Added optional named scenario forwarding to the existing live_run wrapper; it uses running_game's existing R1 scenario parameter. A name is provenance, not a waiver of prelaunch qualification or supported behavior scope.
+
+Focused catalog/observation/legacy scenario/live-driver run: 46 tests PASS, 57.210 seconds; Ruff PASS. Existing S3 observation fixtures now use the explicit external catalog API instead of monkeypatching the catalog location. Tests additionally refuse implicit/wrong catalogs and verify exact named-scenario forwarding without launching a game. Full guarded regression/package evidence follows below. This is not copied-save S3.3 execution; that gate remains open.
+
+
+## Catalog/named-run terminal validation, 2026-10-25
+
+Full guarded suite: **2717 tests, OK (12 unchanged skips), 389.867 seconds**, checkout/probe hermeticity PASS. Coverage **83.1289257%**, previous 83.1194927%, unchanged 80% floor; observation module 89.4737%. Legacy scenario/CLI/live-driver/qualification regressions pass. No baseline, runtime dependency, safety rule, threshold or skip weakened. Ruff, docs-index, gates lint and whitespace PASS.
+
+Whole-wheel audit PASS: exactly behavior_observations.py, scenarios.py and live/live_run.py change versus the prior clean S3 observation wheel; no runtime paths added/removed, every other runtime/payload byte identical, and no foreign namespaces. Installed-wheel import smoke and Salvor **208 tests/4 unchanged skips PASS**, 8.334 seconds. Raw evidence: bridgeforge-state/s3-catalog-* (focused initial run log is s33-focused.log; this filename does not denote S3.3 acceptance). Helper: main BridgeForge scratch/s3-catalog-package.py. Full suite/package/cohort sessions are terminal exit 0. Hosted CI not run; no push, PR, merge or publication.
+
+S3_OPERATOR_GUIDE.md documents current library use, exact external definition binding and remaining preparation/qualification boundaries. Approval is recorded and all four selected cases have prelaunch results. Before any next real trial, use fresh current-engine qualification and exact named R1 preparation; the pre-interface-change eligibility receipts remain historical. Next implement/run explicitly labeled healthy and planted-bug runtime controls where eligible, then observe real cohort features with residual unknowns retained. Do not launch the three held cases, waive static/source/provider gates, or treat the content-only baseline's earlier generic S1 success as new feature evidence. No new live test or existing-save operation was performed in this continuation. S3 and prior S1/S2 acceptance remain incomplete.
