@@ -146,6 +146,20 @@ class NegativeTests(unittest.TestCase):
         self.assertIn("probe_config_sha256", " ".join(evidence["problems"]))
         self.assertIn("launcher_files", " ".join(evidence["problems"]))
 
+    def test_launcher_java_command_is_found_on_windows_and_posix_paths(self) -> None:
+        # Ubuntu CI (2026-10-26): fixtures bind <jdk>/bin/java; the .exe-only pattern found no command and every bound
+        # case refused with "Launcher selects an unbound Java executable".
+        with resolved_temp_dir() as root:
+            for text, expected in (('"C:\\jdk\\bin\\java.exe" -Xmx2g', "C:\\jdk\\bin\\java.exe"),
+                                   ('"/opt/jdk/bin/java" -version', "/opt/jdk/bin/java"),
+                                   ('"/opt/jdk/bin/javaw" -jar x', "/opt/jdk/bin/javaw"),
+                                   ('jre\\bin\\java.exe -Xmx2g', "jre\\bin\\java.exe"),
+                                   ('"/opt/jdk/bin/javadoc" -help', None),
+                                   ('"/opt/java-tools/run" x', None)):
+                launcher = root / "launch.bat"
+                launcher.write_text(text, encoding="utf-8")
+                self.assertEqual(run_manifest._launcher_files(root, launcher)[1], expected, text)
+
     def test_same_version_with_different_bytes_is_not_the_tested_candidate(self) -> None:
         with resolved_temp_dir() as root:
             rig, log = self._run(root)

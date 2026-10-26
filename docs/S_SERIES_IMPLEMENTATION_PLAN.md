@@ -114,3 +114,9 @@ Environment notes found while verifying (not S-series defects):
 Merge order: this branch carries the B0-B6 package moves (`bridgeforge/bytecode/bytecode.py`, `java_ast.py`,
 `java_toolchain.py`, `jar_patch.py`). Item 87 edits those files at their old paths on `origin/main`, so whichever
 merges second is rebased; git's rename detection should carry the edits, then rerun the suite.
+
+Ubuntu CI, 2026-10-26: the first pushes failed 17 tests on Linux only (Windows passed). Two causes, both fixed: the
+launcher parse (`run_manifest._JAVA_EXE`) recognised only `java*.exe`, so a POSIX `<jdk>/bin/java` was never bound and
+every bound case refused; and on POSIX an abruptly killed coordinator left its analysis worker running (now
+`PR_SET_PDEATHSIG` on Linux, `portfolio_process._die_with_parent`). Reproduced and verified in WSL Ubuntu; macOS has no
+parent-death signal and is not covered.

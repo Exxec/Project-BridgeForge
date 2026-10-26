@@ -48,7 +48,9 @@ KIND_CAPABILITY = {
 _RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 _CONTENT_IDS = re.compile(r"BF-PROBE\|[^|]*\|content-ids\|[^|]*\|all-content\|")
 _COMBAT = re.compile(r"BF-PROBE\|[^|]*\|combat-round\|")
-_JAVA_EXE = re.compile(r'"([^"\r\n]*java\w*\.exe)"|(?<!\S)([^\s"\']*java\w*\.exe)(?=\s|$)', re.IGNORECASE)
+# A quoted command is java*.exe, or (a POSIX launcher) a path whose last part is exactly java/javaw; the Ubuntu CI fixtures
+# bind <jdk>/bin/java, which the .exe-only pattern never matched, so every bound case refused there (2026-10-26).
+_JAVA_EXE = re.compile(r'"([^"\r\n]*java\w*\.exe|[^"\r\n]*[\\/]javaw?)"|(?<!\S)([^\s"\']*java\w*\.exe)(?=\s|$)', re.IGNORECASE)
 _JAVA_VERSION = re.compile(r'\bJAVA_VERSION\s*=\s*"([^"]+)"')
 _JAVA_VERSION_OUTPUT = re.compile(r'\bversion\s+"([^"]+)"', re.IGNORECASE)
 EPOCH_SLACK_SECONDS = 2.0

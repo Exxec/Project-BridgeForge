@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import sys
 
 import psutil
 
@@ -64,6 +65,20 @@ class _WindowsJob:
             self.handle = None
 
 
+def _die_with_parent(parent: int):
+    """Linux: the kernel sends the child SIGKILL when the process that started it dies (PR_SET_PDEATHSIG), the POSIX
+    counterpart of the Windows kill-on-close job. Without it an abruptly killed coordinator left its worker running
+    (Ubuntu CI, test_abrupt_coordinator_death_releases_lease_and_reaps_worker, 2026-10-26). Runs in the child before exec."""
+    def setup():
+        import ctypes
+        libc = ctypes.CDLL(None, use_errno=True)
+        if libc.prctl(1, signal.SIGKILL, 0, 0, 0) != 0:  # 1 = PR_SET_PDEATHSIG
+            raise OSError(ctypes.get_errno(), 'prctl(PR_SET_PDEATHSIG) failed')
+        if os.getppid() != parent:  # the parent died before prctl took effect
+            os.kill(os.getpid(), signal.SIGKILL)
+    return setup
+
+
 class AnalysisProcess:
     """Workers wait at a gate until their entire launch family has an owner."""
     def __enter__(self):
@@ -76,9 +91,11 @@ class AnalysisProcess:
         self.job = _WindowsJob() if os.name == 'nt' else None
         self.process = None
         try:
+            linux = sys.platform.startswith('linux')
             with (folder / 'stderr.log').open('wb') as error:
                 self.process = subprocess.Popen(command, cwd=folder, env=env, stdout=subprocess.DEVNULL,
-                                                stderr=error, start_new_session=os.name != 'nt')
+                                                stderr=error, start_new_session=os.name != 'nt',
+                                                preexec_fn=_die_with_parent(os.getpid()) if linux else None)
             if self.job:
                 self.job.assign(self.process.pid)
                 # Windows venv launchers can already have spawned their Python child.
