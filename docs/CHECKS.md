@@ -348,8 +348,10 @@ Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_j
 | `_only_nexerelin_custom_starts` | `(root: Path, prefixes) -> bool` | True when every source using these packages is a class registered in customStarts.json. |
 | `_orgjson_separators` | `(text: str) -> tuple[str, set[str]]` | org.json also accepts `;` between pairs/elements and `=` or `=>` between key and value. |
 | `_override_fits` | `(slot_type: str, mount_override: str) -> bool` | - |
-| `_parse_class_file` | `(data: bytes) -> _ClassFileInfo \| None` | Parse a .class file's constant pool and method table. |
-| `_parse_json` | `(text: str, object_pairs_hook=None) -> tuple[object, set[str]]` | Parse JSON the way Starsector's lenient (org.json-based) loader does. |
+| `_parse_class_file` | `(data: bytes) -> _ClassFileInfo \| None` | - |
+| `_parse_class_file_uncached` | `(data: bytes) -> _ClassFileInfo \| None` | Parse a .class file's constant pool and method table. |
+| `_parse_json` | `(text: str, object_pairs_hook=None) -> tuple[object, set[str]]` | - |
+| `_parse_json_uncached` | `(text: str, object_pairs_hook=None) -> tuple[object, set[str]]` | Parse JSON the way Starsector's lenient (org.json-based) loader does. |
 | `_person_names_duplicate_lines` | `(path: Path) -> list[int]` | 1-based line numbers of rows that repeat an earlier row of the same file (blank rows ignored). |
 | `_planet_types` | `(folders: list[Path]) -> set[str]` | - |
 | `_probe_returns_early` | `(text: str, markers: tuple[str, ...]) -> bool` | `try { loadClass("<library class>") } catch (...) { return; }`: everything after the probe runs only with the library (Upgraded Rotary Weapons' URW_modPlugin, 2026-10-11). |

@@ -103,7 +103,7 @@ class QualificationTests(unittest.TestCase):
 
     def test_unbound_python_never_starts_worker(self):
         body = {'context': {'inputs': {'tools': {}}}}
-        with patch.object(q.subprocess, 'run', side_effect=AssertionError('unbound tool')):
+        with patch.object(q, 'AnalysisProcess', side_effect=AssertionError('unbound tool')):
             self.assertIn('error', q._worker(Path('working'), Path('core'), [], body, False))
 
 

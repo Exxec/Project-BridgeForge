@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+from ..analysis_reuse import parsed_facts
 from ..models import ScanResult
 from pathlib import Path
 
@@ -378,6 +379,14 @@ def _quote_barewords_and_keys(text: str) -> tuple[str, set[str]]:
 
 
 def _parse_json(text: str, object_pairs_hook=None) -> tuple[object, set[str]]:
+    # Hooks may have caller-specific state or side effects; never reuse them.
+    if object_pairs_hook is not None:
+        return _parse_json_uncached(text, object_pairs_hook)
+    return parsed_facts("legacy-json/v1", lambda: text.encode("utf-8", errors="surrogatepass"),
+                        lambda: _parse_json_uncached(text))
+
+
+def _parse_json_uncached(text: str, object_pairs_hook=None) -> tuple[object, set[str]]:
     """Parse JSON the way Starsector's lenient (org.json-based) loader does.
 
     Strict `json.loads` is tried first so the common, well-formed case is not

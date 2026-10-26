@@ -21,7 +21,7 @@ include = ["bridgeforge", "bridgeforge.*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-bridgeforge = ["release_policy.json", "dependency_successors.json", "automation_tiers.json", "vanilla_loose_scripts_rc8.json","java/*.java", "java-tools/bytecode/lib/*.jar", "rules/*.json", "packs/*/*.json", "compat_sets/*.json", "scenarios/*.json", "probe_profiles/*.txt"]
+bridgeforge = ["release_policy.json", "dependency_successors.json", "automation_tiers.json", "vanilla_loose_scripts_rc8.json","java/*.java", "java-tools/bytecode/lib/*.jar", "rules/*.json", "packs/*/*.json", "compat_sets/*.json", "scenarios/*.json", "probe_profiles/*.txt", "kit_resources/*.ps1", "kit_resources/*.md"]
 
 [tool.ruff]
 target-version = "py315"

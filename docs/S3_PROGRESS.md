@@ -1,5 +1,12 @@
 # S3 implementation and evidence
 
+**2026-10-25 continuation:** [S3_COMPARISON_GUIDE.md](S3_COMPARISON_GUIDE.md) documents exact
+named-run reference/deviation comparison. It freshly evaluates S1/R1-bound observations, retains
+missing reference/failed assertions and never promotes a vector match to whole-feature/save
+qualification. Current production re-evaluation of preserved actual controls gives healthy 1 /
+duplicate 2 and retains REGRESSION_DETECTED, with fresh writable case records and untouched old
+workspaces/plans. This is no new live execution. Critical feature/real-mod/family/save gates remain.
+
 ## Owner direction, 2026-10-25
 
 The owner requested "continue on to S3" after the S2 baseline. This authorizes advancing S3 implementation; it does not label S1/S2 operationally accepted, select a representative S3 qualification cohort, authorize saved-campaign migration/gameplay decisions, or create publication/support authority. S1 reviewed compile/independent handoff and S2 cache/resource/parallel/threshold acceptance remain open. The full S1-S4 objective is retained.

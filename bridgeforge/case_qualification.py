@@ -4,9 +4,11 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
+import time
+
+import psutil
 
 from .bytecode.java_toolchain import find_jdk
 from .case_identity import digest, file_digest, tree_digest, tree_files
@@ -18,6 +20,7 @@ from .release import _load_policy, policy_entry
 from .run_manifest import CONFIG_RELATIVE, evaluate_run, read_manifest
 from .live.live_trust import shipped_hash
 from .safeio import atomic_write_json
+from .portfolio_process import AnalysisProcess
 from .scan.scan_classfile import _loaded_mod_jars
 from .scan.scan_registry import _excluded
 from .scan.scanner import _load_lenient_json_file
@@ -152,9 +155,11 @@ def _worker(working: Path, core: Path, providers: list[Path], body: dict, compil
             return {'error': 'Java analysis requires the bound configured JDK, without discovery fallback'}
     with tempfile.TemporaryDirectory(prefix='bf-case-evidence-') as temporary:
         folder = Path(temporary).resolve()
-        request, response = folder / 'request.json', folder / 'response.json'
-        atomic_write_json(request, {'working': str(working), 'core': str(core), 'providers': [str(path) for path in providers],
-                                    'compile': compile_requested, 'jdk': str(jdk) if jdk else None})
+        response = folder / 'response.json'
+        atomic_write_json(folder / 'request.json', {'parent_pid': os.getpid(),
+            'parent_created': psutil.Process().create_time(), 'engine_id': engine_identity(),
+            'scan': {'working': str(working), 'core': str(core), 'providers': [str(path) for path in providers],
+                     'compile': compile_requested, 'jdk': str(jdk) if jdk else None}, 'parse_reuse': None})
         env = dict(os.environ)
         env.update(TMP=str(folder), TEMP=str(folder), TMPDIR=str(folder), PYTHONPATH=str(Path(__file__).resolve().parent.parent))
         env['PATH'] = str(python.parent)
@@ -162,13 +167,18 @@ def _worker(working: Path, core: Path, providers: list[Path], body: dict, compil
         if needs_java:
             env['JAVA_HOME'] = str(jdk)
             env['PATH'] = str(jdk / 'bin') + os.pathsep + env['PATH']
-        try:
-            done = subprocess.run([str(python), '-m', 'bridgeforge.case_evidence', str(request), str(response)],
-                                  cwd=folder, env=env, capture_output=True, text=True, timeout=900)
-        except subprocess.TimeoutExpired:
+        with AnalysisProcess([str(python), '-m', 'bridgeforge.portfolio_worker', str(folder)], folder=folder, env=env) as process:
+            atomic_write_json(folder / 'start.json', {'qualification': True})
+            until = time.monotonic() + 900
+            while process.poll() is None and time.monotonic() < until:
+                time.sleep(.025)
+            timed_out = process.poll() is None
+            code = process.poll()
+        if timed_out:
             return {'error': 'Evidence worker timed out; no qualification'}
-        if done.returncode != 0 or not response.is_file():
-            return {'error': 'Evidence worker failed: ' + (done.stderr or done.stdout)[-2000:]}
+        if code != 0 or not response.is_file():
+            error = (folder / 'stderr.log').read_text(encoding='utf-8', errors='replace') if (folder / 'stderr.log').is_file() else ''
+            return {'error': 'Evidence worker failed: ' + error[-2000:]}
         value = _json(response)
         if value.get('schema_version') != 1:
             return {'error': 'Unsupported evidence worker response'}

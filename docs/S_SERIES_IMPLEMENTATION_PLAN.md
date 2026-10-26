@@ -1,5 +1,11 @@
 # S-series implementation plan
 
+**Current S1 status, 2026-10-25:** complete for the owner-accepted bounded RC8 local-new-game scope.
+[S1_COMPLETION_REVIEW.md](S1_COMPLETION_REVIEW.md) records the exact approvals, controlled-P2/full-build evidence,
+independent agent resume, archive/retry and refusal controls. Active human-review time is NOT_MEASURED in the
+accepted baseline; S2 comparisons must measure it before claiming a reduction. Earlier proposal/approval gates
+below are historical where superseded by the current status and evidence.
+
 Owner instruction, 2026-10-24: "plan S series implementation then proceed to start S1". This authorizes planning S1-S4 and starting S1 implementation; later release acceptance, real-asset selection, game/save changes and publication retain their existing gates. The 2026-10-17 strategy remains the outcome definition. No calendar dates or version numbers are promised.
 
 Implementation base: `docs/b6-closeout` (`8736e13a`), branch `feat/s1-workspace-contracts`. The B stack is published/validated but not all merged; this is a dependent implementation branch, not a change to main. Keep main, originals and unrelated worktrees intact. No PR creation, push or merge is included in this slice.
@@ -49,18 +55,24 @@ S1 may implement offline contracts before pilot selection. Before mutating integ
 
 | Slice | State | Evidence / next action |
 |---|---|---|
-| S1.1 | Contract map recorded; qualification profile DESIGN_PENDING | S1_CONTRACT_MAP.md; review exact obligations before enforcement |
+| S1.1 | COMPLETE, bounded scope accepted 2026-10-25 | S1_CONTRACT_MAP.md and S1_COMPLETION_REVIEW.md; versioned local-new-game v2 |
 | S1.2 | Initial read-only adapter IMPLEMENTED OFFLINE | `bridgeforge/case_workspace.py`, synthetic `tests/test_case_workspace.py`; results in S1_PROGRESS.md |
 | S1.3 | Case/candidate/receipt store IMPLEMENTED OFFLINE and validated | S1_CASE_RECORDS.md and S1_PROGRESS.md; generic receipts remain unverified |
 | S1.4 | Read-only evaluator IMPLEMENTED OFFLINE and validated | S1_CASE_RECORDS.md; no legacy caller policy change |
 | S1.5 | Prepare/run/finalize library IMPLEMENTED OFFLINE and validated | S1_CASE_RECORDS.md; private legacy archive adapter, exact retries/preservation |
-| S1.6 | V2 validated with real P1 both-layout archives and P6 drift refusal; remaining pilot OPEN | S1_OPERATOR_GUIDE.md and S1_PILOT_EVIDENCE.md; finish reviewed repair/refusal/save-routing and independent pilot gates |
-| S2.1 | READ-ONLY BASELINE STARTED, owner-approved 2026-10-25 | S2_COHORT_PROPOSAL.md and S2_PROGRESS.md; three serial baseline passes verified, defaults unchanged, threshold deferred; S1 acceptance remains open |
-| S2.2-S2.4 | OPEN | Baseline/profile recorded; cache/resource/parallel/owner threshold gates remain |
-| S3.1 | INITIAL READ-ONLY IMPLEMENTATION, owner-directed 2026-10-25 | S3_PROGRESS.md; exact case-bound static obligations, not operational acceptance |
-| S3.2 | INITIAL OBSERVATION ADAPTER | S3_PROGRESS.md and S3_OPERATOR_GUIDE.md; approved cohort eligibility, bound catalogs/named runs and real narrow callback-control pair; broader family support remains open |
-| S3.3, S4 | PLANNED | Keep save/operator/support gates separate |
+| S1.6 | COMPLETE for owner-accepted bounded scope, 2026-10-25 | S1_COMPLETION_REVIEW.md; both-layout live/archive evidence, approved controlled repair/full compile, P3-P6 refusals, independent agent resume and accepted limited timing baseline |
+| S2.1 | READ-ONLY BASELINE STARTED, owner-approved 2026-10-25 | S2_COHORT_PROPOSAL.md and S2_PROGRESS.md; three serial baseline passes verified, defaults unchanged, threshold deferred; S1 bounded acceptance is recorded separately |
+| S2.2 | INITIAL OPT-IN PARSING REUSE, measured tradeoff accepted | S2_ANALYSIS_REUSE.md; owner "Accept the opt-in tradeoff", three rounds/96 equal responses, explicit payload/entry limits, defaults unchanged; broader acceptance remains open |
+| S2.3 | OPEN | Governed recipe/ruling evidence and promotion gates remain |
+| S2.4 | INITIAL PRODUCTION READ-ONLY LANE IMPLEMENTED AND VALIDATED | S2_PRODUCTION_PORTFOLIO.md; 2,741 tests/12 skips, three equal real-cohort runs, actual coordinator death/recovery, exact reuse, unchanged defaults; broader S2 acceptance remains open |
+| S3.1 | INITIAL READ-ONLY IMPLEMENTATION, owner-directed 2026-10-25 | S3_PROGRESS.md and S3_COMPARISON_GUIDE.md; exact case-bound obligations and comparison, unknown feature preservation |
+| S3.2 | INITIAL OBSERVATION ADAPTER | S3_PROGRESS.md and S3_OPERATOR_GUIDE.md; approved cohort eligibility, bound catalogs/named runs and preserved real callback-control pair; broader family support remains open |
+| S3.3 | OPEN, requires explicit copied-save scope | No old-save upgrade or migration has been authorized or observed |
 | S3.4 | INITIAL RULE-REVALIDATION EVIDENCE | S3_GENERATION_CONTROL_EVIDENCE.md; changed rule refuses reuse of actual passing observation; full maintained qualification remains open |
+| S4.1 | INITIAL DECLARED LOCAL PROFILE | S4_WORKSTATION_TRIAL.md; Windows x64/Python 3.15 and RC8 local-new-game, broader support not accepted |
+| S4.2 | INITIAL PRIVATE EXCHANGE/VERIFIED CODE KIT | S4_WORKSTATION_TRIAL.md; cold synthetic restore/rebind and actual local kit smoke, fresh-workstation restore still open |
+| S4.3 | AWAITING FRESH-WORKSTATION HUMAN TRIAL | Owner: "I have another workstation i will test from." Trial kit and return instructions prepared; operator identity and independent-human evidence not yet observed |
+| S4.4 | OPEN | Support/retention/publication commitment requires owner decision after actual trial and S1-S3 outcomes |
 
 Keep S1_PROGRESS.md updated with exact branch, checks, limits and resume instructions so another maintainer can continue without this chat. Every slice gets focused acceptance/refusal tests, full guarded regression, unchanged legacy CLI goldens, coverage/no-weakened-baseline checks, lint and an evidence receipt. No minimum automation percentage or speedup is invented. LIVE TEST NOT PERFORMED.
 

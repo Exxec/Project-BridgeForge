@@ -1,5 +1,12 @@
 # S1 real pilot evidence: 2026-10-24
 
+**Closeout 2026-10-25:** [S1_COMPLETION_REVIEW.md](S1_COMPLETION_REVIEW.md) supersedes the pending S1 acceptance
+statements in the dated checkpoints below. Owner approved the real-source controlled encoding-repair pilot and
+accepted the bounded operational baseline, with human active-review time explicitly NOT_MEASURED. Fresh exact-subject
+review/full javac/RC8 Janino checks pass (1/1); the mod's unrelated whole-case findings remain refused. Independent
+agent resume/current-evaluator archive/retry and P3-P6 refusal controls were rechecked. S1 is complete only for the
+accepted local-new-game scope; historical failures, save upgrades, publication and S2-S4 gates are unchanged.
+
 Scope: unchanged, already revived, data-only Faction Relationships Uniquified baseline (`0.1.1+bf.1`), not historical legacy-to-revival repair acceptance. The selected release policy is local-only. Source inputs were copied; primary saves and existing rig instances were preserved. All payloads, screenshots, manifests, logs, inventories and receipts remain ignored under `bridgeforge-state/s1-pilot-20261024-a1/`.
 
 | Attempt | Observed result | Interpretation |

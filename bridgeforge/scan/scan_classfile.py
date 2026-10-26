@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import zipfile
 from pathlib import Path, PurePosixPath
+from ..analysis_reuse import parsed_facts
 from .scan_common import MAX_JAR_ENTRIES
 from .scan_json import _load_lenient_json_file
 
@@ -159,6 +160,10 @@ class _ClassFileInfo:
 
 
 def _parse_class_file(data: bytes) -> _ClassFileInfo | None:
+    return parsed_facts("class-file/v1", data, lambda: _parse_class_file_uncached(data))
+
+
+def _parse_class_file_uncached(data: bytes) -> _ClassFileInfo | None:
     """Parse a .class file's constant pool and method table.
 
     Returns the internal (slash-separated) class names referenced via CONSTANT_Class

@@ -1,5 +1,49 @@
 # S2 read-only measurement progress
 
+**Owned qualification-worker follow-up, 2026-10-25:** the shared S1 read-only scan/compile evidence
+worker now uses the existing S2 gated `AnalysisProcess` ownership path. A plain Windows venv
+launcher timeout could previously leave its Python/Java descendants running. Windows job closure
+or the POSIX owned session now reaps the worker family on timeout/parent loss; fresh engine checks,
+independent qualification dimensions and default resource policy are unchanged. Focused
+qualification/portfolio tests 34 PASS; full elevated guarded suite 2,761 PASS/12 unchanged skips,
+hermeticity PASS. The initial restricted full run failed unrelated boot/Java process tests due
+workstation sandbox permissions and was stopped; both logs are retained under
+`bridgeforge-state/s34-validation-20261025-a1/`. The old portfolio measurement engine and
+its 16.5% result remain point-in-time evidence, not a new benchmark of this worker change.
+
+**Production checkpoint, 2026-10-25:** [S2_PRODUCTION_PORTFOLIO.md](S2_PRODUCTION_PORTFOLIO.md)
+and [operator guide](S2_PORTFOLIO_OPERATOR_GUIDE.md). Bounded candidate analysis, native worker
+ownership, exact-input resume/recovery and CLI are implemented and validated: 2,741 tests/12
+unchanged skips PASS; three real-cohort serial/parallel runs agree, repeated completion launches
+zero workers, actual coordinator-death recovery passes. Median end-to-end reduction 16.5%,
+including substantial integrity verification; sampled worker-family peaks 253.719/441.570 MiB.
+No repairs, recipe promotions or qualification; active review time remains unavailable. Broader
+S2 acceptance is open. Earlier private-harness progress below is dated history.
+
+## Current continuation, 2026-10-25
+
+Owner accepted the measured local parsing slice: "Accept the opt-in tradeoff". This settles
+that slice's worthwhile-tradeoff review only, with defaults unchanged. Portfolio/resource and
+overall S2 acceptance remain separate.
+
+S1's bounded baseline is now owner-accepted; its older pending notes below are historical.
+The next measured S2.2 slice is implemented as opt-in invocation-local parsing reuse; see
+[S2_ANALYSIS_REUSE.md](S2_ANALYSIS_REUSE.md). Three fresh current-engine training-only rounds
+compare 96 complete responses with exact equality and verified input preservation. Median
+first/second scan reductions are approximately 8.9%/28.0%, with peak worker working set rising
+from 181.918 to 211.250 MiB. No default, policy, provider resolution or qualification changes.
+Holdouts remain excluded from tuning; governed recipe reuse, portfolio resource/default
+acceptance and production cancellation/recovery remain open. Full regression
+validation: 2,723 tests/12 unchanged skips PASS, 83.1469862% coverage, guarded hermeticity PASS;
+new cache module 100% statement/branch coverage; isolated wheel payload/import checks PASS.
+The linked report records scope, resources, raw artifacts and remaining acceptance gates.
+
+The [bounded portfolio trial](S2_PORTFOLIO_TRIAL.md) now records three one/two-worker rounds:
+complete response equality and preservation PASS, median elapsed reduction 43.2%, sampled peak
+worker-family RSS 255.660/460.605 MiB. Owned-tree cancellation, worker-failure/retry, changed-context,
+altered-response and existing-lock controls PASS in private measurement plumbing. Production
+portfolio orchestration remains unimplemented; no default or supported resource budget changed.
+
 ## Owner scope, 2026-10-25
 
 The owner explicitly approved S2_COHORT_PROPOSAL.md proposal 8c910c7a5c26ab3837c904b7948ad14c1fcb20c262fcdf0beaf6acbf1947df4c and selected "Measurement first; keep defaults". This authorizes the named 8 training/4 prospective holdout cases for read-only baseline/cache/portfolio measurement. It defers the worthwhile acceptance threshold until results are reviewed. No repair, live expansion, default increase, publication, support commitment or S1 acceptance is inferred.

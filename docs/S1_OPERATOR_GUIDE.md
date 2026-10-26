@@ -1,6 +1,13 @@
 # S1 local case operator guide
 
-Status: operator commands and a real two-layout data-only pilot are validated; the remaining pilot matrix and independent handoff acceptance are still open. Scope is RC8 local-maintainer **new-game** qualification and a local archive. Existing-save upgrades and publication require separate evidence/authority. Original sources, primary saves and prior archives are preserved. `CURRENT_INPUTS`, `CAPTURED`, `PREPARED` and `RUN_PREPARED` do not mean qualified.
+Current closeout review: [S1_COMPLETION_REVIEW.md](S1_COMPLETION_REVIEW.md). The independent reader successfully
+resumed and requalified E1 using this guide, then encountered the expected stale-evaluator refusal on the old
+operation. Recovery was a fresh `prepare` against the unchanged candidate and a new local archive root, followed
+by current qualification/finalization and an exact retry. No old journal, manifest or acceptance label was edited.
+Owner accepted the bounded S1 baseline and controlled compile pilot on 2026-10-25; human active-review time is
+explicitly NOT_MEASURED. S1 is complete in that bounded scope; save upgrades/publication/S4 human trials remain separate.
+
+Status: S1's bounded workflow and baseline are owner-accepted, with both-layout real data-only qualification, reviewed controlled compilation, refusal controls and independent agent resume. Scope is RC8 local-maintainer **new-game** qualification and a local archive. Existing-save upgrades and publication require separate evidence/authority. Original sources, primary saves and prior archives are preserved. `CURRENT_INPUTS`, `CAPTURED`, `PREPARED` and `RUN_PREPARED` do not mean qualified.
 
 ## Inputs and setup
 
@@ -89,7 +96,7 @@ Exit codes: 0 for a successful requested operation; 1 for an incomplete/refused 
 
 Persist case/candidate/operation/run IDs and selected input paths outside chat. Repeat prepare/finalize with the same IDs; do not edit checkpoint labels. PREPARED partial attempts remain in case state; private archive attempts remain under `<archives>/.bridgeforge-attempts`. PACKAGED records exact output before publication, allowing an interrupted move to reconcile only matching bytes. A damaged/missing completed archive, unknown destination collision, changed candidate/context/evaluator or changed run artifacts refuses. Preserve it for diagnosis; create an explicitly rebound candidate/operation when inputs change. Abandoned/foreign locks require an operator investigation, not automatic takeover.
 
-Pilot acceptance remains open: P1 data-only baseline, P2 narrow reviewed loose-Java repair, P3 uncertain jar/source authority refusal, P4 unresolved/conflicting provider refusal, P5 save/persistence routing, P6 changed-after-qualification refusal; both layouts; real positive and drift negative; measured operator steps/review/wait and independent resume. Synthetic command/rig tests are implementation evidence only. See [progress](S1_PROGRESS.md), [contracts](S1_CASE_RECORDS.md), and [pilot requirements](NEXT_MILESTONE.md).
+Pilot acceptance is recorded in [S1_COMPLETION_REVIEW.md](S1_COMPLETION_REVIEW.md): P1 data-only baseline, owner-approved controlled P2 repair/full compile, P3 authority refusal, P4 missing-provider refusal, P5 unsupported-save routing, P6 drift refusal, and independent agent resume. Human review time is explicitly NOT_MEASURED in the accepted baseline. Synthetic command/rig tests remain implementation evidence only. See [progress](S1_PROGRESS.md), [contracts](S1_CASE_RECORDS.md), and [pilot requirements](NEXT_MILESTONE.md).
 
 
 ## Real pilot findings (2026-10-24)

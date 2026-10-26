@@ -1,6 +1,21 @@
 # S1 progress and resume instructions
 
-Latest checkpoint: real v2 cases qualified/archived/retried on both layouts; owned post-qualification drift is refused. Historical v1 refusal is preserved; remaining pilot/owner gates are open. See S1_PILOT_EVIDENCE.md and the final resume instructions below. S1-S4 remain the active goal.
+**S1 complete and owner-accepted, 2026-10-25 (bounded RC8 local-new-game scope).**
+[S1_COMPLETION_REVIEW.md](S1_COMPLETION_REVIEW.md) records the current
+terminal checks on `feat/s1-completion-20261025` (base `ab680e57`). A separate agent resumed E1 from the public guide
+and artifacts, requalified it, observed correct stale-evaluator refusal, then prepared/finalized/retried a fresh local
+operation with exact archive preservation. P3-P6 refusal controls were freshly rechecked. A real-source controlled
+comment-encoding repair passes full javac and RC8 Janino coverage (1/1 active sources), with unchanged executable
+bytes, frozen originals and source inputs. Owner: "Approve the controlled repair pilot"; its exact-subject review
+and full compile were freshly re-evaluated PASS. No historical Leon failure or
+unrelated mod finding is reclassified. Fresh full guarded suite: 2,717 tests, OK (12 unchanged skips), 366.686s;
+hermeticity PASS. Ruff/docs/roadmap/whitespace checks PASS. Production code is unchanged.
+Owner: "Accept the bounded S1 baseline"; active-review time is "not measured", retained as NOT_MEASURED.
+The accepted measurement limitation cannot support a human-review speedup claim. Save upgrades, publication,
+S2 resource/default decisions and S4 human/support gates remain separate. Earlier pending checkpoints below are history.
+This is an independent agent handoff, not an independent human or second-machine S4 trial.
+
+Earlier checkpoint (before closeout): real v2 cases qualified/archived/retried on both layouts; owned post-qualification drift is refused. Historical v1 refusal is preserved. The later closeout above supersedes its pending S1 pilot/owner gates; S2-S4 keep their separate status.
 
 2026-10-24. Branch `feat/s1-workspace-contracts`, parent `docs/b6-closeout` (`8736e13a`), worktree `C:/Users/exxec/Documents/bf-wt/s1-workspace-contracts`. Main and the published B stack are preserved. Helpers/logs belong in BridgeForge, not SpriteForge.
 
