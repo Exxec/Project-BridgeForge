@@ -130,6 +130,7 @@
   ],
   "non_python_symbols": [
     "bridgeforge.bytecode.BridgeforgeBytecode",
-    "bridgeforge.bytecode.BridgeforgeBytecodeRewrite"
+    "bridgeforge.bytecode.BridgeforgeBytecodeRewrite",
+    "bridgeforge.bytecode.BridgeforgeDelegateMethod"
   ]
 }

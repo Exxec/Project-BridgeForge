@@ -1,3 +1,76 @@
+**88. Hand work from the Exotica RC4 and New Galactic Order sessions, made routine (owner-approved 2026-10-26: "all
+approved for now set in roadmap").** Each entry names the hand work it replaces. Suggested order: 88.1-88.2, 88.3, then
+88.4-88.5; 88.6 waits for a second mod with the same CSV layout problem. Nothing below is built yet.
+- 88.1 `probe-group record` writes who ran the session: "Owner ran New Game..." is printed even for unattended
+  `probe-group live` runs (NGO-LIVE-20261026; corrected by hand). Take it from the live run record.
+- 88.2 The live harness treats "the game window is gone" after the probe's `done` marker and a graceful close as LIVE_DONE
+  (87.9, EXO-RC3-LIVE-20261026).
+- 88.3 `rig-check`: scaffold, build, install and collect rig-only check mods. Today two were hand-made (`bf_exotica_check`,
+  `bf_csv_quote_probe`): mod_info, plugin, javac against the jar and RC8, jar, copy into the rig, edit
+  enabled_mods.json, grep `BF-*` lines. They produced the strongest evidence of the day (RC3 vs RC4; RC8-38/39).
+  Collected lines go into the run record and `probe-group report`.
+- 88.4 A/B live runs: `probe-group live --variant NAME=FOLDER` runs the same group against two builds of one mod and
+  reports both (RC3 vs RC4 needed a hand swap of the rig folder, and the probe's class list then named the wrong build).
+- 88.5 `intake` reads .rar/.7z itself (7-Zip CLI, py7zr) and takes `--drop-junk` to remove desktop.ini/Thumbs.db with a
+  record; both of today's archives were extracted by hand and NGO was blocked by a desktop.ini.
+- 88.6 87.11's CSV layout check plus a `fix` that re-maps rows written in a reference core's layout by column name,
+  refusing when a dropped column holds a value (hand script for NGO's ship_systems.csv, 2026-10-26).
+- 88.7 `test_guard` fails fast with "environment incomplete" when a declared dependency (psutil) is missing, instead of
+  running into 141 import errors and replacing `bridgeforge-state/last-suite.json` with that result.
+- 88.8 **Done 2026-10-26.** The project `.venv` has `setuptools` 84.2.1 (`uv pip install --python .venv/Scripts/python.exe
+  setuptools`); `tests.test_package_discovery` now passes locally (S branch).
+- 88.9 `bridgeforge ci-local --linux`: the WSL recipe (vendored manylinux wheels, tracked-file tarball, git repo,
+  `set -e` and literal paths) as a command, run before pushing; the S branch passed every local check and failed 17
+  tests on Ubuntu CI.
+- 88.10 A "maintainer RC" workspace kind for third-party test builds (Exotica 2.1.1-RC4): no archive, the outputs are a
+  diagnosis report and a test build, and `probe-group plan` keeps it out of revival groups.
+- 88.11 Merge order: the S branch carries all of B0-B6; item 87 merges on top of it with three import fixes and a
+  regeneration, done and verified in `integration/s-series-with-87` (87 affected tests OK). Merge S first, then that
+  branch, rather than item 87 onto main directly.
+
+**87. Kotlin jars and module identity, from the Exotica 2.1.1-RC3 diagnosis (owner 2026-10-26: "fix mod and create a RC4
+version of Exotica", "apply lessons learned and handwork to bridgeforge").** Exotica's RC3 test build lost exotics on
+multi-module ships: it keyed modules by hull variant id, which RC8-37 shows is not unique within a ship (11 of 12 RC8
+stations repeat a module id; 598 of 2,023 local multi-module variants). The jar is Kotlin without public source, so RC4 was
+built by delegating eight method bodies to a Java helper (`In operation/Exotica-Technologies-2.1.1-RC4/`, report in
+`In operation/Exotica-Technologies/reports/EXOTICA_2.1.1-RC3_MULTIMODULE_DIAGNOSIS.md`). LIVE TEST NOT PERFORMED.
+- 87.1 **Done 2026-10-26.** `delegate-method`: replace chosen method bodies with one static call into a separately compiled
+  helper class (ASM, `bridgeforge/java/BridgeforgeDelegateMethod.java`); verified by bytecode that exactly the named methods
+  changed and none were added or removed; the output is a new jar patched with the JDK `jar` tool. Tests:
+  `tests/test_delegate_method.py` (runs the patched jar under `-Xverify:all`; refusals).
+- 87.2 **Done 2026-10-26.** `decompile-jar` counts Kotlin sources (`.kt`, which `rebuild-jar` cannot compile) apart from Java
+  and says so in `next`; Exotica's jar gave 319 `.kt` beside 56 `.java`, reported as "56 source files". Test:
+  `tests/test_decompile.py`.
+- 87.3 **Done 2026-10-26.** BridgeForge's own Java helpers (bytecode inspect/rewrite, Java AST) compile and run with one JDK
+  (`JdkInfo.java`, `helper_java_tools`). On the owner's machine PATH has Java 8's `java` beside JDK 25's `javac`: the helpers
+  compiled a version-69 class the runtime refused, so bytecode inspection and Java AST analysis failed there. Tests:
+  `tests/test_java_toolchain.py`.
+- 87.4 **Done 2026-10-26.** `patch-jar-class` no longer refuses the loss of IntelliJ's `$$$reportNull$$$N` (`@NotNull`
+  instrumentation javac never emits), like `lambda$`/`access$`. Test: `tests/test_jar_patch.py`.
+- 87.5 RC8-37 (module ids are not unique within a ship) and RC8-38 (`HullVariantSpec` identity; an unset module slot returns
+  `SpecStore`'s shared spec) added to `docs/RC8_BEHAVIOUR.md`.
+- 87.6 Proposed, not built: a REVIEW scan finding for jar code that keys per-module state by `getHullVariantId()` while the
+  mod (or a mod it supports) ships variants that repeat a module id (RC8-37). Needs owner approval.
+- 87.7 Exotica RC4 live, 2026-10-26: smoke PASS; EXO-RC4-LIVE-20261026 LIVE_DONE with the rig-only `bf_exotica_check`
+  13 PASS/0 FAIL/1 SKIP, while RC3-fix2 (EXO-RC3-LIVE-20261026) fails the two predicted checks (identical-module
+  clobbering, prefix-sibling bleed). Results in the RC4 workspace's `working/reports/REVIVAL_REPORT.md`. Still pending:
+  the owner's hands-on refit session (`docs/LOCAL_HANDOFF.md`, "Exotica 2.1.1-RC4").
+- 87.8 **Done 2026-10-26.** `intake`'s publish rename waits about a minute (backoff capped at 8 s) instead of ~14 s. Exotica RC4
+  (8 MB) and New Galactic Order (35 MB) both failed with "Access is denied" after the old retries and passed on an immediate
+  rerun of the same bytes, as a first antivirus scan of new bytes would (the Yunru pack hit it on 2026-10-04). Test:
+  `tests/test_raw_intake_and_lunalib_rule.py`.
+- 87.10 **Done 2026-10-26.** `csv-field-bare-quote` (REVIEW, low): a row that Python's `csv` reads as too wide but RC8
+  reads whole because of a bare quote pair inside a quoted field (RC8-39, proven on the rig with a quote probe mod) is no
+  longer reported as a MANUAL `csv-row-extra-columns` spill; the quote marks vanish in game. Found on New Galactic Order's
+  descriptions.csv. Test: `tests/test_revival_lessons.py`.
+- 87.11 Proposed, not built: a check for CSV rows written in another layout than their file's header (New Galactic
+  Order's ship_systems.csv: three rows in vanilla 0.9a's 26-column layout under the mod's 24-column header, so every value
+  after column 8 loaded one column off, e.g. EMP active 0.5 s instead of 4). Detection: a too-wide row whose values line up
+  with vanilla's header for that file (any reference core) once the missing columns are empty. Fixed by hand in NGO.
+- 87.9 Observation, not fixed: `probe-group live` raised "the game window is gone" on EXO-RC3-LIVE-20261026 after the probe's
+  `done` marker (campaign, combat) and the graceful close, while `drive` still navigated to the mission list. The run was
+  complete; the harness should treat a window that closes after `done` as LIVE_DONE.
+
 **86. Re-check the archive across environments and against AoTD (owner 2026-10-22; after item 83, uses 85.1).** Everything
 archived was live-validated on Java 25 direct, alone or in small groups. Scope (Done/ 2026-10-22): 112 archives carry code (jars
 or loose scripts) and are re-checked; 42 are data-only (portraits, sprites, CSV) and are skipped, since launcher, Java and the
@@ -18,7 +91,6 @@ ids, dependencies present), about 15-25 groups per environment; a failing group 
 - 86.6 Pre-patcher variants of passes 1-2 only for archives that patch game classes or depend on the Prepatcher.
 - Results go into each workspace's live record and gates.json; an archive is re-archived (`revise`) only when a fix is needed.
   New and revised mods are not part of this item: they get the `standard` bundle before archiving (85.1).
-
 **S-series implementation (owner 2026-10-24: "plan S series implementation then proceed to start S1").**
 [Implementation plan](docs/S_SERIES_IMPLEMENTATION_PLAN.md) translates S1-S4 into dependency-ordered slices. **S1 is complete and owner-accepted 2026-10-25 for the bounded RC8 local-new-game workflow**; [completion evidence](docs/S1_COMPLETION_REVIEW.md) and [progress/handoff](docs/S1_PROGRESS.md) retain the limits. Human active-review time is NOT_MEASURED in the accepted baseline. S2 baseline and S3 initial work retain their separate open delivery/acceptance gates; save upgrades, publication and S4 human/support commitments are not included.
 

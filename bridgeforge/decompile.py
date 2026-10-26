@@ -36,8 +36,20 @@ def decompile_jar(jar: Path, output: Path, vineflower: Path | None = None, jdk: 
     # -dgs=1: decompile generic signatures (Ironclads' run, 2026-10-04); the output folder receives the source tree.
     run = subprocess.run([str(java), "-jar", str(tool), "-dgs=1", str(jar), str(output)], capture_output=True, text=True,
                          encoding="utf-8", errors="replace")
-    sources = sorted(output.rglob("*.java"))
+    java_sources, kotlin_sources = count_sources(output)
+    rebuild = f"edit, then: bridgeforge rebuild-jar <workspace> --sources {output} --jar <the jar> --vanilla-core <core>"
     return {"schema_version": 1, "mode": "DECOMPILE_JAR", "jar": str(jar), "output": str(output), "tool": str(tool),
-            "exit_code": run.returncode, "sources": len(sources),
-            "next": f"edit, then: bridgeforge rebuild-jar <workspace> --sources {output} --jar <the jar> --vanilla-core <core>",
+            "exit_code": run.returncode, "sources": java_sources, "kotlin_sources": kotlin_sources,
+            "next": KOTLIN_NEXT if kotlin_sources else rebuild,
             "log_tail": (run.stdout + run.stderr)[-800:]}
+
+
+# Vineflower's Kotlin plugin writes .kt for Kotlin classes (Exotica Technologies 2.1.1-RC3, 2026-10-26: 319 .kt beside
+# 56 .java). rebuild-jar compiles .java with javac only, and decompiled Kotlin does not recompile as written.
+KOTLIN_NEXT = ("Kotlin classes decompiled to .kt: read them, but rebuild-jar cannot compile them; "
+               "patch single classes with patch-jar-class or get the author's source")
+
+
+def count_sources(output: Path) -> tuple[int, int]:
+    """(.java, .kt) files under a decompiled tree."""
+    return len(list(Path(output).rglob("*.java"))), len(list(Path(output).rglob("*.kt")))

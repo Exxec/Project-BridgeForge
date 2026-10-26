@@ -77,6 +77,13 @@ def add_parser(subcommands) -> None:
     dj_cmd.add_argument("--vineflower", type=Path, help="vineflower jar (default: In operation/_tools/vineflower*.jar)")
     dj_cmd.add_argument("--jdk", type=Path)
     dj_cmd.add_argument("--json", action="store_true")
+    delegate_cmd = subcommands.add_parser("delegate-method", help="replace chosen method bodies with a call into a compiled helper class (for a jar whose decompiled source does not recompile, e.g. Kotlin); only those methods may change, checked by bytecode; writes a new jar with the JDK jar tool")
+    delegate_cmd.add_argument("jar", type=Path, help="the jar to read (never written)")
+    delegate_cmd.add_argument("--spec", type=Path, required=True, help="JSON naming each owner/name/descriptor, its helper method and a reason")
+    delegate_cmd.add_argument("--helper-classes", type=Path, required=True, help="folder holding the compiled helper class(es) at their package paths")
+    delegate_cmd.add_argument("--output", type=Path, required=True, help="the patched jar to create (must not exist)")
+    delegate_cmd.add_argument("--jdk", type=Path)
+    delegate_cmd.add_argument("--json", action="store_true")
     decompiler = subcommands.add_parser("decompiler-review", help="record or explicitly run a user-supplied decompiler as untrusted review evidence")
     decompiler.add_argument("input", type=Path)
     decompiler.add_argument("--adapter", type=Path, required=True)
@@ -104,8 +111,22 @@ def run_cli(args: argparse.Namespace) -> int:
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
-        print(json.dumps(result, indent=2) if args.json else f"{result['sources']} source file(s) in {result['output']} (exit {result['exit_code']}). Next: {result['next']}")
+        print(json.dumps(result, indent=2) if args.json else f"{result['sources']} Java and {result['kotlin_sources']} Kotlin source file(s) in {result['output']} (exit {result['exit_code']}). Next: {result['next']}")
         return 0 if result["exit_code"] == 0 else 1
+    if args.command == "delegate-method":
+        from .delegate_method import delegate_methods
+        try:
+            result = delegate_methods(args.jar, args.spec, args.helper_classes, args.output, args.jdk)
+        except (ValueError, BytecodeUnavailable) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            for row in result["classes"]:
+                print(f"{'OK  ' if row['ok'] else 'FAIL'} {row['class']}: changed {', '.join(row['changed']) or 'nothing'}")
+            print(f"{result['status']}: {result['output'] or 'no jar written'}")
+        return 0 if result["status"] == "PASS" else 1
     if args.command == "port-interfaces":
         from bridgeforge.bytecode.jar_batch import port_interfaces, port_interfaces_queue
         path = args.path.expanduser().resolve()
