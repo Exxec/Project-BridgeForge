@@ -27,6 +27,10 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
 - 88.11 Merge order: the S branch carries all of B0-B6; item 87 merges on top of it with three import fixes and a
   regeneration, done and verified in `integration/s-series-with-87` (87 affected tests OK). Merge S first, then that
   branch, rather than item 87 onto main directly.
+- 88.12 **Done 2026-10-26.** `probe-group live` presses SPACE again after each 90 s without the probe's "combat END" (the round runs
+  about 60 s once unpaused). The single press 2 s after deploying could leave the mission paused (EXO-RC4B-LIVE-20261026 stopped
+  logging after deployment; the owner had been unpausing combat by hand). Five later unattended runs finished combat on their own.
+  Test: `tests/test_live_run.py` (`test_combat_left_paused_by_the_first_space_is_unpaused_by_a_retry`).
 
 **87. Kotlin jars and module identity, from the Exotica 2.1.1-RC3 diagnosis (owner 2026-10-26: "fix mod and create a RC4
 version of Exotica", "apply lessons learned and handwork to bridgeforge").** Exotica's RC3 test build lost exotics on
