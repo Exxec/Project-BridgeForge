@@ -2,6 +2,10 @@
 
 Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; each mod's evidence is in its revival report.
 
+## 2026-10-26
+
+- **New Galactic Order** 1.07a: revived for RC8 and archived (live validated)
+
 ## 2026-10-22
 
 - **Epta Consortium** 2.1.3+bf.2: Version label corrected to 2.1.3 (the upstream 2.1.3 package called itself 2.1.2); Proelefsi station keeps its original sprite.
