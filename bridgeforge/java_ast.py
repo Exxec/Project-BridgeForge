@@ -7,6 +7,11 @@ import tempfile
 from pathlib import Path
 
 
+def _java_tools() -> tuple[str, str]:
+    from .java_toolchain import helper_java_tools  # local: java_toolchain imports scanner, which imports this chain
+    return helper_java_tools()
+
+
 class AstUnavailable(RuntimeError):
     """The selected runtime has no usable JDK compiler."""
 
@@ -39,7 +44,7 @@ def _ensure_helper() -> Path:
     if marker.is_file():
         return output
     output.mkdir(parents=True, exist_ok=True)
-    completed = subprocess.run(["javac", "-d", str(output), str(source)], capture_output=True, text=True, check=False)
+    completed = subprocess.run([_java_tools()[0], "-d", str(output), str(source)], capture_output=True, text=True, check=False)
     if completed.returncode != 0:
         raise AstUnavailable((completed.stderr or completed.stdout or "javac unavailable").strip())
     return output
@@ -55,7 +60,7 @@ def analyze_sources(root: Path) -> list[dict[str, object]]:
         handle.write("\n".join(map(str, sources)))
         sources_file = Path(handle.name)
     try:
-        completed = subprocess.run(["java", "-cp", str(helper), "bridgeforge.ast.BridgeforgeAst", "--sources-file", str(sources_file)], capture_output=True, text=True, check=False)
+        completed = subprocess.run([_java_tools()[1], "-cp", str(helper), "bridgeforge.ast.BridgeforgeAst", "--sources-file", str(sources_file)], capture_output=True, text=True, check=False)
     finally:
         sources_file.unlink(missing_ok=True)
     if completed.returncode != 0:

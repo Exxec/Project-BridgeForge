@@ -6,11 +6,13 @@ import os
 import shutil
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from bridgeforge.java_toolchain import (
     assemble_classpath,
     declared_dependencies,
     find_jdk,
+    helper_java_tools,
     DEFAULT_JAVAC_ARGS,
     parse_javac_errors,
     run_javac,
@@ -86,6 +88,19 @@ class FindJdkTests(unittest.TestCase):
             info = find_jdk(explicit=bad_explicit, repo_root=root / "repo")
             self.assertIsNotNone(info)
             self.assertEqual(info.source, "repo-rig")
+
+    def test_java_is_the_same_jdks_launcher(self) -> None:
+        # 2026-10-26: PATH had Java 8's java beside JDK 25's javac; helpers must run with the JDK that compiled them.
+        with resolved_temp_dir() as root:
+            home = root / "jdk"
+            _touch_javac(home)
+            info = find_jdk(explicit=home, repo_root=root)
+        self.assertEqual(info.java.parent, info.javac.parent)
+        self.assertEqual(info.java.stem, "java")
+
+    def test_helper_tools_fall_back_to_bare_names_without_a_jdk(self) -> None:
+        with patch("bridgeforge.java_toolchain.find_jdk", return_value=None):
+            self.assertEqual(helper_java_tools(), ("javac", "java"))
 
     def test_none_when_nothing_found(self) -> None:
         with resolved_temp_dir() as root:

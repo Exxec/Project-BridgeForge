@@ -78,6 +78,24 @@ class JarPatchTests(unittest.TestCase):
         self.assertFalse(refused["installed"])
         self.assertEqual(allowed["status"], "PASS", allowed)
 
+    def test_intellij_null_instrumentation_may_disappear(self) -> None:
+        # Exotica 2.1.1-RC3 (2026-10-26): IntelliJ adds $$$reportNull$$$0 for @NotNull; javac does not.
+        instrumented = ORIGINAL.replace("public class Gantry {\n", "public class Gantry {\n"
+                                        "    private static void $$$reportNull$$$0(int i) { throw new IllegalArgumentException(); }\n")
+        with resolved_temp_dir() as root:
+            ws = self._workspace(root)
+            (root / "orig" / "data" / "hullmods" / "Gantry.java").write_text(instrumented, encoding="utf-8")
+            done = subprocess.run([self.javac, "--release", "17", "-d", str(root / "inst"), str(root / "orig" / "data" / "hullmods" / "Gantry.java")],
+                                  capture_output=True, text=True, check=False)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            with zipfile.ZipFile(ws / "working" / "jars" / "mod.jar", "w") as archive:
+                archive.write(root / "inst" / "data" / "hullmods" / "Gantry.class", "data/hullmods/Gantry.class")
+            edited = root / "edit" / "Gantry.java"
+            edited.parent.mkdir()
+            edited.write_text(GUARDED, encoding="utf-8")
+            result = patch_jar_classes(ws, "jars/mod.jar", [edited])
+        self.assertEqual(result["status"], "PASS", result)
+
     def test_a_changed_superclass_is_refused(self) -> None:
         # EPTA-20261013: another mod's data/hullmods/BaseHullMod on the classpath won over `import ...combat.*`.
         with resolved_temp_dir() as root:

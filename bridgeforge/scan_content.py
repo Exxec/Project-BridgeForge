@@ -54,11 +54,22 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
                 header = next(rows, [])
                 if not header or not any(cell.strip() for cell in header):
                     raise ValueError("CSV has no header row")
+                rc8_widths: dict[str, int] | None = None
                 for line_number, row in enumerate(rows, start=2):
                     if len(row) <= len(header) or not any(cell.strip() for cell in row):
                         continue
                     if row[0].lstrip().startswith("#"):
                         continue  # a comment row Starsector skips (Industrial Evolution's printing_whitelist.csv notes)
+                    if rc8_widths is None:
+                        rc8_widths = _rc8_csv_widths(path.read_text(encoding="utf-8-sig"))
+                    if rc8_widths.get(row[0], len(row)) <= len(header):
+                        result.add(
+                            id="csv-field-bare-quote", category="assets", severity="low", classification="REVIEW", confidence="DETERMINISTIC",
+                            explanation=("A quoted field holds a bare quote pair (`\"word\"`). Strict CSV readers split the row, but RC8 "
+                                         "toggles quoting on each bare quote, so the row loads whole and only the quote marks vanish (RC8-39). "
+                                         "Write them doubled (`\"\"word\"\"`) to show them; nothing is in the wrong column."),
+                            file=_relative(root, path), evidence=[f"line:{line_number}", f"id:{row[0]}"])
+                        continue
                     # Content beyond the header is a spilled row (loads into the wrong columns). Only
                     # empty trailing cells (spreadsheet padding; Mirfak's hull_mods rows reach 14,726
                     # cells) are ignored by Starsector but rejected by strict tools; that is SAFE to trim.
@@ -83,6 +94,41 @@ def _scan_assets(root: Path, result: ScanResult) -> None:
             result.add(id="invalid-csv", category="assets", severity="high", classification="MANUAL", confidence="DETERMINISTIC", explanation=f"CSV could not be read: {exc}", file=_relative(root, path))
     _scan_wing_roles(root, result)
     _scan_content_graph(root, result)
+
+
+def _rc8_csv_widths(text: str) -> dict[str, int]:
+    """{first field: field count} as RC8's CSV reader splits records: an unpaired `"` toggles quoting and `""` inside
+    quotes is a literal quote, so a bare `"word"` inside a quoted field never ends it (RC8-39, live 2026-10-26)."""
+    widths: dict[str, int] = {}
+    fields: list[str] = []
+    field: list[str] = []
+    quoted = False
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char == '"':
+            if quoted and text[index + 1:index + 2] == '"':
+                field.append('"')
+                index += 1
+            else:
+                quoted = not quoted
+        elif char == "," and not quoted:
+            fields.append("".join(field))
+            field = []
+        elif char in "\r\n" and not quoted:
+            if char == "\r" and text[index + 1:index + 2] == "\n":
+                index += 1
+            fields.append("".join(field))
+            if any(value.strip() for value in fields):
+                widths.setdefault(fields[0], len(fields))
+            fields, field = [], []
+        else:
+            field.append(char)
+        index += 1
+    if field or fields:
+        fields.append("".join(field))
+        widths.setdefault(fields[0], len(fields))
+    return widths
 
 
 def _scan_wing_roles(root: Path, result: ScanResult) -> None:

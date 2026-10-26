@@ -43,6 +43,19 @@ class JdkInfo:
     jar: Path
     source: str  # "explicit" | "repo-rig" | "JAVA_HOME" | "PATH"
 
+    @property
+    def java(self) -> Path:
+        return self.javac.with_name("java.exe" if self.javac.suffix.lower() == ".exe" else "java")
+
+
+def helper_java_tools() -> tuple[str, str]:
+    """(javac, java) from one JDK, for BridgeForge's own Java helpers. On the owner's machine (2026-10-26) PATH has
+    a Java 8 `java` beside JDK 25's `javac`: bare names compiled a class (version 69) the runtime could not load."""
+    jdk = find_jdk()
+    if jdk is None or not jdk.java.is_file():
+        return "javac", "java"
+    return str(jdk.javac), str(jdk.java)
+
 
 def find_jdk(explicit: Path | None = None, repo_root: Path | None = None) -> JdkInfo | None:
     """Locate a JDK with a working javac. Order: explicit --jdk, this repo's rig, JAVA_HOME, PATH.

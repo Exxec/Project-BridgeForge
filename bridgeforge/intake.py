@@ -31,12 +31,19 @@ def operation_root(repo_root: Path, *, create: bool = False) -> Path:
     return operation
 
 
-def _rename_with_retry(source: Path, target: Path, attempts: int = 8) -> None:
+RENAME_ATTEMPTS = 12
+RENAME_MAX_WAIT_SECONDS = 8.0
+
+
+def _rename_with_retry(source: Path, target: Path, attempts: int = RENAME_ATTEMPTS, sleep=None) -> None:
     """Rename, retrying a Windows PermissionError: a freshly extracted tree is often held open for a moment by
     antivirus or indexing, so renaming it failed with 'Access is denied' twice in a row for the 9-mod Yunru pack
-    (2026-10-04). Any other error, or the last attempt's, is raised."""
+    (2026-10-04). The first scan of new bytes can take longer: Exotica RC4 (8 MB) and New Galactic Order (35 MB) both
+    failed after the old ~14 s of retries and both passed on an immediate rerun of the same bytes (2026-10-26), so the
+    waits now grow to 8 s each, about a minute in all. Any other error, or the last attempt's, is raised."""
     import time
 
+    sleep = sleep or time.sleep
     for attempt in range(attempts):
         try:
             source.rename(target)
@@ -44,7 +51,7 @@ def _rename_with_retry(source: Path, target: Path, attempts: int = 8) -> None:
         except PermissionError:
             if attempt == attempts - 1:
                 raise
-            time.sleep(0.5 * (attempt + 1))
+            sleep(min(1.0 * (attempt + 1), RENAME_MAX_WAIT_SECONDS))
 
 
 def _folder_name(name: str) -> str:

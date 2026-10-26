@@ -7,7 +7,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from bridgeforge.decompile import decompile_jar, find_vineflower
+from bridgeforge.decompile import KOTLIN_NEXT, count_sources, decompile_jar, find_vineflower
 from bridgeforge.java_toolchain import find_jdk
 
 
@@ -29,6 +29,17 @@ class DecompileJarTests(unittest.TestCase):
         self.assertIn("return 3;", text)
         with self.assertRaises(ValueError):
             decompile_jar(Path(directory) / "missing.jar", Path(directory) / "x")
+        self.assertEqual(result["kotlin_sources"], 0)
+        self.assertIn("rebuild-jar", result["next"])
+
+    def test_kotlin_sources_are_counted_apart_from_java(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "a" / "b").mkdir(parents=True)
+            for name in ("One.java", "Two.kt", "Three.kt", "x.kotlin_module"):
+                (root / "a" / "b" / name).write_text("", encoding="utf-8")
+            self.assertEqual(count_sources(root), (1, 2))
+        self.assertIn("cannot compile", KOTLIN_NEXT)
 
 
 if __name__ == "__main__":

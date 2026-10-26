@@ -132,7 +132,10 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
         # Compare raw member names: the diff's labels join name and descriptor ("checkF").
         gone = ({key[0] for key in old_parsed.methods} - {key[0] for key in new_parsed.methods}) | \
                ({key[0] for key in old_parsed.fields} - {key[0] for key in new_parsed.fields})
-        removed = sorted(member for member in gone if member not in allowed and not member.startswith(("lambda$", "access$")))
+        # $$$reportNull$$$N is IntelliJ's @NotNull instrumentation, generated per class; javac does not emit it, so a
+        # recompiled class always loses it (Exotica 2.1.1-RC3 ExoticaTechHM$1/$2, 2026-10-26). Like lambda$/access$,
+        # it is compiler-made, never called from outside the class.
+        removed = sorted(member for member in gone if member not in allowed and not member.startswith(("lambda$", "access$", "$$$reportNull$$$")))
         if removed:
             refusals.append(f"{name}: removed {', '.join(removed)} (name them in allow_removed if intended)")
         # The class header must not change. Epta's seven_defensefunnels says `extends BaseHullMod` with `import ...combat.*`; another

@@ -16,6 +16,18 @@ S1-S4 and item 75 extensions remain proposals/specifications unless separately e
 `Done/_replaced-<date>/` and restore it if the new write fails (`tests/test_archive_preserves.py`). Not yet exercised on a
 real `Done/` archive: the first real refresh is the check (old bytes under `_replaced-*`, new archive complete).
 
+## Exotica 2.1.1-RC4 live test (ROADMAP item 87.7, 2026-10-26)
+
+Build: `In operation/Exotica-Technologies-2.1.1-RC4/builds/ExoticaTechnologies-2.1.1-RC4.zip` (LazyLib, MagicLib, LunaLib;
+Console Commands for `et_listmultimoduleships true`). Static checks done: bytecode diff (only the 8 delegated methods
+changed), `-Xverify:all` load of every rewritten class, 11 offline tree checks (`scratch/rc4-check/`). LIVE TEST NOT PERFORMED.
+Run the test plan in `In operation/Exotica-Technologies/reports/EXOTICA_2.1.1-RC3_MULTIMODULE_DIAGNOSIS.md` on RC4 and on
+RC3-fix2 side by side: FullMetalSalvo on the last identical module (Trails of Tooth and Claw Drivershack, UAF Charlotte),
+an exotic on the Flourish root then its undershield (Emergent Threats IX), 2-3 copies of one ship in combat, and the
+AlphaSubcore count after install/uninstall on different identical modules. Done when RC4 shows no clobbering, anchoring or
+bleed where RC3 does, and the log has no ModuleSlotFix "stock module variant" warning. Record the result in the workspace's
+`reports/` and in item 87.7.
+
 ## 0b. Item 73 / 75 implementation: what still needs this machine (2026-10-18)
 
 **Project Go follow-up 2026-10-19 (owner: "Repeat for all next phases if able").** Translation schema alignment is
