@@ -378,6 +378,27 @@ def play_probe_combat(hands: Hands, rows_below: int = 0, total: int | None = Non
     hands.key(SPACE_KEY)
 
 
+# The probe's combat round runs about 60 s once unpaused (3,596 frames, EXO-RC3-LIVE-20261026). The single SPACE press 2 s
+# after deploying could land before the mission took input and leave it paused: EXO-RC4B-LIVE-20261026 stopped logging right
+# after deployment, and the owner (2026-10-26) had been unpausing combat by hand. Between slices of this length with no
+# 'combat END', SPACE is pressed again: a second press un-pauses a wrongly paused mission; a running one would have ended.
+COMBAT_UNPAUSE_RETRY = 90.0
+
+
+def wait_for_combat_end(log: Path, hands: Hands, timeout: float, since: int) -> bool:
+    """True once the probe's 'combat END' is logged; presses SPACE again after each silent COMBAT_UNPAUSE_RETRY."""
+    remaining = timeout
+    while True:
+        step = min(COMBAT_UNPAUSE_RETRY, remaining)
+        if wait_for(log, COMBAT_END, step, hands, since=since):
+            return True
+        remaining -= step
+        if remaining <= 0 or not hands.alive():
+            return False
+        hands.front()
+        hands.key(SPACE_KEY)
+
+
 def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: float = 600, combat_timeout: float = 240,
           generic_fallback: bool = True, new_game_grace: float = NEW_GAME_GRACE,
           vanilla_rows: int = VANILLA_MISSION_ROWS, save_reload: bool = False) -> LiveResult:
@@ -421,7 +442,7 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
     while round_no < rounds_total:
         offset = len(_log_text(log))
         play_probe_combat(hands, rows_below, list_total)
-        if not wait_for(log, COMBAT_END, combat_timeout, hands, since=offset):
+        if not wait_for_combat_end(log, hands, combat_timeout, offset):
             return stuck(f"combat-round-{round_no + 1}", "no 'combat END' probe line after starting the probe mission")
         round_no += 1
         result.rounds = round_no

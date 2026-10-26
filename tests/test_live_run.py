@@ -31,6 +31,9 @@ class FakeGame:
 
     def key(self, vk: int) -> None:
         self.actions.append(("key", vk))
+        if self.stall_at == "first-space" and vk == live_run.SPACE_KEY and self.combat_started:
+            self.stall_at = None  # the first press landed before the mission took input; the next one starts it
+            return
         if vk == live_run.SPACE_KEY and self.combat_started and self.stall_at != "combat":
             self._append(f"BF-PROBE|0.2.23|combat-round|INFO|round {self.combat_started} of {self.rounds}|x")
             self._append("BF-PROBE|0.2.23|probe|INFO|combat|END")
@@ -71,6 +74,20 @@ class DriveTests(unittest.TestCase):
     def test_silent_combat_is_stuck_at_its_round(self) -> None:
         result, _ = self._drive(stall_at="combat")
         self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "combat-round-1"))
+
+    def test_combat_left_paused_by_the_first_space_is_unpaused_by_a_retry(self) -> None:
+        # EXO-RC4B-LIVE-20261026: combat stopped logging after deployment; the owner had been unpausing by hand.
+        retry = live_run.COMBAT_UNPAUSE_RETRY
+        live_run.COMBAT_UNPAUSE_RETRY = 0.05
+        try:
+            with resolved_temp_dir() as base:
+                log = base / "run.stdout.log"
+                game = FakeGame(log, stall_at="first-space")
+                result = live_run.drive(log, game.hands(), menu_timeout=0.2, campaign_timeout=0.2, combat_timeout=0.5)
+        finally:
+            live_run.COMBAT_UNPAUSE_RETRY = retry
+        self.assertEqual(result.verdict, "LIVE_DONE", result)
+        self.assertEqual(sum(1 for action in game.actions if action == ("key", live_run.SPACE_KEY)), 2)
 
     def test_game_that_never_reaches_the_menu_is_stuck_at_the_menu(self) -> None:
         with resolved_temp_dir() as base:
