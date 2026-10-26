@@ -84,3 +84,33 @@ Keep S1_PROGRESS.md updated with exact branch, checks, limits and resume instruc
 The active goal now covers implementation and validation of all S1-S4 in dependency order, not only S1. Automated live testing is authorized where required, using the dedicated isolated rig with its ownership, staged-input/run-manifest and existing policy checks. Inspect current rig/process ownership before staging; serialize GUI/live resources. Preserve originals, primary saves and prior archives. Ordinary implementation/verification may continue without per-slice confirmation; gameplay/save-content decisions, licence/publication, PR creation, main merges, second-operator evidence and owner support/acceptance commitments remain distinct gates. A synthetic/automated test does not impersonate an independent human operator.
 
 Next: S1.3's content-bound candidate/receipt spine, followed by durable case records and qualification adapters. Reuse `copy_drift._collect`/`run_manifest.FILESET_ALGORITHM` for the shipped set only after validating physical payload boundaries. Retain scan-registry's broader analysis-input identity separately; generated reports must not invalidate shipped payload identity. Bind receipts to candidate AND explicit dependency/core/tool/rule/policy context; missing context/provenance cannot become acceptance. Keep decisions and evidence outside frozen payloads and test stale inputs, same-version drift, tampering, unsupported schemas, interruptions and retries before wiring mutations.
+
+## Status check, 2026-10-26
+
+Committed and pushed: `feat/s1-workspace-contracts` (S1 base) and `feat/s1-completion-20261025` (S1 closeout, S2-S4
+initial slices, commit 28a52b29). Neither is merged; no PR is open. Verification on this machine: 2,761 tests, 1
+environmental failure (`test_package_discovery` builds a wheel and the project `.venv` has no `setuptools`), 12 skips,
+hermeticity PASS; the pre-push hook's 1,617 tests PASS.
+
+What remains, by gate:
+
+| Slice | Remaining | Waits on |
+|---|---|---|
+| S2.3 | Governed recipe/ruling evidence and promotion gates | Implementation (not started) |
+| S2 overall | Portfolio resource/default acceptance; measured owner review minutes before any review-time claim | Owner acceptance after measurement |
+| S3.2 / S3.4 | Broader scenario families; full maintained qualification | Implementation and live rig runs |
+| S3.3 | Copied-save upgrade pilot (`S3_COPIED_SAVE_PILOT_PLAN.md`) | Owner: explicit copied-save scope |
+| S4.3 | Fresh-workstation human trial with the local kit (`S4_WORKSTATION_TRIAL.md`) | Owner's second workstation |
+| S4.4 | Support, retention and publication commitment | Owner decision after S4.3 and S1-S3 outcomes |
+
+Environment notes found while verifying (not S-series defects):
+- PATH on this workstation has Java 8's `java` beside JDK 25's `javac`. This branch's AST/bytecode helpers call bare
+  `java`/`javac`, so their tests fail unless JDK 25's `bin` is first on PATH (the pre-push hook too). ROADMAP-3 item 87
+  (`feat/87-kotlin-jar-delegation`) fixes it in code with `helper_java_tools`.
+- The project `.venv` lacks `setuptools`; `test_package_discovery` needs it locally (CI installs it).
+- `test_guard` rewrites `bridgeforge-state/last-suite.json` in the checkout it runs in: a wrong-interpreter run on
+  2026-10-26 replaced this worktree's copy; the S1 evidence remains `bridgeforge-state/closure/full-suite.log`.
+
+Merge order: this branch carries the B0-B6 package moves (`bridgeforge/bytecode/bytecode.py`, `java_ast.py`,
+`java_toolchain.py`, `jar_patch.py`). Item 87 edits those files at their old paths on `origin/main`, so whichever
+merges second is rebased; git's rename detection should carry the edits, then rerun the suite.
