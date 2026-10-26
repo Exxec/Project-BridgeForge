@@ -1,3 +1,33 @@
+**88. Hand work from the Exotica RC4 and New Galactic Order sessions, made routine (owner-approved 2026-10-26: "all
+approved for now set in roadmap").** Each entry names the hand work it replaces. Suggested order: 88.1-88.2, 88.3, then
+88.4-88.5; 88.6 waits for a second mod with the same CSV layout problem. Nothing below is built yet.
+- 88.1 `probe-group record` writes who ran the session: "Owner ran New Game..." is printed even for unattended
+  `probe-group live` runs (NGO-LIVE-20261026; corrected by hand). Take it from the live run record.
+- 88.2 The live harness treats "the game window is gone" after the probe's `done` marker and a graceful close as LIVE_DONE
+  (87.9, EXO-RC3-LIVE-20261026).
+- 88.3 `rig-check`: scaffold, build, install and collect rig-only check mods. Today two were hand-made (`bf_exotica_check`,
+  `bf_csv_quote_probe`): mod_info, plugin, javac against the jar and RC8, jar, copy into the rig, edit
+  enabled_mods.json, grep `BF-*` lines. They produced the strongest evidence of the day (RC3 vs RC4; RC8-38/39).
+  Collected lines go into the run record and `probe-group report`.
+- 88.4 A/B live runs: `probe-group live --variant NAME=FOLDER` runs the same group against two builds of one mod and
+  reports both (RC3 vs RC4 needed a hand swap of the rig folder, and the probe's class list then named the wrong build).
+- 88.5 `intake` reads .rar/.7z itself (7-Zip CLI, py7zr) and takes `--drop-junk` to remove desktop.ini/Thumbs.db with a
+  record; both of today's archives were extracted by hand and NGO was blocked by a desktop.ini.
+- 88.6 87.11's CSV layout check plus a `fix` that re-maps rows written in a reference core's layout by column name,
+  refusing when a dropped column holds a value (hand script for NGO's ship_systems.csv, 2026-10-26).
+- 88.7 `test_guard` fails fast with "environment incomplete" when a declared dependency (psutil) is missing, instead of
+  running into 141 import errors and replacing `bridgeforge-state/last-suite.json` with that result.
+- 88.8 **Done 2026-10-26.** The project `.venv` has `setuptools` 84.2.1 (`uv pip install --python .venv/Scripts/python.exe
+  setuptools`); `tests.test_package_discovery` now passes locally (S branch).
+- 88.9 `bridgeforge ci-local --linux`: the WSL recipe (vendored manylinux wheels, tracked-file tarball, git repo,
+  `set -e` and literal paths) as a command, run before pushing; the S branch passed every local check and failed 17
+  tests on Ubuntu CI.
+- 88.10 A "maintainer RC" workspace kind for third-party test builds (Exotica 2.1.1-RC4): no archive, the outputs are a
+  diagnosis report and a test build, and `probe-group plan` keeps it out of revival groups.
+- 88.11 Merge order: the S branch carries all of B0-B6; item 87 merges on top of it with three import fixes and a
+  regeneration, done and verified in `integration/s-series-with-87` (87 affected tests OK). Merge S first, then that
+  branch, rather than item 87 onto main directly.
+
 **87. Kotlin jars and module identity, from the Exotica 2.1.1-RC3 diagnosis (owner 2026-10-26: "fix mod and create a RC4
 version of Exotica", "apply lessons learned and handwork to bridgeforge").** Exotica's RC3 test build lost exotics on
 multi-module ships: it keyed modules by hull variant id, which RC8-37 shows is not unique within a ship (11 of 12 RC8
