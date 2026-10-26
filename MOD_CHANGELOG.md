@@ -4,7 +4,8 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 
 ## 2026-10-26
 
-- **Exotica Technologies** 2.1.1-RC4: RC4 test build: multi-module exotics keyed by module slot/instance instead of variant id (no clobbering, anchoring or bleed between identical modules, prefix-alike modules or ship copies); 8 methods delegated to a Java helper, not live-tested
+- **New Galactic Order** 1.07a: revived for RC8 and archived (live validated)
+- **Exotica Technologies** 2.1.1-RC4: RC4 test build: multi-module exotics keyed by module slot/instance instead of variant id (no clobbering, anchoring or bleed between identical modules, prefix-alike modules or ship copies); 8 methods delegated to a Java helper; scripted live check on the RC8 rig 13 PASS/0 FAIL (RC3-fix2 fails 2), hands-on refit test pending
 
 ## 2026-10-22
 
