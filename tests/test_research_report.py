@@ -9,7 +9,7 @@ import unittest
 from contextlib import closing, redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from bridgeforge.atlas import connect
+from bridgeforge.atlas.atlas import connect
 from bridgeforge.cli import main
 from bridgeforge.research.research_reconcile import Concept
 from bridgeforge.research.research_reconcile import reconcile

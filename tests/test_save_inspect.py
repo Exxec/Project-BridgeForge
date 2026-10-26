@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.save_inspect import (
+from bridgeforge.save.save_inspect import (
     audit_scripts,
     diff_saves,
     growth_trend,

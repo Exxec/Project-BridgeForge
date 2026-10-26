@@ -5,7 +5,7 @@ import json
 import unittest
 
 from bridgeforge import duel_run
-from bridgeforge.live_run import GameRefused
+from bridgeforge.live.live_run import GameRefused
 from tests.support import resolved_temp_dir
 
 LOG = "\n".join([

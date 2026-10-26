@@ -149,7 +149,7 @@ def sync_copies(working_copy: Path, deployed_copy: Path, prune: bool = False, to
     """
     from datetime import date
 
-    from .probe_config import _is_link
+    from bridgeforge.probe.probe_config import _is_link
 
     deployed_path = Path(deployed_copy).expanduser()
     if not deployed_path.exists():

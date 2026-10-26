@@ -25,7 +25,7 @@ class DraftHonoursBaselineTests(unittest.TestCase):
 
         from bridgeforge.baseline import finding_baseline_key
         from bridgeforge.models import TargetProfile
-        from bridgeforge.scanner import scan_mod
+        from bridgeforge.scan.scanner import scan_mod
 
         with resolved_temp_dir() as root:
             vanilla_core = root / "vanilla-core"

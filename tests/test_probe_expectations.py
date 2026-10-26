@@ -5,9 +5,9 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.probe_config import build_probe_config
-from bridgeforge.probe_expectations import MAX_BOUNTIES, bounty_ids, entity_checks, expectations_path
-from bridgeforge.probe_group import merge_configs
+from bridgeforge.probe.probe_config import build_probe_config
+from bridgeforge.probe.probe_expectations import MAX_BOUNTIES, bounty_ids, entity_checks, expectations_path
+from bridgeforge.probe.probe_group import merge_configs
 from tests.support import resolved_temp_dir
 
 

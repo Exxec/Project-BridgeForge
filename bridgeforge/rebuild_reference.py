@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 
 from .data_diff import _diff
-from .scanner import SHADOW_PATH_EXTENSIONS, _load_lenient_json_file
+from bridgeforge.scan.scanner import SHADOW_PATH_EXTENSIONS, _load_lenient_json_file
 
 SCHEMA_VERSION = 1
 FILE_CLASSES = tuple(sorted(ext for ext in SHADOW_PATH_EXTENSIONS if ext != ".java"))

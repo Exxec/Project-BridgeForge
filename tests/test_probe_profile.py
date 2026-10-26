@@ -4,7 +4,7 @@ from pathlib import Path
 
 from tests.support import link_dir
 
-from bridgeforge.probe_config import (
+from bridgeforge.probe.probe_config import (
     DEFAULT_PROFILE_APPLY,
     PROFILE_DIR,
     PROFILE_FILE,

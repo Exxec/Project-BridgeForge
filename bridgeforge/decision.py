@@ -94,7 +94,7 @@ def _accept(action: dict, base: Path, today: str, dry_run: bool, scan: Callable 
 
     workspace = _path(base, action["workspace"])
     if scan is None:
-        from .scanner import scan_mod
+        from bridgeforge.scan.scanner import scan_mod
 
         scan = lambda working: scan_mod(working).findings  # noqa: E731
     result = accept_selected(workspace, list(action["selectors"]), action["reason"], scan(workspace / "working"), today, dry_run)

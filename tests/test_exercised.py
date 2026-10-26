@@ -5,8 +5,8 @@ import json
 import unittest
 
 from bridgeforge.exercised import hollow_mods, hollow_warnings, parse_exercised
-from bridgeforge.probe_config import build_probe_config
-from bridgeforge.probe_group import merge_configs, record_group
+from bridgeforge.probe.probe_config import build_probe_config
+from bridgeforge.probe.probe_group import merge_configs, record_group
 from tests.bound_runs import bound_run
 from tests.support import resolved_temp_dir
 from tests.test_probe_group import _workspace

@@ -91,12 +91,12 @@ class RequirementTests(unittest.TestCase):
             full["save_compat"] = {"save": str(root / "save")}
             incomplete = {k: v for k, v in full.items() if k != "idempotence"}
             write_evidence(ws, requirement, pack=incomplete)
-            with mock.patch("bridgeforge.save_compat.check_save_compat", return_value={"status": "LOADS", "missing": []}):
+            with mock.patch("bridgeforge.save.save_compat.check_save_compat", return_value={"status": "LOADS", "missing": []}):
                 lacking = migration_requirement(ws, old, new)
             write_evidence(ws, requirement, pack=full)
-            with mock.patch("bridgeforge.save_compat.check_save_compat", return_value={"status": "WILL_FAIL", "missing": [{"reference": "x"}]}):
+            with mock.patch("bridgeforge.save.save_compat.check_save_compat", return_value={"status": "WILL_FAIL", "missing": [{"reference": "x"}]}):
                 failing = migration_requirement(ws, old, new)
-            with mock.patch("bridgeforge.save_compat.check_save_compat", return_value={"status": "LOADS", "missing": []}):
+            with mock.patch("bridgeforge.save.save_compat.check_save_compat", return_value={"status": "LOADS", "missing": []}):
                 good = migration_requirement(ws, old, new)
         self.assertIn("lacks idempotence", " ".join(lacking["problems"]))
         self.assertIn("save-compat says WILL_FAIL", " ".join(failing["problems"]))

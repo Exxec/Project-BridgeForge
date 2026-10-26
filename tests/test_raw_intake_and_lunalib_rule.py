@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.archive_intake import inspect_zip_archive
-from bridgeforge.intake import unprocessed_raw_folders, zip_raw_folder
-from bridgeforge.probe_group import ProbeGroupError, lunalib_rule
+from bridgeforge.intake import RENAME_MAX_WAIT_SECONDS, _rename_with_retry, unprocessed_raw_folders, zip_raw_folder
+from bridgeforge.probe.probe_group import ProbeGroupError, lunalib_rule
 from tests.support import resolved_temp_dir
 
 
@@ -65,6 +65,31 @@ class RawFolderIntakeTests(unittest.TestCase):
             found = unprocessed_raw_folders(queue)
         self.assertEqual([f["folder"] for f in found], ["Raw One", "Raw Two"])
         self.assertEqual(found[1]["mod_root"], "Inner")
+
+
+class RenameRetryTests(unittest.TestCase):
+    """2026-10-26: Exotica RC4 and New Galactic Order failed the publish rename after the old ~14 s of retries."""
+
+    class _Locked:
+        def __init__(self, denials: int) -> None:
+            self.denials, self.calls = denials, 0
+
+        def rename(self, target) -> None:
+            self.calls += 1
+            if self.calls <= self.denials:
+                raise PermissionError("Access is denied")
+
+    def test_a_long_first_scan_lock_is_waited_out_with_capped_backoff(self) -> None:
+        waits: list[float] = []
+        source = self._Locked(denials=10)
+        _rename_with_retry(source, Path("target"), sleep=waits.append)
+        self.assertEqual(source.calls, 11)
+        self.assertEqual(max(waits), RENAME_MAX_WAIT_SECONDS)
+        self.assertGreaterEqual(sum(waits), 30)
+
+    def test_the_last_denial_is_raised(self) -> None:
+        with self.assertRaises(PermissionError):
+            _rename_with_retry(self._Locked(denials=99), Path("target"), sleep=lambda seconds: None)
 
 
 class LunaLibRuleTests(unittest.TestCase):

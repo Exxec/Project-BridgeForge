@@ -4,8 +4,8 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from bridgeforge.scan_hyperspace_market import hyperspace_market_entities
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scan_hyperspace_market import hyperspace_market_entities
+from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
 
 # Excerpt shape of LTA_gen.java (LTA 2026-10-14): hyperspace location in a variable, entity, then market.

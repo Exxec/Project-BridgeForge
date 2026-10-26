@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.probe_config import _hull_inventory
+from bridgeforge.probe.probe_config import _hull_inventory
 
 
 def _mod(root: Path) -> Path:

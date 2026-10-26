@@ -1,5 +1,35 @@
 # Local handoff: work a cloud session could not finish
 
+**Owned qualification-worker checkpoint, 2026-10-25:** the S1 read-only evidence worker now uses the same gated, owned process-family launch as the S2 portfolio worker. Timeout or parent exit releases its Windows kill-on-close job (or POSIX session), including descendants. This closes the plain-launcher timeout gap noted in the older checkpoint below; qualification policy and dimensions are unchanged. Focused tests: 34 PASS. A restricted full run failed unrelated boot/Java process tests under sandbox permissions and was stopped with its log preserved. The elevated full guarded suite then passed 2,761 tests/12 unchanged skips with hermeticity PASS in 414.455s. A separate full coverage run passed 2,761 tests/12 unchanged skips, hermeticity PASS and 83.0760710% branch coverage against the unchanged 80% floor. The current kit and exact engine are in [S4_WORKSTATION_TRIAL.md](S4_WORKSTATION_TRIAL.md); the older engine/kit values below are historical. Both full logs, coverage report/JSON and kit smoke result are under ignored `bridgeforge-state/s34-validation-20261025-a1/`.
+
+**Earlier S-series checkpoint, 2026-10-25:** S1 was complete only for the accepted RC8 local-new-game scope. The production S2 read-only portfolio passed three equal-input rounds, actual coordinator death/recovery and bounded worker ownership; [S2_PRODUCTION_PORTFOLIO.md](S2_PRODUCTION_PORTFOLIO.md) reports the measured 16.5% median end-to-end reduction and remaining recipe, owner-time and yield gates. S3's exact comparison re-evaluated preserved real-game callback controls but did not run a new game or establish feature/save equivalence; [S3_COMPARISON_GUIDE.md](S3_COMPARISON_GUIDE.md) records the limits. S4's source-backed code kit and private case exchange passed local checks; [S4_WORKSTATION_TRIAL.md](S4_WORKSTATION_TRIAL.md) gives the fresh-machine instructions. The owner has another workstation and will test there. The trial, independent-human operator, copied-save scope and support/publication decisions were open. At this earlier checkpoint the full guarded regression was 2,761 tests/12 unchanged skips, hermeticity PASS, 83.0735811% branch coverage and engine `8044d70868ab32863525e0e781b36d2c1184f3522f37fdf6ca8c8a995dfcd9ca`. The plain qualification-worker timeout gap at this checkpoint is closed by the later checkpoint above. Historical S2 evidence has an earlier engine and is not restamped.
+
+**S2 continuation, 2026-10-25:** [S2_ANALYSIS_REUSE.md](S2_ANALYSIS_REUSE.md) records the opt-in
+pure-parsing cache and three current-engine training rounds (96 identical complete responses;
+all selected inputs preserved). First/repeated scan reductions approximately 8.9%/28.0%, peak
+worker working set 181.918 -> 211.250 MiB. Owner: "Accept the opt-in tradeoff" (2026-10-25),
+for this measured local parsing slice only. Defaults unchanged; portfolio acceptance is separate.
+Current guarded coverage run: 2,723 tests/12 unchanged skips PASS, 357.800s, hermeticity PASS,
+coverage 83.1469862%; isolated wheel payload/import smoke PASS. Raw current validation is
+`bridgeforge-state/s2-reuse-20261025-a1/`, not the older S1 `last-suite.json`.
+The [private bounded portfolio trial](S2_PORTFOLIO_TRIAL.md) subsequently passed three serial/
+two-worker rounds and narrow cancel/crash/context/refusal controls, with 43.2% median elapsed
+reduction and 255.660/460.605 MiB sampled family peaks. No production source changed; prior full
+regression remains current by exact engine identity. Next: production read-only portfolio
+ownership/resource/recovery integration and governed recipe evidence. Holdouts cannot choose
+tuning. S2-S4 remain incomplete. No game/save/publication action this slice.
+
+**S1 closeout continuation, 2026-10-25:** current review and resume artifacts are indexed in
+[S1_COMPLETION_REVIEW.md](S1_COMPLETION_REVIEW.md) on `feat/s1-completion-20261025`, based on `ab680e57`.
+The original S-series worktree is preserved. Main's duplicate implementation was preserved under ignored
+`bridgeforge-state/s1-20261025/duplicate-implementation/` and main restored to its clean starting state.
+Current full suite: 2,717 tests, zero failures/errors, 12 unchanged skips; hermeticity PASS. Independent resume,
+current-evaluator archive/retry and P3-P6 refusals are verified. **S1 is complete for its bounded local-new-game scope.**
+Owner: "Approve the controlled repair pilot"; "Accept the bounded S1 baseline"; review time "not measured".
+Exact-subject P2 review and full javac/Janino (1/1) re-evaluated PASS; the full mod remains REFUSED on unrelated findings.
+Do not repeat Leon's failed repair/old diagnostics, fabricate human-review timing, or treat this as save-upgrade,
+publication, S2 default-change or S4 human/support approval.
+
 Cloud sessions have no Starsector install, no test rig, no Windows, and no access to
 `In operation/`. Whatever they build that needs one of those is listed here, most useful first, so a
 local session can pick it up. Each entry says what to run, what "done" looks like, and which
@@ -15,6 +45,18 @@ S1-S4 and item 75 extensions remain proposals/specifications unless separately e
 **DOC-001 fixed 2026-10-18:** `archive --refresh` and group `--archive --refresh` now move the old archive to
 `Done/_replaced-<date>/` and restore it if the new write fails (`tests/test_archive_preserves.py`). Not yet exercised on a
 real `Done/` archive: the first real refresh is the check (old bytes under `_replaced-*`, new archive complete).
+
+## Exotica 2.1.1-RC4 live test (ROADMAP item 87.7, 2026-10-26)
+
+Build: `In operation/Exotica-Technologies-2.1.1-RC4/builds/ExoticaTechnologies-2.1.1-RC4.zip` (LazyLib, MagicLib, LunaLib;
+Console Commands for `et_listmultimoduleships true`). Static checks done: bytecode diff (only the 8 delegated methods
+changed), `-Xverify:all` load of every rewritten class, 11 offline tree checks (`scratch/rc4-check/`). LIVE TEST NOT PERFORMED.
+Run the test plan in `In operation/Exotica-Technologies/reports/EXOTICA_2.1.1-RC3_MULTIMODULE_DIAGNOSIS.md` on RC4 and on
+RC3-fix2 side by side: FullMetalSalvo on the last identical module (Trails of Tooth and Claw Drivershack, UAF Charlotte),
+an exotic on the Flourish root then its undershield (Emergent Threats IX), 2-3 copies of one ship in combat, and the
+AlphaSubcore count after install/uninstall on different identical modules. Done when RC4 shows no clobbering, anchoring or
+bleed where RC3 does, and the log has no ModuleSlotFix "stock module variant" warning. Record the result in the workspace's
+`reports/` and in item 87.7.
 
 ## 0b. Item 73 / 75 implementation: what still needs this machine (2026-10-18)
 

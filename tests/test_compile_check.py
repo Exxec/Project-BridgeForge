@@ -183,7 +183,7 @@ class ScanCompileCheckProviderRootsTests(unittest.TestCase):
             self.skipTest("no javac on PATH")
 
     def test_scan_mod_resolves_a_declared_dependency_via_provider_roots(self) -> None:
-        from bridgeforge.scanner import scan_mod
+        from bridgeforge.scan.scanner import scan_mod
         from bridgeforge.models import TargetProfile
 
         with resolved_temp_dir() as root:
@@ -248,7 +248,7 @@ class DependencyShadowScanFindingTests(unittest.TestCase):
         from unittest.mock import patch
 
         from bridgeforge.models import TargetProfile
-        from bridgeforge.scanner import scan_mod
+        from bridgeforge.scan.scanner import scan_mod
 
         outcome = {"status": "PASS", "errors": [], "shadowed_by_dependency": [
             {"file": "data/scripts/Titan.java", "class": "data.scripts.Titan", "dependency": "Imperium", "supplied_by": "II.jar!data/scripts/Titan.class"}]}

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 
 class RevivalLessonsScannerTests(unittest.TestCase):
@@ -21,6 +21,28 @@ class RevivalLessonsScannerTests(unittest.TestCase):
             self.assertEqual(finding.classification, "MANUAL")
             self.assertEqual(finding.file, "data/descriptions.csv")
             self.assertEqual(finding.evidence[:3], ["line:2", "header-columns:3", "row-columns:4"])
+
+    def test_a_bare_quote_pair_rc8_reads_whole_is_not_a_spilled_row(self) -> None:
+        # New Galactic Order's descriptions.csv (2026-10-26); RC8-39: the live quote probe loaded these rows whole.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "data" / "strings").mkdir(parents=True)
+            (root / "data" / "strings" / "descriptions.csv").write_bytes((
+                'id,type,text1,text2,text3,notes\r\n'
+                'bfq_spill,SHIP,"One. The Vidar is the "little" brother, of the Donar. End one.",,,\r\n'
+                'real_spill,SHIP,a,b,c,d,e\r\n').encode("utf-8"))
+            findings = scan_mod(root).findings
+            bare = [item for item in findings if item.id == "csv-field-bare-quote"]
+            spilled = [item for item in findings if item.id == "csv-row-extra-columns"]
+        self.assertEqual([item.evidence for item in bare], [["line:2", "id:bfq_spill"]])
+        self.assertEqual([item.evidence[0] for item in spilled], ["line:3"])
+        self.assertEqual(spilled[0].classification, "MANUAL")
+
+    def test_rc8_csv_widths_toggle_on_bare_quotes_and_keep_doubled_ones(self) -> None:
+        from bridgeforge.scan.scan_content import _rc8_csv_widths
+
+        widths = _rc8_csv_widths('id,a,b\nx,"say "hi", ok",z\ny,"say ""hi"", ok",z\nz,"multi\nline",q\n')
+        self.assertEqual(widths, {"id": 3, "x": 3, "y": 3, "z": 3})
 
     def test_a_comment_row_with_commas_is_not_a_spilled_row(self) -> None:
         # Magellan Protectorate's indEvo/printing_whitelist.csv (2026-09-30): a "# ..." note line containing commas.

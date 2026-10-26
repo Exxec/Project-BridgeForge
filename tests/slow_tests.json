@@ -1,0 +1,17 @@
+{
+  "threshold_seconds": 2.0,
+  "measured_on": "2026-10-23",
+  "environment": "Windows, Python 3.15, matched JDK 25, B3 research validation venv; one profiling suite run",
+  "tests": {
+    "test_boot_test.BootTestLaunchTests.test_suspect_fatal_dialog_when_alive_without_marker": 2.252242799999749,
+    "test_boot_test.BootTestNaturalExitTests.test_game_still_running_when_the_test_stops_it_is_recorded_killed": 2.2604724000002534,
+    "test_fixer_backups.ApplyFixGuardTests.test_large_rules_csv_with_isolated_cp1252_byte_survives_the_fix": 24.16757920000009,
+    "test_fixers_guards.OrbitPeriodGuardTests.test_refuses_side_effects_and_unknown_calls": 2.1247831999999107,
+    "test_java_ast.Java_astTests.test_bytecode_inspector_reports_symbolic_references_without_execution": 2.5223622999997133,
+    "test_launch_watchdog.BootTestWatchdogTests.test_a_running_java_keeps_the_run_waiting_until_its_own_timeout": 3.1501337999998213,
+    "test_new_game_generic.DriveFallbackTests.test_the_generic_flow_runs_after_the_fixed_flow_and_its_stage_is_recorded": 4.157792599999993,
+    "test_one_launcher.InteractiveTests.test_interactive_run_waits_for_the_operator_and_records_natural": 2.531024100000195,
+    "test_revive.EscalationRunTests.test_a_timeout_kills_the_agent_and_its_helpers": 3.193384199999855,
+    "test_saved_object_compiled.SavedObjectCompiledTests.test_transient_fleet_only_unsaved_and_game_copies_are_quiet": 2.6425672000000304
+  }
+}

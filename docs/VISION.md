@@ -1,5 +1,7 @@
 # BridgeForge long-term vision
 
+**Implementation instruction, 2026-10-24:** owner requested "plan S series implementation then proceed to start S1". The [implementation plan](S_SERIES_IMPLEMENTATION_PLAN.md) orders S1-S4; S1 has started with the compatibility map and offline read-only workspace adapter. The earlier proposal/baseline text below is dated history. Qualification profile enforcement, real pilot/rig access, save/gameplay changes, publication and milestone acceptance retain their explicit gates; S2-S4 are planned, not implemented.
+
 Proposed strategy for owner review, 2026-10-17. Planning horizon: approximately 12-24 months, expressed as four
 outcome-gated releases rather than dated commitments. No development capacity or dedicated rig budget has been established.
 Application source is unchanged by this planning exercise. Baseline inspected: `3342654d`.

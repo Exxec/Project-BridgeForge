@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.models import TargetProfile
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 
 def _mod(root: Path) -> Path:

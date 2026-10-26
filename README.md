@@ -27,7 +27,7 @@ python -m bridgeforge --help
 Run the checks before committing (full suite takes several minutes; CI runs it on Windows and Ubuntu with Python 3.15):
 
 ```powershell
-python -m pip install ruff                 # the project .venv does not carry it
+python -m pip install ruff "setuptools>=68" # lint and the real-backend packaging regression
 ruff check .
 python -m bridgeforge.test_guard           # full suite; also fails if the checkout changed
 python -m bridgeforge docs-index --check   # docs/COMMANDS.md and docs/CHECKS.md are generated
@@ -207,3 +207,6 @@ changes that did not occur block packaging. See
 Scanning is read-only with respect to the selected mod directory. Generated artifacts are written only to `--output`.
 
 These tools enforce reproducibility, scope, packaging, and evidence discipline. They do not automatically resolve REVIEW or MANUAL findings.
+
+
+S1 local case workflow: see [the operator guide](docs/S1_OPERATOR_GUIDE.md) for the opt-in `case` commands, explicit input bindings, resumable local operations and remaining pilot gates. Existing commands retain their contracts; offline tests do not establish live or save-upgrade qualification.

@@ -14,7 +14,7 @@ import re
 import shutil
 from pathlib import Path
 
-from . import live_run as lr
+from bridgeforge.live import live_run as lr
 
 DUEL_MOD_ID = "bf_duel"
 DUEL_MISSIONS = ("seeker", "baseline", "overwhelm", "ubique", "probestop")

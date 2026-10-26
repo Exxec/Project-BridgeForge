@@ -14,7 +14,7 @@ from unittest import mock
 
 from bridgeforge.cli import main
 from bridgeforge.fold import FoldError, _origin_folder_name, fold
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 
 def _write(path: Path, text: str) -> None:

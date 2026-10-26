@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from ..atlas import DEFAULT_DB
+from ..atlas.atlas import DEFAULT_DB
 from .research_decompile import DEFAULT_MAX_CLASSES
 from .research_diff import DEFAULT_MAX_LINES, DEFAULT_MAX_METHODS, DiffError, build_diff
 from .research_diff import render_markdown as render_diff_markdown

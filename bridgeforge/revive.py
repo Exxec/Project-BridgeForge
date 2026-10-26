@@ -107,7 +107,7 @@ def _scan(working: Path, vanilla_core: Path | None) -> list[dict]:
     """Scan findings minus the ones the mod's own baseline accepts (working/reports/baseline*.json):
     an accepted finding is never fixed, packeted or counted against the mod."""
     from .baseline import finding_dict_baseline_key, mod_baseline_keys
-    from .scanner import scan_mod
+    from bridgeforge.scan.scanner import scan_mod
 
     accepted = mod_baseline_keys(working)
     # The rig's mods/ holds the libraries mods depend on; declared-dependency jars resolve class references there.
@@ -124,7 +124,7 @@ def _scan(working: Path, vanilla_core: Path | None) -> list[dict]:
 def _record_settings_baseline(working: Path, findings: list[dict]) -> None:
     """First acceptance of a small settings.json tuning set (owner's held rule, ROADMAP item 19): record the exact
     keys in <workspace>/SETTINGS_BASELINE.json so a later change turns the finding back into REVIEW."""
-    from .scanner import SETTINGS_BASELINE_FILE
+    from bridgeforge.scan.scanner import SETTINGS_BASELINE_FILE
 
     path = Path(working).parent / SETTINGS_BASELINE_FILE
     if Path(working).name != "working" or path.exists():
@@ -160,7 +160,7 @@ def _fix_options(finding_id: str, working: Path, target: str, vanilla_core: Path
         import csv as _csv
 
         from .fixers import nearest_vanilla_gen_row
-        from .scanner import _load_lenient_json_file
+        from bridgeforge.scan.scanner import _load_lenient_json_file
 
         is_star = finding_id == "procgen-star-row-missing"
         vanilla_csv = Path(vanilla_core or "") / "data" / "campaign" / "procgen" / ("star_gen_data.csv" if is_star else "planet_gen_data.csv")
@@ -453,7 +453,7 @@ def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dic
 def attach_precedent(packets: list[dict], workspace: Path) -> None:
     """Give each decision packet the newest earlier answers to its finding id (ROADMAP item 73 C2): rulings in the queue's
     ESCALATION_RULINGS.jsonl and baseline reasons of the queue's other mods. The queue is the workspace's parent folder."""
-    from .escalation_precedent import packet_precedent
+    from bridgeforge.escalation.escalation_precedent import packet_precedent
 
     queue = workspace.parent
     for packet in packets:
@@ -608,7 +608,7 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
     # Relink, when approved in the policy: recompile classes whose game calls RC8 changed only by return type, from
     # unedited source, patched only when nothing else changes (jar_batch; 19 queued mods by hand, 2026-09-30).
     if apply and vanilla_core is not None and "jar-linkage-unresolved" in approved and any(f["id"] == "jar-linkage-unresolved" for f in findings):
-        from .jar_batch import relink_workspace
+        from bridgeforge.bytecode.jar_batch import relink_workspace
 
         relinked = relink_workspace(workspace, vanilla_core, apply=True)
         if relinked["state"] in ("RELINKED", "PARTIAL") and any(j.get("state") == "RELINKED" for j in relinked["jars"]):
@@ -619,7 +619,7 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
             findings = _scan(working, vanilla_core)
     # Interface ports, when approved: known RC8 contract changes on jar classes (jar_batch.port_interfaces).
     if apply and vanilla_core is not None and "jar-interface-method-missing" in approved and any(f["id"] == "jar-interface-method-missing" for f in findings):
-        from .jar_batch import port_interfaces
+        from bridgeforge.bytecode.jar_batch import port_interfaces
 
         ported = port_interfaces(workspace, vanilla_core, apply=True)
         done = [j["jar"] for j in ported["jars"] if j.get("state") == "PORTED"]
@@ -665,7 +665,7 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
         result["report_draft"] = _draft_report(working, vanilla_core, status, write=write and apply)
     if write:
         from .report import write_artifacts
-        from .scanner import scan_mod
+        from bridgeforge.scan.scanner import scan_mod
 
         _write_packets(workspace, packets)
         for item in applied_all:

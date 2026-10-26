@@ -33,7 +33,7 @@ import re
 from pathlib import Path
 
 from .models import TargetProfile
-from .scanner import (
+from bridgeforge.scan.scanner import (
     MOUNT_OVERRIDE_FITS,
     WEAPON_SLOT_SIZE_RANK,
     WEAPON_SLOT_SKIP_TYPES,
@@ -286,7 +286,7 @@ def strip_plan(mod_dir: Path, vanilla_core: Path, only: list[str] | None = None)
 def propose_expected_changes(plan: dict, expected_path: Path, *, build: str, links: dict[str, list[str]], mod_id: str | None = None) -> list[str]:
     """Add a PROPOSED static-layer expected change for each file the plan deletes; return the new ids."""
     from .behavior_discovery import add_expected_change
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     if not any(links.get(kind) for kind in ("risk", "hyp", "test")):
         raise StripPlanError("expected changes need at least one --link risk=|hyp=|test= id (expect check requires it)")

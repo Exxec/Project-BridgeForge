@@ -6,7 +6,7 @@ import zipfile
 from pathlib import Path
 
 from bridgeforge.provider_renamed_ids import closest_known
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
 
 MOD_INFO = '{"id":"demo","name":"Demo","version":"1.0","gameVersion":"0.98a-RC8","dependencies":[{"id":"tasc","name":"TASC"}]}'

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.models import TargetProfile
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
 
 VANILLA_ENGINE_STYLES = {
@@ -68,7 +68,8 @@ class PresetEntryOverrideTests(unittest.TestCase):
         self.assertEqual(sorted(f.file for f in covered), sorted(f"data/config/{name}" for name in names))
         self.assertTrue(all(f.evidence == ["star_red: loses iconTexture"] for f in covered))
         self.assertEqual(nothing, {})
-
+
+
     def test_sounds_json_merges_by_sound_id_within_a_category(self):
         # Live 2026-09-28: Exigency's sounds.json names 3 of vanilla's music ids and vanilla's other music still played.
         vanilla = {"music": {"music_title": [{"file": "t.ogg", "volume": 1}], "music_campaign": [{"file": "c.ogg", "volume": 1}]}}

@@ -17,7 +17,7 @@ import shutil
 from datetime import date
 from pathlib import Path
 
-from .scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 
 def next_version(version: str) -> str:
@@ -153,7 +153,7 @@ def declare_providers(workspace: Path, *, apply: bool = False) -> dict:
     by visible 0.98 mods, so the fix is declaring them as dependencies and nothing else changes (2026-10-01: 9 of the
     21 mods it blocked). Any other strategy (ESCALATE, STRIP_FROM_MOD) is left for a person."""
     from .fixers import _add_dependency_entry
-    from .scanner import _parse_json
+    from bridgeforge.scan.scanner import _parse_json
 
     workspace = Path(workspace).expanduser().resolve()
     info_path = workspace / "working" / "mod_info.json"

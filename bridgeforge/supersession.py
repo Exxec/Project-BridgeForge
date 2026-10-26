@@ -21,7 +21,7 @@ from pathlib import Path
 
 from .archive import _version_text
 from .progress import Checkpoint, report
-from .scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 SCHEMA_VERSION = 1
 RESULT_FILE = "SUPERSESSION.json"
@@ -66,7 +66,7 @@ def corpus_reference_index(db: Path) -> dict[str, list[dict]]:
     import sqlite3
     import zipfile
 
-    from .scanner import _parse_json
+    from bridgeforge.scan.scanner import _parse_json
 
     index: dict[str, list[dict]] = {}
     connection = sqlite3.connect(str(db))

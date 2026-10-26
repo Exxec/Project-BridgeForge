@@ -4,8 +4,8 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from bridgeforge.scan_mission_map import mission_map_references
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scan_mission_map import mission_map_references
+from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
 
 SOURCE = """package data.missions.demo;
@@ -43,7 +43,7 @@ def _hits(mod: Path, core: Path | None):
 
 class MissionMapReferenceTests(unittest.TestCase):
     def test_references_are_read_without_nebulas_or_comments(self) -> None:
-        from bridgeforge.scanner import _blank_java_comments
+        from bridgeforge.scan.scanner import _blank_java_comments
 
         refs = mission_map_references(_blank_java_comments(SOURCE))
         self.assertEqual(refs, [("background", "graphics/demo/bg.png"), ("planet-type", "wormholeA"), ("planet-type", "star_yellow")])

@@ -216,7 +216,7 @@ def _safe_removals(dirs: list[Path], notes: list[str]) -> list[dict]:
 
 
 def compare_root(old: Path, shipped: Tree, vanilla_core: Path | None, removals: list[dict]) -> dict:
-    from .scan_port import dropped_features
+    from bridgeforge.scan.scan_port import dropped_features
 
     classes = classify_missing(old, shipped, vanilla_core, removals)
     with shipped.materialized() as new_root:

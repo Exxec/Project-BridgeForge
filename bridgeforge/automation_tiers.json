@@ -32,6 +32,7 @@
     "content-reference-substitute": "input",
     "core-campaign-plugin-reregistered": "mechanical",
     "csv-encoding-unverified": "inspect",
+    "csv-field-bare-quote": "none",
     "csv-fullwidth-number": "auto",
     "csv-missing-design-type-column": "auto",
     "csv-row-extra-columns": "auto",

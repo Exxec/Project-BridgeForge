@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from bridgeforge.settings_keys import javap_reads, source_reads
 
 LISTING = """  public void updateCargoPrePlayerInteraction();

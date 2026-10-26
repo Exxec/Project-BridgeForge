@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 
 from .models import ScanResult, TargetProfile
-from .scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from .working_tree import classify_path
 
 

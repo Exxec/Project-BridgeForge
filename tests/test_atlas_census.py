@@ -6,9 +6,9 @@ import json
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 
-from bridgeforge import atlas
-from bridgeforge.atlas_census_libs_report import libraries
-from bridgeforge.atlas_census_report import api_how, api_usage, save_risk
+from bridgeforge.atlas import atlas
+from bridgeforge.atlas.atlas_census_libs_report import libraries
+from bridgeforge.atlas.atlas_census_report import api_how, api_usage, save_risk
 from bridgeforge.cli import main
 from tests.test_atlas import build, make_mod, make_vanilla, temp_root
 from tests.test_atlas_calls import INVOKE_INTERFACE, INVOKE_STATIC, RETURN, STRING_CALL, ClassBuilder, jar_mod

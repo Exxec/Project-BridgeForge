@@ -3,7 +3,7 @@
     "archive_intake.py": {
       "write_text": 1
     },
-    "atlas_report.py": {
+    "atlas/atlas_report.py": {
       "write_text": 1
     },
     "behavior_discovery.py": {
@@ -39,13 +39,13 @@
     "cmd_bytecode.py": {
       "write_text": 4
     },
-    "cmd_corpus.py": {
+    "corpus/cmd_corpus.py": {
       "write_text": 4
     },
-    "cmd_probe_group.py": {
+    "probe/cmd_probe_group.py": {
       "write_text": 1
     },
-    "cmd_scan.py": {
+    "scan/cmd_scan.py": {
       "write_text": 2
     },
     "cmd_translate.py": {
@@ -54,7 +54,7 @@
     "conflicts.py": {
       "write_text": 1
     },
-    "corpus_audit.py": {
+    "corpus/corpus_audit.py": {
       "write_text": 1
     },
     "decompiler.py": {
@@ -72,11 +72,11 @@
     "duel_run.py": {
       "write_text": 2
     },
-    "escalation.py": {
+    "escalation/escalation.py": {
       "rmtree": 2,
       "write_text": 5
     },
-    "escalation_queue.py": {
+    "escalation/escalation_queue.py": {
       "write_text": 4
     },
     "explain_proofs.py": {
@@ -94,20 +94,20 @@
     "interface.py": {
       "write_text": 1
     },
-    "jar_batch.py": {
+    "bytecode/jar_batch.py": {
       "write_text": 4
     },
-    "jar_patch.py": {
+    "bytecode/jar_patch.py": {
       "write_text": 2
     },
-    "java_matrix.py": {
+    "bytecode/java_matrix.py": {
       "rmtree": 1,
       "write_text": 5
     },
-    "live_accept.py": {
+    "live/live_accept.py": {
       "write_text": 1
     },
-    "live_trust.py": {
+    "live/live_trust.py": {
       "write_text": 2
     },
     "mass_test.py": {
@@ -137,10 +137,10 @@
     "pipeline.py": {
       "write_text": 2
     },
-    "probe_config.py": {
+    "probe/probe_config.py": {
       "write_text": 3
     },
-    "probe_group.py": {
+    "probe/probe_group.py": {
       "write_text": 2
     },
     "progress.py": {
@@ -179,19 +179,19 @@
     "revive_queue.py": {
       "write_text": 1
     },
-    "rig_doctor.py": {
+    "rig/rig_doctor.py": {
       "write_text": 2
     },
     "runtime.py": {
       "write_text": 3
     },
-    "save_risk.py": {
+    "save/save_risk.py": {
       "write_text": 1
     },
-    "save_snapshot.py": {
+    "save/save_snapshot.py": {
       "write_text": 1
     },
-    "save_summary.py": {
+    "save/save_summary.py": {
       "write_text": 1
     },
     "substitutes.py": {

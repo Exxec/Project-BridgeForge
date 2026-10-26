@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .models import TargetProfile
-from .scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 
 def suggest_integration_scenarios(mod_directory, target: TargetProfile) -> dict:

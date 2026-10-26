@@ -8,7 +8,7 @@ from pathlib import Path
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix
 from bridgeforge.fixers.presets import file_sha256, preset_field_proposals
 from bridgeforge.models import TargetProfile
-from bridgeforge.scanner import _parse_json, scan_mod
+from bridgeforge.scan.scanner import _parse_json, scan_mod
 from tests.support import resolved_temp_dir
 
 FINDING = "preset-entry-drops-vanilla-fields"

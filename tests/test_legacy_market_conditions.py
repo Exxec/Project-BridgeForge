@@ -7,7 +7,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from tests.test_personality_ids import _class_with_strings
 
 

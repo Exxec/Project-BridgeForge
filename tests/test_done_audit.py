@@ -44,7 +44,7 @@ class StatusBehindTests(unittest.TestCase):
         # Six archives made on 2026-10-04 as READY_FOR_LIVE_TEST passed their runs on 2026-10-05 and were never refreshed.
         import json
 
-        from bridgeforge.live_trust import shipped_hash
+        from bridgeforge.live.live_trust import shipped_hash
 
         with resolved_temp_dir() as root:
             done, queue = root / "Done", root / "In operation"

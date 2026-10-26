@@ -9,7 +9,7 @@ from pathlib import Path
 from bridgeforge.models import ScanResult
 from bridgeforge.recreation_plan import PLAN_FILE, render_skeleton, section_numbers, write_skeleton
 from bridgeforge.revive import packet_id, revive
-from bridgeforge.scan_port import PORT_SOURCE_FILE, _scan_port_dropped_feature, dropped_features
+from bridgeforge.scan.scan_port import PORT_SOURCE_FILE, _scan_port_dropped_feature, dropped_features
 from tests.support import resolved_temp_dir
 
 REPO = Path(__file__).resolve().parent.parent

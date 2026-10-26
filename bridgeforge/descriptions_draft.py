@@ -49,7 +49,7 @@ Crafter = Callable[[Path], str]
 
 def agent_crafter(agent: str, timeout: int = 1500) -> Crafter:
     """A crafter that runs `agent` (e.g. "claude -p --permission-mode acceptEdits") in the chunk's folder with PROMPT on stdin."""
-    from .escalation import resolve_agent_command
+    from bridgeforge.escalation.escalation import resolve_agent_command
 
     command = resolve_agent_command(agent)
 
@@ -61,7 +61,7 @@ def agent_crafter(agent: str, timeout: int = 1500) -> Crafter:
 
 
 def _mod_id(root: Path) -> str | None:
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(root / "mod_info.json") if (root / "mod_info.json").is_file() else None
     return str(info.get("id")) if isinstance(info, dict) and info.get("id") else None
@@ -188,7 +188,7 @@ def _render(workspace: Path, rows: list[dict], unresolved: list[dict]) -> str:
 def draft_workspace(workspace: Path, *, vanilla_core: Path | None = None, crafter: Crafter | None = None,
                     version_sources: list[Path] | None = None, work_dir: Path | None = None, chunk: int = DEFAULT_CHUNK) -> dict:
     """Write the workspace's draft sheet; `crafter=None` is `--no-crafted`. Returns counts per source and the unresolved list."""
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
     from .sibling_assets import _plan_findings, sibling_roots
 
     workspace = Path(workspace).expanduser().resolve()

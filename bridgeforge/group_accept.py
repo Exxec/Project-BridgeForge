@@ -15,11 +15,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .live_accept import ACCEPTED_LOG, probe_fail_keys
+from bridgeforge.live.live_accept import ACCEPTED_LOG, probe_fail_keys
 
 
 def _current_version(workspace: Path) -> str:
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(workspace / "working" / "mod_info.json")
     return str(info.get("version") or "") if isinstance(info, dict) else ""
@@ -39,7 +39,7 @@ def context_of(manifest: dict | None) -> dict | None:
 
 def _earlier_entries(workspace: Path, context: dict | None = None) -> list[dict]:
     """Acceptances that still apply to the workspace: same mod version, plus the standing probe_accepted.json lines."""
-    from .probe_group import ACCEPTED_PROBE_FILE
+    from bridgeforge.probe.probe_group import ACCEPTED_PROBE_FILE
 
     entries: list[dict] = []
     version = _current_version(workspace)

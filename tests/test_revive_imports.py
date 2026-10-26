@@ -5,7 +5,7 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.escalation import list_packets, load_packet
+from bridgeforge.escalation.escalation import list_packets, load_packet
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix
 from bridgeforge.revive import build_packets, import_resolution, render_packet, revive
 from bridgeforge.substitutes import Provider

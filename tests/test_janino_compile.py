@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.models import ScanResult, TargetProfile
-from bridgeforge.scanner import _apply_janino_outcome
+from bridgeforge.scan.scanner import _apply_janino_outcome
 from tests.support import resolved_temp_dir
 
 RC8_CORE = Path("C:/Program Files (x86)/Fractal Softworks/Starsector/starsector-core")

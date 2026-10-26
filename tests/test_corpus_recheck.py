@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.cli import main
-from bridgeforge.corpus_recheck import corpus_recheck, render_markdown
+from bridgeforge.corpus.corpus_recheck import corpus_recheck, render_markdown
 from tests.support import resolved_temp_dir
 
 
@@ -134,7 +134,7 @@ class CorpusRecheckTests(unittest.TestCase):
         # _recheck_one must not let one mod's scan_mod failure (e.g. its working/ copy vanished
         # between project_board's discovery and the scan) take down the whole recheck.
         with resolved_temp_dir() as root:
-            from bridgeforge.corpus_recheck import _recheck_one
+            from bridgeforge.corpus.corpus_recheck import _recheck_one
             good = _mod(root, "Good", "READY_FOR_LIVE_TEST\n")
             result_good = _recheck_one("Good", good, None, "READY_FOR_LIVE_TEST", "EXACT")
             self.assertNotIn("error", result_good)
@@ -156,7 +156,7 @@ class CorpusRecheckTests(unittest.TestCase):
     def test_checkpoint_resumes_an_interrupted_sweep(self) -> None:
         from unittest import mock
 
-        import bridgeforge.corpus_recheck as recheck
+        import bridgeforge.corpus.corpus_recheck as recheck
 
         class Stop(Exception):
             pass

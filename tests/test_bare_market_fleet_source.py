@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 
 from bridgeforge.models import TargetProfile
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 FACTORY = "com/fs/starfarer/api/impl/campaign/fleets/FleetFactoryV3"
 

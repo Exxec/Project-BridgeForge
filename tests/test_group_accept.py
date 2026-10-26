@@ -6,10 +6,10 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.group_accept import assess_group, context_of
-from bridgeforge.live_accept import accept_run
-from bridgeforge.probe_config import build_probe_config
+from bridgeforge.live.live_accept import accept_run
+from bridgeforge.probe.probe_config import build_probe_config
 from bridgeforge.run_manifest import read_manifest
-from bridgeforge.probe_group import ProbeGroupError, merge_configs, record_group
+from bridgeforge.probe.probe_group import ProbeGroupError, merge_configs, record_group
 from tests.bound_runs import bound_run
 from tests.support import resolved_temp_dir
 from tests.test_probe_group import _workspace

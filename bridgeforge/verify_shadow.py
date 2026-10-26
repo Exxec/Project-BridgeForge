@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .scanner import _loaded_mod_jars, _parse_class_file, iter_class_files_in_jars
+from bridgeforge.scan.scanner import _loaded_mod_jars, _parse_class_file, iter_class_files_in_jars
 
 SCHEMA_VERSION = 1
 _PACKAGE = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.MULTILINE)

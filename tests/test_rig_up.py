@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge import rig_up as rig_up_module
-from bridgeforge.rig_up import RigUpError, read_rig_state, rig_up
+from bridgeforge.rig import rig_up as rig_up_module
+from bridgeforge.rig.rig_up import RigUpError, read_rig_state, rig_up
 from tests.support import link_dir, resolved_temp_dir
 from tests.test_probe_group import _rig, _workspace
 
@@ -87,7 +87,7 @@ class RigUpTests(unittest.TestCase):
                 (runtime / "mods" / "bridgeforge-probe" / "mod_info.json").write_text(json.dumps({"id": "bridgeforge_probe", "version": "0.2.9"}), encoding="utf-8")
                 return {}
 
-            with mock.patch("bridgeforge.probe_config._install_probe_mod", fake_install):
+            with mock.patch("bridgeforge.probe.probe_config._install_probe_mod", fake_install):
                 rig_up(rig, queue, ["mod_a"], probe_config=True, doctor=_fake_doctor())
             enabled = json.loads((rig / "mods" / "enabled_mods.json").read_text(encoding="utf-8"))["enabledMods"]
             config = json.loads((rig / "saves" / "common" / "bf_probe_config.data").read_text(encoding="utf-8"))
@@ -126,7 +126,7 @@ class RigUpTests(unittest.TestCase):
                     rig_up(rig, queue, ["mod_a"], doctor=_fake_doctor())
 
     def test_the_run_record_carries_the_rig_state(self) -> None:
-        from bridgeforge.live_trust import write_run_record
+        from bridgeforge.live.live_trust import write_run_record
 
         with resolved_temp_dir() as root:
             queue = root / "q"

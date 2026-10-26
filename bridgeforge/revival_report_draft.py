@@ -30,7 +30,7 @@ from pathlib import Path
 from .baseline import finding_baseline_key, mod_baseline_keys
 from .compile_check import compile_loose_scripts
 from .models import TargetProfile
-from .scanner import _load_lenient_json_file, scan_mod
+from bridgeforge.scan.scanner import _load_lenient_json_file, scan_mod
 
 SCHEMA_VERSION = 1
 

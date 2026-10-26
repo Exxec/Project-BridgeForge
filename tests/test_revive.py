@@ -8,7 +8,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from bridgeforge.cli import main
-from bridgeforge.escalation import EscalationError, list_packets, load_packet, run_packet, verify
+from bridgeforge.escalation.escalation import EscalationError, list_packets, load_packet, run_packet, verify
 from bridgeforge.revive import ReviveError, packet_id, render_packet, revive
 from tests.support import resolved_temp_dir
 
@@ -216,7 +216,7 @@ class ReviveTests(unittest.TestCase):
 class JarOnlyPacketTests(unittest.TestCase):
     def test_jar_only_packets_are_recognised(self):
         # Fast Engine Rendering and Magellan Protectorate (2026-09-30): agents cannot open a jar in their sandbox.
-        from bridgeforge.escalation import jar_only
+        from bridgeforge.escalation.escalation import jar_only
         self.assertTrue(jar_only({"allowed_files": ["jars/x.jar!data/Cls.class"]}))
         self.assertFalse(jar_only({"allowed_files": ["jars/x.jar!data/Cls.class", "src/data/Cls.java"]}))
         self.assertFalse(jar_only({"allowed_files": []}))
@@ -309,7 +309,7 @@ class EscalationRunTests(unittest.TestCase):
 
     def test_apply_copies_the_reviewed_verified_attempt_without_rerunning(self):
         # P15 item 20.12: run --apply re-runs the agent; apply takes the attempt already verified.
-        from bridgeforge.escalation import apply_verified
+        from bridgeforge.escalation.escalation import apply_verified
 
         with resolved_temp_dir() as root:
             workspace = _workspace(root)
@@ -330,7 +330,7 @@ class EscalationRunTests(unittest.TestCase):
     def test_apply_after_another_packet_changed_working(self):
         # ROADMAP P15 31.8 (Angry Periphery, 2026-09-28): an earlier packet's applied fix changed another file in
         # working/; the later attempt's sandbox still holds the old copy, which is not the attempt's own change.
-        from bridgeforge.escalation import apply_verified
+        from bridgeforge.escalation.escalation import apply_verified
 
         with resolved_temp_dir() as root:
             workspace = _workspace(root)
@@ -346,7 +346,7 @@ class EscalationRunTests(unittest.TestCase):
 
     def test_a_jar_source_edit_needs_rebuild_jar(self):
         # ROADMAP P15 31.7: a source fix in a compiled mod changes nothing until the jar is rebuilt.
-        from bridgeforge.escalation import apply_verified
+        from bridgeforge.escalation.escalation import apply_verified
 
         with resolved_temp_dir() as root:
             workspace = _workspace(root)

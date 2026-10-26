@@ -1,5 +1,13 @@
 # Strategic roadmap: four outcome-gated releases
 
+**S1 outcome accepted 2026-10-25:** the bounded RC8 local-new-game workflow is complete; see
+[S1_COMPLETION_REVIEW.md](S1_COMPLETION_REVIEW.md) for implementation, real both-layout qualification, independent
+agent resume, approved controlled compilation pilot and the owner's baseline acceptance. Human active-review time
+is explicitly NOT_MEASURED in that accepted baseline. This does not establish S2 optimization, save upgrades,
+publication, or S4 independent-human/support outcomes. Earlier dated proposal/status notes below remain history.
+
+**Current implementation checkpoint, 2026-10-25:** S1's bounded RC8 local-new-game baseline is accepted. S2 has an owner-accepted opt-in parsing-cache tradeoff and a validated read-only production portfolio; S3 has case-bound obligations, strict scenario observations and exact comparison; S4 has private case exchange and a verified local code kit. See [implementation plan](S_SERIES_IMPLEMENTATION_PLAN.md), [S2 production evidence](S2_PRODUCTION_PORTFOLIO.md), [S3 comparison guide](S3_COMPARISON_GUIDE.md) and [S4 workstation trial](S4_WORKSTATION_TRIAL.md). None of these narrower results completes S2-S4 acceptance. Save/gameplay changes, independent-human trial, support commitment and publication retain their gates.
+
 Proposed 2026-10-17 for owner review. Read [VISION.md](VISION.md) for the destination and boundaries and
 [ARCHITECTURE_GAPS.md](ARCHITECTURE_GAPS.md) for the inspected evidence behind the choices.
 This document sets direction over approximately 12-24 months; it does not allocate dates or imply approved staffing.

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .library_registry import LibraryRegistryEntry
 from .models import TargetProfile
-from .scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from .starsector_install import inventory_starsector_install
 from .workspace import resolve_inside, workspace_paths
 

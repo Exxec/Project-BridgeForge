@@ -13,8 +13,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge.bytecode import inspect_bytecode
-from bridgeforge.bytecode_diff import changed_methods
+from bridgeforge.bytecode.bytecode import inspect_bytecode
+from bridgeforge.bytecode.bytecode_diff import changed_methods
 from bridgeforge.cli import main
 from bridgeforge.research.research_decompile import excerpt
 from bridgeforge.research.research_decompile import jar_sha256

@@ -5,7 +5,7 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.escalation_queue import CHECKPOINT_FILE, RESULT_MD, summarize_queue
+from bridgeforge.escalation.escalation_queue import CHECKPOINT_FILE, RESULT_MD, summarize_queue
 from tests.support import resolved_temp_dir
 
 
@@ -35,7 +35,7 @@ class EscalationQueueTests(unittest.TestCase):
 
     def test_rule_accepts_in_baselines_or_approves_the_fixer(self) -> None:
         # ROADMAP P15 31.12: one owner ruling per finding id, recorded, instead of rulings typed into chat.
-        from bridgeforge.escalation_queue import rule
+        from bridgeforge.escalation.escalation_queue import rule
 
         with resolved_temp_dir() as queue:
             _revive(queue, "A", "ESCALATED", ["variant-op-over-budget"])
@@ -58,7 +58,7 @@ class EscalationQueueTests(unittest.TestCase):
 
     def test_accept_in_mod_by_finding_and_file_part(self) -> None:
         # ROADMAP 34.12: one mod's findings accepted as authored, with the evidence in ESCALATION_REVIEW.md.
-        from bridgeforge.escalation_queue import accept_in_mod
+        from bridgeforge.escalation.escalation_queue import accept_in_mod
 
         with resolved_temp_dir() as ws:
             (ws / "working").mkdir()

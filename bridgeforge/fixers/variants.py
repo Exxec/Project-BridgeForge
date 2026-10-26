@@ -3,7 +3,7 @@ import json
 import re
 from pathlib import Path
 from ..build_tag import _STRING_LITERAL, _structural_depths
-from ..scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 from .common import FileChange, FixerError, _decode, _encode, _findings_of
 
 
@@ -19,7 +19,7 @@ def _fix_fleet_type_name_missing(root: Path, options: dict) -> list[FileChange]:
     `options["names"]` ({type: name}) overrides the proposed name. The check needs the vanilla core, so a
     fresh scan here passes `options["vanilla_core"]`."""
     if options.get("scan_findings") is None:
-        from ..scanner import scan_mod
+        from bridgeforge.scan.scanner import scan_mod
 
         vanilla = options.get("vanilla_core")
         findings = [f for f in scan_mod(root, vanilla_core=Path(vanilla) if vanilla else None).findings if f.id == "fleet-type-name-missing"]
@@ -242,7 +242,7 @@ def _fix_variant_op_over_budget(root: Path, options: dict) -> list[FileChange]:
     then non-built-in hull mods, costliest first. If even that cannot fit the budget the variant is refused and left
     as it is, because the only step left would be removing weapons. Aims at the raw budget, no tolerance. Edits are
     surgical: only the two flux numbers and the removed hullMods entries change. Needs `options["vanilla_core"]`."""
-    from ..scanner import (HULL_MOD_COST_COLUMN_BY_SIZE, _csv_id_index, _float_or, _resolve_variant_hull_and_slots,
+    from bridgeforge.scan.scanner import (HULL_MOD_COST_COLUMN_BY_SIZE, _csv_id_index, _float_or, _resolve_variant_hull_and_slots,
                           _ship_file_index, _skin_index, _skin_weapon_slot_changes, scan_mod)
 
     vanilla = options.get("vanilla_core")
@@ -259,7 +259,7 @@ def _fix_variant_op_over_budget(root: Path, options: dict) -> list[FileChange]:
         # the ones RC8's cost changes pushed over; a variant over budget there too was authored that way (as RC8's
         # own 12 over-budget variants are) and is left alone.
         from ..models import ScanResult, TargetProfile
-        from ..scanner import _scan_variant_validity
+        from bridgeforge.scan.scanner import _scan_variant_validity
 
         ref_result = ScanResult(input_path=root, target=TargetProfile())
         _scan_variant_validity(root, ref_result, Path(reference))

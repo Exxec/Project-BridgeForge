@@ -6,7 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from .models import TargetProfile
-from .scanner import _mod_declared_script_rows, scan_mod
+from bridgeforge.scan.scanner import _mod_declared_script_rows, scan_mod
 
 
 def _merge_table_rows(directory: Path) -> dict[tuple[str, str], str]:

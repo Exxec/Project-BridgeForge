@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 import bridgeforge.finding_stats as fs
-from bridgeforge import scan_registry as reg
+from bridgeforge.scan import scan_registry as reg
 from bridgeforge.cli import main
 from bridgeforge.finding_stats import finding_stats
 from tests.support import resolved_temp_dir

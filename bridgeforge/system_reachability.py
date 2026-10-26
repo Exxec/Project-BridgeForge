@@ -22,7 +22,7 @@ import zipfile
 from collections import deque
 from pathlib import Path
 
-from .scanner import _loaded_mod_jars
+from bridgeforge.scan.scanner import _loaded_mod_jars
 
 _DOTTED = re.compile(r"[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+")
 _PACKAGE = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.M)

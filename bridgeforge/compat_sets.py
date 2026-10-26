@@ -8,7 +8,7 @@ from pathlib import Path
 from .boot_test import _is_link
 from .copy_drift import _collect, _find_mod_root, compare_copies
 from .reference_rigs import ReferenceRigError, verify_reference_rig_manifest
-from .scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 _RC_PATTERN = re.compile(r"^0\.98a-RC(\d+)$")
 

@@ -146,6 +146,20 @@ class NegativeTests(unittest.TestCase):
         self.assertIn("probe_config_sha256", " ".join(evidence["problems"]))
         self.assertIn("launcher_files", " ".join(evidence["problems"]))
 
+    def test_launcher_java_command_is_found_on_windows_and_posix_paths(self) -> None:
+        # Ubuntu CI (2026-10-26): fixtures bind <jdk>/bin/java; the .exe-only pattern found no command and every bound
+        # case refused with "Launcher selects an unbound Java executable".
+        with resolved_temp_dir() as root:
+            for text, expected in (('"C:\\jdk\\bin\\java.exe" -Xmx2g', "C:\\jdk\\bin\\java.exe"),
+                                   ('"/opt/jdk/bin/java" -version', "/opt/jdk/bin/java"),
+                                   ('"/opt/jdk/bin/javaw" -jar x', "/opt/jdk/bin/javaw"),
+                                   ('jre\\bin\\java.exe -Xmx2g', "jre\\bin\\java.exe"),
+                                   ('"/opt/jdk/bin/javadoc" -help', None),
+                                   ('"/opt/java-tools/run" x', None)):
+                launcher = root / "launch.bat"
+                launcher.write_text(text, encoding="utf-8")
+                self.assertEqual(run_manifest._launcher_files(root, launcher)[1], expected, text)
+
     def test_same_version_with_different_bytes_is_not_the_tested_candidate(self) -> None:
         with resolved_temp_dir() as root:
             rig, log = self._run(root)
@@ -227,12 +241,12 @@ class NegativeTests(unittest.TestCase):
 
 class OwnershipTests(unittest.TestCase):
     def test_a_run_owns_the_rig_so_staging_is_refused_until_release(self) -> None:
-        from bridgeforge.rig_up import RigUpError, rig_up
+        from bridgeforge.rig.rig_up import RigUpError, rig_up
 
         with resolved_temp_dir() as root:
             queue, targets = _two(root)
             rig, _ = bound_run(root, {"mod_b": targets["mod_b"]}, "R-10", release=False)
-            with mock.patch("bridgeforge.rig_up._running_java_under", return_value=[]):
+            with mock.patch("bridgeforge.rig.rig_up._running_java_under", return_value=[]):
                 with self.assertRaisesRegex(RigUpError, "owns the rig"):
                     rig_up(rig, queue, ["mod_b"], doctor=lambda *a, **k: {"status": "PASS", "checks": []})
                 with self.assertRaises(ManifestError):
@@ -251,7 +265,7 @@ class OwnershipTests(unittest.TestCase):
                 prepare_run(rig, "R-12", "campaign", targets=["mod_b"], expected=["main_menu"])
 
     def test_install_group_refuses_while_a_run_owns_the_rig(self) -> None:
-        from bridgeforge.probe_group import ProbeGroupError, install_group, plan_groups
+        from bridgeforge.probe.probe_group import ProbeGroupError, install_group, plan_groups
 
         with resolved_temp_dir() as root:
             queue, targets = _two(root)
@@ -268,7 +282,7 @@ class LegacyAndLiveRunTests(unittest.TestCase):
         self.assertIn("provenance UNKNOWN", evidence["problems"][0])
 
     def test_running_game_prepares_the_manifest_before_launch_and_releases_after(self) -> None:
-        from bridgeforge import live_run
+        from bridgeforge.live import live_run
 
         with resolved_temp_dir() as root:
             queue, targets = _two(root)
@@ -295,7 +309,7 @@ class LegacyAndLiveRunTests(unittest.TestCase):
             with mock.patch.object(live_run, "_running_java_under", create=True), \
                     mock.patch("bridgeforge.boot_test._running_java_under", return_value=[]), \
                     mock.patch.object(run_manifest, "prepare_run", prepare), mock.patch.object(run_manifest, "release_run", release), \
-                    mock.patch("bridgeforge.rig_prefs.pinned_launcher_prefs", mock.MagicMock()), \
+                    mock.patch("bridgeforge.rig.rig_prefs.pinned_launcher_prefs", mock.MagicMock()), \
                     mock.patch.object(launch.subprocess, "Popen", lambda *a, **k: order.append("launch") or Proc()), \
                     mock.patch.object(live_run, "real_hands", lambda rig_, pid: mock.MagicMock()):
                 with live_run.running_game(rig, "R-14") as (log, hands, rows):
@@ -310,7 +324,7 @@ class LegacyAndLiveRunTests(unittest.TestCase):
 
 class SelectionTests(unittest.TestCase):
     def test_regress_changed_reruns_a_workspace_whose_provider_or_launcher_changed(self) -> None:
-        from bridgeforge.live_trust import write_run_record
+        from bridgeforge.live.live_trust import write_run_record
         from bridgeforge.regress_changed import select_workspaces
 
         with resolved_temp_dir() as root:
@@ -328,3 +342,15 @@ class SelectionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CampaignChecksMilestoneTests(unittest.TestCase):
+    def test_only_ordered_complete_probe_campaign_events_count(self):
+        from bridgeforge.run_manifest import campaign_checks_observed
+        start = '1 INFO BF-PROBE|0.3.2|probe|INFO|campaign|START'
+        end = '2 INFO BF-PROBE|0.3.2|probe|INFO|campaign|END'
+        self.assertTrue(campaign_checks_observed(start + '\n' + end))
+        for text in (start, end, end + '\n' + start,
+                     'Loading rule: campaign', start + '\n' + end.replace('|INFO|', '|FAIL|')):
+            with self.subTest(text=text):
+                self.assertFalse(campaign_checks_observed(text))

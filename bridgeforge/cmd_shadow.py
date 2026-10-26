@@ -21,7 +21,7 @@ def add_parser(subcommands) -> None:
 
 def run_cli(args: argparse.Namespace) -> int:
     from .reference_rigs import reference_core_for_game_version
-    from .scan_json import _load_lenient_json_file
+    from bridgeforge.scan.scan_json import _load_lenient_json_file
     from . import shadow_triage as st
 
     workspace = args.workspace.expanduser().resolve()

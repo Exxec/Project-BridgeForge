@@ -13,7 +13,7 @@ import json
 import re
 from pathlib import Path
 
-from .java_matrix import PREPATCHER_MARKER, _major
+from bridgeforge.bytecode.java_matrix import PREPATCHER_MARKER, _major
 
 PREPATCHER_VALIDATED_MAJORS = (17, 27)  # StarsectorPrepatcher 0.18.4 docs/COMPATIBILITY.md; Java 28 is owner-reported only
 PREPATCHER_NEEDERS = frozenset({"starsector_prepatcher", "aotd_theory_of_toolbox"})
@@ -144,7 +144,7 @@ def enabled_mods_needing_prepatcher(mods_dir: Path) -> list[dict]:
 def main_class_index(tokens: list[str]) -> int | None:
     """Index of the main class in an expanded java command line: the first token that is not an option, an option's value or an
     unresolved @argfile. Everything after it is an application argument, never a JVM option."""
-    from .java_matrix import VALUE_OPTIONS
+    from bridgeforge.bytecode.java_matrix import VALUE_OPTIONS
 
     expect_value = False
     for index, token in enumerate(tokens):

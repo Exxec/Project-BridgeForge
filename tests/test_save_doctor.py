@@ -5,7 +5,7 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.save_doctor import _installed, diagnose, installed_mods
+from bridgeforge.save.save_doctor import _installed, diagnose, installed_mods
 from tests.support import resolved_temp_dir
 
 DESCRIPTOR = """<?xml version="1.0" ?>
@@ -107,7 +107,7 @@ class InstalledModsTests(unittest.TestCase):
 
 class RemovalPlanTests(unittest.TestCase):
     def test_objects_are_droppable_unless_something_outside_refers_to_them(self) -> None:
-        from bridgeforge.save_removal_plan import plan_removal
+        from bridgeforge.save.save_removal_plan import plan_removal
         with resolved_temp_dir() as root:
             (root / "mods").mkdir()
             body = ("<markets><Market z=\"2\"><industries>\n"

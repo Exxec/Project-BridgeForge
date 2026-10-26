@@ -7,9 +7,9 @@ from pathlib import Path
 from . import build_tag as build_tag_module
 from .baseline import load_baseline_keys, split_by_baseline
 from .copy_drift import _collect, _find_mod_root, compare_copies
-from .jar_audit import audit_jar
+from bridgeforge.bytecode.jar_audit import audit_jar
 from .models import TargetProfile
-from .scanner import _load_lenient_json_file, scan_mod
+from bridgeforge.scan.scanner import _load_lenient_json_file, scan_mod
 from .behavior_discovery import check_expected_changes, evaluate_behavior_release
 from .archive_intake import _normalized_member_name
 
@@ -210,10 +210,10 @@ def _save_corpus_gate(root: Path, mod_id: str | None, corpus_dir: Path | None) -
     if not saves:
         return {"status": "SKIPPED", "not_supplied": True, "reason": f"{corpus} has no save entries"}
 
-    from .save_compat import SaveCompatError, check_save_compat
+    from bridgeforge.save.save_compat import SaveCompatError, check_save_compat
 
     try:
-        from . import save_content_compat as _content_module  # lazy: may not exist yet (P3b-E)
+        from bridgeforge.save import save_content_compat as _content_module  # lazy: may not exist yet (P3b-E)
     except ImportError:
         _content_module = None
 

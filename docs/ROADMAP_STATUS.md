@@ -63,3 +63,25 @@ Update this index when implementations or evidence change. Record source, compil
 save compatibility, live acceptance and shipping separately; use UNKNOWN/INCOMPLETE/NOT_APPLICABLE where appropriate.
 An implemented command does not prove its live acceptance criterion. Local-only reports must be labeled as such.
 The detailed per-sub-item status audit and any machine-readable status/lint extension remain R7 work.
+
+Item 83 B3 implementation checkpoint 2026-10-23: all prefix families implemented and validated locally;
+review/merge pending. See [completion evidence](REFACTOR_B3_COMPLETION.md). This does not complete item 83, B4-B6,
+or any live/release gate.
+
+B4 report implemented locally, 2026-10-23: [command-reference audit](REFACTOR_B4_COMMAND_AUDIT.md), based on B3 tip `6a843117`. Report only; owner grouping/deprecation decision and review/merge pending. No command behavior changed.
+
+Owner decision 2026-10-23: retain the current CLI; B4 grouping/deprecations declined. B5 implemented locally: measured unittest fast/slow CI partitions, full suite and coverage preserved. See [B5 evidence](REFACTOR_B5_TEST_SPEED.md). Owner review/merge and hosted CI pending; B6 remains open.
+
+B6 architecture/handoff documentation implemented locally, 2026-10-23: [close-out evidence](REFACTOR_B6_CLOSEOUT.md). Item 83 stays open pending the stack review/merge and applicable cross-repository obligations. Research #73 is merged; other B3 family merges are pending at this checkpoint.
+
+Publication checkpoint 2026-10-23: the eleven B3-B5 branch tips are pushed with green hosted push CI (run links in [the stack ledger](REFACTOR_STACK.md)). B6 full local suite: 2,619 tests, 12 unchanged skips, hermeticity PASS. Draft PR creation awaits explicit owner approval; review/merge and item 83 completion remain open.
+
+Strategic implementation checkpoint 2026-10-24: owner authorized S-series planning and S1 start. The compatibility/policy map is recorded and a read-only workspace adapter is implemented for both dialects; [plan](S_SERIES_IMPLEMENTATION_PLAN.md), [progress](S1_PROGRESS.md). S1 case/candidate/receipt persistence, qualification integration, finalization and operational pilot remain unimplemented; S1 is IN_PROGRESS, not accepted. S2-S4 remain planned. No existing live, archive or auto-acceptance gate is closed.
+
+S1 initial slice validated 2026-10-24: 2,635 tests, 12 unchanged skips, hermeticity PASS; branch coverage 83.1451218%; installed-wheel Salvor 208 tests/4 skips PASS. Existing runtime/payload bytes and CLI golden unchanged; only the read-only adapter is added. S1 remains IN_PROGRESS; [evidence and next slice](S1_PROGRESS.md).
+
+Owner goal 2026-10-24: implement/validate all S1-S4 in dependency order; automated live tests authorized when needed on the dedicated isolated rig under existing ownership/evidence/safety rules. S1.3 is next. Operational and human acceptance gates remain explicit; no live run was performed by this goal-activation checkpoint.
+
+S1.3 checkpoint 2026-10-24: case/candidate/receipt identities and append-only store implemented offline; exact payload/context binding, drift/refusal/replay/retry/lock tests pass. Generic receipts are RECORDED_NOT_VERIFIED; qualification adapters and active profile remain S1.4 work. [Contracts](S1_CASE_RECORDS.md), [validation/handoff](S1_PROGRESS.md).
+
+S1.3 validated 2026-10-24: 2,660 full-suite tests, 12 unchanged skips, hermeticity PASS, coverage 83.1940548%; installed-wheel Salvor 208 tests/4 skips PASS. Next S1.4: qualification obligations and independently verified evidence adapters. S1-S4 goal remains active; operational/live/owner gates are not closed.

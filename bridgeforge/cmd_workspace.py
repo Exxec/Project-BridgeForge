@@ -21,7 +21,7 @@ from .pipeline import run_pipeline
 from .provenance import write_provenance
 from .review import create_review_bundle
 from .runtime import create_runtime_profile, run_runtime_smoke
-from .save_risk import analyze_save_risk
+from bridgeforge.save.save_risk import analyze_save_risk
 from .validate import validate_workspace
 from .workspace import create_workspace, rollback
 

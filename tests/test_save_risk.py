@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.workspace import create_workspace, workspace_paths
-from bridgeforge.save_risk import analyze_save_risk
+from bridgeforge.save.save_risk import analyze_save_risk
 
 
 

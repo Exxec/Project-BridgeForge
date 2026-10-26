@@ -132,7 +132,7 @@ def _bay_candidates(root: Path, vanilla_core: Path | None) -> list[tuple[str, in
     """(hull id, count the hull's own slots/wings show or None, scanner evidence) for each hull the scanner lists."""
     import re
 
-    from .scan_ships import _scan_carrier_bays_proposal
+    from bridgeforge.scan.scan_ships import _scan_carrier_bays_proposal
 
     result = ScanResult(input_path=root, target=TargetProfile("0.98a-RC8", 17))
     _scan_carrier_bays_proposal(root, result, vanilla_core)
@@ -146,7 +146,7 @@ def _bay_candidates(root: Path, vanilla_core: Path | None) -> list[tuple[str, in
 
 
 def propose_bays(root: Path, vanilla_core: Path | None) -> list[dict[str, str]]:
-    from .scan_ships import _ship_file_index
+    from bridgeforge.scan.scan_ships import _ship_file_index
 
     candidates = _bay_candidates(root, vanilla_core)
     if not candidates:

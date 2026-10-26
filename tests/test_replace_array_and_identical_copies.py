@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.models import TargetProfile
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 VANILLA_SETTINGS = {"xpGainMult": 1, "maxShipsInFleet": 30, "playerMaxLevel": 15, "untouched": "keep",
                     "plugins": {"vanillaPlugin": "com.fs.Vanilla"}, "ruleCommandPackages": ["com.fs.rulecmd"]}
@@ -143,7 +143,7 @@ class SettingsBreadthTests(unittest.TestCase):
         import shutil
 
         from bridgeforge.revive import _scan
-        from bridgeforge.scanner import SETTINGS_BASELINE_FILE
+        from bridgeforge.scan.scanner import SETTINGS_BASELINE_FILE
 
         many = {f"k{i}": i + 1 for i in range(26)}
         with tempfile.TemporaryDirectory() as directory:

@@ -1,3 +1,76 @@
+**88. Hand work from the Exotica RC4 and New Galactic Order sessions, made routine (owner-approved 2026-10-26: "all
+approved for now set in roadmap").** Each entry names the hand work it replaces. Suggested order: 88.1-88.2, 88.3, then
+88.4-88.5; 88.6 waits for a second mod with the same CSV layout problem. Nothing below is built yet.
+- 88.1 `probe-group record` writes who ran the session: "Owner ran New Game..." is printed even for unattended
+  `probe-group live` runs (NGO-LIVE-20261026; corrected by hand). Take it from the live run record.
+- 88.2 The live harness treats "the game window is gone" after the probe's `done` marker and a graceful close as LIVE_DONE
+  (87.9, EXO-RC3-LIVE-20261026).
+- 88.3 `rig-check`: scaffold, build, install and collect rig-only check mods. Today two were hand-made (`bf_exotica_check`,
+  `bf_csv_quote_probe`): mod_info, plugin, javac against the jar and RC8, jar, copy into the rig, edit
+  enabled_mods.json, grep `BF-*` lines. They produced the strongest evidence of the day (RC3 vs RC4; RC8-38/39).
+  Collected lines go into the run record and `probe-group report`.
+- 88.4 A/B live runs: `probe-group live --variant NAME=FOLDER` runs the same group against two builds of one mod and
+  reports both (RC3 vs RC4 needed a hand swap of the rig folder, and the probe's class list then named the wrong build).
+- 88.5 `intake` reads .rar/.7z itself (7-Zip CLI, py7zr) and takes `--drop-junk` to remove desktop.ini/Thumbs.db with a
+  record; both of today's archives were extracted by hand and NGO was blocked by a desktop.ini.
+- 88.6 87.11's CSV layout check plus a `fix` that re-maps rows written in a reference core's layout by column name,
+  refusing when a dropped column holds a value (hand script for NGO's ship_systems.csv, 2026-10-26).
+- 88.7 `test_guard` fails fast with "environment incomplete" when a declared dependency (psutil) is missing, instead of
+  running into 141 import errors and replacing `bridgeforge-state/last-suite.json` with that result.
+- 88.8 **Done 2026-10-26.** The project `.venv` has `setuptools` 84.2.1 (`uv pip install --python .venv/Scripts/python.exe
+  setuptools`); `tests.test_package_discovery` now passes locally (S branch).
+- 88.9 `bridgeforge ci-local --linux`: the WSL recipe (vendored manylinux wheels, tracked-file tarball, git repo,
+  `set -e` and literal paths) as a command, run before pushing; the S branch passed every local check and failed 17
+  tests on Ubuntu CI.
+- 88.10 A "maintainer RC" workspace kind for third-party test builds (Exotica 2.1.1-RC4): no archive, the outputs are a
+  diagnosis report and a test build, and `probe-group plan` keeps it out of revival groups.
+- 88.11 Merge order: the S branch carries all of B0-B6; item 87 merges on top of it with three import fixes and a
+  regeneration, done and verified in `integration/s-series-with-87` (87 affected tests OK). Merge S first, then that
+  branch, rather than item 87 onto main directly.
+
+**87. Kotlin jars and module identity, from the Exotica 2.1.1-RC3 diagnosis (owner 2026-10-26: "fix mod and create a RC4
+version of Exotica", "apply lessons learned and handwork to bridgeforge").** Exotica's RC3 test build lost exotics on
+multi-module ships: it keyed modules by hull variant id, which RC8-37 shows is not unique within a ship (11 of 12 RC8
+stations repeat a module id; 598 of 2,023 local multi-module variants). The jar is Kotlin without public source, so RC4 was
+built by delegating eight method bodies to a Java helper (`In operation/Exotica-Technologies-2.1.1-RC4/`, report in
+`In operation/Exotica-Technologies/reports/EXOTICA_2.1.1-RC3_MULTIMODULE_DIAGNOSIS.md`). LIVE TEST NOT PERFORMED.
+- 87.1 **Done 2026-10-26.** `delegate-method`: replace chosen method bodies with one static call into a separately compiled
+  helper class (ASM, `bridgeforge/java/BridgeforgeDelegateMethod.java`); verified by bytecode that exactly the named methods
+  changed and none were added or removed; the output is a new jar patched with the JDK `jar` tool. Tests:
+  `tests/test_delegate_method.py` (runs the patched jar under `-Xverify:all`; refusals).
+- 87.2 **Done 2026-10-26.** `decompile-jar` counts Kotlin sources (`.kt`, which `rebuild-jar` cannot compile) apart from Java
+  and says so in `next`; Exotica's jar gave 319 `.kt` beside 56 `.java`, reported as "56 source files". Test:
+  `tests/test_decompile.py`.
+- 87.3 **Done 2026-10-26.** BridgeForge's own Java helpers (bytecode inspect/rewrite, Java AST) compile and run with one JDK
+  (`JdkInfo.java`, `helper_java_tools`). On the owner's machine PATH has Java 8's `java` beside JDK 25's `javac`: the helpers
+  compiled a version-69 class the runtime refused, so bytecode inspection and Java AST analysis failed there. Tests:
+  `tests/test_java_toolchain.py`.
+- 87.4 **Done 2026-10-26.** `patch-jar-class` no longer refuses the loss of IntelliJ's `$$$reportNull$$$N` (`@NotNull`
+  instrumentation javac never emits), like `lambda$`/`access$`. Test: `tests/test_jar_patch.py`.
+- 87.5 RC8-37 (module ids are not unique within a ship) and RC8-38 (`HullVariantSpec` identity; an unset module slot returns
+  `SpecStore`'s shared spec) added to `docs/RC8_BEHAVIOUR.md`.
+- 87.6 Proposed, not built: a REVIEW scan finding for jar code that keys per-module state by `getHullVariantId()` while the
+  mod (or a mod it supports) ships variants that repeat a module id (RC8-37). Needs owner approval.
+- 87.7 Exotica RC4 live, 2026-10-26: smoke PASS; EXO-RC4-LIVE-20261026 LIVE_DONE with the rig-only `bf_exotica_check`
+  13 PASS/0 FAIL/1 SKIP, while RC3-fix2 (EXO-RC3-LIVE-20261026) fails the two predicted checks (identical-module
+  clobbering, prefix-sibling bleed). Results in the RC4 workspace's `working/reports/REVIVAL_REPORT.md`. Still pending:
+  the owner's hands-on refit session (`docs/LOCAL_HANDOFF.md`, "Exotica 2.1.1-RC4").
+- 87.8 **Done 2026-10-26.** `intake`'s publish rename waits about a minute (backoff capped at 8 s) instead of ~14 s. Exotica RC4
+  (8 MB) and New Galactic Order (35 MB) both failed with "Access is denied" after the old retries and passed on an immediate
+  rerun of the same bytes, as a first antivirus scan of new bytes would (the Yunru pack hit it on 2026-10-04). Test:
+  `tests/test_raw_intake_and_lunalib_rule.py`.
+- 87.10 **Done 2026-10-26.** `csv-field-bare-quote` (REVIEW, low): a row that Python's `csv` reads as too wide but RC8
+  reads whole because of a bare quote pair inside a quoted field (RC8-39, proven on the rig with a quote probe mod) is no
+  longer reported as a MANUAL `csv-row-extra-columns` spill; the quote marks vanish in game. Found on New Galactic Order's
+  descriptions.csv. Test: `tests/test_revival_lessons.py`.
+- 87.11 Proposed, not built: a check for CSV rows written in another layout than their file's header (New Galactic
+  Order's ship_systems.csv: three rows in vanilla 0.9a's 26-column layout under the mod's 24-column header, so every value
+  after column 8 loaded one column off, e.g. EMP active 0.5 s instead of 4). Detection: a too-wide row whose values line up
+  with vanilla's header for that file (any reference core) once the missing columns are empty. Fixed by hand in NGO.
+- 87.9 Observation, not fixed: `probe-group live` raised "the game window is gone" on EXO-RC3-LIVE-20261026 after the probe's
+  `done` marker (campaign, combat) and the graceful close, while `drive` still navigated to the mission list. The run was
+  complete; the harness should treat a window that closes after `done` as LIVE_DONE.
+
 **86. Re-check the archive across environments and against AoTD (owner 2026-10-22; after item 83, uses 85.1).** Everything
 archived was live-validated on Java 25 direct, alone or in small groups. Scope (Done/ 2026-10-22): 112 archives carry code (jars
 or loose scripts) and are re-checked; 42 are data-only (portraits, sprites, CSV) and are skipped, since launcher, Java and the
@@ -18,6 +91,8 @@ ids, dependencies present), about 15-25 groups per environment; a failing group 
 - 86.6 Pre-patcher variants of passes 1-2 only for archives that patch game classes or depend on the Prepatcher.
 - Results go into each workspace's live record and gates.json; an archive is re-archived (`revise`) only when a fix is needed.
   New and revised mods are not part of this item: they get the `standard` bundle before archiving (85.1).
+**S-series implementation (owner 2026-10-24: "plan S series implementation then proceed to start S1").**
+[Implementation plan](docs/S_SERIES_IMPLEMENTATION_PLAN.md) translates S1-S4 into dependency-ordered slices. **S1 is complete and owner-accepted 2026-10-25 for the bounded RC8 local-new-game workflow**; [completion evidence](docs/S1_COMPLETION_REVIEW.md) and [progress/handoff](docs/S1_PROGRESS.md) retain the limits. Human active-review time is NOT_MEASURED in the accepted baseline. S2 baseline and S3 initial work retain their separate open delivery/acceptance gates; save upgrades, publication and S4 human/support commitments are not included.
 
 **85. Automation and fewer tokens per task (owner-approved 2026-10-22).** From this session's hand work. Nothing below is
 built yet; LIVE TEST NOT PERFORMED.
@@ -100,6 +175,23 @@ Review fix: root numbering resumes after the archived page count, preserving fut
 the relocation test detects an unevidenced Done claim on page 4. Companion follow-ups use the stable hardening plan
 and merge after B1 (the original citation PRs were already merged).
 No pending owner/live/research gate is closed by this archive step.
+
+B3 checkpoint 2026-10-23: research independently rechecked (78 tests); Atlas continued in an isolated
+review worktree, 2612 tests, 12 unchanged skips, coverage 83.1088957%, hermeticity PASS.
+See [Atlas evidence](docs/REFACTOR_B3_ATLAS_AUDIT.md) and [stack](docs/REFACTOR_STACK.md).
+Review/merge and remaining B3 families are pending; LIVE TEST NOT PERFORMED.
+
+B3 corpus checkpoint 2026-10-23: six modules moved with import-only AST changes, 2612 tests,
+12 unchanged skips, coverage 83.1088957%, hermeticity PASS; Salvor 208 tests (4 unchanged skips).
+See [corpus evidence](docs/REFACTOR_B3_CORPUS_AUDIT.md). Local dependent branch only; escalation
+is the next family. B3 and owner review/merge remain open; LIVE TEST NOT PERFORMED.
+
+**B3 implementation checkpoint 2026-10-23:** all planned families now live in subpackages on the local stacked branches,
+with consumer facades and preserved history. Full per-family suites, coverage, CLI, wheel and installed Salvor checks pass.
+See [completion evidence](docs/REFACTOR_B3_COMPLETION.md) and [stack](docs/REFACTOR_STACK.md).
+Owner review/merge, B4-B6 and all live gates remain open; LIVE TEST NOT PERFORMED.
+
+B4/B5 checkpoint 2026-10-23: owner chose to retain the current CLI; grouping/deprecations declined. B5 fast/slow unittest CI partitions implemented and locally validated; [evidence](docs/REFACTOR_B5_TEST_SPEED.md). Owner review/merge, hosted CI and B6 remain open.
 
 **82. Research that serves revivals: consolidate, compare, promote (owner-approved 2026-10-21).** Not a new research
 architecture. S1 stays the critical path; runtime evidence is the limiting resource. Guiding rule: every research
@@ -481,7 +573,8 @@ real-mod acceptance or runtime-record change is included.
       - 77.7 **Local agent hygiene.** Agents work in a git worktree, never in the main checkout; run `agent-diff-check` before merging; leave no untracked scripts in the checkout (the 2026-10-18 leftovers made the pre-commit hook fail for every commit there). Keep every document under 64k tokens, paged with next-page notes (owner 2026-10-18; `ROADMAP.md` and VoidSmith's work log were split that day).
     - **Long term, by proposed release:**
       - 77.8 **S1, reproducible revival case.** Build the case record on what now exists: R1 manifests (what ran), R2 registry (what was scanned), the escalation ledger and rulings (what was decided), R5 journals (what shipped). The gap is one object that ties them per mod version; `docs/ARCHITECTURE_GAPS.md` G1/G2 describe it. Measure S1 by "a second person can replay why this archive is what it is".
-      - 77.9 **S2, bounded production lane.** Item 76's measured parallelism plus item 73's metrics: track review minutes per mod, false-positive and refusal rates per check and fixer, and promotion of recurring agent fixes, not just cleared finding counts. A fixer or check that never fires on real data, or always refuses, should be retired or narrowed.
+        **Done 2026-10-25 for the owner-accepted bounded S1 scope** (owner: "Approve the controlled repair pilot"; "Accept the bounded S1 baseline"). [S1 completion review](docs/S1_COMPLETION_REVIEW.md) records artifact-only independent agent resume, requalification, correct stale-evaluator refusal, fresh local archive/exact retry, and current P3-P6 refusal controls. The exact-subject controlled comment-encoding repair has review PASS and full javac/RC8 Janino PASS (1/1), with executable code unchanged; unrelated whole-mod findings remain refused. Owner review time is "not measured", retained as NOT_MEASURED in the accepted baseline. Tests: `tests/test_case_identity.py`, `tests/test_case_workspace.py`, `tests/test_case_qualification.py`, `tests/test_case_operations.py`, `tests/test_case_cli.py`; fresh guarded suite 2,717 tests, OK (12 unchanged skips), hermeticity PASS. No production code or safety baseline changed in closeout; prior whole-case failures, save upgrades/publication and S2-S4 gates remain separate.
+      - 77.9 **S2, bounded production lane.** Item 76's measured parallelism plus item 73's metrics: track review minutes per mod, false-positive and refusal rates per check and fixer, and promotion of recurring agent fixes, not just cleared finding counts. A fixer or check that never fires on real data, or always refuses, should be retired or narrowed. **2026-10-25 continuation:** opt-in pure-parsing reuse measured on the approved eight training cases, three rounds/96 equal complete responses; approximately 8.9% first-scan/28.0% repeated-scan reduction, with measured memory tradeoff and unchanged defaults. Owner 2026-10-25: "Accept the opt-in tradeoff", for this local parsing slice only. Guarded 2,723 tests/12 skips PASS, 83.1469862% coverage; isolated wheel checks PASS. See `docs/S2_ANALYSIS_REUSE.md`. Subsequent private serial/two-worker portfolio trial: three equal/preserved rounds, 43.2% median elapsed reduction, narrow cancel/crash/context/altered-response/existing-lock controls PASS; `docs/S2_PORTFOLIO_TRIAL.md`. Production portfolio/resource/recovery integration, governed recipe promotion and overall S2 acceptance remain open; defaults unchanged.
       - 77.10 **S3, behaviour and upgrade qualification.** Make R6 scenarios and soak runs routine for every revision that touches campaign state; grow `docs/RC8_BEHAVIOUR.md` only from observed runs; give the probe a startup marker that echoes the manifest id (R1 slice 2, not built) so log identity stops depending on paths and timestamps.
       - 77.11 **S4, supportable kit.** Prove a restore on a second machine with R8 before any cutover (item 64); move the rig harness behind a documented, scripted setup so the live gates are not tied to one workstation; keep the agent contract (`AGENTS.md`) and `CLAUDE.md` current with each release.
       - 77.12 **One evidence model across the four projects.** BridgeForge's run records, RC8 behaviour rows and translation method are already consumed by Project Go, Salvor and VoidSmith. Version those contracts (run record, translation schema, save-module API), give each a shared fixture that both sides test against, and change them only in both repositories at once. That is what keeps the sister tools from drifting apart as each grows.
@@ -489,3 +582,7 @@ real-mod acceptance or runtime-record change is included.
 <!-- page-nav:start -->
 > End of the last page.
 <!-- page-nav:end -->
+
+Item 83 B6 documentation checkpoint 2026-10-23: current package map, module placement, shim retirement and CLAUDE paths documented in [ARCHITECTURE.md](ARCHITECTURE.md); [B6 evidence](docs/REFACTOR_B6_CLOSEOUT.md) records validation/publication and remaining gates. B0/B1/B2/research are merged (#64/#65/#72/#73). The rest of the stack and applicable cross-repository work remain open; item 83 is not Done.
+
+Item 83 publication checkpoint 2026-10-23: remaining B3 families, B4 audit and B5 are pushed with green hosted push CI; B6 documentation passes the full local suite (2,619 tests, 12 skips). [Stack ledger](docs/REFACTOR_STACK.md) records exact tips/runs. Draft PR creation requires owner approval; review/merge and item 83 completion remain pending.

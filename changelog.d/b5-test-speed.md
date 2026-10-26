@@ -1,0 +1,1 @@
+- Split the Windows/Ubuntu CI test matrix into measured fast/slow unittest partitions, preserving every test, the full coverage job and hermeticity checks; retain the current CLI per owner decision.

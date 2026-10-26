@@ -11,7 +11,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-from .atlas import DEFAULT_DB, AtlasError, connect
+from .atlas.atlas import DEFAULT_DB, AtlasError, connect
 
 
 def add_parser(subcommands) -> None:
@@ -27,7 +27,7 @@ def add_parser(subcommands) -> None:
 
 def run_cli(args) -> int:
     from .api_diff import ApiDiffError, diff_api_jars
-    from .atlas_census_report import api_how, api_how_text
+    from .atlas.atlas_census_report import api_how, api_how_text
 
     try:
         catalogue = diff_api_jars(args.old_api, args.new_api)

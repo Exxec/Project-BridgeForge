@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.probe_config import ProbeConfigError, build_probe_config, parse_setups, validate_setup_spec
+from bridgeforge.probe.probe_config import ProbeConfigError, build_probe_config, parse_setups, validate_setup_spec
 
 
 class SetupSpecValidationTests(unittest.TestCase):

@@ -9,9 +9,10 @@ import zipfile
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from bridgeforge import atlas, atlas_code
-from bridgeforge.atlas_classfile import ClassFormatError, parse_class
-from bridgeforge.atlas_rules import analyze, build_profile, forecast, load_facts
+from bridgeforge.atlas import atlas
+from bridgeforge.atlas import atlas_code
+from bridgeforge.atlas.atlas_classfile import ClassFormatError, parse_class
+from bridgeforge.atlas.atlas_rules import analyze, build_profile, forecast, load_facts
 from bridgeforge.cli import main
 from tests.support import resolved_temp_dir
 

@@ -5,10 +5,10 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge import java_matrix
+from bridgeforge.bytecode import java_matrix
 from bridgeforge.compat_sets import load_compat_sets, set_mod_ids
 from bridgeforge.env_check import env_check
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
 
 AGENT = "StarsectorPrepatcherAgent.jar"
@@ -118,7 +118,7 @@ class AotdSetAndPolicyTests(unittest.TestCase):
             self.assertIn(wanted, ids)
 
     def test_release_policy_records_aotd_and_fork(self) -> None:
-        policy = json.loads((Path(java_matrix.__file__).with_name("release_policy.json")).read_text(encoding="utf-8"))["mods"]
+        policy = json.loads((Path(java_matrix.__file__).parent.parent / "release_policy.json").read_text(encoding="utf-8"))["mods"]
         for mod_id in ("aotd_vok", "aotd_sop", "aotd_qol", "Cryo_but_better", "aotd_theory_of_toolbox"):
             self.assertTrue(policy[mod_id]["local_only"], mod_id)
         self.assertIn("Kirill", policy["aotd_theory_of_toolbox"]["reason"])

@@ -26,7 +26,7 @@ _SUPPLY_FAIL = re.compile(r"BF-PROBE\|[^|]*\|market-supply\|FAIL\|(?P<subject>[^
 
 def validated_workspaces(queue: Path) -> list[Path]:
     """Workspaces whose revival report's last status line is LIVE_VALIDATED."""
-    from .probe_group import _report_status
+    from bridgeforge.probe.probe_group import _report_status
 
     queue = Path(queue).expanduser().resolve()
     return [ws for ws in sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_"))
@@ -56,11 +56,11 @@ def run_regression(queue: Path, rig: Path, out: Path, *, bat: str | None = None,
                    play: Callable | None = None, install: Callable | None = None, judge: Callable | None = None) -> dict:
     """Plan, install, play and report every group of live-validated workspaces; write the summary to `out`.
     `play`, `install` and `judge` default to live_run, install_group and group_report (tests pass stand-ins)."""
-    from .probe_group import accepted_probe_findings, group_report, install_group, plan_groups
+    from bridgeforge.probe.probe_group import accepted_probe_findings, group_report, install_group, plan_groups
 
     queue, rig, out = Path(queue).expanduser().resolve(), Path(rig).expanduser().resolve(), Path(out)
     if play is None:
-        from .live_run import live_run as play
+        from bridgeforge.live.live_run import live_run as play
     install = install or (lambda plan, n: install_group(plan, n, queue, rig, stage=True))
     judge = judge or (lambda log, config: group_report(log, config, mods_dir=rig / "mods",
                                                        accepted=accepted_probe_findings(queue, rig / "mods")))
@@ -128,8 +128,8 @@ def rejudge(queue: Path, rig: Path, source: Path, out: Path) -> dict:
     improved after REG-20261012-G1 (mission and class-sweep lines had no owner, so every member read UNCLEAR); a pass already run is
     re-read here instead of replayed. `source` is the pass's summary JSON or its partial checkpoint; a group's config is rebuilt from the
     workspaces that own its mod ids."""
-    from .probe_config import build_probe_config
-    from .probe_group import _workspaces_by_mod_id, accepted_probe_findings, group_report, merge_configs
+    from bridgeforge.probe.probe_config import build_probe_config
+    from bridgeforge.probe.probe_group import _workspaces_by_mod_id, accepted_probe_findings, group_report, merge_configs
 
     queue, rig = Path(queue).expanduser().resolve(), Path(rig).expanduser().resolve()
     source = Path(source)

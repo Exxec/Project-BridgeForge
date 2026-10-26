@@ -21,9 +21,9 @@ import re
 import time
 from pathlib import Path
 
-from . import java_matrix
+from bridgeforge.bytecode import java_matrix
 from .progress import Checkpoint, report
-from .scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 # Folders inside a Done/<Mod>/ archive that hold other copies of the mod, never the shipped one.
 NON_SHIPPED = {"original", "alt-original-descriptions", "workspace", "checkpoints", "reports", "scratch", "working"}

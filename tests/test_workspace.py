@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from bridgeforge.report import write_artifacts
 from bridgeforge.migrate import build_plan
 from bridgeforge.models import TargetProfile

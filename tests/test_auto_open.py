@@ -6,7 +6,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from bridgeforge import scan_registry
+from bridgeforge.scan import scan_registry
 from bridgeforge.auto_open import auto_open, render
 from bridgeforge.cli import main
 from tests.support import resolved_temp_dir

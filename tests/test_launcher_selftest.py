@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from bridgeforge import java_matrix
+from bridgeforge.bytecode import java_matrix
 from bridgeforge.env_check import env_check, main_class_index, verify_rig_launchers
 from tests.support import resolved_temp_dir
 

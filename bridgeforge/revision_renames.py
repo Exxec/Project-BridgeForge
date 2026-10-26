@@ -24,7 +24,7 @@ MIN_REASON_CHARS = 20
 
 def class_names(root: Path) -> set[str]:
     """Dotted class names a mod folder provides: class entries of its jars and its loose .java scripts."""
-    from .save_compat import _entry_names
+    from bridgeforge.save.save_compat import _entry_names
 
     root = Path(root)
     names: set[str] = set()
@@ -89,7 +89,7 @@ def migration_requirement(workspace: Path, previous_root: Path | None, working: 
 
 
 def _pack_problems(pack: object, working: Path) -> list[str]:
-    from .save_compat import SaveCompatError, check_save_compat
+    from bridgeforge.save.save_compat import SaveCompatError, check_save_compat
 
     if not isinstance(pack, dict):
         return ["the migration pack is not an object"]

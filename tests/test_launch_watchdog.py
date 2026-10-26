@@ -66,7 +66,7 @@ class WatchdogWiringTests(unittest.TestCase):
     def test_live_run_reports_the_watchdog_as_a_named_stage(self) -> None:
         import contextlib
 
-        from bridgeforge import live_run
+        from bridgeforge.live import live_run
 
         @contextlib.contextmanager
         def firing(*_args, **_kwargs):
@@ -79,7 +79,7 @@ class WatchdogWiringTests(unittest.TestCase):
         self.assertEqual(result.stage, "LAUNCH_NO_PROCESS")
 
     def test_live_runner_uses_the_same_watchdog(self) -> None:
-        source = (Path(boot_test.__file__).parent / "live_run.py").read_text(encoding="utf-8")
+        source = (Path(boot_test.__file__).parent / "live" / "live_run.py").read_text(encoding="utf-8")
         self.assertIn("watchdog_tripped", source)
         self.assertIn("watchdog_message", source)
 

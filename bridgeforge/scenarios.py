@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from .log_triage import PROBE_LINE_RE
-from .probe_config import build_probe_config
+from bridgeforge.probe.probe_config import build_probe_config
 
 """Roadmap P3b-K: named, versioned scenario fixtures (`docs/P3B_SAVE_TOOLING_RECOMMENDATIONS.md`).
 
@@ -34,10 +34,12 @@ def list_scenarios() -> list[str]:
     return sorted(p.stem for p in SCENARIOS_DIR.glob("*.json"))
 
 
-def load_scenario(name: str) -> dict[str, object]:
-    path = SCENARIOS_DIR / f"{name}.json"
+def load_scenario(name: str, *, directory: Path | None = None) -> dict[str, object]:
+    catalog = Path(directory) if directory is not None else SCENARIOS_DIR
+    path = catalog / f"{name}.json"
     if not path.is_file():
-        raise ScenarioError(f"Unknown scenario {name!r}; known scenarios: {list_scenarios()}")
+        known = sorted(p.stem for p in catalog.glob("*.json"))
+        raise ScenarioError(f"Unknown scenario {name!r}; known scenarios: {known}")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -213,7 +215,7 @@ def _evaluate_save_assertion(assertion: dict[str, object], inspection: dict[str,
     """Best-effort evaluation of a {class, field, condition} assertion against save-inspect's output.
 
     save-inspect's exact return shape is owned by another in-flight roadmap slice
-    (bridgeforge.save_inspect.inspect_save, P3b-A); this only assumes the inspection dict has a
+    (bridgeforge.save.save_inspect.inspect_save, P3b-A); this only assumes the inspection dict has a
     top-level section per class name, holding a {field: value} mapping. Anything that doesn't match
     that shape (a missing section/field, or an inspection dict shaped differently than expected) is
     reported as FAIL with a stated reason rather than raising, since the module this leans on may
@@ -233,11 +235,12 @@ def _evaluate_save_assertion(assertion: dict[str, object], inspection: dict[str,
         return {"assertion": assertion, "status": "FAIL", "reason": f"{type(exc).__name__}: {exc}"}
 
 
-def scenario_check(name: str, log_path: Path, save_path: Path | None = None) -> dict[str, object]:
+def scenario_check(name: str, log_path: Path, save_path: Path | None = None, *,
+                   directory: Path | None = None) -> dict[str, object]:
     """Evaluate a named scenario's expected results against a produced probe log (and, optionally, a
     produced save). Read-only: never launches anything and never modifies the log or the save.
     """
-    scenario = load_scenario(name)
+    scenario = load_scenario(name) if directory is None else load_scenario(name, directory=directory)
     expect = scenario.get("expect", {}) if isinstance(scenario.get("expect"), dict) else {}
 
     entries = _read_probe_entries(Path(log_path))
@@ -248,7 +251,7 @@ def scenario_check(name: str, log_path: Path, save_path: Path | None = None) -> 
     save_note: str | None = None
     if save_assertions:
         try:
-            from .save_inspect import inspect_save  # lazy: bridgeforge.save_inspect is owned/written by another in-flight agent
+            from bridgeforge.save.save_inspect import inspect_save  # lazy: bridgeforge.save.save_inspect is owned/written by another in-flight agent
         except ImportError:
             save_note = "save assertions skipped: module unavailable"
         else:

@@ -15,7 +15,7 @@ import hashlib
 from pathlib import Path
 
 from .models import ScanResult
-from .scanner import (
+from bridgeforge.scan.scanner import (
     _csv_id_index,
     _load_lenient_json_file,
     _ship_file_index,

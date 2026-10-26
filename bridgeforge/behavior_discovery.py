@@ -10,11 +10,11 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from . import __version__
-from .scanner import _blank_java_comments, _load_lenient_json_file, scan_mod
+from bridgeforge.scan.scanner import _blank_java_comments, _load_lenient_json_file, scan_mod
 from .models import TargetProfile
-from .jar_audit import ClassFileError, parse_constant_pool, referenced_class_names, referenced_members
-from .save_inspect import inspect_save
-from .scanner import _parse_class_file
+from bridgeforge.bytecode.jar_audit import ClassFileError, parse_constant_pool, referenced_class_names, referenced_members
+from bridgeforge.save.save_inspect import inspect_save
+from bridgeforge.scan.scanner import _parse_class_file
 
 
 SCHEMA_VERSION = 1
@@ -122,7 +122,7 @@ def _load_save_aliases(path: Path | None) -> set[str]:
     return aliases
 
 
-def build_archaeology(mod_directory: Path, *, save_aliases: Path | None = None, vanilla_core: Path | None = None) -> dict[str, object]:
+def build_archaeology(mod_directory: Path, *, save_aliases: Path | None = None, vanilla_core: Path | None = None, provider_roots: list[Path] | None = None) -> dict[str, object]:
     root = _resolved_directory(mod_directory, "mod directory")
     aliases = _load_save_aliases(save_aliases)
     mod_info = _load_lenient_json_file(root / "mod_info.json") if (root / "mod_info.json").is_file() else None
@@ -142,7 +142,8 @@ def build_archaeology(mod_directory: Path, *, save_aliases: Path | None = None, 
     persistent_candidates: list[dict[str, object]] = []
     # With vanilla_core, assets a mod borrows from vanilla resolve instead of reading as missing
     # (Flu-X: 9 false HIGH "asset-reference-missing" risks without it).
-    scan_result = scan_mod(root, TargetProfile(), vanilla_core)
+    scan_result = (scan_mod(root, TargetProfile(), vanilla_core) if provider_roots is None
+                   else scan_mod(root, TargetProfile(), vanilla_core, provider_roots=provider_roots))
 
     def add_node(node_id: str, kind: str, **extra: object) -> None:
         existing = nodes.setdefault(node_id, {"id": node_id, "kind": kind})
@@ -649,7 +650,7 @@ def write_probe_baseline(observation_input: Path, output: Path, *, build: str, s
 
 
 def _save_made_with(save_dir: Path) -> dict | None:
-    from .live_trust import save_made_with
+    from bridgeforge.live.live_trust import save_made_with
 
     return save_made_with(save_dir)
 

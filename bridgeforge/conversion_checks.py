@@ -14,7 +14,7 @@ import io
 import re
 from pathlib import Path
 
-from .scanner import ScanResult, _load_lenient_json_file, _relative
+from bridgeforge.scan.scanner import ScanResult, _load_lenient_json_file, _relative
 
 REPLACED_HULLS = "data/hulls/ship_data.csv"
 FACTION_DIR = Path("data") / "world" / "factions"
@@ -469,7 +469,7 @@ VANILLA_ROW_TABLES = ("data/hulls/ship_data.csv", "data/weapons/weapon_data.csv"
 
 def _table_records(text: str):
     """[(id, start, end, cells)] for each data record of a CSV: its offsets in the text and its cell values."""
-    from .scanner import _csv_record_cells
+    from bridgeforge.scan.scanner import _csv_record_cells
 
     records = _csv_record_cells(text)
     if not records:

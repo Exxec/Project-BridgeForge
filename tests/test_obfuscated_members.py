@@ -6,7 +6,7 @@ import shutil
 import unittest
 from pathlib import Path
 
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
 from tests.test_jar_linkage import _compile, _jar
 
