@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 import unittest
 from collections.abc import Iterator
+from pathlib import Path
 
 
 def flatten(suite: unittest.TestSuite) -> Iterator[unittest.TestCase]:
@@ -15,7 +16,11 @@ def flatten(suite: unittest.TestSuite) -> Iterator[unittest.TestCase]:
 
 
 def main() -> int:
-    loaded = unittest.defaultTestLoader.discover("tests", top_level_dir=".")
+    # Discover as CI does (`unittest discover -s tests`): tests/ is not a package, so top_level_dir="." refused it
+    # ("Start directory is not importable"; every weekly run until 2026-10-26). The repo root stays importable for the
+    # tests' own `from tests.support import ...`.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    loaded = unittest.defaultTestLoader.discover("tests")
     result = unittest.TextTestRunner(verbosity=1).run(unittest.TestSuite(reversed(list(flatten(loaded)))))
     return 0 if result.wasSuccessful() else 1
 

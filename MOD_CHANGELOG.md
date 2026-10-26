@@ -2,6 +2,10 @@
 
 Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; each mod's evidence is in its revival report.
 
+## 2026-10-26
+
+- **Exotica Technologies** 2.1.1-RC4: RC4 test build: multi-module exotics keyed by module slot/instance instead of variant id (no clobbering, anchoring or bleed between identical modules, prefix-alike modules or ship copies); 8 methods delegated to a Java helper, not live-tested
+
 ## 2026-10-22
 
 - **Epta Consortium** 2.1.3+bf.2: Version label corrected to 2.1.3 (the upstream 2.1.3 package called itself 2.1.2); Proelefsi station keeps its original sprite.
