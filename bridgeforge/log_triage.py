@@ -6,8 +6,8 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .jar_audit import _resolve_jar_classes
-from .scanner import _load_lenient_json_file, _loaded_mod_jars
+from bridgeforge.bytecode.jar_audit import _resolve_jar_classes
+from bridgeforge.scan.scanner import _load_lenient_json_file, _loaded_mod_jars
 
 DEFAULT_MOD_PREFIXES = ("data.scripts", "exigency")
 
@@ -440,7 +440,7 @@ def _rig_fingerprint(mods_dir: Path) -> dict[str, object]:
     import hashlib
     import json as _json
 
-    from .rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
+    from bridgeforge.rig.rig_doctor import DEFAULT_CORE_BASELINE_RELATIVE, _repo_root
 
     enabled = _enabled_mod_ids(mods_dir) or set()
     versions = {}

@@ -124,7 +124,7 @@ if __name__ == "__main__":
 class RigCoreIntegrityTests(unittest.TestCase):
     # ROADMAP 35.11 (2026-10-04, from SPW core_integrity): the rig's core hashes match the recorded baseline.
     def test_records_then_detects_a_changed_core_jar(self) -> None:
-        from bridgeforge.rig_doctor import _check_core_integrity
+        from bridgeforge.rig.rig_doctor import _check_core_integrity
 
         with resolved_temp_dir() as directory:
             core = directory / "rig" / "starsector-core"
@@ -143,7 +143,7 @@ class RigCoreIntegrityTests(unittest.TestCase):
 
 class RigCoreBuildTests(unittest.TestCase):
     def test_a_new_build_is_named_not_reported_as_drift(self) -> None:
-        from bridgeforge.rig_doctor import _check_core_integrity
+        from bridgeforge.rig.rig_doctor import _check_core_integrity
 
         def launcher(core: Path, build: bytes) -> None:
             with zipfile.ZipFile(core / "starfarer_obf.jar", "w") as jar:

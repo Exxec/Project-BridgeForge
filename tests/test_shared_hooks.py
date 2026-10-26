@@ -6,7 +6,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 HEADER = "id,name,cost mult,build time,income,upkeep,downgrade,upgrade,tags,data,image,plugin,desc,order\n"
 

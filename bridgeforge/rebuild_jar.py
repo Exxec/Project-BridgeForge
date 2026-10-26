@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-from .java_toolchain import ClasspathResult, assemble_classpath, find_jdk, run_javac
+from bridgeforge.bytecode.java_toolchain import ClasspathResult, assemble_classpath, find_jdk, run_javac
 from .workspace import resolve_inside
 
 SCHEMA_VERSION = 1

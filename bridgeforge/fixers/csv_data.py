@@ -4,7 +4,7 @@ import io
 import json
 import re
 from pathlib import Path
-from ..scanner import DESIGN_TYPE_CSV_TARGETS, _FULLWIDTH_NUMBER_CHARS, _NUMBER_CELL, _load_lenient_json_file, _parse_json, _read_csv_rows_lenient, _relative
+from bridgeforge.scan.scanner import DESIGN_TYPE_CSV_TARGETS, _FULLWIDTH_NUMBER_CHARS, _NUMBER_CELL, _load_lenient_json_file, _parse_json, _read_csv_rows_lenient, _relative
 from .common import FileChange, FixerError, _csv_escape, _csv_records, _decode, _encode, _findings_of, _line_field_spans, _parse_rgb, _split_terminator
 
 
@@ -246,7 +246,7 @@ def _fix_csv_fullwidth_number(root: Path, options: dict) -> list[FileChange]:
 def _fix_rules_csv_duplicate_id(root: Path, options: dict) -> list[FileChange]:
     """Rename each later copy of a repeated rules.csv id to <id>_2, <id>_3 (RC8 'Duplicate key', Ironclads GRP10J-20261005),
     editing only the id cell so every other byte of the file stays."""
-    from ..scanner import _csv_first_cells, _rules_duplicate_id_cells
+    from bridgeforge.scan.scanner import _csv_first_cells, _rules_duplicate_id_cells
 
     path = root / "data" / "campaign" / "rules.csv"
     if not path.is_file():
@@ -273,7 +273,7 @@ def _fix_rules_csv_duplicate_id(root: Path, options: dict) -> list[FileChange]:
 def _fix_rules_csv_whitespace_only_line(root: Path, options: dict) -> list[FileChange]:
     """Empty the whitespace-only lines of rules.csv conditions/script cells (RC8 'No tokens found in string: []', Ironclads
     GRP10K-20261005). Only those cells change; the rest of the file keeps its bytes."""
-    from ..scanner import _rules_whitespace_only_line_cells
+    from bridgeforge.scan.scanner import _rules_whitespace_only_line_cells
 
     path = root / "data" / "campaign" / "rules.csv"
     if not path.is_file():
@@ -293,7 +293,7 @@ def _fix_rules_csv_whitespace_only_line(root: Path, options: dict) -> list[FileC
 def _fix_rules_csv_curly_quote_unreadable(root: Path, options: dict) -> list[FileChange]:
     """Change the curly double quotes of unreadable rules.csv text alternatives to straight ones (Metelson Industries,
     GRP4A-20261006). Only those cells change; the rest of the file keeps its bytes."""
-    from ..scanner import _rules_curly_quote_cells
+    from bridgeforge.scan.scanner import _rules_curly_quote_cells
 
     path = root / "data" / "campaign" / "rules.csv"
     if not path.is_file():
@@ -338,7 +338,7 @@ def _fix_csv_vanilla_row_override(root: Path, options: dict) -> list[FileChange]
 def _fix_person_names_duplicate_row(root: Path, options: dict) -> list[FileChange]:
     """Remove rows of data/characters/person_names.csv that repeat an earlier row (RC8 'Duplicate key' Fatal,
     Ironclads GRP10B-20261005). The first copy stays; every other byte, line endings included, is kept."""
-    from ..scanner import _person_names_duplicate_lines
+    from bridgeforge.scan.scanner import _person_names_duplicate_lines
 
     path = root / "data" / "characters" / "person_names.csv"
     repeats = set(_person_names_duplicate_lines(path)) if path.is_file() else set()
@@ -353,7 +353,7 @@ def _fix_person_names_duplicate_row(root: Path, options: dict) -> list[FileChang
 def _fix_csv_slash_quote_escape(root: Path, options: dict) -> list[FileChange]:
     """Rewrite each /"phrase/" (or \\"phrase\\") that `csv-slash-quote-escape` names as ""phrase"", the CSV escape
     vanilla's descriptions.csv uses (SEEKER 0.6.6 special_items.csv, 2026-09-28). Nothing else in the file changes."""
-    from ..scanner import CSV_SLASH_QUOTE
+    from bridgeforge.scan.scanner import CSV_SLASH_QUOTE
 
     changes = []
     for relative in sorted({f.file for f in _findings_of(root, options, "csv-slash-quote-escape") if f.file}):

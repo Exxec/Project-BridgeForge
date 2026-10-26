@@ -3,7 +3,7 @@ import json
 import re
 from pathlib import Path
 from ..build_tag import _string_literal_to_text, _structural_depths
-from ..scanner import _load_lenient_json_file, _parse_json
+from bridgeforge.scan.scanner import _load_lenient_json_file, _parse_json
 from .common import FileChange, FixerError, _decode, _encode, _findings_of
 from .removed_api import _DEPENDENCIES_ARRAY_PATTERN, _add_revenantlib_dependency
 
@@ -165,7 +165,7 @@ def _fix_undeclared_library_dependency(root: Path, options: dict) -> list[FileCh
     written dependency actually matches what the game expects, not just what the scanner's own
     case-insensitive comparison would have accepted.
     """
-    from ..scanner import LIBRARY_DEPENDENCY_IDS
+    from bridgeforge.scan.scanner import LIBRARY_DEPENDENCY_IDS
 
     to_add: dict[str, str] = {}  # dependency_id -> library display name
     # Providers a person approved (item 73 B7: the one indexed mod that defines an unresolved import's class): declared by

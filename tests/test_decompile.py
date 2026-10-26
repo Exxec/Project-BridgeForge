@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 
 from bridgeforge.decompile import decompile_jar, find_vineflower
-from bridgeforge.java_toolchain import find_jdk
+from bridgeforge.bytecode.java_toolchain import find_jdk
 
 
 class DecompileJarTests(unittest.TestCase):

@@ -6,7 +6,7 @@ from __future__ import annotations
 import unittest
 
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix
-from bridgeforge.scanner import _load_lenient_json_file, scan_mod
+from bridgeforge.scan.scanner import _load_lenient_json_file, scan_mod
 from tests.support import resolved_temp_dir
 from tests.test_rc8_variant_and_asset_checks import (
     SHIP_DATA_HEADER,

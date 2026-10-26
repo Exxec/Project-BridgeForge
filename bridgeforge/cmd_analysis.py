@@ -6,8 +6,8 @@ import json
 import sys
 from pathlib import Path
 
-from .corpus import compare_corpus
-from .corpus_audit import audit_directories, write_corpus_audit
+from .corpus.corpus import compare_corpus
+from .corpus.corpus_audit import audit_directories, write_corpus_audit
 from .cross_mod import analyze_mod_set
 from .evaluation import evaluate_releases
 from .identity_registry import build_campaign_identity_inventory, check_campaign_identity_references, load_campaign_identity_inventory

@@ -100,7 +100,7 @@ def last_manifest_summary(queue: Path, workspace: Path) -> dict | None:
 def select_workspaces(queue: Path, changed: list[str], validated: list[Path] | None = None, rig: Path | None = None) -> dict[str, str]:
     """{workspace name: why it reruns} for the validated workspaces; the others are left out. Besides git and the shipped hash,
     a workspace reruns when the providers, probe config or launcher files of its last bound run differ from the rig now (R1)."""
-    from .live_trust import live_status
+    from bridgeforge.live.live_trust import live_status
     from .regress import validated_workspaces
     from .run_manifest import environment_drift
 
@@ -164,7 +164,7 @@ def run_changed(queue: Path, rig: Path, out: Path, commit: str, *, repo_root: Pa
 
 def _archive_verdicts(queue: Path, rig: Path, result: dict, chosen: dict[str, str], previous: dict[str, str | None]) -> dict[str, dict]:
     """Per selected workspace: its verdict now, the one before, and whether it changed or regressed (was PASS, is not)."""
-    from .probe_group import _workspaces_by_mod_id
+    from bridgeforge.probe.probe_group import _workspaces_by_mod_id
 
     owners = {mod: ws.name for mod, ws in _workspaces_by_mod_id(queue, rig / "mods").items() if ws is not None}
     now: dict[str, str] = {}

@@ -21,7 +21,7 @@ import csv
 import math
 from pathlib import Path
 
-from .scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 SCHEMA_VERSION = 1
 _MISSING = object()

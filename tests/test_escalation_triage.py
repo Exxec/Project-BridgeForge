@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.baseline import accept_findings
-from bridgeforge.escalation_precedent import RULINGS_FILE, predicate_hash
-from bridgeforge.escalation_triage import file_pattern, render, triage, write_result
+from bridgeforge.escalation.escalation_precedent import RULINGS_FILE, predicate_hash
+from bridgeforge.escalation.escalation_triage import file_pattern, render, triage, write_result
 from tests.support import resolved_temp_dir
 
 FINDING = "vanilla-class-duplicated-in-jar"

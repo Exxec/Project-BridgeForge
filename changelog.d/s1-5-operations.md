@@ -1,0 +1,1 @@
+S1: add local case prepare/run/finalize library operations with frozen normalized inputs, fresh qualification, existing archive gates, exact ZIP/original checks, preserved partial attempts and recoverable one-time publication. Existing CLI/caller policies remain unchanged. Synthetic tests only; LIVE TEST NOT PERFORMED.

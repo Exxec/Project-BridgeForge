@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge.escalation_precedent import RULINGS_FILE, precedents, question_shape, standing_answer, standing_eligibility
-from bridgeforge.escalation_sheet import COLUMNS, apply_sheet, build_sheet, read_sheet, write_sheet
+from bridgeforge.escalation.escalation_precedent import RULINGS_FILE, precedents, question_shape, standing_answer, standing_eligibility
+from bridgeforge.escalation.escalation_sheet import COLUMNS, apply_sheet, build_sheet, read_sheet, write_sheet
 from tests.support import resolved_temp_dir
 
 FINDING = "settings-json-override-breadth"
@@ -130,7 +130,7 @@ class ApplyTests(unittest.TestCase):
                 {"group": "G002", "finding": "b-id", "shape": "s2", "mods": "C", "answer": "skip", "reason": "later"},
                 {"group": "G003", "finding": "c-id", "shape": "s3", "mods": "D", "answer": "", "reason": ""},
                 {"group": "G004", "finding": "d-id", "shape": "s4", "mods": "E", "answer": "approve-fixer", "reason": "trim"}])
-            with mock.patch("bridgeforge.escalation_queue.rule", return_value={"ruling": "x", "mods": []}) as rule:
+            with mock.patch("bridgeforge.escalation.escalation_queue.rule", return_value={"ruling": "x", "mods": []}) as rule:
                 result = apply_sheet(sheet)
         self.assertEqual(rule.call_count, 2)
         first = rule.call_args_list[0]
@@ -148,7 +148,7 @@ class ApplyTests(unittest.TestCase):
                 {**base, "group": "G003", "answer": "accept", "reason": "my own words"},
                 {**base, "group": "G004", "answer": "approve-fixer", "reason": "different"},
                 {**base, "group": "G005", "answer": "", "reason": ""}])
-            with mock.patch("bridgeforge.escalation_queue.rule", return_value={"ruling": "x", "mods": []}) as rule:
+            with mock.patch("bridgeforge.escalation.escalation_queue.rule", return_value={"ruling": "x", "mods": []}) as rule:
                 result = apply_sheet(sheet)
         self.assertEqual([c.kwargs["reason"] for c in rule.call_args_list], ["same as before", "my own words", "different"])
         self.assertEqual(result["skipped"], ["G001", "G005"])
@@ -161,7 +161,7 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual([e["group"] for e in result["errors"]], ["G001", "G002"])
 
     def test_rule_narrowed_by_mods_and_shape_end_to_end(self) -> None:
-        from bridgeforge.escalation_queue import rule
+        from bridgeforge.escalation.escalation_queue import rule
 
         with resolved_temp_dir() as queue:
             _workspace(queue, "A", _explanation(5, "one_key"))
@@ -184,7 +184,7 @@ def _finding(evidence: list[str] | None = None, classification: str = "REVIEW", 
 
 def _source(queue: Path, mods: list[str], *, evidence: list[str] | None = None, intent: str = "authored tuning set", operation: str = "accept",
             reason: str = "deliberate", finding: str = FINDING, extra_predicate: dict | None = None, date: str = "2026-10-01") -> str:
-    from bridgeforge.escalation_precedent import predicate_hash, question_predicate, ruling_id
+    from bridgeforge.escalation.escalation_precedent import predicate_hash, question_predicate, ruling_id
 
     predicate = {**question_predicate([_finding(evidence, finding=finding)]), **(extra_predicate or {})}
     entry = {"date": date, "finding": finding, "ruling": operation, "reason": reason, "mods": mods, "predicate": predicate,
@@ -199,7 +199,7 @@ class StandingRulingTests(unittest.TestCase):
     """R4: a standing ruling needs three independent mods on the same versioned predicate."""
 
     def _eligible(self, queue: Path, findings: list[dict] | None = None, mod: str = "T"):
-        from bridgeforge.escalation_precedent import standing_eligibility
+        from bridgeforge.escalation.escalation_precedent import standing_eligibility
 
         return standing_eligibility(queue, findings or [_finding()], mod)
 
@@ -243,7 +243,7 @@ class StandingRulingTests(unittest.TestCase):
         self.assertTrue(any("conflicting rulings" in r for r in verdict["reasons"]))
 
     def test_a_revoked_or_expired_ruling_no_longer_counts(self) -> None:
-        from bridgeforge.escalation_precedent import revoke_ruling
+        from bridgeforge.escalation.escalation_precedent import revoke_ruling
 
         with resolved_temp_dir() as queue:
             first = _source(queue, ["S1"])
@@ -291,7 +291,7 @@ class StandingRulingTests(unittest.TestCase):
         self.assertFalse(fixer["eligible"])
 
     def test_apply_uses_standing_for_open_mods_logs_sources_and_revocation_propagates(self) -> None:
-        from bridgeforge.escalation_precedent import load_log, revoke_ruling
+        from bridgeforge.escalation.escalation_precedent import load_log, revoke_ruling
 
         with resolved_temp_dir() as queue:
             sources = [_source(queue, [mod]) for mod in ("S1", "S2", "S3")]
@@ -366,7 +366,7 @@ class PacketPrecedentTests(unittest.TestCase):
         self.assertNotIn("precedent", agent)
 
     def test_packet_shows_predicate_precedent_only_and_revoked_status(self) -> None:
-        from bridgeforge.escalation_precedent import revoke_ruling
+        from bridgeforge.escalation.escalation_precedent import revoke_ruling
         from bridgeforge.revive import attach_precedent, render_packet
 
         with resolved_temp_dir() as queue:

@@ -5,7 +5,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge import boot_test, launch, live_run, log_triage, window_watch
+from bridgeforge import boot_test
+from bridgeforge import launch
+from bridgeforge.live import live_run
+from bridgeforge import log_triage
+from bridgeforge import window_watch
 from bridgeforge.exit_observation import read_exit_observation
 from tests.bound_runs import make_rig, stage
 from tests.support import resolved_temp_dir
@@ -46,7 +50,7 @@ class OneLauncherTests(unittest.TestCase):
             with mock.patch.object(launch, "start_game", return_value=_Process()) as start, \
                     mock.patch("bridgeforge.boot_test._running_java_under", return_value=[]), \
                     mock.patch("bridgeforge.boot_test._terminate_tree"), \
-                    mock.patch("bridgeforge.rig_prefs.pinned_launcher_prefs", mock.MagicMock()), \
+                    mock.patch("bridgeforge.rig.rig_prefs.pinned_launcher_prefs", mock.MagicMock()), \
                     mock.patch.object(live_run, "real_hands", lambda rig_, pid: mock.MagicMock()):
                 with live_run.running_game(rig, "ONE-1"):
                     pass
@@ -115,7 +119,7 @@ class InteractiveTests(unittest.TestCase):
                 def poll(self):
                     return 7
 
-            with mock.patch.object(launch, "start_game", return_value=Proc()),                     mock.patch.object(launch, "watch_windows", return_value=mock.MagicMock()) as watch,                     mock.patch("bridgeforge.boot_test._running_java_under", return_value=[]),                     mock.patch("bridgeforge.boot_test._terminate_tree"),                     mock.patch("bridgeforge.rig_prefs.pinned_launcher_prefs") as prefs,                     mock.patch.object(live_run, "real_hands", lambda rig_, pid: hands),                     mock.patch.object(live_run, "EXIT_POLL_SECONDS", 0):
+            with mock.patch.object(launch, "start_game", return_value=Proc()),                     mock.patch.object(launch, "watch_windows", return_value=mock.MagicMock()) as watch,                     mock.patch("bridgeforge.boot_test._running_java_under", return_value=[]),                     mock.patch("bridgeforge.boot_test._terminate_tree"),                     mock.patch("bridgeforge.rig.rig_prefs.pinned_launcher_prefs") as prefs,                     mock.patch.object(live_run, "real_hands", lambda rig_, pid: hands),                     mock.patch.object(live_run, "EXIT_POLL_SECONDS", 0):
                 result = live_run.live_run(rig, "INT-1", interactive=True)
             self.assertEqual(result.verdict, "LIVE_DONE")
             self.assertEqual(read_exit_observation(rig, "INT-1"), ("NATURAL", 7))

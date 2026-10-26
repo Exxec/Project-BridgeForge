@@ -28,7 +28,7 @@ from .baseline import finding_dict_baseline_key, mod_baseline_keys
 from .finding_stats import read_ledger
 from .progress import report
 from .report_status import is_closed
-from .scan_registry import assess
+from bridgeforge.scan.scan_registry import assess
 
 SCHEMA_VERSION = 1
 POLICY_NAME = "AUTOMATION_POLICY.json"

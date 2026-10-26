@@ -7,7 +7,7 @@ from pathlib import Path
 
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix
 from bridgeforge.models import TargetProfile
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from bridgeforge.value_proposals import (
     ValueProposalError,
     apply_sheet,

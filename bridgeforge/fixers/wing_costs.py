@@ -1,7 +1,7 @@
 from __future__ import annotations
 import re
 from pathlib import Path
-from ..scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 from .common import FileChange, FixerError, _decode, _encode, _findings_of
 
 
@@ -155,7 +155,7 @@ def _fix_builtin_wing_is_hullmod(root: Path, options: dict) -> list[FileChange]:
 
 def _fix_json_missing_comma(root: Path, options: dict) -> list[FileChange]:
     """Apply scanner._repair_missing_commas, which only succeeds when the file then parses as RC8 reads it."""
-    from ..scanner import _repair_missing_commas
+    from bridgeforge.scan.scanner import _repair_missing_commas
 
     changes: list[FileChange] = []
     for rel in sorted({f.file for f in _findings_of(root, options, "json-missing-comma") if f.file}):

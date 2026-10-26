@@ -4,7 +4,7 @@ import re
 import unittest
 from pathlib import Path
 
-from bridgeforge.probe_config import COMMON_FILE_SUFFIX, CONFIG_FILE, PROFILE_FILE, RIG_MARKER_FILE
+from bridgeforge.probe.probe_config import COMMON_FILE_SUFFIX, CONFIG_FILE, PROFILE_FILE, RIG_MARKER_FILE
 
 PROBE_FILES_JAVA = Path(__file__).resolve().parent.parent / "probe-mod" / "src" / "com" / "bridgeforge" / "probe" / "ProbeFiles.java"
 

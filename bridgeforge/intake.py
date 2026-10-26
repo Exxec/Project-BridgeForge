@@ -14,7 +14,7 @@ from .boot_test import _is_link
 from .dossier import build_dossier
 from .models import TargetProfile
 from .report import write_artifacts
-from .scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 
 def operation_root(repo_root: Path, *, create: bool = False) -> Path:

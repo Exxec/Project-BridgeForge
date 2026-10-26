@@ -17,7 +17,7 @@ proposed work and dated evidence. It does not implement the case lifecycle or re
 - [Charter](PROJECT_CHARTER.md) and [CLAUDE.md](../CLAUDE.md): purpose and committed repository/agent rules.
   The local `AGENTS.md` additionally governs owner decisions/model routing; it is intentionally not shipped in Git.
 - [Vision](VISION.md), [strategic roadmap](STRATEGIC_ROADMAP.md), [next milestone](NEXT_MILESTONE.md) and
-  [architecture gaps](ARCHITECTURE_GAPS.md): proposed S1-S4 direction and evidence; no implicit implementation approval.
+  [architecture gaps](ARCHITECTURE_GAPS.md): S1-S4 direction and dated evidence; current S1 authorization/scope is recorded in the implementation plan, while later acceptance and publication remain gated.
 - [Active roadmap](../ROADMAP-3.md): the only current tactical backlog. Earlier decisions/history remain in
   [archived page 1](archive/ROADMAP.md) and [page 2](archive/ROADMAP-2.md). [docs/ROADMAP.md](ROADMAP.md) and
   [completion log](ROADMAP_COMPLETION_LOG.md) are historical tranche records, not competing current backlogs.
@@ -78,3 +78,34 @@ The bounded audit scope, exceptions and source-backed corrections are recorded i
 
 - [PR stack and owner merge order](REFACTOR_STACK.md)
 - [B3 research validation](REFACTOR_B3_RESEARCH_AUDIT.md)
+
+- [B3 Atlas review evidence](REFACTOR_B3_ATLAS_AUDIT.md): package moves and fresh validation; live gates unchanged.
+
+- [B3 corpus evidence](REFACTOR_B3_CORPUS_AUDIT.md): package moves and full validation; live gates unchanged.
+
+- [B3 escalation evidence](REFACTOR_B3_ESCALATION_AUDIT.md): structural move and regression/consumer validation.
+
+- [B3 probe evidence](REFACTOR_B3_PROBE_AUDIT.md): structural move and regression/consumer validation.
+
+- [B3 rig evidence](REFACTOR_B3_RIG_AUDIT.md): structural move and regression/consumer validation.
+
+- [B3 live evidence](REFACTOR_B3_LIVE_AUDIT.md): structural move and regression/consumer validation.
+
+- [B3 bytecode evidence](REFACTOR_B3_BYTECODE_AUDIT.md): structural move and regression/consumer validation.
+
+- [B3 scan evidence](REFACTOR_B3_SCAN_AUDIT.md): structural move and regression/consumer validation.
+
+- [B3 save evidence](REFACTOR_B3_SAVE_AUDIT.md): structural move and regression/consumer validation.
+
+- [B3 completion evidence](REFACTOR_B3_COMPLETION.md): local implementation complete; owner review/merge pending.
+
+- [B4 command-reference audit](REFACTOR_B4_COMMAND_AUDIT.md): complete parser inventory and bounded static consumer references; grouping/deprecation decisions remain with the owner.
+
+- [B5 test-speed evidence](REFACTOR_B5_TEST_SPEED.md): measured unittest markers, complete CI partitions and local validation.
+
+- [B6 close-out evidence](REFACTOR_B6_CLOSEOUT.md): current architecture/companion paths and the explicit distinction between documentation implementation and remaining item-83 review/merge gates.
+
+- [S-series implementation plan](S_SERIES_IMPLEMENTATION_PLAN.md): owner-authorized S1 start, S1-S4 dependency order and acceptance gates.
+- [S1 contract map](S1_CONTRACT_MAP.md) and [progress/handoff](S1_PROGRESS.md): existing policy compatibility, read-only workspace adapter and next implementation slice.
+
+- [S1 case and receipt contracts](S1_CASE_RECORDS.md): content-bound candidates, context identities, append-only persistence and explicit integrity/provenance limits.

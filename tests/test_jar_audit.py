@@ -4,7 +4,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from bridgeforge.jar_audit import ClassFileError, audit_jar, parse_constant_pool, referenced_class_names
+from bridgeforge.bytecode.jar_audit import ClassFileError, audit_jar, parse_constant_pool, referenced_class_names
 from bridgeforge.cli import main
 
 

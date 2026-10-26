@@ -222,7 +222,7 @@ def build_report(feature: str, case: Path, question: str, *, atlas_db: Path, rep
 
 
 def _mod_ids(trees: dict[str, dict]) -> set[str]:
-    from ..scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
     ids = set()
     for tree in (t for t in trees.values() if t["label"] != "peer"):
         info = _load_lenient_json_file(tree["path"] / "mod_info.json")

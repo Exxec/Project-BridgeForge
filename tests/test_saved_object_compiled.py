@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.saved_object_scan import compiled_entity_fields, saved_interface
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
 from tests.test_jar_linkage import _compile, _jar
 

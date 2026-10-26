@@ -64,7 +64,7 @@ def _fix_data_file_not_utf8(root: Path, options: dict) -> list[FileChange]:
     character in UTF-8. A file with any other invalid byte is refused with the bytes it holds, because
     its real encoding (Mac Roman, Shift-JIS, GBK, CP-1252 letters) cannot be told from the bytes alone.
     """
-    from ..scanner import _PLAYER_TEXT_SUFFIXES
+    from bridgeforge.scan.scanner import _PLAYER_TEXT_SUFFIXES
 
     data = root / "data"
     paths = [root / "mod_info.json"] + ([p for p in data.rglob("*") if p.suffix.lower() in _PLAYER_TEXT_SUFFIXES] if data.is_dir() else [])

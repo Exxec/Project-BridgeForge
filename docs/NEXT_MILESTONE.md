@@ -1,5 +1,14 @@
 # Next milestone proposal: one reproducible revival case
 
+**2026-10-25 independent closeout review:** see [S1_COMPLETION_REVIEW.md](S1_COMPLETION_REVIEW.md) for fresh
+2,717-test validation, artifact-only resume, exact local archive/retry and real-input refusal controls.
+The controlled loose-Java compilation pilot passes full coverage and exact-subject owner review.
+Owner 2026-10-25: "Approve the controlled repair pilot"; "Accept the bounded S1 baseline"; review time "not measured".
+**S1 is complete for the accepted bounded local-new-game scope**, with human-review timing explicitly unavailable.
+S2 performance-default approval and S3/S4 acceptance remain separate. Older proposal/status text below is history.
+
+**Implementation instruction, 2026-10-24:** owner requested "plan S series implementation then proceed to start S1". The [implementation plan](S_SERIES_IMPLEMENTATION_PLAN.md) orders S1-S4; S1 has started with the compatibility map and offline read-only workspace adapter. The earlier proposal/baseline text below is dated history. Qualification profile enforcement, real pilot/rig access, save/gameplay changes, publication and milestone acceptance retain their explicit gates; S2-S4 are planned, not implemented.
+
 S1 of the [strategic roadmap](STRATEGIC_ROADMAP.md). Proposed for owner review, 2026-10-17; implementation has not begun.
 Factual status 2026-10-18: S1's shared case/qualification contracts are not built; the item 75 building blocks it reuses (R1, R2, R5) and the DOC-001 fix exist offline with live gates pending ([ROADMAP_STATUS](ROADMAP_STATUS.md)).
 This is the next significant product objective, not a request to finish every item in the tactical backlog.

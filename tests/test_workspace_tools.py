@@ -6,8 +6,8 @@ import os
 import unittest
 from pathlib import Path
 
-from bridgeforge.jar_batch import repair_decompile
-from bridgeforge.jar_patch import _only_return_type_relinks
+from bridgeforge.bytecode.jar_batch import repair_decompile
+from bridgeforge.bytecode.jar_patch import _only_return_type_relinks
 from bridgeforge.workspace_tools import bump_version, next_version, restore_from_done, review_applied
 from tests.support import resolved_temp_dir
 
@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
 class OverloadGateTests(unittest.TestCase):
     def test_balanced_overload_calls_drop_and_unbalanced_stay(self) -> None:
-        from bridgeforge.jar_batch import _drop_overloads
+        from bridgeforge.bytecode.jar_batch import _drop_overloads
         site = "com/fs/starfarer/api/ui/TooltipMakerAPI.addCustom"
         calls = {site + ":(Lcom/fs/starfarer/api/ui/CustomPanelAPI;F)Lx;": -1, site + ":(Lcom/fs/starfarer/api/ui/UIComponentAPI;F)Lx;": 1}
         self.assertEqual(_drop_overloads(calls, {site}), {})  # Void-Tec: same call site, new overload
@@ -91,13 +91,13 @@ class OverloadGateTests(unittest.TestCase):
         self.assertEqual(_drop_overloads(calls, set()), calls)
 
     def test_renames_are_listed_with_the_rc8_name(self) -> None:
-        from bridgeforge.jar_batch import RENAMED_METHODS
+        from bridgeforge.bytecode.jar_batch import RENAMED_METHODS
         self.assertEqual(RENAMED_METHODS["com/fs/starfarer/api/impl/campaign/events/OfficerManagerEvent.pickPortrait"], "pickPortraitPreferNonDuplicate")
 
 
 class CopyBackTests(unittest.TestCase):
     def test_an_edited_copy_goes_back_over_the_mod_source_with_a_backup(self) -> None:
-        from bridgeforge.jar_batch import _copy_back_sources
+        from bridgeforge.bytecode.jar_batch import _copy_back_sources
         with resolved_temp_dir() as root:
             working = root / "working"
             source = working / "jars" / "src" / "data" / "Gate.java"
@@ -135,7 +135,7 @@ class ThisCheckNoiseTests(unittest.TestCase):
     def test_require_non_null_on_this_is_not_a_call(self) -> None:
         import shutil
         import subprocess
-        from bridgeforge.jar_patch import _javap_stats
+        from bridgeforge.bytecode.jar_patch import _javap_stats
         javac, javap = shutil.which("javac"), shutil.which("javap")
         if not (javac and javap):
             self.skipTest("no JDK on PATH")

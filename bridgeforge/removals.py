@@ -24,7 +24,7 @@ from datetime import date
 from pathlib import Path
 
 from .safeio import atomic_write_json
-from .scan_port import CATEGORIES as FEATURE_CATEGORIES
+from bridgeforge.scan.scan_port import CATEGORIES as FEATURE_CATEGORIES
 
 FILES_CATEGORY = "files"
 CATEGORIES = {**FEATURE_CATEGORIES, FILES_CATEGORY: "files under `data/`"}

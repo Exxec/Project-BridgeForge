@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.save_snapshot import (
+from bridgeforge.save.save_snapshot import (
     SaveSnapshotError,
     snapshot_list,
     snapshot_restore,

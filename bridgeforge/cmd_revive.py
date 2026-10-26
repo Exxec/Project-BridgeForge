@@ -136,7 +136,7 @@ def run_cli(args: argparse.Namespace) -> int:
         return 0
     if args.command == "ready-list":
         # Replaces the hand tally of "how many need live testing" (2026-09-30).
-        from .probe_group import ProbeGroupError, ready_workspaces
+        from bridgeforge.probe.probe_group import ProbeGroupError, ready_workspaces
         try:
             ready = ready_workspaces(args.queue)
         except ProbeGroupError as exc:
@@ -179,7 +179,7 @@ def run_cli(args: argparse.Namespace) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else render_revive(result), end="\n" if args.json else "")
         return 0
     if args.command == "escalation" and args.escalation_command == "rule":
-        from .escalation_queue import rule
+        from bridgeforge.escalation.escalation_queue import rule
         try:
             entry = rule(args.queue, args.finding, accept=args.accept, approve_fixer=args.approve_fixer, reason=args.reason)
         except ValueError as exc:
@@ -189,7 +189,7 @@ def run_cli(args: argparse.Namespace) -> int:
               f"Ruling recorded ({entry['ruling']}) for {entry['finding']}: {len(entry['mods'])} mod baseline(s) updated. Re-run revive-queue --only-status ESCALATED to apply.")
         return 0
     if args.command == "escalation" and args.escalation_command == "accept":
-        from .escalation_queue import accept_in_mod
+        from bridgeforge.escalation.escalation_queue import accept_in_mod
         try:
             entry = accept_in_mod(args.workspace, args.selectors, args.reason)
         except (ValueError, OSError) as exc:
@@ -199,7 +199,7 @@ def run_cli(args: argparse.Namespace) -> int:
               f"Accepted {len(entry['keys'])} finding(s) as authored in {entry['baseline']}. Re-run revive to apply.")
         return 0
     if args.command == "escalation" and args.escalation_command == "queue":
-        from .escalation_queue import summarize_queue
+        from bridgeforge.escalation.escalation_queue import summarize_queue
         result = summarize_queue(args.queue, quiet=args.quiet)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
@@ -209,7 +209,7 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"Escalated mods: {result['escalated']}. Written: {result['result_md']}")
         return 0
     if args.command == "escalation" and args.escalation_command == "triage":
-        from .escalation_triage import summary, triage, write_result
+        from bridgeforge.escalation.escalation_triage import summary, triage, write_result
         if not args.queue.expanduser().is_dir():
             print(f"bridgeforge: no queue folder at {args.queue}", file=sys.stderr)
             return 2
@@ -222,7 +222,7 @@ def run_cli(args: argparse.Namespace) -> int:
         print(f"{len(result['groups'])} group(s). Written: {written['md']}" if written else f"{len(result['groups'])} group(s); pass --write DIR for the commands.")
         return 0
     if args.command == "escalation" and args.escalation_command == "revoke":
-        from .escalation_precedent import revoke_ruling
+        from bridgeforge.escalation.escalation_precedent import revoke_ruling
         try:
             result = revoke_ruling(args.queue, args.ruling_id, args.reason)
         except (ValueError, OSError) as exc:
@@ -231,7 +231,7 @@ def run_cli(args: argparse.Namespace) -> int:
         print(json.dumps(result, indent=2) if args.json else f"Revoked {result['revoked']}; invalidated: {', '.join(result['invalidated']) or 'nothing'}.")
         return 0
     if args.command == "escalation" and args.escalation_command == "sheet":
-        from .escalation_sheet import SheetError, apply_sheet, write_sheet
+        from bridgeforge.escalation.escalation_sheet import SheetError, apply_sheet, write_sheet
         try:
             if args.write:
                 if args.queue is None:
@@ -248,7 +248,7 @@ def run_cli(args: argparse.Namespace) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else text)
         return 1 if args.apply and result["errors"] else 0
     if args.command == "escalation" and args.escalation_command == "review":
-        from .escalation_review import review_sheet
+        from bridgeforge.escalation.escalation_review import review_sheet
         result = review_sheet(args.workspace)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
@@ -256,7 +256,7 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"{len(result['reviews'])} attempt(s) reviewed; flagged: {', '.join(result['flagged']) or 'none'}" + (f"\n  {result['sheet']}" if result["sheet"] else ""))
         return 0
     if args.command == "escalation":
-        from .escalation import EscalationError, list_packets, load_packet, run_packet, verify
+        from bridgeforge.escalation.escalation import EscalationError, list_packets, load_packet, run_packet, verify
         from .revive import render_packet
         try:
             if args.escalation_command == "list":
@@ -277,7 +277,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 print(json.dumps(result, indent=2) if args.json else f"{result['status']}: {args.packet}" + "".join(f"\n  {r}" for r in result["reasons"]))
                 return 0 if result["status"] == "PASS" else 1
             if args.escalation_command == "apply":
-                from .escalation import apply_verified
+                from bridgeforge.escalation.escalation import apply_verified
                 result = apply_verified(args.workspace, args.packet, attempt=args.attempt, rebuild_jar=args.rebuild_jar,
                                         patch_classes=args.patch_class, allow_removed=args.allow_removed)
                 if args.json:
@@ -287,7 +287,7 @@ def run_cli(args: argparse.Namespace) -> int:
                     for item in result["written"]:
                         print(f"  {item['path']}" + (f" (backup {item['backup']})" if item.get("backup") else ""))
                 return 0
-            from .escalation import jar_only
+            from bridgeforge.escalation.escalation import jar_only
 
             local_only = []
             if args.all:
@@ -305,9 +305,9 @@ def run_cli(args: argparse.Namespace) -> int:
                 names = [args.packet]
             if not names or names == [None]:
                 raise EscalationError("Name a packet, or pass --all.")
-            from .escalation_review import diff_snapshots, review_sheet, snapshot_dir
+            from bridgeforge.escalation.escalation_review import diff_snapshots, review_sheet, snapshot_dir
             watched = {d: snapshot_dir(d) for d in args.watch_dir}
-            from .escalation import run_lock
+            from bridgeforge.escalation.escalation import run_lock
             with run_lock(args.workspace):
                 results = [run_packet(args.workspace, name, args.agent, apply=args.apply, retries=args.retries, timeout=args.timeout, auto_accept=args.auto_accept) for name in names]
             for directory, before in watched.items():

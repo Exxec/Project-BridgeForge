@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge.live_trust import shipped_hash, write_run_record
+from bridgeforge.live.live_trust import shipped_hash, write_run_record
 from tests.support import resolved_temp_dir
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures/runtime-context"

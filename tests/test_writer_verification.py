@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from bridgeforge.fixers import FileChange, FixerError, FixPlan, apply_fix
-from bridgeforge.jar_batch import _copy_back_sources
+from bridgeforge.bytecode.jar_batch import _copy_back_sources
 from bridgeforge.archive_intake import stage_zip_archive
 from bridgeforge.safeio import WriteVerificationError, verify_removed, verify_written
 from bridgeforge.translation import _apply_java
@@ -84,7 +84,7 @@ class WriterVerificationTests(unittest.TestCase):
                 data = Path(src).read_bytes()
                 Path(dst).write_bytes(data[:-1] if Path(dst).name == "Foo.java" else data)
 
-            with mock.patch("bridgeforge.jar_batch.shutil.copy2", copy_dropping_last_byte), \
+            with mock.patch("bridgeforge.bytecode.jar_batch.shutil.copy2", copy_dropping_last_byte), \
                     self.assertRaises(WriteVerificationError):
                 _copy_back_sources({edited: source}, [edited], working, "port-interfaces")
             backup = source.with_name("Foo.java.pre-bf-port-interfaces.bak")

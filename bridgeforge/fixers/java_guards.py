@@ -1,7 +1,7 @@
 from __future__ import annotations
 import re
 from pathlib import Path
-from ..scanner import LEGACY_PERSONALITY_IDS, _blank_java_comments, _SOURCE_SET_PERSONALITY
+from bridgeforge.scan.scanner import LEGACY_PERSONALITY_IDS, _blank_java_comments, _SOURCE_SET_PERSONALITY
 from .common import FileChange, FixerError, _decode, _encode, _findings_of, _relative_path
 
 
@@ -39,7 +39,7 @@ def _fix_rules_firebest_populate_options(root: Path, options: dict) -> list[File
 def _fix_personality_id_unknown(root: Path, options: dict) -> list[FileChange]:
     """cowardly/suicidal/fearless -> timid/reckless/reckless in setPersonality(...) (loose scripts only).
 
-    RC8 dropped these 0.6-era personality ids (bridgeforge.scanner.LEGACY_PERSONALITY_IDS); an unknown
+    RC8 dropped these 0.6-era personality ids (bridgeforge.scan.scanner.LEGACY_PERSONALITY_IDS); an unknown
     id leaves the officer's personality null and Ship.getPersonality() NPEs on deploy - a Fatal dialog on
     the first affected ship (live run SK13-1d, SEEKER's missions). The mapping is the same one-to-one
     table the scanner's own finding explanation already suggests. A jar's bundled source needs the jar
@@ -79,7 +79,7 @@ def _fix_nexerelin_corvus_mode_import(root: Path, options: dict) -> list[FileCha
     .getBoolean("$nex_randomSector")) and the Nexerelin import dropped (done by hand for Hiver Swarm, 2026-10-04;
     evidence in scanner._scan_nexerelin_corvus_mode_import). Without Nexerelin the key is absent and getBoolean
     returns false, i.e. "Corvus mode", which is the vanilla sector."""
-    from ..scanner import _NEX_CORVUS_CALL, _NEX_SECTOR_MANAGER_IMPORT
+    from bridgeforge.scan.scanner import _NEX_CORVUS_CALL, _NEX_SECTOR_MANAGER_IMPORT
 
     replacement = '(!Global.getSector().getMemoryWithoutUpdate().getBoolean("$nex_randomSector"))'
     changes: list[FileChange] = []

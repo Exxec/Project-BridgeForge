@@ -20,7 +20,7 @@ import struct
 import zipfile
 from pathlib import Path
 
-from .scanner import _load_lenient_json_file, _loaded_mod_jars
+from bridgeforge.scan.scanner import _load_lenient_json_file, _loaded_mod_jars
 from .system_reachability import entry_names, jar_classes, loadable_source, reachable_classes
 
 _CREATE_SYSTEM_SOURCE = re.compile(r'createStarSystem\(\s*"([^"]+)"\s*\)')
@@ -135,7 +135,7 @@ def mod_systems_by_reach(root: Path) -> tuple[list[str], list[str]]:
 
 def _strings_json_values(root: Path) -> dict[str, str]:
     """{key: value} for the string entries of the mod's data/strings/strings.json (every category)."""
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     path = Path(root) / "data" / "strings" / "strings.json"
     spec = _load_lenient_json_file(path) if path.is_file() else None

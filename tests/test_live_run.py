@@ -5,7 +5,7 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge import live_run
+from bridgeforge.live import live_run
 from tests.support import resolved_temp_dir
 
 
@@ -202,3 +202,25 @@ class MissionListLayoutTests(unittest.TestCase):
         self.assertEqual(keys, [live_run.KEY_1] * 8 + [live_run.KEY_G])
         self.assertIn(("click", *live_run.NEX_FLEET_SELECT), actions)
         self.assertLess(actions.index(("click", *live_run.NEX_FLEET_SELECT)), len(actions) - 3)
+
+
+class FreshRigMenuTests(unittest.TestCase):
+    def test_menu_playback_without_save_descriptors_drives_full_sequence(self):
+        with resolved_temp_dir() as root:
+            log = root / 'fresh.log'; game = FakeGame(log)
+            log.write_text('9287 [Thread-8] INFO sound.H - Playing music with id [miscallenous_main_menu.ogg]\n')
+            result = live_run.drive(log, game.hands(), menu_timeout=0.01, campaign_timeout=0.01, combat_timeout=0.01)
+            self.assertEqual(result.verdict, 'LIVE_DONE', result)
+            self.assertEqual(result.stages, ['main-menu', 'campaign', 'combat-1'])
+
+    def test_preload_or_other_music_does_not_trigger_menu_clicks(self):
+        with resolved_temp_dir() as root:
+            log = root / 'not-ready.log'
+            for text in ('Creating streaming player for music with id [miscallenous_main_menu.ogg]',
+                         'Playing music with id [battle.ogg]'):
+                with self.subTest(text=text):
+                    game = FakeGame(log); log.write_text(text)
+                    result = live_run.drive(log, game.hands(), menu_timeout=0.01)
+                    self.assertEqual(result.verdict, 'LIVE_STUCK')
+                    self.assertEqual(result.stage, 'main-menu')
+                    self.assertEqual(game.actions, [])

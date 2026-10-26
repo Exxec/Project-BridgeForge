@@ -112,7 +112,7 @@ class _Lock:
 
 
 def _info(working: Path) -> dict:
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     info = _load_lenient_json_file(working / "mod_info.json") if (working / "mod_info.json").is_file() else None
     if not isinstance(info, dict):
@@ -131,7 +131,7 @@ def _write_version(working: Path, old: str, new: str) -> None:
 
 def _previous(done_dir: Path, workspace: Path) -> dict | None:
     from .archive import _previous_version
-    from .live_trust import shipped_hash
+    from bridgeforge.live.live_trust import shipped_hash
 
     root = Path(done_dir) / workspace.name / workspace.name
     if not root.is_dir():
@@ -141,7 +141,7 @@ def _previous(done_dir: Path, workspace: Path) -> dict | None:
 
 def prepare(workspace: Path, reason: str, *, done_dir: Path, refresh_candidate: bool = False, keep_version: bool = False,
             today: str | None = None) -> dict:
-    from .live_trust import live_status, shipped_hash
+    from bridgeforge.live.live_trust import live_status, shipped_hash
     from .workspace_tools import next_version
 
     workspace = Path(workspace).expanduser().resolve()
@@ -203,7 +203,7 @@ def _migration_summary(workspace: Path, previous: dict | None, working: Path) ->
 
 def _bound_run(workspace: Path, journal: dict, test_id: str) -> dict:
     """The run record line proving `test_id` was a PASS bound to this candidate and version (read from the records, not the journal)."""
-    from .live_trust import RUN_LOG, live_status
+    from bridgeforge.live.live_trust import RUN_LOG, live_status
 
     log = workspace / "reports" / RUN_LOG
     try:
@@ -234,7 +234,7 @@ def _bound_run(workspace: Path, journal: dict, test_id: str) -> dict:
 
 def finalize(workspace: Path, revision_id: str, test_id: str, *, done_dir: Path, policy_path: Path | None = None,
              changelog: Path | None = None, allow_unexplained: str | None = None) -> dict:
-    from .live_trust import archive_gate, shipped_hash
+    from bridgeforge.live.live_trust import archive_gate, shipped_hash
     from .revision_renames import migration_requirement
 
     try:
@@ -308,7 +308,7 @@ def _step_changelog(workspace: Path, journal: dict, done_dir: Path, policy_path:
 
 
 def _archived_folder_matches(done_dir: Path, workspace: Path, journal: dict) -> bool:
-    from .live_trust import shipped_hash
+    from bridgeforge.live.live_trust import shipped_hash
 
     folder = done_dir / workspace.name / workspace.name
     note = done_dir / workspace.name / "ARCHIVE_NOTE.md"

@@ -269,7 +269,7 @@ def build_checks_index(repo_root: Path = REPO_ROOT) -> str:
     lines += ["", "## revival-audit issues", "", "| Issue id | Severity | Tests | What it means |", "|---|---|---|---|"]
     for key in sorted(issues):
         lines.append(f"| `{_cell(key)}` | {_join(issues[key].severities)} | {_join(catalogue.tests.get(key, []))} | {_cell(issues[key].explanation)} |")
-    lines += ["", f"## Scanner helpers (`bridgeforge/{HELPER_MODULE}`)", "", "Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_json_file`.", "", "| Helper | Signature | Purpose |", "|---|---|---|"]
+    lines += ["", f"## Scanner helpers (`bridgeforge/scan/{HELPER_MODULE}`)", "", "Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_json_file`.", "", "| Helper | Signature | Purpose |", "|---|---|---|"]
     helper_sources = [path.read_text(encoding="utf-8") for path in sorted(set(family_sources(repo_root / "bridgeforge", "scan") + family_sources(repo_root / "bridgeforge", "scanner")))]
     for name, signature, doc in sorted(row for source in helper_sources for row in _helpers(source)):
         lines.append(f"| `{name}` | `{_cell(signature)}` | {_cell(doc) or '-'} |")

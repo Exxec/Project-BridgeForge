@@ -43,7 +43,7 @@ def _fixers():
 
 
 def _read_wpn(path: Path):
-    from ..scanner import _parse_json
+    from bridgeforge.scan.scanner import _parse_json
 
     try:
         data, _ = _parse_json(path.read_text(encoding="utf-8-sig"))
@@ -197,7 +197,7 @@ def draft_weapon_row_proposals(root: Path, out_dir: Path, options: dict | None =
     """Write `weapon-row-proposals.json` (reports only, never the mod) and return its path. Nothing is applied."""
     options = options or {}
     ctx = _Context(Path(root), options)
-    from ..scan_campaign import _declared_spec_ids
+    from bridgeforge.scan.scan_campaign import _declared_spec_ids
 
     sibling_specs = {}
     for identifier, path in _declared_spec_ids(ctx.root / "data" / "weapons", "*.wpn", "id").items():

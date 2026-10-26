@@ -1,0 +1,1 @@
+S1: add a read-only, content-bound local-new-game qualification evaluator and isolated scan/compile worker. Missing evidence stays incomplete; generic PASS receipts, unavailable Janino, unbound providers, legacy logs and post-test mutation cannot qualify. Existing commands and release/archive policies remain unchanged. Synthetic tests only; LIVE TEST NOT PERFORMED.

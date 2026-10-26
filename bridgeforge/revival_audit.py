@@ -84,7 +84,7 @@ def _stale_dependency_claims(dependency_check: str, mod_info_path: Path) -> list
     """
     if not dependency_check or not mod_info_path.is_file():
         return []
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     metadata = _load_lenient_json_file(mod_info_path)
     if not isinstance(metadata, dict):
@@ -93,7 +93,7 @@ def _stale_dependency_claims(dependency_check: str, mod_info_path: Path) -> list
     for item in metadata.get("dependencies") or []:
         if isinstance(item, dict):
             declared.update(str(item.get(key) or "").lower() for key in ("id", "name"))
-    from .scanner import LIBRARY_DEPENDENCY_IDS  # the one library table (ROADMAP P15 item 20.8)
+    from bridgeforge.scan.scanner import LIBRARY_DEPENDENCY_IDS  # the one library table (ROADMAP P15 item 20.8)
 
     stale = []
     for clause in re.split(r"[;(]", dependency_check):

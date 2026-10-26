@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from .models import TargetProfile
-from .scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 
 def build_campaign_identity_inventory(mod_directories: list[Path], target: TargetProfile) -> dict:

@@ -110,7 +110,7 @@ def _target_header(target: Path) -> list[str]:
 
 
 def _plan_findings(working: Path, vanilla_core: Path | None) -> tuple[list[str], list[tuple[str, str]]]:
-    from .scanner import scan_mod
+    from bridgeforge.scan.scanner import scan_mod
 
     result = scan_mod(working, vanilla_core=vanilla_core)
     assets, descriptions = [], []

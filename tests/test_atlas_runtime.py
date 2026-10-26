@@ -6,10 +6,10 @@ import json
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 
-from bridgeforge import atlas
-from bridgeforge.atlas_rules import forecast
-from bridgeforge.atlas_runtime import ingest
-from bridgeforge.atlas_sweep import read_pack, sweep, sweep_text
+from bridgeforge.atlas import atlas
+from bridgeforge.atlas.atlas_rules import forecast
+from bridgeforge.atlas.atlas_runtime import ingest
+from bridgeforge.atlas.atlas_sweep import read_pack, sweep, sweep_text
 from bridgeforge.cli import main
 from tests.test_atlas import INDUSTRIES_HEADER, build, make_mod, make_vanilla, temp_root, write
 
@@ -149,7 +149,7 @@ class PackAndSweepTests(unittest.TestCase):
                 self.assertEqual(main(["atlas", "forecast", "--db", str(db)]), 2)
 
     def test_top_pairs_rank_crash_class_manual_first_and_skip_fixed_history(self) -> None:
-        from bridgeforge.atlas_report import top_pairs
+        from bridgeforge.atlas.atlas_report import top_pairs
 
         def finding(rule, level, category, mods, summary="s"):
             return {"rule": rule, "level": level, "category": category, "mods": mods, "summary": summary}

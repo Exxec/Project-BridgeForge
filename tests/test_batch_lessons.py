@@ -7,7 +7,7 @@ from pathlib import Path
 
 from bridgeforge.behavior_discovery import build_archaeology
 from bridgeforge.models import TargetProfile
-from bridgeforge.scanner import _parse_json, _source_class_index, scan_mod
+from bridgeforge.scan.scanner import _parse_json, _source_class_index, scan_mod
 
 
 def _mod(root: Path, **info) -> Path:
@@ -238,7 +238,7 @@ class SourceImportUnresolvedTests(unittest.TestCase):
 
     def test_vanilla_loose_hullmod_import_is_not_another_mods_class(self) -> None:
         # Adjusted Sector imports data.hullmods.HeavyArmor, one of RC8's 116 loose vanilla scripts.
-        import bridgeforge.scanner as scanner_module
+        import bridgeforge.scan.scanner as scanner_module
 
         self.assertIn("data.hullmods.HeavyArmor", scanner_module.VANILLA_LOOSE_SCRIPT_CLASSES)
         self.assertEqual(len(scanner_module.VANILLA_LOOSE_SCRIPT_CLASSES), 116)
@@ -388,7 +388,7 @@ class SourceImportUnresolvedTests(unittest.TestCase):
         # The machinery stays for evidenced entries: an import-only check would miss a same-package use.
         from unittest import mock
 
-        import bridgeforge.scanner as scanner_module
+        import bridgeforge.scan.scanner as scanner_module
 
         with tempfile.TemporaryDirectory() as directory, mock.patch.dict(scanner_module.LEGACY_VANILLA_CLASSES, {"data.scripts.world.GoneSpawner": "test entry, removed"}):
             mod = _mod(Path(directory))
@@ -406,7 +406,7 @@ class SourceImportUnresolvedTests(unittest.TestCase):
         # Vacuum's earlier copy shipped its own data.scripts.world.BaseSpawnPoint.
         from unittest import mock
 
-        import bridgeforge.scanner as scanner_module
+        import bridgeforge.scan.scanner as scanner_module
 
         with tempfile.TemporaryDirectory() as directory, mock.patch.dict(scanner_module.LEGACY_VANILLA_CLASSES, {"data.scripts.world.GoneSpawner": "test entry, removed"}):
             mod = _mod(Path(directory))

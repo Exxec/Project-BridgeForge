@@ -6,7 +6,7 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.escalation_review import diff_snapshots, flag_diff, review_sheet, snapshot_dir
+from bridgeforge.escalation.escalation_review import diff_snapshots, flag_diff, review_sheet, snapshot_dir
 from tests.support import resolved_temp_dir
 
 
@@ -81,7 +81,7 @@ class RunLockTests(unittest.TestCase):
         import subprocess
         import sys
 
-        from bridgeforge.escalation import EscalationError, run_lock
+        from bridgeforge.escalation.escalation import EscalationError, run_lock
         with resolved_temp_dir() as root:
             live = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
             try:
@@ -105,7 +105,7 @@ class RemoveTreeTests(unittest.TestCase):
         import os
         import stat
 
-        from bridgeforge.escalation import _remove_tree
+        from bridgeforge.escalation.escalation import _remove_tree
         with resolved_temp_dir() as root:
             obj = root / "attempt-1" / "working" / ".git" / "objects" / "00" / "abc"
             obj.parent.mkdir(parents=True)

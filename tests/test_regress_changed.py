@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 from bridgeforge import regress_changed
-from bridgeforge.live_trust import shipped_hash
+from bridgeforge.live.live_trust import shipped_hash
 from bridgeforge.regress_changed import RegressChangedError, run_changed, select_workspaces
 from tests.support import link_dir, resolved_temp_dir
 from tests.test_regress import _workspace

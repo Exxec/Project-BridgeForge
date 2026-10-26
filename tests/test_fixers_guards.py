@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from bridgeforge.fixers import SUPPORTED_FINDINGS, FixerError, compute_fix
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
 
 SYSTEM_ID = "system-generation-unguarded"
@@ -280,7 +280,7 @@ class OrbitPeriodGuardTests(unittest.TestCase):
     def test_refuses_a_loose_script_a_jar_already_shadows(self) -> None:
         with resolved_temp_dir() as root:
             _mod(root, PROVEN, "Ring.java")
-            with mock.patch("bridgeforge.scanner.loose_script_jar_shadowed_class", return_value="data.scripts.Ring"):
+            with mock.patch("bridgeforge.scan.scanner.loose_script_jar_shadowed_class", return_value="data.scripts.Ring"):
                 with self.assertRaisesRegex(FixerError, "shadowed"):
                     compute_fix(root, ORBIT_ID, {})
 

@@ -19,6 +19,9 @@ ids, dependencies present), about 15-25 groups per environment; a failing group 
 - Results go into each workspace's live record and gates.json; an archive is re-archived (`revise`) only when a fix is needed.
   New and revised mods are not part of this item: they get the `standard` bundle before archiving (85.1).
 
+**S-series implementation (owner 2026-10-24: "plan S series implementation then proceed to start S1").**
+[Implementation plan](docs/S_SERIES_IMPLEMENTATION_PLAN.md) translates S1-S4 into dependency-ordered slices. **S1 is complete and owner-accepted 2026-10-25 for the bounded RC8 local-new-game workflow**; [completion evidence](docs/S1_COMPLETION_REVIEW.md) and [progress/handoff](docs/S1_PROGRESS.md) retain the limits. Human active-review time is NOT_MEASURED in the accepted baseline. S2 baseline and S3 initial work retain their separate open delivery/acceptance gates; save upgrades, publication and S4 human/support commitments are not included.
+
 **85. Automation and fewer tokens per task (owner-approved 2026-10-22).** From this session's hand work. Nothing below is
 built yet; LIVE TEST NOT PERFORMED.
 - 85.1 Live-batch command: `live-batch plan` turns LIVE_PENDING gates (`gates.json` needs, `board --live-pending` blocks) into
@@ -100,6 +103,23 @@ Review fix: root numbering resumes after the archived page count, preserving fut
 the relocation test detects an unevidenced Done claim on page 4. Companion follow-ups use the stable hardening plan
 and merge after B1 (the original citation PRs were already merged).
 No pending owner/live/research gate is closed by this archive step.
+
+B3 checkpoint 2026-10-23: research independently rechecked (78 tests); Atlas continued in an isolated
+review worktree, 2612 tests, 12 unchanged skips, coverage 83.1088957%, hermeticity PASS.
+See [Atlas evidence](docs/REFACTOR_B3_ATLAS_AUDIT.md) and [stack](docs/REFACTOR_STACK.md).
+Review/merge and remaining B3 families are pending; LIVE TEST NOT PERFORMED.
+
+B3 corpus checkpoint 2026-10-23: six modules moved with import-only AST changes, 2612 tests,
+12 unchanged skips, coverage 83.1088957%, hermeticity PASS; Salvor 208 tests (4 unchanged skips).
+See [corpus evidence](docs/REFACTOR_B3_CORPUS_AUDIT.md). Local dependent branch only; escalation
+is the next family. B3 and owner review/merge remain open; LIVE TEST NOT PERFORMED.
+
+**B3 implementation checkpoint 2026-10-23:** all planned families now live in subpackages on the local stacked branches,
+with consumer facades and preserved history. Full per-family suites, coverage, CLI, wheel and installed Salvor checks pass.
+See [completion evidence](docs/REFACTOR_B3_COMPLETION.md) and [stack](docs/REFACTOR_STACK.md).
+Owner review/merge, B4-B6 and all live gates remain open; LIVE TEST NOT PERFORMED.
+
+B4/B5 checkpoint 2026-10-23: owner chose to retain the current CLI; grouping/deprecations declined. B5 fast/slow unittest CI partitions implemented and locally validated; [evidence](docs/REFACTOR_B5_TEST_SPEED.md). Owner review/merge, hosted CI and B6 remain open.
 
 **82. Research that serves revivals: consolidate, compare, promote (owner-approved 2026-10-21).** Not a new research
 architecture. S1 stays the critical path; runtime evidence is the limiting resource. Guiding rule: every research
@@ -481,7 +501,8 @@ real-mod acceptance or runtime-record change is included.
       - 77.7 **Local agent hygiene.** Agents work in a git worktree, never in the main checkout; run `agent-diff-check` before merging; leave no untracked scripts in the checkout (the 2026-10-18 leftovers made the pre-commit hook fail for every commit there). Keep every document under 64k tokens, paged with next-page notes (owner 2026-10-18; `ROADMAP.md` and VoidSmith's work log were split that day).
     - **Long term, by proposed release:**
       - 77.8 **S1, reproducible revival case.** Build the case record on what now exists: R1 manifests (what ran), R2 registry (what was scanned), the escalation ledger and rulings (what was decided), R5 journals (what shipped). The gap is one object that ties them per mod version; `docs/ARCHITECTURE_GAPS.md` G1/G2 describe it. Measure S1 by "a second person can replay why this archive is what it is".
-      - 77.9 **S2, bounded production lane.** Item 76's measured parallelism plus item 73's metrics: track review minutes per mod, false-positive and refusal rates per check and fixer, and promotion of recurring agent fixes, not just cleared finding counts. A fixer or check that never fires on real data, or always refuses, should be retired or narrowed.
+        **Done 2026-10-25 for the owner-accepted bounded S1 scope** (owner: "Approve the controlled repair pilot"; "Accept the bounded S1 baseline"). [S1 completion review](docs/S1_COMPLETION_REVIEW.md) records artifact-only independent agent resume, requalification, correct stale-evaluator refusal, fresh local archive/exact retry, and current P3-P6 refusal controls. The exact-subject controlled comment-encoding repair has review PASS and full javac/RC8 Janino PASS (1/1), with executable code unchanged; unrelated whole-mod findings remain refused. Owner review time is "not measured", retained as NOT_MEASURED in the accepted baseline. Tests: `tests/test_case_identity.py`, `tests/test_case_workspace.py`, `tests/test_case_qualification.py`, `tests/test_case_operations.py`, `tests/test_case_cli.py`; fresh guarded suite 2,717 tests, OK (12 unchanged skips), hermeticity PASS. No production code or safety baseline changed in closeout; prior whole-case failures, save upgrades/publication and S2-S4 gates remain separate.
+      - 77.9 **S2, bounded production lane.** Item 76's measured parallelism plus item 73's metrics: track review minutes per mod, false-positive and refusal rates per check and fixer, and promotion of recurring agent fixes, not just cleared finding counts. A fixer or check that never fires on real data, or always refuses, should be retired or narrowed. **2026-10-25 continuation:** opt-in pure-parsing reuse measured on the approved eight training cases, three rounds/96 equal complete responses; approximately 8.9% first-scan/28.0% repeated-scan reduction, with measured memory tradeoff and unchanged defaults. Owner 2026-10-25: "Accept the opt-in tradeoff", for this local parsing slice only. Guarded 2,723 tests/12 skips PASS, 83.1469862% coverage; isolated wheel checks PASS. See `docs/S2_ANALYSIS_REUSE.md`. Subsequent private serial/two-worker portfolio trial: three equal/preserved rounds, 43.2% median elapsed reduction, narrow cancel/crash/context/altered-response/existing-lock controls PASS; `docs/S2_PORTFOLIO_TRIAL.md`. Production portfolio/resource/recovery integration, governed recipe promotion and overall S2 acceptance remain open; defaults unchanged.
       - 77.10 **S3, behaviour and upgrade qualification.** Make R6 scenarios and soak runs routine for every revision that touches campaign state; grow `docs/RC8_BEHAVIOUR.md` only from observed runs; give the probe a startup marker that echoes the manifest id (R1 slice 2, not built) so log identity stops depending on paths and timestamps.
       - 77.11 **S4, supportable kit.** Prove a restore on a second machine with R8 before any cutover (item 64); move the rig harness behind a documented, scripted setup so the live gates are not tied to one workstation; keep the agent contract (`AGENTS.md`) and `CLAUDE.md` current with each release.
       - 77.12 **One evidence model across the four projects.** BridgeForge's run records, RC8 behaviour rows and translation method are already consumed by Project Go, Salvor and VoidSmith. Version those contracts (run record, translation schema, save-module API), give each a shared fixture that both sides test against, and change them only in both repositories at once. That is what keeps the sister tools from drifting apart as each grows.
@@ -489,3 +510,7 @@ real-mod acceptance or runtime-record change is included.
 <!-- page-nav:start -->
 > End of the last page.
 <!-- page-nav:end -->
+
+Item 83 B6 documentation checkpoint 2026-10-23: current package map, module placement, shim retirement and CLAUDE paths documented in [ARCHITECTURE.md](ARCHITECTURE.md); [B6 evidence](docs/REFACTOR_B6_CLOSEOUT.md) records validation/publication and remaining gates. B0/B1/B2/research are merged (#64/#65/#72/#73). The rest of the stack and applicable cross-repository work remain open; item 83 is not Done.
+
+Item 83 publication checkpoint 2026-10-23: remaining B3 families, B4 audit and B5 are pushed with green hosted push CI; B6 documentation passes the full local suite (2,619 tests, 12 skips). [Stack ledger](docs/REFACTOR_STACK.md) records exact tips/runs. Draft PR creation requires owner approval; review/merge and item 83 completion remain pending.

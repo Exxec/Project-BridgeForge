@@ -6,7 +6,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge import graceful_exit, launch, live_run
+from bridgeforge import graceful_exit
+from bridgeforge import launch
+from bridgeforge.live import live_run
 from bridgeforge.exit_observation import KILLED, NATURAL, read_exit_observation
 from tests.bound_runs import make_rig, stage
 from tests.support import resolved_temp_dir
@@ -121,7 +123,7 @@ class RunningGameTests(unittest.TestCase):
 
             outcome: dict = {}
             with mock.patch("bridgeforge.boot_test._running_java_under", return_value=[]), \
-                    mock.patch("bridgeforge.rig_prefs.pinned_launcher_prefs", mock.MagicMock()), \
+                    mock.patch("bridgeforge.rig.rig_prefs.pinned_launcher_prefs", mock.MagicMock()), \
                     mock.patch.object(launch.subprocess, "Popen", lambda *a, **k: Proc()), \
                     mock.patch.object(live_run, "real_hands", lambda rig_, pid: mock.MagicMock()), \
                     mock.patch("bridgeforge.launcher_click.descendant_pids", return_value=set()), \

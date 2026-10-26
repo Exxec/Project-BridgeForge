@@ -1,7 +1,7 @@
 from __future__ import annotations
 import re
 from pathlib import Path
-from ..scanner import _blank_java_comments
+from bridgeforge.scan.scanner import _blank_java_comments
 from .common import FileChange, FixerError, _decode, _encode, _findings_of
 from .interfaces import _insert_before_class_end
 
@@ -27,7 +27,7 @@ def _fix_spawned_ship_captain(root: Path, options: dict) -> list[FileChange]:
     overload with a captain (done by hand for Traverser's turrets, 2026-10-04). The 3-argument form has no
     travel-drive burn, so 0f keeps it. A 4-argument call keeps its own burn. Only the flagged lines change;
     wings are never flagged. Jar sources need patch-jar-class and are refused."""
-    from ..scanner import _call_argument_count
+    from bridgeforge.scan.scanner import _call_argument_count
 
     lines_by_file: dict[str, set[int]] = {}
     for finding in _findings_of(root, options, "spawned-ship-captain-personality-risk"):
@@ -144,7 +144,7 @@ def _fix_hulk_death_effect_repeats(root: Path, options: dict) -> list[FileChange
     """Run a hull mod's wreck effect once per ship: `if (s.isHulk())` becomes `if (s.isHulk() && bfFirstDeath(s, "<Class>_deathDone"))`
     and a static helper keeps the flag in the ship's custom data (the guard SEEKER's Organic Hull had; RC8-27). Loose sources only;
     a class compiled into a jar needs a decompile and patch-jar-class, so those are refused."""
-    from ..scanner import _HULK_IF, _hulk_block_spawns
+    from bridgeforge.scan.scanner import _HULK_IF, _hulk_block_spawns
 
     files = sorted({f.file for f in _findings_of(root, options, "hulk-death-effect-repeats") if f.file and "!" not in f.file and f.file.endswith(".java")})
     if not files:

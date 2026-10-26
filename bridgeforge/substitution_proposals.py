@@ -36,7 +36,7 @@ def _sha256(path: Path) -> str | None:
 
 
 def _declared_provider_dirs(working: Path, provider_roots: list[Path], index_path: Path | None) -> list[tuple[str, Path]]:
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
     from .substitutes import merged_providers
 
     info = _load_lenient_json_file(working / "mod_info.json")
@@ -48,7 +48,7 @@ def _declared_provider_dirs(working: Path, provider_roots: list[Path], index_pat
 
 def _unresolved(working: Path, vanilla_core: Path) -> dict[str, dict[str, list[str]]]:
     from .models import TargetProfile
-    from .scanner import scan_mod
+    from bridgeforge.scan.scanner import scan_mod
 
     context = scan_mod(working, TargetProfile(), vanilla_core).migration_context
     return context.get("unresolved_content_references") or {}

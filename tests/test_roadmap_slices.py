@@ -6,7 +6,7 @@ from pathlib import Path
 
 from bridgeforge.archive_intake import stage_zip_archive
 from bridgeforge.cli import main
-from bridgeforge.corpus_audit import audit_directories
+from bridgeforge.corpus.corpus_audit import audit_directories
 from bridgeforge.library_api import inventory_library_api, validate_library_api_inventory
 from bridgeforge.models import TargetProfile
 

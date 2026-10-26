@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 
 from bridgeforge.saved_object_scan import entity_fields, saved_object_findings
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
 
 AUGMENT = """package data.scripts;

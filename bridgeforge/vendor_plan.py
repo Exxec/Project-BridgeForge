@@ -19,7 +19,7 @@ import json
 import re
 from pathlib import Path
 
-from .scanner import _load_lenient_json_file, _parse_class_file, _read_csv_rows_lenient, iter_class_files_in_jars
+from bridgeforge.scan.scanner import _load_lenient_json_file, _parse_class_file, _read_csv_rows_lenient, iter_class_files_in_jars
 
 SCHEMA_VERSION = 1
 KINDS = ("hullmod", "weapon", "wing", "hull", "variant", "shipsystem")

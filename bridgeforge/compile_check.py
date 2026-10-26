@@ -17,7 +17,7 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-from .java_toolchain import assemble_classpath, find_jdk, run_javac
+from bridgeforge.bytecode.java_toolchain import assemble_classpath, find_jdk, run_javac
 
 SCHEMA_VERSION = 1
 
@@ -72,7 +72,7 @@ def dependency_shadowed_scripts(root: Path, sources: list[Path], dependency_jars
     Titan scripts base Interstellar Imperium's II.jar shadows. Uses the same class-file walk and
     class-name rule as `verify-shadow`; the mod's own jars are `loose-script-shadowed-by-jar`'s job.
     """
-    from .scanner import _parse_class_file, iter_class_files_in_jars
+    from bridgeforge.scan.scanner import _parse_class_file, iter_class_files_in_jars
     from .verify_shadow import script_class_name
 
     owners: dict[str, tuple[str, str]] = {}
@@ -239,7 +239,7 @@ def compile_loose_scripts(root: Path, vanilla_core: Path | None = None, jdk: Pat
         # Janino only for scripts javac accepted and the game actually compiles (not shadowed by a jar);
         # the rest already carry a javac error or never load.
         javac_failed = {str(error["file"]) for error in run.errors}
-        from .scanner import mod_jar_class_names as _jar_names
+        from bridgeforge.scan.scanner import mod_jar_class_names as _jar_names
 
         _shadow = _jar_names(root)
         janino_sources = [source for source in sources if str(source) not in javac_failed
@@ -256,7 +256,7 @@ def compile_loose_scripts(root: Path, vanilla_core: Path | None = None, jdk: Pat
     # isModEnabled guard gates the only call), so it never compiles clean without declaring Nexerelin
     # hard-required -- but the shipped jar's own, unrelated TLPlugin.class is what the game actually
     # loads, so this was reporting a compile-check FAIL for a script that can't block the game.
-    from .scanner import mod_jar_class_names
+    from bridgeforge.scan.scanner import mod_jar_class_names
 
     mod_source_paths = {str(source) for source in sources}
     # mod_jar_class_names re-reads every jar; call it once for the whole mod, not once per source

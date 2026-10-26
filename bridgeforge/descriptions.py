@@ -22,7 +22,7 @@ import shutil
 from pathlib import Path
 
 from .copy_drift import _collect
-from .scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 SHEET_FILE = "DESCRIPTIONS_NEEDED.csv"
 CREDITS_FILE = "BRIDGEFORGE_CREDITS.txt"
@@ -71,7 +71,7 @@ def _index(path: Path) -> dict[str, dict]:
 def build_sheet(queue: Path, vanilla_core: Path | None) -> dict:
     from .models import ScanResult, TargetProfile
     from .report_status import report_status
-    from .scanner import _scan_description_missing
+    from bridgeforge.scan.scanner import _scan_description_missing
 
     queue = Path(queue).expanduser().resolve()
     rows = []

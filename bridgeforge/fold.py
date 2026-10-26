@@ -32,7 +32,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 from .substitutes import SUCCESSORS_PATH, load_successors
 from .workspace import sha256_file
 

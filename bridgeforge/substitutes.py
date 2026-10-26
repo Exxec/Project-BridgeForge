@@ -24,7 +24,7 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .scanner import _base_game_version, _load_lenient_json_file
+from bridgeforge.scan.scanner import _base_game_version, _load_lenient_json_file
 from .revival_audit import _completion_statuses
 
 SCHEMA_VERSION = 1
@@ -454,7 +454,7 @@ def _licence_notes(chosen: list[dict]) -> list[str]:
 def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla_core: Path | None = None, ops: Path | None = None,
                            policy_path: Path | None = None, index_path: Path | None = None) -> dict:
     from .models import TargetProfile
-    from .scanner import scan_mod
+    from bridgeforge.scan.scanner import scan_mod
 
     mod_dir = Path(mod_dir).expanduser().resolve()
     result = scan_mod(mod_dir, TargetProfile(), vanilla_core)

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import TargetProfile
-from .java_ast import AstUnavailable, analyze_sources, utf16_offset_to_index
+from bridgeforge.bytecode.java_ast import AstUnavailable, analyze_sources, utf16_offset_to_index
 from .workspace import checkpoint, resolve_inside, sha256_file, workspace_paths
 
 

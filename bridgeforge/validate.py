@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from .models import TargetProfile
-from .scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from .workspace import sha256_file, workspace_paths
 
 

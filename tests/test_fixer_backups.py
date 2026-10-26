@@ -12,7 +12,7 @@ from bridgeforge.archive_intake import inspect_zip_archive
 from bridgeforge.fixer_backups import backup_target, orphaned_backups, orphaned_backups_in
 from bridgeforge.fixers import FileChange, FixerError, FixPlan, apply_fix, compute_fix
 from bridgeforge.release import record_policy_decision
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
 
 REPO_POLICY = Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json"

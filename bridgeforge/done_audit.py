@@ -44,7 +44,7 @@ def _casefold_hash(root: Path) -> str:
     a stale archive (2026-10-04)."""
     import hashlib
 
-    from .live_trust import _sha256, shipped_files
+    from bridgeforge.live.live_trust import _sha256, shipped_files
 
     digest = hashlib.sha256()
     for relative, path in sorted(shipped_files(root).items(), key=lambda kv: kv[0].casefold()):
@@ -60,7 +60,7 @@ def packaging_problems(folder: Path, root: Path) -> list[str]:
     import hashlib
     import zipfile
 
-    from .live_trust import _mod_info, _sha256, shipped_files
+    from bridgeforge.live.live_trust import _mod_info, _sha256, shipped_files
 
     from .archive import _version_text
 
@@ -86,7 +86,7 @@ def packaging_problems(folder: Path, root: Path) -> list[str]:
         if twice:
             problems.append(f"{len(twice)} entr{'y' if len(twice) == 1 else 'ies'} twice (case-insensitive): {', '.join(twice[:3])}")
         info = archive.read(prefix + "mod_info.json").decode("utf-8-sig", "replace") if prefix + "mod_info.json" in names else ""
-        from .scanner import _parse_json
+        from bridgeforge.scan.scanner import _parse_json
 
         try:
             zipped_version = _version_text((_parse_json(info)[0] or {}).get("version")) if info else ""
@@ -115,7 +115,7 @@ def audit_one(folder: Path, queue: Path, vanilla_core: Path | None, provider_roo
 
 def _audit_one(folder: Path, queue: Path, vanilla_core: Path | None, provider_roots: list[Path]) -> dict:
     from .baseline import finding_dict_baseline_key, mod_baseline_keys
-    from .scanner import scan_mod
+    from bridgeforge.scan.scanner import scan_mod
 
     root = archived_root(folder)
     if root is None:
@@ -151,7 +151,7 @@ def status_behind_live_record(folder: Path, working: Path) -> str | None:
     `archive <workspace> --refresh --readme-copy`."""
     import re
 
-    from .live_trust import live_status
+    from bridgeforge.live.live_trust import live_status
 
     note = Path(folder) / "ARCHIVE_NOTE.md"
     try:

@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.procgen_args import javap_suspects, source_suspects
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 
 PORTED = """class ZorgGen { void generate() {
     PlanetAPI star = system.initStar("zorg_balls_star_000", "star_zorg", 200f, -10000);

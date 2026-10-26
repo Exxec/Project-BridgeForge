@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 SCHEMA_VERSION = 1
 # Library id -> package paths its users reference (slash form, as in class files).

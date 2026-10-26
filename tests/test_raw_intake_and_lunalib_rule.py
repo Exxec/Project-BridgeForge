@@ -7,7 +7,7 @@ from pathlib import Path
 
 from bridgeforge.archive_intake import inspect_zip_archive
 from bridgeforge.intake import unprocessed_raw_folders, zip_raw_folder
-from bridgeforge.probe_group import ProbeGroupError, lunalib_rule
+from bridgeforge.probe.probe_group import ProbeGroupError, lunalib_rule
 from tests.support import resolved_temp_dir
 
 

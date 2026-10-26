@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.scanner import _parse_json, scan_mod
+from bridgeforge.scan.scanner import _parse_json, scan_mod
 
 
 def _write(path: Path, text: str) -> None:

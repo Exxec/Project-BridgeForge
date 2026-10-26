@@ -7,7 +7,7 @@ import shutil
 import unittest
 from pathlib import Path
 
-from bridgeforge.java_toolchain import (
+from bridgeforge.bytecode.java_toolchain import (
     assemble_classpath,
     declared_dependencies,
     find_jdk,

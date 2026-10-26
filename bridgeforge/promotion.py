@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .escalation_review import review_attempt
+from bridgeforge.escalation.escalation_review import review_attempt
 from .finding_stats import VERIFIED_OUTCOMES, read_ledger
 from .safeio import atomic_write_text
 

@@ -1,0 +1,1 @@
+Fix automated live-run readiness on fresh rigs without saved campaigns: accept the shared actual main-menu playback marker while retaining legacy save-descriptor recognition. Preload-only and unrelated music remain insufficient. Derived from a real isolated S1 pilot; profile qualification and natural-exit gates remain separate.

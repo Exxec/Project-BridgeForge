@@ -29,7 +29,7 @@ from pathlib import Path
 from .boot_test import _is_link
 from .manifest_echo import echo_state, write_run_file
 from .safeio import atomic_write_json
-from .save_fingerprint import parse_fingerprint
+from bridgeforge.save.save_fingerprint import parse_fingerprint
 
 MANIFEST_VERSION = 1
 FILESET_ALGORITHM = "copy_drift.collect+sha256/1"
@@ -38,17 +38,19 @@ COMPLETED_SUFFIX = ".completed.json"
 OWNER_FILE = "run_owner.json"
 RIG_STATE_FILE = "rig_up_state.json"
 CONFIG_RELATIVE = Path("saves") / "common" / "bf_probe_config.data"
-MILESTONES = ("main_menu", "campaign_load", "save", "content_ids", "combat", "reload_after_save")
+MILESTONES = ("main_menu", "campaign_load", "save", "content_ids", "combat", "reload_after_save", "campaign_checks")
 # What a kind of run can show at all: a smoke boot passes its boot scenario but never a campaign, combat or save requirement.
 KIND_CAPABILITY = {
     "boot": {"main_menu"},
-    "campaign": {"main_menu", "campaign_load", "save", "content_ids"},
+    "campaign": {"main_menu", "campaign_load", "save", "content_ids", "campaign_checks"},
     "live": set(MILESTONES),
 }
 _RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 _CONTENT_IDS = re.compile(r"BF-PROBE\|[^|]*\|content-ids\|[^|]*\|all-content\|")
 _COMBAT = re.compile(r"BF-PROBE\|[^|]*\|combat-round\|")
-_JAVA_EXE = re.compile(r'"([^"\r\n]*java\w*\.exe)"|(?<!\S)([^\s"\']*java\w*\.exe)(?=\s|$)', re.IGNORECASE)
+# A quoted command is java*.exe, or (a POSIX launcher) a path whose last part is exactly java/javaw; the Ubuntu CI fixtures
+# bind <jdk>/bin/java, which the .exe-only pattern never matched, so every bound case refused there (2026-10-26).
+_JAVA_EXE = re.compile(r'"([^"\r\n]*java\w*\.exe|[^"\r\n]*[\\/]javaw?)"|(?<!\S)([^\s"\']*java\w*\.exe)(?=\s|$)', re.IGNORECASE)
 _JAVA_VERSION = re.compile(r'\bJAVA_VERSION\s*=\s*"([^"]+)"')
 _JAVA_VERSION_OUTPUT = re.compile(r'\bversion\s+"([^"]+)"', re.IGNORECASE)
 EPOCH_SLACK_SECONDS = 2.0
@@ -67,7 +69,7 @@ def _sha256_file(path: Path) -> str:
 
 
 def _tree_hash(folder: Path) -> str:
-    from .live_trust import shipped_hash
+    from bridgeforge.live.live_trust import shipped_hash
 
     try:
         return shipped_hash(folder)
@@ -144,7 +146,7 @@ def _enabled_ids(rig: Path) -> list[str]:
 
 
 def _rig_folders(rig: Path) -> dict[str, list[Path]]:
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     found: dict[str, list[Path]] = {}
     mods = Path(rig) / "mods"
@@ -157,7 +159,7 @@ def _rig_folders(rig: Path) -> dict[str, list[Path]]:
 
 
 def _staged_entries(rig: Path, enabled: list[str]) -> list[dict]:
-    from .scanner import _load_lenient_json_file
+    from bridgeforge.scan.scanner import _load_lenient_json_file
 
     folders = _rig_folders(rig)
     entries = []
@@ -355,6 +357,18 @@ def release_run(rig: Path, run_id: str, launcher: Path | None = None) -> dict:
 
 # ---- the evaluator ----------------------------------------------------------------------------------------------
 
+def campaign_checks_observed(text: str) -> bool:
+    """Observe ordered probe START/END, not save loading or merely startup references."""
+    events = re.finditer(r"BF-PROBE\|[^|\r\n]+\|probe\|INFO\|campaign\|(START|END)(?=\s|$)", text, re.MULTILINE)
+    started = False
+    for event in events:
+        if event.group(1) == 'START':
+            started = True
+        elif started:
+            return True
+    return False
+
+
 def _milestones(log: Path, mods_dir: Path | None) -> dict[str, bool]:
     from .log_triage import triage_log
 
@@ -364,7 +378,8 @@ def _milestones(log: Path, mods_dir: Path | None) -> dict[str, bool]:
     fingerprint = parse_fingerprint(text)
     return {"main_menu": bool(marks["main_menu_reached"]), "campaign_load": bool(marks["campaign_loads"]),
             "save": bool(marks["finished_saving_count"]), "content_ids": bool(_CONTENT_IDS.search(text)),
-            "combat": bool(_COMBAT.search(text)), "reload_after_save": bool(fingerprint and fingerprint["compare_observed"])}
+            "combat": bool(_COMBAT.search(text)), "reload_after_save": bool(fingerprint and fingerprint["compare_observed"]),
+            "campaign_checks": campaign_checks_observed(text)}
 
 
 def evaluate_run(rig: Path, manifest: dict | None, log: Path, *, member_verdicts: dict[str, str] | None = None,

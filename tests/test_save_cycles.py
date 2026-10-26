@@ -5,8 +5,8 @@ import hashlib
 import unittest
 from pathlib import Path
 
-from bridgeforge.save_cycles import SaveCycleError, break_cycle, find_cycles
-from bridgeforge.save_doctor import diagnose
+from bridgeforge.save.save_cycles import SaveCycleError, break_cycle, find_cycles
+from bridgeforge.save.save_doctor import diagnose
 from tests.support import resolved_temp_dir
 
 INNER = '<memory cl="Memory" ref="2"></memory>'
@@ -99,7 +99,7 @@ class BreakCycleTests(unittest.TestCase):
             self.assertFalse((root / "repaired").exists())
 
     def test_a_line_that_is_not_the_expected_text_aborts_the_repair(self) -> None:
-        import bridgeforge.save_cycles as module
+        import bridgeforge.save.save_cycles as module
 
         with resolved_temp_dir() as root:
             save = _save(root, CYCLE)
@@ -130,7 +130,7 @@ class BaseRateTests(unittest.TestCase):
     """ROADMAP 70 H3.4: a diagnosis says how common the surrounding shape is, so a culprit is never named from one cycle alone."""
 
     def test_the_scan_counts_condition_markets_and_those_sharing_a_memory(self) -> None:
-        from bridgeforge.save_cycles import scan_cycles
+        from bridgeforge.save.save_cycles import scan_cycles
 
         with resolved_temp_dir() as root:
             cycles, rate = scan_cycles(_save(root, CYCLE))
@@ -138,7 +138,7 @@ class BaseRateTests(unittest.TestCase):
         self.assertEqual(rate, {"pcmarkets": 2, "pcmarkets_sharing_a_memory": 1})  # the outer market (own memory) and the inner copy (a reference)
 
     def test_a_save_doctor_cycle_problem_carries_the_base_rate(self) -> None:
-        from bridgeforge.save_doctor import diagnose
+        from bridgeforge.save.save_doctor import diagnose
 
         with resolved_temp_dir() as root:
             result = diagnose(_save(root, CYCLE), root / "no-mods", cycles=True)

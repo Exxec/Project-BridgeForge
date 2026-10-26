@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.jar_audit import REFLECTION_SYMBOL_PREFIXES, _resolve_jar_classes, parse_constant_pool, referenced_class_names
-from bridgeforge.probe_mod_build import ProbeModBuildError, build_probe_mod, install_release
+from bridgeforge.bytecode.jar_audit import REFLECTION_SYMBOL_PREFIXES, _resolve_jar_classes, parse_constant_pool, referenced_class_names
+from bridgeforge.probe.probe_mod_build import ProbeModBuildError, build_probe_mod, install_release
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 JDK_DIR = REPO_ROOT / "In operation" / "_rig" / "jdk-25.0.4.1+1"

@@ -54,7 +54,7 @@ def _fix_carrier_bays_proposal(root: Path, options: dict) -> list[FileChange]:
     if options.get("hull_zero_no_evidence"):
         # Hulls with a hangar value but no LAUNCH_BAY slot and no variant wings: 0 is what the data supports (see
         # scanner.carrier_bays_without_evidence). Explicit --hull values win.
-        from ..scanner import carrier_bays_without_evidence
+        from bridgeforge.scan.scanner import carrier_bays_without_evidence
 
         vanilla_core = Path(options["vanilla_core"]).expanduser().resolve() if options.get("vanilla_core") else None
         for hull_id in carrier_bays_without_evidence(root, vanilla_core):

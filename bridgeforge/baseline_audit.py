@@ -19,7 +19,7 @@ from pathlib import Path
 
 from .baseline import mod_baseline_path
 from .safeio import atomic_write_text
-from .scanner import _load_lenient_json_file
+from bridgeforge.scan.scanner import _load_lenient_json_file
 
 STATUSES = ("OK", "STALE_VERSION", "UNSTAMPED", "NO_BASELINE")
 

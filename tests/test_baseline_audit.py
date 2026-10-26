@@ -79,7 +79,7 @@ class ArchiveGateBaselineTests(unittest.TestCase):
     def _gate(self, ws: Path) -> dict:
         from unittest import mock
 
-        from bridgeforge import live_trust
+        from bridgeforge.live import live_trust
 
         with mock.patch.object(live_trust, "audit_shipped", return_value={"status": "PASS", "unexplained": []}), \
                 mock.patch.object(live_trust, "live_status", return_value={"status": "CURRENT"}):

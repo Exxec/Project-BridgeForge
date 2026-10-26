@@ -6,12 +6,12 @@ import json
 import sys
 from pathlib import Path
 
-from .bytecode import BytecodeUnavailable, inspect_bytecode
-from .bytecode_diff import diff_bytecode
-from .bytecode_rules import apply_bytecode_class, apply_bytecode_jar, plan_bytecode
+from bridgeforge.bytecode.bytecode import BytecodeUnavailable, inspect_bytecode
+from bridgeforge.bytecode.bytecode_diff import diff_bytecode
+from bridgeforge.bytecode.bytecode_rules import apply_bytecode_class, apply_bytecode_jar, plan_bytecode
 from .copy_drift import compare_copies, sync_copies
 from .decompiler import create_decompiler_review, run_decompiler_review
-from .jar_audit import audit_jar
+from bridgeforge.bytecode.jar_audit import audit_jar
 
 
 def add_parser(subcommands) -> None:
@@ -107,7 +107,7 @@ def run_cli(args: argparse.Namespace) -> int:
         print(json.dumps(result, indent=2) if args.json else f"{result['sources']} source file(s) in {result['output']} (exit {result['exit_code']}). Next: {result['next']}")
         return 0 if result["exit_code"] == 0 else 1
     if args.command == "port-interfaces":
-        from .jar_batch import port_interfaces, port_interfaces_queue
+        from bridgeforge.bytecode.jar_batch import port_interfaces, port_interfaces_queue
         path = args.path.expanduser().resolve()
         if (path / "working" / "mod_info.json").is_file():
             rows = [port_interfaces(path, args.vanilla_core, apply=args.apply)]
@@ -123,7 +123,7 @@ def run_cli(args: argparse.Namespace) -> int:
                   + "".join(f"\n  not ported: {u['class']} ({u['why']})" for u in row["unported"][:6]))
         return 0
     if args.command == "patch-jar-sources":
-        from .jar_batch import patch_jar_sources
+        from bridgeforge.bytecode.jar_batch import patch_jar_sources
         result = patch_jar_sources(args.workspace, args.vanilla_core, apply=args.apply)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
@@ -257,7 +257,7 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"Status: {result['status']}")
         return 0 if result["status"] == "PASS" else 1
     if args.command == "jar-packets":
-        from .jar_patch import JarPatchError, prepare_jar_packets
+        from bridgeforge.bytecode.jar_patch import JarPatchError, prepare_jar_packets
         try:
             result = prepare_jar_packets(args.mod, vanilla_core=args.vanilla_core, jdk=args.jdk)
         except (JarPatchError, OSError) as exc:
@@ -287,7 +287,7 @@ def run_cli(args: argparse.Namespace) -> int:
         print(f"Ported: {args.out}\nNext: bridgeforge patch-jar-class MOD {args.out} --jar JAR {removed} --install")
         return 0
     if args.command == "patch-jar-class":
-        from .jar_patch import JarPatchError, patch_jar_classes
+        from bridgeforge.bytecode.jar_patch import JarPatchError, patch_jar_classes
         try:
             result = patch_jar_classes(args.mod, args.jar, args.sources, vanilla_core=args.vanilla_core, jdk=args.jdk,
                                        source_root=args.source_root, allow_removed=args.allow_removed, install=args.install)

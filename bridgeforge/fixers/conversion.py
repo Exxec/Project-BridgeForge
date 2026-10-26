@@ -3,7 +3,7 @@ import io
 import json
 import re
 from pathlib import Path
-from ..scanner import _load_lenient_json_file, _parse_json
+from bridgeforge.scan.scanner import _load_lenient_json_file, _parse_json
 from .common import FileChange, FixerError, _decode, _encode, _relative_path
 
 
@@ -33,7 +33,7 @@ def _fix_dependency_version_major_mismatch(root: Path, options: dict) -> list[Fi
     """Set each mismatched dependency's declared version to the provider's (RC8-23: a major mismatch disables the mod
     silently; zzz Bingus Sustem, GRP2C-20261005). Needs `options["provider_roots"]`. Only a string version is edited;
     a {"major":..} object is left for the owner."""
-    from ..scanner import dependency_version_major_conflicts
+    from bridgeforge.scan.scanner import dependency_version_major_conflicts
 
     conflicts = dependency_version_major_conflicts(root, options.get("provider_roots"))
     if not conflicts:

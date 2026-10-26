@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.probe_config import build_probe_config
+from bridgeforge.probe.probe_config import build_probe_config
 
 
 def _mod(root: Path) -> Path:

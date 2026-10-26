@@ -1,0 +1,1 @@
+- Start S1 with a read-only, validated view over manifest and convention/intake workspaces and synthetic boundary tests; record the S1-S4 implementation plan while preserving existing CLI and qualification policies.

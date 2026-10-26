@@ -3,8 +3,8 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.probe_config import ProbeConfigError, write_probe_config
-from bridgeforge.probe_scenario import (
+from bridgeforge.probe.probe_config import ProbeConfigError, write_probe_config
+from bridgeforge.probe.probe_scenario import (
     FAIL, NOT_OBSERVED, PASS, ScenarioError, apply_to_verdicts, evaluate_expectations, load_scenario, probe_config_keys,
     stage_settings, validate_scenario,
 )
@@ -228,7 +228,7 @@ class EvaluationTests(unittest.TestCase):
 
 class RecordWiringTests(unittest.TestCase):
     def test_member_scenarios_are_judged_from_the_workspace_file(self):
-        from bridgeforge.probe_group import evaluate_member_scenarios
+        from bridgeforge.probe.probe_group import evaluate_member_scenarios
 
         with resolved_temp_dir() as tmp:
             workspace = tmp / "ws"

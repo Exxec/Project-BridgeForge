@@ -44,7 +44,7 @@ def _vanilla_scripts(core: Path) -> set[str]:
 
 def mod_hooks(mod: Path, vanilla_industries: dict[str, str], vanilla_scripts: set[str]) -> dict:
     """The hooks one mod folder claims (see the module docstring)."""
-    from .scanner import _load_lenient_json_file, _loaded_mod_jars
+    from bridgeforge.scan.scanner import _load_lenient_json_file, _loaded_mod_jars
 
     info = _load_lenient_json_file(mod / "mod_info.json") if (mod / "mod_info.json").is_file() else None
     info = info if isinstance(info, dict) else {}

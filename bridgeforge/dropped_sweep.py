@@ -18,8 +18,8 @@ from .progress import Checkpoint, report
 from .file_drops import split_dropped_files
 from .removals import CATEGORIES, RemovalsError, load_removals, split_explained
 from .safeio import atomic_write_json, atomic_write_text
-from .scan_json import _load_lenient_json_file
-from .scan_port import dropped_features, load_port_source, resolve_old_tree
+from bridgeforge.scan.scan_json import _load_lenient_json_file
+from bridgeforge.scan.scan_port import dropped_features, load_port_source, resolve_old_tree
 
 VERDICTS = ("DROPS_UNEXPLAINED", "UNDETERMINED", "EXPLAINED", "CLEAN")
 SEARCH_DEPTH = 4

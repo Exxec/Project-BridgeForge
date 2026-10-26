@@ -10,10 +10,10 @@ from .baseline import load_baseline_keys, split_by_baseline
 from .build_tag import DEFAULT_LABEL, BuildTagError, build_tag
 from .copy_drift import _find_mod_root, compare_copies
 from .fixers import SUPPORTED_FINDINGS
-from .jar_audit import audit_jar
+from bridgeforge.bytecode.jar_audit import audit_jar
 from .log_triage import triage_log
 from .models import Finding, TargetProfile
-from .scanner import (
+from bridgeforge.scan.scanner import (
     CAMPAIGN_SYSTEM_CREATION_PATTERN,
     FACTION_SPECIAL_ROLE_KEYS,
     _load_lenient_json_file,
@@ -528,7 +528,7 @@ def _runtime_footprint_artifact(root: Path, save: Path | None, vanilla_core: Pat
         return {"not_supplied": True}
     result: dict[str, object] = {"not_supplied": False}
     try:
-        from .save_compat import check_save_compat
+        from bridgeforge.save.save_compat import check_save_compat
 
         compat = check_save_compat(save, root, vanilla_core=vanilla_core)
         result["classes"] = {
@@ -541,9 +541,9 @@ def _runtime_footprint_artifact(root: Path, save: Path | None, vanilla_core: Pat
         result["classes"] = {"available": False, "reason": str(exc)}
 
     try:
-        from . import save_inspect as _save_inspect  # lazy: another agent may still be building this
+        from bridgeforge.save import save_inspect as _save_inspect  # lazy: another agent may still be building this
     except ImportError:
-        result["objects"] = {"available": False, "reason": "bridgeforge.save_inspect is not available yet"}
+        result["objects"] = {"available": False, "reason": "bridgeforge.save.save_inspect is not available yet"}
     else:
         entry_fn = getattr(_save_inspect, "inspect_save", None) or getattr(_save_inspect, "inspect", None)
         if entry_fn is None:

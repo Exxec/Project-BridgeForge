@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.cli import main
-from bridgeforge.probe_config import ProbeConfigError, build_probe_config, write_probe_config
+from bridgeforge.probe.probe_config import ProbeConfigError, build_probe_config, write_probe_config
 from tests.support import link_dir, resolved_temp_dir
 
 
@@ -182,7 +182,7 @@ class ProbeSweepConfigTests(unittest.TestCase):
         # ROADMAP 46 (probe 0.2.12): what the missions name, and the loaded jar's top-level classes.
         import zipfile
 
-        from bridgeforge.probe_config import build_probe_config
+        from bridgeforge.probe.probe_config import build_probe_config
 
         with tempfile.TemporaryDirectory() as directory:
             mod = Path(directory) / "mod"

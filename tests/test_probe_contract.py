@@ -11,8 +11,8 @@ import json
 import unittest
 from pathlib import Path
 
-from bridgeforge.probe_config import _SETUP_PATTERNS, build_probe_config
-from bridgeforge.probe_group import install_group, merge_configs, plan_groups
+from bridgeforge.probe.probe_config import _SETUP_PATTERNS, build_probe_config
+from bridgeforge.probe.probe_group import install_group, merge_configs, plan_groups
 from tests.support import link_dir, resolved_temp_dir
 from tests.test_probe_group import _rig, _workspace
 

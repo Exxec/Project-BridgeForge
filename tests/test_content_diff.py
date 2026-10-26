@@ -9,7 +9,7 @@ from pathlib import Path
 from bridgeforge.cli import main
 from bridgeforge.content_diff import ContentDiffError, annotate_removed_content, diff_content
 from bridgeforge.models import TargetProfile
-from bridgeforge.scanner import scan_mod
+from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
 
 
