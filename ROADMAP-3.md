@@ -31,6 +31,49 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
   about 60 s once unpaused). The single press 2 s after deploying could leave the mission paused (EXO-RC4B-LIVE-20261026 stopped
   logging after deployment; the owner had been unpausing combat by hand). Five later unattended runs finished combat on their own.
   Test: `tests/test_live_run.py` (`test_combat_left_paused_by_the_first_space_is_unpaused_by_a_retry`).
+- 88.13-88.18 below come from the Exotica #76 Refit-screen sessions (EXO-MANUAL-20261027B-H) and the three upstream PRs
+  (RkShaRkz/ExoticaTechnologies #77-#79); owner-approved 2026-10-27 ("yes add to roadmap"). Suggested order: 88.14, 88.16,
+  88.15, 88.17, 88.13; 88.18 is deferred.
+- 88.13 Kotlin compile check for a mod's source checkout (`kotlin-compile-check`), from the hand script that compile-checked
+  the PRs. Current LazyLib/LunaLib/MagicLib jars carry Kotlin 2.1 metadata, which kotlinc 1.6.21 cannot read, so use kotlinc
+  2.1.x. LunaLib's inline functions need `-jvm-target 17`, and `-language-version 1.9` (the K1 frontend) matches code written in
+  the IDE. Unit tests whose mocks implement an older API are left out. Errors are compared with the unpatched checkout, so
+  library drift (4 baseline javac errors from LazyLib 3.0 hiding `DrawableString.setColor`) is told apart from breakage.
+- 88.14 The script sandbox refuses `java.lang.reflect` in mod code ("File access and reflection are not allowed to scripts",
+  EXO-MANUAL-20261027F; a fix that used it never ran). Add the RC8_BEHAVIOUR row, and have `delegate-method` and
+  `patch-jar-class` refuse a helper class whose constant pool names `java/lang/reflect/*` or `java/io/File`; the safe form is
+  MethodHandles with the reflect objects typed as Object (how Exotica's RefitButtonAdder does it).
+- 88.15 `save-slots SAVE [SAVE2]`: per fleet member and per module slot, the mod tags (a prefix such as `$$EXOTICA$$`) and
+  hull mods from a campaign.xml, and the difference between two saves. The saves were the decisive evidence in every #76 run;
+  each was read with a hand script (`save_slots.py`).
+- 88.16 An `-Interactive` session copies its evidence when the game closes: the save folder(s) written during the session
+  (campaign.xml and .bak), the stdout log and the triage, into the workspace's `reports/.../evidence/<TESTID>/`. Done by hand
+  after each of seven runs.
+- 88.17 Manual-run protocol: a checklist names the build (jar sha), starts from New Game per build, and records the starting
+  state. Runs D-G "reproduced" an AlphaSubcore bug only because they started from a save that already carried it; the
+  maintainer's build from New Game was clean (run H).
+- 88.18 Deferred: a Refit-screen driver that records the owner's clicks once (fixed resolution and ship) and replays them per
+  build with screenshot checks, so before/after runs need no person. Module positions and LunaLib panels make it fragile.
+- 88.19-88.23 below come from the Ironclads v.11+bf.2 runs of 2026-10-30 (RC8-41, RC8-42). Proposed, not started.
+- 88.19 `live --save-reload` calls a reload LIVE_DONE at the compare line, before the load ends: ICBF2-J28FR's Fatal came 243 ms
+  later, was reported as LIVE_DONE, and `log-triage` said FATAL=0. Stay up after the compare line and fail on a dialog.
+- 88.20 Fast Rendering launchers set `-XX:+ShowMessageBoxOnError`. The box outlives the killed java (owner becomes csrss) and blocks
+  every click of later runs; the watcher does not list it (two false LIVE_STUCK at new-game, CTL30-J28FR). Detect and record its
+  text, press No, and refuse to start while one is open. The scratch driver did this with EnumWindows and BM_CLICK.
+- 88.21 A total conversion that replaces `mission_list.csv` can never bind a combat run: `install` adds the probe's row, so the staged
+  hash differs from the candidate (ICBF2C-J25 REFUSED). bf.2 needed a second run on exact bytes with no combat expected. Let the
+  manifest name that one probe-row change, or add combat evidence that carries the staged difference openly.
+- 88.22 `drive_reload` clicked Continue and started a New Game on Java 28 direct (ICBF2C-J28): the log shows a new sector and a new
+  save, and the run ended as no compare line. FR096-IC7-J25FR hit the reverse: the New Game flow opened the load screen and loaded an
+  old save, reported as stuck at new-game. Confirm the save-load log line after the click. Also: REMOVALS.json needs its `files`
+  category (77.19), since bf.2 needed `--allow-unexplained` for four files known to be fine, and that path writes "recorded by the
+  owner" into ARCHIVE_NOTE.md even when an agent wrote the reason on the owner's instruction.
+- 88.23 `fleet-presence` WARN "0 fleets" is mostly false: route fleets spawn only near the player (RC8-41 evidence). Count routes per
+  faction from the save or the API instead. `faction-known-lists` should be read with hull bays: 0 known fighters matters on a carrier.
+  Window screenshots (`*-window1.png`) can catch the desktop when the game is not in front; keep them out of shared evidence.
+- 88.24 Proposed, not started (2026-10-31, RC8-42): `java-matrix` writes `--enable-preview` on every JDK (`java_matrix.py` `DIRECT_FLAGS`) and copies it from
+  stock `fr.vmparams`. On jdk-28+13 it corrupts save loads, so every rig Java 28 launcher crashes on load. Drop it for JDK 28 and record the drop as for
+  `-XX:+UseVectorStubs`. Stock `fr.vmparams` line 41 carries the same flag: worth telling FR's author.
 
 **87. Kotlin jars and module identity, from the Exotica 2.1.1-RC3 diagnosis (owner 2026-10-26: "fix mod and create a RC4
 version of Exotica", "apply lessons learned and handwork to bridgeforge").** Exotica's RC3 test build lost exotics on
