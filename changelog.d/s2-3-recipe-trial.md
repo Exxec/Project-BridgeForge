@@ -1,0 +1,1 @@
+- `recipe-trial` (S2.3, `docs/S2_RECIPE_GOVERNANCE.md`): tries each fixer on private copies of a named training/holdout cohort, checks idempotence, new findings and compile where Java changed, and reports a promotion gate. It writes no input, policy or ruling, and approves nothing.

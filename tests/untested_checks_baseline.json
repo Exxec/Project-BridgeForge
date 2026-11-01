@@ -2,7 +2,6 @@
   "schema_version": 1,
   "untested": [
     "ashlib-version-marker-unreadable",
-    "declared-dependencies",
     "graphicslib-version-marker-unreadable",
     "invalid-csv",
     "invalid-mod-info",

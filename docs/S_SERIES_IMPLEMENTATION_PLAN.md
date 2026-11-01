@@ -63,7 +63,7 @@ S1 may implement offline contracts before pilot selection. Before mutating integ
 | S1.6 | COMPLETE for owner-accepted bounded scope, 2026-10-25 | S1_COMPLETION_REVIEW.md; both-layout live/archive evidence, approved controlled repair/full compile, P3-P6 refusals, independent agent resume and accepted limited timing baseline |
 | S2.1 | READ-ONLY BASELINE STARTED, owner-approved 2026-10-25 | S2_COHORT_PROPOSAL.md and S2_PROGRESS.md; three serial baseline passes verified, defaults unchanged, threshold deferred; S1 bounded acceptance is recorded separately |
 | S2.2 | INITIAL OPT-IN PARSING REUSE, measured tradeoff accepted | S2_ANALYSIS_REUSE.md; owner "Accept the opt-in tradeoff", three rounds/96 equal responses, explicit payload/entry limits, defaults unchanged; broader acceptance remains open |
-| S2.3 | OPEN | Governed recipe/ruling evidence and promotion gates remain |
+| S2.3 | INITIAL TRIAL AND GATE, 2026-11-01 | S2_RECIPE_GOVERNANCE.md; `recipe-trial` on the approved cohort: three equal runs, 2 ready for owner review, 1 blocked, 24 needing more evidence; approves nothing, no policy or default change |
 | S2.4 | INITIAL PRODUCTION READ-ONLY LANE IMPLEMENTED AND VALIDATED | S2_PRODUCTION_PORTFOLIO.md; 2,741 tests/12 skips, three equal real-cohort runs, actual coordinator death/recovery, exact reuse, unchanged defaults; broader S2 acceptance remains open |
 | S3.1 | INITIAL READ-ONLY IMPLEMENTATION, owner-directed 2026-10-25 | S3_PROGRESS.md and S3_COMPARISON_GUIDE.md; exact case-bound obligations and comparison, unknown feature preservation |
 | S3.2 | INITIAL OBSERVATION ADAPTER | S3_PROGRESS.md and S3_OPERATOR_GUIDE.md; approved cohort eligibility, bound catalogs/named runs and preserved real callback-control pair; broader family support remains open |
@@ -96,7 +96,7 @@ What remains, by gate:
 
 | Slice | Remaining | Waits on |
 |---|---|---|
-| S2.3 | Governed recipe/ruling evidence and promotion gates | Implementation (not started) |
+| S2.3 | Reserved holdout with providers, affected-case invalidation, sampled review (`S2_RECIPE_GOVERNANCE.md`) | Implementation; owner rulings on two gate findings |
 | S2 overall | Portfolio resource/default acceptance; measured owner review minutes before any review-time claim | Owner acceptance after measurement |
 | S3.2 / S3.4 | Broader scenario families; full maintained qualification | Implementation and live rig runs |
 | S3.3 | Copied-save upgrade pilot (`S3_COPIED_SAVE_PILOT_PLAN.md`) | Owner: explicit copied-save scope |

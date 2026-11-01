@@ -23,6 +23,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "revise": ("revise",),
     "cmd_case": ("case",),
     "cmd_portfolio": ("portfolio-scan",),
+    "cmd_recipes": ("recipe-trial",),
     "cmd_case_exchange": ("case-exchange",),
     "cmd_behavior_comparison": ("case-behavior-compare",),
     "cmd_local_kit": ("local-kit",),
