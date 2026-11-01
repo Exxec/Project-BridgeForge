@@ -2,6 +2,11 @@
 
 Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; each mod's evidence is in its revival report.
 
+## 2026-10-30
+
+- **Ironclads** v.11+bf.2: Marauder and Black Widow carriers given fighter wings in their faction lists; stray copy of the economy jar removed from the shipped mod
+- **Ironclads** v.11+bf.2: revived for RC8 and archived (live validated)
+
 ## 2026-10-26
 
 - **New Galactic Order** 1.07a: revived for RC8 and archived (live validated)
