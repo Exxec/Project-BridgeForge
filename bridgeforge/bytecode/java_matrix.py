@@ -48,6 +48,8 @@ COMMON_JDK_ROOTS = (
     Path(r"C:\Program Files\Amazon Corretto"),
 )
 
+ENABLE_PREVIEW = "--enable-preview"
+PREVIEW_UNSAFE_FROM_MAJOR = 28
 DIRECT_FLAGS = (
     "-noverify -XX:+UnlockDiagnosticVMOptions -XX:-BytecodeVerificationLocal -XX:-BytecodeVerificationRemote",
     "-Djava.library.path=native\\windows",
@@ -215,12 +217,21 @@ def unsupported_flags(java_exe: Path, flags: list[str]) -> list[str]:
     return dropped
 
 
+def flags_to_drop(java_exe: Path, major: int, flags: list[str]) -> list[str]:
+    """What a launcher of this JDK must leave out: flags it refuses, and on JDK 28+ `--enable-preview`, which it accepts but
+    which corrupts every save load (RC8-42: Boolean fields go flat and XStream's 4-byte write overruns the next field)."""
+    dropped = unsupported_flags(java_exe, flags)
+    if major >= PREVIEW_UNSAFE_FROM_MAJOR and ENABLE_PREVIEW in flags and ENABLE_PREVIEW not in dropped:
+        dropped.append(ENABLE_PREVIEW)
+    return dropped
+
+
 def write_launcher_files(target: Path, variant: dict, core: Path) -> list[str]:
     """Write the variant's bat (and, for Fast Rendering, a filtered copy of the install's fr.vmparams) into
     `target`; returns and records the flags this JDK does not know. The install's own files are only read."""
     java_exe = Path(variant["jdk_home"]) / "bin" / "java.exe"
     if variant["launcher"] == "direct":
-        dropped = unsupported_flags(java_exe, [t for line in DIRECT_FLAGS for t in line.split() if "{" not in t])
+        dropped = flags_to_drop(java_exe, variant["major"], [t for line in DIRECT_FLAGS for t in line.split() if "{" not in t])
     elif variant["launcher"] in ("miko", "miko-noprep"):
         dropped = _write_miko_args(Path(target), variant, Path(core), java_exe)
     else:
@@ -228,7 +239,7 @@ def write_launcher_files(target: Path, variant: dict, core: Path) -> list[str]:
         if not source.is_file():
             raise ValueError(f"{source} not found; the Fast Rendering launcher needs fr.vmparams in the install's starsector-core")
         lines = source.read_text(encoding="utf-8", errors="replace").splitlines()
-        dropped = unsupported_flags(java_exe, [line.strip() for line in lines])
+        dropped = flags_to_drop(java_exe, variant["major"], [line.strip() for line in lines])
         kept = [line for line in lines if line.strip() not in dropped]
         if variant.get("prepatcher"):
             kept = _insert_before_main_class([line for line in kept if PREPATCHER_MARKER not in line], PREPATCHER_AGENT_FLAG)  # last agent, after any FR agents
@@ -257,7 +268,7 @@ def _write_miko_args(target: Path, variant: dict, core: Path, java_exe: Path) ->
     if not source.is_file():
         raise ValueError(f"{source} not found; the miko launcher mirrors the owner's {MIKO_ARGS}")
     lines = source.read_text(encoding="utf-8", errors="replace").splitlines()
-    dropped = unsupported_flags(java_exe, [line.strip() for line in lines])
+    dropped = flags_to_drop(java_exe, variant["major"], [line.strip() for line in lines])
     heap = variant.get("heap_gb", DEFAULT_HEAP_GB)
     out = []
     # Same path style as the owner's own saves line (their file doubles its backslashes): saves -> logs.

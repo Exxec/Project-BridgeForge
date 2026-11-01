@@ -69,6 +69,19 @@ class AutoOpenTests(unittest.TestCase):
         _revived(clean)
         return queue
 
+    def test_a_standing_approval_does_not_explain_an_open_manual_finding(self):
+        with resolved_temp_dir() as root:
+            queue = Path(root) / "queue"
+            queue.mkdir()
+            _revived(_workspace(queue, "Standing", classification="MANUAL"))
+            named = _workspace(queue, "Named", classification="MANUAL")
+            revive = named / "reports" / "revive"
+            revive.mkdir(parents=True)
+            (revive / "REVIVE.json").write_text(json.dumps({"approved": [AUTO_ID], "named_approvals": [AUTO_ID]}), encoding="utf-8")
+            (queue / "AUTOMATION_POLICY.json").write_text(json.dumps({"approved_fixers": {AUTO_ID: {}}}), encoding="utf-8")
+            result = auto_open(queue)
+        self.assertEqual(_reasons(result), {"Standing": "NOT_APPROVED", "Named": "UNEXPLAINED"})
+
     def test_one_reason_per_case(self):
         with resolved_temp_dir() as root:
             result = auto_open(self._queue(root))

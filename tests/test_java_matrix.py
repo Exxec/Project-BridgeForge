@@ -236,5 +236,37 @@ class DescribeLogTests(unittest.TestCase):
             self.assertEqual(json.loads(out.getvalue()), {"java_version": "28-beta (64-bit)", "fast_rendering": True, "launcher_hint": "fr"})
 
 
+class EnablePreviewOnJava28(unittest.TestCase):
+    """RC8-42: jdk-28+13 accepts --enable-preview, and every save load then crashes."""
+
+    def _dropped(self, major: int) -> list[str]:
+        with mock.patch.object(java_matrix, "_java_rejects", lambda exe, flags: False):
+            return java_matrix.flags_to_drop(Path(f"j{major}/bin/java.exe"), major, ["--enable-preview", "-Xss4m"])
+
+    def test_dropped_from_java_28_and_later_only(self):
+        self.assertEqual(self._dropped(28), ["--enable-preview"])
+        self.assertEqual(self._dropped(29), ["--enable-preview"])
+        self.assertEqual(self._dropped(27), [])
+        self.assertEqual(self._dropped(25), [])
+
+    def test_a_java_28_direct_launcher_leaves_it_out_and_records_it(self):
+        with resolved_temp_dir() as tmp, mock.patch.object(java_matrix, "_java_rejects", lambda exe, flags: False):
+            variant = {"jdk_home": "C:/jdk28", "launcher": "direct", "major": 28, "bat": "run.bat", "id": "j28-direct"}
+            java_matrix.write_launcher_files(Path(tmp), variant, Path(tmp))
+            self.assertNotIn("--enable-preview", (Path(tmp) / "run.bat").read_text(encoding="utf-8"))
+            self.assertEqual(variant["dropped_flags"], ["--enable-preview"])
+            variant = {"jdk_home": "C:/jdk25", "launcher": "direct", "major": 25, "bat": "run25.bat", "id": "j25-direct"}
+            java_matrix.write_launcher_files(Path(tmp), variant, Path(tmp))
+            self.assertIn("--enable-preview", (Path(tmp) / "run25.bat").read_text(encoding="utf-8"))
+
+    def test_a_java_28_fast_rendering_launcher_filters_the_stock_file(self):
+        with resolved_temp_dir() as tmp, mock.patch.object(java_matrix, "_java_rejects", lambda exe, flags: False):
+            (Path(tmp) / "fr.vmparams").write_text("--enable-preview\n-Xss4m\n", encoding="utf-8")
+            variant = {"jdk_home": "C:/jdk28", "launcher": "fr", "major": 28, "bat": "run.bat", "id": "j28-fr"}
+            java_matrix.write_launcher_files(Path(tmp), variant, Path(tmp))
+            self.assertEqual((Path(tmp) / "fr.filtered-j28-fr.vmparams").read_text(encoding="utf-8"), "-Xss4m\n")
+            self.assertIn("--enable-preview", (Path(tmp) / "fr.vmparams").read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()

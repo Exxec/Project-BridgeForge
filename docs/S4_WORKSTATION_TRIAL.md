@@ -14,15 +14,15 @@ Private mod/game/save inputs are transferred separately; the kit grants no publi
 The source-backed runtime provides its required probe/harness paths relative to the kit, with
 an explicit selected interpreter and no inherited owner PYTHONPATH requirement.
 
-**Current transfer artifact:** `bridgeforge-state/BridgeForge-local-trial-interim-96182984.zip`,
-SHA256 `577193ff8a021a332a25d4fa16fc15be15dafbdd131209eed7a386576c172cb0`,
-engine `b0265df88ec8075498bb4cc5b62c77fb6445e8004ff1852a0e80d04ee844faf3`.
-The full elevated guarded suite passed 2,761 tests with 12 unchanged skips and hermeticity PASS
-before this kit was built. Its isolated verifier and launcher passed from a foreign working
-directory. The prior `6a8516cf` kit is historical; use the current artifact and
-[trial return template](S4_TRIAL_RETURN_TEMPLATE.md) for the fresh workstation.
-The separate full coverage job also passed 2,761 tests/12 unchanged skips, hermeticity PASS,
-and 83.0760710% branch coverage against the unchanged 80% floor.
+**Current transfer artifact, 2026-11-01:** `bridgeforge-state/BridgeForge-local-trial-e78189c6.zip`,
+SHA256 `adaa81eda06383e0a062057466faf77381dd24582d93b3c05b68ed167bd5156a`,
+engine `65d3460fcccd8f8f0a2dbafe52fb5515ade9586765136330de581fe759135249`. A copy, the exported E1 case manifest
+and a start sheet are in the owner's local `Documents/BridgeForge-S4-Trial` folder for transfer. Owner 2026-11-01: "Save it
+and i will copy/SSH and run it on Workstation"; no trial has run. Its verifier passed from a foreign working directory on
+this machine, where that check also found the guide's launcher command refused by the Windows default script policy; the
+guide now passes a process-only `-ExecutionPolicy Bypass`. The earlier `96182984` kit is historical; use the current
+artifact and [trial return template](S4_TRIAL_RETURN_TEMPLATE.md). The full suite before the build: 2,783 tests with 1 error
+(a syntax error in one new test file, fixed, with that module then passing), 8 skips, hermeticity PASS.
 
 `local-kit build --repo CHECKOUT --wheel EXACT_WHEEL --output CHECKOUT/bridgeforge-state/NEW_NAME`
 validates the wheel against loaded source, bounds archive reads, refuses traversal/foreign

@@ -1,5 +1,11 @@
 # S2 read-only measurement progress
 
+**Owner acceptance, 2026-11-01:** asked to decide whether the portfolio resource use and defaults are acceptable, and what improvement
+is worth having (measured: 16.5% median reduction, sampled peaks 253.719/441.570 MiB), the owner replied "Accept". This accepts the
+measured read-only lane with its defaults as they are: one worker, an explicit memory budget, opt-in two workers and parsing reuse. No
+default expands. Review time stays NOT_MEASURED, so no review-time claim follows. S2 objectives 4 (review work) and 5 (sampled review),
+and S2.3, stay open.
+
 **Owned qualification-worker follow-up, 2026-10-25:** the shared S1 read-only scan/compile evidence
 worker now uses the existing S2 gated `AnalysisProcess` ownership path. A plain Windows venv
 launcher timeout could previously leave its Python/Java descendants running. Windows job closure

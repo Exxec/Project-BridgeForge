@@ -1,6 +1,6 @@
 # S3 copied-save healthy-control pilot plan
 
-Status 2026-10-25: approval for this exact synthetic pilot was requested in the active thread and is pending. No save load, copy-back, migration or live trial is recorded here. This plan is not authority to start the run.
+Status 2026-11-01: owner approved this exact synthetic pilot ("copied save pilot is approved"). It covers only the self-owned `bf_s3_generation_control` seed below, in a new isolated rig. It does not cover a real mod, a primary save or a copy-back. No save load, migration or live trial has run yet: the observer described at the end of this plan must be built and reviewed first.
 
 ## Exact immutable seed
 

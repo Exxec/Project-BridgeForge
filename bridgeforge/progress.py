@@ -103,6 +103,7 @@ def report(done: int, total: int, name: str, detail: str, seconds: float | None)
 # and resume from a checkpoint; tests/test_progress.py holds every entry to that. Add new ones here.
 LONG_RUNNING_COMMANDS = (
     ("portfolio-scan",),
+    ("recipe-trial",),
     ("local-kit", "build"),
     ("finding-stats",),
     ("dependency-graph",),
