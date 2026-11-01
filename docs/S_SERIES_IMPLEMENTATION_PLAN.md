@@ -67,7 +67,7 @@ S1 may implement offline contracts before pilot selection. Before mutating integ
 | S2.4 | INITIAL PRODUCTION READ-ONLY LANE IMPLEMENTED AND VALIDATED | S2_PRODUCTION_PORTFOLIO.md; 2,741 tests/12 skips, three equal real-cohort runs, actual coordinator death/recovery, exact reuse, unchanged defaults; broader S2 acceptance remains open |
 | S3.1 | INITIAL READ-ONLY IMPLEMENTATION, owner-directed 2026-10-25 | S3_PROGRESS.md and S3_COMPARISON_GUIDE.md; exact case-bound obligations and comparison, unknown feature preservation |
 | S3.2 | INITIAL OBSERVATION ADAPTER | S3_PROGRESS.md and S3_OPERATOR_GUIDE.md; approved cohort eligibility, bound catalogs/named runs and preserved real callback-control pair; broader family support remains open |
-| S3.3 | OPEN, requires explicit copied-save scope | No old-save upgrade or migration has been authorized or observed |
+| S3.3 | APPROVED 2026-11-01, not started | S3_COPIED_SAVE_PILOT_PLAN.md: owner approved the exact synthetic pilot only; observer not built, no old-save upgrade or migration observed |
 | S3.4 | INITIAL RULE-REVALIDATION EVIDENCE | S3_GENERATION_CONTROL_EVIDENCE.md; changed rule refuses reuse of actual passing observation; full maintained qualification remains open |
 | S4.1 | INITIAL DECLARED LOCAL PROFILE | S4_WORKSTATION_TRIAL.md; Windows x64/Python 3.15 and RC8 local-new-game, broader support not accepted |
 | S4.2 | INITIAL PRIVATE EXCHANGE/VERIFIED CODE KIT | S4_WORKSTATION_TRIAL.md; cold synthetic restore/rebind and actual local kit smoke, fresh-workstation restore still open |
@@ -99,7 +99,7 @@ What remains, by gate:
 | S2.3 | Reserved holdout with providers, affected-case invalidation, sampled review (`S2_RECIPE_GOVERNANCE.md`) | Implementation; owner review of one `data-file-not-utf8` case |
 | S2 overall | Portfolio resources/defaults accepted 2026-11-01 (S2_PROGRESS.md); measured owner review minutes before any review-time claim; sampled independent review | Owner |
 | S3.2 / S3.4 | Broader scenario families; full maintained qualification | Implementation and live rig runs |
-| S3.3 | Copied-save upgrade pilot (`S3_COPIED_SAVE_PILOT_PLAN.md`) | Owner: explicit copied-save scope |
+| S3.3 | Copied-save upgrade pilot (`S3_COPIED_SAVE_PILOT_PLAN.md`), approved 2026-11-01 | Implementation: separate-slot observer and review, then the rig run |
 | S4.3 | Fresh-workstation human trial with the local kit (`S4_WORKSTATION_TRIAL.md`) | Owner's second workstation |
 | S4.4 | Support, retention and publication commitment | Owner decision after S4.3 and S1-S3 outcomes |
 
