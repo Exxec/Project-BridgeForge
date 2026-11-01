@@ -16,7 +16,8 @@ declared RC8 core and an explicitly selected JDK. Other environments remain unqu
    automatically when the kit is opened.
 3. Run `VENV_PYTHON VerifyKit.py` and save its JSON output outside the code kit. Resolve a
    missing/wrong interpreter or dependency explicitly. Use the included launcher for subsequent
-   commands: `powershell -NoProfile -File BridgeForge.ps1 -Python VENV_PYTHON --help`.
+   commands: `powershell -NoProfile -ExecutionPolicy Bypass -File BridgeForge.ps1 -Python VENV_PYTHON --help`
+   (the bypass applies to that one process; Windows blocks scripts by default).
    The launcher selects the included runtime and restores the prior PYTHONPATH on exit.
 4. Transfer one approved private case's original/working/reports/checkpoints and required
    external context inputs from a verified snapshot or byte-exact local copy. Keep source copies
