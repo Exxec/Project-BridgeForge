@@ -71,9 +71,9 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
 - 88.23 `fleet-presence` WARN "0 fleets" is mostly false: route fleets spawn only near the player (RC8-41 evidence). Count routes per
   faction from the save or the API instead. `faction-known-lists` should be read with hull bays: 0 known fighters matters on a carrier.
   Window screenshots (`*-window1.png`) can catch the desktop when the game is not in front; keep them out of shared evidence.
-- 88.24 Proposed, not started (2026-10-31, RC8-42): `java-matrix` writes `--enable-preview` on every JDK (`java_matrix.py` `DIRECT_FLAGS`) and copies it from
-  stock `fr.vmparams`. On jdk-28+13 it corrupts save loads, so every rig Java 28 launcher crashes on load. Drop it for JDK 28 and record the drop as for
-  `-XX:+UseVectorStubs`. Stock `fr.vmparams` line 41 carries the same flag: worth telling FR's author.
+- 88.24 **Done 2026-11-01.** `java_matrix.flags_to_drop` leaves `--enable-preview` out of every generated JDK 28+ launcher (direct, FR, Mikohime) and
+  records it in `dropped_flags`; on jdk-28+13 it corrupts save loads (RC8-42). Stock `fr.vmparams` is only read, and its line 41 still carries the flag.
+  Tests: `tests/test_java_matrix.py` `EnablePreviewOnJava28`. Live: `J28DX-j28-base-1` and `J28DX-j28-fr-stock` -20261101b on regenerated launchers.
 
 **87. Kotlin jars and module identity, from the Exotica 2.1.1-RC3 diagnosis (owner 2026-10-26: "fix mod and create a RC4
 version of Exotica", "apply lessons learned and handwork to bridgeforge").** Exotica's RC3 test build lost exotics on

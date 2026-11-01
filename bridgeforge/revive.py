@@ -185,8 +185,10 @@ def _fix_options(finding_id: str, working: Path, target: str, vanilla_core: Path
     return [base]
 
 
-def _try_fixers(working: Path, findings: list[dict], *, target: str, vanilla_core: Path | None, approved: set[str], apply: bool) -> tuple[list[dict], list[dict]]:
-    """Compute every supported fixer; apply the permitted ones. Returns (applied, not applied)."""
+def _try_fixers(working: Path, findings: list[dict], *, target: str, vanilla_core: Path | None, approved: set[str], apply: bool,
+                named: frozenset[str] | set[str] = frozenset()) -> tuple[list[dict], list[dict]]:
+    """Compute every supported fixer; apply the permitted ones. Returns (applied, not applied). `named`: fixers a person named
+    for this run. A standing approval never covers a MANUAL or UNKNOWN finding (owner 2026-11-01); naming the fixer does."""
     applied, pending = [], []
     by_id: dict[str, list[dict]] = {}
     for finding in findings:
@@ -197,7 +199,8 @@ def _try_fixers(working: Path, findings: list[dict], *, target: str, vanilla_cor
         group = by_id[finding_id]
         classifications = sorted({f["classification"] for f in group})
         unattended = classifications == ["SAFE"]
-        permitted = unattended or finding_id in approved
+        person_gated = bool({"MANUAL", "UNKNOWN"} & set(classifications)) and finding_id not in named
+        permitted = unattended or (finding_id in approved and not person_gated)
         for options in _fix_options(finding_id, working, target, vanilla_core, group):
             try:
                 plan = compute_fix(working, finding_id, options)
@@ -599,7 +602,7 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
     first = [dict(f) for f in findings]
     pending: list[dict] = []
     for number in range(1, max_rounds + 1):
-        applied, pending = _try_fixers(working, findings, target=target, vanilla_core=vanilla_core, approved=approved, apply=apply)
+        applied, pending = _try_fixers(working, findings, target=target, vanilla_core=vanilla_core, approved=approved, apply=apply, named=set(approve or []))
         rounds.append({"round": number, "applied": applied, "findings": len(findings)})
         applied_all += applied
         if not applied:
@@ -655,7 +658,7 @@ def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path 
         status = "ESCALATED"
     result = {
         "schema_version": SCHEMA_VERSION, "mode": "REVIVE", "workspace": str(workspace), "apply": apply, "target": target,
-        "compile_checked": vanilla_core is not None, "policy": str(policy_path), "approved": sorted(approved),
+        "compile_checked": vanilla_core is not None, "policy": str(policy_path), "approved": sorted(approved), "named_approvals": sorted(approve or []),
         "status": status, "hardest_tier": hardest, "rounds": rounds, "applied": applied_all,
         "findings_before": len(first), "findings_after": len(findings),
         "packets": [{"id": p["id"], "kind": p["kind"], "tier": p["tier"], "finding": p["finding"], "merged": p.get("merged"), "file": p["file"]} for p in packets],

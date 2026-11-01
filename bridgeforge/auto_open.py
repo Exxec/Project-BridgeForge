@@ -10,7 +10,8 @@ gives exactly one reason, first match wins:
 - `FIXER_REFUSED`: the fixer ran and refused. Read from the newest ledger entry for the id carrying that state, else from the
   workspace's escalation packets (`fixer.state`), which is where `revive` records a refusal today; the reason is quoted.
 - `NOT_APPROVED`: not every finding of the id is SAFE and the id has no standing approval (`AUTOMATION_POLICY.json`) and was not
-  given to `revive --approve`. Also when a packet carries the fixer's diff as AWAITING_APPROVAL.
+  given to `revive --approve`, or a standing approval is all it has while a finding is MANUAL/UNKNOWN (owner 2026-11-01). Also
+  when a packet carries the fixer's diff as AWAITING_APPROVAL.
 - `UNEXPLAINED`: none of the above; a bug in the automation to fix.
 
 Read-only. Findings the mod's own baseline accepts, and informational SAFE notes no fixer handles, are not counted.
@@ -94,10 +95,13 @@ def explain_workspace(workspace: Path, standing: set[str]) -> list[dict]:
     ledger = read_ledger(workspace)
     revive = _read_json(workspace / "reports" / "revive" / "REVIVE.json")
     approved = standing | set(revive.get("approved") or [])
+    named = set(revive.get("named_approvals") or [])
     packets = _packet_fixers(workspace)
     rows = []
     for finding_id, group in sorted(by_id.items()):
-        all_safe = {f.get("classification") for f in group} == {"SAFE"}
+        classes = {f.get("classification") for f in group}
+        all_safe = classes == {"SAFE"}
+        person_gated = bool({"MANUAL", "UNKNOWN"} & classes) and finding_id not in named
         refusal = _newest_refusal(ledger, finding_id)
         fixer = packets.get(finding_id) or {}
         underlying = None
@@ -105,7 +109,7 @@ def explain_workspace(workspace: Path, standing: set[str]) -> list[dict]:
             underlying = ("NEVER_REVIVED", "no reports/revive/REVIVE.json and no escalation ledger")
         elif refusal or fixer.get("state") == "FIXER_REFUSED":
             underlying = ("FIXER_REFUSED", str((refusal or {}).get("reason") or fixer.get("reason") or "no reason recorded"))
-        elif fixer.get("state") == "AWAITING_APPROVAL" or (not all_safe and finding_id not in approved):
+        elif fixer.get("state") == "AWAITING_APPROVAL" or (not all_safe and (finding_id not in approved or person_gated)):
             underlying = ("NOT_APPROVED", "classifications " + ", ".join(sorted({str(f.get("classification")) for f in group})))
         if scan["state"] == "CURRENT":
             reason, detail = underlying or ("UNEXPLAINED", "tier auto, no refusal, approval not needed or given, scan is current")

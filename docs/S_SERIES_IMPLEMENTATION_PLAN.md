@@ -96,8 +96,8 @@ What remains, by gate:
 
 | Slice | Remaining | Waits on |
 |---|---|---|
-| S2.3 | Reserved holdout with providers, affected-case invalidation, sampled review (`S2_RECIPE_GOVERNANCE.md`) | Implementation; owner rulings on two gate findings |
-| S2 overall | Portfolio resource/default acceptance; measured owner review minutes before any review-time claim | Owner acceptance after measurement |
+| S2.3 | Reserved holdout with providers, affected-case invalidation, sampled review (`S2_RECIPE_GOVERNANCE.md`) | Implementation; owner review of one `data-file-not-utf8` case |
+| S2 overall | Portfolio resources/defaults accepted 2026-11-01 (S2_PROGRESS.md); measured owner review minutes before any review-time claim; sampled independent review | Owner |
 | S3.2 / S3.4 | Broader scenario families; full maintained qualification | Implementation and live rig runs |
 | S3.3 | Copied-save upgrade pilot (`S3_COPIED_SAVE_PILOT_PLAN.md`) | Owner: explicit copied-save scope |
 | S4.3 | Fresh-workstation human trial with the local kit (`S4_WORKSTATION_TRIAL.md`) | Owner's second workstation |

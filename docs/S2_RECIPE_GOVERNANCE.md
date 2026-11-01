@@ -45,14 +45,16 @@ digest `756c2404...` and the same gate, with every input unchanged. The private 
 | `BLOCKED` | 1 | `data-file-not-utf8` (approved): on 2 mods, fixing the encoding exposes `rules-csv-curly-quote-unreadable`, which needs a person's input |
 | `NEEDS_MORE_EVIDENCE` | 24 | Mostly too few cohort cases, including 10 approved recipes |
 
-Two things the gate exposed for the owner:
+Owner decisions, 2026-11-01 ("For the approvals I'll follow your recommendations"):
 
-- `target-interface-method-missing` is an approved fixer whose findings are all `MANUAL` on these 3 mods. The trial abstains, as
-  the non-negotiables require, so it has no evidence here. `revive` still applies it, because `approved_fixers` permits any
-  classification (`revive.py` `_try_fixers`). That is the owner's dated standing approval, not changed here, but the two rules
-  should be reconciled deliberately.
-- `undeclared-library-dependency` (approved) has 2 verified training cases plus 1 partial, and 2 verified holdout cases, so it
-  sits one case short.
+- `data-file-not-utf8` stays `BLOCKED` until the owner has looked at one exposing case (All the Domain Drones or Metelson). It remains
+  an approved fixer in `revive`; the gate is a report and does not change that.
+- `target-interface-method-missing`: its ruling reads "standing approval (KIND-STRANGER Metelson Industries)" and does not mention
+  MANUAL, and its findings on these 3 mods are all `MANUAL`. So a standing approval no longer covers a MANUAL or UNKNOWN finding in
+  `revive` (`_try_fixers`), for any fixer. `revive --approve FIXER` still applies it, because a person named it for that run.
+
+`undeclared-library-dependency` (approved) has 2 verified training cases plus 1 partial, and 2 verified holdout cases, so it sits one
+case short.
 
 ## Limits
 
@@ -67,5 +69,5 @@ Two things the gate exposed for the owner:
 ## Next
 
 1. Run a larger, freshly reserved holdout, with explicit provider roots, for the recipes one case short.
-2. Owner decision on `data-file-not-utf8` chaining and the MANUAL standing approval above.
+2. Owner review of one `data-file-not-utf8` exposing case.
 3. Add affected-case invalidation when a recipe's approval is revoked, then the owner's sampled independent review (S2 objective 5).

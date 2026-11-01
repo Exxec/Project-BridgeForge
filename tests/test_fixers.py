@@ -1801,6 +1801,25 @@ class DataFileNotUtf8FixerTests(unittest.TestCase):
         self.assertEqual(len(refused), 1)
         self.assertIn("data/strings/tips.csv", refused[0]["reason"])
 
+    def test_a_standing_approval_does_not_cover_manual_or_unknown_but_naming_the_fixer_does(self) -> None:
+        # Owner 2026-11-01: MANUAL/UNKNOWN are never applied on a standing approval (revive applied target-interface-method-missing).
+        from bridgeforge.revive import _try_fixers
+
+        recipe = "mod-info-game-version-inexact"
+        for classification in ("MANUAL", "UNKNOWN"):
+            findings = [{"id": recipe, "classification": classification, "file": "mod_info.json", "evidence": []}]
+            with tempfile.TemporaryDirectory() as directory:
+                mod = Path(directory)
+                text = '{"id": "x", "gameVersion": "0.95a"}'
+                _write(mod / "mod_info.json", text)
+                applied, pending = _try_fixers(mod, findings, target="0.98a-RC8", vanilla_core=None, approved={recipe}, apply=True)
+                self.assertEqual(applied, [])
+                self.assertEqual(pending[0]["state"], "AWAITING_APPROVAL")
+                self.assertEqual((mod / "mod_info.json").read_text(encoding="utf-8"), text)
+                applied, _ = _try_fixers(mod, findings, target="0.98a-RC8", vanilla_core=None, approved={recipe}, apply=True, named={recipe})
+                self.assertEqual(len(applied), 1)
+                self.assertNotEqual((mod / "mod_info.json").read_text(encoding="utf-8"), text)
+
     def test_named_encodings_are_recorded_and_reapplied_by_revive(self) -> None:
         # ROADMAP P15 20.4: a person's fix --encoding decision survives a fresh copy from original/.
         from bridgeforge.cli import main

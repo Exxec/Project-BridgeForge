@@ -1,0 +1,1 @@
+- `java-matrix` leaves `--enable-preview` out of every generated JDK 28+ launcher and records the drop: on jdk-28+13 it corrupts save loads (RC8-42). Stock files are only read.

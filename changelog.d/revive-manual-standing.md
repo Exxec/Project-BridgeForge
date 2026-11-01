@@ -1,0 +1,1 @@
+- `revive` no longer applies a standing fixer approval to a MANUAL or UNKNOWN finding; `revive --approve FIXER` still does, and `auto-open` reports such a finding as NOT_APPROVED (owner decision 2026-11-01).
