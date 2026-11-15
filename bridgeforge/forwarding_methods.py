@@ -19,7 +19,13 @@ FORWARDS_MIN = 5
 _CLASS = re.compile(r"\bclass\s+(\w+)[^{]*?\bimplements\s+([\w.,\s<>]+?)\s*\{")
 _PACKAGE = re.compile(r"(?m)^\s*package\s+([\w.]+)\s*;")
 _IMPORT = re.compile(r"(?m)^\s*import\s+([\w.]+)(\.\*)?\s*;")
-_METHOD = re.compile(r"(?:public|protected|private)?\s*(?:static\s+|final\s+|synchronized\s+)*[\w.<>\[\], ?]+\s+(\w+)\s*\(([^)]*)\)\s*(?:throws[^{;]*)?\{")
+# A type without free spaces or commas (generics are their own group, one level of nesting): a type class that also matched
+# spaces and commas backtracked for minutes on Angry Periphery's long world-generation lines (2026-11-15). Declarations
+# are matched from the start of a line.
+_TYPE = r"[\w.$?]+(?:\s*<[^<>(){};]*(?:<[^<>(){};]*>[^<>(){};]*)*>)?(?:\s*\[\s*\])*"
+# Modifiers, then a generic method's own type parameters (`public <T> List<T> getListeners(Class<T> c)`, dl_DroneAPI).
+_MODIFIERS = r"(?:(?:public|protected|private|static|final|synchronized|abstract|native|default)\s+)*(?:<[^<>(){};]*(?:<[^<>(){};]*>[^<>(){};]*)*>\s*)?"
+_METHOD = re.compile(rf"(?m)^[ \t]*(?:@\w+[ \t]*)*{_MODIFIERS}{_TYPE}\s+(\w+)\s*\(([^)]*)\)\s*(?:throws[^{{;]*)?\{{")
 _FIELD = r"\b{type}\s+(\w+)\s*[;=]"
 _BASE = {"B": "byte", "C": "char", "D": "double", "F": "float", "I": "int", "J": "long", "S": "short", "Z": "boolean", "V": "void"}
 
@@ -111,7 +117,7 @@ def forwarding_source(name: str, descriptor: str, delegate: str, indent: str = "
 
 
 _OBJECT = {("equals", 1), ("hashCode", 0), ("toString", 0), ("clone", 0), ("finalize", 0)}
-_OVERRIDE = re.compile(r"@Override\s*(?=(?:public|protected)?\s*(?:final\s+|synchronized\s+)*[\w.<>\[\], ?]+\s+(\w+)\s*\(([^)]*)\))")
+_OVERRIDE = re.compile(rf"@Override\s*(?={_MODIFIERS}{_TYPE}\s+(\w+)\s*\(([^)]*)\))")
 
 
 def _drop_stale_overrides(text: str, interface: str, core: dict) -> tuple[str, int]:

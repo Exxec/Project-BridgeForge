@@ -56,6 +56,18 @@ class ForwardingMethodTests(unittest.TestCase):
         self.assertEqual(again, [])
         self.assertEqual(built.returncode, 0, built.stderr)
 
+    def test_long_generation_lines_do_not_backtrack(self) -> None:
+        # Angry Periphery 4 (2026-11-15): the scan spent 1,000 s CPU in this check on 300-line world-generation scripts.
+        import time
+
+        from bridgeforge.forwarding_methods import missing_forwards
+
+        line = "        " + ", ".join(f"var{i} value{i} other{i}" for i in range(400)) + " = x;\n"
+        text = "public class G implements SectorGeneratorPlugin {\n" + line * 40 + "    public void generate(SectorAPI s) {\n    }\n}\n"
+        started = time.monotonic()
+        missing_forwards(text, {})
+        self.assertLess(time.monotonic() - started, 2.0)
+
     def test_without_a_delegate_or_a_core_nothing_is_reported(self) -> None:
         with resolved_temp_dir() as root:
             (root / "mod_info.json").write_text('{"id": "m"}', encoding="utf-8")
