@@ -89,13 +89,29 @@ the registry list the builds a mod links on. Wrappers for removed members (a ref
    gate automatic launch), and grouped smoke runs of the CLEAN archive.
 4. **Write paths per build** as their facts become `PROVEN`; repair mappings re-qualified individually.
 
-## Decisions for the owner
+## Decisions (owner, 2026-11-15: all three recommendations accepted)
 
-1. Should read-only tools accept an `OBSERVED` build, with a warning? (Recommended: yes; refusing to *read* a new save
-   protects nothing.)
-2. Registry location: BridgeForge exports and each repo pins a copy by hash (recommended, no cross-repo runtime coupling),
-   or Salvor and VoidSmith import it from the `bridgeforge` package.
-3. Keep RC8 `QUALIFIED` alongside 0.98.5a (recommended: yes; archives validated before 2026-11-15 rest on it).
+1. Read-only tools accept an `OBSERVED` build, with a warning; refusing to *read* a new save protects nothing.
+2. Registry location: BridgeForge exports it and each repo pins a copy by hash (no cross-repo runtime coupling).
+3. RC8 stays `QUALIFIED` alongside 0.98.5a; archives validated before 2026-11-15 rest on it.
+
+## Salvor as the qualification driver (step 3)
+
+Salvor already holds most of what step 3 needs, and running it there also closes Salvor's own open rig steps (its
+`docs/AUTOMATION_PLAN.md`: nothing is yet OBSERVED on a rig).
+
+- **Making the 0.98.5a save** (replaces the owner's manual step 0 once it works): BridgeForge's live harness already
+  drives New Game (`live_run.NEW_GAME_FLOWS`, with the screen-reading fallback) and the probe saves at day N
+  (`save_reload`, `cmdSave`). Run on a 0.98.5a rig, it produces the save. Its menu coordinates are RC8 measurements, so
+  the first run is itself a `RECHECK` of those positions.
+- **Rechecking the save-and-load facts**: Salvor's `rig_auto` session 2 (Play -> Continue -> the probe logs the load ->
+  N days -> quit) is the test for RC8-28 (a loaded game starts paused), RC8-29 (Continue loads the last-used save) and
+  RC8-30 (`cmdSave`). Run on 0.98.5a with a disposable save, each passing stage turns one fact `PROVEN` for that build.
+- **Reading the save shape**: Salvor's diagnosis and `tools/qualify_corpus.py` container counts on the new save give
+  the registry's `save_versions` and list any container type 0.98.5a introduced.
+- **Gate exception**: the launch gate needs `PROVEN` layout facts, which only a launch can prove. Salvor gets a
+  `qualify` mode: allowed on an `OBSERVED` build, disposable saves only, never a repair, writing evidence and nothing
+  else. That is the one place the read/write split is crossed, and only to gather evidence.
 
 ## Exit
 
