@@ -34,6 +34,10 @@ from .scan.scan_json import _load_lenient_json_file
 
 SCHEMA_VERSION = 1
 VERDICTS = ("BREAKS", "RELINK", "REVIEW", "CLEAN")
+# Listed, but no REVIEW verdict on their own: Ironclads replaces ship_data.csv, wing_data.csv and weapon_data.csv lacking
+# 13 to 17 of RC8's columns each (tags, rarity, tech/manufacturer, ...) and was LIVE_VALIDATED on RC8, so the loader reads a
+# missing column as blank (2026-11-15). A fixer adding blank columns would change nothing.
+INFORMATIONAL = {"replace-lacks-new-columns"}
 CHECKPOINT_NAME = "TARGET_IMPACT.partial.jsonl"
 _SKIP_DIRS = {"original", "workspace", "scratch", "reports", "_previous", "disabled_files"}
 
@@ -247,7 +251,7 @@ def mod_impact(folder: Path, old_core: Path, new_core: Path, provider_jars: list
         verdict = "BREAKS"
     elif linkage:
         verdict = "RELINK"
-    elif data:
+    elif any(d["kind"] not in INFORMATIONAL for d in data):
         verdict = "REVIEW"
     else:
         verdict = "CLEAN"

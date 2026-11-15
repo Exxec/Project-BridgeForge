@@ -46,6 +46,9 @@ A dual target through `mod_info.json` alone is not possible for mods that break:
   version string in its `starfarer_obf.jar`: 0.98.5a-RC3 there, 0.98a-RC8 in RC8), else 0.98a-RC8; reviving against 0.98.5a no longer
   writes RC8 into `mod_info.json`. With 89.3-89.5 the gated fixers run inside `revive --vanilla-core <0.98.5a core>` (approval as
   for any fixer). `tests/test_game_version.py`.
+- 89.10 Measured 2026-11-15: a replaced CSV missing columns is tolerated. Ironclads replaces three data CSVs lacking 13-17 of RC8's
+  columns each and was LIVE_VALIDATED on RC8, so `target-impact` lists `replace-lacks-new-columns` as information (no REVIEW verdict
+  by itself) and no blank-column fixer was added (it would change nothing).
 
 **88. Hand work from the Exotica RC4 and New Galactic Order sessions, made routine (owner-approved 2026-10-26: "all
 approved for now set in roadmap").** Each entry names the hand work it replaces. Suggested order: 88.1-88.2, 88.3, then
