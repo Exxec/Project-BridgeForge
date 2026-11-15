@@ -30,3 +30,13 @@ def link_dir(target: Path, link: Path) -> None:
         link.symlink_to(target, target_is_directory=True)
     else:
         _winapi.CreateJunction(str(target), str(link))
+
+
+def javac_path() -> str | None:
+    """A javac to compile test fixtures with: the JDK `find_jdk` picks (repo rig, JAVA_HOME, PATH), else None.
+
+    `shutil.which("javac")` alone skipped these tests on a machine whose only JDK is the rig's (2026-11-15)."""
+    from bridgeforge.bytecode.java_toolchain import find_jdk
+
+    jdk = find_jdk()
+    return str(jdk.javac) if jdk is not None else None

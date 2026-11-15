@@ -1,0 +1,1 @@
+- Item 89.12-89.13: the forwarding check no longer backtracks on long lines; a scan with no JDK reports `source-ast-unavailable` instead of crashing; `tests/test_scan_robustness.py` gives the scanner a time budget on very long lines.

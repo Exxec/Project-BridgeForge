@@ -12,7 +12,7 @@ from pathlib import Path
 from bridgeforge.cli import main
 from bridgeforge.fixers import _LEGACY_FLEETS_CALL, _rewrite_add_orbital_station_span, _rewrite_add_planet_span
 from bridgeforge.revenantlib_contract import CONTRACT, RevenantLibCheckError, check_revenantlib
-from tests.support import resolved_temp_dir
+from tests.support import javac_path, resolved_temp_dir
 
 # Hand-written stand-ins for the three public API types the contract names; not game code.
 API_STUBS = {
@@ -74,7 +74,7 @@ class RevenantLibJarTests(unittest.TestCase):
     """Stand-in RevenantLib builds compiled by a real javac; skipped cleanly when no JDK is on PATH."""
 
     def setUp(self):
-        self.javac = shutil.which("javac")
+        self.javac = javac_path()
         if self.javac is None:
             self.skipTest("no javac on PATH")
 
@@ -151,7 +151,6 @@ class RevenantLibJarTests(unittest.TestCase):
 
     def test_snapshot_is_current_until_the_live_copy_changes(self):
         # P15 item 22.6: Done/RevenantLib is a dated snapshot of a library still in development.
-        import shutil
 
         with resolved_temp_dir() as root:
             self._build(root, self.SOURCES)

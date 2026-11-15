@@ -312,6 +312,9 @@ def run_cli(args: argparse.Namespace) -> int:
                 for method in entry["methods_removed"]:
                     leads = method["same_signature_elsewhere"] or method["same_name_in_class"]
                     print(f"  - {dotted.rsplit('.', 1)[-1]}.{method['signature'].split(' ', 1)[-1]}" + (f"  -> {', '.join(leads)}" if leads else ""))
+            for rename in result.get("parameters_renamed", [])[:40]:
+                from .api_sources import render_rename
+                print(f"  ~ same signature, renamed parameter: {render_rename(rename)}")
             if args.output:
                 print(f"Written: {args.output}")
         return 0

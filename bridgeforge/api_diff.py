@@ -126,6 +126,13 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _renames(old_jar: Path, new_jar: Path) -> list[dict]:
+    from .api_sources import parameter_renames, source_zip_beside
+
+    old_zip, new_zip = source_zip_beside(old_jar), source_zip_beside(new_jar)
+    return list(parameter_renames(str(old_zip), str(new_zip))) if old_zip and new_zip else []
+
+
 def diff_api_jars(old_jar: Path, new_jar: Path) -> dict:
     """Compare two API jars; return a JSON-serialisable catalogue (schema_version 1)."""
     old_path, new_path = resolve_api_jar(old_jar), resolve_api_jar(new_jar)
@@ -185,6 +192,7 @@ def diff_api_jars(old_jar: Path, new_jar: Path) -> dict:
         "removed_classes": removed_classes,
         "added_classes": sorted(_dotted(name) for name in set(new_classes) - set(old_classes)),
         "changed_classes": changed,
+        "parameters_renamed": _renames(old_path, new_path),  # same descriptor, renamed parameters (api_sources, 2026-11-15)
         "note": "Candidates only: a same-named member or class elsewhere is a lead to verify, not proof of a move.",
     }
 

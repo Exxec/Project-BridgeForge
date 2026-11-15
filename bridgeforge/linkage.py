@@ -20,9 +20,11 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
+from .zipsafe import MAX_CLASS_BYTES, ZipEntryTooLarge, read_limited
+
 CORE_JARS = ("starfarer.api.jar", "starfarer_obf.jar", "fs.common_obf.jar", "fs.sound_obf.jar", "json.jar", "log4j-1.2.9.jar",
              "lwjgl.jar", "lwjgl_util.jar", "xstream-1.4.10.jar", "janino.jar", "commons-compiler.jar", "commons-compiler-jdk.jar",
-             "jinput.jar", "jogg-0.0.7.jar", "jorbis-0.0.15.jar", "txw2-2.3.0.jar", "webp-imageio-0.1.6.jar")
+             "jinput.jar", "jogg-0.0.7.jar", "jorbis-0.0.15.jar", "txw2-2.3.0.jar", "txw2-3.0.2.jar", "webp-imageio-0.1.6.jar")  # RC8 and 0.98.5a ship txw2-3.0.2 (2026-11-15)
 
 
 OBJECT_METHODS = (("<init>", "()V"), ("getClass", "()Ljava/lang/Class;"), ("hashCode", "()I"), ("equals", "(Ljava/lang/Object;)Z"),
@@ -120,7 +122,10 @@ def jar_classes(jar: Path) -> dict[str, ClassInfo]:
         with zipfile.ZipFile(jar) as archive:
             for name in archive.namelist():
                 if name.endswith(".class"):
-                    info = parse_class(archive.read(name))
+                    try:
+                        info = parse_class(read_limited(archive, name, MAX_CLASS_BYTES))  # hardening rule: untrusted mod jars
+                    except ZipEntryTooLarge:
+                        continue
                     if info and info.name:
                         found[info.name] = info
     except (OSError, zipfile.BadZipFile):
@@ -165,7 +170,13 @@ def core_index(vanilla_core: str) -> dict[str, ClassInfo]:
 
 
 def _resolve(core: dict[str, ClassInfo], owner: str, kind: str, name: str, descriptor: str) -> bool | None:
-    """True if found, False if the whole hierarchy is in the core and it is not there, None if the hierarchy leaves it."""
+    """True if found, False if the whole hierarchy is in the core and it is not there, None if the hierarchy leaves it.
+
+    A constructor is not inherited: it resolves on the owner alone. Walking up to Object.<init>()V called every removed
+    no-argument constructor resolved (0.98.5a-RC3's ShipAIConfig(), Polaris Prime, 2026-11-15)."""
+    if kind == "method" and name == "<init>":
+        info = core.get(owner)
+        return None if info is None else (name, descriptor) in info.methods
     seen, stack, left_core = set(), [owner], False
     while stack:
         current = stack.pop()
@@ -191,6 +202,8 @@ def _same_name(core: dict[str, ClassInfo], owner: str, kind: str, name: str) -> 
         seen.add(current)
         info = core[current]
         found += sorted(d for n, d in (info.fields if kind == "field" else info.methods) if n == name)
+        if name == "<init>":
+            break  # the owner's own constructors only
         stack += [c for c in (info.super_name, *info.interfaces) if c]
     return found
 

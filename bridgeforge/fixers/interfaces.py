@@ -129,15 +129,17 @@ def _fix_rc8_signature_changed(root: Path, options: dict) -> list[FileChange]:
     or src/ is the jar's bundled source: rebuild the jar (patch-jar-class) after this."""
     from ..signature_rewrites import rewrite
 
+    core = Path(options["vanilla_core"]) if options.get("vanilla_core") else None  # target-gated rules (ROADMAP-3 item 89)
+
     files = sorted({f.file for f in _findings_of(root, options, "rc8-signature-changed") if f.file})
     changes = []
     for rel in files:
         path = root / rel
         raw = path.read_bytes()
         text, had_bom = _decode(raw)
-        new, count = rewrite(text, _blank_java_comments(text, strings=True))
+        new, count = rewrite(text, _blank_java_comments(text, strings=True), core)
         if count:
             changes.append(FileChange(path=path, before=raw, after=_encode(new, had_bom)))
     if not changes:
-        raise FixerError("No old-form call with an exact RC8 equivalent found.")
+        raise FixerError("No old-form call with an exact equivalent on the target found.")
     return changes

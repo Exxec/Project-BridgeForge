@@ -6,6 +6,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
+from tests.support import javac_path
 from bridgeforge.fixers import apply_fix, compute_fix
 from bridgeforge.scan.scanner import scan_mod
 
@@ -48,6 +49,90 @@ class SignatureRewriteTests(unittest.TestCase):
                 'class G { void g() { Misc.addNebulaFromPNG("a.png", 0, 0, system, "terrain", "neb", 4, 4, StarAge.YOUNG); } }\n', encoding="utf-8")
             found = [f for f in scan_mod(mod).findings if f.id == "rc8-signature-changed"]
         self.assertEqual(found, [])
+
+
+TARGET_OLD = ('class D {\n  void d(ShipAPI ship, PersonAPI person) {\n'
+              '    ShipAIConfig config = new ShipAIConfig();\n'
+              '    com.fs.starfarer.api.combat.ShipAIConfig other = new com.fs.starfarer.api.combat.ShipAIConfig( );\n'
+              '    boolean ignored = ship.isBeingIgnored();\n'
+              '    float pay = Misc.getOfficerSalary(person);\n'
+              '    float merc = Misc.getOfficerSalary(person, true);\n'
+              '    float kept = Misc.getOfficerSalary(person, true, false, false); // new ShipAIConfig()\n'
+              '  }\n}\n')
+
+_API = "com/fs/starfarer/api/"
+_PERSON = "Lcom/fs/starfarer/api/characters/PersonAPI;"
+
+
+def _core(new_api: bool) -> dict:
+    """A core index for `linkage.core_index`: RC8's members (javap 2025-04-18 jars) or 0.98.5a-RC3's (javap 2026-11-15)."""
+    from bridgeforge.linkage import ClassInfo
+
+    if new_api:
+        ai = {("<init>", f"({'L' + _API}combat/ShipAPI;)V")}
+        ship = {("isBeingIgnored", "(Z)Z")}
+        misc = {("getOfficerSalary", f"({_PERSON}Z)F"), ("getOfficerSalary", f"({_PERSON}ZZZ)F")}
+    else:
+        ai = {("<init>", "()V")}
+        ship = {("isBeingIgnored", "()Z")}
+        misc = {("getOfficerSalary", f"({_PERSON})F"), ("getOfficerSalary", f"({_PERSON}Z)F")}
+    return {_API + "combat/ShipAIConfig": ClassInfo(_API + "combat/ShipAIConfig", "java/lang/Object", [], methods=ai),
+            _API + "combat/ShipAPI": ClassInfo(_API + "combat/ShipAPI", "java/lang/Object", [], methods=ship),
+            _API + "util/Misc": ClassInfo(_API + "util/Misc", "java/lang/Object", [], methods=misc)}
+
+
+class TargetGatedRewriteTests(unittest.TestCase):
+    """0.98.5a-RC3 (2026-11-15): calls whose old form the newer target dropped. Gated on the target's own API jar,
+    because the new forms do not compile on RC8."""
+
+    def _run(self, new_api: bool | None) -> tuple[list[str], str, list]:
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as directory:
+            mod, core = Path(directory) / "mod", Path(directory) / "core"
+            (mod / "data" / "scripts").mkdir(parents=True)
+            core.mkdir()
+            (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")
+            path = mod / "data" / "scripts" / "D.java"
+            path.write_text(TARGET_OLD, encoding="utf-8")
+            vanilla = None if new_api is None else core
+            with mock.patch("bridgeforge.linkage.core_index", return_value=_core(bool(new_api))):
+                calls = sorted(f.evidence[1] for f in scan_mod(mod, vanilla_core=vanilla).findings if f.id == "rc8-signature-changed")
+                if calls:
+                    apply_fix(compute_fix(mod, "rc8-signature-changed", {"vanilla_core": vanilla}))
+                after = [f for f in scan_mod(mod, vanilla_core=vanilla).findings if f.id == "rc8-signature-changed"]
+            return calls, path.read_text(encoding="utf-8"), after
+
+    def test_newer_target_flags_and_rewrites_each_dropped_form(self) -> None:
+        calls, text, after = self._run(new_api=True)
+        self.assertEqual(calls, ["call:ShipAIConfig", "call:ShipAIConfig", "call:getOfficerSalary", "call:getOfficerSalary",
+                                 "call:isBeingIgnored"])
+        self.assertIn("config = new ShipAIConfig(null);", text)
+        self.assertIn("other = new com.fs.starfarer.api.combat.ShipAIConfig(null);", text)
+        self.assertIn("ignored = ship.isBeingIgnored(false);", text)
+        self.assertIn("pay = Misc.getOfficerSalary(person, Misc.isMercenary(person), false, false);", text)
+        self.assertIn("merc = Misc.getOfficerSalary(person, true, false, false);", text)
+        self.assertIn("kept = Misc.getOfficerSalary(person, true, false, false); // new ShipAIConfig()", text)
+        self.assertEqual(after, [])
+
+    def test_rc8_target_leaves_the_old_forms_alone(self) -> None:
+        calls, text, _ = self._run(new_api=False)
+        self.assertEqual(calls, [])
+        self.assertEqual(text, TARGET_OLD)
+
+    def test_no_target_core_means_no_gated_rule(self) -> None:
+        calls, text, _ = self._run(new_api=None)
+        self.assertEqual(calls, [])
+        self.assertEqual(text, TARGET_OLD)
+
+    def test_a_computed_officer_argument_is_not_duplicated(self) -> None:
+        from unittest import mock
+
+        from bridgeforge.signature_rewrites import suspects
+
+        text = "class E { float f() { return Misc.getOfficerSalary(fleet.getCommander()); } }"
+        with mock.patch("bridgeforge.linkage.core_index", return_value=_core(True)):
+            self.assertEqual(suspects(text, Path("core")), [])
 
 
 if __name__ == "__main__":
@@ -192,10 +277,9 @@ class GenerationGuardPatternTests(unittest.TestCase):
 class BundledSourceStaleTests(unittest.TestCase):
     def test_source_whose_class_header_or_presence_differs_from_the_jar(self) -> None:
         # ROADMAP 47 (2026-10-05): Grytpype's src said "implements HullModEffect", the jar's class extends BaseHullMod.
-        import shutil
         import subprocess
 
-        javac = shutil.which("javac")
+        javac = javac_path()
         jdk = Path(r"C:\Users\exxec\Documents\Project BridgeForge\In operation\_rig\jdk-25.0.4.1+1\bin")
         if (jdk / "javac.exe").is_file():
             javac = str(jdk / "javac.exe")

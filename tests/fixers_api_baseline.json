@@ -60,7 +60,9 @@
     "orbit-period-computed-unguarded",
     "local-weapon-spec-unregistered",
     "content-reference-substitute",
-    "preset-entry-drops-vanilla-fields"
+    "preset-entry-drops-vanilla-fields",
+    "jar-call-signature-changed",
+    "forwarding-class-method-missing"
   ],
   "dispatch": [
     "system-generation-unguarded",
@@ -124,7 +126,9 @@
     "shiproles-wing-id",
     "csv-fullwidth-number",
     "ship-data-missing-fighter-bays-column",
-    "missing-custom-ui-button-pressed-callback"
+    "missing-custom-ui-button-pressed-callback",
+    "jar-call-signature-changed",
+    "forwarding-class-method-missing"
   ],
   "exports": [
     "SUPPORTED_FINDINGS",

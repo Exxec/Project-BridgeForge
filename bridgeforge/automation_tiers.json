@@ -199,6 +199,8 @@
     "aotd-toolbox-version-below-minimum": "decision",
     "per-frame-market-work": "inspect",
     "rc8-signature-changed": "auto",
+    "jar-call-signature-changed": "auto",
+    "forwarding-class-method-missing": "auto",
     "replace-drops-rc8-entries": "decision",
     "retired-vanilla-class-copy": "code",
     "bundled-source-stale": "none",

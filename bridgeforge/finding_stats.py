@@ -39,17 +39,48 @@ def _latest_scan(workspace: Path) -> Path | None:
     return scans[-1] if scans else None
 
 
+def _archived_copy(candidate: Path) -> Path | None:
+    """The shipped copy of a `Done/<Mod>/` archive (`Done/<Mod>/<Mod>/`, or the one child holding a mod_info.json besides
+    `original/` and `workspace/`); None for anything else. Scanning the whole archive against 0.98.5a (2026-11-15) needed it."""
+    archive_like = (candidate / "workspace").is_dir() or candidate.parent.name == "Done"  # Station Augments' patch folder has no workspace/
+    if not archive_like or (candidate / "working").is_dir():
+        return None
+    from .target_impact import _mod_folder
+
+    folder = _mod_folder(candidate)
+    return folder if folder is not None and folder != candidate else None
+
+
 def discover_workspaces(roots: list[Path]) -> list[Path]:
-    """A workspace is a folder with a `working/mod_info.json` or a stored scan under `reports/`."""
+    """A workspace is a folder with a `working/mod_info.json`, a stored scan under `reports/`, or a `Done/` archive
+    (`workspace/` beside the shipped copy). Folders starting with `_` (`Done/_previous`, `_replaced-*`) are history."""
     found: set[Path] = set()
     for root in roots:
         root = Path(root).expanduser().resolve()
         if not root.is_dir():
             raise FindingStatsError(f"{root} is not a directory.")
-        for candidate in [root, *sorted(p for p in root.iterdir() if p.is_dir())]:
-            if (candidate / "working" / "mod_info.json").is_file() or _latest_scan(candidate) is not None                     or (candidate / "reports" / REGISTRY_NAME).is_file():
+        for candidate in [root, *sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith("_"))]:
+            if (candidate / "working" / "mod_info.json").is_file() or _latest_scan(candidate) is not None                     or (candidate / "reports" / REGISTRY_NAME).is_file() or _archived_copy(candidate):
                 found.add(candidate)
     return sorted(found)
+
+
+def _mod_dir(workspace: Path) -> Path:
+    return _archived_copy(workspace) or workspace / "working"
+
+
+def _accepted_keys(workspace: Path) -> set[str]:
+    """The working copy's baseline, or an archive's `workspace/baseline.json` (what `archive` copied there)."""
+    keys = mod_baseline_keys(workspace / "working")
+    archived = workspace / "workspace" / "baseline.json"
+    if not keys and archived.is_file() and _archived_copy(workspace):
+        from .baseline import load_baseline_keys
+
+        try:
+            keys = load_baseline_keys(archived)
+        except (OSError, ValueError):
+            keys = set()
+    return keys
 
 
 def read_ledger(workspace: Path) -> list[dict]:
@@ -95,7 +126,7 @@ def _assessment(workspace: Path, scan: bool, vanilla_core: Path | None) -> tuple
     from bridgeforge.scan import scan_registry
 
     if scan:
-        fp = scan_registry.fingerprint(workspace / "working", _fresh_context(vanilla_core))
+        fp = scan_registry.fingerprint(_mod_dir(workspace), _fresh_context(vanilla_core))
         return {"state": "FRESH_UNREGISTERED", "detail": "scanned now; not published in the registry", "report": None,
                 "fingerprint": fp["digest"]}, fp["digest"]
     assessment = scan_registry.assess(workspace)
@@ -129,7 +160,7 @@ def _workspace_record(workspace: Path, scan: bool, vanilla_core: Path | None, *,
     from bridgeforge.scan import scan_registry
     from bridgeforge.scan.scanner import scan_mod
 
-    working = workspace / "working"
+    working = _mod_dir(workspace)
     if assessment is None:
         assessment, _ = _assessment(workspace, scan, vanilla_core)
     rescanned = False
@@ -153,7 +184,7 @@ def _workspace_record(workspace: Path, scan: bool, vanilla_core: Path | None, *,
         return {"workspace": workspace.name, "unscanned": f"scan failed: {exc}",
                 "freshness": {"state": "INCOMPLETE", "detail": str(exc)}}
     key = _key(assessment)
-    accepted_keys = mod_baseline_keys(working)
+    accepted_keys = _accepted_keys(workspace)
     accepted = sum(1 for f in findings if finding_dict_baseline_key(f) in accepted_keys)
     findings = [f for f in findings if finding_dict_baseline_key(f) not in accepted_keys]
     ids = Counter(f.get("id", "?") for f in findings)
@@ -176,7 +207,7 @@ def _reusable(record: dict, workspace: Path, scan: bool, vanilla_core: Path | No
 
     freshness = record.get("freshness") or {}
     assessment, key = _assessment(workspace, scan, vanilla_core)
-    same = bool(key) and freshness.get("key") == key and freshness.get("filter_digest") == scan_registry.filter_digest(workspace / "working")
+    same = bool(key) and freshness.get("key") == key and freshness.get("filter_digest") == scan_registry.filter_digest(_mod_dir(workspace))
     return same or ("unscanned" in record and not key and assessment["state"] == "NONE"), assessment
 
 

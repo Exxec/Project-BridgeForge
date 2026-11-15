@@ -1,3 +1,66 @@
+**89. 0.98.5a-RC3 as the target (owner 2026-11-15: "check against api of latest starsector ... find conflict with current mods and revive mods ... adding new automation, checks and fixers"; then "for now target the newer version unless possible to refactor so they can target both with a simple mod_info version change").**
+The owner installed 0.98.5a-RC3 at `C:\Games\Starsector-0.98.5a-RC3` (Java 17, Zulu 17.0.10; its `jre\bin` has `javac`/`javap`).
+A dual target through `mod_info.json` alone is not possible for mods that break: a class compiled for 0.98.5a's
+`ShipAIConfig(ShipAPI)` cannot link on RC8. Outputs of the measurements below are in `bridgeforge-state/api-diff/` and
+`bridgeforge-state/target-impact/0.98.5a-RC3/` (local, gitignored).
+- 89.1 Measured: `api-diff` RC8 -> 0.98.5a-RC3: 3076 -> 3172 classes, none removed, 20 methods and 2 fields removed; `ShipAPI`
+  gained six methods, `CampaignTerrainPlugin`, `WeaponAPI`, `MissileAPI` more. One same-descriptor meaning change, found by
+  comparing parameter names in the two `starfarer.api.zip` sources: `Misc.getOfficerSalary(PersonAPI, boolean)` was `mercenary`,
+  is `checkIfInPopulatedSystem`. Content: no hull, weapon, wing, hull mod or ship system removed; 115 story and dev `rules.csv`
+  ids removed; new `ship_data.csv` columns `parts/dmod`, `salary`, `salMult`; `settings.json` drops
+  `factionCommissionStipendPerLevel` and gains a `rules` list of rule files and about 180 `ext_*` keys.
+- 89.2 Built `target-impact OLD_CORE NEW_CORE [roots] --write DIR`: per mod, what fails on the new core and not the old (jar
+  linkage, interface contracts, dropped call forms; data: rule ids a mod overrides that were removed, replaced CSVs lacking new
+  columns, settings keys read and removed), with progress and a checkpoint. First run (471 mod folders in `Done/` and
+  `In operation/`, before the data layer): BREAKS 36, RELINK 4, CLEAN 431; `Done/` archives: 10 break, 2 need a relink.
+  `tests/test_target_impact.py`.
+- 89.3 Gated rules (applied only when the target core's own API jar lacks the old member and has the new one):
+  `new ShipAIConfig()` -> `(null)` (RC8's defaults exactly, both sources), `isBeingIgnored()` -> `(false)`,
+  `Misc.getOfficerSalary(p)` -> `(p, Misc.isMercenary(p), false, false)` and `(p, b)` -> `(p, b, false, false)`; the
+  `rc8-signature-changed` check and fixer pass the core (`TargetGatedRewriteTests`).
+- 89.4 Finding `jar-call-signature-changed` (auto, REVIEW) and fixer: the same calls rewritten in jar bytecode (ASM
+  `append-constant-argument`, a fresh constant pool so no stale Methodref remains for linkage); `jar-linkage-unresolved` no longer
+  repeats them. Polaris Prime's and RevenantLib's jars rewrite as expected (dry run); the test runs the rewritten class with
+  `-Xverify:all` (`tests/test_jar_call_rewrites.py`).
+- 89.5 Finding `forwarding-class-method-missing` (auto, REVIEW) and fixer: a class implementing a game interface by forwarding to
+  one field gets forwards for the methods the target added and loses `@Override` on methods no supertype has any more. RevenantLib's
+  `dl_DroneAPI` compiles against 0.98.5a after it and 89.3 (6 forwards, 1 call, 1 `@Override`; scratch copy, working copy untouched)
+  (`tests/test_forwarding_methods.py`).
+- 89.6 Fixes: `linkage._resolve` walked a constructor up to `Object.<init>()V`, so a removed no-argument constructor was never
+  reported; `linkage` reads jar entries with `zipsafe.read_limited` and indexes `txw2-3.0.2.jar`; `compile-check` built the full
+  provider index for every mod with dependencies (74 of AI-War's 130 s), now ids map to folders from `mod_info.json`, cached;
+  `finding-stats` scans `Done/` archives (shipped copy, `workspace/baseline.json`, `_` folders skipped); eight test files use
+  `tests.support.javac_path()` so JDK tests run where the only JDK is the rig's.
+- 89.7 Open: the archive-wide `finding-stats --scan` against 0.98.5a (running after this merge); revival of the breaking mods
+  (fixers above, then `patch-jar-class --vanilla-core <0.98.5a core>` where source exists); hand ports for
+  `PersonBountyEventData.reportSuccess(int)` and `pickPortraitPreferNonDuplicate(..., Random)`; obfuscated internals in Station
+  Augments and Neutrino 1.8.9; a 0.98.5a rig and live runs; whether a `rules.csv` row overriding a vanilla id behaves as on RC8
+  under the new `rules` list (live). Proposed: a target profile so finding text says "the target" instead of "RC8".
+- 89.8 **Done 2026-11-15.** Same signature, other meaning: `api_sources.parameter_renames` compares parameter names of every
+  public/protected method in the two `starfarer.api.zip` bundles; `api-diff` adds `parameters_renamed` to its catalogue (and
+  prints them) whenever both zips sit beside the jars, as the game ships them; `target-impact` reports a mod calling such a
+  member (jar reference by owner, name and arity; source call by name and arity in a file naming the class) as
+  `parameter-meaning-changed` (REVIEW). RC8 -> 0.98.5a-RC3 gives exactly the one 89.1 found by hand, `getOfficerSalary`.
+  `tests/test_api_sources.py`.
+- 89.9 **Done 2026-11-15.** `revive --target` defaults to the `--vanilla-core`'s own version (`game_version.core_game_version`, the newest
+  version string in its `starfarer_obf.jar`: 0.98.5a-RC3 there, 0.98a-RC8 in RC8), else 0.98a-RC8; reviving against 0.98.5a no longer
+  writes RC8 into `mod_info.json`. With 89.3-89.5 the gated fixers run inside `revive --vanilla-core <0.98.5a core>` (approval as
+  for any fixer). `tests/test_game_version.py`.
+- 89.10 Measured 2026-11-15: a replaced CSV missing columns is tolerated. Ironclads replaces three data CSVs lacking 13-17 of RC8's
+  columns each and was LIVE_VALIDATED on RC8, so `target-impact` lists `replace-lacks-new-columns` as information (no REVIEW verdict
+  by itself) and no blank-column fixer was added (it would change nothing).
+- 89.11 **Done 2026-11-15.** `target-impact` writes a worklist: per mod that breaks, the next steps in order (the gated `fix`
+  commands with the new core, a relink through `jar-packets`/`patch-jar-class`, a hand port, a review) and `fixers_only` when the
+  gated fixers alone clear it, with a count in the report. Also fixed: the ASM and AST helpers were cached by source hash only, so a
+  helper compiled by the rig's Java 25 failed under the game's Java 17 (UnsupportedClassVersionError); they are now compiled
+  with `--release 17` and cached by that. `tests/test_target_impact.py`.
+- 89.12 **Done 2026-11-15.** The forwarding check's declaration pattern backtracked for 1,000 s of CPU on Angry Periphery 4 and stalled
+  the archive scan; types now match without free spaces or commas, and a generic method's `<T>` is allowed.
+- 89.13 **Done 2026-11-15.** Guards: with no JDK found, `helper_java_tools` falls back to bare names and their FileNotFoundError
+  ended a whole scan; the AST and ASM helper launches now raise `AstUnavailable`/`BytecodeUnavailable` (the scan reports
+  `source-ast-unavailable`). `tests/test_scan_robustness.py` also gives the whole scanner a time budget on a mod with very long
+  lines, with and without a core, so a backtracking pattern fails the suite (it fails with 89.12's old pattern).
+
 **88. Hand work from the Exotica RC4 and New Galactic Order sessions, made routine (owner-approved 2026-10-26: "all
 approved for now set in roadmap").** Each entry names the hand work it replaces. Suggested order: 88.1-88.2, 88.3, then
 88.4-88.5; 88.6 waits for a second mod with the same CSV layout problem. Nothing below is built yet.

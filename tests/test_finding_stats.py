@@ -116,6 +116,27 @@ class FindingStatsTests(unittest.TestCase):
         self.assertEqual((mod["bucket"], mod["accepted_by_baseline"]), ("none", 1))
         self.assertEqual(stats["unattended_now"], 1)
 
+    def test_done_archive_layout_scans_the_shipped_copy_with_its_archived_baseline(self):
+        # 2026-11-15 (owner: scan the entire mod archive against 0.98.5a): Done/<Mod>/ holds the shipped copy in
+        # Done/<Mod>/<Mod>/, the author's original/ (never scanned) and workspace/baseline.json; _-folders are history.
+        with resolved_temp_dir() as root:
+            done = root / "Done"
+            shipped = done / "Arc" / "Arc"
+            (shipped / "data" / "config").mkdir(parents=True)
+            (shipped / "mod_info.json").write_text('{"id": "arc", "name": "Arc", "version": "1", "gameVersion": "0.98a-RC8"}', encoding="utf-8")
+            (shipped / "data" / "config" / "settings.json").write_text('{\n# hash comment\n"a": 1}\n', encoding="utf-8")
+            (done / "Arc" / "original" / "Arc").mkdir(parents=True)
+            (done / "Arc" / "original" / "Arc" / "mod_info.json").write_text('{"id": "arc"}', encoding="utf-8")
+            (done / "Arc" / "workspace").mkdir()
+            (done / "Arc" / "workspace" / "baseline.json").write_text(json.dumps({"findings": ["json-hash-comment|data/config/settings.json|"]}),
+                                                                      encoding="utf-8")
+            (done / "_previous" / "Old").mkdir(parents=True)
+            (done / "_previous" / "Old" / "mod_info.json").write_text('{"id": "old"}', encoding="utf-8")
+            stats = finding_stats([done], scan=True)
+        self.assertEqual([m["workspace"] for m in stats["mods"]], ["Arc"])
+        self.assertIn(str(Path("Done") / "Arc" / "Arc"), stats["mods"][0]["source"])
+        self.assertEqual(stats["unscanned"], [])
+
     def test_latest_scan_wins_and_fresh_scan(self):
         import os
 

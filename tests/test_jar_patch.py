@@ -1,14 +1,13 @@
 """`patch-jar-class`: recompile a few edited classes and swap them into a jar (2026-09-30)."""
 from __future__ import annotations
 
-import shutil
 import subprocess
 import unittest
 import zipfile
 from pathlib import Path
 
 from bridgeforge.bytecode.jar_patch import patch_jar_classes
-from tests.support import resolved_temp_dir
+from tests.support import javac_path, resolved_temp_dir
 
 ORIGINAL = (
     "package data.hullmods;\n"
@@ -26,7 +25,7 @@ class JarPatchTests(unittest.TestCase):
     """Real javac; skipped cleanly when no JDK is on PATH."""
 
     def setUp(self) -> None:
-        javac = shutil.which("javac")
+        javac = javac_path()
         if javac is None:
             self.skipTest("no javac on PATH")
         self.javac = javac

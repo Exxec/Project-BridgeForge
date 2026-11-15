@@ -13,7 +13,7 @@ from unittest.mock import patch
 from bridgeforge.api_diff import ApiDiffError, annotate_errors, diff_api_jars, render_method, resolve_api_jar
 from bridgeforge.cli import main
 from bridgeforge.bytecode.java_toolchain import DEFAULT_JAVAC_ARGS, parse_javac_errors
-from tests.support import resolved_temp_dir
+from tests.support import javac_path, resolved_temp_dir
 
 # A miniature of the real drift: SectorAPI.addMessage moved to CampaignUIAPI (RC8), createFleet was
 # dropped outright, a clock class moved package, an overload changed and a constant was removed.
@@ -140,7 +140,7 @@ class RealJarTests(unittest.TestCase):
     """Old/new API jars compiled by a real javac; skipped cleanly when no JDK is on PATH."""
 
     def setUp(self):
-        javac = shutil.which("javac")
+        javac = javac_path()
         if javac is None:
             self.skipTest("no javac on PATH")
         self.javac = javac

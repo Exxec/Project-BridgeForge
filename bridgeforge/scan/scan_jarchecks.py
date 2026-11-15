@@ -37,9 +37,30 @@ def _scan_jar_linkage(root: Path, result: ScanResult, vanilla_core: Path | None)
         if not isinstance(info, dict) or info.get("id") == result.metadata.get("id"):
             continue
         others += [info_path.parent / j for j in info.get("jars") or [] if isinstance(j, str) and (info_path.parent / j).is_file()]
-    for entry, problems in unresolved_references(jars, vanilla_core, others).items():
+    from ..jar_call_rewrites import matching_rule
+
+    for entry, all_problems in unresolved_references(jars, vanilla_core, others).items():
         jar_name, _, member = entry.partition("!")
         jar_rel = next(_relative(root, j) for j in jars if j.name == jar_name)
+        # Calls a bytecode rule rewrites are their own finding, with a fixer (jar_call_rewrites; 0.98.5a-RC3, 2026-11-15).
+        fixable = [(p, matching_rule(p["owner"], p["name"], p["descriptor"], vanilla_core)) for p in all_problems if p["kind"] == "method"]
+        fixable = [(p, rule) for p, rule in fixable if rule is not None]
+        if fixable:
+            result.add(
+                id="jar-call-signature-changed",
+                category="bytecode",
+                severity="high",
+                classification="REVIEW",
+                confidence="DETERMINISTIC",
+                explanation=("This class calls a game method or constructor that gained one trailing parameter on the target "
+                             "(a NoSuchMethodError when it runs). The fixer pushes the documented equivalent (null or false) "
+                             "and calls the new signature, in the jar's bytecode; no source or recompile needed."),
+                file=f"{jar_rel}!{member}",
+                evidence=[rule.label() for _, rule in fixable][:8],
+            )
+        problems = [p for p in all_problems if not any(p is q for q, _ in fixable)]
+        if not problems:
+            continue
         relink = all(p.get("return_type_only") for p in problems)
         evidence = [f"{p['owner'].replace('/', '.')}.{p['name']}{p['descriptor'] if p['kind'] != 'class' else ''}"
                     + (f" (RC8: {', '.join(p['candidates'])})" if p.get("candidates") else "") + (" [class missing]" if p["kind"] == "class" else "")
@@ -511,9 +532,10 @@ def _scan_bundled_source_stale(root: Path, result: ScanResult) -> None:
         )
 
 
-def _scan_rc8_signature_changed(root: Path, result: ScanResult) -> None:
-    """Old-form calls with an exact RC8 equivalent (bridgeforge.signature_rewrites; ROADMAP 41, Ironclads 2026-10-04)."""
-    from ..signature_rewrites import suspects
+def _scan_rc8_signature_changed(root: Path, result: ScanResult, vanilla_core: Path | None = None) -> None:
+    """Old-form calls with an exact equivalent on the target (bridgeforge.signature_rewrites; ROADMAP 41, Ironclads
+    2026-10-04). With a target core, also the forms a target newer than RC8 dropped (0.98.5a-RC3, 2026-11-15)."""
+    from ..signature_rewrites import NOTES, suspects
 
     for source in sorted(root.rglob("*.java")):
         if "disabled_files" in source.relative_to(root).parts:
@@ -522,16 +544,16 @@ def _scan_rc8_signature_changed(root: Path, result: ScanResult) -> None:
             text = _blank_java_comments(source.read_text(encoding="utf-8", errors="replace"), strings=True)
         except OSError:
             continue
-        for line, rule, _, _ in suspects(text):
+        for line, rule, _, _ in suspects(text, vanilla_core):
             result.add(
                 id="rc8-signature-changed",
                 category="api",
                 severity="high",
                 classification="REVIEW",
                 confidence="HIGH",
-                explanation=(f"{rule}(...) uses its pre-RC8 argument list; RC8 has only the changed signature "
-                             "(addMarket gained withJunkAndChatter, TileParams/addNebulaFromPNG a name, addCondition "
-                             "lost its boolean), so this does not compile on RC8. The fixer writes RC8's exact form."),
+                explanation=(f"{rule}(...) uses an argument list the target game no longer has ({NOTES[rule]}), so it "
+                             "does not compile there, or for getOfficerSalary(p, b) computes something else. The fixer "
+                             "writes the target's exact equivalent."),
                 file=_relative(root, source),
                 evidence=[f"line:{line}", f"call:{rule}"],
             )
