@@ -20,6 +20,14 @@ class BytecodeUnavailable(RuntimeError):
     """The inspection-only ASM helper could not be compiled or run."""
 
 
+def _run(*args, **kwargs) -> subprocess.CompletedProcess:
+    """subprocess.run, with a JDK that cannot be started reported as BytecodeUnavailable (see java_ast._run)."""
+    try:
+        return subprocess.run(*args, **kwargs)
+    except OSError as exc:
+        raise BytecodeUnavailable(f"Could not start the JDK ({exc}); no JDK was found in the rig, JAVA_HOME or PATH.") from exc
+
+
 def _source() -> Path:
     return (Path(__file__).parent.parent / "java") / "BridgeforgeBytecode.java"
 
@@ -37,7 +45,7 @@ def _helper() -> Path:
     marker = output / "bridgeforge" / "bytecode" / "BridgeforgeBytecode.class"
     if marker.is_file(): return output
     output.mkdir(parents=True, exist_ok=True)
-    done = subprocess.run([_java_tools()[0], "--release", "17", "-cp", str(asm), "-d", str(output), str(source)], capture_output=True, text=True, check=False)
+    done = _run([_java_tools()[0], "--release", "17", "-cp", str(asm), "-d", str(output), str(source)], capture_output=True, text=True, check=False)
     if done.returncode: raise BytecodeUnavailable((done.stderr or done.stdout).strip())
     return output
 
@@ -48,7 +56,7 @@ def _rewrite_helper() -> Path:
     marker = output / "bridgeforge" / "bytecode" / "BridgeforgeBytecodeRewrite.class"
     if marker.is_file(): return output
     output.mkdir(parents=True, exist_ok=True)
-    done = subprocess.run([_java_tools()[0], "--release", "17", "-cp", str(asm), "-d", str(output), str(source)], capture_output=True, text=True, check=False)
+    done = _run([_java_tools()[0], "--release", "17", "-cp", str(asm), "-d", str(output), str(source)], capture_output=True, text=True, check=False)
     if done.returncode: raise BytecodeUnavailable((done.stderr or done.stdout).strip())
     return output
 
@@ -62,7 +70,7 @@ def inspect_bytecode(inputs: list[Path]) -> dict[str, object]:
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".inputs", delete=False) as handle:
         handle.write("\n".join(map(str, selected))); inputs_file = Path(handle.name)
     try:
-        done = subprocess.run([_java_tools()[1], "-cp", str(helper) + __import__("os").pathsep + str(asm), "bridgeforge.bytecode.BridgeforgeBytecode", "--inputs-file", str(inputs_file)], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+        done = _run([_java_tools()[1], "-cp", str(helper) + __import__("os").pathsep + str(asm), "bridgeforge.bytecode.BridgeforgeBytecode", "--inputs-file", str(inputs_file)], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     finally: inputs_file.unlink(missing_ok=True)
     if done.returncode: raise BytecodeUnavailable((done.stderr or done.stdout).strip())
     result = json.loads(done.stdout)
@@ -81,7 +89,7 @@ def append_constant_argument(input_path: Path, output_path: Path, owner: str, na
         raise ValueError("The appended constant is null or false.")
     helper, asm = _rewrite_helper(), _asm()
     output.parent.mkdir(parents=True, exist_ok=True)
-    done = subprocess.run([_java_tools()[1], "-cp", str(helper) + __import__("os").pathsep + str(asm), "bridgeforge.bytecode.BridgeforgeBytecodeRewrite",
+    done = _run([_java_tools()[1], "-cp", str(helper) + __import__("os").pathsep + str(asm), "bridgeforge.bytecode.BridgeforgeBytecodeRewrite",
                  str(source), str(output), "append-constant-argument", owner, name, descriptor, str(opcode), owner, constant,
                  new_descriptor, str(expected)], capture_output=True, text=True, check=False)
     if done.returncode: raise BytecodeUnavailable((done.stderr or done.stdout).strip())
@@ -100,6 +108,6 @@ def rewrite_class(input_path: Path, output_path: Path, rule: object) -> int:
     elif action not in {"remap-method-reference", "remap-field-reference"} or not name or not descriptor or opcode is None or getattr(rule, "replacement_descriptor") != descriptor:
         raise ValueError("Only exact same-descriptor method/field remaps are application-enabled.")
     helper, asm = _rewrite_helper(), _asm(); output.parent.mkdir(parents=True, exist_ok=True)
-    done = subprocess.run([_java_tools()[1], "-cp", str(helper) + __import__("os").pathsep + str(asm), "bridgeforge.bytecode.BridgeforgeBytecodeRewrite", str(source), str(output), action, getattr(rule, "owner"), name, descriptor, str(opcode), getattr(rule, "replacement_owner"), getattr(rule, "replacement_name"), getattr(rule, "replacement_descriptor"), str(getattr(rule, "expected_matches"))], capture_output=True, text=True, check=False)
+    done = _run([_java_tools()[1], "-cp", str(helper) + __import__("os").pathsep + str(asm), "bridgeforge.bytecode.BridgeforgeBytecodeRewrite", str(source), str(output), action, getattr(rule, "owner"), name, descriptor, str(opcode), getattr(rule, "replacement_owner"), getattr(rule, "replacement_name"), getattr(rule, "replacement_descriptor"), str(getattr(rule, "expected_matches"))], capture_output=True, text=True, check=False)
     if done.returncode: raise BytecodeUnavailable((done.stderr or done.stdout).strip())
     return int(done.stdout.strip())

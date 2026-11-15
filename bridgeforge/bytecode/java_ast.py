@@ -16,6 +16,15 @@ class AstUnavailable(RuntimeError):
     """The selected runtime has no usable JDK compiler."""
 
 
+def _run(*args, **kwargs) -> subprocess.CompletedProcess:
+    """subprocess.run, with a JDK that cannot be started reported as AstUnavailable: with no JDK found `helper_java_tools`
+    falls back to bare names, and the FileNotFoundError ended a whole scan (2026-11-15, ROADMAP-3 item 89)."""
+    try:
+        return subprocess.run(*args, **kwargs)
+    except OSError as exc:
+        raise AstUnavailable(f"Could not start the JDK ({exc}); no JDK was found in the rig, JAVA_HOME or PATH.") from exc
+
+
 def utf16_offset_to_index(text: str, offset: int) -> int:
     units = 0
     for index, character in enumerate(text):
@@ -44,7 +53,7 @@ def _ensure_helper() -> Path:
     if marker.is_file():
         return output
     output.mkdir(parents=True, exist_ok=True)
-    completed = subprocess.run([_java_tools()[0], "--release", "17", "-d", str(output), str(source)], capture_output=True, text=True, check=False)
+    completed = _run([_java_tools()[0], "--release", "17", "-d", str(output), str(source)], capture_output=True, text=True, check=False)
     if completed.returncode != 0:
         raise AstUnavailable((completed.stderr or completed.stdout or "javac unavailable").strip())
     return output
@@ -60,7 +69,7 @@ def analyze_sources(root: Path) -> list[dict[str, object]]:
         handle.write("\n".join(map(str, sources)))
         sources_file = Path(handle.name)
     try:
-        completed = subprocess.run([_java_tools()[1], "-cp", str(helper), "bridgeforge.ast.BridgeforgeAst", "--sources-file", str(sources_file)], capture_output=True, text=True, check=False)
+        completed = _run([_java_tools()[1], "-cp", str(helper), "bridgeforge.ast.BridgeforgeAst", "--sources-file", str(sources_file)], capture_output=True, text=True, check=False)
     finally:
         sources_file.unlink(missing_ok=True)
     if completed.returncode != 0:

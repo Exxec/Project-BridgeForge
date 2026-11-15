@@ -54,6 +54,12 @@ A dual target through `mod_info.json` alone is not possible for mods that break:
   gated fixers alone clear it, with a count in the report. Also fixed: the ASM and AST helpers were cached by source hash only, so a
   helper compiled by the rig's Java 25 failed under the game's Java 17 (UnsupportedClassVersionError); they are now compiled
   with `--release 17` and cached by that. `tests/test_target_impact.py`.
+- 89.12 **Done 2026-11-15.** The forwarding check's declaration pattern backtracked for 1,000 s of CPU on Angry Periphery 4 and stalled
+  the archive scan; types now match without free spaces or commas, and a generic method's `<T>` is allowed.
+- 89.13 **Done 2026-11-15.** Guards: with no JDK found, `helper_java_tools` falls back to bare names and their FileNotFoundError
+  ended a whole scan; the AST and ASM helper launches now raise `AstUnavailable`/`BytecodeUnavailable` (the scan reports
+  `source-ast-unavailable`). `tests/test_scan_robustness.py` also gives the whole scanner a time budget on a mod with very long
+  lines, with and without a core, so a backtracking pattern fails the suite (it fails with 89.12's old pattern).
 
 **88. Hand work from the Exotica RC4 and New Galactic Order sessions, made routine (owner-approved 2026-10-26: "all
 approved for now set in roadmap").** Each entry names the hand work it replaces. Suggested order: 88.1-88.2, 88.3, then
