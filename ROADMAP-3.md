@@ -42,6 +42,10 @@ A dual target through `mod_info.json` alone is not possible for mods that break:
   member (jar reference by owner, name and arity; source call by name and arity in a file naming the class) as
   `parameter-meaning-changed` (REVIEW). RC8 -> 0.98.5a-RC3 gives exactly the one 89.1 found by hand, `getOfficerSalary`.
   `tests/test_api_sources.py`.
+- 89.9 **Done 2026-11-15.** `revive --target` defaults to the `--vanilla-core`'s own version (`game_version.core_game_version`, the newest
+  version string in its `starfarer_obf.jar`: 0.98.5a-RC3 there, 0.98a-RC8 in RC8), else 0.98a-RC8; reviving against 0.98.5a no longer
+  writes RC8 into `mod_info.json`. With 89.3-89.5 the gated fixers run inside `revive --vanilla-core <0.98.5a core>` (approval as
+  for any fixer). `tests/test_game_version.py`.
 
 **88. Hand work from the Exotica RC4 and New Galactic Order sessions, made routine (owner-approved 2026-10-26: "all
 approved for now set in roadmap").** Each entry names the hand work it replaces. Suggested order: 88.1-88.2, 88.3, then

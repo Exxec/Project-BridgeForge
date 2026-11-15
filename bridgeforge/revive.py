@@ -584,11 +584,15 @@ def append_ledger(workspace: Path, entry: dict, now=None) -> None:
         handle.write(json.dumps({"at": _now(now), **entry}, ensure_ascii=False) + "\n")
 
 
-def revive(workspace: Path, *, target: str = DEFAULT_TARGET, vanilla_core: Path | None = None, policy_path: Path | None = None,
+def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | None = None, policy_path: Path | None = None,
            approve: list[str] | None = None, apply: bool = False, max_rounds: int = 5, write: bool = True,
            draft_report: bool = False, providers: list[Path] | None = None, provider_index: Path | None = None, now=None,
            reference_core: Path | None = None, api_catalogue: dict | None = None) -> dict:
     workspace = Path(workspace).expanduser().resolve()
+    if not target:  # the core's own version, so reviving against 0.98.5a writes 0.98.5a (ROADMAP-3 item 89)
+        from .game_version import core_game_version
+
+        target = core_game_version(vanilla_core) or DEFAULT_TARGET
     working = workspace / "working"
     if not (working / "mod_info.json").is_file():
         raise ReviveError(f"{workspace} has no working/mod_info.json; revive works on a workspace copy, never the input mod.")

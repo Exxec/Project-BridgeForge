@@ -3508,7 +3508,7 @@ run the mechanical part of a revival unattended (scan, permitted fixers, rescan,
 | `--approve` FINDING_ID | repeatable | approve this fixer for this run even though its findings are not all SAFE; repeatable |
 | `--policy` POLICY | - | standing fixer approvals (default: AUTOMATION_POLICY.json in the workspace's parent folder) |
 | `--vanilla-core` VANILLA_CORE | - | RC8 starsector-core: enables the loose-script compile check and the fixers that compare against vanilla |
-| `--target` TARGET | default 0.98a-RC8 | target game version for mod_info.json (default: 0.98a-RC8) |
+| `--target` TARGET | - | target game version for mod_info.json (default: the --vanilla-core's own version, read from its starfarer_obf.jar; else 0.98a-RC8) |
 | `--max-rounds` MAX_ROUNDS | default 5 | - |
 | `--providers` PROVIDERS | repeatable | where to look for mods that provide missing content, for the options in missing-content packets (default: the workspace's queue folder and its _rig/mods); repeatable |
 | `--reference-core` REFERENCE_CORE | - | the older starsector-core the mod was made for: lets missing-content packets propose renamed replacements (substitution-proposals) |
