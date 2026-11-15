@@ -1,0 +1,1 @@
+- `vanilla-migration` and side-by-side `target-impact` (ROADMAP-3 item 91): vanilla's own call migration checks each gated fixer rule, a live-test order for CLEAN mods, new-vanilla content id collisions, and a gated `pickPortraitPreferNonDuplicate(..., null)` rule.

@@ -35,7 +35,9 @@ def catalogue(impact: dict, stats: dict | None = None) -> list[dict]:
         scanned = by_name.get(_mod_key(record), {})
         rows.append({"mod": record["mod"], "id": record.get("id"), "version": record.get("version"), "path": record["path"],
                      "delta": record["verdict"], "fixers_only": record.get("fixers_only", False), "next": record.get("next", []),
-                     "tier": scanned.get("bucket", "unscanned" if stats else "-"), "blocking": scanned.get("blocking", [])})
+                     "tier": scanned.get("bucket", "unscanned" if stats else "-"), "blocking": scanned.get("blocking", []),
+                     "touches": record.get("touches", {"classes": [], "members": []}), "resolved_on_new": record.get("resolved_on_new", []),
+                     "leads": [d["detail"] for d in record.get("data", []) if d["kind"] == "vanilla-now-provides"]})
     return rows
 
 
@@ -59,7 +61,20 @@ def render_catalogue(build: str, previous: str | None, rows: list[dict], scanned
         if r["delta"] in ACTIVE:
             lines.append(f"### {r['mod']}: {r['delta']}" + (" (gated fixers alone clear it)" if r["fixers_only"] else ""))
             lines += [f"- {step}" for step in r["next"]] + [""]
-    lines += ["## All mods", "", "| Mod | Delta | Tier | Blocking findings |", "|---|---|---|---|"]
+    risky = sorted((r for r in rows if r["delta"] == "CLEAN" and r["touches"]["classes"]),
+                   key=lambda r: (-len(r["touches"]["members"]), -len(r["touches"]["classes"]), r["mod"]))
+    lines += ["## Live-test order for CLEAN mods", "",
+              f"{len(risky)} CLEAN mods use API classes the new build changed; test these first. Members are calls to a name whose "
+              "overloads or fields changed in that class.", "", "| Mod | Changed members used | Changed classes used |", "|---|---|---|"]
+    lines += [f"| {r['mod']} | {len(r['touches']['members'])}: {', '.join(m.rsplit('.', 2)[-2] + '.' + m.rsplit('.', 1)[-1] for m in r['touches']['members'][:3])}"
+              f"{' ...' if len(r['touches']['members']) > 3 else ''} | {len(r['touches']['classes'])} |" for r in risky[:60]]
+    gained = [r for r in rows if r["resolved_on_new"]]
+    leads = [r for r in rows if r["leads"]]
+    if gained or leads:
+        lines += ["", "## What the new build gives back", ""]
+        lines += [f"- {r['mod']}: links on the new build where it failed on the old: {', '.join(r['resolved_on_new'][:4])}" for r in gained]
+        lines += [f"- {r['mod']}: vanilla now has a method like its own helper (retire a workaround?): {'; '.join(r['leads'][:3])}" for r in leads]
+    lines += ["", "## All mods", "", "| Mod | Delta | Tier | Blocking findings |", "|---|---|---|---|"]
     lines += [f"| {r['mod']} | {r['delta']} | {r['tier']} | {', '.join(r['blocking'][:4])}{' ...' if len(r['blocking']) > 4 else ''} |" for r in rows]
     return "\n".join(lines) + "\n"
 
@@ -81,6 +96,15 @@ def bump(new_core: Path, roots: list[Path], state: Path, *, old_core: Path | Non
     out = build_dir(state, build)
     api = diff_api_jars(old_core, new_core)
     atomic_write_json(out / "api-diff.json", api, indent=2, ensure_ascii=False)
+    migration = None
+    try:  # item 91: how vanilla moved its own calls; needs both cores' starfarer.api.zip
+        from .vanilla_migration import VanillaMigrationError, render as render_migration, vanilla_migration
+
+        migration = vanilla_migration(old_core, new_core, api)
+        atomic_write_json(out / "VANILLA_MIGRATION.json", migration, indent=2, ensure_ascii=False)
+        atomic_write_text(out / "VANILLA_MIGRATION.md", render_migration(migration))
+    except VanillaMigrationError:
+        pass
     checkpoint = out / "impact" / CHECKPOINT_NAME
     if restart and checkpoint.is_file():
         checkpoint.unlink()
@@ -96,7 +120,8 @@ def bump(new_core: Path, roots: list[Path], state: Path, *, old_core: Path | Non
     if make_target:
         set_target(state, new_core)
     return {"build": build, "previous": previous, "folder": str(out), "verdicts": impact["verdicts"], "target_set": make_target,
-            "api": {**api.get("summary", {}), "parameters_renamed": len(api.get("parameters_renamed", []))}, "status": entry["status"]}
+            "api": {**api.get("summary", {}), "parameters_renamed": len(api.get("parameters_renamed", []))}, "status": entry["status"],
+            "fixer_rules_vs_vanilla": migration["rule_verdicts"] if migration else None}
 
 
 def retarget_plan(impact: dict, build: str) -> list[dict]:

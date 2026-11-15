@@ -21,10 +21,11 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from .signature_rewrites import _PORTRAIT_OLD
 from .zipsafe import MAX_CLASS_BYTES, read_limited
 
 _API = "com/fs/starfarer/api/"
-INVOKESPECIAL, INVOKEINTERFACE = 183, 185
+INVOKESPECIAL, INVOKESTATIC, INVOKEINTERFACE = 183, 184, 185
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,9 @@ class CallRule:
 RULES = (
     CallRule("ShipAIConfig", _API + "combat/ShipAIConfig", "<init>", "()V", INVOKESPECIAL, f"(L{_API}combat/ShipAPI;)V", "null"),
     CallRule("isBeingIgnored", _API + "combat/ShipAPI", "isBeingIgnored", "()Z", INVOKEINTERFACE, "(Z)Z", "false"),
+    # null is RC8's behaviour: 0.98.5a picks with the Random only when one is given (signature_rewrites, item 91).
+    CallRule("pickPortraitPreferNonDuplicate", _API + "impl/campaign/events/OfficerManagerEvent", "pickPortraitPreferNonDuplicate",
+             _PORTRAIT_OLD, INVOKESTATIC, _PORTRAIT_OLD.replace(";)", ";Ljava/util/Random;)"), "null"),
 )
 
 

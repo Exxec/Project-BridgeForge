@@ -32,6 +32,9 @@ only when the target lacks the old member and has the new one. No target core gi
 - `Misc.getOfficerSalary(p)` -> `(p, Misc.isMercenary(p), false, false)`: RC8's one-argument form was exactly that
   formula; 0.98.5a's four-argument form with both checks false applies no inactive or civilised-space multiplier.
   Only a plain variable or field is rewritten, so the argument is never evaluated twice.
+- `OfficerManagerEvent.pickPortraitPreferNonDuplicate(f, g)` -> `(f, g, null)` (item 91): 0.98.5a's body is RC8's plus
+  `if (random != null) return picker.pick(random);`, so null is RC8's `picker.pick()`; vanilla itself passes null in
+  `PromoteOfficerIntel` (`vanilla-migration`, 2026-11-15). Kadur Remnant's hand port.
 - `Misc.getOfficerSalary(p, b)` -> `(p, b, false, false)`: the descriptor survived but its boolean changed meaning from
   `mercenary` to `checkIfInPopulatedSystem` (the only same-signature parameter rename between the two source zips), so
   the call compiles and silently computes something else.
@@ -57,6 +60,9 @@ RULES = [
 _API = "com/fs/starfarer/api/"
 _PERSON = "Lcom/fs/starfarer/api/characters/PersonAPI;"
 _SALARY_GATE = (_API + "util/Misc", ("getOfficerSalary", f"({_PERSON})F"), ("getOfficerSalary", f"({_PERSON}ZZZ)F"))
+_PORTRAIT_OLD = f"(L{_API}campaign/FactionAPI;L{_API}characters/FullName$Gender;)Ljava/lang/String;"
+_PORTRAIT_GATE = (_API + "impl/campaign/events/OfficerManagerEvent", ("pickPortraitPreferNonDuplicate", _PORTRAIT_OLD),
+                  ("pickPortraitPreferNonDuplicate", _PORTRAIT_OLD.replace(";)", ";Ljava/util/Random;)")))
 # As RULES, plus a gate: (owner class, member the target must lack, member it must have), names as in the class file.
 TARGET_RULES = [
     ("ShipAIConfig", re.compile(r"\bnew\s+(?:[\w.]+\.)?ShipAIConfig\s*\("), 0, lambda a: True, lambda a: ["null"],
@@ -67,6 +73,8 @@ TARGET_RULES = [
      lambda a: [a[0], f" Misc.isMercenary({a[0].strip()})", " false", " false"], _SALARY_GATE),
     ("getOfficerSalary", re.compile(r"\bMisc\s*\.\s*getOfficerSalary\s*\("), 2, lambda a: True,
      lambda a: a + [" false", " false"], _SALARY_GATE),
+    ("pickPortraitPreferNonDuplicate", re.compile(r"\bpickPortraitPreferNonDuplicate\s*\("), 2, lambda a: True, lambda a: a + [" null"],
+     _PORTRAIT_GATE),
 ]
 NOTES = {
     "addMarket": "RC8 has only addMarket(MarketAPI, boolean withJunkAndChatter)",
@@ -77,6 +85,7 @@ NOTES = {
     "isBeingIgnored": "the target has only isBeingIgnored(boolean byAlly); false is RC8's meaning",
     "getOfficerSalary": "the target dropped the one-argument form and gave the two-argument form's boolean a new meaning "
                         "(mercenary -> checkIfInPopulatedSystem)",
+    "pickPortraitPreferNonDuplicate": "the target added a trailing Random; null picks as RC8 did (vanilla passes null too)",
 }
 
 
