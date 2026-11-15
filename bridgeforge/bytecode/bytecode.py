@@ -68,6 +68,24 @@ def inspect_bytecode(inputs: list[Path]) -> dict[str, object]:
     return result
 
 
+def append_constant_argument(input_path: Path, output_path: Path, owner: str, name: str, descriptor: str, opcode: int,
+                             new_descriptor: str, constant: str, expected: int) -> int:
+    """Push `null` or `false` before each matching call and give it `new_descriptor` (one trailing parameter more), into a
+    copy of a .class file; the Java helper checks the shape. Returns the number of calls rewritten (must be `expected`)."""
+    source, output = input_path.expanduser().resolve(), output_path.expanduser().resolve()
+    if source.suffix.lower() != ".class" or not source.is_file() or source == output:
+        raise ValueError("append_constant_argument needs an existing .class input and a different output path.")
+    if constant not in {"null", "false"}:
+        raise ValueError("The appended constant is null or false.")
+    helper, asm = _rewrite_helper(), _asm()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    done = subprocess.run([_java_tools()[1], "-cp", str(helper) + __import__("os").pathsep + str(asm), "bridgeforge.bytecode.BridgeforgeBytecodeRewrite",
+                 str(source), str(output), "append-constant-argument", owner, name, descriptor, str(opcode), owner, constant,
+                 new_descriptor, str(expected)], capture_output=True, text=True, check=False)
+    if done.returncode: raise BytecodeUnavailable((done.stderr or done.stdout).strip())
+    return int(done.stdout.strip())
+
+
 def rewrite_class(input_path: Path, output_path: Path, rule: object) -> int:
     """Apply one exact same-descriptor rule to a .class copy; never changes input."""
     source, output = input_path.expanduser().resolve(), output_path.expanduser().resolve()

@@ -5,6 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from tests.support import javac_path
 from bridgeforge.migrate import build_plan
 from bridgeforge.models import TargetProfile
 from bridgeforge.workspace import create_workspace, workspace_paths
@@ -21,7 +22,7 @@ from bridgeforge.runtime import create_runtime_profile, run_runtime_smoke
 
 class PipelineTests(unittest.TestCase):
     def test_missing_compile_library_keeps_pipeline_running_as_unavailable(self) -> None:
-        javac = shutil.which("javac")
+        javac = javac_path()
         if not javac:
             self.skipTest("JDK compiler unavailable")
         with tempfile.TemporaryDirectory() as directory:

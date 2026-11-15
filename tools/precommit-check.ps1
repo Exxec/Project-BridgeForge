@@ -15,11 +15,13 @@ foreach($c in @('python','py','C:\Users\exxec\AppData\Local\Python\pythoncore-3.
     & $cmd.Source -m ruff --version *> $null
     if($LASTEXITCODE -eq 0){$py=$cmd.Source;break}
 }
-if(-not $py){Write-Error 'No Python with ruff found. Run: python -m pip install ruff (or put the interpreter that has it first on PATH).'; exit 12}
+# No Python with ruff (2026-11-15: the 3.14 install above is gone): uvx runs ruff without installing it anywhere.
+$uvx=Get-Command uvx -ErrorAction SilentlyContinue
+if(-not $py -and -not $uvx){Write-Error 'No Python with ruff and no uvx found. Run: python -m pip install ruff (or install uv).'; exit 12}
 # Lint what is being committed (ROADMAP 77.25): untracked agent scratch must not block unrelated commits. CI still lints the
 # whole repository.
 $pyFiles=@($staged | Where-Object { $_ -like '*.py' -and (Test-Path -LiteralPath $_) })
 if(-not $pyFiles){ Pop-Location; Write-Host 'Pre-commit validation: PASS (no staged Python files)'; exit 0 }
-try{ & $py -m ruff check -- @pyFiles ; $ruffExit=$LASTEXITCODE }finally{Pop-Location}
+try{ if($py){ & $py -m ruff check -- @pyFiles }else{ & $uvx.Source ruff check -- @pyFiles }; $ruffExit=$LASTEXITCODE }finally{Pop-Location}
 if($ruffExit -ne 0){Write-Error 'ruff check failed; fix lint before committing.'; exit 11}
 Write-Host 'Pre-commit validation: PASS'

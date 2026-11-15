@@ -583,7 +583,10 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_shared_hook_overrides(root, result, vanilla_root)
     _scan_temporary_market_fleet_source(root, result)
     _scan_per_frame_market_work(root, result)
-    _scan_rc8_signature_changed(root, result)
+    _scan_rc8_signature_changed(root, result, vanilla_root)
+    from ..forwarding_methods import scan_forwarding
+
+    scan_forwarding(root, result, vanilla_root)
     _scan_replace_drops_rc8_entries(root, result, vanilla_root)
     _scan_retired_vanilla_class_copy(root, result, vanilla_root)
     _scan_bundled_source_stale(root, result)

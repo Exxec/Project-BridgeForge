@@ -2,9 +2,9 @@
 import tempfile
 import unittest
 import zipfile
-import shutil
 from pathlib import Path
 
+from tests.support import javac_path
 from bridgeforge.models import TargetProfile
 from bridgeforge.workspace import create_workspace
 from bridgeforge.build import compile_feedback, create_build_profile, package_compiled_jar, resolve_registered_dependency_jars, run_compile
@@ -65,7 +65,7 @@ class BuildTests(unittest.TestCase):
 
 
     def test_compile_executes_profile_and_classifies_errors(self) -> None:
-        javac = shutil.which("javac")
+        javac = javac_path()
         if not javac:
             self.skipTest("JDK compiler unavailable")
         with tempfile.TemporaryDirectory() as directory:
@@ -147,7 +147,7 @@ class BuildTests(unittest.TestCase):
 
 
     def test_build_profile_auto_resolves_declared_dependency_via_registry(self) -> None:
-        javac = shutil.which("javac")
+        javac = javac_path()
         if not javac:
             self.skipTest("JDK compiler unavailable")
         with tempfile.TemporaryDirectory() as directory:
@@ -167,7 +167,7 @@ class BuildTests(unittest.TestCase):
 
 
     def test_build_profile_prefers_explicit_dependency_jar_over_registry_without_duplicating(self) -> None:
-        javac = shutil.which("javac")
+        javac = javac_path()
         if not javac:
             self.skipTest("JDK compiler unavailable")
         with tempfile.TemporaryDirectory() as directory:

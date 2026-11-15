@@ -130,6 +130,7 @@ LONG_RUNNING_COMMANDS = (
     ("migrate-inventory",),
     ("state-snapshot",),
     ("snapshot-restore-check",),
+    ("target-impact",),
     ("migrate-verify", "write"),
     ("migrate-verify", "check"),
 )

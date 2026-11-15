@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 import unittest
 import zipfile
 from pathlib import Path
 
 from bridgeforge.scan.scanner import scan_mod
-from tests.support import resolved_temp_dir
+from tests.support import javac_path, resolved_temp_dir
 
 
 def _compile(javac: str, root: Path, sources: dict[str, str], classpath: Path | None = None) -> Path:
@@ -38,9 +37,9 @@ MOD = {"data/hullmods/Info.java": "package data.hullmods; import com.fs.starfare
 
 class JarLinkageTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.javac = shutil.which("javac")
+        self.javac = javac_path()
         if self.javac is None:
-            self.skipTest("no javac on PATH")
+            self.skipTest("no JDK found")
 
     def test_a_call_whose_rc8_return_type_changed_is_reported_as_a_relink(self) -> None:
         with resolved_temp_dir() as root:
@@ -57,6 +56,24 @@ class JarLinkageTests(unittest.TestCase):
         self.assertIn("Tip.table(F)V (RC8: (F)Ljava/lang/Object;)", found[0].evidence[0])
         self.assertIn("return type", found[0].explanation)
 
+    def test_a_removed_no_argument_constructor_is_reported(self) -> None:
+        # 0.98.5a-RC3 (2026-11-15): ShipAIConfig() became ShipAIConfig(ShipAPI). Constructors are not inherited, but the
+        # hierarchy walk reached Object.<init>()V and called Polaris Prime's `new ShipAIConfig()` resolved.
+        old = {"com/fs/starfarer/api/combat/Cfg.java": "package com.fs.starfarer.api.combat; public class Cfg { public Cfg() {} }"}
+        new = {"com/fs/starfarer/api/combat/Cfg.java": "package com.fs.starfarer.api.combat; public class Cfg { public Cfg(Object ship) {} }"}
+        mod_src = {"data/Ai.java": "package data; public class Ai { Object make() { return new com.fs.starfarer.api.combat.Cfg(); } }"}
+        with resolved_temp_dir() as root:
+            old_api = _compile(self.javac, root / "old", old)
+            _jar(_compile(self.javac, root / "new", new), root / "starsector-core" / "starfarer.api.jar")
+            mod = root / "mod"
+            _jar(_compile(self.javac, root / "modbuild", mod_src, classpath=old_api), mod / "jars" / "m.jar")
+            (mod / "mod_info.json").write_text(json.dumps({"id": "m", "name": "m", "version": "1", "gameVersion": "0.98a-RC8",
+                                                           "jars": ["jars/m.jar"]}), encoding="utf-8")
+            found = [f for f in scan_mod(mod, vanilla_core=root / "starsector-core").findings if f.id == "jar-linkage-unresolved"]
+        self.assertEqual(len(found), 1)
+        self.assertIn("Cfg.<init>()V", found[0].evidence[0])
+        self.assertIn("(Ljava/lang/Object;)V", found[0].evidence[0])
+
 
 
 NEW_HOOK = {"com/fs/starfarer/api/combat/Hook.java": "package com.fs.starfarer.api.combat; public interface Hook { void hit(int a, Object result, float b); }",
@@ -70,9 +87,9 @@ class JarInterfaceMethodTests(unittest.TestCase):
     """jar-interface-method-missing (2026-10-01): an interface RC8 changed, implemented with the old signature."""
 
     def setUp(self) -> None:
-        self.javac = shutil.which("javac")
+        self.javac = javac_path()
         if self.javac is None:
-            self.skipTest("no javac on PATH")
+            self.skipTest("no JDK found")
 
     def test_a_class_built_against_the_old_interface_is_reported(self) -> None:
         with resolved_temp_dir() as root:

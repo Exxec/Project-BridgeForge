@@ -19,7 +19,7 @@ from bridgeforge.rebuild_jar import (
     compare_jars,
     rebuild_jar,
 )
-from tests.support import resolved_temp_dir
+from tests.support import javac_path, resolved_temp_dir
 
 ACC_PUBLIC = 0x0001
 ACC_STATIC = 0x0008
@@ -251,7 +251,7 @@ class RebuildJarEndToEndTests(unittest.TestCase):
     """Real javac + jar packaging; skipped cleanly when no JDK is on PATH."""
 
     def setUp(self) -> None:
-        javac = shutil.which("javac")
+        javac = javac_path()
         if javac is None:
             self.skipTest("no javac on PATH")
         self.javac = Path(javac)

@@ -3,7 +3,7 @@
 Three things every javac-backed BridgeForge command needs, factored out so both share one
 implementation: JDK discovery (explicit `--jdk` first, then this repo's rig, then JAVA_HOME,
 then PATH), classpath assembly (RC8 core + a mod's own jars + its declared dependencies' jars,
-found via `substitutes.provider_index`), and a javac runner that parses diagnostics into
+found by mod id over the provider roots), and a javac runner that parses diagnostics into
 structured records instead of leaving callers to grep stderr.
 
 Standard library only. Never writes into a mod's working copy: callers choose the output
@@ -17,10 +17,10 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 from bridgeforge.scan.scanner import _load_lenient_json_file
-from bridgeforge.substitutes import provider_index
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PROVIDER_ROOTS = (REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods")
@@ -154,10 +154,44 @@ def declared_dependencies(mod_dir: Path) -> list[str]:
     return ids
 
 
+def _folders_by_id(roots: list[Path]) -> dict[str, Path]:
+    """{mod id: folder} over the same candidates `substitutes.provider_index` walks (a later folder wins, as its by-id map
+    did). Only mod_info.json is read: the full provider index re-parsed ~23,000 data files per compile-check, 74 of
+    AI-War's 130 s and most of a 316-workspace `finding-stats --scan` (2026-11-15). Cached per process; a root whose
+    folder list changes (its mtime) is read again."""
+    key = []
+    for root in roots:
+        try:
+            resolved = Path(root).expanduser().resolve()
+            key.append((str(resolved), resolved.stat().st_mtime_ns if resolved.is_dir() else 0))
+        except OSError:
+            key.append((str(root), 0))
+    return dict(_folders_by_id_cached(tuple(key)))
+
+
+@lru_cache(maxsize=8)
+def _folders_by_id_cached(key: tuple[tuple[str, int], ...]) -> tuple[tuple[str, Path], ...]:
+    found: dict[str, Path] = {}
+    for root_text, _ in key:
+        root = Path(root_text)
+        if not root.is_dir():
+            continue
+        if (root / "mod_info.json").is_file():
+            candidates = [root]
+        else:
+            children = [p for p in root.iterdir() if p.is_dir()]
+            candidates = children + [p / "working" for p in children if (p / "working" / "mod_info.json").is_file()]
+        for folder in candidates:
+            info = _load_lenient_json_file(folder / "mod_info.json") if (folder / "mod_info.json").is_file() else None
+            if isinstance(info, dict) and info.get("id"):
+                found[str(info["id"])] = folder.resolve()
+    return tuple(found.items())
+
+
 def assemble_classpath(mod_dir: Path, vanilla_core: Path | None, provider_roots: list[Path] | None = None) -> ClasspathResult:
     """Every jar in the core folder, the mod's own jars, and each declared dependency's jars.
 
-    Dependency folders are found with `substitutes.provider_index`/its mod_id index, using
+    Dependency folders are found by mod id (`_folders_by_id`, the candidates provider_index walks), using
     `provider_roots` (default: <repo>/In operation and its rig's mods folder) -- the same default
     `dependency-substitutes` uses. A declared dependency with no matching provider, or a provider
     folder with no jars, is reported in `dependencies_missing` rather than silently dropped.
@@ -173,12 +207,11 @@ def assemble_classpath(mod_dir: Path, vanilla_core: Path | None, provider_roots:
     deps = declared_dependencies(mod_dir)
     if deps:
         roots = [Path(entry) for entry in (provider_roots if provider_roots else DEFAULT_PROVIDER_ROOTS)]
-        providers = provider_index(roots, exclude=mod_dir)
-        result.providers_indexed = len(providers)
-        by_id = {provider.mod_id: provider for provider in providers}
+        by_id = {mod_id: folder for mod_id, folder in _folders_by_id(roots).items() if folder != mod_dir}
+        result.providers_indexed = len(by_id)
         for dep_id in deps:
-            provider = by_id.get(dep_id)
-            jars = sorted(str(jar) for jar in _mod_jars(Path(provider.path))) if provider is not None else []
+            folder = by_id.get(dep_id)
+            jars = sorted(str(jar) for jar in _mod_jars(folder)) if folder is not None else []
             if jars:
                 result.dependency_jars[dep_id] = jars
             else:

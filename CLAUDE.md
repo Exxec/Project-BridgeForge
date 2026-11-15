@@ -19,6 +19,14 @@ The S1-S4 documents are proposed strategy; this policy does not itself approve i
 DOC-001 (source-audited 2026-10-18, fixed the same day): `archive --refresh` and group `--archive --refresh` move the prior
 archive to `Done/_replaced-<date>/` and restore it if the new write fails; never delete an archive. Implementation status of
 items 73/75 is in `docs/ROADMAP_STATUS.md`; the runs still needed on this machine are in `docs/LOCAL_HANDOFF.md` section 0b.
+## Target (owner 2026-11-15)
+
+Revivals now target **0.98.5a-RC3**, installed at `C:\Games\Starsector-0.98.5a-RC3` (Java 17; its `jre\bin` has `javac`).
+Pass `C:\Games\Starsector-0.98.5a-RC3\starsector-core` as `--vanilla-core`. RC8 (`C:\Program Files (x86)\Fractal
+Softworks\Starsector`) is the previous target and the reference for archives validated before 2026-11-15. When a new game
+version appears: `api-diff OLD NEW`, then `target-impact OLD_CORE NEW_CORE --write DIR` (what breaks on the new core and
+not the old), then the gated fixers (`rc8-signature-changed`, `jar-call-signature-changed`,
+`forwarding-class-method-missing`, each taking the target core). ROADMAP-3 item 89.
 
 ## Non-negotiables
 
@@ -131,14 +139,14 @@ in a cloud session. Build and test what you can, then add an entry to `docs/LOCA
 - Live harness: the game launcher waits for a click (`auto_click=True` for any new boot path); the probe row in the mission
   list is found by unique mission id and the list is scrolled two ticks per row. A LIVE_STUCK with no `combat-round` line in
   the log means another mission started, not that the probe's combat hung.
-- Run `ruff` from a Python that has it: the project `.venv` does not (use the Python 3.15 install first on `PATH`, see
-  `docs/LOCAL_HANDOFF.md`). It runs pyflakes plus flake8-bugbear (`B`, four noisy rules ignored in `pyproject.toml`).
+- Run ruff as `uvx ruff check .`: the project `.venv` has none and no `AppData\Local\Python` install exists on this machine
+  (checked 2026-11-15); the local pre-commit hook falls back to `uvx` the same way. It runs pyflakes plus flake8-bugbear (`B`, four noisy rules ignored in `pyproject.toml`).
 - Workspace arguments take a path (`"In operation/<name>"`); `audit-explain` refuses one without `working/`.
 
 ## Checks before committing
 
 ```bash
-ruff check .                              # pyflakes + bugbear + syntax; one-line statements are house style
+uvx ruff check .                          # pyflakes + bugbear + syntax; one-line statements are house style
 python -m bridgeforge.test_guard          # full suite; also fails if the checkout changed
 python -m bridgeforge docs-index          # after adding a check or CLI option; commit docs/*.md
 uv lock --check                           # after touching pyproject dependencies

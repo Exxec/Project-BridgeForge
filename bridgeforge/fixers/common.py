@@ -66,6 +66,8 @@ SUPPORTED_FINDINGS = (
     "local-weapon-spec-unregistered",
     "content-reference-substitute",
     "preset-entry-drops-vanilla-fields",
+    "jar-call-signature-changed",
+    "forwarding-class-method-missing",
 )
 
 

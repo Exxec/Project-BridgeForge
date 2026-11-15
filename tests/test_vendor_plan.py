@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 import json
-import shutil
 import subprocess
 import unittest
 import zipfile
@@ -11,7 +10,7 @@ from pathlib import Path
 
 from bridgeforge.cli import main
 from bridgeforge.vendor_plan import VendorPlanError, render, vendor_plan
-from tests.support import resolved_temp_dir
+from tests.support import javac_path, resolved_temp_dir
 
 
 def _write(path: Path, data: object) -> Path:
@@ -146,7 +145,7 @@ class VendorPlanJarTests(unittest.TestCase):
     """Compiled-only classes, via a real javac; skipped cleanly when no JDK is on PATH."""
 
     def setUp(self):
-        self.javac = shutil.which("javac")
+        self.javac = javac_path()
         if self.javac is None:
             self.skipTest("no javac on PATH")
 

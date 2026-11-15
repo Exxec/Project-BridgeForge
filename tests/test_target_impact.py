@@ -1,0 +1,170 @@
+"""target-impact (2026-11-15): what a newer game version breaks that the validated one did not.
+
+Fixtures are tiny fake cores compiled with the JDK: the old has RC8's shapes (ShipAIConfig(), ShipAPI.isBeingIgnored()),
+the new 0.98.5a-RC3's (ShipAIConfig(ShipAPI), isBeingIgnored(boolean), a new abstract isWasHulk()), as `api-diff` showed.
+"""
+from __future__ import annotations
+
+import io
+import json
+import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+
+from bridgeforge.target_impact import discover_mods, render, target_impact
+from tests.support import javac_path, resolved_temp_dir
+from tests.test_jar_linkage import _compile, _jar
+
+_PKG = "com/fs/starfarer/api/combat/"
+OLD_CORE = {
+    _PKG + "ShipAPI.java": "package com.fs.starfarer.api.combat; public interface ShipAPI { boolean isBeingIgnored(); }",
+    _PKG + "ShipAIConfig.java": "package com.fs.starfarer.api.combat; public class ShipAIConfig { public ShipAIConfig() {} }",
+    _PKG + "Tip.java": "package com.fs.starfarer.api.combat; public interface Tip { void table(); }",
+}
+NEW_CORE = {
+    _PKG + "ShipAPI.java": "package com.fs.starfarer.api.combat; public interface ShipAPI { boolean isBeingIgnored(boolean byAlly); boolean isWasHulk(); }",
+    _PKG + "ShipAIConfig.java": "package com.fs.starfarer.api.combat; public class ShipAIConfig { public ShipAIConfig(ShipAPI ship) {} }",
+    _PKG + "Tip.java": "package com.fs.starfarer.api.combat; public interface Tip { Object table(); }",
+}
+DRONE = {"lib/Drone.java": "package lib; import com.fs.starfarer.api.combat.*;\n"
+                           "public class Drone implements ShipAPI { ShipAPI real; public boolean isBeingIgnored() { return real.isBeingIgnored(); } }"}
+AI = {"mod/Ai.java": "package mod; import com.fs.starfarer.api.combat.*;\n"
+                     "public class Ai { Object make() { return new ShipAIConfig(); } void t(Tip t) { t.table(); } }"}
+LOOSE = "package data.scripts; class Brain { Object c(ShipAPI s) { return s.isBeingIgnored() ? null : new ShipAIConfig(); } }\n"
+
+
+def _mod(root: Path, name: str, info: dict, classes: Path | None) -> Path:
+    folder = root / name
+    folder.mkdir(parents=True)
+    if classes is not None:
+        _jar(classes, folder / "jars" / f"{name}.jar")
+        info = {**info, "jars": [f"jars/{name}.jar"]}
+    (folder / "mod_info.json").write_text(json.dumps({"name": name, "version": "1", **info}), encoding="utf-8")
+    return folder
+
+
+class TargetImpactTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.javac = javac_path()
+        if self.javac is None:
+            self.skipTest("no JDK found")
+
+    def _fixture(self, root: Path) -> tuple[Path, Path, Path]:
+        old_classes = _compile(self.javac, root / "oldbuild", OLD_CORE)
+        _jar(old_classes, root / "old" / "starfarer.api.jar")
+        _jar(_compile(self.javac, root / "newbuild", NEW_CORE), root / "new" / "starfarer.api.jar")
+        queue = root / "queue"
+        _mod(queue, "lib", {"id": "lib"}, _compile(self.javac, root / "libbuild", DRONE, classpath=old_classes))
+        _mod(queue, "user", {"id": "user", "dependencies": [{"id": "lib"}]}, _compile(self.javac, root / "userbuild", AI, classpath=old_classes))
+        loose = _mod(queue, "loose", {"id": "loose"}, None)
+        (loose / "data" / "scripts").mkdir(parents=True)
+        (loose / "data" / "scripts" / "Brain.java").write_text(LOOSE, encoding="utf-8")
+        _mod(queue, "plain", {"id": "plain"}, None)
+        return root / "old", root / "new", queue
+
+    def test_each_kind_of_break_is_found_and_only_new_ones(self) -> None:
+        with resolved_temp_dir() as root:
+            old, new, queue = self._fixture(root)
+            result = target_impact([queue], old, new)
+        by_mod = {r["mod"]: r for r in result["records"]}
+        self.assertEqual(result["verdicts"], {"BREAKS": 3, "RELINK": 0, "REVIEW": 0, "CLEAN": 1})
+        lib = by_mod["queue/lib"]
+        self.assertEqual(lib["interfaces"][0]["methods"], ["com/fs/starfarer/api/combat/ShipAPI.isBeingIgnored(Z)Z",
+                                                           "com/fs/starfarer/api/combat/ShipAPI.isWasHulk()Z"])
+        self.assertEqual([(p["name"], p["descriptor"]) for p in lib["linkage"]], [("isBeingIgnored", "()Z")])
+        user = {(p["name"], p["descriptor"], p["return_type_only"]) for p in by_mod["queue/user"]["linkage"]}
+        self.assertEqual(user, {("<init>", "()V", False), ("table", "()V", True)})
+        self.assertEqual(sorted(s["call"] for s in by_mod["queue/loose"]["sources"]), ["ShipAIConfig", "isBeingIgnored"])
+        self.assertEqual(by_mod["queue/plain"]["verdict"], "CLEAN")
+        members = {e["member"]: e["mods"] for e in result["by_member"]}
+        self.assertEqual(members["com.fs.starfarer.api.combat.ShipAIConfig.<init>()V"], ["queue/user"])
+
+    def test_same_core_twice_reports_nothing(self) -> None:
+        with resolved_temp_dir() as root:
+            old, _, queue = self._fixture(root)
+            result = target_impact([queue], old, old)
+        self.assertEqual(result["verdicts"], {"BREAKS": 0, "RELINK": 0, "REVIEW": 0, "CLEAN": 4})
+
+    def test_cli_writes_report_resumes_and_drops_the_checkpoint(self) -> None:
+        from bridgeforge.cli import main
+
+        with resolved_temp_dir() as root:
+            old, new, queue = self._fixture(root)
+            out = root / "out"
+            out.mkdir()
+            # A checkpoint from an interrupted run with the same inputs: its record is reused, not recomputed.
+            header = {"checkpoint": 1, "old_core": str(old), "new_core": str(new), "roots": [str(queue)]}
+            fake = {"mod": "queue/plain", "id": "plain", "version": "1", "path": "x", "verdict": "RELINK",
+                    "linkage": [], "interfaces": [], "sources": []}
+            (out / "TARGET_IMPACT.partial.jsonl").write_text(json.dumps(header) + "\n" + json.dumps({"key": "queue/plain", "value": fake}) + "\n",
+                                                            encoding="utf-8")
+            err = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(err):
+                code = main(["target-impact", str(old), str(new), str(queue), "--write", str(out)])
+            data = json.loads((out / "TARGET_IMPACT.json").read_text(encoding="utf-8"))
+            self.assertEqual(code, 0)
+            self.assertFalse((out / "TARGET_IMPACT.partial.jsonl").exists())
+            self.assertTrue((out / "TARGET_IMPACT.md").is_file())
+        self.assertIn("[3/4] queue/plain: RELINK (0 linkage, 0 interface, 0 source, 0 data) (from checkpoint)", err.getvalue())
+        self.assertEqual(data["verdicts"]["RELINK"], 1)
+
+
+class DiscoveryTests(unittest.TestCase):
+    def test_done_archive_workspace_and_plain_mod_folders(self) -> None:
+        with resolved_temp_dir() as root:
+            done = root / "Done"
+            (done / "A" / "A" ).mkdir(parents=True)
+            (done / "A" / "A" / "mod_info.json").write_text('{"id": "a"}', encoding="utf-8")
+            (done / "A" / "original" / "A").mkdir(parents=True)
+            (done / "A" / "original" / "A" / "mod_info.json").write_text('{"id": "a-old"}', encoding="utf-8")
+            (done / "B" / "working").mkdir(parents=True)
+            (done / "B" / "working" / "mod_info.json").write_text('{"id": "b"}', encoding="utf-8")
+            (done / "_previous" / "C").mkdir(parents=True)
+            (done / "_previous" / "C" / "mod_info.json").write_text('{"id": "c"}', encoding="utf-8")
+            found = [(label, folder.relative_to(root).as_posix()) for label, folder in discover_mods([done])]
+        self.assertEqual(found, [("Done/A", "Done/A/A"), ("Done/B", "Done/B/working")])
+
+    def test_render_lists_breaking_mods_only(self) -> None:
+        result = {"mods": 2, "old_core": "o", "new_core": "n", "verdicts": {"BREAKS": 1, "RELINK": 0, "CLEAN": 1}, "note": "x",
+                  "by_member": [], "records": [
+                      {"mod": "Q/a", "id": "a", "version": "1", "verdict": "BREAKS", "linkage": [], "interfaces": [],
+                       "sources": [{"file": "S.java", "line": 3, "call": "ShipAIConfig"}]},
+                      {"mod": "Q/b", "id": "b", "version": "1", "verdict": "CLEAN", "linkage": [], "interfaces": [], "sources": []}]}
+        text = render(result)
+        self.assertIn("### Q/a (a 1): BREAKS", text)
+        self.assertIn("`S.java:3` uses the old `ShipAIConfig(...)`", text)
+        self.assertNotIn("Q/b", text)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class DataLayerTests(unittest.TestCase):
+    def test_orphaned_rule_override_new_column_and_removed_setting(self) -> None:
+        # 0.98.5a-RC3 (2026-11-15): 115 rule ids removed, ship_data.csv gained parts/dmod, salary, salMult,
+        # settings.json dropped factionCommissionStipendPerLevel.
+        from bridgeforge.target_impact import data_hits
+
+        with resolved_temp_dir() as root:
+            for name, rules, ship_cols, settings in (("old", "id,trigger\nkpAudience1,x\nkeep,y\n", "id,name", '{"stipendPerLevel": 1, "kept": 2}'),
+                                                     ("new", "id,trigger\nkeep,y\n", "id,name,salary", '{"kept": 2}')):
+                core = root / name / "data"
+                (core / "campaign").mkdir(parents=True)
+                (core / "hulls").mkdir()
+                (core / "config").mkdir()
+                (core / "campaign" / "rules.csv").write_text(rules, encoding="utf-8")
+                (core / "hulls" / "ship_data.csv").write_text(ship_cols + "\n", encoding="utf-8")
+                (core / "config" / "settings.json").write_text(settings, encoding="utf-8")
+            mod = root / "mod"
+            (mod / "data" / "campaign").mkdir(parents=True)
+            (mod / "data" / "hulls").mkdir()
+            (mod / "mod_info.json").write_text('{"id": "m", "replace": ["data/hulls/ship_data.csv"]}', encoding="utf-8")
+            (mod / "data" / "campaign" / "rules.csv").write_text("id,trigger\nkpAudience1,z\nkeep,q\nmine,r\n", encoding="utf-8")
+            (mod / "data" / "hulls" / "ship_data.csv").write_text("id,name\nx,X\n", encoding="utf-8")
+            (mod / "S.java").write_text('float a = Global.getSettings().getFloat("stipendPerLevel"); int b = Global.getSettings().getInt("kept");',
+                                        encoding="utf-8")
+            hits = data_hits(mod, root / "old", root / "new")
+        self.assertEqual(hits, [{"kind": "rule-override-orphaned", "detail": "kpAudience1"},
+                                {"kind": "replace-lacks-new-columns", "detail": "data/hulls/ship_data.csv: salary"},
+                                {"kind": "settings-key-removed", "detail": "stipendPerLevel"}])

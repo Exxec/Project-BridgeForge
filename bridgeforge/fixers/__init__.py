@@ -27,6 +27,7 @@ from .data import _fix_local_weapon_spec_unregistered as _fix_local_weapon_spec_
 from .guards import _fix_orbit_period_computed_unguarded as _fix_orbit_period_computed_unguarded, _fix_system_generation_unguarded as _fix_system_generation_unguarded
 from .presets import _fix_preset_entry_drops_vanilla_fields as _fix_preset_entry_drops_vanilla_fields
 from .substitute import fix_content_reference_substitute as fix_content_reference_substitute
+from .jars import _fix_forwarding_class_method_missing as _fix_forwarding_class_method_missing, _fix_jar_call_signature_changed as _fix_jar_call_signature_changed
 
 
 _FIXER_FUNCS = {
@@ -92,6 +93,8 @@ _FIXER_FUNCS = {
     "csv-fullwidth-number": _fix_csv_fullwidth_number,
     "ship-data-missing-fighter-bays-column": _fix_ship_data_missing_fighter_bays_column,
     "missing-custom-ui-button-pressed-callback": _fix_missing_custom_ui_button_pressed_callback,
+    "jar-call-signature-changed": _fix_jar_call_signature_changed,
+    "forwarding-class-method-missing": _fix_forwarding_class_method_missing,
 }
 
 
