@@ -36,6 +36,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "hand_remove": ("remove",),
     "target_impact": ("target-impact",),
     "target_bump": ("target", "target-bump", "retarget"),
+    "vanilla_migration": ("vanilla-migration",),
     "move_machine": ("migrate-inventory", "relocate", "migrate-verify"),
     "state_snapshot": ("state-snapshot",),
     "snapshot_restore": ("snapshot-restore-check",),

@@ -1,3 +1,27 @@
+**91. Side by side: the old and the new build together (owner 2026-11-15: "for the side to side ideas, go ahead and implement. apply same process for other repos").**
+- 91.1 **Done 2026-11-15.** `vanilla-migration OLD_CORE NEW_CORE [--write DIR]`: for every member `api-diff` lists as removed and every
+  same-signature parameter rename, vanilla's call sites in both builds' `starfarer.api.zip`, paired by file, with what the new code
+  passes in the new positions, and each gated fixer rule checked against it (BACKED / DIFFERS / NO_VANILLA_CALLS). `target-bump`
+  writes it into `targets/<build>/`. RC8 -> 0.98.5a: BACKED 3, DIFFERS 3 (vanilla passes the ship it has where `ShipAIConfig(null)`
+  keeps RC8's defaults), NO_VANILLA_CALLS 1. It showed `pickPortraitPreferNonDuplicate(f, g)` -> `(f, g, null)` is exact: 0.98.5a's
+  body is RC8's plus `if (random != null) return picker.pick(random)`, and vanilla's `PromoteOfficerIntel` passes null. New gated
+  rule in `signature_rewrites.TARGET_RULES` and `jar_call_rewrites.RULES` (INVOKESTATIC): Kadur Remnant (both copies) is now
+  fixers-only. `reportSuccess(int)` stays a hand port: the int changes the result and vanilla passes the bounty's level.
+- 91.2 **Done 2026-11-15.** `target-impact` records `touches` (changed API classes a mod uses: references, descriptors, supertypes,
+  imports; and calls to a changed name). The catalogue's "Live-test order for CLEAN mods" ranks them: 61 CLEAN mods touch changed
+  classes (most: `DModManager.addDMods`, `BaseIndustry.getSupply`).
+- 91.3 **Done 2026-11-15.** `new-vanilla-id-collision` (REVIEW): a content id the mod defines that the new vanilla defines for the
+  first time (the mod's row silently replaces vanilla's new content). Found YunruCore's `low_maintenance` hull mod (3 copies).
+  `resolved_on_new`: links that fail on the old core and resolve on the new.
+- 91.4 **Done 2026-11-15.** `vanilla-now-provides` (information only): a static helper whose name and arity match a method the new
+  API added under a new name; 3 leads (Exotica `getWidth/getHeight`, Void-Tec `getScript`, likely name coincidences).
+- Real run RC8 -> 0.98.5a (471 folders): BREAKS 35, RELINK 4, REVIEW 4, CLEAN 428; fixers alone clear 25 of 43.
+- Sister repos, same idea (agents, 2026-11-15): Salvor PR #13 `salvor version-check SAVE --core NEW` (classes a save names that
+  the new core lacks; an RC8 save: none vanilla, 64 mod classes unresolved -> UNKNOWN); VoidSmith PR #15 `vanilla-diff` (39 hulls,
+  21 weapons, 9 hull mods changed; 977 generated files name a changed id); Project Go PR #13 `string-diff` (94 added, 2 removed, 308
+  changed of 5,822 strings; carry-over of a translation pack). RevenantLib: nothing to add (its dual-build check is 90.4).
+- Tests: `tests/test_target_delta.py` (7), `test_signature_rewrites` (portrait rule), existing target tests.
+
 **90. A new game build in one run (owner 2026-11-15: "Go ahead with item 90"; design `docs/MULTI_VERSION_COMPAT_DESIGN.md`, owner decisions the same day).**
 The RC8 -> 0.98.5a move (item 89) took a dozen hand-run commands, each given the core path again, and a scratch script to merge
 their results.
