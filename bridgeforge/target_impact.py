@@ -37,7 +37,8 @@ VERDICTS = ("BREAKS", "RELINK", "REVIEW", "CLEAN")
 # Listed, but no REVIEW verdict on their own: Ironclads replaces ship_data.csv, wing_data.csv and weapon_data.csv lacking
 # 13 to 17 of RC8's columns each (tags, rarity, tech/manufacturer, ...) and was LIVE_VALIDATED on RC8, so the loader reads a
 # missing column as blank (2026-11-15). A fixer adding blank columns would change nothing.
-INFORMATIONAL = {"replace-lacks-new-columns"}
+# `vanilla-now-provides` is a lead for retiring a workaround (item 91), not a defect.
+INFORMATIONAL = {"replace-lacks-new-columns", "vanilla-now-provides"}
 CHECKPOINT_NAME = "TARGET_IMPACT.partial.jsonl"
 _SKIP_DIRS = {"original", "workspace", "scratch", "reports", "_previous", "disabled_files"}
 
@@ -232,21 +233,24 @@ def meaning_hits(folder: Path, old_core: Path, new_core: Path, jars: list[Path])
 def mod_impact(folder: Path, old_core: Path, new_core: Path, provider_jars: list[Path]) -> dict:
     """What breaks on `new_core` that did not on `old_core`, for one mod folder."""
     from .linkage import missing_interface_methods, unresolved_references
+    from .target_delta import id_collisions, now_provides, touches
 
     info = _mod_info(folder) or {}
     jars = _declared_jars(folder, info)
-    linkage, interfaces = [], []
+    linkage, interfaces, resolved = [], [], []
     if jars:
         before = _linkage_keys(unresolved_references(jars, old_core, provider_jars))
         after = _linkage_keys(unresolved_references(jars, new_core, provider_jars))
         linkage = [after[key] for key in sorted(after.keys() - before.keys())]
+        resolved = sorted({_member(before[key]) for key in before.keys() - after.keys()})  # the new core supplies them
         old_missing = missing_interface_methods(jars, old_core, provider_jars)
         for entry, methods in sorted(missing_interface_methods(jars, new_core, provider_jars).items()):
             new_only = sorted(set(methods) - set(old_missing.get(entry, [])))
             if new_only:
                 interfaces.append({"class": entry, "methods": new_only})
     sources = sorted(_source_hits(folder, new_core) - _source_hits(folder, old_core))
-    data = data_hits(folder, old_core, new_core) + meaning_hits(folder, old_core, new_core, jars)
+    data = (data_hits(folder, old_core, new_core) + meaning_hits(folder, old_core, new_core, jars)
+            + id_collisions(folder, old_core, new_core) + now_provides(folder, old_core, new_core))
     if interfaces or sources or any(not p.get("return_type_only") for p in linkage):
         verdict = "BREAKS"
     elif linkage:
@@ -257,7 +261,8 @@ def mod_impact(folder: Path, old_core: Path, new_core: Path, provider_jars: list
         verdict = "CLEAN"
     record = {"id": info.get("id"), "version": info.get("version"), "path": str(folder), "verdict": verdict,
               "linkage": linkage, "interfaces": interfaces, "data": data,
-              "sources": [{"file": f, "line": line, "call": rule} for f, line, rule in sources]}
+              "sources": [{"file": f, "line": line, "call": rule} for f, line, rule in sources],
+              "touches": touches(folder, jars, old_core, new_core), "resolved_on_new": resolved}
     record["next"], record["fixers_only"] = worklist(folder, record, new_core) if verdict != "CLEAN" else ([], False)
     return record
 
@@ -370,6 +375,8 @@ def render(result: dict) -> str:
         lines += [f"- jar `{i['class']}` lacks {', '.join('`' + m.replace('/', '.') + '`' for m in i['methods'])}" for i in r["interfaces"]]
         lines += [f"- source `{s['file']}:{s['line']}` uses the old `{s['call']}(...)` (fixer: `rc8-signature-changed` with the new core)" for s in r["sources"]]
         lines += [f"- {d['kind']}: `{d['detail']}`" for d in r.get("data", [])]
+        if r.get("resolved_on_new"):
+            lines.append(f"- resolves on the new core only: {', '.join('`' + m + '`' for m in r['resolved_on_new'][:6])}")
         if r.get("next"):
             lines.append("- Next" + (" (fixers alone clear it)" if r.get("fixers_only") else "") + ":")
             lines += [f"  {n}. `{step}`" if step.startswith("bridgeforge ") else f"  {n}. {step}" for n, step in enumerate(r["next"], 1)]

@@ -1,0 +1,1 @@
+- `target`, `target-bump` and `retarget` (ROADMAP-3 item 90): a game-build registry in `bridgeforge-state/`, `--vanilla-core @target`, a new build diffed, catalogued and made the target in one resumable run, and CLEAN workspaces moved to it in bulk.

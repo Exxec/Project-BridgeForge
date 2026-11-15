@@ -106,6 +106,7 @@ LONG_RUNNING_COMMANDS = (
     ("recipe-trial",),
     ("local-kit", "build"),
     ("finding-stats",),
+    ("target-bump",),
     ("dependency-graph",),
     ("corpus-recheck",),
     ("corpus-index", "build"),

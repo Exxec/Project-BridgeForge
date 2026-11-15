@@ -58,10 +58,13 @@ TARGET_OLD = ('class D {\n  void d(ShipAPI ship, PersonAPI person) {\n'
               '    float pay = Misc.getOfficerSalary(person);\n'
               '    float merc = Misc.getOfficerSalary(person, true);\n'
               '    float kept = Misc.getOfficerSalary(person, true, false, false); // new ShipAIConfig()\n'
+              '    String face = OfficerManagerEvent.pickPortraitPreferNonDuplicate(faction, gender);\n'
               '  }\n}\n')
 
 _API = "com/fs/starfarer/api/"
 _PERSON = "Lcom/fs/starfarer/api/characters/PersonAPI;"
+_PORTRAIT = f"(L{_API}campaign/FactionAPI;L{_API}characters/FullName$Gender;)Ljava/lang/String;"
+_OFFICERS = _API + "impl/campaign/events/OfficerManagerEvent"
 
 
 def _core(new_api: bool) -> dict:
@@ -72,11 +75,14 @@ def _core(new_api: bool) -> dict:
         ai = {("<init>", f"({'L' + _API}combat/ShipAPI;)V")}
         ship = {("isBeingIgnored", "(Z)Z")}
         misc = {("getOfficerSalary", f"({_PERSON}Z)F"), ("getOfficerSalary", f"({_PERSON}ZZZ)F")}
+        officers = {("pickPortraitPreferNonDuplicate", _PORTRAIT.replace(";)", ";Ljava/util/Random;)"))}
     else:
         ai = {("<init>", "()V")}
         ship = {("isBeingIgnored", "()Z")}
         misc = {("getOfficerSalary", f"({_PERSON})F"), ("getOfficerSalary", f"({_PERSON}Z)F")}
-    return {_API + "combat/ShipAIConfig": ClassInfo(_API + "combat/ShipAIConfig", "java/lang/Object", [], methods=ai),
+        officers = {("pickPortraitPreferNonDuplicate", _PORTRAIT)}
+    return {_OFFICERS: ClassInfo(_OFFICERS, "java/lang/Object", [], methods=officers),
+_API + "combat/ShipAIConfig": ClassInfo(_API + "combat/ShipAIConfig", "java/lang/Object", [], methods=ai),
             _API + "combat/ShipAPI": ClassInfo(_API + "combat/ShipAPI", "java/lang/Object", [], methods=ship),
             _API + "util/Misc": ClassInfo(_API + "util/Misc", "java/lang/Object", [], methods=misc)}
 
@@ -106,7 +112,8 @@ class TargetGatedRewriteTests(unittest.TestCase):
     def test_newer_target_flags_and_rewrites_each_dropped_form(self) -> None:
         calls, text, after = self._run(new_api=True)
         self.assertEqual(calls, ["call:ShipAIConfig", "call:ShipAIConfig", "call:getOfficerSalary", "call:getOfficerSalary",
-                                 "call:isBeingIgnored"])
+                                 "call:isBeingIgnored", "call:pickPortraitPreferNonDuplicate"])
+        self.assertIn("face = OfficerManagerEvent.pickPortraitPreferNonDuplicate(faction, gender, null);", text)  # item 91
         self.assertIn("config = new ShipAIConfig(null);", text)
         self.assertIn("other = new com.fs.starfarer.api.combat.ShipAIConfig(null);", text)
         self.assertIn("ignored = ship.isBeingIgnored(false);", text)
