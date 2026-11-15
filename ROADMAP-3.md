@@ -35,8 +35,13 @@ A dual target through `mod_info.json` alone is not possible for mods that break:
   (fixers above, then `patch-jar-class --vanilla-core <0.98.5a core>` where source exists); hand ports for
   `PersonBountyEventData.reportSuccess(int)` and `pickPortraitPreferNonDuplicate(..., Random)`; obfuscated internals in Station
   Augments and Neutrino 1.8.9; a 0.98.5a rig and live runs; whether a `rules.csv` row overriding a vanilla id behaves as on RC8
-  under the new `rules` list (live). Proposed: `api-diff --sources` (parameter-name diff, as 89.1 did by hand); a target profile so
-  finding text says "the target" instead of "RC8".
+  under the new `rules` list (live). Proposed: a target profile so finding text says "the target" instead of "RC8".
+- 89.8 **Done 2026-11-15.** Same signature, other meaning: `api_sources.parameter_renames` compares parameter names of every
+  public/protected method in the two `starfarer.api.zip` bundles; `api-diff` adds `parameters_renamed` to its catalogue (and
+  prints them) whenever both zips sit beside the jars, as the game ships them; `target-impact` reports a mod calling such a
+  member (jar reference by owner, name and arity; source call by name and arity in a file naming the class) as
+  `parameter-meaning-changed` (REVIEW). RC8 -> 0.98.5a-RC3 gives exactly the one 89.1 found by hand, `getOfficerSalary`.
+  `tests/test_api_sources.py`.
 
 **88. Hand work from the Exotica RC4 and New Galactic Order sessions, made routine (owner-approved 2026-10-26: "all
 approved for now set in roadmap").** Each entry names the hand work it replaces. Suggested order: 88.1-88.2, 88.3, then

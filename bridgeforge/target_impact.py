@@ -171,6 +171,60 @@ def data_hits(folder: Path, old_core: Path, new_core: Path) -> list[dict]:
     return hits
 
 
+def _descriptor_arity(descriptor: str) -> int:
+    count, pos = 0, 1
+    while descriptor[pos] != ")":
+        while descriptor[pos] == "[":
+            pos += 1
+        pos = descriptor.index(";", pos) + 1 if descriptor[pos] == "L" else pos + 1
+        count += 1
+    return count
+
+
+def meaning_hits(folder: Path, old_core: Path, new_core: Path, jars: list[Path]) -> list[dict]:
+    """Calls to a game method whose descriptor survived but a parameter was renamed (`api_sources`; 0.98.5a's
+    getOfficerSalary boolean, mercenary -> checkIfInPopulatedSystem). Jar references match owner, name and arity; source
+    calls match name and arity in a file that names the class. REVIEW: a rename can be cosmetic."""
+    from .api_sources import parameter_renames, source_zip_beside
+    from .linkage import jar_classes
+    from .procgen_args import _arguments
+
+    old_zip, new_zip = source_zip_beside(old_core), source_zip_beside(new_core)
+    renames = parameter_renames(str(old_zip), str(new_zip)) if old_zip and new_zip else ()
+    if not renames:
+        return []
+    from .api_sources import render_rename
+
+    hits: list[dict] = []
+    refs = set()
+    for jar in jars:
+        for info in jar_classes(jar).values():
+            refs |= {(owner, name, _descriptor_arity(desc)) for kind, owner, name, desc in info.refs if kind == "method" and desc.startswith("(")}
+    texts = []
+    for source in folder.rglob("*.java"):
+        try:
+            texts.append((source, source.read_text(encoding="utf-8", errors="replace")))
+        except OSError:
+            continue
+    for record in renames:
+        owner, simple, arity = record["class"].replace(".", "/"), record["class"].rsplit(".", 1)[-1], len(record["types"])
+        found = (owner, record["method"], arity) in refs
+        call = re.compile(rf"\b{re.escape(record['method'])}\s*\(")
+        for source, text in texts if not found else []:
+            if simple not in text:
+                continue
+            for match in call.finditer(text):
+                args = _arguments(text, match.end() - 1)
+                if args is not None and len([a for a in args if a.strip()]) == arity:
+                    found = True
+                    break
+            if found:
+                break
+        if found:
+            hits.append({"kind": "parameter-meaning-changed", "detail": render_rename(record)})
+    return hits
+
+
 def mod_impact(folder: Path, old_core: Path, new_core: Path, provider_jars: list[Path]) -> dict:
     """What breaks on `new_core` that did not on `old_core`, for one mod folder."""
     from .linkage import missing_interface_methods, unresolved_references
@@ -188,7 +242,7 @@ def mod_impact(folder: Path, old_core: Path, new_core: Path, provider_jars: list
             if new_only:
                 interfaces.append({"class": entry, "methods": new_only})
     sources = sorted(_source_hits(folder, new_core) - _source_hits(folder, old_core))
-    data = data_hits(folder, old_core, new_core)
+    data = data_hits(folder, old_core, new_core) + meaning_hits(folder, old_core, new_core, jars)
     if interfaces or sources or any(not p.get("return_type_only") for p in linkage):
         verdict = "BREAKS"
     elif linkage:
