@@ -18,7 +18,6 @@
     "magiclib-add-activator",
     "magiclib-combat-activator",
     "security-manager",
-    "source-ast-unavailable",
     "target-bytecode-exceeds-profile",
     "unreadable-mod-info",
     "unreadable-source"
