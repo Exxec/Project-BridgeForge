@@ -49,6 +49,11 @@ A dual target through `mod_info.json` alone is not possible for mods that break:
 - 89.10 Measured 2026-11-15: a replaced CSV missing columns is tolerated. Ironclads replaces three data CSVs lacking 13-17 of RC8's
   columns each and was LIVE_VALIDATED on RC8, so `target-impact` lists `replace-lacks-new-columns` as information (no REVIEW verdict
   by itself) and no blank-column fixer was added (it would change nothing).
+- 89.11 **Done 2026-11-15.** `target-impact` writes a worklist: per mod that breaks, the next steps in order (the gated `fix`
+  commands with the new core, a relink through `jar-packets`/`patch-jar-class`, a hand port, a review) and `fixers_only` when the
+  gated fixers alone clear it, with a count in the report. Also fixed: the ASM and AST helpers were cached by source hash only, so a
+  helper compiled by the rig's Java 25 failed under the game's Java 17 (UnsupportedClassVersionError); they are now compiled
+  with `--release 17` and cached by that. `tests/test_target_impact.py`.
 
 **88. Hand work from the Exotica RC4 and New Galactic Order sessions, made routine (owner-approved 2026-10-26: "all
 approved for now set in roadmap").** Each entry names the hand work it replaces. Suggested order: 88.1-88.2, 88.3, then

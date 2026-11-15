@@ -76,6 +76,15 @@ class TargetImpactTests(unittest.TestCase):
         self.assertEqual(user, {("<init>", "()V", False), ("table", "()V", True)})
         self.assertEqual(sorted(s["call"] for s in by_mod["queue/loose"]["sources"]), ["ShipAIConfig", "isBeingIgnored"])
         self.assertEqual(by_mod["queue/plain"]["verdict"], "CLEAN")
+        # Worklist (89.11): fixers first, then a relink, then hand work.
+        self.assertTrue(by_mod["queue/loose"]["fixers_only"])
+        self.assertIn("--finding rc8-signature-changed", by_mod["queue/loose"]["next"][0])
+        user_next = by_mod["queue/user"]["next"]
+        self.assertIn("--finding jar-call-signature-changed", user_next[0])
+        self.assertTrue(user_next[1].startswith("relink 1 call(s)"))
+        self.assertFalse(by_mod["queue/user"]["fixers_only"])
+        self.assertTrue(any(step.startswith("hand: implement") for step in lib["next"]))
+        self.assertIn("1 of 3 mods need only the gated fixers: queue/loose.", render(result))
         members = {e["member"]: e["mods"] for e in result["by_member"]}
         self.assertEqual(members["com.fs.starfarer.api.combat.ShipAIConfig.<init>()V"], ["queue/user"])
 

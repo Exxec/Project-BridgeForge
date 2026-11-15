@@ -33,7 +33,7 @@ def _helper_source() -> Path:
 
 def _helper_directory() -> Path:
     source = _helper_source()
-    digest = hashlib.sha256(source.read_bytes()).hexdigest()[:16]
+    digest = hashlib.sha256(b"release-17" + source.read_bytes()).hexdigest()[:16]
     return Path(tempfile.gettempdir()) / "bridgeforge-ast" / digest
 
 
@@ -44,7 +44,7 @@ def _ensure_helper() -> Path:
     if marker.is_file():
         return output
     output.mkdir(parents=True, exist_ok=True)
-    completed = subprocess.run([_java_tools()[0], "-d", str(output), str(source)], capture_output=True, text=True, check=False)
+    completed = subprocess.run([_java_tools()[0], "--release", "17", "-d", str(output), str(source)], capture_output=True, text=True, check=False)
     if completed.returncode != 0:
         raise AstUnavailable((completed.stderr or completed.stdout or "javac unavailable").strip())
     return output

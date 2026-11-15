@@ -255,9 +255,51 @@ def mod_impact(folder: Path, old_core: Path, new_core: Path, provider_jars: list
         verdict = "REVIEW"
     else:
         verdict = "CLEAN"
-    return {"id": info.get("id"), "version": info.get("version"), "path": str(folder), "verdict": verdict,
-            "linkage": linkage, "interfaces": interfaces, "data": data,
-            "sources": [{"file": f, "line": line, "call": rule} for f, line, rule in sources]}
+    record = {"id": info.get("id"), "version": info.get("version"), "path": str(folder), "verdict": verdict,
+              "linkage": linkage, "interfaces": interfaces, "data": data,
+              "sources": [{"file": f, "line": line, "call": rule} for f, line, rule in sources]}
+    record["next"], record["fixers_only"] = worklist(folder, record, new_core) if verdict != "CLEAN" else ([], False)
+    return record
+
+
+def worklist(folder: Path, record: dict, new_core: Path) -> tuple[list[str], bool]:
+    """The next steps for one mod, most mechanical first, and whether the gated fixers alone would clear it (ROADMAP-3
+    item 89): fixers for dropped call forms in sources and jars and for forwarding classes, a relink for return-type-only
+    changes (needs the class source), a hand port for everything else."""
+    from .jar_call_rewrites import matching_rule
+
+    fix = 'bridgeforge fix "{folder}" --finding {fid} --vanilla-core "{core}" --apply'
+    steps: list[str] = []
+    fixers_only = True
+    if record["sources"]:
+        steps.append(fix.format(folder=folder, fid="rc8-signature-changed", core=new_core))
+    by_rule = [p for p in record["linkage"] if p["kind"] == "method" and matching_rule(p["owner"], p["name"], p["descriptor"], new_core)]
+    if by_rule:
+        steps.append(fix.format(folder=folder, fid="jar-call-signature-changed", core=new_core))
+    relinks = [p for p in record["linkage"] if p.get("return_type_only") and p not in by_rule]
+    if relinks:
+        steps.append(f'relink {len(relinks)} call(s): bridgeforge jar-packets, then patch-jar-class --vanilla-core "{new_core}"')
+        fixers_only = False
+    hand = [p for p in record["linkage"] if p not in by_rule and p not in relinks]
+    if hand:
+        steps.append("hand port: " + ", ".join(sorted({_member(p) for p in hand}))[:300])
+        fixers_only = False
+    if record["interfaces"]:
+        from .forwarding_methods import missing_forwards
+        from .linkage import core_index
+
+        core = core_index(str(Path(new_core).resolve()))
+        texts = (s.read_text(encoding="utf-8", errors="replace") for s in folder.rglob("*.java"))
+        if any("implements" in text and missing_forwards(text, core) for text in texts):
+            steps.append(fix.format(folder=folder, fid="forwarding-class-method-missing", core=new_core) + ", then patch-jar-class")
+        else:
+            steps.append("hand: implement " + ", ".join(m.replace("/", ".") for i in record["interfaces"] for m in i["methods"])[:300])
+        fixers_only = False  # the jar is rebuilt from the edited source with patch-jar-class
+    for d in record.get("data", []):
+        if d["kind"] not in INFORMATIONAL:
+            steps.append(f"review {d['kind']}: {d['detail']}")
+            fixers_only = False
+    return steps, fixers_only and bool(steps)
 
 
 def _member(problem: dict) -> str:
@@ -328,7 +370,16 @@ def render(result: dict) -> str:
         lines += [f"- jar `{i['class']}` lacks {', '.join('`' + m.replace('/', '.') + '`' for m in i['methods'])}" for i in r["interfaces"]]
         lines += [f"- source `{s['file']}:{s['line']}` uses the old `{s['call']}(...)` (fixer: `rc8-signature-changed` with the new core)" for s in r["sources"]]
         lines += [f"- {d['kind']}: `{d['detail']}`" for d in r.get("data", [])]
+        if r.get("next"):
+            lines.append("- Next" + (" (fixers alone clear it)" if r.get("fixers_only") else "") + ":")
+            lines += [f"  {n}. `{step}`" if step.startswith("bridgeforge ") else f"  {n}. {step}" for n, step in enumerate(r["next"], 1)]
         lines.append("")
+    plan = [r for r in result["records"] if r["verdict"] != "CLEAN"]
+    if plan:
+        cleared = [r["mod"] for r in plan if r.get("fixers_only")]
+        lines += ["## Worklist", "", f"{len(cleared)} of {len(plan)} mods need only the gated fixers: {', '.join(cleared) or 'none'}.",
+                  "The rest need a relink, a hand port or a review (steps above). After fixing, run `target-impact` again; then a "
+                  "live run on the new version.", ""]
     return "\n".join(lines) + "\n"
 
 

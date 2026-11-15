@@ -9,6 +9,8 @@ from pathlib import Path
 ASM_SHA256 = "8cadd43ac5eb6d09de05faecca38b917a040bb9139c7edeb4cc81c740b713281"
 
 
+# Helpers are compiled with --release 17 and cached by that: a helper built by the rig's Java 25 was reused under the game's
+# Java 17 and failed with UnsupportedClassVersionError (2026-11-15, ROADMAP-3 item 89).
 def _java_tools() -> tuple[str, str]:
     from .java_toolchain import helper_java_tools  # local: java_toolchain imports scanner, which imports this chain
     return helper_java_tools()
@@ -31,22 +33,22 @@ def _asm() -> Path:
 
 def _helper() -> Path:
     source, asm = _source(), _asm()
-    output = Path(tempfile.gettempdir()) / "bridgeforge-bytecode" / hashlib.sha256(source.read_bytes() + asm.read_bytes()).hexdigest()[:16]
+    output = Path(tempfile.gettempdir()) / "bridgeforge-bytecode" / hashlib.sha256(b"release-17" + source.read_bytes() + asm.read_bytes()).hexdigest()[:16]
     marker = output / "bridgeforge" / "bytecode" / "BridgeforgeBytecode.class"
     if marker.is_file(): return output
     output.mkdir(parents=True, exist_ok=True)
-    done = subprocess.run([_java_tools()[0], "-cp", str(asm), "-d", str(output), str(source)], capture_output=True, text=True, check=False)
+    done = subprocess.run([_java_tools()[0], "--release", "17", "-cp", str(asm), "-d", str(output), str(source)], capture_output=True, text=True, check=False)
     if done.returncode: raise BytecodeUnavailable((done.stderr or done.stdout).strip())
     return output
 
 
 def _rewrite_helper() -> Path:
     source, asm = (Path(__file__).parent.parent / "java") / "BridgeforgeBytecodeRewrite.java", _asm()
-    output = Path(tempfile.gettempdir()) / "bridgeforge-bytecode-rewrite" / hashlib.sha256(source.read_bytes() + asm.read_bytes()).hexdigest()[:16]
+    output = Path(tempfile.gettempdir()) / "bridgeforge-bytecode-rewrite" / hashlib.sha256(b"release-17" + source.read_bytes() + asm.read_bytes()).hexdigest()[:16]
     marker = output / "bridgeforge" / "bytecode" / "BridgeforgeBytecodeRewrite.class"
     if marker.is_file(): return output
     output.mkdir(parents=True, exist_ok=True)
-    done = subprocess.run([_java_tools()[0], "-cp", str(asm), "-d", str(output), str(source)], capture_output=True, text=True, check=False)
+    done = subprocess.run([_java_tools()[0], "--release", "17", "-cp", str(asm), "-d", str(output), str(source)], capture_output=True, text=True, check=False)
     if done.returncode: raise BytecodeUnavailable((done.stderr or done.stdout).strip())
     return output
 
