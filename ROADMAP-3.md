@@ -1,3 +1,28 @@
+**90. A new game build in one run (owner 2026-11-15: "Go ahead with item 90"; design `docs/MULTI_VERSION_COMPAT_DESIGN.md`, owner decisions the same day).**
+The RC8 -> 0.98.5a move (item 89) took a dozen hand-run commands, each given the core path again, and a scratch script to merge
+their results.
+- 90.1 **Done 2026-11-15.** `bridgeforge-state/target.json` names the target build and core; `target show|set CORE [--status]|export
+  --to FILE`. `targets/<build>/build.json` is the registry entry (build read from the core, SHA-256 of its three jars, the
+  `gameVersion` strings meaning the build, save versions, status QUALIFIED/OBSERVED/RETIRED, previous build); a different install
+  claiming a recorded build is refused. `export` drops local paths. `--vanilla-core @target` (any argument that is exactly
+  `@target`, also in lists) resolves in `cli.main`; nothing resolves without the token. Local state: RC8 QUALIFIED, 0.98.5a-RC3
+  OBSERVED and the target.
+- 90.2 **Done 2026-11-15.** `target-bump NEW_CORE [roots] [--from OLD] [--stats FINDING_STATS.json] [--no-set] [--restart --quiet]`:
+  api-diff, target-impact (checkpoint in `targets/<build>/impact/`), `CATALOGUE.md/.json` (the item 89 scratch merge made
+  permanent, joined to a full scan by folder name), registry entry, then the target moves. Real run RC8 -> 0.98.5a over `Done/` and
+  `In operation/` (471 folders): BREAKS 35, RELINK 4, REVIEW 1, CLEAN 431; fixers alone clear 23 of 40. Item 89's v3 had BREAKS
+  36: RevenantLib 1.3.0+bf.2 (RevenantLib PR #4) is now clean. Listed in `progress.LONG_RUNNING_COMMANDS`.
+- 90.3 **Done 2026-11-15.** `retarget [--impact FILE] [--apply]`: every CLEAN workspace not yet on the target gets `gameVersion`
+  (the `mod-info-game-version-inexact` edit) and `bump_version` (`+bf.N`, a revival-report section ending READY_FOR_LIVE_TEST, a
+  MOD_CHANGELOG line). Archives, non-CLEAN and already-moved mods are listed with the reason. Plans only without `--apply`;
+  the 0.98.5a plan lists 287 workspaces, not applied (owner to decide).
+- 90.4 Open: a `dormant` verdict for dual-build mods (a call the old core lacks, made only in a method the old core's interfaces do
+  not declare, as RevenantLib's forwards). Needs a per-method call-site listing from the ASM helper; linkage reads only the
+  constant pool.
+- 90.5 Open (design step 1 rest): per-build behaviour-fact states (CARRIED/RECHECK/PROVEN) classified by `target-bump`.
+- Tests: `tests/test_target_bump.py` (10: registry, fingerprint refusal, status kept, token resolution in paths/strings/lists,
+  bump end to end with checkpoint removal, catalogue join, retarget plan and apply).
+
 **89. 0.98.5a-RC3 as the target (owner 2026-11-15: "check against api of latest starsector ... find conflict with current mods and revive mods ... adding new automation, checks and fixers"; then "for now target the newer version unless possible to refactor so they can target both with a simple mod_info version change").**
 The owner installed 0.98.5a-RC3 at `C:\Games\Starsector-0.98.5a-RC3` (Java 17, Zulu 17.0.10; its `jre\bin` has `javac`/`javap`).
 A dual target through `mod_info.json` alone is not possible for mods that break: a class compiled for 0.98.5a's

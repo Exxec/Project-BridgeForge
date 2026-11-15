@@ -22,11 +22,14 @@ items 73/75 is in `docs/ROADMAP_STATUS.md`; the runs still needed on this machin
 ## Target (owner 2026-11-15)
 
 Revivals now target **0.98.5a-RC3**, installed at `C:\Games\Starsector-0.98.5a-RC3` (Java 17; its `jre\bin` has `javac`).
-Pass `C:\Games\Starsector-0.98.5a-RC3\starsector-core` as `--vanilla-core`. RC8 (`C:\Program Files (x86)\Fractal
-Softworks\Starsector`) is the previous target and the reference for archives validated before 2026-11-15. When a new game
-version appears: `api-diff OLD NEW`, then `target-impact OLD_CORE NEW_CORE --write DIR` (what breaks on the new core and
-not the old), then the gated fixers (`rc8-signature-changed`, `jar-call-signature-changed`,
-`forwarding-class-method-missing`, each taking the target core). ROADMAP-3 item 89.
+Pass `--vanilla-core @target` (any core argument resolves the token from `bridgeforge-state/target.json`; `bridgeforge
+target show`). RC8 (`C:\Program Files (x86)\Fractal Softworks\Starsector`) is the previous target (registry status
+QUALIFIED) and the reference for archives validated before 2026-11-15. When a new game version appears: `bridgeforge
+target-bump NEW_CORE` (api-diff, target-impact, catalogue and registry entry in `bridgeforge-state/targets/<build>/`, then
+the new build becomes the target), the gated fixers the catalogue lists (`rc8-signature-changed`,
+`jar-call-signature-changed`, `forwarding-class-method-missing`), then `bridgeforge retarget` (plan) and `--apply` for the
+workspaces left CLEAN. `target export --to FILE` writes the registry the sister repos pin
+(`docs/MULTI_VERSION_COMPAT_DESIGN.md`). ROADMAP-3 items 89 and 90.
 
 ## Non-negotiables
 

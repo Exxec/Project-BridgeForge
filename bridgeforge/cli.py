@@ -52,5 +52,12 @@ def _reconfigure_streams_for_pipes(streams=None) -> list:
 def main(argv: list[str] | None = None) -> int:
     _reconfigure_streams_for_pipes()
     args = build_parser().parse_args(argv)
+    from .targets import TargetError, resolve_tokens
+
+    try:
+        resolve_tokens(args)  # `--vanilla-core @target` and the like (ROADMAP-3 item 90)
+    except TargetError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
     registered = dispatch(args)
     return 2 if registered is None else registered

@@ -35,6 +35,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "dropped_sweep": ("dropped-features",),
     "hand_remove": ("remove",),
     "target_impact": ("target-impact",),
+    "target_bump": ("target", "target-bump", "retarget"),
     "move_machine": ("migrate-inventory", "relocate", "migrate-verify"),
     "state_snapshot": ("state-snapshot",),
     "snapshot_restore": ("snapshot-restore-check",),
