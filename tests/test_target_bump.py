@@ -3,8 +3,11 @@ hand-run commands and a scratch merge script; these pin the one-run replacement 
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import unittest
+from unittest.mock import patch
 import zipfile
 from pathlib import Path
 
@@ -69,6 +72,22 @@ class RegistryTests(unittest.TestCase):
 
 
 class TokenTests(unittest.TestCase):
+    def test_invalid_target_state_returns_cli_error_without_traceback(self) -> None:
+        from bridgeforge.cli import main
+
+        with resolved_temp_dir() as state:
+            path = state / "target.json"
+            for content in ('{', '[]', '{}', '{"build": "v", "core": null}',
+                            '{"build": "", "core": "x"}', '{"build": "v", "core": ""}'):
+                with self.subTest(content=content):
+                    path.write_text(content, encoding="utf-8")
+                    error = io.StringIO()
+                    with patch('bridgeforge.targets.state_dir', return_value=state), contextlib.redirect_stderr(error):
+                        self.assertEqual(main(['scan', '@target']), 2)
+                    self.assertIn('target set CORE', error.getvalue())
+                    self.assertNotIn('Traceback', error.getvalue())
+                    self.assertEqual(path.read_text(encoding="utf-8"), content)
+
     def test_at_target_resolves_for_paths_strings_and_lists(self) -> None:
         with resolved_temp_dir() as root:
             state, core = root / "state", _core(root, "a", "0.98a-RC8")
