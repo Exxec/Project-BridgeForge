@@ -23,7 +23,8 @@ jobs:
           distribution: temurin
           java-version: "17"
       - name: Install Bridgeforge
-        run: python -m pip install ".[archives]"
+        # Package discovery tests invoke the build backend in the test interpreter.
+        run: python -m pip install ".[archives]" "setuptools>=68"
       - name: Run every test case in reverse order and record the time
         run: |
           start=$(date +%s)
