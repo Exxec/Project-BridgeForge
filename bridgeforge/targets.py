@@ -98,7 +98,16 @@ def record_build(state: Path, core: Path, *, status: str | None = None, previous
 
 def load_target(state: Path) -> dict | None:
     path = Path(state) / "target.json"
-    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+    if not path.is_file():
+        return None
+    try:
+        target = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise TargetError(f"cannot read target {path}: {exc}; run `bridgeforge target set CORE`.") from exc
+    if not isinstance(target, dict) or any(not isinstance(target.get(key), str) or not target[key].strip()
+                                           for key in ("build", "core")):
+        raise TargetError(f"invalid target {path}: expected non-empty build and core strings; run `bridgeforge target set CORE`.")
+    return target
 
 
 def set_target(state: Path, core: Path, *, status: str | None = None, previous: str | None = None) -> dict:
