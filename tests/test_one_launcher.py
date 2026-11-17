@@ -50,11 +50,14 @@ class OneLauncherTests(unittest.TestCase):
             with mock.patch.object(launch, "start_game", return_value=_Process()) as start, \
                     mock.patch("bridgeforge.boot_test._running_java_under", return_value=[]), \
                     mock.patch("bridgeforge.boot_test._terminate_tree"), \
-                    mock.patch("bridgeforge.rig.rig_prefs.pinned_launcher_prefs", mock.MagicMock()), \
+                    mock.patch("bridgeforge.rig.rig_prefs.pinned_launcher_prefs", mock.MagicMock()) as pin, \
                     mock.patch.object(live_run, "real_hands", lambda rig_, pid: mock.MagicMock()):
                 with live_run.running_game(rig, "ONE-1"):
                     pass
             start.assert_called_once()
+            from bridgeforge.rig.rig_prefs import LIVE_PINNED
+
+            pin.assert_called_once_with(LIVE_PINNED)  # ROADMAP-3 93.28: New Game's "Skip it" needs canSkipTutorial
             self.assertEqual(start.call_args.args[1], rig / "run-j25-direct.bat")
             self.assertEqual(start.call_args.args[2], rig / "logs" / "ONE-1.stdout.log")
 

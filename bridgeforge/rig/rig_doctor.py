@@ -474,6 +474,27 @@ def _long_paths_enabled() -> bool | None:
         return None
 
 
+def _check_launcher_prefs() -> dict[str, object]:
+    """What an unattended run needs from this Windows user's Java preferences (ROADMAP-3 item 93.28). With no licence key
+    neither the launcher nor a direct start can begin a game: group 1's smoke on Test1 waited 240 s at the launcher (93.20).
+    With no stored controls the first start shows "Key configuration options have changed" over the main menu. The licence
+    key is only checked for presence, never read."""
+    from bridgeforge.rig import rig_prefs
+
+    key, controls = rig_prefs.has_pref(rig_prefs.LICENCE_KEY), rig_prefs.has_pref(rig_prefs.CONTROLS_VERSION)
+    if key is None:
+        return _check("launcher_prefs", "SKIPPED", "Not Windows: the launcher's Java preferences are not read here.")
+    if not key:
+        return _check("launcher_prefs", "FAIL", "No licence key is stored for this Windows user (Java preference `serial`): "
+                      "neither the launcher nor a direct start can begin a game. The owner enters it in the launcher once.")
+    notes = [] if controls else ["No game controls are stored: the first start shows \"Key configuration options have changed\" "
+                                 "over the main menu until Ok is pressed."]
+    if rig_prefs.read_prefs((rig_prefs.CAN_SKIP_TUTORIAL,)).get(rig_prefs.CAN_SKIP_TUTORIAL) != "true":
+        notes.append("canSkipTutorial is not set (no game started here yet); live runs pin it for the run and restore it.")
+    return _check("launcher_prefs", "WARN" if not controls else "PASS",
+                  " ".join(notes) or "Licence key present; controls stored; canSkipTutorial set.")
+
+
 def _check_environment(runtime_dir: Path, repo_root: Path, long_paths: bool | None = None) -> dict[str, object]:
     """ROADMAP 70 H4: long paths and non-ASCII path hazards (the translator needs ASCII paths; deep mod trees pass 260 characters)."""
     name = "environment"
@@ -535,6 +556,7 @@ def rig_doctor(
             _check_working_copy_drift(runtime_dir, working_copies or {}),
             _check_real_install_saves_untouched(repo_root, real_install, saves_baseline, write_saves_baseline),
             _check_core_integrity(runtime_dir, repo_root, core_baseline, write_core_baseline),
+            _check_launcher_prefs(),
         ]
 
     checks.append(_check_environment(runtime_dir, repo_root))

@@ -13,6 +13,35 @@ import sys
 PREFS_KEY = r"Software\JavaSoft\Prefs\com\fs\starfarer"
 RIG_RESOLUTION = "1920x1440"  # the window every click fraction in live_run was measured in (1920x1440 physical, 2026-10-11)
 PINNED = {"resolution": RIG_RESOLUTION, "fullscreen": "false"}
+# Java's Windows preferences store each capital as "/" plus the letter, so canSkipTutorial is the registry value
+# can/Skip/Tutorial and controlsVersion is controls/Version (both machines' registries, 2026-11-17).
+CAN_SKIP_TUTORIAL = "can/Skip/Tutorial"
+CONTROLS_VERSION = "controls/Version"
+LICENCE_KEY = "serial"
+# A live run's New Game clicks "Skip it" (tutorial). rules.csv `ngcSkipTutorialNoSkip` disables it until the Windows user has
+# started a game with the tutorial (`NGCCanSkipTutorial` is `!isNewPlayer()`, backed by canSkipTutorial): Test1 could not skip
+# it (G1-LIVE2-0985a-20261117). The live run pins it with the resolution and gives the owner's state back (ROADMAP-3 93.28).
+LIVE_PINNED = {**PINNED, CAN_SKIP_TUTORIAL: "true"}
+
+
+def has_pref(name: str, key_path: str = PREFS_KEY) -> bool | None:
+    """Whether the preference value exists, asked without reading it: the registry returns only its size (no data buffer), so
+    the licence key is checked this way and never read out (owner rule 2026-11-17). None off Windows. `key_path` (under
+    HKEY_CURRENT_USER) is for tests."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    import winreg
+
+    query = ctypes.windll.advapi32.RegQueryValueExW
+    query.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+    query.restype = ctypes.c_long
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+            size = ctypes.c_ulong(0)
+            return query(key.handle, name, None, None, None, ctypes.byref(size)) == 0
+    except FileNotFoundError:
+        return False
 
 
 def read_prefs(names=tuple(PINNED)) -> dict[str, str | None]:
