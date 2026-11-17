@@ -35,7 +35,56 @@ Cloud sessions have no Starsector install, no test rig, no Windows, and no acces
 local session can pick it up. Each entry says what to run, what "done" looks like, and which
 roadmap item it closes. Delete an entry once it is done (the roadmap keeps the history).
 
-## Current entry point (documentation audit, 2026-10-18)
+## Current entry point: the 0.98.5a-RC7 target (2026-11-17)
+
+Revivals target 0.98.5a-RC7; RC8 is the previous target and the reference (CLAUDE.md "Target"). The command sequence is in
+[the revival guide](BRIDGEFORGE_REVIVAL_GUIDE.md) section 0a. Run `bridgeforge target show` on a machine before a session: it
+prints `target_core_reports`, the build the core itself reports (ROADMAP-3 92.40).
+
+**Machines.**
+- **Test1** holds the main archive (`Done/`, `In operation/`) and the 0.98.5a rig `In operation\_rig-0985a`, a junction to
+  `C:\Games\Starsector-0.98.5a-RC7` (RC7). `C:\Games\Starsector-0.98.5a-RC3` really is RC3, and `_rig` stays on RC8. Its
+  licence key has been stored since the owner supplied it on 2026-11-17 (93.20); `rig-doctor`'s `launcher_prefs` confirms it
+  is present without reading it. Nobody reads, prints or copies the key.
+- **White_Legion** has RC7 at `C:\Program Files (x86)\Fractal Softworks\Starsector985a` and no rig; its `Done/` and older
+  workspaces are empty folder skeletons (92.24). Development runs there, live tests on Test1.
+- Move workspaces between them as a zip with UTF-8 names and compare names byte for byte, not only file counts and hashes:
+  `tar | ssh tar` turned Eridani's CJK file names into mojibake (92.40; 93.6 and 93.18 are open).
+- `Done/` keeps only the latest archive of each mod (owner 2026-11-17): the seven older copies are in
+  `Done/_replaced-2026-11-17/` on Test1, with a README (96.0).
+
+**Live runs on Test1.** Games start in the logged-on user's session, as one-off interactive scheduled tasks: a game started
+over SSH never shows. Delete each task after its run, because a `/SC ONCE /ST 23:59` task fires again at 23:59 (93.7). The
+2026-11-17 runs started the game directly through local wrappers in `bridgeforge-state/live-wrappers/` (a 1920x1440 window
+moved up): the harness still clicks the launcher (93.21), and its click positions need a 1920x1440 window, larger than
+Test1's 1920x1080 desktop (93.22). 95.4 builds this into `probe-group smoke|live`. Leave the mouse alone during a run, report
+each group before the next `install` (93.29), and record or archive only on the owner's word. Records written on 2026-11-17
+say "RC8" for runs on the RC7 rig (96.5 A1, not fixed).
+
+**Runs still to do.**
+1. **First live run with the canSkipTutorial pin (93.28).** `probe-group live` on the 0.98.5a rig. Done: the run gets past
+   New Game's tutorial choice, and the owner's `canSkipTutorial` is as before afterwards (absent stays absent).
+2. **The abandoned archives the catalogue flagged (96.2).** Kadur Remnant (the gated `jar-call-signature-changed` fixer),
+   Broken Star (`relink`), Vayra's Sector (`reportSuccess(int)`: the argument decided from vanilla's own callers, which pass
+   the bounty's level; 91.1, 95.14), YunruCore (`hullmod:low_maintenance` now collides with an RC7 hull mod: rename or keep,
+   the owner's call with the evidence), Neutrino Corporation 1.8.9 and Station Augments (hand ports of calls into obfuscated
+   game internals). Each: `restore-from-done`, fix, live test on Test1, `bump-version`, then `probe-group record ... --accept
+   --archive --refresh` on the owner's word (the `bridgeforge-revive` skill). Station Augments' archive is the hand-placed
+   copy of item 19 below, which `restore-from-done` refuses. AoTD is skipped (active upstream); Nightcross is superseded.
+3. **Combat re-runs with probe 0.3.3 (93.37, 93.39).** Before 0.3.3, every two-round run fought round 1 twice and never round
+   2. Re-run:
+   - Bultach Coalition, not recorded: SR3-LIVE-0985a-20261117 stopped in round 2.
+   - United Aurora Federation.
+   - The Eridani Combine and Scrapyard Armories group, so their round-2 hulls fight. Both were archived 2026-11-17 on the
+     owner's "archive all"; refresh them only if the re-run changes something.
+
+   Done when `probe-group report` prints no `combat` WARN and every planned round appears in `combat_rounds.started`.
+4. **Archived OP trims (92.20)**, on Test1 (it needs the full `Done/`): classify each `variant-op-over-budget` trim as
+   REGRESSION or AUTHORED against the mod's reference core, and restore the AUTHORED ones as `+bf.N` revisions.
+5. **Catalogue again after the ports:** `target-impact` RC8 -> RC7 over `Done/` (the `bridgeforge-catalogue` skill). The first
+   run (2026-11-17, 175 archives) gave CLEAN 167, BREAKS 4, RELINK 3, REVIEW 1.
+
+## Entry point of the documentation audit, 2026-10-18
 
 Read [INDEX.md](INDEX.md), [ROADMAP_STATUS.md](ROADMAP_STATUS.md) and the strategic documents before selecting new work.
 The 2026-10-12 snapshot below is dated history, not a fresh inventory or an instruction to repeat completed runs.

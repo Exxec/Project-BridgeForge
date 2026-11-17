@@ -31,6 +31,18 @@
   active upstream and under overhaul. Nightcross is superseded.
 - 96.3 **Docs pass**, by an agent with review: README, `docs/BRIDGEFORGE_REVIVAL_GUIDE.md`, `docs/LOCAL_HANDOFF.md`,
   `docs/ROADMAP_STATUS.md` and CLAUDE.md against what items 93.20-93.38, 95 and 96 changed; then push.
+  **Done 2026-11-17.** An agent rewrote the five files for the 0.98.5a-RC7 target. The guide gained sections 0a (intake to
+  archive), 2c (`src-to-jar`, `relink`), 6b (probe-group on the 0.98.5a rig, `probe_accepted.json`, `accept`), 12c (archive,
+  refresh, restore, bump, close) and 12d (`target-impact`, `target-bump`, `retarget`). Every full command example in the five
+  files was parsed against the CLI parser (134 parse; 5 are shorthand). The main session reviewed the diff and corrected
+  three things: Nightcross (closed, not to do), the handoff's combat re-runs (93.39) and a user-profile path in the guide's
+  `$rig`. Left for later, because each needs code and a golden-file change:
+  - help texts that still name RC8 (`revive --vanilla-core`, `relink`, `scan --compile-check`, `rebuild-from-reference`,
+    `content-diff`, `close --reason`);
+  - `rig-doctor`, which compares mods with `0.98a` and so warns about every revived mod on the 0.98.5a rig;
+  - `dependency-substitutes`, which never counts a 0.98.5a provider as current.
+
+  With 96.5 A1.
 - 96.4 **Release.** Once item 95's PRs are merged: `release-notes assemble --version <next>`, the pyproject version, a PR; a
   tag only on the owner's word. Revived mods that change get their own `+bf.N` bump through `bump-version`.
 - 96.5 **Repo-wide suggestions** from three independent review agents on 2026-11-17 (performance and parallelism;
@@ -163,12 +175,13 @@ unproven).
   2.2.10 and 2.2.11, Vram Optimizer 1.0.50 and 1.0.51, SEEKER 0.3.0 and 0.6, Epta Consortium 2.0.3 and 2.1.3, Templars 0.9.8f and
   0.9.9e, Neutrino 1.87-RC3 Nostalgia Edition and 1.8.9), some on the owner's word (Templars and Epta, 2026-10-13). A superseded
   mark for a Done/ archive, set only on the owner's word, that target-impact, done-audit and 95.11 skip; Nightcross is the first.
-  **Done 2026-11-17 (code; Nightcross not yet marked).**
+  **Done 2026-11-17.**
   - `close` takes a `Done/<Mod>` archive too. It writes the existing dated section, ending SUPERSEDED or NOT_REVIVABLE, to the
     archive's `workspace/REVIVAL_REPORT.md`.
   - done-audit and target-impact list a closed archive (or closed queue workspace) by status instead of checking it.
-  - Marking Nightcross (`close "Done/Nightcross" --status SUPERSEDED --reason ...` on Test1) and any old duplicate waits for the
-    owner's word on each.
+  - Nightcross was closed SUPERSEDED on Test1 the same day, on the owner's word ("nightcross armory has been superseded and can
+    safely be ignored"). The older duplicates were not marked: the owner chose "Only keep latest" (96.0), so they moved to
+    `Done/_replaced-2026-11-17/`.
   - Review fixes, the same day:
     - A close beats a done-audit record cached before it.
     - `close` takes the `Done/<Mod>/<Mod>` path target-impact prints, and refuses a folder that is neither a workspace nor an
@@ -450,7 +463,7 @@ Manufactorum and Navarchy of Tania are revived (UNATTENDED_DONE), before their l
   (`variant-op-over-budget`, `variant-wings-exceed-bays`, `variant-weapon-slot-mismatch`, `shippable-work-file`,
   `data-file-not-utf8`, `procgen-star-row-missing`). One command to approve chosen families for chosen workspaces, previewing 92.6's
   diffs, then revive each.
-  Built: correction, already present: `escalation rule <queue> <finding> --approve-fixer` records a standing approval in AUTOMATION_POLICY.json and `revive-queue` applies it. Nothing new built.
+  Built: correction, already present: `escalation rule <finding> <queue> --approve-fixer` records a standing approval in AUTOMATION_POLICY.json and `revive-queue` applies it. Nothing new built.
 - 92.8 **Done 2026-11-16.** **`escalation run --agent` discovery.** No `claude` on PATH on this machine (sessions run in the VS Code extension); the
   first `--all` run failed with only the shell's error. Fall back to the extension's `resources/native-binary/claude.exe`, or fail
   before starting with what is missing. Also: `--watch-dir` reported the parent session's own memory writes as the agent's
@@ -906,6 +919,14 @@ ids, dependencies present), about 15-25 groups per environment; a failing group 
   New and revised mods are not part of this item: they get the `standard` bundle before archiving (85.1).
 **S-series implementation (owner 2026-10-24: "plan S series implementation then proceed to start S1").**
 [Implementation plan](docs/S_SERIES_IMPLEMENTATION_PLAN.md) translates S1-S4 into dependency-ordered slices. **S1 is complete and owner-accepted 2026-10-25 for the bounded RC8 local-new-game workflow**; [completion evidence](docs/S1_COMPLETION_REVIEW.md) and [progress/handoff](docs/S1_PROGRESS.md) retain the limits. Human active-review time is NOT_MEASURED in the accepted baseline. S2 baseline and S3 initial work retain their separate open delivery/acceptance gates; save upgrades, publication and S4 human/support commitments are not included.
+**Owner 2026-11-17: "I'm not sure the S series is worthwhile now as the second user seems a bit extreme."** Recorded; not yet
+decided. The "second user" is S4's goal: a second operator who installs, reproduces, restores and supports the workflow
+(docs/STRATEGIC_ROADMAP.md). Proposed for the owner's decision:
+- Park S4.
+- Stop treating S2 and S3 as gates.
+- Keep the parts that serve the owner alone through the numbered items that already carry them: 95 (re-validating a new build
+  from a catalogue), 93.30 (the scenario testbed), 94 (the feature genome) and the recipe and precedent work in 92 and 96.5.
+- S1's accepted baseline stands as it is.
 
 **85. Automation and fewer tokens per task (owner-approved 2026-10-22).** From this session's hand work. Nothing below is
 built yet; LIVE TEST NOT PERFORMED.

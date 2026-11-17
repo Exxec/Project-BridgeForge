@@ -1,7 +1,7 @@
 # BridgeForge: notes for Claude sessions
 
 BridgeForge is an offline, evidence-first toolkit for reviving legacy Starsector mods on
-0.98a-RC8 (Java 17). Charter: `docs/PROJECT_CHARTER.md`. Command guide:
+0.98.5a-RC7 (Java 17; see "Target" below). Charter: `docs/PROJECT_CHARTER.md`. Command guide:
 `docs/BRIDGEFORGE_REVIVAL_GUIDE.md`. Active plan: [ROADMAP-3.md](ROADMAP-3.md); earlier decisions/history:
 [page 1](docs/archive/ROADMAP.md) and [page 2](docs/archive/ROADMAP-2.md). Release history: `CHANGELOG.md`. Direction for fixers, checks and automation: item 73,
 `docs/AUTOMATION_PLAN.md`, including the owner's 2026-10-14 decisions on what may run without a person. Local sessions also
@@ -33,7 +33,11 @@ target-bump NEW_CORE` (api-diff, target-impact, catalogue and registry entry in 
 the new build becomes the target), the gated fixers the catalogue lists (`rc8-signature-changed`,
 `jar-call-signature-changed`, `forwarding-class-method-missing`), then `bridgeforge retarget` (plan) and `--apply` for the
 workspaces left CLEAN. `target export --to FILE` writes the registry the sister repos pin
-(`docs/MULTI_VERSION_COMPAT_DESIGN.md`). ROADMAP-3 items 89 and 90.
+(`docs/MULTI_VERSION_COMPAT_DESIGN.md`). ROADMAP-3 items 89 and 90. `target-impact`'s next steps restore an archive to a
+workspace first and name `relink` for return-type-only calls (95.13); `retarget` carries a baseline that was current before
+it to the new version (95.10). `Done/` keeps only the latest archive of each mod (owner 2026-11-17; older copies move to
+`Done/_replaced-<date>/`); `close "Done/<Mod>" --status SUPERSEDED|NOT_REVIVABLE --reason ...`, on the owner's word, makes
+`done-audit` and `target-impact` list an archive instead of checking it (95.15).
 
 ## Non-negotiables
 
@@ -142,7 +146,9 @@ on the second PC) and `memory-mirror`.
 - Write files with `safeio.atomic_write_text`/`atomic_write_json` and delete trees with `safeio.safe_rmtree(path, allowed_roots)`
   (refuses junctions and paths outside the roots). `tests/test_safeio_ratchet.py` counts bare `write_text`/`rmtree` per file
   against `tests/safeio_baseline.json`, which may only shrink.
-- Read jar and zip entries of untrusted mods with `zipsafe.read_limited`, never `ZipFile.read`.
+- Read jar and zip entries of untrusted mods only through `zipsafe.read_limited`, `zipsafe.read_class` (None for an oversize
+  class, so a walk goes on with the rest of the jar) or `zipsafe.entry_sha256` (a streamed hash); never `ZipFile.read` or
+  `.open(...).read()` without a size. `tests/test_safeio_ratchet.py` `BoundedZipReadTests` fails on a new one (93.33).
 - Accepted-finding baselines are stamped with the mod version and expire on any version change (`baseline-audit`,
   `baseline-accept`); `archive` refuses a stale baseline unless `reports/SHIPPED_CHANGES.json` carries a written `baseline` reason.
 - `tests/known_failures.json` lists known environmental failures with an expiry; `test_guard` reports them without failing.
@@ -155,7 +161,9 @@ on the second PC) and `memory-mirror`.
   clock). `rig-reset` returns a rig to a known state.
 - Live harness: the game launcher waits for a click (`auto_click=True` for any new boot path); the probe row in the mission
   list is found by unique mission id and the list is scrolled two ticks per row. A LIVE_STUCK with no `combat-round` line in
-  the log means another mission started, not that the probe's combat hung.
+  the log means another mission started, not that the probe's combat hung. `probe-group live` pins the resolution and
+  `canSkipTutorial` and restores the owner's values (93.28). `rig-doctor`'s `launcher_prefs` check asks only whether a
+  licence key is stored: the key is never read, printed or copied (owner rule 2026-11-17).
 - Run ruff as `uvx ruff check .`: the project `.venv` has none and no `AppData\Local\Python` install exists on this machine
   (checked 2026-11-15); the local pre-commit hook falls back to `uvx` the same way. It runs pyflakes plus flake8-bugbear (`B`, four noisy rules ignored in `pyproject.toml`).
 - Workspace arguments take a path (`"In operation/<name>"`); `audit-explain` refuses one without `working/`.
