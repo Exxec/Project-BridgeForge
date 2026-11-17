@@ -6,6 +6,10 @@ import json
 import sys
 from pathlib import Path
 
+# The command every escalation run of the 2026-11-16 batch used; `claude` resolves to the VS Code extension's bundled binary when
+# it is not on PATH (escalation.resolve_agent_command). ROADMAP-3 item 92.8.
+DEFAULT_AGENT = "claude -p --permission-mode acceptEdits"
+
 
 def add_parser(subcommands) -> None:
     review_cmd = subcommands.add_parser("revive-review", help="every fix revive applied since a date, as diffs against the first backup, with placement checks (lookup guards, jar-source edits)")
@@ -58,7 +62,7 @@ def add_parser(subcommands) -> None:
     esc_verify = esc_sub.add_parser("verify", help="rescan and say whether the packet's finding is gone with no new actionable findings")
     esc_verify.add_argument("--working", type=Path, help="check this copy instead of <workspace>/working (an agent's sandbox)")
     esc_run = esc_sub.add_parser("run", help="run an AI agent on a packet in a throwaway copy; only a verified result is kept")
-    esc_run.add_argument("--agent", required=True, help='the agent command; it gets the packet on stdin and BF_PACKET/BF_PROMPT/BF_NOTE/BF_WORKING in its environment, e.g. "claude -p --permission-mode acceptEdits"')
+    esc_run.add_argument("--agent", default=DEFAULT_AGENT, help=f'the agent command; it gets the packet on stdin and BF_PACKET/BF_PROMPT/BF_NOTE/BF_WORKING in its environment (default: "{DEFAULT_AGENT}"; a `claude` missing from PATH resolves to the binary bundled with the VS Code extension)')
     esc_run.add_argument("--apply", action="store_true", help="copy a verified result into working/ (backups kept)")
     esc_run.add_argument("--auto-accept", action="store_true", help="NOT ENABLED yet: refuses, naming the prerequisites (item 75 R1, R2, R4). The report-only ELIGIBLE / NOT ELIGIBLE verdict is in `escalation review`")
     esc_run.add_argument("--retries", type=int, default=1, help="re-runs after a failed attempt, with the failure appended (default 1)")

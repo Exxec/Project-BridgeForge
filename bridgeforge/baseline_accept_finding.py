@@ -97,6 +97,7 @@ def add_parser(subcommands) -> None:
     accept.add_argument("workspace", type=Path)
     accept.add_argument("selectors", nargs="+", metavar="SELECTOR", help="FINDING_ID[:FILE_PART[:EVIDENCE_PART]]: substrings of the finding's file and of its first evidence line")
     accept.add_argument("--reason", required=True, help=f"why these findings stand, with the evidence (at least {MIN_REASON_LENGTH} characters)")
+    accept.add_argument("--vanilla-core", type=Path, help="starsector-core to scan with, so findings that need vanilla data (variant-op-over-budget priced with vanilla weapons) can be selected (@target works)")
     accept.add_argument("--json", action="store_true")
 
 
@@ -104,7 +105,8 @@ def run_cli(args: argparse.Namespace) -> int:
     from bridgeforge.scan.scanner import scan_mod
 
     try:
-        findings = scan_mod(Path(args.workspace) / "working").findings
+        # With the core: 4 of 5 mods had "no finding matches" for variant-op-over-budget without it (ROADMAP-3 item 92.22).
+        findings = scan_mod(Path(args.workspace) / "working", vanilla_core=getattr(args, "vanilla_core", None)).findings
         result = accept_selected(Path(args.workspace), args.selectors, args.reason, findings)
     except (OSError, ValueError) as exc:
         print(f"bridgeforge: {exc}", file=sys.stderr)

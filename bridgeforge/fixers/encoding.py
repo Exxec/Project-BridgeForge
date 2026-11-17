@@ -88,8 +88,14 @@ def _fix_data_file_not_utf8(root: Path, options: dict) -> list[FileChange]:
         if named is not None:
             changes.append(FileChange(path=path, before=raw, after=_reencode_invalid(raw, offsets, named, relative)))
             continue
-        if not all(raw[i] in _CP1252_TYPOGRAPHY and plain(i - 1) and plain(i + 1) for i in offsets):
-            odd = sorted({f"0x{raw[i]:02x}" for i in offsets if raw[i] not in _CP1252_TYPOGRAPHY})
+        # « » (0xAB/0xBB) count as typography only in matched pairs: as quotes they open and close, while the same bytes are
+        # unrelated letters elsewhere (Shift-JIS half-width katakana, Mac Roman). Musashi Manufactorum's descriptions.csv held
+        # only NBSP and three «...» pairs, and was refused (ROADMAP-3 item 92.19, 2026-11-16).
+        allowed = set(_CP1252_TYPOGRAPHY)
+        if sum(raw[i] == 0xAB for i in offsets) == sum(raw[i] == 0xBB for i in offsets):
+            allowed |= {0xAB, 0xBB}
+        if not all(raw[i] in allowed and plain(i - 1) and plain(i + 1) for i in offsets):
+            odd = sorted({f"0x{raw[i]:02x}" for i in offsets if raw[i] not in allowed})
             refused.append(f"{path.relative_to(root).as_posix()} ({', '.join(odd) or 'adjacent high bytes'})")
             continue
         out, last = bytearray(), 0

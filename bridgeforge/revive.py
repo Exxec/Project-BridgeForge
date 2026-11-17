@@ -776,6 +776,23 @@ def _draft_report(working: Path, vanilla_core: Path | None, status: str, *, writ
     return {key: value for key, value in draft.items() if key not in ("report_text", "plan_text")}
 
 
+def next_action(packet: dict, workspace: Path) -> str:
+    """The one command (or decision) that clears a packet (ROADMAP-3 item 92.11)."""
+    ws = f'"{workspace}"'
+    finding = packet["finding"]
+    if finding == "description-missing":
+        return f"`bridgeforge descriptions draft {ws}`, review the sheet, then `bridgeforge descriptions apply {ws} <sheet>`"
+    if finding == "player-text-non-english":
+        return f"`bridgeforge translate-batch {ws}/working --in-place`, then review"
+    if finding == "jar-source-not-rebuilt":
+        return f"`bridgeforge src-to-jar {ws} --jar <jar> --vanilla-core <core>` (or approve `jar-source-not-rebuilt` in revive)"
+    if packet["kind"] == "agent":
+        return f"`bridgeforge escalation run {ws} {packet['id']}` (or `--all`)"
+    if packet["tier"] == "auto":
+        return f"approve the fixer: `bridgeforge revive {ws} --apply --approve {finding}`"
+    return (f"decide; if it stands as authored, `bridgeforge escalation accept {ws} {finding} --reason \"<evidence>\"`")
+
+
 def render(result: dict) -> str:
     lines = [f"# Revive: {Path(result['workspace']).name}", "", f"Status: **{result['status']}** (hardest remaining tier: {result['hardest_tier']})",
              f"Findings: {result['findings_before']} -> {result['findings_after']}; compile check: {'yes' if result['compile_checked'] else 'no (pass --vanilla-core)'}; "
@@ -788,6 +805,13 @@ def render(result: dict) -> str:
         lines += ["", f"## For an AI agent ({len(agent)})", ""] + [f"- {p['id']} ({p['tier']}): `{p['file']}`" for p in agent]
     if owner:
         lines += ["", f"## For the owner ({len(owner)})", ""] + [f"- {p['id']} ({p['tier']})" for p in owner]
+    if result["packets"] and result["status"] != "UNATTENDED_DONE":
+        # Say what stands between the mod and UNATTENDED_DONE (the gameVersion bump and the live probe wait for it), with the
+        # action that clears each. Scrapyard Armories' only blocker was one cosmetic description and nothing said so
+        # (ROADMAP-3 item 92.11, 2026-11-16).
+        ws = Path(result["workspace"])
+        lines += ["", f"## Blocking UNATTENDED_DONE ({len(result['packets'])})", ""]
+        lines += [f"- {p['finding']}: {next_action(p, ws)}" for p in result["packets"]]
     draft = result.get("report_draft")
     if draft:
         lines += ["", f"Report draft: {draft['status']}"]

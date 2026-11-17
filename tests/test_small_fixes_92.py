@@ -34,5 +34,44 @@ class SmallFixesTests(unittest.TestCase):
         self.assertNotIn("0.98a-RC8", text)
 
 
+class CliDefaultsTests(unittest.TestCase):
+    def test_baseline_accept_finding_scans_with_the_vanilla_core(self) -> None:
+        # 92.22: without the core, variant-op-over-budget (priced with vanilla weapons) matched in 1 of 5 mods.
+        from bridgeforge import baseline_accept_finding
+        from bridgeforge.cli import main
+
+        with resolved_temp_dir() as root:
+            (root / "ws" / "working").mkdir(parents=True)
+            (root / "core").mkdir()
+            with patch("bridgeforge.scan.scanner.scan_mod") as scan, \
+                    patch.object(baseline_accept_finding, "accept_selected", return_value={"accepted": []}), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                scan.return_value.findings = []
+                main(["baseline-accept-finding", str(root / "ws"), "x", "--reason", "a reason long enough to pass",
+                      "--vanilla-core", str(root / "core"), "--json"])
+            self.assertEqual(scan.call_args.kwargs["vanilla_core"], root / "core")
+
+    def test_revive_says_what_blocks_unattended_done(self) -> None:
+        # 92.11: Scrapyard's only blocker was one cosmetic description and the output did not say so.
+        from bridgeforge.revive import render
+
+        result = {"workspace": "In operation/Mod", "status": "ESCALATED", "hardest_tier": "input", "findings_before": 1,
+                  "findings_after": 1, "compile_checked": True, "apply": True, "applied": [], "next": "",
+                  "packets": [{"id": "description-missing--mod", "kind": "owner", "tier": "input", "finding": "description-missing", "file": None}]}
+        text = render(result)
+        self.assertIn("## Blocking UNATTENDED_DONE (1)", text)
+        self.assertIn("descriptions draft", text)
+        done = render({**result, "status": "UNATTENDED_DONE", "packets": []})
+        self.assertNotIn("Blocking", done)
+
+    def test_escalation_run_has_a_default_agent(self) -> None:
+        # 92.8: every run of the batch passed the same command; `claude` off PATH resolves to the bundled binary.
+        from bridgeforge.cli import build_parser
+        from bridgeforge.cmd_revive import DEFAULT_AGENT
+
+        args = build_parser().parse_args(["escalation", "run", "ws", "--all"])
+        self.assertEqual(args.agent, DEFAULT_AGENT)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -38,6 +38,7 @@ def add_parser(subcommands) -> None:
     intake_cmd.add_argument("--name", help="portable mod folder name (default: sanitized metadata id)")
     intake_cmd.add_argument("--selected-root", help="exact ZIP mod-root candidate when ambiguous")
     intake_cmd.add_argument("--archaeology", action="store_true", help="also collect static D0 discovery evidence")
+    intake_cmd.add_argument("--strip-junk", action="store_true", help="when the only preflight hazards are junk members (*~, desktop.ini, copies), intake <name>-clean.zip without exactly those; the raw archive is kept and the dropped list recorded in intake.json")
     intake_cmd.add_argument("--json", action="store_true")
     board_cmd = subcommands.add_parser("board", help="read-only declared-evidence status board; missing evidence remains unknown")
     board_cmd.add_argument("--repo-root", type=Path, default=Path.cwd())
@@ -277,7 +278,8 @@ def run_cli(args: argparse.Namespace) -> int:
                     args.archive = zip_raw_folder(args.archive, args.repo_root)
                     print(f"Zipped the raw folder to {args.archive}", file=sys.stderr)
                 result = intake_archive(args.archive, args.repo_root, name=args.name,
-                                        selected_root=args.selected_root, archaeology=args.archaeology)
+                                        selected_root=args.selected_root, archaeology=args.archaeology,
+                                        strip_junk=args.strip_junk)
                 if args.json:
                     print(json.dumps(result, indent=2, sort_keys=True))
                 else:

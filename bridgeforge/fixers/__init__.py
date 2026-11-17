@@ -212,8 +212,10 @@ def apply_fix(plan: FixPlan) -> list[dict[str, object]]:
     for change in plan.changes:
         backup: Path | None = None
         if change.removed:
-            # A move's new copy is its backup; a bare removal keeps the usual .bak next to it.
-            if change.before not in copies:
+            # A move's new copy is its backup; a bare removal keeps the usual .bak next to it. An empty file has nothing to
+            # keep: Musashi's empty isetsu/debug.log got no scratch copy and left a 0-byte .bak that `fixer-backup-orphaned`
+            # then escalated (ROADMAP-3 item 92.18, 2026-11-16).
+            if change.before and change.before not in copies:
                 backup = _backup_path(change.path, plan.finding_id)
                 backup.write_bytes(change.before)
             change.path.unlink()

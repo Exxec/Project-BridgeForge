@@ -647,4 +647,23 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_port_dropped_feature(root, result)
     if compile_check:
         _scan_compile_check(root, result, vanilla_root, provider_roots)
+    _demote_root_readme_json(root, result)
     return result
+
+
+def _demote_root_readme_json(root: Path, result: ScanResult) -> None:
+    """JSON-syntax findings on a mod-root file that nothing in the mod names become SAFE notes: the game reads only
+    mod_info.json in the root, so such a file is a readme for people (ROADMAP-3 item 92.10, 2026-11-16: Scrapyard Armories'
+    prose Changelog.json / Special Thanks.json became UNKNOWN agent packets and the agent wrapped the prose in JSON arrays)."""
+    from .scan_json import _root_file_unreferenced
+
+    verdicts: dict[str, bool] = {}
+    for finding in result.findings:
+        file = (finding.file or "").replace("\\", "/")
+        if not file or "/" in file or not (finding.id.startswith("json-") or finding.id in ("unverified-json-syntax", "non-strict-json-trailing-comma")):
+            continue
+        if file not in verdicts:
+            verdicts[file] = _root_file_unreferenced(root, file)
+        if verdicts[file]:
+            finding.classification = "SAFE"
+            finding.evidence = [*(finding.evidence or []), "root-file-unreferenced"]

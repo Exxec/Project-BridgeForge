@@ -74,6 +74,30 @@ _CJK_TEXT = re.compile(r"[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\u
 _PLAYER_TEXT_SUFFIXES = {".csv", ".json", ".faction", ".ship", ".skin", ".wpn", ".variant", ".system", ".proj"}
 
 
+_JSON_KEY = re.compile(r'"(?:[^"\\]|\\.)*"\s*:')
+
+
+def _json_player_part(line: str) -> str:
+    """A Starsector JSON line without its trailing `#` or `//` comment and without object keys: neither is shown to the player.
+    Eridani Combine after translation: 753 of 761 leftover CJK characters were trailing `#` comments in .faction and
+    *_styles.json files, plus a designTypeColors key (ROADMAP-3 item 92.31, 2026-11-16)."""
+    in_string, escaped = False, False
+    for index, char in enumerate(line):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char == "#" or line.startswith("//", index):
+            line = line[:index]
+            break
+    return _JSON_KEY.sub(":", line)
+
+
 def _scan_non_english_text(root: Path, result: ScanResult) -> None:
     """Chinese/Japanese/Korean text in data files, outside comments (P13, non-English intake).
 
@@ -90,11 +114,12 @@ def _scan_non_english_text(root: Path, result: ScanResult) -> None:
             text = path.read_text(encoding="utf-8-sig", errors="replace")
         except OSError:
             continue
+        is_csv = path.suffix.lower() == ".csv"
         for line in text.splitlines():
             stripped = line.lstrip()
             if stripped.startswith("#") or stripped.startswith("//"):
                 continue
-            hits = len(_CJK_TEXT.findall(line))
+            hits = len(_CJK_TEXT.findall(line if is_csv else _json_player_part(line)))
             if hits:
                 counts[_relative(root, path)] += hits
     if counts:

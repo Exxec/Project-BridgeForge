@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import shutil
 import tempfile
+import zipfile
 
 from .archive_intake import _normalized_member_name, _sha256, _tree_sha256, inspect_zip_archive, stage_zip_archive
 from .behavior_discovery import write_archaeology
@@ -71,12 +72,44 @@ def _relocate_reports(reports: Path, stage: Path, destination: Path) -> None:
             path.write_text(text, encoding="utf-8")
 
 
+def _blocking(preflight: dict) -> list[dict]:
+    return [f for f in preflight.get("findings") or [] if f.get("classification") in ("MANUAL", "UNKNOWN")]
+
+
+def strip_junk_members(archive: Path, entries: list[str]) -> Path:
+    """`<name>-clean.zip` beside the archive without exactly the named junk members (editor backups `*~`, `desktop.ini`,
+    copies); the raw archive is kept. ROADMAP-3 item 92.4 (2026-11-16): 2 of 6 intakes (Scrapyard Armories: four `*.png~`;
+    Navarchy of Tania: two `*.png~` and a `desktop.ini`) were blocked and rebuilt by hand."""
+    from .zipsafe import read_limited
+
+    clean = archive.with_name(f"{archive.stem}-clean{archive.suffix}")
+    if clean.exists():
+        raise ValueError(f"{clean.name} already exists; intake never overwrites it (remove it or intake it directly)")
+    drop = set(entries)
+    with zipfile.ZipFile(archive) as source, zipfile.ZipFile(clean, "w", zipfile.ZIP_DEFLATED) as target:
+        for info in source.infolist():
+            if info.filename not in drop:
+                target.writestr(info, read_limited(source, info))
+    return clean
+
+
 def intake_archive(archive: Path, repo_root: Path, *, name: str | None = None,
-                   selected_root: str | None = None, archaeology: bool = False) -> dict[str, object]:
+                   selected_root: str | None = None, archaeology: bool = False, strip_junk: bool = False) -> dict[str, object]:
     archive = archive.expanduser().resolve()
     preflight = inspect_zip_archive(archive)
+    raw_archive, stripped = None, []
+    blocking = _blocking(preflight)
+    if not preflight["safe_to_stage"] and strip_junk and blocking and all(f["id"] == "archive-junk-member" for f in blocking):
+        stripped = sorted({entry for f in blocking for entry in f.get("entries") or []})
+        raw_archive, archive = archive, strip_junk_members(archive, stripped)
+        preflight = inspect_zip_archive(archive)
+        blocking = _blocking(preflight)
     if not preflight["safe_to_stage"]:
-        raise ValueError("intake blocked by archive preflight hazards")
+        # Name the hazards: the bare message sent the user to `archive-preflight` to find out (2026-11-16).
+        detail = "; ".join(f"{f['id']} ({f['classification']}): {', '.join((f.get('entries') or [])[:6]) or f.get('explanation', '')}"
+                           for f in blocking) or "see `bridgeforge archive-preflight`"
+        hint = " (only junk members: rerun with --strip-junk)" if blocking and all(f["id"] == "archive-junk-member" for f in blocking) else ""
+        raise ValueError(f"intake blocked by archive preflight hazards: {detail}{hint}")
     roots = preflight["candidate_mod_roots"]
     if selected_root is None:
         if len(roots) != 1:
@@ -138,6 +171,8 @@ def intake_archive(archive: Path, repo_root: Path, *, name: str | None = None,
                     "working_tree_sha256": upstream_hash,
                     "finding_counts": dict(sorted(Counter(f.classification for f in result.findings).items())),
                     "archaeology": archaeology, "live_test": "LIVE TEST NOT PERFORMED"}
+        if raw_archive is not None:  # --strip-junk: what was dropped, and from which raw archive
+            manifest.update({"raw_archive": raw_archive.name, "raw_archive_sha256": _sha256(raw_archive), "stripped_members": stripped})
         (reports / "intake.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         (reports / "INTAKE_REPORT.md").write_text(
             "# Intake assessment\n\nArchive and upstream extract preserved; working bytes match selected upstream root.\n\n"

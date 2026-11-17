@@ -546,6 +546,7 @@ accept named findings into a workspace baseline (SELECTOR FINDING_ID[:FILE_PART[
 | `workspace` | - | - |
 | `SELECTOR` | nargs + | FINDING_ID[:FILE_PART[:EVIDENCE_PART]]: substrings of the finding's file and of its first evidence line |
 | `--reason` REASON | required | why these findings stand, with the evidence (at least 20 characters) |
+| `--vanilla-core` VANILLA_CORE | - | starsector-core to scan with, so findings that need vanilla data (variant-op-over-budget priced with vanilla weapons) can be selected (@target works) |
 | `--json` | - | - |
 
 ## decision
@@ -3215,6 +3216,7 @@ preserve a ZIP and create a fresh convention-layout assessment copy
 | `--name` NAME | - | portable mod folder name (default: sanitized metadata id) |
 | `--selected-root` SELECTED_ROOT | - | exact ZIP mod-root candidate when ambiguous |
 | `--archaeology` | - | also collect static D0 discovery evidence |
+| `--strip-junk` | - | when the only preflight hazards are junk members (*~, desktop.ini, copies), intake <name>-clean.zip without exactly those; the raw archive is kept and the dropped list recorded in intake.json |
 | `--json` | - | - |
 
 ## board
@@ -3651,7 +3653,7 @@ run an AI agent on a packet in a throwaway copy; only a verified result is kept
 
 | Argument | Notes | Help |
 |---|---|---|
-| `--agent` AGENT | required | the agent command; it gets the packet on stdin and BF_PACKET/BF_PROMPT/BF_NOTE/BF_WORKING in its environment, e.g. "claude -p --permission-mode acceptEdits" |
+| `--agent` AGENT | default claude -p --permission-mode acceptEdits | the agent command; it gets the packet on stdin and BF_PACKET/BF_PROMPT/BF_NOTE/BF_WORKING in its environment (default: "claude -p --permission-mode acceptEdits"; a `claude` missing from PATH resolves to the binary bundled with the VS Code extension) |
 | `--apply` | - | copy a verified result into working/ (backups kept) |
 | `--auto-accept` | - | NOT ENABLED yet: refuses, naming the prerequisites (item 75 R1, R2, R4). The report-only ELIGIBLE / NOT ELIGIBLE verdict is in `escalation review` |
 | `--retries` RETRIES | default 1 | re-runs after a failed attempt, with the failure appended (default 1) |

@@ -72,5 +72,27 @@ class FalsePositiveTests(unittest.TestCase):
         self.assertIn("data-file-not-utf8", ids)  # the bad byte is that check's finding
 
 
+class RootReadmeTests(unittest.TestCase):
+    def test_an_unreferenced_root_file_is_a_note_and_a_referenced_one_is_not(self) -> None:
+        # Scrapyard Armories: prose "Changelog.json" / "Special Thanks.json" in the mod root (ROADMAP-3 item 92.10).
+        with resolved_temp_dir() as root:
+            mod = root / "mod"
+            _write(mod / "mod_info.json", INFO)
+            _write(mod / "Changelog.json", "0.0.19 Added a ship\n")
+            _write(mod / "Settings.json", "not json either\n")
+            _write(mod / "data" / "scripts" / "Plugin.java", 'class P { Object o = loadJSON("Settings.json"); }\n')
+            _write(mod / "Special Thanks.json", "Thanks to\nGJdude for the sprite\n")
+            found: dict[str, set[str]] = {}
+            readme: dict[str, bool] = {}
+            for f in scan_mod(mod).findings:
+                if f.file in ("Changelog.json", "Special Thanks.json", "Settings.json"):
+                    found.setdefault(f.file, set()).add(f.classification)
+                    readme[f.file] = readme.get(f.file, False) or "root-file-unreferenced" in (f.evidence or [])
+        self.assertEqual(found["Changelog.json"], {"SAFE"})
+        self.assertEqual(found["Special Thanks.json"], {"SAFE"})  # json-content-after-root (REVIEW) demoted too
+        self.assertTrue(readme["Special Thanks.json"])
+        self.assertFalse(readme["Settings.json"])  # the mod's own code reads it, so it keeps its own classification
+
+
 if __name__ == "__main__":
     unittest.main()
