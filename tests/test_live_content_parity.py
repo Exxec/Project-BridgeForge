@@ -41,6 +41,14 @@ class ExpectedContentTests(unittest.TestCase):
         self.assertEqual((expected["conditions"], expected["submarkets"]), (["cond_a"], ["sub_a"]))
         self.assertEqual((expected["systems"], expected["planet_types"]), (["Sys"], ["t1"]))
 
+    def test_a_row_whose_first_cell_is_a_comment_is_skipped_whatever_its_id(self) -> None:
+        # Navarchy of Tania 1.0.1's "#Weapon Name,id,..." template row (G4-LIVE-0985a-20261117): the game skips it, so must we.
+        with resolved_temp_dir() as root:
+            working = _mod(root, "m")
+            (working / "data" / "weapons" / "weapon_data.csv").write_text("name,id,tier\nGun,gun_a,1\n#Weapon Name,id,1\n", encoding="utf-8")
+            expected = expected_content(working)
+        self.assertEqual(expected["weapons"], ["gun_a"])
+
     def test_an_absent_rules_file_expects_no_rules(self) -> None:
         with resolved_temp_dir() as root:
             expected = expected_content(_mod(root, "m", rules=False))
@@ -99,6 +107,57 @@ class ParityVerdictTests(unittest.TestCase):
             result = self._report(root, _LINE.format(status="FAIL", mod="mod_a", detail=f"kind=rules missing 10/100: {ids}"))
         self.assertEqual(result["findings"]["mod_a"]["missing_counts"], {"rules": 90})
         self.assertEqual(len(result["findings"]["mod_a"]["missing"]["rules"]), 40)
+
+
+class ParityAcceptanceTests(unittest.TestCase):
+    """Owner-accepted missing ids: probe_accepted.json entries with "check": "content-parity", "subject": "<kind>:<id>"
+    (Musashi Manufactorum's CSV rows with no .ship/.wpn file, owner 2026-11-17)."""
+
+    def _report(self, root: Path, lines: str, accepted: dict) -> dict:
+        merged = merge_configs([build_probe_config(_mod(root, "mod_a")), build_probe_config(_mod(root, "mod_b"))])
+        log = root / "run.log"
+        log.write_text("5 [main] INFO x - Starting\n9 [t] INFO x - BF-PROBE|0.2.27|content-ids|OK|all-content|checked=1 failed=0\n" + lines,
+                       encoding="utf-8")
+        return group_report(log, merged, accepted=accepted)
+
+    @staticmethod
+    def _accept(*subjects: str) -> dict:
+        return {"mod_a": [{"check": "content-parity", "subject": subject, "reason": "test"} for subject in subjects]}
+
+    def test_every_missing_id_accepted_passes_the_member_and_lists_them(self) -> None:
+        with resolved_temp_dir() as root:
+            report = self._report(root, _LINE.format(status="FAIL", mod="mod_a", detail="kind=hulls missing 0/2: hull_a,hull_b"),
+                                  self._accept("hulls:hull_a", "hulls:hull_b"))
+        member = report["members"]["mod_a"]
+        self.assertEqual(member["verdict"], "PASS")
+        self.assertEqual(member["failures"], [])
+        self.assertIn("content-parity|hulls|missing 2 accepted: hull_a, hull_b", member["accepted"])
+        self.assertEqual(report["content_parity"]["mod_a"]["status"], "PASS")
+
+    def test_an_id_not_accepted_still_fails_with_the_true_count(self) -> None:
+        with resolved_temp_dir() as root:
+            report = self._report(root, _LINE.format(status="FAIL", mod="mod_a", detail="kind=hulls missing 0/2: hull_a,hull_b"),
+                                  self._accept("hulls:hull_a"))
+        member = report["members"]["mod_a"]
+        self.assertEqual(member["verdict"], "FAIL")
+        self.assertEqual(member["failures"], ["content-parity|hulls|missing 1: hull_b"])
+
+    def test_a_bare_kind_or_another_check_accepts_nothing(self) -> None:
+        with resolved_temp_dir() as root:
+            report = self._report(root, _LINE.format(status="FAIL", mod="mod_a", detail="kind=hulls missing 1/2: hull_b"),
+                                  {"mod_a": [{"check": "content-parity", "subject": "hulls", "reason": "t"},
+                                             {"check": "faction-fleet-gen", "subject": "hulls:hull_b", "reason": "t"}]})
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "FAIL")
+        self.assertNotIn("accepted", report["members"]["mod_a"])
+
+    def test_a_capped_list_keeps_failing_for_the_unlisted_ids(self) -> None:
+        ids = [f"r{n}" for n in range(40)]
+        with resolved_temp_dir() as root:
+            report = self._report(root, _LINE.format(status="FAIL", mod="mod_a", detail=f"kind=rules missing 10/100: {','.join(ids)} ..."),
+                                  self._accept(*(f"rules:{ident}" for ident in ids)))
+        member = report["members"]["mod_a"]
+        self.assertEqual(member["verdict"], "FAIL")
+        self.assertEqual(member["failures"], ["content-parity|rules|missing 50: "])
 
 
 if __name__ == "__main__":

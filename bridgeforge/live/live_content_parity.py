@@ -90,6 +90,38 @@ def parity_findings(log: Path, config: dict) -> dict[str, dict]:
     return result
 
 
+def apply_acceptances(findings: dict[str, dict], accepted: dict[str, list[dict]] | None) -> dict[str, list[str]]:
+    """Take owner-accepted missing ids out of each member's findings, in place; return {mod: [accepted lines]}.
+
+    An entry in a workspace's working/reports/probe_accepted.json with "check": "content-parity" and "subject": "<kind>:<id>"
+    accepts exactly that id (Musashi Manufactorum 1.4.4's two hulls and two weapons with a CSV row and no .ship/.wpn file,
+    owner 2026-11-17, G1-LIVE3-0985a-20261117). A bare kind accepts nothing, so an id that goes missing later still fails. When
+    the probe capped the listed ids (`missing_counts` above the list), the unlisted ids cannot be matched and the kind keeps
+    failing. A member left with no missing id passes."""
+    taken: dict[str, list[str]] = {}
+    for mod, entry in findings.items():
+        wanted = {(kind, ident) for item in (accepted or {}).get(mod, []) if item.get("check") == "content-parity"
+                  for kind, _, ident in [str(item.get("subject") or "").partition(":")] if kind and ident}
+        if entry.get("status") != "FAIL" or not wanted:
+            continue
+        for kind in list(entry["missing"]):
+            ids = entry["missing"][kind]
+            hit = [ident for ident in ids if (kind, ident) in wanted]
+            if not hit:
+                continue
+            taken.setdefault(mod, []).append(f"content-parity|{kind}|missing {len(hit)} accepted: {', '.join(hit[:MAX_LISTED_IDS])}"[:240])
+            keep = [ident for ident in ids if (kind, ident) not in wanted]
+            left = entry["missing_counts"].get(kind, len(ids)) - len(hit)
+            if keep or left > 0:
+                entry["missing"][kind], entry["missing_counts"][kind] = keep, left
+            else:
+                del entry["missing"][kind]
+                entry["missing_counts"].pop(kind, None)
+        if not entry["missing"]:
+            entry["status"] = "PASS"
+    return taken
+
+
 def parity_failure_lines(findings: dict[str, dict]) -> dict[str, list[str]]:
     """Failure texts per mod for the group verdict: one per kind, listing the missing ids."""
     lines: dict[str, list[str]] = {}

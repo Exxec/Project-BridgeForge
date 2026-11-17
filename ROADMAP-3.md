@@ -22,12 +22,21 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   recipes; owner designs labelled as departures.
 - Pilots (GD-4): P1 Scrapyard Armories `sa_lobster_tanks`, P2 Navarchy of Tania junkyard spawner, P3 Eridani Combine Pantheon
   system, P4 Bultach Coalition custom start. Local-only under GD-2.
+- Multi-agent mode (owner asked 2026-11-17 "should we turn on ultracode for the genome phase?"; recommendation, not a decision): an
+  eight-agent read-only assessment (two readers, two opposing assessors, a judge, a fact check and a policy check, a synthesis; 32
+  corrections applied) recommends no standing ultracode: the track's pace is set by its one-at-a-time rig runs and the owner's
+  hours, which workflows do not shorten. Use a workflow for single steps instead: 94.G2's per-donor reference hunts and the
+  refutation round before a gene's first proof boot, and 94.G5's collision gap hunt before a carrier's first boot; owner decisions,
+  rig runs and the other phases stay solo. Revisit after measuring the first 94.G2 workflow on pilot P1. It also found the
+  unbounded jar reads of 93.33.
 
 **93. Test rigs, probe targets and library dependencies (owner 2026-11-17: "yes, also bridgeforge is supposed to check for undeclared libraries and add them. If not implement it and continue to make suggestions").**
-**Approved; 93.1-93.2 done, the rest queued after the six live tests.** Found preparing Test1 for the six-mod live run (2026-11-17).
+**Approved; 93.1-93.2 and 93.26 done, the rest queued after the six live tests.** Found preparing Test1 for the six-mod live run (2026-11-17).
 **Live tests paused by the owner 2026-11-17** ("lets pause live testing for now. I will sort that out later"): Test1 has no
 licence key stored (93.20). 93.20-93.25 were found that day and added under the owner's standing instruction to keep adding
-findings (2026-11-16); queued with the rest.
+findings (2026-11-16); queued with the rest. **Resumed the same day** once the owner supplied the key; all four groups reached
+LIVE_DONE on Test1 through `bridgeforge-state/live-wrappers/` (direct start at 1920x1440, window client top -200), after the first-run
+fixes of 93.28. 93.26-93.35 are that day's findings.
 - 93.1 **Done 2026-11-17.** **Optional library use misread as required.** Undeclared-library detection and its fixer already existed
   (`undeclared-library-dependency`, unguarded use declared from `LIBRARY_DEPENDENCY_IDS`; guarded use left alone, Exigency
   2026-09-28), and the batch's mods declare their libraries. But Navarchy of Tania's and Bultach Coalition's Nexerelin use became
@@ -105,7 +114,9 @@ findings (2026-11-16); queued with the rest.
   back. `launch.start_game` passes the four properties through `JAVA_TOOL_OPTIONS` when the core has them and keeps the click
   for cores without: no click to miss and no restart. `startSound=true`, because the main-menu marker is a music line. Test1
   2026-11-17 (G1-DIRECT-0985a-20261117): the JVM picked the properties up and exited with 0 right after "Loading settings", the
-  key check having failed (93.20). Needs one live proof once a key is stored.
+  key check having failed (93.20). Proven live 2026-11-17 once the key was stored: G1-SMOKE-direct-0985a-20261117 reached the main
+  menu in 96 s, and every group's live run started this way through `bridgeforge-state/live-wrappers/`; the harness itself still
+  clicks the launcher until this is built.
 - 93.22 **The rig window must fit the desktop.** The live click fractions were measured in a 1920x1440 window
   (`rig_prefs.RIG_RESOLUTION`); Test1's desktop is 1920x1080 at 96 DPI (2026-11-17), so that window runs off the screen.
   Pre-flight (93.8) compares the desktop with the pinned size and refuses with the remedy (a larger desktop mode, or click
@@ -124,6 +135,52 @@ findings (2026-11-16); queued with the rest.
   RC7 (2026-11-17: 3172 classes, none added or removed, two changed) shows RC7 restored the public `ShipAIConfig()` and added
   `SettingsAPI.getAllMissileSpecs()`, so the gated `ShipAIConfig` rules stay closed on RC7, as designed (`_gate_open`). The same
   diff keeps RevenantLib's RC3 target (its PR #4, merged 2026-11-17) valid for RC7: `ShipAPI` is identical (312 methods).
+- 93.26 **Done 2026-11-17.** **Owner acceptances reach content parity.** `probe_accepted.json` entries never applied to
+  content-parity lines (`group_report` added `parity_failure_lines` after the per-line acceptance), so Musashi's four CSV rows with
+  no .ship/.wpn file (owner: "keep them and ignore warning if it doesn't affect anything"), Bultach's two and Tania's two stayed
+  FAIL. An entry `{"check": "content-parity", "subject": "<kind>:<id>"}` now removes exactly that id
+  (`live_content_parity.apply_acceptances`); a bare kind accepts nothing, a capped list keeps failing for the ids it did not list,
+  and the verdict lists what was accepted. The expected ids also skip a CSV row whose first cell starts with `#`, as the game does
+  (Tania 1.0.1's `#Weapon Name,id,...` template had been expected as a weapon "id"). Tests: `tests/test_live_content_parity.py`.
+- 93.27 **Reuse run-manifest hashes.** Every live run hashed each enabled mod folder whole before the game started (about 5 minutes
+  on Test1: wrapper 08:14:20, game 08:19:16 for group 1, with GraphicsLib and Scrapyard) and again at release. Keep (path, size,
+  mtime, hash) per rig, re-read only changed files, hash in parallel. Owner 2026-11-17 followed the recommendation to build it after
+  the six live tests, so the batch's evidence stays one method.
+- 93.28 **First-run game preferences.** A Windows user who never played shows "Key configuration options have changed" over the
+  main menu and cannot skip the tutorial (rules.csv `ngcSkipTutorialNoSkip`, "Need to start at least one game with the tutorial in
+  order to be able to skip it"; `NGCCanSkipTutorial` is `!isNewPlayer()`, backed by the Java preference `canSkipTutorial`). Test1
+  needed both besides the licence key (93.20). Pre-flight lists them; `rig_prefs` pins `canSkipTutorial=true` for an unattended New
+  Game and restores it.
+- 93.29 **A report reads its own run's probe config.** `probe-group report` uses the rig's current config, so group 3's report after
+  `install 4` named Tania instead of KoC (2026-11-17). Keep the config, or its hash, with the run manifest and read that.
+- 93.30 **Scenario testbed (owner design 2026-11-17).** Hidden mission factions whose fleets the code builds by hand (Tania's Blood
+  Trail and Frost Fire: `createEmptyFleet` then `addFleetMember("tania_blood_stork_main_Death_Special")`, spawned by
+  `tania_mission_unlocker_per_rep` at WELCOMING/FRIENDLY standing) cannot be exercised by `faction-fleet-gen`. Owner: "start a new
+  game as usual but then save then modify save to either advance in time or modify it to trigger shortly after start", instead of
+  waiting in-game days; and (approved) field such fleets' named variants in the probe's combat rounds. Not only Tania: find
+  `createEmptyFleet`/`addFleetMember` calls and their triggers, propose the save edit (Salvor), reload, check the spawned fleet.
+  Tania was archived before this exists (owner: "For now archive Tania and we can create the testbed after").
+- 93.31 **Sound files the game cannot load.** Bultach 1.1.7's `melta_fire.ogg` is FLAC in an Ogg container and the game decodes only
+  Vorbis ("This Ogg bitstream does not contain Vorbis audio data"); re-encoded with ffmpeg libvorbis on the owner's word ("Fix it"),
+  explained in SHIPPED_CHANGES.json (no file of the mod plays it). Add a scanner check for non-Vorbis and empty `.ogg` files and a
+  fixer that re-encodes when ffmpeg is present.
+- 93.32 **Fewer acceptances: content the game cannot load is information.** CSV rows with no .ship/.wpn/.system file (Musashi 4,
+  Bultach 2) and systems a mod creates only under a condition (Tania's `Zufalliger Krieg`, Nexerelin random mode only) are not
+  shortfalls: report them as INFO with the reason, so the owner rules only on what can matter.
+- 93.33 **Bounded jar reads (hardening gap, found 2026-11-17).** `scan_classfile.iter_class_files_in_jars` (`archive.open(item)`
+  then `.read()`) and `behavior_discovery.py` line 182 (`archive.read(member)`) read class entries of untrusted jars unbounded, against
+  the `zipsafe.read_limited` rule, and `tests/test_safeio_ratchet.py` does not count zip reads. Found by the 2026-11-17 ultracode
+  assessment and verified.
+- 93.34 **Findings that are already so on the previous build.** UAF 0.8.4c runs in the owner's RC8 game, yet its first revive listed
+  115 findings: most (over-budget variants, oversized weapons, missing descriptions, unused weapon files, hull-mod instance state,
+  the `fearless` personality no vanilla build defines) are identical on RC8. Mark each finding the reference build shares as
+  "pre-existing, unchanged on <build>" and separate it from what the target build changes, so a mod that works does not read as
+  broken (owner 2026-11-17: "UAF works fine under RC8, I'm surprised these are all detected issues?"). Check the
+  `script-sandbox-forbidden-api` rule against UAF's live boot: its mod plugin loads on RC8.
+- 93.35 **Fast Rendering and Prepatcher on 0.98.5a.** The installed Fast Rendering v1.0.0rc1 (readme: "Starsector 0.98a-RC8 Windows")
+  and StarsectorPrepatcher 0.18.4 (gameVersion 0.98a-RC8) are RC8 builds; Fast Rendering patches game classes with an ASM agent.
+  `java-matrix setup` already has the `fr` launcher and `--prepatcher`; add them to the 0.98.5a rig once 0.98.5a builds exist and a
+  smoke boot proves them.
 
 **92. Less hand work found reviving six mods against 0.98.5a-RC7 (owner 2026-11-16: "add these improvements to roadmap we will implement in queue after these mods are revived but not yet live tested").**
 **Approved, queued: start once Scrapyard Armories, Bultach Coalition, Eridani Combine, Everybody loves KoC, Musashi
