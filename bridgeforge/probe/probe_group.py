@@ -23,6 +23,7 @@ import shutil
 from pathlib import Path
 
 from bridgeforge.copy_drift import _collect, compare_copies
+from bridgeforge.live.live_content_parity import apply_acceptances as apply_parity_acceptances
 from bridgeforge.live.live_content_parity import merge_parity, parity_failure_lines, parity_findings
 from bridgeforge.probe.probe_config import CONFIG_FILE, RIG_MARKER_FILE, _install_probe_mod, _refuse_non_rig, build_probe_config
 from bridgeforge.scan.scanner import _load_lenient_json_file
@@ -700,7 +701,8 @@ ACCEPTED_PROBE_FILE = Path("reports") / "probe_accepted.json"
 def accepted_probe_findings(queue: Path, mods_dir: Path | None = None) -> dict[str, list[dict]]:
     """{mod id: [{"check", "subject", "reason"}]} from each tested workspace's working/reports/probe_accepted.json: probe FAIL
     lines the owner accepted, each with its reason (Magellan's hidden magellan_startigers faction builds no patrol and nothing in
-    the mod spawns its fleets, GRP5C-20261006). An entry hides exactly one `check|subject` line; the verdict still lists it."""
+    the mod spawns its fleets, GRP5C-20261006). An entry hides exactly one `check|subject` line; the verdict still lists it.
+    A content-parity entry names one missing id as `"subject": "<kind>:<id>"` (live_content_parity.apply_acceptances)."""
     found: dict[str, list[dict]] = {}
     for mod_id, workspace in _workspaces_by_mod_id(queue, mods_dir).items():
         path = workspace / "working" / ACCEPTED_PROBE_FILE if workspace is not None else None
@@ -801,6 +803,9 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
         (verdicts[mod_id]["failures"] if mod_id else unattributed).append(entry)
     # 77.17: a shortfall between what the working copy defines and what the game loaded fails that member (excess is information).
     parity = parity_findings(log, config)
+    for mod_id, lines in apply_parity_acceptances(parity, accepted).items():  # owner-accepted "<kind>:<id>" entries (2026-11-17)
+        if mod_id in verdicts:
+            verdicts[mod_id].setdefault("accepted", []).extend(lines)
     for mod_id, lines in parity_failure_lines(parity).items():
         if mod_id in verdicts:
             verdicts[mod_id]["failures"].extend(lines)

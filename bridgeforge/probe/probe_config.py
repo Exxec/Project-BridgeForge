@@ -445,7 +445,11 @@ def _csv_ids(path: Path) -> set[str]:
     if not path.is_file():
         return set()
     rows = csv.DictReader(io.StringIO(path.read_text(encoding="utf-8-sig", errors="replace")))
-    return {i for i in ((row.get("id") or "").strip() for row in rows) if i and not i.startswith("#")}
+    first = (rows.fieldnames or [""])[0]
+    # The game skips a row whose first cell starts with '#', whatever its id column holds: Navarchy of Tania 1.0.1's template row
+    # "#Weapon Name,id,..." in weapon_data.csv was expected as a weapon named "id" (G4-LIVE-0985a-20261117; no game warning).
+    return {i for row in rows if not (row.get(first) or "").lstrip().startswith("#")
+            for i in [(row.get("id") or "").strip()] if i and not i.startswith("#")}
 
 
 def _mod_commodities(mod_root: Path) -> list[str]:
