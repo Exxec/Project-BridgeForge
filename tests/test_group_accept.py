@@ -70,6 +70,26 @@ class AcceptRecordTests(unittest.TestCase):
         self.assertEqual(result["recorded"], ["A", "B"])
         self.assertIn("carried from earlier acceptance of the same mod version: hidden faction builds no patrol", report_a)
 
+    def test_a_content_parity_line_every_id_of_which_is_accepted_is_carried(self) -> None:
+        # ROADMAP-3 93.26: per-id acceptances cover the probe's per-mod content-parity line (Tania, G4B-LIVE-0985a-20261117).
+        parity = PREFIX + "BF-PROBE|0.3.2|content-parity|FAIL|mod=mod_a|kind=hulls missing 1/2: hull_x"
+        with resolved_temp_dir() as root:
+            fx = _Fixture(root, [OK, parity])
+            fx.accept_standing("A", "content-parity", "hulls:hull_x", "a CSV row with no .ship file")
+            result = fx.record(accept=True, note="played")
+            report_a = fx.report("A")
+        self.assertEqual(result["recorded"], ["A", "B"])
+        self.assertIn("carried from earlier acceptance of the same mod version: a CSV row with no .ship file", report_a)
+
+    def test_a_content_parity_line_with_an_id_not_accepted_still_stops(self) -> None:
+        parity = PREFIX + "BF-PROBE|0.3.2|content-parity|FAIL|mod=mod_a|kind=hulls missing 0/2: hull_x,hull_y"
+        with resolved_temp_dir() as root:
+            fx = _Fixture(root, [OK, parity])
+            fx.accept_standing("A", "content-parity", "hulls:hull_x", "a CSV row with no .ship file")
+            result = fx.record(accept=True, note="played")
+        self.assertEqual(result["recorded"], [])
+        self.assertEqual(result["stopped"]["uncovered_probe_fail"], ["content-parity|mod=mod_a"])
+
     def test_a_fail_line_nothing_covers_stops_the_group_and_records_nothing(self) -> None:
         with resolved_temp_dir() as root:
             fx = _Fixture(root, [OK, FAIL_A, FAIL_B])

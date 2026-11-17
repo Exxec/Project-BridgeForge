@@ -68,6 +68,55 @@ def _earlier_entries(workspace: Path, context: dict | None = None) -> list[dict]
     return entries
 
 
+def _parity_entries(log: Path, workspaces: list[Path]) -> list[dict]:
+    """Entries for the content-parity FAIL keys (`content-parity|mod=<id>`) that standing per-id acceptances fully cover.
+
+    The probe logs one `content-parity|FAIL|mod=<id>|kind=<kind> missing <have>/<expected>: <ids>` line per kind, so its key never
+    equals a `probe_accepted.json` entry's `content-parity|<kind>:<id>` (live_content_parity.apply_acceptances, ROADMAP-3 93.26).
+    The key counts as covered only when every id of every such line of that mod is accepted and no list was capped (fewer ids
+    listed than missing): Navarchy of Tania's G4B-LIVE-0985a-20261117 stopped here with its accepted Zufalliger Krieg system."""
+    from bridgeforge.live.live_content_parity import _MISSING, _PARITY_LINE
+    from bridgeforge.probe.probe_group import ACCEPTED_PROBE_FILE
+    from bridgeforge.scan.scanner import _load_lenient_json_file
+
+    try:
+        text = Path(log).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    rows: dict[str, list[tuple[str, int, list[str]]]] = {}
+    for line in text.splitlines():
+        match = _PARITY_LINE.search(line)
+        if not match or match["status"] != "FAIL":
+            continue
+        miss = _MISSING.match(match["detail"].strip())
+        if not miss:
+            rows.setdefault(match["mod"], []).append(("", 1, []))  # unparsed: never covered
+            continue
+        ids = [ident for ident in miss["ids"].replace(" ...", "").split(",") if ident]
+        rows.setdefault(match["mod"], []).append((miss["kind"], int(miss["expected"]) - int(miss["have"]), ids))
+    entries: list[dict] = []
+    for workspace in workspaces:
+        info = _load_lenient_json_file(workspace / "working" / "mod_info.json")
+        mod_id = str(info.get("id") or "") if isinstance(info, dict) else ""
+        if mod_id not in rows:
+            continue
+        try:
+            data = json.loads((workspace / "working" / ACCEPTED_PROBE_FILE).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        accepted = {}
+        for item in data.get("accepted", []) if isinstance(data, dict) else []:
+            if isinstance(item, dict) and item.get("check") == "content-parity" and str(item.get("reason") or "").strip():
+                kind, _, ident = str(item.get("subject") or "").partition(":")
+                if kind and ident:
+                    accepted[(kind, ident)] = str(item["reason"]).strip()
+        if all(kind and missing == len(ids) and all((kind, ident) in accepted for ident in ids) for kind, missing, ids in rows[mod_id]):
+            used = sorted({accepted[(kind, ident)] for kind, _, ids in rows[mod_id] for ident in ids})
+            entries.append({"keys": {f"content-parity|mod={mod_id}"}, "caught": 0, "reason": "; ".join(used),
+                            "source": f"{workspace.name} probe_accepted.json"})
+    return entries
+
+
 def assess_group(log: Path, workspaces: list[Path], mods_dir: Path | None = None, context: dict | None = None) -> dict:
     """What `accept_run` will ask a reason for in this log, and whether earlier acceptances of the members cover it.
 
@@ -78,6 +127,7 @@ def assess_group(log: Path, workspaces: list[Path], mods_dir: Path | None = None
     keys = probe_fail_keys(log)
     caught = int(triage_log(log, mods_dir=mods_dir)["caught_exceptions"].get("distinct") or 0)
     entries = [entry for workspace in workspaces for entry in _earlier_entries(workspace, context)]
+    entries += _parity_entries(log, workspaces)
     covered = {key for entry in entries for key in entry["keys"]}
     uncovered_keys = [key for key in keys if key not in covered]
     caught_cover = max((entry["caught"] for entry in entries), default=0)

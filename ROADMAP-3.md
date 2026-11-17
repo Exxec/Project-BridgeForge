@@ -142,6 +142,10 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   (`live_content_parity.apply_acceptances`); a bare kind accepts nothing, a capped list keeps failing for the ids it did not list,
   and the verdict lists what was accepted. The expected ids also skip a CSV row whose first cell starts with `#`, as the game does
   (Tania 1.0.1's `#Weapon Name,id,...` template had been expected as a weapon "id"). Tests: `tests/test_live_content_parity.py`.
+  Extended the same day to `probe-group record --accept`: `group_accept.assess_group` keys the probe's raw line as
+  `content-parity|mod=<id>`, which no per-id entry matched, so Tania's passing re-run G4B-LIVE-0985a-20261117 still stopped
+  ("findings no earlier acceptance of the same mod version covers"). `group_accept._parity_entries` covers that key when every id of
+  the mod's content-parity FAIL lines is accepted and no list was capped. Tests: `tests/test_group_accept.py`.
 - 93.27 **Reuse run-manifest hashes.** Every live run hashed each enabled mod folder whole before the game started (about 5 minutes
   on Test1: wrapper 08:14:20, game 08:19:16 for group 1, with GraphicsLib and Scrapyard) and again at release. Keep (path, size,
   mtime, hash) per rig, re-read only changed files, hash in parallel. Owner 2026-11-17 followed the recommendation to build it after
@@ -181,6 +185,15 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   and StarsectorPrepatcher 0.18.4 (gameVersion 0.98a-RC8) are RC8 builds; Fast Rendering patches game classes with an ASM agent.
   `java-matrix setup` already has the `fr` launcher and `--prepatcher`; add them to the 0.98.5a rig once 0.98.5a builds exist and a
   smoke boot proves them.
+- 93.36 **The report draft cannot be told where the libraries are.** `revive --draft-report` checks the compile against the queue
+  folder and `_rig/mods` only; White_Legion has no rig, so Sunrider's draft stayed BLOCKED on "5 javac error(s)" that were only
+  LazyLib and MagicLib not found, although `revive --providers` named a mods folder holding both (it feeds missing-content packets,
+  not the compile check). `revival-report-draft --providers <RC8 mods>` then drafted READY_FOR_LIVE_TEST (compile-check: 0 errors in
+  14 loose scripts, Janino 14/14). Pass the providers through, or fall back to the reference install's `mods/`.
+- 93.37 **The live harness misses the probe mission in a long mission list.** United Aurora Federation adds its own missions; in
+  UAF-LIVE-0985a-20261117 combat round 1 started and ended, round 2's line was logged ("hulls 61-86 of 86; restart the mission"), and
+  no `combat|START` followed, so the click back into the mission list did not start the probe mission. Read the list from the screen
+  before each round's click (as the main menu already is), and re-run UAF's round 2 once fixed.
 
 **92. Less hand work found reviving six mods against 0.98.5a-RC7 (owner 2026-11-16: "add these improvements to roadmap we will implement in queue after these mods are revived but not yet live tested").**
 **Approved, queued: start once Scrapyard Armories, Bultach Coalition, Eridani Combine, Everybody loves KoC, Musashi
