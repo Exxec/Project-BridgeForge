@@ -146,15 +146,40 @@ def retarget_plan(impact: dict, build: str) -> list[dict]:
 
 
 def apply_retarget(row: dict, build: str, *, changelog: Path | None = None) -> dict:
+    from .baseline_audit import audit_workspace
     from .fixers.mod_info import _fix_mod_info_game_version_inexact
     from .workspace_tools import bump_version
 
     working = Path(row["workspace"]) / "working"
+    before = audit_workspace(Path(row["workspace"]))
     change = _fix_mod_info_game_version_inexact(working, {"target_game_version": build})[0]
     atomic_write_bytes(change.path, change.after)
     note = (f"Retargeted to Starsector {build} (gameVersion {row['from']} -> {build}): `target-impact` found no API, "
             f"linkage or data change affecting this mod. Not yet live-tested on {build}.")
-    return bump_version(Path(row["workspace"]), note, changelog=changelog)
+    try:
+        result = bump_version(Path(row["workspace"]), note, changelog=changelog)
+    except Exception:
+        # Undo the gameVersion: a half-done retarget reads as "already <build>" to the next plan, so its version bump, report
+        # section and changelog line would never happen (review 2026-11-17). bump_version writes mod_info.json first, so the
+        # original bytes undo that write too.
+        atomic_write_bytes(change.path, change.before)
+        raise
+    result["baseline_carried"] = _carry_baseline(working, before, build)
+    return result
+
+
+def _carry_baseline(working: Path, before: dict, build: str) -> bool:
+    """Keep accepted findings valid across a retarget (ROADMAP-3 item 95.10). A retarget changes only mod_info.json
+    (gameVersion and the `+bf.N` version), so a baseline current before it is re-stamped at the new version, recording where
+    it was carried from; each key keeps its own reason. A finding whose evidence the new build changes has a new key, so it
+    still comes back for a ruling. A baseline already stale before the retarget stays the owner's to re-justify."""
+    if before["status"] != "OK" or not before.get("baseline"):
+        return False
+    from .baseline_audit import stamp_baseline
+
+    stamp_baseline(Path(before["baseline"]), working, carried={
+        "from": before["stamped_version"], "why": f"retarget to {build} changed only mod_info.json (gameVersion and version)"})
+    return True
 
 
 def add_parser(subcommands) -> None:

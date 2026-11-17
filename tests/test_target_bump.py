@@ -168,6 +168,53 @@ class CatalogueAndRetargetTests(unittest.TestCase):
             self.assertTrue(report.rstrip().endswith("READY_FOR_LIVE_TEST"))
             self.assertIn("Retargeted to Starsector 0.98.5a-RC3", changelog.read_text(encoding="utf-8"))
 
+    def test_retarget_carries_a_current_baseline_and_leaves_a_stale_one_stale(self) -> None:
+        """ROADMAP-3 95.10: a retarget changes only mod_info.json, so acceptances current at the old version stay valid at the new
+        one; each key keeps the owner's reason. A baseline already stale before the retarget is still the owner's to re-justify."""
+        from bridgeforge.baseline_audit import audit_workspace, stamp_baseline
+
+        key = "design-type-without-color|data/config/settings.json|"
+        with resolved_temp_dir() as root:
+            rows = retarget_plan(self._impact(root), "0.98.5a-RC3")
+            working = root / "Alpha" / "working"
+            baseline = working / "reports" / "baseline.json"
+            baseline.parent.mkdir(parents=True, exist_ok=True)
+            baseline.write_text(json.dumps({"findings": [key], "reasons": {key: "cosmetic, owner 2026-11-01"}}), encoding="utf-8")
+            stamp_baseline(baseline, working, today="2026-11-01")
+            carried = apply_retarget(rows[0], "0.98.5a-RC3", changelog=root / "MOD_CHANGELOG.md")
+            row = audit_workspace(root / "Alpha")
+            payload = json.loads(baseline.read_text(encoding="utf-8"))
+            # The same retarget on a baseline accepted at an older version than the one retargeted.
+            payload["stamp"]["version"] = "0.9"
+            baseline.write_text(json.dumps(payload), encoding="utf-8")
+            again = apply_retarget({**rows[0], "from": "0.98.5a-RC3"}, "0.98.5a-RC7", changelog=root / "MOD_CHANGELOG.md")
+            stale = audit_workspace(root / "Alpha")
+        self.assertEqual((row["status"], row["stamped_version"]), ("OK", "1.0+bf.1"))
+        self.assertEqual(payload["reasons"][key], "cosmetic, owner 2026-11-01")
+        self.assertEqual(payload["stamp"]["carried"]["from"], "1.0")
+        self.assertIn("0.98.5a-RC3", payload["stamp"]["carried"]["why"])
+        self.assertTrue(carried["baseline_carried"])
+        self.assertFalse(again["baseline_carried"])
+        self.assertEqual((stale["status"], stale["stamped_version"]), ("STALE_VERSION", "0.9"))
+
+    def test_a_retarget_whose_version_bump_fails_is_undone_and_planned_again(self) -> None:
+        """Review 2026-11-17: the new gameVersion stayed written when bump_version failed (a locked MOD_CHANGELOG.md), so the next
+        plan skipped the mod as "already <build>" and its version bump, report section and changelog line never happened."""
+        from unittest import mock
+
+        with resolved_temp_dir() as root:
+            impact = self._impact(root)
+            rows = retarget_plan(impact, "0.98.5a-RC3")
+            info_path = root / "Alpha" / "working" / "mod_info.json"
+            before = info_path.read_bytes()
+            with mock.patch("bridgeforge.workspace_tools.bump_version", side_effect=OSError("MOD_CHANGELOG.md is locked")):
+                with self.assertRaises(OSError):
+                    apply_retarget(rows[0], "0.98.5a-RC3", changelog=root / "MOD_CHANGELOG.md")
+            after = info_path.read_bytes()
+            replanned = retarget_plan(impact, "0.98.5a-RC3")  # the plan reads mod_info.json again
+        self.assertEqual(after, before)
+        self.assertEqual(replanned[0]["action"], "retarget")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,11 +37,14 @@ def _load(path: Path) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
-def stamp_baseline(path: Path, working: Path, reason: str | None = None, today: str | None = None) -> dict:
-    """Record the mod's current version and today's date on the baseline; `reason` is kept for every key that has none."""
+def stamp_baseline(path: Path, working: Path, reason: str | None = None, today: str | None = None,
+                   carried: dict | None = None) -> dict:
+    """Record the mod's current version and today's date on the baseline; `reason` is kept for every key that has none.
+    `carried` ({"from": old version, "why": ...}) records a re-stamp no one re-justified because nothing the keys depend on
+    changed (`retarget`, ROADMAP-3 item 95.10)."""
     payload = _load(path)
     payload.setdefault("findings", [])
-    payload["stamp"] = {"version": mod_version(working), "date": today or date.today().isoformat()}
+    payload["stamp"] = {"version": mod_version(working), "date": today or date.today().isoformat(), **({"carried": carried} if carried else {})}
     if reason:
         reasons = payload.setdefault("reasons", {})
         for key in payload["findings"]:
