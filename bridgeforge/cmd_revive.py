@@ -49,7 +49,7 @@ def add_parser(subcommands) -> None:
     revive_cmd.add_argument("--vanilla-core", type=Path, help="RC8 starsector-core: enables the loose-script compile check and the fixers that compare against vanilla")
     revive_cmd.add_argument("--target", help="target game version for mod_info.json (default: the --vanilla-core's own version, read from its starfarer_obf.jar; else 0.98a-RC8)")
     revive_cmd.add_argument("--max-rounds", type=int, default=5)
-    revive_cmd.add_argument("--providers", type=Path, action="append", default=[], help="where to look for mods that provide missing content, for the options in missing-content packets (default: the workspace's queue folder and its _rig/mods); repeatable")
+    revive_cmd.add_argument("--providers", type=Path, action="append", default=[], help="where to look for mods that provide missing content, for the options in missing-content packets (default: the workspace's queue folder and its _rig/mods); --draft-report's compile check also resolves libraries there; repeatable")
     revive_cmd.add_argument("--reference-core", type=Path, help="the older starsector-core the mod was made for (default: the installed core matching the original mod_info gameVersion): variant-op-over-budget trims only what the target pushed over, src-to-jar proves src/ against it, missing-content packets propose renamed replacements")
     revive_cmd.add_argument("--lib", type=Path, action="append", default=[], help="a library jar the mod compiles against without declaring it (LazyLib, Nexerelin, ...), for src-to-jar; repeatable")
     revive_cmd.add_argument("--provider-index", type=Path, help="saved `provider-index build` output, as for dependency-substitutes")

@@ -103,6 +103,24 @@ def outside_provider_sources(queue: Path) -> list[Path]:
         return []
 
 
+def _provider_roots(working: Path, reference_core: Path | None = None, extra: list[Path] | None = None) -> list[Path] | None:
+    """Where a declared dependency's classes and content resolve for a scan or a report draft of `working`.
+
+    - The rig's mods/ holds the libraries mods depend on.
+    - The queue itself: a dependency revived alongside (Communist Clouds -> Vayra Merged) is not in the rig, and its content read
+      as unresolved in mods that already declared it (2026-10-01).
+    - The queue's PROVIDER_SOURCES.json folders (ROADMAP 34.25).
+    - The reference install's mods/: the libraries the mod was built against live there, declared or not (Bultach's custom start
+      uses Nexerelin's NGCAddStartingShipsByFleetType; ROADMAP-3 item 92.35, 2026-11-16).
+    - `extra`: folders named on the command line (`revive --providers`).
+    The report draft resolves where the scan does: Sunrider's draft said BLOCKED on "5 javac error(s)" that were only LazyLib and
+    MagicLib, which revive's own scan had found in the reference install's mods/ (ROADMAP-3 item 93.36, 2026-11-17)."""
+    queue = Path(working).resolve().parent.parent
+    reference_mods = [Path(reference_core).resolve().parent / "mods"] if reference_core else []
+    roots = [queue / "_rig" / "mods", queue, *outside_provider_sources(queue), *reference_mods, *(extra or [])]
+    return [p for p in roots if p.is_dir()] or None
+
+
 def _target_profile(target: str | None):
     """The scan target for a revive run. ROADMAP-3 item 92.13 (2026-11-16): revive resolved its target from the core
     (0.98.5a-RC7) but scanned with the generic default 0.98.x, so `mod-info-game-version-inexact` never fired for a mod
@@ -158,17 +176,9 @@ def _scan(working: Path, vanilla_core: Path | None, target: str | None = None, r
     from bridgeforge.scan.scanner import scan_mod
 
     accepted = mod_baseline_keys(working)
-    # The rig's mods/ holds the libraries mods depend on; declared-dependency jars resolve class references there.
-    rig_mods = Path(working).resolve().parent.parent / "_rig" / "mods"
-    # And the queue itself: a declared dependency revived alongside (Communist Clouds -> Vayra Merged) is not in the
-    # rig, and its content read as unresolved in mods that already declared it (2026-10-01).
-    queue = Path(working).resolve().parent.parent
-    # And the reference install's mods/: the libraries the mod was built against live there, declared or not (Bultach's
-    # custom start uses Nexerelin's NGCAddStartingShipsByFleetType; ROADMAP-3 item 92.35, 2026-11-16).
-    reference_mods = Path(reference_core).resolve().parent / "mods" if reference_core else None
-    providers = [p for p in (rig_mods, queue, *outside_provider_sources(queue), *([reference_mods] if reference_mods else [])) if p.is_dir()] or None
     findings = [asdict(f) for f in scan_mod(working, target=_target_profile(target), vanilla_core=vanilla_core,
-                                            compile_check=vanilla_core is not None, provider_roots=providers).findings]
+                                            compile_check=vanilla_core is not None,
+                                            provider_roots=_provider_roots(working, reference_core)).findings]
     _record_settings_baseline(working, findings)
     return [f for f in findings if finding_dict_baseline_key(f) not in accepted]
 
@@ -774,7 +784,8 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
         "next": "Live test (the probe) after UNATTENDED_DONE; `bridgeforge escalation run` for agent packets; owner packets need a decision.",
     }
     if draft_report:
-        result["report_draft"] = _draft_report(working, vanilla_core, status, write=write and apply)
+        result["report_draft"] = _draft_report(working, vanilla_core, status, write=write and apply, reference_core=reference_core,
+                                               providers=providers)
     if write:
         from .report import write_artifacts
         from bridgeforge.scan.scanner import scan_mod
@@ -793,21 +804,21 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
     return result
 
 
-def _draft_report(working: Path, vanilla_core: Path | None, status: str, *, write: bool) -> dict:
+def _draft_report(working: Path, vanilla_core: Path | None, status: str, *, write: bool, reference_core: Path | None = None,
+                  providers: list[Path] | None = None) -> dict:
     """`revival-report-draft` for a mod revive finished with nothing left to do (P15 item 8).
 
     Only after UNATTENDED_DONE: any other status still has work in it. The drafter re-checks for
     itself (MANUAL findings, a compile PASS against --vanilla-core) and says BLOCKED rather than
     fabricate a pass. It writes working/reports/REVIVAL_REPORT.md and REVIVAL_PLAN.md only with
-    --apply, and never over an existing report.
+    --apply, and never over an existing report. Libraries resolve where revive's scan found them, plus
+    the folders named with `--providers` (ROADMAP-3 item 93.36).
     """
     from .revival_report_draft import draft_revival_report, write_revival_report_draft
 
     if status != "UNATTENDED_DONE":
         return {"status": "NOT_DRAFTED", "reason": f"revive ended {status}; a report is drafted only when nothing is left to do"}
-    rig_mods = Path(working).resolve().parent.parent / "_rig" / "mods"
-    queue = Path(working).resolve().parent.parent  # declared dependencies revived alongside, as in _scan
-    providers = [p for p in (rig_mods, queue, *outside_provider_sources(queue)) if p.is_dir()] or None
+    providers = _provider_roots(working, reference_core, providers)
     draft = (write_revival_report_draft(working, vanilla_core, providers) if write
              else draft_revival_report(working, vanilla_core, providers))
     return {key: value for key, value in draft.items() if key not in ("report_text", "plan_text")}

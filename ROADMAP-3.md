@@ -257,6 +257,9 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   LazyLib and MagicLib not found, although `revive --providers` named a mods folder holding both (it feeds missing-content packets,
   not the compile check). `revival-report-draft --providers <RC8 mods>` then drafted READY_FOR_LIVE_TEST (compile-check: 0 errors in
   14 loose scripts, Janino 14/14). Pass the providers through, or fall back to the reference install's `mods/`.
+  **Done 2026-11-17.** Both: `revive._provider_roots` now serves revive's scan and `--draft-report` alike (rig, queue,
+  `PROVIDER_SOURCES.json`, the reference install's `mods/`), and the draft adds the `--providers` folders. Test:
+  `tests/test_revive.py` `test_the_report_draft_resolves_libraries_where_the_scan_does_and_in_named_providers` (fails on the old code).
 - 93.37 **The live harness misses the probe mission in a long mission list.** United Aurora Federation adds its own missions; in
   UAF-LIVE-0985a-20261117 combat round 1 started and ended, round 2's line was logged ("hulls 61-86 of 86; restart the mission"), and
   no `combat|START` followed, so the click back into the mission list did not start the probe mission. Read the list from the screen
