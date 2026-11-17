@@ -660,6 +660,24 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   "fixer <finding> (escalation ledger)", and it skips ledger lines that are not objects (the old code raised on them). Test:
   `tests/test_live_trust.py` `test_a_fixer_run_in_the_escalation_ledger_explains_the_files_it_lists` (fails on the old
   reader). Bultach's archive now waits only on its re-run (93.41).
+- 93.45 (S) **A jar entry's name reached javap's JVM as an option.** Found 2026-11-17 while batching javap for 96.5 P1.
+  - **Where:** `settings_keys.jar_reads` (the settings-key check) and `procgen_args.jar_suspects` (the procgen-argument check)
+    gave javap each selected class as `entry[:-6].replace("/", ".")`.
+  - **The problem:** javap's launcher reads an argument starting with `-J` as a JVM option, wherever it stands. So a mod's
+    jar could put any JVM option on the command line, including ones that load an agent or run a command.
+  - **Shown with a harmless option:** a jar whose entry `-J-version.class` holds the SettingsAPI marker made the JVM print its
+    version instead of running javap (JDK 25). javap also reads `@file` as an argument file, `x.class` as a path and `a:b` as
+    a URL.
+  - **Reach:** a scan runs javap whenever `find_jdk` finds a JDK, which is always the case on both machines. Both call sites
+    came with items 34.34-34.36 (2026-10-04), so the published v0.4.0 has the problem, and v0.2.0 does not.
+
+  **Done 2026-11-17.** `zipsafe.javap_class_name` returns an entry's class name only when it is a plain binary name: ASCII
+  letters, digits, `_` and `$`, separated by single dots, and not ending in `.class`. Both walks skip any other entry.
+  Tests: `tests/test_untrusted_input.py` `JavapClassNameTests`:
+  - the name rule, including U+FF0D, which reached javap as "?" on cp1252;
+  - both walks give javap only `a.B` from a jar full of hostile names.
+
+  Each test fails with its guard removed (mutation-checked).
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct
