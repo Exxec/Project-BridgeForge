@@ -123,18 +123,28 @@ class ClasspathResult:
         }
 
 
+def _has_control_character(text: str) -> bool:
+    return any(ord(character) < 32 or ord(character) == 127 for character in text)
+
+
 def _mod_jars(folder: Path) -> list[Path]:
-    """Jars one mod folder ships: its own mod_info.json "jars" list, else every jar under it."""
+    """Jars one mod folder ships: its own mod_info.json "jars" list, else every jar under it.
+
+    A path holding a control character is left out (ROADMAP-3 93.46). The entry "x\\n-proc:full\\n-Afoo=/../jars/lib.jar" passed
+    is_file() on Windows, because the ".." cancels the line-break component, and its line breaks split javac's argument file:
+    compile-check ran an annotation processor from the mod's own jar (2026-11-17)."""
     info_path = folder / "mod_info.json"
     info = _load_lenient_json_file(info_path) if info_path.is_file() else None
     declared = info.get("jars") if isinstance(info, dict) else None
     if isinstance(declared, list):
-        jars = [folder / entry for entry in declared if isinstance(entry, str) and (folder / entry).is_file()]
+        jars = [folder / entry for entry in declared
+                if isinstance(entry, str) and not _has_control_character(entry) and (folder / entry).is_file()]
         if jars:
             return sorted(jars)
     return sorted(
         jar for jar in folder.rglob("*.jar")
         if not _NON_MOD_JAR_DIRS.intersection(part.lower() for part in jar.relative_to(folder).parts[:-1])
+        and not _has_control_character(str(jar))
     )
 
 
@@ -315,6 +325,17 @@ class JavacRun:
         return self.returncode == 0
 
 
+def javac_argument_line(argument: str) -> str:
+    """One argument as a line of a javac @argument file: quoted, with backslashes and quotes escaped.
+
+    javac's argument-file reader ends a token at a line break even inside quotes, so an argument holding one would become
+    several; one of them could be an option such as -proc:full. Such an argument is refused (ValueError), never written
+    (ROADMAP-3 93.46)."""
+    if "\n" in argument or "\r" in argument:
+        raise ValueError(f"refusing a javac argument with a line break in it: {argument!r}")
+    return '"' + argument.replace("\\", "\\\\").replace('"', '\\"') + '"\n'
+
+
 def run_javac(javac: Path, classpath: str, sources: list[Path], out_dir: Path, extra_args: list[str] | None = None,
               release: str | None = None) -> JavacRun:
     """Compile `sources` with javac, using an @argument file so Windows path spaces/length never bite.
@@ -334,9 +355,9 @@ def run_javac(javac: Path, classpath: str, sources: list[Path], out_dir: Path, e
         args += ["-cp", classpath]
     args += ["-d", str(out_dir)]
     args += [str(source) for source in sources]
+    lines = [javac_argument_line(argument) for argument in args]  # refuses a line break before anything is written
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".javac-args", delete=False) as handle:
-        for argument in args:
-            handle.write('"' + argument.replace("\\", "\\\\").replace('"', '\\"') + '"\n')
+        handle.writelines(lines)
         argfile = Path(handle.name)
     try:
         completed = subprocess.run([str(javac), "@" + str(argfile)], capture_output=True, text=True, check=False)

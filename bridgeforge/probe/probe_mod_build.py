@@ -82,7 +82,9 @@ def _core_classpath(core_dir: Path) -> str:
 
 def _run_javac(javac: Path, classpath: str, sources: list[Path], out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    command = [str(javac), "--release", "17", "-nowarn", "-cp", classpath, "-d", str(out_dir)]
+    # -proc:none: the classpath holds other mods' jars (MagicLib, Nexerelin), and a JDK 17 or 21 javac runs any annotation
+    # processor a classpath jar declares unless told not to (ROADMAP-3 93.46).
+    command = [str(javac), "--release", "17", "-proc:none", "-nowarn", "-cp", classpath, "-d", str(out_dir)]
     command.extend(str(source) for source in sources)
     completed = subprocess.run(command, capture_output=True, text=True, check=False)
     if completed.returncode != 0:

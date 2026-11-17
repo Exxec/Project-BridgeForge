@@ -678,6 +678,41 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - both walks give javap only `a.B` from a jar full of hostile names.
 
   Each test fails with its guard removed (mutation-checked).
+- 93.46 (S) **A line break in a mod's jar path reached javac's argument file, and javac ran the mod's annotation
+  processor.** Found 2026-11-17 by the independent security review of 93.45. Reproduced with the real
+  `compile_check.compile_loose_scripts` on JDK 25.0.5.
+  - **Where:** two pieces of code combined:
+    - `java_toolchain._mod_jars` kept any mod_info.json `"jars"` entry whose joined path passed `is_file()`;
+    - `run_javac` and `build.run_compile` wrote each argument quoted into a javac `@` file, escaping only `\` and `"`.
+  - **The problem:** javac's argument-file reader ends a token at a line break, even inside quotes.
+    - The entry `"x\n-proc:full\n-Afoo=/../jars/lib.jar"` passed `is_file()` on Windows, because the `..` cancels the
+      line-break component.
+    - It put `-proc:full` on the command line after the default `-proc:none`.
+    - compile-check then ran an annotation processor from the mod's own jar: the test processor wrote its marker file, and
+      compile-check reported PASS.
+  - **Reach:** everything that assembles a mod's classpath:
+    - compile-check, so also `scan --compile-check`, the portfolio worker, `corpus-recheck` and the revival report draft;
+    - `patch-jar-class` and `rebuild-jar`;
+    - a declared dependency's mod_info.json.
+  - **Related:** on Linux a `.java` or jar file name may hold a line break itself. `build` and the probe's javac runner
+    passed no `-proc:none`, so a JDK 17 or 21 javac would run a processor that a classpath jar declares (the probe's classpath
+    holds MagicLib, the raid check's Nexerelin).
+
+  **Done 2026-11-17.**
+  - `java_toolchain.javac_argument_line` writes one argument-file line and refuses (ValueError) an argument with a line
+    break. `run_javac` and `build.run_compile` use it before writing anything.
+  - `_mod_jars` leaves out a declared or found jar whose path holds a control character.
+  - `build-plan` writes `-proc:none` into the javac command. `run_compile` adds it to an older profile that names no `-proc:`
+    option, and the probe's `_run_javac` passes it too.
+
+  Tests: `tests/test_untrusted_input.py` `JavacArgumentFileTests`:
+  - the line rule;
+  - both writers refuse before starting javac;
+  - `_mod_jars` leaves the entry out;
+  - `build` turns processing off, also for an older profile, and so does the probe build;
+  - the reviewer's case end to end, which ran the processor before the fix.
+
+  Each guard's test fails with the guard removed (mutation-checked).
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct
