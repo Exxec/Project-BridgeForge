@@ -149,6 +149,8 @@ on the second PC) and `memory-mirror`.
 - Read jar and zip entries of untrusted mods only through `zipsafe.read_limited`, `zipsafe.read_class` (None for an oversize
   class, so a walk goes on with the rest of the jar) or `zipsafe.entry_sha256` (a streamed hash); never `ZipFile.read` or
   `.open(...).read()` without a size. `tests/test_safeio_ratchet.py` `BoundedZipReadTests` fails on a new one (93.33).
+  An entry's name is untrusted too: give javap a class only as `zipsafe.javap_class_name(entry)`, and skip the entry when that
+  is None. javap's launcher reads an argument starting with `-J` as a JVM option (93.45).
 - Accepted-finding baselines are stamped with the mod version and expire on any version change (`baseline-audit`,
   `baseline-accept`); `archive` refuses a stale baseline unless `reports/SHIPPED_CHANGES.json` carries a written `baseline` reason.
 - `tests/known_failures.json` lists known environmental failures with an expiry; `test_guard` reports them without failing.

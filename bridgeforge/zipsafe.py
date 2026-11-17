@@ -7,13 +7,25 @@ instead of returning more data; the length check after the read is a backstop.) 
 entry skip the entry (the scanner lists it in `skipped_entries`); a walk over every class of a jar uses `read_class`, which returns
 None for an oversize class, because a walk that caught the error per jar would let one huge entry hide every class after it
 (ROADMAP-3 93.33, review 2026-11-17).
+
+An entry's name is untrusted too. `javap_class_name` turns a class entry into an argument for javap only when it cannot be read as
+anything but a class name (ROADMAP-3 93.45).
 """
 from __future__ import annotations
 
+import re
 import zipfile
 
 MAX_ENTRY_BYTES = 200 * 1024 * 1024  # any resource a real mod ships is far below this
 MAX_CLASS_BYTES = 32 * 1024 * 1024  # a compiled class is a few hundred KB at most
+
+# javap's launcher reads any argument starting with -J as a JVM option, wherever it stands on the command line: a jar entry
+# named "-J-version.class" made the JVM print its version instead of running javap (JDK 25, 2026-11-17). javap also reads
+# "@file" as an argument file, "x.class" as a file path and "a:b" as a URL. So a name from an untrusted jar reaches javap
+# only as a plain binary class name: ASCII letters, digits, _ and $, separated by single dots. ASCII only, so the check
+# does not depend on a code page: on Windows javap gets its arguments in the ANSI code page, and a character outside it
+# arrives changed (U+FF0D arrived as "?" on cp1252, 2026-11-17).
+_PLAIN_BINARY_NAME = re.compile(r"[A-Za-z0-9_$]+(?:\.[A-Za-z0-9_$]+)*")
 
 
 class ZipEntryTooLarge(OSError):
@@ -37,6 +49,17 @@ def read_class(archive: zipfile.ZipFile, member: str | zipfile.ZipInfo) -> bytes
         return read_limited(archive, member, MAX_CLASS_BYTES)
     except ZipEntryTooLarge:
         return None
+
+
+def javap_class_name(entry: str) -> str | None:
+    """The binary class name to give javap for a jar's class entry (`a/b/C.class` -> `a.b.C`), or None when the entry's name
+    could be read as anything else: an option, an argument file, a path or a URL. Callers skip such an entry."""
+    if not entry.endswith(".class"):
+        return None
+    name = entry[:-len(".class")].replace("/", ".")
+    if not _PLAIN_BINARY_NAME.fullmatch(name) or name.endswith(".class"):
+        return None
+    return name
 
 
 def entry_sha256(archive: zipfile.ZipFile, member: str | zipfile.ZipInfo, chunk_bytes: int = 1 << 20) -> str:

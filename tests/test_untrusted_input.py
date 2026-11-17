@@ -147,5 +147,62 @@ class AtlasHostileJarTests(unittest.TestCase):
         self.assertEqual(stats["skipped"], 0)
 
 
+# Entry names a hostile jar can carry. javap's launcher reads an argument starting with -J as a JVM option wherever it stands:
+# a jar entry named "-J-version.class" made the JVM print its version instead of running javap (JDK 25, 2026-11-17).
+_HOSTILE_ENTRIES = ["-J-version.class", "@javap-args.class", "x/class.class", "a b.class", "a:b.class", "a//b.class"]
+
+
+def _jar_with_class_names(path, marker: bytes) -> None:
+    with zipfile.ZipFile(path, "w") as out:
+        for name in [*_HOSTILE_ENTRIES, "a/B.class"]:
+            out.writestr(name, b"\xca\xfe\xba\xbe " + marker)
+
+
+def _javap_class_arguments(module, call) -> list[str]:
+    """Every argument the jar walk passed to javap after the jar path, with subprocess.run replaced by a recorder."""
+    seen: list[str] = []
+
+    def record(args, **_kwargs):
+        seen.extend(args[args.index("-cp") + 2:])
+        return mock.Mock(stdout="", stderr="", returncode=0)
+
+    with mock.patch.object(module.subprocess, "run", side_effect=record):
+        call()
+    return seen
+
+
+class JavapClassNameTests(unittest.TestCase):
+    """ROADMAP-3 93.45: a jar entry's name reaches javap only as a plain binary class name, never as an option, an argument
+    file, a path or a URL."""
+
+    def test_only_a_plain_binary_name_is_a_javap_class_name(self) -> None:
+        from bridgeforge.zipsafe import javap_class_name
+
+        for entry, expected in [("a/B.class", "a.B"), ("a/B$1.class", "a.B$1"), ("Top.class", "Top"), ("_a/$b/c9.class", "_a.$b.c9")]:
+            self.assertEqual(javap_class_name(entry), expected, entry)
+        # Non-ASCII too: on Windows javap gets its arguments in the ANSI code page (U+FF0D arrived as "?" on cp1252).
+        for entry in [*_HOSTILE_ENTRIES, "a/-J-x.class", "/a.class", "a/.class", ".class", "a\\B.class", "a/B.txt", "a/B.class\n",
+                      "－J－version.class", "ü/Kläss.class"]:
+            self.assertIsNone(javap_class_name(entry), entry)
+
+    def test_settings_reads_never_pass_a_hostile_entry_name_to_javap(self) -> None:
+        from bridgeforge import settings_keys
+
+        with resolved_temp_dir() as root:
+            jar = root / "mod.jar"
+            _jar_with_class_names(jar, b"com/fs/starfarer/api/SettingsAPI")
+            passed = _javap_class_arguments(settings_keys, lambda: settings_keys.jar_reads(jar, root / "javap.exe"))
+        self.assertEqual(passed, ["a.B"])
+
+    def test_procgen_suspects_never_pass_a_hostile_entry_name_to_javap(self) -> None:
+        from bridgeforge import procgen_args
+
+        with resolved_temp_dir() as root:
+            jar = root / "mod.jar"
+            _jar_with_class_names(jar, b"initStar")
+            passed = _javap_class_arguments(procgen_args, lambda: procgen_args.jar_suspects(jar, root / "javap.exe"))
+        self.assertEqual(passed, ["a.B"])
+
+
 if __name__ == "__main__":
     unittest.main()
