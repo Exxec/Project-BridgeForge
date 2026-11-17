@@ -177,31 +177,41 @@ def run_cli(args: argparse.Namespace) -> int:
         print(json.dumps({"written": str(path)}) if args.json else f"Recorded in {path}.")
         return 0
     if args.command == "archive":
-        from .archive import ArchiveError, archive_mod
+        from .archive import ArchiveError, archive_mod, prepare_archive
         from .substitutes import REPO_ROOT
-        from .explain_proofs import prepare_for_audit
-        from bridgeforge.live.live_trust import archive_gate
-        prepare_for_audit(args.workspace)  # extract a zip original, copy translation records (copy-only steps, ROADMAP 60b)
-        gate = archive_gate(args.workspace)
+        # 96.6: proven differences, the gate and the owner's standing licence rule, as `probe-group record --archive` has them.
+        try:
+            prepared = prepare_archive(args.workspace)
+        except (ValueError, OSError) as exc:  # an unreadable record (SHIPPED_CHANGES.json, a report) refuses; it never tracebacks
+            print(f"bridgeforge: archive refused: {exc}", file=sys.stderr)
+            return 2
+        gate = prepared["gate"]
         if not gate["allowed"]:
             # ROADMAP 36.11: no archive for an unaudited or stale-tested mod unless the owner recorded why.
             print("bridgeforge: archive refused: " + "; ".join(gate["problems"]), file=sys.stderr)
-            print(f'  explain with: bridgeforge audit-explain "{args.workspace}" FILE... --reason "..." (or --live --reason for the live result)', file=sys.stderr)
+            for reason, files in prepared["auto_explained"].items():
+                print(f"  proven and recorded: {len(files)} file(s): {reason}", file=sys.stderr)
+            print(f'  explain the rest with: bridgeforge audit-explain "{args.workspace}" FILE... --reason "..." (or --live --reason for the live result)', file=sys.stderr)
             return 2
         try:
             result = archive_mod(args.workspace, args.done or REPO_ROOT / "Done", policy_path=args.policy, refresh=args.refresh,
-                                 allow_unexplained=args.allow_unexplained)
+                                 allow_unexplained=args.allow_unexplained, standing_licence=prepared["standing_licence"])
             if args.readme_copy:
                 from .archive import write_readme_copies
                 result["readme_copies"] = write_readme_copies(Path(result["archive"]))
         except (ArchiveError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
+        result["auto_explained"] = prepared["auto_explained"]
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
         else:
             print(f"Archived: {result['archive']} ({result['files']} files, {result['licence']}, status {result['status']})")
             print(f"  {len(result['changed'])} file(s) changed, {len(result['added'])} added vs original; jars identical: {result['jars_identical']}")
+            for reason, files in prepared["auto_explained"].items():
+                print(f"  auto-explained {len(files)} file(s): {reason}")
+            if result["licence_recorded"]:
+                print("  Licence: LOCAL_ONLY recorded, the owner's standing decision of 2026-09-27 (`release-policy set` changes it)")
             for warning in result["warnings"]:
                 print(f"  WARN {warning}")
             if result["allowed_unexplained"]:

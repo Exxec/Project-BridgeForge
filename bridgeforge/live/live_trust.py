@@ -346,6 +346,69 @@ def _text(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig", errors="replace")
 
 
+# Files whose translated display text the translation proof can check line by line or cell by cell; never a jar or an image.
+_TRANSLATABLE = (".csv",) + _JSONLIKE
+
+
+def _translation_only(before: Path, after: Path) -> bool:
+    """Every difference replaces display text where the original held Chinese:
+    - a CSV keeps its rows, and each changed cell held CJK;
+    - a JSON-like file keeps its structure, and each changed value is a string that held CJK. Values are compared, not lines,
+      so an id changed on the same line as a name does not pass.
+
+    Until the 2026-11-17 review the proof was only CJK counts plus some record in reports/translation/. That passed a CSV that
+    lost a Chinese row, and jars whose compressed bytes happen to decode as CJK. ROADMAP-3 96.6."""
+    if before.suffix.lower() == ".csv":
+        import csv
+        import io
+
+        try:
+            rows_a, rows_b = list(csv.reader(io.StringIO(_text(before)))), list(csv.reader(io.StringIO(_text(after))))
+        except csv.Error:
+            return False
+        if len(rows_a) != len(rows_b):
+            return False
+        changed = []
+        for row_a, row_b in zip(rows_a, rows_b):
+            width = max(len(row_a), len(row_b))
+            changed += [old for old, new in zip(row_a + [""] * (width - len(row_a)), row_b + [""] * (width - len(row_b))) if old != new]
+    else:
+        from bridgeforge.scan.scanner import _load_lenient_json_file
+
+        a, b = _load_lenient_json_file(before), _load_lenient_json_file(after)
+        changed = _changed_values(a, b) if a is not None and b is not None else None
+        if changed is None:
+            return False
+    return bool(changed) and all(isinstance(old, str) and _CJK.search(old) for old in changed)
+
+
+def _changed_values(a: object, b: object) -> list | None:
+    """The original value of every leaf that differs between two parsed documents; None when their shapes differ."""
+    if isinstance(a, dict) and isinstance(b, dict):
+        if a.keys() != b.keys():
+            return None
+        found: list = []
+        for key in a:
+            inner = _changed_values(a[key], b[key])
+            if inner is None:
+                return None
+            found += inner
+        return found
+    if isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            return None
+        found = []
+        for x, y in zip(a, b):
+            inner = _changed_values(x, y)
+            if inner is None:
+                return None
+            found += inner
+        return found
+    if isinstance(a, (dict, list)) or isinstance(b, (dict, list)):
+        return None
+    return [] if a == b else [a]
+
+
 def _same_parsed_json(before: Path, after: Path) -> bool:
     from bridgeforge.scan.scanner import _load_lenient_json_file
 
@@ -466,7 +529,8 @@ def auto_explain_shipped(workspace: Path, today: str | None = None) -> dict[str,
                 reason = "JSON syntax made strict for the game's parser; the parsed values are identical to the original"
             elif suffix == ".csv" and _only_manufacturer_column_added(before, after):
                 reason = "game schema: tech/manufacturer column added; every other value is unchanged"
-            elif translated and len(_CJK.findall(_text(before))) > len(_CJK.findall(_text(after))):
+            elif translated and suffix in _TRANSLATABLE and len(_CJK.findall(_text(before))) > len(_CJK.findall(_text(after))) \
+                    and _translation_only(before, after):
                 reason = "Chinese -> English translation (reports/translation/); the original holds the Chinese text"
         elif before.is_file() and not after.is_file() and _kept_in_work_files(scratch, relative, before):
             reason = "an author work file moved out of the shipped copy by the shippable-work-file fixer; a byte-identical copy is kept in scratch/work-files/"

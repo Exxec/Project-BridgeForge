@@ -160,6 +160,56 @@ Check S series implementation plan and if applicable add remaining items to road
     - A4, A5, A6, A10 (M): one public module for mod files (11 resolvers, 5 `_mod_info` loaders); split the `run_cli`
       if-chains (10 of the 13 functions over 200 lines); split the 1,000-line modules with a size ratchet; one shared
       tree hash with 93.27's cache (13 copies of `_sha256`).
+- 96.6 (S) **`archive` does what `record --archive` does first.** On 2026-11-17 the owner said "archive all". All four plain
+  `archive` runs refused (Templars, KoC, Eridani, Scrapyard):
+  - `audit-explain --auto` then proved 9 of their unexplained files: KoC's moved work files, Scrapyard's credits file and
+    Templars' added CSV rows;
+  - three lacked the licence decision the owner's standing rule gives (2026-09-27);
+  - Eridani's 9 translated files went unproven because translate-batch kept its records in `scratch/translate-work/`, not
+    `scratch/translation/`.
+
+  `record --archive` already applied both; plain `archive` applied neither.
+  **Done 2026-11-17.**
+  - `archive.prepare_archive` (used by `archive`) proves what the files prove, checks the gate and, when the gate allows,
+    records the standing LOCAL_ONLY decision for a mod with none.
+  - `release.apply_standing_licence` is now shared with `record_group`. A recorded decision is never changed.
+  - A refusal lists what was proven and recorded.
+  - `prepare_for_audit` copies a translate-batch work folder's records (`export.json` with mode TRANSLATION_EXPORT, and
+    `translations.json`) into `reports/translation/`, so the translation proof sees them.
+  - `record_policy_decision` writes LF: a plain `write_text` had given Test1's policy file CRLF. One bare write converted.
+  - The revive skill describes the plain-archive path and the rule to explain only from records.
+
+  Tests: `tests/test_archive_prepare.py`:
+  - plain archive with a proven difference and no decision;
+  - a recorded decision kept;
+  - a refused archive records no licence;
+  - LF;
+  - the translate-batch proof.
+
+  Each fails on the old code.
+  An independent review the same day found problems, fixed in the same PR:
+  - The translation proof was CJK counts plus any record in `reports/translation/`. Copying translate-batch's
+    `export.json`, which it writes before translating, armed the proof for any such workspace. It passed a CSV that lost a
+    Chinese row, and jars whose bytes happened to decode as CJK. Now it applies only to CSV and JSON-like files, and only
+    when every difference replaces Chinese display text (`_translation_only`): a CSV keeps its rows and each changed cell
+    held CJK; a JSON-like file keeps its structure and each changed value is a string that held CJK. Values are compared,
+    so an id changed on the same line as a name fails.
+  - The standing licence was written before `archive_mod`'s own refusals (an existing `Done/<Mod>`, a short
+    `--allow-unexplained` reason). `prepare_archive` now only returns the CURRENT live result's date. `archive_mod`
+    applies the standing decision in memory and writes it to `release_policy.json` only once the archive is written.
+  - A gate passed by a live waiver has no run date, so the reason claimed "live-validated <today>". Now a waiver gives no
+    standing decision, and the owner records one with `release-policy set`.
+  - An unreadable record (SHIPPED_CHANGES.json) refuses with exit 2 instead of a traceback.
+  - The workspace path is resolved before its id is read.
+
+  Tests (each fails on the first version):
+  - `test_a_translation_record_proves_nothing_but_a_translation`;
+  - `test_a_refusal_after_the_gate_leaves_the_policy_as_it_was`;
+  - `test_a_waived_live_result_gets_no_standing_decision`;
+  - `test_an_unreadable_record_refuses_without_a_traceback`.
+
+  Left as they were: a proof recorded on a refused attempt is keyed by path and not re-checked when the file changes again
+  (older design); `record_group` still records the standing licence before `archive_mod`.
 
 **95. Less hand work and faster re-validation for game updates (owner 2026-11-17: "1 through 5 add to roadmap. 6 I'm not sure we can do that always but if it can be optional that would be great. All others approved."; "Implement the smaller items not the greater phases like S and G").**
 **Approved.** Found taking the six-mod batch, United Aurora Federation and Sunrider through revival and live tests on

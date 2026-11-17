@@ -85,8 +85,28 @@ def record_policy_decision(mod_id: str, *, local_only: bool, reason: str, on: st
     key = next((existing for existing in mods if str(existing).lower() == mod_id.lower()), mod_id)
     previous = mods.get(key)
     mods[key] = {"local_only": bool(local_only), "reason": reason.strip(), "recorded_on": on or date.today().isoformat()}
-    path.write_text(json.dumps(policy, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    # LF as the repository keeps it: a plain write_text gave Test1's copy CRLF (2026-11-17).
+    from .safeio import atomic_write_text
+
+    atomic_write_text(path, json.dumps(policy, indent=2, ensure_ascii=False) + "\n", newline="")
     return {"mod": key, "previous": previous, "current": mods[key], "file": str(path)}
+
+
+# The owner's standing reason for local-only revivals (owner decision 2026-09-27).
+OWNER_STANDING_REASON = ("revived for the owner's local archive (live-validated {date}); not published without the author's permission "
+                         "(owner decision 2026-09-27)")
+
+
+def apply_standing_licence(mod_id: str | None, name: str | None, *, live_date: str, policy_path: Path | None = None) -> bool:
+    """Record the owner's standing local-only decision (2026-09-27) for a revival with no decision yet; True when one was
+    written. A recorded decision, LOCAL_ONLY or RELEASABLE, is never changed. `probe-group record --archive` and, since
+    ROADMAP-3 96.6, `archive` both apply it."""
+    from .substitutes import revival_licence
+
+    if not mod_id or revival_licence(mod_id, name, policy_path).get("decision") in ("LOCAL_ONLY", "RELEASABLE"):
+        return False
+    record_policy_decision(mod_id, local_only=True, reason=OWNER_STANDING_REASON.format(date=live_date), policy_path=policy_path)
+    return True
 
 
 def _licence_gate(mod_id: str | None, mod_name: str | None, policy_path: Path | None) -> dict[str, object]:
