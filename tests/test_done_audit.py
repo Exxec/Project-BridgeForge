@@ -34,6 +34,55 @@ class DoneAuditTests(unittest.TestCase):
         self.assertIn("re-archive it", report)
         self.assertFalse(checkpoint_left)
 
+    def test_an_archive_the_owner_closed_is_listed_not_audited(self) -> None:
+        """ROADMAP-3 95.15: owner 2026-11-17, "nightcross armory has been superseded and can safely be ignored". `close` marks
+        the archive (a dated section in workspace/REVIVAL_REPORT.md), and done-audit lists it without auditing it."""
+        from bridgeforge.report_status import closed_archive_status
+        from bridgeforge.workspace_tools import close_workspace
+
+        with resolved_temp_dir() as root:
+            done, queue = root / "Done", root / "queue"
+            plugin = "package data.plugins;\npublic class P {\n    void s(String n) { Global.getSector().getStarSystem(n).getPlanets(); }\n}\n"
+            _write(done / "Old" / "Old" / "mod_info.json", '{"id": "old", "version": "1"}')
+            _write(done / "Old" / "Old" / "data" / "plugins" / "P.java", plugin)
+            _write(done / "Old" / "workspace" / "REVIVAL_REPORT.md", "# Revival report\n\nLIVE_VALIDATED\n")
+            before = closed_archive_status(done / "Old")
+            written = close_workspace(done / "Old", "SUPERSEDED", "Owner 2026-11-17: superseded, can safely be ignored.", day="2026-11-17")
+            result = done_audit(done, queue, quiet=True)
+            report = (done / "DONE_AUDIT.md").read_text(encoding="utf-8")
+        old = result["mods"][0]
+        self.assertIsNone(before)
+        self.assertTrue(written.endswith("REVIVAL_REPORT.md") and "workspace" in written)
+        self.assertEqual((old["status"], old["findings"], old["closed"]), ("SUPERSEDED", [], True))
+        self.assertIn("closed by the owner", report)
+
+    def test_a_close_wins_over_a_checkpoint_record_from_before_it(self) -> None:
+        """Review 2026-11-17: a done-audit interrupted before the close, resumed after it, reported the archive's old audit."""
+        import json
+
+        from bridgeforge.workspace_tools import close_workspace
+
+        with resolved_temp_dir() as root:
+            done, queue = root / "Done", root / "queue"
+            _write(done / "Old" / "Old" / "mod_info.json", '{"id": "old", "version": "1"}')
+            _write(done / "Old" / "workspace" / "REVIVAL_REPORT.md", "# Revival report\n\nLIVE_VALIDATED\n")
+            header = {"done": str(done.resolve()), "queue": str(queue.resolve()), "vanilla_core": None}
+            cached = {"mod": "Old", "status": "CLEAN", "stale": None, "findings": []}
+            (done / "DONE_AUDIT.partial.jsonl").write_text(json.dumps(header) + "\n" + json.dumps({"key": "Old", "value": cached}) + "\n",
+                                                           encoding="utf-8")
+            close_workspace(done / "Old" / "Old", "SUPERSEDED", "Owner: superseded.")  # the shipped-copy path target-impact prints
+            result = done_audit(done, queue, quiet=True)
+        self.assertEqual(result["mods"][0]["status"], "SUPERSEDED")
+
+    def test_close_refuses_a_folder_that_is_neither_a_workspace_nor_an_archive(self) -> None:
+        from bridgeforge.workspace_tools import close_workspace
+
+        with resolved_temp_dir() as root:
+            (root / "Somewhere").mkdir()
+            with self.assertRaises(ValueError):
+                close_workspace(root / "Somewhere", "SUPERSEDED", "Owner: superseded.")
+            self.assertFalse((root / "Somewhere" / "working").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

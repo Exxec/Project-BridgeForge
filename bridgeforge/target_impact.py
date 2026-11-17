@@ -349,9 +349,13 @@ def target_impact(roots: list[Path], old_core: Path, new_core: Path, *, checkpoi
     for core in (old_core, new_core):
         if not (core / "starfarer.api.jar").is_file():
             raise TargetImpactError(f"{core} is not a starsector-core folder (no starfarer.api.jar).")
-    mods = discover_mods(roots)
+    found = discover_mods(roots)
+    # A mod the owner closed (`close`: SUPERSEDED or NOT_REVIVABLE) is listed, not checked (ROADMAP-3 item 95.15).
+    skipped = [{"mod": label, "status": status} for label, folder in found if (status := _closed_status(folder))]
+    closed_labels = {s["mod"] for s in skipped}
+    mods = [(label, folder) for label, folder in found if label not in closed_labels]
     by_id: dict[str, Path] = {}
-    for _, folder in mods:
+    for _, folder in found:  # a closed library still provides its jars to the mods that depend on it (review 2026-11-17)
         mod_id = (_mod_info(folder) or {}).get("id")
         if isinstance(mod_id, str):
             by_id.setdefault(mod_id, folder)
@@ -386,15 +390,28 @@ def target_impact(roots: list[Path], old_core: Path, new_core: Path, *, checkpoi
     return {"schema_version": SCHEMA_VERSION, "mode": "TARGET_IMPACT", "old_core": str(old_core), "new_core": str(new_core),
             "mods": len(records), "verdicts": {v: verdicts.get(v, 0) for v in VERDICTS},
             "by_member": sorted(({"member": m, "mods": sorted(names)} for m, names in members.items()), key=lambda e: (-len(e["mods"]), e["member"])),
-            "records": records,
+            "records": records, "skipped": skipped,
             "note": "Only what differs between the two cores. CLEAN means none of these checks changed, not that the mod "
                     "works on the new version: content, settings and behaviour changes need the scan and a live test."}
 
 
+def _closed_status(folder: Path) -> str | None:
+    """SUPERSEDED or NOT_REVIVABLE for a mod the owner closed: a queue workspace's `working/` or a `Done/<Mod>/<Mod>` copy."""
+    from .report_status import CLOSED_STATUSES, closed_archive_status, report_status
+
+    folder = Path(folder)
+    if folder.name == "working":
+        status = report_status(folder / "reports" / "REVIVAL_REPORT.md")
+        return status if status in CLOSED_STATUSES else None
+    return closed_archive_status(folder.parent) if folder.parent.name == folder.name else None
+
+
 def render(result: dict) -> str:
     v = result["verdicts"]
+    skipped = result.get("skipped") or []
     lines = [f"# Target impact: {result['mods']} mods", "", f"Old core: `{result['old_core']}`", f"New core: `{result['new_core']}`", "",
              f"BREAKS {v['BREAKS']}, RELINK {v['RELINK']} (recompile only), REVIEW {v.get('REVIEW', 0)} (data the new core treats differently), CLEAN {v['CLEAN']}", "", result["note"], "",
+             *([f"Not checked, closed by the owner: {', '.join(f'{s['mod']} ({s['status']})' for s in skipped)}.", ""] if skipped else []),
              "## By game member", "", "| Member | Mods | Which |", "|---|---|---|"]
     lines += [f"| `{_short(e['member'])}` | {len(e['mods'])} | {', '.join(e['mods'][:8])}{' ...' if len(e['mods']) > 8 else ''} |" for e in result["by_member"]]
     lines += ["", "## Mods that break or need a relink", ""]

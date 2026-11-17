@@ -73,6 +73,19 @@ unproven).
   2.2.10 and 2.2.11, Vram Optimizer 1.0.50 and 1.0.51, SEEKER 0.3.0 and 0.6, Epta Consortium 2.0.3 and 2.1.3, Templars 0.9.8f and
   0.9.9e, Neutrino 1.87-RC3 Nostalgia Edition and 1.8.9), some on the owner's word (Templars and Epta, 2026-10-13). A superseded
   mark for a Done/ archive, set only on the owner's word, that target-impact, done-audit and 95.11 skip; Nightcross is the first.
+  **Done 2026-11-17 (code; Nightcross not yet marked).**
+  - `close` takes a `Done/<Mod>` archive too. It writes the existing dated section, ending SUPERSEDED or NOT_REVIVABLE, to the
+    archive's `workspace/REVIVAL_REPORT.md`.
+  - done-audit and target-impact list a closed archive (or closed queue workspace) by status instead of checking it.
+  - Marking Nightcross (`close "Done/Nightcross" --status SUPERSEDED --reason ...` on Test1) and any old duplicate waits for the
+    owner's word on each.
+  - Review fixes, the same day:
+    - A close beats a done-audit record cached before it.
+    - `close` takes the `Done/<Mod>/<Mod>` path target-impact prints, and refuses a folder that is neither a workspace nor an
+      archive.
+    - A closed library still provides its jars to mods that depend on it.
+  - Tests: `tests/test_done_audit.py` (`test_an_archive_the_owner_closed_is_listed_not_audited`, the checkpoint and refusal
+    cases) and `tests/test_target_impact.py` (`test_an_archive_the_owner_closed_is_listed_not_checked`, `ClosedProviderTests`).
 
 **94. Feature genome: extract and insert features across mods and builds (owner 2026-11-17: "design roadmap from now to endgoal of being able to extract and insert features like DNA"; "all approved. Please make sure everything is traceable and each repo gets a copy of its roadmap specific portion").**
 **Approved strategy addition (GD-1); not implemented.** Design, decisions, estimate and sister entries:

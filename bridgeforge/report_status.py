@@ -44,3 +44,15 @@ SETTLED_STATUSES = (*CLOSED_STATUSES, "LIVE_VALIDATED")
 def is_closed(workspace: Path) -> bool:
     """Closed or live-validated: no unattended queue work."""
     return report_status(Path(workspace) / "working" / "reports" / "REVIVAL_REPORT.md") in SETTLED_STATUSES
+
+
+def archive_report(archive: Path) -> Path:
+    """Where a `Done/<Mod>` archive keeps its revival report (`archive` copies it to `workspace/`)."""
+    return Path(archive) / "workspace" / "REVIVAL_REPORT.md"
+
+
+def closed_archive_status(archive: Path) -> str | None:
+    """SUPERSEDED or NOT_REVIVABLE when the owner closed an archive with `close` (ROADMAP-3 item 95.15), else None. Commands
+    that walk Done/ list such an archive instead of auditing or re-validating it."""
+    status = report_status(archive_report(archive))
+    return status if status in CLOSED_STATUSES else None
