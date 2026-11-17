@@ -568,6 +568,19 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - A game that exited while a round loaded was retried, and the retry clicked into the closed window (`RuntimeError`). It now
     ends as LIVE_STUCK "the game exited before the probe mission's battle started", with no retry. Test:
     `test_a_game_that_exits_while_a_round_loads_is_stuck_without_a_retry` (fails on the first version).
+- 93.40 **A battle that starts and never ends leaves no evidence.** SR4-LIVE-0985a-20261117 (Bultach Coalition alone, probe
+  0.3.3, the first run after 93.39):
+  - round 1 was defined at 241.9 s; the probe logged `combat|START` at 244.6 s and battle music started at 245.8 s;
+  - the log then stayed silent for six minutes: no ship logged, no END. The run ended LIVE_STUCK at `combat-round-1`.
+
+  SR3 fought the same slice normally. A deployment dialog left open (the battle stays paused) and a frozen game look the same
+  in the log.
+  **Done 2026-11-17 (evidence only; the cause is not shown).** When no END comes, the harness now saves
+  `<TESTID>.round<N>-no-end.png` beside the log and names it in the stuck detail. A game that exited mid-battle is named as
+  such, with no screenshot. Tests: `tests/test_live_run.py` `test_a_battle_that_never_ends_leaves_a_screenshot`,
+  `test_a_game_that_exits_mid_battle_is_named_and_not_photographed` (both fail on the old driver).
+  Next: re-run Bultach and read the screenshot if it stops again. Check that Test1's desktop is idle before a run
+  (GetLastInputInfo), since a person using it takes the clicks and key presses.
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct

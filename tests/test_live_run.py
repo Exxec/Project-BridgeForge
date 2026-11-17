@@ -18,9 +18,9 @@ class FakeGame:
     needs no window)."""
 
     def __init__(self, log: Path, rounds: int = 1, stall_at: str | None = None, lost_starts: tuple[int, ...] = (),
-                 late_redefinition: bool = False, dies_at_deploy: int | None = None) -> None:
+                 late_redefinition: bool = False, dies_at_deploy: int | None = None, dies_in_battle: bool = False) -> None:
         self.log, self.rounds, self.stall_at = log, rounds, stall_at
-        self.dies_at_deploy, self.alive = dies_at_deploy, True
+        self.dies_at_deploy, self.dies_in_battle, self.alive = dies_at_deploy, dies_in_battle, True
         self.lost_starts, self.late_redefinition = set(lost_starts), late_redefinition
         self.actions: list[tuple] = []
         self.combat_started = self.deploys = 0
@@ -67,6 +67,9 @@ class FakeGame:
     def key(self, vk: int) -> None:
         self.actions.append(("key", vk))
         if vk != live_run.SPACE_KEY or not self.running:
+            return
+        if self.dies_in_battle:
+            self.alive = False  # the java process exited mid-battle
             return
         if self.stall_at == "first-space":
             self.stall_at = None  # the first press landed before the mission took input; the next one starts it
@@ -121,6 +124,19 @@ class DriveTests(unittest.TestCase):
         result, game = self._drive(stall_at="new-game")
         self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "new-game"))
         self.assertEqual(game.combat_started, 0)
+
+    def test_a_battle_that_never_ends_leaves_a_screenshot(self) -> None:
+        # SR4-LIVE-0985a-20261117: the battle started and nothing more was logged, not even a ship (93.40).
+        result, game = self._drive(stall_at="combat")
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "combat-round-1"))
+        self.assertEqual([path.name for path in game.captures], ["run.round1-no-end.png"])
+        self.assertIn("run.round1-no-end.png", result.detail)
+
+    def test_a_game_that_exits_mid_battle_is_named_and_not_photographed(self) -> None:
+        result, game = self._drive(dies_in_battle=True)
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "combat-round-1"))
+        self.assertIn("the game exited during", result.detail)
+        self.assertEqual(game.captures, [])
 
     def test_silent_combat_is_stuck_at_its_round(self) -> None:
         result, _ = self._drive(stall_at="combat")
