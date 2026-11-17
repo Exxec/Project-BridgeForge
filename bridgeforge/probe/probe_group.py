@@ -1048,10 +1048,11 @@ def smoke_group(rig: Path, bat_name: str = SMOKE_BAT, timeout: int = 240, log_na
     """Boot the rig with the group `install` just enabled, unattended, and read the startup log (ROADMAP 60a).
 
     Catches what fails at load time before anyone is asked to play: a `rules.csv` with mismatched quotes, a duplicate
-    key, a missing library, a Fatal dialog (Metelson, Free Stars Union, Ironclads, 2026-10-05/06). It starts java
-    directly (`run-j25-direct.bat`), so there is no launcher to click, and stops at the main menu. It cannot reach New
-    Game generation (Tritachyon's missing industry crashed in onNewGame): the real run is still needed. Only java
-    processes under the rig are ever stopped (`boot_test._running_java_under`).
+    key, a missing library, a Fatal dialog (Metelson, Free Stars Union, Ironclads, 2026-10-05/06). It starts the game
+    with `run-j25-direct.bat` ("direct" means without `starsector.exe`): the bat runs `StarfarerLauncher`, which shows the
+    launcher window, so the boot clicks Play (`auto_click=True`), then stops at the main menu (ROADMAP-3 item 93.25). It
+    cannot reach New Game generation (Tritachyon's missing industry crashed in onNewGame): the real run is still needed.
+    Only java processes under the rig are ever stopped (`boot_test._running_java_under`).
     """
     import time
 

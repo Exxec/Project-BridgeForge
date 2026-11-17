@@ -25,8 +25,10 @@ new forms do not compile on RC8, so each is gated on the target core's own API j
 only when the target lacks the old member and has the new one. No target core given, no gated rule. Evidence, from
 `api-diff` RC8 -> 0.98.5a-RC3 and both versions' `starfarer.api.zip` sources:
 
-- `new ShipAIConfig()` -> `new ShipAIConfig(null)`: 0.98.5a has only `ShipAIConfig(ShipAPI shipIfAny)`, whose body runs
-  only for a non-null ship; the field defaults are RC8's, so null keeps RC8's behaviour exactly. 30 mods use it.
+- `new ShipAIConfig()` -> `new ShipAIConfig(null)`: 0.98.5a-RC3 has only `ShipAIConfig(ShipAPI shipIfAny)`, whose body
+  runs only for a non-null ship; the field defaults are RC8's, so null keeps RC8's behaviour exactly. 30 mods use it.
+  0.98.5a-RC7 restored the public `ShipAIConfig()` (`api-diff` RC3 -> RC7, 2026-11-17: 3172 classes, two changed), so on
+  RC7 the gate stays closed and the call is left alone, as designed (`_gate_open`; ROADMAP-3 item 93.25).
 - `x.isBeingIgnored()` -> `x.isBeingIgnored(false)`: RC8's javadoc "being mostly ignored by enemy ships"; 0.98.5a's
   `isBeingIgnored(boolean byAlly)` returns false when byAlly is true.
 - `Misc.getOfficerSalary(p)` -> `(p, Misc.isMercenary(p), false, false)`: RC8's one-argument form was exactly that

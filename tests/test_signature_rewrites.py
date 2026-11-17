@@ -132,6 +132,22 @@ class TargetGatedRewriteTests(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertEqual(text, TARGET_OLD)
 
+    def test_a_core_with_both_ship_ai_config_constructors_keeps_that_gate_closed(self) -> None:
+        """ROADMAP-3 93.25: 0.98.5a-RC7 restored the public ShipAIConfig() beside ShipAIConfig(ShipAPI) (`api-diff` RC3 -> RC7,
+        2026-11-17), so `new ShipAIConfig()` is left alone there, while a call RC7 still lacks is rewritten."""
+        from unittest import mock
+
+        from bridgeforge.linkage import ClassInfo
+        from bridgeforge.signature_rewrites import suspects
+
+        core = _core(True)
+        name = _API + "combat/ShipAIConfig"
+        core[name] = ClassInfo(name, "java/lang/Object", [], methods={("<init>", "()V"), ("<init>", f"(L{_API}combat/ShipAPI;)V")})
+        text = "class E { Object a() { return new ShipAIConfig(); } boolean b(ShipAPI s) { return s.isBeingIgnored(); } }"
+        with mock.patch("bridgeforge.linkage.core_index", return_value=core):
+            rules = [rule for _line, rule, _start, _end in suspects(text, Path("core"))]
+        self.assertEqual(rules, ["isBeingIgnored"])
+
     def test_a_computed_officer_argument_is_not_duplicated(self) -> None:
         from unittest import mock
 

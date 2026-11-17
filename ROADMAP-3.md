@@ -202,6 +202,10 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   RC7 (2026-11-17: 3172 classes, none added or removed, two changed) shows RC7 restored the public `ShipAIConfig()` and added
   `SettingsAPI.getAllMissileSpecs()`, so the gated `ShipAIConfig` rules stay closed on RC7, as designed (`_gate_open`). The same
   diff keeps RevenantLib's RC3 target (its PR #4, merged 2026-11-17) valid for RC7: `ShipAPI` is identical (312 methods).
+  **Done 2026-11-17.** Corrected: `smoke_group`'s docstring now says the bat shows the launcher and the boot clicks Play; the
+  `signature_rewrites` and `jar_call_rewrites` notes now say "0.98.5a-RC3", with RC7's restored constructor. Test:
+  `tests/test_signature_rewrites.py` `test_a_core_with_both_ship_ai_config_constructors_keeps_that_gate_closed` (RC7's shape:
+  `new ShipAIConfig()` left alone, `isBeingIgnored()` still rewritten).
 - 93.26 **Done 2026-11-17.** **Owner acceptances reach content parity.** `probe_accepted.json` entries never applied to
   content-parity lines (`group_report` added `parity_failure_lines` after the per-line acceptance), so Musashi's four CSV rows with
   no .ship/.wpn file (owner: "keep them and ignore warning if it doesn't affect anything"), Bultach's two and Tania's two stayed

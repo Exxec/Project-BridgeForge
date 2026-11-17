@@ -6,7 +6,8 @@ classes: push the constant right before the call and call the new descriptor (`b
 ASM). Each rule is gated on the target core's own API jar, exactly as its source twin, and carries the same evidence:
 
 - `ShipAIConfig.<init>()V` -> `<init>(Lcom/fs/starfarer/api/combat/ShipAPI;)V` with null: RC8's no-argument constructor
-  set the defaults the new one keeps for a null ship (both versions' `starfarer.api.zip`).
+  set the defaults the new one keeps for a null ship (both versions' `starfarer.api.zip`). 0.98.5a-RC7 has the
+  no-argument constructor again (`api-diff` RC3 -> RC7, 2026-11-17), so this gate opens only on RC3 (ROADMAP-3 item 93.25).
 - `ShipAPI.isBeingIgnored()Z` -> `isBeingIgnored(Z)Z` with false: RC8's javadoc "ignored by enemy ships"; 0.98.5a
   returns false for byAlly=true.
 
