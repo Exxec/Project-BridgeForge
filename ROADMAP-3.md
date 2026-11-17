@@ -25,6 +25,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
 **93. Test rigs, probe targets and library dependencies (owner 2026-11-17: "yes, also bridgeforge is supposed to check for undeclared libraries and add them. If not implement it and continue to make suggestions").**
 **Approved; 93.1-93.2 done, the rest queued after the six live tests.** Found preparing Test1 for the six-mod live run (2026-11-17).
+**Live tests paused by the owner 2026-11-17** ("lets pause live testing for now. I will sort that out later"): Test1 has no
+licence key stored (93.20). 93.20-93.25 were found that day and added under the owner's standing instruction to keep adding
+findings (2026-11-16); queued with the rest.
 - 93.1 **Done 2026-11-17.** **Optional library use misread as required.** Undeclared-library detection and its fixer already existed
   (`undeclared-library-dependency`, unguarded use declared from `LIBRARY_DEPENDENCY_IDS`; guarded use left alone, Exigency
   2026-09-28), and the batch's mods declare their libraries. But Navarchy of Tania's and Bultach Coalition's Nexerelin use became
@@ -51,7 +54,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   content hashes still matched. Rig sync and any cross-machine copy compare names byte for byte.
 - 93.7 **Run where there is a desktop, or refuse.** A game started from an SSH command lands in a non-interactive session.
   `smoke`/`live` detect it and either refuse with the remedy or launch through an interactive scheduled task in the logged-on
-  user's session (`schtasks /IT`), streaming the log back.
+  user's session (`schtasks /IT`), streaming the log back. Delete the task after its run: a one-off task created with
+  `/SC ONCE /ST 23:59` and started at once with `/Run` also fires by itself at 23:59 that day (three such tasks were found and
+  deleted on Test1, 2026-11-17).
 - 93.8 **Pre-flight before clicks.** User logged on and unlocked, expected resolution, no other Starsector/java process
   (`who-locks`), rig not held by another run manifest; today all by hand.
 - 93.9 **Launchers that travel with the rig.** `run-j25-direct.bat` hard-codes `_rig\jdk-25...`; a new rig works only by borrowing
@@ -81,6 +86,44 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 - 93.19 **Warn about a stale installed copy.** The project `.venv` holds an old non-editable `bridgeforge` in `site-packages`; a
   script run outside the checkout imported it and got old code (2026-11-17). `doctor` warns when the installed copy and the
   checkout differ.
+- 93.20 **No licence key on the rig machine (owner to sort out).** Group 1's smoke on Test1 (G1-SMOKE-0985a-20261117) sat at
+  the launcher for 240 s (its log ends at the launcher's fonts) and was reported SUSPECT_FATAL_DIALOG. Test1's Java preferences
+  for the game (`HKCU\Software\JavaSoft\Prefs\com\fs\starfarer`) are empty: no `serial`, and none of the values a played game
+  leaves (`first/Game/Run`, `controls1`, `resolution`); White_Legion's hold them. RC7's launcher-preferences class reads the key
+  there (`Preferences.userRoot().node("/com/fs/starfarer").get("serial", null)`, javap 2026-11-17), and both the launcher and the
+  direct start (93.21) check it. `rig-doctor` and `smoke`/`live` check that the value exists (never read out, print or copy it)
+  and refuse at once with the remedy: start the launcher on that machine once and enter the key.
+- 93.21 **Start the game without the launcher.** RC7's `StarfarerLauncher.main` checks the system property `launchDirect`; when
+  it is set and the stored key validates, it starts the game at `startRes` (`WxH`), `startFS` and `startSound` and never builds
+  the launcher (javap 2026-11-17; RC8's jar has the same four names in the same classes, not disassembled). The launcher's own
+  JVM restart uses the same properties: on Play, when `GLLauncher` gets true from `shouldRestartOnLaunch` (settings.json
+  `allowJVMRestartFromLauncher` on and the launcher's memory above the running JVM's), `Utils` rebuilds the command line (the
+  running JVM's arguments with `-Xms`/`-Xmx` replaced, plus `-DlaunchDirect` and `-DstartRes=... -DstartFS=...
+  -DstartSound=...`), runs it from a shutdown hook (`Utils$2`, `Runtime.exec`) and calls `System.exit`, which would end the
+  process the harness watches and leave the new JVM's console output in pipes, not the run's log. RC7 ships the setting false,
+  so Play normally starts the game in the same JVM (`goToState("launch_game")`); a mod that turns it on would bring the restart
+  back. `launch.start_game` passes the four properties through `JAVA_TOOL_OPTIONS` when the core has them and keeps the click
+  for cores without: no click to miss and no restart. `startSound=true`, because the main-menu marker is a music line. Test1
+  2026-11-17 (G1-DIRECT-0985a-20261117): the JVM picked the properties up and exited with 0 right after "Loading settings", the
+  key check having failed (93.20). Needs one live proof once a key is stored.
+- 93.22 **The rig window must fit the desktop.** The live click fractions were measured in a 1920x1440 window
+  (`rig_prefs.RIG_RESOLUTION`); Test1's desktop is 1920x1080 at 96 DPI (2026-11-17), so that window runs off the screen.
+  Pre-flight (93.8) compares the desktop with the pinned size and refuses with the remedy (a larger desktop mode, or click
+  fractions measured at another size).
+- 93.23 **A launcher click that misses is retried and recorded.** `launcher_click.click_launcher_once` posts one click at
+  50%/68% of the window (measured on RC8's launcher) and never again; on Test1 the run then waited out its timeout. Retry until
+  the log moves past the launcher and capture the launcher window at each try. Lower priority once 93.21 lands.
+- 93.24 **Captures that show the game window.** On Test1 the full-screen capture (`window_watch.save_screenshot`) showed the
+  scheduled task's console where the launcher was, although the launcher was the foreground window and set topmost, and the
+  taskbar clock in both captures was 12 hours old (G1-SMOKE-0985a-20261117-no-main-menu.png and the G1-PEEK-0985a-20261117
+  experiment, 2026-11-17). Capture the game's own window (`PrintWindow` with `PW_RENDERFULLCONTENT`), start the task's console
+  minimised, and record the desktop size with each capture.
+- 93.25 **Two stale notes.** `probe_group.smoke_group` says `run-j25-direct.bat` starts java "so there is no launcher to
+  click"; the bat starts `StarfarerLauncher`, which shows the launcher ("direct" means without `starsector.exe`). The
+  `signature_rewrites`/`jar_call_rewrites` notes that 0.98.5a has only `ShipAIConfig(ShipAPI)` hold for RC3: `api-diff` RC3 ->
+  RC7 (2026-11-17: 3172 classes, none added or removed, two changed) shows RC7 restored the public `ShipAIConfig()` and added
+  `SettingsAPI.getAllMissileSpecs()`, so the gated `ShipAIConfig` rules stay closed on RC7, as designed (`_gate_open`). The same
+  diff keeps RevenantLib's RC3 target (its PR #4, merged 2026-11-17) valid for RC7: `ShipAPI` is identical (312 methods).
 
 **92. Less hand work found reviving six mods against 0.98.5a-RC7 (owner 2026-11-16: "add these improvements to roadmap we will implement in queue after these mods are revived but not yet live tested").**
 **Approved, queued: start once Scrapyard Armories, Bultach Coalition, Eridani Combine, Everybody loves KoC, Musashi
