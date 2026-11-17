@@ -73,6 +73,24 @@ _MEMORY_FLAG_CHECK = re.compile(r"getMemory(?:WithoutUpdate)?\s*\(\s*\)\s*\.\s*(
 _PERSISTENT_FLAG_CHECK = re.compile(r"getPersistentData\s*\(\s*\)\s*\.\s*(?:containsKey|get)\s*\(")
 
 
+_EXISTENCE_IF = re.compile(r'\bif\s*\((?:[^()]|\([^()]*\))*?\b(?:getEntityById|getStarSystem)\s*\(\s*"[^"]+"\s*\)\s*==\s*null'
+                           r'(?:[^()]|\([^()]*\))*\)\s*\{')
+
+
+def _inside_existence_check(body: str, generates: re.Pattern) -> bool:
+    """The generation call sits inside `if (... getEntityById("x") == null ...) { ... }` (or getStarSystem). Navarchy of Tania's
+    ModPlugin calls TaniaGen.generate in onGameLoad only when getEntityById("carina_system") == null, the star TaniaGen creates;
+    the check reported its four systems as unguarded (ROADMAP-3 item 92.28, 2026-11-16)."""
+    for match in _EXISTENCE_IF.finditer(body):
+        depth, end = 1, match.end()
+        while end < len(body) and depth:
+            depth += {"{": 1, "}": -1}.get(body[end], 0)
+            end += 1
+        if generates.search(body[match.end():end]):
+            return True
+    return False
+
+
 def _scan_system_generation_unguarded(root: Path, result: ScanResult) -> None:
     """Star systems created with no "already generated?" guard (Zorg18, 2026-09-14).
 
@@ -136,15 +154,22 @@ def _scan_system_generation_unguarded(root: Path, result: ScanResult) -> None:
                    for path in reachers):
                 continue
             on_new_game = False
+            existence_guarded = False
             for path in reachers:
                 plugin_text = plugins.get(path, "")
-                if generates.search(_method_body_with_helpers(plugin_text, "onGameLoad")):
+                load_body = _method_body_with_helpers(plugin_text, "onGameLoad")
+                if generates.search(load_body) and _inside_existence_check(load_body, generates):
+                    existence_guarded = True
+                    continue
+                if generates.search(load_body):
                     reached = "onGameLoad"
                     worst = "medium"
                     break
                 if generates.search(_method_body_with_helpers(plugin_text, "onNewGame")) or generates.search(
                         _method_body_with_helpers(plugin_text, "onNewGameAfterProcGen")):
                     on_new_game = True
+            if existence_guarded and reached != "onGameLoad":
+                continue
             if reached != "onGameLoad" and on_new_game:
                 reached = "onNewGame"
             line = text.count("\n", 0, match.start()) + 1

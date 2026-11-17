@@ -48,7 +48,9 @@ def _in_nest(call: str, class_entry: str) -> bool:
 
 
 def _javap_stats(javap: Path, class_file: Path) -> tuple[Counter, int]:
-    out = subprocess.run([str(javap), "-c", "-p", str(class_file)], capture_output=True, text=True, check=False).stdout
+    # Bytes, decoded leniently: javap prints string constants in the platform encoding, and a text-mode read of a class with
+    # an 'è' constant left stdout None (Bultach Coalition, 2026-11-16; ROADMAP-3 item 92.25).
+    out = subprocess.run([str(javap), "-c", "-p", str(class_file)], capture_output=True, check=False).stdout.decode("utf-8", errors="replace")
     calls: Counter = Counter()
     previous = ""
     for line in out.splitlines():
@@ -69,9 +71,26 @@ def _package_path(source: Path) -> str:
     return match.group(1).replace(".", "/") if match else ""
 
 
+def shipped_release(jar_path: Path, sources: list[Path]) -> str | None:
+    """The Java release of the jar class the first source replaces (ROADMAP-3 item 92.26): a jar built for Java 8 gets
+    Java 8 classes. None when no source's class is in the jar (javac's default, 17, then applies)."""
+    from bridgeforge.bytecode.java_toolchain import class_release
+    from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
+
+    with zipfile.ZipFile(jar_path) as archive:
+        names = set(archive.namelist())
+        for source in sources:
+            package = _package_path(Path(source))
+            entry = f"{package}/{Path(source).stem}.class" if package else f"{Path(source).stem}.class"
+            if entry in names:
+                return class_release(read_limited(archive, archive.getinfo(entry), MAX_CLASS_BYTES))
+    return None
+
+
 def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla_core: Path | None = None,
                       provider_roots: list[Path] | None = None, source_root: str | None = None,
-                      allow_removed: list[str] | None = None, install: bool = False, jdk: Path | None = None) -> dict:
+                      allow_removed: list[str] | None = None, install: bool = False, jdk: Path | None = None,
+                      extra_classpath: list[Path] | None = None, release: str | None = None) -> dict:
     workspace = Path(workspace).expanduser().resolve()
     working = workspace / "working"
     jar_path = (working / jar).resolve()
@@ -102,11 +121,16 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
             info = _load_lenient_json_file(info_path) or {}
             if isinstance(info, dict):
                 extra += [str(info_path.parent / j) for j in info.get("jars") or [] if isinstance(j, str) and (info_path.parent / j).is_file()]
+    # Library jars named by the caller: a mod can use one it never declared (Navarchy of Tania imports LazyLib and
+    # Nexerelin with no mod_info dependency, 2026-11-16; ROADMAP-3 item 92.26).
+    extra += [str(Path(j)) for j in extra_classpath or [] if Path(j).is_file()]
     if extra:
         classpath = os.pathsep.join([classpath, *extra]) if classpath else os.pathsep.join(extra)
+    if release is None:
+        release = shipped_release(jar_path, sources)
 
     out_dir = Path(tempfile.mkdtemp(prefix="bf-jar-patch-"))
-    run = run_javac(jdk_info.javac, classpath, sources, out_dir / "classes")
+    run = run_javac(jdk_info.javac, classpath, sources, out_dir / "classes", release=release)
     result = {"schema_version": SCHEMA_VERSION, "mode": "PATCH_JAR_CLASS", "workspace": str(workspace), "jar": jar,
               "sources": [str(s) for s in sources], "compile": {"success": run.success, "errors": run.errors[:20]},
               "classes": [], "installed": False}

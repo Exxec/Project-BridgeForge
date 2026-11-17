@@ -514,6 +514,27 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
     return jars
 
 
+def _scan_jar_source_not_rebuilt(root: Path, result: ScanResult) -> None:
+    """A jar mod's source BridgeForge edited (an agent or fixer left a `.pre-bf-*.bak` beside it) whose current bytes were
+    never built into the jar (`src-to-jar` records what it built). ROADMAP-3 item 92.25, 2026-11-16: Navarchy of Tania's
+    eight applied agent fixes and Eridani Combine's one sat in src/ while the game kept loading the unfixed jar classes."""
+    from bridgeforge.bytecode.src_to_jar import unbuilt_sources
+
+    unbuilt = unbuilt_sources(root)
+    if unbuilt:
+        result.add(
+            id="jar-source-not-rebuilt",
+            category="code",
+            severity="high",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=(f"{len(unbuilt)} source file(s) of a jar mod were changed by BridgeForge (a .pre-bf-*.bak beside each) but "
+                         "never rebuilt into the jar, so the game still runs the old classes. Run `bridgeforge src-to-jar` (or "
+                         "approve it in revive): it proves the original source reproduces the shipped classes, then patches the jar."),
+            evidence=[f"source:{rel}" for rel in unbuilt],
+        )
+
+
 def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core: Path | None = None, compile_check: bool = False, provider_roots: list[Path] | None = None) -> ScanResult:
     root = input_path.expanduser().resolve()
     if not root.is_dir():
@@ -617,6 +638,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_unresolved_content_references(root, result, vanilla_root, provider_roots)
     _scan_carrier_bays_proposal(root, result, vanilla_root)
     _scan_description_missing(root, result, vanilla_root)
+    _scan_jar_source_not_rebuilt(root, result)
     _scan_asset_reference_missing(root, result, vanilla_root)
     _scan_preset_whole_entry_replace(root, result, vanilla_root)
     scan_market_on_hyperspace_entity(root, result)
@@ -625,4 +647,23 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_port_dropped_feature(root, result)
     if compile_check:
         _scan_compile_check(root, result, vanilla_root, provider_roots)
+    _demote_root_readme_json(root, result)
     return result
+
+
+def _demote_root_readme_json(root: Path, result: ScanResult) -> None:
+    """JSON-syntax findings on a mod-root file that nothing in the mod names become SAFE notes: the game reads only
+    mod_info.json in the root, so such a file is a readme for people (ROADMAP-3 item 92.10, 2026-11-16: Scrapyard Armories'
+    prose Changelog.json / Special Thanks.json became UNKNOWN agent packets and the agent wrapped the prose in JSON arrays)."""
+    from .scan_json import _root_file_unreferenced
+
+    verdicts: dict[str, bool] = {}
+    for finding in result.findings:
+        file = (finding.file or "").replace("\\", "/")
+        if not file or "/" in file or not (finding.id.startswith("json-") or finding.id in ("unverified-json-syntax", "non-strict-json-trailing-comma")):
+            continue
+        if file not in verdicts:
+            verdicts[file] = _root_file_unreferenced(root, file)
+        if verdicts[file]:
+            finding.classification = "SAFE"
+            finding.evidence = [*(finding.evidence or []), "root-file-unreferenced"]

@@ -221,7 +221,12 @@ def run_cli(args: argparse.Namespace) -> int:
             if recorded is not None and not args.json:
                 print(f"Named encodings recorded: {recorded}")
         try:
-            rescan = scan_mod(plan.mod_root)
+            # Rescan with the fix's own target and core: `fix --target-game-version 0.98.5a-RC7` set the right value and the
+            # default-target rescan still reported the finding (ROADMAP-3 item 92.14, 2026-11-16).
+            from .models import TargetProfile
+            target = getattr(args, "target_game_version", None)
+            rescan = scan_mod(plan.mod_root, target=TargetProfile(starsector=target) if target else None,
+                              vanilla_core=getattr(args, "vanilla_core", None))
         except ValueError as exc:
             print(f"bridgeforge: fix applied but rescan failed: {exc}", file=sys.stderr)
             return 2

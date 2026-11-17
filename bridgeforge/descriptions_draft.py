@@ -37,12 +37,22 @@ _CJK = re.compile(r"[぀-ヿ㐀-䶿一-鿿가-힯]")
 _SENTENCE_END = re.compile(r"[.!?](?:[\"')\]]*)(?:\s|$)")
 PROMPT = """You are writing Starsector codex descriptions. Edit ONLY the file {file} in the current folder.
 It is JSON with "entries": fill every entries[].text. Each entry has "facts" taken from the mod's own data (kind, name, size,
-role, manufacturer, system). Write two to four sentences of plain English in the tone of the mod's other text, using only
-those facts and general ship, weapon or system function. Invent no lore names, factions, people, places or events. One
-line per text, no vertical bars, no markdown. Do not add, remove or reorder entries or change any other field."""
+role, manufacturer, damage, range, hints, the system's spec type). Write two to four sentences of plain English in the tone of
+the mod's other text, using only those facts and general ship, weapon or system function. Invent no lore names, factions,
+people, places or events, and claim no mechanic the facts do not show (no costs, side effects or numbers of your own).
+Read the facts literally: hints STRIKE means a heavy blow against single targets, not general use; PD means point defense;
+a system's spec_type says what it does (TELEPORTER moves the ship instantly, PHASE_CLOAK phases it, BURN_DRIVE or
+ENGINE_MOD is a burst of speed, STAT_MOD changes the ship's stats, WEAPON fires something); hull_size is the ship's class
+(FRIGATE, DESTROYER, CRUISER, CAPITAL_SHIP), so do not call a frigate a destroyer. One line per text, no vertical bars,
+no markdown. Do not add, remove or reorder entries or change any other field."""
 
 TYPE_FOR_KIND = {"hull": "SHIP", "weapon": "WEAPON", "ship-system": "SHIP_SYSTEM"}
-_FACT_COLUMNS = ("name", "designation", "tech/manufacturer", "size", "type", "system id", "primaryRoleStr", "role")
+_FACT_COLUMNS = ("name", "designation", "tech/manufacturer", "size", "type", "system id", "primaryRoleStr", "role",
+                 "damage/shot", "damage/second", "range", "hints", "fighter bays", "max speed", "defense id", "active", "cooldown")
+# Spec-file fields that decide what a thing is (ROADMAP-3 items 92.15/92.30, 2026-11-16): 13 of 23 crafted rows in the six-mod
+# batch contradicted them (a TELEPORTER system as a weapons overdrive, a 2800-damage STRIKE gun as general purpose, a FRIGATE
+# hull as a destroyer), because the agent saw only names and roles.
+_SPEC_FIELDS = {"hull": ("hullSize",), "weapon": ("type", "size", "specClass"), "ship-system": ("type", "aiType")}
 
 Crafter = Callable[[Path], str]
 
@@ -122,11 +132,52 @@ def _facts(working: Path, mod_info: dict) -> Callable[[str, str], dict]:
     sources = {"hull": _index(working / "data" / "hulls" / "ship_data.csv"), "weapon": _index(working / "data" / "weapons" / "weapon_data.csv"),
                "ship-system": _index(working / "data" / "shipsystems" / "ship_systems.csv")}
 
+    def spec(cid: str, kind: str) -> dict:
+        from bridgeforge.scan.scanner import _load_lenient_json_file
+
+        folder, suffix = {"hull": ("hulls", ".ship"), "weapon": ("weapons", ".wpn"), "ship-system": ("shipsystems", ".system")}[kind]
+        path = next((working / "data" / folder).rglob(f"{cid}{suffix}"), None) if (working / "data" / folder).is_dir() else None
+        data = _load_lenient_json_file(path) if path is not None else None
+        if not isinstance(data, dict):
+            return {}
+        names = {"hullSize": "hull_size", "type": "spec_type", "size": "mount_size", "specClass": "spec_class", "aiType": "ai_type"}
+        return {names[field]: str(data[field]) for field in _SPEC_FIELDS[kind] if isinstance(data.get(field), (str, int, float))}
+
     def facts(cid: str, kind: str) -> dict:
         row = sources.get(kind, {}).get(cid) or {}
         found = {column: row[column].strip() for column in _FACT_COLUMNS if row.get(column, "").strip()}
+        if kind in _SPEC_FIELDS:
+            found.update(spec(cid, kind))
+        if kind == "weapon" and "type" in found:
+            found["damage_type"] = found.pop("type")  # weapon_data's `type` is the damage type, the .wpn's is the mount
         return {"kind": kind, "mod": mod_info.get("name") or "", **found}
     return facts
+
+
+_CLASS_WORDS = {"FRIGATE": "frigate", "DESTROYER": "destroyer", "CRUISER": "cruiser", "CAPITAL_SHIP": "capital"}
+_SYSTEM_WORDS = {"TELEPORTER": ("teleport", "jump", "displac", "blink", "instant", "new position", "out of normal space"),
+                 "PHASE_CLOAK": ("phase", "p-space", "normal space"), "BURN_DRIVE": ("speed", "forward", "burn", "dash", "surge", "hurl"),
+                 "ENGINE_MOD": ("engine", "speed", "drive", "thrust", "surge")}
+
+
+def check_against_facts(text: str, facts: dict) -> str | None:
+    """Why a crafted text contradicts its facts (None when it does not). The checks are the contradictions found by hand in the
+    2026-11-16 batch (ROADMAP-3 item 92.30); a draft rejected here is listed as unresolved, never applied."""
+    lowered = text.lower()
+    hints = str(facts.get("hints") or "").upper()
+    if "STRIKE" in hints and re.search(r"\b(general[- ]purpose|general combat|all-purpose|versatile|any role)\b", lowered):
+        return "hints STRIKE, but the text calls it a general-purpose weapon"
+    if re.search(r"\bPD\b", hints) and "defen" not in lowered and "missile" not in lowered and "fighter" not in lowered:
+        return "hints PD, but the text does not describe point defense"
+    size = str(facts.get("hull_size") or "").upper()
+    if size in _CLASS_WORDS:
+        wrong = [word for key, word in _CLASS_WORDS.items() if key != size and re.search(rf"\b{word}\b", lowered)]
+        if wrong:
+            return f"hull_size {size}, but the text calls it a {wrong[0]}"
+    words = _SYSTEM_WORDS.get(str(facts.get("spec_type") or "").upper())
+    if facts.get("kind") == "ship-system" and words and not any(word in lowered for word in words):
+        return f"system type {facts['spec_type']}, but the text does not describe that effect"
+    return None
 
 
 def check_crafted(text: str) -> str | None:
@@ -165,7 +216,7 @@ def craft(entries: list[dict], crafter: Crafter, work_dir: Path, *, chunk: int =
         for entry in part:
             key = f"{entry['id']}|{entry['type']}"
             text = _clean_text(str((by_key.get(key) or {}).get("text") or ""))
-            problem = check_crafted(text) if key in by_key else "entry missing from the returned chunk"
+            problem = (check_crafted(text) or check_against_facts(text, entry["facts"])) if key in by_key else "entry missing from the returned chunk"
             if problem:
                 rejected[key] = problem
             else:

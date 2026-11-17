@@ -563,6 +563,25 @@ def _repair_missing_commas(text: str, limit: int = 20) -> tuple[str, list[int]] 
     return None
 
 
+def _root_file_unreferenced(root: Path, file: str) -> bool:
+    """A file in the mod root (not mod_info.json) that no loose script, jar class or data file names. The game itself reads
+    only mod_info.json there, so such a file is a readme for people. Scrapyard Armories' prose `Changelog.json` and
+    `Special Thanks.json` became UNKNOWN agent packets, and the agent could only wrap the prose in JSON arrays
+    (ROADMAP-3 item 92.10, 2026-11-16)."""
+    if "/" in file.replace("\\", "/") or file.lower() == "mod_info.json":
+        return False
+    needle = file.encode("utf-8")
+    for path in Path(root).rglob("*"):
+        if not path.is_file() or path.parent == Path(root) or path.suffix.lower() not in (".java", ".jar", ".json", ".csv", ".kt"):
+            continue
+        try:
+            if path.stat().st_size < 64 * 1024 * 1024 and needle in path.read_bytes():
+                return False
+        except OSError:
+            return False
+    return True
+
+
 def _unverified_json_syntax_finding(result: ScanResult, category: str, file: str, exc: Exception) -> None:
     result.add(id="unverified-json-syntax", category=category, severity="medium", classification="UNKNOWN", confidence="DETERMINISTIC", explanation=f"A strict JSON parser rejected this file ({exc}). This is not proof that the target game parser rejects it; no matching parser-tolerance evidence is available.", file=file)
 

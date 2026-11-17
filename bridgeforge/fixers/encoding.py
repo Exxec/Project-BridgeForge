@@ -88,8 +88,14 @@ def _fix_data_file_not_utf8(root: Path, options: dict) -> list[FileChange]:
         if named is not None:
             changes.append(FileChange(path=path, before=raw, after=_reencode_invalid(raw, offsets, named, relative)))
             continue
-        if not all(raw[i] in _CP1252_TYPOGRAPHY and plain(i - 1) and plain(i + 1) for i in offsets):
-            odd = sorted({f"0x{raw[i]:02x}" for i in offsets if raw[i] not in _CP1252_TYPOGRAPHY})
+        # « » (0xAB/0xBB) count as typography only in matched pairs: as quotes they open and close, while the same bytes are
+        # unrelated letters elsewhere (Shift-JIS half-width katakana, Mac Roman). Musashi Manufactorum's descriptions.csv held
+        # only NBSP and three «...» pairs, and was refused (ROADMAP-3 item 92.19, 2026-11-16).
+        allowed = set(_CP1252_TYPOGRAPHY)
+        if sum(raw[i] == 0xAB for i in offsets) == sum(raw[i] == 0xBB for i in offsets):
+            allowed |= {0xAB, 0xBB}
+        if not all(raw[i] in allowed and plain(i - 1) and plain(i + 1) for i in offsets):
+            odd = sorted({f"0x{raw[i]:02x}" for i in offsets if raw[i] not in allowed})
             refused.append(f"{path.relative_to(root).as_posix()} ({', '.join(odd) or 'adjacent high bytes'})")
             continue
         out, last = bytearray(), 0
@@ -171,3 +177,32 @@ def _reencode_invalid(raw: bytes, offsets: list[int], encoding: str, relative: s
         out += raw[last:i] + text.encode("utf-8")
         last = i + width
     return bytes(out + raw[last:])
+
+
+def _fix_fullwidth_punctuation(root: Path, options: dict) -> list[FileChange]:
+    """fullwidth-punctuation-in-text: full-width punctuation in English player text made ASCII, line by line, with the same rule
+    the check uses (`scan_text.fullwidth_punctuation_fixed`); lines still holding other CJK are left to translation. Line
+    endings and a BOM are kept (ROADMAP-3 item 92.32)."""
+    from bridgeforge.scan.scan_text import fullwidth_punctuation_files, fullwidth_punctuation_fixed
+
+    changes = []
+    for path in fullwidth_punctuation_files(root):
+        raw = path.read_bytes()
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            continue  # data-file-not-utf8 first
+        lines = text.splitlines(keepends=True)
+        changed = False
+        for index, line in enumerate(lines):
+            body = line.rstrip("\r\n")
+            fixed = fullwidth_punctuation_fixed(body)
+            if fixed is not None:
+                lines[index] = fixed + line[len(body):]
+                changed = True
+        if changed:
+            bom = b"\xef\xbb\xbf" if raw.startswith(b"\xef\xbb\xbf") else b""
+            changes.append(FileChange(path=path, before=raw, after=bom + "".join(lines).encode("utf-8")))
+    if not changes:
+        raise FixerError("No English player text with full-width punctuation found.")
+    return changes

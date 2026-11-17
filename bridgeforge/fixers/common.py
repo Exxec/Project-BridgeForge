@@ -48,6 +48,7 @@ SUPPORTED_FINDINGS = (
     "faction-trait-weight-legacy-personality-id",
     "shiproles-wing-id",
     "csv-fullwidth-number",
+    "fullwidth-punctuation-in-text",
     "ship-data-missing-fighter-bays-column",
     "missing-custom-ui-button-pressed-callback",
     "shippable-work-file",

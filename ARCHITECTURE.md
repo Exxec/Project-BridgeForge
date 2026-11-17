@@ -15,7 +15,7 @@ The recursive Python inventory contains **334 files**: 186 at package root and 1
 | `bridgeforge/probe/` | 8 | Probe build/configuration, group planning, installation and reporting. |
 | `bridgeforge/rig/` | 6 | Rig setup, preferences, diagnosis, reset and rig command handlers. |
 | `bridgeforge/live/` | 6 | Live-run orchestration, log/result handling and the live ledger. |
-| `bridgeforge/bytecode/` | 10 | Java/bytecode/JAR analysis, toolchain and helper compilation. |
+| `bridgeforge/bytecode/` | 11 | Java/bytecode/JAR analysis, toolchain and helper compilation. |
 | `bridgeforge/scan/` | 28 | Scanner orchestration, parsing, registry and check families. |
 | `bridgeforge/save/` | 17 | Save inspection, fingerprints, compatibility, upgrade planning and save commands. |
 | `bridgeforge/fixers/` | 24 | B2 domain rewrites, common helpers and the public fixer API. |

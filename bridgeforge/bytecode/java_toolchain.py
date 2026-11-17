@@ -246,6 +246,14 @@ _DETAIL_LINE = re.compile(r"^\s+(symbol|location):\s*(.*)$")
 # whose only overload changed parameter types into a bare "incompatible types" naming neither method
 # nor class; verbose mode reports "method getDays in interface SectorAPI cannot be applied", which
 # `api_diff.annotate_errors` can match against a removed signature.
+def class_release(class_bytes: bytes) -> str | None:
+    """The javac --release a class file was built for: major 52 -> "8", 61 -> "17" (52 + 9 = Java 9 onward)."""
+    if len(class_bytes) < 8 or class_bytes[:4] != b"\xca\xfe\xba\xbe":
+        return None
+    major = int.from_bytes(class_bytes[6:8], "big")
+    return "8" if major <= 52 else str(major - 44)
+
+
 DEFAULT_JAVAC_ARGS = (
     "--release", "17", "-proc:none", "-nowarn", "-encoding", "UTF-8", "-Xmaxerrs", "10000", "-sourcepath", "",
     "-Xdiags:verbose",
@@ -307,15 +315,19 @@ class JavacRun:
         return self.returncode == 0
 
 
-def run_javac(javac: Path, classpath: str, sources: list[Path], out_dir: Path, extra_args: list[str] | None = None) -> JavacRun:
+def run_javac(javac: Path, classpath: str, sources: list[Path], out_dir: Path, extra_args: list[str] | None = None,
+              release: str | None = None) -> JavacRun:
     """Compile `sources` with javac, using an @argument file so Windows path spaces/length never bite.
 
     Applies DEFAULT_JAVAC_ARGS (`--release 17 -proc:none -nowarn -encoding UTF-8 -Xmaxerrs 10000 -sourcepath "" -Xdiags:verbose`);
-    `extra_args`, if given, are appended after them.
+    `extra_args`, if given, are appended after them. `release` replaces 17: a class patched into a jar built for Java 8
+    (Eridani Combine's ECE.jar, class version 52, 2026-11-16) is compiled for 8 so the rest of the jar stays consistent.
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     args = list(DEFAULT_JAVAC_ARGS)
+    if release:
+        args[args.index("--release") + 1] = str(release)
     if extra_args:
         args += list(extra_args)
     if classpath:

@@ -9,7 +9,7 @@ from .common import FileChange as FileChange, FixPlan as FixPlan, FixerError as 
 from .conversion import SUPPLY_RATIOS as SUPPLY_RATIOS, _SHADOW_ID_KEYS as _SHADOW_ID_KEYS, _fix_conversion_faction_names_missing_content as _fix_conversion_faction_names_missing_content, _fix_conversion_faction_names_removed_hull as _fix_conversion_faction_names_removed_hull, _fix_conversion_vanilla_lifecycle_plugin as _fix_conversion_vanilla_lifecycle_plugin, _fix_dependency_version_major_mismatch as _fix_dependency_version_major_mismatch, _fix_factions_csv_relists_neutral as _fix_factions_csv_relists_neutral, _fix_ship_data_supplies_legacy_column as _fix_ship_data_supplies_legacy_column, _fix_vanilla_path_shadowing as _fix_vanilla_path_shadowing, _matching_brace as _matching_brace
 from .csv_data import _add_design_type_color as _add_design_type_color, _fix_csv_fullwidth_number as _fix_csv_fullwidth_number, _fix_csv_missing_design_type_column as _fix_csv_missing_design_type_column, _fix_csv_row_extra_columns as _fix_csv_row_extra_columns, _fix_csv_slash_quote_escape as _fix_csv_slash_quote_escape, _fix_csv_vanilla_row_override as _fix_csv_vanilla_row_override, _fix_person_names_duplicate_row as _fix_person_names_duplicate_row, _fix_rules_csv_curly_quote_unreadable as _fix_rules_csv_curly_quote_unreadable, _fix_rules_csv_duplicate_id as _fix_rules_csv_duplicate_id, _fix_rules_csv_whitespace_only_line as _fix_rules_csv_whitespace_only_line, _fullwidth_cells as _fullwidth_cells
 from .dependencies import _DEPENDENCY_ENTRY_ID_PATTERN as _DEPENDENCY_ENTRY_ID_PATTERN, _DEPENDENCY_ENTRY_PATTERN as _DEPENDENCY_ENTRY_PATTERN, _add_dependency_entry as _add_dependency_entry, _fix_revenantlib_fold_conflict as _fix_revenantlib_fold_conflict, _fix_undeclared_library_dependency as _fix_undeclared_library_dependency, _remove_dependency_entries as _remove_dependency_entries
-from .encoding import NAMED_ENCODINGS_FILE as NAMED_ENCODINGS_FILE, _CP1252_TYPOGRAPHY as _CP1252_TYPOGRAPHY, _NAMEABLE_ENCODINGS as _NAMEABLE_ENCODINGS, _REFERENCE_SUFFIXES as _REFERENCE_SUFFIXES, _fix_data_file_not_utf8 as _fix_data_file_not_utf8, _invalid_utf8_offsets as _invalid_utf8_offsets, _named_encodings_path as _named_encodings_path, _reencode_invalid as _reencode_invalid, _referencing_bytes as _referencing_bytes, pending_named_encodings as pending_named_encodings, record_named_encodings as record_named_encodings
+from .encoding import NAMED_ENCODINGS_FILE as NAMED_ENCODINGS_FILE, _CP1252_TYPOGRAPHY as _CP1252_TYPOGRAPHY, _NAMEABLE_ENCODINGS as _NAMEABLE_ENCODINGS, _REFERENCE_SUFFIXES as _REFERENCE_SUFFIXES, _fix_data_file_not_utf8 as _fix_data_file_not_utf8, _fix_fullwidth_punctuation as _fix_fullwidth_punctuation, _invalid_utf8_offsets as _invalid_utf8_offsets, _named_encodings_path as _named_encodings_path, _reencode_invalid as _reencode_invalid, _referencing_bytes as _referencing_bytes, pending_named_encodings as pending_named_encodings, record_named_encodings as record_named_encodings
 from .faction_weights import _ID_WEIGHT_KEY_VALUE_PATTERN as _ID_WEIGHT_KEY_VALUE_PATTERN, _SHIP_ROLES_KEY_PATTERN as _SHIP_ROLES_KEY_PATTERN, _TRAITS_KEY_PATTERN as _TRAITS_KEY_PATTERN, _fix_faction_trait_weight_legacy_personality_id as _fix_faction_trait_weight_legacy_personality_id, _fix_shippable_work_file as _fix_shippable_work_file, _fix_shiproles_wing_id as _fix_shiproles_wing_id, _format_weight_sum as _format_weight_sum, _matching_close_brace as _matching_close_brace, _rewrite_id_weight_object as _rewrite_id_weight_object
 from .factions import _fix_faction_known_lists_missing as _fix_faction_known_lists_missing, _hull_ids as _hull_ids, _load_variant as _load_variant, _weapon_ids as _weapon_ids
 from .interfaces import _HULL_MOD_EFFECT_DEFAULTS as _HULL_MOD_EFFECT_DEFAULTS, _SHIP_SYSTEM_DEFAULTS as _SHIP_SYSTEM_DEFAULTS, _fix_missing_custom_ui_button_pressed_callback as _fix_missing_custom_ui_button_pressed_callback, _fix_rc8_signature_changed as _fix_rc8_signature_changed, _fix_target_interface_method_missing as _fix_target_interface_method_missing, _insert_before_class_end as _insert_before_class_end
@@ -91,6 +91,7 @@ _FIXER_FUNCS = {
     "faction-trait-weight-legacy-personality-id": _fix_faction_trait_weight_legacy_personality_id,
     "shiproles-wing-id": _fix_shiproles_wing_id,
     "csv-fullwidth-number": _fix_csv_fullwidth_number,
+    "fullwidth-punctuation-in-text": _fix_fullwidth_punctuation,
     "ship-data-missing-fighter-bays-column": _fix_ship_data_missing_fighter_bays_column,
     "missing-custom-ui-button-pressed-callback": _fix_missing_custom_ui_button_pressed_callback,
     "jar-call-signature-changed": _fix_jar_call_signature_changed,
@@ -212,8 +213,10 @@ def apply_fix(plan: FixPlan) -> list[dict[str, object]]:
     for change in plan.changes:
         backup: Path | None = None
         if change.removed:
-            # A move's new copy is its backup; a bare removal keeps the usual .bak next to it.
-            if change.before not in copies:
+            # A move's new copy is its backup; a bare removal keeps the usual .bak next to it. An empty file has nothing to
+            # keep: Musashi's empty isetsu/debug.log got no scratch copy and left a 0-byte .bak that `fixer-backup-orphaned`
+            # then escalated (ROADMAP-3 item 92.18, 2026-11-16).
+            if change.before and change.before not in copies:
                 backup = _backup_path(change.path, plan.finding_id)
                 backup.write_bytes(change.before)
             change.path.unlink()

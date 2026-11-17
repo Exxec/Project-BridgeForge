@@ -51,7 +51,15 @@ def _reconfigure_streams_for_pipes(streams=None) -> list:
 
 def main(argv: list[str] | None = None) -> int:
     _reconfigure_streams_for_pipes()
-    args = build_parser().parse_args(argv)
+    try:
+        parser = build_parser()
+    except ModuleNotFoundError as exc:
+        # A Python without the package's dependencies (system Python with no psutil, 2026-11-16) died in register_all with
+        # a traceback even for --help. Name the module and the fix instead (ROADMAP-3 item 92.12).
+        print(f"bridgeforge: missing dependency '{exc.name}' in {sys.executable}. Use the project's virtual environment "
+              "(.venv) or install the package with its dependencies: python -m pip install -e .", file=sys.stderr)
+        return 2
+    args = parser.parse_args(argv)
     from .targets import TargetError, resolve_tokens
 
     try:

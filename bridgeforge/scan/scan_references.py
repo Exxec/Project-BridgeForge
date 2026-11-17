@@ -416,7 +416,10 @@ def _scan_description_missing(root: Path, result: ScanResult, vanilla_core: Path
             row_type = (row.get("type") or "").strip().upper()
             if row_id and not row_id.startswith("#"):
                 described.setdefault(row_id, set()).add(row_type)
-    for row in _read_csv_rows(descriptions_path) or []:
+    # Leniently, as vanilla's: one non-UTF-8 byte made _read_csv_rows return None and every hull look undescribed
+    # (Scrapyard Armories, cp1252 0x92 on line 57: ~34 false findings; Musashi the same; ROADMAP-3 item 92.1, 2026-11-16).
+    # The bad bytes are data-file-not-utf8's finding, not this one's.
+    for row in _read_csv_rows_lenient(descriptions_path) or []:
         row_id = (row.get("id") or "").strip()
         row_type = (row.get("type") or "").strip().upper()
         if row_id and not row_id.startswith("#"):

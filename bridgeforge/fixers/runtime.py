@@ -26,12 +26,14 @@ def _fix_spawned_ship_captain(root: Path, options: dict) -> list[FileChange]:
     """spawnShipOrWing("ship", loc, facing) -> spawnShipOrWing("ship", loc, facing, 0f, bfSpawnCaptain()), the
     overload with a captain (done by hand for Traverser's turrets, 2026-10-04). The 3-argument form has no
     travel-drive burn, so 0f keeps it. A 4-argument call keeps its own burn. Only the flagged lines change;
-    wings are never flagged. Jar sources need patch-jar-class and are refused."""
+    wings are never flagged. A jar mod's `src/` is edited too (ROADMAP-3 item 92.27, 2026-11-16: Navarchy of Tania's 16 calls were
+    done by hand): its .pre-bf-fix backup raises `jar-source-not-rebuilt`, and `src-to-jar` carries the edit into the jar. Sources
+    inside a jar (`jars/...`) are still refused."""
     from bridgeforge.scan.scanner import _call_argument_count
 
     lines_by_file: dict[str, set[int]] = {}
     for finding in _findings_of(root, options, "spawned-ship-captain-personality-risk"):
-        if finding.file and "!" not in finding.file and not finding.file.replace("\\", "/").startswith(("jars/", "src/")):
+        if finding.file and "!" not in finding.file and not finding.file.replace("\\", "/").startswith("jars/"):
             if any(e == "call:spawnShipOrWing" for e in finding.evidence):
                 lines_by_file.setdefault(finding.file, set()).update(
                     int(e.split(":", 1)[1]) for e in finding.evidence if e.startswith("line:"))

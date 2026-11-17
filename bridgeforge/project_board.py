@@ -107,6 +107,12 @@ def _row(area: str, folder: Path, working: Path | None) -> dict[str, object]:
     stage = "WORKING_COPY_PRESENT" if working is not None else "LAYOUT_INCOMPLETE"
     if area == "Done":
         stage = "RELEASE_PRESENT_NOT_VERIFIED" if working is not None else "LAYOUT_INCOMPLETE"
+    if working is None and not any(path.is_file() for path in folder.rglob("*")):
+        # A folder tree with no files at all: White_Legion's Done/ (6 mods) and older In operation/ projects were such
+        # skeletons, created 2026-11-02 by a copy that carried folders only, and the board called them merely
+        # incomplete (ROADMAP-3 item 92.24, 2026-11-16).
+        stage = "EMPTY_SKELETON"
+        warnings.append("the folder tree holds no files: a copy that carried folders only? Restore it from the machine that has it")
     declared_status = None
     declared_status_confidence = None
     report = evidence_path("REVIVAL_REPORT.md")
@@ -190,6 +196,23 @@ def _row(area: str, folder: Path, working: Path | None) -> dict[str, object]:
                          "last_test": str(test_path) if test_path is not None else None}}
 
 
+def _backup_status(repo: Path, operation: Path) -> dict[str, object]:
+    """Whether revived work has anywhere else to be (ROADMAP-3 item 92.37, 2026-11-16): on White_Legion six workspaces reached
+    UNATTENDED_DONE with no `bridgeforge-state/snapshot.json`, so their only copy was the working disk."""
+    from .state_snapshot import CONFIG_RELATIVE
+
+    configured = (repo / CONFIG_RELATIVE).is_file()
+    revived = []
+    if operation.is_dir():
+        for revive in sorted(operation.glob("*/reports/revive/REVIVE.json")):
+            try:
+                if json.loads(revive.read_text(encoding="utf-8")).get("status") == "UNATTENDED_DONE":
+                    revived.append(revive.parents[2].name)
+            except (OSError, ValueError):
+                continue
+    return {"snapshot_configured": configured, "revived_unbacked": [] if configured else revived}
+
+
 def project_board(repo_root: Path) -> dict[str, object]:
     repo = repo_root.expanduser().resolve()
     operation = operation_root(repo)
@@ -220,7 +243,7 @@ def project_board(repo_root: Path) -> dict[str, object]:
                                         "licence": (entry.get("licence") or {}).get("decision")}
                                        for entry in document["revival_order"] if isinstance(entry, dict)]}
     return {"schema_version": 1, "mode": "PROJECT_BOARD", "repo_root": str(repo), "mods": rows,
-            "dependency_graph": graph,
+            "dependency_graph": graph, "backup": _backup_status(repo, operation),
             "layout_findings": layout_findings(repo),
             "note": "Declared evidence only, not release/live validation. Missing risks/test evidence is unknown."}
 
@@ -256,6 +279,11 @@ def render_board(board: dict[str, object]) -> str:
             lines.append("Nothing queued needs an old dependency revived.")
     if warnings:
         lines.extend(["", "## Evidence warnings", "", *warnings])
+    backup = board.get("backup") or {}
+    if backup.get("revived_unbacked"):
+        lines.extend(["", "## Backup", "",
+                      f"No snapshot destination (bridgeforge-state/snapshot.json): {len(backup['revived_unbacked'])} revived workspace(s) "
+                      "exist only here: " + ", ".join(cell(name) for name in backup["revived_unbacked"]) + ". Configure one or copy them."])
     lines.extend(["", "## Layout findings", ""])
     lines.extend(f"- {item['code']}: {cell(item['path'])} — {cell(item['detail'])}" for item in board["layout_findings"])
     if not board["layout_findings"]:

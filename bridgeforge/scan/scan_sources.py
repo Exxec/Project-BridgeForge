@@ -22,7 +22,7 @@ from .scan_libraries import _local_class_names, _mod_info_declares_dependency, _
 from .scan_missions import _scan_campaign_fleet_references, _scan_mission_local_fleet_references, _scan_mission_required_files
 from .scan_settings import _scan_fleet_type_names, _scan_procgen_mod_body_leak, _scan_replace_array
 from .scan_shadowing import _scan_vanilla_script_shadow_repointable
-from .scan_text import _scan_orphaned_fixer_backups, _scan_removed_without_record, _scan_data_encoding, _scan_fullwidth_numbers, _scan_non_ascii_names, _scan_non_english_text, _scan_shippable_work_files
+from .scan_text import _scan_orphaned_fixer_backups, _scan_removed_without_record, _scan_data_encoding, _scan_fullwidth_numbers, _scan_fullwidth_punctuation, _scan_non_ascii_names, _scan_non_english_text, _scan_shippable_work_files
 
 
 def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = None, provider_roots: list[Path] | None = None) -> None:
@@ -220,8 +220,8 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
             result.add(id="duplicate-source-layout", category="source", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation="Identical Java source appears at multiple paths. Establish the authoritative source/JAR layout before compiling or modifying it.", evidence=sorted(paths))
     _scan_mission_local_fleet_references(root, result, vanilla_core)
     _scan_campaign_fleet_references(root, result, vanilla_core)
-    _scan_jar_linkage(root, result, vanilla_core)
-    _scan_jar_interface_methods(root, result, vanilla_core)
+    _scan_jar_linkage(root, result, vanilla_core, provider_roots)
+    _scan_jar_interface_methods(root, result, vanilla_core, provider_roots)
     _scan_core_campaign_plugin_reregistered(root, result)
     _scan_system_generation_unguarded(root, result)
     _scan_mission_required_files(root, result)
@@ -244,6 +244,7 @@ def _scan_sources(root: Path, result: ScanResult, vanilla_core: Path | None = No
     _scan_bare_market_fleet_source(root, result)
     _scan_legacy_event_report(root, result)
     _scan_non_english_text(root, result)
+    _scan_fullwidth_punctuation(root, result)
     _scan_shippable_work_files(root, result)
     _scan_non_ascii_names(root, result)
     _scan_data_encoding(root, result)

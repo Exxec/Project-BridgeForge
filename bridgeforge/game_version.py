@@ -41,3 +41,35 @@ def core_game_version(vanilla_core: Path | None) -> str | None:
         return _from_jar(str(jar.resolve()), jar.stat().st_mtime_ns)
     except (OSError, zipfile.BadZipFile):
         return None
+
+
+def base_version(version: str) -> str:
+    """'0.98a-RC8' -> '0.98a'; '0.98' -> '0.98a'; '0.98.5a-RC7' -> '0.98.5a'. The launcher matches on the base version."""
+    base = re.sub(r"-RC\d+$", "", (version or "").strip(), flags=re.I).lower()
+    return base if not base or base.endswith("a") else base + "a"
+
+
+def reference_core_for(declared: str | None, search_roots: list[Path], *, exclude: Path | None = None) -> Path | None:
+    """The installed starsector-core a mod was made for: the newest core under `search_roots` (each a core, an install
+    holding `starsector-core/`, or a folder of installs) whose own version has the mod's declared base version.
+
+    ROADMAP-3 item 92.17 (2026-11-16): `revive` passed no reference core to the `variant-op-over-budget` fixer, so the
+    owner ruling of 2026-09-27 (option 2, RC8-06: trim only what the new build's costs pushed over) did not apply and the
+    six-mod batch had 42 authored over-budget variants trimmed (all were over budget on their own RC8 core too)."""
+    want = base_version(declared or "")
+    if not want:
+        return None
+    skip = Path(exclude).resolve() if exclude else None
+    found: list[tuple[str, Path]] = []
+    for root in search_roots:
+        root = Path(root)
+        candidates = [root, root / "starsector-core"]
+        if root.is_dir():
+            candidates += [child / "starsector-core" for child in sorted(root.iterdir()) if child.is_dir()]
+        for core in candidates:
+            if not (core / "starfarer_obf.jar").is_file() or (skip and core.resolve() == skip):
+                continue
+            version = core_game_version(core)
+            if version and base_version(version) == want and (version, core) not in found:
+                found.append((version, core))
+    return max(found, key=lambda item: _key(item[0]))[1] if found else None

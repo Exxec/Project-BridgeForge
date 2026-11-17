@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import shutil
 import tempfile
+import zipfile
 
 from .archive_intake import _normalized_member_name, _sha256, _tree_sha256, inspect_zip_archive, stage_zip_archive
 from .behavior_discovery import write_archaeology
@@ -71,12 +72,72 @@ def _relocate_reports(reports: Path, stage: Path, destination: Path) -> None:
             path.write_text(text, encoding="utf-8")
 
 
+def resolve_mod_folder(query: str, mods_dir: Path) -> Path:
+    """The one folder under `mods_dir` a loose name means: each query word is matched to its closest word of the folder name
+    ("koch" -> "Everybody loves KoC-1.05.49a", "eridiani combine" -> "Eridani Combine-1.0.3.6"). Refuses no match or a tie,
+    naming the candidates (ROADMAP-3 item 92.5, 2026-11-16: six intakes each needed the exact folder name by hand)."""
+    from difflib import SequenceMatcher
+
+    def words(text: str) -> list[str]:
+        return [w for w in re.findall(r"[a-z]+", text.casefold()) if len(w) > 1 or not text.strip()]
+
+    wanted = words(query)
+    if not wanted:
+        raise ValueError(f"nothing to match in {query!r}")
+    scored = []
+    for folder in sorted(p for p in Path(mods_dir).iterdir() if p.is_dir()):
+        have = words(folder.name)
+        if not have:
+            continue
+        score = sum(max(SequenceMatcher(None, w, h).ratio() for h in have) for w in wanted) / len(wanted)
+        scored.append((score, folder))
+    scored.sort(key=lambda item: -item[0])
+    if not scored or scored[0][0] < 0.8:
+        raise ValueError(f"no folder in {mods_dir} matches {query!r}")
+    if len(scored) > 1 and scored[0][0] - scored[1][0] < 0.05:
+        tied = ", ".join(f.name for s, f in scored[:3] if scored[0][0] - s < 0.05)
+        raise ValueError(f"{query!r} is ambiguous in {mods_dir}: {tied}")
+    return scored[0][1]
+
+
+def _blocking(preflight: dict) -> list[dict]:
+    return [f for f in preflight.get("findings") or [] if f.get("classification") in ("MANUAL", "UNKNOWN")]
+
+
+def strip_junk_members(archive: Path, entries: list[str]) -> Path:
+    """`<name>-clean.zip` beside the archive without exactly the named junk members (editor backups `*~`, `desktop.ini`,
+    copies); the raw archive is kept. ROADMAP-3 item 92.4 (2026-11-16): 2 of 6 intakes (Scrapyard Armories: four `*.png~`;
+    Navarchy of Tania: two `*.png~` and a `desktop.ini`) were blocked and rebuilt by hand."""
+    from .zipsafe import read_limited
+
+    clean = archive.with_name(f"{archive.stem}-clean{archive.suffix}")
+    if clean.exists():
+        raise ValueError(f"{clean.name} already exists; intake never overwrites it (remove it or intake it directly)")
+    drop = set(entries)
+    with zipfile.ZipFile(archive) as source, zipfile.ZipFile(clean, "w", zipfile.ZIP_DEFLATED) as target:
+        for info in source.infolist():
+            if info.filename not in drop:
+                target.writestr(info, read_limited(source, info))
+    return clean
+
+
 def intake_archive(archive: Path, repo_root: Path, *, name: str | None = None,
-                   selected_root: str | None = None, archaeology: bool = False) -> dict[str, object]:
+                   selected_root: str | None = None, archaeology: bool = False, strip_junk: bool = False) -> dict[str, object]:
     archive = archive.expanduser().resolve()
     preflight = inspect_zip_archive(archive)
+    raw_archive, stripped = None, []
+    blocking = _blocking(preflight)
+    if not preflight["safe_to_stage"] and strip_junk and blocking and all(f["id"] == "archive-junk-member" for f in blocking):
+        stripped = sorted({entry for f in blocking for entry in f.get("entries") or []})
+        raw_archive, archive = archive, strip_junk_members(archive, stripped)
+        preflight = inspect_zip_archive(archive)
+        blocking = _blocking(preflight)
     if not preflight["safe_to_stage"]:
-        raise ValueError("intake blocked by archive preflight hazards")
+        # Name the hazards: the bare message sent the user to `archive-preflight` to find out (2026-11-16).
+        detail = "; ".join(f"{f['id']} ({f['classification']}): {', '.join((f.get('entries') or [])[:6]) or f.get('explanation', '')}"
+                           for f in blocking) or "see `bridgeforge archive-preflight`"
+        hint = " (only junk members: rerun with --strip-junk)" if blocking and all(f["id"] == "archive-junk-member" for f in blocking) else ""
+        raise ValueError(f"intake blocked by archive preflight hazards: {detail}{hint}")
     roots = preflight["candidate_mod_roots"]
     if selected_root is None:
         if len(roots) != 1:
@@ -138,6 +199,8 @@ def intake_archive(archive: Path, repo_root: Path, *, name: str | None = None,
                     "working_tree_sha256": upstream_hash,
                     "finding_counts": dict(sorted(Counter(f.classification for f in result.findings).items())),
                     "archaeology": archaeology, "live_test": "LIVE TEST NOT PERFORMED"}
+        if raw_archive is not None:  # --strip-junk: what was dropped, and from which raw archive
+            manifest.update({"raw_archive": raw_archive.name, "raw_archive_sha256": _sha256(raw_archive), "stripped_members": stripped})
         (reports / "intake.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         (reports / "INTAKE_REPORT.md").write_text(
             "# Intake assessment\n\nArchive and upstream extract preserved; working bytes match selected upstream root.\n\n"
