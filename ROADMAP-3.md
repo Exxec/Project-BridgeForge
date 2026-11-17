@@ -265,6 +265,10 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct
   G3's record on the owner's word.
+  **Done 2026-11-17 (code; G3's record not yet corrected, owner's call).** `probe_group.run_save_made_with` reads the last folder
+  the run's log says the game saved to (`CampaignGameManager - Saving to ..\saves/save_X...`, from G3's own log), only a plain
+  `save_*` name inside the rig's `saves/`, and None when the run saved nothing. Test: `tests/test_probe_group.py`
+  `test_record_describes_the_save_its_own_log_wrote` (another run's newer save present; no save; a name escaping `saves/`).
 
 **92. Less hand work found reviving six mods against 0.98.5a-RC7 (owner 2026-11-16: "add these improvements to roadmap we will implement in queue after these mods are revived but not yet live tested").**
 **Approved, queued: start once Scrapyard Armories, Bultach Coalition, Eridani Combine, Everybody loves KoC, Musashi
