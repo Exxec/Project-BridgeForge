@@ -568,6 +568,14 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - A game that exited while a round loaded was retried, and the retry clicked into the closed window (`RuntimeError`). It now
     ends as LIVE_STUCK "the game exited before the probe mission's battle started", with no retry. Test:
     `test_a_game_that_exits_while_a_round_loads_is_stuck_without_a_retry` (fails on the first version).
+  **Live-validated 2026-11-17 on Test1's 0.98.5a-RC7 rig.** In both runs below, the post-battle definition and the restart
+  both defined round 2, and `report` showed no combat WARN:
+  - G1R-LIVE-0985a-20261117 (Eridani, Musashi and Scrapyard; 113 hulls; JDK 25 direct): round 1 fought hulls 1-60
+    (29 ships), round 2 fought hulls 61-113 (53 ships). FATAL 0, MOD-ERROR 0, all three PASS; recorded LIVE_VALIDATED in the
+    workspaces. Eridani's and Scrapyard's 2026-11-17 archives predate this run; refreshing them is the owner's call.
+  - SR5-LIVE-0985a-20261117 (Bultach Coalition; 105 hulls; Fast Rendering + Prepatcher, 93.42): round 1 fought hulls 1-60
+    (30 ships), round 2 fought hulls 61-105 (41 ships). PASS, with the owner's two accepted content-parity ids; recorded
+    LIVE_VALIDATED. Archive refused (93.41, 93.44).
 - 93.40 **A battle that starts and never ends leaves no evidence.** SR4-LIVE-0985a-20261117 (Bultach Coalition alone, probe
   0.3.3, the first run after 93.39):
   - round 1 was defined at 241.9 s; the probe logged `combat|START` at 244.6 s and battle music started at 245.8 s;
@@ -581,6 +589,46 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   `test_a_game_that_exits_mid_battle_is_named_and_not_photographed` (both fail on the old driver).
   Next: re-run Bultach and read the screenshot if it stops again. Check that Test1's desktop is idle before a run
   (GetLastInputInfo), since a person using it takes the clicks and key presses.
+  The next Bultach run (SR5, with Fast Rendering) fought both rounds, so SR4's stall has not recurred and its cause is unknown.
+- 93.41 (S) **A run under Prepatcher records as UNBOUND.**
+  - SR5-LIVE-0985a-20261117 passed, but its evidence was REFUSED: "staged inputs drifted during the run: staged files of
+    starsector_prepatcher changed since launch".
+  - The Prepatcher agent writes `mods/StarsectorPrepatcher/logs/prepatcher.log` while the game runs, so the run manifest's
+    staged-input check sees its own mod change. The live result reads UNBOUND and the archive gate refuses.
+  - Fix: leave a mod's known runtime output out of the staged fileset (a per-mod ignore list, Prepatcher's `logs/` first),
+    or move Prepatcher's log out of the mod folder if `prepatcher.properties` allows it.
+  - Then re-record SR5; the run itself needs no repeat.
+- 93.42 (M) **Fast Rendering and Prepatcher in every live test, built in.**
+  - Owner 2026-11-17: "please copy, send and setup the following with each live test" (StarsectorPrepatcher 0.18.8,
+    fast_rendering v1.0.2rc1).
+  - Done by hand on Test1:
+    - Prepatcher in the rig's `mods/`;
+    - Fast Rendering rig-local in `_rig-0985a/fast_rendering/`, because the rig's `starsector-core` is a junction to the
+      real install, which stays read-only;
+    - `fast_rendering/fr.rig.vmparams`: FR's own file, with absolute agent and classpath paths, logs in the rig, the
+      Prepatcher agent last and `ShowMessageBoxOnError` dropped;
+    - `run-j25-frpp.bat`;
+    - the local live wrappers default to it, and each install gets `--also-enable starsector_prepatcher`;
+    - `bridgeforge-state/live-wrappers/setup_frpp.py` re-creates the setup.
+  - Observed:
+    - FR v1.0.2rc1 loads from the rig-local path (SR5's smoke reached the main menu in 21 s).
+    - Prepatcher 0.18.8 refuses RC7 ("Unknown Starsector bytecode namespace; refusing guessed names") and the game runs
+      unpatched. Its release notes list RC8, 0.98.5a-RC3 and RC5 only, so RC7 needs a Prepatcher release that knows its
+      names.
+  - To do in BridgeForge: `java-matrix setup --launcher fr` reads `fr.vmparams` and `fr.jar` from the install's core. It
+    should accept a rig-local FR folder, and `probe-group smoke|live` should use the FR + Prepatcher launcher when the rig
+    has one (with 95.4's direct start).
+- 93.43 (S) **JDK 27 on the rig** (owner asked 2026-11-17 "Should we add java 27?"; recommended; waits while live testing
+  is paused).
+  - Prepatcher 0.18.8 supports "Java 17 or Java 27+", so the rig's JDK 25 is outside its range.
+  - `fr.jar` is compiled for Java 17 (class major 61, no preview), so Fast Rendering runs on 27.
+  - Add a rig-local Temurin 27 beside `_rig/jdk-25.0.4.1+1` and a `run-j27-frpp.bat` without `--enable-preview` (nothing needs
+    it; 88.24's save crash came with it on a newer JDK).
+  - Make one comparison run against JDK 25, then switch, keeping JDK 25 as the fallback.
+- 93.44 (S) **Bultach's archive: an unexplained `star_gen_data.csv`.** `audit-shipped` lists
+  `data/campaign/procgen/star_gen_data.csv` as added and UNEXPLAINED (not in the original). Find the step that added it (the
+  RC7 revive's records, an escalation, or a hand edit) and explain it from that record. Then re-record SR5 (after 93.41) and
+  archive on the owner's "archive all".
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct

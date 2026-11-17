@@ -71,14 +71,16 @@ say "RC8" for runs on the RC7 rig (96.5 A1, not fixed).
    game internals). Each: `restore-from-done`, fix, live test on Test1, `bump-version`, then `probe-group record ... --accept
    --archive --refresh` on the owner's word (the `bridgeforge-revive` skill). Station Augments' archive is the hand-placed
    copy of item 19 below, which `restore-from-done` refuses. AoTD is skipped (active upstream); Nightcross is superseded.
-3. **Combat re-runs with probe 0.3.3 (93.37, 93.39).** Before 0.3.3, every two-round run fought round 1 twice and never round
-   2. Re-run:
-   - Bultach Coalition, not recorded: SR3-LIVE-0985a-20261117 stopped in round 2.
-   - United Aurora Federation.
-   - The Eridani Combine and Scrapyard Armories group, so their round-2 hulls fight. Both were archived 2026-11-17 on the
-     owner's "archive all"; refresh them only if the re-run changes something.
+3. **Live testing is paused (owner 2026-11-17).** When it resumes:
+   - Every run uses Fast Rendering and Prepatcher (93.42): `run-j25-frpp.bat` through the wrappers, and each install with
+     `--also-enable starsector_prepatcher`. Check that Test1's desktop is idle first.
+   - United Aurora Federation still needs its re-run with probe 0.3.3 (93.37).
+   - Bultach passed (SR5-LIVE-0985a-20261117) but is not archived until 93.41 and 93.44 are done; then re-record SR5 and
+     archive it.
+   - G1R-LIVE-0985a-20261117 fought Eridani's, Musashi's and Scrapyard's round-2 hulls and passed (93.39). Refreshing
+     Eridani's and Scrapyard's archives with that record is the owner's call.
+   - JDK 27 (93.43) when the owner approves it.
 
-   Done when `probe-group report` prints no `combat` WARN and every planned round appears in `combat_rounds.started`.
 4. **Archived OP trims (92.20)**, on Test1 (it needs the full `Done/`): classify each `variant-op-over-budget` trim as
    REGRESSION or AUTHORED against the mod's reference core, and restore the AUTHORED ones as `+bf.N` revisions.
 5. **Catalogue again after the ports:** `target-impact` RC8 -> RC7 over `Done/` (the `bridgeforge-catalogue` skill). The first
