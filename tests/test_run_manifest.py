@@ -179,6 +179,23 @@ class NegativeTests(unittest.TestCase):
         self.assertEqual(evidence["status"], "REFUSED")
         self.assertIn("drifted during the run", " ".join(evidence["problems"]))
 
+    def test_a_mods_own_runtime_log_is_not_drift_but_its_payload_is(self) -> None:
+        # 93.41: StarsectorPrepatcher's agent writes logs/prepatcher.log while the game runs (SR5-LIVE-0985a-20261117).
+        with resolved_temp_dir() as root:
+            _, targets = _two(root)
+            rig, log = bound_run(root, targets, "R-4", None, providers={"lib": [], "starsector_prepatcher": []}, release=False)
+            logs = rig / "mods" / "starsector_prepatcher" / "logs"
+            logs.mkdir()
+            (logs / "prepatcher.log").write_text("[INFO] javaagent starting\n", encoding="utf-8")
+            completed = release_run(rig, "R-4")
+            evidence = _evaluate(rig, log, "R-4")
+            (rig / "mods" / "starsector_prepatcher" / "payload.txt").write_text("a different agent build", encoding="utf-8")
+            changed = _evaluate(rig, log, "R-4")
+        self.assertEqual(completed["drift"], [])
+        self.assertEqual(evidence["status"], "ACCEPTABLE", evidence["problems"])
+        self.assertEqual(changed["status"], "REFUSED")
+        self.assertIn("staged files of starsector_prepatcher changed", " ".join(changed["problems"]))
+
     def test_an_unreleased_run_has_no_completion_record(self) -> None:
         with resolved_temp_dir() as root:
             rig, log = self._run(root, release=False)
