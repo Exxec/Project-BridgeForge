@@ -267,23 +267,46 @@ def mod_impact(folder: Path, old_core: Path, new_core: Path, provider_jars: list
     return record
 
 
+def _workspace_for(folder: Path) -> tuple[list[str], Path]:
+    """(steps that give the mod a workspace, the mod folder the fix steps act on). A queue workspace acts on its `working/`. A
+    `Done/<Mod>/<Mod>` copy is restored first (`restore-from-done` makes `In operation/<Mod>`): `retarget` refuses archives,
+    which move with `archive --refresh` after a live run (ROADMAP-3 item 95.13). Any other mod folder is acted on in place."""
+    folder = Path(folder)
+    if folder.name == "working":
+        return [], folder
+    if folder.parent.name == folder.name and folder.parent.parent.name == "Done":
+        # The queue beside this Done/, named explicitly: restore-from-done's default is the package's own queue (review 2026-11-17).
+        queue = folder.parent.parent.parent / "In operation"
+        working = queue / folder.name / "working"
+        if working.is_dir():  # `archive` copies, so the workspace the archive came from may still be in the queue
+            return [f"the queue already holds {working.parent}: the steps below fix it (if it changed since this archive, "
+                    "`done-audit` shows the archive STALE)"], working
+        return [f'bridgeforge restore-from-done "{folder.parent}" --queue "{queue}"'], working
+    return [], folder
+
+
 def worklist(folder: Path, record: dict, new_core: Path) -> tuple[list[str], bool]:
     """The next steps for one mod, most mechanical first, and whether the gated fixers alone would clear it (ROADMAP-3
-    item 89): fixers for dropped call forms in sources and jars and for forwarding classes, a relink for return-type-only
-    changes (needs the class source), a hand port for everything else."""
+    item 89): fixers for dropped call forms in sources and jars and for forwarding classes, `relink` for return-type-only
+    changes (recompiles the class from its shipped or decompiled source, unedited; ROADMAP-3 item 95.13), a hand port for
+    everything else. An archived mod is restored to a workspace first."""
     from .jar_call_rewrites import matching_rule
 
+    setup, target = _workspace_for(folder)
     fix = 'bridgeforge fix "{folder}" --finding {fid} --vanilla-core "{core}" --apply'
     steps: list[str] = []
     fixers_only = True
     if record["sources"]:
-        steps.append(fix.format(folder=folder, fid="rc8-signature-changed", core=new_core))
+        steps.append(fix.format(folder=target, fid="rc8-signature-changed", core=new_core))
     by_rule = [p for p in record["linkage"] if p["kind"] == "method" and matching_rule(p["owner"], p["name"], p["descriptor"], new_core)]
     if by_rule:
-        steps.append(fix.format(folder=folder, fid="jar-call-signature-changed", core=new_core))
+        steps.append(fix.format(folder=target, fid="jar-call-signature-changed", core=new_core))
     relinks = [p for p in record["linkage"] if p.get("return_type_only") and p not in by_rule]
     if relinks:
-        steps.append(f'relink {len(relinks)} call(s): bridgeforge jar-packets, then patch-jar-class --vanilla-core "{new_core}"')
+        if target.name == "working":
+            steps.append(f'bridgeforge relink "{target.parent}" --vanilla-core "{new_core}" --apply')
+        else:  # `relink` works on a workspace; a loose mod folder needs intake first, or the jar route by hand
+            steps.append(f'relink {len(relinks)} call(s): bridgeforge jar-packets, then patch-jar-class --vanilla-core "{new_core}"')
         fixers_only = False
     hand = [p for p in record["linkage"] if p not in by_rule and p not in relinks]
     if hand:
@@ -296,7 +319,7 @@ def worklist(folder: Path, record: dict, new_core: Path) -> tuple[list[str], boo
         core = core_index(str(Path(new_core).resolve()))
         texts = (s.read_text(encoding="utf-8", errors="replace") for s in folder.rglob("*.java"))
         if any("implements" in text and missing_forwards(text, core) for text in texts):
-            steps.append(fix.format(folder=folder, fid="forwarding-class-method-missing", core=new_core) + ", then patch-jar-class")
+            steps.append(fix.format(folder=target, fid="forwarding-class-method-missing", core=new_core) + ", then patch-jar-class")
         else:
             steps.append("hand: implement " + ", ".join(m.replace("/", ".") for i in record["interfaces"] for m in i["methods"])[:300])
         fixers_only = False  # the jar is rebuilt from the edited source with patch-jar-class
@@ -304,11 +327,20 @@ def worklist(folder: Path, record: dict, new_core: Path) -> tuple[list[str], boo
         if d["kind"] not in INFORMATIONAL:
             steps.append(f"review {d['kind']}: {d['detail']}")
             fixers_only = False
-    return steps, fixers_only and bool(steps)
+    return (setup + steps if steps else steps), fixers_only and bool(steps)
 
 
 def _member(problem: dict) -> str:
     return f"{problem['owner'].replace('/', '.')}.{problem['name']}{problem['descriptor'] if problem['kind'] != 'class' else ''}"
+
+
+# One Station Augments descriptor named an obfuscated class hundreds of characters long (2026-11-17 catalogue, ROADMAP-3 item
+# 95.12(i)): the markdown shortens member names, the JSON keeps them whole.
+MEMBER_TEXT_LIMIT = 160
+
+
+def _short(text: str, limit: int = MEMBER_TEXT_LIMIT) -> str:
+    return text if len(text) <= limit else f"{text[:limit - 1]}… ({len(text)} chars)"
 
 
 def target_impact(roots: list[Path], old_core: Path, new_core: Path, *, checkpoint: Path | None = None, progress=None) -> dict:
@@ -364,15 +396,16 @@ def render(result: dict) -> str:
     lines = [f"# Target impact: {result['mods']} mods", "", f"Old core: `{result['old_core']}`", f"New core: `{result['new_core']}`", "",
              f"BREAKS {v['BREAKS']}, RELINK {v['RELINK']} (recompile only), REVIEW {v.get('REVIEW', 0)} (data the new core treats differently), CLEAN {v['CLEAN']}", "", result["note"], "",
              "## By game member", "", "| Member | Mods | Which |", "|---|---|---|"]
-    lines += [f"| `{e['member']}` | {len(e['mods'])} | {', '.join(e['mods'][:8])}{' ...' if len(e['mods']) > 8 else ''} |" for e in result["by_member"]]
+    lines += [f"| `{_short(e['member'])}` | {len(e['mods'])} | {', '.join(e['mods'][:8])}{' ...' if len(e['mods']) > 8 else ''} |" for e in result["by_member"]]
     lines += ["", "## Mods that break or need a relink", ""]
     for r in result["records"]:
         if r["verdict"] == "CLEAN":
             continue
         lines.append(f"### {r['mod']} ({r['id']} {r['version']}): {r['verdict']}")
-        lines += [f"- jar `{p['class']}` calls `{_member(p)}`" + (f" (new core: {', '.join(p['candidates'])})" if p.get("candidates") else "")
+        lines += [f"- jar `{p['class']}` calls `{_short(_member(p))}`"
+                  + (f" (new core: {', '.join(_short(c) for c in p['candidates'])})" if p.get("candidates") else "")
                   + (" [return type only]" if p.get("return_type_only") else "") for p in r["linkage"]]
-        lines += [f"- jar `{i['class']}` lacks {', '.join('`' + m.replace('/', '.') + '`' for m in i['methods'])}" for i in r["interfaces"]]
+        lines += [f"- jar `{i['class']}` lacks {', '.join('`' + _short(m.replace('/', '.')) + '`' for m in i['methods'])}" for i in r["interfaces"]]
         lines += [f"- source `{s['file']}:{s['line']}` uses the old `{s['call']}(...)` (fixer: `rc8-signature-changed` with the new core)" for s in r["sources"]]
         lines += [f"- {d['kind']}: `{d['detail']}`" for d in r.get("data", [])]
         if r.get("resolved_on_new"):

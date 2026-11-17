@@ -50,12 +50,21 @@ unproven).
   live run minimises its own console window and records the desktop size (93.24); (g, M) probe combat rounds sized by hull count,
   one progress line per round (UAF's 86 hulls took two rounds, "hulls 61-86 of 86"); (h, S) a revive with `--providers` passes
   them to the report draft's compile check (93.36); (i, S) `TARGET_IMPACT.md` shortens obfuscated member names (one Station
-  Augments descriptor ran to hundreds of characters).
+  Augments descriptor ran to hundreds of characters). **(i) Done 2026-11-17:** names over 160 characters are cut in the markdown with
+  their length; the JSON keeps them whole (`tests/test_target_impact.py`
+  `test_render_shortens_obfuscated_member_names_and_the_json_keeps_them`).
 - 95.13 (S) **target-impact points at `relink`.** The three RELINK mods (AoTD Vaults of Knowledge 5.0.7, Broken Star, Nightcross)
   and Sunrider share one member: `StarSystemGenerator.addStableLocations(StarSystemAPI, int)` returns a `List` on RC7.
   `bridgeforge relink` already recompiles return-type-only calls from shipped or decompiled source, unedited; target-impact's next
   step names jar-packets and patch-jar-class instead. Nightcross is not to be worked on (owner 2026-11-17: "nightcross armory has
   been superseded and can safely be ignored").
+  **Done 2026-11-17.** A workspace gets `bridgeforge relink "<workspace>" --vanilla-core <new core> --apply`. An archived
+  `Done/<Mod>/<Mod>` copy gets `restore-from-done ... --queue <Done's sibling In operation>` first, and its fix and relink steps
+  then name `In operation/<Mod>`: the worklist had told `fix` to edit the archive in place, while `retarget` refuses archives
+  ("archives move with `archive --refresh`"). When the queue still holds that workspace (`archive` copies), the steps fix it
+  and say so instead of restoring over it; review 2026-11-17 found both cases. A loose mod folder keeps the jar-packets route,
+  as `relink` needs a workspace. Test: `tests/test_target_impact.py`
+  `test_an_archive_is_restored_first_and_a_workspace_is_relinked_directly` (fails on the old code).
 - 95.14 (M) **A changed member's default argument, decided once.** `OfficerManagerEvent.pickPortraitPreferNonDuplicate` gained a
   `Random` and a rule exists, so Kadur Remnant clears with the gated fixer; `PersonBountyEventData.reportSuccess()` gained an `int`
   and Vayra's Sector is listed as a hand port. Record what RC7's own callers pass as a rule (`jar_call_rewrites`) with that

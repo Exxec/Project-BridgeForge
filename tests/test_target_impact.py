@@ -88,6 +88,31 @@ class TargetImpactTests(unittest.TestCase):
         members = {e["member"]: e["mods"] for e in result["by_member"]}
         self.assertEqual(members["com.fs.starfarer.api.combat.ShipAIConfig.<init>()V"], ["queue/user"])
 
+    def test_an_archive_is_restored_first_and_a_workspace_is_relinked_directly(self) -> None:
+        """ROADMAP-3 95.13: a return-type-only call is `bridgeforge relink`'s job (recompile from source, unedited), and it works
+        on a workspace; an archived copy is restored first, as `retarget` refuses archives ("archives move with archive --refresh")."""
+        with resolved_temp_dir() as root:
+            old, new, _ = self._fixture(root)
+            old_classes = root / "oldbuild" / "classes"  # what _fixture compiled the old core into
+            _mod(root / "Done" / "user", "user", {"id": "user"}, _compile(self.javac, root / "donebuild", AI, classpath=old_classes))
+            _mod(root / "q" / "W", "working", {"id": "w"}, _compile(self.javac, root / "wsbuild", AI, classpath=old_classes))
+            result = target_impact([root / "Done", root / "q"], old, new)
+            # The same archive while the queue still holds the workspace it was archived from (`archive` copies).
+            (root / "In operation" / "user" / "working").mkdir(parents=True)
+            again = {r["mod"]: r for r in target_impact([root / "Done"], old, new)["records"]}
+        by_mod = {r["mod"]: r for r in result["records"]}
+        queue = root.resolve() / "In operation"
+        restored = queue / "user"
+        self.assertEqual(by_mod["Done/user"]["next"], [
+            f'bridgeforge restore-from-done "{(root / "Done" / "user").resolve()}" --queue "{queue}"',
+            f'bridgeforge fix "{restored / "working"}" --finding jar-call-signature-changed --vanilla-core "{new.resolve()}" --apply',
+            f'bridgeforge relink "{restored}" --vanilla-core "{new.resolve()}" --apply'])
+        workspace = (root / "q" / "W").resolve()
+        self.assertEqual(by_mod["q/W"]["next"][1], f'bridgeforge relink "{workspace}" --vanilla-core "{new.resolve()}" --apply')
+        self.assertFalse(by_mod["Done/user"]["fixers_only"])  # a relink is not a gated fixer
+        self.assertTrue(again["Done/user"]["next"][0].startswith(f"the queue already holds {restored}"))
+        self.assertEqual(again["Done/user"]["next"][2], f'bridgeforge relink "{restored}" --vanilla-core "{new.resolve()}" --apply')
+
     def test_same_core_twice_reports_nothing(self) -> None:
         with resolved_temp_dir() as root:
             old, _, queue = self._fixture(root)
@@ -143,6 +168,19 @@ class DiscoveryTests(unittest.TestCase):
         self.assertIn("### Q/a (a 1): BREAKS", text)
         self.assertIn("`S.java:3` uses the old `ShipAIConfig(...)`", text)
         self.assertNotIn("Q/b", text)
+
+    def test_render_shortens_obfuscated_member_names_and_the_json_keeps_them(self) -> None:
+        """ROADMAP-3 95.12(i): one Station Augments descriptor ran to hundreds of characters in TARGET_IMPACT.md (2026-11-17)."""
+        long_member = "implement com.fs.starfarer.combat.ai.F.super(FLcom.fs.starfarer.combat.ai." + "O0" * 200 + ";)V"
+        result = {"mods": 1, "old_core": "o", "new_core": "n", "verdicts": {"BREAKS": 1, "RELINK": 0, "CLEAN": 0}, "note": "x",
+                  "by_member": [{"member": long_member, "mods": ["Q/a"]}], "records": [
+                      {"mod": "Q/a", "id": "a", "version": "1", "verdict": "BREAKS", "linkage": [], "sources": [],
+                       "interfaces": [{"class": "a.jar!X.class", "methods": [long_member[len("implement "):].replace(".", "/")]}]}]}
+        text = render(result)
+        self.assertNotIn("O0" * 100, text)
+        self.assertTrue(all(len(line) < 400 for line in text.splitlines()))
+        self.assertIn("implement com.fs.starfarer.combat.ai.F.super(", text)
+        self.assertEqual(result["by_member"][0]["member"], long_member)  # only the markdown is shortened
 
 
 if __name__ == "__main__":
