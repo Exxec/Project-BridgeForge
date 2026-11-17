@@ -32,22 +32,32 @@ public final class ProbeFiles {
     /** 0.2.13: the combat mission's round counter, so each start fights the next slice of hulls. */
     public static final String COMBAT_ROUND = "bf_probe_combat_round";
 
-    /** The round to fight now, advanced for the next start (0 when the file is absent or unreadable). */
-    public static int nextCombatRound() {
-        int round = 0;
+    /**
+     * The round the next battle fights (0 when the file is absent or unreadable). Reading never advances it: 0.3.3, because
+     * the game runs a mission's defineMission again when a battle ends as well as when the next one starts, and 0.2.13's
+     * advance-on-read counted both. With two rounds every second battle fought round 1's hulls again (G1-LIVE3, G2,
+     * G2B-LIVE-0985a-20261117), so the second slice never fought.
+     */
+    public static int currentCombatRound() {
         try {
             if (com.fs.starfarer.api.Global.getSettings().fileExistsInCommon(COMBAT_ROUND)) {
-                round = Integer.parseInt(com.fs.starfarer.api.Global.getSettings().readTextFileFromCommon(COMBAT_ROUND).trim());
+                return Integer.parseInt(com.fs.starfarer.api.Global.getSettings().readTextFileFromCommon(COMBAT_ROUND).trim());
             }
         } catch (Throwable t) {
-            round = 0;
+            // an unreadable counter only means the first slice again
         }
+        return 0;
+    }
+
+    /** Called once when a battle ends: the next definition shows the next slice. Returns the round that just ended. */
+    public static int advanceCombatRound() {
+        int ended = currentCombatRound();
         try {
-            com.fs.starfarer.api.Global.getSettings().writeTextFileToCommon(COMBAT_ROUND, String.valueOf(round + 1));
+            com.fs.starfarer.api.Global.getSettings().writeTextFileToCommon(COMBAT_ROUND, String.valueOf(ended + 1));
         } catch (Throwable t) {
-            // a missing counter only means the first slice again
+            // a counter that cannot be written only means the same slice again
         }
-        return round;
+        return ended;
     }
 
     private ProbeFiles() {

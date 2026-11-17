@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge.probe.probe_group import (ProbeGroupError, bisect_group, dependency_version_conflicts, group_report, install_group,
-                                     merge_configs, plan_groups)
+from bridgeforge.probe.probe_group import (ProbeGroupError, bisect_group, combat_rounds, dependency_version_conflicts, group_report,
+                                     install_group, merge_configs, plan_groups)
 from bridgeforge.probe.probe_config import build_probe_config
 from tests.support import link_dir, resolved_temp_dir
 
@@ -750,6 +750,49 @@ class CombatPerfTests(unittest.TestCase):
     def test_a_runaway_in_a_bigger_group_makes_every_member_unclear(self) -> None:
         report = self._report(2)
         self.assertEqual({v["verdict"] for v in report["members"].values()}, {"UNCLEAR"})
+
+
+class CombatRoundsTests(unittest.TestCase):
+    """Which slices of the combat plan started a battle. Probe 0.3.2 advanced its round on every definition of the mission and the
+    game defines it again after each battle, so G1-LIVE3-0985a-20261117 fought round 1 twice and round 2 never."""
+
+    @staticmethod
+    def _log(*events: str) -> str:
+        prefix = "9 [main] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.3.2|"
+        lines = []
+        for event in events:
+            if event in ("START", "END"):
+                lines.append(f"{prefix}probe|INFO|combat|{event}")
+            else:
+                number, total, hulls = event.split("/")
+                lines.append(f"{prefix}combat-round|INFO|round {number} of {total}|hulls {hulls} of 113; restart the mission for the next round")
+        return "\n".join(lines) + "\n"
+
+    def test_probe_0_3_2_fought_round_one_twice_and_never_round_two(self) -> None:
+        # G1-LIVE3: round 1 started and ended, the game defined round 2 after the battle, the restart defined round 1 again.
+        rounds = combat_rounds(self._log("1/2/1-60", "START", "END", "2/2/61-113", "1/2/1-60", "START", "END"))
+        self.assertEqual(rounds, {"planned": 2, "started": [1, 1], "missing": [2], "missing_hulls": ["61-113"]})
+
+    def test_a_restart_that_started_nothing_leaves_its_round_out(self) -> None:
+        # SR3-LIVE-0985a-20261117: round 2 was defined after the battle and no battle followed.
+        self.assertEqual(combat_rounds(self._log("1/2/1-60", "START", "END", "2/2/61-105"))["missing"], [2])
+
+    def test_probe_0_3_3_fights_each_round_once(self) -> None:
+        rounds = combat_rounds(self._log("1/2/1-60", "START", "END", "2/2/61-105", "2/2/61-105", "START", "END", "1/2/1-60"))
+        self.assertEqual((rounds["started"], rounds["missing"]), ([1, 2], []))
+
+    def test_a_log_without_combat_plans_nothing(self) -> None:
+        self.assertEqual(combat_rounds("nothing\n"), {"planned": 0, "started": [], "missing": [], "missing_hulls": []})
+
+    def test_the_group_report_carries_the_rounds(self) -> None:
+        with resolved_temp_dir() as root:
+            config = merge_configs([build_probe_config(_workspace(root / "q", "A", "mod_a", "hull_a"))])
+            log = root / "run.stdout.log"
+            log.write_text(CombatPerfTests.CONTENT + self._log("1/2/1-60", "START", "END", "2/2/61-113", "1/2/1-60", "START", "END"),
+                           encoding="utf-8")
+            report = group_report(log, config)
+        self.assertEqual(report["combat_rounds"]["missing"], [2])
+        self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")  # coverage is reported, not a verdict
 
 
 class MarketSupplyTests(unittest.TestCase):

@@ -54,10 +54,13 @@ public class MissionDefinition implements MissionDefinitionPlugin {
         // 0.2.13 (owner request 2026-10-05): every hull fights. With 12 per side most hulls were skipped (group 1: 30
         // fought, 86 skipped); now each start of the mission fights the next slice of 2 x cap hulls, wrapping round,
         // so restarting the mission covers the whole group. The round counter lives in a common file.
+        // 0.3.3: only read here. The game defines the mission again when a battle ends as well as when the next one
+        // starts, so advancing here counted twice per battle and the second of two rounds fought round 1 again
+        // (G1-LIVE3-0985a-20261117); the combat plugin advances the counter when a battle ends.
         int total = config.variantByHull.size();
         int perRound = 2 * cap;
         int rounds = total == 0 ? 1 : (total + perRound - 1) / perRound;
-        int round = ProbeFiles.nextCombatRound() % rounds;
+        int round = ProbeFiles.currentCombatRound() % rounds;
         int sliceStart = round * perRound;
         int sliceEnd = Math.min(total, sliceStart + perRound);
         ProbeLog.emit("combat-round", ProbeLog.STATUS_INFO, "round " + (round + 1) + " of " + rounds,

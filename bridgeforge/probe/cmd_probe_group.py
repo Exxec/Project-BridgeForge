@@ -314,6 +314,11 @@ def run_cli(args: argparse.Namespace) -> int:
                         print(f"  (group) {item}")
                     if result.get("combat_filler_sides"):
                         print(f"  combat: vanilla filler ships stood in for side(s) {', '.join(result['combat_filler_sides'])} (the group had no mod ships there)")
+                    rounds = result.get("combat_rounds") or {}
+                    if rounds.get("missing"):
+                        slices = ", ".join(f"round {r} (hulls {h})" for r, h in zip(rounds["missing"], rounds["missing_hulls"]))
+                        print(f"  WARN combat: {slices} of {rounds['planned']} never started a battle (battles fought rounds "
+                              f"{', '.join(map(str, rounds['started'])) or 'none'}); those hulls were not in combat")
         except (ProbeGroupError, ProbeConfigError, OSError, ValueError, StopIteration) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

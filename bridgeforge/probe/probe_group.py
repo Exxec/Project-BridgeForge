@@ -752,6 +752,26 @@ def _missing_optional_library(detail: str, enabled: set[str]) -> str | None:
     return None
 
 
+_ROUND_OR_COMBAT_START = re.compile(r"BF-PROBE\|[^|]*\|(?:combat-round\|INFO\|round (?P<round>\d+) of (?P<total>\d+)\|hulls (?P<hulls>\d+-\d+)"
+                                    r"|probe\|INFO\|combat\|START)")
+
+
+def combat_rounds(log_text: str) -> dict:
+    """Which slices of the probe's combat plan started a battle: the round the game defined last before each `combat START`.
+    Probe 0.3.2 and earlier advanced the round on every definition of the mission, and the game defines it again after each
+    battle, so with two rounds the second battle fought round 1 again and round 2 never fought (G1-LIVE3, G2,
+    G2B-LIVE-0985a-20261117); a restart click that starts nothing leaves its round out too (UAF, SR3-LIVE-0985a-20261117)."""
+    planned, started, last, hulls = 0, [], None, {}
+    for match in _ROUND_OR_COMBAT_START.finditer(log_text):
+        if match["round"]:
+            last, planned = int(match["round"]), max(planned, int(match["total"]))
+            hulls[last] = match["hulls"]
+        elif last is not None:
+            started.append(last)
+    missing = [number for number in range(1, planned + 1) if number not in started]
+    return {"planned": planned, "started": started, "missing": missing, "missing_hulls": [hulls[number] for number in missing]}
+
+
 def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted: dict[str, list[dict]] | None = None) -> dict:
     """One verdict per member: probe FAIL lines matched by the content id or faction they name, and crashes
     by the mod whose jar threw (log-triage attribution). Unmatched FAILs are reported for the group. `accepted` moves the
@@ -767,7 +787,8 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
     verdicts = {mod_id: {"failures": [], "crashes": []} for mod_id in members}
     unattributed, seen_content, filler_sides, optional_integrations, sweep_artefacts = [], False, [], [], []
     enabled = _enabled_mod_ids(mods_dir)
-    for line in Path(log).read_text(encoding="utf-8", errors="replace").splitlines():
+    log_text = Path(log).read_text(encoding="utf-8", errors="replace")
+    for line in log_text.splitlines():
         match = _PROBE_LINE.search(line)
         if not match:
             continue
@@ -833,6 +854,7 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
     return {"schema_version": SCHEMA_VERSION, "mode": "PROBE_GROUP_REPORT", "log": str(log),
             "content_ids_ran": seen_content, "fatal": triage["counts"]["FATAL"], "mod_errors": triage["counts"]["MOD-ERROR"],
             "members": verdicts, "content_parity": parity, "campaign_perf": perf, "unattributed": unattributed, "combat_filler_sides": filler_sides,
+            "combat_rounds": combat_rounds(log_text),
             "optional_integration_classes": optional_integrations, "sweep_artefact_classes": sweep_artefacts,
             "note": "INCOMPLETE means the probe's content-ids check never ran (start a New Game and wait one in-game day)."}
 
