@@ -73,3 +73,44 @@ def reference_core_for(declared: str | None, search_roots: list[Path], *, exclud
             if version and base_version(version) == want and (version, core) not in found:
                 found.append((version, core))
     return max(found, key=lambda item: _key(item[0]))[1] if found else None
+
+
+# A whole build ("0.98.5a-RC7"); "0.98" or "0.98a" alone name a release, not the build a revival was made for.
+_FULL_BUILD = re.compile(r"\d+\.\d+(?:\.\d+)*a-RC\d+")
+
+
+def revival_build(working: Path) -> str | None:
+    """The game build a revived copy is for, as records name it (ROADMAP-3 96.5 A1: archives and live records said "RC8" for
+    mods revived against 0.98.5a-RC7). The candidates:
+    - the working copy's mod_info.json gameVersion, which `retarget` sets to the new build;
+    - the target of its last applied `revive` (reports/revive/REVIVE.json, the core's own version since item 89). This one
+      matters because revive's fixer leaves a gameVersion of the same release alone, such as 0.98.5a-RC3 under an RC7 target.
+
+    It is the newer of the two that name a whole build. A dry run's target is not a revival. None when neither names one."""
+    import json
+
+    from .scan.scan_json import _load_lenient_json_file
+
+    working = Path(working)
+    found: list[str] = []
+    info = _load_lenient_json_file(working / "mod_info.json") if (working / "mod_info.json").is_file() else None
+    declared = info.get("gameVersion") if isinstance(info, dict) else None
+    if isinstance(declared, str) and _FULL_BUILD.fullmatch(declared.strip()):
+        found.append(declared.strip())
+    try:
+        revive = json.loads((working.parent / "reports" / "revive" / "REVIVE.json").read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        revive = None
+    target = revive.get("target") if isinstance(revive, dict) and revive.get("apply") is True else None
+    if isinstance(target, str) and _FULL_BUILD.fullmatch(target.strip()):
+        found.append(target.strip())
+    return max(found, key=_key) if found else None
+
+
+def rig_label(rig: Path | None, core: Path | str | None = None) -> str:
+    """How a record names the rig a run used: "0.98.5a-RC7 rig", the build its core reports. `core` is the core the run's
+    manifest recorded at launch (`rig_core`), so a junction re-pointed since cannot relabel the run; else the rig's
+    starsector-core now. "rig (build not read)" when neither can be read. Records called every rig "RC8 rig" (96.5 A1)."""
+    path = Path(core) if core else (Path(rig) / "starsector-core" if rig else None)
+    build = core_game_version(path) if path else None
+    return f"{build} rig" if build else "rig (build not read)"

@@ -293,8 +293,10 @@ def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, t
             elif _digest(before) != _digest(source):
                 changed.append(relative)
     status = _final_status(working / "reports" / "REVIVAL_REPORT.md")
+    from .game_version import revival_build
+    build = revival_build(working)
     note = _render_note(info, name, version, licence, status, changed, added, jars_identical, jar_names, original is not None,
-                        zip_path.name, workspace.name, today or date.today().isoformat(), _live_line(workspace))
+                        zip_path.name, workspace.name, today or date.today().isoformat(), _live_line(workspace), build=build)
     diff = None
     if previous_digests:
         diff = since_previous(previous_jars, previous_digests, files)  # read before the previous archive was moved aside or removed
@@ -303,8 +305,8 @@ def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, t
         note += override_section(reason, gates["problems"])
     atomic_write_text(target / "ARCHIVE_NOTE.md", note)
     # The mods' own changelog, beside Done/ (the repo root in use; a temp folder in tests).
-    from .mod_changelog import add_entry
-    add_entry(name, f"revived for RC8 and archived ({(status or 'no status').replace('_', ' ').lower()})", version=version,
+    from .mod_changelog import add_entry, archived_text
+    add_entry(name, archived_text(build, status), version=version,
               day=today or date.today().isoformat(), path=target.parent.parent / "MOD_CHANGELOG.md")
     try:
         master = write_master_log(target.parent)
@@ -362,10 +364,13 @@ def write_readme_copies(target: Path) -> list[str]:
 
 
 def _render_note(info: dict, name: str, version: str, licence: dict, status: str | None, changed: list[str], added: list[str],
-                 jars_identical: bool | None, jar_names: list[str], has_original: bool, zip_name: str, folder: str, today: str, live_line: str = "") -> str:
+                 jars_identical: bool | None, jar_names: list[str], has_original: bool, zip_name: str, folder: str, today: str, live_line: str = "",
+                 build: str | None = None) -> str:
     author = str(info.get("author") or "").strip() or "not named in the mod"
     local = licence.get("decision") == "LOCAL_ONLY"
-    lines = [f"# {name} {version}: archive note", "", f"**Original author: {author}.** Revival for Starsector 0.98a-RC8: BridgeForge by Exxec.", ""]
+    # The build the mod was revived for (96.5 A1: every note said 0.98a-RC8); mod_changelog.NOTE_BUILD reads it back.
+    revival = f"Revival for Starsector {build}" if build else "Revival"
+    lines = [f"# {name} {version}: archive note", "", f"**Original author: {author}.** {revival}: BridgeForge by Exxec.", ""]
     if local:
         lines += ["## Status: local archive only, not for publication", "",
                   f"Recorded in BridgeForge's `release_policy.json` as `LOCAL_ONLY`: {licence.get('reason') or 'no reason recorded'}.",

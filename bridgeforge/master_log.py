@@ -18,7 +18,9 @@ from bridgeforge.scan.scan_json import _load_lenient_json_file
 DASH = "-"
 FIELDS = ["mod", "release_version", "archived", "live_validated", "status", "author", "policy", "files_vs_original",
           "what_was_done", "release_zips", "folder"]
-GENERIC = re.compile(r"revived for RC8 and archived", re.I)
+# The whole generated archive line, any build since 96.5 A1 (2026-11-17) or none; a hand-written line that merely mentions
+# archiving ("re-revived and archived after the save-crash fix") is a note to keep.
+GENERIC = re.compile(r"^revived (?:for \S+ )?and archived \([^)]*\)$", re.I)
 _STATUS = re.compile(r"Revival report status: \*\*([A-Z_]+)\*\* \(archived (\d{4}-\d\d-\d\d)\)")
 _LIVE = re.compile(r"(?i)live-validated (\d{4}-\d\d-\d\d)(?: \(test ([\w.-]+)\))?")
 
@@ -90,7 +92,7 @@ def _changelog_notes(mod: str, folder: str, version: str, events: list[tuple[str
     notes = []
     for day, text in events:
         match = re.match(r"\*\*(.+?)\*\*\s+(\S+?):\s*(.*)$", text)
-        if match and not GENERIC.search(match.group(3)) and _norm(match.group(1)) in keys and match.group(2) == version:
+        if match and not GENERIC.search(match.group(3).strip()) and _norm(match.group(1)) in keys and match.group(2) == version:
             notes.append(f"{day}: {match.group(3)}")
     return notes
 
@@ -134,8 +136,17 @@ def archive_row(folder: Path, events: list[tuple[str, str]], operation: Path) ->
         "live_validated": _live_text(note, status, _live_record(operation, folder.name)),
         "status": status.group(1) if status else DASH, "author": author.group(1) if author else DASH,
         "policy": policy.group(1) if policy else DASH, "files_vs_original": _files_vs_original(note),
-        "what_was_done": " | ".join(done) if done else "Revived for RC8 (see workspace/REVIVAL_REPORT.md)",
+        "what_was_done": " | ".join(done) if done else _revived_for(note) + " (see workspace/REVIVAL_REPORT.md)",
     }
+
+
+def _revived_for(note: str) -> str:
+    """"Revived for 0.98.5a-RC7", as the note's credit line says, read as `seed_from_archives` reads it; the notes written while
+    RC8 was the only target keep "RC8", and a credit line naming no build gives "Revived"."""
+    from bridgeforge.mod_changelog import build_label, note_build
+
+    build = note_build(note)
+    return f"Revived for {build_label(build)}" if build else "Revived"
 
 
 def _set_aside(done: Path) -> list[dict]:

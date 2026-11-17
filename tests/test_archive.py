@@ -59,6 +59,23 @@ class ArchiveTests(unittest.TestCase):
         self.assertIn("READY_FOR_LIVE_TEST", note)
         self.assertTrue(still_there)
 
+    def test_the_note_and_changelog_name_the_build_the_mod_was_revived_for(self) -> None:
+        # 96.5 A1: every note said "Revival for Starsector 0.98a-RC8" and every changelog line "revived for RC8", also for
+        # the mods revived against 0.98.5a-RC7 on 2026-11-17.
+        with resolved_temp_dir() as root:
+            ws = _workspace(root)
+            info = ws / "working" / "mod_info.json"
+            info.write_text(info.read_text(encoding="utf-8").replace("0.98a-RC8", "0.98.5a-RC7"), encoding="utf-8")
+            policy = root / "policy.json"
+            shutil.copy2(REPO_POLICY, policy)
+            record_policy_decision("bf_fixture_radar", local_only=True, reason="author unreachable", policy_path=policy)
+            archive_mod(ws, root / "Done", policy_path=policy, today="2026-11-17")
+            note = (root / "Done" / "Radar" / "ARCHIVE_NOTE.md").read_text(encoding="utf-8")
+            changelog = (root / "MOD_CHANGELOG.md").read_text(encoding="utf-8")
+        self.assertIn("Revival for Starsector 0.98.5a-RC7: BridgeForge by Exxec.", note)
+        self.assertNotIn("0.98a-RC8", note)
+        self.assertIn("- **Radar** 3.0: revived for 0.98.5a-RC7 and archived (ready for live test)", changelog)
+
     def test_an_original_descriptions_copy_is_archived_with_its_own_zip(self) -> None:
         # Owner request 2026-09-28: keep a copy without BridgeForge-written descriptions beside the revival.
         with resolved_temp_dir() as root:

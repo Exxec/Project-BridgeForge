@@ -1020,10 +1020,14 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
                 skipped.append({"mod_id": mod_id, "verdict": "PASS", "workspace": workspace.name, "archive": f"accept refused: {exc}"})
                 break
         elif f"## Live probe run {test_id}" not in body:
+            from bridgeforge.game_version import rig_label
+
+            # 96.5 A1: the heading named every rig "RC8 rig", and the body credited the owner with runs the harness played.
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(body + f"\n\n## Live probe run {test_id} (group run, RC8 rig)\n\n`bridgeforge probe-group report`: **PASS** "
+            path.write_text(body + f"\n\n## Live probe run {test_id} (group run, {rig_label(rig, core=(manifest or {}).get('rig_core'))})\n\n`bridgeforge probe-group report`: **PASS** "
                             f"(probe {version}: content-ids ran, no FAIL line for this mod; group triage FATAL={report['fatal']}, "
-                            f"MOD-ERROR={report['mod_errors']}). Owner ran New Game, one in-game day and the probe combat mission.\n\nLIVE_VALIDATED\n",
+                            f"MOD-ERROR={report['mod_errors']}). The run started a New Game, played one in-game day and the probe combat "
+                            "mission.\n\nLIVE_VALIDATED\n",
                             encoding="utf-8")
         recorded.append(workspace.name)
         if not archive:

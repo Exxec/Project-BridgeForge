@@ -110,8 +110,10 @@ def accept_run(workspace: Path | str, log: Path | str, *, test_id: str, note: st
         raise AcceptError(f"{report_path.name} already records {test_id}.")
 
     if not record_only:
+        from bridgeforge.game_version import rig_label
+
         lines = [
-            f"{heading} ({today}, RC8 rig)",
+            f"{heading} ({today}, {rig_label(rig or (Path(mods_dir).parent if mods_dir else None), core=(manifest or {}).get('rig_core'))})",
             "",
             f"Log milestones: main menu reached, {len(milestones['campaign_loads'])} campaign load(s), "
             f"{milestones['finished_saving_count']} save event(s). Triage: FATAL={triage['counts']['FATAL']}, "

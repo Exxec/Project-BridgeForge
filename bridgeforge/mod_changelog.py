@@ -54,6 +54,34 @@ def add_entry(mod: str, text: str, *, version: str | None = None, day: str | Non
     return line
 
 
+# The lines written while 0.98a-RC8 was the only target say "RC8"; the same words keep a re-seed from adding a second line for each.
+_LEGACY_LABELS = {"0.98a-RC8": "RC8"}
+# The build an archive note's credit line names ("Revival for Starsector 0.98.5a-RC7: BridgeForge by Exxec."); a credit line
+# for a revival whose build is not known names none ("Revival: BridgeForge by Exxec.", archive._render_note).
+NOTE_BUILD = re.compile(r"Revival for Starsector (\S+?):")
+NO_BUILD_CREDIT = "Revival: BridgeForge by Exxec."
+
+
+def note_build(text: str) -> str | None:
+    """The build an archive note says the mod was revived for. None when its credit line names no build. A note older than
+    the credit line (`archive` has written one since 2026-09-27) is from when 0.98a-RC8 was the only target."""
+    found = NOTE_BUILD.search(text)
+    if found:
+        return found.group(1)
+    return None if NO_BUILD_CREDIT in text else "0.98a-RC8"
+
+
+def build_label(build: str) -> str:
+    """How the changelog and master log name a build: as the core reports it, except the legacy "RC8"."""
+    return _LEGACY_LABELS.get(build, build)
+
+
+def archived_text(build: str | None, status: str | None) -> str:
+    """The changelog text for an archive, naming the build the mod was revived for (ROADMAP-3 96.5 A1: every line said RC8)."""
+    state = (status or "no status").replace("_", " ").lower()
+    return f"revived for {build_label(build)} and archived ({state})" if build else f"revived and archived ({state})"
+
+
 def seed_from_archives(done: Path, path: Path | None = None) -> int:
     """One "archived" line per Done/<mod>/ARCHIVE_NOTE.md, under its archive date. Returns the lines added."""
     added = 0
@@ -64,7 +92,6 @@ def seed_from_archives(done: Path, path: Path | None = None) -> int:
         if not title or not stamp:
             continue
         before = path.read_text(encoding="utf-8") if path and Path(path).is_file() else ""
-        add_entry(title.group(1).strip(), f"revived for RC8 and archived ({stamp.group(1).replace('_', ' ').lower()})",
-                  day=stamp.group(2), path=path)
+        add_entry(title.group(1).strip(), archived_text(note_build(text), stamp.group(1)), day=stamp.group(2), path=path)
         added += (Path(path or DEFAULT_PATH).read_text(encoding="utf-8") != before)
     return added

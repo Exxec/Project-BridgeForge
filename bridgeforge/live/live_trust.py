@@ -463,9 +463,9 @@ def auto_explain_shipped(workspace: Path, today: str | None = None) -> dict[str,
             if suffix == ".csv" and _only_rows_added(before, after):
                 reason = "CSV rows added (the header and every original row are unchanged)"
             elif suffix in _JSONLIKE and _same_parsed_json(before, after):
-                reason = "JSON syntax made strict for RC8; the parsed values are identical to the original"
+                reason = "JSON syntax made strict for the game's parser; the parsed values are identical to the original"
             elif suffix == ".csv" and _only_manufacturer_column_added(before, after):
-                reason = "RC8 schema: tech/manufacturer column added; every other value is unchanged"
+                reason = "game schema: tech/manufacturer column added; every other value is unchanged"
             elif translated and len(_CJK.findall(_text(before))) > len(_CJK.findall(_text(after))):
                 reason = "Chinese -> English translation (reports/translation/); the original holds the Chinese text"
         elif before.is_file() and not after.is_file() and _kept_in_work_files(scratch, relative, before):
