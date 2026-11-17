@@ -749,7 +749,7 @@ in the copy.
   is refused while other files still reference it (`--force-dangling` records the references).
 - **Archive gate.** `archive` and `revise finalize` run that sweep plus the content-parity audit first. DROPS_UNEXPLAINED and
   LOSS_SUSPECTED refuse, UNDETERMINED warns; `--allow-unexplained REASON` (20+ characters) goes ahead and writes the reason to
-  `ARCHIVE_NOTE.md`. On probe 0.3.0 or later (current 0.3.2), `probe-group record --accept` prints the archive command for each
+  `ARCHIVE_NOTE.md`. On probe 0.3.0 or later (current 0.3.3), `probe-group record --accept` prints the archive command for each
   passing workspace.
 - **Owner decisions.** `decision template port-dropped-feature` prints a draft; `decision apply DRAFT [--dry-run]` runs the ticked
   actions and is idempotent. `escalation triage QUEUE` groups open packets by what they wait on.
