@@ -1,0 +1,122 @@
+---
+name: bridgeforge-pr
+description: Ship a BridgeForge change the house way, from branch to merged pull request. Covers ruff via uvx, the full suite under test_guard with the project .venv and JDK 25, roadmap-lint, the regenerated docs index and CLI golden file, the changelog fragment, the Done note in ROADMAP-3.md, an independent review, the owner's PR layout (TEST STEPS / BEFORE FIX / AFTER FIX / EXPECTED BEHAVIOR), CI and merging by head commit. Use it whenever you commit, open, update or merge a pull request in this repository, or finish a roadmap item. Also use it when the user just says "push it", "open a PR", "ship it", "merge it" or "sync to github".
+---
+
+# Shipping a BridgeForge change
+
+One roadmap item per branch and per pull request. Each step below exists because skipping it once broke CI or the record
+(the notes say when). CLAUDE.md has the full house rules; this is the order to apply them in.
+
+## 1. Branch, in a worktree when several items run at once
+
+```bash
+git fetch -q origin
+git worktree add -b fix/<item>-<slug> ../BridgeForge-<item> origin/main   # or docs/..., feat/...
+```
+
+A worktree per item lets you run several full suites in parallel (about 11 minutes each; 24 CPUs handled seven at
+once). **Never edit a checkout while its suite runs**: `test_guard` fails the run if the checkout changed, and the result
+would describe code you no longer have. Edit another worktree meanwhile.
+
+## 2. Tests first, and tests that do not depend on this machine
+
+Write the failing test, watch it fail for the right reason, then fix. For a test that guards a property, run
+`scripts/mutate_check.py` (break the code on purpose; the test must fail). A test that still passes against the broken
+code proves nothing. That happened twice on 2026-11-17.
+
+CI runs on clean Windows and Ubuntu runners: no Starsector install, no licence key in the registry, Java 8 on PATH. Patch
+machine state (registry, installed games, home folder) in tests. One rig-doctor test read the developer's registry and
+would have failed only on the Windows runner.
+
+## 3. Before committing
+
+Run `scripts/checks.sh` from the checkout root. It runs ruff, roadmap-lint, the docs index and the golden and index tests.
+- **Changed a CLI `--help` text?** Run `python -m tests.test_cli_golden --write` and review the diff.
+- **Any change at all:** run `python -m bridgeforge docs-index`. A new test that only *names* a finding id changes
+  `docs/CHECKS.md`; that failure turns up only in the full suite.
+- **Code changes:** add `changelog.d/<slug>.md`, one bullet ("- Item N: what changed for the user"). Never edit
+  CHANGELOG.md. Roadmap-only PRs need no fragment.
+- **Finished item:** add `**Done <date>.**` to its ROADMAP-3.md entry, saying what was built and naming the tests
+  (`tests/test_x.py` `test_name`). roadmap-lint refuses a Done entry without evidence.
+
+## 4. The full suite
+
+```bash
+export JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot"
+export PATH="/c/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin:$PATH"
+.venv/Scripts/python.exe -m bridgeforge.test_guard > <scratch>/suite-<item>.log 2>&1   # run in the background
+```
+
+Plain `python` lacks psutil and PATH `java` is Java 8, so use the `.venv` interpreter and JDK 25. From another worktree,
+call the main checkout's `.venv/Scripts/python.exe` by its full path. Read the result from the log's `Ran N tests`,
+`OK (skipped=K)` and `Test hermeticity PASS` lines. (The `hermeticity FAIL` lines that appear inside test_guard's own
+self-tests are expected.)
+
+## 5. Review before pushing
+
+Get a reading that is not anchored on yours: the `code-review` skill, or one review agent per batch of diffs, given the
+diffs and not your conclusions. Check every finding against the code before fixing it, then rerun the suite. Use
+`security-review` for untrusted input handling, file-system writes and anything over SSH.
+
+## 6. Commit message
+
+```
+Fix item 93.33: bound every zip and jar entry read
+
+What was found, with evidence (file:line, counts, the log line), and what changed.
+
+Full suite: 2907 tests, OK (skipped=12); hermeticity PASS.
+
+<the Co-Authored-By line from the session's attribution reminder>
+```
+
+The subject is `Fix item N: ...` or `Add item N: ...`. Review fixes go in a new commit, not an amend.
+
+## 7. Pull request body (owner rule, 2026-11-01)
+
+```
+<one-line summary>
+
+**TEST STEPS**
+1. the commands, or the user actions with versions
+
+**BEFORE FIX**
+- what happened, with evidence
+
+**AFTER FIX**
+- what happens now, specifically; only what was observed (say so if not run live)
+
+**EXPECTED BEHAVIOR**
+- the requirement
+
+<the generated-with line from the session's attribution reminder>
+```
+
+Write the body to a file and pass it with `gh pr create --body-file <file>`, which avoids quoting trouble in the shell.
+(The Exotica repository uses its maintainer's layout instead; see the memory note.)
+
+## 8. CI and merge
+
+```bash
+gh pr checks <N>                                   # can show a stale "pending"; confirm with:
+gh run list --branch <branch> --limit 3
+H=$(gh pr view <N> --json headRefOid -q .headRefOid)
+gh pr merge <N> --merge --match-head-commit "$H"   # merges exactly what CI saw
+```
+
+Merge only green PRs. After merging:
+- `git fetch`.
+- Rebase the other item branches onto `origin/main`, stashing any uncommitted work first.
+- Pull on Test1 (the `test1-run` skill, or `git -C "<Test1 repo>" pull --ff-only origin main`).
+- Remove the worktree with `git worktree remove ../BridgeForge-<item>`.
+
+## Releases
+
+When the owner asks for a release, or after a batch of merged items:
+1. Run `python -m bridgeforge release-notes assemble --version <V>` to move the fragments under the version heading.
+2. Bump the version in pyproject.
+3. Ship it through the same PR route.
+4. Tag only on the owner's word.
+
+`release-notes --check` lists the pending fragments.

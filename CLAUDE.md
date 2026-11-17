@@ -109,6 +109,16 @@ Anything that needs the game install, a test rig, Windows or `In operation/` can
 in a cloud session. Build and test what you can, then add an entry to `docs/LOCAL_HANDOFF.md`
 (what to run, what "done" looks like, which roadmap item) and say so in the roadmap entry.
 
+## Skills (owner 2026-11-17)
+
+`.claude/skills/` holds the project's skills. Use them rather than re-deriving the steps:
+- `bridgeforge-pr`: the commit and PR routine, with `scripts/checks.sh` and `scripts/mutate_check.py`;
+- `bridgeforge-revive`: one mod from intake to archive;
+- `bridgeforge-catalogue`: Done/ against a new game build.
+
+The machine-specific skills live in each machine's `~/.claude/skills`, not in this public repository: `test1-run` (running
+on the second PC) and `memory-mirror`.
+
 ## Layout
 
 - `bridgeforge/` the package. `cli.py` builds/dispatches through `cli_commands.COMMAND_MODULES`; each owner module

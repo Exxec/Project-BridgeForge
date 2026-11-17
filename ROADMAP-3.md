@@ -1,3 +1,42 @@
+**96. Skills, the abandoned mods' RC7 ports, a docs pass and a release (owner 2026-11-17: "Go ahead and create earlier skills and utilize other skills mentioned"; "AOTD is active and undergoing a overhaul so we can safely ignore it for now. The others mentioned are abandoned so we will have to do the hard work behind reviving them"; "If need be make sure to bump versions/releases. Also add to queue you or an agent review/update all related docs then sync to github").**
+**Approved.** Queued after item 95's small items.
+- 96.0 **Owner decisions on the RC8 -> RC7 catalogue (95, 2026-11-17).**
+  - Done/ keeps only the latest archive of each mod id ("Only keep latest"). The seven older copies moved, unchanged, to
+    `Done/_replaced-2026-11-17/` on Test1, with a README. Neutrino 1.8.9 (gameVersion 0.97) is kept over Nostalgia Edition
+    1.87-RC3 (0.95.1a-RC6).
+  - Nightcross is closed as SUPERSEDED once 95.15 merges.
+  - KoC's G3 record, which names Tania's save, matters only to the record and is left as it is (93.38 fixes new records).
+- 96.1 **Done 2026-11-17.** **Skills.**
+  - In this repository, `.claude/skills/`:
+    - `bridgeforge-pr`: the commit and PR routine, with `scripts/checks.sh` (ruff, roadmap-lint, docs-index, the golden and
+      index tests) and `scripts/mutate_check.py`;
+    - `bridgeforge-revive`: one mod from intake to archive, with the traps found on 2026-11-16/17;
+    - `bridgeforge-catalogue`: Done/ against a new build.
+  - On both machines, not here because the repository is public:
+    - `test1-run`, a one-off interactive scheduled-task runner;
+    - `memory-mirror`, a SHA-256-verified mirror of memory, rules and skills.
+  - Tests:
+    - `checks.sh` passed every step on this branch;
+    - `test1_task.sh` ran `hostname` and `git log` on Test1 and deleted its task;
+    - `mirror.py --check` found the 5 changed files, and the mirror run verified 39 memory and 4 skill files identical on
+      both machines.
+  - Also in use: the `skill-creator` skill to write these; an independent review agent per batch of diffs, which found 11
+    problems in 95's PRs, all fixed before merging. To do: `security-review` on 93.33 and `fewer-permission-prompts`.
+- 96.2 **Port the abandoned archives the catalogue flagged.** Kadur Remnant (the gated `jar-call-signature-changed` fixer),
+  Broken Star (`relink`), Vayra's Sector (`PersonBountyEventData.reportSuccess(int)`: decide the argument from vanilla's own
+  callers, 95.14), YunruCore (`hullmod:low_maintenance` now collides with an RC7 hull mod: rename the mod's id, with a
+  save-compatibility note, or keep it; owner's call with the evidence), Neutrino Corporation 1.8.9 and Station Augments
+  (hand ports of calls into obfuscated game internals). Each one: `restore-from-done`, fix, live test on Test1, `+bf.N`,
+  `record --archive --refresh` (the `bridgeforge-revive` skill). AoTD (Vaults of Knowledge, Theory of Toolbox) is skipped:
+  active upstream and under overhaul. Nightcross is superseded.
+- 96.3 **Docs pass**, by an agent with review: README, `docs/BRIDGEFORGE_REVIVAL_GUIDE.md`, `docs/LOCAL_HANDOFF.md`,
+  `docs/ROADMAP_STATUS.md` and CLAUDE.md against what items 93.20-93.38, 95 and 96 changed; then push.
+- 96.4 **Release.** Once item 95's PRs are merged: `release-notes assemble --version <next>`, the pyproject version, a PR; a
+  tag only on the owner's word. Revived mods that change get their own `+bf.N` bump through `bump-version`.
+- 96.5 **Repo-wide suggestions.** Three independent review agents (performance and parallelism; architecture and process;
+  CI and tooling) report on the whole repository. Their suggestions are listed here for the owner to approve, not done
+  unasked.
+
 **95. Less hand work and faster re-validation for game updates (owner 2026-11-17: "1 through 5 add to roadmap. 6 I'm not sure we can do that always but if it can be optional that would be great. All others approved."; "Implement the smaller items not the greater phases like S and G").**
 **Approved.** Found taking the six-mod batch, United Aurora Federation and Sunrider through revival and live tests on
 2026-11-16/17. Sizes: S small, M medium, L large; the small ones are implemented first, one pull request each. The S and G
