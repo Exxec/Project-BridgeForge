@@ -50,7 +50,15 @@ MENU_LOADED = "Reading save data from"
 # Fresh rigs have no save descriptors to enumerate; actual playback also confirms the menu.
 MENU_READY = re.compile(re.escape(MENU_LOADED) + "|" + MAIN_MENU_RE.pattern)
 CAMPAIGN_END = "probe|INFO|campaign|END"
+COMBAT_START = "probe|INFO|combat|START"
 COMBAT_END = "probe|INFO|combat|END"
+# The probe logs 'combat START' about 2.5 s after the game defines the mission for a battle (G2B-LIVE-0985a-20261117), well inside
+# play_probe_combat's clicks. A restart whose clicks start nothing logs nothing: UAF-LIVE-0985a-20261117 and SR3-LIVE-0985a-20261117
+# waited out the whole combat timeout in round 2 (93.37). The start is confirmed after the clicks, with a screenshot and one retry.
+COMBAT_START_TIMEOUT = 45.0
+# The game defines the probe mission again 1.8 to 2.4 s after each battle ends (the 2026-11-17 runs); Continue is clicked after
+# that line, not into the transition.
+POST_BATTLE_SETTLE = 15.0
 FINGERPRINT_SAVED = "fingerprint|INFO|save|cmdSave returned true"  # save_reload stage (next probe version)
 ROUND_LINE = re.compile(r"combat-round\|INFO\|round (\d+) of (\d+)")
 
@@ -66,6 +74,7 @@ class Hands:
     alive: Callable[[], bool] = lambda: True
     front: Callable[[], None] = lambda: None
     geometry: Callable[[], tuple] | None = None
+    capture: Callable[[Path], bool] | None = None  # a screenshot of the game window to this path; True once written
 
 
 @dataclass
@@ -399,6 +408,49 @@ def wait_for_combat_end(log: Path, hands: Hands, timeout: float, since: int) -> 
         hands.key(SPACE_KEY)
 
 
+def _capture(hands: Hands, log: Path, tag: str) -> str | None:
+    """A screenshot of the game window beside the log (<TESTID>.<tag>.png) when the hands can take one: its path, else None."""
+    if hands.capture is None:
+        return None
+    path = log.with_name(f"{log.name.split('.stdout.log')[0]}.{tag}.png")
+    try:
+        return str(path) if hands.capture(path) else None
+    except Exception:  # evidence only: a failed screenshot never ends the run
+        return None
+
+
+def start_probe_combat(log: Path, hands: Hands, layout: tuple[int, int | None], round_no: int, timeout: float, since: int,
+                       stages: list[str]) -> tuple[bool, str | None]:
+    """Play the probe mission and confirm its battle started ('combat START' after `since`). If it did not, take a screenshot and
+    retry once (95.12(a)); a later round first clicks Continue again, in case the last battle's results are still up. Returns
+    (started, the screenshot's path or None)."""
+    play_probe_combat(hands, *layout)
+    if wait_for(log, COMBAT_START, timeout, hands, since=since):
+        return True, None
+    if not hands.alive():  # the game exited: nothing to photograph or click (the clicks would raise on a closed window)
+        return False, None
+    shot = _capture(hands, log, f"round{round_no}-no-start")
+    stages.append(f"combat-{round_no}-retry")
+    if round_no > 1:
+        hands.front()
+        hands.click(*COMBAT_CONTINUE)
+        hands.sleep(4)
+    play_probe_combat(hands, *layout)
+    return wait_for(log, COMBAT_START, timeout, hands, since=since), shot
+
+
+def continue_after_battle(log: Path, hands: Hands, round_from: int, timeout: float) -> None:
+    """Leave a battle's results for the mission list: wait for the game's own re-definition of the mission (its combat-round line
+    after the battle's END), then click Continue."""
+    text = _log_text(log)
+    end_at = text.find(COMBAT_END, round_from)
+    if wait_for(log, ROUND_LINE, timeout, hands, since=end_at + len(COMBAT_END) if end_at >= 0 else len(text)):
+        hands.sleep(2)
+    hands.front()
+    hands.click(*COMBAT_CONTINUE)
+    hands.sleep(4)
+
+
 def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: float = 600, combat_timeout: float = 240,
           generic_fallback: bool = True, new_game_grace: float = NEW_GAME_GRACE,
           vanilla_rows: int = VANILLA_MISSION_ROWS, save_reload: bool = False) -> LiveResult:
@@ -439,11 +491,17 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
     rows_below, list_total = layout if layout else (0, None)
     if rows_below > MAX_ROWS_REACHABLE:
         return stuck("mission-list", f"{rows_below} mission rows sit below the probe's; only {MAX_ROWS_REACHABLE} are reachable without scrolling back")
+    start_timeout, settle_timeout = min(COMBAT_START_TIMEOUT, combat_timeout), min(POST_BATTLE_SETTLE, combat_timeout)
     while round_no < rounds_total:
         offset = len(_log_text(log))
-        play_probe_combat(hands, rows_below, list_total)
+        started, shot = start_probe_combat(log, hands, (rows_below, list_total), round_no + 1, start_timeout, offset, result.stages)
+        if not started:
+            if not hands.alive():
+                return stuck(f"combat-round-{round_no + 1}", "the game exited before the probe mission's battle started")
+            return stuck(f"combat-round-{round_no + 1}", "the probe mission did not start (no 'combat START' probe line), also after one retry"
+                         + (f"; screenshot {shot}" if shot else ""))
         if not wait_for_combat_end(log, hands, combat_timeout, offset):
-            return stuck(f"combat-round-{round_no + 1}", "no 'combat END' probe line after starting the probe mission")
+            return stuck(f"combat-round-{round_no + 1}", "no 'combat END' probe line after the probe mission started")
         round_no += 1
         result.rounds = round_no
         found = ROUND_LINE.findall(_log_text(log)[offset:])
@@ -451,9 +509,7 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
             rounds_total = max(rounds_total, int(found[-1][1]))
         result.stages.append(f"combat-{round_no}")
         if round_no < rounds_total:
-            hands.front()
-            hands.click(*COMBAT_CONTINUE)
-            hands.sleep(4)
+            continue_after_battle(log, hands, offset, settle_timeout)
     result.verdict = "LIVE_DONE"
     return result
 
@@ -481,7 +537,8 @@ def real_hands(rig: Path, launcher_pid: int | None = None) -> Hands:
     return Hands(click=lambda fx, fy: game_click.click_fraction(geometry(), fx, fy),
                  key=game_click.press_key,
                  scroll=lambda fx, fy, n: game_click.scroll(geometry(), fx, fy, n),
-                 alive=lambda: bool(pids()), front=front, geometry=geometry)
+                 alive=lambda: bool(pids()), front=front, geometry=geometry,
+                 capture=lambda path: game_click.capture_client(geometry(), path))
 
 
 # What a unattended live run must show in its log to count (ROADMAP item 75 R1); `drive` ends LIVE_DONE after a combat round.

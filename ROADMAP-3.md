@@ -143,7 +143,7 @@ unproven).
   `target-impact` is not CLEAN.
 - 95.12 **Further suggestions** (owner asked "Anything else for bridgeforge, this process, or any sub modules like the probe etc?"):
   (a, S) a combat-round watchdog: no `combat|START` within a bound after the click means a screenshot and one retry (UAF's round 2
-  waited out the timeout, 93.37); (b, S) the probe's log header carries its config hash, so `report` and `record` find the run's own
+  waited out the timeout, 93.37; **Done 2026-11-17**, see 93.37); (b, S) the probe's log header carries its config hash, so `report` and `record` find the run's own
   config (with 93.29); (c, M) acceptance analytics: aggregate accepted findings across mods into proposed scanner rules (Sunrider's
   `initStar(id, "nebula_center_young", 0, 0)` is vanilla's own pattern, RC7's `star_gen_data.csv` gives radius 0; a library used
   behind an `isModEnabled` guard is optional, not undeclared); (d, S) a one-page owner summary per mod at archive time: fixes,
@@ -416,6 +416,39 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   UAF-LIVE-0985a-20261117 combat round 1 started and ended, round 2's line was logged ("hulls 61-86 of 86; restart the mission"), and
   no `combat|START` followed, so the click back into the mission list did not start the probe mission. Read the list from the screen
   before each round's click (as the main menu already is), and re-run UAF's round 2 once fixed.
+  SR3-LIVE-0985a-20261117 (Bultach Coalition alone) stopped the same way: round 1 ended at 231.7 s, the game defined round 2 at 234.1 s,
+  and no battle followed in the next 220 s. So a long list is not established as the cause.
+  **Done 2026-11-17 (95.12(a); the cause is still not shown).** After its clicks each round waits for the probe's `combat|START`
+  (`COMBAT_START_TIMEOUT`, 45 s). If none comes it saves `<TESTID>.round<N>-no-start.png` beside the log (`Hands.capture`), clicks
+  Continue again for a later round, and plays the mission once more. A second miss ends as LIVE_STUCK at `combat-round-<N>`, with
+  "also after one retry" and the screenshot's path. After a battle, Continue now waits for the game's own re-definition of the mission
+  (its combat-round line, 1.8 to 2.4 s after END in the 2026-11-17 runs) instead of clicking into the transition. Tests:
+  `tests/test_live_run.py` `test_a_restart_that_starts_nothing_is_retried_once_after_a_screenshot`,
+  `test_a_mission_that_never_starts_is_stuck_at_its_round_naming_the_retry`,
+  `test_a_first_round_that_starts_nothing_is_retried_without_a_continue_click`,
+  `test_continue_waits_for_the_game_to_define_the_mission_again` (each fails on the old loop). Screen-reading the list stays open if
+  a screenshot shows the click itself misses. Next: re-run UAF and Bultach.
+- 93.39 **The second of two combat rounds re-ran the first, so its hulls never fought.** Probe 0.2.13 advanced its round counter on
+  every `defineMission`. The game calls that once when a battle ends as well as when the next one starts, so the counter rose twice
+  per battle, and with two rounds every second battle was round 1 again. Every two-round live run on Test1 shows it:
+  - G1-LIVE3 (Eridani Combine, Scrapyard Armories, Musashi Manufactorum): hulls 61-113 never fought; both battles logged 28 ships;
+  - G2 and G2B (Bultach Coalition): hulls 61-105 never fought.
+  Runs of one round are unaffected (Tania, KoC, the Sunrider group, Templars). Found 2026-11-17 from the order of the logs' round
+  lines: round 1, END, round 2, round 1, START.
+  **Done 2026-11-17 (probe 0.3.3).** `MissionDefinition` only reads the counter (`ProbeFiles.currentCombatRound`), and the battle's
+  end advances it (`ProbeDone.combatEnded` → `ProbeFiles.advanceCombatRound`); the last-round check uses the round that ended.
+  Rebuilt jar: 6 of 54 classes differ, the 3 edited ones and 3 that inline `ProbeLog.VERSION`. `probe-group report` now carries
+  `combat_rounds` (`planned`, `started`, `missing`, `missing_hulls`: the round the game defined last before each START) and prints
+  a WARN for a round that never started a battle. This is coverage, not a verdict. Tests: `tests/test_probe_group.py`
+  `CombatRoundsTests` (G1-LIVE3's and SR3's shapes, 0.3.3's, the report field) and `tests/test_probe_config.py`
+  `CombatRoundCounterTests` (source, release copy and both jars). Owner's call: re-run Eridani and Scrapyard (archived 2026-11-17 on
+  "archive all") so their round-2 hulls fight, and re-run Bultach before it is recorded.
+  An independent review the same day found two problems, fixed in the same PR:
+  - `combat_rounds` raised `KeyError` for a round the game never defined (a run stuck or crashed in an earlier round). Such a
+    round now shows `?` for its hulls. Test: `test_a_run_stopped_before_a_round_was_defined_names_no_hulls_for_it`.
+  - A game that exited while a round loaded was retried, and the retry clicked into the closed window (`RuntimeError`). It now
+    ends as LIVE_STUCK "the game exited before the probe mission's battle started", with no retry. Test:
+    `test_a_game_that_exits_while_a_round_loads_is_stuck_without_a_retry` (fails on the first version).
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct

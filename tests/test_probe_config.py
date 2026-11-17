@@ -123,6 +123,34 @@ class ProbeVersionTests(unittest.TestCase):
         self.assertIn(f'public static final String VERSION = "{declared}";', source)
 
 
+class CombatRoundCounterTests(unittest.TestCase):
+    """Probe 0.3.3: the mission definition only reads the round counter and a battle's end advances it. The game defines the
+    mission again after each battle, so 0.3.2's advance-on-read fought round 1 twice in two-round runs (G1-LIVE3-0985a-20261117)."""
+
+    PROBE = Path(__file__).resolve().parent.parent / "probe-mod"
+    RELEASE = PROBE / "releases" / "bridgeforge-probe"
+    MISSION = Path("data") / "missions" / "bfprobe_combat" / "MissionDefinition.java"
+
+    def test_the_mission_definition_reads_the_round_without_advancing_it(self) -> None:
+        for mission in (self.PROBE / self.MISSION, self.RELEASE / self.MISSION):
+            with self.subTest(mission=str(mission)):
+                source = mission.read_text(encoding="utf-8")
+                self.assertIn("ProbeFiles.currentCombatRound()", source)
+                self.assertNotIn("nextCombatRound", source)
+
+    def test_a_battle_end_advances_the_round_in_the_source_and_both_built_jars(self) -> None:
+        from zipfile import ZipFile
+
+        from bridgeforge.zipsafe import read_class
+
+        done = (self.PROBE / "src" / "com" / "bridgeforge" / "probe" / "ProbeDone.java").read_text(encoding="utf-8")
+        self.assertIn("ProbeFiles.advanceCombatRound()", done)
+        for jar in (self.PROBE / "jars" / "bridgeforge-probe.jar", self.RELEASE / "jars" / "bridgeforge-probe.jar"):
+            with self.subTest(jar=str(jar)), ZipFile(jar) as archive:
+                self.assertIn(b"advanceCombatRound", read_class(archive, "com/bridgeforge/probe/ProbeDone.class"))
+                self.assertNotIn(b"nextCombatRound", read_class(archive, "com/bridgeforge/probe/ProbeFiles.class"))
+
+
 class ProbeConfigRigTests(unittest.TestCase):
     def test_refuses_non_junction_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

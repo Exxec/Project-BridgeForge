@@ -10,44 +10,95 @@ from tests.support import resolved_temp_dir
 
 
 class FakeGame:
-    """Hands that record every action and append log lines when the run reaches the stage that would produce them."""
+    """Hands that record every action and append log lines when the run reaches the stage that would produce them. As in the real
+    game, a battle logs its round and 'combat START' as it begins, and after its END the game defines the mission again, which
+    logs the next round's line (`late_redefinition`: only at the next pause, as when the game takes its time). `lost_starts` names
+    DEPLOY clicks (1-based) that start nothing, like the round-2 restarts of UAF and SR3-LIVE-0985a-20261117. `dies_at_deploy`
+    ends the game at that DEPLOY click; after it, clicks, scrolls and front() raise as real_hands' geometry() does (a key press
+    needs no window)."""
 
-    def __init__(self, log: Path, rounds: int = 1, stall_at: str | None = None) -> None:
+    def __init__(self, log: Path, rounds: int = 1, stall_at: str | None = None, lost_starts: tuple[int, ...] = (),
+                 late_redefinition: bool = False, dies_at_deploy: int | None = None) -> None:
         self.log, self.rounds, self.stall_at = log, rounds, stall_at
+        self.dies_at_deploy, self.alive = dies_at_deploy, True
+        self.lost_starts, self.late_redefinition = set(lost_starts), late_redefinition
         self.actions: list[tuple] = []
-        self.combat_started = 0
+        self.combat_started = self.deploys = 0
+        self.running, self.pending_redefinition = False, None
+        self.captures: list[Path] = []
         self.log.write_text("1 [main] INFO  Reading save data from [x]\n", encoding="utf-8")
 
     def _append(self, text: str) -> None:
         with self.log.open("a", encoding="utf-8") as handle:
             handle.write(text + "\n")
 
+    def _round_line(self, ahead: int = 0) -> str:
+        number = (self.combat_started - 1 + ahead) % self.rounds + 1
+        return f"BF-PROBE|0.3.3|combat-round|INFO|round {number} of {self.rounds}|hulls 1-2 of 2"
+
+    def _window(self) -> None:
+        if not self.alive:
+            raise RuntimeError("the game window is gone")
+
+    def front(self) -> None:
+        self._window()
+
+    def scroll(self, *args) -> None:
+        self._window()
+        self.actions.append(("scroll", *args))
+
     def click(self, fx: float, fy: float) -> None:
+        self._window()
         self.actions.append(("click", fx, fy))
         if (fx, fy) == live_run.START_GAME and self.stall_at != "new-game":
             self._append("BF-PROBE|0.2.23|probe|INFO|campaign|END")
         if (fx, fy) == live_run.DEPLOY:
+            self.deploys += 1
+            if self.deploys == self.dies_at_deploy:
+                self.alive = False  # the java process exited while the battle loaded
+                return
+            if self.deploys in self.lost_starts:
+                return  # the clicks landed nowhere: no mission, no battle
             self.combat_started += 1
+            self.running = True
+            self._append(self._round_line())
+            self._append("BF-PROBE|0.3.3|probe|INFO|combat|START")
 
     def key(self, vk: int) -> None:
         self.actions.append(("key", vk))
-        if self.stall_at == "first-space" and vk == live_run.SPACE_KEY and self.combat_started:
+        if vk != live_run.SPACE_KEY or not self.running:
+            return
+        if self.stall_at == "first-space":
             self.stall_at = None  # the first press landed before the mission took input; the next one starts it
             return
-        if vk == live_run.SPACE_KEY and self.combat_started and self.stall_at != "combat":
-            self._append(f"BF-PROBE|0.2.23|combat-round|INFO|round {self.combat_started} of {self.rounds}|x")
-            self._append("BF-PROBE|0.2.23|probe|INFO|combat|END")
+        if self.stall_at != "combat":
+            self.running = False
+            self._append("BF-PROBE|0.3.3|probe|INFO|combat|END")
+            if self.late_redefinition:
+                self.pending_redefinition = self._round_line(1)
+            else:
+                self._append(self._round_line(1))
+
+    def sleep(self, _seconds: float) -> None:
+        if self.pending_redefinition:
+            self._append(self.pending_redefinition)
+            self.actions.append(("logged", "redefinition"))
+            self.pending_redefinition = None
+
+    def capture(self, path: Path) -> bool:
+        self.captures.append(path)
+        return True
 
     def hands(self) -> live_run.Hands:
-        return live_run.Hands(click=self.click, key=self.key, scroll=lambda *a: self.actions.append(("scroll", *a)),
-                              sleep=lambda _s: None)
+        return live_run.Hands(click=self.click, key=self.key, scroll=self.scroll, sleep=self.sleep, capture=self.capture,
+                              alive=lambda: self.alive, front=self.front)
 
 
 class DriveTests(unittest.TestCase):
-    def _drive(self, rounds: int = 1, stall_at: str | None = None):
+    def _drive(self, rounds: int = 1, stall_at: str | None = None, **fake):
         with resolved_temp_dir() as base:
             log = base / "run.stdout.log"
-            game = FakeGame(log, rounds, stall_at)
+            game = FakeGame(log, rounds, stall_at, **fake)
             result = live_run.drive(log, game.hands(), menu_timeout=0.2, campaign_timeout=0.2, combat_timeout=0.2)
         return result, game
 
@@ -74,6 +125,45 @@ class DriveTests(unittest.TestCase):
     def test_silent_combat_is_stuck_at_its_round(self) -> None:
         result, _ = self._drive(stall_at="combat")
         self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "combat-round-1"))
+        self.assertIn("after the probe mission started", result.detail)
+
+    def test_a_restart_that_starts_nothing_is_retried_once_after_a_screenshot(self) -> None:
+        # UAF and SR3-LIVE-0985a-20261117: round 2's clicks back into the mission list started no battle (95.12(a)).
+        result, game = self._drive(rounds=2, lost_starts=(2,))
+        self.assertEqual((result.verdict, result.rounds), ("LIVE_DONE", 2), result)
+        self.assertIn("combat-2-retry", result.stages)
+        self.assertEqual([path.name for path in game.captures], ["run.round2-no-start.png"])
+        clicks = [action[1:] for action in game.actions if action[0] == "click"]
+        deploys = [index for index, click in enumerate(clicks) if click == live_run.DEPLOY]
+        self.assertEqual(len(deploys), 3)
+        # the retry clicks Continue first, in case the last battle's results are still up
+        self.assertIn(live_run.COMBAT_CONTINUE, clicks[deploys[1]:deploys[2]])
+
+    def test_a_mission_that_never_starts_is_stuck_at_its_round_naming_the_retry(self) -> None:
+        result, game = self._drive(rounds=2, lost_starts=(2, 3))
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "combat-round-2"))
+        self.assertIn("also after one retry", result.detail)
+        self.assertIn("run.round2-no-start.png", result.detail)
+        self.assertEqual(game.combat_started, 1)
+
+    def test_a_game_that_exits_while_a_round_loads_is_stuck_without_a_retry(self) -> None:
+        # Review 2026-11-17: the retry clicked into a closed window (RuntimeError) where the old loop stopped cleanly.
+        result, game = self._drive(rounds=2, dies_at_deploy=2)
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "combat-round-2"))
+        self.assertIn("the game exited", result.detail)
+        self.assertEqual((game.deploys, game.captures), (2, []))
+
+    def test_a_first_round_that_starts_nothing_is_retried_without_a_continue_click(self) -> None:
+        result, game = self._drive(lost_starts=(1,))
+        self.assertEqual((result.verdict, result.rounds), ("LIVE_DONE", 1), result)
+        self.assertIn("combat-1-retry", result.stages)
+        self.assertNotIn(("click", *live_run.COMBAT_CONTINUE), game.actions)
+
+    def test_continue_waits_for_the_game_to_define_the_mission_again(self) -> None:
+        # The game defines the mission again about 2 s after a battle ends; a Continue click before that can land in the transition.
+        result, game = self._drive(rounds=2, late_redefinition=True)
+        self.assertEqual((result.verdict, result.rounds), ("LIVE_DONE", 2), result)
+        self.assertLess(game.actions.index(("logged", "redefinition")), game.actions.index(("click", *live_run.COMBAT_CONTINUE)))
 
     def test_combat_left_paused_by_the_first_space_is_unpaused_by_a_retry(self) -> None:
         # EXO-RC4B-LIVE-20261026: combat stopped logging after deployment; the owner had been unpausing by hand.

@@ -29,26 +29,27 @@ final class ProbeDone {
         writeIfComplete();
     }
 
-    /** Called when a combat round ends; only the last round of the configured slices completes the run. */
+    /**
+     * Called once when a combat round ends: advances the round counter (0.3.3; the mission definition only reads it) and,
+     * after the last of the configured slices, completes the run.
+     */
     static void combatEnded() {
         ProbeExercised.emitAll();
-        if (isLastRound()) {
+        if (isLastRound(ProbeFiles.advanceCombatRound())) {
             combatDone = true;
         }
         writeIfComplete();
     }
 
-    private static boolean isLastRound() {
+    private static boolean isLastRound(int ended) {
         try {
             ProbeConfig config = ProbeConfig.load();
             int cap = config.combatCapPerSide > 0 ? config.combatCapPerSide : DEFAULT_CAP;
             int total = config.variantByHull.size();
             int rounds = total == 0 ? 1 : (total + 2 * cap - 1) / (2 * cap);
-            // ProbeFiles.nextCombatRound() has already advanced the counter for the round that just ended.
-            int started = Integer.parseInt(Global.getSettings().readTextFileFromCommon(ProbeFiles.COMBAT_ROUND).trim());
-            return (started - 1) % rounds == rounds - 1;
+            return ended % rounds == rounds - 1;
         } catch (Throwable t) {
-            return true; // an unreadable counter must not leave the harness waiting for a marker that never comes
+            return true; // an unreadable config must not leave the harness waiting for a marker that never comes
         }
     }
 
