@@ -153,7 +153,7 @@ def close_workspace(workspace: Path, status: str, reason: str, *, day: str | Non
         raise ValueError(f"{root} is neither a queue workspace (working/) nor a Done/<Mod> archive (workspace/REVIVAL_REPORT.md)")
     report.parent.mkdir(parents=True, exist_ok=True)
     body = report.read_text(encoding="utf-8").rstrip() if report.is_file() else "# Revival report"
-    title = "Superseded" if status == "SUPERSEDED" else "Not revivable for RC8"
+    title = "Superseded" if status == "SUPERSEDED" else "Not revivable"  # the reason names the build (96.5 A1: it said RC8 for every build)
     report.write_text(body + f"\n\n## {title} ({day or date.today().isoformat()})\n\n{reason.strip()}\n\n{status}\n", encoding="utf-8")
     return str(report)
 

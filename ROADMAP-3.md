@@ -80,6 +80,21 @@
 
     Left open, because each changes behaviour (96.3): `rig-doctor` compares mods with `0.98a`, and `dependency-substitutes`
     never counts a 0.98.5a provider as current.
+    An independent review the same day found six problems, fixed in the same PR:
+    - `revival_build` now takes the newer of a whole-build gameVersion and an applied revive's target. Revive's fixer
+      leaves a same-release gameVersion such as 0.98.5a-RC3 under an RC7 target. "0.98a" alone and a dry run's target name no
+      build.
+    - Seeding tells a note with no credit line (RC8, as before) from a credit line naming no build ("revived and archived").
+      The master log reads notes the same way (`mod_changelog.note_build`).
+    - `GENERIC` matches only a whole generated line, so a hand-written "re-revived and archived after..." stays.
+    - The accept and record headings read the core the run's manifest recorded at launch (`rig_core`), not wherever the
+      junction points at accept time.
+    - Three missed RC8 texts are gone: `close` writes "Not revivable" (the reason names the build), and two auto-explain
+      reasons say "the game's parser" and "game schema".
+    - The report draft's title and compile line are tested.
+
+    Tests: `tests/test_build_labels.py` (same-release precedence, dry run, manifest core, the four kinds of note, generic
+    negatives, the draft). Each review case fails on the first version (mutation-checked).
   - **Performance:**
     - P1 (S): one `javap` per jar, not per class (`settings_keys.py:116`, `procgen_args.py:151`). That is 40-77% of a
       scan (UAF: 252 launches, 52.8 of 68.6 s), and revive repeats it.

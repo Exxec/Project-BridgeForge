@@ -113,7 +113,7 @@ def accept_run(workspace: Path | str, log: Path | str, *, test_id: str, note: st
         from bridgeforge.game_version import rig_label
 
         lines = [
-            f"{heading} ({today}, {rig_label(rig or (Path(mods_dir).parent if mods_dir else None))})",
+            f"{heading} ({today}, {rig_label(rig or (Path(mods_dir).parent if mods_dir else None), core=(manifest or {}).get('rig_core'))})",
             "",
             f"Log milestones: main menu reached, {len(milestones['campaign_loads'])} campaign load(s), "
             f"{milestones['finished_saving_count']} save event(s). Triage: FATAL={triage['counts']['FATAL']}, "
