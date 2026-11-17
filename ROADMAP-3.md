@@ -647,6 +647,14 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   `data/campaign/procgen/star_gen_data.csv` as added and UNEXPLAINED (not in the original). Find the step that added it (the
   RC7 revive's records, an escalation, or a hand edit) and explain it from that record. Then re-record SR5 (after 93.41) and
   archive on the owner's "archive all".
+  **Done 2026-11-17 (tooling).** The record exists: Bultach's escalation ledger has
+  `{"finding": "procgen-star-row-missing", "files": ["data/campaign/procgen/star_gen_data.csv"], "runner": "fixer", "outcome":
+  "APPLIED"}`. The fixer added the `bt_divine_star` row that the mod's planets.json star and campaign code need. The
+  shipped-copy audit read only a ledger entry's single `file`, never a fixer run's `files` list; KoC's moved work files had
+  the same shape. `live_trust._recorded_changes` now reads both, explaining a fixer entry as
+  "fixer <finding> (escalation ledger)", and it skips ledger lines that are not objects (the old code raised on them). Test:
+  `tests/test_live_trust.py` `test_a_fixer_run_in_the_escalation_ledger_explains_the_files_it_lists` (fails on the old
+  reader). Bultach's archive now waits only on its re-run (93.41).
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct
