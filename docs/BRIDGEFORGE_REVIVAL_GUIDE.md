@@ -1,19 +1,26 @@
 # BridgeForge revival toolkit: how to use it
 
-This guide covers the commands built for reviving old Starsector mods on 0.98a-RC8: what each one does, when to use it, and the workflows that chain them together. For the design behind them, see `docs/REVIVAL_ASSURANCE_PLAN.md`. For progress, see `ROADMAP-3.md`.
+This guide covers the commands built for reviving old Starsector mods: what each one does, when to use it, and the workflows that chain them together. Revivals target **0.98.5a-RC7** (Java 17). 0.98a-RC8 is the previous target and the reference build: archives validated before the move rest on it. For the design behind the commands, see `docs/REVIVAL_ASSURANCE_PLAN.md`. For progress, see `ROADMAP-3.md`. Claude sessions also have the project skills in `.claude/skills/`: `bridgeforge-revive` (one mod from intake to archive), `bridgeforge-catalogue` (`Done/` against a new game build) and `bridgeforge-pr` (commits and pull requests).
 
-All commands run from the repo root:
+All commands run from the repo root, the checkout that also holds `In operation/`, `Done/` and `bridgeforge-state/` (on Test1, the project folder):
 
 ```powershell
 .venv\Scripts\python.exe -m bridgeforge <command> ...
 ```
 
-Two shorthands used below, adjust to your machine:
+Use `python -m` from the checkout, not the `bridgeforge.exe` script: the `.venv` can hold an older installed copy, and the script runs that one (ROADMAP-3 93.19). Defaults written `<repo>/...`, and `@target`, resolve beside the checkout the package runs from, not the current folder; from another checkout, pass the paths.
+
+Three shorthands used below, adjust to your machine:
 
 ```powershell
-$core = "C:\Program Files (x86)\Fractal Softworks\Starsector\starsector-core"   # vanilla game data, read-only
-$rig  = "C:\Users\exxec\Documents\Project BridgeForge\In operation\_rig"  # isolated test rig
+$core = "C:\Program Files (x86)\Fractal Softworks\Starsector985a\starsector-core"  # the target, 0.98.5a-RC7; read-only
+$ref  = "C:\Program Files (x86)\Fractal Softworks\Starsector\starsector-core"      # 0.98a-RC8, the reference; read-only
+$rig  = "In operation\_rig-0985a"                                                 # the isolated 0.98.5a test rig, from the repo root
 ```
+
+On Test1 the target core is `C:\Games\Starsector-0.98.5a-RC7\starsector-core`; `In operation\_rig-0985a` is its 0.98.5a rig and `In operation\_rig` the RC8 rig.
+
+**`@target`.** A core argument written exactly `@target` (`--vanilla-core @target`, or a core given to `target-impact`) resolves to the target core recorded in `<repo>/bridgeforge-state/target.json`. `target set <core>` records it on a machine; `target show` prints the target, every recorded build and `target_core_reports`, the build the core itself reports. Trust that, not a folder name: Test1's `C:\Games\Starsector-0.98.5a-RC3` holds RC3. Without a recorded target the token is refused; name the core path instead.
 
 ## 0. Safety rules (read once)
 
@@ -25,9 +32,60 @@ section 12 are offline-tested with their live runs still pending (`docs/LOCAL_HA
 
 - **Your real Starsector install is read-only.** BridgeForge only ever reads it (`--vanilla-core`, `--source-mods`).
 - **Test rigs must be isolated.** A rig is a folder with `run-java25.bat`, `mods/`, `logs/`, `saves/` and a `starsector-core` **junction** to the real install. The junction is what keeps saves inside the rig. `boot-test`, `probe-config` and `compat-set` refuse to run when it's missing.
-- **Work on working copies** under `In operation/`. Never edit a mod's original archive. Finished mods go to `Done/` only after a passing live test.
+- **Work on working copies** under `In operation/`. Never edit a mod's original archive, or an archive in `Done/`. Finished mods go to `Done/` only after a passing live test, and only on the owner's word.
+- **The owner decides acceptances and archiving.** Present each finding with its evidence and a recommendation, and quote the owner's words in the reason you record.
+- **The game's licence key is never read, printed or copied.** `rig-doctor` only checks that one is stored (section 0b).
 - **Every command that changes files keeps backups** (`*.pre-*.bak`), or previews first (`fix` and `build-tag --dry-run`).
 - A Starsector **Fatal error shows only as a dialog box**, never in the log. If the game is still running but no main menu appears, suspect that dialog.
+
+## 0a. One mod from intake to archive
+
+The order that worked for the six-mod batch, United Aurora Federation and Sunrider (2026-11-16/17). Each step names the section with the details.
+
+**1. Intake** a copy; the input mod is never edited.
+
+```powershell
+python -m bridgeforge intake "<mod zip or folder>" --repo-root . --name <Workspace-Name> --strip-junk
+```
+
+A raw mod folder is zipped into `In operation/_raw-zips/` first and left alone. `--strip-junk` takes in `<name>-clean.zip` when
+junk members (`*~`, `desktop.ini`, copies) are the only hazards; the raw archive is kept and the dropped list goes into
+`intake.json`. One call takes several sources (then without `--name`), and `--from-mods <mods folder>` matches loose names to
+that folder's mods ("koch" -> `Everybody loves KoC-1.05.49a`; a tie is refused).
+
+**2. Revive** against the target (section 2b).
+
+```powershell
+python -m bridgeforge revive "In operation/<Name>" --vanilla-core @target --apply --draft-report [--approve <fixer-id> ...] [--providers "<mods folder>"]
+```
+
+**3. Finish what revive leaves.** Input-tier fixers do not run inside revive: `fix "In operation/<Name>/working" --finding <id>
+--apply` (section 2). A jar that ships its source is rebuilt with `src-to-jar`, and calls whose game method now only returns a
+value with `relink` (section 2c). Agent packets go to `escalation run` (section 2b).
+
+**4. The owner's decisions.** Group what is left for the owner: real (fix now), as authored (accept, with the evidence),
+setup-dependent (for example an optional integration behind an `isModEnabled` guard), and already so on the previous build. A
+mod that runs on RC8 can still list many findings that are identical there (ROADMAP-3 93.34): say so plainly. Recommend one
+option per group. After the owner rules, record each finding with their words:
+
+```powershell
+python -m bridgeforge escalation accept "In operation/<Name>" <finding-id>[:<file part>] --reason "<evidence>; owner <date>: '<their words>'"
+```
+
+`baseline-accept-finding` does the same for a finding outside a packet. Run `revive` again until it ends UNATTENDED_DONE and
+the drafted `working/reports/REVIVAL_REPORT.md` reads READY_FOR_LIVE_TEST: `probe-group plan` takes only such workspaces.
+
+**5. Live test** on the 0.98.5a rig: `rig-doctor` (section 0b), then `probe-group plan`, `install`, `smoke`, `live` and
+`report` (section 6b).
+
+**6. Record and archive**, on the owner's word only (sections 6b and 12c):
+
+```powershell
+python -m bridgeforge probe-group record <TESTID> --rig $rig --accept --archive --note "<the owner's words; what ran>"
+```
+
+A mod changed after archiving goes back through `restore-from-done`, a fix, `bump-version` and a new live test (section
+12c). A new game build starts with `target-impact` over `Done/` (section 12d).
 
 ## 0b. Before every test session: rig-doctor
 
@@ -38,18 +96,21 @@ python -m bridgeforge rig-doctor $rig --real-install "C:\Program Files (x86)\Fra
 
 Checks, each with its fix command:
 - the rig is isolated (junction)
-- no rig game is running
+- no rig game is running, and no other process holds the rig's files (`who-locks`)
 - the probe is installed and matches its release copy
-- every enabled mod resolves, with its dependencies and a matching base `gameVersion`
+- every enabled mod resolves, with its dependencies and a matching base `gameVersion`. The check still compares with `0.98a`, so on the 0.98.5a rig it warns about every mod revived to `0.98.5a` (ROADMAP-3 93.4 is open).
 - every known working copy matches its rig copy (`--working ID=PATH` adds more)
 - your real install's saves haven't changed since the recorded baseline
+- the rig core's jars hash as recorded (`--write-core-baseline` records them from a known-good core)
 - if RevenantLib is installed, it still provides every `bf.*` method `fix --finding removed-api-call` rewrites calls to (`revenantlib-check` runs the same check on any RevenantLib folder or jar, and also catches a jar missing a class for one of its source files)
+- `launcher_prefs` (ROADMAP-3 93.28): what an unattended run needs from this Windows user's Java preferences. FAIL when no licence key is stored: neither the launcher nor a direct start can begin a game, and the owner enters the key once in that machine's launcher. WARN when no game controls are stored (the first start shows "Key configuration options have changed"). A note when `canSkipTutorial` is unset: `probe-group live` pins it, with the window resolution, for the run and puts the owner's values back afterwards. The key is checked for presence only, never read, printed or copied.
+- long paths, ASCII paths, project-layout strays and locked workspaces
 
 Exit code 1 means a FAIL: fix it before testing.
 
 ## 1. Look at a mod: scan and dossier
 
-**`scan`** runs every static check (about 380 finding ids; the list is `docs/CHECKS.md`) and writes a report.
+**`scan`** runs every static check (224 finding ids on 2026-11-17; the list is `docs/CHECKS.md`) and writes a report.
 
 ```powershell
 python -m bridgeforge scan "<mod_dir>" --vanilla-core $core --output .\scan-out
@@ -76,11 +137,11 @@ Classifications: **MANUAL** means likely broken, act on it. **REVIEW** needs jud
 check whether vanilla itself dropped them:
 
 ```powershell
-python -m bridgeforge content-diff "<old install>\starsector-core" $core --output "In operation\_reference\removed-content-0.9a-to-rc8.json"
-python -m bridgeforge scan "<mod_dir>" --vanilla-core $core --removed-content "In operation\_reference\removed-content-0.9a-to-rc8.json" --output "<reports>"
+python -m bridgeforge content-diff "<old install>\starsector-core" $core --output "In operation\_reference\removed-content-<old>-to-0985a.json"
+python -m bridgeforge scan "<mod_dir>" --vanilla-core $core --removed-content "In operation\_reference\removed-content-<old>-to-0985a.json" --output "<reports>"
 ```
 
-Ids vanilla removed then appear as `content-reference-removed-in-vanilla`, each with any RC8 id of the
+Ids vanilla removed then appear as `content-reference-removed-in-vanilla`, each with any current vanilla id of the
 same display name (a lead, not a confirmed rename). RevenantLib may already carry the old content.
 
 **Stripping content nothing provides? strip-plan.** When `dependency-substitutes` says STRIP_FROM_MOD:
@@ -105,17 +166,19 @@ and every `MISSING`, then fold the result into RevenantLib by hand and record it
 ## 1b. Which API changed? api-diff
 
 ```powershell
-python -m bridgeforge api-diff "<old install>\starsector-core" $core --output "In operation\_reference\api-diff-0.9a-to-rc8.json"
-python -m bridgeforge compile-check "<mod_dir>" --vanilla-core $core --api-diff "In operation\_reference\api-diff-0.9a-to-rc8.json"
+python -m bridgeforge api-diff "<old install>\starsector-core" $core --output "In operation\_reference\api-diff-<old>-to-0985a.json"
+python -m bridgeforge compile-check "<mod_dir>" --vanilla-core $core --api-diff "In operation\_reference\api-diff-<old>-to-0985a.json"
 ```
 
 `api-diff` compares two `starfarer.api.jar`s (a jar, or the `starsector-core` folder holding one) once,
 and lists every public class, method and field the newer one removed or changed. For each removed method
 it names the new overloads in the same class and other classes that now declare the same name and
-signature (the `SectorAPI.addMessage` -> `CampaignUIAPI.addMessage` kind). With `--api-diff`,
-`compile-check` prints those leads under each javac error they explain (`API CHANGE ...`). They are
+signature (the `SectorAPI.addMessage` -> `CampaignUIAPI.addMessage` kind). When both cores' `starfarer.api.zip`
+sit beside the jars, as the game ships them, it also lists methods whose parameters were renamed under the same
+signature (`parameters_renamed`: `Misc.getOfficerSalary`'s `mercenary` became `checkIfInPopulatedSystem`). With
+`--api-diff`, `compile-check` prints those leads under each javac error they explain (`API CHANGE ...`). They are
 leads to verify, not rewrites. The catalogue holds only API names; keep the game jars themselves out of
-the repository.
+the repository. For the step from one target build to the next, `target-impact` does this per mod (section 12d).
 
 ## 1c. What did the mod actually change? diff-data
 
@@ -135,8 +198,8 @@ files (the `vanilla-path-shadowing` finding) and you have the install it was mad
 python -m bridgeforge rebuild-from-reference "<mod_dir>" --reference-core "<old install>\starsector-core" --vanilla-core $core --class wpn --output "In operation\<Mod>\scratch\rebuilt-wpn"
 ```
 
-Per file: **MERGED** (RC8's version plus the mod's edits, written to `--output`), **CONFLICT** (the mod
-and RC8 changed the same value; RC8's is kept and the path listed for you to decide),
+Per file: **MERGED** (the current core's version plus the mod's edits, written to `--output`), **CONFLICT** (the mod
+and the current core changed the same value; the core's is kept and the path listed for you to decide),
 **UNCHANGED_COPY** (the mod never edited it: delete it from the mod). Review the merged files with
 `diff-data`, then copy them into the working copy yourself. Repeat per `--class`.
 
@@ -179,17 +242,27 @@ python -m bridgeforge fix "<mod_dir>" --finding <id> --apply    # write + backup
 ```
 
 Only supported finding ids are accepted; any other id is refused with the full list (`fix --help` prints it too, 64 ids on
-2026-10-18). The original mechanical ones, with their extra options:
+2026-11-17). In a workspace, `<mod_dir>` is its `working/` folder. Some fixers with their extra options:
 
 | Finding | Extra options |
 |---|---|
-| `wing-role-assault-removed` | none |
-| `mod-info-game-version-inexact` | `--target-game-version 0.98a-RC8` |
+| `mod-info-game-version-inexact` | `--target-game-version 0.98.5a-RC7` (`revive` sets it from the core) |
 | `csv-row-extra-columns` | none (refuses if any extra field has content) |
 | `csv-missing-design-type-column` | `--design-type NAME --id-prefix P [--id-prefix P2] --design-color R,G,B` |
 | `procgen-planet-row-missing` / `procgen-star-row-missing` | `--vanilla-core $core --type-id <custom_type> --from-vanilla-id <closest_vanilla_type>` (clones vanilla's row with spawn frequency 0) |
 | `faction-known-lists-missing` | `--vanilla-core $core --faction-file <data/world/factions/x.faction>`; refuses if any id is unresolved |
 | `mod-info-triage-banner` | none |
+| `variant-op-over-budget` | `--reference-core $ref`: trims only the variants the target's costs pushed over (owner ruling 2026-09-27) |
+| `data-file-not-utf8` | `--encoding FILE=ENC` once a person has read the file and named its encoding |
+
+**Fixers of the `input` tier** (`bridgeforge/automation_tiers.json`, for example `rules-csv-curly-quote-unreadable`) never
+run inside `revive`: apply them here with `--apply`.
+
+**Gated fixers for a new build (ROADMAP-3 item 89).** `rc8-signature-changed` (source calls),
+`jar-call-signature-changed` (the same calls in jar bytecode) and `forwarding-class-method-missing` (a class that forwards
+a game interface gets the methods the new build added) apply a rule only when the core you pass lacks the old member and
+has the new one, so pass the target: `fix "<working>" --finding jar-call-signature-changed --vanilla-core @target --apply`.
+A changed member whose new argument changes the result (`PersonBountyEventData.reportSuccess(int)`) stays a hand port.
 
 Fixers added by item 73 (offline-tested 2026-10-18) refuse whatever they cannot prove. These are REVIEW tier, so they run
 only with an approval: `system-generation-unguarded` and `orbit-period-computed-unguarded` (guards),
@@ -205,15 +278,18 @@ Anything else (REVIEW or MANUAL) needs a human or agent decision. Use the dossie
 `revive` does the mechanical part of a revival in one go and hands you (or an AI agent) only
 what is left:
 
-```
-bridgeforge revive "In operation/MyMod" --vanilla-core "<RC8>/starsector-core"          # dry run
-bridgeforge revive "In operation/MyMod" --vanilla-core "<RC8>/starsector-core" --apply  # write fixes
+```powershell
+python -m bridgeforge revive "In operation/MyMod" --vanilla-core @target          # dry run (reports and packets are still written)
+python -m bridgeforge revive "In operation/MyMod" --vanilla-core @target --apply  # write fixes
 ```
 
 It scans, applies every fixer it may, rescans, and repeats until nothing changes. A fixer runs
 unattended only when all its findings are SAFE. Approve others per run with `--approve ID`, or
-once for every mod in `In operation/AUTOMATION_POLICY.json`. What remains is in
-`reports/escalations/`, with a summary in `reports/revive/REVIVE.md`:
+once for every mod in `In operation/AUTOMATION_POLICY.json`, where `escalation rule <finding> "In operation"
+--approve-fixer --reason "..."` records a standing approval on the owner's word. What remains is in
+`reports/escalations/`, with a summary in `reports/revive/REVIVE.md`. A run ends UNATTENDED_DONE, FIXES_PENDING (approve
+the listed fixers, or rerun with `--apply`) or ESCALATED; REVIVE.md then lists what still blocks UNATTENDED_DONE, with the
+one action that clears each.
 
 - **agent packets** hold a finding a program can't fix yet. Each is a complete prompt: evidence,
   the only files that may change, a numbered excerpt, rules, and the check that decides "done".
@@ -222,15 +298,30 @@ once for every mod in `In operation/AUTOMATION_POLICY.json`. What remains is in
   swap or revive a provider, copy just the piece (`vendor-plan`, then `vendor-copy --plan`), or
   strip the references (with vanilla weapons that fit each emptied slot).
 
+Against the target core, revive:
+- writes the core's own build into `mod_info.json` (`--target` overrides);
+- uses a reference core, by default the installed core matching the original `gameVersion` (`--reference-core`
+  overrides): `variant-op-over-budget` trims only what the target pushed over and is refused without one, `src-to-jar`
+  proves against it, and REVIVE.md compares the over-budget variants on both builds;
+- resolves libraries for its scan in the queue's `_rig/mods`, the queue, `PROVIDER_SOURCES.json` and the reference
+  install's `mods/`; `--providers` folders add to the report draft's compile check and to the options in missing-content
+  packets.
+
 When `revive` leaves nothing to do, `--draft-report` (with `--apply` and `--vanilla-core`) drafts
-the mod's REVIVAL_REPORT.md and REVIVAL_PLAN.md so it goes straight to the live test.
+the mod's REVIVAL_REPORT.md and REVIVAL_PLAN.md so it goes straight to the live test. Its compile check resolves
+libraries where the scan does (ROADMAP-3 93.36). On its own: `revival-report-draft "In operation/MyMod/working"
+--vanilla-core @target --providers "<mods folder>" --apply`.
+
+A whole queue: `revive-queue "In operation" --vanilla-core @target [--never-revived | --only-status ESCALATED] [--apply]
+[--draft-report] [--jobs N]` revives each workspace with progress lines, resumes after an interruption (`--restart` starts
+over) and writes `REVIVE_QUEUE.json`.
 
 To copy a piece of an abandoned mod into RevenantLib:
 
 ```
-bridgeforge vendor-plan "In operation/OldMod" --id weapon:old_gun --json > plan.json
-bridgeforge vendor-copy --plan plan.json --to "In operation/RevenantLib"            # dry run
-bridgeforge vendor-copy --plan plan.json --to "In operation/RevenantLib" --apply
+python -m bridgeforge vendor-plan "In operation/OldMod" --id weapon:old_gun --json > plan.json
+python -m bridgeforge vendor-copy --plan plan.json --to "In operation/RevenantLib"            # dry run
+python -m bridgeforge vendor-copy --plan plan.json --to "In operation/RevenantLib" --apply
 ```
 
 It refuses a stale plan, a conflict with what the target already has, or a plan with open
@@ -238,10 +329,10 @@ SUSPECT/MISSING entries (`--allow-partial` to copy the rest), and prints each fi
 PROVENANCE.md.
 
 ```
-bridgeforge escalation list "In operation/MyMod"
-bridgeforge escalation show "In operation/MyMod" <packet>
-bridgeforge escalation run  "In operation/MyMod" <packet> --agent "claude -p --permission-mode acceptEdits"
-bridgeforge escalation run  "In operation/MyMod" --all --agent "..." --apply
+python -m bridgeforge escalation list "In operation/MyMod"
+python -m bridgeforge escalation show "In operation/MyMod" <packet>
+python -m bridgeforge escalation run  "In operation/MyMod" <packet> --agent "claude -p --permission-mode acceptEdits"
+python -m bridgeforge escalation run  "In operation/MyMod" --all --agent "..." --apply
 ```
 
 The agent works in a copy under `scratch/escalations/`. BridgeForge rejects edits outside the
@@ -249,14 +340,54 @@ packet's files, rescans the copy, and keeps the change only if the finding is go
 appeared. Kept changes are REVIEW: they still need the live test. Every attempt is logged in
 `reports/escalations/ledger.jsonl`. `--auto-accept` is not enabled: it refuses and names its prerequisites (item 75 R1, R2, R4).
 `escalation review WORKSPACE` writes the review sheet, including a report-only ELIGIBLE / NOT ELIGIBLE verdict.
+A `claude` missing from PATH resolves to the binary bundled with the VS Code extension. `escalation prune WORKSPACE
+[--apply]` drops the mod copy inside each finished attempt and keeps the prompt, note, output and changed files.
+
+The owner's rulings: `escalation accept WORKSPACE FINDING_ID[:FILE_PART] --reason "..."` accepts a mod's packet findings as
+authored (into its baseline; the reason goes to `reports/ESCALATION_REVIEW.md`), and `baseline-accept-finding WORKSPACE
+FINDING_ID[:FILE_PART[:EVIDENCE_PART]] --reason "..." --vanilla-core @target` does the same for findings outside a packet.
+Both record a decision the owner made; quote their words in the reason.
 
 `finding-stats` looks across the whole queue. It shows how many mods could run unattended, which
 finding would unlock the most mods if it had a fixer, and which fixes agents keep making (write
 those as fixers next):
 
 ```
-bridgeforge finding-stats "In operation" --write "In operation"
+python -m bridgeforge finding-stats "In operation" --write "In operation"
 ```
+
+## 2c. Jars: src-to-jar and relink
+
+**A jar that ships its source** (`src/`, `jars/src/`). Fixers, agent packets and translations edit the source, but the game
+loads the jar: `jar-source-not-rebuilt` holds the mod until the classes are rebuilt.
+
+```powershell
+python -m bridgeforge src-to-jar "In operation\<Mod>" --jar jars/<Name>.jar --vanilla-core @target --source-root jars/src --lib "<library jar>"           # proof and build only
+python -m bridgeforge src-to-jar "In operation\<Mod>" --jar jars/<Name>.jar --vanilla-core @target --source-root jars/src --lib "<library jar>" --apply   # patch the jar
+```
+
+It takes the sources that differ from `original/` and first proves that the original sources, compiled against the
+reference core at the jar class's own release, give the bytecode of the author's jar in `original/`; otherwise it refuses.
+Then it compiles the changed sources against the target and patches the jar (backup in `scratch/jar-patch-<date>/`, ledger
+`working/reports/src-to-jar.json`). `--lib` names each library jar the code compiles against (LazyLib, MagicLib, Nexerelin,
+...); `--reference-core` defaults to the installed core matching the original `gameVersion`; `--relink path/Class` also
+rebuilds an unchanged class; `--allow-removed` names a member whose removal is intended beyond the fields the
+`hullmod-instance-state` packets list. A mod with two jars is rebuilt one jar at a time. `revive --approve
+jar-source-not-rebuilt` runs it inside revive (with `--lib` there too). With no source: bytecode packets (`jar-packets`,
+`patch-jar-class`) or an owner-approved patch.
+
+**Return-type-only calls: relink.** A class whose game call now differs only in its return type (`jar-linkage-unresolved`)
+needs only a recompile, unedited:
+
+```powershell
+python -m bridgeforge relink "In operation\<Mod>" --vanilla-core @target            # report only
+python -m bridgeforge relink "In operation\<Mod>" --vanilla-core @target --apply    # install; backups in scratch/jar-patch-<date>/
+```
+
+It recompiles from the shipped source, or decompiled source, and patches only when nothing else changes. Given the queue
+folder it walks every workspace with progress lines and a checkpoint (`--restart` ignores it). Example: RC7's
+`StarSystemGenerator.addStableLocations(StarSystemAPI, int)` returns a `List` where RC8's returned nothing; Broken Star,
+Nightcross, AoTD Vaults of Knowledge and Sunrider call it.
 
 ## 3. Build numbers: build-tag
 
@@ -297,7 +428,7 @@ It sets `enabled_mods.json`, launches the rig, waits for the main menu, closes t
 The **probe mod** (`bridgeforge-probe`) runs checks inside the game and logs the results. It does nothing unless the rig marker exists, so it can't affect a normal install.
 
 ```powershell
-python -m bridgeforge build-probe-mod --jdk "$rig\jdk-25.0.4.1+1" --core $core --install-release   # only after editing probe-mod/
+python -m bridgeforge build-probe-mod --jdk "<JDK 17+ home>" --core $ref --install-release   # only after editing probe-mod/; the release copy is built against RC8's API
 python -m bridgeforge probe-config "<mod_dir>" --runtime $rig --install [--track <entity_id>] [--seconds 60] [--combat-cap 12]
 ```
 
@@ -359,6 +490,64 @@ python -m bridgeforge scenario list
 python -m bridgeforge scenario plan avesta-near $rig --mod "exigency=<mod_dir>"      # what to enable and run (writes nothing)
 python -m bridgeforge scenario check avesta-near "$rig\logs\<run>.stdout.log" [--save "<save dir>"]   # PASS/FAIL per expectation
 ```
+
+## 6b. Live runs on the 0.98.5a rig: probe-group
+
+A group run tests several READY_FOR_LIVE_TEST workspaces at once: the probe checks each mod's content in the campaign and
+in combat, and `record` turns a passing run into LIVE_VALIDATED. Every `probe-group` command defaults to the RC8 rig
+(`<queue>/_rig`), so pass `--rig $rig` each time, and keep this rig's plan apart from the default `PROBE_GROUPS.json`.
+
+```powershell
+python -m bridgeforge rig-doctor $rig                                                              # section 0b
+python -m bridgeforge probe-group plan --rig $rig --write "$rig\PROBE_GROUPS.json" [--exclude <Workspace>] [--solo <Workspace>]
+python -m bridgeforge probe-group install 1 --plan "$rig\PROBE_GROUPS.json" --rig $rig
+python -m bridgeforge probe-group smoke --rig $rig --log-name G1-SMOKE-<date>                       # boot to the main menu, triage the startup log
+python -m bridgeforge probe-group live G1-LIVE-<date> --rig $rig                                     # the whole live run; leave mouse and keyboard alone
+python -m bridgeforge probe-group report "$rig\logs\G1-LIVE-<date>.stdout.log" --rig $rig            # per-mod verdicts, before the next install
+python -m bridgeforge probe-group record G1-LIVE-<date> --rig $rig --accept --note "<what ran and was seen>"   # on the owner's word; --archive archives too
+```
+
+- **plan** takes workspaces whose revival report reads READY_FOR_LIVE_TEST and whose last revive, if any, ended
+  UNATTENDED_DONE, with a `0.98` `gameVersion` and their dependencies in the rig (or providers in the queue). Members share
+  no mod or content id. `--exclude` leaves a workspace out, `--solo` gives it a group of its own; large campaign mods run
+  alone unless `--no-auto-solo`.
+- **Libraries** a mod declares must be in the rig's `mods/` (UAF's AshLib was copied in by hand; ROADMAP-3 93.5 is open).
+- **smoke** and **live** need the logged-on user's desktop: a game started from an SSH session never shows (93.7). On
+  Test1, run them as one-off interactive scheduled tasks and delete each task after its run (a `/SC ONCE /ST 23:59` task
+  fires again at 23:59). The harness still clicks the launcher, and its click positions were measured in a 1920x1440
+  window, larger than Test1's 1920x1080 desktop (93.21, 93.22). The 2026-11-17 runs on Test1 therefore started the game
+  directly through local wrapper scripts (`bridgeforge-state/live-wrappers/`, not in the repository) until ROADMAP-3 95.4
+  builds that in.
+- **live** pins the launcher resolution and `canSkipTutorial` for the run and puts the owner's values back after it (93.28).
+- **report** reads the rig's current probe config, so report a group before the next `install` (93.29).
+- **record** reads `<rig>/logs/<TESTID>.stdout.log` and refuses a run that is not bound to its staged inputs (the run
+  manifest, section 12), for example when the probe config changed since the launch: re-install that group's config, or run
+  again. `--accept` carries probe FAIL lines and caught exceptions only when an earlier acceptance of the same mod version
+  covers them; anything uncovered stops the whole group and nothing is recorded. `--archive [--refresh]` archives each
+  passing member (section 12c). A record names the save its own run wrote (93.38).
+
+**Owner acceptances for probe lines.** The owner's ruling on a harmless probe FAIL line (a CSV row with no file that nothing
+uses, content a mod creates only under a condition) goes into the workspace's `working/reports/probe_accepted.json`:
+
+```json
+{"accepted": [
+  {"check": "content-parity", "subject": "hulls:<hull id>", "reason": "<evidence>; owner <date>: '<their words>'"},
+  {"check": "faction-fleet-gen", "subject": "<faction id>", "reason": "..."}
+]}
+```
+
+For `content-parity` the subject is `<kind>:<id>` and accepts exactly that missing id: a bare kind accepts nothing, and a
+list the probe capped keeps failing for the ids it did not list (93.26). For other checks the subject is the FAIL line's own,
+such as a faction id or a class name. `report` lists what was accepted; `record --accept` counts those lines as covered.
+
+**One workspace: accept.** `accept` records one workspace's passing run on its own, without archiving:
+
+```powershell
+python -m bridgeforge accept "In operation\<Mod>" --log "$rig\logs\<TESTID>.stdout.log" --test-id <TESTID> --rig $rig --note "<what the owner did and saw>" [--accept-findings "<reason>"]
+```
+
+It checks the log, writes the dated evidence section and LIVE_VALIDATED to the revival report, and a run record the archive
+gate reads. A run without its manifest (`<rig>/logs/<TESTID>.manifest.json`) is not accepted.
 
 ## 7. Read a log: log-triage
 
@@ -456,6 +645,9 @@ python -m bridgeforge release … --apply                                       
 
 ## 10. Workflows
 
+The usual path for a revival is section 0a. The workflows below are the manual route, for a mod the queue commands do not
+cover.
+
 **A. First look at a new mod**
 
 `scan` (with `--vanilla-core`) → `dossier` → triage the open questions → `fix` for the SAFE ones → write the rest into the mod's `reports/REVIVAL_PLAN.md` → `scan --write-baseline` once reviewed.
@@ -505,14 +697,14 @@ three agreeing rulings from independent mods; `escalation revoke` withdraws one 
 sibling mod, then (unless `--no-crafted`) an agent-crafted text marked crafted. Review it, then
 `descriptions apply WORKSPACE DRAFT`. `translate-batch` reuses a translation memory.
 
-**Preparing a rig and a live run.**
+**Preparing a rig and a live run.** Section 6b has the full sequence for the 0.98.5a rig.
 
 ```powershell
 python -m bridgeforge rig-up $rig --mods <mod_id> --probe-config   # sync, enable dependencies, write the probe config; records rig_up_state.json
-python -m bridgeforge probe-group plan
-python -m bridgeforge probe-group install <group>                  # or rig-up for an ad-hoc set of mods
-python -m bridgeforge probe-group live <TESTID>                    # plays the run; prepares and releases the run manifest itself
-python -m bridgeforge probe-group record <TESTID> --accept --note "what was run and seen"
+python -m bridgeforge probe-group plan --rig $rig
+python -m bridgeforge probe-group install <group> --rig $rig        # or rig-up for an ad-hoc set of mods
+python -m bridgeforge probe-group live <TESTID> --rig $rig          # plays the run; prepares and releases the run manifest itself
+python -m bridgeforge probe-group record <TESTID> --rig $rig --accept --note "what was run and seen"
 ```
 
 `run-manifest prepare|release|check RIG RUN_ID` is the same binding done by hand; `tools/bf-test.ps1 launch`, `boot-test` and
@@ -528,7 +720,7 @@ changed (a regression writes `_regress/REGRESSION_HOLD.json` and blocks the next
 ends a run with no java process as `LAUNCH_NO_PROCESS`; a generic New Game fallback drives total conversions it has no special
 case for; `raid_run` and the `bf_raid` test mod force a raid on a market.
 
-**Revising a shipped mod: revise.** Use this instead of bump-and-archive:
+**Revising a shipped mod: revise.** An alternative to bump-and-archive (section 12c) that archives exactly the tested bytes:
 
 ```powershell
 python -m bridgeforge revise prepare "In operation\<Mod>" "what changed"    # bumps the version once; journals the previous archive and the candidate hash
@@ -557,7 +749,7 @@ in the copy.
   is refused while other files still reference it (`--force-dangling` records the references).
 - **Archive gate.** `archive` and `revise finalize` run that sweep plus the content-parity audit first. DROPS_UNEXPLAINED and
   LOSS_SUSPECTED refuse, UNDETERMINED warns; `--allow-unexplained REASON` (20+ characters) goes ahead and writes the reason to
-  `ARCHIVE_NOTE.md`. On probe 0.3.0 or later (current 0.3.1), `probe-group record --accept` prints the archive command for each
+  `ARCHIVE_NOTE.md`. On probe 0.3.0 or later (current 0.3.2), `probe-group record --accept` prints the archive command for each
   passing workspace.
 - **Owner decisions.** `decision template port-dropped-feature` prints a draft; `decision apply DRAFT [--dry-run]` runs the ticked
   actions and is idempotent. `escalation triage QUEUE` groups open packets by what they wait on.
@@ -577,6 +769,86 @@ in the copy.
 `legacy-event-system` check (item 72 E3) is not built. `port-dropped-feature` (E4, REVIEW) needs a `reports/PORT_SOURCE.json`
 (`docs/PORT_SOURCE_FORMAT.md`) before it reports anything.
 
+## 12c. Archives: archive, restore-from-done, bump-version, close
+
+`Done/` keeps one archive per mod, the latest (owner 2026-11-17); older copies move to `Done/_replaced-<date>/`, never
+deleted. Archive only on the owner's word, and never edit `Done/` in place.
+
+```powershell
+python -m bridgeforge audit-shipped "In operation\<Mod>"                                    # every shipped difference from original/ must be explained
+python -m bridgeforge audit-explain "In operation\<Mod>" --auto                             # what the files prove: credits, syntax-only JSON, translation, ...
+python -m bridgeforge audit-explain "In operation\<Mod>" <file> ... --reason "<evidence>"   # the rest, by hand
+python -m bridgeforge archive "In operation\<Mod>" [--refresh]                              # Done/<Mod>/: mod folder, zip, original, reports, ARCHIVE_NOTE.md
+```
+
+`archive` refuses unless the shipped-copy audit passes, the live result is CURRENT and the accepted-findings baseline was
+stamped at the mod's current version (`baseline-accept WORKSPACE --reason "..."` re-stamps it once the owner confirms the
+findings still stand). Written exceptions live in `reports/SHIPPED_CHANGES.json`: `audit-explain` records why files differ,
+`audit-explain WORKSPACE --live --reason "..."` why the mod may go without a current live result, and a `baseline` reason,
+written by hand, why a stale baseline stands. It also runs the dropped-feature and content-parity gate (section 12b).
+`--refresh` replaces an existing archive: the old one moves to `Done/_replaced-<date>/<Mod>[-N]` and comes back if the new
+write fails. `probe-group record --archive [--refresh]` archives each passing group member the same way.
+
+**A shipped mod that changes after archiving:**
+
+```powershell
+python -m bridgeforge restore-from-done "Done\<Mod>" --queue "In operation"        # the workspace again: shipped folder, original/, reports, baseline
+#   fix it, then:
+python -m bridgeforge bump-version "In operation\<Mod>" --note "<what changed and the evidence>"   # +bf.N, a report section ending READY_FOR_LIVE_TEST, a MOD_CHANGELOG line
+#   live-test it again (section 6b), then on the owner's word:
+python -m bridgeforge probe-group record <TESTID> --rig $rig --accept --archive --refresh --note "<the owner's words; what ran>"
+```
+
+`restore-from-done` needs an archive that `archive` made (`Done/<Mod>/<Mod>/mod_info.json`) and refuses when the queue
+already holds that workspace; name `--queue`, the `In operation` beside that `Done/`. `revise prepare|finalize` (section
+12) is the stricter route.
+
+**An archive that is no longer worked on:**
+
+```powershell
+python -m bridgeforge close "Done\<Mod>" --status SUPERSEDED --reason "<what supersedes it; owner <date>: '<their words>'>"
+```
+
+`close` takes a queue workspace or a `Done/<Mod>` archive (also the `Done/<Mod>/<Mod>` path `target-impact` prints) and writes
+a dated section ending SUPERSEDED or NOT_REVIVABLE to its revival report. Queue commands skip a closed workspace; `done-audit`
+and `target-impact` list a closed archive instead of checking it, and a closed library still provides its jars to the mods
+that depend on it. Nothing is moved or deleted.
+
+## 12d. A new game build: target-impact, target-bump, retarget
+
+When a new build appears, catalogue `Done/` first, read-only (the `bridgeforge-catalogue` skill). It is a long-running
+command: run it in the background and read its progress lines. The old core is the build the mods were validated on, the
+current target; the RC8 -> RC7 catalogue was `target-impact $ref $core "Done" --write ...`.
+
+```powershell
+python -m bridgeforge target-impact @target "<new starsector-core>" "Done" --write "bridgeforge-state\target-impact-<old>-to-<new>-<date>"
+```
+
+Per mod it reports what fails on the new core and not on the old one: jar linkage, interface contracts, dropped call forms,
+parameters whose meaning changed, and data the new core treats differently (rule ids a mod overrides that were removed,
+settings keys read and removed; a replaced CSV without the new columns is information only). Verdicts are CLEAN, BREAKS,
+RELINK (recompile only) and REVIEW. CLEAN means none of these checks changed, not that the mod works on the new build.
+`TARGET_IMPACT.md` has a "By game member" table, one changed member often explaining several mods, and per mod the next
+steps in order: the gated fixers (section 2), `relink` (section 2c), a hand port or a review. An archived
+`Done/<Mod>/<Mod>` copy gets `restore-from-done ... --queue` first, and its steps then act on `In operation/<Mod>`. Archives
+the owner closed are listed under `skipped`, not checked. RC8 -> 0.98.5a-RC7 over 175 archives took about 5 minutes on
+Test1 (2026-11-17): CLEAN 167, BREAKS 4, RELINK 3, REVIEW 1.
+
+Once the owner has decided what to port:
+
+```powershell
+python -m bridgeforge target-bump "<new starsector-core>" [roots]   # --from defaults to the current target; api-diff, vanilla-migration, target-impact, catalogue and registry entry in bridgeforge-state/targets/<build>/, then the new build becomes the target (resumable)
+python -m bridgeforge retarget                                        # plan: every CLEAN workspace not yet on the target
+python -m bridgeforge retarget --apply                                # gameVersion, +bf.N, a report section ending READY_FOR_LIVE_TEST, a MOD_CHANGELOG line
+```
+
+`retarget` skips archives (they move with `archive --refresh` after a live run), mods that are not CLEAN and mods already
+on the build. A baseline that was current before the retarget is re-stamped at the new version, noting where it was carried
+from; one that was already stale stays stale. Then come the gated fixers the catalogue lists, `relink` and a live test per
+mod. `vanilla-migration OLD_CORE NEW_CORE [--write DIR]` shows how vanilla's own code moved across each changed member and
+whether each gated fixer rule matches it (BACKED, DIFFERS or NO_VANILLA_CALLS). `target export --to FILE` writes the
+registry the sister repos pin (`docs/MULTI_VERSION_COMPAT_DESIGN.md`).
+
 ## 11. Troubleshooting
 
 | Symptom | Cause / fix |
@@ -585,5 +857,12 @@ in the copy.
 | A process is detected, but no game window | That can be VS Code's Java language server (also `java.exe`). BridgeForge matches by the executable path under the rig, not by name. |
 | Game "crashed" but the log is clean | A Fatal error dialog. Look at the screen; the log never shows it. |
 | `UNKNOWN` everywhere | You forgot `--vanilla-core`. |
-| A mod unchecked itself in the launcher | Its `gameVersion` targets a different **base** version (e.g. `0.97a`). An older RC of `0.98a`, such as `0.98a-RC5`, is accepted. Use `fix --finding mod-info-game-version-inexact --target-game-version 0.98a-RC8`. |
+| `@target` is refused | No target is recorded beside this checkout: `target set <core>` there, or name the core path. |
+| A mod unchecked itself in the launcher | Its `gameVersion` targets a different **base** version (`0.98a` or `0.98` on 0.98.5a). `revive --vanilla-core @target` sets it; by hand, `fix --finding mod-info-game-version-inexact --target-game-version 0.98.5a-RC7`. |
+| The report draft is BLOCKED on javac errors that are only missing libraries | Revive's draft resolves libraries where its scan does (93.36). On its own: `revival-report-draft "<working>" --vanilla-core @target --providers "<mods folder>" --apply`. |
+| `rig-doctor` FAILs `launcher_prefs` | No licence key is stored for this Windows user. The owner starts the launcher on that machine once and enters it. BridgeForge only checks that it exists; never read, print or copy it. |
+| A smoke or live run started over SSH waits and times out | The game started in a non-interactive session (93.7). Start it in the logged-on user's session, as an interactive scheduled task, and delete the task afterwards. |
+| `probe-group report` names the wrong mods | It reads the rig's current probe config: report a group before the next `install` (93.29). |
+| `probe-group record` refuses the run | The run is not bound to its staged inputs, for example the probe config changed since the launch: re-install that group's config, or run again. |
+| `restore-from-done` refuses an archive | It needs `Done/<Mod>/<Mod>/mod_info.json` (an archive made by `archive`) and no workspace of that name in the queue. |
 | Launching the bat fails with "not recognized" | The path has spaces. BridgeForge quotes it; if you launch by hand, quote the full bat path. |

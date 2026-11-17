@@ -2,10 +2,11 @@
 
 Offline, evidence-first tooling for reviving legacy Starsector mods: inspect preserved inputs, apply authorized
 repairs on copies, escalate judgment, and qualify candidates with separate static, package and live evidence.
-The reference revival target is Starsector 0.98a-RC8 / Java 17. A clean scan or successful compile is not proof
-that a mod loads, preserves its features or is safe for existing saves.
+Revivals target Starsector 0.98.5a-RC7 / Java 17; 0.98a-RC8, the previous target, is the reference build
+(`bridgeforge target show`). A clean scan or successful compile is not proof that a mod loads, preserves its features
+or is safe for existing saves.
 
-**Version status, checked 2026-10-21:** this checkout identifies as 0.4.0 (the bundled probe mod is 0.3.1). The latest published release is
+**Version status, checked 2026-11-17:** this checkout identifies as 0.4.0 (the bundled probe mod is 0.3.2). The latest published release is
 [0.2.0, a pre-release](https://github.com/Exxec/Project-BridgeForge/releases/tag/v0.2.0), not a published 0.3.0 or 0.4.0 build.
 The [publication receipt](docs/RELEASE_0_2_0.md) records that release's exact source and artifact hashes.
 Current-main documentation can describe capabilities absent from the older wheel; use the matching tag/source docs.
@@ -13,7 +14,9 @@ Current-main documentation can describe capabilities absent from the older wheel
 Start with the [documentation index](docs/INDEX.md), [revival guide](docs/BRIDGEFORGE_REVIVAL_GUIDE.md),
 [CLI reference](docs/COMMANDS.md) and [current status](docs/ROADMAP_STATUS.md).
 The proposed long-term direction is in [VISION](docs/VISION.md), [STRATEGIC_ROADMAP](docs/STRATEGIC_ROADMAP.md)
-and [NEXT_MILESTONE](docs/NEXT_MILESTONE.md); these are proposals, not implementation claims.
+and [NEXT_MILESTONE](docs/NEXT_MILESTONE.md); these are proposals, not implementation claims. Claude sessions also use
+the project skills in `.claude/skills/`: the commit and pull-request routine, one mod from intake to archive, and
+cataloguing `Done/` against a new game build.
 
 Requires Python 3.15+. From a source checkout, create a virtual environment, activate it, then install:
 
@@ -49,11 +52,14 @@ The command writes `MODERNIZATION_REPORT.md` and `bridgeforge.compat.json` to th
 evidence. `--target-starsector` and `--target-java` select the analysis target (default `0.98.x` / Java 17), not a promise
 that every selected target has been live-qualified.
 
-The convention-layout workflow uses `intake` then `revive` to scan/fix/rescan and prepare unresolved owner/agent packets.
-Only approved finding families can be applied unattended. Live acceptance and publication remain separate gates.
-See the guide before applying or launching anything. `archive --refresh` and `probe-group record --archive --refresh`
-move the previous archive to `Done/_replaced-<date>/` and put it back if the new write fails (DOC-001, fixed 2026-10-18;
-[BUGS.md](BUGS.md)); this has been tested offline and not yet exercised on a real `Done/` archive.
+The convention-layout workflow uses `intake` then `revive --vanilla-core @target` to scan/fix/rescan and prepare
+unresolved owner/agent packets, then group live runs (`probe-group`) and `archive`; the
+[revival guide](docs/BRIDGEFORGE_REVIVAL_GUIDE.md) section 0a gives the order. Only approved finding families can be
+applied unattended. Live acceptance, archiving and publication remain separate gates, and acceptances and archiving are
+the owner's decisions. See the guide before applying or launching anything. `archive --refresh` and
+`probe-group record --archive --refresh` move the previous archive to `Done/_replaced-<date>/` and put it back if the
+new write fails (DOC-001, fixed 2026-10-18; [BUGS.md](BUGS.md)); this has been tested offline and not yet exercised on a
+real `Done/` archive.
 
 **Trust gates added 2026-10-18 (offline; live runs pending).** Acceptance of a live run now needs a run manifest that binds
 the run to the staged rig files (`run-manifest prepare|release|check`, `accept --rig`, `probe-group record --accept`).
@@ -71,6 +77,18 @@ runs the ticked actions of an owner decision draft, `hygiene` is a read-only pre
 merges stacked pull requests in order (it skips ones already merged), and `atlas api-usage|save-risk|libraries|migrations|exemplars`
 and `api how` give static research over indexed mods. None of this is live-proven; see the
 [revival guide](docs/BRIDGEFORGE_REVIVAL_GUIDE.md) section 12b.
+
+**Added 2026-11-15 to 2026-11-17 (ROADMAP-3 items 89-96).** A game-build registry: `target show|set|export`, and
+`--vanilla-core @target` on any command. `target-impact OLD_CORE NEW_CORE` lists per mod what a new build breaks, with the
+next steps (an archive is restored to a workspace first; `relink` recompiles return-type-only calls); `target-bump` runs it
+with `api-diff`, `vanilla-migration` and a catalogue, then moves the target, and `retarget` moves the CLEAN workspaces,
+carrying their current baselines. Gated fixers rewrite changed calls in sources and jars. `intake` takes several sources,
+raw folders and `--strip-junk`; `src-to-jar` rebuilds a jar from its edited source after proving the original source
+reproduces it; `close` also marks a `Done/` archive SUPERSEDED or NOT_REVIVABLE, which `done-audit` and `target-impact` then
+list instead of checking; `rig-doctor` checks the launcher preferences an unattended run needs (the licence key for
+presence only, never read). The six-mod batch, United Aurora Federation and Sunrider ran live on the 0.98.5a rig on
+2026-11-17, started through local wrapper scripts; the harness's own direct start is still open (ROADMAP-3 95.4). See the
+[revival guide](docs/BRIDGEFORGE_REVIVAL_GUIDE.md) sections 0a, 2c, 6b, 12c and 12d.
 
 Project Go extraction observations can be joined to exact selected candidate bytes with the read-only
 [localization coverage API](docs/LOCALIZATION_COVERAGE_IMPORT.md). A hash match does not establish complete coverage,
@@ -90,7 +108,10 @@ python -m bridgeforge board --write
 full upstream tree under `original/extracted`, and creates a byte-matching copy of
 the selected mod root under `working`. Scan/dossier evidence goes in `reports`;
 `--archaeology` adds D0 evidence. Ambiguous ZIPs need `--selected-root`; no existing
-mod folder is ever replaced. Intake means `ASSESSMENT_REQUIRED`: complete and
+mod folder is ever replaced. One call takes several sources; a raw mod folder is zipped
+into `In operation/_raw-zips/` first, `--from-mods DIR` matches loose names to that
+folder's mods, and `--strip-junk` takes in `<name>-clean.zip` when junk members are the
+only hazards (the raw archive is kept). Intake means `ASSESSMENT_REQUIRED`: complete and
 score the per-mod revival plan before editing. No compile or live test is implied.
 
 `board` reads declared report/test/risk evidence without scanning or changing mods.

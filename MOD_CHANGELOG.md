@@ -2,6 +2,19 @@
 
 Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; each mod's evidence is in its revival report.
 
+## 2026-11-17
+
+- **Navarchy of Tania** 1.0.1: revived for 0.98.5a-RC7 and archived (live validated)
+- **Kadur Remnant** 3.2.3support6+bf.2: Ported to Starsector 0.98.5a-RC7: the four mission classes in KadurRemnant.jar call OfficerManagerEvent.pickPortraitPreferNonDuplicate with the trailing Random argument RC7 added (null, as vanilla passes it), by the gated fixer jar-call-signature-changed (target-impact RC8 to RC7, 2026-11-17).
+- **Broken Star [BF r2]** 0.1+bf.3: Ported to Starsector 0.98.5a-RC7: broke_epworth recompiled from its own source against RC7, where StarSystemGenerator.addStableLocations returns a List (bridgeforge relink; target-impact RC8 to RC7, 2026-11-17).
+- **Sunrider** 0.8.6: revived for 0.98.5a-RC7 and archived (live validated)
+- **Musashi Manufactorum** 1.4.4: revived for 0.98.5a-RC7 and archived (live validated)
+- **Maelstrom Knights Templar Expanded v2.5.1** 2.5.1+bf.1: Fixed the author's copy-paste in data/weapons/tem_pope_shield.wpn (id tem_judicator_shield -> tem_pope_shield): the Judicator and boss Paladin keep their own shield sprite, and the Pope shield row resolves. Found by content-parity in SR1-LIVE-0985a-20261117; owner 2026-11-17.
+- **Maelstrom Knights Templar Expanded v2.5.1** 2.5.1+bf.1: revived for 0.98a-RC8 (2026-10-13) and archived (live validated on the 0.98.5a-RC7 rig)
+- **Everybody loves KoC** 1.05.49a: revived for 0.98.5a-RC7 and archived (live validated)
+- **Eridani Combine** 1.0.3.6: revived for 0.98.5a-RC7 and archived (live validated)
+- **Scrapyard Armories** 2.16.1: revived for 0.98.5a-RC7 and archived (live validated)
+
 ## 2026-10-30
 
 - **Ironclads** v.11+bf.2: Marauder and Black Widow carriers given fighter wings in their faction lists; stray copy of the economy jar removed from the shipped mod

@@ -1,6 +1,6 @@
 # Current roadmap view
 
-Reconciled 2026-10-17 for the owner-approved planning update. This is a compact index into the authoritative
+Reconciled 2026-10-17 for the owner-approved planning update; items 89-96 added 2026-11-17. This is a compact index into the authoritative
 `ROADMAP-3.md`, not a replacement history. Historical test/run claims below are attributed to their recorded evidence;
 this documentation pass did not rerun the suite, launch the game or requalify releases.
 
@@ -8,6 +8,23 @@ Source/GitHub documentation audit 2026-10-18: current source/default branch is `
 published tool is v0.2.0 pre-release (re-checked 2026-10-21). Proposed S1-S4 strategy remains unimplemented. DOC-001 (`archive --refresh`
 deleted the old archive) was fixed 2026-10-18; see `BUGS.md` and [the audit](archive/DOCS_AUDIT_2026-10-18.md). Neither is a
 fresh live acceptance.
+
+**Items 89-96, 2026-11-15 to 2026-11-17: the move to 0.98.5a.** As ROADMAP-3 records them on 2026-11-17; tests are offline
+unless a run is named. Revivals target 0.98.5a-RC7 (`target show`); RC8 is the previous target (QUALIFIED) and the
+reference. The checkout is package 0.4.0 (unreleased) with probe 0.3.2; the latest published tool is still v0.2.0.
+
+| Item | Implementation | Validation / shipping evidence | Next step |
+|---|---|---|---|
+| 89 0.98.5a as the target | `target-impact` with a worklist, gated rules and fixers (`rc8-signature-changed`, `jar-call-signature-changed`, `forwarding-class-method-missing`), parameter renames in `api-diff`, `revive --target` from the core; 89.8, 89.9 and 89.11-89.13 Done 2026-11-15 | `tests/test_target_impact.py`, `test_api_sources.py`, `test_game_version.py`, `test_jar_call_rewrites.py`, `test_forwarding_methods.py` | 89.7: hand ports, and whether a `rules.csv` row overriding a vanilla id behaves as on RC8 under the new `rules` list (live) |
+| 90 game-build registry | 90.1-90.3 Done 2026-11-15: `target show/set/export`, `@target`, `target-bump`, `retarget` | `tests/test_target_bump.py` | 90.4 dormant-call verdict and 90.5 per-build behaviour facts open |
+| 91 side by side | 91.1-91.4 Done 2026-11-15: `vanilla-migration`, `touches`, `new-vanilla-id-collision`, `vanilla-now-provides` | `tests/test_target_delta.py` and the tests named in 91 | None open |
+| 92 the six-mod batch on RC7 | Done 2026-11-16/17 except 92.20 and 92.40; parts left open in 92.8 (`--watch-dir` attribution), 92.9 (finding texts that say "RC8") and 92.25 (sources built in a platform encoding) | Tests named per sub-item; all six mods reached UNATTENDED_DONE | 92.20 OP-trim audit on Test1 (LOCAL_HANDOFF); 92.40 byte-for-byte name checks for copies |
+| 93 rigs, probe targets, libraries | Done: 93.1, 93.2, 93.25, 93.26, 93.28 (code), 93.33, 93.36, 93.38 (code) | Tests named per sub-item; the batch's four groups reached LIVE_DONE on Test1's 0.98.5a rig (2026-11-17) through local wrappers | 93.28's first live run; 93.3-93.24 (93.21's direct start proven only through the wrappers), 93.27, 93.29-93.32, 93.34, 93.35, 93.37 open |
+| 94 feature genome | Approved strategy (GD-1), not implemented | [FEATURE_GENOME_ROADMAP.md](FEATURE_GENOME_ROADMAP.md) | 94.G1 |
+| 95 faster re-validation | Done 2026-11-17: 95.10, 95.12(i), 95.13, 95.15 (code) | Tests named per sub-item; the RC8 -> RC7 `target-impact` catalogue of `Done/` (175 archives: CLEAN 167, BREAKS 4, RELINK 3, REVIEW 1) | 95.1-95.9, 95.11, 95.12(a)-(h), 95.14 open (Nightcross closed on Test1 2026-11-17) |
+| 96 skills, ports, docs, release | 96.0 owner decisions recorded; 96.1 Done 2026-11-17 (`.claude/skills/`); 96.3 docs pass: this update | `checks.sh` passed every step; an independent review per batch of diffs | 96.2 ports (LOCAL_HANDOFF), 96.4 release; 96.5 suggestions await the owner |
+
+The table below is the 2026-10-17/18 reconciliation of items 61-75.
 
 | Item | Implementation | Validation / shipping evidence | Next step |
 |---|---|---|---|
