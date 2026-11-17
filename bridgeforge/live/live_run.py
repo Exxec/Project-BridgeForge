@@ -501,7 +501,13 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
             return stuck(f"combat-round-{round_no + 1}", "the probe mission did not start (no 'combat START' probe line), also after one retry"
                          + (f"; screenshot {shot}" if shot else ""))
         if not wait_for_combat_end(log, hands, combat_timeout, offset):
-            return stuck(f"combat-round-{round_no + 1}", "no 'combat END' probe line after the probe mission started")
+            if not hands.alive():
+                return stuck(f"combat-round-{round_no + 1}", "the game exited during the probe mission's battle")
+            # SR4-LIVE-0985a-20261117: the battle started and the log went silent with no ship logged. A screenshot tells a
+            # deployment dialog left open from a frozen frame (93.40).
+            shot = _capture(hands, log, f"round{round_no + 1}-no-end")
+            return stuck(f"combat-round-{round_no + 1}", "no 'combat END' probe line after the probe mission started"
+                         + (f"; screenshot {shot}" if shot else ""))
         round_no += 1
         result.rounds = round_no
         found = ROUND_LINE.findall(_log_text(log)[offset:])
