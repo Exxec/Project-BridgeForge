@@ -138,6 +138,10 @@ Check S series implementation plan and if applicable add remaining items to road
   - **CI and tooling:**
     - C3 (S): stop duplicate push and pull_request runs. 101 of 191 SHAs ran twice, and nine PRs queued for hours on
       2026-11-17. Docs-only PRs run only the doc-reading tests.
+      **First half done 2026-11-17.** `.github/workflows/ci.yml` runs on `pull_request`, and on `push` only to `main`, so each
+      PR commit runs once. A branch pushed without a PR runs no CI, and this repository opens a PR for every change. The
+      docs-only path filter is still open: it needs a list of the tests that read documents (`tests/test_roadmap_lint`,
+      `test_gates`, `test_checks_index`, `test_cli_golden` and others) and care that a required check still reports.
     - C1 (S): the git hooks never run (`.githooks/` is ignored and `core.hooksPath` is unset). A pre-commit that
       regenerates the generated files would have caught the stale CHECKS.md.
     - C5 (S): a pre-push static tier plus tests selected by import, under 2 minutes.
