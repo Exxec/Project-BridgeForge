@@ -499,6 +499,8 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"Checked {result['classes_checked']} classes in {result['jars_checked']} jar(s).")
             for problem in result["unreadable_jars"]:
                 print(f"  NOT checked: {problem}")
+            for problem in result.get("skipped_classes") or []:
+                print(f"  class NOT checked: {problem}")
         return 0
     if args.command == "vendor-plan":
         from ..substitutes import REPO_ROOT

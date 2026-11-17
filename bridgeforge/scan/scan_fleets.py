@@ -8,7 +8,7 @@ from .scan_classfile import NON_MOD_JAR_DIRS, _iter_jar_class_files, _parse_clas
 from .scan_common import _relative
 from .scan_javatext import _blank_java_comments, _brace_body, _call_argument_count, _enclosing_method_span, _extract_call_arguments_text, _split_call_arguments
 from .scan_json import _read_csv_rows, _wing_ids_set
-from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
+from bridgeforge.zipsafe import read_class
 
 
 # RC8's FleetFactoryV3 multiplies fleet size by the source market's Stats.COMBAT_FLEET_SIZE_MULT.
@@ -335,7 +335,9 @@ def _scan_temporary_market_fleet_source(root: Path, result: ScanResult) -> None:
             with zipfile.ZipFile(jar) as archive:
                 for name in archive.namelist():
                     if name.endswith(".class"):
-                        data = read_limited(archive, name, MAX_CLASS_BYTES)
+                        data = read_class(archive, name)
+                        if data is None:  # over MAX_CLASS_BYTES: skip it and read the rest of the jar
+                            continue
                         # A class that also calls addMarket may remove a market it registered (Omega-Trauma's
                         # IIRT_Omega_Invasion removes a planet's real market; 2026-10-04): not this pattern.
                         if (b"createMarket" in data and b"removeMarket" in data and b"FleetParamsV3" in data

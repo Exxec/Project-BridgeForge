@@ -21,6 +21,7 @@ from pathlib import Path
 
 from .archive import _version_text
 from .progress import Checkpoint, report
+from .zipsafe import read_limited
 from bridgeforge.scan.scanner import _load_lenient_json_file
 
 SCHEMA_VERSION = 1
@@ -85,7 +86,7 @@ def corpus_reference_index(db: Path) -> dict[str, list[dict]]:
                 inner = location.split("!", 1)[1]
                 if source.lower().endswith((".zip", ".jar")):
                     handle = archives.get(source) or archives.setdefault(source, zipfile.ZipFile(root / source))
-                    text = handle.read(inner).decode("utf-8-sig", errors="replace")
+                    text = read_limited(handle, inner).decode("utf-8-sig", errors="replace")
                 elif source.lower().endswith(".7z"):
                     try:
                         import py7zr

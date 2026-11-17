@@ -70,10 +70,11 @@ def verify_shadow(scripts: list[Path], against: list[Path]) -> dict:
     jars = sorted({jar for target in against for jar in _jars(target)})
     trusted = [jar for jar in jars if _is_game_core(jar.parent)]
     unreadable: list[str] = []
+    skipped: list[str] = []  # single class entries not read (ROADMAP-3 93.33); their jars still count as checked
     owners: dict[str, list[str]] = {}
     class_count = 0
-    walks = [iter_class_files_in_jars([jar for jar in jars if jar not in trusted], unreadable),
-             iter_class_files_in_jars(trusted, unreadable, max_entries=TRUSTED_GAME_JAR_MAX_ENTRIES)]
+    walks = [iter_class_files_in_jars([jar for jar in jars if jar not in trusted], unreadable, skipped_entries=skipped),
+             iter_class_files_in_jars(trusted, unreadable, max_entries=TRUSTED_GAME_JAR_MAX_ENTRIES, skipped_entries=skipped)]
     for jar, member, data in (item for walk in walks for item in walk):
         info = _parse_class_file(data)
         if info is not None and info.this_class:
@@ -88,6 +89,6 @@ def verify_shadow(scripts: list[Path], against: list[Path]) -> dict:
     return {
         "schema_version": SCHEMA_VERSION, "mode": "VERIFY_SHADOW",
         "against": [str(p) for p in against], "jars_checked": len(jars) - len(unreadable), "classes_checked": class_count,
-        "unreadable_jars": unreadable, "results": results,
+        "unreadable_jars": unreadable, "skipped_classes": skipped, "results": results,
         "note": "SHADOWED: a jar compiles this class, so the game loads the jar's copy and never compiles the loose file. NOT_SHADOWED covers only the jars checked.",
     }

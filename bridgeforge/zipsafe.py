@@ -3,8 +3,10 @@
 Mods, jars and the 42 GB backlog are untrusted input. `ZipFile.read` loads a whole entry into memory, and an entry's declared size can
 lie, so a hostile or corrupt archive could exhaust memory in any command that reads jars. `read_limited` refuses an entry whose declared
 size is over the limit. (Python's `zipfile` stops reading at the declared size, so a header that understates it fails the CRC check
-instead of returning more data; the length check after the read is a backstop.) The error is an `OSError`, which the jar
-readers already catch per entry, so a refused entry is skipped and (in the scanner) listed with the entry's other read failures.
+instead of returning more data; the length check after the read is a backstop.) The error is an `OSError`. Readers that catch it per
+entry skip the entry (the scanner lists it in `skipped_entries`); a walk over every class of a jar uses `read_class`, which returns
+None for an oversize class, because a walk that caught the error per jar would let one huge entry hide every class after it
+(ROADMAP-3 93.33, review 2026-11-17).
 """
 from __future__ import annotations
 
@@ -27,6 +29,14 @@ def read_limited(archive: zipfile.ZipFile, member: str | zipfile.ZipInfo, max_by
     if len(data) > max_bytes:
         raise ZipEntryTooLarge(f"{info.filename}: holds more than the {max_bytes} bytes its header declared")
     return data
+
+
+def read_class(archive: zipfile.ZipFile, member: str | zipfile.ZipInfo) -> bytes | None:
+    """A class entry, or None when it is over MAX_CLASS_BYTES: the caller skips it and goes on with the rest of the jar."""
+    try:
+        return read_limited(archive, member, MAX_CLASS_BYTES)
+    except ZipEntryTooLarge:
+        return None
 
 
 def entry_sha256(archive: zipfile.ZipFile, member: str | zipfile.ZipInfo, chunk_bytes: int = 1 << 20) -> str:

@@ -16,7 +16,7 @@ import re
 import subprocess
 import zipfile
 from pathlib import Path
-from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
+from bridgeforge.zipsafe import read_class
 
 GETTERS = ("getFloat", "getInt", "getBoolean", "getString", "getColor", "getDouble", "getLong")
 _SOURCE_READ = re.compile(r"getSettings\s*\(\s*\)\s*\.\s*(" + "|".join(GETTERS) + r")\s*\(\s*\"([^\"]+)\"\s*\)")
@@ -108,7 +108,7 @@ def jar_reads(jar: Path, javap: Path) -> list[tuple[str, str, str]]:
     """(class, getter, key) for classes in a jar that call SettingsAPI getters."""
     try:
         with zipfile.ZipFile(jar) as archive:
-            names = [n for n in archive.namelist() if n.endswith(".class") and b"com/fs/starfarer/api/SettingsAPI" in read_limited(archive, n, MAX_CLASS_BYTES)]
+            names = [n for n in archive.namelist() if n.endswith(".class") and b"com/fs/starfarer/api/SettingsAPI" in (read_class(archive, n) or b"")]
     except (OSError, zipfile.BadZipFile):
         return []
     found = []
