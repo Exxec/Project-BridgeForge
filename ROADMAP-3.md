@@ -95,15 +95,17 @@ findings (2026-11-16); queued with the rest.
   and refuse at once with the remedy: start the launcher on that machine once and enter the key.
 - 93.21 **Start the game without the launcher.** RC7's `StarfarerLauncher.main` checks the system property `launchDirect`; when
   it is set and the stored key validates, it starts the game at `startRes` (`WxH`), `startFS` and `startSound` and never builds
-  the launcher (javap 2026-11-17; RC8's jar has the same four names in the same classes, not disassembled). RC7's launcher does
-  the same on Play, in a new JVM: `Utils` rebuilds the command line (the running JVM's arguments with `-Xms`/`-Xmx` replaced,
-  plus `-DlaunchDirect` and `-DstartRes=... -DstartFS=... -DstartSound=...`), registers a shutdown hook that runs it
-  (`Utils$2`, `Runtime.exec`; the Mac branch runs `open /Applications/Starsector.app`) and calls `System.exit`. So even a click
-  that lands ends the process the harness watches, and the new JVM's console output goes to pipes of the exiting JVM, not to
-  the run's log (`Runtime.exec` pipes a child's standard streams). `launch.start_game` passes the four properties through
-  `JAVA_TOOL_OPTIONS` when the core has them and keeps the click for cores without; `startSound=true`, because the main-menu
-  marker is a music line. Test1 2026-11-17 (G1-DIRECT-0985a-20261117): the JVM picked the properties up and exited with 0
-  right after "Loading settings", the key check having failed (93.20). Needs one live proof once a key is stored.
+  the launcher (javap 2026-11-17; RC8's jar has the same four names in the same classes, not disassembled). The launcher's own
+  JVM restart uses the same properties: on Play, when `GLLauncher` gets true from `shouldRestartOnLaunch` (settings.json
+  `allowJVMRestartFromLauncher` on and the launcher's memory above the running JVM's), `Utils` rebuilds the command line (the
+  running JVM's arguments with `-Xms`/`-Xmx` replaced, plus `-DlaunchDirect` and `-DstartRes=... -DstartFS=...
+  -DstartSound=...`), runs it from a shutdown hook (`Utils$2`, `Runtime.exec`) and calls `System.exit`, which would end the
+  process the harness watches and leave the new JVM's console output in pipes, not the run's log. RC7 ships the setting false,
+  so Play normally starts the game in the same JVM (`goToState("launch_game")`); a mod that turns it on would bring the restart
+  back. `launch.start_game` passes the four properties through `JAVA_TOOL_OPTIONS` when the core has them and keeps the click
+  for cores without: no click to miss and no restart. `startSound=true`, because the main-menu marker is a music line. Test1
+  2026-11-17 (G1-DIRECT-0985a-20261117): the JVM picked the properties up and exited with 0 right after "Loading settings", the
+  key check having failed (93.20). Needs one live proof once a key is stored.
 - 93.22 **The rig window must fit the desktop.** The live click fractions were measured in a 1920x1440 window
   (`rig_prefs.RIG_RESOLUTION`); Test1's desktop is 1920x1080 at 96 DPI (2026-11-17), so that window runs off the screen.
   Pre-flight (93.8) compares the desktop with the pinned size and refuses with the remedy (a larger desktop mode, or click
