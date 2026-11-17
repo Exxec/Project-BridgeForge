@@ -1,3 +1,28 @@
+**94. Feature genome: extract and insert features across mods and builds (owner 2026-11-17: "design roadmap from now to endgoal of being able to extract and insert features like DNA"; "all approved. Please make sure everything is traceable and each repo gets a copy of its roadmap specific portion").**
+**Approved strategy addition (GD-1); not implemented.** Design, decisions, estimate and sister entries:
+[docs/FEATURE_GENOME_ROADMAP.md](docs/FEATURE_GENOME_ROADMAP.md). Ids: phases 94.G1-94.G7, decisions GD-1-GD-5,
+refinements GR-1-GR-6 (approved 2026-11-17: one pinned gene.json contract with conformance tests, a gene census before G2,
+history as the closure benchmark, a cross-repository trace check, an early Java probe spike, one licence ledger per mod). Commits and pull requests implementing a phase name its id in the subject. Estimate (section 13):
+27-45 BridgeForge sessions, 13-21 in sister repositories, 27-43 rig boots or live runs, about 17-29 owner hours.
+- 94.G1 **Gene contract and identity** (read-only): versioned `gene.json` (kind, anchors, members with hashes, needs,
+  registrations, conditions, persistent state, build, provenance and licence, phenotype obligations); content-hash identity;
+  `gene describe`. Acceptance in section 6.
+- 94.G2 **Sequencing and proof**: closure for campaign features and registration slicing; subtraction and isolation proofs per
+  gene. Project Go exports a gene's strings as one unit.
+- 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
+  from vanished authors (GD-3).
+- 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
+  validates sprites and slots.
+- 94.G5 **Insertion**: carrier mod first, then integration on workspace copies (GD-5); collision checks; XStream aliases
+  (`ModPlugin.configureXStream`, 0.98.5a API) proven with Salvor; VoidSmith variants and faction-knowledge proposals;
+  SpriteForge restyles on request.
+- 94.G6 **Expression qualification**: per-kind probe obligations (S3), live runs on the 0.98.5a rig (item 93), SPW per-gene cost,
+  Salvor add and remove on save copies.
+- 94.G7 **Engineering**: composed carriers (VoidSmith checks fleet roles), agent-edited genes with independent verification,
+  recipes; owner designs labelled as departures.
+- Pilots (GD-4): P1 Scrapyard Armories `sa_lobster_tanks`, P2 Navarchy of Tania junkyard spawner, P3 Eridani Combine Pantheon
+  system, P4 Bultach Coalition custom start. Local-only under GD-2.
+
 **93. Test rigs, probe targets and library dependencies (owner 2026-11-17: "yes, also bridgeforge is supposed to check for undeclared libraries and add them. If not implement it and continue to make suggestions").**
 **Approved; 93.1-93.2 done, the rest queued after the six live tests.** Found preparing Test1 for the six-mod live run (2026-11-17).
 - 93.1 **Done 2026-11-17.** **Optional library use misread as required.** Undeclared-library detection and its fixer already existed
