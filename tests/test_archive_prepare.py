@@ -93,6 +93,40 @@ class PlainArchiveTests(unittest.TestCase):
         self.assertIn("proven and recorded: 1 file(s): revival credits file added by BridgeForge", err)
         self.assertIn("explain the rest with", err)
 
+    def test_a_refusal_after_the_gate_leaves_the_policy_as_it_was(self) -> None:
+        # Review 2026-11-17: the decision was written before archive_mod's own refusals, here an existing Done/<Mod>.
+        with resolved_temp_dir() as root:
+            ws, policy = _workspace(root), _policy(root)
+            _write(root / "Done" / "Radar" / "ARCHIVE_NOTE.md", "# Radar 3.0: archive note\n")
+            before = policy.read_bytes()
+            code, _out, err = _archive(root, ws, policy)
+            after = policy.read_bytes()
+        self.assertEqual(code, 2, err)
+        self.assertEqual(after, before)
+
+    def test_a_waived_live_result_gets_no_standing_decision(self) -> None:
+        # The standing reason says "live-validated <date>"; a waiver has no run date to give it (review 2026-11-17).
+        with resolved_temp_dir() as root:
+            ws, policy = _workspace(root), _policy(root)
+            (ws / "reports" / "live_runs.jsonl").unlink()
+            _write(ws / "reports" / "SHIPPED_CHANGES.json", json.dumps({"schema_version": 1, "files": {},
+                                                                          "live": {"reason": "validated before run records existed", "date": "2026-10-01"}}))
+            before = policy.read_bytes()
+            code, _out, err = _archive(root, ws, policy)
+            after = policy.read_bytes()
+        self.assertEqual(code, 2)
+        self.assertIn("no licence decision", err)
+        self.assertEqual(after, before)
+
+    def test_an_unreadable_record_refuses_without_a_traceback(self) -> None:
+        with resolved_temp_dir() as root:
+            ws, policy = _workspace(root), _policy(root)
+            _write(ws / "reports" / "SHIPPED_CHANGES.json", "{not json")
+            code, _out, err = _archive(root, ws, policy)
+        self.assertEqual(code, 2)
+        self.assertIn("archive refused", err)
+        self.assertNotIn("Traceback", err)
+
     def test_a_recorded_decision_is_written_with_lf(self) -> None:
         with resolved_temp_dir() as root:
             policy = _policy(root)
@@ -118,6 +152,25 @@ class TranslateBatchProofTests(unittest.TestCase):
         self.assertEqual(copied, ["translate-work-export.json", "translate-work-translations.json"])
         proven = {file: reason for reason, files in groups.items() for file in files}
         self.assertIn("translation", proven["data/variants/x.variant"])
+
+    def test_a_translation_record_proves_nothing_but_a_translation(self) -> None:
+        # Review 2026-11-17: an aborted translate-batch leaves export.json only, and the proof was CJK counts alone. A CSV that
+        # lost a Chinese row and a jar with fewer CJK-looking bytes passed as translations.
+        with resolved_temp_dir() as root:
+            ws = root / "In operation" / "Eri"
+            original = ws / "original" / "Eri 1"
+            _write(original / "mod_info.json", '{"id": "eri", "name": "Eri", "version": "1"}')
+            _write(original / "data" / "strings" / "names.csv", "id,name\na,鱼雷\nb,轰炸机\n")
+            _write(original / "data" / "variants" / "x.variant", '{"displayName":"鱼雷轰炸机","hullId":"x"}')
+            _write(original / "jars" / "x.jar", "PK 鱼雷轰炸机鱼雷轰炸机")
+            shutil.copytree(original, ws / "working")
+            _write(ws / "working" / "data" / "strings" / "names.csv", "id,name\na,鱼雷\n")  # a row lost, not translated
+            _write(ws / "working" / "data" / "variants" / "x.variant", '{"displayName":"Torpedo Bomber","hullId":"y"}')  # an id changed too
+            _write(ws / "working" / "jars" / "x.jar", "PK changed by hand")
+            _write(ws / "scratch" / "translate-work" / "export.json", json.dumps({"schema_version": 1, "mode": "TRANSLATION_EXPORT", "entries": []}))
+            groups = auto_explain_shipped(ws)
+        proven = {file for files in groups.values() for file in files}
+        self.assertEqual(proven & {"data/strings/names.csv", "data/variants/x.variant", "jars/x.jar"}, set())
 
 
 if __name__ == "__main__":

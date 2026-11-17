@@ -160,6 +160,29 @@
   - the translate-batch proof.
 
   Each fails on the old code.
+  An independent review the same day found problems, fixed in the same PR:
+  - The translation proof was CJK counts plus any record in `reports/translation/`. Copying translate-batch's
+    `export.json`, which it writes before translating, armed the proof for any such workspace. It passed a CSV that lost a
+    Chinese row, and jars whose bytes happened to decode as CJK. Now it applies only to CSV and JSON-like files, and only
+    when every difference replaces Chinese display text (`_translation_only`): a CSV keeps its rows and each changed cell
+    held CJK; a JSON-like file keeps its structure and each changed value is a string that held CJK. Values are compared,
+    so an id changed on the same line as a name fails.
+  - The standing licence was written before `archive_mod`'s own refusals (an existing `Done/<Mod>`, a short
+    `--allow-unexplained` reason). `prepare_archive` now only returns the CURRENT live result's date. `archive_mod`
+    applies the standing decision in memory and writes it to `release_policy.json` only once the archive is written.
+  - A gate passed by a live waiver has no run date, so the reason claimed "live-validated <today>". Now a waiver gives no
+    standing decision, and the owner records one with `release-policy set`.
+  - An unreadable record (SHIPPED_CHANGES.json) refuses with exit 2 instead of a traceback.
+  - The workspace path is resolved before its id is read.
+
+  Tests (each fails on the first version):
+  - `test_a_translation_record_proves_nothing_but_a_translation`;
+  - `test_a_refusal_after_the_gate_leaves_the_policy_as_it_was`;
+  - `test_a_waived_live_result_gets_no_standing_decision`;
+  - `test_an_unreadable_record_refuses_without_a_traceback`.
+
+  Left as they were: a proof recorded on a refused attempt is keyed by path and not re-checked when the file changes again
+  (older design); `record_group` still records the standing licence before `archive_mod`.
 
 **95. Less hand work and faster re-validation for game updates (owner 2026-11-17: "1 through 5 add to roadmap. 6 I'm not sure we can do that always but if it can be optional that would be great. All others approved."; "Implement the smaller items not the greater phases like S and G").**
 **Approved.** Found taking the six-mod batch, United Aurora Federation and Sunrider through revival and live tests on

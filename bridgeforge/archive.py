@@ -156,7 +156,7 @@ def _move_aside(target: Path, done_dir: Path, today: str, prefix: str = "_replac
     return destination
 
 
-def prepare_archive(workspace: Path, *, policy_path: Path | None = None, today: str | None = None) -> dict:
+def prepare_archive(workspace: Path) -> dict:
     """What `probe-group record --archive` does before it archives, done for `archive` too (ROADMAP-3 96.6). On 2026-11-17 all four
     plain archives were refused, for differences `audit-explain --auto` then proved and for want of the licence decision the
     owner's standing rule gives.
@@ -164,32 +164,31 @@ def prepare_archive(workspace: Path, *, policy_path: Path | None = None, today: 
     Steps:
     - prove what the files prove (this also extracts a zip original and copies translation records);
     - check the archive gate;
-    - when the gate allows, record the standing local-only decision (2026-09-27) for a mod with none.
+    - give the date of the CURRENT live result, if there is one. `archive_mod(standing_licence=...)` applies the owner's
+      standing local-only decision (2026-09-27) with that date to a mod with none, and writes it only once the archive is
+      written. Its reason says "live-validated <date>", so a waived live result, which has no run date, gives none.
 
-    Returns {"auto_explained": {reason: [files]}, "gate": archive_gate(...), "licence_recorded": bool}."""
+    Returns {"auto_explained": {reason: [files]}, "gate": archive_gate(...), "standing_licence": date or None}."""
     from bridgeforge.live.live_trust import archive_gate, auto_explain_shipped
-    from .release import apply_standing_licence
 
-    workspace = Path(workspace)
+    workspace = Path(workspace).expanduser().resolve()
     proven = auto_explain_shipped(workspace)
     gate = archive_gate(workspace)
-    recorded = False
-    if gate["allowed"]:
-        info = _load_lenient_json_file(workspace / "working" / "mod_info.json") or {}
-        recorded = apply_standing_licence(info.get("id"), str(info.get("name") or workspace.name),
-                                          live_date=gate["live"].get("date") or today or date.today().isoformat(), policy_path=policy_path)
-    return {"auto_explained": proven, "gate": gate, "licence_recorded": recorded}
+    live = gate["live"]
+    standing = live.get("date") if live.get("status") == "CURRENT" and live.get("date") else None
+    return {"auto_explained": proven, "gate": gate, "standing_licence": standing}
 
 
 def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = None, today: str | None = None,
-                refresh: bool = False, move_aside: bool = False, allow_unexplained: str | None = None) -> dict:
+                refresh: bool = False, move_aside: bool = False, allow_unexplained: str | None = None,
+                standing_licence: str | None = None) -> dict:
     """Archive the workspace into done_dir/<workspace>. An earlier archive of the mod is never deleted: `refresh` (or `move_aside`)
     moves it to Done/_replaced-<date>/<Mod>[-N] first. If writing the new archive fails part-way, the partial one is moved to
     Done/_failed-<date>/ and the earlier archive is moved back; the ArchiveError says exactly where everything is (DOC-001)."""
     state: dict = {}
     try:
         return _archive_mod(workspace, done_dir, policy_path=policy_path, today=today, refresh=refresh, move_aside=move_aside,
-                            allow_unexplained=allow_unexplained, _state=state)
+                            allow_unexplained=allow_unexplained, standing_licence=standing_licence, _state=state)
     except Exception as exc:
         moved = state.get("moved")
         if moved is None:
@@ -219,7 +218,7 @@ def _gate_refusal(workspace: Path, problems: list[str]) -> str:
 
 
 def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, today: str | None, refresh: bool, move_aside: bool,
-                 allow_unexplained: str | None, _state: dict) -> dict:
+                 allow_unexplained: str | None, _state: dict, standing_licence: str | None = None) -> dict:
     from .explain_proofs import prepare_for_audit
     from .master_log import write_master_log
     from .substitutes import revival_licence
@@ -246,8 +245,16 @@ def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, t
     info = _load_lenient_json_file(working / "mod_info.json") or {}
     mod_id, name, version = info.get("id"), str(info.get("name") or workspace.name), _version_text(info.get("version"))
     licence = revival_licence(mod_id, name, policy_path)
+    standing = None
     if licence.get("decision") not in ("LOCAL_ONLY", "RELEASABLE"):
-        raise ArchiveError(f"no licence decision for {mod_id}: record one first (bridgeforge release-policy set {mod_id} --local-only|--releasable --reason ...).")
+        if not (standing_licence and mod_id):
+            raise ArchiveError(f"no licence decision for {mod_id}: record one first (bridgeforge release-policy set {mod_id} --local-only|--releasable --reason ...).")
+        # 96.6: the owner's standing decision for a live-validated revival with none. It is written to the policy only once this
+        # archive is written, so a refusal below leaves release_policy.json as it was (review 2026-11-17).
+        from .release import OWNER_STANDING_REASON
+
+        standing = OWNER_STANDING_REASON.format(date=standing_licence)
+        licence = {"decision": "LOCAL_ONLY", "reason": standing}
     target = Path(done_dir).expanduser().resolve() / workspace.name
     prepared = prepare_for_audit(workspace)  # a zip original is extracted beside original/, translation records copied
     gates = pre_archive_checks(workspace)  # nothing under Done/ is written before this: a refusal leaves the archive folder untouched
@@ -333,13 +340,21 @@ def _archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None, t
     from .mod_changelog import add_entry, archived_text
     add_entry(name, archived_text(build, status), version=version,
               day=today or date.today().isoformat(), path=target.parent.parent / "MOD_CHANGELOG.md")
+    if standing:
+        from .release import ReleaseError, record_policy_decision
+
+        try:
+            record_policy_decision(mod_id, local_only=True, reason=standing, policy_path=policy_path)
+        except (ReleaseError, OSError) as exc:
+            warnings.append(f"the standing LOCAL_ONLY decision was not written to release_policy.json ({exc}); record it with release-policy set")
+            standing = None
     try:
         master = write_master_log(target.parent)
     except OSError as exc:
         master = {"error": str(exc)}
     return {"schema_version": SCHEMA_VERSION, "mode": "ARCHIVE", "archive": str(target), "files": len(files), "zip": str(zip_path),
             "replaced": replaced, "prepared": prepared, "master_log": master,
-            "licence": licence.get("decision"), "status": status, "changed": changed, "added": added, "since_previous": diff,
+            "licence": licence.get("decision"), "licence_recorded": bool(standing), "status": status, "changed": changed, "added": added, "since_previous": diff,
             "warnings": warnings, "jars_identical": jars_identical, "note": str(target / "ARCHIVE_NOTE.md"),
             "allowed_unexplained": {"reason": reason, "problems": gates["problems"]} if gates["problems"] else None}
 
