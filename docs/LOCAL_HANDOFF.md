@@ -59,7 +59,8 @@ over SSH never shows. Delete each task after its run, because a `/SC ONCE /ST 23
 moved up): the harness still clicks the launcher (93.21), and its click positions need a 1920x1440 window, larger than
 Test1's 1920x1080 desktop (93.22). 95.4 builds this into `probe-group smoke|live`. Leave the mouse alone during a run, report
 each group before the next `install` (93.29), and record or archive only on the owner's word. Records written on 2026-11-17
-say "RC8" for runs on the RC7 rig (96.5 A1, not fixed).
+before 96.5 A1 say "RC8" for runs on the RC7 rig. A1 fixed the code that day; by the owner's rule, the older records stay as
+they are.
 
 **Runs still to do.**
 1. **First live run with the canSkipTutorial pin (93.28).** `probe-group live` on the 0.98.5a rig. Done: the run gets past
@@ -75,11 +76,12 @@ say "RC8" for runs on the RC7 rig (96.5 A1, not fixed).
    - Every run uses Fast Rendering and Prepatcher (93.42): `run-j25-frpp.bat` through the wrappers, and each install with
      `--also-enable starsector_prepatcher`. Check that Test1's desktop is idle first.
    - United Aurora Federation still needs its re-run with probe 0.3.3 (93.37).
-   - Bultach passed (SR5-LIVE-0985a-20261117) but is not archived until 93.41 and 93.44 are done; then re-record SR5 and
-     archive it.
-   - G1R-LIVE-0985a-20261117 fought Eridani's, Musashi's and Scrapyard's round-2 hulls and passed (93.39). Refreshing
-     Eridani's and Scrapyard's archives with that record is the owner's call.
-   - JDK 27 (93.43) when the owner approves it.
+   - Bultach passed SR5-LIVE-0985a-20261117, and 93.41 and 93.44 are done. SR5 cannot be re-recorded, because its manifest
+     hashed Prepatcher's log before 93.41's fix. Run it once more, then record and archive it on the owner's word.
+   - G1R-LIVE-0985a-20261117 fought Eridani's, Musashi's and Scrapyard's round-2 hulls and passed (93.39). Owner
+     2026-11-17: Eridani's and Scrapyard's archives stay as they are.
+   - JDK 27 (93.43) is set up on Test1 but is not the default: `run-j27-frpp.bat`, chosen with `BF_RIG_BAT=run-j27-frpp.bat`.
+     Make one comparison run against JDK 25. Then make it the wrappers' default, with JDK 25 as the fallback.
 
 4. **Archived OP trims (92.20)**, on Test1 (it needs the full `Done/`): classify each `variant-op-over-budget` trim as
    REGRESSION or AUTHORED against the mod's reference core, and restore the AUTHORED ones as `+bf.N` revisions.

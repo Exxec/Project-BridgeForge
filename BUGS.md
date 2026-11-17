@@ -89,7 +89,8 @@
 ## Resolved in the historical "1.0 hardening" tranche
 
 The tranche name below is historical, not a claim that package version 1.0 has been released. The current package
-identifies as 0.4.0; latest published tool release is the 0.2.0 pre-release (checked 2026-10-21).
+identifies as 0.4.0; latest published tool release is the 0.2.0 pre-release (checked 2026-10-21). Since 2026-11-17 it is the
+0.4.0 pre-release (`docs/RELEASE_0_4_0.md`).
 
 | ID | Resolution |
 | --- | --- |

@@ -5,13 +5,14 @@ Reconciled 2026-10-17 for the owner-approved planning update; items 89-97 added 
 this documentation pass did not rerun the suite, launch the game or requalify releases.
 
 Source/GitHub documentation audit 2026-10-18: current source/default branch is `3342654d`, package 0.3.0 then (0.4.0 on 2026-10-21); latest
-published tool is v0.2.0 pre-release (re-checked 2026-10-21). Proposed S1-S4 strategy remains unimplemented. DOC-001 (`archive --refresh`
+published tool is v0.2.0 pre-release (re-checked 2026-10-21; v0.4.0 since 2026-11-17, below). Proposed S1-S4 strategy remains unimplemented. DOC-001 (`archive --refresh`
 deleted the old archive) was fixed 2026-10-18; see `BUGS.md` and [the audit](archive/DOCS_AUDIT_2026-10-18.md). Neither is a
 fresh live acceptance.
 
 **Items 89-96, 2026-11-15 to 2026-11-17: the move to 0.98.5a.** As ROADMAP-3 records them on 2026-11-17; tests are offline
 unless a run is named. Revivals target 0.98.5a-RC7 (`target show`); RC8 is the previous target (QUALIFIED) and the
-reference. The checkout is package 0.4.0 (unreleased) with probe 0.3.3; the latest published tool is still v0.2.0.
+reference. The checkout is package 0.4.0 with probe 0.3.3. v0.4.0 was published as a pre-release on 2026-11-17
+([receipt](RELEASE_0_4_0.md)); later changes wait as `changelog.d/` fragments until they are assembled under 0.4.1.
 
 | Item | Implementation | Validation / shipping evidence | Next step |
 |---|---|---|---|
@@ -19,10 +20,10 @@ reference. The checkout is package 0.4.0 (unreleased) with probe 0.3.3; the late
 | 90 game-build registry | 90.1-90.3 Done 2026-11-15: `target show/set/export`, `@target`, `target-bump`, `retarget` | `tests/test_target_bump.py` | 90.4 dormant-call verdict and 90.5 per-build behaviour facts open |
 | 91 side by side | 91.1-91.4 Done 2026-11-15: `vanilla-migration`, `touches`, `new-vanilla-id-collision`, `vanilla-now-provides` | `tests/test_target_delta.py` and the tests named in 91 | None open |
 | 92 the six-mod batch on RC7 | Done 2026-11-16/17 except 92.20 and 92.40; parts left open in 92.8 (`--watch-dir` attribution), 92.9 (finding texts that say "RC8") and 92.25 (sources built in a platform encoding) | Tests named per sub-item; all six mods reached UNATTENDED_DONE | 92.20 OP-trim audit on Test1 (LOCAL_HANDOFF); 92.40 byte-for-byte name checks for copies |
-| 93 rigs, probe targets, libraries | Done: 93.1, 93.2, 93.25, 93.26, 93.28 (code), 93.33, 93.36, 93.37 (start check and retry; the cause is not shown), 93.38 (code), 93.39 (probe 0.3.3: every combat round fights its own hulls), 93.40 (a screenshot when a battle never ends); live-validated with G1R and SR5 on 2026-11-17. Open: 93.41 (Prepatcher runs record UNBOUND), 93.42 (FR + Prepatcher built in), 93.43 (JDK 27), 93.44 (Bultach's archive) | Tests named per sub-item; the batch's four groups reached LIVE_DONE on Test1's 0.98.5a rig (2026-11-17) through local wrappers | 93.28's first live run; 93.3-93.24 (93.21's direct start proven only through the wrappers), 93.27, 93.29-93.32, 93.34, 93.35, 93.37 open |
+| 93 rigs, probe targets, libraries | Done: 93.1, 93.2, 93.25, 93.26, 93.28 (code), 93.33, 93.36, 93.37 (start check and retry; the cause is not shown), 93.38 (code), 93.39 (probe 0.3.3: every combat round fights its own hulls), 93.40 (a screenshot when a battle never ends), 93.41 (code: Prepatcher's own log is not drift), 93.44 (tooling: the audit reads fixer runs in the escalation ledger); live-validated with G1R and SR5 on 2026-11-17. Open: 93.42 (FR + Prepatcher built in), 93.43 (JDK 27: set up on Test1, not yet the default), Bultach's re-run and archive (after 93.41 and 93.44) | Tests named per sub-item; the batch's four groups reached LIVE_DONE on Test1's 0.98.5a rig (2026-11-17) through local wrappers | 93.28's first live run; 93.3-93.24 (93.21's direct start proven only through the wrappers), 93.27, 93.29-93.32, 93.34, 93.35, 93.37 open |
 | 94 feature genome | Approved strategy (GD-1), not implemented | [FEATURE_GENOME_ROADMAP.md](FEATURE_GENOME_ROADMAP.md) | 94.G1 |
 | 95 faster re-validation | Done 2026-11-17: 95.10, 95.12(i), 95.13, 95.15 (code) | Tests named per sub-item; the RC8 -> RC7 `target-impact` catalogue of `Done/` (175 archives: CLEAN 167, BREAKS 4, RELINK 3, REVIEW 1) | 95.12(a) Done (93.37); 95.1-95.9, 95.11, 95.12(b)-(h), 95.14 open (Nightcross closed on Test1 2026-11-17) |
-| 96 skills, ports, docs, release | 96.0 owner decisions recorded; 96.1 Done 2026-11-17 (`.claude/skills/`); 96.3 docs pass: this update | `checks.sh` passed every step; an independent review per batch of diffs | 96.2 ports (LOCAL_HANDOFF), 96.4 release; 96.5 suggestions await the owner |
+| 96 skills, ports, docs, release | 96.0 owner decisions recorded; 96.1 Done 2026-11-17 (`.claude/skills/`); 96.3 Done 2026-11-17 (docs pass); 96.4 Done 2026-11-17: v0.4.0 published as a pre-release ([receipt](RELEASE_0_4_0.md)); 96.5 A1 and P6 Done, C3's first half done; 96.6 Done | `checks.sh` passed every step; an independent review per batch of diffs; 96.4: full suite and main CI on the tagged commit, asset hashes checked after download | The rest of 96.5's small items, in the handoff order ([FEATURE_GENOME_ROADMAP](FEATURE_GENOME_ROADMAP.md) section 14); P1 is next. 96.2's ports wait on live testing (LOCAL_HANDOFF) |
 | 97 S series re-queued | Owner 2026-11-17: S4 parked; S2 and S3 no longer gates | ROADMAP-3 item 97 lists what remains from S_SERIES_IMPLEMENTATION_PLAN.md | 97.1 copied-save pilot (approved 2026-11-01), 97.2 the owner's look at one `data-file-not-utf8` case, 97.3 with 93.30/95.11, 97.4 only with a speed-up claim |
 
 The table below is the 2026-10-17/18 reconciliation of items 61-75.

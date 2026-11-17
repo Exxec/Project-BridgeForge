@@ -77,9 +77,19 @@ Check S series implementation plan and if applicable add remaining items to road
   0.4.0, so there is no pyproject change. Salvor pins `bridgeforge>=0.4,<0.5` and BridgeForge stays its save-diagnosis provider
   (94 D4), so a 0.5 bump would also need Salvor's pin moved. Owner 2026-11-17: tag and publish v0.4.0 ("Yes"). The heading is
   dated `## 0.4.0 (2026-11-17)`, and an empty `## 0.4.1 (unreleased)` takes the next fragments.
+  **Done 2026-11-17: v0.4.0 is published as a pre-release** (22:55 UTC). The receipt is `docs/RELEASE_0_4_0.md`.
+  - The annotated tag `v0.4.0` peels to `128830f`, #112's merge.
+  - Checked before tagging:
+    - the full suite at that commit, in a clean worktree: 2969 tests, OK (skipped=12); hermeticity PASS;
+    - main CI's nine jobs on that commit (run 44192728646). A tag push runs no CI since #107.
+  - Wheel and sdist were built from a clean checkout. Every packaged file Git tracks equals its blob (wheel 400, sdist 721), and
+    an installed-wheel check passed.
+  - The draft's and then the public release's assets were downloaded. Both matched `SHA256SUMS.txt` and GitHub's digests.
+  - It is a pre-release like 0.2.0: promotion waits on the paused live work, and is the owner's call.
 - 96.5 **Repo-wide suggestions** from three independent review agents on 2026-11-17 (performance and parallelism;
   architecture and process; CI and tooling). Measured on this machine, read-only. They are listed for the owner to
-  approve, not done unasked. Sizes S/M/L, the most valuable first.
+  approve, not done unasked. Sizes S/M/L, the most valuable first. Owner 2026-11-17: follow the recommended order of the
+  suite-review handoff (FEATURE_GENOME_ROADMAP.md section 14), which takes the remaining small items after 96.4.
   - **A1 (S), first: records say RC8 after the switch to RC7.** Tania's archived report (2026-11-17) is titled
     "(0.98a-RC8)", says the scripts were "compiled against RC8", and heads its live run "(2026-11-17, RC8 rig)". The
     sources: `live/live_accept.py:114`; `probe/probe_group.py:991-993`, which also writes "Owner ran New Game" for
@@ -590,7 +600,8 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   both defined round 2, and `report` showed no combat WARN:
   - G1R-LIVE-0985a-20261117 (Eridani, Musashi and Scrapyard; 113 hulls; JDK 25 direct): round 1 fought hulls 1-60
     (29 ships), round 2 fought hulls 61-113 (53 ships). FATAL 0, MOD-ERROR 0, all three PASS; recorded LIVE_VALIDATED in the
-    workspaces. Eridani's and Scrapyard's 2026-11-17 archives predate this run; refreshing them is the owner's call.
+    workspaces. Eridani's and Scrapyard's 2026-11-17 archives predate this run. Owner 2026-11-17: keep them as they are ("No" to
+    refreshing them with this run).
   - SR5-LIVE-0985a-20261117 (Bultach Coalition; 105 hulls; Fast Rendering + Prepatcher, 93.42): round 1 fought hulls 1-60
     (30 ships), round 2 fought hulls 61-105 (41 ships). PASS, with the owner's two accepted content-parity ids; recorded
     LIVE_VALIDATED. Archive refused (93.41, 93.44).
@@ -648,6 +659,28 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - Add a rig-local Temurin 27 beside `_rig/jdk-25.0.4.1+1` and a `run-j27-frpp.bat` without `--enable-preview` (nothing needs
     it; 88.24's save crash came with it on a newer JDK).
   - Make one comparison run against JDK 25, then switch, keeping JDK 25 as the fallback.
+  **Set up 2026-11-17; the comparison run waits on live testing.**
+  - Owner 2026-11-17: "yes you can copy Java 27 from" the `jdk-27+22` folder of White_Legion's RC8 install. It was copied at
+    22:32 UTC.
+  - At 22:37-22:38 UTC that install's JDK folders changed: `jdk-27+22` was gone, replaced by `jdk-27.0.2+0` and `jdk-28+24`
+    (`28-beta`, early access).
+  - Owner, the same evening: replace the rig's copy with `jdk-27.0.2+0` ("yes since its newer"). Later the owner will add
+    JDK 28 and the Mikohime setup, so both can be tested.
+
+  On Test1:
+  - `In operation\_rig\jdk-27.0.2+0`, beside JDK 25, is a copy of that folder: 415 files, each checked against a SHA-256
+    manifest after the copy.
+    - `java -version` reports `27.0.2-beta`, Temurin-27.0.2+0 (build `27.0.2-beta-ea`, a nightly of 2026-11-14). It is an
+      early-access build, not a general release.
+    - The first copy, `jdk-27+22` (`27-beta+22-ea`), was moved to `_rig-0985a\_addons\retired\`.
+  - `_rig-0985a\fast_rendering\fr.rig.j27.vmparams` is `fr.rig.vmparams` without two flags:
+    - `--enable-preview`;
+    - `-XX:+UseVectorStubs`, which 27.0.2 refuses and 27+22 accepted. `java_matrix.flags_to_drop` found it.
+  - `_rig-0985a\run-j27-frpp.bat` launches it.
+    - The live wrappers still default to `run-j25-frpp.bat`; `BF_RIG_BAT=run-j27-frpp.bat` selects JDK 27.
+    - `bridgeforge-state/live-wrappers/setup_j27.py [JDK folder]` re-creates both files.
+  - BridgeForge's own tools still use JDK 25: `java_toolchain.find_jdk` takes the first `In operation\_rig\jdk-*` by name, and
+    `jdk-25.0.4.1+1` sorts first.
 - 93.44 (S) **Bultach's archive: an unexplained `star_gen_data.csv`.** `audit-shipped` lists
   `data/campaign/procgen/star_gen_data.csv` as added and UNEXPLAINED (not in the original). Find the step that added it (the
   RC7 revive's records, an escalation, or a hand edit) and explain it from that record. Then re-record SR5 (after 93.41) and
