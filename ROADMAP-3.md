@@ -1,3 +1,151 @@
+**92. Less hand work found reviving six mods against 0.98.5a-RC7 (owner 2026-11-16: "add these improvements to roadmap we will implement in queue after these mods are revived but not yet live tested").**
+**Approved, queued: start once Scrapyard Armories, Bultach Coalition, Eridani Combine, Everybody loves KoC, Musashi
+Manufactorum and Navarchy of Tania are revived (UNATTENDED_DONE), before their live tests.** Found 2026-11-16 by running
+`intake` + `revive --vanilla-core <Starsector985a core>` on those six (findings 107/128/24/46/63/119). Ordered by hand work saved.
+- 92.1 **`description-missing` cascades from an undecodable descriptions.csv.** `scan/scan_references.py`
+  `_scan_description_missing` reads vanilla's file leniently (`_read_csv_rows_lenient`) but the mod's own with `_read_csv_rows`,
+  so one cp1252 byte (0x92, line 57) made ~34 Scrapyard hulls with rows read as undescribed; after the approved
+  `data-file-not-utf8` fix only `emp_station` (genuinely blank) remained. Musashi shows the same pair. Read the mod's file
+  leniently too, or suppress `description-missing` on that file while `data-file-not-utf8`/`csv-encoding-unverified` is open.
+  Test: a cp1252 descriptions.csv with a described hull yields no `description-missing`.
+- 92.2 **Fixer for return-type-only jar linkage when source ships.** Navarchy of Tania: 3 `jar-linkage-unresolved` classes
+  (`tania_mustafar_system`, `tania_requiem_system`, `tania_random_mode_fodder`) all call
+  `StarSystemGenerator.addStableLocations(StarSystemAPI, int)`, `V` before, `List` in 0.98.5a. The packet itself says recompiling
+  relinks with no source change, and the mod ships `src/`. When every unresolved member differs only in return type and a
+  matching source exists, recompile (`jar-packets` + `patch-jar-class`) as a gated fixer instead of a code-tier packet.
+- 92.3 **One packet per hullmod for jar + src duplicates.** Bultach Coalition: 6 hullmods flagged `hullmod-instance-state` twice,
+  once as `jars/ORKS.jar!…class` and once as `src/….java` (33 agent packets). Merge into one packet ("fix the source, rebuild the
+  jar class") so the two copies cannot be fixed differently.
+- 92.4 **`intake --strip-junk`.** 2 of 6 intakes (Scrapyard: 4 `*.png~`; Tania: 2 `*.png~` + `desktop.ini`) were blocked by
+  `archive-junk-member` and needed a hand-rebuilt `-clean.zip`. Drop exactly the members that finding names into a derived zip,
+  keep the raw zip, record the dropped list in `intake.json`.
+- 92.5 **Batch intake by mod-folder name.** `intake` takes one archive; six mods meant six calls, each needing the exact folder name
+  ("koch" was `Everybody loves KoC-1.05.49a`, "eridiani" `Eridani Combine-1.0.3.6`). Accept several sources and
+  `--from-mods DIR NAME...` with fuzzy matching that shows the match and refuses ambiguity.
+- 92.6 **Dry-run diffs for owner approvals.** `revive` lists owner packets but not what each approval would write; the Scrapyard
+  `variant-op-over-budget` trim (dropped `heavyarmor` and all 13 flux capacitors, 98 -> 72 OP) was only visible by diffing
+  afterwards. Show the per-file diff each approvable fixer would apply, and give `variant-op-over-budget` a trim strategy
+  (capacitors/vents first vs hullmods first).
+- 92.7 **Approve fixer families across the queue at once.** The same auto-tier owner packets recur across the five queued mods
+  (`variant-op-over-budget`, `variant-wings-exceed-bays`, `variant-weapon-slot-mismatch`, `shippable-work-file`,
+  `data-file-not-utf8`, `procgen-star-row-missing`). One command to approve chosen families for chosen workspaces, previewing 92.6's
+  diffs, then revive each.
+- 92.8 **`escalation run --agent` discovery.** No `claude` on PATH on this machine (sessions run in the VS Code extension); the
+  first `--all` run failed with only the shell's error. Fall back to the extension's `resources/native-binary/claude.exe`, or fail
+  before starting with what is missing. Also: `--watch-dir` reported the parent session's own memory writes as the agent's
+  (same folder, concurrent); attribute by process or warn that concurrent writers are included.
+- 92.9 **Local target set-up and target-aware wording.** `target show` is empty here and CLAUDE.md names
+  `C:\Games\Starsector-0.98.5a-RC3`, absent on this machine; the installed 0.98.5 core is
+  `C:\Program Files (x86)\Fractal Softworks\Starsector985a` (`starfarer_obf.jar`: 0.98.5a-RC7), so `@target` does not resolve.
+  `target set` it (RC7 > RC3) and update CLAUDE.md; have `revive` warn when `--vanilla-core`'s build differs from the registry's.
+  Packet text still says "RC8" when the target is RC7; name the build from the target.
+- 92.10 **Readme files in the mod root are information only.** Scrapyard's `Changelog.json` and `Special Thanks.json` (prose, never
+  loaded by the game) became UNKNOWN `unverified-json-syntax` agent packets; the agent could only wrap the prose in JSON arrays
+  (its note: renaming to `.txt` would be natural but was outside the allowed files). Classify root files other than
+  `mod_info.json` as information, or let the packet allow a rename.
+- 92.11 **Say what still blocks UNATTENDED_DONE.** After every fix Scrapyard's only remaining packet was one cosmetic
+  `description-missing` (`emp_station`), which alone holds back the `gameVersion` bump and the live probe; the output did not say
+  so. Print the remaining blockers and the one action that clears each (draft text, `baseline-accept`).
+- 92.12 **`psutil` imported at module load.** `case_qualification.py` (and `portfolio*.py`) import `psutil` at top level, so with
+  system Python (no psutil) even `bridgeforge intake --help` dies in `register_all`. Import it lazily in the functions that need
+  it, or have `cli.main` name the `.venv` when a dependency is missing.
+- 92.13 **`revive` scans with `0.98.x`, so `gameVersion` is never bumped (highest priority of 92).** `revive --vanilla-core
+  <985a>` resolves its target to `0.98.5a-RC7` (REVIVE.json `target`) but its scans record `target.starsector: "0.98.x"`
+  (`reports/scan-*-revive/bridgeforge.compat.json`). `scan/scan_libraries.py` `_scan_mod_info_game_version` returns early when
+  the declared series equals the generic target's, so Scrapyard's `"gameVersion": "0.98"` reached UNATTENDED_DONE unchanged,
+  although that check's own text says the launcher unchecks a mod whose base version differs (`0.98` vs `0.98.5a`). Fixed by hand
+  with `fix --finding mod-info-game-version-inexact --target-game-version 0.98.5a-RC7 --apply`. Pass revive's resolved target into
+  every scan it runs; test: a `"0.98"` mod revived against an 0.98.5a core gets `mod-info-game-version-inexact` and the bump.
+- 92.14 **`fix` rescan ignores `--target-game-version`.** The same fix reported "Finding 'mod-info-game-version-inexact' STILL
+  PRESENT after rescan" although `mod_info.json` then read `0.98.5a-RC7`: the verifying rescan does not use the option the fix
+  was given. Rescan with the fix's own target options.
+- 92.15 **Crafted descriptions must be grounded in the spec.** `descriptions draft` crafted for Scrapyard's `emp_station` "a
+  short-range electromagnetic pulse ... shields, weapons, and engines disrupted ... draws on flux reserves"; the `.system` is
+  `"type":"EMP"` (vanilla's arc emitter), range 800, 700 EMP + 300 energy per arc, used only by the station `sa_tesla_spike`.
+  Rewritten by hand from vanilla's `emp` SHIP_SYSTEM row. Put the spec's key fields, the user hulls/tags (e.g. `HIDE_IN_CODEX`
+  station) and vanilla's row for the same system/weapon `type` into the crafting prompt; flag claims about mechanics absent from
+  the spec.
+- 92.16 **Credits text names the old target.** `descriptions.py` `_credits` writes "Revival for Starsector 0.98a-RC8" into
+  `BRIDGEFORGE_CREDITS.txt` regardless of target (Scrapyard, revived for 0.98.5a-RC7). Use the workspace's revive target (ties in
+  with 92.9).
+- 92.17 **`revive --approve variant-op-over-budget` bypasses the owner ruling without `--reference-core` (high priority).**
+  RC8-06 / owner ruling 2026-09-27 option 2: trim only what the new game's costs pushed over; variants authored over budget stay.
+  `fixers/variants.py` applies that filter only `if reference`, and `revive` passes no reference core unless given one, so the
+  first batch run trimmed everything over budget: Navarchy of Tania's boss `tania_redemption_Holy` lost 43 of 49 vents, Scrapyard's
+  `sa_trocar_rammer` lost `heavyarmor` and 13 caps, 0-OP armour plates lost their vents (50 variant files over five mods).
+  Reverted from `original/` and re-run with `--reference-core <RC8 core>`. Resolve the reference core from the mod's declared
+  `gameVersion` (all six declare 0.98a/RC8; RC8 is the registry's previous build) and refuse to apply this fixer when none
+  resolves. Test: an over-budget variant that is over budget on the reference core too is left alone by `revive`.
+- 92.18 **`shippable-work-file` creates its own `fixer-backup-orphaned`.** Musashi: the fixer moved `graphics/mm/ships/isetsu/debug.log`
+  to `scratch/work-files/` (by design) and left `debug.log.pre-bf-fix-shippable-work-file.bak` (0 bytes) beside the now-absent
+  file; the next scan raised `fixer-backup-orphaned` (inspect, "archive refuses until resolved"). A fixer that removes a file on
+  purpose should not leave a backup in `working/` (scratch holds the copy), or the check should skip backups whose fixer removes.
+- 92.19 **`data-file-not-utf8` refuses unambiguous cp1252.** Musashi `data/strings/descriptions.csv`: the only high bytes are
+  0xA0 (NBSP), 0xAB/0xBB (« »), 8 lines, none valid multi-byte UTF-8, yet the fixer wants `fix --encoding FILE=ENC` by hand
+  because they are not "CP-1252 punctuation". When no line is valid multi-byte UTF-8 and every bad byte maps to a printable
+  cp1252/Latin-1 character, apply cp1252.
+- 92.20 **Audit archived OP trims against the ruling (after 92.17; needs the machine with the full `Done/`).** On this machine
+  `Done/` holds six empty `original/` stubs (checked 2026-11-16), so nothing could be checked here. Archives trimmed via
+  `fix --reference-core` followed the ruling; ones trimmed by `revive` without a reference core may not have (92.17). A read-only
+  sweep: for every archive whose records show a `variant-op-over-budget` fix, rescan each trimmed variant's `original/` copy
+  against the mod's reference core (from its declared `gameVersion`) and classify REGRESSION (fits on the reference, over on the
+  target: trim stays) or AUTHORED (over on the reference too: the trim broke the ruling). Then, per mod with AUTHORED trims:
+  restore those variant files from `original/`, `revise prepare`/`finalize` as `+bf.N`, `mod-changelog add`, and
+  `archive --refresh` (old archive to `Done/_replaced-<date>/`). Batch the live checks into one probe session per group.
+  Done when the sweep lists every archive as CLEAN/RESTORED with its counts.
+- 92.21 **92.13 also inverts once the version is right.** After `fix --target-game-version 0.98.5a-RC7` set the correct value,
+  the next `revive` scan (generic `0.98.x`, normalised to `0.98a`) raised `mod-info-game-version-inexact` on all six mods
+  ("declared 0.98.5a-RC7 ... target 0.98a"), while the fixer, given revive's real target, refused ("already '0.98.5a-RC7'").
+  Worked around with `escalation accept ... --reason "... 92.13"` per mod; drop those acceptances when 92.13 lands.
+  Also confirmed `revive --reference-core` is used only for substitution proposals (`revive.py:278`), never passed to fixers.
+- 92.22 **`baseline-accept-finding` scans without the vanilla core.** `baseline_accept_finding.py:107` calls
+  `scan_mod(working)` with no `vanilla_core`, so findings that need vanilla data (`variant-op-over-budget` priced with vanilla
+  weapons/hull mods) do not exist for it: "no finding matches" on 4 of 5 mods, while Bultach (own-weapon variants) matched 3 of 15.
+  `escalation accept` on the packet worked. Take `--vanilla-core` (default `@target`) or reuse the latest stored revive scan.
+- 92.23 **Revive reference scan as a report, every run.** The decisive evidence for the OP question (per mod: over on RC8 vs over on
+  0.98.5a, regressions = the difference; this batch 1/22/15/3/1 authored, 0 regressions) took an ad-hoc script over
+  `_scan_variant_validity`. Have `revive` write that comparison for each value-type finding (OP, wings, slots) when a reference core
+  is known, and use it for 92.17.
+- 92.24 **Detect empty workspace skeletons.** On this machine `Done/` (6 mods) and the older `In operation/` projects (Scy-Nation,
+  Hiigaran-Descendants, ...) are directory trees with zero files, all created 2026-11-02 11:51-12:01 (a copy that carried folders
+  but no files); nothing reported it. `board`/`hygiene`/`done-audit` should flag a workspace or archive with no files (and a
+  `working/` without `mod_info.json`) as BROKEN, not unknown.
+- 92.25 **CRITICAL: agent fixes to `src/` never reach the jar the game loads.** `escalation run --apply` edits `src/**/*.java` and
+  verifies by rescanning the source; nothing rebuilds the jar. Navarchy of Tania: 8 applied agent fixes (hull-mod state, hard-coded
+  entity/system references, orbit guard) were inert in `jars/tania.jar`; the scan still flagged the jar copy
+  (`jars/tania.jar!data/hullmods/tania_Cautious_Personality.class`). Eridani: 1 (`ECE_StarSystem`). Done by hand 2026-11-16 with a
+  scratch `src_to_jar.py`: (1) changed sources = `working/src` vs `original/.../src`, plus relink-only classes; (2) prove `src/`
+  is authoritative: each ORIGINAL source compiled against the reference core at the jar class's own release (Tania 61/Java 17,
+  Eridani 52/Java 8) gives bytecode identical to the jar's (javap -c -p, constant-pool indexes stripped), else refuse (it refused
+  Eridani until the release matched, and refused a class already patched until given the pre-patch jar); (3) compile the fixed
+  sources against the target; (4) back up the jar to `scratch/jar-patch-<date>/`, `jar uf` all produced classes (inner classes
+  too), check entries. Productize as `bridgeforge src-to-jar` and run it inside `escalation run --apply` / `revive` whenever an
+  applied change touches a jar-backed source; the packet is not done until the jar class is rebuilt. Subsumes 92.2's relink and
+  92.3's dedupe. Test: an agent edit to `src/X.java` of a jar mod changes `X.class` in the jar.
+- 92.26 **`patch-jar-class` cannot compile against library mods or old class versions.** Tania's spawner imports LazyLib; there is
+  no option for dependency jars ("package org.lazywizard.lazylib does not exist"). Resolve dependency jars from `mod_info.json`
+  dependencies via the provider index / mods folder (Tania: LazyLib, MagicLib, Nexerelin `ExerelinCore.jar`; Eridani: LazyLib,
+  MagicLib, GraphicsLib `Graphics.jar`, BoxUtil `BoxUtilMod.jar`); compile at the jar class's major version, not always 17; pass
+  `-implicit:none -sourcepath ""` (MagicLib.jar ships `.java` sources that javac otherwise compiles and fails on).
+- 92.27 **`spawned-ship-captain-personality-risk` fixer refuses jar sources.** Tania had 16 3-argument `spawnShipOrWing` calls in a
+  jar-backed source (11 amalgam ships, 5 neutral giant asteroids); the fixer's own template (5-argument overload with
+  `bfSpawnCaptain()`, STEADY; javap confirms the overload in 0.98.5a) applied cleanly by hand. Allow it on `src/` once 92.25 rebuilds
+  the jar. The packet excerpt showed 2 of the 16 calls; print the count.
+- 92.28 **False positives found in this batch** (each accepted with evidence; fix the check, add a test per case):
+  `csv-vanilla-row-override` counts commented rows: all 27 "overrides" (Musashi 17 ship_data + 6 weapon_data, Eridani 4) are
+  `#Name,id,...` rows the loader skips. `star-type-undefined` matched a faction id: Tania's `star_federation` is
+  `setRelationship("star_federation", ...)`. `system-generation-unguarded` misses a caller-level guard: Tania's ModPlugin calls
+  `TaniaGen.generate` only when `getEntityById("carina_system") == null` (the star `Carinasystem.initStar` creates), yet it reported
+  four systems "called from onGameLoad" unguarded.
+- 92.29 **Acceptances keyed by evidence lapse when an agent edits the file.** Tania's accepted `system-generation-unguarded` came
+  back after the Carinasystem agent fix changed the finding's evidence list; it had to be accepted again. Key mod-level
+  acceptances by finding id + subject (system name, file), not the full evidence.
+- 92.30 **Crafted descriptions, second sample (extends 92.15).** Musashi: 5 of 9 crafted rows contradicted the data: Tadaiji Lance
+  (2800 energy/shot, range 1200, hints STRIKE, LARGE) and Bushi Rift Cannon (1300/shot, STRIKE) as "general combat" weapons; a
+  phase cloak given an unsupported flux claim; a "slow" torpedo the spec does not show; the Raidsuit's class (ship_data
+  designation Destroyer vs `.ship` hullSize FRIGATE). Feed `weapon_data` damage/shot, range, size, hints and tags, the system
+  `.system` type, and hull designation/size into the prompt; reject rows that state a role contradicting STRIKE/PD hints.
+
 **91. Side by side: the old and the new build together (owner 2026-11-15: "for the side to side ideas, go ahead and implement. apply same process for other repos").**
 - 91.1 **Done 2026-11-15.** `vanilla-migration OLD_CORE NEW_CORE [--write DIR]`: for every member `api-diff` lists as removed and every
   same-signature parameter rename, vanilla's call sites in both builds' `starfarer.api.zip`, paired by file, with what the new code
