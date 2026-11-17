@@ -33,9 +33,52 @@
   `docs/ROADMAP_STATUS.md` and CLAUDE.md against what items 93.20-93.38, 95 and 96 changed; then push.
 - 96.4 **Release.** Once item 95's PRs are merged: `release-notes assemble --version <next>`, the pyproject version, a PR; a
   tag only on the owner's word. Revived mods that change get their own `+bf.N` bump through `bump-version`.
-- 96.5 **Repo-wide suggestions.** Three independent review agents (performance and parallelism; architecture and process;
-  CI and tooling) report on the whole repository. Their suggestions are listed here for the owner to approve, not done
-  unasked.
+- 96.5 **Repo-wide suggestions** from three independent review agents on 2026-11-17 (performance and parallelism;
+  architecture and process; CI and tooling). Measured on this machine, read-only. They are listed for the owner to
+  approve, not done unasked. Sizes S/M/L, the most valuable first.
+  - **A1 (S), first: records say RC8 after the switch to RC7.** Tania's archived report (2026-11-17) is titled
+    "(0.98a-RC8)", says the scripts were "compiled against RC8", and heads its live run "(2026-11-17, RC8 rig)". The
+    sources: `live/live_accept.py:114`; `probe/probe_group.py:991-993`, which also writes "Owner ran New Game" for
+    harness runs; the archive credit line; the MOD_CHANGELOG lines; `master_log`; revive's "0.98a-RC8" fallback. Fix:
+    one helper naming the build the core reports. Past records only matter as records (owner's rule for the G3 case).
+  - **Performance:**
+    - P1 (S): one `javap` per jar, not per class (`settings_keys.py:116`, `procgen_args.py:151`). That is 40-77% of a
+      scan (UAF: 252 launches, 52.8 of 68.6 s), and revive repeats it.
+    - P2 (S-M): provider lookups read only each provider's `mod_info.json` (`substitutes.provider_for`). About 35 s per
+      scan with providers (Bultach: 29.9 -> 68.2 s).
+    - P3 (S): revive drops its duplicate final scan; compile-check caches its harness and core compile (about 2 s a scan).
+    - P4 (S): AST facts resolve each file once (about 3.5 s a scan).
+    - P6 (S): fix the quadratic `_invalid_utf8_offsets`. It is the suite's slowest test at 24 s, and large CP-1252
+      files hit it too.
+    - P7 (S): parse the vanilla core once per process (about 2 s a scan, about 6 min per done-audit).
+    - P5, P8 (M, S): read each source and each jar class once per scan.
+    - P9 (M): memoize the AST helper in tests (an estimated 2-3 of 11 minutes).
+    - P10 (M): a process pool for target-impact and corpus-index (5 -> about 1.5 min).
+  - **CI and tooling:**
+    - C3 (S): stop duplicate push and pull_request runs. 101 of 191 SHAs ran twice, and nine PRs queued for hours on
+      2026-11-17. Docs-only PRs run only the doc-reading tests.
+    - C1 (S): the git hooks never run (`.githooks/` is ignored and `core.hooksPath` is unset). A pre-commit that
+      regenerates the generated files would have caught the stale CHECKS.md.
+    - C5 (S): a pre-push static tier plus tests selected by import, under 2 minutes.
+    - C6 (S): the same JDK locally and on CI, and `-encoding` on every test javac (14 of 16 lack it).
+    - C7, C8 (S): wall-clock budgets to `process_time`, `timeout-minutes`, `buffer=True`; a shared setup step and a
+      pinned ruff (weekly.yml drifted from ci.yml and failed 5 weeks running).
+    - C2 (M): time-balanced shards with coverage inside the Ubuntu ones (Windows-fast is 12 min now; PR results in
+      about 5-6).
+    - C4 (M): a machine-state sandbox for the suite: winreg raises unless patched; HOME, APPDATA and TEMP point at temp
+      folders.
+    - C9 (M): shared test fixtures (`_write` is copied in 60 files; 39 copies write CRLF on Windows).
+  - **Architecture and process:**
+    - A3 (S): `escalation run --all` breaks the long-running rule (no progress, no checkpoint). `auto-open` and
+      `atlas migrations` are missing from the list, and a test should require it.
+    - A8 (S): the revival guide still teaches the RC8 workflow (docs pass, 96.3).
+    - A9 (S): retire two dead tools scripts and a fourth status list (`prepush-check.ps1` lacks NOT_REVIVABLE).
+    - A2 (S/M): one resolver for the checkout and the state folder. The `.venv` holds a stale non-editable copy,
+      0.4.0, 68 files behind.
+    - A7 (S/M): MOD_CHANGELOG and release decisions as fragments, since two machines now write them.
+    - A4, A5, A6, A10 (M): one public module for mod files (11 resolvers, 5 `_mod_info` loaders); split the `run_cli`
+      if-chains (10 of the 13 functions over 200 lines); split the 1,000-line modules with a size ratchet; one shared
+      tree hash with 93.27's cache (13 copies of `_sha256`).
 
 **95. Less hand work and faster re-validation for game updates (owner 2026-11-17: "1 through 5 add to roadmap. 6 I'm not sure we can do that always but if it can be optional that would be great. All others approved."; "Implement the smaller items not the greater phases like S and G").**
 **Approved.** Found taking the six-mod batch, United Aurora Federation and Sunrider through revival and live tests on
