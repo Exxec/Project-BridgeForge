@@ -523,9 +523,11 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
     from bridgeforge.graceful_exit import clear_done
 
     clear_done(rig)
-    from bridgeforge.rig.rig_prefs import pinned_launcher_prefs
+    from bridgeforge.rig.rig_prefs import LIVE_PINNED, pinned_launcher_prefs
 
-    prefs = pinned_launcher_prefs() if pin_prefs else contextlib.nullcontext()  # the click fractions were measured at 1280x960; the owner's own setting comes back afterwards
+    # The window the click fractions were measured in, and canSkipTutorial for New Game's "Skip it" (ROADMAP-3 93.28); the
+    # owner's own values come back afterwards.
+    prefs = pinned_launcher_prefs(LIVE_PINNED) if pin_prefs else contextlib.nullcontext()
     prefs.__enter__()
     try:
         process = launch.start_game(rig, bat, log, err)

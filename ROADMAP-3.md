@@ -235,6 +235,17 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   order to be able to skip it"; `NGCCanSkipTutorial` is `!isNewPlayer()`, backed by the Java preference `canSkipTutorial`). Test1
   needed both besides the licence key (93.20). Pre-flight lists them; `rig_prefs` pins `canSkipTutorial=true` for an unattended New
   Game and restores it.
+  **Done 2026-11-17 (code; first live run with it still to come).**
+  - `rig_prefs.LIVE_PINNED` adds `can/Skip/Tutorial=true` to the resolution pins. Java stores each capital as "/" plus the letter;
+    the names were read from both machines' registries. `probe-group live` pins it and restores the owner's state, absent included.
+  - `rig-doctor` has a `launcher_prefs` check: FAIL with no licence key, WARN with no stored controls (`controls/Version`, the
+    key-configuration dialog), a note when canSkipTutorial is unset.
+  - `rig_prefs.has_pref` asks the registry for a value's size only, so the licence key is checked for presence and never read.
+  - Tests: `tests/test_rig_prefs.py` (the pin and restore, `FirstRunPreflightTests`) and `tests/test_one_launcher.py` (the live run
+    passes `LIVE_PINNED`).
+  - Review fixes, the same day: rig-doctor's tests no longer depend on the Windows user's preferences (a CI runner has none,
+    which would FAIL the check). `HasPrefTests` runs the presence check against a throwaway registry key and fails if any value
+    is read.
 - 93.29 **A report reads its own run's probe config.** `probe-group report` uses the rig's current config, so group 3's report after
   `install 4` named Tania instead of KoC (2026-11-17). Keep the config, or its hash, with the run manifest and read that.
 - 93.30 **Scenario testbed (owner design 2026-11-17).** Hidden mission factions whose fleets the code builds by hand (Tania's Blood
