@@ -1,3 +1,62 @@
+**93. Test rigs, probe targets and library dependencies (owner 2026-11-17: "yes, also bridgeforge is supposed to check for undeclared libraries and add them. If not implement it and continue to make suggestions").**
+**Approved; 93.1-93.2 done, the rest queued after the six live tests.** Found preparing Test1 for the six-mod live run (2026-11-17).
+- 93.1 **Done 2026-11-17.** **Optional library use misread as required.** Undeclared-library detection and its fixer already existed
+  (`undeclared-library-dependency`, unguarded use declared from `LIBRARY_DEPENDENCY_IDS`; guarded use left alone, Exigency
+  2026-09-28), and the batch's mods declare their libraries. But Navarchy of Tania's and Bultach Coalition's Nexerelin use became
+  REVIEW agent packets that failed twice each: Tania because two jar classes import Nexerelin types they never use, Bultach because
+  it mixes an isModEnabled-guarded plugin with a custom start registered in `customStarts.json`. Built: a source whose shipped
+  class (in the mod's jar) references nothing of the library is not counted (judged from bytecode: a loose script the game
+  compiles can fail on an unused import, so it still counts); a registered custom-start class counts as guarded. Both mods now
+  get the SAFE `optional-library-integration` note. Tests: `tests/test_batch_lessons.py` (incl. the loose-script counter-case).
+- 93.2 **Done 2026-11-17.** **Libraries the check did not know.** BoxUtil (id `BoxUtil`, `org/boxutil/`; Eridani depends on it)
+  and AshLib (id `ashlib`, `ashlib/`) were in neither table, read from zz BoxUtil-1.4.9 and Ashlib-2.2.3. Added to
+  `BUNDLED_LIBRARY_PACKAGE_PREFIXES` and `LIBRARY_DEPENDENCY_IDS`, so an undeclared use is found and declared. Tests:
+  `tests/test_batch_lessons.py`.
+- 93.3 **One command to make a test rig.** `_rig-0985a` on Test1 was built by hand (junction to the core, launcher copied, four
+  folders, six libraries copied). `rig-create-test --core <starsector-core> --libs-from <mods folder> --name _rig-<build>`: create
+  the folders and junction, write launchers, record the core's build in `rig_up_state.json`, never touch an existing rig.
+- 93.4 **Every rig states its build and refuses the wrong one.** Test1's `_rig` pointed at RC8 while the target was 0.98.5a, and
+  `C:\Games\Starsector-0.98.5a-RC3` turned out to be RC3 (92.40). `rig-doctor`, `probe-group install|smoke|live` print the build
+  the rig's core reports and refuse when it is not the target build (override with a flag and a reason).
+- 93.5 **Rig libraries from the mods' dependencies.** BoxUtil was missing from the rig and noticed only by reading Eridani's
+  mod_info. `probe-group install` resolves each declared (and 93.1-detected undeclared) dependency by id from a libraries folder,
+  copies it, picks one version when several exist (MagicLib 1.5.6 and 1.6.1 side by side), and flags a library whose own
+  `gameVersion` predates the target.
+- 93.6 **Name-faithful copies.** `tar | ssh tar` turned Eridani's CJK file names into code-page mojibake (92.40); file counts and
+  content hashes still matched. Rig sync and any cross-machine copy compare names byte for byte.
+- 93.7 **Run where there is a desktop, or refuse.** A game started from an SSH command lands in a non-interactive session.
+  `smoke`/`live` detect it and either refuse with the remedy or launch through an interactive scheduled task in the logged-on
+  user's session (`schtasks /IT`), streaming the log back.
+- 93.8 **Pre-flight before clicks.** User logged on and unlocked, expected resolution, no other Starsector/java process
+  (`who-locks`), rig not held by another run manifest; today all by hand.
+- 93.9 **Launchers that travel with the rig.** `run-j25-direct.bat` hard-codes `_rig\jdk-25...`; a new rig works only by borrowing
+  it. Resolve the JDK relative to the rig or from one shared JDK location.
+- 93.10 **Probe targets from the applied fixes.** Generate probe checks from the revive ledger: Tania's junk-fleet spawn in combat
+  with an AI-replacement mod (the captain fix), Lobster tanks on two ships, Bultach's per-ship hull mods, KoC's `dual_apmg` load
+  line, Eridani's translated rules lines, crafted descriptions present in the codex.
+- 93.11 **AI-replacement compat set.** The owner runs AI Tweaks, and the module/spawned-ship captain crash is AI-replacement specific
+  (RC8 report pending confirmation); a standard compat set with it turns that risk into a tested one.
+- 93.12 **Paired before/after runs.** The same probe scenario on the RC8 rig with the original mod and on the 0.98.5a rig with the
+  revived one, diffed (`behavior-diff` exists; nothing pairs the runs).
+- 93.13 **Known-noise baseline per build.** Log lines a clean rig with only the libraries produces on each build, so `log-triage`
+  reports what the mods add.
+- 93.14 **One command for a batch.** The six-mod batch ran intake -> revive -> standard approvals -> agent packets -> src-to-jar ->
+  descriptions -> translation -> revive by hand, per mod. `revive-queue` chains it and stops only at owner decisions, gathered
+  into one decisions sheet for the batch (`escalation sheet` builds one).
+- 93.15 **Rebuild the jar right after an agent fix.** `src-to-jar` runs only in an approved revive. `escalation run --apply` runs it
+  when a jar mod's source fix verifies, taking library jars from the reference install's `mods/` so `--lib` is not needed.
+- 93.16 **Packets say the source is jar-backed.** Bultach's agents also removed `readResolve` and moved unlisted fields
+  (`rightArm`, `nearbyShips`); a packet for a jar-backed source says "compiled into jars/X.jar and rebuilt by src-to-jar" and
+  lists every field the fix may move.
+- 93.17 **Parallel agent packets.** Bultach's 33 packets ran one after another (about 40 minutes); packets on different files are
+  independent and can run a few at a time (bounded, item 76's E3).
+- 93.18 **A machine-independent workspace bundle.** Move workspaces as a zip with UTF-8 names (zip's language-encoding flag; tar
+  through the Windows console mangled them, 92.40), and keep paths in workspace reports relative: Test1's packets and REVIVE.json
+  still name White_Legion paths.
+- 93.19 **Warn about a stale installed copy.** The project `.venv` holds an old non-editable `bridgeforge` in `site-packages`; a
+  script run outside the checkout imported it and got old code (2026-11-17). `doctor` warns when the installed copy and the
+  checkout differ.
+
 **92. Less hand work found reviving six mods against 0.98.5a-RC7 (owner 2026-11-16: "add these improvements to roadmap we will implement in queue after these mods are revived but not yet live tested").**
 **Approved, queued: start once Scrapyard Armories, Bultach Coalition, Eridani Combine, Everybody loves KoC, Musashi
 Manufactorum and Navarchy of Tania are revived (UNATTENDED_DONE), before their live tests.** Found 2026-11-16 by running
@@ -222,6 +281,21 @@ Manufactorum and Navarchy of Tania are revived (UNATTENDED_DONE), before their l
   RC7, read from `starfarer_obf.jar`). State the build as `target show` reports it, and make `target show` print the version read
   from the core beside the registry entry so a stale folder name cannot mislead (with 92.9).
   Built: CLAUDE.md states the build (0.98.5a, RC7 per `target show`) and warns that Test1's RC3-named folder holds RC7; see 92.9 for `target_core_reports`.
+  Correction 2026-11-17 (92.40): that claim was wrong; Test1's RC3 folder reports RC3. CLAUDE.md now says so.
+- 92.39 **Done 2026-11-17.** **Acceptances did not travel between machines.** Everybody loves KoC's accepted
+  `vanilla-path-shadowing` came back on Test1: its evidence names the absolute core path
+  (`vanilla-path:C:/Program Files (x86)/.../Starsector985a/starsector-core/...` here, `C:\Games\...` there), so the baseline key
+  differed. Built: `baseline.stable_evidence` cuts any absolute path up to a `starsector-core` folder (either slash, drive or POSIX)
+  to `starsector-core/...`, for new keys and stored ones as they load. Tests: `tests/test_small_fixes_92.py`.
+- 92.40 **Test1's "RC7" was RC3; and a copy mangled non-ASCII names.** Live-test preparation on Test1 (2026-11-17):
+  `core_game_version` read `0.98.5a-RC3` from `C:\Games\Starsector-0.98.5a-RC3` and its `starfarer_obf.jar` differed from
+  White_Legion's RC7 (sha256 1d8301ec... vs 8b917602...), contradicting 92.38's note; Bultach raised an RC3-only
+  `rc8-signature-changed` there. The RC7 install was copied to `C:\Games\Starsector-0.98.5a-RC7` (6143 files, same jar hash, reports
+  RC7) and a separate test rig `_rig-0985a` points at it (the RC8 `_rig` is untouched). Separately, the `tar | ssh tar` workspace
+  copy (92.37) turned Eridani's `图层 173.png`/`图层 174 拷贝.png` into code-page mojibake in all six places (fixed by renaming from
+  code points; content hashes matched). Open: any cross-machine copy BridgeForge offers must compare names byte for byte, not
+  only file counts and content hashes; `target show` should be run on each machine before a live session (92.9 makes it say the
+  build).
 
 **91. Side by side: the old and the new build together (owner 2026-11-15: "for the side to side ideas, go ahead and implement. apply same process for other repos").**
 - 91.1 **Done 2026-11-15.** `vanilla-migration OLD_CORE NEW_CORE [--write DIR]`: for every member `api-diff` lists as removed and every

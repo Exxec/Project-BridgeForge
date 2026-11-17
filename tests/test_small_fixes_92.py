@@ -100,6 +100,21 @@ class CliDefaultsTests(unittest.TestCase):
         self.assertIn(finding_dict_baseline_key(moved), keys)
         self.assertNotIn(finding_dict_baseline_key(other), keys)  # a different subject is still a new finding
 
+    def test_an_acceptance_travels_to_a_machine_whose_core_sits_elsewhere(self) -> None:
+        # 92.39: KoC's accepted vanilla-path-shadowing came back on Test1 (core under C:\Games, not Program Files).
+        from bridgeforge.baseline import finding_dict_baseline_key, load_baseline_keys
+
+        with resolved_temp_dir() as root:
+            stored = root / "baseline.json"
+            here = "vanilla-path:C:/Program Files (x86)/Fractal Softworks/Starsector985a/starsector-core/data/hulls/mining_drone.ship"
+            stored.write_text(json.dumps({"findings": [f"vanilla-path-shadowing|data/hulls/mining_drone.ship|{here}"]}), encoding="utf-8")
+            keys = load_baseline_keys(stored)
+        there = {"id": "vanilla-path-shadowing", "file": "data/hulls/mining_drone.ship",
+                 "evidence": [r"vanilla-path:C:\Games\Starsector-0.98.5a-RC7\starsector-core\data\hulls\mining_drone.ship"]}
+        other = {**there, "evidence": [r"vanilla-path:C:\Games\Starsector-0.98.5a-RC7\starsector-core\data\hulls\wolf.ship"]}
+        self.assertIn(finding_dict_baseline_key(there), keys)
+        self.assertNotIn(finding_dict_baseline_key(other), keys)
+
     def test_escalation_run_has_a_default_agent(self) -> None:
         # 92.8: every run of the batch passed the same command; `claude` off PATH resolves to the bundled binary.
         from bridgeforge.cli import build_parser

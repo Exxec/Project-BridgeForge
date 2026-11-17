@@ -10,12 +10,18 @@ from .models import Finding
 
 
 _LINE_NUMBER = re.compile(r":\d+(?=[:\s]|$)")
+# An absolute path up to a starsector-core folder (any drive, either slash): the part that differs between machines.
+_CORE_PATH = re.compile(r"(?:(?<![A-Za-z])[A-Za-z]:)?[\\/][^|:]*?[\\/]starsector-core(?=[\\/]|$)", re.IGNORECASE)
 
 
 def stable_evidence(evidence: str) -> str:
-    """Evidence without line numbers (`Carinasystem.java:31: Carina` -> `Carinasystem.java:#: Carina`): an accepted finding
-    must survive an edit that only moves lines. Navarchy of Tania's accepted system-generation-unguarded came back after an
-    agent fix shifted Carinasystem.java and had to be accepted again (ROADMAP-3 item 92.29, 2026-11-16)."""
+    """Evidence without line numbers (`Carinasystem.java:31: Carina` -> `Carinasystem.java:#: Carina`) and without the
+    machine's own path to a starsector-core (`vanilla-path:C:/.../Starsector985a/starsector-core/data/...` ->
+    `vanilla-path:starsector-core/data/...`): an accepted finding must survive an edit that only moves lines (Navarchy of
+    Tania, ROADMAP-3 item 92.29) and a copy to another machine (Everybody loves KoC's accepted vanilla-path-shadowing came
+    back on Test1, whose core sits elsewhere; item 92.39, 2026-11-17)."""
+    if "starsector-core" in evidence.lower():
+        evidence = _CORE_PATH.sub("starsector-core", evidence.replace("\\", "/"))
     return _LINE_NUMBER.sub(":#", evidence)
 
 
