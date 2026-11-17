@@ -68,11 +68,25 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+# Folders a mod writes into while the game runs: output, not staged input, so they stay out of that mod's staged hash.
+# Keyed by mod_info id. ROADMAP-3 93.41: StarsectorPrepatcher's agent writes logs/prepatcher.log during the run, so
+# SR5-LIVE-0985a-20261117 (Bultach, PASS) read "staged files of starsector_prepatcher changed since launch" and stayed UNBOUND.
+RUNTIME_OUTPUT_DIRS = {"starsector_prepatcher": ("logs",)}
+
+
 def _tree_hash(folder: Path) -> str:
-    from bridgeforge.live.live_trust import shipped_hash
+    from bridgeforge.live.live_trust import _mod_info, shipped_files, shipped_hash
 
     try:
-        return shipped_hash(folder)
+        skipped = RUNTIME_OUTPUT_DIRS.get(str(_mod_info(folder).get("id") or ""))
+        if not skipped:
+            return shipped_hash(folder)  # every other mod hashes exactly as before
+        digest = hashlib.sha256()
+        for relative, path in shipped_files(folder).items():
+            if relative.split("/", 1)[0].lower() in skipped:
+                continue
+            digest.update(f"{relative}\0{_sha256_file(path)}\n".encode("utf-8"))
+        return digest.hexdigest()
     except OSError as exc:
         raise ManifestError(f"cannot read {folder}: {exc}") from exc
 

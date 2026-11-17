@@ -602,6 +602,11 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - Fix: leave a mod's known runtime output out of the staged fileset (a per-mod ignore list, Prepatcher's `logs/` first),
     or move Prepatcher's log out of the mod folder if `prepatcher.properties` allows it.
   - Then re-record SR5; the run itself needs no repeat.
+  **Done 2026-11-17 (code).** `run_manifest.RUNTIME_OUTPUT_DIRS` (`starsector_prepatcher`: `logs`) keeps a mod's own runtime
+  output out of that mod's staged hash. Every other mod hashes exactly as before, so older manifests stay valid. SR5's
+  manifest hashed the old log, so it cannot be re-recorded under this fix. Bultach needs one re-run once live testing
+  resumes (93.44 first). Test: `tests/test_run_manifest.py` `test_a_mods_own_runtime_log_is_not_drift_but_its_payload_is`
+  (fails on the old hash).
 - 93.42 (M) **Fast Rendering and Prepatcher in every live test, built in.**
   - Owner 2026-11-17: "please copy, send and setup the following with each live test" (StarsectorPrepatcher 0.18.8,
     fast_rendering v1.0.2rc1).
