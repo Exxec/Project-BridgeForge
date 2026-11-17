@@ -3606,7 +3606,7 @@ run the mechanical part of a revival unattended (scan, permitted fixers, rescan,
 | `--vanilla-core` VANILLA_CORE | - | RC8 starsector-core: enables the loose-script compile check and the fixers that compare against vanilla |
 | `--target` TARGET | - | target game version for mod_info.json (default: the --vanilla-core's own version, read from its starfarer_obf.jar; else 0.98a-RC8) |
 | `--max-rounds` MAX_ROUNDS | default 5 | - |
-| `--providers` PROVIDERS | repeatable | where to look for mods that provide missing content, for the options in missing-content packets (default: the workspace's queue folder and its _rig/mods); repeatable |
+| `--providers` PROVIDERS | repeatable | where to look for mods that provide missing content, for the options in missing-content packets (default: the workspace's queue folder and its _rig/mods); --draft-report's compile check also resolves libraries there; repeatable |
 | `--reference-core` REFERENCE_CORE | - | the older starsector-core the mod was made for (default: the installed core matching the original mod_info gameVersion): variant-op-over-budget trims only what the target pushed over, src-to-jar proves src/ against it, missing-content packets propose renamed replacements |
 | `--lib` LIB | repeatable | a library jar the mod compiles against without declaring it (LazyLib, Nexerelin, ...), for src-to-jar; repeatable |
 | `--provider-index` PROVIDER_INDEX | - | saved `provider-index build` output, as for dependency-substitutes |

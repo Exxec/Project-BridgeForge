@@ -165,6 +165,36 @@ class ReviveTests(unittest.TestCase):
         self.assertEqual(again["report_draft"]["status"], "REFUSED")  # never over an existing report
         self.assertIn("Report draft: REFUSED", summary)
 
+    def test_the_report_draft_resolves_libraries_where_the_scan_does_and_in_named_providers(self):
+        """ROADMAP-3 93.36: Sunrider's draft said BLOCKED on LazyLib and MagicLib, which revive's own scan found in the
+        reference install's mods/ (2026-11-17); `--providers` folders count for the draft too."""
+        from unittest import mock
+
+        from bridgeforge import revival_report_draft
+
+        with resolved_temp_dir() as root:
+            core = root / "Target" / "starsector-core"
+            reference = root / "Reference" / "starsector-core"
+            named = root / "Named mods"
+            for folder in (core, reference, root / "Reference" / "mods", named):
+                folder.mkdir(parents=True)
+            clean = root / "In operation" / "Clean"
+            (clean / "working").mkdir(parents=True)
+            (clean / "working" / "mod_info.json").write_text(json.dumps({"id": "clean", "name": "Clean", "version": "1", "gameVersion": "0.98a-RC8"}), encoding="utf-8")
+            seen: list[list[Path]] = []
+            real = revival_report_draft.draft_revival_report
+
+            def spy(mod_dir, vanilla_core=None, provider_roots=None):
+                seen.append([Path(p).resolve() for p in provider_roots or []])
+                return real(mod_dir, vanilla_core, provider_roots)
+
+            with mock.patch.object(revival_report_draft, "draft_revival_report", spy):
+                result = revive(clean, vanilla_core=core, draft_report=True, reference_core=reference, providers=[named])
+            expected = [(root / "Reference" / "mods").resolve(), named.resolve()]
+        self.assertEqual(result["report_draft"]["status"], "OK")
+        self.assertEqual(len(seen), 1)
+        self.assertEqual([p for p in seen[0] if p in expected], expected)
+
     def test_missing_content_packets_carry_all_three_options(self):
         with resolved_temp_dir() as root:
             workspace, core = _addon_with_missing_content(root)
