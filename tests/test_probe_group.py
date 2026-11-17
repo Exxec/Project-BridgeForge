@@ -401,10 +401,14 @@ class InstallTests(unittest.TestCase):
             record_group(log, build_probe_config(a), queue, rig, test_id="GRP-S", today="2026-11-17")
             run = json.loads((queue / "_live" / "GRP-S.json").read_text(encoding="utf-8"))
             unsaved = run_save_made_with(rig, "\n".join([MENU, LOAD]), save_made_with)
-            escaping = run_save_made_with(rig, saving.replace("save_Own_1", "../../save_Own_1/.."), save_made_with)
+            # A path outside the rig is never read, even when a save is there: only its last part is looked up in saves/.
+            outside = root / "elsewhere" / "save_Outside_3"
+            outside.mkdir(parents=True)
+            (outside / "descriptor.xml").write_text(DESCRIPTOR, encoding="utf-8")
+            elsewhere = run_save_made_with(rig, saving.replace("..\\saves/save_Own_1", str(outside)), save_made_with)
         self.assertEqual(run["save_made_with"]["game_version"], "0.98a-RC8")
         self.assertIsNone(unsaved)  # a run that saved nothing has no save of its own, whatever else the rig holds
-        self.assertIsNone(escaping)  # only a plain save_* folder name inside the rig's saves/
+        self.assertIsNone(elsewhere)
 
     def test_record_refresh_replaces_an_earlier_archive_only_when_asked(self) -> None:
         # Six archives made as READY_FOR_LIVE_TEST stayed that way after their runs passed (2026-10-11): `record --archive` met

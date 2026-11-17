@@ -871,9 +871,10 @@ _SAVING_TO = re.compile(r"CampaignGameManager\s+-\s+Saving to (?P<path>.+?)\.\.\
 def run_save_made_with(rig: Path, log_text: str, reader) -> dict | None:
     """What the run's own save records: the last folder its log says the game saved to, read with `reader`. None when the run
     saved nothing. The rig's newest save was read before, so a group recorded after a later run described that run's save:
-    G3-LIVE-0985a-20261117 (KoC) listed Tania's mods (ROADMAP-3 item 93.38, 2026-11-17)."""
+    G3-LIVE-0985a-20261117 (KoC) listed Tania's mods (ROADMAP-3 item 93.38, 2026-11-17). Only the path's last part is looked
+    up, and only as a `save_*` folder of the rig's own saves/, so a path in the log never leads outside the rig."""
     names = [re.split(r"[\\/]", match.group("path").strip())[-1] for match in _SAVING_TO.finditer(log_text)]
-    names = [name for name in names if re.fullmatch(r"save_[^\\/]+", name) and ".." not in name]
+    names = [name for name in names if re.fullmatch(r"save_[^\\/]+", name)]
     folder = Path(rig) / "saves" / names[-1] if names else None
     return reader(folder) if folder is not None and folder.is_dir() else None
 
