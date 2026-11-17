@@ -1,7 +1,10 @@
 name: CI
 
 on:
+  # Pull requests run CI; a push runs it only on main (the merge). Both triggers on every branch ran each PR commit twice:
+  # 101 of 191 SHAs, and nine PRs queued for hours on 2026-11-17 (ROADMAP-3 96.5 C3).
   push:
+    branches: [main]
   pull_request:
 
 permissions:
