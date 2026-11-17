@@ -131,6 +131,12 @@ Check S series implementation plan and if applicable add remaining items to road
     - P4 (S): AST facts resolve each file once (about 3.5 s a scan).
     - P6 (S): fix the quadratic `_invalid_utf8_offsets`. It is the suite's slowest test at 24 s, and large CP-1252
       files hit it too.
+      **Done 2026-11-17.** One decode with a registered error handler. The handler records each undecodable byte and
+      resumes one byte past it, which is where the old loop resumed, so the offsets are the same. They are collected per
+      thread. `test_large_rules_csv_with_isolated_cp1252_byte_survives_the_fix` went from 37.6 s to under 0.75 s on
+      White_Legion. Its five modules took 62.5 s before; with the new test module they took 21.5 s after. Test: `tests/test_utf8_offsets.py`: equal to the old
+      loop on 610 inputs (truncated, overlong and surrogate sequences, stray bytes), unmixed across 8 threads, and a
+      2.4 MB file with 120,000 isolated CP-1252 bytes.
     - P7 (S): parse the vanilla core once per process (about 2 s a scan, about 6 min per done-audit).
     - P5, P8 (M, S): read each source and each jar class once per scan.
     - P9 (M): memoize the AST helper in tests (an estimated 2-3 of 11 minutes).
