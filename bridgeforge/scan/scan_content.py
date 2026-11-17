@@ -360,6 +360,10 @@ def _scan_star_type_undefined(root: Path, result: ScanResult, vanilla_core: Path
         # A description id is not a star type: Templars' TEM_Antioch makes its star with initStar(..., "star_neutron", ...) and then calls
         # setCustomDescriptionId("star_antioch") (javap of Templars.jar, 2026-10-13), which this check had reported as an undefined star.
         code = re.sub(r'setCustomDescriptionId\s*\(\s*"[^"]*"\s*\)', "setCustomDescriptionId()", _blank_java_comments(text))
+        # A faction id is not a star type either: Navarchy of Tania's TaniaGen calls setRelationship("star_federation", NEUTRAL)
+        # (ROADMAP-3 item 92.28, 2026-11-16). Faction-taking calls' string arguments are blanked.
+        code = re.sub(r'\b(setRelationship|getRelationship|adjustRelationship|ensureAtBest|ensureAtWorst|getFaction|isAtWorst|isAtBest|'
+                      r'isHostileTo|getRelationshipLevel)\s*\(\s*"[^"]*"', r'\1(""', code)
         for literal in set(re.findall(r'"(star_[a-z0-9_]+)"', code)):
             if literal not in defined:
                 used.setdefault(literal, []).append(_relative(root, source))

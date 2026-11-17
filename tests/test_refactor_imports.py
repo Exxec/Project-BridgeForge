@@ -18,6 +18,10 @@ class RefactorImportTests(unittest.TestCase):
         old_modules = set(MOVES["moves"])
         shims = set(MOVES["shims"])
         new_modules = set(MOVES["moves"].values())
+        # A module added to a moved-to package after the move (bridgeforge.bytecode.src_to_jar, ROADMAP-3 item 92.25) is a
+        # real implementation file, not a compatibility path, even though its name starts with the old flat module's.
+        new_modules |= {".".join(p.relative_to(ROOT).with_suffix("").parts) for p in python_sources(ROOT / "bridgeforge")
+                        if p.name != "__init__.py"} - old_modules - shims
         problems = []
         for path in python_sources(ROOT / "bridgeforge"):
             relative = path.relative_to(ROOT).with_suffix("")

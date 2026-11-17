@@ -71,6 +71,7 @@
     "saved-object-holds-market-ref": "inspect",
     "nexerelin-corvus-mode-import": "auto",
     "jar-linkage-unresolved": "code",
+    "jar-source-not-rebuilt": "code",
     "jar-interface-method-missing": "code",
     "internal-jvm-api": "code",
     "invalid-csv": "inspect",

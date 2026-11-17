@@ -46,7 +46,8 @@ def add_parser(subcommands) -> None:
     revive_cmd.add_argument("--target", help="target game version for mod_info.json (default: the --vanilla-core's own version, read from its starfarer_obf.jar; else 0.98a-RC8)")
     revive_cmd.add_argument("--max-rounds", type=int, default=5)
     revive_cmd.add_argument("--providers", type=Path, action="append", default=[], help="where to look for mods that provide missing content, for the options in missing-content packets (default: the workspace's queue folder and its _rig/mods); repeatable")
-    revive_cmd.add_argument("--reference-core", type=Path, help="the older starsector-core the mod was made for: lets missing-content packets propose renamed replacements (substitution-proposals)")
+    revive_cmd.add_argument("--reference-core", type=Path, help="the older starsector-core the mod was made for (default: the installed core matching the original mod_info gameVersion): variant-op-over-budget trims only what the target pushed over, src-to-jar proves src/ against it, missing-content packets propose renamed replacements")
+    revive_cmd.add_argument("--lib", type=Path, action="append", default=[], help="a library jar the mod compiles against without declaring it (LazyLib, Nexerelin, ...), for src-to-jar; repeatable")
     revive_cmd.add_argument("--provider-index", type=Path, help="saved `provider-index build` output, as for dependency-substitutes")
     revive_cmd.add_argument("--draft-report", action="store_true", help="when the run ends UNATTENDED_DONE, draft REVIVAL_REPORT.md/REVIVAL_PLAN.md with revival-report-draft (written only with --apply, never over an existing report; needs --vanilla-core for its compile check)")
     revive_cmd.add_argument("--json", action="store_true")
@@ -172,7 +173,7 @@ def run_cli(args: argparse.Namespace) -> int:
         try:
             result = revive(args.workspace, target=args.target, vanilla_core=args.vanilla_core, policy_path=args.policy,
                             approve=args.approve, apply=args.apply, max_rounds=args.max_rounds, draft_report=args.draft_report,
-                            providers=args.providers, provider_index=args.provider_index, reference_core=args.reference_core)
+                            providers=args.providers, provider_index=args.provider_index, reference_core=args.reference_core, libs=args.lib)
         except (ReviveError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

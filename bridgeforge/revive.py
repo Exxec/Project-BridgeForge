@@ -103,7 +103,37 @@ def outside_provider_sources(queue: Path) -> list[Path]:
         return []
 
 
-def _scan(working: Path, vanilla_core: Path | None) -> list[dict]:
+def _target_profile(target: str | None):
+    """The scan target for a revive run. ROADMAP-3 item 92.13 (2026-11-16): revive resolved its target from the core
+    (0.98.5a-RC7) but scanned with the generic default 0.98.x, so `mod-info-game-version-inexact` never fired for a mod
+    declaring "0.98" and, once bumped by hand, fired against the correct value (normalised to 0.98a; 92.21)."""
+    from .models import TargetProfile
+
+    return TargetProfile(starsector=target) if target else None
+
+
+def _declared_game_version(workspace: Path) -> str | None:
+    """mod_info gameVersion as the author shipped it: original/ first (working/ may already be bumped), then working/."""
+    from bridgeforge.scan.scanner import _load_lenient_json_file
+
+    originals = sorted((workspace / "original").glob("*/mod_info.json")) + sorted((workspace / "original").glob("*/*/mod_info.json"))
+    for path in [*originals, workspace / "working" / "mod_info.json"]:
+        info = _load_lenient_json_file(path) if path.is_file() else None
+        if isinstance(info, dict) and isinstance(info.get("gameVersion"), str):
+            return info["gameVersion"]
+    return None
+
+
+def _resolve_reference_core(workspace: Path, vanilla_core: Path) -> Path | None:
+    """The installed core the mod was made for, from its declared gameVersion, among the installs beside the target core
+    (CLAUDE.md: reference installs sit beside RC8 under Fractal Softworks/). ROADMAP-3 item 92.17."""
+    from .game_version import reference_core_for
+
+    install_root = Path(vanilla_core).resolve().parent.parent
+    return reference_core_for(_declared_game_version(workspace), [install_root], exclude=Path(vanilla_core))
+
+
+def _scan(working: Path, vanilla_core: Path | None, target: str | None = None) -> list[dict]:
     """Scan findings minus the ones the mod's own baseline accepts (working/reports/baseline*.json):
     an accepted finding is never fixed, packeted or counted against the mod."""
     from .baseline import finding_dict_baseline_key, mod_baseline_keys
@@ -116,7 +146,8 @@ def _scan(working: Path, vanilla_core: Path | None) -> list[dict]:
     # rig, and its content read as unresolved in mods that already declared it (2026-10-01).
     queue = Path(working).resolve().parent.parent
     providers = [p for p in (rig_mods, queue, *outside_provider_sources(queue)) if p.is_dir()] or None
-    findings = [asdict(f) for f in scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None, provider_roots=providers).findings]
+    findings = [asdict(f) for f in scan_mod(working, target=_target_profile(target), vanilla_core=vanilla_core,
+                                            compile_check=vanilla_core is not None, provider_roots=providers).findings]
     _record_settings_baseline(working, findings)
     return [f for f in findings if finding_dict_baseline_key(f) not in accepted]
 
@@ -147,10 +178,17 @@ def packet_id(finding_id: str, file: str) -> str:
     return f"{finding_id}--{suffix}"
 
 
-def _fix_options(finding_id: str, working: Path, target: str, vanilla_core: Path | None, findings: list[dict]) -> list[dict]:
+def _fix_options(finding_id: str, working: Path, target: str, vanilla_core: Path | None, findings: list[dict],
+                 reference_core: Path | None = None) -> list[dict]:
     # scan_findings: the fixer reuses this run's scan instead of rescanning the whole mod (the five
     # file-list fixers each did, so one round could cost six full scans on a large mod).
-    base = {"target_game_version": target, "vanilla_core": vanilla_core, "scan_findings": findings}
+    base = {"target_game_version": target, "vanilla_core": vanilla_core, "scan_findings": findings, "reference_core": reference_core}
+    if finding_id == "variant-op-over-budget" and reference_core is None:
+        # Owner ruling 2026-09-27 option 2 (RC8-06): trim only what the new build's costs pushed over, which needs the
+        # core the mod was made for. Without one, revive refuses rather than trim authored loadouts (ROADMAP-3 92.17).
+        return [{**base, "refuse": "variant-op-over-budget needs the core the mod was made for (--reference-core, or an "
+                 "installed core matching mod_info gameVersion): only variants that fit there are trimmed (owner ruling "
+                 "2026-09-27 option 2, RC8-06)."}]
     if finding_id == "faction-known-lists-missing":
         return [{**base, "faction_file": working / f["file"]} for f in findings if f.get("file")]
     if finding_id == "csv-missing-design-type-column":
@@ -186,7 +224,7 @@ def _fix_options(finding_id: str, working: Path, target: str, vanilla_core: Path
 
 
 def _try_fixers(working: Path, findings: list[dict], *, target: str, vanilla_core: Path | None, approved: set[str], apply: bool,
-                named: frozenset[str] | set[str] = frozenset()) -> tuple[list[dict], list[dict]]:
+                named: frozenset[str] | set[str] = frozenset(), reference_core: Path | None = None) -> tuple[list[dict], list[dict]]:
     """Compute every supported fixer; apply the permitted ones. Returns (applied, not applied). `named`: fixers a person named
     for this run. A standing approval never covers a MANUAL or UNKNOWN finding (owner 2026-11-01); naming the fixer does."""
     applied, pending = [], []
@@ -201,7 +239,10 @@ def _try_fixers(working: Path, findings: list[dict], *, target: str, vanilla_cor
         unattended = classifications == ["SAFE"]
         person_gated = bool({"MANUAL", "UNKNOWN"} & set(classifications)) and finding_id not in named
         permitted = unattended or (finding_id in approved and not person_gated)
-        for options in _fix_options(finding_id, working, target, vanilla_core, group):
+        for options in _fix_options(finding_id, working, target, vanilla_core, group, reference_core):
+            if options.get("refuse"):
+                pending.append({"finding": finding_id, "state": "FIXER_REFUSED", "reason": options["refuse"], "classifications": classifications})
+                continue
             try:
                 plan = compute_fix(working, finding_id, options)
             except FixerError as exc:
@@ -587,7 +628,7 @@ def append_ledger(workspace: Path, entry: dict, now=None) -> None:
 def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | None = None, policy_path: Path | None = None,
            approve: list[str] | None = None, apply: bool = False, max_rounds: int = 5, write: bool = True,
            draft_report: bool = False, providers: list[Path] | None = None, provider_index: Path | None = None, now=None,
-           reference_core: Path | None = None, api_catalogue: dict | None = None) -> dict:
+           reference_core: Path | None = None, api_catalogue: dict | None = None, libs: list[Path] | None = None) -> dict:
     workspace = Path(workspace).expanduser().resolve()
     if not target:  # the core's own version, so reviving against 0.98.5a writes 0.98.5a (ROADMAP-3 item 89)
         from .game_version import core_game_version
@@ -601,17 +642,44 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
     policy_path = policy_path if policy_path is not None else workspace.parent / POLICY_NAME
     policy = load_policy(policy_path)
     approved = set(approve or []) | set(policy["approved_fixers"])
+    if reference_core is None and vanilla_core is not None:
+        reference_core = _resolve_reference_core(workspace, Path(vanilla_core))
     rounds, applied_all = [], []
-    findings = _scan(working, vanilla_core)
+    findings = _scan(working, vanilla_core, target)
     first = [dict(f) for f in findings]
     pending: list[dict] = []
     for number in range(1, max_rounds + 1):
-        applied, pending = _try_fixers(working, findings, target=target, vanilla_core=vanilla_core, approved=approved, apply=apply, named=set(approve or []))
+        applied, pending = _try_fixers(working, findings, target=target, vanilla_core=vanilla_core, approved=approved, apply=apply,
+                                       named=set(approve or []), reference_core=reference_core)
         rounds.append({"round": number, "applied": applied, "findings": len(findings)})
         applied_all += applied
         if not applied:
             break
-        findings = _scan(working, vanilla_core)
+        findings = _scan(working, vanilla_core, target)
+    # Rebuild jar classes whose src/ BridgeForge edited, when approved (ROADMAP-3 item 92.25): proven against the reference
+    # core first, so a jar built from other source is refused, never overwritten.
+    if apply and vanilla_core is not None and "jar-source-not-rebuilt" in approved and any(f["id"] == "jar-source-not-rebuilt" for f in findings):
+        from bridgeforge.bytecode.jar_batch import _info
+        from bridgeforge.bytecode.src_to_jar import SrcToJarError, src_to_jar
+
+        built = []
+        for jar_rel in [j for j in _info(working).get("jars") or [] if isinstance(j, str) and (working / j).is_file()]:
+            try:
+                run = src_to_jar(workspace, jar_rel, vanilla_core=Path(vanilla_core), reference_core=reference_core,
+                                 extra_classpath=libs, apply=True)
+            except (SrcToJarError, OSError) as exc:
+                pending.append({"finding": "jar-source-not-rebuilt", "state": "FIXER_REFUSED", "reason": f"{jar_rel}: {exc}"})
+                continue
+            if run.get("installed"):
+                built.append(jar_rel)
+            elif run["status"] != "NOTHING_TO_BUILD":
+                reasons = run.get("refusals") or [str(e) for e in (run.get("compile") or {}).get("errors", [])[:3]]
+                pending.append({"finding": "jar-source-not-rebuilt", "state": "FIXER_REFUSED", "reason": f"{jar_rel}: " + "; ".join(reasons)})
+        if built:
+            entry = {"finding": "jar-source-not-rebuilt", "files": built, "why": "approved (src-to-jar)"}
+            applied_all.append(entry)
+            rounds.append({"round": len(rounds) + 1, "applied": [entry], "findings": len(findings)})
+            findings = _scan(working, vanilla_core, target)
     # Relink, when approved in the policy: recompile classes whose game calls RC8 changed only by return type, from
     # unedited source, patched only when nothing else changes (jar_batch; 19 queued mods by hand, 2026-09-30).
     if apply and vanilla_core is not None and "jar-linkage-unresolved" in approved and any(f["id"] == "jar-linkage-unresolved" for f in findings):
@@ -623,7 +691,7 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
                      "why": "approved (relink)"}
             applied_all.append(entry)
             rounds.append({"round": len(rounds) + 1, "applied": [entry], "findings": len(findings)})
-            findings = _scan(working, vanilla_core)
+            findings = _scan(working, vanilla_core, target)
     # Interface ports, when approved: known RC8 contract changes on jar classes (jar_batch.port_interfaces).
     if apply and vanilla_core is not None and "jar-interface-method-missing" in approved and any(f["id"] == "jar-interface-method-missing" for f in findings):
         from bridgeforge.bytecode.jar_batch import port_interfaces
@@ -634,7 +702,7 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
             entry = {"finding": "jar-interface-method-missing", "files": done, "why": "approved (port-interfaces)"}
             applied_all.append(entry)
             rounds.append({"round": len(rounds) + 1, "applied": [entry], "findings": len(findings)})
-            findings = _scan(working, vanilla_core)
+            findings = _scan(working, vanilla_core, target)
     remaining_tiers = [tier_for(f["id"]) for f in findings if not _informational(f)]
     roots = providers if providers else [workspace.parent, workspace.parent / "_rig" / "mods"]
     cache: dict = {}
@@ -662,7 +730,7 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
         status = "ESCALATED"
     result = {
         "schema_version": SCHEMA_VERSION, "mode": "REVIVE", "workspace": str(workspace), "apply": apply, "target": target,
-        "compile_checked": vanilla_core is not None, "policy": str(policy_path), "approved": sorted(approved), "named_approvals": sorted(approve or []),
+        "compile_checked": vanilla_core is not None, "reference_core": str(reference_core) if reference_core else None, "policy": str(policy_path), "approved": sorted(approved), "named_approvals": sorted(approve or []),
         "status": status, "hardest_tier": hardest, "rounds": rounds, "applied": applied_all,
         "findings_before": len(first), "findings_after": len(findings),
         "packets": [{"id": p["id"], "kind": p["kind"], "tier": p["tier"], "finding": p["finding"], "merged": p.get("merged"), "file": p["file"]} for p in packets],
@@ -679,7 +747,7 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
             append_ledger(workspace, {"packet": None, "finding": item["finding"], "files": item["files"], "runner": "fixer", "outcome": "APPLIED"}, now)
         stamp = time.strftime("%Y-%m-%d-%H%M%S", time.gmtime(now if now is not None else time.time()))
         if apply and applied_all:
-            write_artifacts(scan_mod(working, vanilla_core=vanilla_core, compile_check=vanilla_core is not None), workspace / "reports" / f"scan-{stamp}-revive",
+            write_artifacts(scan_mod(working, target=_target_profile(target), vanilla_core=vanilla_core, compile_check=vanilla_core is not None), workspace / "reports" / f"scan-{stamp}-revive",
                             registry={"vanilla_core": vanilla_core, "compile_check": vanilla_core is not None})
         run_dir = workspace / "reports" / "revive"
         run_dir.mkdir(parents=True, exist_ok=True)

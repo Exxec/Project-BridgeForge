@@ -508,10 +508,18 @@ def vanilla_row_overrides(root: Path, vanilla_core: Path | None) -> dict[str, li
             their_text = theirs.read_text(encoding="utf-8-sig", errors="replace")
         except OSError:
             continue
-        vanilla = {row_id: cells for row_id, _s, _e, cells in _table_records(their_text) if row_id and not row_id.startswith("#")}
+        # A row whose FIRST cell starts with '#' is a comment the loader skips, whatever its id column says: Musashi's
+        # "#Paragon,paragon,..." (17 ship_data + 6 weapon_data rows) and Eridani's 4 weapon rows override nothing, and vanilla
+        # itself ships "#Light Mortar (High Delay, Fighter)",lightmortar_fighter with no .wpn. The same rule as
+        # _first_value_commented in the description check (ROADMAP-3 item 92.28, 2026-11-16).
+        def live(row_id: str, cells: dict) -> bool:
+            first = next(iter(cells.values()), "") if cells else ""
+            return bool(row_id) and not row_id.startswith("#") and not str(first).lstrip().startswith("#")
+
+        vanilla = {row_id: cells for row_id, _s, _e, cells in _table_records(their_text) if live(row_id, cells)}
         rows = []
         for row_id, _start, _end, cells in _table_records(mine_text):
-            if row_id and not row_id.startswith("#") and row_id in vanilla:
+            if live(row_id, cells) and row_id in vanilla:
                 other = vanilla[row_id]
                 differing = sum(1 for column, value in cells.items() if column in other and value.strip() != other[column].strip())
                 rows.append((row_id, differing))

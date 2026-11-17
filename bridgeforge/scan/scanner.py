@@ -514,6 +514,27 @@ def _scan_jars(root: Path, result: ScanResult) -> list[Path]:
     return jars
 
 
+def _scan_jar_source_not_rebuilt(root: Path, result: ScanResult) -> None:
+    """A jar mod's source BridgeForge edited (an agent or fixer left a `.pre-bf-*.bak` beside it) whose current bytes were
+    never built into the jar (`src-to-jar` records what it built). ROADMAP-3 item 92.25, 2026-11-16: Navarchy of Tania's
+    eight applied agent fixes and Eridani Combine's one sat in src/ while the game kept loading the unfixed jar classes."""
+    from bridgeforge.bytecode.src_to_jar import unbuilt_sources
+
+    unbuilt = unbuilt_sources(root)
+    if unbuilt:
+        result.add(
+            id="jar-source-not-rebuilt",
+            category="code",
+            severity="high",
+            classification="REVIEW",
+            confidence="DETERMINISTIC",
+            explanation=(f"{len(unbuilt)} source file(s) of a jar mod were changed by BridgeForge (a .pre-bf-*.bak beside each) but "
+                         "never rebuilt into the jar, so the game still runs the old classes. Run `bridgeforge src-to-jar` (or "
+                         "approve it in revive): it proves the original source reproduces the shipped classes, then patches the jar."),
+            evidence=[f"source:{rel}" for rel in unbuilt],
+        )
+
+
 def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core: Path | None = None, compile_check: bool = False, provider_roots: list[Path] | None = None) -> ScanResult:
     root = input_path.expanduser().resolve()
     if not root.is_dir():
@@ -617,6 +638,7 @@ def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core
     _scan_unresolved_content_references(root, result, vanilla_root, provider_roots)
     _scan_carrier_bays_proposal(root, result, vanilla_root)
     _scan_description_missing(root, result, vanilla_root)
+    _scan_jar_source_not_rebuilt(root, result)
     _scan_asset_reference_missing(root, result, vanilla_root)
     _scan_preset_whole_entry_replace(root, result, vanilla_root)
     scan_market_on_hyperspace_entity(root, result)

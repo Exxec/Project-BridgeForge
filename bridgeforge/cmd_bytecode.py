@@ -55,7 +55,21 @@ def add_parser(subcommands) -> None:
     patch_jar_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, put on the compile classpath")
     patch_jar_cmd.add_argument("--jdk", type=Path)
     patch_jar_cmd.add_argument("--install", action="store_true", help="only when PASS: keep the old jar and sources in scratch/jar-patch-<date>/ and swap the classes in")
+    patch_jar_cmd.add_argument("--lib", type=Path, action="append", default=[], help="a library jar to compile against (LazyLib, Nexerelin, ...), for one the mod uses without declaring it; repeatable")
     patch_jar_cmd.add_argument("--json", action="store_true")
+    src_jar_cmd = subcommands.add_parser("src-to-jar", help="rebuild the jar classes whose src/ files changed (agent or fixer edits) into the jar the game loads, after proving the original src/ reproduces the shipped classes (ROADMAP-3 92.25)")
+    src_jar_cmd.add_argument("mod", type=Path, help="mod workspace (holding original/ and working/)")
+    src_jar_cmd.add_argument("--jar", required=True, help="the jar to rebuild, relative to working/ (e.g. jars/Name.jar)")
+    src_jar_cmd.add_argument("--vanilla-core", type=Path, required=True, help="the target starsector-core to compile against")
+    src_jar_cmd.add_argument("--reference-core", type=Path, help="the core the jar was built against, for the proof (default: the installed core matching the original mod_info gameVersion)")
+    src_jar_cmd.add_argument("--source-root", default="src", help="the source tree relative to working/ (default: src)")
+    src_jar_cmd.add_argument("--relink", action="append", default=[], help="also rebuild this unchanged class (path/Class, relative to the source root) to relink it against the target; repeatable")
+    src_jar_cmd.add_argument("--reference-jar", type=Path, help="prove against this jar instead of working/<jar> (the pre-patch backup, when the jar already holds a patch)")
+    src_jar_cmd.add_argument("--lib", type=Path, action="append", default=[], help="a library jar to compile against; repeatable")
+    src_jar_cmd.add_argument("--jdk", type=Path)
+    src_jar_cmd.add_argument("--allow-removed", action="append", default=[], help="a member whose removal is intended beyond the fields hullmod-instance-state packets list (those are allowed automatically); repeatable")
+    src_jar_cmd.add_argument("--apply", action="store_true", help="patch the jar (backup in scratch/jar-patch-<date>/) and record the built sources")
+    src_jar_cmd.add_argument("--json", action="store_true")
     jar_packets_cmd = subcommands.add_parser("jar-packets", help="for each jar-only escalation packet: find the class's source, copy it to scratch/jar-packets/ to edit, and say whether it rebuilds the shipped class unchanged (FAITHFUL) or not")
     jar_packets_cmd.add_argument("mod", type=Path, help="mod workspace (holding working/)")
     jar_packets_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, put on the compile classpath")
@@ -311,7 +325,8 @@ def run_cli(args: argparse.Namespace) -> int:
         from bridgeforge.bytecode.jar_patch import JarPatchError, patch_jar_classes
         try:
             result = patch_jar_classes(args.mod, args.jar, args.sources, vanilla_core=args.vanilla_core, jdk=args.jdk,
-                                       source_root=args.source_root, allow_removed=args.allow_removed, install=args.install)
+                                       source_root=args.source_root, allow_removed=args.allow_removed, install=args.install,
+                                       extra_classpath=args.lib)
         except (JarPatchError, OSError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
@@ -331,6 +346,28 @@ def run_cli(args: argparse.Namespace) -> int:
             for refusal in result.get("refusals", []):
                 print(f"  refused: {refusal}")
         return 0 if result["status"] == "PASS" else 1
+    if args.command == "src-to-jar":
+        from bridgeforge.bytecode.src_to_jar import SrcToJarError, src_to_jar
+        reference = args.reference_core
+        if reference is None:
+            from bridgeforge.revive import _resolve_reference_core
+            reference = _resolve_reference_core(Path(args.mod).resolve(), args.vanilla_core)
+        try:
+            result = src_to_jar(args.mod, args.jar, vanilla_core=args.vanilla_core, reference_core=reference, source_root=args.source_root,
+                                extra_classpath=args.lib, relink=args.relink, reference_jar=args.reference_jar, apply=args.apply, jdk=args.jdk,
+                                allow_removed=args.allow_removed)
+        except (SrcToJarError, OSError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        else:
+            print(f"{result['status']}: {args.jar}, {len(result['sources'])} source(s)" + (" (installed)" if result.get("installed") else ""))
+            for error in (result.get("compile") or {}).get("errors", [])[:5]:
+                print(f"  compile: {error}")
+            for refusal in result.get("refusals") or []:
+                print(f"  refused: {refusal}")
+        return 0 if result["status"] in ("PASS", "NOTHING_TO_BUILD") else 1
     if args.command == "rebuild-jar":
         from .rebuild_jar import RebuildJarError, rebuild_jar
         try:
