@@ -1,5 +1,7 @@
 # Strategic roadmap: four outcome-gated releases
 
+**Owner decision, 2026-11-17:** "Park S4. Stop treating S2 and S3 as gates." S4 (the second operator, supported configurations, private exchange, support and publication) is parked. S2 and S3 gate nothing. Their remaining work is queued as ordinary items in [ROADMAP-3](../ROADMAP-3.md) item 97.
+
 **S1 outcome accepted 2026-10-25:** the bounded RC8 local-new-game workflow is complete; see
 [S1_COMPLETION_REVIEW.md](S1_COMPLETION_REVIEW.md) for implementation, real both-layout qualification, independent
 agent resume, approved controlled compilation pilot and the owner's baseline acceptance. Human active-review time
