@@ -1,1 +1,0 @@
-- Item 89.8: `api-diff` lists methods whose signature survived but whose parameters were renamed (from the two `starfarer.api.zip` source bundles; RC8 -> 0.98.5a: `Misc.getOfficerSalary` boolean `mercenary` -> `checkIfInPopulatedSystem`), and `target-impact` reports mods calling them as `parameter-meaning-changed`.

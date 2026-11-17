@@ -1,1 +1,0 @@
-- Item 89.11: `target-impact` adds a per-mod worklist (gated fixer commands, relinks, hand ports, reviews) and counts the mods the fixers alone clear; the ASM/AST helpers are compiled with `--release 17`, so a helper built by a newer JDK no longer fails under Java 17.

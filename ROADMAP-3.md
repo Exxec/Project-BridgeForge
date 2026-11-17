@@ -72,6 +72,11 @@ Check S series implementation plan and if applicable add remaining items to road
   With 96.5 A1.
 - 96.4 **Release.** Once item 95's PRs are merged: `release-notes assemble --version <next>`, the pyproject version, a PR; a
   tag only on the owner's word. Revived mods that change get their own `+bf.N` bump through `bump-version`.
+  **Notes assembled 2026-11-17; the tag waits on the owner.** `release-notes assemble --version 0.4.0` moved the 88 pending
+  `changelog.d/` fragments (items 79.7 to 96.6 and 93.44) under `## 0.4.0 (unreleased)` in CHANGELOG.md. The package version stays
+  0.4.0, so there is no pyproject change. Salvor pins `bridgeforge>=0.4,<0.5` and BridgeForge stays its save-diagnosis provider
+  (94 D4), so a 0.5 bump would also need Salvor's pin moved. Owner 2026-11-17: tag and publish v0.4.0 ("Yes"). The heading is
+  dated `## 0.4.0 (2026-11-17)`, and an empty `## 0.4.1 (unreleased)` takes the next fragments.
 - 96.5 **Repo-wide suggestions** from three independent review agents on 2026-11-17 (performance and parallelism;
   architecture and process; CI and tooling). Measured on this machine, read-only. They are listed for the owner to
   approve, not done unasked. Sizes S/M/L, the most valuable first.

@@ -1,1 +1,0 @@
-- Add S1 content-bound case/candidate/receipt persistence, resume revalidation and immutable retry/lock safeguards; supplied receipt outcomes remain unverified observations and do not change acceptance policy.

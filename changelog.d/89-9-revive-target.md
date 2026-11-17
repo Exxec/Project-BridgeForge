@@ -1,1 +1,0 @@
-- Item 89.9: `revive --target` defaults to the version of the `--vanilla-core` it is given (read from its `starfarer_obf.jar`), so reviving against 0.98.5a writes 0.98.5a into `mod_info.json`.

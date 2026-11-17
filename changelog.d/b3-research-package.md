@@ -1,1 +1,0 @@
-- Move research implementation and command modules into `bridgeforge/research/` while preserving CLI behavior and test selection. Stored scan fingerprints become stale; refresh with `finding-stats --rescan-stale`.

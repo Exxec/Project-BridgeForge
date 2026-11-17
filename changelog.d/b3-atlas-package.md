@@ -1,1 +1,0 @@
-- Reorganize Atlas modules into a subpackage, preserving commands, payloads and resource locations.
