@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.4.0 (unreleased)
+## 0.4.1 (unreleased)
+
+## 0.4.0 (2026-11-17)
 
 - One launcher path (ROADMAP-3 79.7): `bridgeforge/launch.py` is the single implementation of the rig launch (bat, stdout/stderr logs), run manifest prepare/release, launch watchdog, launcher Play click, exit observation (NATURAL/KILLED), graceful close and process stop; `probe-group live` and `boot-test` both use it, and `tools/bf-test.ps1 launch` now calls `probe-group live` (or `boot-test` with `-BootOnly`) instead of launching the game itself.
 - Interactive launch and window watcher in the one launcher path (ROADMAP-3 79.7): `bridgeforge/window_watch.py` records new game windows and Fatal dialog text to `<TESTID>.windows.txt` (plus window and no-main-menu screenshots) for every launch; `probe-group live --interactive` / `bf-test.ps1 launch -Interactive` start the game with manifest, watcher and exit observation without driving the mouse or keyboard.
