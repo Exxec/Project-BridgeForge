@@ -1,3 +1,70 @@
+**95. Less hand work and faster re-validation for game updates (owner 2026-11-17: "1 through 5 add to roadmap. 6 I'm not sure we can do that always but if it can be optional that would be great. All others approved."; "Implement the smaller items not the greater phases like S and G").**
+**Approved.** Found taking the six-mod batch, United Aurora Federation and Sunrider through revival and live tests on
+2026-11-16/17. Sizes: S small, M medium, L large; the small ones are implemented first, one pull request each. The S and G
+phases are not part of this item.
+Catalogue (owner: "start the scan on already revived mods ... just catalogue what needs to be done"): `target-impact` RC8 ->
+0.98.5a-RC7 over the 175 mods in Done/ ran in about 5 minutes on Test1 (2026-11-17): CLEAN 167, BREAKS 4, RELINK 3, REVIEW 1.
+Finding what a build changes is already quick; the time goes to full scans and live runs (95.7, 95.10, 95.11). BREAKS: Kadur
+Remnant (the gated `jar-call-signature-changed` fixer clears it), Vayra's Sector (95.14), Neutrino Corporation 1.8.9 and Station
+Augments (calls into obfuscated game classes: hand ports; check the authors' current releases first). RELINK: 95.13. REVIEW:
+YunruCore's `hullmod:low_maintenance` collides with a hull mod RC7 added. Informational: Ironclads replaces `ship_data.csv`
+without RC7's new columns `parts/dmod`, `salary` and `salMult`, read as blank (whether a blank salary changes crew costs is
+unproven).
+- 95.1 (M) **Owner rulings as standing policy.** The owner ruled the same way many times: CSV rows with no file that nothing uses
+  (Musashi, Bultach, UAF: "keep them and ignore warning if it doesn't affect anything"), findings the reference build shares in a
+  mod that works there (UAF: "Your clear to proceed"), and behaviour as authored with evidence (Sunrider: "yes"). Encode them as
+  rules in `AUTOMATION_POLICY.json`, each with its evidence check (no reference found, unchanged on the reference build, guard
+  present), so the acceptance is written with that evidence and only exceptions reach the owner. On 2026-11-17 the owner ruled on
+  64 baseline findings (UAF 39, Sunrider 25) and 24 probe findings (Musashi 4, Bultach 2, Tania 6, UAF 12); measure on these how
+  many the rules settle before enabling them.
+- 95.2 (M) **Findings the previous build shares, labelled (93.34).** The owner's decision sheet shows what the target build changes
+  first and the pre-existing findings apart.
+- 95.3 (M) **One command per stage chain.** `revive-queue` (93.14): intake, revive, decision sheet, accept, input-tier fixes
+  (`bridgeforge fix`, which revive does not apply), report draft; `live-queue`: install, smoke, live, report and record per group,
+  unattended, resuming after the last finished step. Each of these is a separate command today, and the Test1 live runs needed
+  hand-written task scripts.
+- 95.4 (M) **A live harness without wrappers.** Direct start (93.21), first-run preferences pre-flight and pins (93.28), the
+  report's own run config (93.29), mission-list reading (93.37) and the run's own save (93.38) in `probe-group smoke|live|record`,
+  so `bridgeforge-state/live-wrappers/` can retire.
+- 95.5 (M) **Run-manifest hash reuse (93.27).** About 5 minutes per live run on Test1.
+- 95.6 (M, optional) **Two-machine sync.** `sync --to HOST` for the memory folder, workspaces and Done/, hash-verified in both
+  directions, never overwriting a newer change without asking; off by default (owner: "if it can be optional that would be
+  great"). On 2026-11-17 development ran on White_Legion and live tests on Test1, with workspaces copied by hand (scp).
+- 95.7 (L) **Scan cache.** Split the scanner's checks into mod-only (cached by file hash and checker version) and build-dependent
+  (linkage, API, compile, vanilla data), so a re-scan for a new build re-runs only the build-dependent ones.
+- 95.8 (M) **Member-use index.** Index once which game classes and members each mod's jars and scripts use (corpus-index), so
+  "which mods use what the new build changed" is a lookup over the api-diff.
+- 95.9 (M) **Parallel scanning** across mods, with the existing checkpoint and resume.
+- 95.10 (S) **Acceptances carried across builds.** Baseline keys are normalized already (92.x); carry each acceptance to the new
+  target unless the finding's evidence changed.
+- 95.11 (M) **Targeted re-validation.** On a new build, smoke every archived group and run full live tests only where
+  `target-impact` is not CLEAN.
+- 95.12 **Further suggestions** (owner asked "Anything else for bridgeforge, this process, or any sub modules like the probe etc?"):
+  (a, S) a combat-round watchdog: no `combat|START` within a bound after the click means a screenshot and one retry (UAF's round 2
+  waited out the timeout, 93.37); (b, S) the probe's log header carries its config hash, so `report` and `record` find the run's own
+  config (with 93.29); (c, M) acceptance analytics: aggregate accepted findings across mods into proposed scanner rules (Sunrider's
+  `initStar(id, "nebula_center_young", 0, 0)` is vanilla's own pattern, RC7's `star_gen_data.csv` gives radius 0; a library used
+  behind an `isModEnabled` guard is optional, not undeclared); (d, S) a one-page owner summary per mod at archive time: fixes,
+  rebuilt classes, acceptances, shipped changes; (e, M) rig bring-up on a new machine in one command (93.3, 93.5), with the
+  licence-key presence check, preference pins and the mods' declared libraries (AshLib was copied by hand for UAF); (f, S) the
+  live run minimises its own console window and records the desktop size (93.24); (g, M) probe combat rounds sized by hull count,
+  one progress line per round (UAF's 86 hulls took two rounds, "hulls 61-86 of 86"); (h, S) a revive with `--providers` passes
+  them to the report draft's compile check (93.36); (i, S) `TARGET_IMPACT.md` shortens obfuscated member names (one Station
+  Augments descriptor ran to hundreds of characters).
+- 95.13 (S) **target-impact points at `relink`.** The three RELINK mods (AoTD Vaults of Knowledge 5.0.7, Broken Star, Nightcross)
+  and Sunrider share one member: `StarSystemGenerator.addStableLocations(StarSystemAPI, int)` returns a `List` on RC7.
+  `bridgeforge relink` already recompiles return-type-only calls from shipped or decompiled source, unedited; target-impact's next
+  step names jar-packets and patch-jar-class instead. Nightcross is not to be worked on (owner 2026-11-17: "nightcross armory has
+  been superseded and can safely be ignored").
+- 95.14 (M) **A changed member's default argument, decided once.** `OfficerManagerEvent.pickPortraitPreferNonDuplicate` gained a
+  `Random` and a rule exists, so Kadur Remnant clears with the gated fixer; `PersonBountyEventData.reportSuccess()` gained an `int`
+  and Vayra's Sector is listed as a hand port. Record what RC7's own callers pass as a rule (`jar_call_rewrites`) with that
+  evidence, so the fixer applies it in every mod that makes the call.
+- 95.15 (S) **Superseded archives skipped.** Seven mod ids are archived twice (14 archives: PatchLib 1.1.0 and 1.1.2, AI Tweaks
+  2.2.10 and 2.2.11, Vram Optimizer 1.0.50 and 1.0.51, SEEKER 0.3.0 and 0.6, Epta Consortium 2.0.3 and 2.1.3, Templars 0.9.8f and
+  0.9.9e, Neutrino 1.87-RC3 Nostalgia Edition and 1.8.9), some on the owner's word (Templars and Epta, 2026-10-13). A superseded
+  mark for a Done/ archive, set only on the owner's word, that target-impact, done-audit and 95.11 skip; Nightcross is the first.
+
 **94. Feature genome: extract and insert features across mods and builds (owner 2026-11-17: "design roadmap from now to endgoal of being able to extract and insert features like DNA"; "all approved. Please make sure everything is traceable and each repo gets a copy of its roadmap specific portion").**
 **Approved strategy addition (GD-1); not implemented.** Design, decisions, estimate and sister entries:
 [docs/FEATURE_GENOME_ROADMAP.md](docs/FEATURE_GENOME_ROADMAP.md). Ids: phases 94.G1-94.G7, decisions GD-1-GD-5,
@@ -194,6 +261,10 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   UAF-LIVE-0985a-20261117 combat round 1 started and ended, round 2's line was logged ("hulls 61-86 of 86; restart the mission"), and
   no `combat|START` followed, so the click back into the mission list did not start the probe mission. Read the list from the screen
   before each round's click (as the main menu already is), and re-run UAF's round 2 once fixed.
+- 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
+  (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
+  run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct
+  G3's record on the owner's word.
 
 **92. Less hand work found reviving six mods against 0.98.5a-RC7 (owner 2026-11-16: "add these improvements to roadmap we will implement in queue after these mods are revived but not yet live tested").**
 **Approved, queued: start once Scrapyard Armories, Bultach Coalition, Eridani Combine, Everybody loves KoC, Musashi
