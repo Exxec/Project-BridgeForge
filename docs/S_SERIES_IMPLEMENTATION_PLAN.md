@@ -1,5 +1,7 @@
 # S-series implementation plan
 
+**Owner decision, 2026-11-17:** "Park S4. Stop treating S2 and S3 as gates." S4 (the second operator, supported configurations, private exchange, support and publication) is parked. S2 and S3 gate nothing. Their remaining work is queued as ordinary items in [ROADMAP-3](../ROADMAP-3.md) item 97.
+
 **Current S1 status, 2026-10-25:** complete for the owner-accepted bounded RC8 local-new-game scope.
 [S1_COMPLETION_REVIEW.md](S1_COMPLETION_REVIEW.md) records the exact approvals, controlled-P2/full-build evidence,
 independent agent resume, archive/retry and refusal controls. Active human-review time is NOT_MEASURED in the

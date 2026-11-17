@@ -1,6 +1,6 @@
 # Current roadmap view
 
-Reconciled 2026-10-17 for the owner-approved planning update; items 89-96 added 2026-11-17. This is a compact index into the authoritative
+Reconciled 2026-10-17 for the owner-approved planning update; items 89-97 added 2026-11-17. This is a compact index into the authoritative
 `ROADMAP-3.md`, not a replacement history. Historical test/run claims below are attributed to their recorded evidence;
 this documentation pass did not rerun the suite, launch the game or requalify releases.
 
@@ -23,6 +23,7 @@ reference. The checkout is package 0.4.0 (unreleased) with probe 0.3.3; the late
 | 94 feature genome | Approved strategy (GD-1), not implemented | [FEATURE_GENOME_ROADMAP.md](FEATURE_GENOME_ROADMAP.md) | 94.G1 |
 | 95 faster re-validation | Done 2026-11-17: 95.10, 95.12(i), 95.13, 95.15 (code) | Tests named per sub-item; the RC8 -> RC7 `target-impact` catalogue of `Done/` (175 archives: CLEAN 167, BREAKS 4, RELINK 3, REVIEW 1) | 95.12(a) Done (93.37); 95.1-95.9, 95.11, 95.12(b)-(h), 95.14 open (Nightcross closed on Test1 2026-11-17) |
 | 96 skills, ports, docs, release | 96.0 owner decisions recorded; 96.1 Done 2026-11-17 (`.claude/skills/`); 96.3 docs pass: this update | `checks.sh` passed every step; an independent review per batch of diffs | 96.2 ports (LOCAL_HANDOFF), 96.4 release; 96.5 suggestions await the owner |
+| 97 S series re-queued | Owner 2026-11-17: S4 parked; S2 and S3 no longer gates | ROADMAP-3 item 97 lists what remains from S_SERIES_IMPLEMENTATION_PLAN.md | 97.1 copied-save pilot (approved 2026-11-01), 97.2 the owner's look at one `data-file-not-utf8` case, 97.3 with 93.30/95.11, 97.4 only with a speed-up claim |
 
 The table below is the 2026-10-17/18 reconciliation of items 61-75.
 

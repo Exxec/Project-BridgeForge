@@ -1,3 +1,30 @@
+**97. The S series' remaining work, re-queued without gates (owner 2026-11-17: "Park S4. Stop treating S2 and S3 as gates.
+Check S series implementation plan and if applicable add remaining items to roadmap queue").**
+**Approved; queued after items 95 and 96.** From docs/S_SERIES_IMPLEMENTATION_PLAN.md's "what remains" table (status check
+2026-10-26). Each is now an ordinary item: no S-series acceptance waits on it, and it waits on nothing in the S series.
+- 97.1 (M) **Copied-save upgrade pilot** (S3.3; owner-approved 2026-11-01, "copied save pilot is approved").
+  - Scope: the synthetic `bf_s3_generation_control` seed only, in a new isolated rig, as docs/S3_COPIED_SAVE_PILOT_PLAN.md
+    sets out.
+  - Build first: an in-game observer that saves to a separately named slot (`ExistingSaveReloadStage` saves to the slot it
+    loaded from), and an S3 case adapter for `evaluate_upgrade`.
+  - Then one rig run: load the old save with the new build, save to the new slot, restart, reload and compare.
+  - It is the base for upgrading real saves on a new game build (95). Not started.
+- 97.2 (S) **Recipe reuse, the owner's look at one case** (S2.3, docs/S2_RECIPE_GOVERNANCE.md). `data-file-not-utf8`
+  stays BLOCKED until the owner looks at one case where fixing the encoding exposes `rules-csv-curly-quote-unreadable`
+  (All the Domain Drones or Metelson). Present that case with evidence and a recommendation, then record the ruling.
+  - Two recipes are ready for owner review and 24 need more evidence (the 2026-11-01 trial).
+  - A reserved holdout with providers and affected-case invalidation remain to build, as reuse earns them.
+- 97.3 (M) **Scenario families and maintained qualification** (S3.2, S3.4). New-game, campaign, combat and integration
+  families, each with a healthy and a known-bug control. When a provider, rule or candidate changes, the obligations it
+  affects reopen. Carried by 93.30 (the scenario testbed) and 95.11 (targeted re-validation), not as a separate track.
+- 97.4 (S) **Measured review minutes** (S2 overall). Measure the owner's active review time only when a speed-up claim
+  is made; it is no longer an acceptance step.
+- Parked (owner 2026-11-17), with the reason recorded beside the S-series entry below:
+  - S4.1 supported configurations;
+  - S4.2 private exchange and recovery;
+  - S4.3 the second-operator trial;
+  - S4.4 support and publication commitments.
+
 **96. Skills, the abandoned mods' RC7 ports, a docs pass and a release (owner 2026-11-17: "Go ahead and create earlier skills and utilize other skills mentioned"; "AOTD is active and undergoing a overhaul so we can safely ignore it for now. The others mentioned are abandoned so we will have to do the hard work behind reviving them"; "If need be make sure to bump versions/releases. Also add to queue you or an agent review/update all related docs then sync to github").**
 **Approved.** Queued after item 95's small items.
 - 96.0 **Owner decisions on the RC8 -> RC7 catalogue (95, 2026-11-17).**
@@ -994,14 +1021,17 @@ ids, dependencies present), about 15-25 groups per environment; a failing group 
   New and revised mods are not part of this item: they get the `standard` bundle before archiving (85.1).
 **S-series implementation (owner 2026-10-24: "plan S series implementation then proceed to start S1").**
 [Implementation plan](docs/S_SERIES_IMPLEMENTATION_PLAN.md) translates S1-S4 into dependency-ordered slices. **S1 is complete and owner-accepted 2026-10-25 for the bounded RC8 local-new-game workflow**; [completion evidence](docs/S1_COMPLETION_REVIEW.md) and [progress/handoff](docs/S1_PROGRESS.md) retain the limits. Human active-review time is NOT_MEASURED in the accepted baseline. S2 baseline and S3 initial work retain their separate open delivery/acceptance gates; save upgrades, publication and S4 human/support commitments are not included.
-**Owner 2026-11-17: "I'm not sure the S series is worthwhile now as the second user seems a bit extreme."** Recorded; not yet
-decided. The "second user" is S4's goal: a second operator who installs, reproduces, restores and supports the workflow
+**Owner 2026-11-17: "I'm not sure the S series is worthwhile now as the second user seems a bit extreme."** The "second
+user" is S4's goal: a second operator who installs, reproduces, restores and supports the workflow
 (docs/STRATEGIC_ROADMAP.md). Proposed for the owner's decision:
 - Park S4.
 - Stop treating S2 and S3 as gates.
 - Keep the parts that serve the owner alone through the numbered items that already carry them: 95 (re-validating a new build
   from a catalogue), 93.30 (the scenario testbed), 94 (the feature genome) and the recipe and precedent work in 92 and 96.5.
 - S1's accepted baseline stands as it is.
+**Decided 2026-11-17 (owner: "Park S4. Stop treating S2 and S3 as gates.").** S4.1-S4.4 are parked. The local profile,
+the private exchange kit and the fresh-workstation trial kit stay as they are, unused, and no second-operator trial is
+awaited. S2 and S3 gate nothing. Their remaining work that serves the owner is queued as ordinary items in item 97.
 
 **85. Automation and fewer tokens per task (owner-approved 2026-10-22).** From this session's hand work. Nothing below is
 built yet; LIVE TEST NOT PERFORMED.
