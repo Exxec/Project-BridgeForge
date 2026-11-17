@@ -55,7 +55,7 @@ def add_parser(subcommands) -> None:
     group_record.add_argument("--queue", type=Path)
     group_record.add_argument("--rig", type=Path)
     group_record.add_argument("--json", action="store_true")
-    group_smoke = group_sub.add_parser("smoke", help="after `install`: boot the rig unattended to the main menu and triage the startup log (no launcher click, no New Game); catches load-time failures before a person plays")
+    group_smoke = group_sub.add_parser("smoke", help="after `install`: boot the rig unattended to the main menu and triage the startup log (clicks the launcher's Play, no New Game); catches load-time failures before a person plays")
     group_smoke.add_argument("--bat", default="run-j25-direct.bat", help="rig launcher to start (default: java 25, started directly)")
     group_smoke.add_argument("--timeout", type=int, default=240)
     group_smoke.add_argument("--log-name")
