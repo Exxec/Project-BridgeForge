@@ -1,5 +1,7 @@
 from __future__ import annotations
+import codecs
 import json
+import threading
 from pathlib import Path
 from .common import FileChange, FixerError
 from bridgeforge.zipsafe import read_limited
@@ -46,15 +48,26 @@ def _referencing_bytes(root: Path, skip: set[str]) -> bytes:
 _CP1252_TYPOGRAPHY = frozenset({0x85, 0x91, 0x92, 0x93, 0x94, 0x96, 0x97, 0xA0})
 
 
+# One decode with an error handler that records each undecodable byte and resumes one byte past it. That is where the old
+# loop resumed, so the offsets are the same. The old loop re-decoded the rest of the file after every bad byte: quadratic, and
+# a large CP-1252 rules.csv took 24-38 s (ROADMAP-3 96.5 P6). The list is thread-local, because the handler is global.
+_OFFSET_HANDLER = "bridgeforge-invalid-utf8-offsets"
+_collected = threading.local()
+
+
+def _record_invalid_byte(exc: UnicodeError) -> tuple[str, int]:
+    _collected.offsets.append(exc.start)
+    return "", exc.start + 1
+
+
+codecs.register_error(_OFFSET_HANDLER, _record_invalid_byte)
+
+
 def _invalid_utf8_offsets(raw: bytes) -> list[int]:
-    offsets, start = [], 0
-    while start < len(raw):
-        try:
-            raw[start:].decode("utf-8")
-            break
-        except UnicodeDecodeError as exc:
-            offsets.append(start + exc.start)
-            start += exc.start + 1
+    """Offsets of the bytes UTF-8 cannot decode, each found where decoding resumes one byte past the previous one."""
+    _collected.offsets = []
+    raw.decode("utf-8", _OFFSET_HANDLER)
+    offsets, _collected.offsets = _collected.offsets, []
     return offsets
 
 
