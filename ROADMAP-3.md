@@ -37,6 +37,14 @@ unproven).
 - 95.9 (M) **Parallel scanning** across mods, with the existing checkpoint and resume.
 - 95.10 (S) **Acceptances carried across builds.** Baseline keys are normalized already (92.x); carry each acceptance to the new
   target unless the finding's evidence changed.
+  **Done 2026-11-17.** `retarget --apply` changes only mod_info.json, but its `+bf.N` version bump made every baseline
+  STALE_VERSION. A baseline current before the retarget is now re-stamped at the new version, with
+  `stamp.carried = {"from", "why"}`, and each key keeps its owner's reason. The evidence condition holds by construction: a key
+  is `id|file|evidence`, so a finding the new core words differently is a new key and comes back for a ruling. A baseline
+  already stale before the retarget stays stale. Review fix, the same day: when the version bump fails (a locked file), the new
+  gameVersion is undone, so the next plan offers the retarget again instead of skipping it as "already" retargeted. Tests:
+  `tests/test_target_bump.py` `test_retarget_carries_a_current_baseline_and_leaves_a_stale_one_stale`,
+  `test_a_retarget_whose_version_bump_fails_is_undone_and_planned_again`.
 - 95.11 (M) **Targeted re-validation.** On a new build, smoke every archived group and run full live tests only where
   `target-impact` is not CLEAN.
 - 95.12 **Further suggestions** (owner asked "Anything else for bridgeforge, this process, or any sub modules like the probe etc?"):
