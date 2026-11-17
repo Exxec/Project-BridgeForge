@@ -19,7 +19,8 @@ proposed work and dated evidence. It does not implement the case lifecycle or re
 - [Vision](VISION.md), [strategic roadmap](STRATEGIC_ROADMAP.md), [next milestone](NEXT_MILESTONE.md) and
   [architecture gaps](ARCHITECTURE_GAPS.md): S1-S4 direction and dated evidence; current S1 authorization/scope is recorded in the implementation plan, while later acceptance and publication remain gated.
 - [Feature genome roadmap](FEATURE_GENOME_ROADMAP.md): the approved (2026-11-17) track for extracting and inserting features
-  across mods and builds, ROADMAP-3 item 94 (phases 94.G1-94.G7, decisions GD-1-GD-5, refinements GR-1-GR-6, sister entries).
+  across mods and builds, ROADMAP-3 item 94 (phases 94.G1-94.G7, decisions GD-1-GD-5, refinements GR-1-GR-6, sister entries;
+  section 14: the 2026-11-17 suite-architecture review and the owner's decisions D1-D4, with the work-package order).
 - [Active roadmap](../ROADMAP-3.md): the only current tactical backlog. Earlier decisions/history remain in
   [archived page 1](archive/ROADMAP.md) and [page 2](archive/ROADMAP-2.md). [docs/ROADMAP.md](ROADMAP.md) and
   [completion log](ROADMAP_COMPLETION_LOG.md) are historical tranche records, not competing current backlogs.

@@ -320,6 +320,9 @@ unproven).
     cases) and `tests/test_target_impact.py` (`test_an_archive_the_owner_closed_is_listed_not_checked`, `ClosedProviderTests`).
 
 **94. Feature genome: extract and insert features across mods and builds (owner 2026-11-17: "design roadmap from now to endgoal of being able to extract and insert features like DNA"; "all approved. Please make sure everything is traceable and each repo gets a copy of its roadmap specific portion").**
+**Review and decisions D1-D4 (2026-11-17):** FEATURE_GENOME_ROADMAP.md section 14. G1 starts after item 96 (D1),
+no GUI or multi-game platform (D2), sister conformance tests when their phase starts (D3), BridgeForge stays Salvor's
+save-diagnosis provider (D4); work packages WP0-WP7 in the order recorded there.
 **Approved strategy addition (GD-1); not implemented.** Design, decisions, estimate and sister entries:
 [docs/FEATURE_GENOME_ROADMAP.md](docs/FEATURE_GENOME_ROADMAP.md). Ids: phases 94.G1-94.G7, decisions GD-1-GD-5,
 refinements GR-1-GR-6 (approved 2026-11-17: one pinned gene.json contract with conformance tests, a gene census before G2,
