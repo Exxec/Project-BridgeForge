@@ -19,6 +19,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .progress import Checkpoint, report
+from .report_status import closed_archive_status
 from bridgeforge.zipsafe import entry_sha256, read_limited
 
 CRASH_CLASS = frozenset({
@@ -179,9 +180,18 @@ def done_audit(done: Path, queue: Path, vanilla_core: Path | None = None, quiet:
         for number, folder in enumerate(folders, 1):
             cached = checkpoint.get(folder.name)
             started = time.perf_counter()
-            record = cached if cached is not None else audit_one(folder, queue, vanilla_core, providers)
-            if cached is None:
+            # The owner closed it (ROADMAP-3 item 95.15): listed, not audited. Read before the checkpoint, so a close made while
+            # a run was interrupted wins over the record cached before it, and a reopened archive is audited again (review).
+            closed = closed_archive_status(folder)
+            if closed:
+                record = {"mod": folder.name, "status": closed, "stale": None, "findings": [], "closed": True}
+            elif cached is not None and not cached.get("closed"):
+                record = cached
+            else:
+                record = audit_one(folder, queue, vanilla_core, providers)
+            if record is not cached:
                 checkpoint.add(folder.name, record)
+            cached = cached if record is cached else None  # the progress line says "from checkpoint" only for a reused record
             records.append(record)
             if not quiet:
                 detail = record["status"] + (f" ({len(record['findings'])} finding(s))" if record["findings"] else "")
@@ -196,6 +206,8 @@ def done_audit(done: Path, queue: Path, vanilla_core: Path | None = None, quiet:
             if record["status"] == "CLEAN" and not record.get("compat"):
                 continue
             lines.append(f"## {record['mod']}: {record['status']}")
+            if record.get("closed"):
+                lines.append("- closed by the owner (`close`): listed, not audited")
             if record["stale"]:
                 lines.append("- the queue's working copy differs from the archive: re-archive it (fixes never reached Done/)")
             if record.get("status_behind"):

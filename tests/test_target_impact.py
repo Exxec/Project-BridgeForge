@@ -142,6 +142,23 @@ class TargetImpactTests(unittest.TestCase):
         self.assertIn("[3/4] queue/plain: RELINK (0 linkage, 0 interface, 0 source, 0 data) (from checkpoint)", err.getvalue())
         self.assertEqual(data["verdicts"]["RELINK"], 1)
 
+    def test_an_archive_the_owner_closed_is_listed_not_checked(self) -> None:
+        """ROADMAP-3 95.15: owner 2026-11-17, "nightcross armory has been superseded and can safely be ignored"; the RC8 -> RC7
+        catalogue had listed Done/Nightcross as RELINK."""
+        from bridgeforge.workspace_tools import close_workspace
+
+        with resolved_temp_dir() as root:
+            old, new, _ = self._fixture(root)
+            archive = root / "Done" / "user"
+            _mod(archive, "user", {"id": "user"}, _compile(self.javac, root / "donebuild", AI, classpath=root / "oldbuild" / "classes"))
+            (archive / "workspace").mkdir()
+            (archive / "workspace" / "REVIVAL_REPORT.md").write_text("# Revival report\n\nLIVE_VALIDATED\n", encoding="utf-8")
+            close_workspace(archive, "SUPERSEDED", "Owner 2026-11-17: superseded, can safely be ignored.")
+            result = target_impact([root / "Done"], old, new)
+        self.assertEqual(result["records"], [])
+        self.assertEqual(result["skipped"], [{"mod": "Done/user", "status": "SUPERSEDED"}])
+        self.assertIn("Done/user (SUPERSEDED)", render(result))
+
 
 class DiscoveryTests(unittest.TestCase):
     def test_done_archive_workspace_and_plain_mod_folders(self) -> None:
@@ -215,3 +232,38 @@ class DataLayerTests(unittest.TestCase):
         self.assertEqual(hits, [{"kind": "rule-override-orphaned", "detail": "kpAudience1"},
                                 {"kind": "replace-lacks-new-columns", "detail": "data/hulls/ship_data.csv: salary"},
                                 {"kind": "settings-key-removed", "detail": "stipendPerLevel"}])
+
+
+class ClosedProviderTests(unittest.TestCase):
+    def test_a_closed_library_archive_still_provides_its_jars(self) -> None:
+        """Review 2026-11-17 (ROADMAP-3 95.15): a mod whose dependency's only copy is a closed archive was checked without the
+        library's jars, once closed mods left the id map."""
+        from unittest import mock
+
+        from bridgeforge import target_impact as module
+        from bridgeforge.workspace_tools import close_workspace
+
+        with resolved_temp_dir() as root:
+            for core in ("old", "new"):
+                (root / core).mkdir()
+                (root / core / "starfarer.api.jar").write_bytes(b"")
+            lib = root / "Done" / "lib" / "lib"
+            (lib / "jars").mkdir(parents=True)
+            (lib / "jars" / "lib.jar").write_bytes(b"PK")
+            (lib / "mod_info.json").write_text('{"id": "lib", "jars": ["jars/lib.jar"]}', encoding="utf-8")
+            (root / "Done" / "lib" / "workspace").mkdir()
+            (root / "Done" / "lib" / "workspace" / "REVIVAL_REPORT.md").write_text("# Revival report\n\nLIVE_VALIDATED\n", encoding="utf-8")
+            close_workspace(root / "Done" / "lib", "SUPERSEDED", "Owner: superseded.")
+            (root / "q" / "user").mkdir(parents=True)
+            (root / "q" / "user" / "mod_info.json").write_text('{"id": "user", "dependencies": [{"id": "lib"}]}', encoding="utf-8")
+            seen: dict[str, list[str]] = {}
+
+            def fake(folder, old, new, providers):
+                seen[Path(folder).name] = [Path(p).name for p in providers]
+                return {"id": None, "version": None, "path": str(folder), "verdict": "CLEAN", "linkage": [], "interfaces": [],
+                        "data": [], "sources": [], "touches": {}, "resolved_on_new": [], "next": [], "fixers_only": False}
+
+            with mock.patch.object(module, "mod_impact", side_effect=fake):
+                result = module.target_impact([root / "Done", root / "q"], root / "old", root / "new")
+        self.assertEqual(seen, {"user": ["lib.jar"]})
+        self.assertEqual(result["skipped"], [{"mod": "Done/lib", "status": "SUPERSEDED"}])

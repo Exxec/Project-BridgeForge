@@ -135,12 +135,22 @@ def _auto_accepted_since(queue: Path, since: str) -> list[dict]:
 
 def close_workspace(workspace: Path, status: str, reason: str, *, day: str | None = None) -> str:
     """End revival work on a mod: a dated revival-report section ending in SUPERSEDED or NOT_REVIVABLE, which every
-    queue command then skips (report_status.CLOSED_STATUSES). Nothing is moved or deleted."""
-    from .report_status import CLOSED_STATUSES
+    queue command then skips (report_status.CLOSED_STATUSES). Nothing is moved or deleted. A `Done/<Mod>` archive is closed
+    the same way, in its `workspace/REVIVAL_REPORT.md`, and done-audit and target-impact then list it instead of checking it
+    (ROADMAP-3 item 95.15)."""
+    from .report_status import CLOSED_STATUSES, archive_report
 
     if status not in CLOSED_STATUSES:
         raise ValueError(f"status must be one of {', '.join(CLOSED_STATUSES)}")
-    report = Path(workspace).expanduser().resolve() / "working" / "reports" / "REVIVAL_REPORT.md"
+    root = Path(workspace).expanduser().resolve()
+    if not (root / "working").is_dir() and root.name == root.parent.name and archive_report(root.parent).is_file():
+        root = root.parent  # the Done/<Mod>/<Mod> copy target-impact names: close its archive, Done/<Mod>
+    if (root / "working").is_dir():
+        report = root / "working" / "reports" / "REVIVAL_REPORT.md"
+    elif archive_report(root).is_file():
+        report = archive_report(root)
+    else:  # writing a report nothing reads would look like a close and change nothing (review 2026-11-17)
+        raise ValueError(f"{root} is neither a queue workspace (working/) nor a Done/<Mod> archive (workspace/REVIVAL_REPORT.md)")
     report.parent.mkdir(parents=True, exist_ok=True)
     body = report.read_text(encoding="utf-8").rstrip() if report.is_file() else "# Revival report"
     title = "Superseded" if status == "SUPERSEDED" else "Not revivable for RC8"

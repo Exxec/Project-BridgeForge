@@ -100,8 +100,8 @@ def add_parser(subcommands) -> None:
     declare_cmd = subcommands.add_parser("declare-providers", help="apply a content-reference-unresolved SWAP: declare the visible 0.98 mods that provide every needed id (nothing else changes); any other strategy is left for a person")
     declare_cmd.add_argument("workspace", type=Path, nargs="+")
     declare_cmd.add_argument("--apply", action="store_true")
-    close_cmd = subcommands.add_parser("close", help="end revival work on a mod: a dated report section ending SUPERSEDED or NOT_REVIVABLE; queue commands skip it after")
-    close_cmd.add_argument("workspace", type=Path)
+    close_cmd = subcommands.add_parser("close", help="end revival work on a mod: a dated report section ending SUPERSEDED or NOT_REVIVABLE; queue commands skip it after, and done-audit and target-impact list a closed Done/<Mod> archive instead of checking it")
+    close_cmd.add_argument("workspace", type=Path, help="a queue workspace, or a Done/<Mod> archive (its workspace/REVIVAL_REPORT.md)")
     close_cmd.add_argument("--status", required=True, choices=["SUPERSEDED", "NOT_REVIVABLE"])
     close_cmd.add_argument("--reason", required=True, help="the evidence: what supersedes it, or what RC8 removed")
     restore_cmd = subcommands.add_parser("restore-from-done", help="rebuild an In operation workspace from a Done/ archive (shipped folder, original, reports and baseline)")
@@ -248,7 +248,11 @@ def run_cli(args: argparse.Namespace) -> int:
         return 0
     if args.command == "close":
         from .workspace_tools import close_workspace
-        print(f"{args.status}: {close_workspace(args.workspace, args.status, args.reason)}")
+        try:
+            print(f"{args.status}: {close_workspace(args.workspace, args.status, args.reason)}")
+        except ValueError as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
         return 0
     if args.command == "restore-from-done":
         from .workspace_tools import restore_from_done
