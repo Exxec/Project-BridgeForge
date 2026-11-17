@@ -72,8 +72,10 @@ The proposal builds on working parts. Each row is a command that exists today (c
 | **SPW** | Expression cost: performance attributed to the gene in a live session |
 
 Each keeps its own scope (VISION.md, "Product and repository boundaries"): BridgeForge owns the gene contract, extraction,
-adaptation, insertion and qualification evidence; the others consume and return versioned evidence through files, as they do
-today.
+adaptation, insertion and qualification evidence; the others read a gene manifest and return versioned evidence through files.
+Some already exchange files with BridgeForge (Salvor pins it; Project Go's coverage manifest; SPW's `mod-identity.json`;
+`revenantlib-check`). SpriteForge has no exchange today and must not depend on BridgeForge (its AGENTS.md section 6 and M7
+evidence, checked 2026-11-17); for it, `gene.json` is a file it reads, nothing more.
 
 ## 5. Guardrails
 
@@ -195,16 +197,17 @@ credit; performance.
 
 ## 12. Sister-repository entries
 
-Each repository's own roadmap carries its portion and cites the ids above. Filled in when each entry lands:
+Each repository's own roadmap carries its portion and cites the ids above (entries added 2026-11-17, each checked to contain its
+phase ids, GD-2, GR-1, GR-4 and the link to this document):
 
 | Repository | Phases | Entry | Pull request |
 |---|---|---|---|
-| RevenantLib | 94.G3, 94.G5 | (pending) | (pending) |
-| Project-Salvor | 94.G5, 94.G6 | (pending) | (pending) |
-| Project-VoidSmith | 94.G5, 94.G7 | (pending) | (pending) |
-| SpriteForge | 94.G4, 94.G5 | (pending) | (pending) |
-| Project-Go | 94.G2, 94.G4 | (pending) | (pending) |
-| SPW | 94.G6 | (pending) | (pending) |
+| RevenantLib | 94.G3, 94.G5 | [`ROADMAP.md`, item 1](https://github.com/Exxec/RevenantLib/blob/main/ROADMAP.md) (the repository's first roadmap) | [RevenantLib#5](https://github.com/Exxec/RevenantLib/pull/5) |
+| Project-Salvor | 94.G5, 94.G6 | [`ROADMAP.md`, near-term item 11](https://github.com/Exxec/Project-Salvor/blob/master/ROADMAP.md) (10 if Salvor#13 closes unmerged) | [Project-Salvor#14](https://github.com/Exxec/Project-Salvor/pull/14) |
+| Project-VoidSmith | 94.G5, 94.G7 | [`ROADMAP.md`, phase 58](https://github.com/Exxec/Project-VoidSmith/blob/master/ROADMAP.md#genome-track-phase-58-bridgeforge-94g5-94g7-approved-2026-11-17) | [Project-VoidSmith#16](https://github.com/Exxec/Project-VoidSmith/pull/16) |
+| SpriteForge | 94.G4, 94.G5 | [`ROADMAP.md`, milestone M9](https://github.com/Exxec/SpriteForge/blob/master/ROADMAP.md) | [SpriteForge#1](https://github.com/Exxec/SpriteForge/pull/1) |
+| Project-Go | 94.G2, 94.G4 | [`docs/ROADMAP.md`, P9](https://github.com/Exxec/Project-Go/blob/main/docs/ROADMAP.md#p9--genome-track-export-and-carry-a-genes-strings-bridgeforge-94g2-94g4-approved-2026-11-17) | [Project-Go#14](https://github.com/Exxec/Project-Go/pull/14) |
+| SPW | 94.G6 | [`docs/PERFORMANCE_WORKBENCH_ROADMAP.md`, "Genome track"](https://github.com/Exxec/SPW/blob/main/docs/PERFORMANCE_WORKBENCH_ROADMAP.md#genome-track-bridgeforge-item-94-phase-94g6-approved-2026-11-17) | [SPW#6](https://github.com/Exxec/SPW/pull/6) |
 
 ## 13. Effort estimate and proposed refinements (2026-11-17)
 
