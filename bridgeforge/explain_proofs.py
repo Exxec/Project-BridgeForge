@@ -247,4 +247,27 @@ def prepare_for_audit(workspace: Path) -> list[str]:
                 target.mkdir(parents=True, exist_ok=True)
                 destination.write_bytes(item.read_bytes())
                 done.append(f"copied scratch/translation/{item.name} to reports/translation/")
+    # `translate-batch` keeps the same records in the work folder it was given (Eridani Combine: scratch/translate-work/,
+    # 2026-11-16, so its nine translated files went unproven; ROADMAP-3 96.6). Its export.json says TRANSLATION_EXPORT.
+    for export in sorted((workspace / "scratch").glob("*/export.json")):
+        folder = export.parent
+        if folder == source or not _is_translation_export(export):
+            continue
+        for item in (export, folder / "translations.json"):
+            destination = target / f"{folder.name}-{item.name}"
+            if item.is_file() and not destination.exists():
+                target.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(item.read_bytes())
+                done.append(f"copied scratch/{folder.name}/{item.name} to reports/translation/{destination.name}")
     return done
+
+
+def _is_translation_export(path: Path) -> bool:
+    """A `translate-export` / `translate-batch` export document (schema 1: {"mode": "TRANSLATION_EXPORT", "entries": [...]})."""
+    try:
+        if path.stat().st_size > 64 * 1024 * 1024:
+            return False
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and data.get("mode") == "TRANSLATION_EXPORT"

@@ -156,6 +156,31 @@ def _move_aside(target: Path, done_dir: Path, today: str, prefix: str = "_replac
     return destination
 
 
+def prepare_archive(workspace: Path, *, policy_path: Path | None = None, today: str | None = None) -> dict:
+    """What `probe-group record --archive` does before it archives, done for `archive` too (ROADMAP-3 96.6). On 2026-11-17 all four
+    plain archives were refused, for differences `audit-explain --auto` then proved and for want of the licence decision the
+    owner's standing rule gives.
+
+    Steps:
+    - prove what the files prove (this also extracts a zip original and copies translation records);
+    - check the archive gate;
+    - when the gate allows, record the standing local-only decision (2026-09-27) for a mod with none.
+
+    Returns {"auto_explained": {reason: [files]}, "gate": archive_gate(...), "licence_recorded": bool}."""
+    from bridgeforge.live.live_trust import archive_gate, auto_explain_shipped
+    from .release import apply_standing_licence
+
+    workspace = Path(workspace)
+    proven = auto_explain_shipped(workspace)
+    gate = archive_gate(workspace)
+    recorded = False
+    if gate["allowed"]:
+        info = _load_lenient_json_file(workspace / "working" / "mod_info.json") or {}
+        recorded = apply_standing_licence(info.get("id"), str(info.get("name") or workspace.name),
+                                          live_date=gate["live"].get("date") or today or date.today().isoformat(), policy_path=policy_path)
+    return {"auto_explained": proven, "gate": gate, "licence_recorded": recorded}
+
+
 def archive_mod(workspace: Path, done_dir: Path, *, policy_path: Path | None = None, today: str | None = None,
                 refresh: bool = False, move_aside: bool = False, allow_unexplained: str | None = None) -> dict:
     """Archive the workspace into done_dir/<workspace>. An earlier archive of the mod is never deleted: `refresh` (or `move_aside`)

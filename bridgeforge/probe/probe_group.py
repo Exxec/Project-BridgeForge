@@ -860,8 +860,9 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
             "note": "INCOMPLETE means the probe's content-ids check never ran (start a New Game and wait one in-game day)."}
 
 
-# The owner's standing reason for local-only revivals (owner decision 2026-09-27), used by `record --archive`.
-OWNER_STANDING_REASON = "revived for the owner's local archive (live-validated {date}); not published without the author's permission (owner decision 2026-09-27)"
+# The owner's standing reason for local-only revivals (owner decision 2026-09-27); defined in release.py since 96.6, where `archive`
+# applies it too.
+from bridgeforge.release import OWNER_STANDING_REASON  # noqa: E402,F401
 
 
 def _workspaces_by_mod_id(queue: Path, mods_dir: Path | None = None) -> dict[str, Path | None]:
@@ -933,8 +934,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     from datetime import date
 
     from bridgeforge.archive import ArchiveError, archive_mod
-    from bridgeforge.release import record_policy_decision
-    from bridgeforge.substitutes import revival_licence
+    from bridgeforge.release import apply_standing_licence
 
     today = today or date.today().isoformat()
     report = group_report(log, config, mods_dir=Path(rig) / "mods", accepted=accepted_probe_findings(queue, Path(rig) / "mods"))
@@ -1032,8 +1032,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
         recorded.append(workspace.name)
         if not archive:
             continue
-        if revival_licence(mod_id, _mod_info(workspace / "working").get("name"), policy_path).get("decision") not in ("LOCAL_ONLY", "RELEASABLE"):
-            record_policy_decision(mod_id, local_only=True, reason=OWNER_STANDING_REASON.format(date=today), policy_path=policy_path)
+        apply_standing_licence(mod_id, _mod_info(workspace / "working").get("name"), live_date=today, policy_path=policy_path)
         done = Path(done_dir or Path(queue).parent / "Done")
         auto_explain_shipped(workspace)
         gate = archive_gate(workspace)

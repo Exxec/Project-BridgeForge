@@ -74,6 +74,21 @@ bridgeforge probe-group record <TESTID> --rig "In operation\_rig-0985a" --accept
 `record` refuses when the run is not bound to its staged inputs, for example when the probe config changed since the
 launch. Re-install that group's config, or run again.
 
+To archive a mod that is already recorded LIVE_VALIDATED, run `bridgeforge archive "In operation/<Mod>"`. Like
+`record --archive`, it first records:
+- what the files prove (`audit-explain --auto`): the credits file, moved work files, rows only added, and translations whose
+  records sit in `scratch/translation/` or a translate-batch work folder;
+- the owner's standing LOCAL_ONLY licence decision (2026-09-27), when the mod has none.
+
+If it still refuses, explain each remaining file only from a record that shows why it changed:
+- the revival report;
+- `reports/ESCALATION_REVIEW.md`;
+- a ROADMAP item carrying the owner's decision;
+- an earlier `SHIPPED_CHANGES.json`.
+
+Check the diff matches the record before `audit-explain FILE... --reason`, and never guess a reason. A baseline gone stale
+through an owner-ordered `+bf.N` bump is re-stamped with `baseline-accept --reason`, naming what carried over.
+
 ## 6. A mod changed after archiving
 
 1. `bridgeforge restore-from-done "Done/<Mod>" --queue "In operation"`.

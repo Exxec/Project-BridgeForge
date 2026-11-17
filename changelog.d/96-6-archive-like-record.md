@@ -1,0 +1,6 @@
+- `archive` first does what `probe-group record --archive` does (ROADMAP-3 96.6):
+  - it records what the files prove (`audit-explain --auto`);
+  - when the gate allows, it records the owner's standing local-only licence decision for a mod with none;
+  - a refusal lists what it proved.
+- `audit-explain --auto` sees a `translate-batch` work folder's records.
+- Release-policy decisions are written with LF line endings.
