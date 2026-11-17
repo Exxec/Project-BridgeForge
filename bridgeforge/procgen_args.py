@@ -21,6 +21,7 @@ import re
 import subprocess
 import zipfile
 from pathlib import Path
+from bridgeforge.zipsafe import read_class
 
 _CALL = re.compile(r"\b(initStar|addPlanet)\s*\(")
 _NUMBER = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*[fFdD]?\s*$")
@@ -140,7 +141,7 @@ def jar_suspects(jar: Path, javap: Path) -> list[tuple[str, str, str, list[str]]
     """(class, method, call, problems) for one jar's classes that mention initStar or addPlanet."""
     try:
         with zipfile.ZipFile(jar) as archive:
-            names = [n for n in archive.namelist() if n.endswith(".class") and (b"initStar" in (data := archive.read(n))
+            names = [n for n in archive.namelist() if n.endswith(".class") and (b"initStar" in (data := read_class(archive, n) or b"")
                                                                                 or b"addPlanet" in data)]
     except (OSError, zipfile.BadZipFile):
         return []

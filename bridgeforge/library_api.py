@@ -8,6 +8,7 @@ from pathlib import Path
 from .models import TargetProfile
 from bridgeforge.scan.scanner import scan_mod
 from bridgeforge.bytecode.bytecode import BytecodeUnavailable, inspect_bytecode
+from bridgeforge.zipsafe import ZipEntryTooLarge, read_limited
 
 
 DEPENDENCY_ID_ALIASES = {
@@ -60,8 +61,8 @@ def _inventory_matches_dependency(inventory: dict, dependency: str) -> bool:
 
 def _manifest_value(archive: zipfile.ZipFile) -> str | None:
     try:
-        text = archive.read("META-INF/MANIFEST.MF").decode("utf-8", errors="replace")
-    except KeyError:
+        text = read_limited(archive, "META-INF/MANIFEST.MF").decode("utf-8", errors="replace")
+    except (KeyError, ZipEntryTooLarge):
         return None
     for key in ("Implementation-Version", "Specification-Version", "Bundle-Version"):
         match = re.search(rf"(?im)^{re.escape(key)}:\s*(.+)$", text)

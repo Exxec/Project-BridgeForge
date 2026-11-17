@@ -15,6 +15,7 @@ from .models import TargetProfile
 from bridgeforge.bytecode.jar_audit import ClassFileError, parse_constant_pool, referenced_class_names, referenced_members
 from bridgeforge.save.save_inspect import inspect_save
 from bridgeforge.scan.scanner import _parse_class_file
+from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
 
 SCHEMA_VERSION = 1
@@ -179,7 +180,7 @@ def build_archaeology(mod_directory: Path, *, save_aliases: Path | None = None, 
                             add_node(class_id, "class", name=class_name, providers=sorted(package_classes[class_name]))
                             edges.add((file_id, class_id, "provides", member))
                             try:
-                                class_bytes = archive.read(member)
+                                class_bytes = read_limited(archive, member, MAX_CLASS_BYTES)
                                 pool = parse_constant_pool(class_bytes)
                                 references = referenced_class_names(pool)
                             except (ClassFileError, KeyError, OSError):

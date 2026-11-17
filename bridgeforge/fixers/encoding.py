@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from .common import FileChange, FixerError
+from bridgeforge.zipsafe import read_limited
 
 
 _REFERENCE_SUFFIXES = {".json", ".csv", ".java", ".kt", ".faction", ".ship", ".skin", ".variant", ".wpn", ".proj",
@@ -31,7 +32,7 @@ def _referencing_bytes(root: Path, skip: set[str]) -> bytes:
                 parts.append(path.read_bytes().lower())
             elif suffix == ".jar":
                 with zipfile.ZipFile(path) as jar:
-                    parts.extend(jar.read(info).lower() for info in jar.infolist() if not info.is_dir() and info.file_size <= 8 * 1024 * 1024)
+                    parts.extend(read_limited(jar, info, 8 * 1024 * 1024).lower() for info in jar.infolist() if not info.is_dir() and info.file_size <= 8 * 1024 * 1024)
         except (OSError, zipfile.BadZipFile):
             continue
     return b"\n".join(parts)

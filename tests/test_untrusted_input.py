@@ -1,13 +1,18 @@
 """ROADMAP 70 H2.4: untrusted archives and class files must not exhaust memory or hang a command."""
 from __future__ import annotations
 
+import hashlib
 import io
+import struct
 import unittest
 import zipfile
+from unittest import mock
 
 from bridgeforge.atlas import atlas
 from bridgeforge.atlas.atlas_classfile import ClassFormatError, parse_class
-from bridgeforge.zipsafe import ZipEntryTooLarge, read_limited
+from bridgeforge.scan import scan_classfile
+from bridgeforge.zipsafe import ZipEntryTooLarge, entry_sha256, read_limited
+from tests.support import resolved_temp_dir
 from tests.test_atlas import build, make_mod, make_vanilla, temp_root
 
 
@@ -43,6 +48,74 @@ class ZipSafeTests(unittest.TestCase):
         info.CRC = 0xDEADBEEF
         with self.assertRaises(zipfile.BadZipFile):
             read_limited(archive, info)
+
+    def test_an_entry_hash_is_streamed_and_matches_the_whole_entry(self) -> None:
+        data = bytes(range(256)) * 9000  # over two read chunks
+        archive = _zip({"music.ogg": data})
+        self.assertEqual(entry_sha256(archive, "music.ogg"), hashlib.sha256(data).hexdigest())
+        self.assertEqual(entry_sha256(archive, archive.getinfo("music.ogg")), hashlib.sha256(data).hexdigest())
+
+
+def _class_with_string(text: str) -> bytes:
+    """A class file holding one Utf8 constant: enough for the constant-pool readers."""
+    raw = text.encode("utf-8")
+    return b"\xca\xfe\xba\xbe\x00\x00\x00\x3d" + struct.pack(">H", 2) + b"\x01" + struct.pack(">H", len(raw)) + raw + b"\x00" * 8
+
+
+def _jar_with_big_class_first(path, small: bytes) -> None:
+    with zipfile.ZipFile(path, "w") as out:
+        out.writestr("a/Big.class", b"\xca\xfe\xba\xbe" + b"\x00" * 200)
+        out.writestr("a/Small.class", small)
+
+
+class JarClassLimitTests(unittest.TestCase):
+    """ROADMAP-3 93.33: jar walks read class entries with a bound, skip an oversize one and go on with the rest of the jar."""
+
+    def test_a_class_over_the_limit_is_skipped_and_named_apart_from_unreadable_jars(self) -> None:
+        with resolved_temp_dir() as root:
+            jar = root / "mod.jar"
+            _jar_with_big_class_first(jar, b"\xca\xfe\xba\xbe" + b"\x00" * 8)
+            unreadable: list[str] = []
+            skipped: list[str] = []
+            with mock.patch.object(scan_classfile, "MAX_CLASS_BYTES", 64):
+                members = [member for _jar, member, _data in
+                           scan_classfile.iter_class_files_in_jars([jar], unreadable=unreadable, skipped_entries=skipped)]
+        self.assertEqual(members, ["a/Small.class"])
+        self.assertEqual(unreadable, [])  # whole jars only: verify-shadow counts the jars it checked from this list
+        self.assertEqual(len(skipped), 1)
+        self.assertIn("a/Big.class", skipped[0])
+        self.assertIn("64 byte limit", skipped[0])
+
+    def test_verify_shadow_counts_a_jar_with_a_skipped_class_as_checked(self) -> None:
+        """Review 2026-11-17: per-entry records in `unreadable` made `jars_checked` wrong, even negative."""
+        from bridgeforge.verify_shadow import verify_shadow
+
+        with resolved_temp_dir() as root:
+            jar = root / "mod.jar"
+            _jar_with_big_class_first(jar, _class_with_string("unrelated"))
+            script = root / "data" / "scripts" / "X.java"
+            script.parent.mkdir(parents=True)
+            script.write_text("package data.scripts;\npublic class X {}\n", encoding="utf-8")
+            with mock.patch.object(scan_classfile, "MAX_CLASS_BYTES", 64):
+                result = verify_shadow([script], [jar])
+        self.assertEqual((result["jars_checked"], result["unreadable_jars"]), (1, []))
+        self.assertEqual(len(result["skipped_classes"]), 1)
+
+    def test_a_walk_that_catches_per_jar_reads_past_an_oversize_class(self) -> None:
+        """Review 2026-11-17: campaign_layout and six other walks catch errors per jar, so before read_class one huge entry
+        hid every class after it."""
+        from bridgeforge import zipsafe
+        from bridgeforge.campaign_layout import mod_placed_types
+
+        with resolved_temp_dir() as root:
+            (root / "jars").mkdir()
+            (root / "mod_info.json").write_text('{"id": "m", "name": "m", "version": "1", "jars": ["jars/m.jar"]}', encoding="utf-8")
+            _jar_with_big_class_first(root / "jars" / "m.jar", _class_with_string("m_planet_type"))
+            with mock.patch.object(zipsafe, "MAX_CLASS_BYTES", 64):
+                placed = mod_placed_types(root, {"m_planet_type"})
+                big = zipsafe.read_class(zipfile.ZipFile(root / "jars" / "m.jar"), "a/Big.class")
+        self.assertEqual(placed, {"m_planet_type"})
+        self.assertIsNone(big)
 
 
 class ClassFileLimitTests(unittest.TestCase):

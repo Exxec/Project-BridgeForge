@@ -31,6 +31,7 @@ from pathlib import Path
 from bridgeforge.safeio import verify_written
 from bridgeforge.bytecode.java_toolchain import assemble_classpath, find_jdk, run_javac
 from bridgeforge.rebuild_jar import _diff_class, _parse_class
+from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
 SCHEMA_VERSION = 1
 _NOISE = re.compile(r"StringBuilder|String\.valueOf|StringConcatFactory|makeConcat|Logger|getLogger")
@@ -139,7 +140,7 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
 
     new_classes = {p.relative_to(out_dir / "classes").as_posix(): p.read_bytes() for p in (out_dir / "classes").rglob("*.class")}
     with zipfile.ZipFile(jar_path) as archive:
-        shipped = {name: archive.read(name) for name in archive.namelist() if name in new_classes}
+        shipped = {name: read_limited(archive, name, MAX_CLASS_BYTES) for name in archive.namelist() if name in new_classes}
     allowed = set(allow_removed or [])
     refusals = []
     for name, data in sorted(new_classes.items()):
@@ -208,7 +209,7 @@ def patch_jar_classes(workspace: Path, jar: str, sources: list[Path], *, vanilla
     with zipfile.ZipFile(kept) as source_jar, zipfile.ZipFile(temp, "w", zipfile.ZIP_DEFLATED) as target_jar:
         names = set(source_jar.namelist())
         for info in source_jar.infolist():
-            target_jar.writestr(info, new_classes.get(info.filename) or source_jar.read(info.filename))
+            target_jar.writestr(info, new_classes.get(info.filename) or read_limited(source_jar, info.filename))
         for name, data in new_classes.items():
             if name not in names:
                 target_jar.writestr(name, data)

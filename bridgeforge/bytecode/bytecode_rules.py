@@ -10,6 +10,7 @@ from pathlib import Path
 
 from bridgeforge.bytecode.bytecode import inspect_bytecode, rewrite_class
 from bridgeforge.bytecode.bytecode_diff import diff_bytecode
+from bridgeforge.zipsafe import read_limited
 
 
 @dataclass(frozen=True)
@@ -129,7 +130,7 @@ def apply_bytecode_jar(input_path: Path, output_path: Path, rules_path: Path, ap
         original_members: dict[str, bytes] = {}
         with zipfile.ZipFile(source) as original, zipfile.ZipFile(candidate_jar, "w") as rewritten:
             for info in original.infolist():
-                data = original.read(info.filename)
+                data = read_limited(original, info.filename)
                 original_members[info.filename] = data
                 if info.filename in entry_rules:
                     current = temporary / "input.class"; current.write_bytes(data)
@@ -138,7 +139,7 @@ def apply_bytecode_jar(input_path: Path, output_path: Path, rules_path: Path, ap
                     data = current.read_bytes()
                 rewritten.writestr(info, data)
         with zipfile.ZipFile(candidate_jar) as rewritten:
-            if any(rewritten.read(name) != data for name, data in original_members.items() if name not in entry_rules):
+            if any(read_limited(rewritten, name) != data for name, data in original_members.items() if name not in entry_rules):
                 raise ValueError("Bytecode JAR rewrite changed an unselected archive member.")
         semantic = diff_bytecode([source], [candidate_jar])
         if semantic["added_classes"] or semantic["removed_classes"] or len(semantic["changed_classes"]) != len(entry_rules):

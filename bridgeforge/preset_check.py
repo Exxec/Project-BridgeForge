@@ -15,6 +15,7 @@ import re
 from pathlib import Path
 
 from bridgeforge.scan.scanner import _load_lenient_json_file
+from bridgeforge.zipsafe import read_class
 
 SCHEMA_VERSION = 1
 # Library id -> package paths its users reference (slash form, as in class files).
@@ -58,7 +59,8 @@ def _referenced_libraries(folder: Path) -> set[str]:
     for jar in folder.rglob("*.jar"):
         try:
             with zipfile.ZipFile(jar) as archive:
-                blobs.extend(archive.read(item) for item in archive.infolist() if item.filename.endswith(".class"))
+                blobs.extend(data for item in archive.infolist()
+                             if item.filename.endswith(".class") and (data := read_class(archive, item)) is not None)
         except (OSError, zipfile.BadZipFile, NotImplementedError):
             continue
     for library, patterns in needles.items():

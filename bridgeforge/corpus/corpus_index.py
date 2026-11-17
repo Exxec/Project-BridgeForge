@@ -19,6 +19,7 @@ import io
 import sqlite3
 import zipfile
 from pathlib import Path
+from bridgeforge.zipsafe import read_limited
 
 SCHEMA_VERSION = 2  # 2: content_rows maps each content rowid to its source (2026-09-27)
 DEFAULT_MAX_BYTES = 4 * 1024 * 1024
@@ -103,7 +104,7 @@ def _index_zip(connection, source: str, data: bytes, max_bytes: int) -> None:
                 if info.file_size > max_bytes:
                     connection.execute("INSERT OR REPLACE INTO skipped VALUES (?, ?, ?)", (location, source, f"larger than {max_bytes} bytes"))
                 else:
-                    _add_text(connection, source, location, archive.read(info), max_bytes)
+                    _add_text(connection, source, location, read_limited(archive, info, max_bytes), max_bytes)
             else:
                 connection.execute("INSERT OR REPLACE INTO files VALUES (?, ?, ?)", (location, source, info.file_size))
 

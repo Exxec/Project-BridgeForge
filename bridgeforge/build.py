@@ -15,6 +15,7 @@ from .models import TargetProfile
 from bridgeforge.scan.scanner import scan_mod
 from .starsector_install import inventory_starsector_install
 from .workspace import resolve_inside, workspace_paths
+from bridgeforge.zipsafe import read_limited
 
 
 @dataclass(frozen=True)
@@ -250,7 +251,7 @@ def package_compiled_jar(workspace: Path, input_jar: str, output_name: str | Non
     replacements = {path.relative_to(classes).as_posix(): path for path in class_files}
     try:
         with zipfile.ZipFile(source) as original:
-            original_entries = {info.filename: original.read(info) for info in original.infolist()}
+            original_entries = {info.filename: read_limited(original, info) for info in original.infolist()}
     except zipfile.BadZipFile as exc:
         raise ValueError("Packaging requires a readable JAR/ZIP archive.") from exc
     contents = {
