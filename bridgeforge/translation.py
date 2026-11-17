@@ -750,6 +750,7 @@ def _apply_translation(mod_dir: Path, document: dict, out_dir: Path | None = Non
             _apply_jsonlike(path, rel, entries, applied, problems)
         elif kind == "java":
             _apply_java(path, rel, entries, applied, problems)
+    _mirror_jar_strings_to_sources(target, by_file, applied)
     total = sum(1 for e in document["entries"])
     remaining = check_translation(target)["leftover_count"]
     return {
@@ -763,6 +764,43 @@ def _apply_translation(mod_dir: Path, document: dict, out_dir: Path | None = Non
         "format_slots_reindexed": document.get("_reindexed", []),
         "leftover_cjk_units": remaining,
     }
+
+
+def _mirror_jar_strings_to_sources(target: Path, by_file: dict, applied: Counter) -> None:
+    """Give a jar class's shipped source the same translated literals the jar got. Eridani Combine's 18 ECE.jar strings were
+    translated while src/ kept the Chinese, so a later src-to-jar rebuild would have reverted them (ROADMAP-3 item 92.33,
+    2026-11-16). Only an exact Java literal of the source string, in `<any source root>/<class path>.java`, is replaced."""
+    sources: dict[str, list[Path]] = defaultdict(list)
+    for path in target.rglob("*.java"):
+        rel = path.relative_to(target).as_posix()
+        if not rel.startswith("data/"):  # loose scripts under data/ are translated as java units already
+            sources[path.stem].append(path)
+    pairs: dict[Path, list[tuple[str, str]]] = defaultdict(list)
+    for entries in by_file.values():
+        for entry in entries.values():
+            if entry.get("kind") != "jar" or not entry.get("translation"):
+                continue
+            class_path = entry["context"]["class"].split("$", 1)[0]
+            for path in sources.get(class_path.rsplit("/", 1)[-1], []):
+                if path.with_suffix("").as_posix().endswith("/" + class_path):
+                    pairs[path].append((entry["source"], entry["translation"]))
+    def raw_literal(value: str) -> str:  # the literal as a source file usually holds it: characters as they are
+        return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r") + '"'
+
+    from .safeio import atomic_write_text
+
+    for path, replacements in pairs.items():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        new = text
+        for source, translation in replacements:
+            for literal in {raw_literal(source), _encode_java_string(source)}:
+                new = new.replace(literal, raw_literal(translation))
+        if new != text:
+            atomic_write_text(path, new)
+            applied["jar-source"] += 1
 
 
 def _apply_csv(path: Path, rel: str, entries: dict, applied: Counter, problems: list) -> None:

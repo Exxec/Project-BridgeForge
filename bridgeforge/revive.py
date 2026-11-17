@@ -112,6 +112,24 @@ def _target_profile(target: str | None):
     return TargetProfile(starsector=target) if target else None
 
 
+def _reference_comparison(working: Path, vanilla_core: Path | None, reference_core: Path | None) -> dict | None:
+    """Over-budget variants on the core the mod was made for vs the target: the difference is what the new build's costs
+    pushed over (the only trims the 2026-09-27 ruling allows). It settled the six-mod batch (42 authored, 0 regressions) but
+    took a hand-written script (ROADMAP-3 item 92.23, 2026-11-16)."""
+    if vanilla_core is None or reference_core is None:
+        return None
+    from .models import ScanResult, TargetProfile
+    from bridgeforge.scan.scanner import _scan_variant_validity
+
+    over = {}
+    for label, core in (("reference", Path(reference_core)), ("target", Path(vanilla_core))):
+        found = ScanResult(input_path=working, target=TargetProfile())
+        _scan_variant_validity(working, found, core)
+        over[label] = {f.file for f in found.findings if f.id == "variant-op-over-budget"}
+    return {"variant-op-over-budget": {"reference": len(over["reference"]), "target": len(over["target"]),
+                                       "regressions": sorted(over["target"] - over["reference"])}}
+
+
 def _declared_game_version(workspace: Path) -> str | None:
     """mod_info gameVersion as the author shipped it: original/ first (working/ may already be bumped), then working/."""
     from bridgeforge.scan.scanner import _load_lenient_json_file
@@ -133,7 +151,7 @@ def _resolve_reference_core(workspace: Path, vanilla_core: Path) -> Path | None:
     return reference_core_for(_declared_game_version(workspace), [install_root], exclude=Path(vanilla_core))
 
 
-def _scan(working: Path, vanilla_core: Path | None, target: str | None = None) -> list[dict]:
+def _scan(working: Path, vanilla_core: Path | None, target: str | None = None, reference_core: Path | None = None) -> list[dict]:
     """Scan findings minus the ones the mod's own baseline accepts (working/reports/baseline*.json):
     an accepted finding is never fixed, packeted or counted against the mod."""
     from .baseline import finding_dict_baseline_key, mod_baseline_keys
@@ -145,7 +163,10 @@ def _scan(working: Path, vanilla_core: Path | None, target: str | None = None) -
     # And the queue itself: a declared dependency revived alongside (Communist Clouds -> Vayra Merged) is not in the
     # rig, and its content read as unresolved in mods that already declared it (2026-10-01).
     queue = Path(working).resolve().parent.parent
-    providers = [p for p in (rig_mods, queue, *outside_provider_sources(queue)) if p.is_dir()] or None
+    # And the reference install's mods/: the libraries the mod was built against live there, declared or not (Bultach's
+    # custom start uses Nexerelin's NGCAddStartingShipsByFleetType; ROADMAP-3 item 92.35, 2026-11-16).
+    reference_mods = Path(reference_core).resolve().parent / "mods" if reference_core else None
+    providers = [p for p in (rig_mods, queue, *outside_provider_sources(queue), *([reference_mods] if reference_mods else [])) if p.is_dir()] or None
     findings = [asdict(f) for f in scan_mod(working, target=_target_profile(target), vanilla_core=vanilla_core,
                                             compile_check=vanilla_core is not None, provider_roots=providers).findings]
     _record_settings_baseline(working, findings)
@@ -458,6 +479,20 @@ def build_packets(workspace: Path, findings: list[dict], pending_fixes: list[dic
     packets = []
     fixer_state = {item["finding"]: item for item in pending_fixes}
     groups: dict[tuple[str, str], list[dict]] = {}
+    # One packet per class: a finding on a jar class whose source the mod also ships (and the same finding is raised on that
+    # source) is fixed in the source and carried into the jar by src-to-jar; `jar-source-not-rebuilt` keeps the mod from
+    # UNATTENDED_DONE until it is. Bultach Coalition had 6 hull mods packeted twice, jar and src (ROADMAP-3 item 92.3).
+    source_classes = {(f["id"], f["file"].replace("\\", "/")[:-5]) for f in findings
+                      if (f.get("file") or "").endswith(".java") and "!" not in f["file"]}
+
+    def covered_by_source(finding: dict) -> bool:
+        jar, _, member = (finding.get("file") or "").partition("!")
+        if not member.endswith(".class") or not jar.endswith(".jar"):
+            return False
+        stem = member[:-6].split("$", 1)[0]
+        return any(fid == finding["id"] and (src == stem or src.endswith("/" + stem)) for fid, src in source_classes)
+
+    findings = [f for f in findings if not covered_by_source(f)]
     for finding in findings:
         tier = tier_for(finding["id"])
         if tier not in ACTIONABLE or _informational(finding):
@@ -645,7 +680,7 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
     if reference_core is None and vanilla_core is not None:
         reference_core = _resolve_reference_core(workspace, Path(vanilla_core))
     rounds, applied_all = [], []
-    findings = _scan(working, vanilla_core, target)
+    findings = _scan(working, vanilla_core, target, reference_core)
     first = [dict(f) for f in findings]
     pending: list[dict] = []
     for number in range(1, max_rounds + 1):
@@ -655,7 +690,7 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
         applied_all += applied
         if not applied:
             break
-        findings = _scan(working, vanilla_core, target)
+        findings = _scan(working, vanilla_core, target, reference_core)
     # Rebuild jar classes whose src/ BridgeForge edited, when approved (ROADMAP-3 item 92.25): proven against the reference
     # core first, so a jar built from other source is refused, never overwritten.
     if apply and vanilla_core is not None and "jar-source-not-rebuilt" in approved and any(f["id"] == "jar-source-not-rebuilt" for f in findings):
@@ -679,7 +714,7 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
             entry = {"finding": "jar-source-not-rebuilt", "files": built, "why": "approved (src-to-jar)"}
             applied_all.append(entry)
             rounds.append({"round": len(rounds) + 1, "applied": [entry], "findings": len(findings)})
-            findings = _scan(working, vanilla_core, target)
+            findings = _scan(working, vanilla_core, target, reference_core)
     # Relink, when approved in the policy: recompile classes whose game calls RC8 changed only by return type, from
     # unedited source, patched only when nothing else changes (jar_batch; 19 queued mods by hand, 2026-09-30).
     if apply and vanilla_core is not None and "jar-linkage-unresolved" in approved and any(f["id"] == "jar-linkage-unresolved" for f in findings):
@@ -691,7 +726,7 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
                      "why": "approved (relink)"}
             applied_all.append(entry)
             rounds.append({"round": len(rounds) + 1, "applied": [entry], "findings": len(findings)})
-            findings = _scan(working, vanilla_core, target)
+            findings = _scan(working, vanilla_core, target, reference_core)
     # Interface ports, when approved: known RC8 contract changes on jar classes (jar_batch.port_interfaces).
     if apply and vanilla_core is not None and "jar-interface-method-missing" in approved and any(f["id"] == "jar-interface-method-missing" for f in findings):
         from bridgeforge.bytecode.jar_batch import port_interfaces
@@ -702,7 +737,7 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
             entry = {"finding": "jar-interface-method-missing", "files": done, "why": "approved (port-interfaces)"}
             applied_all.append(entry)
             rounds.append({"round": len(rounds) + 1, "applied": [entry], "findings": len(findings)})
-            findings = _scan(working, vanilla_core, target)
+            findings = _scan(working, vanilla_core, target, reference_core)
     remaining_tiers = [tier_for(f["id"]) for f in findings if not _informational(f)]
     roots = providers if providers else [workspace.parent, workspace.parent / "_rig" / "mods"]
     cache: dict = {}
@@ -733,7 +768,9 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
         "compile_checked": vanilla_core is not None, "reference_core": str(reference_core) if reference_core else None, "policy": str(policy_path), "approved": sorted(approved), "named_approvals": sorted(approve or []),
         "status": status, "hardest_tier": hardest, "rounds": rounds, "applied": applied_all,
         "findings_before": len(first), "findings_after": len(findings),
-        "packets": [{"id": p["id"], "kind": p["kind"], "tier": p["tier"], "finding": p["finding"], "merged": p.get("merged"), "file": p["file"]} for p in packets],
+        "reference_comparison": _reference_comparison(working, vanilla_core, reference_core),
+        "packets": [{"id": p["id"], "kind": p["kind"], "tier": p["tier"], "finding": p["finding"], "merged": p.get("merged"), "file": p["file"],
+                     "fixer_files": len((p.get("fixer") or {}).get("files") or []) if (p.get("fixer") or {}).get("diff") else 0} for p in packets],
         "next": "Live test (the probe) after UNATTENDED_DONE; `bridgeforge escalation run` for agent packets; owner packets need a decision.",
     }
     if draft_report:
@@ -804,7 +841,10 @@ def render(result: dict) -> str:
     if agent:
         lines += ["", f"## For an AI agent ({len(agent)})", ""] + [f"- {p['id']} ({p['tier']}): `{p['file']}`" for p in agent]
     if owner:
-        lines += ["", f"## For the owner ({len(owner)})", ""] + [f"- {p['id']} ({p['tier']})" for p in owner]
+        # A ready fixer's diff is in the packet; say so here (ROADMAP-3 item 92.6: the Rammer trim was only seen by diffing afterwards).
+        lines += ["", f"## For the owner ({len(owner)})", ""] + [
+            f"- {p['id']} ({p['tier']})" + (f": fixer ready, {p['fixer_files']} file(s) would change; diff in reports/escalations/{p['id']}.md"
+                                            if p.get("fixer_files") else "") for p in owner]
     if result["packets"] and result["status"] != "UNATTENDED_DONE":
         # Say what stands between the mod and UNATTENDED_DONE (the gameVersion bump and the live probe wait for it), with the
         # action that clears each. Scrapyard Armories' only blocker was one cosmetic description and nothing said so
@@ -812,6 +852,10 @@ def render(result: dict) -> str:
         ws = Path(result["workspace"])
         lines += ["", f"## Blocking UNATTENDED_DONE ({len(result['packets'])})", ""]
         lines += [f"- {p['finding']}: {next_action(p, ws)}" for p in result["packets"]]
+    comparison = (result.get("reference_comparison") or {}).get("variant-op-over-budget")
+    if comparison and comparison["target"]:
+        lines += ["", f"Over-budget variants: {comparison['target']} on the target, {comparison['reference']} on the reference core; "
+                      f"{len(comparison['regressions'])} pushed over by the target (only these may be trimmed)."]
     draft = result.get("report_draft")
     if draft:
         lines += ["", f"Report draft: {draft['status']}"]

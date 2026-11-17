@@ -179,6 +179,8 @@ def _scan_hullmod_instance_state(root: Path, result: ScanResult) -> None:
     on a wreck. REVIEW: constants stored in non-final fields are harmless; per-ship state belongs in
     ship.getCustomData().
     """
+    # Evidence lists every field, uncapped: the agent fix and src-to-jar's allowed removals read it, and a 12-field cap hid
+    # bt_puncher.rightArm, the 13th (Bultach Coalition, ROADMAP-3 item 92.34, 2026-11-16).
     explanation = (
         "This hull mod keeps changeable instance fields. Starsector shares ONE hull mod object across every "
         "ship with it, so per-ship state (timers, 'runOnce' flags, cached radius) leaks between ships and is "
@@ -226,7 +228,7 @@ def _scan_hullmod_instance_state(root: Path, result: ScanResult) -> None:
             and (walk_failed or name in written_names)
         )
         if mutable:
-            result.add(id="hullmod-instance-state", category="scripts", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation=explanation, file=f"{_relative(root, jar)}!{member}", evidence=[f"field:{name}" for name in mutable[:12]])
+            result.add(id="hullmod-instance-state", category="scripts", severity="medium", classification="REVIEW", confidence="DETERMINISTIC", explanation=explanation, file=f"{_relative(root, jar)}!{member}", evidence=[f"field:{name}" for name in mutable])
     for source in sorted(root.rglob("*.java")):
         if any(part in NON_MOD_JAR_DIRS or part.startswith("src-decompiled") for part in source.relative_to(root).parts):
             continue
@@ -275,7 +277,7 @@ def _scan_hullmod_instance_state(root: Path, result: ScanResult) -> None:
 
         mutable = [name for name in mutable if written(name)]
         if mutable:
-            result.add(id="hullmod-instance-state", category="scripts", severity="medium", classification="REVIEW", confidence="HEURISTIC", explanation=explanation, file=_relative(root, source), evidence=[f"field:{name}" for name in mutable[:12]])
+            result.add(id="hullmod-instance-state", category="scripts", severity="medium", classification="REVIEW", confidence="HEURISTIC", explanation=explanation, file=_relative(root, source), evidence=[f"field:{name}" for name in mutable])
 
 
 def _scan_rules_firebest_populate_options(root: Path, result: ScanResult) -> None:

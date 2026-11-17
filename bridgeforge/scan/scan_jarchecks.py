@@ -14,7 +14,7 @@ from .scan_javatext import _blank_java_comments
 from .scan_json import _load_lenient_json_file, _read_csv_rows_lenient
 
 
-def _scan_jar_linkage(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+def _scan_jar_linkage(root: Path, result: ScanResult, vanilla_core: Path | None, provider_roots: list[Path] | None = None) -> None:
     """jar-linkage-unresolved: a declared jar calls a game method or field RC8 does not have (bridgeforge/linkage.py).
     Too Much Information's beginTable(...)V (RC8 returns UIPanelAPI) is a NoSuchMethodError the first time the tooltip
     draws. Over the 79 live-validated mods in Done/ (2026-09-30) it found only addImageWithText in four, the same
@@ -30,9 +30,19 @@ def _scan_jar_linkage(root: Path, result: ScanResult, vanilla_core: Path | None)
         return
     # Providers: the jars each other rig mod declares, not every jar in its folder (FlowerGod's build/cp held a
     # copy of starfarer.api.jar, which hid every break, 2026-09-30).
+    # Plus the scan's provider roots (a queue's workspaces, a reference install's mods/): a library the mod uses without
+    # declaring it, such as Nexerelin's NGCAddStartingShipsByFleetType for Bultach's custom start, resolved only with a rig
+    # (ROADMAP-3 item 92.35, 2026-11-16).
     rig_mods = Path(vanilla_core).resolve().parent / "mods"
+    info_paths = sorted(rig_mods.glob("*/mod_info.json")) if rig_mods.is_dir() else []
+    for provider in provider_roots or []:
+        provider = Path(provider)
+        if provider.is_dir() and provider.resolve() != rig_mods:
+            info_paths += sorted(provider.glob("*/mod_info.json")) + sorted(provider.glob("*/working/mod_info.json"))
     others = []
-    for info_path in sorted(rig_mods.glob("*/mod_info.json")) if rig_mods.is_dir() else []:
+    for info_path in info_paths:
+        if info_path.parent.resolve() == Path(root).resolve():
+            continue
         info = _load_lenient_json_file(info_path) or {}
         if not isinstance(info, dict) or info.get("id") == result.metadata.get("id"):
             continue
@@ -82,7 +92,7 @@ def _scan_jar_linkage(root: Path, result: ScanResult, vanilla_core: Path | None)
         )
 
 
-def _scan_jar_interface_methods(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
+def _scan_jar_interface_methods(root: Path, result: ScanResult, vanilla_core: Path | None, provider_roots: list[Path] | None = None) -> None:
     """jar-interface-method-missing: a concrete jar class implements a game interface (or extends an abstract game
     class) without a method RC8 requires: an AbstractMethodError when the game calls it. Polaris Prime, UNGP and
     Wotani (10 on-hit classes) were found only by compiling, 2026-10-01; `bridgeforge port-interfaces` ports the
@@ -95,9 +105,19 @@ def _scan_jar_interface_methods(root: Path, result: ScanResult, vanilla_core: Pa
     jars = [root / entry for entry in declared if isinstance(entry, str) and (root / entry).is_file()]
     if not jars:
         return
+    # Plus the scan's provider roots (a queue's workspaces, a reference install's mods/): a library the mod uses without
+    # declaring it, such as Nexerelin's NGCAddStartingShipsByFleetType for Bultach's custom start, resolved only with a rig
+    # (ROADMAP-3 item 92.35, 2026-11-16).
     rig_mods = Path(vanilla_core).resolve().parent / "mods"
+    info_paths = sorted(rig_mods.glob("*/mod_info.json")) if rig_mods.is_dir() else []
+    for provider in provider_roots or []:
+        provider = Path(provider)
+        if provider.is_dir() and provider.resolve() != rig_mods:
+            info_paths += sorted(provider.glob("*/mod_info.json")) + sorted(provider.glob("*/working/mod_info.json"))
     others = []
-    for info_path in sorted(rig_mods.glob("*/mod_info.json")) if rig_mods.is_dir() else []:
+    for info_path in info_paths:
+        if info_path.parent.resolve() == Path(root).resolve():
+            continue
         info = _load_lenient_json_file(info_path) or {}
         if isinstance(info, dict) and info.get("id") != result.metadata.get("id"):
             others += [info_path.parent / j for j in info.get("jars") or [] if isinstance(j, str) and (info_path.parent / j).is_file()]

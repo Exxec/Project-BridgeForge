@@ -72,6 +72,27 @@ class FalsePositiveTests(unittest.TestCase):
         self.assertIn("data-file-not-utf8", ids)  # the bad byte is that check's finding
 
 
+class CallerGuardTests(unittest.TestCase):
+    def _mod(self, root: Path, plugin_body: str) -> Path:
+        mod = root / "mod"
+        _write(mod / "mod_info.json", INFO)
+        _write(mod / "data" / "scripts" / "world" / "Gen.java",
+               'class Gen { void generate(Object sector) { sector.createStarSystem("Carina"); sector.initStar("carina_system", "star_yellow", 1f, 1f); } }\n')
+        _write(mod / "data" / "scripts" / "Plugin.java",
+               "class Plugin extends BaseModPlugin {\n  public void onGameLoad(boolean newGame) {\n" + plugin_body + "\n  }\n}\n")
+        return mod
+
+    def test_generation_inside_an_existence_check_is_guarded(self) -> None:
+        # Navarchy of Tania: ModPlugin_tania.onGameLoad -> if (getEntityById("carina_system") == null) new TaniaGen().generate(...)
+        with resolved_temp_dir() as root:
+            guarded = self._mod(root / "a", '    if (Global.getSector().getEntityById("carina_system") == null) {\n      new Gen().generate(Global.getSector());\n    }')
+            bare = self._mod(root / "b", "    new Gen().generate(Global.getSector());")
+            guarded_ids = _ids(guarded)
+            bare_evidence = [e for f in scan_mod(bare).findings if f.id == "system-generation-unguarded" for e in f.evidence]
+        self.assertNotIn("system-generation-unguarded", guarded_ids)
+        self.assertTrue(any("called from onGameLoad" in e for e in bare_evidence))  # the unguarded plugin is still reported
+
+
 class RootReadmeTests(unittest.TestCase):
     def test_an_unreferenced_root_file_is_a_note_and_a_referenced_one_is_not(self) -> None:
         # Scrapyard Armories: prose "Changelog.json" / "Special Thanks.json" in the mod root (ROADMAP-3 item 92.10).

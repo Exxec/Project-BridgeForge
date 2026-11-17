@@ -161,6 +161,13 @@ def src_to_jar(workspace: Path, jar_rel: str, *, vanilla_core: Path, reference_c
     working = workspace / "working"
     if not (working / jar_rel).is_file():
         raise SrcToJarError(f"{working / jar_rel} is not a file.")
+    if reference_jar is None:
+        # Prove against the author's untouched jar: the working jar may already hold an earlier patch or translated strings,
+        # which no original source reproduces (Tania needed --reference-jar by hand; Eridani's ECE.jar was translated;
+        # ROADMAP-3 item 92.33, 2026-11-16).
+        orig = original_root(workspace)
+        if orig is not None and (orig / jar_rel).is_file():
+            reference_jar = orig / jar_rel
     rels = sorted(set(changed_sources(workspace, source_root)) | {r if r.endswith(".java") else f"{r}.java" for r in relink or []})
     # Only sources whose class this jar ships: a mod with two jars is rebuilt one jar at a time.
     with zipfile.ZipFile(Path(reference_jar) if reference_jar else working / jar_rel) as archive:

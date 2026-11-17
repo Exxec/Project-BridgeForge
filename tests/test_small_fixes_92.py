@@ -63,6 +63,42 @@ class CliDefaultsTests(unittest.TestCase):
         self.assertIn("descriptions draft", text)
         done = render({**result, "status": "UNATTENDED_DONE", "packets": []})
         self.assertNotIn("Blocking", done)
+        # 92.6: a ready fixer's diff is pointed to from REVIVE.md.
+        ready = render({**result, "packets": [{"id": "variant-wings-exceed-bays--mod", "kind": "owner", "tier": "auto",
+                                               "finding": "variant-wings-exceed-bays", "file": None, "fixer_files": 2}]})
+        self.assertIn("fixer ready, 2 file(s) would change; diff in reports/escalations/variant-wings-exceed-bays--mod.md", ready)
+
+    def test_a_jar_class_with_shipped_source_gets_one_packet(self) -> None:
+        # 92.3: Bultach's hull mods were packeted twice, jars/ORKS.jar!... and src/...
+        from pathlib import Path
+
+        from bridgeforge.revive import build_packets
+
+        def finding(file: str) -> dict:
+            return {"id": "hullmod-instance-state", "file": file, "classification": "REVIEW", "evidence": [], "severity": "medium",
+                    "category": "code", "confidence": "HEURISTIC", "explanation": ""}
+
+        with resolved_temp_dir() as root:
+            packets = build_packets(Path(root), [finding("jars/ORKS.jar!data/hullmods/bt_puncher.class"),
+                                                 finding("src/data/hullmods/bt_puncher.java"),
+                                                 finding("jars/ORKS.jar!data/hullmods/bt_only_compiled.class")],
+                                    [{"finding": "hullmod-instance-state", "state": "FIXER_REFUSED", "reason": "x"}], vanilla_core=None)
+        self.assertEqual(sorted(p["file"] for p in packets),
+                         ["jars/ORKS.jar!data/hullmods/bt_only_compiled.class", "src/data/hullmods/bt_puncher.java"])
+
+    def test_an_acceptance_survives_an_edit_that_moves_lines(self) -> None:
+        # 92.29: Tania's accepted system-generation-unguarded came back after an agent fix shifted Carinasystem.java.
+        from bridgeforge.baseline import finding_dict_baseline_key, load_baseline_keys
+
+        with resolved_temp_dir() as root:
+            stored = root / "baseline.json"
+            stored.write_text(json.dumps({"findings": ["system-generation-unguarded||src/World/Carinasystem.java:31: Carina (called from onGameLoad)"]}),
+                              encoding="utf-8")
+            keys = load_baseline_keys(stored)
+        moved = {"id": "system-generation-unguarded", "file": None, "evidence": ["src/World/Carinasystem.java:44: Carina (called from onGameLoad)"]}
+        other = {"id": "system-generation-unguarded", "file": None, "evidence": ["src/World/Mustafar.java:44: Mustafar (called from onGameLoad)"]}
+        self.assertIn(finding_dict_baseline_key(moved), keys)
+        self.assertNotIn(finding_dict_baseline_key(other), keys)  # a different subject is still a new finding
 
     def test_escalation_run_has_a_default_agent(self) -> None:
         # 92.8: every run of the batch passed the same command; `claude` off PATH resolves to the bundled binary.

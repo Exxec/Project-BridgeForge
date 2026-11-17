@@ -98,6 +98,50 @@ def _json_player_part(line: str) -> str:
     return _JSON_KEY.sub(":", line)
 
 
+_FULLWIDTH_PUNCT = re.compile(r"[！-／：-＠［-｀｛-～、。]")
+
+
+def fullwidth_punctuation_fixed(line: str) -> str | None:
+    """The line with full-width punctuation made ASCII, or None when there is none to fix or the line still holds other CJK
+    (untranslated text is player-text-non-english's finding). `，`/`、` become `, ` (a space added before a following word),
+    `。` becomes `.`, U+FF01-FF5E map to their ASCII forms. Eridani Combine after translation kept `：` x2 in the mod_info author
+    line and a `，` in a hull-mod tooltip, outside the game font (ROADMAP-3 item 92.32, 2026-11-16)."""
+    if not _FULLWIDTH_PUNCT.search(line) or _CJK_TEXT.search(_FULLWIDTH_PUNCT.sub("", line)):
+        return None
+
+    def ascii_form(match: re.Match) -> str:
+        char = match.group(0)
+        if char in "，、":
+            following = line[match.end():match.end() + 1]
+            return "," if not following or following.isspace() else ", "
+        return "." if char == "。" else chr(ord(char) - 0xFEE0)
+    return _FULLWIDTH_PUNCT.sub(ascii_form, line)
+
+
+def fullwidth_punctuation_files(root: Path) -> list[Path]:
+    paths = [root / "mod_info.json"] + ([p for p in (root / "data").rglob("*") if p.suffix.lower() in _PLAYER_TEXT_SUFFIXES]
+                                        if (root / "data").is_dir() else [])
+    return [p for p in paths if p.is_file()]
+
+
+def _scan_fullwidth_punctuation(root: Path, result: ScanResult) -> None:
+    hits = []
+    for path in fullwidth_punctuation_files(root):
+        try:
+            text = path.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            continue
+        for number, line in enumerate(text.splitlines(), 1):
+            if fullwidth_punctuation_fixed(line) is not None:
+                hits.append(f"{_relative(root, path)}:{number}")
+    if hits:
+        result.add(id="fullwidth-punctuation-in-text", category="localization", severity="low", classification="SAFE",
+                   confidence="DETERMINISTIC",
+                   explanation="English player text holds full-width punctuation (，：。 and the like), which the game font cannot draw. "
+                               "Converting to the ASCII form keeps the meaning.",
+                   evidence=hits[:25] + ([f"... {len(hits) - 25} more"] if len(hits) > 25 else []))
+
+
 def _scan_non_english_text(root: Path, result: ScanResult) -> None:
     """Chinese/Japanese/Korean text in data files, outside comments (P13, non-English intake).
 

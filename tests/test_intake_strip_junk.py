@@ -65,5 +65,46 @@ class StripJunkTests(unittest.TestCase):
         self.assertEqual(kept, b"someone else's")
 
 
+class BatchIntakeTests(unittest.TestCase):
+    """ROADMAP-3 item 92.5: several sources per call and loose names resolved in a mods folder."""
+
+    def test_loose_names_resolve_to_one_folder_or_are_refused(self) -> None:
+        from bridgeforge.intake import resolve_mod_folder
+
+        with resolved_temp_dir() as root:
+            for name in ("Everybody loves KoC-1.05.49a", "Eridani Combine-1.0.3.6", "Kazeron Navarchy-1.8.0",
+                         "Navarchy of Tania-1.0.1", "MagicLib-1.5.6", "MagicLib-1.6.1"):
+                (root / name).mkdir()
+            self.assertEqual(resolve_mod_folder("koch", root).name, "Everybody loves KoC-1.05.49a")
+            self.assertEqual(resolve_mod_folder("eridiani combine", root).name, "Eridani Combine-1.0.3.6")
+            self.assertEqual(resolve_mod_folder("navarchy of tania", root).name, "Navarchy of Tania-1.0.1")
+            with self.assertRaises(ValueError):
+                resolve_mod_folder("magiclib", root)  # two versions: a tie is refused
+            with self.assertRaises(ValueError):
+                resolve_mod_folder("unrelated", root)
+
+    def test_several_sources_in_one_call(self) -> None:
+        import contextlib
+        import io
+
+        from bridgeforge.cli import main
+
+        with resolved_temp_dir() as root:
+            mods = root / "mods"
+            for folder, mod_id in (("Alpha Mod-1.0", "alpha"), ("Beta Mod-2.0", "beta")):
+                (mods / folder).mkdir(parents=True)
+                (mods / folder / "mod_info.json").write_text(json.dumps({"id": mod_id, "name": folder, "version": "1"}), encoding="utf-8")
+            repo = root / "repo"
+            repo.mkdir()
+            err = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+                code = main(["intake", "alpha", "beta", "nonesuch", "--from-mods", str(mods), "--repo-root", str(repo)])
+            made = sorted(p.name for p in (repo / "In operation").iterdir() if p.is_dir() and not p.name.startswith("_"))
+        self.assertEqual(made, ["alpha", "beta"])
+        self.assertIn("alpha -> Alpha Mod-1.0", err.getvalue())
+        self.assertIn("nonesuch", err.getvalue())
+        self.assertEqual(code, 2)  # one source failed; the others were still taken in
+
+
 if __name__ == "__main__":
     unittest.main()

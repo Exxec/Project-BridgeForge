@@ -104,6 +104,10 @@ def add_parser(subcommands) -> None:
     esc_revoke.add_argument("ruling_id")
     esc_revoke.add_argument("--reason", required=True)
     esc_revoke.add_argument("--json", action="store_true")
+    esc_prune = esc_sub.add_parser("prune", help="drop the mod copy inside each finished agent attempt (scratch/escalations/<packet>/attempt-N/working), keeping prompt, note, output and the changed files; dry run unless --apply (ROADMAP-3 92.36)")
+    esc_prune.add_argument("workspace", type=Path)
+    esc_prune.add_argument("--apply", action="store_true")
+    esc_prune.add_argument("--json", action="store_true")
     for command in (esc_list, esc_show, esc_verify, esc_run, esc_apply):
         command.add_argument("workspace", type=Path)
         command.add_argument("--json", action="store_true")
@@ -264,6 +268,16 @@ def run_cli(args: argparse.Namespace) -> int:
         from bridgeforge.escalation.escalation import EscalationError, list_packets, load_packet, run_packet, verify
         from .revive import render_packet
         try:
+            if args.escalation_command == "prune":
+                from bridgeforge.escalation.prune import prune_sandboxes
+                result = prune_sandboxes(args.workspace, apply=args.apply)
+                if args.json:
+                    print(json.dumps(result, indent=2, ensure_ascii=False))
+                else:
+                    done = [a for a in result["attempts"] if a["state"] != "KEPT"]
+                    print(f"{'Pruned' if args.apply else 'Would prune'} {len(done)} attempt sandbox(es), "
+                          f"{result['bytes_freed'] / 1_000_000:.1f} MB; kept {len(result['attempts']) - len(done)} without a finished outcome.")
+                return 0
             if args.escalation_command == "list":
                 packets = list_packets(args.workspace)
                 if args.json:

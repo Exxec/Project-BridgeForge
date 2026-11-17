@@ -192,7 +192,19 @@ def _run_target(args, state: Path) -> int:
         atomic_write_json(args.to, registry(state), indent=2)
         print(f"Written: {args.to}", file=sys.stderr)
     else:
-        print(json.dumps(registry(state), indent=2))
+        shown = registry(state)
+        # The build the core itself reports, beside the registry entry: a folder named Starsector-0.98.5a-RC3 held RC7 on
+        # Test1, and CLAUDE.md named the build by folder (ROADMAP-3 items 92.9/92.38, 2026-11-16).
+        from .targets import load_target
+        target = load_target(state)
+        if isinstance(target, dict) and target.get("core"):
+            from .game_version import core_game_version
+            reported = core_game_version(Path(target["core"]))
+            shown["target_core_reports"] = reported  # the version string only; the local path stays local
+            if reported and target.get("build") and reported != target["build"]:
+                shown["warning"] = (f"the target core now reports {reported}, the registry says {target['build']}: "
+                                    "`bridgeforge target set` it again")
+        print(json.dumps(shown, indent=2))
     return 0
 
 

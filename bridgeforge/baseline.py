@@ -3,21 +3,38 @@ from __future__ import annotations
 from .safeio import atomic_write_text
 
 import json
+import re
 from pathlib import Path
 
 from .models import Finding
 
 
+_LINE_NUMBER = re.compile(r":\d+(?=[:\s]|$)")
+
+
+def stable_evidence(evidence: str) -> str:
+    """Evidence without line numbers (`Carinasystem.java:31: Carina` -> `Carinasystem.java:#: Carina`): an accepted finding
+    must survive an edit that only moves lines. Navarchy of Tania's accepted system-generation-unguarded came back after an
+    agent fix shifted Carinasystem.java and had to be accepted again (ROADMAP-3 item 92.29, 2026-11-16)."""
+    return _LINE_NUMBER.sub(":#", evidence)
+
+
+def stable_key(key: str) -> str:
+    """A stored `id|file|evidence` key with its evidence part made line-number free, so older baselines still match."""
+    parts = key.split("|", 2)
+    return key if len(parts) < 3 else f"{parts[0]}|{parts[1]}|{stable_evidence(parts[2])}"
+
+
 def finding_baseline_key(finding: Finding) -> str:
-    """A finding's identity for baseline comparison: id + file + first evidence item."""
+    """A finding's identity for baseline comparison: id + file + first evidence item (line numbers removed)."""
     first_evidence = finding.evidence[0] if finding.evidence else ""
-    return f"{finding.id}|{finding.file or ''}|{first_evidence}"
+    return f"{finding.id}|{finding.file or ''}|{stable_evidence(first_evidence)}"
 
 
 def load_baseline_keys(path: Path) -> set[str]:
-    """Read a `scan --write-baseline` file and return its accepted finding keys."""
+    """Read a `scan --write-baseline` file and return its accepted finding keys (line-number free, see `stable_key`)."""
     payload = json.loads(Path(path).expanduser().resolve().read_text(encoding="utf-8"))
-    return set(payload.get("findings", []))
+    return {stable_key(key) for key in payload.get("findings", []) if isinstance(key, str)}
 
 
 def split_by_baseline(findings: list[Finding], baseline_keys: set[str]) -> tuple[list[Finding], int]:
@@ -57,7 +74,7 @@ def mod_baseline_keys(working: Path) -> set[str]:
 def finding_dict_baseline_key(finding: dict) -> str:
     """`finding_baseline_key` for a finding already turned into a dict (scan JSON, asdict)."""
     evidence = finding.get("evidence") or []
-    return f"{finding.get('id')}|{finding.get('file') or ''}|{evidence[0] if evidence else ''}"
+    return f"{finding.get('id')}|{finding.get('file') or ''}|{stable_evidence(evidence[0]) if evidence else ''}"
 
 
 def accept_findings(working: Path, keys: list[str], reason: str | None = None) -> Path:

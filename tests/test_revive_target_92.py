@@ -75,6 +75,60 @@ class ReviveTargetTests(unittest.TestCase):
             result = revive(workspace, vanilla_core=new)
         self.assertEqual(Path(result["reference_core"]), rc8)
 
+    def test_revive_reports_the_reference_comparison(self) -> None:
+        # 92.23: over budget on the reference vs the target; the difference is what may be trimmed.
+        from unittest.mock import patch
+
+        from bridgeforge.models import Finding
+
+        def over_budget(working, result, core):  # stand-in for the priced check: v2 goes over only on the new build
+            files = ["data/variants/v1.variant"] + (["data/variants/v2.variant"] if "985a" in str(core) else [])
+            for file in files:
+                result.findings.append(Finding(id="variant-op-over-budget", category="variants", severity="high",
+                                               classification="REVIEW", confidence="DETERMINISTIC", explanation="", file=file))
+
+        with resolved_temp_dir() as root:
+            _core(root / "FS" / "Starsector", "0.98a-RC8")
+            new = _core(root / "FS" / "Starsector985a", "0.98.5a-RC7")
+            workspace = _mod(root, "0.98a-RC8")
+            with patch("bridgeforge.scan.scanner._scan_variant_validity", side_effect=over_budget):
+                result = revive(workspace, vanilla_core=new)
+        self.assertEqual(result["reference_comparison"]["variant-op-over-budget"],
+                         {"reference": 1, "target": 2, "regressions": ["data/variants/v2.variant"]})
+
+    def test_target_show_prints_what_the_core_reports(self) -> None:
+        # 92.9/92.38: Test1's Starsector-0.98.5a-RC3 folder holds RC7.
+        import contextlib
+        import io
+        from types import SimpleNamespace
+
+        from bridgeforge.target_bump import _run_target
+        from bridgeforge.targets import set_target
+
+        def full_core(version: str) -> Path:
+            core = _core(root / "Starsector-0.98.5a-RC3", version)
+            for name in ("starfarer.api.jar", "fs.common_obf.jar"):
+                with zipfile.ZipFile(core / name, "w") as jar:
+                    jar.writestr("x.class", b"\xca\xfe\xba\xbe")
+            return core
+
+        with resolved_temp_dir() as root:
+            core = full_core("0.98.5a-RC3")
+            state = root / "bridgeforge-state"
+            state.mkdir()
+            set_target(state, core)
+            for jar in core.glob("*.jar"):
+                jar.unlink()
+            core.rmdir()
+            full_core("0.98.5a-RC7")  # the install was updated in place
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                _run_target(SimpleNamespace(target_action="show"), state)
+            shown = json.loads(out.getvalue())
+        self.assertEqual(shown["target_core_reports"], "0.98.5a-RC7")
+        self.assertIn("registry says 0.98.5a-RC3", shown["warning"])
+        self.assertNotIn(str(core), out.getvalue())  # local paths stay local
+
     def test_op_trim_is_refused_without_a_reference_core(self) -> None:
         # 92.17: owner ruling 2026-09-27 option 2 (RC8-06) needs the core the mod was made for.
         with resolved_temp_dir() as root:

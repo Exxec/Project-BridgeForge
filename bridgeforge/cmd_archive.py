@@ -33,7 +33,8 @@ def add_parser(subcommands) -> None:
     archive_stage.add_argument("--select-root", help="one preflight candidate mod root when the archive contains multiple")
     archive_stage.add_argument("--manifest-output", type=Path, help="optional manifest path outside the staged directory")
     intake_cmd = subcommands.add_parser("intake", help="preserve a ZIP and create a fresh convention-layout assessment copy")
-    intake_cmd.add_argument("archive", type=Path, help="a mod ZIP, or a raw mod folder (zipped into In operation/_raw-zips/ first, the folder itself is left alone)")
+    intake_cmd.add_argument("archive", type=Path, nargs="+", help="mod ZIPs or raw mod folders (a folder is zipped into In operation/_raw-zips/ first and left alone); with --from-mods, loose mod names")
+    intake_cmd.add_argument("--from-mods", type=Path, help="a mods folder: each source that is not a path is matched to one of its folders by name words (\"koch\" -> Everybody loves KoC-1.05.49a); a tie or no match is refused")
     intake_cmd.add_argument("--repo-root", type=Path, default=Path.cwd())
     intake_cmd.add_argument("--name", help="portable mod folder name (default: sanitized metadata id)")
     intake_cmd.add_argument("--selected-root", help="exact ZIP mod-root candidate when ambiguous")
@@ -273,18 +274,36 @@ def run_cli(args: argparse.Namespace) -> int:
     if args.command in {"intake", "board"}:
         try:
             if args.command == "intake":
-                if args.archive.expanduser().is_dir():
-                    from .intake import zip_raw_folder
-                    args.archive = zip_raw_folder(args.archive, args.repo_root)
-                    print(f"Zipped the raw folder to {args.archive}", file=sys.stderr)
-                result = intake_archive(args.archive, args.repo_root, name=args.name,
-                                        selected_root=args.selected_root, archaeology=args.archaeology,
-                                        strip_junk=args.strip_junk)
+                # Several sources in one call, and loose names resolved in a mods folder (ROADMAP-3 item 92.5, 2026-11-16).
+                from .intake import resolve_mod_folder, zip_raw_folder
+                if len(args.archive) > 1 and (args.name or args.selected_root):
+                    raise ValueError("--name and --selected-root apply to one source; intake the others separately")
+                results, failed = [], 0
+                for source in args.archive:
+                    try:
+                        if not source.expanduser().exists() and args.from_mods is not None:
+                            match = resolve_mod_folder(str(source), args.from_mods)
+                            print(f"{source} -> {match.name}", file=sys.stderr)
+                            source = match
+                        if source.expanduser().is_dir():
+                            source = zip_raw_folder(source, args.repo_root)
+                            print(f"Zipped the raw folder to {source}", file=sys.stderr)
+                        result = intake_archive(source, args.repo_root, name=args.name,
+                                                selected_root=args.selected_root, archaeology=args.archaeology,
+                                                strip_junk=args.strip_junk)
+                    except (OSError, ValueError) as exc:
+                        failed += 1
+                        print(f"bridgeforge: {source}: {exc}", file=sys.stderr)
+                        continue
+                    results.append(result)
+                    if not args.json:
+                        print(f"{result['status']}: {result['destination']}")
                 if args.json:
-                    print(json.dumps(result, indent=2, sort_keys=True))
-                else:
-                    print(f"{result['status']}: {result['destination']}")
+                    print(json.dumps(results[0] if len(args.archive) == 1 and results else results, indent=2, sort_keys=True))
+                elif results:
                     print("Archive/upstream bytes preserved. Complete and score a revival plan before editing.")
+                if failed:
+                    return 2
             elif args.live_pending:
                 from .gates import live_pending_plan
                 from .safeio import atomic_write_text

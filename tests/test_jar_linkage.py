@@ -56,6 +56,27 @@ class JarLinkageTests(unittest.TestCase):
         self.assertIn("Tip.table(F)V (RC8: (F)Ljava/lang/Object;)", found[0].evidence[0])
         self.assertIn("return type", found[0].explanation)
 
+    def test_a_library_class_in_the_game_namespace_resolves_through_provider_roots(self) -> None:
+        # ROADMAP-3 item 92.35 (2026-11-16): Bultach's custom start calls Nexerelin's
+        # com.fs...rulecmd.newgame.NGCAddStartingShipsByFleetType; with no rig it read "class missing".
+        lib_api = {"com/fs/starfarer/api/impl/Lib.java": "package com.fs.starfarer.api.impl; public class Lib { public static void go() {} }"}
+        start = {"data/Start.java": "package data; public class Start { void s() { com.fs.starfarer.api.impl.Lib.go(); } }"}
+        with resolved_temp_dir() as root:
+            lib_classes = _compile(self.javac, root / "lib", lib_api)
+            _jar(_compile(self.javac, root / "new", NEW_API), root / "starsector-core" / "starfarer.api.jar")
+            library = root / "OtherInstall" / "mods" / "nexlike"
+            _jar(lib_classes, library / "jars" / "lib.jar")
+            (library / "mod_info.json").write_text(json.dumps({"id": "nexlike", "name": "n", "version": "1", "jars": ["jars/lib.jar"]}), encoding="utf-8")
+            mod = root / "mod"
+            _jar(_compile(self.javac, root / "modbuild", start, classpath=lib_classes), mod / "jars" / "m.jar")
+            (mod / "mod_info.json").write_text(json.dumps({"id": "m", "name": "m", "version": "1", "gameVersion": "0.98a-RC8",
+                                                           "jars": ["jars/m.jar"]}), encoding="utf-8")
+            alone = [f.id for f in scan_mod(mod, vanilla_core=root / "starsector-core").findings]
+            provided = [f.id for f in scan_mod(mod, vanilla_core=root / "starsector-core",
+                                               provider_roots=[root / "OtherInstall" / "mods"]).findings]
+        self.assertIn("jar-linkage-unresolved", alone)
+        self.assertNotIn("jar-linkage-unresolved", provided)
+
     def test_a_removed_no_argument_constructor_is_reported(self) -> None:
         # 0.98.5a-RC3 (2026-11-15): ShipAIConfig() became ShipAIConfig(ShipAPI). Constructors are not inherited, but the
         # hierarchy walk reached Object.<init>()V and called Polaris Prime's `new ShipAIConfig()` resolved.

@@ -9,39 +9,45 @@ Manufactorum and Navarchy of Tania are revived (UNATTENDED_DONE), before their l
   leniently too, or suppress `description-missing` on that file while `data-file-not-utf8`/`csv-encoding-unverified` is open.
   Test: a cp1252 descriptions.csv with a described hull yields no `description-missing`.
   Built: the mod's descriptions.csv is read leniently like vanilla's (`scan_references.py`). Tests: `tests/test_false_positives_92.py`.
-- 92.2 **Fixer for return-type-only jar linkage when source ships.** Navarchy of Tania: 3 `jar-linkage-unresolved` classes
+- 92.2 **Done 2026-11-16.** **Fixer for return-type-only jar linkage when source ships.** Navarchy of Tania: 3 `jar-linkage-unresolved` classes
   (`tania_mustafar_system`, `tania_requiem_system`, `tania_random_mode_fodder`) all call
   `StarSystemGenerator.addStableLocations(StarSystemAPI, int)`, `V` before, `List` in 0.98.5a. The packet itself says recompiling
   relinks with no source change, and the mod ships `src/`. When every unresolved member differs only in return type and a
   matching source exists, recompile (`jar-packets` + `patch-jar-class`) as a gated fixer instead of a code-tier packet.
-- 92.3 **One packet per hullmod for jar + src duplicates.** Bultach Coalition: 6 hullmods flagged `hullmod-instance-state` twice,
+  Built: subsumed by 92.25: `src-to-jar --relink path/Class` rebuilds return-type-only classes from shipped source after the same proof (Tania's three systems).
+- 92.3 **Done 2026-11-16.** **One packet per hullmod for jar + src duplicates.** Bultach Coalition: 6 hullmods flagged `hullmod-instance-state` twice,
   once as `jars/ORKS.jar!…class` and once as `src/….java` (33 agent packets). Merge into one packet ("fix the source, rebuild the
   jar class") so the two copies cannot be fixed differently.
+  Built: `revive.build_packets` drops a jar-class finding when the same finding is raised on that class's shipped source; `jar-source-not-rebuilt` then holds the mod until `src-to-jar` runs. Tests: `tests/test_small_fixes_92.py`.
 - 92.4 **Done 2026-11-16.** **`intake --strip-junk`.** 2 of 6 intakes (Scrapyard: 4 `*.png~`; Tania: 2 `*.png~` + `desktop.ini`) were blocked by
   `archive-junk-member` and needed a hand-rebuilt `-clean.zip`. Drop exactly the members that finding names into a derived zip,
   keep the raw zip, record the dropped list in `intake.json`.
   Built: `intake --strip-junk` writes `<name>-clean.zip` without exactly the members `archive-junk-member` names (only when those are the sole blocking hazards; never over an existing file), keeps the raw archive, records `raw_archive`, its sha256 and `stripped_members` in intake.json; the blocked message now names the hazards and suggests the flag. Tests: `tests/test_intake_strip_junk.py`.
-- 92.5 **Batch intake by mod-folder name.** `intake` takes one archive; six mods meant six calls, each needing the exact folder name
+- 92.5 **Done 2026-11-16.** **Batch intake by mod-folder name.** `intake` takes one archive; six mods meant six calls, each needing the exact folder name
   ("koch" was `Everybody loves KoC-1.05.49a`, "eridiani" `Eridani Combine-1.0.3.6`). Accept several sources and
   `--from-mods DIR NAME...` with fuzzy matching that shows the match and refuses ambiguity.
-- 92.6 **Dry-run diffs for owner approvals.** `revive` lists owner packets but not what each approval would write; the Scrapyard
+  Built: `intake` takes several sources; `--from-mods DIR` resolves loose names by word similarity (`intake.resolve_mod_folder`: all six batch names resolve on the real mods folder, MagicLib x2 and 'navarchy' alone are refused as ties); one failing source does not stop the rest. Tests: `tests/test_intake_strip_junk.py`.
+- 92.6 **Done 2026-11-16.** **Dry-run diffs for owner approvals.** `revive` lists owner packets but not what each approval would write; the Scrapyard
   `variant-op-over-budget` trim (dropped `heavyarmor` and all 13 flux capacitors, 98 -> 72 OP) was only visible by diffing
   afterwards. Show the per-file diff each approvable fixer would apply, and give `variant-op-over-budget` a trim strategy
   (capacitors/vents first vs hullmods first).
-- 92.7 **Approve fixer families across the queue at once.** The same auto-tier owner packets recur across the five queued mods
+  Built: correction, each owner packet's markdown already carried the ready fixer's diff (`render_packet`, a ```diff block the session's summaries had stripped); REVIVE.md now points to it with the changed-file count. Trim strategy not added: 92.17 leaves only regression trims. Tests: `tests/test_small_fixes_92.py`.
+- 92.7 **Done 2026-11-16.** **Approve fixer families across the queue at once.** The same auto-tier owner packets recur across the five queued mods
   (`variant-op-over-budget`, `variant-wings-exceed-bays`, `variant-weapon-slot-mismatch`, `shippable-work-file`,
   `data-file-not-utf8`, `procgen-star-row-missing`). One command to approve chosen families for chosen workspaces, previewing 92.6's
   diffs, then revive each.
+  Built: correction, already present: `escalation rule <queue> <finding> --approve-fixer` records a standing approval in AUTOMATION_POLICY.json and `revive-queue` applies it. Nothing new built.
 - 92.8 **Done 2026-11-16.** **`escalation run --agent` discovery.** No `claude` on PATH on this machine (sessions run in the VS Code extension); the
   first `--all` run failed with only the shell's error. Fall back to the extension's `resources/native-binary/claude.exe`, or fail
   before starting with what is missing. Also: `--watch-dir` reported the parent session's own memory writes as the agent's
   (same folder, concurrent); attribute by process or warn that concurrent writers are included.
   Built: correction, BridgeForge already resolves a `claude` missing from PATH to the extension's bundled binary (`escalation.resolve_agent_command`, P15 20.13); the first run failed because the session prefixed its own `which claude &&`. `escalation run --agent` now defaults to `claude -p --permission-mode acceptEdits`. The --watch-dir attribution part is open. Tests: `tests/test_small_fixes_92.py`.
-- 92.9 **Local target set-up and target-aware wording.** `target show` is empty here and CLAUDE.md names
+- 92.9 **Done 2026-11-16.** **Local target set-up and target-aware wording.** `target show` is empty here and CLAUDE.md names
   `C:\Games\Starsector-0.98.5a-RC3`, absent on this machine; the installed 0.98.5 core is
   `C:\Program Files (x86)\Fractal Softworks\Starsector985a` (`starfarer_obf.jar`: 0.98.5a-RC7), so `@target` does not resolve.
   `target set` it (RC7 > RC3) and update CLAUDE.md; have `revive` warn when `--vanilla-core`'s build differs from the registry's.
   Packet text still says "RC8" when the target is RC7; name the build from the target.
+  Built (part): `target show` prints `target_core_reports`, the build read from the core, and a warning when it differs from the registry (no local path printed). Open: finding texts that say "RC8" for reference behaviour. Tests: `tests/test_revive_target_92.py`.
 - 92.10 **Done 2026-11-16.** **Readme files in the mod root are information only.** Scrapyard's `Changelog.json` and `Special Thanks.json` (prose, never
   loaded by the game) became UNKNOWN `unverified-json-syntax` agent packets; the agent could only wrap the prose in JSON arrays
   (its note: renaming to `.txt` would be natural but was outside the allowed files). Classify root files other than
@@ -67,12 +73,13 @@ Manufactorum and Navarchy of Tania are revived (UNATTENDED_DONE), before their l
   PRESENT after rescan" although `mod_info.json` then read `0.98.5a-RC7`: the verifying rescan does not use the option the fix
   was given. Rescan with the fix's own target options.
   Built: `fix` rescans with its `--target-game-version` and `--vanilla-core`. Tests: `tests/test_fixers_92.py`.
-- 92.15 **Crafted descriptions must be grounded in the spec.** `descriptions draft` crafted for Scrapyard's `emp_station` "a
+- 92.15 **Done 2026-11-16.** **Crafted descriptions must be grounded in the spec.** `descriptions draft` crafted for Scrapyard's `emp_station` "a
   short-range electromagnetic pulse ... shields, weapons, and engines disrupted ... draws on flux reserves"; the `.system` is
   `"type":"EMP"` (vanilla's arc emitter), range 800, 700 EMP + 300 energy per arc, used only by the station `sa_tesla_spike`.
   Rewritten by hand from vanilla's `emp` SHIP_SYSTEM row. Put the spec's key fields, the user hulls/tags (e.g. `HIDE_IN_CODEX`
   station) and vanilla's row for the same system/weapon `type` into the crafting prompt; flag claims about mechanics absent from
   the spec.
+  Built: see 92.30.
 - 92.16 **Done 2026-11-16.** **Credits text names the old target.** `descriptions.py` `_credits` writes "Revival for Starsector 0.98a-RC8" into
   `BRIDGEFORGE_CREDITS.txt` regardless of target (Scrapyard, revived for 0.98.5a-RC7). Use the workspace's revive target (ties in
   with 92.9).
@@ -116,14 +123,16 @@ Manufactorum and Navarchy of Tania are revived (UNATTENDED_DONE), before their l
   weapons/hull mods) do not exist for it: "no finding matches" on 4 of 5 mods, while Bultach (own-weapon variants) matched 3 of 15.
   `escalation accept` on the packet worked. Take `--vanilla-core` (default `@target`) or reuse the latest stored revive scan.
   Built: `baseline-accept-finding --vanilla-core` (works with @target). Tests: `tests/test_small_fixes_92.py`.
-- 92.23 **Revive reference scan as a report, every run.** The decisive evidence for the OP question (per mod: over on RC8 vs over on
+- 92.23 **Done 2026-11-16.** **Revive reference scan as a report, every run.** The decisive evidence for the OP question (per mod: over on RC8 vs over on
   0.98.5a, regressions = the difference; this batch 1/22/15/3/1 authored, 0 regressions) took an ad-hoc script over
   `_scan_variant_validity`. Have `revive` write that comparison for each value-type finding (OP, wings, slots) when a reference core
   is known, and use it for 92.17.
-- 92.24 **Detect empty workspace skeletons.** On this machine `Done/` (6 mods) and the older `In operation/` projects (Scy-Nation,
+  Built: REVIVE.json `reference_comparison` (variant-op-over-budget on the reference vs the target, regressions = the difference), shown in REVIVE.md. Real data: Tania 22/22/0, auto-resolved RC8 reference. Tests: `tests/test_revive_target_92.py`.
+- 92.24 **Done 2026-11-16.** **Detect empty workspace skeletons.** On this machine `Done/` (6 mods) and the older `In operation/` projects (Scy-Nation,
   Hiigaran-Descendants, ...) are directory trees with zero files, all created 2026-11-02 11:51-12:01 (a copy that carried folders
   but no files); nothing reported it. `board`/`hygiene`/`done-audit` should flag a workspace or archive with no files (and a
   `working/` without `mod_info.json`) as BROKEN, not unknown.
+  Built: `board` stage `EMPTY_SKELETON` for a folder tree with no files (real repo: 12 In operation projects and the Done/ stubs). Tests: `tests/test_board_92.py`.
 - 92.25 **Done 2026-11-16.** **CRITICAL: agent fixes to `src/` never reach the jar the game loads.** `escalation run --apply` edits `src/**/*.java` and
   verifies by rescanning the source; nothing rebuilds the jar. Navarchy of Tania: 8 applied agent fixes (hull-mod state, hard-coded
   entity/system references, orbit guard) were inert in `jars/tania.jar`; the scan still flagged the jar copy
@@ -143,10 +152,11 @@ Manufactorum and Navarchy of Tania are revived (UNATTENDED_DONE), before their l
   MagicLib, GraphicsLib `Graphics.jar`, BoxUtil `BoxUtilMod.jar`); compile at the jar class's major version, not always 17; pass
   `-implicit:none -sourcepath ""` (MagicLib.jar ships `.java` sources that javac otherwise compiles and fails on).
   Built: `patch-jar-class --lib`, `run_javac(release=)`, `jar_patch.shipped_release` (class major version -> --release); `-sourcepath ""` was already in DEFAULT_JAVAC_ARGS. Tests: `tests/test_src_to_jar.py` (Java 8 jar stays 52).
-- 92.27 **`spawned-ship-captain-personality-risk` fixer refuses jar sources.** Tania had 16 3-argument `spawnShipOrWing` calls in a
+- 92.27 **Done 2026-11-16.** **`spawned-ship-captain-personality-risk` fixer refuses jar sources.** Tania had 16 3-argument `spawnShipOrWing` calls in a
   jar-backed source (11 amalgam ships, 5 neutral giant asteroids); the fixer's own template (5-argument overload with
   `bfSpawnCaptain()`, STEADY; javap confirms the overload in 0.98.5a) applied cleanly by hand. Allow it on `src/` once 92.25 rebuilds
   the jar. The packet excerpt showed 2 of the 16 calls; print the count.
+  Built: the captain fixer edits a jar mod's `src/` (still refuses `jars/...`); its backup raises `jar-source-not-rebuilt`. Real data: Tania's original source gets the 16 calls rewritten as done by hand. Tests: `tests/test_fixers_92.py`.
 - 92.28 **Done 2026-11-16.** **False positives found in this batch** (each accepted with evidence; fix the check, add a test per case):
   `csv-vanilla-row-override` counts commented rows: all 27 "overrides" (Musashi 17 ship_data + 6 weapon_data, Eridani 4) are
   `#Name,id,...` rows the loader skips. `star-type-undefined` matched a faction id: Tania's `star_federation` is
@@ -154,51 +164,61 @@ Manufactorum and Navarchy of Tania are revived (UNATTENDED_DONE), before their l
   `TaniaGen.generate` only when `getEntityById("carina_system") == null` (the star `Carinasystem.initStar` creates), yet it reported
   four systems "called from onGameLoad" unguarded.
   Built: `csv-vanilla-row-override` skips rows whose first cell starts with '#'; `star-type-undefined` blanks faction-call arguments; `system-generation-unguarded` (caller-level guard) not yet. Tests: `tests/test_false_positives_92.py`.
-- 92.29 **Acceptances keyed by evidence lapse when an agent edits the file.** Tania's accepted `system-generation-unguarded` came
+  Built (2026-11-16, second pass): `system-generation-unguarded` treats a generation call inside `if (... getEntityById("x") == null ...) { }` or getStarSystem in the plugin method as guarded (`scan_campaign._inside_existence_check`); Tania's original now has no finding, an unguarded plugin is still reported. Tests: `tests/test_false_positives_92.py`.
+- 92.29 **Done 2026-11-16.** **Acceptances keyed by evidence lapse when an agent edits the file.** Tania's accepted `system-generation-unguarded` came
   back after the Carinasystem agent fix changed the finding's evidence list; it had to be accepted again. Key mod-level
   acceptances by finding id + subject (system name, file), not the full evidence.
+  Built: baseline keys drop line numbers from the evidence part (`baseline.stable_evidence`), applied to stored keys on load so older baselines still match; a different subject still counts as new. Tests: `tests/test_small_fixes_92.py`; 1111 baseline/escalation/archive tests pass.
 - 92.31 **Done 2026-11-16.** **`player-text-non-english` counts JSON `#` comments.** Eridani Combine after `translate-batch` (59 units translated,
   2189 -> 761 CJK characters): 753 of the 761 were `#` comments in `EridaniCombine.faction`, `engine_styles.json`,
   `hull_styles.json` (Starsector JSON allows `#` comments) and a `designTypeColors` key that is never displayed. Blank `#`
   comments (as `_load_lenient_json_file` does) and skip JSON keys before counting.
   Built: JSON-style data files are counted without trailing `#`/`//` comments and object keys (`scan_text._json_player_part`). Real data: Eridani working copy now clean, the untranslated original still flagged (1431 characters, was 2189 with comments). Tests: `tests/test_fixers_92.py`.
-- 92.32 **Full-width punctuation fixer.** The real leftovers were `：` (U+FF1A, x2 in the `mod_info.json` author line) and `，`
+- 92.32 **Done 2026-11-16.** **Full-width punctuation fixer.** The real leftovers were `：` (U+FF1A, x2 in the `mod_info.json` author line) and `，`
   (U+FF0C, a hull-mod tooltip in `hull_mods.csv`), outside the game font; replaced by hand with `:` and `, `. A SAFE fixer for
   full-width ASCII punctuation (U+FF01-FF5E, U+3001/3002) in English player text, after translation.
-- 92.33 **Translating jar strings leaves `src/` untranslated.** `translate-batch --in-place` patched 18 strings in Eridani's
+  Built: check `fullwidth-punctuation-in-text` (SAFE, auto) and its fixer (`fixers.encoding._fix_fullwidth_punctuation`, shared rule `scan_text.fullwidth_punctuation_fixed`): lines still holding other CJK are left to translation, line endings and BOM kept. Real data: Eridani's pre-fix files give exactly the two hand-fixed lines. Tests: `tests/test_fixers_92.py`.
+- 92.33 **Done 2026-11-16.** **Translating jar strings leaves `src/` untranslated.** `translate-batch --in-place` patched 18 strings in Eridani's
   `ECE.jar` (19:49) but `src/` keeps the Chinese, so a later `src-to-jar` rebuild of such a class would revert the
   translation; the 92.25 proof now refuses (the jar no longer matches the source), which is safe but blocks the rebuild.
   Apply translations to the matching `src/` string literals too, and record the jar classes changed in the src-to-jar ledger.
-- 92.34 **`hullmod-instance-state` misses fields set only at declaration but mutated.** Bultach Coalition: the agents also (rightly)
+  Built: `translate-apply` mirrors each translated jar string into the matching `src/<class>.java` literal (raw or \u-escaped form); `src-to-jar` proves against the jar in `original/` by default, so neither a translated nor an already-patched working jar blocks the proof. Tests: `tests/test_translation_92.py`, `tests/test_src_to_jar.py`.
+- 92.34 **Done 2026-11-16.** **`hullmod-instance-state` misses fields set only at declaration but mutated.** Bultach Coalition: the agents also (rightly)
   moved `bt_puncher.rightArm` (`new bt_SinuousSegment[2]`, filled per ship) and `bt_stolen_blastdampeners.nearbyShips`
   (`new HashSet<>()`, add/remove per ship), and removed `readResolve` (it only re-created a moved field), but the packets did not list
   them, so `src-to-jar`'s automatic allowance (the packets' `field:` names) refused until `--allow-removed` named them. Flag a
   collection/array field whose elements are written in `advanceInCombat`/`applyEffects*`, and allow `readResolve` when every field it
   touches moved. The same run showed `javap` output must be read as bytes (cp1252 'è' constants left `_javap_stats` stdout None);
   fixed in `jar_patch._javap_stats` and `src_to_jar._javap_text` (test: `test_non_ascii_string_constants_do_not_break_the_proof`).
-- 92.35 **Library-provided classes in the vanilla namespace.** Bultach's `jar-linkage-unresolved` on `bt_murtach_start` named
+  Built (part): the evidence cap of 12 fields is gone (bt_puncher.rightArm was the 13th; real data now lists 16). Collections stay excluded on purpose (a Map keyed by ship is the correct per-ship pattern), so `nearbyShips` and `readResolve` still need `--allow-removed`. Tests: existing hullmod-instance-state suites (159).
+- 92.35 **Done 2026-11-16.** **Library-provided classes in the vanilla namespace.** Bultach's `jar-linkage-unresolved` on `bt_murtach_start` named
   `rulecmd.newgame.NGCAddStartingShipsByFleetType.generateFleetFromVariantIds` "class missing"; Nexerelin 0.12.2d's
   `ExerelinCore.jar` ships that class (javap), and the start extends Nexerelin's `CustomStart`, registered only in
   `data/config/exerelin/customStarts.json`. Resolve linkage against the jars of libraries the mod uses even when undeclared (here
   via its `exerelin` imports), and treat classes only reachable through a library's config as optional.
-- 92.30 **Crafted descriptions, second and third samples (extends 92.15).** Bultach: 8 of 14 crafted rows contradicted their spec (a TELEPORTER/PHASE_DISPLACER system described as a weapons overdrive, a BURN_DRIVE given blast damage, an ENGINE_MOD given a fuel cost, a Bultach hull called Gestalt); corrected by hand. Musashi: 5 of 9 crafted rows contradicted the data: Tadaiji Lance
+  Built: `_scan_jar_linkage`/`_scan_jar_interface_methods` take the scan's provider roots (incl. queue workspaces' working/), and `revive` adds the reference install's `mods/`. Real data: Bultach's NGCAddStartingShipsByFleetType resolves through Nexerelin. Tests: `tests/test_jar_linkage.py`.
+- 92.30 **Done 2026-11-16.** **Crafted descriptions, second and third samples (extends 92.15).** Bultach: 8 of 14 crafted rows contradicted their spec (a TELEPORTER/PHASE_DISPLACER system described as a weapons overdrive, a BURN_DRIVE given blast damage, an ENGINE_MOD given a fuel cost, a Bultach hull called Gestalt); corrected by hand. Musashi: 5 of 9 crafted rows contradicted the data: Tadaiji Lance
   (2800 energy/shot, range 1200, hints STRIKE, LARGE) and Bushi Rift Cannon (1300/shot, STRIKE) as "general combat" weapons; a
   phase cloak given an unsupported flux claim; a "slow" torpedo the spec does not show; the Raidsuit's class (ship_data
   designation Destroyer vs `.ship` hullSize FRIGATE). Feed `weapon_data` damage/shot, range, size, hints and tags, the system
   `.system` type, and hull designation/size into the prompt; reject rows that state a role contradicting STRIKE/PD hints.
-- 92.36 **Prune escalation sandboxes after verification.** Bultach Coalition's workspace was 2.1 GB, 1.7 GB of it
+  Built: facts now carry damage/shot, damage/second, range, hints, bays, speed, defense, active/cooldown, and the spec files' hullSize, weapon type/size/specClass, system type/aiType; the prompt reads STRIKE/PD/system types literally; `check_against_facts` rejects STRIKE-as-general, PD without defence, a wrong hull class and a system text not describing its spec type. Replayed on the batch's real drafts it rejects 5 of the 13 hand-found errors (the rest were judgement calls the richer facts and prompt address). Tests: `tests/test_descriptions_draft.py`.
+- 92.36 **Done 2026-11-16.** **Prune escalation sandboxes after verification.** Bultach Coalition's workspace was 2.1 GB, 1.7 GB of it
   `scratch/escalations` (one full working copy per agent attempt, 33 packets). Once a packet is APPLIED or FAILED, keep the note,
   the diff against the first backup and the verify result, and drop the sandbox copy (or hard-link unchanged files); report the
   bytes freed.
-- 92.37 **Workspaces with no backup, and a supported copy to the main machine.** On White_Legion `bridgeforge-state/snapshot.json`
+  Built: `escalation prune WS [--apply]` (`escalation/prune.py`): only attempts the ledger shows finished; changed files kept under attempt-N/changed/, PRUNED.json written, `working/` removed via safe_rmtree within scratch/. Real data (dry run): Bultach 21 attempts, 1722.9 MB. Tests: `tests/test_escalation_prune.py`.
+- 92.37 **Done 2026-11-16.** **Workspaces with no backup, and a supported copy to the main machine.** On White_Legion `bridgeforge-state/snapshot.json`
   is absent, so `state-snapshot` never ran after the six revivals; the only copy was the working disk (and this machine's `Done/`
   had already lost its files, 92.24). The six workspaces and zips were copied to Test1 by hand (`tar | ssh tar`, refusing existing
   names; 2.7 GB). `hygiene`/`board` should warn when revived workspaces have no snapshot destination, and a `sync-to HOST:PATH`
   (or `state-snapshot --to` over SSH) should copy named workspaces, refuse to overwrite, and verify file counts and hashes.
-- 92.38 **CLAUDE.md names the target install by folder, not build.** CLAUDE.md says revivals target 0.98.5a-RC3 at
+  Built (part): `board` has a Backup section listing UNATTENDED_DONE workspaces when no snapshot destination is configured. `sync-to` dropped (owner 2026-11-16: sync means GitHub; the six workspaces were copied to Test1 once, 52,252 files, counts and key hashes verified). Tests: `tests/test_board_92.py`.
+- 92.38 **Done 2026-11-16.** **CLAUDE.md names the target install by folder, not build.** CLAUDE.md says revivals target 0.98.5a-RC3 at
   `C:\Games\Starsector-0.98.5a-RC3`; on Test1 that folder holds RC7 (owner 2026-11-16), White_Legion's is `Starsector985a` (also
   RC7, read from `starfarer_obf.jar`). State the build as `target show` reports it, and make `target show` print the version read
   from the core beside the registry entry so a stale folder name cannot mislead (with 92.9).
+  Built: CLAUDE.md states the build (0.98.5a, RC7 per `target show`) and warns that Test1's RC3-named folder holds RC7; see 92.9 for `target_core_reports`.
 
 **91. Side by side: the old and the new build together (owner 2026-11-15: "for the side to side ideas, go ahead and implement. apply same process for other repos").**
 - 91.1 **Done 2026-11-15.** `vanilla-migration OLD_CORE NEW_CORE [--write DIR]`: for every member `api-diff` lists as removed and every

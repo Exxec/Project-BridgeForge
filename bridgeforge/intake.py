@@ -72,6 +72,34 @@ def _relocate_reports(reports: Path, stage: Path, destination: Path) -> None:
             path.write_text(text, encoding="utf-8")
 
 
+def resolve_mod_folder(query: str, mods_dir: Path) -> Path:
+    """The one folder under `mods_dir` a loose name means: each query word is matched to its closest word of the folder name
+    ("koch" -> "Everybody loves KoC-1.05.49a", "eridiani combine" -> "Eridani Combine-1.0.3.6"). Refuses no match or a tie,
+    naming the candidates (ROADMAP-3 item 92.5, 2026-11-16: six intakes each needed the exact folder name by hand)."""
+    from difflib import SequenceMatcher
+
+    def words(text: str) -> list[str]:
+        return [w for w in re.findall(r"[a-z]+", text.casefold()) if len(w) > 1 or not text.strip()]
+
+    wanted = words(query)
+    if not wanted:
+        raise ValueError(f"nothing to match in {query!r}")
+    scored = []
+    for folder in sorted(p for p in Path(mods_dir).iterdir() if p.is_dir()):
+        have = words(folder.name)
+        if not have:
+            continue
+        score = sum(max(SequenceMatcher(None, w, h).ratio() for h in have) for w in wanted) / len(wanted)
+        scored.append((score, folder))
+    scored.sort(key=lambda item: -item[0])
+    if not scored or scored[0][0] < 0.8:
+        raise ValueError(f"no folder in {mods_dir} matches {query!r}")
+    if len(scored) > 1 and scored[0][0] - scored[1][0] < 0.05:
+        tied = ", ".join(f.name for s, f in scored[:3] if scored[0][0] - s < 0.05)
+        raise ValueError(f"{query!r} is ambiguous in {mods_dir}: {tied}")
+    return scored[0][1]
+
+
 def _blocking(preflight: dict) -> list[dict]:
     return [f for f in preflight.get("findings") or [] if f.get("classification") in ("MANUAL", "UNKNOWN")]
 

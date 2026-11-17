@@ -62,6 +62,41 @@ class FixerGapTests(unittest.TestCase):
         self.assertNotIn("player-text-non-english", clean)
         self.assertIn("player-text-non-english", flagged)
 
+    def test_captain_fix_edits_a_jar_mods_src_and_asks_for_the_rebuild(self) -> None:
+        # 92.27: Navarchy of Tania's spawner is a jar-backed source; the fixer refused it and 16 calls were fixed by hand.
+        import zipfile
+
+        with resolved_temp_dir() as root:
+            _write(root / "mod_info.json", '{"id":"demo","name":"Demo","version":"1.0","gameVersion":"0.98a-RC8","jars":["jars/demo.jar"]}')
+            (root / "jars").mkdir()
+            with zipfile.ZipFile(root / "jars" / "demo.jar", "w") as jar:
+                jar.writestr("data/scripts/Spawner.class", b"\xca\xfe\xba\xbe")
+            _write(root / "src" / "data" / "scripts" / "Spawner.java",
+                   "package data.scripts;\nclass Spawner { void go(Object e, Object p) {\n"
+                   "    engine.getFleetManager(1).spawnShipOrWing(\"tania_amalgam_med_Var1\", p, 0f);\n} }\n")
+            apply_fix(compute_fix(root, "spawned-ship-captain-personality-risk", {}))
+            text = (root / "src" / "data" / "scripts" / "Spawner.java").read_text(encoding="utf-8")
+            ids = [f.id for f in scan_mod(root).findings]
+        self.assertIn('"tania_amalgam_med_Var1", p, 0f, 0f, bfSpawnCaptain())', text)
+        self.assertIn("jar-source-not-rebuilt", ids)
+
+    def test_fullwidth_punctuation_in_english_text_is_made_ascii(self) -> None:
+        # 92.32: Eridani after translation: "Code Support：Hanliu" and "seconds，holds" (by hand), outside the game font.
+        with resolved_temp_dir() as root:
+            _write(root / "mod_info.json", '{"id":"demo","name":"Demo","version":"1.0","gameVersion":"0.98a-RC8","author":"Code Support：Hanliu"}\r\n')
+            _write(root / "data" / "hullmods" / "hull_mods.csv",
+                   'name,id,desc\r\nTimeflow,ece_t,"Burst of %s seconds，holds %s charges."\r\nUntranslated,ece_u,"天苑，四"\r\n')
+            found = [f for f in scan_mod(root).findings if f.id == "fullwidth-punctuation-in-text"]
+            apply_fix(compute_fix(root, "fullwidth-punctuation-in-text", {}))
+            info = (root / "mod_info.json").read_bytes()
+            csv_text = (root / "data" / "hullmods" / "hull_mods.csv").read_bytes().decode("utf-8")
+            after = [f.id for f in scan_mod(root).findings]
+        self.assertEqual(found[0].classification, "SAFE")
+        self.assertIn(b'"author":"Code Support:Hanliu"}\r\n', info)  # line ending kept
+        self.assertIn("Burst of %s seconds, holds %s charges.", csv_text)
+        self.assertIn("天苑，四", csv_text)  # an untranslated line is left to translation
+        self.assertNotIn("fullwidth-punctuation-in-text", after)
+
     def test_fix_rescans_with_its_own_target(self) -> None:
         # 92.14: `fix --target-game-version 0.98.5a-RC7` set the value and still reported "STILL PRESENT".
         import contextlib

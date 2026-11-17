@@ -177,3 +177,32 @@ def _reencode_invalid(raw: bytes, offsets: list[int], encoding: str, relative: s
         out += raw[last:i] + text.encode("utf-8")
         last = i + width
     return bytes(out + raw[last:])
+
+
+def _fix_fullwidth_punctuation(root: Path, options: dict) -> list[FileChange]:
+    """fullwidth-punctuation-in-text: full-width punctuation in English player text made ASCII, line by line, with the same rule
+    the check uses (`scan_text.fullwidth_punctuation_fixed`); lines still holding other CJK are left to translation. Line
+    endings and a BOM are kept (ROADMAP-3 item 92.32)."""
+    from bridgeforge.scan.scan_text import fullwidth_punctuation_files, fullwidth_punctuation_fixed
+
+    changes = []
+    for path in fullwidth_punctuation_files(root):
+        raw = path.read_bytes()
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            continue  # data-file-not-utf8 first
+        lines = text.splitlines(keepends=True)
+        changed = False
+        for index, line in enumerate(lines):
+            body = line.rstrip("\r\n")
+            fixed = fullwidth_punctuation_fixed(body)
+            if fixed is not None:
+                lines[index] = fixed + line[len(body):]
+                changed = True
+        if changed:
+            bom = b"\xef\xbb\xbf" if raw.startswith(b"\xef\xbb\xbf") else b""
+            changes.append(FileChange(path=path, before=raw, after=bom + "".join(lines).encode("utf-8")))
+    if not changes:
+        raise FixerError("No English player text with full-width punctuation found.")
+    return changes

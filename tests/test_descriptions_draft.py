@@ -130,5 +130,39 @@ class QueueTests(unittest.TestCase):
         self.assertFalse(checkpoint.exists())
 
 
+class GroundedFactsTests(unittest.TestCase):
+    """ROADMAP-3 items 92.15/92.30 (2026-11-16): 13 of 23 crafted rows contradicted the mod's data."""
+
+    def test_facts_carry_the_spec_fields_that_decide_what_a_thing_is(self) -> None:
+        from bridgeforge.descriptions_draft import _facts
+
+        with resolved_temp_dir() as root:
+            data = root / "data"
+            (data / "hulls").mkdir(parents=True)
+            (data / "weapons").mkdir()
+            (data / "shipsystems").mkdir()
+            (data / "hulls" / "ship_data.csv").write_text("name,id,designation\nRaidsuit,mm_r,Destroyer\n", encoding="utf-8")
+            (data / "hulls" / "mm_r.ship").write_text('{"hullId":"mm_r","hullSize":"FRIGATE"}', encoding="utf-8")
+            (data / "weapons" / "weapon_data.csv").write_text("name,id,type,damage/shot,range,hints\nLance,mm_l,ENERGY,2800,1200,STRIKE\n", encoding="utf-8")
+            (data / "weapons" / "mm_l.wpn").write_text('{"id":"mm_l","type":"BALLISTIC","size":"LARGE","specClass":"projectile"}', encoding="utf-8")
+            (data / "shipsystems" / "ship_systems.csv").write_text("name,id\nReckoning,bt_r\n", encoding="utf-8")
+            (data / "shipsystems" / "bt_r.system").write_text('{"id":"bt_r","type":"TELEPORTER","aiType":"PHASE_DISPLACER"}', encoding="utf-8")
+            facts = _facts(root, {"name": "Mod"})
+            hull, weapon, system = facts("mm_r", "hull"), facts("mm_l", "weapon"), facts("bt_r", "ship-system")
+        self.assertEqual(hull["hull_size"], "FRIGATE")
+        self.assertEqual((weapon["damage/shot"], weapon["hints"], weapon["damage_type"], weapon["mount_size"]), ("2800", "STRIKE", "ENERGY", "LARGE"))
+        self.assertEqual((system["spec_type"], system["ai_type"]), ("TELEPORTER", "PHASE_DISPLACER"))
+
+    def test_contradictions_from_the_batch_are_rejected(self) -> None:
+        from bridgeforge.descriptions_draft import check_against_facts
+
+        self.assertIn("STRIKE", check_against_facts("A Musashi energy weapon suited to general combat roles.", {"hints": "STRIKE,USE_VS_FRIGATES"}))
+        self.assertIn("FRIGATE", check_against_facts("A destroyer-class hull for raiding.", {"hull_size": "FRIGATE"}))
+        self.assertIn("TELEPORTER", check_against_facts("Pushes weapons past their limits.", {"kind": "ship-system", "spec_type": "TELEPORTER"}))
+        self.assertIsNone(check_against_facts("Tears the ship out of normal space and sets it down at a new position in an instant.",
+                                              {"kind": "ship-system", "spec_type": "TELEPORTER"}))
+        self.assertIsNone(check_against_facts("A long-range strike cannon.", {"hints": "STRIKE", "hull_size": ""}))
+
+
 if __name__ == "__main__":
     unittest.main()
