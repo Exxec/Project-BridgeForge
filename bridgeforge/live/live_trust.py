@@ -271,8 +271,15 @@ def _recorded_changes(workspace: Path) -> dict[str, str]:
                 entry = json.loads(line)
             except ValueError:
                 continue
-            if entry.get("outcome") == "APPLIED" and entry.get("file"):
-                found.setdefault(str(entry["file"]).split("!", 1)[0], f"escalation {entry.get('packet')}")
+            if not isinstance(entry, dict) or entry.get("outcome") != "APPLIED":
+                continue
+            # An agent packet names one "file"; a fixer run names its "files" (93.44: Bultach's star_gen_data.csv, added by the
+            # procgen-star-row-missing fixer, stayed unexplained because only "file" was read).
+            names = [entry["file"]] if entry.get("file") else []
+            names += [name for name in entry.get("files") or [] if isinstance(name, str)]
+            why = f"escalation {entry['packet']}" if entry.get("packet") else f"fixer {entry.get('finding')} (escalation ledger)"
+            for name in names:
+                found.setdefault(str(name).split("!", 1)[0], why)
     manual = workspace / "reports" / SHIPPED_CHANGES
     if manual.is_file():
         try:

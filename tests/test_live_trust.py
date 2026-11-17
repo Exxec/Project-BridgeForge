@@ -42,6 +42,25 @@ class ShippedAuditTests(unittest.TestCase):
         self.assertEqual(result["status"], "PASS")
         self.assertEqual([r["file"] for r in result["differences"]], ["mod_info.json"])
 
+    def test_a_fixer_run_in_the_escalation_ledger_explains_the_files_it_lists(self) -> None:
+        # 93.44: Bultach's procgen-star-row-missing fixer added star_gen_data.csv and its ledger entry names "files", not "file".
+        with resolved_temp_dir() as root:
+            ws = _workspace(root)
+            _write(ws / "working" / "data" / "campaign" / "procgen" / "star_gen_data.csv", "id,age\nbt_divine_star,ANY\n")
+            _write(ws / "working" / "data" / "hulls" / "ship_data.csv", "id\nm_hull\nedited\n")
+            before = audit_shipped(ws)
+            entries = [{"at": "2026-11-17T00:52:03Z", "packet": None, "finding": "procgen-star-row-missing",
+                        "files": ["data/campaign/procgen/star_gen_data.csv"], "runner": "fixer", "outcome": "APPLIED"},
+                       {"packet": "p1", "file": "data/hulls/ship_data.csv", "outcome": "APPLIED"},
+                       "not an entry", {"packet": None, "files": ["mod_info.json"], "outcome": "FAILED"}]
+            _write(ws / "reports" / "escalations" / "ledger.jsonl", "\n".join(json.dumps(e) for e in entries) + "\n")
+            after = audit_shipped(ws)
+        self.assertEqual(sorted(before["unexplained"]), ["data/campaign/procgen/star_gen_data.csv", "data/hulls/ship_data.csv"])
+        self.assertEqual(after["status"], "PASS", after["unexplained"])
+        why = {row["file"]: row["explained_by"] for row in after["differences"]}
+        self.assertEqual(why["data/campaign/procgen/star_gen_data.csv"], "fixer procgen-star-row-missing (escalation ledger)")
+        self.assertEqual(why["data/hulls/ship_data.csv"], "escalation p1")
+
     def test_unexplained_edit_and_removal_fail_until_explained(self) -> None:
         with resolved_temp_dir() as root:
             ws = _workspace(root)
