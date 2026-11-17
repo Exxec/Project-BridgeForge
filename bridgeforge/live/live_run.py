@@ -427,6 +427,8 @@ def start_probe_combat(log: Path, hands: Hands, layout: tuple[int, int | None], 
     play_probe_combat(hands, *layout)
     if wait_for(log, COMBAT_START, timeout, hands, since=since):
         return True, None
+    if not hands.alive():  # the game exited: nothing to photograph or click (the clicks would raise on a closed window)
+        return False, None
     shot = _capture(hands, log, f"round{round_no}-no-start")
     stages.append(f"combat-{round_no}-retry")
     if round_no > 1:
@@ -494,6 +496,8 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
         offset = len(_log_text(log))
         started, shot = start_probe_combat(log, hands, (rows_below, list_total), round_no + 1, start_timeout, offset, result.stages)
         if not started:
+            if not hands.alive():
+                return stuck(f"combat-round-{round_no + 1}", "the game exited before the probe mission's battle started")
             return stuck(f"combat-round-{round_no + 1}", "the probe mission did not start (no 'combat START' probe line), also after one retry"
                          + (f"; screenshot {shot}" if shot else ""))
         if not wait_for_combat_end(log, hands, combat_timeout, offset):

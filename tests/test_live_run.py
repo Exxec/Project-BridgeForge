@@ -13,11 +13,14 @@ class FakeGame:
     """Hands that record every action and append log lines when the run reaches the stage that would produce them. As in the real
     game, a battle logs its round and 'combat START' as it begins, and after its END the game defines the mission again, which
     logs the next round's line (`late_redefinition`: only at the next pause, as when the game takes its time). `lost_starts` names
-    DEPLOY clicks (1-based) that start nothing, like the round-2 restarts of UAF and SR3-LIVE-0985a-20261117."""
+    DEPLOY clicks (1-based) that start nothing, like the round-2 restarts of UAF and SR3-LIVE-0985a-20261117. `dies_at_deploy`
+    ends the game at that DEPLOY click; after it, clicks, scrolls and front() raise as real_hands' geometry() does (a key press
+    needs no window)."""
 
     def __init__(self, log: Path, rounds: int = 1, stall_at: str | None = None, lost_starts: tuple[int, ...] = (),
-                 late_redefinition: bool = False) -> None:
+                 late_redefinition: bool = False, dies_at_deploy: int | None = None) -> None:
         self.log, self.rounds, self.stall_at = log, rounds, stall_at
+        self.dies_at_deploy, self.alive = dies_at_deploy, True
         self.lost_starts, self.late_redefinition = set(lost_starts), late_redefinition
         self.actions: list[tuple] = []
         self.combat_started = self.deploys = 0
@@ -33,12 +36,27 @@ class FakeGame:
         number = (self.combat_started - 1 + ahead) % self.rounds + 1
         return f"BF-PROBE|0.3.3|combat-round|INFO|round {number} of {self.rounds}|hulls 1-2 of 2"
 
+    def _window(self) -> None:
+        if not self.alive:
+            raise RuntimeError("the game window is gone")
+
+    def front(self) -> None:
+        self._window()
+
+    def scroll(self, *args) -> None:
+        self._window()
+        self.actions.append(("scroll", *args))
+
     def click(self, fx: float, fy: float) -> None:
+        self._window()
         self.actions.append(("click", fx, fy))
         if (fx, fy) == live_run.START_GAME and self.stall_at != "new-game":
             self._append("BF-PROBE|0.2.23|probe|INFO|campaign|END")
         if (fx, fy) == live_run.DEPLOY:
             self.deploys += 1
+            if self.deploys == self.dies_at_deploy:
+                self.alive = False  # the java process exited while the battle loaded
+                return
             if self.deploys in self.lost_starts:
                 return  # the clicks landed nowhere: no mission, no battle
             self.combat_started += 1
@@ -72,8 +90,8 @@ class FakeGame:
         return True
 
     def hands(self) -> live_run.Hands:
-        return live_run.Hands(click=self.click, key=self.key, scroll=lambda *a: self.actions.append(("scroll", *a)),
-                              sleep=self.sleep, capture=self.capture)
+        return live_run.Hands(click=self.click, key=self.key, scroll=self.scroll, sleep=self.sleep, capture=self.capture,
+                              alive=lambda: self.alive, front=self.front)
 
 
 class DriveTests(unittest.TestCase):
@@ -127,6 +145,13 @@ class DriveTests(unittest.TestCase):
         self.assertIn("also after one retry", result.detail)
         self.assertIn("run.round2-no-start.png", result.detail)
         self.assertEqual(game.combat_started, 1)
+
+    def test_a_game_that_exits_while_a_round_loads_is_stuck_without_a_retry(self) -> None:
+        # Review 2026-11-17: the retry clicked into a closed window (RuntimeError) where the old loop stopped cleanly.
+        result, game = self._drive(rounds=2, dies_at_deploy=2)
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "combat-round-2"))
+        self.assertIn("the game exited", result.detail)
+        self.assertEqual((game.deploys, game.captures), (2, []))
 
     def test_a_first_round_that_starts_nothing_is_retried_without_a_continue_click(self) -> None:
         result, game = self._drive(lost_starts=(1,))

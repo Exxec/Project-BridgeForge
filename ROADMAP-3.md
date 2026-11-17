@@ -443,6 +443,12 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   `CombatRoundsTests` (G1-LIVE3's and SR3's shapes, 0.3.3's, the report field) and `tests/test_probe_config.py`
   `CombatRoundCounterTests` (source, release copy and both jars). Owner's call: re-run Eridani and Scrapyard (archived 2026-11-17 on
   "archive all") so their round-2 hulls fight, and re-run Bultach before it is recorded.
+  An independent review the same day found two problems, fixed in the same PR:
+  - `combat_rounds` raised `KeyError` for a round the game never defined (a run stuck or crashed in an earlier round). Such a
+    round now shows `?` for its hulls. Test: `test_a_run_stopped_before_a_round_was_defined_names_no_hulls_for_it`.
+  - A game that exited while a round loaded was retried, and the retry clicked into the closed window (`RuntimeError`). It now
+    ends as LIVE_STUCK "the game exited before the probe mission's battle started", with no retry. Test:
+    `test_a_game_that_exits_while_a_round_loads_is_stuck_without_a_retry` (fails on the first version).
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct

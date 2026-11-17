@@ -769,7 +769,8 @@ def combat_rounds(log_text: str) -> dict:
         elif last is not None:
             started.append(last)
     missing = [number for number in range(1, planned + 1) if number not in started]
-    return {"planned": planned, "started": started, "missing": missing, "missing_hulls": [hulls[number] for number in missing]}
+    # A round the game never defined (a run stopped in an earlier round) has no hull range in the log.
+    return {"planned": planned, "started": started, "missing": missing, "missing_hulls": [hulls.get(number, "?") for number in missing]}
 
 
 def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted: dict[str, list[dict]] | None = None) -> dict:

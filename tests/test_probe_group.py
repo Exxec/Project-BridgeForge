@@ -777,6 +777,13 @@ class CombatRoundsTests(unittest.TestCase):
         # SR3-LIVE-0985a-20261117: round 2 was defined after the battle and no battle followed.
         self.assertEqual(combat_rounds(self._log("1/2/1-60", "START", "END", "2/2/61-105"))["missing"], [2])
 
+    def test_a_run_stopped_before_a_round_was_defined_names_no_hulls_for_it(self) -> None:
+        # Review 2026-11-17: a run stuck or crashed in round 1 never defines round 2, so its hull range is unknown (was a KeyError).
+        rounds = combat_rounds(self._log("1/2/1-60", "START"))
+        self.assertEqual((rounds["missing"], rounds["missing_hulls"]), ([2], ["?"]))
+        rounds = combat_rounds(self._log("1/3/1-60", "START", "END", "2/3/61-120"))
+        self.assertEqual((rounds["missing"], rounds["missing_hulls"]), ([2, 3], ["61-120", "?"]))
+
     def test_probe_0_3_3_fights_each_round_once(self) -> None:
         rounds = combat_rounds(self._log("1/2/1-60", "START", "END", "2/2/61-105", "2/2/61-105", "START", "END", "1/2/1-60"))
         self.assertEqual((rounds["started"], rounds["missing"]), ([1, 2], []))
