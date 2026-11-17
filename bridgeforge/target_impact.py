@@ -275,7 +275,13 @@ def _workspace_for(folder: Path) -> tuple[list[str], Path]:
     if folder.name == "working":
         return [], folder
     if folder.parent.name == folder.name and folder.parent.parent.name == "Done":
-        return [f'bridgeforge restore-from-done "{folder.parent}"'], folder.parent.parent.parent / "In operation" / folder.name / "working"
+        # The queue beside this Done/, named explicitly: restore-from-done's default is the package's own queue (review 2026-11-17).
+        queue = folder.parent.parent.parent / "In operation"
+        working = queue / folder.name / "working"
+        if working.is_dir():  # `archive` copies, so the workspace the archive came from may still be in the queue
+            return [f"the queue already holds {working.parent}: the steps below fix it (if it changed since this archive, "
+                    "`done-audit` shows the archive STALE)"], working
+        return [f'bridgeforge restore-from-done "{folder.parent}" --queue "{queue}"'], working
     return [], folder
 
 

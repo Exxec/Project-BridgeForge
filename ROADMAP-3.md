@@ -59,9 +59,11 @@ unproven).
   step names jar-packets and patch-jar-class instead. Nightcross is not to be worked on (owner 2026-11-17: "nightcross armory has
   been superseded and can safely be ignored").
   **Done 2026-11-17.** A workspace gets `bridgeforge relink "<workspace>" --vanilla-core <new core> --apply`. An archived
-  `Done/<Mod>/<Mod>` copy gets `restore-from-done` first, and its fix and relink steps then name `In operation/<Mod>`: the worklist
-  had told `fix` to edit the archive in place, while `retarget` refuses archives ("archives move with `archive --refresh`"). A
-  loose mod folder keeps the jar-packets route, as `relink` needs a workspace. Test: `tests/test_target_impact.py`
+  `Done/<Mod>/<Mod>` copy gets `restore-from-done ... --queue <Done's sibling In operation>` first, and its fix and relink steps
+  then name `In operation/<Mod>`: the worklist had told `fix` to edit the archive in place, while `retarget` refuses archives
+  ("archives move with `archive --refresh`"). When the queue still holds that workspace (`archive` copies), the steps fix it
+  and say so instead of restoring over it; review 2026-11-17 found both cases. A loose mod folder keeps the jar-packets route,
+  as `relink` needs a workspace. Test: `tests/test_target_impact.py`
   `test_an_archive_is_restored_first_and_a_workspace_is_relinked_directly` (fails on the old code).
 - 95.14 (M) **A changed member's default argument, decided once.** `OfficerManagerEvent.pickPortraitPreferNonDuplicate` gained a
   `Random` and a rule exists, so Kadur Remnant clears with the gated fixer; `PersonBountyEventData.reportSuccess()` gained an `int`

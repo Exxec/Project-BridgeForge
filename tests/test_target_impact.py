@@ -97,15 +97,21 @@ class TargetImpactTests(unittest.TestCase):
             _mod(root / "Done" / "user", "user", {"id": "user"}, _compile(self.javac, root / "donebuild", AI, classpath=old_classes))
             _mod(root / "q" / "W", "working", {"id": "w"}, _compile(self.javac, root / "wsbuild", AI, classpath=old_classes))
             result = target_impact([root / "Done", root / "q"], old, new)
+            # The same archive while the queue still holds the workspace it was archived from (`archive` copies).
+            (root / "In operation" / "user" / "working").mkdir(parents=True)
+            again = {r["mod"]: r for r in target_impact([root / "Done"], old, new)["records"]}
         by_mod = {r["mod"]: r for r in result["records"]}
-        restored = root.resolve() / "In operation" / "user"
+        queue = root.resolve() / "In operation"
+        restored = queue / "user"
         self.assertEqual(by_mod["Done/user"]["next"], [
-            f'bridgeforge restore-from-done "{(root / "Done" / "user").resolve()}"',
+            f'bridgeforge restore-from-done "{(root / "Done" / "user").resolve()}" --queue "{queue}"',
             f'bridgeforge fix "{restored / "working"}" --finding jar-call-signature-changed --vanilla-core "{new.resolve()}" --apply',
             f'bridgeforge relink "{restored}" --vanilla-core "{new.resolve()}" --apply'])
         workspace = (root / "q" / "W").resolve()
         self.assertEqual(by_mod["q/W"]["next"][1], f'bridgeforge relink "{workspace}" --vanilla-core "{new.resolve()}" --apply')
         self.assertFalse(by_mod["Done/user"]["fixers_only"])  # a relink is not a gated fixer
+        self.assertTrue(again["Done/user"]["next"][0].startswith(f"the queue already holds {restored}"))
+        self.assertEqual(again["Done/user"]["next"][2], f'bridgeforge relink "{restored}" --vanilla-core "{new.resolve()}" --apply')
 
     def test_same_core_twice_reports_nothing(self) -> None:
         with resolved_temp_dir() as root:
