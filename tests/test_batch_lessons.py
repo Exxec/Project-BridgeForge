@@ -590,3 +590,70 @@ class LibraryRequiredByThrowTests(unittest.TestCase):
                 "  if (has) { doExtra(); }\n} }\n", encoding="utf-8")
             result = scan_mod(mod, TargetProfile())
         self.assertEqual([f for f in result.findings if f.id == "undeclared-library-dependency"], [])
+
+
+class LibraryCoverage93Tests(unittest.TestCase):
+    """ROADMAP-3 items 93.1/93.2 (2026-11-17), from the six-mod 0.98.5a batch."""
+
+    def test_an_undeclared_boxutil_use_is_found_and_declared(self) -> None:
+        from bridgeforge.fixers import apply_fix, compute_fix
+
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "scripts").mkdir(parents=True)
+            (mod / "data" / "scripts" / "Fx.java").write_text(
+                "import org.boxutil.units.standard.entity.SpriteEntity;\npublic class Fx { Object e = new SpriteEntity(); }\n", encoding="utf-8")
+            found = _ids(scan_mod(mod, TargetProfile()), "undeclared-library-dependency")
+            apply_fix(compute_fix(mod, "undeclared-library-dependency", {}))
+            info = json.loads((mod / "mod_info.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(found), 1)
+        self.assertIn("dependency-id:BoxUtil", found[0].evidence)
+        self.assertIn("BoxUtil", [d.get("id") for d in info.get("dependencies") or []])
+
+    def _guarded_plus_unused_import(self, directory: str, *, compiled: bool) -> list:
+        from tests.test_rc8_bytecode_checks import build_class_file, write_jar
+
+        mod = _mod(Path(directory), jars=["jars/m.jar"] if compiled else [])
+        src = mod / "src" / "fx"
+        src.mkdir(parents=True)
+        (src / "Plug.java").write_text(
+            "package fx;\nimport exerelin.campaign.SectorManager;\npublic class Plug { void f() {\n"
+            "  if (Global.getSettings().getModManager().isModEnabled(\"nexerelin\")) { SectorManager.getManager(); }\n} }\n", encoding="utf-8")
+        (src / "Intel.java").write_text(
+            "package fx;\nimport exerelin.campaign.SectorManager;\nimport exerelin.plugins.ExerelinCampaignPlugin;\npublic class Intel { int x = 1; }\n",
+            encoding="utf-8")
+        if compiled:  # what javac emits: only Plug references Nexerelin; Intel's unused imports compile to nothing
+            write_jar(mod / "jars" / "m.jar", {"fx/Plug.class": build_class_file("fx/Plug", extra_class_refs=("exerelin/campaign/SectorManager",)),
+                                               "fx/Intel.class": build_class_file("fx/Intel")})
+        return scan_mod(mod, TargetProfile()).findings
+
+    def test_unused_imports_in_a_jar_class_do_not_break_an_all_guarded_integration(self) -> None:
+        # Navarchy of Tania: two jar classes import Nexerelin types they never use; every real use checks isModEnabled.
+        with tempfile.TemporaryDirectory() as directory:
+            findings = self._guarded_plus_unused_import(directory, compiled=True)
+        self.assertEqual([f for f in findings if f.id == "undeclared-library-dependency"], [])
+        self.assertEqual(len([f for f in findings if f.id == "optional-library-integration"]), 1)
+
+    def test_without_the_compiled_class_an_unused_import_still_counts(self) -> None:
+        # A source the game compiles itself can fail on an unused import of a missing library: only bytecode proves "unused".
+        with tempfile.TemporaryDirectory() as directory:
+            findings = self._guarded_plus_unused_import(directory, compiled=False)
+        self.assertEqual(len([f for f in findings if f.id == "undeclared-library-dependency"]), 1)
+
+    def test_a_guarded_plugin_plus_a_registered_custom_start_is_optional(self) -> None:
+        # Bultach Coalition: ork_ModPlugin checks isModEnabled; bt_murtach_start is a customStarts.json start.
+        with tempfile.TemporaryDirectory() as directory:
+            mod = _mod(Path(directory))
+            (mod / "data" / "scripts").mkdir(parents=True)
+            (mod / "data" / "campaign" / "customstart").mkdir(parents=True)
+            (mod / "data" / "config" / "exerelin").mkdir(parents=True)
+            (mod / "data" / "scripts" / "Plug.java").write_text(
+                "package data.scripts;\nimport exerelin.campaign.SectorManager;\npublic class Plug { void f() {\n"
+                "  if (Global.getSettings().getModManager().isModEnabled(\"nexerelin\")) { SectorManager.getManager(); }\n} }\n", encoding="utf-8")
+            (mod / "data" / "campaign" / "customstart" / "Start.java").write_text(
+                "package data.campaign.customstart;\nimport exerelin.campaign.customstart.CustomStart;\npublic class Start extends CustomStart {}\n",
+                encoding="utf-8")
+            (mod / "data" / "config" / "exerelin" / "customStarts.json").write_text(
+                json.dumps({"starts": [{"id": "s", "className": "data.campaign.customstart.Start"}]}), encoding="utf-8")
+            result = scan_mod(mod, TargetProfile())
+        self.assertEqual(_ids(result, "undeclared-library-dependency"), [])

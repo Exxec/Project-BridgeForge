@@ -391,6 +391,42 @@ def _nexerelin_custom_start_classes(root: Path) -> set[str]:
     return {s["className"].strip() for s in starts or [] if isinstance(s, dict) and isinstance(s.get("className"), str) and s["className"].strip()}
 
 
+_IMPORT_STATEMENT = re.compile(r"^\s*import\s+(?:static\s+)?([\w.]+(?:\.\*)?)\s*;", re.MULTILINE)
+
+
+def _library_used_beyond_imports(text: str, dotted_needles: list[str]) -> bool:
+    """True when a source uses a library: a fully qualified reference outside its import lines, or a simple name it imports
+    from the library appearing in the code. A wildcard import of the library counts as use (its names cannot be told)."""
+    imported = [m.group(1) for m in _IMPORT_STATEMENT.finditer(text) if any(m.group(1).startswith(n) for n in dotted_needles)]
+    body = _IMPORT_STATEMENT.sub("", text)
+    if any(needle in body for needle in dotted_needles) or any(name.endswith(".*") for name in imported):
+        return True
+    return any(re.search(rf"\b{re.escape(name.rsplit('.', 1)[-1])}\b", body) for name in imported)
+
+
+def _jar_class_references(root: Path) -> dict[str, set[str]]:
+    """{dotted outer class name: referenced class names (slash form)} for every class in the mod's jars, inner classes
+    folded into their outer class."""
+    refs: dict[str, set[str]] = {}
+    for _jar, _member, data in _iter_jar_class_files(root):
+        info = _parse_class_file(data)
+        if info is not None and info.this_class:
+            outer = info.this_class.split("$", 1)[0].replace("/", ".")
+            refs.setdefault(outer, set()).update(info.referenced_classes)
+    return refs
+
+
+def _compiled_without_library(text: str, source: Path, jar_refs: dict[str, set[str]], prefixes) -> bool:
+    """The source's class ships in a jar and that bytecode references nothing of the library, though the source names it:
+    only unused imports, which compile to nothing. Judged from the bytecode, never the text, because a loose script the game
+    compiles itself can fail on an unused import of a missing library. Navarchy of Tania's tania_duel_location and
+    tania_firstmission_intel import Nexerelin classes they never use (ROADMAP-3 item 93.1, 2026-11-17)."""
+    package = re.search(r"^\s*package\s+([\w.]+)\s*;", text, re.MULTILINE)
+    name = f"{package.group(1)}.{source.stem}" if package else source.stem
+    refs = jar_refs.get(name)
+    return refs is not None and not any(ref.startswith(prefix) for ref in refs for prefix in prefixes)
+
+
 def _only_nexerelin_custom_starts(root: Path, prefixes) -> bool:
     """True when every source using these packages is a class registered in customStarts.json."""
     registered = _nexerelin_custom_start_classes(root)
@@ -623,6 +659,7 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
     """Code that reaches a known library's package without mod_info.json declaring that dependency."""
     own_info = _load_lenient_json_file(root / "mod_info.json")
     own_id = str(own_info.get("id", "")).strip().lower() if isinstance(own_info, dict) else ""
+    jar_refs: dict[str, set[str]] | None = None  # read once, and only when a source names a library
     for library, dependency_id in LIBRARY_DEPENDENCY_IDS.items():
         if _mod_info_declares_dependency(result, dependency_id):
             continue
@@ -653,6 +690,9 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
         fail_fast = re.compile(r'!\s*[\w.()\s]*isModEnabled\s*\(\s*"' + re.escape(dependency_id) + r'"\s*\)\s*\)\s*\{?\s*throw\b', re.IGNORECASE)
         every_hit_id_guarded = True
         fails_fast_hit = False
+        # A class only Nexerelin loads (a custom start registered in its customStarts.json) is as safe as a guarded one;
+        # Bultach mixes the two: ork_ModPlugin checks isModEnabled, bt_murtach_start is a registered start (93.1).
+        library_loaded_only = _nexerelin_custom_start_classes(root) if library == "Nexerelin" else set()
         for source in sorted(root.rglob("*.java")):
             if "disabled_files" in source.relative_to(root).parts:
                 continue
@@ -664,11 +704,22 @@ def _scan_undeclared_library_dependency(root: Path, result: ScanResult) -> None:
                 continue
             if not any(needle in text for needle in dotted_needles):
                 continue
+            if not _library_used_beyond_imports(text, dotted_needles):
+                jar_refs = _jar_class_references(root) if jar_refs is None else jar_refs
+            if not _library_used_beyond_imports(text, dotted_needles) and _compiled_without_library(text, source, jar_refs or {}, prefixes):
+                # Only unused imports, and the shipped class proves they compiled to nothing: no load, no dependency. Tania's
+                # two such classes made its otherwise fully isModEnabled-guarded Nexerelin use an agent packet that failed
+                # twice (ROADMAP-3 item 93.1, 2026-11-17).
+                continue
             source_hits.append(_relative(root, source))
             if re.search(r"\bisModEnabled\s*\(", text):
                 guarded = True
             if fail_fast.search(text) or _fails_fast_through_variable(text, dependency_id):
                 fails_fast_hit = True
+            package = re.search(r"^\s*package\s+([\w.]+)\s*;", text, re.MULTILINE)
+            class_name = f"{package.group(1)}.{source.stem}" if package else source.stem
+            if class_name in library_loaded_only:
+                continue
             if not id_guard.search(text) or fail_fast.search(text) or _fails_fast_through_variable(text, dependency_id):
                 every_hit_id_guarded = False
         bytecode_hits: list[str] = []

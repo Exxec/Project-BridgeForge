@@ -260,6 +260,11 @@ BUNDLED_LIBRARY_PACKAGE_PREFIXES = {
     # CMUtils (Combat Misc Utils, id cmutils): Neutrino (tomatopaste) calls cmu/CMUtils without declaring it, a
     # NoClassDefFoundError in live GRP4-20261005c (2026-10-05).
     "CMUtils": ("cmu/",),
+    # BoxUtil (id BoxUtil; zz BoxUtil-1.4.9 jars/BoxUtilMod.jar: org/boxutil/units|base|util) and AshLib (id ashlib;
+    # Ashlib-2.2.3 jars/ashlib.jar: ashlib/data/...), read 2026-11-17: Eridani Combine depends on BoxUtil, and neither library
+    # was known, so a mod using one without declaring it got no finding and no fix (ROADMAP-3 item 93.2).
+    "BoxUtil": ("org/boxutil/",),
+    "AshLib": ("ashlib/",),
 }
 
 
@@ -271,6 +276,8 @@ LIBRARY_DEPENDENCY_IDS = {
     "LunaLib": "lunalib",
     "Nexerelin": "nexerelin",
     "CMUtils": "cmutils",  # CMUtils 0.3.2 mod_info.json
+    "BoxUtil": "BoxUtil",  # zz BoxUtil-1.4.9 mod_info.json
+    "AshLib": "ashlib",  # Ashlib-2.2.3 mod_info.json
 }
 
 

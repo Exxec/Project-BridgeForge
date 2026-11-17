@@ -21,9 +21,11 @@ archive to `Done/_replaced-<date>/` and restore it if the new write fails; never
 items 73/75 is in `docs/ROADMAP_STATUS.md`; the runs still needed on this machine are in `docs/LOCAL_HANDOFF.md` section 0b.
 ## Target (owner 2026-11-15)
 
-Revivals now target **0.98.5a**. Trust the build the core reports (`bridgeforge target show` prints `target_core_reports`), not
-a folder name: on Test1 `C:\Games\Starsector-0.98.5a-RC3` holds **RC7** (owner 2026-11-16); on White_Legion the same build is
-`C:\Program Files (x86)\Fractal Softworks\Starsector985a` (Java 17; its `jre\bin` has `javac`). ROADMAP-3 item 92.38.
+Revivals now target **0.98.5a-RC7**. Trust the build the core reports (`bridgeforge target show` prints `target_core_reports`),
+not a folder name or memory: Test1's `C:\Games\Starsector-0.98.5a-RC3` reports RC3 (its starfarer_obf.jar differs from RC7's;
+it was believed to be RC7 until checked, 2026-11-17), and `C:\Games\Starsector-0.98.5a-RC7` is the RC7 copy used by Test1's
+0.98.5a test rig `In operation\_rig-0985a`. On White_Legion RC7 is `C:\Program Files (x86)\Fractal Softworks\Starsector985a`
+(Java 17; its `jre\bin` has `javac`). ROADMAP-3 items 92.38 and 92.40.
 Pass `--vanilla-core @target` (any core argument resolves the token from `bridgeforge-state/target.json`; `bridgeforge
 target show`). RC8 (`C:\Program Files (x86)\Fractal Softworks\Starsector`) is the previous target (registry status
 QUALIFIED) and the reference for archives validated before 2026-11-15. When a new game version appears: `bridgeforge
