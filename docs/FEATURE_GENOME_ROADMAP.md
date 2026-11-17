@@ -157,7 +157,7 @@ labelled as departures.
 
 ## 7. Order and placement
 
-G1-G3 are read-only analysis and can start once the six live tests and items 92/93 settle, alongside S2. G4-G5 write only to
+G1-G3 are read-only analysis and can start once the six live tests and items 92/93 settle, alongside S2. **Updated 2026-11-17 (D1, section 14):** G1 starts after ROADMAP-3 item 96, and S2 no longer gates anything (item 97). G4-G5 write only to
 copies and build on S2's recipe reuse and on `src-to-jar`. G6 needs S3's behavior obligations and item 93's rig and
 probe-target work. G7 comes last. This adds a track; it does not reorder S1-S4.
 
@@ -241,3 +241,59 @@ shrink scope.
 | GR-4 | A cross-repository trace check: every genome entry in a sister roadmap names an existing 94.Gn, BridgeForge's section 12 names every entry, and a `trace 94.G2` command lists the commits, pull requests, tests and documents that cite an id. |
 | GR-5 | Spike the Java probe extension during G2, so the probe build and rig path are proven before G5 and G6 depend on them. |
 | GR-6 | One machine-readable licence ledger per mod, shared by `vendor-copy`, the gene bank and RevenantLib, so GD-2 is enforced in one place. |
+
+## 14. Suite-architecture review and the owner's decisions D1-D4 (2026-11-17)
+
+An outside review of the seven Exxec repositories (BridgeForge, Salvor, VoidSmith, SPW, Project Go, SpriteForge,
+RevenantLib) was checked against the repositories as they stood on 2026-11-17, BridgeForge `main` at `02bde54`. It came
+back as an implementation handoff with work packages WP0-WP7. This section records its verdict and the owner's answers,
+so that every later package traces back to a recorded decision.
+
+**Verdict.** The direction is right and is already this track's decisions (GD-1-GD-5, GR-1-GR-6): keep the specialist
+repositories, connect them through versioned files, and settle contracts before any shared interface. Five points of the
+reviewed plan are wrong or needed a decision:
+- **Save logic.** Salvor depends on BridgeForge, not the reverse: its `pyproject.toml` requires `bridgeforge>=0.4,<0.5`
+  and pins a commit, and BridgeForge keeps compatibility facades for it. Do not invert it (D4); audit only (WP6).
+- **A unified workbench, then a GUI, then other games.** VISION.md excludes a general desktop GUI and a multi-game platform
+  for this horizon (D2).
+- **S2-S4 acceptance gates.** S4 is parked and S2 and S3 no longer gate (ROADMAP-3 item 97), so that sequencing argument
+  does not apply.
+- **A new integration layer.** The pattern exists and is extended, with no new repository and no shared package:
+  - `gates.json` schema 1 in four repositories;
+  - fixture directories copied byte for byte between BridgeForge and Project Go;
+  - `target export` pinned by hash;
+  - SPW's interchange files;
+  - docs/SISTER_REPO_INTEROPERABILITY_DESIGN.md.
+- **RevenantLib as an application.** It is a mod plus build and check tools: a destination for genes, not a tool the
+  pipeline calls.
+
+Two of the review's additions are kept: a common header for evidence files about a gene (WP5), and making the
+cross-repository conformance check real early (WP3).
+
+**Decisions (owner, 2026-11-17):**
+
+| Id | Question | Owner's answer |
+|---|---|---|
+| D1 | Start 94.G1 now? | "I recommend 94.G1 start after 96 and then whenever you recommend from there." G1 (WP1-WP3) starts after ROADMAP-3 item 96. |
+| D2 | Lift VISION's exclusion of a general desktop GUI or a multi-game platform? | "No." Cross-repository status stays in BridgeForge's command line; an orchestration command can be revisited after the G2 pilots. |
+| D3 | Do sister repositories add their `gene.json` conformance test now or when their phase starts? | "follow recommendation": when their phase starts, as each sister entry says; BridgeForge reports pin drift from WP3 onward. |
+| D4 | Keep BridgeForge as the provider of save diagnosis to Salvor? | "yes". |
+
+**Order of the work packages** (D1 leaves the order after item 96 to the implementing session; recommended 2026-11-17):
+1. WP0, this record. Documents only, now.
+2. ROADMAP-3 item 96's work that needs no rig: the 96.4 release and 96.5's remaining small items. 96.2's ports need live
+   runs. Live testing is paused (owner 2026-11-17), so they resume with it and do not hold G1.
+3. WP1 (94.G1 `gene.json` contract and identity), WP2 (GR-1 export, fixtures and pin) and WP3 (GR-4 `trace` and the
+   cross-repository check with pin drift), in that order. WP1's acceptance run over three batch mods is local and goes to
+   docs/LOCAL_HANDOFF.md.
+4. WP4 (GR-6 licence ledger). It extends `bridgeforge/release_policy.json` rather than adding a second source, and comes
+   before any gene leaves its mod (G3-G5).
+5. WP5 (the evidence header, design only, after WP1 so its fields match `gene.json`), then WP6 (the duplication audit of
+   save reading, mod identity, lenient JSON and class indexing; a report only).
+6. GR-2 (census), GR-3 (closure benchmark) and GR-5 (Java probe spike), leading into 94.G2.
+7. WP7 in each sister repository when its phase starts (D3): Project Go (G2), RevenantLib (G3), SpriteForge (G4),
+   VoidSmith and Salvor (G5), SPW (G6).
+
+Outside this track unless D2 changes: a shared workspace layout imported from the review (WP1 decides where genes and evidence
+live against the existing workspace forms), a launcher, a GUI, workflow plugins, other games, merging repositories, and a
+shared runtime library.
