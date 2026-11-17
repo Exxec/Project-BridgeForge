@@ -46,7 +46,7 @@ def add_parser(subcommands) -> None:
     revive_cmd.add_argument("--apply", action="store_true", help="write fixes into working/ (default: dry run; reports and packets are still written)")
     revive_cmd.add_argument("--approve", action="append", default=[], metavar="FINDING_ID", help="approve this fixer for this run even though its findings are not all SAFE; repeatable")
     revive_cmd.add_argument("--policy", type=Path, help="standing fixer approvals (default: AUTOMATION_POLICY.json in the workspace's parent folder)")
-    revive_cmd.add_argument("--vanilla-core", type=Path, help="RC8 starsector-core: enables the loose-script compile check and the fixers that compare against vanilla")
+    revive_cmd.add_argument("--vanilla-core", type=Path, help="the target build's starsector-core (@target): enables the loose-script compile check and the fixers that compare against vanilla")
     revive_cmd.add_argument("--target", help="target game version for mod_info.json (default: the --vanilla-core's own version, read from its starfarer_obf.jar; else 0.98a-RC8)")
     revive_cmd.add_argument("--max-rounds", type=int, default=5)
     revive_cmd.add_argument("--providers", type=Path, action="append", default=[], help="where to look for mods that provide missing content, for the options in missing-content packets (default: the workspace's queue folder and its _rig/mods); --draft-report's compile check also resolves libraries there; repeatable")

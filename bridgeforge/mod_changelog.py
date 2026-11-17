@@ -54,6 +54,23 @@ def add_entry(mod: str, text: str, *, version: str | None = None, day: str | Non
     return line
 
 
+# The lines written while 0.98a-RC8 was the only target say "RC8"; the same words keep a re-seed from adding a second line for each.
+_LEGACY_LABELS = {"0.98a-RC8": "RC8"}
+# The build an archive note's credit line names ("Revival for Starsector 0.98.5a-RC7: BridgeForge by Exxec.").
+NOTE_BUILD = re.compile(r"Revival for Starsector (\S+?):")
+
+
+def build_label(build: str) -> str:
+    """How the changelog and master log name a build: as the core reports it, except the legacy "RC8"."""
+    return _LEGACY_LABELS.get(build, build)
+
+
+def archived_text(build: str | None, status: str | None) -> str:
+    """The changelog text for an archive, naming the build the mod was revived for (ROADMAP-3 96.5 A1: every line said RC8)."""
+    state = (status or "no status").replace("_", " ").lower()
+    return f"revived for {build_label(build)} and archived ({state})" if build else f"revived and archived ({state})"
+
+
 def seed_from_archives(done: Path, path: Path | None = None) -> int:
     """One "archived" line per Done/<mod>/ARCHIVE_NOTE.md, under its archive date. Returns the lines added."""
     added = 0
@@ -63,8 +80,10 @@ def seed_from_archives(done: Path, path: Path | None = None) -> int:
         stamp = re.search(r"status: \*\*([A-Z_]+)\*\* \(archived (\d{4}-\d{2}-\d{2})\)", text)
         if not title or not stamp:
             continue
+        build = NOTE_BUILD.search(text)
         before = path.read_text(encoding="utf-8") if path and Path(path).is_file() else ""
-        add_entry(title.group(1).strip(), f"revived for RC8 and archived ({stamp.group(1).replace('_', ' ').lower()})",
+        # A note without the credit line predates it, when 0.98a-RC8 was the only target.
+        add_entry(title.group(1).strip(), archived_text(build.group(1) if build else "0.98a-RC8", stamp.group(1)),
                   day=stamp.group(2), path=path)
         added += (Path(path or DEFAULT_PATH).read_text(encoding="utf-8") != before)
     return added

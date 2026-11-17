@@ -17,12 +17,23 @@ COMBAT = PROBE + "BF-PROBE|0.2.9|combat-round|INFO|round-1|frames=900"
 BASIC_LOG = [MENU, LOAD]
 
 
-def make_rig(root: Path, providers: dict[str, list[str]] | None = None) -> Path:
-    """A rig whose starsector-core is a junction, with provider mods {id: [their own dependencies]} installed."""
+def write_core_build(core: Path, build: str) -> None:
+    """A starfarer_obf.jar whose one class holds the version string `game_version.core_game_version` reads from a real core."""
+    import zipfile
+
+    with zipfile.ZipFile(Path(core) / "starfarer_obf.jar", "w") as jar:
+        jar.writestr("com/fs/starfarer/Version.class", b"\xca\xfe\xba\xbe" + build.encode("ascii") + b"\x00")
+
+
+def make_rig(root: Path, providers: dict[str, list[str]] | None = None, core_build: str | None = None) -> Path:
+    """A rig whose starsector-core is a junction, with provider mods {id: [their own dependencies]} installed; with `core_build`,
+    a core that reports that game build."""
     rig = root / "rig"
     (rig / "mods").mkdir(parents=True)
     core = root / "core_real"
     core.mkdir(exist_ok=True)
+    if core_build:
+        write_core_build(core, core_build)
     link_dir(core, rig / "starsector-core")
     for mod_id, deps in (providers or {}).items():
         folder = rig / "mods" / mod_id
@@ -43,9 +54,10 @@ def stage(rig: Path, workspaces: dict[str, Path], extra_enabled: list[str] | Non
 
 def bound_run(root: Path, workspaces: dict[str, Path], test_id: str, log_lines: list[str] | None = None, *,
               expected: tuple[str, ...] = ("main_menu", "campaign_load"), kind: str = "campaign",
-              providers: dict[str, list[str]] | None = None, rig: Path | None = None, release: bool = True) -> tuple[Path, Path]:
+              providers: dict[str, list[str]] | None = None, rig: Path | None = None, release: bool = True,
+              core_build: str | None = None) -> tuple[Path, Path]:
     """Stage, prepare the manifest, write the log (after it, so it is newer), release. Returns (rig, log path)."""
-    rig = rig or make_rig(root, providers)
+    rig = rig or make_rig(root, providers, core_build)
     stage(rig, workspaces, list(providers or {}))
     prepare_run(rig, test_id, kind, targets=list(workspaces), expected=list(expected))
     log = rig / "logs" / f"{test_id}.stdout.log"

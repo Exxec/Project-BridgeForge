@@ -112,12 +112,15 @@ def parse_draft_sources(path: Path) -> dict[tuple[str, str], str | None]:
 
 
 def _credits(working: Path, crafted: list[tuple[str, str]]) -> None:
+    from .game_version import revival_build
+
     info = _load_lenient_json_file(working / "mod_info.json") or {}
+    # The build the mod was revived for, not a fixed RC8: Scrapyard Armories revived for 0.98.5a-RC7 was credited
+    # "for 0.98a-RC8" (ROADMAP-3 item 92.16, 2026-11-16); no build named means no build claimed (96.5 A1).
+    build = revival_build(working)
     lines = [f"{info.get('name', working.parent.name)}: BridgeForge revival credits", "",
              f"Original mod: {info.get('author') or 'see the mod itself'}. All original art, code and text belong to the original author(s).",
-             # The revived mod's own gameVersion, not a fixed RC8: Scrapyard Armories revived for 0.98.5a-RC7 was credited
-             # "for 0.98a-RC8" (ROADMAP-3 item 92.16, 2026-11-16).
-             f"Revival for Starsector {info.get('gameVersion') or '0.98a-RC8'}: BridgeForge by Exxec.", "",
+             f"{'Revival for Starsector ' + build if build else 'Revival'}: BridgeForge by Exxec.", "",
              "Crafted descriptions (not original)", "-----------------------------------",
              "The codex descriptions for the entries below were missing from the original mod. They were written for",
              "this revival from the mod's own lore, names and roles, and are not the author's text.",

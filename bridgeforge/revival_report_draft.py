@@ -90,10 +90,15 @@ def draft_revival_report(mod_dir: Path, vanilla_core: Path | None = None, provid
     review_count = by_classification.get("REVIEW", 0)
     safe_count = by_classification.get("SAFE", 0)
     file_count = len(result.files)
-    compile_text = f"PASS ({compile_result['error_count']} errors, {len(compile_result['files'])} loose script(s) compiled against RC8)"
+    # The build of the core the draft compiled against, as that core reports it (96.5 A1: drafts said RC8 for RC7 revivals).
+    from .game_version import core_game_version
+
+    build = core_game_version(vanilla_core)
+    compile_text = (f"PASS ({compile_result['error_count']} errors, {len(compile_result['files'])} loose script(s) compiled against "
+                    f"{build or 'the given core'})")
 
     report_lines = [
-        f"# Revival Report: {mod_name} (0.98a-RC8)",
+        f"# Revival Report: {mod_name}" + (f" ({build})" if build else ""),
         "",
         f"Date: {date.today().isoformat()}",
         f"Working copy: `{root}`",

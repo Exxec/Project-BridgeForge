@@ -28,7 +28,8 @@ class _Fixture:
         self.a = _workspace(self.queue, "A", "mod_a", "hull_a")
         self.b = _workspace(self.queue, "B", "mod_b", "hull_b")
         self.config = merge_configs([build_probe_config(self.a), build_probe_config(self.b)])
-        self.rig, self.log = bound_run(root, {"mod_a": self.queue / "A", "mod_b": self.queue / "B"}, "GRP-A", [MENU, LOAD, *log_lines])
+        self.rig, self.log = bound_run(root, {"mod_a": self.queue / "A", "mod_b": self.queue / "B"}, "GRP-A", [MENU, LOAD, *log_lines],
+                                       core_build="0.98.5a-RC7")
 
     def record(self, **kwargs):
         return record_group(self.log, self.config, self.queue, self.rig, test_id="GRP-A", today="2026-10-14", **kwargs)
@@ -50,10 +51,20 @@ class AcceptRecordTests(unittest.TestCase):
             report_a = fx.report("A")
         self.assertEqual(result["recorded"], ["A", "B"])
         self.assertIsNone(result["stopped"])
-        self.assertIn("## Live run GRP-A (2026-10-14, RC8 rig)", report_a)
+        self.assertIn("## Live run GRP-A (2026-10-14, 0.98.5a-RC7 rig)", report_a)
         self.assertIn("Owner's account: ran New Game and a day", report_a)
         self.assertNotIn("## Live probe run", report_a)
         self.assertEqual(sorted(m["workspace"] for m in run["members"]), ["A", "B"])  # the group record was not replaced by a one-member one
+
+    def test_a_plain_record_names_the_rigs_build_and_not_the_owner(self) -> None:
+        # 96.5 A1: the heading said "RC8 rig" on the 0.98.5a-RC7 rig, and the body credited the owner with runs the harness played.
+        with resolved_temp_dir() as root:
+            fx = _Fixture(root, [OK])
+            fx.record()
+            report_a = fx.report("A")
+        self.assertIn("## Live probe run GRP-A (group run, 0.98.5a-RC7 rig)", report_a)
+        self.assertIn("The run started a New Game, played one in-game day and the probe combat mission.", report_a)
+        self.assertNotIn("Owner ran", report_a)
 
     def test_accept_needs_a_note(self) -> None:
         with resolved_temp_dir() as root:

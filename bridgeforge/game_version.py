@@ -73,3 +73,34 @@ def reference_core_for(declared: str | None, search_roots: list[Path], *, exclud
             if version and base_version(version) == want and (version, core) not in found:
                 found.append((version, core))
     return max(found, key=lambda item: _key(item[0]))[1] if found else None
+
+
+_BUILD = re.compile(r"\d+\.\d+(?:\.\d+)*a(?:-RC\d+)?", re.I)
+
+
+def revival_build(working: Path) -> str | None:
+    """The game build a revived copy is for, as records name it (ROADMAP-3 96.5 A1: archives and live records said "RC8" for
+    mods revived against 0.98.5a-RC7). That is the working copy's mod_info.json gameVersion, which revive's fixer and
+    `retarget` set to the target core's own build; else the target its last `revive` recorded (reports/revive/REVIVE.json).
+    None when neither names a build: an author's "0.98" is not one."""
+    import json
+
+    from .scan.scan_json import _load_lenient_json_file
+
+    working = Path(working)
+    info = _load_lenient_json_file(working / "mod_info.json") if (working / "mod_info.json").is_file() else None
+    declared = str(info.get("gameVersion") or "").strip() if isinstance(info, dict) else ""
+    if _BUILD.fullmatch(declared):
+        return declared
+    try:
+        recorded = json.loads((working.parent / "reports" / "revive" / "REVIVE.json").read_text(encoding="utf-8")).get("target")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return recorded.strip() if isinstance(recorded, str) and _BUILD.fullmatch(recorded.strip()) else None
+
+
+def rig_label(rig: Path | None) -> str:
+    """How a record names the rig a run used: "0.98.5a-RC7 rig", the build its starsector-core reports; "rig (build not read)"
+    when there is no rig or its core cannot be read. Records called every rig "RC8 rig" (96.5 A1)."""
+    build = core_game_version(Path(rig) / "starsector-core") if rig else None
+    return f"{build} rig" if build else "rig (build not read)"

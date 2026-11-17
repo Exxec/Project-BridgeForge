@@ -53,6 +53,33 @@
     sources: `live/live_accept.py:114`; `probe/probe_group.py:991-993`, which also writes "Owner ran New Game" for
     harness runs; the archive credit line; the MOD_CHANGELOG lines; `master_log`; revive's "0.98a-RC8" fallback. Fix:
     one helper naming the build the core reports. Past records only matter as records (owner's rule for the G3 case).
+    **Done 2026-11-17.** Two helpers in `game_version`:
+    - `revival_build(working)` is the build a revived copy is for. That is its `gameVersion` (which revive's fixer and `retarget`
+      set to the core's own build), else the target its last `revive` recorded, else none.
+    - `rig_label(rig)` is "<build> rig", from the rig's core, or "rig (build not read)".
+
+    They feed:
+    - the ARCHIVE_NOTE credit line;
+    - the MOD_CHANGELOG line (`mod_changelog.archived_text`). Lines for RC8 archives keep the words "RC8", so re-seeding adds
+      no second line, and a note older than the credit line seeds as RC8;
+    - the credits file;
+    - `master_log` (its generic-line pattern takes any build);
+    - the `accept` and group-record headings. The group record says "The run started a New Game..." rather than crediting
+      the owner;
+    - the report draft's title and compile line.
+
+    Six help texts that called RC8 *the* core now say the target or the given core: `revive --vanilla-core`, `close --reason`,
+    `relink`, `scan --compile-check`/`compile-check`, `content-diff` and `rebuild-from-reference`. Historical ids such as
+    RC8-25 stay. Revive's documented `--target` fallback (0.98a-RC8 without a core) is unchanged: 36 tests run revive without a
+    core, and the batch passes `@target`. Records written before the fix stay as they are, by the owner's rule. Tests:
+    - `tests/test_build_labels.py`;
+    - `tests/test_archive.py` `test_the_note_and_changelog_name_the_build_the_mod_was_revived_for`;
+    - `tests/test_group_accept.py` `test_a_plain_record_names_the_rigs_build_and_not_the_owner`;
+    - the `accept` headings in `tests/test_live_accept.py` and `tests/test_group_accept.py`, now on a synthetic rig whose core
+      reports 0.98.5a-RC7 (`tests/bound_runs.write_core_build`).
+
+    Left open, because each changes behaviour (96.3): `rig-doctor` compares mods with `0.98a`, and `dependency-substitutes`
+    never counts a 0.98.5a provider as current.
   - **Performance:**
     - P1 (S): one `javap` per jar, not per class (`settings_keys.py:116`, `procgen_args.py:151`). That is 40-77% of a
       scan (UAF: 252 launches, 52.8 of 68.6 s), and revive repeats it.

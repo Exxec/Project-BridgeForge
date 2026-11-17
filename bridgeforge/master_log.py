@@ -18,7 +18,7 @@ from bridgeforge.scan.scan_json import _load_lenient_json_file
 DASH = "-"
 FIELDS = ["mod", "release_version", "archived", "live_validated", "status", "author", "policy", "files_vs_original",
           "what_was_done", "release_zips", "folder"]
-GENERIC = re.compile(r"revived for RC8 and archived", re.I)
+GENERIC = re.compile(r"revived (?:for \S+ )?and archived", re.I)  # any build since 96.5 A1 (2026-11-17), or none
 _STATUS = re.compile(r"Revival report status: \*\*([A-Z_]+)\*\* \(archived (\d{4}-\d\d-\d\d)\)")
 _LIVE = re.compile(r"(?i)live-validated (\d{4}-\d\d-\d\d)(?: \(test ([\w.-]+)\))?")
 
@@ -134,8 +134,16 @@ def archive_row(folder: Path, events: list[tuple[str, str]], operation: Path) ->
         "live_validated": _live_text(note, status, _live_record(operation, folder.name)),
         "status": status.group(1) if status else DASH, "author": author.group(1) if author else DASH,
         "policy": policy.group(1) if policy else DASH, "files_vs_original": _files_vs_original(note),
-        "what_was_done": " | ".join(done) if done else "Revived for RC8 (see workspace/REVIVAL_REPORT.md)",
+        "what_was_done": " | ".join(done) if done else _revived_for(note) + " (see workspace/REVIVAL_REPORT.md)",
     }
+
+
+def _revived_for(note: str) -> str:
+    """"Revived for 0.98.5a-RC7", from the note's credit line; the notes written while RC8 was the only target keep "RC8"."""
+    from bridgeforge.mod_changelog import NOTE_BUILD, build_label
+
+    found = NOTE_BUILD.search(note)
+    return f"Revived for {build_label(found.group(1))}" if found else "Revived"
 
 
 def _set_aside(done: Path) -> list[dict]:

@@ -47,7 +47,7 @@ def _log(root: Path, lines: list[str]) -> Path:
 
 def _run(root: Path, ws: Path, test_id: str, lines: list[str], expected: tuple[str, ...] = ("main_menu", "campaign_load")) -> tuple[Path, Path]:
     """A synthetic staged run of the workspace's mod: (rig, the run's own log). R1: acceptance needs this manifest."""
-    return bound_run(root, {"bf_fixture_radar": ws}, test_id, lines, expected=expected)
+    return bound_run(root, {"bf_fixture_radar": ws}, test_id, lines, expected=expected, core_build="0.98.5a-RC7")
 
 
 class AcceptTests(unittest.TestCase):
@@ -60,7 +60,7 @@ class AcceptTests(unittest.TestCase):
             report = (ws / "working" / "reports" / "REVIVAL_REPORT.md").read_text(encoding="utf-8")
             status = live_status(ws)
             record = json.loads((ws.parent / "_live" / "T-1.json").read_text(encoding="utf-8"))
-        self.assertIn("## Live run T-1 (2026-10-06, RC8 rig)", report)
+        self.assertIn("## Live run T-1 (2026-10-06, 0.98.5a-RC7 rig)", report)  # the build the rig's core reports (96.5 A1)
         self.assertIn("Not exercised: no raid happened", report)
         self.assertTrue(report.rstrip().endswith("LIVE_VALIDATED"))
         self.assertEqual(status["status"], "CURRENT")
