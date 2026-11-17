@@ -31,7 +31,7 @@ class SrcToJarTests(unittest.TestCase):
         src = root / f"build-{release}-{hashlib.md5(text.encode()).hexdigest()[:6]}"
         (src / "data" / "scripts").mkdir(parents=True)
         (src / "data" / "scripts" / "Spawner.java").write_text(text, encoding="utf-8")
-        done = subprocess.run([self.javac, "--release", release, "-nowarn", "-d", str(src / "out"), str(src / "data" / "scripts" / "Spawner.java")],
+        done = subprocess.run([self.javac, "--release", release, "-nowarn", "-encoding", "UTF-8", "-d", str(src / "out"), str(src / "data" / "scripts" / "Spawner.java")],
                               capture_output=True, text=True, check=False)
         self.assertEqual(done.returncode, 0, done.stderr)
         return (src / "out" / CLASS).read_bytes()

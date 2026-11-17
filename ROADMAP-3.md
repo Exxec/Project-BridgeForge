@@ -146,6 +146,9 @@ Manufactorum and Navarchy of Tania are revived (UNATTENDED_DONE), before their l
   applied change touches a jar-backed source; the packet is not done until the jar class is rebuilt. Subsumes 92.2's relink and
   92.3's dedupe. Test: an agent edit to `src/X.java` of a jar mod changes `X.class` in the jar.
   Built: `bytecode/src_to_jar.py` and `bridgeforge src-to-jar` (changed sources vs original/, javap proof against the reference core at the shipped release, `patch_jar_classes` install, ledger `working/reports/src-to-jar.json`); check `jar-source-not-rebuilt` (tier code, like jar-linkage-unresolved: an approved revive step, not a SUPPORTED_FINDINGS fixer); `revive` runs it when `jar-source-not-rebuilt` is approved (`--lib` for undeclared libraries). Real data, dry run: Tania 9 sources/15 classes PASS, Eridani (Java 8) PASS, proof against an already-patched jar REFUSED. Tests: `tests/test_src_to_jar.py`.
+  Open: sources are compiled as UTF-8; an author who built with a platform default (cp1252 on Windows with JDK 8-17) would be
+  refused by the proof (safe, but a manual step). Try the platform encodings after UTF-8 and compile the patch with the one that
+  matched. Found by CI 2026-11-17: the non-ASCII test's own javac read its source as cp1252 on the Windows runner.
 - 92.26 **Done 2026-11-16.** **`patch-jar-class` cannot compile against library mods or old class versions.** Tania's spawner imports LazyLib; there is
   no option for dependency jars ("package org.lazywizard.lazylib does not exist"). Resolve dependency jars from `mod_info.json`
   dependencies via the provider index / mods folder (Tania: LazyLib, MagicLib, Nexerelin `ExerelinCore.jar`; Eridani: LazyLib,
