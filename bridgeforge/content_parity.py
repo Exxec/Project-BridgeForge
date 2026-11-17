@@ -29,6 +29,7 @@ from .archive_intake import _normalized_member_name, inspect_zip_archive
 from .progress import Checkpoint, report
 from .removals import RemovalsError, covers, load_removals, split_explained
 from .safeio import atomic_write_json, atomic_write_text, safe_rmtree
+from bridgeforge.zipsafe import read_limited
 
 VERDICTS = ("LOSS_SUSPECTED", "REVIEW", "UNDETERMINED", "CLEAN")
 RESULT_JSON, RESULT_MD, CHECKPOINT = "CONTENT_PARITY.json", "CONTENT_PARITY.md", "CONTENT_PARITY.partial.jsonl"
@@ -121,7 +122,7 @@ def open_tree(path: Path) -> Iterator[Tree]:
             name = _normalized_member_name(entry.filename)
             if name and not entry.is_dir():
                 members[name] = entry
-        yield Tree({n: e.file_size for n, e in members.items()}, lambda n: archive.read(members[n]))
+        yield Tree({n: e.file_size for n, e in members.items()}, lambda n: read_limited(archive, members[n]))
 
 
 def _digest(data: bytes) -> str:

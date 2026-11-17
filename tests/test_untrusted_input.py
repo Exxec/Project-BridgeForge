@@ -1,13 +1,17 @@
 """ROADMAP 70 H2.4: untrusted archives and class files must not exhaust memory or hang a command."""
 from __future__ import annotations
 
+import hashlib
 import io
 import unittest
 import zipfile
+from unittest import mock
 
 from bridgeforge.atlas import atlas
 from bridgeforge.atlas.atlas_classfile import ClassFormatError, parse_class
-from bridgeforge.zipsafe import ZipEntryTooLarge, read_limited
+from bridgeforge.scan import scan_classfile
+from bridgeforge.zipsafe import ZipEntryTooLarge, entry_sha256, read_limited
+from tests.support import resolved_temp_dir
 from tests.test_atlas import build, make_mod, make_vanilla, temp_root
 
 
@@ -43,6 +47,30 @@ class ZipSafeTests(unittest.TestCase):
         info.CRC = 0xDEADBEEF
         with self.assertRaises(zipfile.BadZipFile):
             read_limited(archive, info)
+
+    def test_an_entry_hash_is_streamed_and_matches_the_whole_entry(self) -> None:
+        data = bytes(range(256)) * 9000  # over two read chunks
+        archive = _zip({"music.ogg": data})
+        self.assertEqual(entry_sha256(archive, "music.ogg"), hashlib.sha256(data).hexdigest())
+        self.assertEqual(entry_sha256(archive, archive.getinfo("music.ogg")), hashlib.sha256(data).hexdigest())
+
+
+class JarClassLimitTests(unittest.TestCase):
+    """ROADMAP-3 93.33: the scanner's jar walk reads class entries with a bound and names what it skipped."""
+
+    def test_a_class_over_the_limit_is_skipped_and_reported(self) -> None:
+        with resolved_temp_dir() as root:
+            jar = root / "mod.jar"
+            with zipfile.ZipFile(jar, "w") as out:
+                out.writestr("a/Small.class", b"\xca\xfe\xba\xbe" + b"\x00" * 8)
+                out.writestr("a/Big.class", b"\xca\xfe\xba\xbe" + b"\x00" * 200)
+            unreadable: list[str] = []
+            with mock.patch.object(scan_classfile, "MAX_CLASS_BYTES", 64):
+                members = [member for _jar, member, _data in scan_classfile.iter_class_files_in_jars([jar], unreadable=unreadable)]
+        self.assertEqual(members, ["a/Small.class"])
+        self.assertEqual(len(unreadable), 1)
+        self.assertIn("a/Big.class", unreadable[0])
+        self.assertIn("64 byte limit", unreadable[0])
 
 
 class ClassFileLimitTests(unittest.TestCase):

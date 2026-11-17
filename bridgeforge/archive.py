@@ -355,7 +355,7 @@ def write_readme_copies(target: Path) -> list[str]:
         with zipfile.ZipFile(source) as original, zipfile.ZipFile(copy, "w", zipfile.ZIP_DEFLATED) as out:
             for item in original.infolist():
                 if item.filename.lower() != "readme.txt":
-                    out.writestr(item, original.read(item.filename))
+                    out.writestr(item, read_limited(original, item.filename))
             out.writestr("readme.txt", readme)
         written.append(copy.name)
     return written

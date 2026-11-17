@@ -31,6 +31,7 @@ from pathlib import Path
 
 from .safeio import verify_written
 from bridgeforge.scan.scanner import _blank_java_comments, _loaded_mod_jars, _parse_class_file, _parse_json
+from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
 SCHEMA_VERSION = 1
 CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
@@ -328,8 +329,8 @@ def _aligned_reference_constants(own_jar: Path, ref_jar: Path, class_name: str, 
     member = class_name + ".class"
     try:
         with zipfile.ZipFile(own_jar) as own, zipfile.ZipFile(ref_jar) as ref:
-            own_count, own_table = _class_utf8_table(own.read(member))
-            ref_count, ref_table = _class_utf8_table(ref.read(member))
+            own_count, own_table = _class_utf8_table(read_limited(own, member, MAX_CLASS_BYTES))
+            ref_count, ref_table = _class_utf8_table(read_limited(ref, member, MAX_CLASS_BYTES))
     except (OSError, KeyError, zipfile.BadZipFile, IndexError):
         return None
     if own_count != ref_count:
@@ -475,7 +476,7 @@ def export_translation(mod_dir: Path) -> dict[str, object]:
                     if not name.endswith(".class"):
                         continue
                     try:
-                        data = archive.read(name)
+                        data = read_limited(archive, name, MAX_CLASS_BYTES)
                     except (zipfile.BadZipFile, OSError) as exc:
                         # The Chinese Nightcross jar had entries with bad CRCs; report, don't abort.
                         unreadable.append(f"{rel}!{name}: {exc}")
@@ -910,7 +911,7 @@ def _apply_jar(path: Path, entries: dict, applied: Counter, problems: list) -> N
     count = 0
     with zipfile.ZipFile(path) as src, zipfile.ZipFile(tmp, "w") as dst:
         for info in src.infolist():
-            data = src.read(info)
+            data = read_limited(src, info)
             wanted = by_class.get(info.filename[:-6]) if info.filename.endswith(".class") else None
             if wanted:
                 strings = _class_string_constants(data)
@@ -930,7 +931,7 @@ def _apply_jar(path: Path, entries: dict, applied: Counter, problems: list) -> N
             dst.writestr(info, data, compress_type=info.compress_type)
     with zipfile.ZipFile(tmp) as check:
         for info in check.infolist():
-            data = check.read(info)  # CRC verified on read
+            data = read_limited(check, info)  # CRC verified on read
             if info.filename.endswith(".class") and _parse_class_file(data) is None:
                 raise TranslationError(f"{info.filename} does not parse after rewriting")
     # A freshly copied jar is often held briefly by antivirus or an indexer on Windows (seen on

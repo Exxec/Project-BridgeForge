@@ -4,6 +4,7 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path, PurePosixPath
 from ..analysis_reuse import parsed_facts
+from ..zipsafe import MAX_CLASS_BYTES, read_limited
 from .scan_common import MAX_JAR_ENTRIES
 from .scan_json import _load_lenient_json_file
 
@@ -65,8 +66,7 @@ def _iter_class_files_in(target: Path):
                     if member.is_absolute() or ".." in member.parts:
                         continue
                     try:
-                        with archive.open(item) as class_file:
-                            data = class_file.read()
+                        data = read_limited(archive, item, MAX_CLASS_BYTES)
                     except (OSError, zipfile.BadZipFile, KeyError):
                         continue
                     yield jar, item.filename.replace("\\", "/"), data
@@ -423,9 +423,10 @@ def iter_class_files_in_jars(jars, unreadable: list[str] | None = None, max_entr
                     if member.is_absolute() or ".." in member.parts:
                         continue
                     try:
-                        with archive.open(item) as class_file:
-                            data = class_file.read()
-                    except (OSError, zipfile.BadZipFile, KeyError):
+                        data = read_limited(archive, item, MAX_CLASS_BYTES)
+                    except (OSError, zipfile.BadZipFile, KeyError) as exc:
+                        if unreadable is not None:  # an entry not looked inside is named too (ROADMAP-3 93.33)
+                            unreadable.append(f"{jar}!{item.filename}: {exc}")
                         continue
                     yield jar, item.filename.replace("\\", "/"), data
         except (OSError, zipfile.BadZipFile) as exc:

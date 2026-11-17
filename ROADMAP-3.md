@@ -242,6 +242,12 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   then `.read()`) and `behavior_discovery.py` line 182 (`archive.read(member)`) read class entries of untrusted jars unbounded, against
   the `zipsafe.read_limited` rule, and `tests/test_safeio_ratchet.py` does not count zip reads. Found by the 2026-11-17 ultracode
   assessment and verified.
+  **Done 2026-11-17.** A check over the whole package found 35 such reads in 25 modules, not two. Each now goes through
+  `zipsafe.read_limited` (class entries at `MAX_CLASS_BYTES`) or `zipsafe.entry_sha256`, a streamed hash used by intake's
+  written-file check and by done-audit. `iter_class_files_in_jars` names each class entry it skipped in `unreadable`. Tests:
+  `tests/test_safeio_ratchet.py` `BoundedZipReadTests` fails on any new `ZipFile.read`, or `.open(...).read()` without a size
+  (an AST check over the package, with detector cases); `tests/test_untrusted_input.py` covers the streamed hash and an oversize
+  class that is skipped and reported.
 - 93.34 **Findings that are already so on the previous build.** UAF 0.8.4c runs in the owner's RC8 game, yet its first revive listed
   115 findings: most (over-budget variants, oversized weapons, missing descriptions, unused weapon files, hull-mod instance state,
   the `fearless` personality no vanilla build defines) are identical on RC8. Mark each finding the reference build shares as

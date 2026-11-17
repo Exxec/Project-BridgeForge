@@ -22,6 +22,7 @@ from pathlib import Path
 
 from bridgeforge.scan.scanner import _load_lenient_json_file, _loaded_mod_jars
 from .system_reachability import entry_names, jar_classes, loadable_source, reachable_classes
+from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
 _CREATE_SYSTEM_SOURCE = re.compile(r'createStarSystem\(\s*"([^"]+)"\s*\)')
 _OP_LDC, _OP_LDC_W = 0x12, 0x13
@@ -192,7 +193,7 @@ def mod_placed_types(root: Path, types: set[str]) -> set[str]:
             with zipfile.ZipFile(jar) as archive:
                 for member in archive.namelist():
                     if member.endswith(".class"):
-                        data = archive.read(member)
+                        data = read_limited(archive, member, MAX_CLASS_BYTES)
                         parsed = _constant_pool(data)
                         if parsed:
                             values = {entry[1] for entry in parsed[0].values() if entry[0] == "utf8"}

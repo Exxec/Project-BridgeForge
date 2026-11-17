@@ -19,6 +19,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .progress import Checkpoint, report
+from bridgeforge.zipsafe import entry_sha256, read_limited
 
 CRASH_CLASS = frozenset({
     "jar-linkage-unresolved", "campaign-lookup-dereferenced-unguarded", "loose-script-compile-error",
@@ -57,7 +58,6 @@ def packaging_problems(folder: Path, root: Path) -> list[str]:
     <folder>-<version>.zip by `archive`; backups and other zips are not judged) must exist, hold no entry twice
     (Faction Relationships Uniquified's held Data/ and data/), name the version its mod_info.json declares (Zorg18's
     first V18+bf.5 zip still said V18+bf.7 inside), and hold the same files as the folder."""
-    import hashlib
     import zipfile
 
     from bridgeforge.live.live_trust import _mod_info, _sha256, shipped_files
@@ -85,7 +85,7 @@ def packaging_problems(folder: Path, root: Path) -> list[str]:
         twice = sorted(n for n, c in seen.items() if c > 1)
         if twice:
             problems.append(f"{len(twice)} entr{'y' if len(twice) == 1 else 'ies'} twice (case-insensitive): {', '.join(twice[:3])}")
-        info = archive.read(prefix + "mod_info.json").decode("utf-8-sig", "replace") if prefix + "mod_info.json" in names else ""
+        info = read_limited(archive, prefix + "mod_info.json").decode("utf-8-sig", "replace") if prefix + "mod_info.json" in names else ""
         from bridgeforge.scan.scanner import _parse_json
 
         try:
@@ -94,7 +94,7 @@ def packaging_problems(folder: Path, root: Path) -> list[str]:
             zipped_version = ""
         if version and zipped_version != version:
             problems.append(f"the zip's mod_info.json declares {zipped_version or 'no version'!r}, not {version!r}")
-        zipped = {n[len(prefix):].casefold(): hashlib.sha256(archive.read(n)).hexdigest() for n in inside}
+        zipped = {n[len(prefix):].casefold(): entry_sha256(archive, n) for n in inside}
     missing = sorted(set(folder_files) - set(zipped))
     extra = sorted(set(zipped) - set(folder_files))
     differ = sorted(k for k in set(folder_files) & set(zipped) if folder_files[k] != zipped[k])

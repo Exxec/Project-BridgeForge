@@ -13,6 +13,7 @@ from bridgeforge.project_board import layout_findings
 from bridgeforge.probe.probe_mod_build import RELEASE_RELATIVE
 from bridgeforge.reference_rigs import verify_reference_rig_manifest
 from bridgeforge.scan.scanner import _base_game_version, _load_lenient_json_file
+from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
 TARGET_BASE_GAME_VERSION = "0.98a"
 DEFAULT_BASELINE_RELATIVE = Path("bridgeforge-state") / "real-saves-baseline.json"
@@ -411,7 +412,7 @@ def core_build(core: Path) -> str | None:
     StarfarerLauncher.class (read 2026-10-04; the jar manifests carry no version)."""
     try:
         with zipfile.ZipFile(Path(core) / "starfarer_obf.jar") as jar:
-            data = jar.read("com/fs/starfarer/StarfarerLauncher.class")
+            data = read_limited(jar, "com/fs/starfarer/StarfarerLauncher.class", MAX_CLASS_BYTES)
     except (OSError, KeyError, zipfile.BadZipFile):
         return None
     match = _BUILD_PATTERN.search(data)

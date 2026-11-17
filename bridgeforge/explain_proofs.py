@@ -20,6 +20,7 @@ import json
 import zipfile
 from datetime import date
 from pathlib import Path
+from bridgeforge.zipsafe import read_limited
 
 CREDITS_FILE = "BRIDGEFORGE_CREDITS.txt"
 DESCRIPTIONS_RELATIVE = "data/strings/descriptions.csv"
@@ -215,7 +216,7 @@ def _safe_extract(archive: zipfile.ZipFile, destination: Path) -> int:
             target.mkdir(parents=True, exist_ok=True)
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(archive.read(info))
+        target.write_bytes(read_limited(archive, info))
         count += 1
     return count
 

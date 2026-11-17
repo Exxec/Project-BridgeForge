@@ -23,6 +23,7 @@ from collections import deque
 from pathlib import Path
 
 from bridgeforge.scan.scanner import _loaded_mod_jars
+from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
 _DOTTED = re.compile(r"[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+")
 _PACKAGE = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.M)
@@ -128,7 +129,7 @@ def jar_classes(root: Path) -> dict[str, tuple[bytes, set[str], set[str]]]:
                 for member in archive.namelist():
                     if not member.endswith(".class"):
                         continue
-                    data = archive.read(member)
+                    data = read_limited(archive, member, MAX_CLASS_BYTES)
                     parsed = _constant_pool(data)
                     refs: set[str] = set()
                     strings: set[str] = set()

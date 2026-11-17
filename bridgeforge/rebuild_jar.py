@@ -30,6 +30,7 @@ from pathlib import Path
 
 from bridgeforge.bytecode.java_toolchain import ClasspathResult, assemble_classpath, find_jdk, run_javac
 from .workspace import resolve_inside
+from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
 SCHEMA_VERSION = 1
 
@@ -292,7 +293,7 @@ def _diff_class(class_name: str, old: _ParsedClass, new: _ParsedClass) -> dict |
 
 def _classes_from_jar(data: bytes) -> dict[str, bytes]:
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
-        return {info.filename.replace("\\", "/"): archive.read(info) for info in archive.infolist() if not info.is_dir() and info.filename.lower().endswith(".class")}
+        return {info.filename.replace("\\", "/"): read_limited(archive, info, MAX_CLASS_BYTES) for info in archive.infolist() if not info.is_dir() and info.filename.lower().endswith(".class")}
 
 
 def compare_jars(original_bytes: bytes, new_bytes: bytes) -> dict:
@@ -354,7 +355,7 @@ def _package_jar(original_jar: Path, classes_dir: Path, output_jar: Path) -> lis
     class_files = sorted(path for path in classes_dir.rglob("*.class") if path.is_file())
     replacements = {path.relative_to(classes_dir).as_posix(): path for path in class_files}
     with zipfile.ZipFile(original_jar) as original:
-        original_entries = {info.filename: original.read(info) for info in original.infolist() if not info.is_dir()}
+        original_entries = {info.filename: read_limited(original, info) for info in original.infolist() if not info.is_dir()}
     contents = {name: (replacements[name].read_bytes() if name in replacements else data) for name, data in original_entries.items()}
     contents.update({name: path.read_bytes() for name, path in replacements.items()})
     output_jar.parent.mkdir(parents=True, exist_ok=True)

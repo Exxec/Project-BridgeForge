@@ -5,6 +5,7 @@ import io
 import struct
 import zipfile
 from pathlib import Path
+from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
 # Library packages a "rebuilt" jar may legitimately bundle because javac compiled the library's
 # sources off the classpath rather than the mod's own sources; real case: every Exigency rebuild
@@ -122,7 +123,7 @@ def _classes_from_zip(archive: zipfile.ZipFile) -> dict[str, bytes]:
     for info in archive.infolist():
         if info.is_dir() or not info.filename.lower().endswith(".class"):
             continue
-        classes[info.filename] = archive.read(info.filename)
+        classes[info.filename] = read_limited(archive, info.filename, MAX_CLASS_BYTES)
     return classes
 
 
@@ -161,7 +162,7 @@ def _resolve_jar_classes(path: Path, rebuilt_name: str | None, error_prefix: str
             chosen = jar_entries[0]
         else:
             chosen = max(jar_entries, key=lambda info: info.file_size)
-        jar_bytes = archive.read(chosen)
+        jar_bytes = read_limited(archive, chosen)
     with zipfile.ZipFile(io.BytesIO(jar_bytes)) as inner:
         return _classes_from_zip(inner)
 

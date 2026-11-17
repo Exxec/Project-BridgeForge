@@ -14,6 +14,7 @@ import zipfile
 from pathlib import Path
 
 from bridgeforge.bytecode.jar_audit import ClassFileError, parse_constant_pool
+from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
 # kind -> (API method names whose string argument is an id of that kind, table relative to the mod root)
 KIND_APIS: dict[str, tuple[frozenset[str], str]] = {
@@ -86,7 +87,7 @@ def used_ids_by_kind(root: Path) -> dict[str, dict[str, list[str]]]:
                     if not item.filename.endswith(".class"):
                         continue
                     try:
-                        pool = parse_constant_pool(archive.read(item))
+                        pool = parse_constant_pool(read_limited(archive, item, MAX_CLASS_BYTES))
                     except (ClassFileError, OSError, zipfile.BadZipFile):
                         continue
                     utf8 = {i: e[1] for i, e in enumerate(pool) if e is not None and e[0] == 1}

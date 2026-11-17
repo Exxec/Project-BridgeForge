@@ -25,6 +25,7 @@ import zipfile
 from pathlib import Path
 
 from .progress import Checkpoint, report
+from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
 RESULT_JSON, RESULT_MD, CHECKPOINT = "MODS_COMPAT.json", "MODS_COMPAT.md", "MODS_COMPAT.partial.jsonl"
 _NEW_GAME_KEYS = ("newGameSectorProcGen", "newGameCreationEntryPoint")
@@ -64,7 +65,7 @@ def mod_hooks(mod: Path, vanilla_industries: dict[str, str], vanilla_scripts: se
                 for name in archive.namelist():
                     if not name.endswith(".class"):
                         continue
-                    data = archive.read(name)
+                    data = read_limited(archive, name, MAX_CLASS_BYTES)
                     if b"setPluginClass" not in data:
                         continue
                     for industry in vanilla_industries:

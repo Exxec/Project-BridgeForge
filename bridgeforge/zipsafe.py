@@ -27,3 +27,14 @@ def read_limited(archive: zipfile.ZipFile, member: str | zipfile.ZipInfo, max_by
     if len(data) > max_bytes:
         raise ZipEntryTooLarge(f"{info.filename}: holds more than the {max_bytes} bytes its header declared")
     return data
+
+
+def entry_sha256(archive: zipfile.ZipFile, member: str | zipfile.ZipInfo, chunk_bytes: int = 1 << 20) -> str:
+    """The SHA-256 of an entry, read in chunks: hashing needs no limit, only bounded memory (ROADMAP-3 93.33)."""
+    import hashlib
+
+    digest = hashlib.sha256()
+    with archive.open(member) as handle:
+        for block in iter(lambda: handle.read(chunk_bytes), b""):
+            digest.update(block)
+    return digest.hexdigest()
