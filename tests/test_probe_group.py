@@ -377,6 +377,39 @@ class InstallTests(unittest.TestCase):
         self.assertNotIn("LIVE_VALIDATED", report_b)
         self.assertEqual(len(top_zip), 1)
 
+    def test_record_describes_the_save_its_own_log_wrote(self) -> None:
+        """ROADMAP-3 93.38: G3-LIVE-0985a-20261117 (KoC), recorded after group 4's run, listed Tania's mods as its save's: the
+        record read the rig's newest save. The run's log names the folder it saved to."""
+        import os
+        import time
+
+        from bridgeforge.live.live_trust import save_made_with
+        from bridgeforge.probe.probe_group import record_group, run_save_made_with
+        from tests.bound_runs import LOAD, MENU, bound_run
+        from tests.test_live_trust import DESCRIPTOR
+
+        saving = "100705 [main] INFO  com.fs.starfarer.campaign.save.CampaignGameManager  - Saving to ..\\saves/save_Own_1..."
+        with resolved_temp_dir() as root:
+            queue = root / "In operation"
+            a = _workspace(queue, "A", "mod_a", "hull_a")
+            rig, log = bound_run(root, {"mod_a": queue / "A"}, "GRP-S", [MENU, LOAD, saving])
+            for name, game in (("save_Own_1", "0.98a-RC8"), ("save_Later_2", "0.98.5a-RC7")):
+                (rig / "saves" / name).mkdir(parents=True)
+                (rig / "saves" / name / "descriptor.xml").write_text(DESCRIPTOR.replace("0.98a-RC8", game), encoding="utf-8")
+            later = time.time() + 60
+            os.utime(rig / "saves" / "save_Later_2", (later, later))  # another run's save is the newest
+            record_group(log, build_probe_config(a), queue, rig, test_id="GRP-S", today="2026-11-17")
+            run = json.loads((queue / "_live" / "GRP-S.json").read_text(encoding="utf-8"))
+            unsaved = run_save_made_with(rig, "\n".join([MENU, LOAD]), save_made_with)
+            # A path outside the rig is never read, even when a save is there: only its last part is looked up in saves/.
+            outside = root / "elsewhere" / "save_Outside_3"
+            outside.mkdir(parents=True)
+            (outside / "descriptor.xml").write_text(DESCRIPTOR, encoding="utf-8")
+            elsewhere = run_save_made_with(rig, saving.replace("..\\saves/save_Own_1", str(outside)), save_made_with)
+        self.assertEqual(run["save_made_with"]["game_version"], "0.98a-RC8")
+        self.assertIsNone(unsaved)  # a run that saved nothing has no save of its own, whatever else the rig holds
+        self.assertIsNone(elsewhere)
+
     def test_record_refresh_replaces_an_earlier_archive_only_when_asked(self) -> None:
         # Six archives made as READY_FOR_LIVE_TEST stayed that way after their runs passed (2026-10-11): `record --archive` met
         # the existing folder and stopped; `--refresh` is the owner's word to replace it.

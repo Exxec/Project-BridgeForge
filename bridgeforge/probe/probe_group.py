@@ -864,9 +864,19 @@ def _workspaces_by_mod_id(queue: Path, mods_dir: Path | None = None) -> dict[str
     return found
 
 
-def _newest_save_made_with(rig: Path, reader) -> dict | None:
-    saves = sorted((p for p in (rig / "saves").glob("save_*") if p.is_dir()), key=lambda p: p.stat().st_mtime) if (rig / "saves").is_dir() else []
-    return reader(saves[-1]) if saves else None
+# "CampaignGameManager  - Saving to ..\saves/save_LewisVerdun_4976405174046756277..." (0.98.5a-RC7 log, G3-LIVE-0985a-20261117).
+_SAVING_TO = re.compile(r"CampaignGameManager\s+-\s+Saving to (?P<path>.+?)\.\.\.\s*$", re.MULTILINE)
+
+
+def run_save_made_with(rig: Path, log_text: str, reader) -> dict | None:
+    """What the run's own save records: the last folder its log says the game saved to, read with `reader`. None when the run
+    saved nothing. The rig's newest save was read before, so a group recorded after a later run described that run's save:
+    G3-LIVE-0985a-20261117 (KoC) listed Tania's mods (ROADMAP-3 item 93.38, 2026-11-17). Only the path's last part is looked
+    up, and only as a `save_*` folder of the rig's own saves/, so a path in the log never leads outside the rig."""
+    names = [re.split(r"[\\/]", match.group("path").strip())[-1] for match in _SAVING_TO.finditer(log_text)]
+    names = [name for name in names if re.fullmatch(r"save_[^\\/]+", name)]
+    folder = Path(rig) / "saves" / names[-1] if names else None
+    return reader(folder) if folder is not None and folder.is_dir() else None
 
 
 def evaluate_member_scenarios(log: Path, workspaces: dict[str, Path]) -> dict[str, dict]:
@@ -942,7 +952,7 @@ def record_group(log: Path, config: dict, queue: Path, rig: Path, *, test_id: st
     run_record = write_run_record(queue, test_id, tested, triage=triage_log(log, mods_dir=Path(rig) / "mods"),
                                   verdicts={m: v["verdict"] for m, v in report["members"].items()}, probe_config=config,
                                   core_baseline=_repo_root() / DEFAULT_CORE_BASELINE_RELATIVE, today=today,
-                                  save_made_with=_newest_save_made_with(Path(rig), save_made_with), rig_state=read_rig_state(Path(rig)),
+                                  save_made_with=run_save_made_with(Path(rig), text, save_made_with), rig_state=read_rig_state(Path(rig)),
                                   evidence=evidence, manifest=manifest, campaign_perf=report.get("campaign_perf"),
                                   process_exit_code=exit_code, process_exit_observed=exit_observed,
                                   scenario=scenario_blocks or None, exercised=exercised or None)
