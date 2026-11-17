@@ -2,6 +2,11 @@
 
 **Implementation instruction, 2026-10-24:** owner requested "plan S series implementation then proceed to start S1". The [implementation plan](S_SERIES_IMPLEMENTATION_PLAN.md) orders S1-S4; S1 has started with the compatibility map and offline read-only workspace adapter. The earlier proposal/baseline text below is dated history. Qualification profile enforcement, real pilot/rig access, save/gameplay changes, publication and milestone acceptance retain their explicit gates; S2-S4 are planned, not implemented.
 
+**Addition approved 2026-11-17:** the [feature genome track](FEATURE_GENOME_ROADMAP.md) (ROADMAP-3 item 94) moves single
+features between mods and game builds. It works within the boundaries below: every insertion is an owner-requested,
+recorded departure from restoration (not an autonomous redesign), licence decisions travel with each feature, and the
+exclusions in "Deliberate exclusions" still apply to everything the track does not explicitly add.
+
 Proposed strategy for owner review, 2026-10-17. Planning horizon: approximately 12-24 months, expressed as four
 outcome-gated releases rather than dated commitments. No development capacity or dedicated rig budget has been established.
 Application source is unchanged by this planning exercise. Baseline inspected: `3342654d`.
