@@ -1,1 +1,0 @@
-- Feature genome track approved (ROADMAP-3 item 94, `docs/FEATURE_GENOME_ROADMAP.md`): extract and insert features across mods and builds in phases 94.G1-94.G7, with owner decisions GD-1-GD-5, refinements GR-1-GR-6, pilots P1-P4, an effort estimate, and each sister repository's portion recorded in its own roadmap.

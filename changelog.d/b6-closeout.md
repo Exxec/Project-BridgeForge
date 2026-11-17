@@ -1,1 +1,0 @@
-- Refresh the B-series architecture map, module placement and consumer-shim retirement rules; update CLAUDE paths and record remaining review/merge gates without marking item 83 complete.

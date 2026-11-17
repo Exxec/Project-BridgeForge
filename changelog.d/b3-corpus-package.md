@@ -1,1 +1,0 @@
-- Reorganize corpus analysis, indexing, inventory and command modules into a subpackage without changing behavior.

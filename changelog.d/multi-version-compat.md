@@ -1,1 +1,0 @@
-- Proposal `docs/MULTI_VERSION_COMPAT_DESIGN.md`: a game-build registry and per-build fact states so BridgeForge, Salvor, VoidSmith, Project Go and RevenantLib follow a new Starsector build without hard-coded version strings.

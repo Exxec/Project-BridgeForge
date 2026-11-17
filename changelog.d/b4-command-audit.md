@@ -1,1 +1,0 @@
-- Document all 267 current command paths and bounded static references across BridgeForge, sibling repositories and local rig scripts for B4 owner review; command grouping and deprecation remain undecided.
