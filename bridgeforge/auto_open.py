@@ -25,11 +25,11 @@ from collections import Counter
 from pathlib import Path
 
 from .automation import tier_for
-from .baseline import finding_dict_baseline_key, mod_baseline_keys
+from .baseline import finding_dict_baseline_key, mod_baseline_keys, mod_baseline_path
 from .finding_stats import read_ledger
-from .progress import report
+from .progress import Checkpoint, report
 from .report_status import is_closed
-from bridgeforge.scan.scan_registry import assess
+from bridgeforge.scan.scan_registry import REGISTRY_NAME, assess
 
 SCHEMA_VERSION = 1
 POLICY_NAME = "AUTOMATION_POLICY.json"
@@ -127,22 +127,57 @@ def discover(queue: Path) -> list[Path]:
     return sorted(p for p in queue.iterdir() if p.is_dir() and not p.name.startswith("_") and (p / "reports").is_dir() and not is_closed(p))
 
 
-def auto_open(queue: Path, *, policy: Path | None = None, progress=None) -> dict:
+CHECKPOINT_NAME = "auto-open.partial.jsonl"
+
+
+def _inputs_stamp(workspace: Path) -> list[list]:
+    """Size and modification time of each file `explain_workspace` reads besides the tree it fingerprints: the scan
+    registry, REVIVE.json, the escalation ledger and packets, and the mod's baseline."""
+    reports = workspace / "reports"
+    paths = [reports / REGISTRY_NAME, reports / "revive" / "REVIVE.json", reports / "escalations" / "ledger.jsonl",
+             *sorted((reports / "escalations").glob("*.json"))]
+    baseline = mod_baseline_path(workspace / "working")
+    stamp = []
+    for path in [*paths, *([baseline] if baseline else [])]:
+        try:
+            info = path.stat()
+        except OSError:
+            stamp.append([path.name, None, None])
+        else:
+            stamp.append([path.name, info.st_size, info.st_mtime_ns])
+    return stamp
+
+
+def auto_open(queue: Path, *, policy: Path | None = None, progress=None, checkpoint: Path | None = None) -> dict:
+    """`checkpoint`: a file that keeps each finished workspace, so an interrupted walk resumes (long-running rule; ROADMAP-3
+    96.5 A3). The command passes `<queue>/auto-open.partial.jsonl`; it is removed when the walk completes.
+    The header holds each workspace's `_inputs_stamp`, as `escalation queue` holds REVIVE.json's time: a revive, scan,
+    escalation or baseline change in between starts the walk afresh. An edit inside `working/` that no scan recorded is not
+    seen by a resumed walk; a completed walk always reads everything again."""
     queue = Path(queue).expanduser().resolve()
     policy = Path(policy) if policy else queue / POLICY_NAME
     standing = set(_read_json(policy).get("approved_fixers") or {})
     workspaces = discover(queue)
     mods: dict[str, list[dict]] = {}
     counts: dict[str, Counter] = {}
-    for index, workspace in enumerate(workspaces, 1):
-        started = time.monotonic()
-        rows = explain_workspace(workspace, standing)
-        if rows:
-            mods[workspace.name] = rows
-            for row in rows:
-                counts.setdefault(row["id"], Counter())[row["reason"]] += 1
-        if progress:
-            progress(index, len(workspaces), workspace.name, rows, time.monotonic() - started)
+    header = {"command": "auto-open", "queue": str(queue), "workspaces": [w.name for w in workspaces],
+              "approved_fixers": sorted(standing)}
+    if checkpoint:
+        header["inputs"] = {w.name: _inputs_stamp(w) for w in workspaces}
+    with Checkpoint(checkpoint, header) as done:
+        for index, workspace in enumerate(workspaces, 1):
+            started = time.monotonic()
+            cached = done.get(workspace.name)
+            rows = cached["rows"] if cached is not None else explain_workspace(workspace, standing)
+            if cached is None:
+                done.add(workspace.name, {"rows": rows})
+            if rows:
+                mods[workspace.name] = rows
+                for row in rows:
+                    counts.setdefault(row["id"], Counter())[row["reason"]] += 1
+            if progress:
+                progress(index, len(workspaces), workspace.name, rows, None if cached is not None else time.monotonic() - started)
+        done.finish()
     totals = Counter(row["reason"] for rows in mods.values() for row in rows)
     return {"schema_version": SCHEMA_VERSION, "mode": "AUTO_OPEN", "queue": str(queue), "workspaces": len(workspaces),
             "mods_with_open_auto_findings": len(mods), "totals": {r: totals.get(r, 0) for r in REASONS},
@@ -177,11 +212,12 @@ def add_parser(subcommands) -> None:
 def run_cli(args: argparse.Namespace) -> int:
     import sys
 
-    def progress(done: int, total: int, name: str, rows: list[dict], seconds: float) -> None:
+    def progress(done: int, total: int, name: str, rows: list[dict], seconds: float | None) -> None:
         report(done, total, name, f"{len(rows)} open auto-tier id(s)", seconds)
 
     try:
-        result = auto_open(args.queue, policy=args.policy, progress=None if args.quiet else progress)
+        result = auto_open(args.queue, policy=args.policy, progress=None if args.quiet else progress,
+                           checkpoint=Path(args.queue).expanduser().resolve() / CHECKPOINT_NAME)
     except (AutoOpenError, OSError) as exc:
         print(f"bridgeforge: {exc}", file=sys.stderr)
         return 2

@@ -177,6 +177,35 @@ Check S series implementation plan and if applicable add remaining items to road
   - **Architecture and process:**
     - A3 (S): `escalation run --all` breaks the long-running rule (no progress, no checkpoint). `auto-open` and
       `atlas migrations` are missing from the list, and a test should require it.
+      **Done 2026-11-17.** All three now print progress and resume from a checkpoint, and all three are listed in
+      `progress.LONG_RUNNING_COMMANDS`.
+      - `escalation run --all` prints one line per packet and offers `--quiet`. Finished packets go to
+        `reports/escalations/run-all.partial.jsonl`, so an interrupted run resumes after the last one; an agent attempt can
+        take half an hour.
+      - `auto-open` keeps each finished workspace in `<queue>/auto-open.partial.jsonl`.
+      - `atlas migrations` keeps each finished pair in `<--write DIR>/<stem>.partial.jsonl`, when the pair labels are
+        unique. Without `--write` it keeps none: the atlas folder is not its to write into.
+      - Each checkpoint is removed when its run completes.
+      - A checkpoint's header names everything that changes a result, so a changed input starts the run afresh instead of
+        reusing a stale record:
+        - `escalation run --all`: every run option and each packet file's SHA-256, so packets `revive` wrote afresh are
+          run, not skipped;
+        - `auto-open`: each workspace's scan registry, REVIVE.json, escalation ledger and packets, and baseline, by size
+          and time. This is how `escalation queue` holds REVIVE.json's time. An edit inside `working/` that no scan
+          recorded is not seen by a resumed walk.
+        - `atlas migrations`: the API jars, by the SHA-256 the api-diff catalogue records.
+      - The new list test runs the other way round from the old one: every command that offers `--quiet` must be
+        listed, since `--quiet` exists only where a command prints per-item progress. It found exactly `auto-open` and
+        `atlas migrations`.
+
+      Tests: `tests/test_progress.py` `LongRunningListTests`:
+      - the reverse list check;
+      - one resume test per command: interrupted on the second item, then resumed, the finished item is not redone and
+        the checkpoint is gone;
+      - one test per command that a changed input starts afresh: a rewritten packet, another `--timeout` or
+        `--auto-accept`, a workspace revived in between, other API jars.
+
+      Each fails with its guard removed (mutation-checked).
     - A8 (S): the revival guide still teaches the RC8 workflow (docs pass, 96.3).
     - A9 (S): retire two dead tools scripts and a fourth status list (`prepush-check.ps1` lacks NOT_REVIVABLE).
     - A2 (S/M): one resolver for the checkout and the state folder. The `.venv` holds a stale non-editable copy,
