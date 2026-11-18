@@ -185,8 +185,9 @@ python -m bridgeforge docs-index          # after adding a check or CLI option; 
 uv lock --check                           # after touching pyproject dependencies
 ```
 
-The tracked hooks in `tools/githooks/` run ruff and `docs-index --check` before a commit, and the cross-cutting tests plus the
-touched modules' tests before a push. Enable them once per clone with `git config core.hooksPath tools/githooks`. The relative
+The tracked hooks in `tools/githooks/` run ruff and `docs-index --check` before a commit. Before a push they lint the branch's
+changed files, check the docs, then run the fast cases of the cross-cutting tests plus the tests named after or importing a
+changed module (`merge_train.select_test_modules`; a module over 25 importers is left to CI; 96.5 C5). Enable them once per clone with `git config core.hooksPath tools/githooks`. The relative
 path works in every worktree, and `bridgeforge hygiene` reports when they are off (96.5 C1).
 
 Optional extra: `pip install ".[archives]"` (py7zr) lets `corpus-index` read `.7z`; tests needing it skip

@@ -2,10 +2,7 @@
 """ROADMAP-3 83 B0: moving a source must never remove it from an audit."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
-import shutil
-import subprocess
 import unittest
 from unittest.mock import Mock, patch
 
@@ -158,23 +155,19 @@ class SourcePathsTests(unittest.TestCase):
             paths = ["bridgeforge/pkg/reader.py", "bridgeforge\\pkg\\reader.py", "docs/reader.py"]
             self.assertEqual(test_modules_for(paths, root), ["tests.pkg.test_reader_extra", "tests.test_reader"])
 
-    def test_prepush_powershell_mapping_matches_python_mapping(self):
-        shell = shutil.which("powershell") or shutil.which("pwsh")
-        if not shell:
-            self.assertIn("-Recurse", (ROOT / "tools/prepush-check.ps1").read_text(encoding="utf-8"))
-            return
+    def test_prepush_selection_is_the_python_rule_only(self):
+        # The PowerShell copy of the mapping had to be kept in step with this one; since 96.5 C5 the script asks
+        # tools/prepush-select.py (merge_train.select_test_modules), so there is one rule.
+        script = (ROOT / "tools/prepush-check.ps1").read_text(encoding="utf-8")
+        self.assertIn("prepush-select.py", script)
+        self.assertNotIn("Get-ChildItem -LiteralPath $testsRoot", script)
         with resolved_temp_dir() as root:
             for name in ("test_reader.py", "pkg/test_reader_extra.py", "__pycache__/test_reader_bad.py"):
                 path = root / "tests" / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("", encoding="utf-8")
-            script = (ROOT / "tools/prepush-check.ps1").read_text(encoding="utf-8")
-            selector = script[script.index("$modules=@($crossCutting)"):script.index("# Git runs hooks")]
-            setup = "$root='" + str(root).replace("'", "''") + "'\n$crossCutting=@()\n"
-            setup += "function git { if($args -contains 'diff'){'bridgeforge/pkg/reader.py'}; $global:LASTEXITCODE=0 }\n"
-            result = subprocess.run([shell, "-NoProfile", "-Command", setup + selector + "\nConvertTo-Json -InputObject @($modules) -Compress"],
-                                    capture_output=True, text=True, timeout=30, check=True)
-            self.assertEqual(set(json.loads(result.stdout)), set(test_modules_for(["bridgeforge/pkg/reader.py"], root / "tests")))
+            self.assertEqual(set(test_modules_for(["bridgeforge/pkg/reader.py"], root / "tests")),
+                             {"tests.test_reader", "tests.pkg.test_reader_extra"})
 
     def test_command_registry_accepts_dotted_module_paths(self):
         module = Mock()

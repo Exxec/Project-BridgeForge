@@ -29,7 +29,8 @@ class HookGitEnvironmentTests(unittest.TestCase):
     def test_the_pre_push_hook_clears_git_variables_before_its_tests(self):
         script = (ROOT / "tools" / "prepush-check.ps1").read_text(encoding="utf-8")
         clear = script.index("GIT_*")
-        self.assertLess(clear, script.index("-m unittest"))
+        self.assertLess(clear, script.index("run_partitioned.py"))  # the tests (96.5 C5)
+        self.assertLess(clear, script.index("docs-index --check"))  # and the static tier, which runs Python too
 
 
 if __name__ == "__main__":
