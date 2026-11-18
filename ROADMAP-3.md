@@ -770,6 +770,36 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - both screenshot scripts carry no path.
 
   All 5 fail on the old code.
+- 93.48 (S) **`src-to-jar` could write a mod's bytes over any existing file.** A lead from the 93.45 security review,
+  reproduced 2026-11-17.
+  - **Where:** `src_to_jar.prove_authoritative` compares the jar's classes with those the original sources compile to. It
+    wrote each shipped inner class to `<scratch>/shipped/<entry name>`, checking only that `<scratch>/ref/<entry name>`
+    existed. Both paths climb out by the same number of `..`.
+  - **With `/` separators,** javac refused the jar ("cannot access data.scripts": Java's zip reader rejects `..` parts), so
+    the proof stopped before writing.
+  - **Stored with backslashes** (`data/scripts/Spawner$\..\..\..\..\..\..\victim.class`), the entry is a plain file name to
+    javac, which compiled. Python's zipfile on Windows reads `\` as `/`, so the write left the scratch folder and replaced
+    an existing file with the entry's bytes. The proof reported no problem.
+  - **Reach:** `src-to-jar` on a mod whose jar ships such an entry. Any existing file the user can write, at a guessable
+    place relative to the temp folder, was in reach, such as BridgeForge's cached helper classes there, which it runs
+    later.
+
+  **Done 2026-11-17.**
+  - `_class_entries` counts only entries with a plain binary class name (`zipsafe.javap_class_name`).
+  - The write loop also refuses a path that resolves outside the scratch folder.
+
+  Tests: `tests/test_src_to_jar.py`:
+  - `test_a_jar_entry_cannot_write_outside_the_proofs_folder`: the backslash entry, end to end;
+  - `test_the_proof_writes_nothing_outside_its_folder_even_past_the_name_filter`: the second guard alone;
+  - `test_only_plain_class_entries_are_read_for_the_proof`.
+
+  Each fails with its guard removed. The first failed on the old code with `b'hostile bytes' != b'untouched'`.
+  The review's other leads, read 2026-11-17:
+  - `research_decompile` already refuses `..` and `:` in entry names, and on Windows zipfile turns `\` into `/` before
+    that check;
+  - `corpus-index` checks 7-Zip members, and `corpus_releases` extracts them into memory;
+  - `sibling-assets` refuses `..`, and its escape cases copy a file onto itself;
+  - `delegate-method` takes its class names from the user's own spec.
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct

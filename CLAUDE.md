@@ -155,6 +155,8 @@ on the second PC) and `memory-mirror`.
   every javac run `-proc:none`: a mod's jar on the classpath may declare an annotation processor (93.46). Never build a
   cmd.exe line or a PowerShell script from a mod's text: pass a path to PowerShell in an environment variable, and make a
   name from a mod's id plain first (`mass_test.log_name_for`). `launch.command_line` refuses `"`, `%` and `!` (93.47).
+  Write a jar entry to disk only under a name `javap_class_name` accepts, and check the path stays in its folder: Python's
+  zipfile on Windows reads `\` in a name as `/`, Java does not (93.48).
 - Accepted-finding baselines are stamped with the mod version and expire on any version change (`baseline-audit`,
   `baseline-accept`); `archive` refuses a stale baseline unless `reports/SHIPPED_CHANGES.json` carries a written `baseline` reason.
 - `tests/known_failures.json` lists known environmental failures with an expiry; `test_guard` reports them without failing.
