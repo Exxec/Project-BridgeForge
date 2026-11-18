@@ -7,6 +7,7 @@ import subprocess
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 from bridgeforge.bytecode.src_to_jar import changed_sources, read_ledger, src_to_jar, unbuilt_sources
 from bridgeforge.scan.scanner import scan_mod
@@ -58,6 +59,71 @@ class SrcToJarTests(unittest.TestCase):
     def _jar_class(self, ws: Path) -> bytes:
         with zipfile.ZipFile(ws / "working" / "jars" / "mod.jar") as archive:
             return archive.read(CLASS)
+
+    def test_a_jar_entry_cannot_write_outside_the_proofs_folder(self) -> None:
+        """ROADMAP-3 93.48: `prove_authoritative` wrote each shipped inner class to `<scratch>/shipped/<entry name>` and checked
+        only that `<scratch>/ref/<entry name>` existed. Both climb out by the same number of `..`.
+        - With `/` separators javac refuses the jar ("cannot access data.scripts"), so the proof stopped first.
+        - Stored with backslashes, the entry is a plain file name to javac, which compiled, while Python's zipfile on Windows
+          reads it as `data/scripts/Spawner$/../../../../../../victim.class`: it overwrote a file outside the scratch folder
+          (2026-11-17)."""
+        from bridgeforge.bytecode import src_to_jar as module
+
+        class FixedScratch:
+            def __init__(self, path: Path) -> None:
+                self.path = path
+
+            def __enter__(self) -> str:
+                self.path.mkdir(parents=True)
+                return str(self.path)
+
+            def __exit__(self, *_exc) -> bool:
+                return False
+
+        with resolved_temp_dir() as root:
+            ws = self._workspace(root)
+            victim = root / "victim.class"
+            victim.write_bytes(b"untouched")
+            # <root>/scratch/proof/shipped/data/scripts/Spawner$ is six folders below <root>. ZipInfo turns "\" into "/" when
+            # it is created, so the raw name is set afterwards.
+            hostile = zipfile.ZipInfo("placeholder")
+            hostile.filename = "data/scripts/Spawner$" + "\\.." * 6 + "\\victim.class"
+            with zipfile.ZipFile(ws / "working" / "jars" / "mod.jar", "a") as archive:
+                archive.writestr(hostile, b"hostile bytes")
+            with mock.patch.object(module.tempfile, "TemporaryDirectory", return_value=FixedScratch(root / "scratch" / "proof")):
+                module.prove_authoritative(ws, "jars/mod.jar", ["data/scripts/Spawner.java"], reference_core=root / "core",
+                                           jdk=Path(self.javac).resolve().parent.parent)
+            self.assertEqual(victim.read_bytes(), b"untouched")
+
+    def test_the_proof_writes_nothing_outside_its_folder_even_past_the_name_filter(self) -> None:
+        """The second guard of 93.48, on its own: a name the filter let through still may not leave the scratch folder."""
+        from bridgeforge.bytecode import src_to_jar as module
+
+        with resolved_temp_dir() as root:
+            ws = self._workspace(root)
+            victim = root / "victim.class"
+            victim.write_bytes(b"untouched")
+            real = module._class_entries(ws / "working" / "jars" / "mod.jar", "data/scripts/Spawner")
+            hostile = "data/scripts/Spawner$/" + "../" * 12 + victim.relative_to(victim.anchor).as_posix()
+            with mock.patch.object(module, "_class_entries", return_value={**real, hostile: b"hostile bytes"}), \
+                    mock.patch.object(module, "_javap_text", return_value="same"), \
+                    mock.patch.object(Path, "is_file", lambda path: True):
+                problems = module.prove_authoritative(ws, "jars/mod.jar", ["data/scripts/Spawner.java"],
+                                                      reference_core=root / "core", jdk=Path(self.javac).resolve().parent.parent)
+            self.assertEqual(victim.read_bytes(), b"untouched")
+        self.assertTrue(any("points outside the proof's folder" in problem for problem in problems), problems)
+
+    def test_only_plain_class_entries_are_read_for_the_proof(self) -> None:
+        from bridgeforge.bytecode.src_to_jar import _class_entries
+
+        with resolved_temp_dir() as root:
+            jar = root / "mod.jar"
+            with zipfile.ZipFile(jar, "w") as archive:
+                for name in ["data/scripts/Spawner.class", "data/scripts/Spawner$1.class",
+                             "data/scripts/Spawner$/../../x.class", "data/scripts/Spawner$-J-x.class"]:
+                    archive.writestr(name, b"\xca\xfe\xba\xbe")
+            self.assertEqual(sorted(_class_entries(jar, "data/scripts/Spawner")),
+                             ["data/scripts/Spawner$1.class", "data/scripts/Spawner.class"])
 
     def test_an_agent_edit_is_flagged_then_built_into_the_jar(self) -> None:
         with resolved_temp_dir() as root:

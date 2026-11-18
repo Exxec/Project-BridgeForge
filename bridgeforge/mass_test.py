@@ -214,8 +214,14 @@ def _retry_with_lunalib(rig: Path, target: dict, needs: dict, variants: list[dic
         row["verdict"] = "NEEDS_LUNALIB"
 
 
+def log_name_for(mod_id: str) -> str:
+    """`mass-<id>` with anything but ASCII letters, digits, `.`, `_` and `-` replaced: the name reaches cmd.exe's launch line and
+    a PowerShell screenshot path, and a mod's id is the mod's to choose (ROADMAP-3 93.47)."""
+    return "mass-" + (re.sub(r"[^A-Za-z0-9._-]+", "_", str(mod_id))[:80] or "_")
+
+
 def _test_one(rig: Path, target: dict, needs: dict, variants: list[dict], screen: bool, skip_baseline_validated: bool, repeats: int, timeout: int, parallel: int, ledger: Path | None, skip_known: bool, keep_logs: Path, lunalib_needs: dict | None = None) -> dict:
-    run_kwargs = dict(repeats=repeats, timeout=timeout, quiet=True, parallel=parallel, ledger=ledger, skip_known=skip_known, mod_sources=needs["folders"], keep_logs=keep_logs / target["name"], log_name=f"mass-{target['id']}")
+    run_kwargs = dict(repeats=repeats, timeout=timeout, quiet=True, parallel=parallel, ledger=ledger, skip_known=skip_known, mod_sources=needs["folders"], keep_logs=keep_logs / target["name"], log_name=log_name_for(target["id"]))
     baseline, stress = pick_screen_variants(variants)
     assumed: list[dict] = []
     first = variants
