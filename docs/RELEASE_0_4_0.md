@@ -45,6 +45,25 @@ not a change to the tag or its source.
 The release notes are CHANGELOG.md's 0.4.0 section (144 entries) under a short header. 0.3.0 was tagged (`v0.3.0`) but
 never published, so readers coming from 0.2.0 should also read 0.3.0's section. No existing tag or release was changed.
 
+## Known issues found after publication
+
+The same evening, while batching javap (96.5 P1), a security problem turned up. An independent security review then found
+three more of the same kind. All four let a mod's own files steer a tool BridgeForge starts. v0.4.0 has all four:
+
+| Item | What a mod could do | Fixed by |
+|---|---|---|
+| 93.45 | put JVM options on javap's command line through a jar entry's name (`-J...`) during a scan | #113 |
+| 93.46 | make `compile-check` run an annotation processor from its own jar, through a line break in a mod_info.json `"jars"` entry | #115 |
+| 93.47 | run a command through cmd.exe or PowerShell during `mass-test`, through its mod id | #116 |
+| 93.48 | make `src-to-jar` overwrite an existing file outside its scratch folder, through a jar entry stored with backslashes | #117 |
+
+- **Notices:** v0.4.0's release page carries a known-issue note.
+- **0.4.1:** it carries all four fixes (the owner's word, 2026-11-17). Do not scan, compile-check, mass-test or `src-to-jar` mods
+  you do not trust with v0.4.0.
+- **Earlier releases,** checked against the tags: v0.2.0, the earlier published release, has none of the four routes.
+  The one exception is 93.46's related part: its `compile` (build) also passed no `-proc:none`. The unpublished v0.3.0 tag
+  already had 93.46's compile-check route.
+
 ## Scope
 
 - **Contents:** the assets are tool-only. They contain no game files, original mods, rigs or saves.

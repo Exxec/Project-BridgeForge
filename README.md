@@ -6,11 +6,11 @@ Revivals target Starsector 0.98.5a-RC7 / Java 17; 0.98a-RC8, the previous target
 (`bridgeforge target show`). A clean scan or successful compile is not proof that a mod loads, preserves its features
 or is safe for existing saves.
 
-**Version status, checked 2026-11-17:** this checkout identifies as 0.4.0 (the bundled probe mod is 0.3.3). The newest published release is
+**Version status, checked 2026-11-17:** this checkout identifies as 0.4.1 (the bundled probe mod is 0.3.3). The newest published release is
 [0.4.0, a pre-release](https://github.com/Exxec/Project-BridgeForge/releases/tag/v0.4.0). 0.3.0 was tagged but never published.
 Its [publication receipt](docs/RELEASE_0_4_0.md) records the exact source, the checks and the artifact hashes;
 [0.2.0's receipt](docs/RELEASE_0_2_0.md) does the same for that release. Main can be ahead of the newest release: later
-changes wait as fragments in `changelog.d/` until they are assembled under 0.4.1 in the [CHANGELOG](CHANGELOG.md). For a
+changes wait as fragments in `changelog.d/` until they are assembled under the next version in the [CHANGELOG](CHANGELOG.md). For a
 given wheel, use the docs at its tag.
 
 Start with the [documentation index](docs/INDEX.md), [revival guide](docs/BRIDGEFORGE_REVIVAL_GUIDE.md),
