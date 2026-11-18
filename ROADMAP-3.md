@@ -140,6 +140,29 @@ Check S series implementation plan and if applicable add remaining items to road
   - **Performance:**
     - P1 (S): one `javap` per jar, not per class (`settings_keys.py:116`, `procgen_args.py:151`). That is 40-77% of a
       scan (UAF: 252 launches, 52.8 of 68.6 s), and revive repeats it.
+      **Done 2026-11-17.** `bytecode/javap_batch.class_listings` gives javap all of a jar's selected classes in one call, as
+      many calls as the Windows command-line limit needs. It splits the output back per class by each listing's declaration
+      line.
+      - The split was checked with JDK 25: each listing equals that class's own call byte for byte. The test jar had an inner
+        class, an enum, a generic interface, a class without a SourceFile attribute, string constants holding newlines and
+        braces, and a missing class.
+      - Entry names still pass `zipsafe.javap_class_name` (93.45).
+      - Both checks use it.
+      - A batch is used only when its listings name exactly the classes asked for, in order; otherwise it is read again one
+        class at a time. An independent review found why: javap names the class a file declares, so `p/Foo.class`
+        declaring `p.A` prints as `p.A`. Split by name, that listing was lost, and a decoy could replace a real class's
+        listing. One call per class credited it to `p/Foo.class`, and so does the fallback.
+
+      On UAF's three jars the two checks went from 252 javap launches and 49.5 s to 5 launches and 1.9-2.5 s, with identical
+      results: 29 settings reads and 0 procgen suspects, the same SHA-256 for both lists.
+      Tests: `tests/test_javap_batch.py`:
+      - one launch per jar for both checks (3 launches before);
+      - the split;
+      - the command-line budget;
+      - the declared-name cases: a misnamed file, a decoy, a class javap cannot read;
+      - two real-javap comparisons with one call per class: a plain jar read in one launch, and a jar with a misnamed and a
+        missing class.
+      The 93.45 tests in `tests/test_untrusted_input.py` now watch `javap_batch`'s launches.
     - P2 (S-M): provider lookups read only each provider's `mod_info.json` (`substitutes.provider_for`). About 35 s per
       scan with providers (Bultach: 29.9 -> 68.2 s).
     - P3 (S): revive drops its duplicate final scan; compile-check caches its harness and core compile (about 2 s a scan).
