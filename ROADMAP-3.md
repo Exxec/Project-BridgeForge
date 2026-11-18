@@ -153,6 +153,26 @@ Check S series implementation plan and if applicable add remaining items to road
       loop on 610 inputs (truncated, overlong and surrogate sequences, stray bytes), unmixed across 8 threads, and a
       2.4 MB file with 120,000 isolated CP-1252 bytes.
     - P7 (S): parse the vanilla core once per process (about 2 s a scan, about 6 min per done-audit).
+      **Done 2026-11-17.** A profile of a second Bultach scan in the same process showed three core readers called twice per
+      scan and cached nothing:
+      - `scan_jarchecks._vanilla_api_jar_class_info`: every class in starfarer.api.jar and starfarer_obf.jar;
+      - `_vanilla_loose_script_fqns`;
+      - `scan_content._vanilla_faction_ids`.
+
+      Each is now read once per core per process. The key is the core's resolved path plus the API jars' size and
+      modification time, and for factions the folder's modification time, so another build or a replaced jar is read
+      again. The jar classes come back read-only and the script names as a frozenset; faction ids come back as a fresh set
+      for each caller, because the rules check adds the mod's factions to it.
+      Measured on RC7's core (White_Legion, under load): the jar classes take 0.56 s (6,442 classes), the scripts 0.02 s and
+      the factions 0.04 s, and a repeat call under 1 ms. A scan called each twice, so the first scan saves about 0.6 s and
+      every later scan in the process about 1.2 s. For `done-audit` over 184 archives that is about 4 minutes. Two Bultach
+      scans gave the same 79 findings (same SHA-256) before and after.
+      Tests: `tests/test_core_cache.py`:
+      - parsed once;
+      - read again after a jar changes;
+      - read-only;
+      - scripts read once;
+      - each caller gets its own faction set.
     - P5, P8 (M, S): read each source and each jar class once per scan.
     - P9 (M): memoize the AST helper in tests (an estimated 2-3 of 11 minutes).
     - P10 (M): a process pool for target-impact and corpus-index (5 -> about 1.5 min).

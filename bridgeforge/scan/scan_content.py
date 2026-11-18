@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+from functools import lru_cache
 from ..models import ScanResult
 from pathlib import Path
 from .scan_campaign import _declared_spec_ids
@@ -460,17 +461,29 @@ def _scan_procgen_rows(root: Path, result: ScanResult, vanilla_core: Path | None
 
 
 def _vanilla_faction_ids(vanilla_core: Path) -> set[str]:
+    """The core's faction ids, read once per core per process (ROADMAP-3 96.5 P7). Each caller gets its own set: the rules
+    check adds the mod's factions to it."""
+    faction_dir = Path(vanilla_core).resolve() / "data" / "world" / "factions"
+    try:
+        stamp = faction_dir.stat().st_mtime_ns
+    except OSError:
+        stamp = None
+    return set(_faction_ids(str(faction_dir), stamp))
+
+
+@lru_cache(maxsize=4)
+def _faction_ids(faction_dir: str, _stamp: int | None) -> frozenset[str]:
     ids: set[str] = set()
-    faction_dir = vanilla_core / "data" / "world" / "factions"
-    if not faction_dir.is_dir():
-        return ids
-    for path in faction_dir.glob("*.faction"):
+    folder = Path(faction_dir)
+    if not folder.is_dir():
+        return frozenset()
+    for path in folder.glob("*.faction"):
         data = _load_lenient_json_file(path)
         if isinstance(data, dict):
             faction_id = data.get("id")
             if isinstance(faction_id, str) and faction_id:
                 ids.add(faction_id)
-    return ids
+    return frozenset(ids)
 
 
 _RULES_MERGED_CONDITION = re.compile(r"[A-Za-z0-9_)]\$[A-Za-z_]")
