@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Tracked git hook (ROADMAP-3 96.5 C1). Enable once per clone: git config core.hooksPath tools/githooks
+# (`bridgeforge hygiene` reports when it is off). It runs tools/precommit-check.ps1, which is Windows PowerShell.
+set -euo pipefail
+repo_root="$(git rev-parse --show-toplevel)"
+if ! command -v powershell.exe >/dev/null 2>&1; then
+    echo "pre-commit: powershell.exe not found; tools/precommit-check.ps1 skipped" >&2
+    exit 0
+fi
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$repo_root/tools/precommit-check.ps1"

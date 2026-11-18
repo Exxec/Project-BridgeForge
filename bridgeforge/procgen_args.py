@@ -18,10 +18,10 @@ bundled sources are parsed; jar classes are read with javap when a JDK is availa
 from __future__ import annotations
 
 import re
-import subprocess
 import zipfile
 from pathlib import Path
-from bridgeforge.zipsafe import javap_class_name, read_class
+from bridgeforge.bytecode.javap_batch import class_listings
+from bridgeforge.zipsafe import read_class
 
 _CALL = re.compile(r"\b(initStar|addPlanet)\s*\(")
 _NUMBER = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*[fFdD]?\s*$")
@@ -138,8 +138,9 @@ def javap_suspects(listing: str) -> list[tuple[str, str, list[str]]]:
 
 
 def jar_suspects(jar: Path, javap: Path) -> list[tuple[str, str, str, list[str]]]:
-    """(class, method, call, problems) for one jar's classes that mention initStar or addPlanet. A class whose entry name is
-    not a plain binary name is skipped: javap would read it as an option or a path (ROADMAP-3 93.45)."""
+    """(class, method, call, problems) for one jar's classes that mention initStar or addPlanet, from one javap launch per jar
+    (96.5 P1). A class whose entry name is not a plain binary name is skipped: javap would read it as an option or a path
+    (93.45)."""
     try:
         with zipfile.ZipFile(jar) as archive:
             names = [n for n in archive.namelist() if n.endswith(".class") and (b"initStar" in (data := read_class(archive, n) or b"")
@@ -147,10 +148,6 @@ def jar_suspects(jar: Path, javap: Path) -> list[tuple[str, str, str, list[str]]
     except (OSError, zipfile.BadZipFile):
         return []
     found = []
-    for name in names:
-        if (cls := javap_class_name(name)) is None:
-            continue
-        out = subprocess.run([str(javap), "-c", "-p", "-constants", "-cp", str(jar), cls], capture_output=True,
-                             text=True, encoding="utf-8", errors="replace").stdout
-        found += [(name, method, call, problems) for method, call, problems in javap_suspects(out)]
+    for name, listing in class_listings(javap, jar, names).items():
+        found += [(name, method, call, problems) for method, call, problems in javap_suspects(listing)]
     return found

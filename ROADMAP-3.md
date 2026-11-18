@@ -140,8 +140,45 @@ Check S series implementation plan and if applicable add remaining items to road
   - **Performance:**
     - P1 (S): one `javap` per jar, not per class (`settings_keys.py:116`, `procgen_args.py:151`). That is 40-77% of a
       scan (UAF: 252 launches, 52.8 of 68.6 s), and revive repeats it.
+      **Done 2026-11-17.** `bytecode/javap_batch.class_listings` gives javap all of a jar's selected classes in one call, as
+      many calls as the Windows command-line limit needs. It splits the output back per class by each listing's declaration
+      line.
+      - The split was checked with JDK 25: each listing equals that class's own call byte for byte. The test jar had an inner
+        class, an enum, a generic interface, a class without a SourceFile attribute, string constants holding newlines and
+        braces, and a missing class.
+      - Entry names still pass `zipsafe.javap_class_name` (93.45).
+      - Both checks use it.
+      - A batch is used only when its listings name exactly the classes asked for, in order; otherwise it is read again one
+        class at a time. An independent review found why: javap names the class a file declares, so `p/Foo.class`
+        declaring `p.A` prints as `p.A`. Split by name, that listing was lost, and a decoy could replace a real class's
+        listing. One call per class credited it to `p/Foo.class`, and so does the fallback.
+
+      On UAF's three jars the two checks went from 252 javap launches and 49.5 s to 5 launches and 1.9-2.5 s, with identical
+      results: 29 settings reads and 0 procgen suspects, the same SHA-256 for both lists.
+      Tests: `tests/test_javap_batch.py`:
+      - one launch per jar for both checks (3 launches before);
+      - the split;
+      - the command-line budget;
+      - the declared-name cases: a misnamed file, a decoy, a class javap cannot read;
+      - two real-javap comparisons with one call per class: a plain jar read in one launch, and a jar with a misnamed and a
+        missing class.
+      The 93.45 tests in `tests/test_untrusted_input.py` now watch `javap_batch`'s launches.
     - P2 (S-M): provider lookups read only each provider's `mod_info.json` (`substitutes.provider_for`). About 35 s per
       scan with providers (Bultach: 29.9 -> 68.2 s).
+      **Done 2026-11-17.** `provider_for` and `provider_index` take `contents=False`, which reads only mod_info.json and leaves
+      `provides` empty.
+      - Five scan steps look providers up: `scan_classfile`, `scan_compile`, `scan_content`, `scan_libraries` and
+        `scan_references`. They use only a provider's id, path and version, and now ask for just those. Before, one scan
+        built the full index five times.
+      - `dependency-substitutes`, revive's substitution cache and `corpus provider-index` still read contents.
+
+      Measured on White_Legion with `In operation` as the provider root: providers added 3.1 s to a Bultach scan
+      (17.5 -> 20.6 s) and now add 0.5 s (14.8 -> 15.3 s). The findings are the same 104, with the same SHA-256.
+      Tests: `tests/test_substitutes.py` `IdOnlyProviderIndexTests`:
+      - an id-only index opens no CSV or jar;
+      - a whole scan asks only for ids.
+
+      Both fail with their guard removed.
     - P3 (S): revive drops its duplicate final scan; compile-check caches its harness and core compile (about 2 s a scan).
     - P4 (S): AST facts resolve each file once (about 3.5 s a scan).
     - P6 (S): fix the quadratic `_invalid_utf8_offsets`. It is the suite's slowest test at 24 s, and large CP-1252
@@ -153,6 +190,26 @@ Check S series implementation plan and if applicable add remaining items to road
       loop on 610 inputs (truncated, overlong and surrogate sequences, stray bytes), unmixed across 8 threads, and a
       2.4 MB file with 120,000 isolated CP-1252 bytes.
     - P7 (S): parse the vanilla core once per process (about 2 s a scan, about 6 min per done-audit).
+      **Done 2026-11-17.** A profile of a second Bultach scan in the same process showed three core readers called twice per
+      scan and cached nothing:
+      - `scan_jarchecks._vanilla_api_jar_class_info`: every class in starfarer.api.jar and starfarer_obf.jar;
+      - `_vanilla_loose_script_fqns`;
+      - `scan_content._vanilla_faction_ids`.
+
+      Each is now read once per core per process. The key is the core's resolved path plus the API jars' size and
+      modification time, and for factions the folder's modification time, so another build or a replaced jar is read
+      again. The jar classes come back read-only and the script names as a frozenset; faction ids come back as a fresh set
+      for each caller, because the rules check adds the mod's factions to it.
+      Measured on RC7's core (White_Legion, under load): the jar classes take 0.56 s (6,442 classes), the scripts 0.02 s and
+      the factions 0.04 s, and a repeat call under 1 ms. A scan called each twice, so the first scan saves about 0.6 s and
+      every later scan in the process about 1.2 s. For `done-audit` over 184 archives that is about 4 minutes. Two Bultach
+      scans gave the same 79 findings (same SHA-256) before and after.
+      Tests: `tests/test_core_cache.py`:
+      - parsed once;
+      - read again after a jar changes;
+      - read-only;
+      - scripts read once;
+      - each caller gets its own faction set.
     - P5, P8 (M, S): read each source and each jar class once per scan.
     - P9 (M): memoize the AST helper in tests (an estimated 2-3 of 11 minutes).
     - P10 (M): a process pool for target-impact and corpus-index (5 -> about 1.5 min).
@@ -165,6 +222,21 @@ Check S series implementation plan and if applicable add remaining items to road
       `test_gates`, `test_checks_index`, `test_cli_golden` and others) and care that a required check still reports.
     - C1 (S): the git hooks never run (`.githooks/` is ignored and `core.hooksPath` is unset). A pre-commit that
       regenerates the generated files would have caught the stale CHECKS.md.
+      **Done 2026-11-17.**
+      - The hooks are tracked in `tools/githooks/` (`pre-commit`, `pre-push`, executable). They call the tracked
+        `tools/precommit-check.ps1` and `tools/prepush-check.ps1`, and skip with a note where there is no PowerShell.
+      - Enable them once per clone with `git config core.hooksPath tools/githooks`. The relative path works in every worktree.
+      - The pre-commit check now also runs `docs-index --check` when Python files are staged. Checked by hand: with a staged
+        new scan function it refused with exit 14 and named the fix; on clean changes it passed in 7.8 s.
+      - `hygiene` reports the hooks: SKIPPED in a repository without `tools/githooks/`, PASS when `core.hooksPath` points
+        there, otherwise a FINDING with the fix.
+
+      Tests: `tests/test_hygiene.py` `HooksTests`:
+      - a repository without the hooks is skipped;
+      - off is a FINDING with the fix, and on passes;
+      - this repository's hooks are tracked as executable and call its checks, including the `docs-index --check` call.
+
+      The last two fail with their guard removed (mutation-checked).
     - C5 (S): a pre-push static tier plus tests selected by import, under 2 minutes.
     - C6 (S): the same JDK locally and on CI, and `-encoding` on every test javac (14 of 16 lack it).
     - C7, C8 (S): wall-clock budgets to `process_time`, `timeout-minutes`, `buffer=True`; a shared setup step and a
@@ -281,6 +353,22 @@ Check S series implementation plan and if applicable add remaining items to road
     (pyproject, `bridgeforge/__init__.py`, `uv.lock`). Salvor's pin `bridgeforge>=0.4,<0.5` covers it.
   - **Publication:** tag and publish follow 0.4.0's process (`docs/RELEASE_0_4_0.md`). The receipt will be
     `docs/RELEASE_0_4_1.md`.
+
+  **Done 2026-11-17: v0.4.1 is published, and is the first full release** (2026-11-18 01:02 UTC as a pre-release, made a
+  full release at 01:23 UTC). The receipt is `docs/RELEASE_0_4_1.md`.
+  - The annotated tag `v0.4.1` peels to `ed77cbb`, #121's merge.
+  - Checked before tagging:
+    - the full suite at that commit, in a clean worktree: 2987 tests, OK (skipped=12); hermeticity PASS;
+    - main CI's nine jobs on that commit (run 44210899558). A tag push runs no CI since #107.
+  - Wheel and sdist were built from a clean checkout. Every packaged file Git tracks equals its blob (wheel 400, sdist 722), and
+    an installed-wheel check passed, before tagging and again on the wheel downloaded from the public release.
+  - The draft's and then the public release's assets were downloaded. Both matched `SHA256SUMS.txt` and GitHub's digests, and
+    the blob check passed again on the public download.
+  - v0.4.0's release page now names all four problems and links v0.4.1; only that paragraph changed.
+  - Owner, the same evening: "You can make it a full release instead of pre-release".
+    - At 01:23 UTC v0.4.1 became a full release, marked Latest. Its notes' opening sentence now says so; nothing else changed.
+    - Read back: the flags, `releases/latest`, the notes, the asset digests and the tag.
+    - 0.4.0 and 0.2.0 stay pre-releases. A full release certifies the package, not any mod: the live work stays open.
 
 **95. Less hand work and faster re-validation for game updates (owner 2026-11-17: "1 through 5 add to roadmap. 6 I'm not sure we can do that always but if it can be optional that would be great. All others approved."; "Implement the smaller items not the greater phases like S and G").**
 **Approved.** Found taking the six-mod batch, United Aurora Federation and Sunrider through revival and live tests on
@@ -846,6 +934,36 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - `corpus-index` checks 7-Zip members, and `corpus_releases` extracts them into memory;
   - `sibling-assets` refuses `..`, and its escape cases copy a file onto itself;
   - `delegate-method` takes its class names from the user's own spec.
+- 93.49 (S/M) **A probe battle can stall, so its round never ends.** SR6-LIVE-0985a-20261117 (Bultach Coalition, probe 0.3.3,
+  Fast Rendering + Prepatcher, JDK 25, the setup SR5 passed with) ended LIVE_STUCK at `combat-round-1`.
+  - **Timeline:** round 1 started at 203.6 s. For about 100 s after that the log shows only repeated LunaLib settings errors
+    (shaderLib's `enableFullExplosionEffects`), then nothing until the harness gave up.
+  - **93.40's screenshot** (`SR6-LIVE-0985a-20261117.round1-no-end.png`) shows the game running, not frozen. The HUD says
+    "NO ENEMY PRESENCE" and "SHUTTLE READY FOR COMMAND TRANSFER": the player's flagship is gone, and no enemy is near.
+  - **Coverage:** `report` showed FATAL 0 and MOD-ERROR 0, with ORK PASS and the owner's two accepted ids, but round 2's hulls
+    (61-105) never fought. The run was not recorded.
+  - **Reading:** nothing in the probe mission ends a battle whose remaining ships never meet. This is likely what SR4 hit
+    too (93.40). Which ships were left is not shown; the log does not name them.
+  - **Proposal:** the probe's combat plugin ends a battle after a quiet spell (no hull damaged or destroyed for N seconds).
+    It logs `combat|END` with the reason and the ships still alive per side, so the run goes on to the next round; `report`
+    shows such a round as fought with a WARN. This needs probe 0.3.4 and a live run.
+- 93.50 (S) **A vanished game window ends a live run with an exception.** SR7-LIVE-0985a-20261117 (Bultach again, after SR6)
+  passed its smoke. Then, during New Game:
+  - the game read the newest save (log line 30197 at 120.4 s: `Reading save data from [..\saves\save_HekaWillis_...]`,
+    written by SR6);
+  - the log then ends with the JVM's code-cache summary; there is no hs_err file, and `windows.txt` lists no dialog;
+  - the harness raised `RuntimeError: the game window is gone` from `new_game`'s click, with no verdict.
+  - **Two parts:**
+    - The harness should end any stage whose window is gone as LIVE_STUCK, naming the stage and the log's last lines, as
+      93.37 does for a battle.
+    - Why a save was read during New Game is not shown. The rig's `saves/` held 14 saves from the day's runs, and
+      `probe-group install` leaves them. Moving the rig's saves aside before each run would make every run start the same
+      way.
+- 93.51 (S) **Two lower-risk leads from the 93.45 security review,** read 2026-11-17, not yet fixed:
+  - BridgeForge's helper classes are cached in the temp folder and reused without a check (`bytecode.py`, `java_ast.py`,
+    `delegate_method.py`). On a shared POSIX `/tmp` another local user could plant one. Windows' temp folder is per user.
+  - `decompiler-review --execute` with a `.bat` adapter: Python quotes an argument only when it holds a space, so an input
+    path without spaces reaches cmd.exe unquoted, and an `&` in it would act. The owner's paths all hold spaces.
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct

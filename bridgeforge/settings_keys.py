@@ -13,10 +13,10 @@ reads with opt*/has guards are not flagged.
 from __future__ import annotations
 
 import re
-import subprocess
 import zipfile
 from pathlib import Path
-from bridgeforge.zipsafe import javap_class_name, read_class
+from bridgeforge.bytecode.javap_batch import class_listings
+from bridgeforge.zipsafe import read_class
 
 GETTERS = ("getFloat", "getInt", "getBoolean", "getString", "getColor", "getDouble", "getLong")
 _SOURCE_READ = re.compile(r"getSettings\s*\(\s*\)\s*\.\s*(" + "|".join(GETTERS) + r")\s*\(\s*\"([^\"]+)\"\s*\)")
@@ -105,18 +105,14 @@ def javap_reads(listing: str) -> list[tuple[str, str]]:
 
 
 def jar_reads(jar: Path, javap: Path) -> list[tuple[str, str, str]]:
-    """(class, getter, key) for classes in a jar that call SettingsAPI getters. A class whose entry name is not a plain
-    binary name is skipped: javap would read it as an option or a path (ROADMAP-3 93.45)."""
+    """(class, getter, key) for classes in a jar that call SettingsAPI getters, from one javap launch per jar (96.5 P1). A class
+    whose entry name is not a plain binary name is skipped: javap would read it as an option or a path (93.45)."""
     try:
         with zipfile.ZipFile(jar) as archive:
             names = [n for n in archive.namelist() if n.endswith(".class") and b"com/fs/starfarer/api/SettingsAPI" in (read_class(archive, n) or b"")]
     except (OSError, zipfile.BadZipFile):
         return []
     found = []
-    for name in names:
-        if (cls := javap_class_name(name)) is None:
-            continue
-        out = subprocess.run([str(javap), "-c", "-p", "-constants", "-cp", str(jar), cls],
-                             capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
-        found += [(name, getter, key) for getter, key in javap_reads(out)]
+    for name, listing in class_listings(javap, jar, names).items():
+        found += [(name, getter, key) for getter, key in javap_reads(listing)]
     return found
