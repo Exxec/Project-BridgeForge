@@ -104,6 +104,19 @@ class InstalledModsTests(unittest.TestCase):
             self.assertEqual(found, _installed(mods))
         self.assertEqual(found, {"alpha": {"folder": mods / "alpha", "version": "1.0", "name": "Alpha"}})
 
+    def test_a_version_object_reads_as_the_dotted_version_the_save_records(self) -> None:
+        """mod_info's {"major", "minor", "patch"} form was stored as its Python repr, so a save made with 1.20.0 read as
+        VERSION_CHANGED against the same 1.20.0: 15 of 61 such findings on an RC8 save (White_Legion, 2026-11-17)."""
+        with resolved_temp_dir() as root:
+            mods = root / "mods"
+            for mod_id, version in (("agc", {"major": "1", "minor": "20", "patch": "0"}), ("asf", {"major": 1, "minor": 7, "patch": 1})):
+                (mods / mod_id).mkdir(parents=True)
+                (mods / mod_id / "mod_info.json").write_text(json.dumps({"id": mod_id, "name": mod_id, "version": version}), encoding="utf-8")
+            self.assertEqual({k: v["version"] for k, v in installed_mods(mods).items()}, {"agc": "1.20.0", "asf": "1.7.1"})
+            save = _save(root, [("agc", "1.20.0"), ("asf", "1.7.2")], '<WSR.V z="2"></WSR.V>')
+            result = diagnose(save, mods)
+        self.assertEqual([(p["class"], p["mod"]) for p in result["problems"]], [("VERSION_CHANGED", "asf")])
+
 
 class RemovalPlanTests(unittest.TestCase):
     def test_objects_are_droppable_unless_something_outside_refers_to_them(self) -> None:

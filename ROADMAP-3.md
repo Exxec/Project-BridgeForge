@@ -896,6 +896,23 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     `delegate_method.py`). On a shared POSIX `/tmp` another local user could plant one. Windows' temp folder is per user.
   - `decompiler-review --execute` with a `.bat` adapter: Python quotes an argument only when it holds a space, so an input
     path without spaces reaches cmd.exe unquoted, and an `&` in it would act. The owner's paths all hold spaces.
+- 93.52 (S) **save-doctor reported equal versions as changed.** Found testing Salvor's provider on real saves (owner
+  2026-11-17: "improve/test Salvor" between CI waits). `save_doctor.installed_mods`, the provider contract Salvor imports,
+  stored mod_info's `{"major", "minor", "patch"}` version as its Python repr. A save made with 1.20.0 then read as
+  VERSION_CHANGED against the same 1.20.0.
+  - 16 of 61 VERSION_CHANGED on one of the owner's RC8 saves were this.
+  - 32 of 43 on the 16 saves Test1's 0.98.5a rig wrote on 2026-11-17 were this. The other 11 are real: probe 0.3.2 saves
+    against the installed 0.3.3.
+
+  **Done 2026-11-17.** The version goes through `corpus_releases.version_text`.
+  - With it, the rig saves' diagnosis matches the runs that wrote them:
+    - each save's enabled mods match its run's manifest;
+    - no false MOD_MISSING or CLASS_UNRESOLVED;
+    - the 0.98.5a-RC7 game version is read.
+  - The owner's seven RC8 saves were read in place and not changed.
+
+  Test: `tests/test_save_doctor.py` (an object version against the dotted one, and a real change still reported);
+  mutation-checked.
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct

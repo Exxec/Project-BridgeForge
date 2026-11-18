@@ -47,12 +47,16 @@ _JAVA_KEYWORDS = frozenset(
 
 
 def installed_mods(mods_dir: Path) -> dict[str, dict]:
-    """Public provider contract used by Salvor: installed mods keyed by mod id."""
+    """Public provider contract used by Salvor: installed mods keyed by mod id. `version` is the dotted text a save's
+    descriptor records, also for mod_info's {"major", "minor", "patch"} form (whose Python repr read as a changed version)."""
+    from bridgeforge.corpus.corpus_releases import version_text
+
     found: dict[str, dict] = {}
     for info_path in sorted(Path(mods_dir).glob("*/mod_info.json")):
         info = _load_lenient_json_file(info_path) or {}
         if isinstance(info, dict) and info.get("id"):
-            found[str(info["id"])] = {"folder": info_path.parent, "version": str(info.get("version") or ""), "name": str(info.get("name") or "")}
+            found[str(info["id"])] = {"folder": info_path.parent, "version": version_text(info.get("version") or ""),
+                                      "name": str(info.get("name") or "")}
     return found
 
 
