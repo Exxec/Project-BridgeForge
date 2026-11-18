@@ -165,6 +165,21 @@ Check S series implementation plan and if applicable add remaining items to road
       `test_gates`, `test_checks_index`, `test_cli_golden` and others) and care that a required check still reports.
     - C1 (S): the git hooks never run (`.githooks/` is ignored and `core.hooksPath` is unset). A pre-commit that
       regenerates the generated files would have caught the stale CHECKS.md.
+      **Done 2026-11-17.**
+      - The hooks are tracked in `tools/githooks/` (`pre-commit`, `pre-push`, executable). They call the tracked
+        `tools/precommit-check.ps1` and `tools/prepush-check.ps1`, and skip with a note where there is no PowerShell.
+      - Enable them once per clone with `git config core.hooksPath tools/githooks`. The relative path works in every worktree.
+      - The pre-commit check now also runs `docs-index --check` when Python files are staged. Checked by hand: with a staged
+        new scan function it refused with exit 14 and named the fix; on clean changes it passed in 7.8 s.
+      - `hygiene` reports the hooks: SKIPPED in a repository without `tools/githooks/`, PASS when `core.hooksPath` points
+        there, otherwise a FINDING with the fix.
+
+      Tests: `tests/test_hygiene.py` `HooksTests`:
+      - a repository without the hooks is skipped;
+      - off is a FINDING with the fix, and on passes;
+      - this repository's hooks are tracked as executable and call its checks, including the `docs-index --check` call.
+
+      The last two fail with their guard removed (mutation-checked).
     - C5 (S): a pre-push static tier plus tests selected by import, under 2 minutes.
     - C6 (S): the same JDK locally and on CI, and `-encoding` on every test javac (14 of 16 lack it).
     - C7, C8 (S): wall-clock budgets to `process_time`, `timeout-minutes`, `buffer=True`; a shared setup step and a
