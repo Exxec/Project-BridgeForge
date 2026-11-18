@@ -247,7 +247,7 @@ def _dependency_roots(root: Path, provider_roots: list[Path] | None) -> list[Pat
         from ..substitutes import provider_index
 
         deps = set(declared_dependencies(root) or [])
-        _DEPENDENCY_ROOTS_CACHE[key] = [Path(p.path) for p in provider_index([Path(r) for r in provider_roots], exclude=root)
+        _DEPENDENCY_ROOTS_CACHE[key] = [Path(p.path) for p in provider_index([Path(r) for r in provider_roots], exclude=root, contents=False)
                                         if p.mod_id in deps] if deps else []
     return _DEPENDENCY_ROOTS_CACHE[key]
 
