@@ -181,6 +181,12 @@ Check S series implementation plan and if applicable add remaining items to road
         - the matrix job runs and skips its steps, since a matrix job skipped whole reports once under its unexpanded name.
       - **A failed scope job runs everything:** each job that needs it carries `!cancelled()`. Otherwise a failed scope job
         would skip them, and skipped checks read as passed.
+      - **Checked on GitHub** with a draft pull request based on this branch that changed one Markdown file (#126, closed
+        unmerged, its branch deleted):
+        - Change scope saw only `docs/INDEX.md` and set `docs_only=true`.
+        - Lint and Documentation tests passed: 46 tests, hermeticity PASS.
+        - The four matrix checks reported under their own names, in 4-7 s with their steps skipped.
+        - Coverage, Dependency audit, uv.lock in sync and Shared fixtures showed as skipped.
 
       Tests: `tests/test_ci_scope.py`:
       - the classifier and its command line;
