@@ -197,7 +197,8 @@ one Python passed while argparse output, home and checkout paths, and junction h
 
 CI (`.github/workflows/ci.yml`) runs all of these, plus disjoint fast/slow test jobs on Windows and Ubuntu with
 Python 3.15, a separate full coverage job and a coverage floor (`[tool.coverage.report] fail_under` in pyproject; raise
-it when coverage rises, never lower it).
+it when coverage rises, never lower it). A pull request that changes only documents runs Lint and the test modules in
+`tests/doc_tests.json`; a push to main always runs everything (`tools/ci-scope.py`, ROADMAP-3 96.5 C3).
 
 ## Test conventions
 

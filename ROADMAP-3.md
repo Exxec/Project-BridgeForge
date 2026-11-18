@@ -220,6 +220,37 @@ Check S series implementation plan and if applicable add remaining items to road
       PR commit runs once. A branch pushed without a PR runs no CI, and this repository opens a PR for every change. The
       docs-only path filter is still open: it needs a list of the tests that read documents (`tests/test_roadmap_lint`,
       `test_gates`, `test_checks_index`, `test_cli_golden` and others) and care that a required check still reports.
+      **Done 2026-11-17.** A pull request that changes only documents runs Lint and a new Documentation tests job. Its other
+      checks show as skipped, and a push to main still runs everything.
+      - **The decision:** `tools/ci-scope.py` reads the pull request's own changes, its merge commit against the base. A
+        change is documentation only when every changed path is a Markdown file outside `bridgeforge/`, `tests/`,
+        `probe-mod/`, `tools/` and `.github/`. Markdown under those folders is input: package data
+        (`kit_resources/TRIAL_GUIDE.md`), fixtures, CI.
+      - **The list:** `tests/doc_tests.json` holds the test modules that read a document, with the documents each reads.
+        - It was measured: the whole suite (2987 tests) ran under an audit hook on `open()`, and six modules opened a
+          Markdown file in the checkout.
+        - The guesses above were wrong: `test_gates` and `test_cli_golden` read none, and `test_release_notes` works on
+          temporary copies.
+        - The tests that start a child process were read by hand; none reads a repository document.
+        - A documentation-only run is 46 tests in about 12 s here, against about 10 minutes for the suite.
+      - **Every check name still reports:**
+        - the single jobs skip whole, and a skipped job reports under its own name;
+        - the matrix job runs and skips its steps, since a matrix job skipped whole reports once under its unexpanded name.
+      - **A failed scope job runs everything:** each job that needs it carries `!cancelled()`. Otherwise a failed scope job
+        would skip them, and skipped checks read as passed.
+      - **Checked on GitHub** with a draft pull request based on this branch that changed one Markdown file (#126, closed
+        unmerged, its branch deleted):
+        - Change scope saw only `docs/INDEX.md` and set `docs_only=true`.
+        - Lint and Documentation tests passed: 46 tests, hermeticity PASS.
+        - The four matrix checks reported under their own names, in 4-7 s with their steps skipped.
+        - Coverage, Dependency audit, uv.lock in sync and Shared fixtures showed as skipped.
+
+      Tests: `tests/test_ci_scope.py`:
+      - the classifier and its command line;
+      - the list, and that each document it names is documentation;
+      - the workflow's wiring.
+
+      Each guard fails its test when removed (mutation-checked).
     - C1 (S): the git hooks never run (`.githooks/` is ignored and `core.hooksPath` is unset). A pre-commit that
       regenerates the generated files would have caught the stale CHECKS.md.
       **Done 2026-11-17.**
