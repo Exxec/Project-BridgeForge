@@ -140,8 +140,45 @@ Check S series implementation plan and if applicable add remaining items to road
   - **Performance:**
     - P1 (S): one `javap` per jar, not per class (`settings_keys.py:116`, `procgen_args.py:151`). That is 40-77% of a
       scan (UAF: 252 launches, 52.8 of 68.6 s), and revive repeats it.
+      **Done 2026-11-17.** `bytecode/javap_batch.class_listings` gives javap all of a jar's selected classes in one call, as
+      many calls as the Windows command-line limit needs. It splits the output back per class by each listing's declaration
+      line.
+      - The split was checked with JDK 25: each listing equals that class's own call byte for byte. The test jar had an inner
+        class, an enum, a generic interface, a class without a SourceFile attribute, string constants holding newlines and
+        braces, and a missing class.
+      - Entry names still pass `zipsafe.javap_class_name` (93.45).
+      - Both checks use it.
+      - A batch is used only when its listings name exactly the classes asked for, in order; otherwise it is read again one
+        class at a time. An independent review found why: javap names the class a file declares, so `p/Foo.class`
+        declaring `p.A` prints as `p.A`. Split by name, that listing was lost, and a decoy could replace a real class's
+        listing. One call per class credited it to `p/Foo.class`, and so does the fallback.
+
+      On UAF's three jars the two checks went from 252 javap launches and 49.5 s to 5 launches and 1.9-2.5 s, with identical
+      results: 29 settings reads and 0 procgen suspects, the same SHA-256 for both lists.
+      Tests: `tests/test_javap_batch.py`:
+      - one launch per jar for both checks (3 launches before);
+      - the split;
+      - the command-line budget;
+      - the declared-name cases: a misnamed file, a decoy, a class javap cannot read;
+      - two real-javap comparisons with one call per class: a plain jar read in one launch, and a jar with a misnamed and a
+        missing class.
+      The 93.45 tests in `tests/test_untrusted_input.py` now watch `javap_batch`'s launches.
     - P2 (S-M): provider lookups read only each provider's `mod_info.json` (`substitutes.provider_for`). About 35 s per
       scan with providers (Bultach: 29.9 -> 68.2 s).
+      **Done 2026-11-17.** `provider_for` and `provider_index` take `contents=False`, which reads only mod_info.json and leaves
+      `provides` empty.
+      - Five scan steps look providers up: `scan_classfile`, `scan_compile`, `scan_content`, `scan_libraries` and
+        `scan_references`. They use only a provider's id, path and version, and now ask for just those. Before, one scan
+        built the full index five times.
+      - `dependency-substitutes`, revive's substitution cache and `corpus provider-index` still read contents.
+
+      Measured on White_Legion with `In operation` as the provider root: providers added 3.1 s to a Bultach scan
+      (17.5 -> 20.6 s) and now add 0.5 s (14.8 -> 15.3 s). The findings are the same 104, with the same SHA-256.
+      Tests: `tests/test_substitutes.py` `IdOnlyProviderIndexTests`:
+      - an id-only index opens no CSV or jar;
+      - a whole scan asks only for ids.
+
+      Both fail with their guard removed.
     - P3 (S): revive drops its duplicate final scan; compile-check caches its harness and core compile (about 2 s a scan).
     - P4 (S): AST facts resolve each file once (about 3.5 s a scan).
     - P6 (S): fix the quadratic `_invalid_utf8_offsets`. It is the suite's slowest test at 24 s, and large CP-1252
@@ -153,6 +190,26 @@ Check S series implementation plan and if applicable add remaining items to road
       loop on 610 inputs (truncated, overlong and surrogate sequences, stray bytes), unmixed across 8 threads, and a
       2.4 MB file with 120,000 isolated CP-1252 bytes.
     - P7 (S): parse the vanilla core once per process (about 2 s a scan, about 6 min per done-audit).
+      **Done 2026-11-17.** A profile of a second Bultach scan in the same process showed three core readers called twice per
+      scan and cached nothing:
+      - `scan_jarchecks._vanilla_api_jar_class_info`: every class in starfarer.api.jar and starfarer_obf.jar;
+      - `_vanilla_loose_script_fqns`;
+      - `scan_content._vanilla_faction_ids`.
+
+      Each is now read once per core per process. The key is the core's resolved path plus the API jars' size and
+      modification time, and for factions the folder's modification time, so another build or a replaced jar is read
+      again. The jar classes come back read-only and the script names as a frozenset; faction ids come back as a fresh set
+      for each caller, because the rules check adds the mod's factions to it.
+      Measured on RC7's core (White_Legion, under load): the jar classes take 0.56 s (6,442 classes), the scripts 0.02 s and
+      the factions 0.04 s, and a repeat call under 1 ms. A scan called each twice, so the first scan saves about 0.6 s and
+      every later scan in the process about 1.2 s. For `done-audit` over 184 archives that is about 4 minutes. Two Bultach
+      scans gave the same 79 findings (same SHA-256) before and after.
+      Tests: `tests/test_core_cache.py`:
+      - parsed once;
+      - read again after a jar changes;
+      - read-only;
+      - scripts read once;
+      - each caller gets its own faction set.
     - P5, P8 (M, S): read each source and each jar class once per scan.
     - P9 (M): memoize the AST helper in tests (an estimated 2-3 of 11 minutes).
     - P10 (M): a process pool for target-impact and corpus-index (5 -> about 1.5 min).
@@ -196,6 +253,21 @@ Check S series implementation plan and if applicable add remaining items to road
       Each guard fails its test when removed (mutation-checked).
     - C1 (S): the git hooks never run (`.githooks/` is ignored and `core.hooksPath` is unset). A pre-commit that
       regenerates the generated files would have caught the stale CHECKS.md.
+      **Done 2026-11-17.**
+      - The hooks are tracked in `tools/githooks/` (`pre-commit`, `pre-push`, executable). They call the tracked
+        `tools/precommit-check.ps1` and `tools/prepush-check.ps1`, and skip with a note where there is no PowerShell.
+      - Enable them once per clone with `git config core.hooksPath tools/githooks`. The relative path works in every worktree.
+      - The pre-commit check now also runs `docs-index --check` when Python files are staged. Checked by hand: with a staged
+        new scan function it refused with exit 14 and named the fix; on clean changes it passed in 7.8 s.
+      - `hygiene` reports the hooks: SKIPPED in a repository without `tools/githooks/`, PASS when `core.hooksPath` points
+        there, otherwise a FINDING with the fix.
+
+      Tests: `tests/test_hygiene.py` `HooksTests`:
+      - a repository without the hooks is skipped;
+      - off is a FINDING with the fix, and on passes;
+      - this repository's hooks are tracked as executable and call its checks, including the `docs-index --check` call.
+
+      The last two fail with their guard removed (mutation-checked).
     - C5 (S): a pre-push static tier plus tests selected by import, under 2 minutes.
     - C6 (S): the same JDK locally and on CI, and `-encoding` on every test javac (14 of 16 lack it).
     - C7, C8 (S): wall-clock budgets to `process_time`, `timeout-minutes`, `buffer=True`; a shared setup step and a
@@ -208,6 +280,39 @@ Check S series implementation plan and if applicable add remaining items to road
   - **Architecture and process:**
     - A3 (S): `escalation run --all` breaks the long-running rule (no progress, no checkpoint). `auto-open` and
       `atlas migrations` are missing from the list, and a test should require it.
+      **Done 2026-11-17.** All three now print progress and resume from a checkpoint, and all three are listed in
+      `progress.LONG_RUNNING_COMMANDS`.
+      - `escalation run --all` prints one line per packet and offers `--quiet`. Finished packets go to
+        `reports/escalations/run-all.partial.jsonl`, so an interrupted run resumes after the last one; an agent attempt can
+        take half an hour.
+      - `auto-open` keeps each finished workspace in `<queue>/auto-open.partial.jsonl`.
+      - `atlas migrations` keeps each finished pair in `<--write DIR>/<stem>.partial.jsonl`, when the pair labels are
+        unique. Without `--write` it keeps none: the atlas folder is not its to write into.
+      - Each checkpoint is removed when its run completes.
+      - A checkpoint's header names the inputs that change a result, so a changed input starts the run afresh instead of
+        reusing a stale record:
+        - `escalation run --all`: every run option and each packet file's SHA-256, so packets `revive` wrote afresh are
+          run, not skipped. A packet that finished counts as done whatever its outcome; naming it runs it again.
+        - `auto-open`: the standing fixer approvals, and each workspace's scan registry, REVIVE.json, escalation ledger
+          and packets, and baseline, by size and time. This is how `escalation queue` holds REVIVE.json's time. An edit
+          inside `working/` that no scan recorded is not seen by a resumed walk.
+        - `atlas migrations`: the API jars, by the SHA-256 the api-diff catalogue records. A pair is known by its label,
+          so a pair whose folders changed in between keeps its rows.
+        - `Checkpoint` takes a longer list for the same run (ROADMAP 49). The approvals and the API jars are therefore
+          a string and a dict, not lists: an independent review found that one more approved fixer, or swapped jars,
+          resumed with stale rows.
+      - The new list test runs the other way round from the old one: every command that offers `--quiet` must be
+        listed, since `--quiet` exists only where a command prints per-item progress. It found exactly `auto-open` and
+        `atlas migrations`.
+
+      Tests: `tests/test_progress.py` `LongRunningListTests`:
+      - the reverse list check;
+      - one resume test per command: interrupted on the second item, then resumed, the finished item is not redone and
+        the checkpoint is gone;
+      - tests that a changed input starts afresh: a rewritten packet, another `--timeout` or `--auto-accept`, a
+        workspace revived in between, one more approved fixer, other or swapped API jars.
+
+      Each fails with its guard removed (mutation-checked).
     - A8 (S): the revival guide still teaches the RC8 workflow (docs pass, 96.3).
     - A9 (S): retire two dead tools scripts and a fourth status list (`prepush-check.ps1` lacks NOT_REVIVABLE).
     - A2 (S/M): one resolver for the checkout and the state folder. The `.venv` holds a stale non-editable copy,
@@ -279,6 +384,22 @@ Check S series implementation plan and if applicable add remaining items to road
     (pyproject, `bridgeforge/__init__.py`, `uv.lock`). Salvor's pin `bridgeforge>=0.4,<0.5` covers it.
   - **Publication:** tag and publish follow 0.4.0's process (`docs/RELEASE_0_4_0.md`). The receipt will be
     `docs/RELEASE_0_4_1.md`.
+
+  **Done 2026-11-17: v0.4.1 is published, and is the first full release** (2026-11-18 01:02 UTC as a pre-release, made a
+  full release at 01:23 UTC). The receipt is `docs/RELEASE_0_4_1.md`.
+  - The annotated tag `v0.4.1` peels to `ed77cbb`, #121's merge.
+  - Checked before tagging:
+    - the full suite at that commit, in a clean worktree: 2987 tests, OK (skipped=12); hermeticity PASS;
+    - main CI's nine jobs on that commit (run 44210899558). A tag push runs no CI since #107.
+  - Wheel and sdist were built from a clean checkout. Every packaged file Git tracks equals its blob (wheel 400, sdist 722), and
+    an installed-wheel check passed, before tagging and again on the wheel downloaded from the public release.
+  - The draft's and then the public release's assets were downloaded. Both matched `SHA256SUMS.txt` and GitHub's digests, and
+    the blob check passed again on the public download.
+  - v0.4.0's release page now names all four problems and links v0.4.1; only that paragraph changed.
+  - Owner, the same evening: "You can make it a full release instead of pre-release".
+    - At 01:23 UTC v0.4.1 became a full release, marked Latest. Its notes' opening sentence now says so; nothing else changed.
+    - Read back: the flags, `releases/latest`, the notes, the asset digests and the tag.
+    - 0.4.0 and 0.2.0 stay pre-releases. A full release certifies the package, not any mod: the live work stays open.
 
 **95. Less hand work and faster re-validation for game updates (owner 2026-11-17: "1 through 5 add to roadmap. 6 I'm not sure we can do that always but if it can be optional that would be great. All others approved."; "Implement the smaller items not the greater phases like S and G").**
 **Approved.** Found taking the six-mod batch, United Aurora Federation and Sunrider through revival and live tests on

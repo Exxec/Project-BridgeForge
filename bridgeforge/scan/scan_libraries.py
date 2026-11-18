@@ -286,7 +286,7 @@ def toolbox_version_gaps(root: Path, provider_roots: list[Path] | None) -> list[
     if provider_roots:
         from ..substitutes import provider_index
 
-        versions = [_version_tuple(p.version) for p in provider_index([Path(e) for e in provider_roots], exclude=Path(root)) if p.mod_id == TOOLBOX_ID]
+        versions = [_version_tuple(p.version) for p in provider_index([Path(e) for e in provider_roots], exclude=Path(root), contents=False) if p.mod_id == TOOLBOX_ID]
         installed = max(versions, default=())
     required = installed or TOOLBOX_FORK_MINIMUM
     gaps = []

@@ -190,21 +190,23 @@ class JavapClassNameTests(unittest.TestCase):
 
     def test_settings_reads_never_pass_a_hostile_entry_name_to_javap(self) -> None:
         from bridgeforge import settings_keys
+        from bridgeforge.bytecode import javap_batch
 
         with resolved_temp_dir() as root:
             jar = root / "mod.jar"
             _jar_with_class_names(jar, b"com/fs/starfarer/api/SettingsAPI")
-            passed = _javap_class_arguments(settings_keys, lambda: settings_keys.jar_reads(jar, root / "javap.exe"))
-        self.assertEqual(passed, ["a.B"])
+            passed = _javap_class_arguments(javap_batch, lambda: settings_keys.jar_reads(jar, root / "javap.exe"))
+        self.assertEqual(set(passed), {"a.B"})  # however many calls: only a.B ever reaches javap
 
     def test_procgen_suspects_never_pass_a_hostile_entry_name_to_javap(self) -> None:
         from bridgeforge import procgen_args
+        from bridgeforge.bytecode import javap_batch
 
         with resolved_temp_dir() as root:
             jar = root / "mod.jar"
             _jar_with_class_names(jar, b"initStar")
-            passed = _javap_class_arguments(procgen_args, lambda: procgen_args.jar_suspects(jar, root / "javap.exe"))
-        self.assertEqual(passed, ["a.B"])
+            passed = _javap_class_arguments(javap_batch, lambda: procgen_args.jar_suspects(jar, root / "javap.exe"))
+        self.assertEqual(set(passed), {"a.B"})  # however many calls: only a.B ever reaches javap
 
 
 # A mod_info.json "jars" entry whose line-break component the ".." cancels: Windows' is_file() said yes, and the line breaks

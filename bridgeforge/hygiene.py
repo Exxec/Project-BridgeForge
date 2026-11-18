@@ -202,6 +202,24 @@ def _check_build(top: Path, command: str | None) -> dict:
     return {"status": status, "command": command, "exit_code": done.returncode, "tail": output[-TAIL_LINES:]}
 
 
+HOOKS_DIR = "tools/githooks"
+
+
+def _check_hooks(top: Path) -> dict:
+    """The repository's tracked hooks run only when core.hooksPath points at them (ROADMAP-3 96.5 C1: they never ran, so a
+    stale docs/CHECKS.md reached a pull request on 2026-11-17). A repository without tools/githooks/ is not checked."""
+    hooks = top / HOOKS_DIR
+    if not hooks.is_dir():
+        return {"status": SKIPPED, "reason": f"no {HOOKS_DIR}/ in this repository"}
+    try:
+        configured = _git(top, "config", "--get", "core.hooksPath").strip()
+    except ValueError:  # git config exits 1 when the key is unset
+        configured = ""
+    if configured and (top / configured).resolve() == hooks.resolve():
+        return {"status": PASS, "hooks_path": configured}
+    return {"status": FINDING, "hooks_path": configured or None, "fix": f"git config core.hooksPath {HOOKS_DIR}"}
+
+
 def _overall(checks: dict) -> str:
     statuses = [check["status"] for check in _flatten(checks)]
     if FINDING in statuses:
@@ -235,6 +253,7 @@ def check(repo: Path, build: str | None = None) -> dict:
         "lint": _check_lint(top, ruff, tracked_python),
         "misnamed_paths": _check_misnamed(tracked + untracked + ignored["entries"]),
         "build": _check_build(top, build),
+        "hooks": _check_hooks(top),
     }
     return {"repo": top.as_posix(), "status": _overall(checks), "checks": checks}
 
@@ -263,6 +282,11 @@ def _summary_lines(result: dict) -> list[str]:
     if build["status"] != NOT_RUN:
         lines.append(f"  build `{build['command']}`: exit {build['exit_code']} [{build['status']}]")
         lines.extend(f"    {line}" for line in build["tail"])
+    hooks = checks["hooks"]
+    if hooks["status"] == FINDING:
+        lines.append(f"  git hooks: off (core.hooksPath is {hooks['hooks_path'] or 'unset'}); run `{hooks['fix']}` [{FINDING}]")
+    elif hooks["status"] == PASS:
+        lines.append(f"  git hooks: on ({hooks['hooks_path']}) [{PASS}]")
     return lines
 
 

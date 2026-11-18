@@ -466,7 +466,7 @@ migration mining (STATIC, proposals only): per OLD/NEW mod pair the API symbols 
 | `--stem` STEM | default MIGRATIONS | file name stem for --write (default MIGRATIONS) |
 | `--old-api` OLD_API | - | older starfarer.api.jar (or its folder): only api-diff-removed symbols are kept, and renames are judged signature-compatible or not |
 | `--new-api` NEW_API | - | newer starfarer.api.jar (or its folder) |
-| `--write` DIR | - | write MIGRATIONS.md and MIGRATIONS.json into DIR |
+| `--write` DIR | - | write MIGRATIONS.md and MIGRATIONS.json into DIR; an interrupted run resumes from <stem>.partial.jsonl there |
 | `--top` TOP | default 25 | rules shown (default 25) |
 | `--quiet` | - | no per-pair progress lines on stderr |
 | `--json` | - | - |
@@ -3663,7 +3663,8 @@ run an AI agent on a packet in a throwaway copy; only a verified result is kept
 | `workspace` | - | - |
 | `--json` | - | - |
 | `packet` | - | packet id (see `escalation list`) |
-| `--all` | - | run every agent packet in turn |
+| `--all` | - | run every agent packet in turn; an interrupted run resumes after the last packet that finished, whatever its outcome (name a packet to run it again) |
+| `--quiet` | - | with --all: no per-packet progress lines on stderr |
 | `--watch-dir` WATCH_DIR | repeatable | a directory the agent must not touch (e.g. the session's memory folder); what changed in it is reported after the run; repeatable |
 
 ## escalation apply

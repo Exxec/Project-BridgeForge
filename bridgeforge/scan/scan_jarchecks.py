@@ -4,6 +4,9 @@ from __future__ import annotations
 import json
 import re
 import zipfile
+from collections.abc import Mapping
+from functools import lru_cache
+from types import MappingProxyType
 from ..models import ScanResult
 from ..zipsafe import MAX_CLASS_BYTES, read_limited
 from collections import Counter
@@ -240,7 +243,29 @@ def _scan_bundled_library_classes(root: Path, result: ScanResult) -> None:
             )
 
 
-def _vanilla_api_jar_class_info(vanilla_core: Path) -> dict[str, _ClassFileInfo]:
+def _core_key(vanilla_core: Path) -> tuple:
+    """A vanilla core's identity for the per-process caches below: its resolved path and the API jars' size and modification
+    time, so another build or a replaced jar is read again (ROADMAP-3 96.5 P7)."""
+    core = Path(vanilla_core).resolve()
+    stamps = []
+    for name in ("starfarer.api.jar", "starfarer_obf.jar"):
+        try:
+            stat = (core / name).stat()
+            stamps.append((name, stat.st_size, stat.st_mtime_ns))
+        except OSError:
+            stamps.append((name, None, None))
+    return str(core), tuple(stamps)
+
+
+def _vanilla_api_jar_class_info(vanilla_core: Path) -> Mapping[str, _ClassFileInfo]:
+    """Every class of the core's API jars, parsed once per core per process (96.5 P7: a scan asked twice, and `done-audit`
+    asks once per archive). Read-only: every caller shares it."""
+    return _api_jar_class_info(_core_key(vanilla_core))
+
+
+@lru_cache(maxsize=4)
+def _api_jar_class_info(key: tuple) -> Mapping[str, _ClassFileInfo]:
+    vanilla_core = Path(key[0])
     classes: dict[str, _ClassFileInfo] = {}
     for jar_name in ("starfarer.api.jar", "starfarer_obf.jar"):
         jar_path = vanilla_core / jar_name
@@ -263,10 +288,16 @@ def _vanilla_api_jar_class_info(vanilla_core: Path) -> dict[str, _ClassFileInfo]
                         classes[fqn] = info
         except (OSError, zipfile.BadZipFile):
             continue
-    return classes
+    return MappingProxyType(classes)
 
 
-def _vanilla_loose_script_fqns(vanilla_core: Path) -> set[str]:
+def _vanilla_loose_script_fqns(vanilla_core: Path) -> frozenset[str]:
+    """Read once per core per process (96.5 P7); see `_loose_script_fqns`."""
+    return _loose_script_fqns(_core_key(vanilla_core))
+
+
+@lru_cache(maxsize=4)
+def _loose_script_fqns(key: tuple) -> frozenset[str]:
     """Every loose vanilla .java source under data/** (not just data/scripts), by path-derived FQN.
 
     Starsector loads loose scripts from many data/ subdirectories, not only data/scripts (e.g.
@@ -275,9 +306,10 @@ def _vanilla_loose_script_fqns(vanilla_core: Path) -> set[str]:
     declares a 'package' line, that is used instead so a mismatched directory layout does not
     produce a false FQN.
     """
+    vanilla_core = Path(key[0])
     data_root = vanilla_core / "data"
     if not data_root.is_dir():
-        return set()
+        return frozenset()
     fqns: set[str] = set()
     for path in data_root.rglob("*.java"):
         relative = path.relative_to(vanilla_core)
@@ -292,7 +324,7 @@ def _vanilla_loose_script_fqns(vanilla_core: Path) -> set[str]:
             fqns.add(f"{package_match.group(1)}.{path.stem}")
         else:
             fqns.add(path_fqn)
-    return fqns
+    return frozenset(fqns)
 
 
 def _scan_vanilla_duplicated_classes(root: Path, result: ScanResult, vanilla_core: Path | None) -> None:
