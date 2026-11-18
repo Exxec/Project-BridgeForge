@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .library_registry import LibraryRegistryEntry
 from .models import TargetProfile
+from bridgeforge.bytecode.java_toolchain import javac_argument_line
 from bridgeforge.scan.scanner import scan_mod
 from .starsector_install import inventory_starsector_install
 from .workspace import resolve_inside, workspace_paths
@@ -158,7 +159,8 @@ def create_build_profile(workspace: Path, target: TargetProfile, jdk_home: Path 
     findings = unavailable_findings + _classpath_ambiguity_findings([path for _, path in available_jars])
     compile_validation = {"status": "UNAVAILABLE" if unavailable_findings else "AVAILABLE", "findings": findings}
     classes = workspace / "build" / "classes"
-    command = [jdk.javac if jdk and jdk.javac else "<javac-not-configured>", "--release", str(target.java), "-d", str(classes)]
+    # -proc:none: a JDK 17 or 21 javac runs any annotation processor a classpath jar declares unless told not to (93.46).
+    command = [jdk.javac if jdk and jdk.javac else "<javac-not-configured>", "--release", str(target.java), "-proc:none", "-d", str(classes)]
     classpath = [*api, *dependencies]
     if classpath:
         command.extend(["-classpath", __import__("os").pathsep.join(classpath)])
@@ -211,10 +213,12 @@ def run_compile(workspace: Path) -> dict:
     command[0] = javac
     if not any(argument.endswith(".java") for argument in command):
         raise ValueError("Build profile contains no Java source files.")
+    if not any(argument.startswith("-proc:") for argument in command):
+        command.insert(1, "-proc:none")  # a profile written before 93.46
+    lines = [javac_argument_line(argument) for argument in command[1:]]  # refuses a line break (ROADMAP-3 93.46)
     classes.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".javac", delete=False) as handle:
-        for argument in command[1:]:
-            handle.write('"' + argument.replace('\\', '\\\\').replace('"', '\\"') + '"\n')
+        handle.writelines(lines)
         argument_file = Path(handle.name)
     try:
         completed = subprocess.run([command[0], "@" + str(argument_file)], cwd=workspace, capture_output=True, text=True, check=False)
