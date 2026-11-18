@@ -5,6 +5,7 @@ import io
 import re
 import unittest
 from contextlib import redirect_stdout
+from unittest import mock
 from pathlib import Path
 
 from bridgeforge.cli import main
@@ -54,11 +55,64 @@ class MergeTrainTests(unittest.TestCase):
             got = test_modules_for(["bridgeforge/foo.py", "bridgeforge/nope.py", "docs/x.md"], tmp)
             self.assertEqual(got, [*CROSS_CUTTING_TESTS, "tests.test_foo", "tests.test_foo_more"])
 
-    def test_prepush_script_lists_the_same_cross_cutting_tests(self) -> None:
+    def test_tests_that_import_a_changed_module_are_selected(self) -> None:
+        # 96.5 C5: P4 changed bridgeforge/scan/scan_javatext.py, which no test_scan_javatext* covers by name; the tests of
+        # the checks that import it were not run before a push.
+        with resolved_temp_dir() as tmp:
+            for name in CROSS_CUTTING_TESTS:
+                (tmp / (name.split(".")[1] + ".py")).write_text("", encoding="utf-8")
+            files = {
+                "test_campaign.py": "from bridgeforge.scan.scan_javatext import _blank_java_comments\n",
+                "test_from_package.py": "from bridgeforge.scan import scan_javatext\n",
+                "test_inside_a_test.py": "def test():\n    import bridgeforge.scan.scan_javatext as t\n",
+                "test_facade.py": "from bridgeforge.save_doctor import diagnose\n",
+                "test_other.py": "from bridgeforge.scan.scan_json import _parse_json\nimport scan_javatext_lookalike\n",
+                "test_broken.py": "this is not python (\n",
+            }
+            (tmp / "nested").mkdir()
+            (tmp / "nested" / "test_deep.py").write_text("from bridgeforge.scan.scan_javatext import x\n", encoding="utf-8")
+            for name, text in files.items():
+                (tmp / name).write_text(text, encoding="utf-8")
+            got = test_modules_for(["bridgeforge/scan/scan_javatext.py"], tmp)
+            facade = test_modules_for(["bridgeforge/save/save_doctor.py"], tmp)
+        self.assertEqual(got, [*CROSS_CUTTING_TESTS, "tests.nested.test_deep", "tests.test_campaign",
+                               "tests.test_from_package", "tests.test_inside_a_test"])
+        self.assertEqual(facade, [*CROSS_CUTTING_TESTS, "tests.test_facade"])
+
+    def test_a_central_modules_importers_are_left_to_ci_with_a_note(self) -> None:
+        from bridgeforge import merge_train
+
+        with resolved_temp_dir() as tmp:
+            for n in range(4):
+                (tmp / f"test_user{n}.py").write_text("from bridgeforge.scan.scanner import scan_mod\n", encoding="utf-8")
+            (tmp / "test_scanner_named.py").write_text("", encoding="utf-8")
+            (tmp / "test_small.py").write_text("from bridgeforge.scan.scan_json import x\n", encoding="utf-8")
+            with mock.patch.object(merge_train, "MAX_IMPORTERS", 3):
+                modules, notes = merge_train.select_test_modules(
+                    ["bridgeforge/scan/scanner.py", "bridgeforge/scan/scan_json.py"], tmp)
+        self.assertEqual(modules, ["tests.test_scanner_named", "tests.test_small"])
+        self.assertEqual(len(notes), 1)
+        self.assertIn("bridgeforge.scan.scanner: 4 test modules import it", notes[0])
+
+    def test_prepush_script_runs_the_static_tier_then_the_shared_selection(self) -> None:
         script = (ROOT / "tools" / "prepush-check.ps1").read_text(encoding="utf-8")
-        for name in CROSS_CUTTING_TESTS:
-            self.assertIn(f"'{name}'", script)
         self.assertIn("REVIVAL_REPORT", script)
+        order = [script.index(marker) for marker in ("ruff check", "docs-index --check", "prepush-select.py",
+                                                      "run_partitioned.py') --partition fast --modules")]
+        self.assertEqual(order, sorted(order))
+        self.assertIn("$budgetSeconds=120", script)
+
+    def test_prepush_select_prints_the_shared_rule(self) -> None:
+        import subprocess
+        import sys
+
+        changed = ["bridgeforge/scan/scan_javatext.py", "docs/x.md"]
+        done = subprocess.run([sys.executable, str(ROOT / "tools" / "prepush-select.py"), *changed],
+                              capture_output=True, text=True, check=True, cwd=ROOT)
+        expected = test_modules_for(changed, ROOT / "tests")
+        self.assertEqual(done.stdout.split(), expected)
+        self.assertIn("tests.test_blank_comments_cache", expected)  # imports scan_javatext, not named after it
+        self.assertEqual(expected[:len(CROSS_CUTTING_TESTS)], list(CROSS_CUTTING_TESTS))
 
     def test_keep_both_sides_drops_only_markers(self) -> None:
         self.assertEqual(keep_both_sides(CONFLICTED), "# Changelog\n- main\n- branch\n")

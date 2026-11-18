@@ -11,6 +11,7 @@ The cross-cutting tests plus the test modules of the touched files run before a 
 from __future__ import annotations
 
 import argparse
+import ast
 import re
 import subprocess
 import sys
@@ -58,17 +59,67 @@ def subprocess_runner(command: list[str], cwd: Path | None = None) -> Result:
     return Result(done.returncode, done.stdout, done.stderr)
 
 
-def test_modules_for(changed: list[str], tests_dir: Path) -> list[str]:
-    """Cross-cutting tests plus matching leaves in flat or nested test packages."""
+def _imported_modules(path: Path) -> set[str]:
+    """Every dotted module a test file imports, anywhere in it (a test may import inside a test method). `from a.b import c`
+    gives both `a.b` and `a.b.c`, since `c` may be a module. A file that does not parse imports nothing here."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+    except (SyntaxError, ValueError, OSError):
+        return set()
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            found.add(node.module)
+            found.update(f"{node.module}.{alias.name}" for alias in node.names)
+    return found
+
+
+def _imports_changed(imported: set[str], dotted: str, leaf: str) -> bool:
+    """The test imports the changed module itself, or a root facade of the same name (`bridgeforge.save_doctor` for
+    `bridgeforge.save.save_doctor`)."""
+    return dotted in imported or f"bridgeforge.{leaf}" in imported
+
+
+# A module more test modules import than this is central (scan/scanner.py: 80 of them, 967 tests, 234 s on White_Legion,
+# 2026-11-17): its importers would take a push past 2 minutes, so only the tests named after it run and CI runs the rest.
+MAX_IMPORTERS = 25
+
+
+def select_test_modules(changed: list[str], tests_dir: Path) -> tuple[list[str], list[str]]:
+    """(modules, notes): cross-cutting tests, then, sorted, the tests named after a touched module and the tests that import
+    one (96.5 C5), in flat or nested test packages. A note names each central module whose importers were left to CI."""
     tests_dir = Path(tests_dir)
-    modules = list(CROSS_CUTTING_TESTS)
+    sources = [s for s in python_sources(tests_dir) if s.name.startswith("test_")]
+    module_of = {s: "tests." + s.relative_to(tests_dir).with_suffix("").as_posix().replace("/", ".") for s in sources}
+    selected: set[str] = set()
+    notes: list[str] = []
+    imports: dict[Path, set[str]] = {}
     for path in changed:
-        match = re.fullmatch(r"bridgeforge/(?:[A-Za-z0-9_]+/)*([A-Za-z0-9_]+)\.py", path.replace("\\", "/"))
-        if match:
-            modules.extend("tests." + p.relative_to(tests_dir).with_suffix("").as_posix().replace("/", ".")
-                           for p in python_sources(tests_dir) if p.name.startswith(f"test_{match.group(1)}"))
+        match = re.fullmatch(r"bridgeforge/((?:[A-Za-z0-9_]+/)*([A-Za-z0-9_]+))\.py", path.replace("\\", "/"))
+        if not match:
+            continue
+        dotted, leaf = "bridgeforge." + match.group(1).replace("/", "."), match.group(2)
+        if leaf == "__init__":
+            dotted, leaf = dotted.rsplit(".", 1)[0], dotted.rsplit(".", 2)[-2]
+        selected.update(module_of[s] for s in sources if s.name.startswith(f"test_{leaf}"))
+        for source in sources:
+            if source not in imports:
+                imports[source] = _imported_modules(source)
+        importers = {module_of[s] for s in sources if _imports_changed(imports[s], dotted, leaf)}
+        if len(importers) > MAX_IMPORTERS:
+            notes.append(f"{dotted}: {len(importers)} test modules import it; only the tests named after it run, CI runs the rest")
+        else:
+            selected |= importers
+    modules = [*CROSS_CUTTING_TESTS, *sorted(selected)]
     present = [m for m in modules if (tests_dir / Path(*m.split(".")[1:])).with_suffix(".py").is_file()]
-    return list(dict.fromkeys(present))
+    return list(dict.fromkeys(present)), notes
+
+
+def test_modules_for(changed: list[str], tests_dir: Path) -> list[str]:
+    """The modules of `select_test_modules`, without its notes (merge-train and the pre-push share the rule)."""
+    return select_test_modules(changed, tests_dir)[0]
 
 
 def keep_both_sides(text: str) -> str:

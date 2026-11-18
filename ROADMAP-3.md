@@ -301,6 +301,29 @@ Check S series implementation plan and if applicable add remaining items to road
 
       The last two fail with their guard removed (mutation-checked).
     - C5 (S): a pre-push static tier plus tests selected by import, under 2 minutes.
+      **Done 2026-11-17.** `tools/prepush-check.ps1` runs in three tiers:
+      1. the report-status check;
+      2. the static tier: ruff on the Python files the branch changed against origin/main, and `docs-index --check`
+         (seconds; it catches what a commit made with the hooks off let through);
+      3. the tests from `tools/prepush-select.py`, run as `tests/run_partitioned.py --partition fast --modules ...`, so the
+         cases in `tests/slow_tests.json` are left to CI's slow job.
+      It prints the static and total seconds, and a note when a push goes over 120 s.
+      - The selection is one rule, `merge_train.select_test_modules`, shared with merge-train. It takes the cross-cutting
+        tests, the tests named after a changed module (as before), and now the tests that import it: an AST read of every
+        test file, including imports inside a test, `from pkg import module`, and a root facade of the same name.
+        P4's change to `scan/scan_javatext.py` matched no test by name; two test modules import it
+        (`test_blank_comments_cache`, `test_mod_guarded_missions`).
+      - A module that more than 25 test modules import is central: `scan/scanner.py` has 73, 967 tests, 234 s on
+        White_Legion. For such a module only the tests named after it run, and a note says CI runs the rest.
+      - The PowerShell copy of the name mapping is gone, along with the test that kept it in step with Python's.
+      Tests: `tests/test_merge_train.py`:
+      - selection by import (nested, inside a test, by package, by facade; a file that does not parse);
+      - the central-module cap and its note;
+      - the script's tier order;
+      - `prepush-select.py` prints the shared rule.
+
+      `tests/test_source_paths.py` checks that the script has no mapping of its own. The import match and the facade
+      match each fail with their guard removed (mutation-checked).
     - C6 (S): the same JDK locally and on CI, and `-encoding` on every test javac (14 of 16 lack it).
     - C7, C8 (S): wall-clock budgets to `process_time`, `timeout-minutes`, `buffer=True`; a shared setup step and a
       pinned ruff (weekly.yml drifted from ci.yml and failed 5 weeks running).
