@@ -913,6 +913,29 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
 
   Test: `tests/test_save_doctor.py` (an object version against the dotted one, and a real change still reported);
   mutation-checked.
+- 93.53 (S) **save-doctor called three loadable saves WILL_LIKELY_FAIL.** Three of the owner's seven RC8 saves (Warren
+  Koyamatsu) had six CLASS_UNRESOLVED packages each with no mod missing.
+  - **Aliases:** the names are XStream aliases. Star Lords' `LordsModPlugin.configureXStream` registers
+    `faction.LawProposal`, `ai.LordAI` and more for its `starlords.*` classes, and the game writes the alias into the
+    save. The class index knew only jar entry names.
+  - **Loose scripts:** in two more saves, Emergent Threats' loose `.java` scripts (`data/scripts/vice/listeners`) read as
+    unresolved, because loose scripts the game compiles at load were not indexed.
+
+  **Done 2026-11-17.** `save_compat.ModClassIndex` now indexes two more kinds of name:
+  - the aliases a mod's `modPlugin` class declares when it overrides `configureXStream`: its string literals shaped like
+    dotted class names, read with a bounded read of that one class. A plugin that registers them in a helper class is
+    not seen.
+  - each loose `.java` script's class, by its package line, for mods and the core alike.
+
+  Result: the Warren Koyamatsu saves read NO_KNOWN_PROBLEM. The two saves still WILL_LIKELY_FAIL list mods that really are
+  missing (`Starlight1130`, `QualityCaptains`, `Red_stripe`), and their remaining unresolved packages belong to no
+  installed mod.
+
+  Tests: `tests/test_save_doctor.py`:
+  - a plugin compiled with javac whose aliases, and their package, resolve;
+  - a mod whose loose script's class resolves.
+
+  Each fails with its guard removed (mutation-checked).
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct

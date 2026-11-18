@@ -83,6 +83,50 @@ class SaveDoctorTests(unittest.TestCase):
             result = diagnose(save, root / "mods")
         self.assertEqual(result["verdict"], "NO_KNOWN_PROBLEM", result["problems"])
 
+    def test_names_a_mod_plugin_registers_as_xstream_aliases_resolve(self) -> None:
+        """Star Lords' LordsModPlugin.configureXStream aliases its classes to `faction.LawProposal`, `ai.LordAI` and more,
+        and the game writes those names into the save. They read as CLASS_UNRESOLVED and made three of the owner's RC8
+        saves WILL_LIKELY_FAIL, with no mod missing (2026-11-17)."""
+        import subprocess
+        import zipfile
+
+        from tests.support import javac_path
+
+        javac = javac_path()
+        if javac is None:
+            self.skipTest("no javac")
+        with resolved_temp_dir() as root:
+            source = root / "src" / "lords" / "LordsPlugin.java"
+            source.parent.mkdir(parents=True)
+            source.write_text("package lords;\npublic class LordsPlugin {\n  public void configureXStream(Object x) {\n"
+                              '    String[] aliases = {"faction.LawProposal", "ai.LordAI"};\n  }\n}\n', encoding="utf-8")
+            subprocess.run([javac, "-proc:none", "-d", str(root / "classes"), str(source)], check=True, capture_output=True)
+            mod = root / "mods" / "lords"
+            (mod / "jars").mkdir(parents=True)
+            with zipfile.ZipFile(mod / "jars" / "Lords.jar", "w") as jar:
+                jar.write(root / "classes" / "lords" / "LordsPlugin.class", "lords/LordsPlugin.class")
+            info = {"id": "lords", "name": "lords", "version": "1.0", "jars": ["jars/Lords.jar"], "modPlugin": "lords.LordsPlugin"}
+            (mod / "mod_info.json").write_text(json.dumps(info), encoding="utf-8")
+            body = ('<faction.LawProposal z="2"></faction.LawProposal>\n<ai.LordAI z="3"></ai.LordAI>\n'
+                    '<faction.Other z="4"></faction.Other>')
+            save = _save(root, [("lords", "1.0")], body)
+            result = diagnose(save, root / "mods")
+        # The aliases resolve, and so does their package: faction.Other is not reported either, as for a mod's own package.
+        self.assertEqual(result["verdict"], "NO_KNOWN_PROBLEM", result["problems"])
+
+    def test_classes_of_a_mods_loose_scripts_resolve(self) -> None:
+        """The game compiles loose .java scripts at load: Emergent Threats' data/scripts/vice/listeners read as
+        CLASS_UNRESOLVED in an RC8 save because only jar classes were indexed (2026-11-17)."""
+        with resolved_temp_dir() as root:
+            _mod(root / "mods", "et", "1.5.0")
+            script = root / "mods" / "et" / "data" / "scripts" / "vice" / "listeners" / "BountyListener.java"
+            script.parent.mkdir(parents=True)
+            script.write_text("package data.scripts.vice.listeners;\npublic class BountyListener {}\n", encoding="utf-8")
+            body = '<data.scripts.vice.listeners.BountyListener z="2"></data.scripts.vice.listeners.BountyListener>'
+            save = _save(root, [("et", "1.5.0")], body)
+            result = diagnose(save, root / "mods")
+        self.assertEqual(result["verdict"], "NO_KNOWN_PROBLEM", result["problems"])
+
     def test_a_save_cut_off_mid_write_is_truncated(self) -> None:
         with resolved_temp_dir() as root:
             (root / "mods").mkdir()

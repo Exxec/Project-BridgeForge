@@ -184,6 +184,43 @@ def _dotted(entry_name: str) -> str:
     return posix.replace("/", ".")
 
 
+_ALIAS_NAME = re.compile(r"[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+")
+
+
+def _xstream_aliases(mod_dir: Path, entries: dict[str, Path]) -> dict[str, str]:
+    """Save names a mod's plugin registers in `configureXStream` (alias name -> plugin class).
+
+    The game writes an XStream alias into the save instead of the class name: Star Lords' LordsModPlugin aliases its
+    classes to `faction.LawProposal`, `ai.LordAI` and more (owner's RC8 saves, 2026-11-17), which read as unresolved
+    classes. Only the class mod_info names as `modPlugin` is read, and only when it declares `configureXStream`; its
+    string literals shaped like dotted class names are taken as aliases. A plugin that registers them in a helper class
+    is not seen."""
+    from bridgeforge.scan.scan_classfile import _parse_class_file
+    from bridgeforge.zipsafe import read_class
+
+    try:
+        info = _load_lenient_json_file(_find_mod_info(mod_dir))
+    except BuildTagError:
+        return {}
+    plugin = info.get("modPlugin") if isinstance(info, dict) else None
+    if not isinstance(plugin, str) or not plugin.strip():
+        return {}
+    plugin = plugin.strip()
+    entry = plugin.replace(".", "/") + ".class"
+    jar = entries.get(entry)
+    if jar is None:
+        return {}
+    try:
+        with zipfile.ZipFile(jar) as archive:
+            data = read_class(archive, entry)
+    except (OSError, zipfile.BadZipFile, KeyError):
+        return {}
+    parsed = _parse_class_file(data) if data else None
+    if parsed is None or "configureXStream" not in parsed.utf8_values:
+        return {}
+    return {name: plugin for name in parsed.string_constants if _ALIAS_NAME.fullmatch(name)}
+
+
 class ModClassIndex:
     """Alias index for one mod build, built from its loaded jars."""
 
@@ -191,6 +228,12 @@ class ModClassIndex:
         self.source = Path(source).expanduser().resolve()
         self.entries = _class_index(self.source)
         self.canonical: set[str] = {_dotted(name) for name in self.entries}
+        if self.source.is_dir():
+            # Loose .java scripts the game compiles at load are classes too: Emergent Threats' data/scripts/vice/listeners
+            # read as CLASS_UNRESOLVED in the owner's RC8 save, its jar holding only patches (2026-11-17).
+            from bridgeforge.scan.scan_jarchecks import _vanilla_loose_script_fqns
+
+            self.canonical |= _vanilla_loose_script_fqns(self.source)
         self.alias_to_classes: dict[str, set[str]] = {}
         self.packages: set[str] = set()
         for canonical in self.canonical:
@@ -199,6 +242,11 @@ class ModClassIndex:
                 self.packages.add(package)
             for alias in _aliases_for_class(canonical):
                 self.alias_to_classes.setdefault(alias, set()).add(canonical)
+        if self.source.is_dir():
+            for alias, plugin in _xstream_aliases(self.source, self.entries).items():
+                self.alias_to_classes.setdefault(alias, set()).add(plugin)
+                if _package_of(alias):
+                    self.packages.add(_package_of(alias))
 
     @property
     def is_empty(self) -> bool:
