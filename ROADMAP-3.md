@@ -813,6 +813,36 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - `corpus-index` checks 7-Zip members, and `corpus_releases` extracts them into memory;
   - `sibling-assets` refuses `..`, and its escape cases copy a file onto itself;
   - `delegate-method` takes its class names from the user's own spec.
+- 93.49 (S/M) **A probe battle can stall, so its round never ends.** SR6-LIVE-0985a-20261117 (Bultach Coalition, probe 0.3.3,
+  Fast Rendering + Prepatcher, JDK 25, the setup SR5 passed with) ended LIVE_STUCK at `combat-round-1`.
+  - **Timeline:** round 1 started at 203.6 s. For about 100 s after that the log shows only repeated LunaLib settings errors
+    (shaderLib's `enableFullExplosionEffects`), then nothing until the harness gave up.
+  - **93.40's screenshot** (`SR6-LIVE-0985a-20261117.round1-no-end.png`) shows the game running, not frozen. The HUD says
+    "NO ENEMY PRESENCE" and "SHUTTLE READY FOR COMMAND TRANSFER": the player's flagship is gone, and no enemy is near.
+  - **Coverage:** `report` showed FATAL 0 and MOD-ERROR 0, with ORK PASS and the owner's two accepted ids, but round 2's hulls
+    (61-105) never fought. The run was not recorded.
+  - **Reading:** nothing in the probe mission ends a battle whose remaining ships never meet. This is likely what SR4 hit
+    too (93.40). Which ships were left is not shown; the log does not name them.
+  - **Proposal:** the probe's combat plugin ends a battle after a quiet spell (no hull damaged or destroyed for N seconds).
+    It logs `combat|END` with the reason and the ships still alive per side, so the run goes on to the next round; `report`
+    shows such a round as fought with a WARN. This needs probe 0.3.4 and a live run.
+- 93.50 (S) **A vanished game window ends a live run with an exception.** SR7-LIVE-0985a-20261117 (Bultach again, after SR6)
+  passed its smoke. Then, during New Game:
+  - the game read the newest save (log line 30197 at 120.4 s: `Reading save data from [..\saves\save_HekaWillis_...]`,
+    written by SR6);
+  - the log then ends with the JVM's code-cache summary; there is no hs_err file, and `windows.txt` lists no dialog;
+  - the harness raised `RuntimeError: the game window is gone` from `new_game`'s click, with no verdict.
+  - **Two parts:**
+    - The harness should end any stage whose window is gone as LIVE_STUCK, naming the stage and the log's last lines, as
+      93.37 does for a battle.
+    - Why a save was read during New Game is not shown. The rig's `saves/` held 14 saves from the day's runs, and
+      `probe-group install` leaves them. Moving the rig's saves aside before each run would make every run start the same
+      way.
+- 93.51 (S) **Two lower-risk leads from the 93.45 security review,** read 2026-11-17, not yet fixed:
+  - BridgeForge's helper classes are cached in the temp folder and reused without a check (`bytecode.py`, `java_ast.py`,
+    `delegate_method.py`). On a shared POSIX `/tmp` another local user could plant one. Windows' temp folder is per user.
+  - `decompiler-review --execute` with a `.bat` adapter: Python quotes an argument only when it holds a space, so an input
+    path without spaces reaches cmd.exe unquoted, and an `&` in it would act. The owner's paths all hold spaces.
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct
