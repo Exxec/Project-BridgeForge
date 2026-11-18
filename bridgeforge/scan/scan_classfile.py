@@ -100,7 +100,7 @@ def _dependency_jar_class_names(root: Path, provider_roots: list[Path] | None = 
     if not deps:
         return {}
     roots = [Path(entry) for entry in provider_roots]
-    providers = provider_index(roots, exclude=root)
+    providers = provider_index(roots, exclude=root, contents=False)  # ids and paths only (96.5 P2)
     by_id = {provider.mod_id: provider for provider in providers}
     classes: dict[str, str] = {}
     for dep_id in deps:
