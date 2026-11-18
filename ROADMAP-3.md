@@ -931,9 +931,14 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   missing (`Starlight1130`, `QualityCaptains`, `Red_stripe`), and their remaining unresolved packages belong to no
   installed mod.
 
+  - The rule that skips the game's own aliases (`WSR.V`) skipped every name starting with a capital. That also hid a
+    mod package that starts with one (`Jaydee8652.JaydeePiracy`). Only an all-capitals first part is skipped now; found
+    porting the rule to Salvor's version-check.
+
   Tests: `tests/test_save_doctor.py`:
   - a plugin compiled with javac whose aliases, and their package, resolve;
-  - a mod whose loose script's class resolves.
+  - a mod whose loose script's class resolves;
+  - a capital-led package that is reported while `WSR.V` is not.
 
   Each fails with its guard removed (mutation-checked).
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save

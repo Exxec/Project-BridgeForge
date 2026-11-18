@@ -127,6 +127,15 @@ class SaveDoctorTests(unittest.TestCase):
             result = diagnose(save, root / "mods")
         self.assertEqual(result["verdict"], "NO_KNOWN_PROBLEM", result["problems"])
 
+    def test_a_package_starting_with_a_capital_is_checked_not_taken_for_the_games_alias(self) -> None:
+        """Every name starting with a capital was skipped as the game's `WSR.V` alias, so a missing mod's
+        `Jaydee8652.JaydeePiracy` classes could never be reported (2026-11-17)."""
+        with resolved_temp_dir() as root:
+            (root / "mods").mkdir()
+            body = '<WSR.V z="2"></WSR.V>\n<Jaydee8652.Piracy.Lost z="3"></Jaydee8652.Piracy.Lost>'
+            result = diagnose(_save(root, [], body), root / "mods")
+        self.assertEqual([p["package"] for p in result["problems"] if p["class"] == "CLASS_UNRESOLVED"], ["Jaydee8652.Piracy"])
+
     def test_a_save_cut_off_mid_write_is_truncated(self) -> None:
         with resolved_temp_dir() as root:
             (root / "mods").mkdir()
