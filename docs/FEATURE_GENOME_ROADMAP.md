@@ -294,6 +294,12 @@ cross-repository conformance check real early (WP3).
 7. WP7 in each sister repository when its phase starts (D3): Project Go (G2), RevenantLib (G3), SpriteForge (G4),
    VoidSmith and Salvor (G5), SPW (G6).
 
+**Queued (owner 2026-11-17, that night):** "We may have to just Queue the G series of roadmap." Steps 3-7 (WP1-WP7, GR-2,
+GR-3 and GR-5) are queued, not started, until the owner says otherwise; nothing of them had begun. The work in their place is:
+- step 2's remaining small items of 96.5;
+- Salvor, whose rig flow is getting its first real runs;
+- live testing between CI waits.
+
 Outside this track unless D2 changes: a shared workspace layout imported from the review (WP1 decides where genes and evidence
 live against the existing workspace forms), a launcher, a GUI, workflow plugins, other games, merging repositories, and a
 shared runtime library.
