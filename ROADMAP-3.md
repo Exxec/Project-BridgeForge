@@ -235,6 +235,19 @@ Check S series implementation plan and if applicable add remaining items to road
 
   Left as they were: a proof recorded on a refused attempt is keyed by path and not re-checked when the file changes again
   (older design); `record_group` still records the standing licence before `archive_mod`.
+- 96.7 (S) **Release 0.4.1: the four security fixes.** The owner was asked, 2026-11-17, whether to tag a 0.4.1 with the javap
+  fix once it merged, and to add a known-issue line to v0.4.0's release page: "yes". The security review that followed 93.45
+  found 93.46-93.48.
+  - **What 0.4.1 carries:** all four fixes (93.45 #113, 93.46 #115, 93.47 #116, 93.48 #117) and the v0.4.0 receipt (#114).
+  - **What waits:** 96.5's performance items (P1 #118, P2 #119, P7) go into the next version, so this release is only its
+    fixes.
+  - **The notices:** v0.4.0's release page carries a known-issue note, added after #113. `docs/RELEASE_0_4_0.md` has a
+    section listing the four problems and their fixes.
+  - **The notes and the version:** `release-notes assemble --version 0.4.1` moved the five fragments under
+    `## 0.4.1 (2026-11-17)`, and an empty `## 0.4.2 (unreleased)` takes the next ones. The package version is 0.4.1
+    (pyproject, `bridgeforge/__init__.py`, `uv.lock`). Salvor's pin `bridgeforge>=0.4,<0.5` covers it.
+  - **Publication:** tag and publish follow 0.4.0's process (`docs/RELEASE_0_4_0.md`). The receipt will be
+    `docs/RELEASE_0_4_1.md`.
 
 **95. Less hand work and faster re-validation for game updates (owner 2026-11-17: "1 through 5 add to roadmap. 6 I'm not sure we can do that always but if it can be optional that would be great. All others approved."; "Implement the smaller items not the greater phases like S and G").**
 **Approved.** Found taking the six-mod batch, United Aurora Federation and Sunrider through revival and live tests on

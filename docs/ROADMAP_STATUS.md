@@ -11,8 +11,8 @@ fresh live acceptance.
 
 **Items 89-96, 2026-11-15 to 2026-11-17: the move to 0.98.5a.** As ROADMAP-3 records them on 2026-11-17; tests are offline
 unless a run is named. Revivals target 0.98.5a-RC7 (`target show`); RC8 is the previous target (QUALIFIED) and the
-reference. The checkout is package 0.4.0 with probe 0.3.3. v0.4.0 was published as a pre-release on 2026-11-17
-([receipt](RELEASE_0_4_0.md)); later changes wait as `changelog.d/` fragments until they are assembled under 0.4.1.
+reference. The checkout is package 0.4.1 with probe 0.3.3. v0.4.0 was published as a pre-release on 2026-11-17
+([receipt](RELEASE_0_4_0.md)); later changes wait as `changelog.d/` fragments until they are assembled under the next version.
 
 | Item | Implementation | Validation / shipping evidence | Next step |
 |---|---|---|---|
