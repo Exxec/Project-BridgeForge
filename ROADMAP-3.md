@@ -249,6 +249,19 @@ Check S series implementation plan and if applicable add remaining items to road
   - **Publication:** tag and publish follow 0.4.0's process (`docs/RELEASE_0_4_0.md`). The receipt will be
     `docs/RELEASE_0_4_1.md`.
 
+  **Done 2026-11-17: v0.4.1 is published as a pre-release** (2026-11-18 01:02 UTC). The receipt is
+  `docs/RELEASE_0_4_1.md`.
+  - The annotated tag `v0.4.1` peels to `ed77cbb`, #121's merge.
+  - Checked before tagging:
+    - the full suite at that commit, in a clean worktree: 2987 tests, OK (skipped=12); hermeticity PASS;
+    - main CI's nine jobs on that commit (run 44210899558). A tag push runs no CI since #107.
+  - Wheel and sdist were built from a clean checkout. Every packaged file Git tracks equals its blob (wheel 400, sdist 722), and
+    an installed-wheel check passed, before tagging and again on the wheel downloaded from the public release.
+  - The draft's and then the public release's assets were downloaded. Both matched `SHA256SUMS.txt` and GitHub's digests, and
+    the blob check passed again on the public download.
+  - v0.4.0's release page now names all four problems and links v0.4.1; only that paragraph changed.
+  - It is a pre-release like 0.4.0: promotion waits on the live work, and is the owner's call.
+
 **95. Less hand work and faster re-validation for game updates (owner 2026-11-17: "1 through 5 add to roadmap. 6 I'm not sure we can do that always but if it can be optional that would be great. All others approved."; "Implement the smaller items not the greater phases like S and G").**
 **Approved.** Found taking the six-mod batch, United Aurora Federation and Sunrider through revival and live tests on
 2026-11-16/17. Sizes: S small, M medium, L large; the small ones are implemented first, one pull request each. The S and G

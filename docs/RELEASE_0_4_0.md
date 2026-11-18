@@ -57,9 +57,10 @@ three more of the same kind. All four let a mod's own files steer a tool BridgeF
 | 93.47 | run a command through cmd.exe or PowerShell during `mass-test`, through its mod id | #116 |
 | 93.48 | make `src-to-jar` overwrite an existing file outside its scratch folder, through a jar entry stored with backslashes | #117 |
 
-- **Notices:** v0.4.0's release page carries a known-issue note.
-- **0.4.1:** it carries all four fixes (the owner's word, 2026-11-17). Do not scan, compile-check, mass-test or `src-to-jar` mods
-  you do not trust with v0.4.0.
+- **Notices:** v0.4.0's release page carries a known-issue note. It names all four problems and links v0.4.1.
+- **0.4.1:** it carries all four fixes (the owner's word, 2026-11-17). It was published on 2026-11-18 at 01:02 UTC; its
+  receipt is [RELEASE_0_4_1.md](RELEASE_0_4_1.md). Do not scan, compile-check, mass-test or `src-to-jar` mods you do not
+  trust with v0.4.0.
 - **Earlier releases,** checked against the tags: v0.2.0, the earlier published release, has none of the four routes.
   The one exception is 93.46's related part: its `compile` (build) also passed no `-proc:none`. The unpublished v0.3.0 tag
   already had 93.46's compile-check route.

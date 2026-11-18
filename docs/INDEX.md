@@ -53,6 +53,7 @@ The dates and original measurements in these documents are preserved. Recheck im
   [performance workbench design](PERFORMANCE_WORKBENCH_DESIGN.md), and `docs/proposals/` describe plans or earlier scopes.
 - [D-series pilot](D_SERIES_PILOT_REPORT.md), [AoTD sweep](AOTD_SWEEP_2026-10-12.md),
   [Vacuum layout record](P12_VACUUM_LAYOUT.md), [0.2.0 publication](RELEASE_0_2_0.md), [0.4.0 publication](RELEASE_0_4_0.md),
+  [0.4.1 publication](RELEASE_0_4_1.md),
   [Zorg/EPTA follow-up](OWNER_MOD_FOLLOWUP_2026-10-17.md) record their own bounded evidence, not current universal acceptance.
 - [CHANGELOG](../CHANGELOG.md) and [mod changelog](../MOD_CHANGELOG.md) retain historical command names/versions where
   relevant; use the live CLI reference rather than executing a superseded example from release history.
@@ -64,9 +65,10 @@ The dates and original measurements in these documents are preserved. Recheck im
 GitHub default branch was `main` at `3342654d` when checked on 2026-10-18 (source package 0.3.0 then; 0.4.0 on 2026-10-21, probe 0.3.1); latest
 published tool release is v0.2.0 **pre-release**. Its GitHub asset digests match the publication receipt. No open GitHub
 issues/PRs were returned; root roadmap/local reports still contain unresolved work. Latest main CI was successful.
-Since then, v0.4.0 was published as a **pre-release** on 2026-11-17 and is the newest published release. Its
-[receipt](RELEASE_0_4_0.md) records the source commit, the suite and CI results it was tagged on, and asset digests checked
-after download.
+Since then, v0.4.0 was published as a **pre-release** on 2026-11-17. Its [receipt](RELEASE_0_4_0.md) records the source
+commit, the suite and CI results it was tagged on, and asset digests checked after download, and lists four security
+problems found after publication. v0.4.1, a **pre-release** that fixes them, followed the same evening and is the newest
+published release; its [receipt](RELEASE_0_4_1.md) records the same checks.
 
 The checks above describe the pre-publication audit snapshot. The owner authorized publication of the documentation
 corrections and proposed strategy on 2026-10-18. The strategy documents are included in that documentation commit;
