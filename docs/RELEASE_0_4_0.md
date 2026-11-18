@@ -3,7 +3,9 @@
 Published 2026-11-17 22:55:13 UTC:
 [BridgeForge 0.4.0](https://github.com/Exxec/Project-BridgeForge/releases/tag/v0.4.0), on the owner's word the same day
 ("Yes" to tagging and publishing v0.4.0; ROADMAP-3 96.4). It is public, marked pre-release, not a draft, and not marked
-Latest (no release is). As with 0.2.0, full-release promotion waits on the live work listed below, and it is the owner's call.
+Latest (no release was then). As with 0.2.0, full-release promotion waits on the live work listed below, and it is the owner's call.
+It stays a pre-release: the security release v0.4.1, which fixes the problems listed below, became the first full release
+and the Latest the same evening ([RELEASE_0_4_1.md](RELEASE_0_4_1.md)).
 
 Release source: `128830f1b6f4420b8d343f4cbb153b2593540323`, the merge of #112, which dated the notes. The remote annotated
 tag `v0.4.0` (object `ac236617845a98244bdc03941dfce06ae1b601ce`) peels to that commit. This document is a later receipt,
@@ -58,9 +60,9 @@ three more of the same kind. All four let a mod's own files steer a tool BridgeF
 | 93.48 | make `src-to-jar` overwrite an existing file outside its scratch folder, through a jar entry stored with backslashes | #117 |
 
 - **Notices:** v0.4.0's release page carries a known-issue note. It names all four problems and links v0.4.1.
-- **0.4.1:** it carries all four fixes (the owner's word, 2026-11-17). It was published on 2026-11-18 at 01:02 UTC; its
-  receipt is [RELEASE_0_4_1.md](RELEASE_0_4_1.md). Do not scan, compile-check, mass-test or `src-to-jar` mods you do not
-  trust with v0.4.0.
+- **0.4.1:** it carries all four fixes (the owner's word, 2026-11-17). It was published on 2026-11-18 at 01:02 UTC and made
+  a full release, marked Latest, at 01:23 UTC; its receipt is [RELEASE_0_4_1.md](RELEASE_0_4_1.md). Do not scan,
+  compile-check, mass-test or `src-to-jar` mods you do not trust with v0.4.0.
 - **Earlier releases,** checked against the tags: v0.2.0, the earlier published release, has none of the four routes.
   The one exception is 93.46's related part: its `compile` (build) also passed no `-proc:none`. The unpublished v0.3.0 tag
   already had 93.46's compile-check route.

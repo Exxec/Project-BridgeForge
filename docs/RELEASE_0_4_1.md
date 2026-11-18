@@ -2,9 +2,10 @@
 
 Published 2026-11-18 01:02:07 UTC, the evening of 2026-11-17 locally (the date CHANGELOG gives):
 [BridgeForge 0.4.1](https://github.com/Exxec/Project-BridgeForge/releases/tag/v0.4.1), on the owner's word of 2026-11-17
-("yes" to tagging a 0.4.1 with the security fixes and to a known-issue line on v0.4.0's page; ROADMAP-3 96.7). It is public,
-marked pre-release, not a draft, and not marked Latest (no release is). As with 0.4.0, full-release promotion waits on the
-live work listed below, and it is the owner's call.
+("yes" to tagging a 0.4.1 with the security fixes and to a known-issue line on v0.4.0's page; ROADMAP-3 96.7). It was
+published as a pre-release, not marked Latest. The same evening the owner made it a full release ("You can make it a full
+release instead of pre-release"): at 01:23 UTC it became a full release marked Latest, the first full BridgeForge release.
+0.4.0 and 0.2.0 stay pre-releases.
 
 Release source: `ed77cbb87d5d5426821105e77b7b5eac899a6243`, the merge of #121, which assembled the notes and set the
 version. The remote annotated tag `v0.4.1` (object `ce1433f3c6b2dc8495b5ba9c3ca0da1e18ad88a0`) peels to that commit. This
@@ -66,6 +67,20 @@ The release notes are CHANGELOG.md's 0.4.1 section (five entries) under a short 
   - v0.4.0 is still a pre-release, not a draft, and not marked Latest.
 - **Tags and other releases:** no existing tag or release was changed in any other way.
 
+## Promotion to a full release
+
+At 2026-11-18 01:23:47 UTC, on the owner's word, v0.4.1 was edited to a full release (not a pre-release) and marked Latest.
+- **Notes:** the opening sentence of the notes said the release was a pre-release whose promotion waited on live
+  acceptance work. It now reads "It is a full release: the owner promoted it from pre-release on 2026-11-17. 0.4.0 and 0.2.0
+  stay pre-releases." Nothing else in the notes changed.
+- **Read back at 01:23:55 UTC:**
+  - not a draft and not a pre-release, and `releases/latest` returns `v0.4.1`;
+  - the stored notes equal the intended text;
+  - the three assets' GitHub digests are the ones in the table above;
+  - the tag still peels to `ed77cbb`;
+  - v0.4.0 is still a pre-release.
+- **Not a live test:** the promotion certifies the package, as built and checked above. It certifies no mod.
+
 ## Scope
 
 - **Contents:** the assets are tool-only. They contain no game files, original mods, rigs or saves.
@@ -86,12 +101,15 @@ Live testing is wrapped up for now (owner, 2026-11-17): Test1 is in use. The liv
 Local evidence on the owner's machine, in the gitignored `In operation/_attic/release-0.4.1/`:
 - the built assets;
 - both downloads;
-- the notes, the draft's body, and v0.4.0's release body before and after the edit;
+- the notes and the draft's body;
+- v0.4.0's release body before and after its edit, and v0.4.1's before and after the promotion;
 - the suite, CI, build, blob-check and both installed-wheel logs, and a note of the suite's commit and worktree state;
+- the promotion log, with the asset digests before and after it;
 - the scripts:
   - `verify_dist.py` (the blob check);
   - `installed_wheel_check.py`;
   - `make_041_notes.py` (the notes);
-  - `v040_link_041.py` (v0.4.0's note).
+  - `v040_link_041.py` (v0.4.0's note);
+  - `v041_full_release_notes.py` (the promoted notes).
 
 Before any later re-publication, look at the existing tag and release first. Never recreate them blindly.

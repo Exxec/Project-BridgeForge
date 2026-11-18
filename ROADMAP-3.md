@@ -249,8 +249,8 @@ Check S series implementation plan and if applicable add remaining items to road
   - **Publication:** tag and publish follow 0.4.0's process (`docs/RELEASE_0_4_0.md`). The receipt will be
     `docs/RELEASE_0_4_1.md`.
 
-  **Done 2026-11-17: v0.4.1 is published as a pre-release** (2026-11-18 01:02 UTC). The receipt is
-  `docs/RELEASE_0_4_1.md`.
+  **Done 2026-11-17: v0.4.1 is published, and is the first full release** (2026-11-18 01:02 UTC as a pre-release, made a
+  full release at 01:23 UTC). The receipt is `docs/RELEASE_0_4_1.md`.
   - The annotated tag `v0.4.1` peels to `ed77cbb`, #121's merge.
   - Checked before tagging:
     - the full suite at that commit, in a clean worktree: 2987 tests, OK (skipped=12); hermeticity PASS;
@@ -260,7 +260,10 @@ Check S series implementation plan and if applicable add remaining items to road
   - The draft's and then the public release's assets were downloaded. Both matched `SHA256SUMS.txt` and GitHub's digests, and
     the blob check passed again on the public download.
   - v0.4.0's release page now names all four problems and links v0.4.1; only that paragraph changed.
-  - It is a pre-release like 0.4.0: promotion waits on the live work, and is the owner's call.
+  - Owner, the same evening: "You can make it a full release instead of pre-release".
+    - At 01:23 UTC v0.4.1 became a full release, marked Latest. Its notes' opening sentence now says so; nothing else changed.
+    - Read back: the flags, `releases/latest`, the notes, the asset digests and the tag.
+    - 0.4.0 and 0.2.0 stay pre-releases. A full release certifies the package, not any mod: the live work stays open.
 
 **95. Less hand work and faster re-validation for game updates (owner 2026-11-17: "1 through 5 add to roadmap. 6 I'm not sure we can do that always but if it can be optional that would be great. All others approved."; "Implement the smaller items not the greater phases like S and G").**
 **Approved.** Found taking the six-mod batch, United Aurora Federation and Sunrider through revival and live tests on

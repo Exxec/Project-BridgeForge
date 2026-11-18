@@ -67,8 +67,9 @@ published tool release is v0.2.0 **pre-release**. Its GitHub asset digests match
 issues/PRs were returned; root roadmap/local reports still contain unresolved work. Latest main CI was successful.
 Since then, v0.4.0 was published as a **pre-release** on 2026-11-17. Its [receipt](RELEASE_0_4_0.md) records the source
 commit, the suite and CI results it was tagged on, and asset digests checked after download, and lists four security
-problems found after publication. v0.4.1, a **pre-release** that fixes them, followed the same evening and is the newest
-published release; its [receipt](RELEASE_0_4_1.md) records the same checks.
+problems found after publication. v0.4.1, which fixes them, followed the same evening. The owner made it a **full release**,
+marked Latest, that night; it is the newest published release, and its [receipt](RELEASE_0_4_1.md) records the same checks
+and the promotion.
 
 The checks above describe the pre-publication audit snapshot. The owner authorized publication of the documentation
 corrections and proposed strategy on 2026-10-18. The strategy documents are included in that documentation commit;
