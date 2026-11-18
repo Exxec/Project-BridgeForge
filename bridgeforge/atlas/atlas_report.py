@@ -388,7 +388,7 @@ def add_parser(subcommands) -> None:
     mig.add_argument("--stem", default="MIGRATIONS", help="file name stem for --write (default MIGRATIONS)")
     mig.add_argument("--old-api", type=Path, help="older starfarer.api.jar (or its folder): only api-diff-removed symbols are kept, and renames are judged signature-compatible or not")
     mig.add_argument("--new-api", type=Path, help="newer starfarer.api.jar (or its folder)")
-    mig.add_argument("--write", type=Path, metavar="DIR", help="write MIGRATIONS.md and MIGRATIONS.json into DIR")
+    mig.add_argument("--write", type=Path, metavar="DIR", help="write MIGRATIONS.md and MIGRATIONS.json into DIR; an interrupted run resumes from <stem>.partial.jsonl there")
     mig.add_argument("--top", type=int, default=DEFAULT_LIMIT, help="rules shown (default %d)" % DEFAULT_LIMIT)
     mig.add_argument("--quiet", action="store_true", help="no per-pair progress lines on stderr")
     exem = sub.add_parser("exemplars", help="feature exemplars (STATIC): rank indexed mods by how many of a feature's API symbols they reference, with the classes/files that do (needs `atlas build`)")

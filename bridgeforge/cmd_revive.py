@@ -113,11 +113,53 @@ def add_parser(subcommands) -> None:
         command.add_argument("--json", action="store_true")
     for command in (esc_show, esc_verify, esc_run, esc_apply):
         command.add_argument("packet", nargs="?" if command is esc_run else None, help="packet id (see `escalation list`)")
-    esc_run.add_argument("--all", action="store_true", help="run every agent packet in turn")
+    esc_run.add_argument("--all", action="store_true", help="run every agent packet in turn; an interrupted run resumes after the last packet that finished, whatever its outcome (name a packet to run it again)")
+    esc_run.add_argument("--quiet", action="store_true", help="with --all: no per-packet progress lines on stderr")
     esc_run.add_argument("--watch-dir", type=Path, action="append", default=[], help="a directory the agent must not touch (e.g. the session's memory folder); what changed in it is reported after the run; repeatable")
     esc_review = esc_sub.add_parser("review", help="write reports/ESCALATION_REVIEW_SHEET.md: each packet's newest attempt with its diff and flags for changes that need a human (removed hints, Random/save logic, loop rewrites, swallowed exceptions)")
     esc_review.add_argument("workspace", type=Path)
     esc_review.add_argument("--json", action="store_true")
+
+
+def run_packets(args: argparse.Namespace, names: list[str]) -> list[dict]:
+    """Run each packet in turn. With --all: one progress line per packet, and finished packets go to a checkpoint beside the
+    packets, so an interrupted run resumes after the last packet that finished (ROADMAP-3 96.5 A3). An agent attempt can take
+    half an hour; `--all` used to run every packet with no output until the end and keep nothing when stopped.
+    The header holds every option that changes a run and each packet file's SHA-256, so packets that `revive` wrote afresh
+    in between are run again, not skipped."""
+    import hashlib
+    import time
+
+    from bridgeforge.escalation import escalation
+    from bridgeforge.progress import Checkpoint, report
+
+    def packet_digest(name: str) -> str | None:
+        try:
+            return hashlib.sha256((escalation.packets_dir(args.workspace) / f"{name}.json").read_bytes()).hexdigest()
+        except OSError:
+            return None  # a missing packet: run_packet says so
+
+    path = escalation.packets_dir(args.workspace) / "run-all.partial.jsonl" if args.all else None
+    header = {"command": "escalation run --all", "workspace": str(Path(args.workspace).resolve()), "packets": names,
+              "agent": args.agent, "apply": bool(args.apply), "retries": args.retries, "timeout": args.timeout,
+              "auto_accept": bool(args.auto_accept),
+              "packet_sha256": {name: packet_digest(name) for name in names} if path else {}}
+    results = []
+    with Checkpoint(path, header) as checkpoint:
+        for number, name in enumerate(names, 1):
+            started = time.perf_counter()
+            result = checkpoint.get(name)
+            seconds = None
+            if result is None:
+                result = escalation.run_packet(args.workspace, name, args.agent, apply=args.apply, retries=args.retries,
+                                               timeout=args.timeout, auto_accept=args.auto_accept)
+                checkpoint.add(name, result)
+                seconds = time.perf_counter() - started
+            if args.all and not args.quiet:
+                report(number, len(names), name, result["outcome"], seconds)
+            results.append(result)
+        checkpoint.finish()
+    return results
 
 
 def run_cli(args: argparse.Namespace) -> int:
@@ -265,7 +307,7 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"{len(result['reviews'])} attempt(s) reviewed; flagged: {', '.join(result['flagged']) or 'none'}" + (f"\n  {result['sheet']}" if result["sheet"] else ""))
         return 0
     if args.command == "escalation":
-        from bridgeforge.escalation.escalation import EscalationError, list_packets, load_packet, run_packet, verify
+        from bridgeforge.escalation.escalation import EscalationError, list_packets, load_packet, verify
         from .revive import render_packet
         try:
             if args.escalation_command == "prune":
@@ -328,7 +370,7 @@ def run_cli(args: argparse.Namespace) -> int:
             watched = {d: snapshot_dir(d) for d in args.watch_dir}
             from bridgeforge.escalation.escalation import run_lock
             with run_lock(args.workspace):
-                results = [run_packet(args.workspace, name, args.agent, apply=args.apply, retries=args.retries, timeout=args.timeout, auto_accept=args.auto_accept) for name in names]
+                results = run_packets(args, names)
             for directory, before in watched.items():
                 touched = diff_snapshots(before, snapshot_dir(directory))
                 if any(touched.values()):
