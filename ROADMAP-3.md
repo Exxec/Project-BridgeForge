@@ -203,6 +203,16 @@ Check S series implementation plan and if applicable add remaining items to road
 
       Each fails with its guard removed (mutation-checked).
     - P4 (S): AST facts resolve each file once (about 3.5 s a scan).
+      **Done 2026-11-17.** A profile of a Sunrider scan (86 `.java` files, RC7 core, White_Legion) found the repeated work
+      in `scan_javatext._blank_java_comments`: 4,523 calls and 5.06 s of a 24.8 s scan. About 40 source checks each blank
+      every file's comments again. Results are now kept per text and mode for the process: least recently used first out,
+      within 64 M characters (an entry counts its text and its result), under a lock; the values are strings, so a caller
+      cannot change a cached one. All 129 call sites keep their code.
+      After: 247 blankings, 0.51 s, and the scan took 18.8 s (both timed under cProfile). The 70 findings are the same
+      (SHA-256 of the findings before and after).
+      Tests: `tests/test_blank_comments_cache.py`: equal to the uncached result; each text and mode blanked once over 40
+      passes, including a new string read again; the budget holds, and a text over it is blanked but not kept; 8 threads.
+      The once and budget guards each fail with their guard removed (mutation-checked).
     - P6 (S): fix the quadratic `_invalid_utf8_offsets`. It is the suite's slowest test at 24 s, and large CP-1252
       files hit it too.
       **Done 2026-11-17.** One decode with a registered error handler. The handler records each undecodable byte and

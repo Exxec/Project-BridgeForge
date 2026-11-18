@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+import threading
+from collections import OrderedDict
 
 
 def _method_body(text: str, name: str) -> str:
@@ -138,7 +140,50 @@ def _enclosing_method_span(text: str, position: int) -> tuple[int, int]:
     return best
 
 
+# ROADMAP-3 96.5 P4: some 40 source checks each blank every .java file again (a Sunrider scan: 4,523 calls for 86 files,
+# about 5 s of 25). Results are kept per (strings, text) for the process, least recently used first out, within a budget of
+# characters (each entry counts its text and its result). The values are str, so a cached result cannot be changed by a caller.
+BLANK_CACHE_MAX_CHARS = 64 * 1024 * 1024
+_blank_cache: OrderedDict[tuple[bool, str], str] = OrderedDict()
+_blank_cache_size = 0
+_blank_lock = threading.Lock()
+
+
+def clear_blank_cache() -> None:
+    global _blank_cache_size
+    with _blank_lock:
+        _blank_cache.clear()
+        _blank_cache_size = 0
+
+
+def _blank_cache_chars() -> int:
+    return _blank_cache_size
+
+
 def _blank_java_comments(text: str, strings: bool = False) -> str:
+    """`_blank_java_comments_uncached`, computed once per text and mode in this process."""
+    global _blank_cache_size
+    key = (strings, text)
+    with _blank_lock:
+        found = _blank_cache.get(key)
+        if found is not None:
+            _blank_cache.move_to_end(key)
+            return found
+    result = _blank_java_comments_uncached(text, strings)
+    cost = 2 * len(text)
+    if cost > BLANK_CACHE_MAX_CHARS:
+        return result
+    with _blank_lock:
+        if key not in _blank_cache:
+            while _blank_cache and _blank_cache_size + cost > BLANK_CACHE_MAX_CHARS:
+                (_old_strings, old_text), _old = _blank_cache.popitem(last=False)
+                _blank_cache_size -= 2 * len(old_text)
+            _blank_cache[key] = result
+            _blank_cache_size += cost
+    return result
+
+
+def _blank_java_comments_uncached(text: str, strings: bool = False) -> str:
     """Blank out // and /* */ comment text with spaces, keeping newlines so offsets and line numbers hold.
 
     String and char literals are skipped, so "http://..." survives. Without this, source checks flagged
