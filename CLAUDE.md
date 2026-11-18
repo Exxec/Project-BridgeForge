@@ -152,7 +152,9 @@ on the second PC) and `memory-mirror`.
   An entry's name is untrusted too: give javap a class only as `zipsafe.javap_class_name(entry)`, and skip the entry when that
   is None. javap's launcher reads an argument starting with `-J` as a JVM option (93.45). Write a javac `@` file only through
   `java_toolchain.javac_argument_line`, which refuses a line break (javac ends a token there even inside quotes), and give
-  every javac run `-proc:none`: a mod's jar on the classpath may declare an annotation processor (93.46).
+  every javac run `-proc:none`: a mod's jar on the classpath may declare an annotation processor (93.46). Never build a
+  cmd.exe line or a PowerShell script from a mod's text: pass a path to PowerShell in an environment variable, and make a
+  name from a mod's id plain first (`mass_test.log_name_for`). `launch.command_line` refuses `"`, `%` and `!` (93.47).
 - Accepted-finding baselines are stamped with the mod version and expire on any version change (`baseline-audit`,
   `baseline-accept`); `archive` refuses a stale baseline unless `reports/SHIPPED_CHANGES.json` carries a written `baseline` reason.
 - `tests/known_failures.json` lists known environmental failures with an expiry; `test_guard` reports them without failing.

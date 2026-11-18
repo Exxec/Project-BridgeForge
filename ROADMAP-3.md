@@ -746,6 +746,30 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - the reviewer's case end to end, which ran the processor before the fix.
 
   Each guard's test fails with the guard removed (mutation-checked).
+- 93.47 (S) **A mod's id reached cmd.exe and PowerShell.** Found 2026-11-17 by the security review of 93.45, which ran an
+  injected command through each in a copy of the code; the flow was then confirmed in the source.
+  - **Where:** `mass_test` named each boot's log `mass-<mod id>`, taken from the mod's mod_info.json. Through `java_matrix`
+    and `boot_test` that name reached:
+    - `launch.command_line`, which builds the raw `cmd.exe /c ""bat" > "log" 2> "err""` line. An id such as
+      `x" & <command> & rem ` runs the command;
+    - the window watcher's screenshot path, written into a PowerShell single-quoted string that doubled only `'`.
+      PowerShell also ends such a string at U+2018-U+201B.
+  - **Reach:** `mass-test` over archives in `Done/`. Every other launch passes a test id from the command line.
+
+  **Done 2026-11-17.**
+  - `mass_test.log_name_for` keeps only ASCII letters, digits, `.`, `_` and `-` of the id.
+  - `launch.command_line` refuses a path holding `"`, `%`, `!` or a control character. These are what cmd.exe acts on inside
+    the quotes.
+  - `window_watch.save_screenshot` and `game_click.capture_client` give PowerShell the path in an environment variable
+    (`BF_IMAGE_PATH`), never inside the script.
+
+  Tests: `tests/test_command_line_names.py`:
+  - the launch line refuses such paths;
+  - `start_game` starts nothing;
+  - a hostile id becomes a plain log name;
+  - both screenshot scripts carry no path.
+
+  All 5 fail on the old code.
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct
