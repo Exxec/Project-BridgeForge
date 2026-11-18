@@ -160,8 +160,10 @@ def auto_open(queue: Path, *, policy: Path | None = None, progress=None, checkpo
     workspaces = discover(queue)
     mods: dict[str, list[dict]] = {}
     counts: dict[str, Counter] = {}
+    # The approvals are one string, not a list: Checkpoint takes a longer list for the same run, and one more approved
+    # fixer changes NOT_APPROVED rows.
     header = {"command": "auto-open", "queue": str(queue), "workspaces": [w.name for w in workspaces],
-              "approved_fixers": sorted(standing)}
+              "approved_fixers": json.dumps(sorted(standing))}
     if checkpoint:
         header["inputs"] = {w.name: _inputs_stamp(w) for w in workspaces}
     with Checkpoint(checkpoint, header) as done:

@@ -113,7 +113,7 @@ def add_parser(subcommands) -> None:
         command.add_argument("--json", action="store_true")
     for command in (esc_show, esc_verify, esc_run, esc_apply):
         command.add_argument("packet", nargs="?" if command is esc_run else None, help="packet id (see `escalation list`)")
-    esc_run.add_argument("--all", action="store_true", help="run every agent packet in turn; an interrupted run resumes after the last packet that finished")
+    esc_run.add_argument("--all", action="store_true", help="run every agent packet in turn; an interrupted run resumes after the last packet that finished, whatever its outcome (name a packet to run it again)")
     esc_run.add_argument("--quiet", action="store_true", help="with --all: no per-packet progress lines on stderr")
     esc_run.add_argument("--watch-dir", type=Path, action="append", default=[], help="a directory the agent must not touch (e.g. the session's memory folder); what changed in it is reported after the run; repeatable")
     esc_review = esc_sub.add_parser("review", help="write reports/ESCALATION_REVIEW_SHEET.md: each packet's newest attempt with its diff and flags for changes that need a human (removed hints, Random/save logic, loop rewrites, swallowed exceptions)")

@@ -3663,7 +3663,7 @@ run an AI agent on a packet in a throwaway copy; only a verified result is kept
 | `workspace` | - | - |
 | `--json` | - | - |
 | `packet` | - | packet id (see `escalation list`) |
-| `--all` | - | run every agent packet in turn; an interrupted run resumes after the last packet that finished |
+| `--all` | - | run every agent packet in turn; an interrupted run resumes after the last packet that finished, whatever its outcome (name a packet to run it again) |
 | `--quiet` | - | with --all: no per-packet progress lines on stderr |
 | `--watch-dir` WATCH_DIR | repeatable | a directory the agent must not touch (e.g. the session's memory folder); what changed in it is reported after the run; repeatable |
 

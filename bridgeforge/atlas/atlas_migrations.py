@@ -154,11 +154,13 @@ def mine(pairs: list[Pair], catalogue: dict | None = None, progress=None, checkp
     """`checkpoint`: a file that keeps each finished pair's replacements, so an interrupted run resumes (long-running rule;
     ROADMAP-3 96.5 A3). It is used only when the pair labels are unique, and removed when the run completes. The header
     names the API jars by the SHA-256 the catalogue records, so a run with other `--old-api`/`--new-api` jars starts
-    afresh."""
+    afresh. A pair is known by its label: a pair whose folders changed between the interrupted run and its resume keeps
+    its rows (queue pairs are extracted afresh each run, so their files' times say nothing)."""
     rules: dict[tuple[str, str], dict] = {}
     scanned = []
     labels = [pair.label for pair in pairs]
-    api = [(catalogue.get(side) or {}).get("sha256") for side in ("old", "new")] if catalogue else None
+    # A dict, not a list: Checkpoint takes a list holding the same items for the same run, and swapped jars are not.
+    api = {side: (catalogue.get(side) or {}).get("sha256") for side in ("old", "new")} if catalogue else None
     header = {"command": "atlas migrations", "pairs": labels, "api_jars_sha256": api}
     with Checkpoint(checkpoint if len(set(labels)) == len(labels) else None, header) as done:
         for index, pair in enumerate(pairs, 1):

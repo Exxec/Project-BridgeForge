@@ -249,7 +249,38 @@ class LongRunningListTests(unittest.TestCase):
                 module.auto_open(queue, checkpoint=checkpoint)
         self.assertEqual(calls, ["ModA", "ModB", "ModA", "ModB"])
 
-    def test_atlas_migrations_start_afresh_with_other_api_jars(self):
+    def test_auto_open_starts_afresh_when_another_fixer_was_approved_in_between(self):
+        """Checkpoint takes a longer list for the same run, so the standing approvals must not be a plain list: one more
+        approved fixer turns NOT_APPROVED rows into others (review of 96.5 A3, 2026-11-18)."""
+        from unittest import mock
+
+        from bridgeforge import auto_open as module
+
+        calls, seen = [], []
+
+        def explain(workspace, standing):
+            calls.append(workspace.name)
+            seen.append(sorted(standing))
+            if workspace.name == "ModB" and calls.count("ModB") == 1:
+                raise _Interrupted
+            return []
+
+        with resolved_temp_dir() as queue:
+            for name in ("ModA", "ModB"):
+                (queue / name / "reports").mkdir(parents=True)
+            policy = queue / module.POLICY_NAME
+            policy.write_text(json.dumps({"approved_fixers": {"fixer-a": "owner"}}), encoding="utf-8")
+            checkpoint = queue / module.CHECKPOINT_NAME
+            with mock.patch.object(module, "explain_workspace", side_effect=explain):
+                with self.assertRaises(_Interrupted):
+                    module.auto_open(queue, checkpoint=checkpoint)
+                policy.write_text(json.dumps({"approved_fixers": {"fixer-a": "owner", "fixer-b": "owner"}}), encoding="utf-8")
+                module.auto_open(queue, checkpoint=checkpoint)
+        self.assertEqual(calls, ["ModA", "ModB", "ModA", "ModB"])
+        self.assertEqual(seen[-1], ["fixer-a", "fixer-b"])
+
+    def _atlas_calls(self, first: dict | None, second: dict | None) -> list[str]:
+        """Interrupt `mine` at pair b with catalogue `first`, run again with `second`; returns the pairs read."""
         from unittest import mock
 
         from bridgeforge.atlas import atlas_migrations as module
@@ -269,13 +300,20 @@ class LongRunningListTests(unittest.TestCase):
                 (root / name / "new").mkdir(parents=True)
                 pairs.append(module.Pair(f"{name}: old -> new", root / name / "old", root / name / "new"))
             checkpoint = root / "MIGRATIONS.partial.jsonl"
-            first = {"old": {"sha256": "1" * 64}, "new": {"sha256": "2" * 64}}
-            other = {"old": {"sha256": "1" * 64}, "new": {"sha256": "3" * 64}}
             with mock.patch.object(module, "pair_replacements", side_effect=replacements):
                 with self.assertRaises(_Interrupted):
                     module.mine(pairs, first, None, checkpoint=checkpoint)
-                module.mine(pairs, other, None, checkpoint=checkpoint)
-        self.assertEqual(calls, ["a", "b", "a", "b"])
+                module.mine(pairs, second, None, checkpoint=checkpoint)
+        return calls
+
+    def test_atlas_migrations_start_afresh_with_other_api_jars(self):
+        jars = {"old": {"sha256": "1" * 64}, "new": {"sha256": "2" * 64}}
+        self.assertEqual(self._atlas_calls(jars, jars), ["a", "b", "b"])
+        other = {"old": {"sha256": "1" * 64}, "new": {"sha256": "3" * 64}}
+        swapped = {"old": {"sha256": "2" * 64}, "new": {"sha256": "1" * 64}}
+        for name, second in (("another new jar", other), ("old and new swapped", swapped), ("no api-diff", None)):
+            with self.subTest(second=name):
+                self.assertEqual(self._atlas_calls(jars, second), ["a", "b", "a", "b"])
 
 
 if __name__ == "__main__":
