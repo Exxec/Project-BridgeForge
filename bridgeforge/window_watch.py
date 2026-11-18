@@ -50,15 +50,19 @@ def child_text(handle: int) -> str:
 
 
 def save_screenshot(path: Path) -> bool:
-    """The whole virtual screen as a PNG (PowerShell + System.Drawing)."""
+    """The whole virtual screen as a PNG (PowerShell + System.Drawing).
+
+    The path goes to PowerShell in an environment variable, never inside the script: a single-quoted string also ends at
+    U+2018-U+201B, and the mass test's paths carried a mod's id (ROADMAP-3 93.47)."""
+    import os
     import subprocess
 
-    quoted = str(path).replace("'", "''")
     script = ("Add-Type -AssemblyName System.Windows.Forms, System.Drawing; $v=[System.Windows.Forms.SystemInformation]::VirtualScreen; "
               "$b=New-Object System.Drawing.Bitmap $v.Width,$v.Height; $g=[System.Drawing.Graphics]::FromImage($b); "
-              f"$g.CopyFromScreen($v.Left,$v.Top,0,0,$b.Size); $b.Save('{quoted}', [System.Drawing.Imaging.ImageFormat]::Png)")
+              "$g.CopyFromScreen($v.Left,$v.Top,0,0,$b.Size); $b.Save($env:BF_IMAGE_PATH, [System.Drawing.Imaging.ImageFormat]::Png)")
     try:
-        subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, timeout=60, check=True)
+        subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, timeout=60, check=True,
+                       env={**os.environ, "BF_IMAGE_PATH": str(path)})
     except Exception:
         return False
     return Path(path).is_file()

@@ -96,18 +96,20 @@ def scroll(geometry: tuple[int, int, int, int, int], fx: float, fy: float, notch
 def capture_client(geometry: tuple[int, int, int, int, int], path: Path) -> bool:
     """Save the game window's client area (PowerShell + System.Drawing, DPI-aware, only that rectangle): a .bmp at full size for
     screen_read, anything else as a 1280x960 PNG to look at."""
+    import os
     import subprocess
 
     _hwnd, left, top, width, height = geometry
-    quoted = str(path).replace("'", "''")
-    save = (f"$b.Save('{quoted}', [System.Drawing.Imaging.ImageFormat]::Bmp)" if str(path).lower().endswith(".bmp")
-            else f"$s=New-Object System.Drawing.Bitmap $b,1280,960; $s.Save('{quoted}')")
+    # The path goes in an environment variable, never inside the script (ROADMAP-3 93.47, as window_watch.save_screenshot).
+    save = ("$b.Save($env:BF_IMAGE_PATH, [System.Drawing.Imaging.ImageFormat]::Bmp)" if str(path).lower().endswith(".bmp")
+            else "$s=New-Object System.Drawing.Bitmap $b,1280,960; $s.Save($env:BF_IMAGE_PATH)")
     script = ("Add-Type -AssemblyName System.Drawing; Add-Type 'using System.Runtime.InteropServices; public class D { [DllImport(\"user32.dll\")] public static extern bool SetProcessDPIAware(); }'; "
               "[D]::SetProcessDPIAware() | Out-Null; $b=New-Object System.Drawing.Bitmap " + str(width) + "," + str(height) + "; "
               "$g=[System.Drawing.Graphics]::FromImage($b); $g.CopyFromScreen(" + str(left) + "," + str(top) + ",0,0,(New-Object System.Drawing.Size " + str(width) + "," + str(height) + ")); "
               + save)
     try:
-        subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, timeout=60, check=True)
+        subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, timeout=60, check=True,
+                       env={**os.environ, "BF_IMAGE_PATH": str(path)})
     except Exception:
         return False
     return Path(path).is_file()

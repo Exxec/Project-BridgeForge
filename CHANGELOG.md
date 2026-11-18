@@ -1,6 +1,32 @@
 # Changelog
 
-## 0.4.1 (unreleased)
+## 0.4.2 (unreleased)
+
+## 0.4.1 (2026-11-17)
+
+- Security: a mod's jar can no longer put options on javap's command line through a class entry's name (ROADMAP-3 93.45).
+  The settings-key and procgen-argument checks gave javap each class as named in the jar, and javap's launcher reads an
+  argument starting with `-J` as a JVM option. They now pass only plain binary class names (`zipsafe.javap_class_name`)
+  and skip any other entry. v0.4.0 has the problem; v0.2.0 does not.
+- Security: a mod can no longer make compile-check run its own code (ROADMAP-3 93.46). A mod_info.json "jars" entry with
+  line breaks reached javac's argument file, where a line break ends a token even inside quotes. That put `-proc:full`
+  after `-proc:none`, so javac ran an annotation processor from the mod's jar. Fixes:
+  - argument-file lines refuse line breaks;
+  - jar paths holding control characters are left off the classpath;
+  - `build` and the probe build now pass `-proc:none` too.
+- Security: a mod's id can no longer reach cmd.exe or a PowerShell script (ROADMAP-3 93.47).
+  - The mass test named its logs after the mod's id. That name went into the raw cmd.exe launch line and into a quoted
+    screenshot path in PowerShell.
+  - Log names now keep only ASCII letters, digits, `.`, `_` and `-`.
+  - The launch line refuses a path holding `"`, `%`, `!` or a control character.
+  - Screenshot paths reach PowerShell in an environment variable.
+- Security: `src-to-jar` no longer writes a jar entry outside its scratch folder (ROADMAP-3 93.48). An entry stored as
+  `pkg/Name$\..\..\x.class` compiled fine for javac but was a path out of the folder to Python's zipfile on Windows, so
+  the proof overwrote an existing file with the mod's bytes. Only plain class names are read now, and a write must stay in
+  the folder.
+- BridgeForge 0.4.0 is published as a GitHub pre-release (ROADMAP-3 96.4). `docs/RELEASE_0_4_0.md` records its source commit,
+  the suite and CI results it was tagged on, and the asset hashes, checked again after download. Also recorded: JDK 27 on the
+  test rig (93.43; set up, not yet the default) and the owner's decision to keep Eridani's and Scrapyard's archives (93.39).
 
 ## 0.4.0 (2026-11-17)
 

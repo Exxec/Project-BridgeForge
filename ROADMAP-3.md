@@ -258,6 +258,35 @@ Check S series implementation plan and if applicable add remaining items to road
 
   Left as they were: a proof recorded on a refused attempt is keyed by path and not re-checked when the file changes again
   (older design); `record_group` still records the standing licence before `archive_mod`.
+- 96.7 (S) **Release 0.4.1: the four security fixes.** The owner was asked, 2026-11-17, whether to tag a 0.4.1 with the javap
+  fix once it merged, and to add a known-issue line to v0.4.0's release page: "yes". The security review that followed 93.45
+  found 93.46-93.48.
+  - **What 0.4.1 carries:** all four fixes (93.45 #113, 93.46 #115, 93.47 #116, 93.48 #117) and the v0.4.0 receipt (#114).
+  - **What waits:** 96.5's performance items (P1 #118, P2 #119, P7) go into the next version, so this release is only its
+    fixes.
+  - **The notices:** v0.4.0's release page carries a known-issue note, added after #113. `docs/RELEASE_0_4_0.md` has a
+    section listing the four problems and their fixes.
+  - **The notes and the version:** `release-notes assemble --version 0.4.1` moved the five fragments under
+    `## 0.4.1 (2026-11-17)`, and an empty `## 0.4.2 (unreleased)` takes the next ones. The package version is 0.4.1
+    (pyproject, `bridgeforge/__init__.py`, `uv.lock`). Salvor's pin `bridgeforge>=0.4,<0.5` covers it.
+  - **Publication:** tag and publish follow 0.4.0's process (`docs/RELEASE_0_4_0.md`). The receipt will be
+    `docs/RELEASE_0_4_1.md`.
+
+  **Done 2026-11-17: v0.4.1 is published, and is the first full release** (2026-11-18 01:02 UTC as a pre-release, made a
+  full release at 01:23 UTC). The receipt is `docs/RELEASE_0_4_1.md`.
+  - The annotated tag `v0.4.1` peels to `ed77cbb`, #121's merge.
+  - Checked before tagging:
+    - the full suite at that commit, in a clean worktree: 2987 tests, OK (skipped=12); hermeticity PASS;
+    - main CI's nine jobs on that commit (run 44210899558). A tag push runs no CI since #107.
+  - Wheel and sdist were built from a clean checkout. Every packaged file Git tracks equals its blob (wheel 400, sdist 722), and
+    an installed-wheel check passed, before tagging and again on the wheel downloaded from the public release.
+  - The draft's and then the public release's assets were downloaded. Both matched `SHA256SUMS.txt` and GitHub's digests, and
+    the blob check passed again on the public download.
+  - v0.4.0's release page now names all four problems and links v0.4.1; only that paragraph changed.
+  - Owner, the same evening: "You can make it a full release instead of pre-release".
+    - At 01:23 UTC v0.4.1 became a full release, marked Latest. Its notes' opening sentence now says so; nothing else changed.
+    - Read back: the flags, `releases/latest`, the notes, the asset digests and the tag.
+    - 0.4.0 and 0.2.0 stay pre-releases. A full release certifies the package, not any mod: the live work stays open.
 
 **95. Less hand work and faster re-validation for game updates (owner 2026-11-17: "1 through 5 add to roadmap. 6 I'm not sure we can do that always but if it can be optional that would be great. All others approved."; "Implement the smaller items not the greater phases like S and G").**
 **Approved.** Found taking the six-mod batch, United Aurora Federation and Sunrider through revival and live tests on
@@ -769,6 +798,90 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - the reviewer's case end to end, which ran the processor before the fix.
 
   Each guard's test fails with the guard removed (mutation-checked).
+- 93.47 (S) **A mod's id reached cmd.exe and PowerShell.** Found 2026-11-17 by the security review of 93.45, which ran an
+  injected command through each in a copy of the code; the flow was then confirmed in the source.
+  - **Where:** `mass_test` named each boot's log `mass-<mod id>`, taken from the mod's mod_info.json. Through `java_matrix`
+    and `boot_test` that name reached:
+    - `launch.command_line`, which builds the raw `cmd.exe /c ""bat" > "log" 2> "err""` line. An id such as
+      `x" & <command> & rem ` runs the command;
+    - the window watcher's screenshot path, written into a PowerShell single-quoted string that doubled only `'`.
+      PowerShell also ends such a string at U+2018-U+201B.
+  - **Reach:** `mass-test` over archives in `Done/`. Every other launch passes a test id from the command line.
+
+  **Done 2026-11-17.**
+  - `mass_test.log_name_for` keeps only ASCII letters, digits, `.`, `_` and `-` of the id.
+  - `launch.command_line` refuses a path holding `"`, `%`, `!` or a control character. These are what cmd.exe acts on inside
+    the quotes.
+  - `window_watch.save_screenshot` and `game_click.capture_client` give PowerShell the path in an environment variable
+    (`BF_IMAGE_PATH`), never inside the script.
+
+  Tests: `tests/test_command_line_names.py`:
+  - the launch line refuses such paths;
+  - `start_game` starts nothing;
+  - a hostile id becomes a plain log name;
+  - both screenshot scripts carry no path.
+
+  All 5 fail on the old code.
+- 93.48 (S) **`src-to-jar` could write a mod's bytes over any existing file.** A lead from the 93.45 security review,
+  reproduced 2026-11-17.
+  - **Where:** `src_to_jar.prove_authoritative` compares the jar's classes with those the original sources compile to. It
+    wrote each shipped inner class to `<scratch>/shipped/<entry name>`, checking only that `<scratch>/ref/<entry name>`
+    existed. Both paths climb out by the same number of `..`.
+  - **With `/` separators,** javac refused the jar ("cannot access data.scripts": Java's zip reader rejects `..` parts), so
+    the proof stopped before writing.
+  - **Stored with backslashes** (`data/scripts/Spawner$\..\..\..\..\..\..\victim.class`), the entry is a plain file name to
+    javac, which compiled. Python's zipfile on Windows reads `\` as `/`, so the write left the scratch folder and replaced
+    an existing file with the entry's bytes. The proof reported no problem.
+  - **Reach:** `src-to-jar` on a mod whose jar ships such an entry. Any existing file the user can write, at a guessable
+    place relative to the temp folder, was in reach, such as BridgeForge's cached helper classes there, which it runs
+    later.
+
+  **Done 2026-11-17.**
+  - `_class_entries` counts only entries with a plain binary class name (`zipsafe.javap_class_name`).
+  - The write loop also refuses a path that resolves outside the scratch folder.
+
+  Tests: `tests/test_src_to_jar.py`:
+  - `test_a_jar_entry_cannot_write_outside_the_proofs_folder`: the backslash entry, end to end;
+  - `test_the_proof_writes_nothing_outside_its_folder_even_past_the_name_filter`: the second guard alone;
+  - `test_only_plain_class_entries_are_read_for_the_proof`.
+
+  Each fails with its guard removed. The first failed on the old code with `b'hostile bytes' != b'untouched'`.
+  The review's other leads, read 2026-11-17:
+  - `research_decompile` already refuses `..` and `:` in entry names, and on Windows zipfile turns `\` into `/` before
+    that check;
+  - `corpus-index` checks 7-Zip members, and `corpus_releases` extracts them into memory;
+  - `sibling-assets` refuses `..`, and its escape cases copy a file onto itself;
+  - `delegate-method` takes its class names from the user's own spec.
+- 93.49 (S/M) **A probe battle can stall, so its round never ends.** SR6-LIVE-0985a-20261117 (Bultach Coalition, probe 0.3.3,
+  Fast Rendering + Prepatcher, JDK 25, the setup SR5 passed with) ended LIVE_STUCK at `combat-round-1`.
+  - **Timeline:** round 1 started at 203.6 s. For about 100 s after that the log shows only repeated LunaLib settings errors
+    (shaderLib's `enableFullExplosionEffects`), then nothing until the harness gave up.
+  - **93.40's screenshot** (`SR6-LIVE-0985a-20261117.round1-no-end.png`) shows the game running, not frozen. The HUD says
+    "NO ENEMY PRESENCE" and "SHUTTLE READY FOR COMMAND TRANSFER": the player's flagship is gone, and no enemy is near.
+  - **Coverage:** `report` showed FATAL 0 and MOD-ERROR 0, with ORK PASS and the owner's two accepted ids, but round 2's hulls
+    (61-105) never fought. The run was not recorded.
+  - **Reading:** nothing in the probe mission ends a battle whose remaining ships never meet. This is likely what SR4 hit
+    too (93.40). Which ships were left is not shown; the log does not name them.
+  - **Proposal:** the probe's combat plugin ends a battle after a quiet spell (no hull damaged or destroyed for N seconds).
+    It logs `combat|END` with the reason and the ships still alive per side, so the run goes on to the next round; `report`
+    shows such a round as fought with a WARN. This needs probe 0.3.4 and a live run.
+- 93.50 (S) **A vanished game window ends a live run with an exception.** SR7-LIVE-0985a-20261117 (Bultach again, after SR6)
+  passed its smoke. Then, during New Game:
+  - the game read the newest save (log line 30197 at 120.4 s: `Reading save data from [..\saves\save_HekaWillis_...]`,
+    written by SR6);
+  - the log then ends with the JVM's code-cache summary; there is no hs_err file, and `windows.txt` lists no dialog;
+  - the harness raised `RuntimeError: the game window is gone` from `new_game`'s click, with no verdict.
+  - **Two parts:**
+    - The harness should end any stage whose window is gone as LIVE_STUCK, naming the stage and the log's last lines, as
+      93.37 does for a battle.
+    - Why a save was read during New Game is not shown. The rig's `saves/` held 14 saves from the day's runs, and
+      `probe-group install` leaves them. Moving the rig's saves aside before each run would make every run start the same
+      way.
+- 93.51 (S) **Two lower-risk leads from the 93.45 security review,** read 2026-11-17, not yet fixed:
+  - BridgeForge's helper classes are cached in the temp folder and reused without a check (`bytecode.py`, `java_ast.py`,
+    `delegate_method.py`). On a shared POSIX `/tmp` another local user could plant one. Windows' temp folder is per user.
+  - `decompiler-review --execute` with a `.bat` adapter: Python quotes an argument only when it holds a space, so an input
+    path without spaces reaches cmd.exe unquoted, and an `&` in it would act. The owner's paths all hold spaces.
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct
