@@ -88,12 +88,17 @@ def _javap_text(javap: Path, class_file: Path) -> str:
 
 
 def _class_entries(jar: Path, class_stem: str) -> dict[str, bytes]:
-    """The jar's class `pkg/Name.class` and its inner classes `pkg/Name$*.class`."""
-    from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
+    """The jar's class `pkg/Name.class` and its inner classes `pkg/Name$*.class`.
+
+    Only entries with a plain binary class name (`zipsafe.javap_class_name`) count. `prove_authoritative` writes each one
+    under its scratch folder by that name, and an entry stored as `pkg/Name$\\..\\..\\x.class` is a plain file name to javac
+    but, read by Python's zipfile on Windows, a path out of the folder (ROADMAP-3 93.48)."""
+    from bridgeforge.zipsafe import MAX_CLASS_BYTES, javap_class_name, read_limited
 
     with zipfile.ZipFile(jar) as archive:
         return {n: read_limited(archive, n, MAX_CLASS_BYTES) for n in archive.namelist()
-                if n == f"{class_stem}.class" or (n.startswith(f"{class_stem}$") and n.endswith(".class"))}
+                if (n == f"{class_stem}.class" or (n.startswith(f"{class_stem}$") and n.endswith(".class")))
+                and javap_class_name(n) is not None}
 
 
 def prove_authoritative(workspace: Path, jar_rel: str, rels: list[str], *, reference_core: Path, source_root: str = "src",
@@ -132,6 +137,9 @@ def prove_authoritative(workspace: Path, jar_rel: str, rels: list[str], *, refer
                     problems.append(f"{name}: in the jar but not produced by the original source")
                     continue
                 shipped_file = Path(tmp) / "shipped" / name
+                if not shipped_file.resolve().is_relative_to(Path(tmp).resolve()):  # 93.48; _class_entries already refuses
+                    problems.append(f"{name}: the entry name points outside the proof's folder; not written")
+                    continue
                 shipped_file.parent.mkdir(parents=True, exist_ok=True)
                 shipped_file.write_bytes(data)
                 if _javap_text(jdk_info.javap, built) != _javap_text(jdk_info.javap, shipped_file):
