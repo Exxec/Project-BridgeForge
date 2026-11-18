@@ -314,7 +314,8 @@ def _scan_content_id_renamed_by_provider(root: Path, result: ScanResult, vanilla
         from ..substitutes import provider_index
 
         deps = set(declared_dependencies(root))
-        provider_dirs = [Path(p.path) for p in provider_index([Path(r) for r in provider_roots], exclude=root) if p.mod_id in deps]
+        provider_dirs = [Path(p.path) for p in provider_index([Path(r) for r in provider_roots], exclude=root, contents=False)
+                         if p.mod_id in deps]
     hits = renamed_ids(root, vanilla_core, provider_dirs)
     if not hits:
         return

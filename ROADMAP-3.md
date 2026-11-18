@@ -142,6 +142,20 @@ Check S series implementation plan and if applicable add remaining items to road
       scan (UAF: 252 launches, 52.8 of 68.6 s), and revive repeats it.
     - P2 (S-M): provider lookups read only each provider's `mod_info.json` (`substitutes.provider_for`). About 35 s per
       scan with providers (Bultach: 29.9 -> 68.2 s).
+      **Done 2026-11-17.** `provider_for` and `provider_index` take `contents=False`, which reads only mod_info.json and leaves
+      `provides` empty.
+      - Five scan steps look providers up: `scan_classfile`, `scan_compile`, `scan_content`, `scan_libraries` and
+        `scan_references`. They use only a provider's id, path and version, and now ask for just those. Before, one scan
+        built the full index five times.
+      - `dependency-substitutes`, revive's substitution cache and `corpus provider-index` still read contents.
+
+      Measured on White_Legion with `In operation` as the provider root: providers added 3.1 s to a Bultach scan
+      (17.5 -> 20.6 s) and now add 0.5 s (14.8 -> 15.3 s). The findings are the same 104, with the same SHA-256.
+      Tests: `tests/test_substitutes.py` `IdOnlyProviderIndexTests`:
+      - an id-only index opens no CSV or jar;
+      - a whole scan asks only for ids.
+
+      Both fail with their guard removed.
     - P3 (S): revive drops its duplicate final scan; compile-check caches its harness and core compile (about 2 s a scan).
     - P4 (S): AST facts resolve each file once (about 3.5 s a scan).
     - P6 (S): fix the quadratic `_invalid_utf8_offsets`. It is the suite's slowest test at 24 s, and large CP-1252
