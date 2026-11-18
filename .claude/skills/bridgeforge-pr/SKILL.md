@@ -105,6 +105,10 @@ H=$(gh pr view <N> --json headRefOid -q .headRefOid)
 gh pr merge <N> --merge --match-head-commit "$H"   # merges exactly what CI saw
 ```
 
+A pull request that changes only Markdown outside `bridgeforge/`, `tests/`, `probe-mod/`, `tools/` and `.github/` runs
+Lint and Documentation tests (the modules in `tests/doc_tests.json`); its other checks show as skipped, and the merge to
+main runs everything (`tools/ci-scope.py`, 96.5 C3). A test that starts reading a document belongs in that list.
+
 Merge only green PRs. After merging:
 - `git fetch`.
 - Rebase the other item branches onto `origin/main`, stashing any uncommitted work first.

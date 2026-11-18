@@ -207,5 +207,42 @@ class HygieneTests(unittest.TestCase):
             self.assertIn("FLAG app.py (shrunk, lost_public_api; lines 62 -> 1) lost run", text)
 
 
+class HooksTests(unittest.TestCase):
+    """ROADMAP-3 96.5 C1: the tracked hooks in tools/githooks run only when core.hooksPath points at them. Before, the hooks
+    lived in the ignored .githooks/ and core.hooksPath was unset, so no hook ever ran."""
+
+    def _hooks(self, repo: Path) -> dict:
+        with mock.patch.object(hygiene, "_find_ruff", return_value=FAKE_RUFF), \
+                mock.patch.object(hygiene, "_run_ruff", return_value=CLEAN_RUFF):
+            return hygiene.check(repo)["checks"]["hooks"]
+
+    def test_a_repository_without_tracked_hooks_is_not_checked(self) -> None:
+        with resolved_temp_dir() as root:
+            self.assertEqual(self._hooks(_repo(root))["status"], hygiene.SKIPPED)
+
+    def test_hooks_that_are_off_are_a_finding_with_the_fix_and_pass_once_on(self) -> None:
+        with resolved_temp_dir() as root:
+            repo = _repo(root)
+            (repo / "tools" / "githooks").mkdir(parents=True)
+            (repo / "tools" / "githooks" / "pre-commit").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+            off = self._hooks(repo)
+            _git(repo, "config", "core.hooksPath", "tools/githooks")
+            on = self._hooks(repo)
+        self.assertEqual((off["status"], off["fix"]), (hygiene.FINDING, "git config core.hooksPath tools/githooks"))
+        self.assertEqual(on["status"], hygiene.PASS)
+
+    def test_this_repositorys_hooks_are_tracked_executable_and_run_its_checks(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        if not (root / ".git").exists():
+            self.skipTest("not a git checkout (an sdist)")
+        listed = subprocess.run(["git", "ls-files", "-s", "tools/githooks"], cwd=root, capture_output=True, text=True,
+                                encoding="utf-8").stdout
+        modes = {line.split("\t")[1]: line.split()[0] for line in listed.splitlines()}
+        self.assertEqual(modes, {"tools/githooks/pre-commit": "100755", "tools/githooks/pre-push": "100755"})
+        self.assertIn("tools/precommit-check.ps1", (root / "tools" / "githooks" / "pre-commit").read_text(encoding="utf-8"))
+        self.assertIn("tools/prepush-check.ps1", (root / "tools" / "githooks" / "pre-push").read_text(encoding="utf-8"))
+        self.assertIn("-m bridgeforge docs-index --check", (root / "tools" / "precommit-check.ps1").read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()

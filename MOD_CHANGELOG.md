@@ -14,6 +14,8 @@ Bigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; 
 - **Everybody loves KoC** 1.05.49a: revived for 0.98.5a-RC7 and archived (live validated)
 - **Eridani Combine** 1.0.3.6: revived for 0.98.5a-RC7 and archived (live validated)
 - **Scrapyard Armories** 2.16.1: revived for 0.98.5a-RC7 and archived (live validated)
+- **Bultach Coalition** 1.1.7 release: revived for 0.98.5a-RC7 and archived (live validated)
+- **United Aurora Federation** 0.8.4c: revived for 0.98.5a-RC7 and archived (live validated)
 
 ## 2026-10-30
 

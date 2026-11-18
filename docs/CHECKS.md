@@ -256,6 +256,7 @@ Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_j
 |---|---|---|
 | `_alternative_needs_straight_quotes` | `(alternative: str) -> bool` | A rules.csv text alternative whose curly double quotes RC8 cannot read: an opening quote with no closing one, or a comma between a pair. Metelson Industries' greetingMIHostileWeaker/Stronger (a curly opening quote closed by a straight one, "speaks quickly, <U+201C>If our lives are already written, it would...") stopped RC8 at startup with 'Mismatched quotes in the string' (alternatives bisected on the rig, BIS4E-BIS4H 2026-10-06; the straight-quote version loaded). A balanced pair with no comma inside loads (Faction Relationships Uniquified, live validated), so it is left alone. |
 | `_annotate_source_reachability` | `(root: Path, result: ScanResult) -> None` | Resolve only unambiguous local class-qualified calls from configured roots. |
+| `_api_jar_class_info` | `(key: tuple) -> Mapping[str, _ClassFileInfo]` | - |
 | `_apply_janino_outcome` | `(root: Path, result: ScanResult, janino: dict) -> None` | Replace the `loose-script-janino-risk` guess with RC8's own Janino (ROADMAP P15 item 22.1). |
 | `_asset_exists` | `(candidate: str, root: Path, vanilla_core: Path \| None) -> bool` | - |
 | `_attribute_library_usage` | `(result: ScanResult) -> None` | - |
@@ -276,6 +277,7 @@ Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_j
 | `_convert_single_quoted_strings` | `(text: str) -> str` | Rewrite `'...'` string tokens (outside double-quoted strings) as `"..."`. |
 | `_core_content` | `(core: Path) -> tuple[set[str], set[str], set[str]]` | - |
 | `_core_digest` | `(core: Path, incomplete: list[str]) -> str` | - |
+| `_core_key` | `(vanilla_core: Path) -> tuple` | A vanilla core's identity for the per-process caches below: its resolved path and the API jars' size and modification time, so another build or a replaced jar is read again (ROADMAP-3 96.5 P7). |
 | `_csv_first_cells` | `(text: str) -> list[tuple[int, int, str, bool]]` | (start, end, value, quoted) of the first cell of every record of a CSV, by text offset. A quoted cell may hold newlines. |
 | `_csv_first_column_ids` | `(path: Path) -> set[str]` | IDs from a procgen CSV's first column (data rows only, comments skipped). |
 | `_csv_header` | `(path: Path) -> list[str] \| None` | - |
@@ -300,6 +302,7 @@ Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_j
 | `_excluded` | `(relative: str) -> bool` | - |
 | `_external_memory_keys_harmless` | `(text: str, keys: list[str], mod_id: str) -> bool` | Every use of every key is a write (`set`/`unset`: an inert entry without the integration; Kadur's `$nex_recentlyCapturedByPlayer`), or a read on a line guarded by `isModEnabled("<mod_id>")` directly or through a boolean assigned from it (Hiver's `!haveNexerelin \|\| ...getBoolean("$nex_randomSector")`). ROADMAP 34.17. |
 | `_extract_call_arguments_text` | `(text: str, open_paren_index: int) -> str \| None` | Return the text between a call's matching parens, respecting nesting and quoted strings. |
+| `_faction_ids` | `(faction_dir: str, _stamp: int \| None) -> frozenset[str]` | - |
 | `_faction_market_evidence` | `(root: Path, faction_id: str) -> str` | 'found' when the faction owns or configures a market, 'none' when sources rule it out, else 'unknown'. |
 | `_fails_fast_through_variable` | `(text: str, dependency_id: str) -> bool` | `boolean has = ...isModEnabled("<id>"); ... if (!has) { throw` -- a required library, not an optional one. Hiigaran Descendants 2.1 (HiiModPlugin.onApplicationLoad, shaderLib) stopped at startup this way, GRP7B-20261005. |
 | `_fill_empty_array_elements` | `(text: str) -> tuple[str, bool]` | Write `null` for an empty array element, as org.json's JSONArray reads it. |
@@ -344,6 +347,7 @@ Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_j
 | `_looks_like_constant` | `(name: str) -> bool` | UPPER_SNAKE fields are constants by convention even when not declared final (never mutated). |
 | `_looks_like_division` | `(expr: str) -> bool` | - |
 | `_lookup_null_guarded` | `(text: str, method: str, name: str) -> bool` | True when <method>("<name>") is compared with null, inline or through the variable it's assigned to. Used for getStarSystem and getEntityById: Fantastic Furniture checks getEntityById("gilead") != null before using it, and an agent could not clear a finding that had nothing to fix (pilot 4, 2026-09-29). |
+| `_loose_script_fqns` | `(key: tuple) -> frozenset[str]` | Every loose vanilla .java source under data/** (not just data/scripts), by path-derived FQN. |
 | `_method_body` | `(text: str, name: str) -> str` | Body of the first method called `name` (brace-matched on comment-blanked text), or ''. |
 | `_method_body_with_helpers` | `(text: str, name: str) -> str` | A method's body plus the bodies of same-class methods it calls (one level), e.g. onNewGame -> initExigency. |
 | `_mod_declared_script_rows` | `(root: Path) -> dict[str, str]` | simple class name -> the mod's own row/file that names it (CSV `script`, `.system` statsScript). |
@@ -409,9 +413,9 @@ Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_j
 | `_unquoted_key_json_finding` | `(result: ScanResult, category: str, file: str) -> None` | - |
 | `_unregistered_skill_ids` | `(vanilla_core: Path \| None) -> set[str]` | Skill ids RC8 ships a .skill file for, or comments out of skill_data.csv, but does not register. With the 0.8.1a reference beside the RC8 install, its skill ids too (removed in 0.9's skill rework). |
 | `_unverified_json_syntax_finding` | `(result: ScanResult, category: str, file: str, exc: Exception) -> None` | - |
-| `_vanilla_api_jar_class_info` | `(vanilla_core: Path) -> dict[str, _ClassFileInfo]` | - |
-| `_vanilla_faction_ids` | `(vanilla_core: Path) -> set[str]` | - |
-| `_vanilla_loose_script_fqns` | `(vanilla_core: Path) -> set[str]` | Every loose vanilla .java source under data/** (not just data/scripts), by path-derived FQN. |
+| `_vanilla_api_jar_class_info` | `(vanilla_core: Path) -> Mapping[str, _ClassFileInfo]` | Every class of the core's API jars, parsed once per core per process (96.5 P7: a scan asked twice, and `done-audit` asks once per archive). Read-only: every caller shares it. |
+| `_vanilla_faction_ids` | `(vanilla_core: Path) -> set[str]` | The core's faction ids, read once per core per process (ROADMAP-3 96.5 P7). Each caller gets its own set: the rules check adds the mod's factions to it. |
+| `_vanilla_loose_script_fqns` | `(vanilla_core: Path) -> frozenset[str]` | Read once per core per process (96.5 P7); see `_loose_script_fqns`. |
 | `_version_major_of` | `(version) -> str` | - |
 | `_version_series` | `(version: str) -> str` | '0.98a-RC8' -> '0.98', '0.9.1a' -> '0.9.1', '0.98.x' -> '0.98'. |
 | `_version_tuple` | `(text: object) -> tuple[int, ...]` | Leading numeric dotted part of a version string: `1.0.14-spp13` -> (1, 0, 14); no digits -> (). |

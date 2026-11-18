@@ -75,13 +75,16 @@ they are.
 3. **Live testing is paused (owner 2026-11-17).** When it resumes:
    - Every run uses Fast Rendering and Prepatcher (93.42): `run-j25-frpp.bat` through the wrappers, and each install with
      `--also-enable starsector_prepatcher`. Check that Test1's desktop is idle first.
-   - United Aurora Federation still needs its re-run with probe 0.3.3 (93.37).
-   - Bultach passed SR5-LIVE-0985a-20261117, and 93.41 and 93.44 are done. SR5 cannot be re-recorded, because its manifest
-     hashed Prepatcher's log before 93.41's fix. Run it once more, then record and archive it on the owner's word.
-     The two runs after that did not pass, and neither was recorded:
-     - SR6: its round-1 battle stalled, with no enemy near and the flagship gone (93.49);
-     - SR7: the newest save loaded during New Game, then the game window closed (93.50).
-     93.49's fix makes the next run more likely to fight both rounds.
+   - United Aurora Federation is done: UAFR2-LIVE-0985a-20261117 fought both combat rounds (93.37's start check and retry
+     held live). Report: PASS, FATAL=0, MOD-ERROR=0, only the owner's two accepted ids. It is recorded LIVE_VALIDATED and
+     archived on the owner's word ("Go ahead and archive", 2026-11-17). The archive note's credit line ends in ".." because
+     the author string already ends with a period: cosmetic, to fix in the credit-line code.
+   - Bultach is done: SR8-LIVE-0985a-20261117 passed and is recorded LIVE_VALIDATED. It is archived to `Done/` under the
+     owner's "archive all"; the archive gate passed after 93.41 and 93.44. SR5 could not be re-recorded, and SR6 and SR7
+     failed (93.49, 93.50).
+     - Before SR8 the rig's 14 old save folders were moved to `_rig-0985a\saves-aside-20261118`; nothing was deleted.
+     - SR8 reached the main menu, the campaign and both combat rounds, on the repo at 8e1ff8e (JDK 25, FR + Prepatcher).
+     - One passing run does not prove the saves caused SR7.
    - G1R-LIVE-0985a-20261117 fought Eridani's, Musashi's and Scrapyard's round-2 hulls and passed (93.39). Owner
      2026-11-17: Eridani's and Scrapyard's archives stay as they are.
    - JDK 27 (93.43) is set up on Test1 but is not the default: `run-j27-frpp.bat`, chosen with `BF_RIG_BAT=run-j27-frpp.bat`.
@@ -272,7 +275,9 @@ the test suite while it does (hermeticity check), then commit them.
   with the following mods" (proven on CLICKTEST-20261011: main menu reached with no manual click; the log is in
   `<id>.windows.txt`). `BF_NO_AUTOCLICK=1` turns it off. `probe-group live TESTID` (after `install N`) plays the whole live run unattended with real clicks (leave the mouse and keyboard alone for about five minutes; then `probe-group report` and `record --archive` on that log). `probe-group smoke` (after `install N`) does the same click from Python and boots to the main menu in about 12 s: run it before asking anyone to play. The mass boot test (`java-matrix`) starts java directly on fresh instance rigs and needs no click.
 - `git commit`'s hook runs ruff from the first Python that has it, else `uvx ruff` (2026-11-15: no Python install here
-  has ruff). `core.hooksPath` now points at this checkout's `.githooks` (it named the old `Documents` copy).
+  has ruff). The hooks are tracked in `tools/githooks/` since 96.5 C1: enable them once per clone with
+  `git config core.hooksPath tools/githooks`. `core.hooksPath` was found unset on 2026-11-17, so no hook had run;
+  `bridgeforge hygiene` now reports it.
 - Workspaces get locked to non-admin sessions (twice: `Done\` zips and 14 workspaces; cause unknown). If `probe-group plan` says
   "Access is denied", run `tools\unlock-workspaces.ps1 -Apply` from an Administrator PowerShell (dry run without `-Apply`).
 - Existing archive handling is path-specific: ordinary group `record --archive` calls the move-aside path;
