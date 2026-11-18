@@ -10,6 +10,7 @@ when used, so a test that replaces them there replaces them for every caller.
 """
 from __future__ import annotations
 
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -41,8 +42,16 @@ def settle_exit(process, wait: float, *, sleep: Callable[[float], None] = time.s
     return observed_exit(process.poll(), java_left())
 
 
+_CMD_UNSAFE = re.compile(r'["%!\x00-\x1f\x7f]')
+
+
 def command_line(bat: Path, log: Path, err: Path) -> str:
     # A raw command-line string, not a list: the leading-quote + redirection form only works verbatim (list2cmdline would corrupt it).
+    # So no path may hold what cmd.exe would act on inside it: `"` ends the quoting, `%` and `!` expand variables. The mass test
+    # named its log after the mod's id, and an id such as `x" & <command> & rem ` ran the command (ROADMAP-3 93.47).
+    for path in (bat, log, err):
+        if _CMD_UNSAFE.search(str(path)):
+            raise ValueError(f"refusing to launch: a path holds a character cmd.exe would act on: {str(path)!r}")
     return f'cmd.exe /c ""{bat}" > "{log}" 2> "{err}""'
 
 
