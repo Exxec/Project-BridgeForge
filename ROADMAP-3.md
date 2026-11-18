@@ -1071,6 +1071,31 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   touches an end of the scanned rows (clipped there, not cut). The run's screenshot now reads nine rows, with Continue at
   y 372 and Missions at y 452, which matches the screen. Test: `tests/test_screen_read.py`
   `test_a_column_where_text_cuts_buttons_in_two_is_not_chosen` (fails without the fix: 11 rows).
+- 93.55 (S) **save-doctor passed a save holding a faction no enabled mod defines.** Salvor's RC7 rig run on Test1
+  (2026-11-17), once 93.54 let the Continue click land: the candidate was a Templars save with Templars removed (Salvor
+  dropped `TemCrusadeManager` and the mod entry; static checks said NO_KNOWN_PROBLEM). The game stopped loading in
+  `com.fs.starfarer.campaign.Faction.readResolve()` with `this.spec` null, at the `templars` Faction (campaign.xml line
+  2485; 94 Templars references, the Antioch system among them).
+  Evidence (RC7 `starfarer_obf.jar`, javap): `spec` is transient and looked up by `id` in `readResolve`, and
+  `readResolve` always calls `updateDoctrineAndKnown`, whose `isPlayerFaction()` calls `spec.getId()` with no null check.
+  So any Faction element with no spec stops the load.
+  **Done 2026-11-17.** `save_doctor.diagnose` reports FACTION_UNDEFINED (blocking) for each Faction id that no `.faction`
+  file defines, in the core or an enabled installed mod, subfolders included (Roider Union keeps
+  `roider_mining/roider_dust.faction`). A Faction element is an element with an `id` leaf beside a
+  `secondaryColorSegmentsOverride` leaf: a byte search of every RC7 core jar found that field name only in `Faction`.
+  The check needs the core; without it the result lists the check as skipped.
+  Results:
+  - Salvor's candidate: `templars` only, in 0.8 s for 11 MB.
+  - The owner's seven RC8 saves (read-only, RC8 core and mods): two read NO_KNOWN_PROBLEM as before.
+    - The three Warren Koyamatsu saves name `eidolon`. Wide Horizons Content defines it, and those saves no longer
+      enable that mod. By the bytecode above they would not load with today's mod set; no run has shown that either way.
+    - The two saves that already list missing mods also name `Azure_Federation`, `cinis_of_crusaders`, `red_stripe` and
+      `red_stripe_vower`.
+  Tests: `tests/test_save_doctor.py`:
+  - an undefined faction is reported, while a core faction and an enabled mod's faction one folder down are not, and
+    neither are nested `id` leaves;
+  - with no core, the check is skipped and the result says so;
+  - an installed but disabled mod's faction is undefined.
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct

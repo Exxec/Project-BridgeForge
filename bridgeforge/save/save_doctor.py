@@ -37,8 +37,64 @@ RECOVERY = {
     "NON_FINITE": "high for the file (reset the value on a copy); fix the mod bug that wrote it too",
     "MEMORY_CYCLE": "medium: replace the inner memory reference with an empty memory on a copy (save-doctor --break-cycle --out COPY); then fix the mod that stores the entity (RC8-31)",
     "VERSION_CHANGED": "informational: check this mod first if the save fails",
+    "FACTION_UNDEFINED": "high: the game stops loading in Faction.readResolve (no faction spec for the id); enable the mod "
+                         "that defines the faction. Removing a faction from a save is not supported",
 }
 _NON_FINITE = re.compile(r">\s*(-?Infinity|NaN)\s*<")
+# A serialized com.fs.starfarer.campaign.Faction: its `id` leaf and `secondaryColorSegmentsOverride`, a field only Faction
+# declares in RC7's jars (javap and a byte search of every core jar, 2026-11-17). Faction's `spec` is transient and looked up
+# by id in readResolve, so an id with no .faction file stops the load with an NPE (Salvor rig run, Test1, 2026-11-17).
+FACTION_MARKER = "secondaryColorSegmentsOverride"
+_LEAF = re.compile(r"^\s*<([\w.$-]+)(?:\s[^>]*)?>([^<]*)</\1>\s*$")
+_OPEN = re.compile(r"^\s*<([\w.$-]+)(?:\s[^>]*)?(?<!/)>\s*$")
+_CLOSE = re.compile(r"^\s*</([\w.$-]+)>\s*$")
+
+
+class _FactionIds:
+    """The ids of the Faction objects written in full in campaign.xml, fed one line at a time (one tag per line, as the
+    game writes it). Each open element keeps its own `id` leaf; a marker leaf beside it makes that id a faction's."""
+
+    def __init__(self) -> None:
+        self.ids: set[str] = set()
+        self._open: list[str | None] = []
+
+    def feed(self, line: str) -> None:
+        leaf = _LEAF.match(line)
+        if leaf:
+            if self._open and leaf.group(1) == "id":
+                self._open[-1] = leaf.group(2).strip()
+            elif self._open and leaf.group(1) == FACTION_MARKER and self._open[-1]:
+                self.ids.add(self._open[-1])
+            return
+        if _CLOSE.match(line):
+            if self._open:
+                self._open.pop()
+            return
+        if _OPEN.match(line):
+            self._open.append(None)
+
+
+def _faction_file_ids(directory: Path) -> set[str]:
+    """Ids of every .faction file under `directory`, subfolders included: factions.csv may list a path one folder down
+    (Roider Union 2.3.1: data/world/factions/roider_mining/roider_dust.faction)."""
+    ids: set[str] = set()
+    if not directory.is_dir():
+        return ids
+    for path in sorted(directory.rglob("*.faction")):
+        try:
+            data = _load_lenient_json_file(path)
+        except (ValueError, OSError):
+            continue
+        if isinstance(data, dict) and isinstance(data.get("id"), str):
+            ids.add(data["id"])
+    return ids
+
+
+def _defined_factions(vanilla_core: Path, enabled_folders: list[Path]) -> set[str]:
+    defined = _faction_file_ids(Path(vanilla_core) / "data" / "world" / "factions")
+    for folder in enabled_folders:
+        defined |= _faction_file_ids(folder / "data" / "world" / "factions")
+    return defined
 _JAVA_KEYWORDS = frozenset(
     "abstract assert boolean break byte case catch char class const continue default do double else enum extends final "
     "finally float for goto if implements import instanceof int interface long native new null package private "
@@ -136,10 +192,18 @@ def diagnose(save: Path, mods_dir: Path, vanilla_core: Path | None = None, cycle
             item["classes"].add(token)
             if len(item["examples"]) < 3:
                 item["examples"].add(token)
+        factions = _FactionIds()
         with campaign_xml.open("r", encoding="utf-8", errors="replace") as handle:
             for line in handle:
                 if _NON_FINITE.search(line):
                     non_finite += 1
+                factions.feed(line)
+        if vanilla_core is None:
+            skipped.append("no vanilla core given: the FACTION_UNDEFINED check was skipped")
+        else:
+            folders = [installed[str(mod.get("id") or "")]["folder"] for mod in enabled if str(mod.get("id") or "") in installed]
+            for faction in sorted(factions.ids - _defined_factions(Path(vanilla_core), folders)):
+                problems.append({"class": "FACTION_UNDEFINED", "faction": faction})
     for package, item in sorted(unresolved.items(), key=lambda kv: -kv[1]["occurrences"]):
         problems.append({"class": "CLASS_UNRESOLVED", "package": package, "occurrences": item["occurrences"],
                          "examples": sorted(item["examples"]), "classes": sorted(item["classes"]), "sample_path": item["sample_path"]})
@@ -154,7 +218,8 @@ def diagnose(save: Path, mods_dir: Path, vanilla_core: Path | None = None, cycle
             # The base rate keeps a diagnosis honest: the same shape (a condition market sharing its memory) is normal in most colonies.
             problems.append({"class": "MEMORY_CYCLE", **cycle, "base_rate": f"{len(found)} cycle(s) among {rate['pcmarkets']} condition market(s); "
                              f"{rate['pcmarkets_sharing_a_memory']} of them share a memory with another element, which is normal on its own"})
-    blocking = [p for p in problems if p["class"] in ("TRUNCATED", "MOD_MISSING", "CLASS_UNRESOLVED", "NON_FINITE", "MEMORY_CYCLE")]
+    blocking = [p for p in problems if p["class"] in ("TRUNCATED", "MOD_MISSING", "CLASS_UNRESOLVED", "NON_FINITE", "MEMORY_CYCLE",
+                                                       "FACTION_UNDEFINED")]
     verdict = "TRUNCATED" if truncated else ("WILL_LIKELY_FAIL" if blocking else "NO_KNOWN_PROBLEM")
     return {"schema_version": SCHEMA_VERSION, "mode": "READ_ONLY_SAVE_DOCTOR", "save": str(descriptor.get("save_dir")),
             "character": descriptor.get("character_name"), "game_version": descriptor.get("game_version"),
