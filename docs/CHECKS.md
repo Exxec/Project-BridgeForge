@@ -262,7 +262,9 @@ Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_j
 | `_attribute_library_usage` | `(result: ScanResult) -> None` | - |
 | `_bareword_value_json_finding` | `(result: ScanResult, category: str, file: str) -> None` | - |
 | `_base_game_version` | `(version: str) -> str` | '0.98a-RC8' -> '0.98a'. The launcher accepts any RC of the same base version. |
-| `_blank_java_comments` | `(text: str, strings: bool=False) -> str` | Blank out // and /* */ comment text with spaces, keeping newlines so offsets and line numbers hold. |
+| `_blank_cache_chars` | `() -> int` | - |
+| `_blank_java_comments` | `(text: str, strings: bool=False) -> str` | `_blank_java_comments_uncached`, computed once per text and mode in this process. |
+| `_blank_java_comments_uncached` | `(text: str, strings: bool=False) -> str` | Blank out // and /* */ comment text with spaces, keeping newlines so offsets and line numbers hold. |
 | `_blank_mod_guarded_blocks` | `(text: str) -> str` | `text` with the body of every `if (...) { }` whose condition tests that another mod is enabled replaced by spaces (newlines kept). |
 | `_brace_body` | `(text: str, open_brace: int) -> str` | - |
 | `_call_argument_count` | `(text: str, index: int) -> int` | Top-level arguments of the call whose argument list starts at or after `index` (the first '(' from there); string literals are expected blanked or quote-free. 0 when the list does not close. |
