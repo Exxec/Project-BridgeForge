@@ -169,16 +169,21 @@ def _resolve_reference_core(workspace: Path, vanilla_core: Path) -> Path | None:
     return reference_core_for(_declared_game_version(workspace), [install_root], exclude=Path(vanilla_core))
 
 
-def _scan(working: Path, vanilla_core: Path | None, target: str | None = None, reference_core: Path | None = None) -> list[dict]:
+def _scan(working: Path, vanilla_core: Path | None, target: str | None = None, reference_core: Path | None = None,
+          keep: dict | None = None) -> list[dict]:
     """Scan findings minus the ones the mod's own baseline accepts (working/reports/baseline*.json):
-    an accepted finding is never fixed, packeted or counted against the mod."""
+    an accepted finding is never fixed, packeted or counted against the mod. `keep` receives the whole scan result
+    (`keep["result"]`) and its provider roots, so revive can register the very scan it decided on (ROADMAP-3 96.5 P3)."""
     from .baseline import finding_dict_baseline_key, mod_baseline_keys
     from bridgeforge.scan.scanner import scan_mod
 
     accepted = mod_baseline_keys(working)
-    findings = [asdict(f) for f in scan_mod(working, target=_target_profile(target), vanilla_core=vanilla_core,
-                                            compile_check=vanilla_core is not None,
-                                            provider_roots=_provider_roots(working, reference_core)).findings]
+    providers = _provider_roots(working, reference_core)
+    result = scan_mod(working, target=_target_profile(target), vanilla_core=vanilla_core, compile_check=vanilla_core is not None,
+                      provider_roots=providers)
+    if keep is not None:
+        keep.update(result=result, provider_roots=providers)
+    findings = [asdict(f) for f in result.findings]
     _record_settings_baseline(working, findings)
     return [f for f in findings if finding_dict_baseline_key(f) not in accepted]
 
@@ -690,7 +695,8 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
     if reference_core is None and vanilla_core is not None:
         reference_core = _resolve_reference_core(workspace, Path(vanilla_core))
     rounds, applied_all = [], []
-    findings = _scan(working, vanilla_core, target, reference_core)
+    last: dict = {}  # the newest scan of working/, registered as revive's scan (96.5 P3)
+    findings = _scan(working, vanilla_core, target, reference_core, keep=last)
     first = [dict(f) for f in findings]
     pending: list[dict] = []
     for number in range(1, max_rounds + 1):
@@ -700,7 +706,7 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
         applied_all += applied
         if not applied:
             break
-        findings = _scan(working, vanilla_core, target, reference_core)
+        findings = _scan(working, vanilla_core, target, reference_core, keep=last)
     # Rebuild jar classes whose src/ BridgeForge edited, when approved (ROADMAP-3 item 92.25): proven against the reference
     # core first, so a jar built from other source is refused, never overwritten.
     if apply and vanilla_core is not None and "jar-source-not-rebuilt" in approved and any(f["id"] == "jar-source-not-rebuilt" for f in findings):
@@ -724,7 +730,7 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
             entry = {"finding": "jar-source-not-rebuilt", "files": built, "why": "approved (src-to-jar)"}
             applied_all.append(entry)
             rounds.append({"round": len(rounds) + 1, "applied": [entry], "findings": len(findings)})
-            findings = _scan(working, vanilla_core, target, reference_core)
+            findings = _scan(working, vanilla_core, target, reference_core, keep=last)
     # Relink, when approved in the policy: recompile classes whose game calls RC8 changed only by return type, from
     # unedited source, patched only when nothing else changes (jar_batch; 19 queued mods by hand, 2026-09-30).
     if apply and vanilla_core is not None and "jar-linkage-unresolved" in approved and any(f["id"] == "jar-linkage-unresolved" for f in findings):
@@ -736,7 +742,7 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
                      "why": "approved (relink)"}
             applied_all.append(entry)
             rounds.append({"round": len(rounds) + 1, "applied": [entry], "findings": len(findings)})
-            findings = _scan(working, vanilla_core, target, reference_core)
+            findings = _scan(working, vanilla_core, target, reference_core, keep=last)
     # Interface ports, when approved: known RC8 contract changes on jar classes (jar_batch.port_interfaces).
     if apply and vanilla_core is not None and "jar-interface-method-missing" in approved and any(f["id"] == "jar-interface-method-missing" for f in findings):
         from bridgeforge.bytecode.jar_batch import port_interfaces
@@ -747,7 +753,7 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
             entry = {"finding": "jar-interface-method-missing", "files": done, "why": "approved (port-interfaces)"}
             applied_all.append(entry)
             rounds.append({"round": len(rounds) + 1, "applied": [entry], "findings": len(findings)})
-            findings = _scan(working, vanilla_core, target, reference_core)
+            findings = _scan(working, vanilla_core, target, reference_core, keep=last)
     remaining_tiers = [tier_for(f["id"]) for f in findings if not _informational(f)]
     roots = providers if providers else [workspace.parent, workspace.parent / "_rig" / "mods"]
     cache: dict = {}
@@ -788,15 +794,19 @@ def revive(workspace: Path, *, target: str | None = None, vanilla_core: Path | N
                                                providers=providers)
     if write:
         from .report import write_artifacts
-        from bridgeforge.scan.scanner import scan_mod
 
         _write_packets(workspace, packets)
         for item in applied_all:
             append_ledger(workspace, {"packet": None, "finding": item["finding"], "files": item["files"], "runner": "fixer", "outcome": "APPLIED"}, now)
         stamp = time.strftime("%Y-%m-%d-%H%M%S", time.gmtime(now if now is not None else time.time()))
         if apply and applied_all:
-            write_artifacts(scan_mod(working, target=_target_profile(target), vanilla_core=vanilla_core, compile_check=vanilla_core is not None), workspace / "reports" / f"scan-{stamp}-revive",
-                            registry={"vanilla_core": vanilla_core, "compile_check": vanilla_core is not None})
+            # The last scan above already covers the finished tree: nothing in working/ changes after it (packets and the
+            # ledger live in the workspace's reports/, and the fingerprint skips working/reports/). Register that scan, with
+            # the providers it used, instead of a second scan without them, which made the registered report differ from the
+            # one revive's status came from (ROADMAP-3 96.5 P3).
+            write_artifacts(last["result"], workspace / "reports" / f"scan-{stamp}-revive",
+                            registry={"vanilla_core": vanilla_core, "compile_check": vanilla_core is not None,
+                                      "provider_roots": last["provider_roots"]})
         run_dir = workspace / "reports" / "revive"
         run_dir.mkdir(parents=True, exist_ok=True)
         (run_dir / "REVIVE.json").write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
