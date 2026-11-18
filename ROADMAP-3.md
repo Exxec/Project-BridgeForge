@@ -1062,6 +1062,15 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   - a capital-led package that is reported while `WSR.V` is not.
 
   Each fails with its guard removed (mutation-checked).
+- 93.54 (S) **The main menu reader counted two buttons twice at 1920x1080.** Found by Salvor's rig step R2 on Test1
+  (0.98.5a-RC7, fullscreen 1920x1080): the automatic Continue click opened the Missions screen. `screen_read.main_menu_buttons`
+  samples four columns and keeps the one with the most button rows. At x 0.70 the text of New Game and Load Game breaks
+  their fill into two short bands each, so that column read 11 rows and won. The names are counted from the bottom, so
+  Continue resolved to Missions. Columns 0.66 and 0.68 read all nine rows.
+  **Done 2026-11-17.** A band shorter than 0.8 of its column's tallest band is a cut button and no longer counts, unless it
+  touches an end of the scanned rows (clipped there, not cut). The run's screenshot now reads nine rows, with Continue at
+  y 372 and Missions at y 452, which matches the screen. Test: `tests/test_screen_read.py`
+  `test_a_column_where_text_cuts_buttons_in_two_is_not_chosen` (fails without the fix: 11 rows).
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct

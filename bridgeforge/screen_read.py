@@ -65,15 +65,30 @@ def bands(flags: list[bool], min_len: int, max_gap: int = 1) -> list[tuple[int, 
     return found
 
 
+FULL_ROW_SHARE = 0.8  # a band shorter than this share of its column's tallest band is a button cut by its own text
+
+
+def _full_rows(found: list[tuple[int, int]], first: int, last: int) -> list[tuple[int, int]]:
+    """The bands that span a whole button. Where a column crosses a button's text, the fill breaks and one button reads as two
+    short bands (SALVOR-R2, 0.98.5a-RC7 at 1920x1080: New Game and Load Game at x 0.70). A band at either end of the scanned
+    rows [first, last] may be clipped by the scan, not cut, and is kept."""
+    if not found:
+        return []
+    tallest = max(e - s for s, e in found)
+    return [(s, e) for s, e in found if e - s >= tallest * FULL_ROW_SHARE or s <= first or e >= last]
+
+
 def main_menu_buttons(bitmap: Bitmap) -> list[tuple[float, float]]:
     """Centres of the main menu's buttons as client fractions, top to bottom. The menu sits right of centre; a few columns are sampled
-    and the column with the most button rows wins."""
+    and the column with the most whole button rows wins (a column through button text counts cut rows twice, so short bands are
+    not counted)."""
     best: list[tuple[int, int]] = []
     best_x = 0
+    top = int(bitmap.height * 0.25)
     for fx in (0.66, 0.68, 0.70, 0.72):
         x = int(bitmap.width * fx)
-        flags = [is_button_fill(*bitmap.pixel(x, y)) for y in range(int(bitmap.height * 0.25), int(bitmap.height * 0.80))]
-        found = [(s + int(bitmap.height * 0.25), e + int(bitmap.height * 0.25)) for s, e in bands(flags, max(4, bitmap.height // 120), 3)]
+        flags = [is_button_fill(*bitmap.pixel(x, y)) for y in range(top, int(bitmap.height * 0.80))]
+        found = _full_rows([(s + top, e + top) for s, e in bands(flags, max(4, bitmap.height // 120), 3)], top, top + len(flags) - 1)
         if len(found) > len(best):
             best, best_x = found, x
     return [(best_x / bitmap.width, (s + e) / 2 / bitmap.height) for s, e in best]

@@ -10,13 +10,16 @@ TEAL = (40, 95, 120)
 DARK = (5, 8, 12)
 
 
-def _bmp(width: int, height: int, rows_y: list[tuple[int, int]]) -> bytes:
+def _bmp(width: int, height: int, rows_y: list[tuple[int, int]],
+         holes: tuple[tuple[int, int, int, int], ...] = ()) -> bytes:
+    """A dark screen with teal button rows; `holes` are dark (x0, x1, y0, y1) boxes, like button text over the fill."""
     row_bytes = (width * 3 + 3) & ~3
     pixels = bytearray()
     for y in reversed(range(height)):  # bottom-up
         line = bytearray()
         for x in range(width):
             inside = any(a <= y <= b for a, b in rows_y) and int(width * 0.62) <= x <= int(width * 0.76)
+            inside = inside and not any(x0 <= x <= x1 and y0 <= y <= y1 for x0, x1, y0, y1 in holes)
             r, g, b = TEAL if inside else DARK
             line += bytes((b, g, r))
         line += b"\x00" * (row_bytes - width * 3)
@@ -55,6 +58,18 @@ class ScreenReadTests(unittest.TestCase):
         eight = nine[1:]
         buttons = main_menu_buttons(Bitmap(_bmp(300, h, eight)))
         self.assertAlmostEqual(main_menu_target(buttons, "New Game")[1], (eight[2][0] + eight[2][1]) / 2 / h, places=2)
+
+    def test_a_column_where_text_cuts_buttons_in_two_is_not_chosen(self) -> None:
+        # SALVOR-R2 2026-11-17, 0.98.5a-RC7 at 1920x1080: at x 0.70 the text of New Game and Load Game cut their fill in two,
+        # that column had 11 bands and won, and the Continue click landed on Missions. Columns 0.66 and 0.68 read nine rows.
+        h, w = 400, 300
+        nine = [(110 + i * 25, 128 + i * 25) for i in range(9)]
+        x = int(w * 0.70)
+        cuts = tuple((x - 3, x + 3, a + 7, a + 11) for a, _b in nine[3:5])
+        buttons = main_menu_buttons(Bitmap(_bmp(w, h, nine, cuts)))
+        self.assertEqual(len(buttons), 9)
+        self.assertAlmostEqual(main_menu_target(buttons, "Continue")[1], (nine[0][0] + nine[0][1]) / 2 / h, places=2)
+        self.assertAlmostEqual(main_menu_target(buttons, "Missions")[1], (nine[2][0] + nine[2][1]) / 2 / h, places=2)
 
     def test_too_few_buttons_gives_nothing(self) -> None:
         self.assertIsNone(main_menu_target([(0.7, 0.5)] * 3, "Missions"))
