@@ -75,7 +75,10 @@ they are.
 3. **Live testing is paused (owner 2026-11-17).** When it resumes:
    - Every run uses Fast Rendering and Prepatcher (93.42): `run-j25-frpp.bat` through the wrappers, and each install with
      `--also-enable starsector_prepatcher`. Check that Test1's desktop is idle first.
-   - United Aurora Federation still needs its re-run with probe 0.3.3 (93.37).
+   - United Aurora Federation is done: UAFR2-LIVE-0985a-20261117 fought both combat rounds (93.37's start check and retry
+     held live). Report: PASS, FATAL=0, MOD-ERROR=0, only the owner's two accepted ids. It is recorded LIVE_VALIDATED and
+     archived on the owner's word ("Go ahead and archive", 2026-11-17). The archive note's credit line ends in ".." because
+     the author string already ends with a period: cosmetic, to fix in the credit-line code.
    - Bultach is done: SR8-LIVE-0985a-20261117 passed and is recorded LIVE_VALIDATED. It is archived to `Done/` under the
      owner's "archive all"; the archive gate passed after 93.41 and 93.44. SR5 could not be re-recorded, and SR6 and SR7
      failed (93.49, 93.50).
