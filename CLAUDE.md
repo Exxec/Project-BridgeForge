@@ -138,7 +138,7 @@ on the second PC) and `memory-mirror`.
   `tests/run_partitioned.py` and measured `tests/slow_tests.json`; normal full discovery and the full coverage job remain.
 - `probe-mod/` the in-game probe (Java, public API only); built by `build-probe-mod`.
 - Gitignored and local-only: `In operation/`, `Done/`, `AGENTS.md`, `tools/*.ps1` (except
-  `bf-test.ps1`), `.githooks/`. RevenantLib is a separate private repo, `Exxec/RevenantLib`
+  `bf-test.ps1` and the scripts the hooks call), `.githooks/` (old local hooks; the tracked ones are `tools/githooks/`). RevenantLib is a separate private repo, `Exxec/RevenantLib`
   (`working/`, `original/`, `reports/`); `revenantlib-check` verifies it provides what the fixers call.
 
 ## Hardening rules (ROADMAP item 70, 2026-10-12)
@@ -185,6 +185,10 @@ python -m bridgeforge docs-index          # after adding a check or CLI option; 
 uv lock --check                           # after touching pyproject dependencies
 ```
 
+The tracked hooks in `tools/githooks/` run ruff and `docs-index --check` before a commit, and the cross-cutting tests plus the
+touched modules' tests before a push. Enable them once per clone with `git config core.hooksPath tools/githooks`. The relative
+path works in every worktree, and `bridgeforge hygiene` reports when they are off (96.5 C1).
+
 Optional extra: `pip install ".[archives]"` (py7zr) lets `corpus-index` read `.7z`; tests needing it skip
 without it. The web-session hook installs it.
 
@@ -193,7 +197,8 @@ one Python passed while argparse output, home and checkout paths, and junction h
 
 CI (`.github/workflows/ci.yml`) runs all of these, plus disjoint fast/slow test jobs on Windows and Ubuntu with
 Python 3.15, a separate full coverage job and a coverage floor (`[tool.coverage.report] fail_under` in pyproject; raise
-it when coverage rises, never lower it).
+it when coverage rises, never lower it). A pull request that changes only documents runs Lint and the test modules in
+`tests/doc_tests.json`; a push to main always runs everything (`tools/ci-scope.py`, ROADMAP-3 96.5 C3).
 
 ## Test conventions
 

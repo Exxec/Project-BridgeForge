@@ -18,6 +18,7 @@ from typing import NamedTuple
 
 from .atlas import discover_mods, mod_identity
 from .atlas_census import API_PREFIX, dotted, member_symbol, qualified_uses, read_jar_classes, read_loose
+from ..progress import Checkpoint
 from ..safeio import atomic_write_text
 from bridgeforge.scan.scanner import _load_lenient_json_file, _loaded_mod_jars
 from ..zipsafe import read_limited
@@ -149,24 +150,46 @@ def _identity(old: Path, new: Path) -> tuple[str, str]:
     return mod_id, "id:" + mod_id
 
 
-def mine(pairs: list[Pair], catalogue: dict | None = None, progress=None) -> dict:
+def mine(pairs: list[Pair], catalogue: dict | None = None, progress=None, checkpoint: Path | None = None) -> dict:
+    """`checkpoint`: a file that keeps each finished pair's replacements, so an interrupted run resumes (long-running rule;
+    ROADMAP-3 96.5 A3). It is used only when the pair labels are unique, and removed when the run completes. The header
+    names the API jars by the SHA-256 the catalogue records, so a run with other `--old-api`/`--new-api` jars starts
+    afresh. A pair is known by its label: a pair whose folders changed between the interrupted run and its resume keeps
+    its rows (queue pairs are extracted afresh each run, so their files' times say nothing)."""
     rules: dict[tuple[str, str], dict] = {}
     scanned = []
-    for index, pair in enumerate(pairs, 1):
-        mod_id, family = _identity(pair.old, pair.new)
-        rows = pair_replacements(pair.old, pair.new, catalogue)
-        scanned.append({"pair": pair.label, "mod": mod_id, "replacements": len(rows),
-                        "old_version": pair.old_version, "new_version": pair.new_version})
-        if progress:
-            progress(f"[{index}/{len(pairs)}] {pair.label}: {len(rows)} replacement(s)")
-        for old, new, symbol_kind, reason, compat, old_example, new_example, cls in rows:
-            rule = rules.setdefault((old, new), {"old": old, "new": new, "symbol_kind": symbol_kind, "reason": reason,
-                                                 "kind": compat, "mods": {}, "old_examples": [], "new_examples": []})
-            rule["mods"].setdefault(mod_id, family)
-            for key, example in (("old_examples", old_example), ("new_examples", new_example)):
-                text = f"{mod_id}: {example} ({cls})"
-                if len(rule[key]) < EXAMPLES and text not in rule[key]:
-                    rule[key].append(text)
+    labels = [pair.label for pair in pairs]
+    # A dict, not a list: Checkpoint takes a list holding the same items for the same run, and swapped jars are not.
+    api = {side: (catalogue.get(side) or {}).get("sha256") for side in ("old", "new")} if catalogue else None
+    header = {"command": "atlas migrations", "pairs": labels, "api_jars_sha256": api}
+    with Checkpoint(checkpoint if len(set(labels)) == len(labels) else None, header) as done:
+        for index, pair in enumerate(pairs, 1):
+            mod_id, family = _identity(pair.old, pair.new)
+            cached = done.get(pair.label)
+            rows = [tuple(row) for row in cached["rows"]] if cached is not None else pair_replacements(pair.old, pair.new, catalogue)
+            if cached is None:
+                done.add(pair.label, {"rows": [list(row) for row in rows]})
+            scanned.append({"pair": pair.label, "mod": mod_id, "replacements": len(rows),
+                            "old_version": pair.old_version, "new_version": pair.new_version})
+            if progress:
+                progress(f"[{index}/{len(pairs)}] {pair.label}: {len(rows)} replacement(s)" + (" (from checkpoint)" if cached is not None else ""))
+            _add_rules(rules, rows, mod_id, family)
+        done.finish()
+    return _rules_report(rules, catalogue, scanned)
+
+
+def _add_rules(rules: dict, rows: list, mod_id: str, family: str) -> None:
+    for old, new, symbol_kind, reason, compat, old_example, new_example, cls in rows:
+        rule = rules.setdefault((old, new), {"old": old, "new": new, "symbol_kind": symbol_kind, "reason": reason,
+                                             "kind": compat, "mods": {}, "old_examples": [], "new_examples": []})
+        rule["mods"].setdefault(mod_id, family)
+        for key, example in (("old_examples", old_example), ("new_examples", new_example)):
+            text = f"{mod_id}: {example} ({cls})"
+            if len(rule[key]) < EXAMPLES and text not in rule[key]:
+                rule[key].append(text)
+
+
+def _rules_report(rules: dict, catalogue: dict | None, scanned: list[dict]) -> dict:
     out = []
     for rule in rules.values():
         independent = len(set(rule["mods"].values()))
@@ -324,7 +347,8 @@ def run_migrations(args, emit, say) -> int:
             pairs += installed_pairs(args.pairs_installed, args.installed)
         if not pairs:
             raise ValueError("give OLD_DIR NEW_DIR, --pairs-from QUEUE, --pairs-json FILE or --pairs-installed QUEUE (no pairs found)")
-        data = mine(pairs, catalogue, None if args.quiet else say)
+        checkpoint = Path(args.write) / f"{args.stem}.partial.jsonl" if args.write else None  # 96.5 A3: resume with --write
+        data = mine(pairs, catalogue, None if args.quiet else say, checkpoint=checkpoint)
     if args.write:
         for path in write_outputs(data, args.write, args.stem):
             say(f"wrote {path}")

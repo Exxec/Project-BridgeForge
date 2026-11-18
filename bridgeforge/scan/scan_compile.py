@@ -36,7 +36,7 @@ def dependency_version_major_conflicts(root: Path, provider_roots: list[Path] | 
     if not declared:
         return []
     by_id: dict[str, list] = {}
-    for provider in provider_index([Path(entry) for entry in provider_roots], exclude=Path(root)):
+    for provider in provider_index([Path(entry) for entry in provider_roots], exclude=Path(root), contents=False):
         by_id.setdefault(provider.mod_id, []).append(provider)
     conflicts = []
     for dep in declared:

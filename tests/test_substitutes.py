@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from bridgeforge.substitutes import required_from_scan
 import io
@@ -526,3 +527,66 @@ class WorkspaceStatusTests(unittest.TestCase):
         # Before 2026-09-25 the last line was taken verbatim: RevenantLib's "status" was a sentence about FX Example.
         state = self._state("reports/REVIVAL_REPORT.md", "**READY_WITH_REVIEW_ITEMS** - notes\n\nFX Example still compile-checks PASS.\n")
         self.assertIsNone(state["status"])
+
+
+class IdOnlyProviderIndexTests(unittest.TestCase):
+    """ROADMAP-3 96.5 P2: a scan asks providers only for their id, path and version, so it reads only their mod_info.json.
+    The full index reads every CSV, .wpn, .ship, .skin, jar and .java of every provider: about 35 s more per scan with
+    providers (Bultach Coalition: 29.9 s without, 68.2 s with; measured 2026-11-17)."""
+
+    def test_an_id_only_index_reads_nothing_but_mod_info(self) -> None:
+        from bridgeforge import substitutes
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mod = _provider(root, "lib", "0.98a-RC8", "Armor,lib_armor\n", "lib_wing,v\n")
+            _write(mod / "jars" / "lib.jar", "not a jar")
+            _write(mod / "data" / "weapons" / "gun.wpn", json.dumps({"id": "lib_gun"}))
+            _write(mod / "data" / "scripts" / "A.java", "package lib;\npublic class A {}\n")
+            dict_version = root / "mods" / "dictlib"
+            _write(dict_version / "mod_info.json", json.dumps({"id": "dictlib", "name": "dictlib",
+                                                               "version": {"major": 1, "minor": 2, "patch": 3}}))
+            with mock.patch.object(substitutes, "_csv_ids", side_effect=AssertionError("read a CSV")), \
+                    mock.patch.object(substitutes.zipfile, "ZipFile", side_effect=AssertionError("opened a jar")), \
+                    mock.patch.object(Path, "rglob", side_effect=AssertionError("walked the mod's files")):
+                providers = substitutes.provider_index([root / "mods"], contents=False)
+        self.assertEqual(sorted((p.mod_id, p.version, Path(p.path).name) for p in providers),
+                         [("dictlib", "1.2.3", "dictlib"), ("lib", "1", "lib")])
+        self.assertTrue(all(p.provides == {kind: set() for kind in substitutes.KINDS} for p in providers))
+
+    def test_every_scan_step_asks_for_ids_only(self) -> None:
+        """A static check: a small fixture does not reach every scan step, so each `provider_index` call under
+        bridgeforge/scan must pass `contents=False` (review 2026-11-17)."""
+        import ast
+
+        scan_dir = Path(__file__).resolve().parents[1] / "bridgeforge" / "scan"
+        calls = []
+        for path in sorted(scan_dir.glob("*.py")):
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", None)) == "provider_index":
+                    contents = next((keyword.value for keyword in node.keywords if keyword.arg == "contents"), None)
+                    calls.append((path.name, isinstance(contents, ast.Constant) and contents.value is False))
+        self.assertGreaterEqual(len(calls), 5, calls)
+        self.assertEqual([name for name, ids_only in calls if not ids_only], [])
+
+    def test_a_scan_asks_providers_for_ids_only(self) -> None:
+        from bridgeforge import substitutes
+        from bridgeforge.scan.scanner import scan_mod
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _provider(root, "lib", "0.98a-RC8", "Armor,lib_armor\n", "lib_wing,v\n")
+            mod = root / "mod"
+            _write(mod / "mod_info.json", json.dumps({"id": "m", "name": "m", "version": "1", "gameVersion": "0.98a-RC8",
+                                                       "dependencies": [{"id": "lib", "version": "1"}]}))
+            asked: list[bool] = []
+            real = substitutes.provider_for
+
+            def recording(folder, **kwargs):
+                asked.append(kwargs.get("contents", True))
+                return real(folder, **kwargs)
+
+            with mock.patch.object(substitutes, "provider_for", side_effect=recording):
+                scan_mod(mod, provider_roots=[root / "mods"])
+        self.assertTrue(asked)  # the scan did look its providers up
+        self.assertNotIn(True, asked)

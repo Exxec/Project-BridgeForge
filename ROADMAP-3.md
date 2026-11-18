@@ -165,6 +165,20 @@ Check S series implementation plan and if applicable add remaining items to road
       The 93.45 tests in `tests/test_untrusted_input.py` now watch `javap_batch`'s launches.
     - P2 (S-M): provider lookups read only each provider's `mod_info.json` (`substitutes.provider_for`). About 35 s per
       scan with providers (Bultach: 29.9 -> 68.2 s).
+      **Done 2026-11-17.** `provider_for` and `provider_index` take `contents=False`, which reads only mod_info.json and leaves
+      `provides` empty.
+      - Five scan steps look providers up: `scan_classfile`, `scan_compile`, `scan_content`, `scan_libraries` and
+        `scan_references`. They use only a provider's id, path and version, and now ask for just those. Before, one scan
+        built the full index five times.
+      - `dependency-substitutes`, revive's substitution cache and `corpus provider-index` still read contents.
+
+      Measured on White_Legion with `In operation` as the provider root: providers added 3.1 s to a Bultach scan
+      (17.5 -> 20.6 s) and now add 0.5 s (14.8 -> 15.3 s). The findings are the same 104, with the same SHA-256.
+      Tests: `tests/test_substitutes.py` `IdOnlyProviderIndexTests`:
+      - an id-only index opens no CSV or jar;
+      - a whole scan asks only for ids.
+
+      Both fail with their guard removed.
     - P3 (S): revive drops its duplicate final scan; compile-check caches its harness and core compile (about 2 s a scan).
     - P4 (S): AST facts resolve each file once (about 3.5 s a scan).
     - P6 (S): fix the quadratic `_invalid_utf8_offsets`. It is the suite's slowest test at 24 s, and large CP-1252
@@ -176,6 +190,26 @@ Check S series implementation plan and if applicable add remaining items to road
       loop on 610 inputs (truncated, overlong and surrogate sequences, stray bytes), unmixed across 8 threads, and a
       2.4 MB file with 120,000 isolated CP-1252 bytes.
     - P7 (S): parse the vanilla core once per process (about 2 s a scan, about 6 min per done-audit).
+      **Done 2026-11-17.** A profile of a second Bultach scan in the same process showed three core readers called twice per
+      scan and cached nothing:
+      - `scan_jarchecks._vanilla_api_jar_class_info`: every class in starfarer.api.jar and starfarer_obf.jar;
+      - `_vanilla_loose_script_fqns`;
+      - `scan_content._vanilla_faction_ids`.
+
+      Each is now read once per core per process. The key is the core's resolved path plus the API jars' size and
+      modification time, and for factions the folder's modification time, so another build or a replaced jar is read
+      again. The jar classes come back read-only and the script names as a frozenset; faction ids come back as a fresh set
+      for each caller, because the rules check adds the mod's factions to it.
+      Measured on RC7's core (White_Legion, under load): the jar classes take 0.56 s (6,442 classes), the scripts 0.02 s and
+      the factions 0.04 s, and a repeat call under 1 ms. A scan called each twice, so the first scan saves about 0.6 s and
+      every later scan in the process about 1.2 s. For `done-audit` over 184 archives that is about 4 minutes. Two Bultach
+      scans gave the same 79 findings (same SHA-256) before and after.
+      Tests: `tests/test_core_cache.py`:
+      - parsed once;
+      - read again after a jar changes;
+      - read-only;
+      - scripts read once;
+      - each caller gets its own faction set.
     - P5, P8 (M, S): read each source and each jar class once per scan.
     - P9 (M): memoize the AST helper in tests (an estimated 2-3 of 11 minutes).
     - P10 (M): a process pool for target-impact and corpus-index (5 -> about 1.5 min).
@@ -186,8 +220,54 @@ Check S series implementation plan and if applicable add remaining items to road
       PR commit runs once. A branch pushed without a PR runs no CI, and this repository opens a PR for every change. The
       docs-only path filter is still open: it needs a list of the tests that read documents (`tests/test_roadmap_lint`,
       `test_gates`, `test_checks_index`, `test_cli_golden` and others) and care that a required check still reports.
+      **Done 2026-11-17.** A pull request that changes only documents runs Lint and a new Documentation tests job. Its other
+      checks show as skipped, and a push to main still runs everything.
+      - **The decision:** `tools/ci-scope.py` reads the pull request's own changes, its merge commit against the base. A
+        change is documentation only when every changed path is a Markdown file outside `bridgeforge/`, `tests/`,
+        `probe-mod/`, `tools/` and `.github/`. Markdown under those folders is input: package data
+        (`kit_resources/TRIAL_GUIDE.md`), fixtures, CI.
+      - **The list:** `tests/doc_tests.json` holds the test modules that read a document, with the documents each reads.
+        - It was measured: the whole suite (2987 tests) ran under an audit hook on `open()`, and six modules opened a
+          Markdown file in the checkout.
+        - The guesses above were wrong: `test_gates` and `test_cli_golden` read none, and `test_release_notes` works on
+          temporary copies.
+        - The tests that start a child process were read by hand; none reads a repository document.
+        - A documentation-only run is 46 tests in about 12 s here, against about 10 minutes for the suite.
+      - **Every check name still reports:**
+        - the single jobs skip whole, and a skipped job reports under its own name;
+        - the matrix job runs and skips its steps, since a matrix job skipped whole reports once under its unexpanded name.
+      - **A failed scope job runs everything:** each job that needs it carries `!cancelled()`. Otherwise a failed scope job
+        would skip them, and skipped checks read as passed.
+      - **Checked on GitHub** with a draft pull request based on this branch that changed one Markdown file (#126, closed
+        unmerged, its branch deleted):
+        - Change scope saw only `docs/INDEX.md` and set `docs_only=true`.
+        - Lint and Documentation tests passed: 46 tests, hermeticity PASS.
+        - The four matrix checks reported under their own names, in 4-7 s with their steps skipped.
+        - Coverage, Dependency audit, uv.lock in sync and Shared fixtures showed as skipped.
+
+      Tests: `tests/test_ci_scope.py`:
+      - the classifier and its command line;
+      - the list, and that each document it names is documentation;
+      - the workflow's wiring.
+
+      Each guard fails its test when removed (mutation-checked).
     - C1 (S): the git hooks never run (`.githooks/` is ignored and `core.hooksPath` is unset). A pre-commit that
       regenerates the generated files would have caught the stale CHECKS.md.
+      **Done 2026-11-17.**
+      - The hooks are tracked in `tools/githooks/` (`pre-commit`, `pre-push`, executable). They call the tracked
+        `tools/precommit-check.ps1` and `tools/prepush-check.ps1`, and skip with a note where there is no PowerShell.
+      - Enable them once per clone with `git config core.hooksPath tools/githooks`. The relative path works in every worktree.
+      - The pre-commit check now also runs `docs-index --check` when Python files are staged. Checked by hand: with a staged
+        new scan function it refused with exit 14 and named the fix; on clean changes it passed in 7.8 s.
+      - `hygiene` reports the hooks: SKIPPED in a repository without `tools/githooks/`, PASS when `core.hooksPath` points
+        there, otherwise a FINDING with the fix.
+
+      Tests: `tests/test_hygiene.py` `HooksTests`:
+      - a repository without the hooks is skipped;
+      - off is a FINDING with the fix, and on passes;
+      - this repository's hooks are tracked as executable and call its checks, including the `docs-index --check` call.
+
+      The last two fail with their guard removed (mutation-checked).
     - C5 (S): a pre-push static tier plus tests selected by import, under 2 minutes.
     - C6 (S): the same JDK locally and on CI, and `-encoding` on every test javac (14 of 16 lack it).
     - C7, C8 (S): wall-clock budgets to `process_time`, `timeout-minutes`, `buffer=True`; a shared setup step and a
@@ -200,6 +280,39 @@ Check S series implementation plan and if applicable add remaining items to road
   - **Architecture and process:**
     - A3 (S): `escalation run --all` breaks the long-running rule (no progress, no checkpoint). `auto-open` and
       `atlas migrations` are missing from the list, and a test should require it.
+      **Done 2026-11-17.** All three now print progress and resume from a checkpoint, and all three are listed in
+      `progress.LONG_RUNNING_COMMANDS`.
+      - `escalation run --all` prints one line per packet and offers `--quiet`. Finished packets go to
+        `reports/escalations/run-all.partial.jsonl`, so an interrupted run resumes after the last one; an agent attempt can
+        take half an hour.
+      - `auto-open` keeps each finished workspace in `<queue>/auto-open.partial.jsonl`.
+      - `atlas migrations` keeps each finished pair in `<--write DIR>/<stem>.partial.jsonl`, when the pair labels are
+        unique. Without `--write` it keeps none: the atlas folder is not its to write into.
+      - Each checkpoint is removed when its run completes.
+      - A checkpoint's header names the inputs that change a result, so a changed input starts the run afresh instead of
+        reusing a stale record:
+        - `escalation run --all`: every run option and each packet file's SHA-256, so packets `revive` wrote afresh are
+          run, not skipped. A packet that finished counts as done whatever its outcome; naming it runs it again.
+        - `auto-open`: the standing fixer approvals, and each workspace's scan registry, REVIVE.json, escalation ledger
+          and packets, and baseline, by size and time. This is how `escalation queue` holds REVIVE.json's time. An edit
+          inside `working/` that no scan recorded is not seen by a resumed walk.
+        - `atlas migrations`: the API jars, by the SHA-256 the api-diff catalogue records. A pair is known by its label,
+          so a pair whose folders changed in between keeps its rows.
+        - `Checkpoint` takes a longer list for the same run (ROADMAP 49). The approvals and the API jars are therefore
+          a string and a dict, not lists: an independent review found that one more approved fixer, or swapped jars,
+          resumed with stale rows.
+      - The new list test runs the other way round from the old one: every command that offers `--quiet` must be
+        listed, since `--quiet` exists only where a command prints per-item progress. It found exactly `auto-open` and
+        `atlas migrations`.
+
+      Tests: `tests/test_progress.py` `LongRunningListTests`:
+      - the reverse list check;
+      - one resume test per command: interrupted on the second item, then resumed, the finished item is not redone and
+        the checkpoint is gone;
+      - tests that a changed input starts afresh: a rewritten packet, another `--timeout` or `--auto-accept`, a
+        workspace revived in between, one more approved fixer, other or swapped API jars.
+
+      Each fails with its guard removed (mutation-checked).
     - A8 (S): the revival guide still teaches the RC8 workflow (docs pass, 96.3).
     - A9 (S): retire two dead tools scripts and a fourth status list (`prepush-check.ps1` lacks NOT_REVIVABLE).
     - A2 (S/M): one resolver for the checkout and the state folder. The `.venv` holds a stale non-editable copy,

@@ -1,0 +1,20 @@
+{
+  "measured_on": "2026-11-17",
+  "method": "The whole suite (2987 tests, OK) under an audit hook that credited every open() of a Markdown file inside the checkout to the test module running at the time (import, setUpClass or test), on White_Legion with Python 3.15 and JDK 25 (ROADMAP-3 96.5 C3). The tests that start a child process were read by hand: they run git or javac on temporary folders or are mocked, and read no repository document. A push to main runs everything, so a module missing here still fails there.",
+  "reads": {
+    "test_bug_class_registry": ["docs/BUG_CLASSES.md"],
+    "test_checks_index": ["docs/BUG_CLASSES.md", "docs/CHECKS.md", "docs/COMMANDS.md"],
+    "test_finding_stats": ["docs/BUG_CLASSES.md"],
+    "test_roadmap_lint": ["ROADMAP-3.md", "docs/archive/ROADMAP-2.md", "docs/archive/ROADMAP.md"],
+    "test_scan_port": ["docs/TEMPLAR_CRUSADE_PLAN.md"],
+    "test_source_paths": ["docs/BUG_CLASSES.md"]
+  },
+  "modules": [
+    "test_bug_class_registry",
+    "test_checks_index",
+    "test_finding_stats",
+    "test_roadmap_lint",
+    "test_scan_port",
+    "test_source_paths"
+  ]
+}

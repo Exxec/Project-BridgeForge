@@ -54,8 +54,11 @@ def _csv_ids(path: Path) -> set[str]:
         return set()
 
 
-def provider_for(folder: Path) -> Provider | None:
-    """What one mod folder defines. Only file listings and small data files are read."""
+def provider_for(folder: Path, *, contents: bool = True) -> Provider | None:
+    """What one mod folder defines. Only file listings and small data files are read.
+
+    `contents=False` reads only mod_info.json and leaves `provides` empty: a scan needs a provider's id, path and version
+    only, and the full read cost about 35 s per scan with providers (ROADMAP-3 96.5 P2)."""
     info = _load_lenient_json_file(folder / "mod_info.json") if (folder / "mod_info.json").is_file() else None
     if not isinstance(info, dict) or not info.get("id"):
         return None
@@ -64,6 +67,8 @@ def provider_for(folder: Path) -> Provider | None:
     version = info.get("version")
     # Some mods declare {"major":..,"minor":..,"patch":..} instead of a string.
     provider.version = ".".join(str(version.get(part, "")) for part in ("major", "minor", "patch")).strip(".") if isinstance(version, dict) else str(version or "")
+    if not contents:
+        return provider
     data = folder / "data"
     provider.provides["hullmod"] |= _csv_ids(data / "hullmods" / "hull_mods.csv")
     provider.provides["weapon"] |= _csv_ids(data / "weapons" / "weapon_data.csv")
@@ -88,8 +93,9 @@ def provider_for(folder: Path) -> Provider | None:
     return provider
 
 
-def provider_index(roots: list[Path], exclude: Path | None = None) -> list[Provider]:
-    """Providers from mod folders: each root is a mods folder, a mod folder, or an In operation tree."""
+def provider_index(roots: list[Path], exclude: Path | None = None, *, contents: bool = True) -> list[Provider]:
+    """Providers from mod folders: each root is a mods folder, a mod folder, or an In operation tree. `contents=False`: ids,
+    paths and versions only (`provider_for`)."""
     seen: set[str] = set()
     providers: list[Provider] = []
     for root in roots:
@@ -103,7 +109,7 @@ def provider_index(roots: list[Path], exclude: Path | None = None) -> list[Provi
             if str(resolved) in seen or (exclude is not None and resolved == Path(exclude).resolve()):
                 continue
             seen.add(str(resolved))
-            provider = provider_for(folder)
+            provider = provider_for(folder, contents=contents)
             if provider is not None:
                 providers.append(provider)
     return providers
