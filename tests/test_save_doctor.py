@@ -136,6 +136,52 @@ class SaveDoctorTests(unittest.TestCase):
             result = diagnose(_save(root, [], body), root / "mods")
         self.assertEqual([p["package"] for p in result["problems"] if p["class"] == "CLASS_UNRESOLVED"], ["Jaydee8652.Piracy"])
 
+    def test_a_faction_no_core_or_enabled_mod_defines_is_reported(self) -> None:
+        """Salvor's RC7 rig run (2026-11-17): a Templars save with Templars removed still held the `templars` Faction, and
+        the game stopped loading in Faction.readResolve (its transient `spec` is looked up by id and was null). Static
+        checks had said NO_KNOWN_PROBLEM."""
+        body = ('<sector z="2">\n<factions z="3">\n'
+                '<Fctn z="4">\n<id>hegemony</id>\n<memory z="5">\n<id>not.a.faction</id>\n</memory>\n'
+                '<secondaryColorSegmentsOverride>0</secondaryColorSegmentsOverride>\n</Fctn>\n'
+                '<ow z="6">\n<id>templars</id>\n<relationships z="7">\n<id>nested</id>\n</relationships>\n'
+                '<secondaryColorSegmentsOverride>0</secondaryColorSegmentsOverride>\n</ow>\n'
+                '<ow z="8">\n<id>mine</id>\n<secondaryColorSegmentsOverride>2</secondaryColorSegmentsOverride>\n</ow>\n'
+                '<ow ref="6"></ow>\n<market z="9">\n<id>orphan_id_without_faction_fields</id>\n'
+                '<name>Market</name>\n<size>3</size>\n</market>\n'
+                '<memory z="10">\n<id>marker_one_level_down</id>\n<d z="11">\n'
+                '<secondaryColorSegmentsOverride>0</secondaryColorSegmentsOverride>\n</d>\n</memory>\n'
+                '</factions>\n</sector>')
+        with resolved_temp_dir() as root:
+            core = root / "core"
+            (core / "data" / "world" / "factions").mkdir(parents=True)
+            (core / "data" / "world" / "factions" / "hegemony.faction").write_text('{"id": "hegemony"}', encoding="utf-8")
+            _mod(root / "mods", "minemod", "1.0")
+            # One folder down, as Roider Union 2.3.1 keeps roider_mining/roider_dust.faction.
+            (root / "mods" / "minemod" / "data" / "world" / "factions" / "sub").mkdir(parents=True)
+            (root / "mods" / "minemod" / "data" / "world" / "factions" / "sub" / "mine.faction").write_text(
+                '{"id": "mine"}', encoding="utf-8")
+            save = _save(root, [("minemod", "1.0")], body)
+            result = diagnose(save, root / "mods", vanilla_core=core)
+            without_core = diagnose(save, root / "mods")
+        undefined = [p for p in result["problems"] if p["class"] == "FACTION_UNDEFINED"]
+        self.assertEqual([p["faction"] for p in undefined], ["templars"])
+        self.assertEqual(result["verdict"], "WILL_LIKELY_FAIL")
+        self.assertIn("readResolve", result["recovery"]["FACTION_UNDEFINED"])
+        self.assertFalse([p for p in without_core["problems"] if p["class"] == "FACTION_UNDEFINED"])
+        self.assertTrue(any("FACTION_UNDEFINED" in note for note in without_core["skipped"]))
+
+    def test_a_faction_of_an_installed_but_disabled_mod_is_still_undefined(self) -> None:
+        body = '<ow z="2">\n<id>mine</id>\n<secondaryColorSegmentsOverride>0</secondaryColorSegmentsOverride>\n</ow>'
+        with resolved_temp_dir() as root:
+            core = root / "core"
+            (core / "data" / "world" / "factions").mkdir(parents=True)
+            _mod(root / "mods", "minemod", "1.0")
+            (root / "mods" / "minemod" / "data" / "world" / "factions").mkdir(parents=True)
+            (root / "mods" / "minemod" / "data" / "world" / "factions" / "mine.faction").write_text(
+                '{"id": "mine"}', encoding="utf-8")
+            result = diagnose(_save(root, [], body), root / "mods", vanilla_core=core)
+        self.assertEqual([p["faction"] for p in result["problems"] if p["class"] == "FACTION_UNDEFINED"], ["mine"])
+
     def test_a_save_cut_off_mid_write_is_truncated(self) -> None:
         with resolved_temp_dir() as root:
             (root / "mods").mkdir()
