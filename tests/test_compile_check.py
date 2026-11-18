@@ -146,6 +146,56 @@ class CompileLooseScriptsEndToEndTests(unittest.TestCase):
             self.assertEqual(result["vanilla_loose_script_companions"], 1)
             self.assertEqual(result["vanilla_companion_errors"], [])
 
+    def test_the_vanilla_companions_compile_once_per_process(self) -> None:
+        """ROADMAP-3 96.5 P3: every compile-check recompiled the core's ~116 loose scripts with the mod's (1.4 s of javac on
+        RC7, 2026-11-17), so revive's several scans paid it each time. They compile once per process and core now, into a
+        folder this process owns; the mod's scripts compile against those classes."""
+        from unittest import mock
+
+        from bridgeforge import compile_check
+        from bridgeforge.bytecode import java_toolchain
+
+        with resolved_temp_dir() as root:
+            vanilla_core = root / "core"
+            (vanilla_core / "data" / "scripts" / "world").mkdir(parents=True)
+            (vanilla_core / "data" / "scripts" / "world" / "BaseSpawnPoint.java").write_text(
+                "package data.scripts.world;\npublic abstract class BaseSpawnPoint { public void tick() {} }", encoding="utf-8")
+            mod = self._mod(root)
+            (mod / "data" / "scripts" / "world").mkdir(parents=True)
+            (mod / "data" / "scripts" / "world" / "MySpawn.java").write_text(
+                "package data.scripts.world;\npublic class MySpawn extends BaseSpawnPoint {}", encoding="utf-8")
+            real, compiled = java_toolchain.run_javac, []
+
+            def spy(javac, classpath, sources, out, *args, **kwargs):
+                compiled.append([Path(s).name for s in sources])
+                return real(javac, classpath, sources, out, *args, **kwargs)
+
+            compile_check._COMPANIONS.clear()
+            with mock.patch.object(compile_check, "run_javac", side_effect=spy):
+                first = compile_loose_scripts(mod, vanilla_core=vanilla_core, provider_roots=[])
+                second = compile_loose_scripts(mod, vanilla_core=vanilla_core, provider_roots=[])
+        self.assertEqual((first["status"], second["status"]), ("PASS", "PASS"), (first["errors"], second["errors"]))
+        self.assertEqual(sum("BaseSpawnPoint.java" in batch for batch in compiled), 1, compiled)
+        self.assertEqual(sum("MySpawn.java" in batch for batch in compiled), 2)
+
+    def test_a_broken_vanilla_companion_is_still_reported(self) -> None:
+        with resolved_temp_dir() as root:
+            vanilla_core = root / "core"
+            (vanilla_core / "data" / "scripts").mkdir(parents=True)
+            (vanilla_core / "data" / "scripts" / "Broken.java").write_text(
+                "package data.scripts;\npublic class Broken { int x = missing; }", encoding="utf-8")
+            mod = self._mod(root)
+            (mod / "data" / "scripts" / "mine").mkdir(parents=True)
+            (mod / "data" / "scripts" / "mine" / "Ok.java").write_text("package data.scripts.mine;\npublic class Ok {}",
+                                                                      encoding="utf-8")
+            from bridgeforge import compile_check
+
+            compile_check._COMPANIONS.clear()
+            result = compile_loose_scripts(mod, vanilla_core=vanilla_core, provider_roots=[])
+        self.assertEqual([Path(e["file"]).name for e in result["vanilla_companion_errors"]], ["Broken.java"])
+        self.assertNotEqual(result["javac_returncode"], 0)
+        self.assertEqual(result["error_count"], 0)
+
     def test_pass_when_no_loose_scripts(self) -> None:
         with resolved_temp_dir() as root:
             mod = root / "mod"

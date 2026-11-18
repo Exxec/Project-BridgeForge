@@ -105,6 +105,65 @@ def vanilla_loose_scripts(vanilla_core: Path) -> list[Path]:
     return sorted(data_dir.rglob("*.java"))
 
 
+# Per-process caches (ROADMAP-3 96.5 P3). Every compile-check compiled the core's loose scripts with the mod's (1.4 s of javac
+# for RC7's 116, 2026-11-17) and the Janino harness (0.4 s), so revive's several scans paid both each time. They are compiled
+# once per process into a folder this process made and removes at exit, keyed by javac and every input's size and time. Nothing
+# is shared between processes, so a planted class in a shared temp folder (93.51) cannot be picked up.
+_COMPANIONS: dict[tuple, tuple[Path, list, int]] = {}
+_HARNESS: dict[tuple, Path] = {}
+_CACHE_ROOT: list[Path] = []
+
+
+def _cache_dir(name: str) -> Path:
+    if not _CACHE_ROOT:
+        import atexit
+        import shutil
+
+        root = Path(tempfile.mkdtemp(prefix="bf-compile-cache-"))
+        atexit.register(shutil.rmtree, root, True)
+        _CACHE_ROOT.append(root)
+    return Path(tempfile.mkdtemp(prefix=name, dir=_CACHE_ROOT[0]))
+
+
+def _stamp(paths: list[Path]) -> tuple:
+    stamps = []
+    for path in paths:
+        try:
+            info = Path(path).stat()
+            stamps.append((str(path), info.st_size, info.st_mtime_ns))
+        except OSError:
+            stamps.append((str(path), None, None))
+    return tuple(stamps)
+
+
+def _compiled_companions(javac: Path, vanilla_core: Path, companions: list[Path]) -> tuple[Path, list, int]:
+    """The core's loose scripts compiled against the core alone: (class folder, javac errors, javac return code). The game
+    compiles them from the core, never with a mod's jars, and the folder goes last on the mod's classpath, so a jar class
+    still beats a same-named loose script as in the game."""
+    with tempfile.TemporaryDirectory(prefix="bf-core-only-") as empty:
+        classpath = assemble_classpath(Path(empty), vanilla_core, None)
+        key = (str(javac), str(Path(vanilla_core).resolve()), _stamp(companions), _stamp(classpath.core_jars))
+        cached = _COMPANIONS.get(key)
+        if cached is not None and cached[0].is_dir():
+            return cached
+        out = _cache_dir("companions-")
+        run = run_javac(javac, classpath.classpath(), companions, out)
+    _COMPANIONS[key] = (out, list(run.errors), run.returncode)
+    return _COMPANIONS[key]
+
+
+def _compiled_harness(javac: Path, janino_cp: str, jars: list[Path]) -> Path | None:
+    key = (str(javac), _stamp([*jars, _JANINO_HARNESS]))
+    cached = _HARNESS.get(key)
+    if cached is not None and cached.is_dir():
+        return cached
+    out = _cache_dir("janino-harness-")
+    if run_javac(javac, janino_cp, [_JANINO_HARNESS], out).returncode != 0:
+        return None
+    _HARNESS[key] = out
+    return out
+
+
 def _janino_gap_warnings(sources: list[Path], root: Path) -> list[dict[str, object]]:
     warnings: list[dict[str, object]] = []
     for source in sources:
@@ -158,8 +217,8 @@ def janino_compile(jdk_javac: Path, vanilla_core: Path | None, root: Path, sourc
     if not sources:
         return {"status": "PASS", "failures": {}, "checked": 0}
     janino_cp = os.pathsep.join(str(jar) for jar in jars)
-    harness = run_javac(jdk_javac, janino_cp, [_JANINO_HARNESS], work_dir / "janino-harness")
-    if harness.returncode != 0:
+    harness_dir = _compiled_harness(jdk_javac, janino_cp, jars)
+    if harness_dir is None:
         return {"status": "UNAVAILABLE", "reason": "could not compile the Janino harness", "failures": {}, "checked": 0}
     by_class: dict[str, str] = {}
     roots: list[str] = [str(root), str(vanilla_core)]
@@ -172,7 +231,7 @@ def janino_compile(jdk_javac: Path, vanilla_core: Path | None, root: Path, sourc
     completed = subprocess.run(
         # -noverify as the game runs (RC8 vmparams and the rig's run-java25.bat, read 2026-09-27): without it
         # the JVM verifier rejects Janino bytecode the game loads fine (DNEEP, Osiris-Alliance VerifyError).
-        [str(java), "-noverify", "-cp", os.pathsep.join([janino_cp, str(work_dir / "janino-harness")]), "JaninoCheck",
+        [str(java), "-noverify", "-cp", os.pathsep.join([janino_cp, str(harness_dir)]), "JaninoCheck",
          os.pathsep.join(roots), ",".join(by_class), classpath],
         capture_output=True, text=True, check=False, timeout=timeout,
     )
@@ -234,8 +293,11 @@ def compile_loose_scripts(root: Path, vanilla_core: Path | None = None, jdk: Pat
 
     companions = vanilla_loose_scripts(vanilla_core) if vanilla_core is not None else []
     base["vanilla_loose_script_companions"] = len(companions)
+    companion_dir, companion_errors, companion_rc = (_compiled_companions(jdk_info.javac, vanilla_core, companions)
+                                                     if companions else (None, [], 0))
+    mod_classpath = classpath_result.classpath() + (os.pathsep + str(companion_dir) if companion_dir else "")
     with tempfile.TemporaryDirectory(prefix="bf-compile-check-") as tmp:
-        run = run_javac(jdk_info.javac, classpath_result.classpath(), sources + companions, Path(tmp) / "classes")
+        run = run_javac(jdk_info.javac, mod_classpath, sources, Path(tmp) / "classes")
         # Janino only for scripts javac accepted and the game actually compiles (not shadowed by a jar);
         # the rest already carry a javac error or never load.
         javac_failed = {str(error["file"]) for error in run.errors}
@@ -275,7 +337,7 @@ def compile_loose_scripts(root: Path, vanilla_core: Path | None = None, jdk: Pat
     # The game never compiles a dependency-shadowed script, so its javac errors cannot fail a load.
     dependency_shadowed_errors = [error for error in run.errors if error["file"] in shadowed_paths]
     mod_errors = [error for error in mod_errors if error not in dependency_shadowed_errors]
-    vanilla_errors = [error for error in run.errors if error["file"] not in mod_source_paths]
+    vanilla_errors = list(companion_errors) + [error for error in run.errors if error["file"] not in mod_source_paths]
     error_counts = Counter(str(error["kind"]) for error in mod_errors)
     shadowed_rel = {Path(p).relative_to(root).as_posix() for p in shadowed_paths}
     janino["failures"] = {rel: msg for rel, msg in janino["failures"].items() if rel not in shadowed_rel}
@@ -289,7 +351,7 @@ def compile_loose_scripts(root: Path, vanilla_core: Path | None = None, jdk: Pat
         "errors": mod_errors,
         "error_count": len(mod_errors),
         "error_counts_by_kind": dict(error_counts),
-        "javac_returncode": run.returncode,
+        "javac_returncode": run.returncode or companion_rc,
         # Errors in a jar-shadowed loose script: real evidence the source is stale/RC8-incompatible,
         # but never a launch blocker (see the comment above) - not counted in status/error_count.
         "jar_shadowed_errors": shadowed_errors,

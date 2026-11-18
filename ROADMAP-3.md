@@ -180,6 +180,28 @@ Check S series implementation plan and if applicable add remaining items to road
 
       Both fail with their guard removed.
     - P3 (S): revive drops its duplicate final scan; compile-check caches its harness and core compile (about 2 s a scan).
+      **Done 2026-11-17.**
+      - **The duplicate scan was also the wrong scan.** After applying fixes, revive scanned the finished tree once more to
+        write its artifacts, and that scan had no dependency providers, while every scan revive decides on has them
+        (`_provider_roots`, which always includes the queue). So the scan the registry held, which `auto-open` and
+        `assess` read, was not the one revive's status came from. Revive now registers its own last scan, with its
+        provider roots in the registry context. Nothing in `working/` changes after that scan: packets and the ledger
+        live in the workspace's `reports/`, and the fingerprint skips `working/reports/`.
+      - **Compile-check** compiled RC7's 116 loose core scripts with every mod's (1.4 s of javac) and the Janino harness
+        (0.4 s) on every scan, measured on White_Legion. Both now compile once per process, core and javac:
+        - into a folder that process creates and removes at exit, keyed by every input's size and time. Nothing is shared
+          between processes, so 93.51's planted-class route does not apply;
+        - the core scripts against the core alone, as the game compiles them, with their classes last on the mod's
+          classpath, so a mod jar's class still beats a same-named loose script, as in the game;
+        - their errors are still reported (`vanilla_companion_errors`, and in `javac_returncode`).
+
+      Tests:
+      - `tests/test_revive.py`: every scan has providers, the registered report is the last scan, and the registry
+        context and `assess` agree;
+      - `tests/test_compile_check.py`: the companions compile once for two checks, and a broken core script is still
+        reported.
+
+      Each fails with its guard removed (mutation-checked).
     - P4 (S): AST facts resolve each file once (about 3.5 s a scan).
     - P6 (S): fix the quadratic `_invalid_utf8_offsets`. It is the suite's slowest test at 24 s, and large CP-1252
       files hit it too.

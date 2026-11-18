@@ -108,6 +108,35 @@ class ReviveTests(unittest.TestCase):
         self.assertTrue(scans)
         self.assertEqual(second["status"], "ESCALATED")
 
+    def test_the_registered_scan_is_the_last_one_revive_decided_on(self):
+        """ROADMAP-3 96.5 P3: after applying fixes, revive scanned the finished tree a second time to write its artifacts, and
+        that scan had no dependency providers, so the registered report (what auto-open and the registry read) was not the
+        scan revive's status came from. It now registers its own last scan, providers and all."""
+        from unittest import mock
+
+        from bridgeforge.scan import scanner
+        from bridgeforge.scan.scan_registry import assess, read_index
+
+        real, calls = scanner.scan_mod, []
+
+        def spy(*args, **kwargs):
+            result = real(*args, **kwargs)
+            calls.append((kwargs.get("provider_roots"), len(result.findings)))
+            return result
+
+        with resolved_temp_dir() as root:
+            workspace = _workspace(root)
+            with mock.patch.object(scanner, "scan_mod", side_effect=spy):
+                result = revive(workspace, apply=True)
+            entries, _problem = read_index(workspace)
+            manifest = json.loads((workspace / entries[-1]["report"]).read_text(encoding="utf-8"))
+            state = assess(workspace)["state"]
+        self.assertTrue(result["applied"])
+        self.assertTrue(calls and all(providers for providers, _count in calls), calls)  # every scan with providers
+        self.assertEqual(len(manifest.get("findings", manifest)), calls[-1][1])
+        self.assertTrue(entries[-1]["context"].get("provider_roots"))
+        self.assertEqual(state, "CURRENT")
+
     def test_manual_is_never_applied_without_approval(self):
         with resolved_temp_dir() as root:
             workspace = _workspace(root)
