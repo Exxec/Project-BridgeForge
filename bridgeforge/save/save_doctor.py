@@ -47,12 +47,16 @@ _JAVA_KEYWORDS = frozenset(
 
 
 def installed_mods(mods_dir: Path) -> dict[str, dict]:
-    """Public provider contract used by Salvor: installed mods keyed by mod id."""
+    """Public provider contract used by Salvor: installed mods keyed by mod id. `version` is the dotted text a save's
+    descriptor records, also for mod_info's {"major", "minor", "patch"} form (whose Python repr read as a changed version)."""
+    from bridgeforge.corpus.corpus_releases import version_text
+
     found: dict[str, dict] = {}
     for info_path in sorted(Path(mods_dir).glob("*/mod_info.json")):
         info = _load_lenient_json_file(info_path) or {}
         if isinstance(info, dict) and info.get("id"):
-            found[str(info["id"])] = {"folder": info_path.parent, "version": str(info.get("version") or ""), "name": str(info.get("name") or "")}
+            found[str(info["id"])] = {"folder": info_path.parent, "version": version_text(info.get("version") or ""),
+                                      "name": str(info.get("name") or "")}
     return found
 
 
@@ -114,8 +118,10 @@ def diagnose(save: Path, mods_dir: Path, vanilla_core: Path | None = None, cycle
         for token, _is_class_attr, sample_path in _scan_save_tokens(campaign_xml):
             if "." not in token and "_-" not in token and "$" not in token:
                 continue  # bare names are XStream aliases or fields; only dotted class names are judged
-            if not re.match(r"[a-z]", token):
-                continue  # `WSR.V`: a dotted XStream alias the game registers (no WSR class exists), not a package
+            if re.fullmatch(r"[A-Z]+", token.split(".", 1)[0]):
+                # `WSR.V`: a dotted XStream alias the game registers (no WSR class exists), not a package. Only an
+                # all-capitals first part: a mod's package may start with a capital (Jaydee8652.JaydeePiracy, 2026-11-17).
+                continue
             if token.split(".", 1)[0] in _JAVA_KEYWORDS:
                 continue  # `if.new`, `super.Object`: the game's obfuscator names classes and fields with keywords
             if any(index.resolve(token) for index in indexes) or (vanilla is not None and vanilla.resolve(token)):
