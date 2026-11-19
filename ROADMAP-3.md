@@ -1334,6 +1334,16 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     - Why a save was read during New Game is not shown. The rig's `saves/` held 14 saves from the day's runs, and
       `probe-group install` leaves them. Moving the rig's saves aside before each run would make every run start the same
       way.
+- 93.58 (S) **The display goes dark mid-run.** Test1's power plan turns the display off after 180 s without input
+  (`powercfg` VIDEOIDLE 0xb4, read 2026-11-19). The 96.2 runs P962KR and P962KR2 (Kadur Remnant) reached the campaign, then the
+  harness's Escape and menu clicks never reached the game: LIVE_STUCK at the first combat round, the log silent after the
+  probe's checks. P962KR3 passed with a background process holding the display on.
+  **Done 2026-11-19.** `live_run` holds the display and system on for the whole run (`live/display_awake.py`,
+  `SetThreadExecutionState` with ES_DISPLAY_REQUIRED, reset to the plan's timeouts afterwards; a no-op off Windows).
+  This is the likely cause, not a proven one: Broken Star still stalled at the same step with the display held on
+  (P962BS4), so that one has another cause, under 96.2. Tests: `tests/test_display_awake.py` (held inside and released
+  after, also on error; nothing released when nothing was held; `live_run` holds it around the game; Windows accepts the
+  request).
 - 93.51 (S) **Two lower-risk leads from the 93.45 security review,** read 2026-11-17, not yet fixed:
   - BridgeForge's helper classes are cached in the temp folder and reused without a check (`bytecode.py`, `java_ast.py`,
     `delegate_method.py`). On a shared POSIX `/tmp` another local user could plant one. Windows' temp folder is per user.
