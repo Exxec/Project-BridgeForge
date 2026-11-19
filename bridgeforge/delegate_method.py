@@ -23,6 +23,7 @@ import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from .bytecode.helper_cache import helper_directory
 
 from .bytecode.bytecode import BytecodeUnavailable, _asm, inspect_bytecode
 from .bytecode.bytecode_diff import changed_methods
@@ -65,7 +66,7 @@ def load_spec(path: Path) -> list[Delegation]:
 
 def _delegate_helper() -> Path:
     source, asm = Path(__file__).with_name("java") / "BridgeforgeDelegateMethod.java", _asm()
-    output = Path(tempfile.gettempdir()) / "bridgeforge-delegate" / hashlib.sha256(source.read_bytes() + asm.read_bytes()).hexdigest()[:16]
+    output = helper_directory("delegate", hashlib.sha256(source.read_bytes() + asm.read_bytes()).hexdigest()[:16], BytecodeUnavailable)  # private per-user folder (93.51)
     if (output / "bridgeforge" / "bytecode" / "BridgeforgeDelegateMethod.class").is_file():
         return output
     output.mkdir(parents=True, exist_ok=True)
