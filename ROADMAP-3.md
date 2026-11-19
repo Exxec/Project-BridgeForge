@@ -1352,6 +1352,18 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   (P962BS4), so that one has another cause, under 96.2. Tests: `tests/test_display_awake.py` (held inside and released
   after, also on error; nothing released when nothing was held; `live_run` holds it around the game; Windows accepts the
   request).
+- 93.59 (S) **The harness leaves the campaign while the probe saves.** With `--save-after-checks` the probe calls `cmdSave()`
+  right after its first `campaign END`, and the harness pressed Escape about a second after that line. From END to the probe's
+  `save|campaign|cmdSave returned true`: P962KR3 (Kadur Remnant, passed) 2.3 s; P962BS4 (Broken Star) 27.8 s and P962YC2
+  (YunruCore, display held on by 93.58) 20.3 s, both LIVE_STUCK at combat round 1 with the game still on the campaign map and
+  the fleet moved by the Exit click (screenshot `P962YC2-...round1-no-start.png`). The keys and clicks sent during the save
+  were lost. P962KR and P962KR2 (93.58) may have been the same.
+  **Done 2026-11-19.** When the rig's probe config has `save_after_checks: true` (`live_run.probe_saves_after_checks`), `drive`
+  waits up to 180 s for the probe's save line (INFO or FAIL), settles 3 s, then leaves the campaign; stage `probe-saved`. No
+  line: LIVE_STUCK at `probe-save`, with nothing pressed. Tests: `tests/test_live_run.py` (a fake game that loses input during
+  the save: the run waits and loses nothing; without the wait the Escape is lost; a save that never reports is stuck at
+  probe-save; the config flag read strictly). Without the wait two tests fail (mutation-checked). Live confirmation: the
+  YunruCore and Broken Star re-runs on Test1 (96.2).
 - 93.51 (S) **Two lower-risk leads from the 93.45 security review,** read 2026-11-17, not yet fixed:
   - BridgeForge's helper classes are cached in the temp folder and reused without a check (`bytecode.py`, `java_ast.py`,
     `delegate_method.py`). On a shared POSIX `/tmp` another local user could plant one. Windows' temp folder is per user.

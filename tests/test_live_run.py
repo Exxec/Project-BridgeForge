@@ -18,7 +18,8 @@ class FakeGame:
     needs no window)."""
 
     def __init__(self, log: Path, rounds: int = 1, stall_at: str | None = None, lost_starts: tuple[int, ...] = (),
-                 late_redefinition: bool = False, dies_at_deploy: int | None = None, dies_in_battle: bool = False) -> None:
+                 late_redefinition: bool = False, dies_at_deploy: int | None = None, dies_in_battle: bool = False,
+                 saves_after_end: bool = False) -> None:
         self.log, self.rounds, self.stall_at = log, rounds, stall_at
         self.dies_at_deploy, self.dies_in_battle, self.alive = dies_at_deploy, dies_in_battle, True
         self.lost_starts, self.late_redefinition = set(lost_starts), late_redefinition
@@ -26,6 +27,10 @@ class FakeGame:
         self.combat_started = self.deploys = 0
         self.running, self.pending_redefinition = False, None
         self.captures: list[Path] = []
+        # saves_after_end: the probe saves after 'campaign END' and logs 'cmdSave returned' at the second pause after it (the New
+        # Game flow's own pause after Start Game is shorter than the save); keys and clicks sent before that are lost to the save,
+        # as in P962BS4 and P962YC2 (93.59). "never": the save never reports.
+        self.saves_after_end, self.saving, self.save_pauses, self.lost_to_save = saves_after_end, False, 0, []
         self.log.write_text("1 [main] INFO  Reading save data from [x]\n", encoding="utf-8")
 
     def _append(self, text: str) -> None:
@@ -50,8 +55,11 @@ class FakeGame:
     def click(self, fx: float, fy: float) -> None:
         self._window()
         self.actions.append(("click", fx, fy))
+        if self.saving:
+            self.lost_to_save.append(("click", fx, fy))
         if (fx, fy) == live_run.START_GAME and self.stall_at != "new-game":
             self._append("BF-PROBE|0.2.23|probe|INFO|campaign|END")
+            self.saving, self.save_pauses = bool(self.saves_after_end), 2
         if (fx, fy) == live_run.DEPLOY:
             self.deploys += 1
             if self.deploys == self.dies_at_deploy:
@@ -66,6 +74,8 @@ class FakeGame:
 
     def key(self, vk: int) -> None:
         self.actions.append(("key", vk))
+        if self.saving:
+            self.lost_to_save.append(("key", vk))
         if vk != live_run.SPACE_KEY or not self.running:
             return
         if self.dies_in_battle:
@@ -83,6 +93,11 @@ class FakeGame:
                 self._append(self._round_line(1))
 
     def sleep(self, _seconds: float) -> None:
+        if self.saving and self.saves_after_end != "never":
+            self.save_pauses -= 1
+            if self.save_pauses == 0:
+                self.saving = False
+                self._append("BF-PROBE|0.3.3|save|INFO|campaign|cmdSave returned true")
         if self.pending_redefinition:
             self._append(self.pending_redefinition)
             self.actions.append(("logged", "redefinition"))
@@ -194,6 +209,49 @@ class DriveTests(unittest.TestCase):
             live_run.COMBAT_UNPAUSE_RETRY = retry
         self.assertEqual(result.verdict, "LIVE_DONE", result)
         self.assertEqual(sum(1 for action in game.actions if action == ("key", live_run.SPACE_KEY)), 2)
+
+    def test_a_probe_save_is_waited_for_before_leaving_the_campaign(self) -> None:
+        # 93.59: P962BS4 (27.8 s save) and P962YC2 (20.3 s) lost the Escape and the Exit clicks to the probe's save.
+        with resolved_temp_dir() as base:
+            log = base / "run.stdout.log"
+            game = FakeGame(log, saves_after_end=True)
+            result = live_run.drive(log, game.hands(), menu_timeout=0.2, campaign_timeout=0.2, combat_timeout=0.2, probe_saves=True)
+        self.assertEqual(result.verdict, "LIVE_DONE", result)
+        self.assertEqual(result.stages, ["main-menu", "campaign", "probe-saved", "combat-1"])
+        self.assertEqual(game.lost_to_save, [])
+
+    def test_without_the_wait_the_escape_lands_during_the_save(self) -> None:
+        # What the stalled runs did: the fake keeps playing, the real game ignored these.
+        with resolved_temp_dir() as base:
+            log = base / "run.stdout.log"
+            game = FakeGame(log, saves_after_end=True)
+            live_run.drive(log, game.hands(), menu_timeout=0.2, campaign_timeout=0.2, combat_timeout=0.2)
+        self.assertIn(("key", live_run.ESCAPE_KEY), game.lost_to_save)
+
+    def test_a_save_that_never_reports_is_stuck_at_probe_save(self) -> None:
+        with resolved_temp_dir() as base:
+            log = base / "run.stdout.log"
+            game = FakeGame(log, saves_after_end="never")
+            original = live_run.PROBE_SAVE_TIMEOUT
+            live_run.PROBE_SAVE_TIMEOUT = 0.2
+            try:
+                result = live_run.drive(log, game.hands(), menu_timeout=0.2, campaign_timeout=0.2, combat_timeout=0.2, probe_saves=True)
+            finally:
+                live_run.PROBE_SAVE_TIMEOUT = original
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "probe-save"))
+        self.assertNotIn(("key", live_run.ESCAPE_KEY), game.actions)
+
+    def test_probe_saves_after_checks_reads_the_rig_config(self) -> None:
+        from bridgeforge.run_manifest import CONFIG_RELATIVE
+
+        with resolved_temp_dir() as rig:
+            self.assertFalse(live_run.probe_saves_after_checks(rig))  # no config
+            config = rig / CONFIG_RELATIVE
+            config.parent.mkdir(parents=True)
+            for text, expected in (('{"save_after_checks": true}', True), ('{"save_after_checks": false}', False),
+                                   ('{"save_after_checks": "true"}', False), ("not json", False), ("[]", False)):
+                config.write_text(text, encoding="utf-8")
+                self.assertIs(live_run.probe_saves_after_checks(rig), expected, text)
 
     def test_game_that_never_reaches_the_menu_is_stuck_at_the_menu(self) -> None:
         with resolved_temp_dir() as base:
