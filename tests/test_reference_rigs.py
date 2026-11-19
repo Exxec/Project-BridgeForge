@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+
+import tests.support  # noqa: F401  installs the registry guard when this module runs alone (96.5 C4)
 from pathlib import Path
 from unittest import mock
 
@@ -84,7 +86,7 @@ class ReferenceRigTests(unittest.TestCase):
             manifest = write_reference_rig_manifest(install, game_version="0.7.2a", output=root / "rig.json")
             with mock.patch("bridgeforge.rig.rig_doctor._repo_root", return_value=root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]), mock.patch(
                 "bridgeforge.rig.rig_doctor.who_locks", return_value={"processes": [], "limitations": []}
-            ):
+            ), mock.patch("bridgeforge.rig.rig_doctor._long_paths_enabled", return_value=True):  # HKLM: machine state (96.5 C4)
                 result = rig_doctor(install, reference_manifest=manifest)
             self.assertEqual(result["status"], "PASS")
             probe = next(c for c in result["checks"] if c["name"] == "probe_installed")

@@ -357,6 +357,27 @@ Check S series implementation plan and if applicable add remaining items to road
       about 5-6).
     - C4 (M): a machine-state sandbox for the suite: winreg raises unless patched; HOME, APPDATA and TEMP point at temp
       folders.
+      **Narrowed to S (owner 2026-11-18: "I like your recommended route for C4").** Only the registry guard: in
+      `tests/support.py`, any `winreg` call raises unless the test patches it. `rig/rig_prefs.py` writes
+      `HKCU\Software\JavaSoft\Prefs\com\fs\starfarer` (the key that also holds the licence key) and rig-doctor reads
+      `LongPathsEnabled` from HKLM; today only each test's own patch keeps them off the real registry. HOME, APPDATA and
+      TEMP are not redirected: 5 modules read the home folder, the tests already use temp folders, and redirecting them
+      would change git's, javac's, java's and uv's environment in every test that starts one. Patch the home folder in a
+      test if one of those 5 modules ever needs it.
+      **Done 2026-11-18.** `tests/support.py` wraps `winreg.OpenKey`, `OpenKeyEx`, `CreateKey`, `CreateKeyEx`, `DeleteKey` and
+      `DeleteKeyEx` on import: any key outside `HKEY_CURRENT_USER\Software\BridgeForgeTests` raises `RegistryGuardError`.
+      It is not an `OSError`, because rig-doctor catches `OSError` as "unreadable" and would hide the access. A test that
+      patches one of those calls replaces the guard on purpose. Discovery imports every test module before a test runs and
+      194 of 317 import `support`, so a whole run is guarded from its first test; the four modules that reach registry
+      code without importing it now do, and a test keeps it so.
+      The guard found real reads at once: the tests that call `rig_doctor()` and `test_reference_rigs` read HKLM
+      `LongPathsEnabled`, so their result depended on the machine; `test_rig_doctor_environment`'s "unknown long-path
+      setting" test asked the real key and accepted either answer. They now patch `_long_paths_enabled`, and that test
+      asserts PASS for an unknown setting. No test wrote to the preferences key.
+      Tests: `tests/test_registry_guard.py` (the preferences key and HKLM refused; the guard's error escapes rig-doctor's
+      `except OSError`; the test root allowed and a look-alike prefix refused; a patch replaces the guard and is restored;
+      registry-reaching modules import `support`). Removing the guard fails five of them; widening the prefix rule fails
+      one (mutation-checked).
     - C9 (M): shared test fixtures (`_write` is copied in 60 files; 39 copies write CRLF on Windows).
   - **Architecture and process:**
     - A3 (S): `escalation run --all` breaks the long-running rule (no progress, no checkpoint). `auto-open` and

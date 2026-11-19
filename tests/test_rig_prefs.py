@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import sys
 import unittest
+
+import tests.support  # noqa: F401  installs the registry guard when this module runs alone (96.5 C4)
 from unittest import mock
 
 from bridgeforge.rig import rig_prefs

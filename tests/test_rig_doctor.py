@@ -60,7 +60,10 @@ def _patch_repo_root(repo_root: Path):
     with mock.patch("bridgeforge.rig.rig_doctor._repo_root", return_value=repo_root), mock.patch(
         "bridgeforge.rig.rig_doctor.who_locks", return_value={"processes": [], "limitations": []}
     ), mock.patch("bridgeforge.rig.rig_doctor._check_launcher_prefs",
-                  return_value={"name": "launcher_prefs", "status": "PASS", "detail": "patched in tests"}):
+                  return_value={"name": "launcher_prefs", "status": "PASS", "detail": "patched in tests"}), mock.patch(
+        # HKLM LongPathsEnabled: machine state the registry guard refuses (96.5 C4); its own tests pass long_paths explicitly.
+        "bridgeforge.rig.rig_doctor._long_paths_enabled", return_value=True
+    ):
         yield
 
 

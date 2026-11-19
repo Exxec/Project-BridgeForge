@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import unittest
+
+import tests.support  # noqa: F401  installs the registry guard when this module runs alone (96.5 C4)
 from pathlib import Path
 
 from bridgeforge.rig.rig_doctor import _check_environment
@@ -22,7 +24,11 @@ class EnvironmentCheckTests(unittest.TestCase):
         self.assertEqual(_check_environment(Path("C:/rig"), Path("C:/repo"), long_paths=True)["status"], "PASS")
 
     def test_unknown_long_path_setting_is_not_a_warning(self) -> None:
-        self.assertEqual(_check_environment(Path("C:/rig"), Path("C:/repo"), long_paths=None)["status"] in {"PASS", "WARN"}, True)
+        # long_paths=None asked the real HKLM key and accepted either answer; the registry guard found it (96.5 C4).
+        from unittest import mock
+
+        with mock.patch("bridgeforge.rig.rig_doctor._long_paths_enabled", return_value=None):
+            self.assertEqual(_check_environment(Path("C:/rig"), Path("C:/repo"), long_paths=None)["status"], "PASS")
 
 
 if __name__ == "__main__":
