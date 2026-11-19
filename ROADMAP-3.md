@@ -518,6 +518,16 @@ Check S series implementation plan and if applicable add remaining items to road
     - A4, A5, A6, A10 (M): one public module for mod files (11 resolvers, 5 `_mod_info` loaders); split the `run_cli`
       if-chains (10 of the 13 functions over 200 lines); split the 1,000-line modules with a size ratchet; one shared
       tree hash with 93.27's cache (13 copies of `_sha256`).
+      **A4 Done 2026-11-18.** `bridgeforge/mod_files.py` holds the shapes that were copied: `read_mod_info` (lenient, an
+      object or None), `find_mod_root` (the folder or its only child holding mod_info.json, raising `ModRootError`, a
+      ValueError), `nearest_mod_root` (the same, returning None) and `workspace_or_mod_root` (`working/` first). Four
+      `_mod_info` loaders (live_trust, mass_test, probe_group, target_impact) and five resolvers (copy_drift, prepare_test,
+      intake, value_proposals, vendor_plan) now call it; each keeps its own error class. Resolvers with other rules stay
+      put and the module says why (build_tag searches two levels, supersession reads original/, target_impact follows
+      Done/'s layout, master_log skips original/ and workspace/). Tests: `tests/test_mod_files.py`, including a guard that
+      fails when any of those nine functions gets its own mod_info.json path back (checked by restoring vendor_plan's copy).
+      Not in scope, left for a later change: 57 one-line inline reads (`_load_lenient_json_file(x / "mod_info.json")`,
+      e.g. game_version, behavior_discovery, campaign_layout, cmd_shadow, descriptions_draft) could call `read_mod_info`.
 - 96.6 (S) **`archive` does what `record --archive` does first.** On 2026-11-17 the owner said "archive all". All four plain
   `archive` runs refused (Templars, KoC, Eridani, Scrapyard):
   - `audit-explain --auto` then proved 9 of their unexplained files: KoC's moved work files, Scrapyard's credits file and

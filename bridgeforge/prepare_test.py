@@ -12,17 +12,12 @@ class PrepareTestError(ValueError):
 
 def _mod_root_for_sync(path: Path) -> Path:
     """Resolve the same working/deployed mod-root convention `compare_copies` uses, for copy operations."""
-    root = Path(path).expanduser().resolve()
-    if not root.is_dir():
-        raise PrepareTestError(f"{root} is not an existing directory.")
-    if (root / "mod_info.json").is_file():
-        return root
-    candidates = sorted(child for child in root.iterdir() if child.is_dir() and (child / "mod_info.json").is_file())
-    if len(candidates) == 1:
-        return candidates[0]
-    if not candidates:
-        raise PrepareTestError(f"No mod_info.json found at {root} or one directory below it.")
-    raise PrepareTestError(f"Multiple mod_info.json candidates below {root}; ambiguous mod root.")
+    from .mod_files import ModRootError, find_mod_root
+
+    try:
+        return find_mod_root(path)
+    except ModRootError as exc:
+        raise PrepareTestError(str(exc)) from exc
 
 
 def prepare_test(
