@@ -23,6 +23,7 @@ import argparse
 import csv
 import re
 import json
+import os
 import sys
 import time
 from collections import Counter
@@ -344,8 +345,37 @@ def _short(text: str, limit: int = MEMBER_TEXT_LIMIT) -> str:
     return text if len(text) <= limit else f"{text[:limit - 1]}… ({len(text)} chars)"
 
 
-def target_impact(roots: list[Path], old_core: Path, new_core: Path, *, checkpoint: Path | None = None, progress=None) -> dict:
-    """`progress(done, total, label, record, seconds_or_None)` after each mod."""
+def default_jobs() -> int:
+    """Worker processes when none are asked for: up to four, leaving one CPU free (each worker parses both cores once)."""
+    return max(1, min(4, (os.cpu_count() or 2) - 1))
+
+
+def _timed_impact(folder: Path, old_core: Path, new_core: Path, providers: list[Path]) -> tuple[dict, float]:
+    started = time.monotonic()
+    return mod_impact(folder, old_core, new_core, providers), time.monotonic() - started
+
+
+def _impacts(pending: list[tuple[str, Path, list[Path]]], old_core: Path, new_core: Path, jobs: int):
+    """(label, impact, seconds) per pending mod, in the order they finish. Each mod is independent and read-only, so with
+    jobs > 1 a process pool checks them side by side (ROADMAP-3 96.5 P10); one job keeps the old in-process loop."""
+    if jobs <= 1 or len(pending) < 2:
+        for label, folder, providers in pending:
+            impact, seconds = _timed_impact(folder, old_core, new_core, providers)
+            yield label, impact, seconds
+        return
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
+    with ProcessPoolExecutor(max_workers=min(jobs, len(pending))) as pool:
+        futures = {pool.submit(_timed_impact, folder, old_core, new_core, providers): label for label, folder, providers in pending}
+        for future in as_completed(futures):
+            impact, seconds = future.result()  # a worker's exception ends the run, as the loop's would
+            yield futures[future], impact, seconds
+
+
+def target_impact(roots: list[Path], old_core: Path, new_core: Path, *, checkpoint: Path | None = None, progress=None,
+                  jobs: int = 1) -> dict:
+    """`progress(done, total, label, record, seconds_or_None)` after each mod, in the order they finish. `jobs` > 1 checks
+    mods in that many worker processes; the result is the same, its records in the mods' order."""
     old_core, new_core = Path(old_core).expanduser().resolve(), Path(new_core).expanduser().resolve()
     for core in (old_core, new_core):
         if not (core / "starfarer.api.jar").is_file():
@@ -362,20 +392,29 @@ def target_impact(roots: list[Path], old_core: Path, new_core: Path, *, checkpoi
             by_id.setdefault(mod_id, folder)
     header = {"checkpoint": SCHEMA_VERSION, "old_core": str(old_core), "new_core": str(new_core),
               "roots": [str(Path(r).expanduser().resolve()) for r in roots]}
-    records = []
+    by_label: dict[str, dict] = {}
+    pending: list[tuple[str, Path, list[Path]]] = []
     with Checkpoint(checkpoint, header) as saved:
-        for index, (label, folder) in enumerate(mods, 1):
-            started = time.monotonic()
+        done = 0
+        for label, folder in mods:
             record = saved.get(label)
-            resumed = record is not None
-            if record is None:
-                info = _mod_info(folder) or {}
-                providers = [jar for dep in _dependency_ids(info) if dep in by_id for jar in _declared_jars(by_id[dep], _mod_info(by_id[dep]) or {})]
-                record = {"mod": label, **mod_impact(folder, old_core, new_core, providers)}
-                saved.add(label, record)
+            if record is not None:  # resumed from the checkpoint
+                by_label[label] = record
+                done += 1
+                if progress:
+                    progress(done, len(mods), label, record, None)
+                continue
+            info = _mod_info(folder) or {}
+            providers = [jar for dep in _dependency_ids(info) if dep in by_id for jar in _declared_jars(by_id[dep], _mod_info(by_id[dep]) or {})]
+            pending.append((label, folder, providers))
+        for label, impact, seconds in _impacts(pending, old_core, new_core, jobs):
+            record = {"mod": label, **impact}
+            saved.add(label, record)
+            by_label[label] = record
+            done += 1
             if progress:
-                progress(index, len(mods), label, record, None if resumed else time.monotonic() - started)
-            records.append(record)
+                progress(done, len(mods), label, record, seconds)
+    records = [by_label[label] for label, _ in mods]
     verdicts = Counter(r["verdict"] for r in records)
     members: dict[str, set[str]] = {}
     for r in records:
@@ -449,6 +488,7 @@ def add_parser(subcommands) -> None:
     command.add_argument("roots", type=Path, nargs="*", help="Done/ archives, queue folders or single mods; default <repo>/Done and <repo>/In operation")
     command.add_argument("--write", type=Path, help="write TARGET_IMPACT.json and TARGET_IMPACT.md into DIR; a checkpoint there lets an interrupted run resume")
     command.add_argument("--restart", action="store_true", help="with --write: ignore an earlier run's checkpoint")
+    command.add_argument("--jobs", type=int, help="worker processes checking mods side by side (default: up to 4, one CPU left free; 1 = in-process)")
     command.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
     command.add_argument("--json", action="store_true")
 
@@ -469,7 +509,10 @@ def run_cli(args: argparse.Namespace) -> int:
         report(done, total, label, detail, seconds)
 
     try:
-        result = target_impact(roots, args.old_core, args.new_core, checkpoint=checkpoint, progress=None if args.quiet else progress)
+        if args.jobs is not None and args.jobs < 1:
+            raise TargetImpactError("--jobs must be 1 or more.")
+        result = target_impact(roots, args.old_core, args.new_core, checkpoint=checkpoint, progress=None if args.quiet else progress,
+                               jobs=args.jobs if args.jobs is not None else default_jobs())
     except (TargetImpactError, OSError) as exc:
         print(f"bridgeforge: {exc}", file=sys.stderr)
         return 2
