@@ -15,8 +15,9 @@ from datetime import date
 from pathlib import Path
 
 from ..safeio import atomic_write_text
+from bridgeforge.paths import checkout_root
 
-DEFAULT_PATH = Path(__file__).resolve().parents[2] / "docs" / "atlas_predictions.json"
+DEFAULT_PATH = checkout_root() / "docs" / "atlas_predictions.json"
 OUTCOMES = ("confirmed", "refuted", "inconclusive")
 
 

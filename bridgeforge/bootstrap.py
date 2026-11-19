@@ -9,7 +9,9 @@ from bridgeforge.scan.scanner import scan_mod
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent
+    from .paths import data_root
+
+    return data_root()
 
 
 def default_baselines_dir() -> Path:

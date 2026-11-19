@@ -22,7 +22,9 @@ from pathlib import Path
 from .lookup import default_discovery_dir, load_graph
 
 SCHEMA_VERSION = 1
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from .paths import data_root
+
+REPO_ROOT = data_root()  # In operation/, Done/, bridgeforge-state/ (96.5 A2)
 DEFAULT_CORPUS = REPO_ROOT / "bridgeforge-state" / "corpus-fingerprints"
 CATEGORIES = ("api", "lifecycle", "structure", "finding")
 

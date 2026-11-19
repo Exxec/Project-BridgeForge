@@ -220,6 +220,51 @@ def _check_hooks(top: Path) -> dict:
     return {"status": FINDING, "hooks_path": configured or None, "fix": f"git config core.hooksPath {HOOKS_DIR}"}
 
 
+def _main_checkout(top: Path) -> Path:
+    """The checkout every worktree of this repository shares (the parent of the common .git folder)."""
+    try:
+        return Path(_git(top, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()).parent
+    except ValueError:
+        return top
+
+
+def _checkout_version(top: Path) -> str | None:
+    match = re.search(r'^version\s*=\s*"([^"]+)"', (top / "pyproject.toml").read_text(encoding="utf-8"), re.MULTILINE) \
+        if (top / "pyproject.toml").is_file() else None
+    return match.group(1) if match else None
+
+
+def _check_installed(top: Path, distribution=None, main_checkout: Path | None = None) -> dict:
+    """The interpreter's installed bridgeforge is an editable install at this checkout's version (ROADMAP-3 96.5 A2).
+
+    White_Legion's .venv held a plain 0.4.0 install, 68 files behind, which every command run outside a checkout imported
+    instead of the code (2026-11-18). An editable install follows its checkout; a plain one goes stale. The fix names the
+    main checkout, not a worktree: worktrees are removed after their branch merges."""
+    import importlib.metadata
+    from urllib.parse import unquote, urlparse
+    from urllib.request import url2pathname
+
+    try:
+        dist = distribution or importlib.metadata.distribution("bridgeforge")
+    except importlib.metadata.PackageNotFoundError:
+        return {"status": SKIPPED, "reason": "bridgeforge is not installed in this interpreter"}
+    try:
+        direct = json.loads(dist.read_text("direct_url.json") or "{}")
+    except json.JSONDecodeError:
+        direct = {}
+    editable = bool(direct.get("dir_info", {}).get("editable"))
+    url = urlparse(direct.get("url", ""))
+    source = url2pathname(unquote(url.path)) if url.scheme == "file" else None
+    installed, wanted = dist.version, _checkout_version(top)
+    result = {"version": installed, "checkout_version": wanted, "editable": editable, "source": source,
+              "fix": f'uv pip install --python "{sys.executable}" -e "{main_checkout or top}"'}
+    if not editable:
+        return {"status": FINDING, **result, "reason": "a plain install: commands run outside a checkout use this frozen copy"}
+    if wanted and installed != wanted:
+        return {"status": FINDING, **result, "reason": f"the editable install's checkout is at {installed}, this one at {wanted}"}
+    return {"status": PASS, **result}
+
+
 def _overall(checks: dict) -> str:
     statuses = [check["status"] for check in _flatten(checks)]
     if FINDING in statuses:
@@ -254,6 +299,7 @@ def check(repo: Path, build: str | None = None) -> dict:
         "misnamed_paths": _check_misnamed(tracked + untracked + ignored["entries"]),
         "build": _check_build(top, build),
         "hooks": _check_hooks(top),
+        "installed_package": _check_installed(top, main_checkout=_main_checkout(top)),
     }
     return {"repo": top.as_posix(), "status": _overall(checks), "checks": checks}
 
@@ -287,6 +333,11 @@ def _summary_lines(result: dict) -> list[str]:
         lines.append(f"  git hooks: off (core.hooksPath is {hooks['hooks_path'] or 'unset'}); run `{hooks['fix']}` [{FINDING}]")
     elif hooks["status"] == PASS:
         lines.append(f"  git hooks: on ({hooks['hooks_path']}) [{PASS}]")
+    installed = checks["installed_package"]
+    if installed["status"] == FINDING:
+        lines.append(f"  installed bridgeforge {installed['version']}: {installed['reason']}; run `{installed['fix']}` [{FINDING}]")
+    elif installed["status"] == PASS:
+        lines.append(f"  installed bridgeforge {installed['version']}: editable at {installed['source']} [{PASS}]")
     return lines
 
 

@@ -1,0 +1,1 @@
+- One resolver for where things are: `bridgeforge.paths` (`checkout_root`, `data_root`); `BRIDGEFORGE_DATA_ROOT` points the data defaults (In operation, Done, bridgeforge-state) at another folder, and `hygiene` reports a stale installed copy of bridgeforge (96.5 A2).

@@ -708,8 +708,9 @@ def _apply_scenario(mod_dir: Path, runtime_dir: Path, config: dict[str, object],
 
 def _install_probe_mod(runtime_dir: Path) -> dict[str, object]:
     """Copy the built runtime-only release copy of bridgeforge-probe into <runtime_dir>/mods/."""
-    repo_root = Path(__file__).resolve().parents[2]
-    release_dir = repo_root / RELEASE_RELATIVE
+    from bridgeforge.paths import checkout_root
+
+    release_dir = checkout_root() / RELEASE_RELATIVE
     if not release_dir.is_dir():
         raise ProbeConfigError(
             f"{release_dir} not found; build the probe mod first (build_probe_mod + install_release)."

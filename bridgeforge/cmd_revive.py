@@ -5,6 +5,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from .paths import data_root
 
 # The command every escalation run of the 2026-11-16 batch used; `claude` resolves to the VS Code extension's bundled binary when
 # it is not on PATH (escalation.resolve_agent_command). ROADMAP-3 item 92.8.
@@ -182,7 +183,7 @@ def run_cli(args: argparse.Namespace) -> int:
         if args.modlog_command == "add":
             print(add_entry(args.mod, args.text, version=args.version, day=args.date, path=args.file))
         else:
-            done_dir = args.done or Path(__file__).resolve().parent.parent / "Done"
+            done_dir = args.done or data_root() / "Done"
             print(f"{seed_from_archives(done_dir, args.file or DEFAULT_PATH)} line(s) added to {args.file or DEFAULT_PATH}")
         return 0
     if args.command == "ready-list":

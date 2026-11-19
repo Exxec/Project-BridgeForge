@@ -12,6 +12,7 @@ from .intake import intake_archive
 from .project_board import project_board, render_board, write_board
 from .promote import promote_mod
 from .release import release_mod, ReleaseError
+from .paths import data_root
 
 
 def add_parser(subcommands) -> None:
@@ -267,7 +268,7 @@ def run_cli(args: argparse.Namespace) -> int:
     if args.command == "restore-from-done":
         from .workspace_tools import restore_from_done
         try:
-            result = restore_from_done(args.archive, args.queue or Path(__file__).resolve().parent.parent / "In operation")
+            result = restore_from_done(args.archive, args.queue or data_root() / "In operation")
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2

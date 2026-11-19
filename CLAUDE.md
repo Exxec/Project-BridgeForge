@@ -132,6 +132,11 @@ on the second PC) and `memory-mirror`.
   Scanner orchestration is `scan/scanner.py`; checks and shared parsing live beside it. Internal imports use those
   implementations, not the 11 root Salvor compatibility facades. `tests/refactor_module_moves.json` and
   `tests/test_refactor_imports.py` pin those boundaries. Do not remove a facade before its consumer pin/import migration.
+- `paths.py` is the one place that says where things are (96.5 A2): `checkout_root()` is the source tree, `data_root()`
+  holds `In operation/`, `Done/` and `bridgeforge-state/`. They are the same folder unless `BRIDGEFORGE_DATA_ROOT` names
+  another, as White_Legion needs: its checkouts are worktrees under `bridgeforge-state/github-fixes/`. Never compute either
+  from `__file__` (`tests/test_paths.py`). The suite never sees the variable. `hygiene` reports a plain (non-editable) or
+  out-of-date installed copy of bridgeforge in the interpreter.
 - `case_workspace.py` is the S1 read-only adapter for both workspace dialects; it grants no mutation or qualification rights.
   Its implementation/status and next slice are in `docs/S1_PROGRESS.md`.
 - `tests/` unittest suite; `tests/support.py` has `resolved_temp_dir()` and `link_dir()`. B5 CI partitions use

@@ -14,9 +14,10 @@ import shutil
 from pathlib import Path
 
 from .safeio import atomic_write_text, safe_rmtree
+from .paths import checkout_root
 
 CAPACITY_MOD_ID = "bf_capacity"
-CAPACITY_SOURCE = Path(__file__).resolve().parent.parent / "probe-mod" / "capacity-mod" / CAPACITY_MOD_ID
+CAPACITY_SOURCE = checkout_root() / "probe-mod" / "capacity-mod" / CAPACITY_MOD_ID
 
 EXCESS_COST_PER_UNIT = 0.1  # supplies per day per unit over capacity, for cargo space, fuel and personnel separately
 EXCESS_COST_CAP = 50.0      # per resource

@@ -58,6 +58,8 @@ def _patch_repo_root(repo_root: Path):
     # Machine process state is not part of these filesystem fixtures, and neither are the Windows user's Java preferences: a CI
     # runner has no Starsector licence key, so the real launcher_prefs check FAILs there (review 2026-11-17, ROADMAP-3 93.28).
     with mock.patch("bridgeforge.rig.rig_doctor._repo_root", return_value=repo_root), mock.patch(
+        "bridgeforge.rig.rig_doctor._checkout_root", return_value=repo_root  # the probe release copy (96.5 A2)
+    ), mock.patch(
         "bridgeforge.rig.rig_doctor.who_locks", return_value={"processes": [], "limitations": []}
     ), mock.patch("bridgeforge.rig.rig_doctor._check_launcher_prefs",
                   return_value={"name": "launcher_prefs", "status": "PASS", "detail": "patched in tests"}), mock.patch(

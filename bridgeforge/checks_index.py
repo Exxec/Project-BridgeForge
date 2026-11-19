@@ -25,7 +25,9 @@ from pathlib import Path, PurePath
 from .source_paths import family_sources, python_sources
 
 SCHEMA_VERSION = 1
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from .paths import checkout_root
+
+REPO_ROOT = checkout_root()  # the source tree: docs/ and tests/ (96.5 A2)
 HELPER_MODULE = "scan*.py"  # scanner.py and the scan_*.py modules its checks were split into
 UNTESTED_BASELINE = Path("tests") / "untested_checks_baseline.json"
 NOT_COVERAGE = {"test_checks_index", "test_finding_stats"}

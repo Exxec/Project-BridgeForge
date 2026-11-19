@@ -10,6 +10,8 @@ class ReferenceRigError(ValueError):
     """Raised when a historical Starsector install cannot be registered safely."""
 
 
+from .paths import data_root
+
 DEFAULT_REGISTRY_RELATIVE = Path("bridgeforge-state") / "reference-rigs"
 
 
@@ -93,7 +95,7 @@ def write_reference_rig_manifest(
 ) -> Path:
     manifest = build_reference_rig_manifest(install, game_version=game_version)
     if output is None:
-        root = Path(repo_root).resolve() if repo_root is not None else Path(__file__).resolve().parent.parent
+        root = Path(repo_root).resolve() if repo_root is not None else data_root()
         output = root / DEFAULT_REGISTRY_RELATIVE / f"{_safe_version(game_version)}.json"
     path = Path(output).expanduser().resolve()
     if path.exists() and not replace:
@@ -148,7 +150,7 @@ def reference_core_for_game_version(game_version: str | None, *, repo_root: Path
     version = re.sub(r"-RC\d+$", "", str(game_version or "").strip())
     if not version:
         return None
-    root = Path(repo_root).resolve() if repo_root is not None else Path(__file__).resolve().parent.parent
+    root = Path(repo_root).resolve() if repo_root is not None else data_root()
     manifest = root / DEFAULT_REGISTRY_RELATIVE / f"{_safe_version(version)}.json"
     try:
         payload = load_reference_rig_manifest(manifest)
