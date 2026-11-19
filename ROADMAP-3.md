@@ -325,6 +325,17 @@ Check S series implementation plan and if applicable add remaining items to road
       `tests/test_source_paths.py` checks that the script has no mapping of its own. The import match and the facade
       match each fail with their guard removed (mutation-checked).
     - C6 (S): the same JDK locally and on CI, and `-encoding` on every test javac (14 of 16 lack it).
+      **Done 2026-11-18.** CI installed Temurin 17 while the suite ran locally on JDK 25 (White_Legion has only
+      Adoptium 25 builds). `.java-version` (25) now names one version: every setup-java step in `ci.yml` and `weekly.yml`
+      reads it (`java-version-file`), and `tests/support.javac_path` asks `find_jdk(prefer_major=...)` for that version
+      first, so a machine holding several JDKs compiles test fixtures with CI's. `java_toolchain.jdk_major` reads a JDK's
+      `release` file. Fixtures still compile with `--release 17` where they did before.
+      A count over `tests/` found 24 javac command lists without `-encoding` in 19 files, not 14 of 16; each now passes
+      `-encoding UTF-8` (javac otherwise reads the platform code page on Windows and UTF-8 on Ubuntu).
+      Tests: `tests/test_jdk_consistency.py`: every setup-java step reads `.java-version`; an AST check fails on a test
+      javac list with no `-encoding` (a starred `DEFAULT_JAVAC_ARGS` counts); `jdk_major`; the preferred version beating
+      the search order; and the local JDK matching `.java-version` (skipped with the two versions named when it does not).
+      All three guards fail with their fix removed (mutation-checked).
     - C7, C8 (S): wall-clock budgets to `process_time`, `timeout-minutes`, `buffer=True`; a shared setup step and a
       pinned ruff (weekly.yml drifted from ci.yml and failed 5 weeks running).
     - C2 (M): time-balanced shards with coverage inside the Ubuntu ones (Windows-fast is 12 min now; PR results in

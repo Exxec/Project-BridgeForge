@@ -333,7 +333,7 @@ class RealHelperTests(unittest.TestCase):
                 folder.mkdir()
                 source = folder / "Fixture.java"
                 source.write_text(f"class Fixture {{\n  int same() {{ return 7; }}\n  int differs() {{\n    return {constant};\n  }}\n  String text() {{ return \"café\\t\"; }}\n}}\n", encoding="utf-8")
-                done = subprocess.run(["javac", "--release", "17", "-g", "-d", str(folder), str(source)], capture_output=True, text=True, check=False)
+                done = subprocess.run(["javac", "-encoding", "UTF-8", "--release", "17", "-g", "-d", str(folder), str(source)], capture_output=True, text=True, check=False)
                 self.assertEqual(done.returncode, 0, done.stderr)
                 details = inspect_bytecode([folder / "Fixture.class"])["classes"][0]["method_details"]
                 digests[label] = {m["name"]: m for m in details}

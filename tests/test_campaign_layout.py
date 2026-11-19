@@ -56,7 +56,7 @@ class CampaignLayoutFactsTests(unittest.TestCase):
             _write(root / "src" / "api" / "SectorAPI.java", "package api; public interface SectorAPI { Object createStarSystem(String name); }")
             _write(root / "src" / "gen" / "Gen.java", 'package gen; public class Gen { void g(api.SectorAPI s) { s.createStarSystem("Zorg Zeta"); String other = "Zeta I"; } }')
             out = root / "classes"
-            subprocess.run([str(javac), "-d", str(out), *map(str, (root / "src").rglob("*.java"))], check=True, capture_output=True)
+            subprocess.run([str(javac), "-encoding", "UTF-8", "-d", str(out), *map(str, (root / "src").rglob("*.java"))], check=True, capture_output=True)
             mod = root / "mod"
             _write(mod / "mod_info.json", '{"id": "m", "jars": ["jars/m.jar"]}')
             (mod / "jars").mkdir()
@@ -80,7 +80,7 @@ class CampaignLayoutFactsTests(unittest.TestCase):
             _write(root / "src" / "m" / "AlicerceGen.java", 'package m; public class AlicerceGen { void g(api.SectorAPI s) { s.createStarSystem("Alicerce"); } }')
             _write(root / "src" / "m" / "DataGen.java", 'package m; public class DataGen { void g(api.SectorAPI s) { s.createStarSystem("Meiyo"); } }')
             out = root / "classes"
-            subprocess.run([str(javac), "-d", str(out), *map(str, (root / "src").rglob("*.java"))], check=True, capture_output=True)
+            subprocess.run([str(javac), "-encoding", "UTF-8", "-d", str(out), *map(str, (root / "src").rglob("*.java"))], check=True, capture_output=True)
             mod = root / "mod"
             _write(mod / "mod_info.json", '{"id": "m", "jars": ["jars/m.jar"], "modPlugin": "m.Plugin"}')
             _write(mod / "data" / "config" / "settings.json", '{"plugins": {"meiyoGen": "m.DataGen"}}')

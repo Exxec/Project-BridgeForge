@@ -263,7 +263,7 @@ class RebuildJarEndToEndTests(unittest.TestCase):
         source.write_text(java_source, encoding="utf-8")
         classes = root / "orig-classes"
         classes.mkdir(exist_ok=True)
-        completed = subprocess.run([str(self.javac), "--release", "17", "-d", str(classes), str(source)], capture_output=True, text=True, check=False)
+        completed = subprocess.run([str(self.javac), "-encoding", "UTF-8", "--release", "17", "-d", str(classes), str(source)], capture_output=True, text=True, check=False)
         self.assertEqual(completed.returncode, 0, completed.stderr)
         dest.parent.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(dest, "w") as archive:

@@ -20,7 +20,7 @@ class DecompileJarTests(unittest.TestCase):
             root = Path(directory)
             (root / "src" / "data").mkdir(parents=True)
             (root / "src" / "data" / "Mod.java").write_text("package data;\npublic class Mod { public int go() { return 3; } }\n", encoding="utf-8")
-            subprocess.run([str(jdk.javac), "-d", str(root / "classes"), str(root / "src" / "data" / "Mod.java")], check=True)
+            subprocess.run([str(jdk.javac), "-encoding", "UTF-8", "-d", str(root / "classes"), str(root / "src" / "data" / "Mod.java")], check=True)
             with zipfile.ZipFile(root / "m.jar", "w") as z:
                 z.write(root / "classes" / "data" / "Mod.class", "data/Mod.class")
             result = decompile_jar(root / "m.jar", root / "out")

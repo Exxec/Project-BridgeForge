@@ -314,7 +314,7 @@ class BundledSourceStaleTests(unittest.TestCase):
             build.mkdir(parents=True)
             (build / "Base.java").write_text("package data;\npublic class Base { }\n", encoding="utf-8")
             (build / "Mod.java").write_text("package data;\npublic class Mod extends Base { public void go() {} }\n", encoding="utf-8")
-            subprocess.run([javac, "-d", str(root / "classes"), str(build / "Base.java"), str(build / "Mod.java")], check=True)
+            subprocess.run([javac, "-encoding", "UTF-8", "-d", str(root / "classes"), str(build / "Base.java"), str(build / "Mod.java")], check=True)
             mod = root / "mod"
             (mod / "jars").mkdir(parents=True)
             (mod / "mod_info.json").write_text('{"id": "fx"}', encoding="utf-8")

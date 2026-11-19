@@ -16,7 +16,7 @@ def _compile(javac: str, root: Path, sources: dict[str, str], classpath: Path | 
     for name, text in sources.items():
         (src / name).parent.mkdir(parents=True, exist_ok=True)
         (src / name).write_text(text, encoding="utf-8")
-    command = [javac, "--release", "17", "-d", str(out)] + (["-cp", str(classpath)] if classpath else []) + [str(src / n) for n in sources]
+    command = [javac, "-encoding", "UTF-8", "--release", "17", "-d", str(out)] + (["-cp", str(classpath)] if classpath else []) + [str(src / n) for n in sources]
     done = subprocess.run(command, capture_output=True, text=True, check=False)
     assert done.returncode == 0, done.stderr
     return out

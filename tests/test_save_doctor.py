@@ -100,7 +100,7 @@ class SaveDoctorTests(unittest.TestCase):
             source.parent.mkdir(parents=True)
             source.write_text("package lords;\npublic class LordsPlugin {\n  public void configureXStream(Object x) {\n"
                               '    String[] aliases = {"faction.LawProposal", "ai.LordAI"};\n  }\n}\n', encoding="utf-8")
-            subprocess.run([javac, "-proc:none", "-d", str(root / "classes"), str(source)], check=True, capture_output=True)
+            subprocess.run([javac, "-encoding", "UTF-8", "-proc:none", "-d", str(root / "classes"), str(source)], check=True, capture_output=True)
             mod = root / "mods" / "lords"
             (mod / "jars").mkdir(parents=True)
             with zipfile.ZipFile(mod / "jars" / "Lords.jar", "w") as jar:

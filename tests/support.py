@@ -32,11 +32,20 @@ def link_dir(target: Path, link: Path) -> None:
         _winapi.CreateJunction(str(target), str(link))
 
 
+def project_jdk_major() -> int | None:
+    """The JDK feature version CI installs (`.java-version`, read by every setup-java step), or None outside a checkout."""
+    try:
+        return int((Path(__file__).resolve().parents[1] / ".java-version").read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
 def javac_path() -> str | None:
     """A javac to compile test fixtures with: the JDK `find_jdk` picks (repo rig, JAVA_HOME, PATH), else None.
 
+    A JDK of `.java-version`'s version wins when there is one, so a local run compiles with the JDK CI uses (96.5 C6).
     `shutil.which("javac")` alone skipped these tests on a machine whose only JDK is the rig's (2026-11-15)."""
     from bridgeforge.bytecode.java_toolchain import find_jdk
 
-    jdk = find_jdk()
+    jdk = find_jdk(prefer_major=project_jdk_major())
     return str(jdk.javac) if jdk is not None else None

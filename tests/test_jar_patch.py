@@ -38,7 +38,7 @@ class JarPatchTests(unittest.TestCase):
         src.mkdir(parents=True)
         (src / "Gantry.java").write_text(ORIGINAL, encoding="utf-8")
         classes = root / "orig-classes"
-        done = subprocess.run([self.javac, "--release", "17", "-d", str(classes), str(src / "Gantry.java")], capture_output=True, text=True, check=False)
+        done = subprocess.run([self.javac, "-encoding", "UTF-8", "--release", "17", "-d", str(classes), str(src / "Gantry.java")], capture_output=True, text=True, check=False)
         self.assertEqual(done.returncode, 0, done.stderr)
         with zipfile.ZipFile(ws / "working" / "jars" / "mod.jar", "w") as archive:
             archive.write(classes / "data" / "hullmods" / "Gantry.class", "data/hullmods/Gantry.class")
@@ -84,7 +84,7 @@ class JarPatchTests(unittest.TestCase):
         with resolved_temp_dir() as root:
             ws = self._workspace(root)
             (root / "orig" / "data" / "hullmods" / "Gantry.java").write_text(instrumented, encoding="utf-8")
-            done = subprocess.run([self.javac, "--release", "17", "-d", str(root / "inst"), str(root / "orig" / "data" / "hullmods" / "Gantry.java")],
+            done = subprocess.run([self.javac, "-encoding", "UTF-8", "--release", "17", "-d", str(root / "inst"), str(root / "orig" / "data" / "hullmods" / "Gantry.java")],
                                   capture_output=True, text=True, check=False)
             self.assertEqual(done.returncode, 0, done.stderr)
             with zipfile.ZipFile(ws / "working" / "jars" / "mod.jar", "w") as archive:

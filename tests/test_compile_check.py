@@ -245,7 +245,7 @@ class ScanCompileCheckProviderRootsTests(unittest.TestCase):
             (src / "lib" / "Helper.java").write_text("package lib;\npublic class Helper { public static void go() {} }", encoding="utf-8")
             import subprocess
             classes = root / "provider-classes"
-            subprocess.run(["javac", "-d", str(classes), str(src / "lib" / "Helper.java")], check=True)
+            subprocess.run(["javac", "-encoding", "UTF-8", "-d", str(classes), str(src / "lib" / "Helper.java")], check=True)
             import zipfile
             with zipfile.ZipFile(provider / "jars" / "BaseLib.jar", "w") as archive:
                 archive.write(classes / "lib" / "Helper.class", "lib/Helper.class")

@@ -121,7 +121,7 @@ class PipelineTests(unittest.TestCase):
             (source / "mod_info.json").write_text(json.dumps({"id": "legacy", "gameVersion": "0.95"}), encoding="utf-8")
             java_source = source / "Fixture.java"
             java_source.write_text("class Fixture { static int value() { return Math.abs(-1); } }", encoding="utf-8")
-            completed = subprocess.run(["javac", "--release", "17", "-d", str(source), str(java_source)], capture_output=True, text=True, check=False)
+            completed = subprocess.run(["javac", "-encoding", "UTF-8", "--release", "17", "-d", str(source), str(java_source)], capture_output=True, text=True, check=False)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             evidence = {"provenance": "fixture", "before_fixture": "fixture", "after_fixture": "fixture", "semantic_diff_validation": "fixture", "idempotence": "fixture", "conflict_review": "fixture", "save_risk_assessment": "fixture"}
             rules = root / "bytecode-rules.json"

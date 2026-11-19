@@ -158,7 +158,7 @@ class VendorPlanJarTests(unittest.TestCase):
             _write(src / "data/hullmods/Other.java", "package data.hullmods;\npublic class Other { Listener l; }\n")
             _write(src / "data/hullmods/Listener.java", "package data.hullmods;\npublic class Listener {}\n")
             _write(src / "data/scripts/Watcher.java", "package data.scripts;\npublic class Watcher { String id = \"other_mod\"; }\n")
-            completed = subprocess.run([self.javac, "--release", "17", "-d", str(out), *map(str, src.rglob("*.java"))], capture_output=True, text=True, check=False)
+            completed = subprocess.run([self.javac, "-encoding", "UTF-8", "--release", "17", "-d", str(out), *map(str, src.rglob("*.java"))], capture_output=True, text=True, check=False)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             with zipfile.ZipFile(_write(mod / "jars/rebal.jar", b""), "w") as archive:
                 for path in sorted(out.rglob("*.class")):

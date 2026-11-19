@@ -68,7 +68,7 @@ class HullmodInstanceStateTests(unittest.TestCase):
                 (src / relative).parent.mkdir(parents=True, exist_ok=True)
                 (src / relative).write_text(text, encoding="utf-8")
             out.mkdir()
-            subprocess.run(["javac", "-d", str(out), *[str(src / r) for r in sources]], check=True, capture_output=True)
+            subprocess.run(["javac", "-encoding", "UTF-8", "-d", str(out), *[str(src / r) for r in sources]], check=True, capture_output=True)
             (root / "jars").mkdir()
             (root / "mod_info.json").write_text(json.dumps({"id": "fx", "jars": ["jars/fx.jar"]}), encoding="utf-8")
             with zipfile.ZipFile(root / "jars" / "fx.jar", "w") as archive:
