@@ -182,6 +182,48 @@ class SaveDoctorTests(unittest.TestCase):
             result = diagnose(_save(root, [], body), root / "mods", vanilla_core=core)
         self.assertEqual([p["faction"] for p in result["problems"] if p["class"] == "FACTION_UNDEFINED"], ["mine"])
 
+    def test_content_in_a_factions_lists_that_nothing_defines_is_reported(self) -> None:
+        """Salvor's R4 run 7890f07c (Test1, 2026-11-18): Scrapyard Armories removed, the save still listed its hulls in vanilla
+        factions' knownShips and shipsWhenImporting, and the load stopped at "Fatal: Ship hull spec [sa_manticore_remnant]
+        not found!". RC7 keeps those saved lists unless StarfarerSettings."for.new"() holds (javap, 93.56)."""
+        body = ('<sector z="2">\n<factions z="3">\n'
+                '<o z="4">\n<id>remnant</id>\n<shipsWhenImporting z="5">\n<st>nova</st>\n<st>sa_manticore_remnant</st>\n'
+                '</shipsWhenImporting>\n<knownShips z="6">\n<st>nova</st>\n<st>sa_manticore_remnant</st>\n<st>mod_hull</st>\n'
+                '<st>skinned</st>\n</knownShips>\n<knownWeapons z="7">\n<st>pulselaser</st>\n<st>sa_rhino</st>\n</knownWeapons>\n'
+                '<knownFighters z="8">\n<st>sa_grendel_wing</st>\n</knownFighters>\n<knownHullMods z="9">\n<st>heavyarmor</st>\n'
+                '<st>sa_mod</st>\n</knownHullMods>\n<knownIndustries z="10">\n<st>not_checked</st>\n</knownIndustries>\n'
+                '<secondaryColorSegmentsOverride>0</secondaryColorSegmentsOverride>\n</o>\n'
+                '<memory z="11">\n<id>not_a_faction</id>\n<knownShips z="12">\n<st>ignored_outside_a_faction</st>\n</knownShips>\n'
+                '</memory>\n</factions>\n</sector>')
+        with resolved_temp_dir() as root:
+            core = root / "core" / "data"
+            (core / "world" / "factions").mkdir(parents=True)
+            (core / "world" / "factions" / "remnant.faction").write_text('{"id": "remnant"}', encoding="utf-8")
+            (core / "hulls").mkdir()
+            (core / "hulls" / "nova.ship").write_text('{"hullId": "nova"}', encoding="utf-8")
+            (core / "weapons").mkdir()
+            (core / "weapons" / "weapon_data.csv").write_text("name,id\nPulse,pulselaser\n", encoding="utf-8")
+            (core / "hullmods").mkdir()
+            (core / "hullmods" / "hull_mods.csv").write_text("name,id\nArmor,heavyarmor\n", encoding="utf-8")
+            _mod(root / "mods", "kept", "1.0")
+            hulls = root / "mods" / "kept" / "data" / "hulls"
+            hulls.mkdir(parents=True)
+            (hulls / "mod_hull.ship").write_text('{"hullId": "mod_hull"}', encoding="utf-8")
+            (hulls / "skins").mkdir()
+            (hulls / "skins" / "skinned.skin").write_text('{"skinHullId": "skinned"}', encoding="utf-8")
+            save = _save(root, [("kept", "1.0")], body)
+            result = diagnose(save, root / "mods", vanilla_core=root / "core")
+            without_core = diagnose(save, root / "mods")
+        found = {(p["faction"], p["list"], p["kind"], tuple(p["ids"])) for p in result["problems"] if p["class"] == "FACTION_LIST_UNDEFINED"}
+        self.assertEqual(found, {("remnant", "shipsWhenImporting", "hull", ("sa_manticore_remnant",)),
+                                 ("remnant", "knownShips", "hull", ("sa_manticore_remnant",)),
+                                 ("remnant", "knownWeapons", "weapon", ("sa_rhino",)),
+                                 ("remnant", "knownFighters", "wing", ("sa_grendel_wing",)),
+                                 ("remnant", "knownHullMods", "hullmod", ("sa_mod",))})
+        self.assertEqual(result["verdict"], "WILL_LIKELY_FAIL")
+        self.assertIn("Ship hull spec", result["recovery"]["FACTION_LIST_UNDEFINED"])
+        self.assertFalse([p for p in without_core["problems"] if p["class"] == "FACTION_LIST_UNDEFINED"])
+
     def test_a_save_cut_off_mid_write_is_truncated(self) -> None:
         with resolved_temp_dir() as root:
             (root / "mods").mkdir()
