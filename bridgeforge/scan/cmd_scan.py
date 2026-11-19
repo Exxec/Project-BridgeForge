@@ -83,228 +83,269 @@ def add_parser(subcommands) -> None:
     docs_cmd.add_argument("--json", action="store_true")
 
 
-def run_cli(args: argparse.Namespace) -> int:
-    if args.command == "mods-compat":
-        from ..mods_compat import mods_compat
-        result = mods_compat(args.mods_dir, args.vanilla_core, args.output, quiet=args.quiet)
-        if args.json:
-            print(json.dumps(result, indent=2))
-        else:
-            print(f"{result['mods']} mod(s); {len(result['conflicts'])} hook(s) claimed by two or more. See {args.output / 'MODS_COMPAT.md'}")
-        return 0
-    if args.command == "baseline-stats":
-        from ..baseline_stats import baseline_stats, render
-        result = baseline_stats(args.queue)
-        print(json.dumps(result, indent=2) if args.json else render(result, args.top))
-        return 0
-    if args.command == "docs-index":
-        from ..checks_index import write_reference_docs
-        result = write_reference_docs(check_only=args.check)
-        if args.json:
-            print(json.dumps(result, indent=2))
-        elif result["status"] == "STALE":
-            print("Stale (run bridgeforge docs-index): " + ", ".join(result["stale"]))
-        else:
-            print("Written: " + ", ".join(result["written"]) if result["written"] else "docs/CHECKS.md and docs/COMMANDS.md are up to date")
-        if args.stage and result["status"] != "STALE":
-            import subprocess
+def _run_mods_compat(args: argparse.Namespace) -> int:
+    from ..mods_compat import mods_compat
+    result = mods_compat(args.mods_dir, args.vanilla_core, args.output, quiet=args.quiet)
+    if args.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"{result['mods']} mod(s); {len(result['conflicts'])} hook(s) claimed by two or more. See {args.output / 'MODS_COMPAT.md'}")
+    return 0
 
-            tracked = subprocess.run(["git", "ls-files", "docs/CHECKS.md", "docs/COMMANDS.md"], capture_output=True, text=True).stdout.split()
-            if tracked:
-                subprocess.run(["git", "add", "--", *tracked], check=False)
-                print("Staged: " + ", ".join(tracked))
-        return 1 if result["status"] == "STALE" else 0
-    if args.command == "preset-check":
-        from ..preset_check import check_presets
-        result = check_presets(args.script, args.rig_mods)
-        if args.json:
-            print(json.dumps(result, indent=2))
-        else:
-            print(f"Preset check: {result['status']} ({len(result['presets'])} presets, rig mods {result['rig_mods']})")
-            for preset in result["presets"]:
-                if preset["status"] != "PASS":
-                    print(f"  {preset['preset']} [{preset['status']}]")
-                    for line in preset["errors"]:
-                        print(f"    ERROR   {line}")
-                    for line in preset["warnings"]:
-                        print(f"    WARNING {line}")
-        return 1 if result["status"] == "FAIL" else 0
-    if args.command == "scan":
-        try:
-            result = scan_mod(args.mod_directory, TargetProfile(args.target_starsector, args.target_java), args.vanilla_core, compile_check=args.compile_check, provider_roots=args.providers or None)
-            if args.removed_content:
-                from ..content_diff import annotate_removed_content
-                annotate_removed_content(result, json.loads(args.removed_content.read_text(encoding="utf-8")))
-        except (ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        try:
-            report, manifest = write_artifacts(result, args.output, registry={"vanilla_core": args.vanilla_core, "compile_check": args.compile_check,
-                                                                                "provider_roots": args.providers or None, "removed_content": args.removed_content})
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.write_baseline:
-            keys = sorted({finding_baseline_key(finding) for finding in result.findings})
-            args.write_baseline.parent.mkdir(parents=True, exist_ok=True)
-            atomic_write_text(args.write_baseline, json.dumps({"findings": keys}, indent=2, sort_keys=True) + "\n")
-            from ..baseline_audit import stamp_baseline
 
-            stamp_baseline(args.write_baseline, args.mod_directory)  # accepted at this version, today (ROADMAP 70 H1.5)
-            print(f"Scanned {len(result.files)} files; found {len(result.findings)} findings.")
-            print(f"Report: {report}")
-            print(f"Manifest: {manifest}")
-            print(f"Baseline written: {args.write_baseline} ({len(keys)} accepted finding(s))")
-            return 0
-        if args.baseline:
-            try:
-                baseline_keys = load_baseline_keys(args.baseline)
-            except (OSError, json.JSONDecodeError) as exc:
-                print(f"bridgeforge: could not read baseline file: {exc}", file=sys.stderr)
-                return 2
-            new_findings, resolved_count = split_by_baseline(result.findings, baseline_keys)
-            print(f"Scanned {len(result.files)} files; found {len(new_findings)} new finding(s) not in baseline ({resolved_count} previously accepted finding(s) resolved).")
-            print(f"Report: {report}")
-            print(f"Manifest: {manifest}")
-            return 0
+def _run_baseline_stats(args: argparse.Namespace) -> int:
+    from ..baseline_stats import baseline_stats, render
+    result = baseline_stats(args.queue)
+    print(json.dumps(result, indent=2) if args.json else render(result, args.top))
+    return 0
+
+
+def _run_docs_index(args: argparse.Namespace) -> int:
+    from ..checks_index import write_reference_docs
+    result = write_reference_docs(check_only=args.check)
+    if args.json:
+        print(json.dumps(result, indent=2))
+    elif result["status"] == "STALE":
+        print("Stale (run bridgeforge docs-index): " + ", ".join(result["stale"]))
+    else:
+        print("Written: " + ", ".join(result["written"]) if result["written"] else "docs/CHECKS.md and docs/COMMANDS.md are up to date")
+    if args.stage and result["status"] != "STALE":
+        import subprocess
+
+        tracked = subprocess.run(["git", "ls-files", "docs/CHECKS.md", "docs/COMMANDS.md"], capture_output=True, text=True).stdout.split()
+        if tracked:
+            subprocess.run(["git", "add", "--", *tracked], check=False)
+            print("Staged: " + ", ".join(tracked))
+    return 1 if result["status"] == "STALE" else 0
+
+
+def _run_preset_check(args: argparse.Namespace) -> int:
+    from ..preset_check import check_presets
+    result = check_presets(args.script, args.rig_mods)
+    if args.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"Preset check: {result['status']} ({len(result['presets'])} presets, rig mods {result['rig_mods']})")
+        for preset in result["presets"]:
+            if preset["status"] != "PASS":
+                print(f"  {preset['preset']} [{preset['status']}]")
+                for line in preset["errors"]:
+                    print(f"    ERROR   {line}")
+                for line in preset["warnings"]:
+                    print(f"    WARNING {line}")
+    return 1 if result["status"] == "FAIL" else 0
+
+
+def _run_scan(args: argparse.Namespace) -> int:
+    try:
+        result = scan_mod(args.mod_directory, TargetProfile(args.target_starsector, args.target_java), args.vanilla_core, compile_check=args.compile_check, provider_roots=args.providers or None)
+        if args.removed_content:
+            from ..content_diff import annotate_removed_content
+            annotate_removed_content(result, json.loads(args.removed_content.read_text(encoding="utf-8")))
+    except (ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    try:
+        report, manifest = write_artifacts(result, args.output, registry={"vanilla_core": args.vanilla_core, "compile_check": args.compile_check,
+                                                                            "provider_roots": args.providers or None, "removed_content": args.removed_content})
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.write_baseline:
+        keys = sorted({finding_baseline_key(finding) for finding in result.findings})
+        args.write_baseline.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(args.write_baseline, json.dumps({"findings": keys}, indent=2, sort_keys=True) + "\n")
+        from ..baseline_audit import stamp_baseline
+
+        stamp_baseline(args.write_baseline, args.mod_directory)  # accepted at this version, today (ROADMAP 70 H1.5)
         print(f"Scanned {len(result.files)} files; found {len(result.findings)} findings.")
         print(f"Report: {report}")
         print(f"Manifest: {manifest}")
+        print(f"Baseline written: {args.write_baseline} ({len(keys)} accepted finding(s))")
         return 0
-    if args.command == "working-tree-layout":
+    if args.baseline:
         try:
-            result = analyze_working_tree(args.mod_directory)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
+            baseline_keys = load_baseline_keys(args.baseline)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"bridgeforge: could not read baseline file: {exc}", file=sys.stderr)
             return 2
-        payload = json.dumps(result, indent=2, sort_keys=True)
-        if args.output:
-            output = args.output.expanduser().resolve()
-            if output.is_relative_to(args.mod_directory.expanduser().resolve()):
-                print("bridgeforge: Working-tree layout output must not be inside the input mod directory.", file=sys.stderr)
-                return 2
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(payload + "\n", encoding="utf-8")
-            print(f"Working-tree layout: {output}")
-        else:
-            print(payload)
+        new_findings, resolved_count = split_by_baseline(result.findings, baseline_keys)
+        print(f"Scanned {len(result.files)} files; found {len(new_findings)} new finding(s) not in baseline ({resolved_count} previously accepted finding(s) resolved).")
+        print(f"Report: {report}")
+        print(f"Manifest: {manifest}")
         return 0
-    if args.command == "source-authority":
-        try:
-            output = write_source_authority_selection(args.mod_directory, args.select_root, args.output)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
+    print(f"Scanned {len(result.files)} files; found {len(result.findings)} findings.")
+    print(f"Report: {report}")
+    print(f"Manifest: {manifest}")
+    return 0
+
+
+def _run_working_tree_layout(args: argparse.Namespace) -> int:
+    try:
+        result = analyze_working_tree(args.mod_directory)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        output = args.output.expanduser().resolve()
+        if output.is_relative_to(args.mod_directory.expanduser().resolve()):
+            print("bridgeforge: Working-tree layout output must not be inside the input mod directory.", file=sys.stderr)
             return 2
-        print(f"Source authority selection: {output}")
-        return 0
-    if args.command == "build-input-manifest":
-        try:
-            manifest = build_input_manifest(args.mod_directory, args.source_root)
-            output = write_build_input_manifest(manifest, args.output, args.mod_directory)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload + "\n", encoding="utf-8")
+        print(f"Working-tree layout: {output}")
+    else:
+        print(payload)
+    return 0
+
+
+def _run_source_authority(args: argparse.Namespace) -> int:
+    try:
+        output = write_source_authority_selection(args.mod_directory, args.select_root, args.output)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(f"Source authority selection: {output}")
+    return 0
+
+
+def _run_build_input_manifest(args: argparse.Namespace) -> int:
+    try:
+        manifest = build_input_manifest(args.mod_directory, args.source_root)
+        output = write_build_input_manifest(manifest, args.output, args.mod_directory)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(f"Build-input manifest: {output}")
+    return 0
+
+
+def _run_integration_scenarios(args: argparse.Namespace) -> int:
+    try:
+        result = suggest_integration_scenarios(args.mod_directory, TargetProfile(args.target_starsector, args.target_java))
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        output = args.output.expanduser().resolve()
+        if output.is_relative_to(args.mod_directory.expanduser().resolve()):
+            print("bridgeforge: Integration scenario output must not be inside the input mod directory.", file=sys.stderr)
             return 2
-        print(f"Build-input manifest: {output}")
-        return 0
-    if args.command == "integration-scenarios":
-        try:
-            result = suggest_integration_scenarios(args.mod_directory, TargetProfile(args.target_starsector, args.target_java))
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        payload = json.dumps(result, indent=2, sort_keys=True)
-        if args.output:
-            output = args.output.expanduser().resolve()
-            if output.is_relative_to(args.mod_directory.expanduser().resolve()):
-                print("bridgeforge: Integration scenario output must not be inside the input mod directory.", file=sys.stderr)
-                return 2
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(payload + "\n", encoding="utf-8")
-            print(f"Integration scenarios: {output}")
-        else:
-            print(payload)
-        return 0
-    if args.command == "compile-check":
-        from ..compile_check import compile_loose_scripts
-        try:
-            result = compile_loose_scripts(args.mod, vanilla_core=args.vanilla_core, jdk=args.jdk, provider_roots=args.providers)
-            if args.api_diff:
-                from ..api_diff import annotate_errors
-                result["api_diff_annotated"] = annotate_errors(result.get("errors", []), json.loads(args.api_diff.read_text(encoding="utf-8")))
-        except (ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-        else:
-            print(f"{result['status']}: {args.mod} ({result.get('error_count', 0)} error(s) in {len(result.get('files', []))} loose script(s))")
-            if result["status"] == "UNAVAILABLE":
-                print(f"  {result['reason']}")
-            for kind, count in result.get("error_counts_by_kind", {}).items():
-                print(f"  {kind}: {count}")
-            missing = (result.get("classpath") or {}).get("dependencies_missing") or []
-            if missing:
-                print(f"  dependency jars not found: {', '.join(missing)}")
-            shadowed = result.get("jar_shadowed_errors") or []
-            if shadowed:
-                mod_root = Path(args.mod).expanduser().resolve()
-                shadowed_files = sorted({str(Path(error["file"]).relative_to(mod_root)).replace("\\", "/") for error in shadowed})
-                print(f"  {len(shadowed)} error(s) in {len(shadowed_files)} jar-shadowed loose script(s) not counted above (the game loads the jar's class instead): {', '.join(shadowed_files[:5])}")
-            janino = result.get("janino") or {}
-            if janino.get("status") in ("PASS", "FAIL"):
-                print(f"  Janino (RC8's runtime compiler): {janino['status']} ({janino.get('checked', 0)} script(s) compiled)")
-                for rel, message in sorted((janino.get("failures") or {}).items()):
-                    print(f"  JANINO FAIL {rel}: {message[:300]}")
-            elif janino.get("reason"):
-                print(f"  Janino not run: {janino['reason']}")
-            for warning in result.get("janino_gap_warnings", [])[:10]:
-                print(f"  WARNING javac-vs-Janino gap in {warning['file']}: {', '.join(warning['java8plus_syntax'])}")
-            for error in [e for e in result.get("errors", []) if e.get("api_changes")][:20]:
-                for hint in error["api_changes"]:
-                    leads = hint.get("same_signature_elsewhere") or hint.get("same_name_in_class") or hint.get("same_name_elsewhere") or []
-                    print(f"  API CHANGE {Path(str(error['file'])).name}:{error['line']}: {hint.get('removed') or hint.get('removed_class')} removed"
-                          + (f"; candidates: {', '.join(leads)}" if leads else "; no same-named candidate"))
-        return 0 if result["status"] == "PASS" else 1
-    if args.command == "revenantlib-check":
-        from ..revenantlib_contract import RevenantLibCheckError, check_revenantlib
-        import zipfile
-        try:
-            result = check_revenantlib(args.path)
-            if args.snapshot is not None:
-                # The checked jar lives at <mod>/jars/RevenantLib.jar; compare that mod folder with the archive.
-                drift = compare_copies(Path(result["jar"]).parent.parent, args.snapshot)
-                result["snapshot"] = {"path": str(args.snapshot), "status": "CURRENT" if drift["status"] == "PASS" else "STALE",
-                                      "drift_count": drift["drift_count"], "different": [d["path"] for d in drift["different"]],
-                                      "missing_in_snapshot": drift["missing_in_deployed"], "extra_in_snapshot": drift["extra_in_deployed"]}
-        except (RevenantLibCheckError, OSError, zipfile.BadZipFile, ValueError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-        else:
-            print(f"{result['status']}: {result['jar']}")
-            for entry in result["contract"]:
-                print(f"  {entry['status']} {entry['call']}" + (f" -- {entry['detail']}" if entry.get("detail") else ""))
-            stale = result["jar_vs_source"]
-            if not stale["checked"]:
-                print("  jar vs source: not checked (no src/ beside the jar)")
-            for name in stale["sources_without_class"]:
-                print(f"  FAIL source without a compiled class in the jar: {name}.java")
-            for name in stale["classes_without_source"]:
-                print(f"  FAIL class in the jar without source: {name}")
-            snapshot = result.get("snapshot")
-            if snapshot:
-                print(f"  snapshot {snapshot['status']}: {snapshot['path']}" + (f" ({snapshot['drift_count']} file(s) differ: {', '.join((snapshot['different'] + snapshot['missing_in_snapshot'] + snapshot['extra_in_snapshot'])[:5])}) - refresh the archive" if snapshot["status"] == "STALE" else ""))
-        return 0 if result["status"] == "PASS" else 1
-    if args.command == "check-impact":
-        from ..check_impact import check_impact
-        result = check_impact(args.queue, args.finding, vanilla_core=args.vanilla_core, all_workspaces=args.all, quiet=args.quiet)
-        if args.json:
-            print(json.dumps(result, indent=2))
-        else:
-            for row in result["mods"]:
-                if row["verdict"] in ("CLEARED", "REDUCED", "NEW"):
-                    print(f"{row['verdict']:9} {row['workspace']} ({row['before']} -> {row['now']})")
-            print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())) + f". Written: {result['result_path']}")
-        return 0
-    return 2
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload + "\n", encoding="utf-8")
+        print(f"Integration scenarios: {output}")
+    else:
+        print(payload)
+    return 0
+
+
+def _run_compile_check(args: argparse.Namespace) -> int:
+    from ..compile_check import compile_loose_scripts
+    try:
+        result = compile_loose_scripts(args.mod, vanilla_core=args.vanilla_core, jdk=args.jdk, provider_roots=args.providers)
+        if args.api_diff:
+            from ..api_diff import annotate_errors
+            result["api_diff_annotated"] = annotate_errors(result.get("errors", []), json.loads(args.api_diff.read_text(encoding="utf-8")))
+    except (ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(f"{result['status']}: {args.mod} ({result.get('error_count', 0)} error(s) in {len(result.get('files', []))} loose script(s))")
+        if result["status"] == "UNAVAILABLE":
+            print(f"  {result['reason']}")
+        for kind, count in result.get("error_counts_by_kind", {}).items():
+            print(f"  {kind}: {count}")
+        missing = (result.get("classpath") or {}).get("dependencies_missing") or []
+        if missing:
+            print(f"  dependency jars not found: {', '.join(missing)}")
+        shadowed = result.get("jar_shadowed_errors") or []
+        if shadowed:
+            mod_root = Path(args.mod).expanduser().resolve()
+            shadowed_files = sorted({str(Path(error["file"]).relative_to(mod_root)).replace("\\", "/") for error in shadowed})
+            print(f"  {len(shadowed)} error(s) in {len(shadowed_files)} jar-shadowed loose script(s) not counted above (the game loads the jar's class instead): {', '.join(shadowed_files[:5])}")
+        janino = result.get("janino") or {}
+        if janino.get("status") in ("PASS", "FAIL"):
+            print(f"  Janino (RC8's runtime compiler): {janino['status']} ({janino.get('checked', 0)} script(s) compiled)")
+            for rel, message in sorted((janino.get("failures") or {}).items()):
+                print(f"  JANINO FAIL {rel}: {message[:300]}")
+        elif janino.get("reason"):
+            print(f"  Janino not run: {janino['reason']}")
+        for warning in result.get("janino_gap_warnings", [])[:10]:
+            print(f"  WARNING javac-vs-Janino gap in {warning['file']}: {', '.join(warning['java8plus_syntax'])}")
+        for error in [e for e in result.get("errors", []) if e.get("api_changes")][:20]:
+            for hint in error["api_changes"]:
+                leads = hint.get("same_signature_elsewhere") or hint.get("same_name_in_class") or hint.get("same_name_elsewhere") or []
+                print(f"  API CHANGE {Path(str(error['file'])).name}:{error['line']}: {hint.get('removed') or hint.get('removed_class')} removed"
+                      + (f"; candidates: {', '.join(leads)}" if leads else "; no same-named candidate"))
+    return 0 if result["status"] == "PASS" else 1
+
+
+def _run_revenantlib_check(args: argparse.Namespace) -> int:
+    from ..revenantlib_contract import RevenantLibCheckError, check_revenantlib
+    import zipfile
+    try:
+        result = check_revenantlib(args.path)
+        if args.snapshot is not None:
+            # The checked jar lives at <mod>/jars/RevenantLib.jar; compare that mod folder with the archive.
+            drift = compare_copies(Path(result["jar"]).parent.parent, args.snapshot)
+            result["snapshot"] = {"path": str(args.snapshot), "status": "CURRENT" if drift["status"] == "PASS" else "STALE",
+                                  "drift_count": drift["drift_count"], "different": [d["path"] for d in drift["different"]],
+                                  "missing_in_snapshot": drift["missing_in_deployed"], "extra_in_snapshot": drift["extra_in_deployed"]}
+    except (RevenantLibCheckError, OSError, zipfile.BadZipFile, ValueError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(f"{result['status']}: {result['jar']}")
+        for entry in result["contract"]:
+            print(f"  {entry['status']} {entry['call']}" + (f" -- {entry['detail']}" if entry.get("detail") else ""))
+        stale = result["jar_vs_source"]
+        if not stale["checked"]:
+            print("  jar vs source: not checked (no src/ beside the jar)")
+        for name in stale["sources_without_class"]:
+            print(f"  FAIL source without a compiled class in the jar: {name}.java")
+        for name in stale["classes_without_source"]:
+            print(f"  FAIL class in the jar without source: {name}")
+        snapshot = result.get("snapshot")
+        if snapshot:
+            print(f"  snapshot {snapshot['status']}: {snapshot['path']}" + (f" ({snapshot['drift_count']} file(s) differ: {', '.join((snapshot['different'] + snapshot['missing_in_snapshot'] + snapshot['extra_in_snapshot'])[:5])}) - refresh the archive" if snapshot["status"] == "STALE" else ""))
+    return 0 if result["status"] == "PASS" else 1
+
+
+def _run_check_impact(args: argparse.Namespace) -> int:
+    from ..check_impact import check_impact
+    result = check_impact(args.queue, args.finding, vanilla_core=args.vanilla_core, all_workspaces=args.all, quiet=args.quiet)
+    if args.json:
+        print(json.dumps(result, indent=2))
+    else:
+        for row in result["mods"]:
+            if row["verdict"] in ("CLEARED", "REDUCED", "NEW"):
+                print(f"{row['verdict']:9} {row['workspace']} ({row['before']} -> {row['now']})")
+        print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())) + f". Written: {result['result_path']}")
+    return 0
+
+
+_HANDLERS = {
+    "mods-compat": _run_mods_compat,
+    "baseline-stats": _run_baseline_stats,
+    "docs-index": _run_docs_index,
+    "preset-check": _run_preset_check,
+    "scan": _run_scan,
+    "working-tree-layout": _run_working_tree_layout,
+    "source-authority": _run_source_authority,
+    "build-input-manifest": _run_build_input_manifest,
+    "integration-scenarios": _run_integration_scenarios,
+    "compile-check": _run_compile_check,
+    "revenantlib-check": _run_revenantlib_check,
+    "check-impact": _run_check_impact,
+}
+
+
+def run_cli(args: argparse.Namespace) -> int:
+    handler = _HANDLERS.get(args.command)
+    return handler(args) if handler is not None else 2

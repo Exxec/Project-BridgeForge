@@ -117,279 +117,332 @@ def add_parser(subcommands) -> None:
     port_state_cmd.add_argument("--out", type=Path, required=True, help="where to write the ported source (never the input)")
 
 
-def run_cli(args: argparse.Namespace) -> int:
-    if args.command == "decompile-jar":
-        from .decompile import decompile_jar
+def _run_decompile_jar(args: argparse.Namespace) -> int:
+    from .decompile import decompile_jar
+    try:
+        result = decompile_jar(args.jar, args.output, args.vineflower, args.jdk)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(result, indent=2) if args.json else f"{result['sources']} Java and {result['kotlin_sources']} Kotlin source file(s) in {result['output']} (exit {result['exit_code']}). Next: {result['next']}")
+    return 0 if result["exit_code"] == 0 else 1
+
+
+def _run_delegate_method(args: argparse.Namespace) -> int:
+    from .delegate_method import delegate_methods
+    try:
+        result = delegate_methods(args.jar, args.spec, args.helper_classes, args.output, args.jdk)
+    except (ValueError, BytecodeUnavailable) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2))
+    else:
+        for row in result["classes"]:
+            print(f"{'OK  ' if row['ok'] else 'FAIL'} {row['class']}: changed {', '.join(row['changed']) or 'nothing'}")
+        print(f"{result['status']}: {result['output'] or 'no jar written'}")
+    return 0 if result["status"] == "PASS" else 1
+
+
+def _run_port_interfaces(args: argparse.Namespace) -> int:
+    from bridgeforge.bytecode.jar_batch import port_interfaces, port_interfaces_queue
+    path = args.path.expanduser().resolve()
+    if (path / "working" / "mod_info.json").is_file():
+        rows = [port_interfaces(path, args.vanilla_core, apply=args.apply)]
+        result = rows[0]
+    else:
+        result = port_interfaces_queue(path, args.vanilla_core, apply=args.apply, quiet=args.quiet, restart=args.restart)
+        rows = result["workspaces"]
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0
+    for row in rows:
+        print(f"{row['workspace']}: {row['classes']} class(es)" + "".join(f"\n  {j['jar']}: {j['state']} ({j['classes']})" for j in row["jars"])
+              + "".join(f"\n  not ported: {u['class']} ({u['why']})" for u in row["unported"][:6]))
+    return 0
+
+
+def _run_patch_jar_sources(args: argparse.Namespace) -> int:
+    from bridgeforge.bytecode.jar_batch import patch_jar_sources
+    result = patch_jar_sources(args.workspace, args.vanilla_core, apply=args.apply)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0
+    for row in result["jars"]:
+        print(f"{row['state']:20} {row['jar']}: {', '.join(row['files'])}")
+        for cls, change in (row.get("classes") or {}).items():
+            print(f"  {cls}: null checks {change['null_checks']}, calls {change['calls'] or '{}'}, members {change['members'] or '{}'}")
+    for name in result["not_in_any_jar"]:
+        print(f"NOT IN ANY JAR       {name}")
+    return 0
+
+
+def _run_decompiler_review(args: argparse.Namespace) -> int:
+    try:
+        output = args.output.expanduser().resolve()
+        if (output / "decompiler-review-plan.json").is_file():
+            result = run_decompiler_review(output, args.execute)
+        else:
+            plan = create_decompiler_review(args.input, output, args.adapter, args.adapter_argument)
+            result = {"status": "NOT_EXECUTED", "plan": plan}
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(f"Decompiler review status: {result['status']}")
+    return 0 if result["status"] in {"PASS", "NOT_EXECUTED"} else 1
+
+
+def _run_bytecode_inspect(args: argparse.Namespace) -> int:
+    try:
+        result = inspect_bytecode(args.input)
+    except (ValueError, BytecodeUnavailable) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        output = args.output.expanduser().resolve()
+        output.write_text(payload + "\n", encoding="utf-8")
+        print(f"Inspected {len(result['classes'])} class(es): {output}")
+    else:
+        print(payload)
+    return 0
+
+
+def _run_bytecode_plan(args: argparse.Namespace) -> int:
+    try:
+        result = plan_bytecode(args.input, args.rules)
+    except (ValueError, BytecodeUnavailable) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        output = args.output.expanduser().resolve()
+        output.write_text(payload + "\n", encoding="utf-8")
+        print(f"Planned {len(result['planned'])} review-only bytecode remap(s): {output}")
+    else:
+        print(payload)
+    return 0
+
+
+def _run_bytecode_diff(args: argparse.Namespace) -> int:
+    try:
+        result = diff_bytecode(args.before, args.after)
+    except (ValueError, BytecodeUnavailable) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        output = args.output.expanduser().resolve()
+        output.write_text(payload + "\n", encoding="utf-8")
+        print(f"Compared {len(result['changed_classes'])} changed class(es): {output}")
+    else:
+        print(payload)
+    return 0
+
+
+def _run_bytecode_apply(args: argparse.Namespace) -> int:
+    try:
+        result = (apply_bytecode_jar if args.input.suffix.lower() == ".jar" else apply_bytecode_class)(args.input, args.output, args.rules, set(args.approve))
+    except (ValueError, BytecodeUnavailable) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+def _run_copy_drift(args: argparse.Namespace) -> int:
+    if args.prune and not args.sync:
+        print("bridgeforge: --prune needs --sync.", file=sys.stderr)
+        return 2
+    if args.sync:
         try:
-            result = decompile_jar(args.jar, args.output, args.vineflower, args.jdk)
+            synced = sync_copies(args.working_copy, args.deployed_copy, prune=args.prune)
         except ValueError as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
-        print(json.dumps(result, indent=2) if args.json else f"{result['sources']} Java and {result['kotlin_sources']} Kotlin source file(s) in {result['output']} (exit {result['exit_code']}). Next: {result['next']}")
-        return 0 if result["exit_code"] == 0 else 1
-    if args.command == "delegate-method":
-        from .delegate_method import delegate_methods
-        try:
-            result = delegate_methods(args.jar, args.spec, args.helper_classes, args.output, args.jdk)
-        except (ValueError, BytecodeUnavailable) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
         if args.json:
-            print(json.dumps(result, indent=2))
-        else:
-            for row in result["classes"]:
-                print(f"{'OK  ' if row['ok'] else 'FAIL'} {row['class']}: changed {', '.join(row['changed']) or 'nothing'}")
-            print(f"{result['status']}: {result['output'] or 'no jar written'}")
-        return 0 if result["status"] == "PASS" else 1
-    if args.command == "port-interfaces":
-        from bridgeforge.bytecode.jar_batch import port_interfaces, port_interfaces_queue
-        path = args.path.expanduser().resolve()
-        if (path / "working" / "mod_info.json").is_file():
-            rows = [port_interfaces(path, args.vanilla_core, apply=args.apply)]
-            result = rows[0]
-        else:
-            result = port_interfaces_queue(path, args.vanilla_core, apply=args.apply, quiet=args.quiet, restart=args.restart)
-            rows = result["workspaces"]
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-            return 0
-        for row in rows:
-            print(f"{row['workspace']}: {row['classes']} class(es)" + "".join(f"\n  {j['jar']}: {j['state']} ({j['classes']})" for j in row["jars"])
-                  + "".join(f"\n  not ported: {u['class']} ({u['why']})" for u in row["unported"][:6]))
-        return 0
-    if args.command == "patch-jar-sources":
-        from bridgeforge.bytecode.jar_batch import patch_jar_sources
-        result = patch_jar_sources(args.workspace, args.vanilla_core, apply=args.apply)
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-            return 0
-        for row in result["jars"]:
-            print(f"{row['state']:20} {row['jar']}: {', '.join(row['files'])}")
-            for cls, change in (row.get("classes") or {}).items():
-                print(f"  {cls}: null checks {change['null_checks']}, calls {change['calls'] or '{}'}, members {change['members'] or '{}'}")
-        for name in result["not_in_any_jar"]:
-            print(f"NOT IN ANY JAR       {name}")
-        return 0
-    if args.command == "decompiler-review":
-        try:
-            output = args.output.expanduser().resolve()
-            if (output / "decompiler-review-plan.json").is_file():
-                result = run_decompiler_review(output, args.execute)
-            else:
-                plan = create_decompiler_review(args.input, output, args.adapter, args.adapter_argument)
-                result = {"status": "NOT_EXECUTED", "plan": plan}
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        print(f"Decompiler review status: {result['status']}")
-        return 0 if result["status"] in {"PASS", "NOT_EXECUTED"} else 1
-    if args.command == "bytecode-inspect":
-        try:
-            result = inspect_bytecode(args.input)
-        except (ValueError, BytecodeUnavailable) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        payload = json.dumps(result, indent=2, sort_keys=True)
-        if args.output:
-            output = args.output.expanduser().resolve()
-            output.write_text(payload + "\n", encoding="utf-8")
-            print(f"Inspected {len(result['classes'])} class(es): {output}")
-        else:
-            print(payload)
-        return 0
-    if args.command == "bytecode-plan":
-        try:
-            result = plan_bytecode(args.input, args.rules)
-        except (ValueError, BytecodeUnavailable) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        payload = json.dumps(result, indent=2, sort_keys=True)
-        if args.output:
-            output = args.output.expanduser().resolve()
-            output.write_text(payload + "\n", encoding="utf-8")
-            print(f"Planned {len(result['planned'])} review-only bytecode remap(s): {output}")
-        else:
-            print(payload)
-        return 0
-    if args.command == "bytecode-diff":
-        try:
-            result = diff_bytecode(args.before, args.after)
-        except (ValueError, BytecodeUnavailable) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        payload = json.dumps(result, indent=2, sort_keys=True)
-        if args.output:
-            output = args.output.expanduser().resolve()
-            output.write_text(payload + "\n", encoding="utf-8")
-            print(f"Compared {len(result['changed_classes'])} changed class(es): {output}")
-        else:
-            print(payload)
-        return 0
-    if args.command == "bytecode-apply":
-        try:
-            result = (apply_bytecode_jar if args.input.suffix.lower() == ".jar" else apply_bytecode_class)(args.input, args.output, args.rules, set(args.approve))
-        except (ValueError, BytecodeUnavailable) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
+            print(json.dumps(synced, indent=2, sort_keys=True))
+            return 0 if synced["status"] == "PASS" else 1
+        for item in synced["copied"]:
+            print(f"COPIED {item}")
+        for item in synced["pruned"]:
+            print(f"PRUNED {item} -> {synced['pruned_to']}")
+        for item in synced["extra_kept"]:
+            print(f"EXTRA-KEPT {item} (use --prune to move it out)")
+    try:
+        result = compare_copies(args.working_copy, args.deployed_copy)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(f"Working root: {result['working_root']}")
+        print(f"Deployed root: {result['deployed_root']}")
+        for item in result["missing_in_deployed"]:
+            print(f"MISSING-IN-DEPLOYED {item}")
+        for item in result["different"]:
+            print(f"DIFFERENT {item['path']} (newer: {item['newer_side']})")
+        for item in result["extra_in_deployed"]:
+            print(f"EXTRA-IN-DEPLOYED {item}")
+        print(f"Drift: {result['drift_count']} ({result['status']})")
+    return 0 if result["status"] == "PASS" else 1
+
+
+def _run_jar_audit(args: argparse.Namespace) -> int:
+    try:
+        result = audit_jar(args.rebuilt, args.original)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(f"Classes: rebuilt={result['rebuilt_class_count']} original={result['original_class_count']}")
+        print(f"Removed: {len(result['removed_classes'])}; changed: {result['changed_class_count']}; unchanged: {result['unchanged_class_count']}")
+        for entry in result["bundled_library_packages"]:
+            print(f"MANUAL bundled library package: {entry['package']}")
+        for entry in result["unexpected_new_packages"]:
+            print(f"REVIEW unexpected new package: {entry['package']}")
+        for entry in result["reflection_findings"]:
+            print(f"MANUAL reflection/File/NIO reference in {entry['class']}: {', '.join(entry['referenced_symbols'])}")
+        for entry in result["removed_classes"]:
+            print(f"REVIEW removed class: {entry['class']}")
+        print(f"Status: {result['status']}")
+    return 0 if result["status"] == "PASS" else 1
+
+
+def _run_jar_packets(args: argparse.Namespace) -> int:
+    from bridgeforge.bytecode.jar_patch import JarPatchError, prepare_jar_packets
+    try:
+        result = prepare_jar_packets(args.mod, vanilla_core=args.vanilla_core, jdk=args.jdk)
+    except (JarPatchError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0
-    if args.command == "copy-drift":
-        if args.prune and not args.sync:
-            print("bridgeforge: --prune needs --sync.", file=sys.stderr)
-            return 2
-        if args.sync:
-            try:
-                synced = sync_copies(args.working_copy, args.deployed_copy, prune=args.prune)
-            except ValueError as exc:
-                print(f"bridgeforge: {exc}", file=sys.stderr)
-                return 2
-            if args.json:
-                print(json.dumps(synced, indent=2, sort_keys=True))
-                return 0 if synced["status"] == "PASS" else 1
-            for item in synced["copied"]:
-                print(f"COPIED {item}")
-            for item in synced["pruned"]:
-                print(f"PRUNED {item} -> {synced['pruned_to']}")
-            for item in synced["extra_kept"]:
-                print(f"EXTRA-KEPT {item} (use --prune to move it out)")
-        try:
-            result = compare_copies(args.working_copy, args.deployed_copy)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True))
-        else:
-            print(f"Working root: {result['working_root']}")
-            print(f"Deployed root: {result['deployed_root']}")
-            for item in result["missing_in_deployed"]:
-                print(f"MISSING-IN-DEPLOYED {item}")
-            for item in result["different"]:
-                print(f"DIFFERENT {item['path']} (newer: {item['newer_side']})")
-            for item in result["extra_in_deployed"]:
-                print(f"EXTRA-IN-DEPLOYED {item}")
-            print(f"Drift: {result['drift_count']} ({result['status']})")
-        return 0 if result["status"] == "PASS" else 1
-    if args.command == "jar-audit":
-        try:
-            result = audit_jar(args.rebuilt, args.original)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True))
-        else:
-            print(f"Classes: rebuilt={result['rebuilt_class_count']} original={result['original_class_count']}")
-            print(f"Removed: {len(result['removed_classes'])}; changed: {result['changed_class_count']}; unchanged: {result['unchanged_class_count']}")
-            for entry in result["bundled_library_packages"]:
-                print(f"MANUAL bundled library package: {entry['package']}")
-            for entry in result["unexpected_new_packages"]:
-                print(f"REVIEW unexpected new package: {entry['package']}")
-            for entry in result["reflection_findings"]:
-                print(f"MANUAL reflection/File/NIO reference in {entry['class']}: {', '.join(entry['referenced_symbols'])}")
-            for entry in result["removed_classes"]:
-                print(f"REVIEW removed class: {entry['class']}")
-            print(f"Status: {result['status']}")
-        return 0 if result["status"] == "PASS" else 1
-    if args.command == "jar-packets":
-        from bridgeforge.bytecode.jar_patch import JarPatchError, prepare_jar_packets
-        try:
-            result = prepare_jar_packets(args.mod, vanilla_core=args.vanilla_core, jdk=args.jdk)
-        except (JarPatchError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-            return 0
-        for row in result["packets"]:
-            print(f"{row['state']:15} {row['class']}  ({row['finding']})\n  {row['next']}")
-        if not result["packets"]:
-            print("No jar-only packets.")
-        return 0
-    if args.command == "port-hullmod-state":
-        from .hullmod_state import HullModStateError, port_hullmod_state
-        if args.out.resolve() == args.source.resolve():
-            print("bridgeforge: --out must not be the input source.", file=sys.stderr)
-            return 2
-        try:
-            ported = port_hullmod_state(args.source.read_text(encoding="utf-8"), args.field, args.source.stem)
-        except (HullModStateError, OSError) as exc:
-            print(f"bridgeforge: not ported: {exc}", file=sys.stderr)
-            return 2
-        args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(ported, encoding="utf-8")
-        removed = " ".join(f"--allow-removed {f}" for f in args.field)
-        print(f"Ported: {args.out}\nNext: bridgeforge patch-jar-class MOD {args.out} --jar JAR {removed} --install")
-        return 0
-    if args.command == "patch-jar-class":
-        from bridgeforge.bytecode.jar_patch import JarPatchError, patch_jar_classes
-        try:
-            result = patch_jar_classes(args.mod, args.jar, args.sources, vanilla_core=args.vanilla_core, jdk=args.jdk,
-                                       source_root=args.source_root, allow_removed=args.allow_removed, install=args.install,
-                                       extra_classpath=args.lib)
-        except (JarPatchError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-        else:
-            print(f"{result['status']}: {args.jar}" + (" (installed)" if result["installed"] else ""))
-            for error in result["compile"]["errors"][:5]:
-                print(f"  compile: {error}")
-            for entry in result["classes"]:
-                bits = [f"null checks {entry['null_checks'][0]}->{entry['null_checks'][1]}"] if "null_checks" in entry else ["new"]
-                if entry.get("members"):
-                    bits.append("members " + json.dumps(entry["members"]))
-                if entry.get("calls_changed"):
-                    bits.append("calls " + json.dumps(entry["calls_changed"]))
-                print(f"  {entry['class']}: " + "; ".join(bits))
-            for refusal in result.get("refusals", []):
-                print(f"  refused: {refusal}")
-        return 0 if result["status"] == "PASS" else 1
-    if args.command == "src-to-jar":
-        from bridgeforge.bytecode.src_to_jar import SrcToJarError, src_to_jar
-        reference = args.reference_core
-        if reference is None:
-            from bridgeforge.revive import _resolve_reference_core
-            reference = _resolve_reference_core(Path(args.mod).resolve(), args.vanilla_core)
-        try:
-            result = src_to_jar(args.mod, args.jar, vanilla_core=args.vanilla_core, reference_core=reference, source_root=args.source_root,
-                                extra_classpath=args.lib, relink=args.relink, reference_jar=args.reference_jar, apply=args.apply, jdk=args.jdk,
-                                allow_removed=args.allow_removed)
-        except (SrcToJarError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
-        else:
-            print(f"{result['status']}: {args.jar}, {len(result['sources'])} source(s)" + (" (installed)" if result.get("installed") else ""))
-            for error in (result.get("compile") or {}).get("errors", [])[:5]:
-                print(f"  compile: {error}")
-            for refusal in result.get("refusals") or []:
-                print(f"  refused: {refusal}")
-        return 0 if result["status"] in ("PASS", "NOTHING_TO_BUILD") else 1
-    if args.command == "rebuild-jar":
-        from .rebuild_jar import RebuildJarError, rebuild_jar
-        try:
-            result = rebuild_jar(args.mod, args.sources, args.jar, vanilla_core=args.vanilla_core, jdk=args.jdk,
-                                  provider_roots=args.providers, output=args.output, install=args.install)
-        except (RebuildJarError, ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-        else:
-            print(f"{result['status']}: {args.mod}")
-            if result["status"] == "UNAVAILABLE":
-                print(f"  {result['reason']}")
-            comparison = result.get("comparison")
-            if comparison:
-                print(f"  classes: +{len(comparison['added_classes'])} -{len(comparison['removed_classes'])}; changed: {len(comparison['class_changes'])}")
-                if comparison["forbidden_sandbox_references"]:
-                    print(f"  forbidden sandbox references: {len(comparison['forbidden_sandbox_references'])} class(es)")
-            if result.get("installed"):
-                print(f"  installed: {result.get('installed_to')} (previous jar: {result.get('moved_original_to') or 'none'})")
-            elif result.get("install_note"):
-                print(f"  {result['install_note']}")
-        return 0 if result["status"] == "PASS" else 1
-    return 2
+    for row in result["packets"]:
+        print(f"{row['state']:15} {row['class']}  ({row['finding']})\n  {row['next']}")
+    if not result["packets"]:
+        print("No jar-only packets.")
+    return 0
+
+
+def _run_port_hullmod_state(args: argparse.Namespace) -> int:
+    from .hullmod_state import HullModStateError, port_hullmod_state
+    if args.out.resolve() == args.source.resolve():
+        print("bridgeforge: --out must not be the input source.", file=sys.stderr)
+        return 2
+    try:
+        ported = port_hullmod_state(args.source.read_text(encoding="utf-8"), args.field, args.source.stem)
+    except (HullModStateError, OSError) as exc:
+        print(f"bridgeforge: not ported: {exc}", file=sys.stderr)
+        return 2
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(ported, encoding="utf-8")
+    removed = " ".join(f"--allow-removed {f}" for f in args.field)
+    print(f"Ported: {args.out}\nNext: bridgeforge patch-jar-class MOD {args.out} --jar JAR {removed} --install")
+    return 0
+
+
+def _run_patch_jar_class(args: argparse.Namespace) -> int:
+    from bridgeforge.bytecode.jar_patch import JarPatchError, patch_jar_classes
+    try:
+        result = patch_jar_classes(args.mod, args.jar, args.sources, vanilla_core=args.vanilla_core, jdk=args.jdk,
+                                   source_root=args.source_root, allow_removed=args.allow_removed, install=args.install,
+                                   extra_classpath=args.lib)
+    except (JarPatchError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(f"{result['status']}: {args.jar}" + (" (installed)" if result["installed"] else ""))
+        for error in result["compile"]["errors"][:5]:
+            print(f"  compile: {error}")
+        for entry in result["classes"]:
+            bits = [f"null checks {entry['null_checks'][0]}->{entry['null_checks'][1]}"] if "null_checks" in entry else ["new"]
+            if entry.get("members"):
+                bits.append("members " + json.dumps(entry["members"]))
+            if entry.get("calls_changed"):
+                bits.append("calls " + json.dumps(entry["calls_changed"]))
+            print(f"  {entry['class']}: " + "; ".join(bits))
+        for refusal in result.get("refusals", []):
+            print(f"  refused: {refusal}")
+    return 0 if result["status"] == "PASS" else 1
+
+
+def _run_src_to_jar(args: argparse.Namespace) -> int:
+    from bridgeforge.bytecode.src_to_jar import SrcToJarError, src_to_jar
+    reference = args.reference_core
+    if reference is None:
+        from bridgeforge.revive import _resolve_reference_core
+        reference = _resolve_reference_core(Path(args.mod).resolve(), args.vanilla_core)
+    try:
+        result = src_to_jar(args.mod, args.jar, vanilla_core=args.vanilla_core, reference_core=reference, source_root=args.source_root,
+                            extra_classpath=args.lib, relink=args.relink, reference_jar=args.reference_jar, apply=args.apply, jdk=args.jdk,
+                            allow_removed=args.allow_removed)
+    except (SrcToJarError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    else:
+        print(f"{result['status']}: {args.jar}, {len(result['sources'])} source(s)" + (" (installed)" if result.get("installed") else ""))
+        for error in (result.get("compile") or {}).get("errors", [])[:5]:
+            print(f"  compile: {error}")
+        for refusal in result.get("refusals") or []:
+            print(f"  refused: {refusal}")
+    return 0 if result["status"] in ("PASS", "NOTHING_TO_BUILD") else 1
+
+
+def _run_rebuild_jar(args: argparse.Namespace) -> int:
+    from .rebuild_jar import RebuildJarError, rebuild_jar
+    try:
+        result = rebuild_jar(args.mod, args.sources, args.jar, vanilla_core=args.vanilla_core, jdk=args.jdk,
+                              provider_roots=args.providers, output=args.output, install=args.install)
+    except (RebuildJarError, ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(f"{result['status']}: {args.mod}")
+        if result["status"] == "UNAVAILABLE":
+            print(f"  {result['reason']}")
+        comparison = result.get("comparison")
+        if comparison:
+            print(f"  classes: +{len(comparison['added_classes'])} -{len(comparison['removed_classes'])}; changed: {len(comparison['class_changes'])}")
+            if comparison["forbidden_sandbox_references"]:
+                print(f"  forbidden sandbox references: {len(comparison['forbidden_sandbox_references'])} class(es)")
+        if result.get("installed"):
+            print(f"  installed: {result.get('installed_to')} (previous jar: {result.get('moved_original_to') or 'none'})")
+        elif result.get("install_note"):
+            print(f"  {result['install_note']}")
+    return 0 if result["status"] == "PASS" else 1
+
+
+_HANDLERS = {
+    "decompile-jar": _run_decompile_jar,
+    "delegate-method": _run_delegate_method,
+    "port-interfaces": _run_port_interfaces,
+    "patch-jar-sources": _run_patch_jar_sources,
+    "decompiler-review": _run_decompiler_review,
+    "bytecode-inspect": _run_bytecode_inspect,
+    "bytecode-plan": _run_bytecode_plan,
+    "bytecode-diff": _run_bytecode_diff,
+    "bytecode-apply": _run_bytecode_apply,
+    "copy-drift": _run_copy_drift,
+    "jar-audit": _run_jar_audit,
+    "jar-packets": _run_jar_packets,
+    "port-hullmod-state": _run_port_hullmod_state,
+    "patch-jar-class": _run_patch_jar_class,
+    "src-to-jar": _run_src_to_jar,
+    "rebuild-jar": _run_rebuild_jar,
+}
+
+
+def run_cli(args: argparse.Namespace) -> int:
+    handler = _HANDLERS.get(args.command)
+    return handler(args) if handler is not None else 2

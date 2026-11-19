@@ -142,229 +142,253 @@ def add_parser(subcommands) -> None:
     fold_cmd.add_argument("--json", action="store_true")
 
 
-def run_cli(args: argparse.Namespace) -> int:
-    if args.command == "audit-shipped":
-        from bridgeforge.live.live_trust import audit_shipped, live_status
-        result = {"audit": audit_shipped(args.workspace), "live": live_status(args.workspace)}
+def _run_audit_shipped(args: argparse.Namespace) -> int:
+    from bridgeforge.live.live_trust import audit_shipped, live_status
+    result = {"audit": audit_shipped(args.workspace), "live": live_status(args.workspace)}
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        audit = result["audit"]
+        print(f"Shipped-copy audit: {audit['status']}" + (f" ({audit['reason']})" if audit.get("reason") else ""))
+        for row in audit.get("differences") or []:
+            print(f"  {row['kind']:<8} {row['file']}: {row['explained_by'] or 'UNEXPLAINED'}")
+        live = result["live"]
+        print(f"Live result: {live['status']}" + (f" (last PASS {live['test_id']}, {live.get('date')})" if live.get("test_id") else ""))
+    return 0 if result["audit"]["status"] == "PASS" else 1
+
+
+def _run_audit_explain(args: argparse.Namespace) -> int:
+    from bridgeforge.live.live_trust import auto_explain_shipped, explain_shipped
+    if args.auto:
+        groups = auto_explain_shipped(args.workspace)
         if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
+            print(json.dumps(groups, indent=2))
         else:
-            audit = result["audit"]
-            print(f"Shipped-copy audit: {audit['status']}" + (f" ({audit['reason']})" if audit.get("reason") else ""))
-            for row in audit.get("differences") or []:
-                print(f"  {row['kind']:<8} {row['file']}: {row['explained_by'] or 'UNEXPLAINED'}")
-            live = result["live"]
-            print(f"Live result: {live['status']}" + (f" (last PASS {live['test_id']}, {live.get('date')})" if live.get("test_id") else ""))
-        return 0 if result["audit"]["status"] == "PASS" else 1
-    if args.command == "audit-explain":
-        from bridgeforge.live.live_trust import auto_explain_shipped, explain_shipped
-        if args.auto:
-            groups = auto_explain_shipped(args.workspace)
+            for reason, files in groups.items():
+                print(f"{len(files)} file(s): {reason}")
+            print("Nothing could be proven; explain the rest with --reason." if not groups else "Anything still unexplained needs --reason.")
+        return 0
+    if not args.reason:
+        print("bridgeforge: --reason is required (or pass --auto).", file=sys.stderr)
+        return 2
+    try:
+        path = explain_shipped(args.workspace, args.files, args.reason, live=args.live)
+    except (ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps({"written": str(path)}) if args.json else f"Recorded in {path}.")
+    return 0
+
+
+def _run_archive(args: argparse.Namespace) -> int:
+    from .archive import ArchiveError, archive_mod, prepare_archive
+    from .substitutes import REPO_ROOT
+    # 96.6: proven differences, the gate and the owner's standing licence rule, as `probe-group record --archive` has them.
+    try:
+        prepared = prepare_archive(args.workspace)
+    except (ValueError, OSError) as exc:  # an unreadable record (SHIPPED_CHANGES.json, a report) refuses; it never tracebacks
+        print(f"bridgeforge: archive refused: {exc}", file=sys.stderr)
+        return 2
+    gate = prepared["gate"]
+    if not gate["allowed"]:
+        # ROADMAP 36.11: no archive for an unaudited or stale-tested mod unless the owner recorded why.
+        print("bridgeforge: archive refused: " + "; ".join(gate["problems"]), file=sys.stderr)
+        for reason, files in prepared["auto_explained"].items():
+            print(f"  proven and recorded: {len(files)} file(s): {reason}", file=sys.stderr)
+        print(f'  explain the rest with: bridgeforge audit-explain "{args.workspace}" FILE... --reason "..." (or --live --reason for the live result)', file=sys.stderr)
+        return 2
+    try:
+        result = archive_mod(args.workspace, args.done or REPO_ROOT / "Done", policy_path=args.policy, refresh=args.refresh,
+                             allow_unexplained=args.allow_unexplained, standing_licence=prepared["standing_licence"])
+        if args.readme_copy:
+            from .archive import write_readme_copies
+            result["readme_copies"] = write_readme_copies(Path(result["archive"]))
+    except (ArchiveError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    result["auto_explained"] = prepared["auto_explained"]
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(f"Archived: {result['archive']} ({result['files']} files, {result['licence']}, status {result['status']})")
+        print(f"  {len(result['changed'])} file(s) changed, {len(result['added'])} added vs original; jars identical: {result['jars_identical']}")
+        for reason, files in prepared["auto_explained"].items():
+            print(f"  auto-explained {len(files)} file(s): {reason}")
+        if result["licence_recorded"]:
+            print("  Licence: LOCAL_ONLY recorded, the owner's standing decision of 2026-09-27 (`release-policy set` changes it)")
+        for warning in result["warnings"]:
+            print(f"  WARN {warning}")
+        if result["allowed_unexplained"]:
+            print(f"  Archived past its checks with --allow-unexplained: {'; '.join(result['allowed_unexplained']['problems'])}")
+        from .state_snapshot import snapshot_after_archive
+        note = snapshot_after_archive(args.done or REPO_ROOT / "Done")
+        if note:
+            print(f"  {note}")
+        print(f"  Note: {result['note']}. The workspace is untouched; remove it yourself once the archive is checked.")
+    return 0
+
+
+def _run_relink(args: argparse.Namespace) -> int:
+    from bridgeforge.bytecode.jar_batch import relink_queue, relink_workspace
+    path = args.path.expanduser().resolve()
+    if (path / "working" / "mod_info.json").is_file():
+        result = relink_workspace(path, args.vanilla_core, apply=args.apply)
+        rows = [result]
+    else:
+        result = relink_queue(path, args.vanilla_core, apply=args.apply, quiet=args.quiet, restart=args.restart)
+        rows = result["workspaces"]
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0
+    for row in rows:
+        print(f"{row['state']:13} {row['workspace']}" + "".join(f"\n  {j['jar']}: {j['state']} ({j['classes']} class(es))" for j in row.get("jars") or [])
+              + (f"\n  no source: {', '.join(row['missing_source'])}" if row.get("missing_source") else "")
+              + (f"\n  removed in RC8: {', '.join(row['port'])}" if row.get("port") else ""))
+    if "counts" in result:
+        print("counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())))
+    return 0
+
+
+def _run_bump_version(args: argparse.Namespace) -> int:
+    from .workspace_tools import bump_version
+    try:
+        result = bump_version(args.workspace, args.note, day=args.date)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(f"{result['old']} -> {result['new']}\n  {result['changelog']}")
+    return 0
+
+
+def _run_declare_providers(args: argparse.Namespace) -> int:
+    from .workspace_tools import declare_providers
+    for workspace in args.workspace:
+        result = declare_providers(workspace, apply=args.apply)
+        print(f"{result['state']:16} {result['workspace']}: " + (", ".join(result["declared"]) or str(result.get("strategy") or "")))
+    return 0
+
+
+def _run_close(args: argparse.Namespace) -> int:
+    from .workspace_tools import close_workspace
+    try:
+        print(f"{args.status}: {close_workspace(args.workspace, args.status, args.reason)}")
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def _run_restore_from_done(args: argparse.Namespace) -> int:
+    from .workspace_tools import restore_from_done
+    try:
+        result = restore_from_done(args.archive, args.queue or data_root() / "In operation")
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(f"restored {result['workspace']} (reports: {', '.join(result['restored_reports']) or 'none'})" + (f"\n  NOTE: {result['note']}" if result["note"] else ""))
+    return 0
+
+
+def _run_promote(args: argparse.Namespace) -> int:
+    try:
+        result = promote_mod(args.mod, args.repo_root, original=args.original, baseline=args.baseline,
+            behavior_diff=args.behavior_diff, behavior_risks=args.behavior_risks,
+            behavior_unknowns=args.behavior_unknowns, expected_changes=args.expected_changes,
+            vanilla_core=args.vanilla_core, rig=args.rig, corpus_dir=args.corpus_dir,
+            policy=args.policy, apply=args.apply)
+    except (ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(result, indent=2, sort_keys=True) if args.json else f"{result['status']}: {args.mod}")
+    return 1 if result["status"] == "BLOCKED" else 0
+
+
+def _run_intake_or_board(args: argparse.Namespace) -> int:
+    try:
+        if args.command == "intake":
+            # Several sources in one call, and loose names resolved in a mods folder (ROADMAP-3 item 92.5, 2026-11-16).
+            from .intake import resolve_mod_folder, zip_raw_folder
+            if len(args.archive) > 1 and (args.name or args.selected_root):
+                raise ValueError("--name and --selected-root apply to one source; intake the others separately")
+            results, failed = [], 0
+            for source in args.archive:
+                try:
+                    if not source.expanduser().exists() and args.from_mods is not None:
+                        match = resolve_mod_folder(str(source), args.from_mods)
+                        print(f"{source} -> {match.name}", file=sys.stderr)
+                        source = match
+                    if source.expanduser().is_dir():
+                        source = zip_raw_folder(source, args.repo_root)
+                        print(f"Zipped the raw folder to {source}", file=sys.stderr)
+                    result = intake_archive(source, args.repo_root, name=args.name,
+                                            selected_root=args.selected_root, archaeology=args.archaeology,
+                                            strip_junk=args.strip_junk)
+                except (OSError, ValueError) as exc:
+                    failed += 1
+                    print(f"bridgeforge: {source}: {exc}", file=sys.stderr)
+                    continue
+                results.append(result)
+                if not args.json:
+                    print(f"{result['status']}: {result['destination']}")
             if args.json:
-                print(json.dumps(groups, indent=2))
-            else:
-                for reason, files in groups.items():
-                    print(f"{len(files)} file(s): {reason}")
-                print("Nothing could be proven; explain the rest with --reason." if not groups else "Anything still unexplained needs --reason.")
-            return 0
-        if not args.reason:
-            print("bridgeforge: --reason is required (or pass --auto).", file=sys.stderr)
-            return 2
-        try:
-            path = explain_shipped(args.workspace, args.files, args.reason, live=args.live)
-        except (ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        print(json.dumps({"written": str(path)}) if args.json else f"Recorded in {path}.")
-        return 0
-    if args.command == "archive":
-        from .archive import ArchiveError, archive_mod, prepare_archive
-        from .substitutes import REPO_ROOT
-        # 96.6: proven differences, the gate and the owner's standing licence rule, as `probe-group record --archive` has them.
-        try:
-            prepared = prepare_archive(args.workspace)
-        except (ValueError, OSError) as exc:  # an unreadable record (SHIPPED_CHANGES.json, a report) refuses; it never tracebacks
-            print(f"bridgeforge: archive refused: {exc}", file=sys.stderr)
-            return 2
-        gate = prepared["gate"]
-        if not gate["allowed"]:
-            # ROADMAP 36.11: no archive for an unaudited or stale-tested mod unless the owner recorded why.
-            print("bridgeforge: archive refused: " + "; ".join(gate["problems"]), file=sys.stderr)
-            for reason, files in prepared["auto_explained"].items():
-                print(f"  proven and recorded: {len(files)} file(s): {reason}", file=sys.stderr)
-            print(f'  explain the rest with: bridgeforge audit-explain "{args.workspace}" FILE... --reason "..." (or --live --reason for the live result)', file=sys.stderr)
-            return 2
-        try:
-            result = archive_mod(args.workspace, args.done or REPO_ROOT / "Done", policy_path=args.policy, refresh=args.refresh,
-                                 allow_unexplained=args.allow_unexplained, standing_licence=prepared["standing_licence"])
-            if args.readme_copy:
-                from .archive import write_readme_copies
-                result["readme_copies"] = write_readme_copies(Path(result["archive"]))
-        except (ArchiveError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        result["auto_explained"] = prepared["auto_explained"]
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-        else:
-            print(f"Archived: {result['archive']} ({result['files']} files, {result['licence']}, status {result['status']})")
-            print(f"  {len(result['changed'])} file(s) changed, {len(result['added'])} added vs original; jars identical: {result['jars_identical']}")
-            for reason, files in prepared["auto_explained"].items():
-                print(f"  auto-explained {len(files)} file(s): {reason}")
-            if result["licence_recorded"]:
-                print("  Licence: LOCAL_ONLY recorded, the owner's standing decision of 2026-09-27 (`release-policy set` changes it)")
-            for warning in result["warnings"]:
-                print(f"  WARN {warning}")
-            if result["allowed_unexplained"]:
-                print(f"  Archived past its checks with --allow-unexplained: {'; '.join(result['allowed_unexplained']['problems'])}")
-            from .state_snapshot import snapshot_after_archive
-            note = snapshot_after_archive(args.done or REPO_ROOT / "Done")
-            if note:
-                print(f"  {note}")
-            print(f"  Note: {result['note']}. The workspace is untouched; remove it yourself once the archive is checked.")
-        return 0
-    if args.command == "relink":
-        from bridgeforge.bytecode.jar_batch import relink_queue, relink_workspace
-        path = args.path.expanduser().resolve()
-        if (path / "working" / "mod_info.json").is_file():
-            result = relink_workspace(path, args.vanilla_core, apply=args.apply)
-            rows = [result]
-        else:
-            result = relink_queue(path, args.vanilla_core, apply=args.apply, quiet=args.quiet, restart=args.restart)
-            rows = result["workspaces"]
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-            return 0
-        for row in rows:
-            print(f"{row['state']:13} {row['workspace']}" + "".join(f"\n  {j['jar']}: {j['state']} ({j['classes']} class(es))" for j in row.get("jars") or [])
-                  + (f"\n  no source: {', '.join(row['missing_source'])}" if row.get("missing_source") else "")
-                  + (f"\n  removed in RC8: {', '.join(row['port'])}" if row.get("port") else ""))
-        if "counts" in result:
-            print("counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())))
-        return 0
-    if args.command == "bump-version":
-        from .workspace_tools import bump_version
-        try:
-            result = bump_version(args.workspace, args.note, day=args.date)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        print(f"{result['old']} -> {result['new']}\n  {result['changelog']}")
-        return 0
-    if args.command == "declare-providers":
-        from .workspace_tools import declare_providers
-        for workspace in args.workspace:
-            result = declare_providers(workspace, apply=args.apply)
-            print(f"{result['state']:16} {result['workspace']}: " + (", ".join(result["declared"]) or str(result.get("strategy") or "")))
-        return 0
-    if args.command == "close":
-        from .workspace_tools import close_workspace
-        try:
-            print(f"{args.status}: {close_workspace(args.workspace, args.status, args.reason)}")
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        return 0
-    if args.command == "restore-from-done":
-        from .workspace_tools import restore_from_done
-        try:
-            result = restore_from_done(args.archive, args.queue or data_root() / "In operation")
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        print(f"restored {result['workspace']} (reports: {', '.join(result['restored_reports']) or 'none'})" + (f"\n  NOTE: {result['note']}" if result["note"] else ""))
-        return 0
-    if args.command == "promote":
-        try:
-            result = promote_mod(args.mod, args.repo_root, original=args.original, baseline=args.baseline,
-                behavior_diff=args.behavior_diff, behavior_risks=args.behavior_risks,
-                behavior_unknowns=args.behavior_unknowns, expected_changes=args.expected_changes,
-                vanilla_core=args.vanilla_core, rig=args.rig, corpus_dir=args.corpus_dir,
-                policy=args.policy, apply=args.apply)
-        except (ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        print(json.dumps(result, indent=2, sort_keys=True) if args.json else f"{result['status']}: {args.mod}")
-        return 1 if result["status"] == "BLOCKED" else 0
-    if args.command in {"intake", "board"}:
-        try:
-            if args.command == "intake":
-                # Several sources in one call, and loose names resolved in a mods folder (ROADMAP-3 item 92.5, 2026-11-16).
-                from .intake import resolve_mod_folder, zip_raw_folder
-                if len(args.archive) > 1 and (args.name or args.selected_root):
-                    raise ValueError("--name and --selected-root apply to one source; intake the others separately")
-                results, failed = [], 0
-                for source in args.archive:
-                    try:
-                        if not source.expanduser().exists() and args.from_mods is not None:
-                            match = resolve_mod_folder(str(source), args.from_mods)
-                            print(f"{source} -> {match.name}", file=sys.stderr)
-                            source = match
-                        if source.expanduser().is_dir():
-                            source = zip_raw_folder(source, args.repo_root)
-                            print(f"Zipped the raw folder to {source}", file=sys.stderr)
-                        result = intake_archive(source, args.repo_root, name=args.name,
-                                                selected_root=args.selected_root, archaeology=args.archaeology,
-                                                strip_junk=args.strip_junk)
-                    except (OSError, ValueError) as exc:
-                        failed += 1
-                        print(f"bridgeforge: {source}: {exc}", file=sys.stderr)
-                        continue
-                    results.append(result)
-                    if not args.json:
-                        print(f"{result['status']}: {result['destination']}")
-                if args.json:
-                    print(json.dumps(results[0] if len(args.archive) == 1 and results else results, indent=2, sort_keys=True))
-                elif results:
-                    print("Archive/upstream bytes preserved. Complete and score a revival plan before editing.")
-                if failed:
-                    return 2
-            elif args.live_pending:
-                from .gates import live_pending_plan
-                from .safeio import atomic_write_text
-                if not args.repos:
-                    raise ValueError("--live-pending needs --repos DIR...")
-                plan = live_pending_plan(args.repos)
-                if isinstance(args.write, Path):
-                    atomic_write_text(args.write, plan + "\n")
-                print(plan)
-            else:
-                result = project_board(args.repo_root)
-                if args.write:
-                    write_board(result, args.repo_root)
-                print(json.dumps(result, indent=2, sort_keys=True) if args.json else render_board(result), end="\n" if args.json else "")
-        except (ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        return 0
-    if args.command == "archive-preflight":
-        try:
-            result = inspect_zip_archive(args.archive, original=args.original)
-            archive = args.archive.expanduser().resolve()
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        payload = json.dumps(result, indent=2, sort_keys=True)
-        if args.output:
-            output = args.output.expanduser().resolve()
-            if output == archive:
-                print("bridgeforge: Archive preflight output must not replace the input archive.", file=sys.stderr)
+                print(json.dumps(results[0] if len(args.archive) == 1 and results else results, indent=2, sort_keys=True))
+            elif results:
+                print("Archive/upstream bytes preserved. Complete and score a revival plan before editing.")
+            if failed:
                 return 2
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(payload + "\n", encoding="utf-8")
-            print(f"Archive preflight: {output}")
+        elif args.live_pending:
+            from .gates import live_pending_plan
+            from .safeio import atomic_write_text
+            if not args.repos:
+                raise ValueError("--live-pending needs --repos DIR...")
+            plan = live_pending_plan(args.repos)
+            if isinstance(args.write, Path):
+                atomic_write_text(args.write, plan + "\n")
+            print(plan)
         else:
-            print(payload)
-        return 0
-    if args.command == "archive-stage":
-        try:
-            destination = stage_zip_archive(args.archive, args.output, args.select_root, args.manifest_output)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
+            result = project_board(args.repo_root)
+            if args.write:
+                write_board(result, args.repo_root)
+            print(json.dumps(result, indent=2, sort_keys=True) if args.json else render_board(result), end="\n" if args.json else "")
+    except (ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def _run_archive_preflight(args: argparse.Namespace) -> int:
+    try:
+        result = inspect_zip_archive(args.archive, original=args.original)
+        archive = args.archive.expanduser().resolve()
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        output = args.output.expanduser().resolve()
+        if output == archive:
+            print("bridgeforge: Archive preflight output must not replace the input archive.", file=sys.stderr)
             return 2
-        print(f"Staged archive to: {destination}")
-        return 0
-    if args.command == "build-tag" and args.record_only:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload + "\n", encoding="utf-8")
+        print(f"Archive preflight: {output}")
+    else:
+        print(payload)
+    return 0
+
+
+def _run_archive_stage(args: argparse.Namespace) -> int:
+    try:
+        destination = stage_zip_archive(args.archive, args.output, args.select_root, args.manifest_output)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(f"Staged archive to: {destination}")
+    return 0
+
+
+def _run_build_tag(args: argparse.Namespace) -> int:
+    if args.record_only:
         try:
             manifest = record_current_manifest(args.mod_dir, manifests_dir=args.manifests_dir)
         except BuildTagError as exc:
@@ -375,116 +399,149 @@ def run_cli(args: argparse.Namespace) -> int:
         else:
             print(f"Recorded manifest r{manifest['build']} for {manifest['mod_id']}: {manifest['path']} ({manifest['file_count']} files); mod_info.json untouched.")
         return 0
-    if args.command == "build-tag":
-        try:
-            result = apply_build_tag(
-                args.mod_dir,
-                label=args.label,
-                set_value=args.set_value,
-                dry_run=args.dry_run,
-                manifests_dir=args.manifests_dir,
-                record_manifest=not (args.dry_run or args.no_manifest),
-            )
-        except BuildTagError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True))
+    try:
+        result = apply_build_tag(
+            args.mod_dir,
+            label=args.label,
+            set_value=args.set_value,
+            dry_run=args.dry_run,
+            manifests_dir=args.manifests_dir,
+            record_manifest=not (args.dry_run or args.no_manifest),
+        )
+    except BuildTagError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(f"mod_info: {result['mod_info']}")
+        print(f"name: {result['old_name']} -> {result['new_name']}")
+        if result["version_is_object"]:
+            print(f"version: unchanged (an object, not a string): {result['old_version']}")
         else:
-            print(f"mod_info: {result['mod_info']}")
-            print(f"name: {result['old_name']} -> {result['new_name']}")
-            if result["version_is_object"]:
-                print(f"version: unchanged (an object, not a string): {result['old_version']}")
-            else:
-                print(f"version: {result['old_version']} -> {result['new_version']}")
-            print("Dry run: mod_info.json was not written." if args.dry_run else "mod_info.json updated.")
-            if result.get("manifest_path"):
-                print(f"Build manifest: {result['manifest_path']} ({result['manifest_file_count']} files)")
-        return 0
-    if args.command == "release":
-        try:
-            result = release_mod(
-                args.mod_dir,
-                original=args.original,
-                baseline=args.baseline,
-                out_dir=args.out_dir,
-                vanilla_core=args.vanilla_core,
-                rig=args.rig,
-                corpus_dir=args.corpus_dir,
-                policy_path=args.policy,
-                behavior_diff_path=args.behavior_diff,
-                behavior_risks_path=args.behavior_risks,
-                behavior_unknowns_path=args.behavior_unknowns,
-                expected_changes_path=args.expected_changes,
-                require_behavior_evidence=True,
-                apply=args.apply,
-            )
-        except (ReleaseError, ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True, default=str))
+            print(f"version: {result['old_version']} -> {result['new_version']}")
+        print("Dry run: mod_info.json was not written." if args.dry_run else "mod_info.json updated.")
+        if result.get("manifest_path"):
+            print(f"Build manifest: {result['manifest_path']} ({result['manifest_file_count']} files)")
+    return 0
+
+
+def _run_release(args: argparse.Namespace) -> int:
+    try:
+        result = release_mod(
+            args.mod_dir,
+            original=args.original,
+            baseline=args.baseline,
+            out_dir=args.out_dir,
+            vanilla_core=args.vanilla_core,
+            rig=args.rig,
+            corpus_dir=args.corpus_dir,
+            policy_path=args.policy,
+            behavior_diff_path=args.behavior_diff,
+            behavior_risks_path=args.behavior_risks,
+            behavior_unknowns_path=args.behavior_unknowns,
+            expected_changes_path=args.expected_changes,
+            require_behavior_evidence=True,
+            apply=args.apply,
+        )
+    except (ReleaseError, ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True, default=str))
+    else:
+        print(f"Release: {result['status']}")
+        for name, gate in result["gates"].items():
+            detail = gate.get("reason") or gate.get("error") or ""
+            print(f"  {gate['status']:<8} {name}" + (f" - {detail}" if detail else ""))
+        for path in result.get("written", []):
+            print(f"  wrote {path}")
+    return 1 if result["status"] == "BLOCKED" else 0
+
+
+def _run_release_policy(args: argparse.Namespace) -> int:
+    from .release import ReleaseError as PolicyError, record_policy_decision  # alias: a bare ReleaseError here would shadow main()'s
+    from .substitutes import revival_licence
+    try:
+        if args.policy_command == "show":
+            decision = revival_licence(args.mod, args.mod, args.policy)
+            print(f"{args.mod}: {decision['decision']}" + (f" ({decision['reason']})" if decision.get("reason") else ""))
         else:
-            print(f"Release: {result['status']}")
-            for name, gate in result["gates"].items():
-                detail = gate.get("reason") or gate.get("error") or ""
-                print(f"  {gate['status']:<8} {name}" + (f" - {detail}" if detail else ""))
-            for path in result.get("written", []):
-                print(f"  wrote {path}")
-        return 1 if result["status"] == "BLOCKED" else 0
-    if args.command == "release-policy":
-        from .release import ReleaseError as PolicyError, record_policy_decision  # alias: a bare ReleaseError here would shadow main()'s
-        from .substitutes import revival_licence
-        try:
-            if args.policy_command == "show":
-                decision = revival_licence(args.mod, args.mod, args.policy)
-                print(f"{args.mod}: {decision['decision']}" + (f" ({decision['reason']})" if decision.get("reason") else ""))
-            else:
-                result = record_policy_decision(args.mod, local_only=args.local_only, reason=args.reason, on=args.on, policy_path=args.policy)
-                verb = "updated" if result["previous"] else "recorded"
-                print(f"{verb} {result['mod']}: {'LOCAL_ONLY' if result['current']['local_only'] else 'RELEASABLE'} in {result['file']}")
-        except PolicyError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        return 0
-    if args.command == "done-audit":
-        from .done_audit import RESULT_MD, done_audit
-        from .substitutes import REPO_ROOT
-        done = args.done or REPO_ROOT / "Done"
-        if args.write and not args.content_parity:
-            print("bridgeforge: --write needs --content-parity.", file=sys.stderr)
-            return 2
-        if args.content_parity:
-            from .content_parity import RESULT_MD as PARITY_MD, content_parity
-            out = args.write or done
-            result = content_parity(done, args.queue or REPO_ROOT / "In operation", out, vanilla_core=args.vanilla_core, quiet=args.quiet)
-            if args.json:
-                print(json.dumps(result, indent=2, ensure_ascii=False))
-            else:
-                print("Counts: " + ", ".join(f"{k} {v}" for k, v in result["counts"].items()) + f". Report: {Path(out) / PARITY_MD}")
-            return 0
-        result = done_audit(done, args.queue or REPO_ROOT / "In operation", vanilla_core=args.vanilla_core, quiet=args.quiet)
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-        else:
-            print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())) + f". Report: {Path(done) / RESULT_MD}")
-        return 0
-    if args.command == "fold":
-        from .fold import FoldError, fold
-        try:
-            result = fold(args.source, args.target, dry_run=args.dry_run, overwrite=args.overwrite, successors_path=args.successors_path)
-        except FoldError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
+            result = record_policy_decision(args.mod, local_only=args.local_only, reason=args.reason, on=args.on, policy_path=args.policy)
+            verb = "updated" if result["previous"] else "recorded"
+            print(f"{verb} {result['mod']}: {'LOCAL_ONLY' if result['current']['local_only'] else 'RELEASABLE'} in {result['file']}")
+    except PolicyError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def _run_done_audit(args: argparse.Namespace) -> int:
+    from .done_audit import RESULT_MD, done_audit
+    from .substitutes import REPO_ROOT
+    done = args.done or REPO_ROOT / "Done"
+    if args.write and not args.content_parity:
+        print("bridgeforge: --write needs --content-parity.", file=sys.stderr)
+        return 2
+    if args.content_parity:
+        from .content_parity import RESULT_MD as PARITY_MD, content_parity
+        out = args.write or done
+        result = content_parity(done, args.queue or REPO_ROOT / "In operation", out, vanilla_core=args.vanilla_core, quiet=args.quiet)
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
         else:
-            print(f"{result['status']}: {result['source']} -> {result['destination']}" + (" (dry run)" if result["dry_run"] else ""))
-            if result["status"] == "CONFLICT":
-                print("  conflicts: " + ", ".join(result["conflicts"][:10]) + (" ..." if len(result["conflicts"]) > 10 else ""))
-            elif result["status"] == "REFUSED":
-                print(f"  {result['message']}")
-            else:
-                print(f"  files copied: {len(result['files_copied'])}; provenance written: {result['provenance_written']}; successors entry written: {result['successors_entry_written']}")
-        return 0 if result["status"] in ("OK", "NOOP") else 1
-    return 2
+            print("Counts: " + ", ".join(f"{k} {v}" for k, v in result["counts"].items()) + f". Report: {Path(out) / PARITY_MD}")
+        return 0
+    result = done_audit(done, args.queue or REPO_ROOT / "In operation", vanilla_core=args.vanilla_core, quiet=args.quiet)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items())) + f". Report: {Path(done) / RESULT_MD}")
+    return 0
+
+
+def _run_fold(args: argparse.Namespace) -> int:
+    from .fold import FoldError, fold
+    try:
+        result = fold(args.source, args.target, dry_run=args.dry_run, overwrite=args.overwrite, successors_path=args.successors_path)
+    except FoldError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(f"{result['status']}: {result['source']} -> {result['destination']}" + (" (dry run)" if result["dry_run"] else ""))
+        if result["status"] == "CONFLICT":
+            print("  conflicts: " + ", ".join(result["conflicts"][:10]) + (" ..." if len(result["conflicts"]) > 10 else ""))
+        elif result["status"] == "REFUSED":
+            print(f"  {result['message']}")
+        else:
+            print(f"  files copied: {len(result['files_copied'])}; provenance written: {result['provenance_written']}; successors entry written: {result['successors_entry_written']}")
+    return 0 if result["status"] in ("OK", "NOOP") else 1
+
+
+_HANDLERS = {
+    "audit-shipped": _run_audit_shipped,
+    "audit-explain": _run_audit_explain,
+    "archive": _run_archive,
+    "relink": _run_relink,
+    "bump-version": _run_bump_version,
+    "declare-providers": _run_declare_providers,
+    "close": _run_close,
+    "restore-from-done": _run_restore_from_done,
+    "promote": _run_promote,
+    "board": _run_intake_or_board,
+    "intake": _run_intake_or_board,
+    "archive-preflight": _run_archive_preflight,
+    "archive-stage": _run_archive_stage,
+    "build-tag": _run_build_tag,
+    "release": _run_release,
+    "release-policy": _run_release_policy,
+    "done-audit": _run_done_audit,
+    "fold": _run_fold,
+}
+
+
+def run_cli(args: argparse.Namespace) -> int:
+    handler = _HANDLERS.get(args.command)
+    return handler(args) if handler is not None else 2

@@ -528,6 +528,19 @@ Check S series implementation plan and if applicable add remaining items to road
       fails when any of those nine functions gets its own mod_info.json path back (checked by restoring vendor_plan's copy).
       Not in scope, left for a later change: 57 one-line inline reads (`_load_lenient_json_file(x / "mod_info.json")`,
       e.g. game_version, behavior_discovery, campaign_layout, cmd_shadow, descriptions_draft) could call `read_mod_info`.
+      **A5 Done 2026-11-18.** The ten `run_cli` functions over 200 lines (cmd_rig 437, cmd_corpus 396, cmd_archive 346,
+      cmd_bytecode 276, cmd_translate 235, cmd_analysis 233, cmd_revive 231, cmd_scan 225, cmd_probe_group 224, cmd_save
+      208) are now a `_HANDLERS` table and one `_run_<command>(args)` per command (120 commands, 112 handlers); probe-group's
+      sub-command chain is a `_SUB_COMMANDS` table of eight functions plus `report`. A command's own conditional branches
+      (`vendor-copy --plan`, `build-tag --record-only`, the seven `escalation` sub-commands, `compat-set install`) stay in
+      its handler, in their old order; `intake`/`board` and the eight save readers share one handler as before. The move
+      was done by a script and checked by AST: every handler's statements equal what `run_cli` ran for that command, and
+      nothing outside `run_cli` changed. An independent review found no behaviour change. `checks_index` skips `_run_*` as
+      it skips `_scan_*`, so docs/CHECKS.md's scanner-helper table is unchanged. Tests: `tests/test_cli_handlers.py` (each
+      table equals the command's `COMMAND_MODULES` entry; an unknown command still returns 2; probe-group's table matches
+      its parser; `compat-set` with another sub-command returns 2; a failed probe-group smoke prints its JSON once and
+      returns 1, an error returns 2, a stopped record returns 1; a ratchet: no new function over 200 lines, the three left
+      being `build_archaeology`, `_scan_variant_validity` and `_scan_sources`).
 - 96.6 (S) **`archive` does what `record --archive` does first.** On 2026-11-17 the owner said "archive all". All four plain
   `archive` runs refused (Templars, KoC, Eridani, Scrapyard):
   - `audit-explain --auto` then proved 9 of their unexplained files: KoC's moved work files, Scrapyard's credits file and

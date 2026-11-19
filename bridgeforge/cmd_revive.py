@@ -163,74 +163,83 @@ def run_packets(args: argparse.Namespace, names: list[str]) -> list[dict]:
     return results
 
 
-def run_cli(args: argparse.Namespace) -> int:
-    if args.command == "revive-review":
-        from .workspace_tools import review_applied
-        result = review_applied(args.queue, args.since)
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-            return 0
-        print(f"{result['applied']} applied fix(es) since {args.since}; {len(result['flagged'])} flagged")
-        for row in result["flagged"]:
-            print(f"  {row['workspace']}: {row['finding']} {row['file']}: {', '.join(row['flags'])}")
-        if result["auto_accepted"]:
-            print(f"{len(result['auto_accepted'])} escalation attempt(s) auto-accepted without a person since {args.since} (review these):")
-            for row in result["auto_accepted"]:
-                print(f"  {row['workspace']}: {row['packet']} ({', '.join(row['changed'])})")
+def _run_revive_review(args: argparse.Namespace) -> int:
+    from .workspace_tools import review_applied
+    result = review_applied(args.queue, args.since)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0
-    if args.command == "mod-changelog":
-        from .mod_changelog import DEFAULT_PATH, add_entry, seed_from_archives
-        if args.modlog_command == "add":
-            print(add_entry(args.mod, args.text, version=args.version, day=args.date, path=args.file))
-        else:
-            done_dir = args.done or data_root() / "Done"
-            print(f"{seed_from_archives(done_dir, args.file or DEFAULT_PATH)} line(s) added to {args.file or DEFAULT_PATH}")
+    print(f"{result['applied']} applied fix(es) since {args.since}; {len(result['flagged'])} flagged")
+    for row in result["flagged"]:
+        print(f"  {row['workspace']}: {row['finding']} {row['file']}: {', '.join(row['flags'])}")
+    if result["auto_accepted"]:
+        print(f"{len(result['auto_accepted'])} escalation attempt(s) auto-accepted without a person since {args.since} (review these):")
+        for row in result["auto_accepted"]:
+            print(f"  {row['workspace']}: {row['packet']} ({', '.join(row['changed'])})")
+    return 0
+
+
+def _run_mod_changelog(args: argparse.Namespace) -> int:
+    from .mod_changelog import DEFAULT_PATH, add_entry, seed_from_archives
+    if args.modlog_command == "add":
+        print(add_entry(args.mod, args.text, version=args.version, day=args.date, path=args.file))
+    else:
+        done_dir = args.done or data_root() / "Done"
+        print(f"{seed_from_archives(done_dir, args.file or DEFAULT_PATH)} line(s) added to {args.file or DEFAULT_PATH}")
+    return 0
+
+
+def _run_ready_list(args: argparse.Namespace) -> int:
+    from bridgeforge.probe.probe_group import ProbeGroupError, ready_workspaces
+    try:
+        ready = ready_workspaces(args.queue)
+    except ProbeGroupError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    rows = []
+    for workspace in ready:
+        revive_record = workspace / "reports" / "revive" / "REVIVE.json"
+        compiled = json.loads(revive_record.read_text(encoding="utf-8")).get("compile_checked") if revive_record.is_file() else None
+        rows.append({"workspace": workspace.name, "compile_checked": compiled})
+    if args.json:
+        print(json.dumps({"ready": rows, "count": len(rows)}, indent=2))
         return 0
-    if args.command == "ready-list":
-        # Replaces the hand tally of "how many need live testing" (2026-09-30).
-        from bridgeforge.probe.probe_group import ProbeGroupError, ready_workspaces
-        try:
-            ready = ready_workspaces(args.queue)
-        except ProbeGroupError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        rows = []
-        for workspace in ready:
-            revive_record = workspace / "reports" / "revive" / "REVIVE.json"
-            compiled = json.loads(revive_record.read_text(encoding="utf-8")).get("compile_checked") if revive_record.is_file() else None
-            rows.append({"workspace": workspace.name, "compile_checked": compiled})
-        if args.json:
-            print(json.dumps({"ready": rows, "count": len(rows)}, indent=2))
-            return 0
-        print(f"{len(rows)} mod(s) ready for live testing:")
-        for row in rows:
-            print(f"  {row['workspace']}" + ("" if row["compile_checked"] else "  (revive did not compile-check it)"))
-        if rows:
-            print(f'Next: bridgeforge probe-group plan "{args.queue}", then install a group and `.\\tools\\bf-test.ps1 launch <TESTID>`.')
-        return 0
-    if args.command == "revive-queue":
-        from .revive_queue import revive_queue
-        result = revive_queue(args.queue, only_status=set(args.only_status) or None, never_revived=args.never_revived, apply=args.apply,
-                              draft_report=args.draft_report, vanilla_core=args.vanilla_core, quiet=args.quiet, restart=args.restart,
-                              jobs=args.jobs)
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-        else:
-            print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items(), key=lambda kv: str(kv[0]))))
-            print(f"Written: {result['result_path']}")
-        return 0
-    if args.command == "revive":
-        from .revive import ReviveError, render as render_revive, revive
-        try:
-            result = revive(args.workspace, target=args.target, vanilla_core=args.vanilla_core, policy_path=args.policy,
-                            approve=args.approve, apply=args.apply, max_rounds=args.max_rounds, draft_report=args.draft_report,
-                            providers=args.providers, provider_index=args.provider_index, reference_core=args.reference_core, libs=args.lib)
-        except (ReviveError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else render_revive(result), end="\n" if args.json else "")
-        return 0
-    if args.command == "escalation" and args.escalation_command == "rule":
+    print(f"{len(rows)} mod(s) ready for live testing:")
+    for row in rows:
+        print(f"  {row['workspace']}" + ("" if row["compile_checked"] else "  (revive did not compile-check it)"))
+    if rows:
+        print(f'Next: bridgeforge probe-group plan "{args.queue}", then install a group and `.\\tools\\bf-test.ps1 launch <TESTID>`.')
+    return 0
+
+
+def _run_revive_queue(args: argparse.Namespace) -> int:
+    from .revive_queue import revive_queue
+    result = revive_queue(args.queue, only_status=set(args.only_status) or None, never_revived=args.never_revived, apply=args.apply,
+                          draft_report=args.draft_report, vanilla_core=args.vanilla_core, quiet=args.quiet, restart=args.restart,
+                          jobs=args.jobs)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print("Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(result["counts"].items(), key=lambda kv: str(kv[0]))))
+        print(f"Written: {result['result_path']}")
+    return 0
+
+
+def _run_revive(args: argparse.Namespace) -> int:
+    from .revive import ReviveError, render as render_revive, revive
+    try:
+        result = revive(args.workspace, target=args.target, vanilla_core=args.vanilla_core, policy_path=args.policy,
+                        approve=args.approve, apply=args.apply, max_rounds=args.max_rounds, draft_report=args.draft_report,
+                        providers=args.providers, provider_index=args.provider_index, reference_core=args.reference_core, libs=args.lib)
+    except (ReviveError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else render_revive(result), end="\n" if args.json else "")
+    return 0
+
+
+def _run_escalation(args: argparse.Namespace) -> int:
+    if args.escalation_command == 'rule':
         from bridgeforge.escalation.escalation_queue import rule
         try:
             entry = rule(args.queue, args.finding, accept=args.accept, approve_fixer=args.approve_fixer, reason=args.reason)
@@ -240,7 +249,7 @@ def run_cli(args: argparse.Namespace) -> int:
         print(json.dumps(entry, indent=2, ensure_ascii=False) if args.json else
               f"Ruling recorded ({entry['ruling']}) for {entry['finding']}: {len(entry['mods'])} mod baseline(s) updated. Re-run revive-queue --only-status ESCALATED to apply.")
         return 0
-    if args.command == "escalation" and args.escalation_command == "accept":
+    if args.escalation_command == 'accept':
         from bridgeforge.escalation.escalation_queue import accept_in_mod
         try:
             entry = accept_in_mod(args.workspace, args.selectors, args.reason)
@@ -250,7 +259,7 @@ def run_cli(args: argparse.Namespace) -> int:
         print(json.dumps(entry, indent=2, ensure_ascii=False) if args.json else
               f"Accepted {len(entry['keys'])} finding(s) as authored in {entry['baseline']}. Re-run revive to apply.")
         return 0
-    if args.command == "escalation" and args.escalation_command == "queue":
+    if args.escalation_command == 'queue':
         from bridgeforge.escalation.escalation_queue import summarize_queue
         result = summarize_queue(args.queue, quiet=args.quiet)
         if args.json:
@@ -260,7 +269,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 print(f"{len(row['only_blocker']):4} only / {len(row['mods']):4} mods  {row['finding']} ({row['tier']}, {row['kind']})")
             print(f"Escalated mods: {result['escalated']}. Written: {result['result_md']}")
         return 0
-    if args.command == "escalation" and args.escalation_command == "triage":
+    if args.escalation_command == 'triage':
         from bridgeforge.escalation.escalation_triage import summary, triage, write_result
         if not args.queue.expanduser().is_dir():
             print(f"bridgeforge: no queue folder at {args.queue}", file=sys.stderr)
@@ -273,7 +282,7 @@ def run_cli(args: argparse.Namespace) -> int:
         print(summary(result))
         print(f"{len(result['groups'])} group(s). Written: {written['md']}" if written else f"{len(result['groups'])} group(s); pass --write DIR for the commands.")
         return 0
-    if args.command == "escalation" and args.escalation_command == "revoke":
+    if args.escalation_command == 'revoke':
         from bridgeforge.escalation.escalation_precedent import revoke_ruling
         try:
             result = revoke_ruling(args.queue, args.ruling_id, args.reason)
@@ -282,7 +291,7 @@ def run_cli(args: argparse.Namespace) -> int:
             return 2
         print(json.dumps(result, indent=2) if args.json else f"Revoked {result['revoked']}; invalidated: {', '.join(result['invalidated']) or 'nothing'}.")
         return 0
-    if args.command == "escalation" and args.escalation_command == "sheet":
+    if args.escalation_command == 'sheet':
         from bridgeforge.escalation.escalation_sheet import SheetError, apply_sheet, write_sheet
         try:
             if args.write:
@@ -299,7 +308,7 @@ def run_cli(args: argparse.Namespace) -> int:
             return 2
         print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else text)
         return 1 if args.apply and result["errors"] else 0
-    if args.command == "escalation" and args.escalation_command == "review":
+    if args.escalation_command == 'review':
         from bridgeforge.escalation.escalation_review import review_sheet
         result = review_sheet(args.workspace)
         if args.json:
@@ -307,90 +316,103 @@ def run_cli(args: argparse.Namespace) -> int:
         else:
             print(f"{len(result['reviews'])} attempt(s) reviewed; flagged: {', '.join(result['flagged']) or 'none'}" + (f"\n  {result['sheet']}" if result["sheet"] else ""))
         return 0
-    if args.command == "escalation":
-        from bridgeforge.escalation.escalation import EscalationError, list_packets, load_packet, verify
-        from .revive import render_packet
-        try:
-            if args.escalation_command == "prune":
-                from bridgeforge.escalation.prune import prune_sandboxes
-                result = prune_sandboxes(args.workspace, apply=args.apply)
-                if args.json:
-                    print(json.dumps(result, indent=2, ensure_ascii=False))
-                else:
-                    done = [a for a in result["attempts"] if a["state"] != "KEPT"]
-                    print(f"{'Pruned' if args.apply else 'Would prune'} {len(done)} attempt sandbox(es), "
-                          f"{result['bytes_freed'] / 1_000_000:.1f} MB; kept {len(result['attempts']) - len(done)} without a finished outcome.")
-                return 0
-            if args.escalation_command == "list":
-                packets = list_packets(args.workspace)
-                if args.json:
-                    print(json.dumps(packets, indent=2, ensure_ascii=False))
-                for packet in [] if args.json else packets:
-                    print(f"{packet['id']}  {packet['kind']:5}  {packet['tier']:10}  {packet.get('file') or '(mod-wide)'}")
-                return 0
-            if args.escalation_command == "show":
-                packet = load_packet(args.workspace, args.packet)
-                print(json.dumps(packet, indent=2, ensure_ascii=False) if args.json else render_packet(packet), end="\n" if args.json else "")
-                return 0
-            if args.escalation_command == "verify":
-                packet = load_packet(args.workspace, args.packet)
-                working = args.working or Path(packet["workspace"]) / "working"
-                result = verify(packet, working.expanduser().resolve())
-                print(json.dumps(result, indent=2) if args.json else f"{result['status']}: {args.packet}" + "".join(f"\n  {r}" for r in result["reasons"]))
-                return 0 if result["status"] == "PASS" else 1
-            if args.escalation_command == "apply":
-                from bridgeforge.escalation.escalation import apply_verified
-                result = apply_verified(args.workspace, args.packet, attempt=args.attempt, rebuild_jar=args.rebuild_jar,
-                                        patch_classes=args.patch_class, allow_removed=args.allow_removed)
-                if args.json:
-                    print(json.dumps(result, indent=2, ensure_ascii=False))
-                else:
-                    print(f"APPLIED: {result['packet']} attempt {result['attempt']} (verified again first)")
-                    for item in result["written"]:
-                        print(f"  {item['path']}" + (f" (backup {item['backup']})" if item.get("backup") else ""))
-                return 0
-            from bridgeforge.escalation.escalation import jar_only
-
-            local_only = []
-            if args.all:
-                # A packet whose only files are jar entries ("x.jar!path/Cls.class") cannot be fixed in an agent sandbox:
-                # it has no jar, javap or python (Fast Engine Rendering and Magellan Protectorate agents changed nothing,
-                # 2026-09-30). --all leaves them out and lists them for the main session; naming one still runs it.
-                agent_packets = [p for p in list_packets(args.workspace) if p["kind"] == "agent"]
-                local_only = [p["id"] for p in agent_packets if jar_only(p)]
-                names = [p["id"] for p in agent_packets if p["id"] not in local_only]
-                for name in local_only:
-                    print(f"SKIPPED (jar-only, fix in the main session): {name}", file=sys.stderr)
-                if not names and local_only:
-                    return 0
+    from bridgeforge.escalation.escalation import EscalationError, list_packets, load_packet, verify
+    from .revive import render_packet
+    try:
+        if args.escalation_command == "prune":
+            from bridgeforge.escalation.prune import prune_sandboxes
+            result = prune_sandboxes(args.workspace, apply=args.apply)
+            if args.json:
+                print(json.dumps(result, indent=2, ensure_ascii=False))
             else:
-                names = [args.packet]
-            if not names or names == [None]:
-                raise EscalationError("Name a packet, or pass --all.")
-            from bridgeforge.escalation.escalation_review import diff_snapshots, review_sheet, snapshot_dir
-            watched = {d: snapshot_dir(d) for d in args.watch_dir}
-            from bridgeforge.escalation.escalation import run_lock
-            with run_lock(args.workspace):
-                results = run_packets(args, names)
-            for directory, before in watched.items():
-                touched = diff_snapshots(before, snapshot_dir(directory))
-                if any(touched.values()):
-                    print(f"WARNING: the agent run changed {directory}: {json.dumps(touched)}", file=sys.stderr)
-            review = review_sheet(args.workspace)
-            if review["flagged"] and not args.json:
-                print(f"Review first (flagged): {', '.join(review['flagged'])} -> {review['sheet']}", file=sys.stderr)
-        except (EscalationError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(results, indent=2, ensure_ascii=False))
-        for result in [] if args.json else results:
-            last = result["attempts"][-1]
-            print(f"{result['outcome']}: {result['packet']} after {len(result['attempts'])} attempt(s)" + (" [AUTO-ACCEPTED]" if result.get("auto_accepted") else "") + "".join(f"\n  {r}" for r in last["reasons"]))
-            if result.get("auto_accept_blocked"):
-                print(f"  not auto-accepted: {result['auto_accept_blocked']}")
-        accepted = [r["packet"] for r in results if r.get("auto_accepted")]
-        if args.auto_accept and not args.json:
-            print(f"Auto-accepted {len(accepted)} of {len(results)} packet(s)" + (": " + ", ".join(accepted) if accepted else "") + "; the rest wait in the review sheet.")
-        return 0 if all(r["outcome"] in ("VERIFIED", "APPLIED") for r in results) else 1
-    return 2
+                done = [a for a in result["attempts"] if a["state"] != "KEPT"]
+                print(f"{'Pruned' if args.apply else 'Would prune'} {len(done)} attempt sandbox(es), "
+                      f"{result['bytes_freed'] / 1_000_000:.1f} MB; kept {len(result['attempts']) - len(done)} without a finished outcome.")
+            return 0
+        if args.escalation_command == "list":
+            packets = list_packets(args.workspace)
+            if args.json:
+                print(json.dumps(packets, indent=2, ensure_ascii=False))
+            for packet in [] if args.json else packets:
+                print(f"{packet['id']}  {packet['kind']:5}  {packet['tier']:10}  {packet.get('file') or '(mod-wide)'}")
+            return 0
+        if args.escalation_command == "show":
+            packet = load_packet(args.workspace, args.packet)
+            print(json.dumps(packet, indent=2, ensure_ascii=False) if args.json else render_packet(packet), end="\n" if args.json else "")
+            return 0
+        if args.escalation_command == "verify":
+            packet = load_packet(args.workspace, args.packet)
+            working = args.working or Path(packet["workspace"]) / "working"
+            result = verify(packet, working.expanduser().resolve())
+            print(json.dumps(result, indent=2) if args.json else f"{result['status']}: {args.packet}" + "".join(f"\n  {r}" for r in result["reasons"]))
+            return 0 if result["status"] == "PASS" else 1
+        if args.escalation_command == "apply":
+            from bridgeforge.escalation.escalation import apply_verified
+            result = apply_verified(args.workspace, args.packet, attempt=args.attempt, rebuild_jar=args.rebuild_jar,
+                                    patch_classes=args.patch_class, allow_removed=args.allow_removed)
+            if args.json:
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            else:
+                print(f"APPLIED: {result['packet']} attempt {result['attempt']} (verified again first)")
+                for item in result["written"]:
+                    print(f"  {item['path']}" + (f" (backup {item['backup']})" if item.get("backup") else ""))
+            return 0
+        from bridgeforge.escalation.escalation import jar_only
+
+        local_only = []
+        if args.all:
+            # A packet whose only files are jar entries ("x.jar!path/Cls.class") cannot be fixed in an agent sandbox:
+            # it has no jar, javap or python (Fast Engine Rendering and Magellan Protectorate agents changed nothing,
+            # 2026-09-30). --all leaves them out and lists them for the main session; naming one still runs it.
+            agent_packets = [p for p in list_packets(args.workspace) if p["kind"] == "agent"]
+            local_only = [p["id"] for p in agent_packets if jar_only(p)]
+            names = [p["id"] for p in agent_packets if p["id"] not in local_only]
+            for name in local_only:
+                print(f"SKIPPED (jar-only, fix in the main session): {name}", file=sys.stderr)
+            if not names and local_only:
+                return 0
+        else:
+            names = [args.packet]
+        if not names or names == [None]:
+            raise EscalationError("Name a packet, or pass --all.")
+        from bridgeforge.escalation.escalation_review import diff_snapshots, review_sheet, snapshot_dir
+        watched = {d: snapshot_dir(d) for d in args.watch_dir}
+        from bridgeforge.escalation.escalation import run_lock
+        with run_lock(args.workspace):
+            results = run_packets(args, names)
+        for directory, before in watched.items():
+            touched = diff_snapshots(before, snapshot_dir(directory))
+            if any(touched.values()):
+                print(f"WARNING: the agent run changed {directory}: {json.dumps(touched)}", file=sys.stderr)
+        review = review_sheet(args.workspace)
+        if review["flagged"] and not args.json:
+            print(f"Review first (flagged): {', '.join(review['flagged'])} -> {review['sheet']}", file=sys.stderr)
+    except (EscalationError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(results, indent=2, ensure_ascii=False))
+    for result in [] if args.json else results:
+        last = result["attempts"][-1]
+        print(f"{result['outcome']}: {result['packet']} after {len(result['attempts'])} attempt(s)" + (" [AUTO-ACCEPTED]" if result.get("auto_accepted") else "") + "".join(f"\n  {r}" for r in last["reasons"]))
+        if result.get("auto_accept_blocked"):
+            print(f"  not auto-accepted: {result['auto_accept_blocked']}")
+    accepted = [r["packet"] for r in results if r.get("auto_accepted")]
+    if args.auto_accept and not args.json:
+        print(f"Auto-accepted {len(accepted)} of {len(results)} packet(s)" + (": " + ", ".join(accepted) if accepted else "") + "; the rest wait in the review sheet.")
+    return 0 if all(r["outcome"] in ("VERIFIED", "APPLIED") for r in results) else 1
+
+
+_HANDLERS = {
+    "revive-review": _run_revive_review,
+    "mod-changelog": _run_mod_changelog,
+    "ready-list": _run_ready_list,
+    "revive-queue": _run_revive_queue,
+    "revive": _run_revive,
+    "escalation": _run_escalation,
+}
+
+
+def run_cli(args: argparse.Namespace) -> int:
+    handler = _HANDLERS.get(args.command)
+    return handler(args) if handler is not None else 2

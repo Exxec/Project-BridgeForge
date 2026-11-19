@@ -107,238 +107,270 @@ def _load_substitutions(path: Path | None) -> list[dict] | None:
     return data.get("proposals") if isinstance(data, dict) else data
 
 
-def run_cli(args: argparse.Namespace) -> int:
-    if args.command == "translate-export":
-        output = args.output.expanduser().resolve()
-        if Path(args.mod_dir).expanduser().resolve() in output.parents:
-            print("bridgeforge: the translation JSON must not be written inside the mod", file=sys.stderr)
-            return 2
-        try:
-            document = export_translation(args.mod_dir)
-            prefill: dict[str, object] = {}
-            if args.record:
-                prefill["record"] = prefill_from_record(document, args.record)
-            if args.reference:
-                prefill["reference"] = prefill_from_reference(document, args.mod_dir, args.reference)
-        except TranslationError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps(document, ensure_ascii=False, indent=1), encoding="utf-8")
-        blank = sum(1 for entry in document["entries"] if not entry["translation"])
-        summary = {"output": str(output), "entries": document["entry_count"], "unique_sources": document["unique_source_count"], "prefill": prefill, "still_blank": blank}
+def _run_translate_export(args: argparse.Namespace) -> int:
+    output = args.output.expanduser().resolve()
+    if Path(args.mod_dir).expanduser().resolve() in output.parents:
+        print("bridgeforge: the translation JSON must not be written inside the mod", file=sys.stderr)
+        return 2
+    try:
+        document = export_translation(args.mod_dir)
+        prefill: dict[str, object] = {}
+        if args.record:
+            prefill["record"] = prefill_from_record(document, args.record)
+        if args.reference:
+            prefill["reference"] = prefill_from_reference(document, args.mod_dir, args.reference)
+    except TranslationError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(document, ensure_ascii=False, indent=1), encoding="utf-8")
+    blank = sum(1 for entry in document["entries"] if not entry["translation"])
+    summary = {"output": str(output), "entries": document["entry_count"], "unique_sources": document["unique_source_count"], "prefill": prefill, "still_blank": blank}
+    if args.json:
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
+    else:
+        print(f"Translation export: {output}")
+        print(f"Entries: {document['entry_count']} ({document['unique_source_count']} unique sources); still blank: {blank}")
+        for source, stats in prefill.items():
+            print(f"Prefill from {source}: {stats}")
+    return 0
+
+
+def _run_translate_apply(args: argparse.Namespace) -> int:
+    try:
+        document = json.loads(args.translations.read_text(encoding="utf-8"))
+        result = apply_translation(args.mod_dir, document, out_dir=args.out, in_place=args.in_place)
+    except (OSError, json.JSONDecodeError, TranslationError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(f"Translation apply: {result['status']} -> {result['target']}")
+        print(f"Applied: {result['applied']}; leftover non-English units: {result['leftover_cjk_units']}")
+        for problem in result["problems"][:20]:
+            print(f"  problem: {problem}")
+    return 0 if result["status"] == "OK" else 1
+
+
+def _run_translate_tm(args: argparse.Namespace) -> int:
+    try:
+        memory = export_project_go_tm(json.loads(args.translations.read_text(encoding="utf-8")), context=args.context)
+    except (OSError, json.JSONDecodeError, KeyError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(memory, ensure_ascii=False, indent=1), encoding="utf-8")
+    from collections import Counter as _Counter
+    by_provenance = dict(_Counter(item["provenance"] for item in memory["entries"]))
+    if args.json:
+        print(json.dumps({"output": str(args.output), "entries": len(memory["entries"]), "by_provenance": by_provenance}, indent=2))
+    else:
+        print(f"Project Go translation memory: {args.output} ({len(memory['entries'])} entries; {by_provenance})")
+        print("Import with: ssmt tm import <database.sqlite> json <this file>")
+    return 0
+
+
+def _run_translate_check(args: argparse.Namespace) -> int:
+    try:
+        result = check_translation(args.mod_dir)
+    except TranslationError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(f"Translation check: {result['status']}; leftover non-English units: {result['leftover_count']}")
+        for rel, count in list(result["leftover_by_file"].items())[:15]:
+            print(f"  {count:5} {rel}")
+        if result["design_type_keys_unused"]:
+            print(f"designTypeColors keys no tech/manufacturer uses: {result['design_type_keys_unused']}")
+    return 0 if result["status"] == "OK" else 1
+
+
+def _run_fix(args: argparse.Namespace) -> int:
+    options = {
+        "target_game_version": args.target_game_version,
+        "design_type": args.design_type,
+        "id_prefixes": args.id_prefix,
+        "design_color": args.design_color,
+        "vanilla_core": args.vanilla_core,
+        "type_id": args.type_id,
+        "from_vanilla_id": args.from_vanilla_id,
+        "faction_file": args.faction_file,
+        "encodings": dict(item.split("=", 1) for item in (args.encoding or [])),
+        "reference_core": args.reference_core,
+        "hulls": args.hull,
+        "declare_providers": [{"id": item.partition("=")[0], "name": item.partition("=")[2] or item.partition("=")[0]} for item in args.declare_provider] or None,
+        "hull_zero_no_evidence": args.hull_zero_no_evidence,
+        "allow_shadowed_edit": args.allow_shadowed_edit,
+        "provider_roots": args.providers or None,
+        "substitutions": _load_substitutions(args.substitutions),
+    }
+    try:
+        plan = compute_fix(args.mod_dir, args.finding, options)
+    except FixerError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if not args.apply:
+        diffs = {str(change.path): unified_diff_for_change(change) for change in plan.changes}
         if args.json:
-            print(json.dumps(summary, indent=2, ensure_ascii=False))
+            print(json.dumps({"finding_id": plan.finding_id, "dry_run": True, "diffs": diffs}, indent=2, sort_keys=True))
         else:
-            print(f"Translation export: {output}")
-            print(f"Entries: {document['entry_count']} ({document['unique_source_count']} unique sources); still blank: {blank}")
-            for source, stats in prefill.items():
-                print(f"Prefill from {source}: {stats}")
+            for path, diff_text in diffs.items():
+                print(f"--- dry-run diff for {path} ---")
+                print(diff_text or "(no textual diff; binary or empty change)")
         return 0
-    if args.command == "translate-apply":
-        try:
-            document = json.loads(args.translations.read_text(encoding="utf-8"))
-            result = apply_translation(args.mod_dir, document, out_dir=args.out, in_place=args.in_place)
-        except (OSError, json.JSONDecodeError, TranslationError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-        else:
-            print(f"Translation apply: {result['status']} -> {result['target']}")
-            print(f"Applied: {result['applied']}; leftover non-English units: {result['leftover_cjk_units']}")
-            for problem in result["problems"][:20]:
-                print(f"  problem: {problem}")
-        return 0 if result["status"] == "OK" else 1
-    if args.command == "translate-tm":
-        try:
-            memory = export_project_go_tm(json.loads(args.translations.read_text(encoding="utf-8")), context=args.context)
-        except (OSError, json.JSONDecodeError, KeyError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(memory, ensure_ascii=False, indent=1), encoding="utf-8")
-        from collections import Counter as _Counter
-        by_provenance = dict(_Counter(item["provenance"] for item in memory["entries"]))
-        if args.json:
-            print(json.dumps({"output": str(args.output), "entries": len(memory["entries"]), "by_provenance": by_provenance}, indent=2))
-        else:
-            print(f"Project Go translation memory: {args.output} ({len(memory['entries'])} entries; {by_provenance})")
-            print("Import with: ssmt tm import <database.sqlite> json <this file>")
-        return 0
-    if args.command == "translate-check":
-        try:
-            result = check_translation(args.mod_dir)
-        except TranslationError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-        else:
-            print(f"Translation check: {result['status']}; leftover non-English units: {result['leftover_count']}")
-            for rel, count in list(result["leftover_by_file"].items())[:15]:
-                print(f"  {count:5} {rel}")
-            if result["design_type_keys_unused"]:
-                print(f"designTypeColors keys no tech/manufacturer uses: {result['design_type_keys_unused']}")
-        return 0 if result["status"] == "OK" else 1
-    if args.command == "fix":
-        options = {
-            "target_game_version": args.target_game_version,
-            "design_type": args.design_type,
-            "id_prefixes": args.id_prefix,
-            "design_color": args.design_color,
-            "vanilla_core": args.vanilla_core,
-            "type_id": args.type_id,
-            "from_vanilla_id": args.from_vanilla_id,
-            "faction_file": args.faction_file,
-            "encodings": dict(item.split("=", 1) for item in (args.encoding or [])),
-            "reference_core": args.reference_core,
-            "hulls": args.hull,
-            "declare_providers": [{"id": item.partition("=")[0], "name": item.partition("=")[2] or item.partition("=")[0]} for item in args.declare_provider] or None,
-            "hull_zero_no_evidence": args.hull_zero_no_evidence,
-            "allow_shadowed_edit": args.allow_shadowed_edit,
-            "provider_roots": args.providers or None,
-            "substitutions": _load_substitutions(args.substitutions),
-        }
-        try:
-            plan = compute_fix(args.mod_dir, args.finding, options)
-        except FixerError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if not args.apply:
-            diffs = {str(change.path): unified_diff_for_change(change) for change in plan.changes}
+    applied = apply_fix(plan)
+    if plan.finding_id == "data-file-not-utf8" and options["encodings"]:
+        from .fixers import record_named_encodings
+        recorded = record_named_encodings(plan.mod_root, options["encodings"])
+        if recorded is not None and not args.json:
+            print(f"Named encodings recorded: {recorded}")
+    try:
+        # Rescan with the fix's own target and core: `fix --target-game-version 0.98.5a-RC7` set the right value and the
+        # default-target rescan still reported the finding (ROADMAP-3 item 92.14, 2026-11-16).
+        from .models import TargetProfile
+        target = getattr(args, "target_game_version", None)
+        rescan = scan_mod(plan.mod_root, target=TargetProfile(starsector=target) if target else None,
+                          vanilla_core=getattr(args, "vanilla_core", None))
+    except ValueError as exc:
+        print(f"bridgeforge: fix applied but rescan failed: {exc}", file=sys.stderr)
+        return 2
+    finding_resolved = not any(finding.id == plan.finding_id for finding in rescan.findings)
+    result = {"finding_id": plan.finding_id, "applied": applied, "finding_resolved": finding_resolved}
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        for item in applied:
+            print(f"Fixed: {item['path']} (backup: {item['backup']})")
+        print(f"Finding '{plan.finding_id}' {'resolved' if finding_resolved else 'STILL PRESENT'} after rescan.")
+    return 0 if finding_resolved else 1
+
+
+def _run_strip_plan(args: argparse.Namespace) -> int:
+    from .strip_plan import StripPlanError, strip_plan
+    try:
+        result = strip_plan(args.mod, args.vanilla_core, args.only)
+        if args.expected:
+            from .strip_plan import propose_expected_changes
+            if not args.build:
+                raise StripPlanError("--expected needs --build")
+            links: dict[str, list[str]] = {}
+            for item in args.link:
+                kind, separator, linked = item.partition("=")
+                if not separator or kind not in {"risk", "hyp", "test", "bug_class"} or not linked:
+                    raise StripPlanError(f"--link expects risk|hyp|test|bug_class=ID, got {item!r}")
+                links.setdefault(kind, []).append(linked)
+            result["expected_changes_added"] = propose_expected_changes(result, args.expected, build=args.build, links=links)
+    except (StripPlanError, ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        if not result["edits"]:
+            print("Nothing to strip: no unresolved content references" + (" match --id." if args.only else "."))
+        for edit in result["edits"]:
+            print(f"{edit['file']}: {edit['action']} -- {edit['kind']}:{edit['id']}")
+            substitutes = edit.get("substitutes")
+            if substitutes and substitutes.get("candidates"):
+                more = substitutes["candidate_count"] - len(substitutes["candidates"])
+                print(f"    vanilla {substitutes['slot']} options: {', '.join(substitutes['candidates'])}" + (f" (+{more} more)" if more > 0 else ""))
+            elif substitutes:
+                print(f"    {substitutes.get('note') or 'no vanilla weapon fits ' + str(substitutes['slot'])}")
+        if result.get("expected_changes_added") is not None:
+            print(f"PROPOSED expected changes added to {args.expected}: {', '.join(result['expected_changes_added']) or 'none (no file deletions)'}")
+    return 0
+
+
+def _run_descriptions(args: argparse.Namespace) -> int:
+    from .descriptions import DescriptionsError, apply_draft, build_sheet
+    try:
+        if args.descriptions_command == "sheet":
+            result = build_sheet(args.queue, args.vanilla_core)
+            print(f"{result['entries']} missing description(s) in {result['mods']} mod(s). Written: {result['path']}")
+        elif args.descriptions_command == "draft":
+            from .descriptions_draft import agent_crafter, draft_descriptions
+            target = args.target.expanduser().resolve()
+            checkpoint = None if (target / "working").is_dir() else target / "description-drafts.partial.jsonl"
+            result = draft_descriptions(target, vanilla_core=args.vanilla_core, crafter=None if args.no_crafted else agent_crafter(args.agent),
+                                        version_sources=args.version_source, checkpoint_path=checkpoint, quiet=args.quiet)
             if args.json:
-                print(json.dumps({"finding_id": plan.finding_id, "dry_run": True, "diffs": diffs}, indent=2, sort_keys=True))
+                print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
             else:
-                for path, diff_text in diffs.items():
-                    print(f"--- dry-run diff for {path} ---")
-                    print(diff_text or "(no textual diff; binary or empty change)")
-            return 0
-        applied = apply_fix(plan)
-        if plan.finding_id == "data-file-not-utf8" and options["encodings"]:
-            from .fixers import record_named_encodings
-            recorded = record_named_encodings(plan.mod_root, options["encodings"])
-            if recorded is not None and not args.json:
-                print(f"Named encodings recorded: {recorded}")
-        try:
-            # Rescan with the fix's own target and core: `fix --target-game-version 0.98.5a-RC7` set the right value and the
-            # default-target rescan still reported the finding (ROADMAP-3 item 92.14, 2026-11-16).
-            from .models import TargetProfile
-            target = getattr(args, "target_game_version", None)
-            rescan = scan_mod(plan.mod_root, target=TargetProfile(starsector=target) if target else None,
-                              vanilla_core=getattr(args, "vanilla_core", None))
-        except ValueError as exc:
-            print(f"bridgeforge: fix applied but rescan failed: {exc}", file=sys.stderr)
-            return 2
-        finding_resolved = not any(finding.id == plan.finding_id for finding in rescan.findings)
-        result = {"finding_id": plan.finding_id, "applied": applied, "finding_resolved": finding_resolved}
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True))
+                by = result["by_source"]
+                print(f"{result['rows']} of {result['missing']} missing description(s) drafted in {result['mods']} mod(s): "
+                      f"{by['version']} from another version, {by['sibling']} from a sibling, {by['crafted']} crafted; "
+                      f"{result['unresolved']} unresolved. Sheets: <workspace>/reports/description-drafts.md")
         else:
-            for item in applied:
-                print(f"Fixed: {item['path']} (backup: {item['backup']})")
-            print(f"Finding '{plan.finding_id}' {'resolved' if finding_resolved else 'STILL PRESENT'} after rescan.")
-        return 0 if finding_resolved else 1
-    if args.command == "strip-plan":
-        from .strip_plan import StripPlanError, strip_plan
-        try:
-            result = strip_plan(args.mod, args.vanilla_core, args.only)
-            if args.expected:
-                from .strip_plan import propose_expected_changes
-                if not args.build:
-                    raise StripPlanError("--expected needs --build")
-                links: dict[str, list[str]] = {}
-                for item in args.link:
-                    kind, separator, linked = item.partition("=")
-                    if not separator or kind not in {"risk", "hyp", "test", "bug_class"} or not linked:
-                        raise StripPlanError(f"--link expects risk|hyp|test|bug_class=ID, got {item!r}")
-                    links.setdefault(kind, []).append(linked)
-                result["expected_changes_added"] = propose_expected_changes(result, args.expected, build=args.build, links=links)
-        except (StripPlanError, ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-        else:
-            if not result["edits"]:
-                print("Nothing to strip: no unresolved content references" + (" match --id." if args.only else "."))
-            for edit in result["edits"]:
-                print(f"{edit['file']}: {edit['action']} -- {edit['kind']}:{edit['id']}")
-                substitutes = edit.get("substitutes")
-                if substitutes and substitutes.get("candidates"):
-                    more = substitutes["candidate_count"] - len(substitutes["candidates"])
-                    print(f"    vanilla {substitutes['slot']} options: {', '.join(substitutes['candidates'])}" + (f" (+{more} more)" if more > 0 else ""))
-                elif substitutes:
-                    print(f"    {substitutes.get('note') or 'no vanilla weapon fits ' + str(substitutes['slot'])}")
-            if result.get("expected_changes_added") is not None:
-                print(f"PROPOSED expected changes added to {args.expected}: {', '.join(result['expected_changes_added']) or 'none (no file deletions)'}")
-        return 0
-    if args.command == "descriptions":
-        from .descriptions import DescriptionsError, apply_draft, build_sheet
-        try:
-            if args.descriptions_command == "sheet":
-                result = build_sheet(args.queue, args.vanilla_core)
-                print(f"{result['entries']} missing description(s) in {result['mods']} mod(s). Written: {result['path']}")
-            elif args.descriptions_command == "draft":
-                from .descriptions_draft import agent_crafter, draft_descriptions
-                target = args.target.expanduser().resolve()
-                checkpoint = None if (target / "working").is_dir() else target / "description-drafts.partial.jsonl"
-                result = draft_descriptions(target, vanilla_core=args.vanilla_core, crafter=None if args.no_crafted else agent_crafter(args.agent),
-                                            version_sources=args.version_source, checkpoint_path=checkpoint, quiet=args.quiet)
-                if args.json:
-                    print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
-                else:
-                    by = result["by_source"]
-                    print(f"{result['rows']} of {result['missing']} missing description(s) drafted in {result['mods']} mod(s): "
-                          f"{by['version']} from another version, {by['sibling']} from a sibling, {by['crafted']} crafted; "
-                          f"{result['unresolved']} unresolved. Sheets: <workspace>/reports/description-drafts.md")
-            else:
-                result = apply_draft(args.workspace, args.draft)
-                print(f"Added {len(result['added'])} row(s); already present: {len(result['skipped_existing'])}.")
-                print(f"Credits: {result['credits']}")
-                print(f"Original-descriptions copy: {result['alternative']}")
-        except (DescriptionsError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        return 0
-    if args.command == "translate-batch":
-        from .translate_batch import TranslateBatchError, agent_translator, translate_batch
-        from .translation import TranslationError as TranslateApplyError
-        base = (args.out or args.mod_dir).expanduser().resolve()
-        work = args.work or base.with_name(base.name + ".translate-work")
-        from .translation_memory import DEFAULT_MEMORY_RELATIVE
-        memory = None if args.no_memory else args.memory or (DEFAULT_MEMORY_RELATIVE if DEFAULT_MEMORY_RELATIVE.parent.is_dir() else None)
-        try:
-            result = translate_batch(args.mod_dir, translator=agent_translator(args.agent), work_dir=work, out_dir=args.out,
-                                     in_place=args.in_place, chunk=args.chunk, reference=args.reference, records=args.record, quiet=args.quiet,
-                                     memory=memory)
-        except (TranslateBatchError, TranslateApplyError, OSError, ValueError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
-        else:
-            print(f"Entries {result['entries']}, sent to the agent in {result['chunks']} chunk(s), translated {result['translated']}.")
-            if memory is not None:
-                print(f"Translation memory {memory}: {result['prefilled']['memory']['reused']} reused, {result['sent_to_agent']} new string(s) sent, {result['memory_added']} pair(s) added.")
-            if result["stopped"]:
-                print(f"Stopped: {result['stopped']}. Rerun the same command to continue from the checkpoint.")
-            for number, problems in result["failed_chunks"].items():
-                print(f"  chunk {number} rejected twice: {'; '.join(problems[:3])}")
-            if result["applied"] is not None:
-                print(f"Applied -> {args.out or args.mod_dir}; translate-check {result['check']['status']}, leftover non-English units: {result['check']['leftover_count']}")
-            elif not result["stopped"]:
-                print(f"Not applied: fix or rerun the rejected chunks (work folder {result['work_dir']}).")
-        return 0 if result["applied"] is not None else 1
-    if args.command == "renamed-ids":
-        from .renamed_ids import find_renamed
-        results = find_renamed(args.old_copy, args.new_copy, args.ids)
-        if args.json:
-            print(json.dumps(results, indent=2, ensure_ascii=False))
-        else:
-            for r in results:
-                extra = (" -> " + ", ".join(r["renamed_to"])) if r.get("renamed_to") else ""
-                near = ("; similar: " + ", ".join(f"{s['id']} ({s['name']})" for s in r["similar"])) if r.get("similar") else ""
-                print(f"{r['verdict']:<16} {r['id']}{extra}{near}")
-        return 0
-    return 2
+            result = apply_draft(args.workspace, args.draft)
+            print(f"Added {len(result['added'])} row(s); already present: {len(result['skipped_existing'])}.")
+            print(f"Credits: {result['credits']}")
+            print(f"Original-descriptions copy: {result['alternative']}")
+    except (DescriptionsError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def _run_translate_batch(args: argparse.Namespace) -> int:
+    from .translate_batch import TranslateBatchError, agent_translator, translate_batch
+    from .translation import TranslationError as TranslateApplyError
+    base = (args.out or args.mod_dir).expanduser().resolve()
+    work = args.work or base.with_name(base.name + ".translate-work")
+    from .translation_memory import DEFAULT_MEMORY_RELATIVE
+    memory = None if args.no_memory else args.memory or (DEFAULT_MEMORY_RELATIVE if DEFAULT_MEMORY_RELATIVE.parent.is_dir() else None)
+    try:
+        result = translate_batch(args.mod_dir, translator=agent_translator(args.agent), work_dir=work, out_dir=args.out,
+                                 in_place=args.in_place, chunk=args.chunk, reference=args.reference, records=args.record, quiet=args.quiet,
+                                 memory=memory)
+    except (TranslateBatchError, TranslateApplyError, OSError, ValueError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    else:
+        print(f"Entries {result['entries']}, sent to the agent in {result['chunks']} chunk(s), translated {result['translated']}.")
+        if memory is not None:
+            print(f"Translation memory {memory}: {result['prefilled']['memory']['reused']} reused, {result['sent_to_agent']} new string(s) sent, {result['memory_added']} pair(s) added.")
+        if result["stopped"]:
+            print(f"Stopped: {result['stopped']}. Rerun the same command to continue from the checkpoint.")
+        for number, problems in result["failed_chunks"].items():
+            print(f"  chunk {number} rejected twice: {'; '.join(problems[:3])}")
+        if result["applied"] is not None:
+            print(f"Applied -> {args.out or args.mod_dir}; translate-check {result['check']['status']}, leftover non-English units: {result['check']['leftover_count']}")
+        elif not result["stopped"]:
+            print(f"Not applied: fix or rerun the rejected chunks (work folder {result['work_dir']}).")
+    return 0 if result["applied"] is not None else 1
+
+
+def _run_renamed_ids(args: argparse.Namespace) -> int:
+    from .renamed_ids import find_renamed
+    results = find_renamed(args.old_copy, args.new_copy, args.ids)
+    if args.json:
+        print(json.dumps(results, indent=2, ensure_ascii=False))
+    else:
+        for r in results:
+            extra = (" -> " + ", ".join(r["renamed_to"])) if r.get("renamed_to") else ""
+            near = ("; similar: " + ", ".join(f"{s['id']} ({s['name']})" for s in r["similar"])) if r.get("similar") else ""
+            print(f"{r['verdict']:<16} {r['id']}{extra}{near}")
+    return 0
+
+
+_HANDLERS = {
+    "translate-export": _run_translate_export,
+    "translate-apply": _run_translate_apply,
+    "translate-tm": _run_translate_tm,
+    "translate-check": _run_translate_check,
+    "fix": _run_fix,
+    "strip-plan": _run_strip_plan,
+    "descriptions": _run_descriptions,
+    "translate-batch": _run_translate_batch,
+    "renamed-ids": _run_renamed_ids,
+}
+
+
+def run_cli(args: argparse.Namespace) -> int:
+    handler = _HANDLERS.get(args.command)
+    return handler(args) if handler is not None else 2
