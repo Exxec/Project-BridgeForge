@@ -1,0 +1,1 @@
+- `gene.json` schema 2 (ROADMAP-3 94.G1): element shapes for registrations, conditions and persistent state; `derived_from` for adapted genes; the licence ledger's local-only members. Schema 1 is withdrawn before any sister repository pinned it; `gene contract` prints the new pin.

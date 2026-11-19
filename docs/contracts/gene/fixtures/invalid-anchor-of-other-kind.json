@@ -1,6 +1,6 @@
 {
   "schema": "bridgeforge-gene",
-  "schema_version": 1,
+  "schema_version": 2,
   "identity": "279076c0bd21677449324632e7d7b57cb3a3a94651d0e00960b5b7282b93ac28",
   "kind": "hullmod",
   "anchors": [
@@ -27,7 +27,12 @@
     "vanilla": [],
     "mods": []
   },
-  "registrations": [],
+  "registrations": [
+    {
+      "locus": "data/hullmods/hull_mods.csv [example_mod]",
+      "statement": "hull mod row example_mod"
+    }
+  ],
   "conditions": [],
   "persistent_state": [],
   "build": {
@@ -39,8 +44,12 @@
     "mod_name": "Fixture Mod",
     "author": "BridgeForge"
   },
+  "derived_from": null,
   "licence": {
-    "decision": "LOCAL_ONLY"
+    "decision": "LOCAL_ONLY",
+    "reason": "fixture",
+    "mod_decision": "LOCAL_ONLY",
+    "local_only_members": []
   },
   "phenotype_obligations": [
     "the hull mod applies to a ship and shows its effect"

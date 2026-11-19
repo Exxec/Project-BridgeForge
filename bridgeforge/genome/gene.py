@@ -1,9 +1,24 @@
 """94.G1: the gene contract and identity, read-only (docs/FEATURE_GENOME_ROADMAP.md sections 2 and 6, WP1).
 
 A gene is the minimal closed set of parts that gives one player-observable capability. `describe(mod, "kind:id")` writes
-its manifest, `gene.json` schema 1, from `vendor-plan`'s closure: the six content kinds it covers (hull mod, weapon, wing,
+its manifest, `gene.json` schema 2, from `vendor-plan`'s closure: the six content kinds it covers (hull mod, weapon, wing,
 hull, variant, ship system). Campaign features, registration slicing and the archaeology fields (registrations,
-conditions, persistent state) come with G2; in schema 1 they are present and empty, and `collected_from` says so.
+conditions, persistent state) come with G2; `describe` leaves them empty and `collected_from` says so, but schema 2 fixes
+the shape of each element now, before a sister repository pins the contract (advisor review 2026-11-19):
+- a registration is `{locus, statement}`: where the gene is registered (a member path, or `Class#method`) and what it adds;
+- a condition is `{kind, subject}`: what must hold for the gene to exist (`mod-enabled` / `nexerelin`, a setting key);
+- a persistent-state entry is `{name, via}`: a class or key that reaches saves, and how (`xstream`, `memory`, ...).
+Each element may carry more fields; only these are required, so G2 can add detail without a new schema version.
+
+`derived_from` is null for a gene described from its mod, or `{identity, by, from_build}` for one that G4 adapted: the
+identity it came from, the fixer or packet that changed it, and the build it was adapted from. Adapting changes the
+members' bytes, so it changes the identity; this field keeps the lineage. Like provenance and licence, it is not part of
+the identity.
+
+`licence` is the licence ledger's answer (94.G1 WP4): `mod_decision` for the whole mod, `local_only_members` for the
+members a local-only path exception covers, and `decision`, which is LOCAL_ONLY whenever that list is not empty.
+
+Schema 1 is withdrawn: no sister repository had pinned it, and its manifests were local acceptance output.
 
 Identity is the SHA-256 of the kind and the normalized members, so the same feature copied into another mod or another
 folder gets the same identity (one allele): a text file's line endings are normalized, a CSV row is its non-empty cells,
@@ -23,7 +38,7 @@ from bridgeforge.vendor_plan import _TEXT_SUFFIXES, KINDS, _rows, vendor_plan
 from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
 GENE_SCHEMA = "bridgeforge-gene"
-GENE_SCHEMA_VERSION = 1
+GENE_SCHEMA_VERSION = 2
 COLLECTED_FROM = ["vendor-plan"]
 # What the player sees each kind do: the phenotype a live run must observe (S3 makes these real obligations, G6).
 PHENOTYPE = {
@@ -35,8 +50,11 @@ PHENOTYPE = {
     "shipsystem": ["the ship system activates in combat"],
 }
 REQUIRED_KEYS = ("schema", "schema_version", "identity", "kind", "anchors", "provides", "members", "needs", "registrations",
-                 "conditions", "persistent_state", "build", "provenance", "licence", "phenotype_obligations", "unknowns",
-                 "collected_from")
+                 "conditions", "persistent_state", "build", "provenance", "derived_from", "licence", "phenotype_obligations",
+                 "unknowns", "collected_from")
+# The fields each archaeology element must carry (schema 2); an element may carry more.
+ELEMENT_FIELDS = {"registrations": ("locus", "statement"), "conditions": ("kind", "subject"), "persistent_state": ("name", "via")}
+DERIVED_FIELDS = ("identity", "by", "from_build")
 
 
 class GeneError(ValueError):
@@ -130,6 +148,7 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
         members.append({**member, "reason": entry["reason"]})
     members.sort(key=lambda m: (m["what"], m["path"]))
     info = read_mod_info(root) or {}
+    licence = _licence(plan["licence"], info, [m["path"] for m in members], policy_path)
     dependencies = sorted(d["id"] for d in info.get("dependencies") or [] if isinstance(d, dict) and isinstance(d.get("id"), str))
     gene = {
         "schema": GENE_SCHEMA, "schema_version": GENE_SCHEMA_VERSION,
@@ -140,15 +159,30 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
         "registrations": [], "conditions": [], "persistent_state": [],
         "build": {"game_version": info.get("gameVersion"), "mod_version": _version_text(info.get("version"))},
         "provenance": {"mod_id": info.get("id"), "mod_name": info.get("name"), "author": info.get("author")},
-        "licence": plan["licence"],
+        "derived_from": None,
+        "licence": licence,
         "phenotype_obligations": list(PHENOTYPE[kind]),
         "unknowns": {"missing": plan["missing"], "suspects": plan["suspects"]},
         "collected_from": list(COLLECTED_FROM),
     }
     problems = validate(gene)
     if problems:
-        raise GeneError("the manifest does not meet schema 1: " + "; ".join(problems))
+        raise GeneError(f"the manifest does not meet schema {GENE_SCHEMA_VERSION}: " + "; ".join(problems))
     return gene
+
+
+def _licence(mod_licence: dict, info: dict, member_paths: list[str], policy_path: Path | None) -> dict:
+    """The gene's licence from the ledger: the mod's decision, narrowed to LOCAL_ONLY when a member is under a local-only path."""
+    from bridgeforge.licence_ledger import local_only_paths
+
+    restricted = local_only_paths(info.get("id"), info.get("name"), member_paths, policy_path)
+    if not restricted:
+        return {"decision": mod_licence["decision"], "reason": mod_licence.get("reason"), "mod_decision": mod_licence["decision"],
+                "local_only_members": []}
+    first = restricted[0]
+    return {"decision": "LOCAL_ONLY",
+            "reason": f"{len(restricted)} member(s) under local-only paths, first {first['path']} ({first['prefix']}: {first['reason']})",
+            "mod_decision": mod_licence["decision"], "local_only_members": [hit["path"] for hit in restricted]}
 
 
 def _version_text(version: object) -> str | None:
@@ -176,8 +210,38 @@ def _member_problem(member: object) -> str | None:
     return None
 
 
+def _element_problem(key: str, element: object) -> str | None:
+    fields = ELEMENT_FIELDS[key]
+    if not isinstance(element, dict) or not all(isinstance(element.get(f), str) and element[f] for f in fields):
+        return f"each of {key} is an object with non-empty strings {', '.join(fields)}"
+    return None
+
+
+def _derived_problem(derived: object) -> str | None:
+    if derived is None:
+        return None
+    if (not isinstance(derived, dict) or not _is_hash(derived.get("identity")) or not isinstance(derived.get("by"), str)
+            or not derived["by"] or "from_build" not in derived
+            or not (derived["from_build"] is None or isinstance(derived["from_build"], str))):
+        return "derived_from is null or {identity: 64 hex digits, by: non-empty string, from_build: string or null}"
+    return None
+
+
+def _licence_problem(licence: object, member_paths: set[str] | None) -> str | None:
+    if not isinstance(licence, dict) or not isinstance(licence.get("decision"), str) or not isinstance(licence.get("mod_decision"), str):
+        return "licence is an object with a decision and a mod_decision"
+    local = licence.get("local_only_members")
+    if not isinstance(local, list) or not all(isinstance(path, str) for path in local):
+        return "licence.local_only_members is a list of member paths"
+    if local and licence["decision"] != "LOCAL_ONLY":
+        return "a gene with local-only members has the decision LOCAL_ONLY"
+    if member_paths is not None and not set(local) <= member_paths:
+        return "licence.local_only_members names a path that is not a member"
+    return None
+
+
 def validate(gene: object) -> list[str]:
-    """What keeps `gene` from being a schema-1 manifest; empty when it is one. Sister repositories read these files, so
+    """What keeps `gene` from being a schema-2 manifest; empty when it is one. Sister repositories read these files, so
     every field's shape is checked, and malformed input gives problems, never an exception."""
     if not isinstance(gene, dict):
         return ["a manifest is a JSON object"]
@@ -202,9 +266,18 @@ def validate(gene: object) -> list[str]:
     for key in ("build", "provenance"):
         if not isinstance(gene[key], dict):
             problems.append(f"{key} is an object")
-    if not isinstance(gene["licence"], dict) or not isinstance(gene["licence"].get("decision"), str):
-        problems.append("licence is an object with a decision")
+    for key in ELEMENT_FIELDS:
+        if isinstance(gene[key], list):
+            problems += sorted({p for p in (_element_problem(key, e) for e in gene[key]) if p})
+    derived = _derived_problem(gene["derived_from"])
+    if derived:
+        problems.append(derived)
     members = gene["members"]
+    member_paths = ({m["path"] for m in members if isinstance(m, dict) and isinstance(m.get("path"), str)}
+                    if isinstance(members, list) else None)
+    licence = _licence_problem(gene["licence"], member_paths)
+    if licence:
+        problems.append(licence)
     if not isinstance(members, list) or not members:
         problems.append("members is a non-empty list")
     else:
@@ -223,4 +296,5 @@ def dumps(gene: dict) -> str:
     return json.dumps(gene, indent=2, ensure_ascii=False) + "\n"
 
 
-__all__ = ["GENE_SCHEMA", "GENE_SCHEMA_VERSION", "GeneError", "describe", "dumps", "identity", "validate"]
+__all__ = ["DERIVED_FIELDS", "ELEMENT_FIELDS", "GENE_SCHEMA", "GENE_SCHEMA_VERSION", "GeneError", "describe", "dumps", "identity",
+           "validate"]

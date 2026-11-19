@@ -1,10 +1,12 @@
 """94.G1 WP2 (GR-1): the gene.json contract as files a sister repository pins by hash.
 
 `gene contract --write` puts three things in `docs/contracts/gene/`:
-- `gene.schema.json`: a JSON Schema (2020-12) of manifest schema 1, for repositories that validate with a library;
+- `gene.schema.json`: a JSON Schema (2020-12) of manifest schema 2, for repositories that validate with a library;
 - `fixtures/`: manifests every consumer must judge as BridgeForge does: the `valid-*` ones pass, each `invalid-*` one
   fails, and `valid-*` identities must come out equal from the identity rule;
 - `CONTRACT.json`: the schema id and version, the identity rule in words, every file's SHA-256 and each fixture's verdict.
+
+Schema 1 is withdrawn (2026-11-19, before any sister pinned it); CONTRACT.json says so.
 
 A consumer copies the folder byte for byte and pins CONTRACT.json's SHA-256, as it pins `target export`'s registry; WP3's
 cross-repository check reports a pin that no longer matches. `gene contract --check` fails when the committed folder
@@ -16,8 +18,8 @@ import copy
 import hashlib
 from pathlib import Path
 
-from bridgeforge.genome.gene import (GENE_SCHEMA, GENE_SCHEMA_VERSION, PHENOTYPE, REQUIRED_KEYS, dumps, identity,
-                                     validate)
+from bridgeforge.genome.gene import (ELEMENT_FIELDS, GENE_SCHEMA, GENE_SCHEMA_VERSION, PHENOTYPE, REQUIRED_KEYS, dumps,
+                                     identity, validate)
 from bridgeforge.vendor_plan import KINDS
 
 CONTRACT_RELATIVE = Path("docs") / "contracts" / "gene"
@@ -29,10 +31,12 @@ IDENTITY_RULE = ("identity = SHA-256 (lowercase hex) of the UTF-8 text: the kind
 
 _HASH = {"type": "string", "pattern": "^[0-9a-f]{64}$"}
 _STRINGS = {"type": "array", "items": {"type": "string"}}
+WITHDRAWN_VERSIONS = [1]
 
 
 def json_schema() -> dict:
-    """Manifest schema 1 as a JSON Schema. The identity's agreement with the members is checked by the identity rule, not here."""
+    """Manifest schema 2 as a JSON Schema. The identity's agreement with the members, and local-only members being members,
+    are checked by the identity rule and `validate`, not here. Elements allow more fields than they require."""
     member = {"type": "object", "required": ["what", "path", "sha256"],
               "properties": {"what": {"enum": ["file", "csv-row", "jar-class"]}, "path": {"type": "string", "minLength": 1},
                              "sha256": _HASH, "reason": {"type": "string"}}}
@@ -51,9 +55,17 @@ def json_schema() -> dict:
             "provides": _STRINGS,
             "members": {"type": "array", "minItems": 1, "items": member},
             "needs": {"type": "object", "required": ["vanilla", "mods"], "properties": {"vanilla": _STRINGS, "mods": _STRINGS}},
-            "registrations": {"type": "array"}, "conditions": {"type": "array"}, "persistent_state": {"type": "array"},
+            **{key: {"type": "array", "items": {"type": "object", "required": list(fields), "additionalProperties": True,
+                                                "properties": {f: {"type": "string", "minLength": 1} for f in fields}}}
+               for key, fields in ELEMENT_FIELDS.items()},
             "build": {"type": "object"}, "provenance": {"type": "object"},
-            "licence": {"type": "object", "required": ["decision"], "properties": {"decision": {"type": "string"}}},
+            "derived_from": {"oneOf": [{"type": "null"}, {
+                "type": "object", "required": ["identity", "by", "from_build"],
+                "properties": {"identity": _HASH, "by": {"type": "string", "minLength": 1}, "from_build": {"type": ["string", "null"]}}}]},
+            "licence": {"type": "object", "required": ["decision", "mod_decision", "local_only_members"],
+                        "properties": {"decision": {"type": "string"}, "mod_decision": {"type": "string"}, "local_only_members": _STRINGS},
+                        "if": {"properties": {"local_only_members": {"minItems": 1}}},
+                        "then": {"properties": {"decision": {"const": "LOCAL_ONLY"}}}},
             "phenotype_obligations": _STRINGS,
             "unknowns": {"type": "object", "required": ["missing", "suspects"],
                          "properties": {"missing": {"type": "array"}, "suspects": {"type": "array"}}},
@@ -73,10 +85,14 @@ def _base() -> dict:
     return {
         "schema": GENE_SCHEMA, "schema_version": GENE_SCHEMA_VERSION, "identity": identity("hullmod", members),
         "kind": "hullmod", "anchors": ["hullmod:example_mod"], "provides": ["hullmod:example_mod"], "members": members,
-        "needs": {"vanilla": [], "mods": []}, "registrations": [], "conditions": [], "persistent_state": [],
+        "needs": {"vanilla": [], "mods": []},
+        "registrations": [{"locus": "data/hullmods/hull_mods.csv [example_mod]", "statement": "hull mod row example_mod"}],
+        "conditions": [], "persistent_state": [],
         "build": {"game_version": "0.98.5a-RC7", "mod_version": "1.0.0"},
         "provenance": {"mod_id": "fixture_mod", "mod_name": "Fixture Mod", "author": "BridgeForge"},
-        "licence": {"decision": "LOCAL_ONLY"}, "phenotype_obligations": list(PHENOTYPE["hullmod"]),
+        "derived_from": None,
+        "licence": {"decision": "LOCAL_ONLY", "reason": "fixture", "mod_decision": "LOCAL_ONLY", "local_only_members": []},
+        "phenotype_obligations": list(PHENOTYPE["hullmod"]),
         "unknowns": {"missing": [], "suspects": []}, "collected_from": ["vendor-plan"],
     }
 
@@ -88,7 +104,15 @@ def fixtures() -> dict[str, dict]:
     moved["provenance"] = {"mod_id": "another_mod", "mod_name": "Another", "author": "someone"}
     moved["build"] = {"game_version": "0.97a-RC11", "mod_version": "0.3"}
     moved["members"] = list(reversed(moved["members"]))
-    out = {"valid-hullmod.json": base, "valid-same-gene-other-mod.json": moved}
+    adapted = copy.deepcopy(base)  # a gene G4 adapted, from a releasable mod with one member under a local-only path
+    adapted["members"][0]["sha256"] = "1" * 64
+    adapted["identity"] = identity(adapted["kind"], adapted["members"])
+    adapted["derived_from"] = {"identity": base["identity"], "by": "jar-call-signature-changed", "from_build": "0.98a-RC8"}
+    adapted["conditions"] = [{"kind": "mod-enabled", "subject": "nexerelin", "note": "extra fields are allowed"}]
+    adapted["persistent_state"] = [{"name": "data.hullmods.Example", "via": "xstream"}]
+    adapted["licence"] = {"decision": "LOCAL_ONLY", "reason": "a member under a local-only path", "mod_decision": "RELEASABLE",
+                          "local_only_members": [adapted["members"][1]["path"]]}
+    out = {"valid-hullmod.json": base, "valid-same-gene-other-mod.json": moved, "valid-adapted-gene.json": adapted}
 
     def broken(name: str, change) -> None:
         gene = copy.deepcopy(base)
@@ -112,6 +136,11 @@ def fixtures() -> dict[str, dict]:
 
     broken("duplicate-member", duplicated)
     broken("licence-without-decision", lambda g: g.update(licence={}))
+    broken("registration-without-locus", lambda g: g["registrations"][0].pop("locus"))
+    broken("derived-from-short-identity", lambda g: g.update(derived_from={"identity": "abc", "by": "fixer", "from_build": None}))
+    broken("local-only-member-not-local-only", lambda g: g["licence"].update(
+        decision="RELEASABLE", mod_decision="RELEASABLE", local_only_members=[g["members"][0]["path"]]))
+    broken("local-only-member-not-a-member", lambda g: g["licence"].update(local_only_members=["graphics/not_a_member.png"]))
     return out
 
 
@@ -129,7 +158,8 @@ def contract_files() -> dict[str, bytes]:
         if name.startswith("valid-") == bool(problems):
             raise AssertionError(f"fixture {name} is judged {'invalid' if problems else 'valid'}: {problems}")
         verdicts[name] = {"valid": not problems, "identity": gene.get("identity") if not problems else None}
-    contract = {"contract": GENE_SCHEMA, "schema_version": GENE_SCHEMA_VERSION, "identity_rule": IDENTITY_RULE,
+    contract = {"contract": GENE_SCHEMA, "schema_version": GENE_SCHEMA_VERSION, "withdrawn_versions": WITHDRAWN_VERSIONS,
+                "identity_rule": IDENTITY_RULE,
                 "files": {path: hashlib.sha256(data).hexdigest() for path, data in sorted(files.items())},
                 "fixtures": verdicts}
     files["CONTRACT.json"] = _canonical_bytes(contract)

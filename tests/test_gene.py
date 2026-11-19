@@ -1,4 +1,4 @@
-"""94.G1: gene manifests (gene.json schema 1) and their content-hash identity."""
+"""94.G1: gene manifests (gene.json schema 2) and their content-hash identity."""
 from __future__ import annotations
 
 import io
@@ -60,7 +60,7 @@ class GeneManifestTests(unittest.TestCase):
         tampered = json.loads(json.dumps(gene))
         tampered["members"][0]["sha256"] = "0" * 64
         self.assertIn("identity does not match the members", validate(tampered))
-        self.assertEqual(validate({**gene, "schema_version": 2})[0][:9], "schema is")
+        self.assertEqual(validate({**gene, "schema_version": 1})[0][:9], "schema is")  # schema 1 is withdrawn
         self.assertIn("missing licence", validate({k: v for k, v in gene.items() if k != "licence"}))
         self.assertEqual(validate([]), ["a manifest is a JSON object"])
         self.assertEqual(identity(gene["kind"], list(reversed(gene["members"]))), gene["identity"])  # order does not matter
@@ -136,6 +136,38 @@ class GeneManifestTests(unittest.TestCase):
         twice = {**gene, "members": gene["members"] + gene["members"][:1]}
         self.assertIn("a member is listed twice", validate(twice))
         self.assertNotEqual(validate({**gene, "members": [{"what": "file", "path": 5, "sha256": "0" * 64}]}), [])
+
+    def test_schema_2_elements_derived_from_and_licence_shapes(self) -> None:
+        with resolved_temp_dir() as root:
+            gene = describe(_rebal(root), "weapon:rebal_rail")
+        self.assertIsNone(gene["derived_from"])
+        self.assertEqual(gene["licence"]["local_only_members"], [])
+        good = {**gene, "registrations": [{"locus": "data/scripts/Plugin.java#onApplicationLoad", "statement": "x", "extra": 1}],
+                "conditions": [{"kind": "mod-enabled", "subject": "nexerelin"}], "persistent_state": [{"name": "a.B", "via": "xstream"}],
+                "derived_from": {"identity": "a" * 64, "by": "relink", "from_build": None}}
+        self.assertEqual(validate(good), [])
+        bad = {"registrations": [{"locus": "x"}], "conditions": [{"kind": "", "subject": "s"}], "persistent_state": ["a.B"],
+               "derived_from": {"identity": "a" * 64, "by": "relink"},
+               "licence": {**gene["licence"], "decision": "RELEASABLE", "local_only_members": [gene["members"][0]["path"]]}}
+        for key, value in bad.items():
+            with self.subTest(key=key):
+                self.assertEqual(len(validate({**gene, key: value})), 1, validate({**gene, key: value}))
+
+    def test_a_member_under_a_local_only_path_makes_the_gene_local_only(self) -> None:
+        import json as _json
+        with resolved_temp_dir() as root:
+            mod = _rebal(root)
+            policy = root / "policy" / "release_policy.json"
+            policy.parent.mkdir()
+            policy.write_text(_json.dumps({"schema_version": 1, "default": {"local_only": False}, "mods": {"@_ss_rebal_@": {
+                "local_only": False, "reason": "MIT", "paths": [
+                    {"prefix": "graphics/fx", "local_only": True, "reason": "glow sprite by another author"}]}}}), encoding="utf-8")
+            gene = describe(mod, "hullmod:shields_formshield", vanilla_core=_vanilla(root), policy_path=policy)
+            other = describe(mod, "weapon:rebal_rail", policy_path=policy)
+        self.assertEqual(validate(gene), [])
+        self.assertEqual((gene["licence"]["decision"], gene["licence"]["mod_decision"]), ("LOCAL_ONLY", "RELEASABLE"))
+        self.assertEqual(gene["licence"]["local_only_members"], ["graphics/fx/formshield_glow.png"])
+        self.assertEqual((other["licence"]["decision"], other["licence"]["local_only_members"]), ("RELEASABLE", []))
 
     def test_the_cli_writes_the_manifest(self) -> None:
         with resolved_temp_dir() as root:
