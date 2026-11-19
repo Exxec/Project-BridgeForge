@@ -9,7 +9,8 @@ failed=0
 step() { printf '\n== %s\n' "$1"; }
 
 step "ruff"
-uvx ruff check . || failed=1
+RUFF_PIN="$(sed -n 's/^required-version = "==\(.*\)"$/\1/p' pyproject.toml)"
+uvx "ruff@${RUFF_PIN:-latest}" check . || failed=1
 
 step "roadmap-lint"
 "$PY" -m bridgeforge roadmap-lint || failed=1

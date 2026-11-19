@@ -1,0 +1,28 @@
+name: Set up BridgeForge
+description: >-
+  Python, the JDK named in .java-version, and BridgeForge installed, the same way for every job that runs the suite
+  (ROADMAP-3 96.5 C8: weekly.yml's own copy of these steps drifted from ci.yml's and failed five weeks running).
+  Run actions/checkout first.
+inputs:
+  python-version:
+    description: Python version for actions/setup-python.
+    default: "3.15"
+  install:
+    description: Arguments to `python -m pip install`.
+    default: '. "setuptools>=68"'
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v7
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: pip
+        cache-dependency-path: pyproject.toml
+    - uses: actions/setup-java@v6
+      with:
+        distribution: temurin
+        java-version-file: .java-version
+    - name: Install BridgeForge
+      shell: bash
+      # Package discovery tests invoke the build backend in the test interpreter, hence setuptools.
+      run: python -m pip install ${{ inputs.install }}

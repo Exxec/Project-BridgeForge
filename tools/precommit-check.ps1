@@ -22,7 +22,9 @@ if(-not $py -and -not $uvx){Write-Error 'No Python with ruff and no uvx found. R
 # whole repository.
 $pyFiles=@($staged | Where-Object { $_ -like '*.py' -and (Test-Path -LiteralPath $_) })
 if(-not $pyFiles){ Pop-Location; Write-Host 'Pre-commit validation: PASS (no staged Python files)'; exit 0 }
-try{ if($py){ & $py -m ruff check -- @pyFiles }else{ & $uvx.Source ruff check -- @pyFiles }; $ruffExit=$LASTEXITCODE }finally{Pop-Location}
+# pyproject's required-version pins ruff (96.5 C8): uvx runs exactly that one, an installed ruff must match it.
+$ruffPin=(Select-String -LiteralPath (Join-Path $root 'pyproject.toml') -Pattern '^required-version = "==(.+)"$').Matches | ForEach-Object { $_.Groups[1].Value } | Select-Object -First 1
+try{ if($uvx -and $ruffPin){ & $uvx.Source "ruff@$ruffPin" check -- @pyFiles }elseif($py){ & $py -m ruff check -- @pyFiles }else{ & $uvx.Source ruff check -- @pyFiles }; $ruffExit=$LASTEXITCODE }finally{Pop-Location}
 if($ruffExit -ne 0){Write-Error 'ruff check failed; fix lint before committing.'; exit 11}
 # Generated docs (ROADMAP-3 96.5 C1): a staged test that names a finding id, or a changed --help text, makes docs/CHECKS.md or
 # docs/COMMANDS.md stale, which only the full suite and CI noticed (2026-11-17). docs-index --check writes nothing.
