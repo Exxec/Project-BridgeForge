@@ -98,7 +98,7 @@ Checks, each with its fix command:
 - the rig is isolated (junction)
 - no rig game is running, and no other process holds the rig's files (`who-locks`)
 - the probe is installed and matches its release copy
-- every enabled mod resolves, with its dependencies and a matching base `gameVersion`. The check still compares with `0.98a`, so on the 0.98.5a rig it warns about every mod revived to `0.98.5a` (ROADMAP-3 93.4 is open).
+- every enabled mod resolves, with its dependencies and a matching base `gameVersion`. The base version comes from the rig core's own build, so on the 0.98.5a rig a mod still at `0.98a` warns and one revived to `0.98.5a` does not (96.5 A8).
 - every known working copy matches its rig copy (`--working ID=PATH` adds more)
 - your real install's saves haven't changed since the recorded baseline
 - the rig core's jars hash as recorded (`--write-core-baseline` records them from a known-good core)
