@@ -1,7 +1,7 @@
 """94.G1: the gene contract and identity, read-only (docs/FEATURE_GENOME_ROADMAP.md sections 2 and 6, WP1).
 
 A gene is the minimal closed set of parts that gives one player-observable capability. `describe(mod, "kind:id")` writes
-its manifest, `gene.json` schema 2, from `vendor-plan`'s closure: the six content kinds it covers (hull mod, weapon, wing,
+its manifest, `gene.json` schema 3, from `vendor-plan`'s closure: the six content kinds it covers (hull mod, weapon, wing,
 hull, variant, ship system). Campaign features, registration slicing and the archaeology fields (registrations,
 conditions, persistent state) come with G2; `describe` leaves them empty and `collected_from` says so, but schema 2 fixes
 the shape of each element now, before a sister repository pins the contract (advisor review 2026-11-19):
@@ -18,7 +18,10 @@ the identity.
 `licence` is the licence ledger's answer (94.G1 WP4): `mod_decision` for the whole mod, `local_only_members` for the
 members a local-only path exception covers, and `decision`, which is LOCAL_ONLY whenever that list is not empty.
 
-Schema 1 is withdrawn: no sister repository had pinned it, and its manifests were local acceptance output.
+Schema 3 (94.G2, 2026-11-19) adds one member kind, `json-entry`: a key of a JSON file, `<file>#<JSON Pointer>` such as
+`data/config/settings.json#/sa_lobster_tanks_growth_rate`, hashed as its parsed value in canonical JSON (genome/closure.py).
+For now only object keys: a pointer ending in an array index or `-` is refused, and array membership (a hull added to a
+list) stays an unknown until a pilot needs it. Schemas 1 and 2 are withdrawn; no sister repository had pinned either.
 
 Identity is the SHA-256 of the kind and the normalized members, so the same feature copied into another mod or another
 folder gets the same identity (one allele): a text file's line endings are normalized, a CSV row is its non-empty cells,
@@ -38,7 +41,9 @@ from bridgeforge.vendor_plan import _TEXT_SUFFIXES, KINDS, _rows, vendor_plan
 from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
 
 GENE_SCHEMA = "bridgeforge-gene"
-GENE_SCHEMA_VERSION = 2
+GENE_SCHEMA_VERSION = 3
+WITHDRAWN_VERSIONS = (1, 2)  # the one list: contract.py and evidence.py import it
+MEMBER_KINDS = ("file", "csv-row", "jar-class", "json-entry")
 COLLECTED_FROM = ["vendor-plan"]
 # What the player sees each kind do: the phenotype a live run must observe (S3 makes these real obligations, G6).
 PHENOTYPE = {
@@ -146,7 +151,13 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
         else:
             raise GeneError(f"vendor-plan named a part of an unknown kind: {entry['what']!r}")
         members.append({**member, "reason": entry["reason"]})
+    from bridgeforge.genome.closure import SETTINGS_FILE, extend
+
+    extra = extend(root, members, vanilla_core, [closure_id.split(":", 1)[1] for closure_id in plan["closure_ids"]])
+    members += extra["members"]
     members.sort(key=lambda m: (m["what"], m["path"]))
+    # The whole-file settings.json SUSPECT is replaced by key-level ones (a key no member reads), or by nothing.
+    suspects = [s for s in plan["suspects"] if s["path"] != SETTINGS_FILE] + extra["suspects"]
     info = read_mod_info(root) or {}
     licence = _licence(plan["licence"], info, [m["path"] for m in members], policy_path)
     dependencies = sorted(d["id"] for d in info.get("dependencies") or [] if isinstance(d, dict) and isinstance(d.get("id"), str))
@@ -155,14 +166,14 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
         "identity": identity(kind, members),
         "kind": kind, "anchors": [anchor], "provides": plan["closure_ids"],
         "members": members,
-        "needs": {"vanilla": plan["provided_by_vanilla"], "mods": dependencies},
+        "needs": {"vanilla": sorted(set(plan["provided_by_vanilla"]) | set(extra["vanilla"])), "mods": dependencies},
         "registrations": [], "conditions": [], "persistent_state": [],
         "build": {"game_version": info.get("gameVersion"), "mod_version": _version_text(info.get("version"))},
         "provenance": {"mod_id": info.get("id"), "mod_name": info.get("name"), "author": info.get("author")},
         "derived_from": None,
         "licence": licence,
         "phenotype_obligations": list(PHENOTYPE[kind]),
-        "unknowns": {"missing": plan["missing"], "suspects": plan["suspects"]},
+        "unknowns": {"missing": plan["missing"] + extra["missing"], "suspects": suspects},
         "collected_from": list(COLLECTED_FROM),
     }
     problems = validate(gene)
@@ -201,12 +212,30 @@ def _is_hash(value: object) -> bool:
 def _member_problem(member: object) -> str | None:
     if not isinstance(member, dict):
         return "a member is an object"
-    if member.get("what") not in ("file", "csv-row", "jar-class"):
-        return f"member kind {member.get('what')!r} is not file, csv-row or jar-class"
+    if member.get("what") not in MEMBER_KINDS:
+        return f"member kind {member.get('what')!r} is not one of {', '.join(MEMBER_KINDS)}"
     if not isinstance(member.get("path"), str) or not member["path"]:
         return "a member's path is a non-empty string"
+    if member["what"] == "json-entry":
+        problem = _json_entry_problem(member["path"])
+        if problem:
+            return problem
     if not _is_hash(member.get("sha256")):
         return f"{member['path']}: sha256 is 64 lowercase hex digits"
+    return None
+
+
+def _json_entry_problem(path: str) -> str | None:
+    """A json-entry path is `<file>#<JSON Pointer>` to an object key: the pointer starts with `/` and its last token is
+    not an array index or `-` (array membership is not a member kind yet)."""
+    file, sep, pointer = path.partition("#")
+    if not sep or not file:
+        return f"{path}: a json-entry path is <file>#<JSON Pointer>"
+    if not pointer.startswith("/"):
+        return f"{path}: the JSON Pointer starts with '/'"
+    last = pointer.rsplit("/", 1)[-1]
+    if last == "-" or last.isdigit():
+        return f"{path}: a json-entry points at an object key, not an array element"
     return None
 
 

@@ -12,7 +12,7 @@ gate states `PASS`, `FAIL`, `NOT_RUN` and `UNKNOWN` of docs/SISTER_REPO_INTEROPE
 core below is required; a producer may add fields.
 
     {"evidence": "bridgeforge-gene-evidence", "schema_version": 1, "kind": "subtraction-proof",
-     "gene": {"identity": <64 hex>, "schema_version": 2},
+     "gene": {"identity": <64 hex>, "schema_version": 3},
      "produced_by": {"tool": "bridgeforge", "version": "0.4.2"},
      "created_at": "2026-11-19T18:00:00+00:00", "build": {"game_version": "0.98.5a-RC7"},
      "inputs": [{"role": "donor", "path": "data/hullmods/hull_mods.csv", "sha256": <64 hex>}],
@@ -28,12 +28,12 @@ import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
-from bridgeforge.genome.gene import GENE_SCHEMA_VERSION, _is_hash
+from bridgeforge.genome.gene import GENE_SCHEMA_VERSION, WITHDRAWN_VERSIONS, _is_hash
 
 EVIDENCE = "bridgeforge-gene-evidence"
 EVIDENCE_SCHEMA_VERSION = 1
 VERDICTS = ("PASS", "FAIL", "NOT_RUN", "UNKNOWN")
-WITHDRAWN_GENE_VERSIONS = (1,)
+WITHDRAWN_GENE_VERSIONS = WITHDRAWN_VERSIONS  # one list, in gene.py
 REQUIRED_KEYS = ("evidence", "schema_version", "kind", "gene", "produced_by", "created_at", "build", "inputs", "verdict")
 
 

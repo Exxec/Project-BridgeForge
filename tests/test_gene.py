@@ -60,7 +60,8 @@ class GeneManifestTests(unittest.TestCase):
         tampered = json.loads(json.dumps(gene))
         tampered["members"][0]["sha256"] = "0" * 64
         self.assertIn("identity does not match the members", validate(tampered))
-        self.assertEqual(validate({**gene, "schema_version": 1})[0][:9], "schema is")  # schema 1 is withdrawn
+        for withdrawn in (1, 2):  # schemas 1 and 2 are withdrawn
+            self.assertEqual(validate({**gene, "schema_version": withdrawn})[0][:9], "schema is")
         self.assertIn("missing licence", validate({k: v for k, v in gene.items() if k != "licence"}))
         self.assertEqual(validate([]), ["a manifest is a JSON object"])
         self.assertEqual(identity(gene["kind"], list(reversed(gene["members"]))), gene["identity"])  # order does not matter

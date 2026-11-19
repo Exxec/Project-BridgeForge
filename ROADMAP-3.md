@@ -1322,7 +1322,46 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   Next: GR-5 (Java probe spike; it needs live testing, paused by the owner 2026-11-19), then 94.G2 starting with P1.
 - 94.G2 **Sequencing and proof**: closure for campaign features and registration slicing; subtraction and isolation proofs per
   gene. Project Go exports a gene's strings as one unit. Acceptance adds (WP5): every proof file carries the evidence header
-  and passes `gene evidence check` against its gene with `--root`.
+  and passes `gene evidence check` against its gene with `--root`. Started 2026-11-19 on the owner's "Sounds good continue",
+  with P1 offline; the boot halves of the proofs wait for live testing (paused by the owner the same day).
+  **Slice 1 Done 2026-11-19: `gene.json` schema 3 and P1's closure.**
+  - Describing P1 (Scrapyard Armories `hullmod:sa_lobster_tanks`) showed two gaps:
+    - the seven `sa_lobster_tanks_*` settings keys its script reads were only a SUSPECT covering the whole
+      `settings.json`;
+    - the vanilla lobster and food commodities it handles were not needs.
+  - Schema 3 adds one general member kind, `json-entry`: `<file>#<JSON Pointer>`, hashed as the parsed value in canonical
+    JSON, so `5` and `5.0` are one allele. It is general so that later pilots need no schema 4: `sounds.json`,
+    `strings.json`, the part of a `.faction` a gene adds to.
+  - For now it covers only object keys. A pointer to an array element or `-` is refused, and array membership stays an
+    unknown. Schemas 1 and 2 are withdrawn (`WITHDRAWN_VERSIONS`, one list that `contract.py` and `evidence.py` import).
+    `gene sisters` confirmed that no sister had pinned either. The new pin is `fea8aa10…`.
+  - `bridgeforge/genome/closure.py` adds two rules, both on evidence only:
+    - **Settings keys.** A key is a member when a member script passes it to a SettingsAPI getter: as a literal or a
+      `static final String` constant in a `.java` file, or as the call's string argument in a jar class. It becomes
+      `setting:<key>` in `needs.vanilla` when only the core has it, and missing when neither does. A key that only
+      mentions a closure id stays SUSPECT at key level, never by prefix, and the whole-file SUSPECT goes.
+    - **Commodities.** `Commodities.X` resolves against the core's own `Commodities` class constants, giving
+      `commodity:<id>` when the core's `commodities.csv` has it. An unresolvable constant, or an id the core lacks, is
+      missing, never dropped.
+  - **P1 now:**
+    - members: the row, the script, the sprite and the 7 settings keys;
+    - `needs.vanilla`: `commodity:food` and `commodity:lobster`;
+    - no SUSPECT and no missing.
+
+    Its identity changed, as intended. Its `persistent_state` stays empty: `DATA_KEY` lives in the combat engine's
+    `getCustomData()`, which is transient. The P1 proof files record that as evidence.
+  - Tests: `tests/test_gene_closure.py`:
+    - keys from literals and constants, not mentions;
+    - the canonical value hash;
+    - a fixture mod's keys sorted into members, a vanilla need, missing and key-level suspects;
+    - commodities resolved against a compiled core class, with a retired id and an unknown constant missing;
+    - keys from bytecode, only on SettingsAPI.
+
+    Also new contract fixtures: `valid-settings-entries.json`, plus three invalid `json-entry` paths, each breaking
+    one rule. Mutation-checked: 8 mutants killed. Two survived at first and showed real holes, now fixed: a commodity
+    id the core lacks was dropped silently, and the bytecode owner filter was untested.
+  - Next: P1's proof files (subtraction and isolation, static halves PASS/FAIL, boot halves NOT_RUN until live testing
+    resumes), the first producer of the WP5 header.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

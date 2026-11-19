@@ -1,0 +1,1 @@
+- `gene.json` schema 3 (ROADMAP-3 94.G2): a `json-entry` member kind; `gene describe` makes the settings keys a gene's scripts read into members and resolves `Commodities.X` against the core into `needs.vanilla`. Schemas 1 and 2 are withdrawn.
