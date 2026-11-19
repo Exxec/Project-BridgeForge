@@ -277,6 +277,14 @@ Check S series implementation plan and if applicable add remaining items to road
       either fix fails its test. An independent review found no behaviour change in the scan; its three points (the
       portfolio flag, the error type for an unknown AST line, thin tests) are taken.
     - P9 (M): memoize the AST helper in tests (an estimated 2-3 of 11 minutes).
+      **Done 2026-11-19.** Measured first: over the whole suite (3,135 tests) `java_ast.analyze_sources` was called 1,390
+      times, 930 of them on folders with no `.java` file (0.4 s); the 460 real JVM runs took 122 s on 329 distinct inputs. The
+      memo is in `java_ast` itself, not only in tests, because a revive scans each mod several times: a result is keyed by
+      each source's path relative to the root and its bytes, plus the helper's folder (its source digest), so an edited file
+      or a new helper misses; each caller gets copies. It holds at most 1,024 results and 200,000 facts (one real mod gives
+      up to 12,003). The same measurement afterwards: 70 s of AST time instead of 122 s (with other jobs on the machine).
+      Tests that fake the helper's output clear it (`java_ast.clear_memo`). Tests: `tests/test_scan_read_once.py` (the same
+      sources run the helper once, a caller's change does not reach the memo, new bytes run it again; fails without the memo).
     - P10 (M): a process pool for target-impact and corpus-index (5 -> about 1.5 min).
   - **CI and tooling:**
     - C3 (S): stop duplicate push and pull_request runs. 101 of 191 SHAs ran twice, and nine PRs queued for hours on

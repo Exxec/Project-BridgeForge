@@ -4,6 +4,7 @@ import base64
 import hashlib
 import subprocess
 import tempfile
+from collections import OrderedDict
 from pathlib import Path
 from .helper_cache import helper_directory
 
@@ -60,11 +61,48 @@ def _ensure_helper() -> Path:
     return output
 
 
+# Facts depend only on each source's path relative to the root and its bytes (and the helper, whose folder name is its
+# source digest). The suite ran the JVM helper 460 times on 329 distinct inputs (38 of its 122 s were repeats), and a
+# revive scans each mod several times, so recent results are kept per process (ROADMAP-3 96.5 P9).
+# Bounded by entries and by facts held: the suite has 332 distinct small inputs, while one real mod gives up to 12,003 facts
+# (Sunrider), so a done-audit over hundreds of mods keeps only the most recent few.
+_MEMO_ENTRIES = 1024
+_MEMO_FACTS = 200_000
+_memo: OrderedDict[str, list[dict[str, object]]] = OrderedDict()
+
+
+def clear_memo() -> None:
+    """Forget remembered results (a test that fakes the helper's output must not leave its fake behind)."""
+    _memo.clear()
+
+
+def _memo_key(root: Path, sources: list[Path]) -> str:
+    digest = hashlib.sha256(str(_helper_directory()).encode("utf-8"))
+    for source in sources:
+        data = source.read_bytes()
+        digest.update(source.relative_to(root).as_posix().encode("utf-8") + b"\0" + str(len(data)).encode("ascii") + b"\0" + data)
+    return digest.hexdigest()
+
+
 def analyze_sources(root: Path) -> list[dict[str, object]]:
+    """The AST facts of every .java file under `root`; a repeat of the same sources returns copies of the last result."""
     root = root.resolve()
     sources = sorted(root.rglob("*.java"))
     if not sources:
         return []
+    key = _memo_key(root, sources)
+    if key in _memo:
+        _memo.move_to_end(key)
+        return [dict(fact) for fact in _memo[key]]  # each fact is flat (str and int values): a copy per caller
+    facts = _analyze(root, sources)
+    if len(facts) <= _MEMO_FACTS:
+        _memo[key] = [dict(fact) for fact in facts]
+        while len(_memo) > _MEMO_ENTRIES or sum(len(held) for held in _memo.values()) > _MEMO_FACTS:
+            _memo.popitem(last=False)
+    return facts
+
+
+def _analyze(root: Path, sources: list[Path]) -> list[dict[str, object]]:
     helper = _ensure_helper()
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".sources", delete=False) as handle:
         handle.write("\n".join(map(str, sources)))
