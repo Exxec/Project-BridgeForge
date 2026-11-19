@@ -380,6 +380,24 @@ Check S series implementation plan and if applicable add remaining items to road
 
       Each fails with its guard removed (mutation-checked).
     - A8 (S): the revival guide still teaches the RC8 workflow (docs pass, 96.3).
+      **Done 2026-11-18.** A8 was recorded at 12:28 on 2026-11-17; 96.3 rewrote the guide for RC7 at 13:58 the same day.
+      This closes what 96.3 left for later, because each needed code:
+      - `rig-doctor` compared every enabled mod with a fixed `0.98a`, so it warned about every mod revived to 0.98.5a on
+        the 0.98.5a rig. `rig_doctor.rig_base_game_version` now reads the rig core's own build (`core_build`), falling back
+        to `0.98a`. The guide's section 1 said the check was still wrong; it now says what it does.
+      - `dependency-substitutes` counted a provider as current only at `0.98a`, so a 0.98.5a provider was never EXACT.
+        `substitutes.target_series` takes a given core's build, else (no core given) `bridgeforge-state/target.json`'s, else
+        `0.98a`; `rank` and `cover` take that series and the report names it (`target_series`). The report key stays
+        `targets_0.98a` (reports and revive options carry it) and means "targets the current series". The 0.98.5a
+        launcher unchecks a 0.98a mod, so on an RC7 core a 0.98a provider is no longer current either.
+      - Eleven `--help` texts that called the core "RC8" now say "target" (`shadow-triage`, `strip-plan`,
+        `substitution-proposals`, `value-proposals`, `api-diff`, `port-interfaces`, `scan --removed-content`, `fix
+        --reference-core`, two in `rig-doctor`). The six 96.3 named were already fixed. Kept: `revive --target`'s
+        `0.98a-RC8` fallback (the real default), `target-impact`'s example and the `RC8-nn` behaviour ids.
+      Tests: `tests/test_rig_doctor.py` (a 0.98.5a-RC7 core warns about a 0.98a mod and not a 0.98.5a one);
+      `tests/test_substitutes.py` (on an RC7 core the 0.98.5a provider is EXACT and chosen, the 0.98a one PARTIAL; the
+      series from a recorded target and a named core's precedence). Both fixes fail their tests when removed
+      (mutation-checked).
     - A9 (S): retire two dead tools scripts and a fourth status list (`prepush-check.ps1` lacks NOT_REVIVABLE).
     - A2 (S/M): one resolver for the checkout and the state folder. The `.venv` holds a stale non-editable copy,
       0.4.0, 68 files behind.

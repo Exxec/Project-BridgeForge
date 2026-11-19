@@ -130,7 +130,7 @@ def render_lines(result: dict) -> list[str]:
 def add_parser(subcommands) -> None:
     cmd = subcommands.add_parser("substitution-proposals", help="for each unresolved content id, a renamed replacement with its evidence (reference-install rename, declared-provider rename, content-diff catalogue); read-only, writes proposals you approve for `fix --finding content-reference-substitute`")
     cmd.add_argument("workspace", type=Path, help="a workspace folder holding working/mod_info.json")
-    cmd.add_argument("--vanilla-core", type=Path, required=True, help="RC8 starsector-core")
+    cmd.add_argument("--vanilla-core", type=Path, required=True, help="target starsector-core (@target)")
     cmd.add_argument("--reference-core", type=Path, help="the older starsector-core the mod was made for (enables the rename source)")
     cmd.add_argument("--providers", type=Path, action="append", default=[], help="where to look for declared dependencies (default: the workspace's queue folder); repeatable")
     cmd.add_argument("--provider-index", type=Path)

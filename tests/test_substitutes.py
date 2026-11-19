@@ -251,6 +251,33 @@ class SubstituteTests(unittest.TestCase):
         self.assertEqual([(c["mod_id"], c["verdict"]) for c in report["candidates"]], [("newsector", "EXACT"), ("halfsector", "PARTIAL")])
         self.assertEqual(report["strategy"], "SWAP")
 
+    def test_on_a_0_98_5a_core_a_0_98_5a_provider_is_current_and_a_0_98a_one_is_not(self) -> None:
+        # 96.3/96.5 A8: a fixed "0.98a" never counted a 0.98.5a provider as current after the move to 0.98.5a-RC7.
+        import zipfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            core = _core(root)
+            with zipfile.ZipFile(core / "starfarer_obf.jar", "w") as jar:
+                jar.writestr("com/fs/starfarer/StarfarerLauncher.class", b"\xca\xfe\x00" + b"0.98.5a-RC7" + b"\x00")
+            _provider(root, "rc8sector", "0.98a-RC8", "Red,old_red_army\n", "old_yak_wing,v\n")
+            _provider(root, "rc7sector", "0.98.5a-RC7", "Red,old_red_army\n", "old_yak_wing,v\n")
+            report = dependency_substitutes(_addon(root), [root / "mods"], vanilla_core=core, ops=root / "none")
+        self.assertEqual(report["target_series"], "0.98.5a")
+        self.assertEqual([(c["mod_id"], c["verdict"]) for c in report["candidates"]], [("rc7sector", "EXACT"), ("rc8sector", "PARTIAL")])
+        self.assertEqual([item["mod_id"] for item in report["provider_set"]], ["rc7sector"])
+        self.assertEqual(report["strategy"], "SWAP")
+
+    def test_without_a_core_the_recorded_target_names_the_series(self) -> None:
+        from bridgeforge.substitutes import target_series
+
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            self.assertEqual(target_series(state=state), "0.98a")  # no target recorded
+            (state / "target.json").write_text(json.dumps({"build": "0.98.5a-RC7", "core": "c"}), encoding="utf-8")
+            self.assertEqual(target_series(state=state), "0.98.5a")
+            self.assertEqual(target_series(vanilla_core=state / "no-core", state=state), "0.98a")  # a named core wins
+
     def test_a_full_provider_for_an_old_game_version_is_only_partial(self) -> None:
         provider = Provider("oldsector", "Old", "p", "0.9.1a")
         provider.provides["hullmod"] = {"old_red_army"}
