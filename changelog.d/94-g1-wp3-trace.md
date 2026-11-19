@@ -1,0 +1,1 @@
+- `bridgeforge gene trace ID` lists the commits, pull requests, tests and documents that cite a roadmap id, and `bridgeforge gene sisters` checks each sister repository's genome entry and gene contract pin against section 12 (ROADMAP-3 94.G1 WP3, GR-4).

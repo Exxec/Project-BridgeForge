@@ -23,6 +23,16 @@ def add_parser(subcommands) -> None:
                                                         "docs/contracts/gene/ folder, or write it, and print CONTRACT.json's SHA-256")
     contract_cmd.add_argument("--folder", type=Path, help="contract folder (default: docs/contracts/gene in the checkout)")
     contract_cmd.add_argument("--write", action="store_true", help="write the folder instead of checking it")
+    trace_cmd = gene_sub.add_parser("trace", help="what cites a roadmap id (GR-4): commits, the pull requests that merged them, tests and "
+                                                  "documents of this checkout; read-only, offline")
+    trace_cmd.add_argument("item", help="a roadmap id, e.g. 94.G1 or GR-4")
+    trace_cmd.add_argument("--json", action="store_true")
+    sisters_cmd = gene_sub.add_parser("sisters", help="the cross-repository check (GR-4): each sister repository's genome entry against "
+                                                      "section 12 of docs/FEATURE_GENOME_ROADMAP.md, and its gene contract pin against "
+                                                      "this checkout's contract; reads GitHub through gh unless --clone is given")
+    sisters_cmd.add_argument("--clone", action="append", default=[], metavar="REPO=DIR",
+                             help="read this repository from a local checkout instead of GitHub; repeatable")
+    sisters_cmd.add_argument("--json", action="store_true")
 
 
 def run_cli(args: argparse.Namespace) -> int:
@@ -30,6 +40,10 @@ def run_cli(args: argparse.Namespace) -> int:
         return 2
     if args.gene_command == "contract":
         return _run_contract(args)
+    if args.gene_command == "trace":
+        return _run_trace(args)
+    if args.gene_command == "sisters":
+        return _run_sisters(args)
     try:
         gene = describe(args.mod, args.anchor, vanilla_core=args.vanilla_core)
     except (GeneError, VendorPlanError, OSError) as exc:
@@ -63,3 +77,46 @@ def _run_contract(args: argparse.Namespace) -> int:
         return 1
     print(f"{folder}: current; pin CONTRACT.json sha256 {contract_sha256()}")
     return 0
+
+
+def _run_trace(args: argparse.Namespace) -> int:
+    import json
+
+    from bridgeforge.paths import checkout_root
+
+    from .trace import render, trace
+
+    try:
+        result = trace(args.item, checkout_root())
+    except RuntimeError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(result, indent=2) if args.json else render(result))
+    return 0
+
+
+def _run_sisters(args: argparse.Namespace) -> int:
+    import json
+
+    from bridgeforge.paths import checkout_root
+
+    from .contract import contract_sha256
+    from .sisters import GENOME_DOC, check_sisters, clone_reader, github_reader, render
+
+    clones = {}
+    for spec in args.clone:
+        name, sep, folder = spec.partition("=")
+        if not sep or not name or not folder:
+            print(f"bridgeforge: --clone takes REPO=DIR, got {spec!r}", file=sys.stderr)
+            return 2
+        clones[name] = Path(folder)
+    root = checkout_root()
+    read = clone_reader(clones) if clones else github_reader
+    try:
+        result = check_sisters((root / GENOME_DOC).read_text(encoding="utf-8"), (root / "ROADMAP-3.md").read_text(encoding="utf-8"),
+                               read, contract_sha256())
+    except (OSError, RuntimeError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(result, indent=2) if args.json else render(result))
+    return 0 if result["ok"] else 1
