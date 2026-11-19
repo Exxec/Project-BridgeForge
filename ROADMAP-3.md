@@ -545,6 +545,17 @@ Augments (calls into obfuscated game classes: hand ports; check the authors' cur
 YunruCore's `hullmod:low_maintenance` collides with a hull mod RC7 added. Informational: Ironclads replaces `ship_data.csv`
 without RC7's new columns `parts/dmod`, `salary` and `salMult`, read as blank (whether a blank salary changes crew costs is
 unproven).
+- 96.8 (S) **Release 0.4.2: 96.5's performance, CI and small items.** Owner 2026-11-18: "Go ahead with 0.42 release"
+  (0.4.2, the version after 0.4.1), cut once C7/C8 (#137), A8 (#138), A9 (#139) and C4 (#140) merged.
+  - **What 0.4.2 carries:** the 22 fragments since v0.4.1, now under `## 0.4.2` in CHANGELOG: save-doctor fixes (93.52,
+    93.53, 93.55's FACTION_UNDEFINED) and the RC7 menu reader (93.54); 96.5's performance items P1, P2, P3, P4 and P7;
+    the CI and tooling items C1, C3, C4, C5, C6, C7/C8; A3, A8 and A9; the 0.4.1 receipt, two archive records and two
+    roadmap notes (93.49-93.51, the G series queued).
+  - **This PR:** `release-notes assemble --version 0.4.2`; the version in `pyproject.toml`, `bridgeforge/__init__.py` and
+    `uv.lock`; README, BUGS.md and ROADMAP_STATUS name 0.4.2; CHANGELOG opens `## 0.4.3 (unreleased)`.
+  - **After it merges:** the full suite at the merge commit, main CI, wheel and sdist built and checked as for 0.4.1, the
+    annotated tag `v0.4.2`, a full GitHub release marked Latest (as 0.4.1 became) with the wheel, sdist and
+    `SHA256SUMS.txt`, and a receipt, `docs/RELEASE_0_4_2.md`.
 - 95.1 (M) **Owner rulings as standing policy.** The owner ruled the same way many times: CSV rows with no file that nothing uses
   (Musashi, Bultach, UAF: "keep them and ignore warning if it doesn't affect anything"), findings the reference build shares in a
   mod that works there (UAF: "Your clear to proceed"), and behaviour as authored with evidence (Sunrider: "yes"). Encode them as

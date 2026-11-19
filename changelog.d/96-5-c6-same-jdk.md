@@ -1,1 +1,0 @@
-- CI and local test runs use the same JDK: `.java-version` (25) drives every setup-java step and the JDK the tests pick, and every test javac passes `-encoding UTF-8` (96.5 C6).

@@ -1,1 +1,0 @@
-- The pre-push report check uses the shared status list (it lacked NOT_REVIVABLE), and two retired `tools/` scripts that `master_log` and `archive` replaced are removed (96.5 A9).

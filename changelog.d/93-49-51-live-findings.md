@@ -1,4 +1,0 @@
-- Roadmap: the day's last live runs and the security review's remaining leads (ROADMAP-3 93.49-93.51).
-  - SR6's probe battle stalled, so its round never ended.
-  - In SR7 the newest save loaded during New Game and the window closed, and the harness raised instead of giving a verdict.
-  - Two lower-risk leads from the review are recorded but not fixed.

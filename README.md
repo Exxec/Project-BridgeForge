@@ -6,7 +6,7 @@ Revivals target Starsector 0.98.5a-RC7 / Java 17; 0.98a-RC8, the previous target
 (`bridgeforge target show`). A clean scan or successful compile is not proof that a mod loads, preserves its features
 or is safe for existing saves.
 
-**Version status, checked 2026-11-17:** this checkout identifies as 0.4.1 (the bundled probe mod is 0.3.3). The newest published release is
+**Version status, checked 2026-11-17:** this checkout identifies as 0.4.2 (the bundled probe mod is 0.3.3). The newest published release is
 [0.4.1](https://github.com/Exxec/Project-BridgeForge/releases/tag/v0.4.1), the first full release (earlier ones are
 pre-releases). It fixes four security problems found in 0.4.0: do not use 0.4.0 on mods you do not trust. 0.3.0 was
 tagged but never published.

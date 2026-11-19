@@ -1,1 +1,0 @@
-- `rig-doctor` and `dependency-substitutes` judge mods against the core's own build (0.98.5a on RC7) instead of a fixed `0.98a`, and eleven `--help` texts call the core the target, not RC8 (96.5 A8).

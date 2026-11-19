@@ -1,6 +1,64 @@
 # Changelog
 
-## 0.4.2 (unreleased)
+## 0.4.3 (unreleased)
+
+## 0.4.2 (2026-11-18)
+
+- Records: Bultach Coalition 1.1.7 (SR8-LIVE-0985a-20261117) and United Aurora Federation 0.8.4c (UAFR2-LIVE-0985a-20261117)
+  passed their live re-runs and are archived (live validated, LOCAL_ONLY). Bultach finishes the six-mod 0.98.5a batch.
+  MOD_CHANGELOG and `release_policy.json` carry the entries the records wrote on Test1.
+- Roadmap: the day's last live runs and the security review's remaining leads (ROADMAP-3 93.49-93.51).
+  - SR6's probe battle stalled, so its round never ended.
+  - In SR7 the newest save loaded during New Game and the window closed, and the harness raised instead of giving a verdict.
+  - Two lower-risk leads from the review are recorded but not fixed.
+- Fix: `save-doctor` (and `installed_mods`, the provider Salvor imports) no longer reports VERSION_CHANGED when a mod writes
+  its version as `{"major", "minor", "patch"}` and the save recorded the same version dotted (ROADMAP-3 93.52). On Test1's
+  rig saves 32 of 43 such findings were false; the 11 left are real.
+- Fix: `save-doctor` resolves the XStream aliases a mod's plugin registers (Star Lords' `faction.LawProposal`, `ai.LordAI`)
+  and the classes of loose `.java` scripts, which read as unresolved classes and made loadable saves WILL_LIKELY_FAIL
+  (ROADMAP-3 93.53). Three of the owner's seven RC8 saves now read NO_KNOWN_PROBLEM.
+- Fix: the main menu reader no longer counts a button twice where its text cuts the fill. At 1920x1080 (0.98.5a-RC7) it
+  read 11 rows instead of nine, and a Continue click opened Missions (ROADMAP-3 93.54).
+- Fix: `save-doctor` reports FACTION_UNDEFINED when a save holds a faction that neither the core nor an enabled mod
+  defines. The game stops loading such a save in `Faction.readResolve`; a Templars save with Templars removed had read
+  NO_KNOWN_PROBLEM (ROADMAP-3 93.55).
+- Roadmap: the feature-genome G series (94.G1's WP1-WP3 onward) is queued, not started, on the owner's word (2026-11-17).
+  96.5's small items, Salvor's rig runs and live testing come first.
+- `escalation run --all`, `auto-open` and `atlas migrations --write` print one progress line per item (`--quiet` turns it
+  off) and resume from a checkpoint after an interruption (ROADMAP-3 96.5 A3). A changed input starts the run afresh:
+  a packet that `revive` wrote again, another run option, a workspace revived or rescanned in between, one more approved
+  fixer, or other API jars. A test now requires every command that offers `--quiet` to follow the long-running rule.
+- `rig-doctor` and `dependency-substitutes` judge mods against the core's own build (0.98.5a on RC7) instead of a fixed `0.98a`, and eleven `--help` texts call the core the target, not RC8 (96.5 A8).
+- The pre-push report check uses the shared status list (it lacked NOT_REVIVABLE), and two retired `tools/` scripts that `master_log` and `archive` replaced are removed (96.5 A9).
+- The git hooks are tracked in `tools/githooks/` and run once enabled with `git config core.hooksPath tools/githooks`
+  (ROADMAP-3 96.5 C1). Before, they lived in an ignored folder and never ran. The pre-commit check also refuses a stale
+  `docs/CHECKS.md` or `docs/COMMANDS.md`, and `bridgeforge hygiene` reports hooks that are off.
+- CI: a pull request that changes only documents runs Lint and the six test modules that read a document
+  (`tests/doc_tests.json`, measured over the whole suite), not the whole suite on every runner; a push to main still runs
+  everything (ROADMAP-3 96.5 C3). Every check name still reports, and a failed scope decision runs everything.
+- The test suite refuses any Windows registry access outside a test key unless the test patches it; this found the rig-doctor tests reading the machine's LongPathsEnabled setting (96.5 C4).
+- Tooling: the pre-push hook lints the branch's changed Python files and checks the generated docs first, then runs the tests
+  that import a changed module as well as those named after it, leaving the measured slow tests and a central module's
+  many importers to CI (ROADMAP-3 96.5 C5).
+- CI and local test runs use the same JDK: `.java-version` (25) drives every setup-java step and the JDK the tests pick, and every test javac passes `-encoding UTF-8` (96.5 C6).
+- CI jobs share one setup action and carry timeouts, test runners buffer output, CPU-bound test budgets use CPU time, and ruff is pinned once in `pyproject.toml` for CI, the hooks and the PR checks (96.5 C7, C8).
+- Faster scans: the settings-key and procgen-argument checks start javap once per jar, not once per class (ROADMAP-3 96.5
+  P1). On United Aurora Federation's three jars that is 5 launches instead of 252, and about 2 s instead of 49.5 s, with the
+  same findings.
+- Faster scans with provider roots: each scan step that looks a dependency's provider up now reads only that provider's
+  mod_info.json, not its CSVs, specs, jars and sources (ROADMAP-3 96.5 P2). One scan used to build the full provider index
+  five times.
+- `revive --apply` registers the scan it decided on, dependency providers included, instead of scanning the finished tree a
+  second time without them; compile-check compiles the core's loose scripts and the Janino harness once per process, not on
+  every scan (about 1.8 s a scan on RC7) (ROADMAP-3 96.5 P3).
+- Performance: a scan blanks each Java file's comments once, not once per source check. A Sunrider scan spent 5.1 s there and
+  now spends 0.5 s, with the same findings (ROADMAP-3 96.5 P4).
+- Faster batch scans: the vanilla core's API classes, loose scripts and faction ids are read once per process, not twice per
+  scan (ROADMAP-3 96.5 P7). About 1.2 s saved per scan after the first, about 4 minutes over a 184-archive `done-audit`.
+- BridgeForge 0.4.1, the security release, is published on GitHub and, on the owner's word, is the first full release,
+  marked Latest (ROADMAP-3 96.7). `docs/RELEASE_0_4_1.md` records its source commit, the suite and CI results it was tagged
+  on, the asset hashes, checked again after download, and the promotion. v0.4.0's release page now names its four security
+  problems and links 0.4.1.
 
 ## 0.4.1 (2026-11-17)
 
