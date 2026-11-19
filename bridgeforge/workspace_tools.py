@@ -50,15 +50,49 @@ def bump_version(workspace: Path, note: str, *, day: str | None = None, changelo
     return {"workspace": str(workspace), "old": old, "new": new, "report": str(report), "changelog": line}
 
 
-def restore_from_done(done_mod: Path, queue: Path) -> dict:
+ARCHIVE_OWN_FOLDERS = ("original", "workspace")  # what `archive` writes beside the shipped mod folder
+PREVIOUS_BUILD_REPORTS = ("REVIVAL_REPORT.md", "REVIVAL_PLAN.md")
+
+
+def _shipped_folder(done_mod: Path) -> Path:
+    """The archive's shipped mod folder: `Done/<X>/<X>`, or else its one other folder holding a mod_info.json. Station Augments
+    ships "Station Augments" in `Done/Station.Augments-2.4.3+bf.1` (ROADMAP-3 96.10)."""
+    named = done_mod / done_mod.name
+    if (named / "mod_info.json").is_file():
+        return named
+    found = [d for d in sorted(done_mod.iterdir()) if d.is_dir() and not d.is_symlink() and d.name not in ARCHIVE_OWN_FOLDERS
+             and (d / "mod_info.json").is_file()]
+    if len(found) == 1:
+        return found[0]
+    detail = f"{len(found)} folders with a mod_info.json ({', '.join(d.name for d in found)})" if found else "no mod folder"
+    raise ValueError(f"{done_mod}: {detail}; not an archive made by `bridgeforge archive`.")
+
+
+def _move_aside(ws: Path, day: str) -> Path:
+    """Move an existing workspace to `<queue>/_stale-<day>/<name>` (a free name), never deleting it (DOC-001)."""
+    holder = ws.parent / f"_stale-{day}"
+    target = holder / ws.name
+    n = 2
+    while target.exists():
+        target, n = holder / f"{ws.name}-{n}", n + 1
+    holder.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(ws), str(target))
+    return target
+
+
+def restore_from_done(done_mod: Path, queue: Path, *, for_retarget: bool = False, day: str | None = None) -> dict:
+    """Rebuild `<queue>/<archive name>` from a Done/ archive. With `for_retarget` (ROADMAP-3 96.10), a workspace of that name is
+    moved to `<queue>/_stale-<day>/` first, and the archived report and plan are kept as `*.previous-build.md`: they describe
+    the build the archive was validated on, and revive drafts the new build's."""
     done_mod = Path(done_mod).expanduser().resolve()
     name = done_mod.name
     ws = Path(queue).expanduser().resolve() / name
+    shipped = _shipped_folder(done_mod)
+    moved = None
     if ws.exists():
-        raise ValueError(f"{ws} already exists.")
-    shipped = done_mod / name
-    if not (shipped / "mod_info.json").is_file():
-        raise ValueError(f"{shipped} has no mod_info.json (not an archive made by `bridgeforge archive`).")
+        if not for_retarget:
+            raise ValueError(f"{ws} already exists (with --for-retarget it is moved to _stale-<date>/ first).")
+        moved = _move_aside(ws, day or date.today().isoformat())
     shutil.copytree(shipped, ws / "working")
     if (done_mod / "original").is_dir():
         shutil.copytree(done_mod / "original", ws / "original")
@@ -69,7 +103,15 @@ def restore_from_done(done_mod: Path, queue: Path) -> dict:
         if item.is_file():
             shutil.copy2(item, reports / item.name)
     baseline = any(i.name.startswith("baseline") for i in kept)
+    kept_as_previous = []
+    if for_retarget:
+        for report in PREVIOUS_BUILD_REPORTS:
+            if (reports / report).is_file():
+                previous = reports / report.replace(".md", ".previous-build.md")
+                (reports / report).replace(previous)
+                kept_as_previous.append(previous.name)
     return {"workspace": str(ws), "restored_reports": [i.name for i in kept if i.is_file()], "baseline": baseline,
+            "shipped_folder": shipped.name, "moved_aside": str(moved) if moved else None, "previous_build_reports": kept_as_previous,
             "note": None if baseline else "the archive kept no baseline: findings accepted before archiving will reappear; "
                                           "accept them again only if the content is unchanged from the archived copy"}
 

@@ -95,13 +95,15 @@ through an owner-ordered `+bf.N` bump is re-stamped with `baseline-accept --reas
 
 ## 6. A mod changed after archiving
 
-1. `bridgeforge restore-from-done "Done/<Mod>" --queue "In operation"`. It refuses when a workspace of that name exists:
-   look at it first, and move an older one to `In operation/_stale-<date>/` (never delete). Until ROADMAP-3 96.10 it cannot
-   restore an archive whose shipped folder name differs from the archive's (Station Augments).
+1. `bridgeforge restore-from-done "Done/<Mod>" --queue "In operation"`. It finds the shipped folder even when its name differs
+   from the archive's (Station Augments). It refuses when a workspace of that name exists: look at it first.
+   - **For a new game build** add `--for-retarget` (ROADMAP-3 96.10): an existing workspace moves to
+     `In operation/_stale-<date>/` (never deleted), and the archived report and plan are kept as `*.previous-build.md`, so
+     revive drafts the new build's report.
 2. Fix it, then `bridgeforge bump-version "In operation/<Mod>" --note "<what changed>"` (`+bf.N`, MOD_CHANGELOG).
-3. For a new game build, the restored report is the previous build's, and revive's draft refuses to overwrite it. After revive
-   ends UNATTENDED_DONE, run `revival-report-draft "<ws>/working" --vanilla-core <core> --providers <rig mods> --apply --force`
-   and check that it reads READY_FOR_LIVE_TEST. The archived copy keeps the old report.
+3. Revive until UNATTENDED_DONE; check that the report reads READY_FOR_LIVE_TEST. A workspace restored without
+   `--for-retarget` keeps the old report, which blocks the draft: `revival-report-draft "<ws>/working" --vanilla-core <core>
+   --providers <rig mods> --apply --force`.
 4. Live-test it again, then `record --archive --refresh`. The old archive moves to `Done/_replaced-<date>/`.
 
 Never edit Done/ in place.

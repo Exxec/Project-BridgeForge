@@ -108,6 +108,9 @@ def add_parser(subcommands) -> None:
     restore_cmd = subcommands.add_parser("restore-from-done", help="rebuild an In operation workspace from a Done/ archive (shipped folder, original, reports and baseline)")
     restore_cmd.add_argument("archive", type=Path, help="Done/<Mod>")
     restore_cmd.add_argument("--queue", type=Path, help="default: <repo>/In operation")
+    restore_cmd.add_argument("--for-retarget", action="store_true",
+                             help="porting to a new game build: move a workspace of the same name to <queue>/_stale-<date>/ (never "
+                                  "deleted) and keep the archived report and plan as *.previous-build.md, so revive drafts the new build's")
     done_audit_cmd = subcommands.add_parser("done-audit", help="re-scan every archived revival in Done/: STALE when the queue copy changed since archiving, plus crash-class and MANUAL/UNKNOWN findings the baseline does not accept (writes Done/DONE_AUDIT.md)")
     done_audit_cmd.add_argument("--done", type=Path, help="default: <repo>/Done")
     done_audit_cmd.add_argument("--queue", type=Path, help="default: <repo>/In operation")
@@ -281,11 +284,14 @@ def _run_close(args: argparse.Namespace) -> int:
 def _run_restore_from_done(args: argparse.Namespace) -> int:
     from .workspace_tools import restore_from_done
     try:
-        result = restore_from_done(args.archive, args.queue or data_root() / "In operation")
-    except ValueError as exc:
+        result = restore_from_done(args.archive, args.queue or data_root() / "In operation", for_retarget=args.for_retarget)
+    except (ValueError, OSError) as exc:
         print(f"bridgeforge: {exc}", file=sys.stderr)
         return 2
-    print(f"restored {result['workspace']} (reports: {', '.join(result['restored_reports']) or 'none'})" + (f"\n  NOTE: {result['note']}" if result["note"] else ""))
+    print(f"restored {result['workspace']} from {result['shipped_folder']} (reports: {', '.join(result['restored_reports']) or 'none'})"
+          + (f"\n  moved the existing workspace to {result['moved_aside']}" if result["moved_aside"] else "")
+          + (f"\n  kept as the previous build's: {', '.join(result['previous_build_reports'])}" if result["previous_build_reports"] else "")
+          + (f"\n  NOTE: {result['note']}" if result["note"] else ""))
     return 0
 
 
