@@ -1,0 +1,1 @@
+- A live run checks the screen for the main menu after leaving the campaign, retries the exit once, and stops at `leave-campaign` instead of clicking blind; a stuck run writes its keys and clicks with the log size at each to `<log>.actions.json` (ROADMAP-3 96.9).
