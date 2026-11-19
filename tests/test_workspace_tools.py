@@ -44,6 +44,55 @@ class WorkspaceToolTests(unittest.TestCase):
         self.assertTrue(result["baseline"] and restored)
         self.assertIsNone(result["note"])
 
+    def _archive(self, root, shipped: str = "Mod"):
+        done = root / "Done" / "Mod"
+        (done / shipped).mkdir(parents=True)
+        (done / shipped / "mod_info.json").write_text('{"id":"m"}', encoding="utf-8")
+        (done / "original").mkdir()
+        (done / "original" / "mod_info.json").write_text('{"id":"m-original"}', encoding="utf-8")  # never the shipped folder
+        (done / "workspace").mkdir()
+        (done / "workspace" / "REVIVAL_REPORT.md").write_text("LIVE_VALIDATED\n", encoding="utf-8")
+        (done / "workspace" / "REVIVAL_PLAN.md").write_text("plan\n", encoding="utf-8")
+        return done
+
+    def test_restore_finds_a_shipped_folder_named_otherwise(self) -> None:
+        # 96.10: Station Augments ships "Station Augments" in Done/Station.Augments-2.4.3+bf.1.
+        with resolved_temp_dir() as root:
+            done = self._archive(root, shipped="Mod Folder")
+            result = restore_from_done(done, root / "In operation")
+            info = (root / "In operation" / "Mod" / "working" / "mod_info.json").read_text(encoding="utf-8")
+        self.assertEqual((result["shipped_folder"], info), ("Mod Folder", '{"id":"m"}'))
+
+    def test_restore_refuses_an_archive_with_two_mod_folders(self) -> None:
+        with resolved_temp_dir() as root:
+            done = self._archive(root, shipped="A")
+            (done / "B").mkdir()
+            (done / "B" / "mod_info.json").write_text("{}", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "2 folders with a mod_info.json"):
+                restore_from_done(done, root / "In operation")
+
+    def test_restore_keeps_an_existing_workspace_unless_for_retarget(self) -> None:
+        with resolved_temp_dir() as root:
+            done = self._archive(root)
+            old = root / "In operation" / "Mod" / "working"
+            old.mkdir(parents=True)
+            (old / "september.txt").write_text("old work", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "already exists"):
+                restore_from_done(done, root / "In operation")
+            self.assertTrue((old / "september.txt").is_file())  # the refusal touched nothing
+            result = restore_from_done(done, root / "In operation", for_retarget=True, day="2026-11-19")
+            moved = root / "In operation" / "_stale-2026-11-19" / "Mod" / "working" / "september.txt"
+            reports = root / "In operation" / "Mod" / "working" / "reports"
+            names = sorted(p.name for p in reports.iterdir())
+            self.assertTrue(moved.is_file())
+            self.assertEqual(Path(result["moved_aside"]), moved.parents[1])
+            # The archived report says LIVE_VALIDATED for the previous build: kept under another name, so revive drafts anew
+            self.assertEqual(names, ["REVIVAL_PLAN.previous-build.md", "REVIVAL_REPORT.previous-build.md"])
+            # A second re-port the same day keeps the first stale copy too
+            again = restore_from_done(done, root / "In operation", for_retarget=True, day="2026-11-19")
+            self.assertTrue(again["moved_aside"].endswith("Mod-2"))
+            self.assertTrue(moved.is_file())
+
     def test_review_flags_a_misplaced_guard_and_a_jar_source_edit(self) -> None:
         with resolved_temp_dir() as root:
             ws = root / "Mod"

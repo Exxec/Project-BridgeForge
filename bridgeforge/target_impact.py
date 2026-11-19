@@ -276,14 +276,17 @@ def _workspace_for(folder: Path) -> tuple[list[str], Path]:
     folder = Path(folder)
     if folder.name == "working":
         return [], folder
-    if folder.parent.name == folder.name and folder.parent.parent.name == "Done":
-        # The queue beside this Done/, named explicitly: restore-from-done's default is the package's own queue (review 2026-11-17).
+    if folder.parent.parent.name == "Done":
+        # Any shipped folder of a Done/<Archive>, also one named otherwise ("Station Augments" in Station.Augments-2.4.3+bf.1;
+        # 96.10): never acted on in place. The queue beside this Done/ is named explicitly: restore-from-done's default is the
+        # package's own queue (review 2026-11-17). The workspace takes the archive's name.
         queue = folder.parent.parent.parent / "In operation"
-        working = queue / folder.name / "working"
+        working = queue / folder.parent.name / "working"
         if working.is_dir():  # `archive` copies, so the workspace the archive came from may still be in the queue
             return [f"the queue already holds {working.parent}: the steps below fix it (if it changed since this archive, "
-                    "`done-audit` shows the archive STALE)"], working
-        return [f'bridgeforge restore-from-done "{folder.parent}" --queue "{queue}"'], working
+                    "`done-audit` shows the archive STALE; to start from the archive instead, add --for-retarget to "
+                    "restore-from-done, which moves that workspace aside)"], working
+        return [f'bridgeforge restore-from-done "{folder.parent}" --queue "{queue}" --for-retarget'], working
     return [], folder
 
 

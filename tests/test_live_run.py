@@ -19,7 +19,7 @@ class FakeGame:
 
     def __init__(self, log: Path, rounds: int = 1, stall_at: str | None = None, lost_starts: tuple[int, ...] = (),
                  late_redefinition: bool = False, dies_at_deploy: int | None = None, dies_in_battle: bool = False,
-                 saves_after_end: bool = False) -> None:
+                 saves_after_end: bool = False, menu_after_exits: int | None = None) -> None:
         self.log, self.rounds, self.stall_at = log, rounds, stall_at
         self.dies_at_deploy, self.dies_in_battle, self.alive = dies_at_deploy, dies_in_battle, True
         self.lost_starts, self.late_redefinition = set(lost_starts), late_redefinition
@@ -31,6 +31,9 @@ class FakeGame:
         # Game flow's own pause after Start Game is shorter than the save); keys and clicks sent before that are lost to the save,
         # as in P962BS4 and P962YC2 (93.59). "never": the save never reports.
         self.saves_after_end, self.saving, self.save_pauses, self.lost_to_save = saves_after_end, False, 0, []
+        # menu_after_exits (96.9): the fake has a readable screen, and the main menu shows after that many Exit-OK clicks (the
+        # earlier ones are lost, as in a stall); a large number means it never shows.
+        self.menu_after_exits, self.exit_oks, self.menu = menu_after_exits, 0, False
         self.log.write_text("1 [main] INFO  Reading save data from [x]\n", encoding="utf-8")
 
     def _append(self, text: str) -> None:
@@ -57,6 +60,12 @@ class FakeGame:
         self.actions.append(("click", fx, fy))
         if self.saving:
             self.lost_to_save.append(("click", fx, fy))
+        if self.menu_after_exits is not None:
+            if (fx, fy) == live_run.GAME_MENU_EXIT_OK:
+                self.exit_oks += 1
+                self.menu = self.exit_oks >= self.menu_after_exits
+            elif self.menu:
+                self.menu = False  # Missions clicked: the menu gives way to the mission list
         if (fx, fy) == live_run.START_GAME and self.stall_at != "new-game":
             self._append("BF-PROBE|0.2.23|probe|INFO|campaign|END")
             self.saving, self.save_pauses = bool(self.saves_after_end), 2
@@ -107,9 +116,14 @@ class FakeGame:
         self.captures.append(path)
         return True
 
+    def menu_buttons(self, _hands) -> list[tuple[float, float]]:
+        """The main menu's nine buttons while it shows, none on any other screen (stands in for live_run._menu_buttons)."""
+        return [(0.72, 0.30 + 0.05 * i) for i in range(9)] if self.menu else []
+
     def hands(self) -> live_run.Hands:
+        geometry = (lambda: (0, 0, 0, 1920, 1440)) if self.menu_after_exits is not None else None
         return live_run.Hands(click=self.click, key=self.key, scroll=self.scroll, sleep=self.sleep, capture=self.capture,
-                              alive=lambda: self.alive, front=self.front)
+                              alive=lambda: self.alive, front=self.front, geometry=geometry)
 
 
 class DriveTests(unittest.TestCase):
@@ -252,6 +266,47 @@ class DriveTests(unittest.TestCase):
                                    ('{"save_after_checks": "true"}', False), ("not json", False), ("[]", False)):
                 config.write_text(text, encoding="utf-8")
                 self.assertIs(live_run.probe_saves_after_checks(rig), expected, text)
+
+    def _drive_screen(self, menu_after_exits: int):
+        from unittest import mock
+
+        with resolved_temp_dir() as base:
+            log = base / "run.stdout.log"
+            game = FakeGame(log, menu_after_exits=menu_after_exits)
+            with mock.patch.object(live_run, "_menu_buttons", game.menu_buttons):
+                result = live_run.drive(log, game.hands(), menu_timeout=0.2, campaign_timeout=0.2, combat_timeout=0.2,
+                                        generic_fallback=False)
+            actions_file = Path(f"{log}.actions.json")
+            saved = json.loads(actions_file.read_text(encoding="utf-8")) if actions_file.is_file() else None
+        return result, game, saved
+
+    def test_a_lost_exit_is_seen_on_screen_and_sent_again(self) -> None:
+        # 96.9: after 93.59's stalls the harness clicked Missions blind on the campaign map.
+        result, game, _ = self._drive_screen(menu_after_exits=2)
+        self.assertEqual(result.verdict, "LIVE_DONE", result)
+        self.assertEqual(game.exit_oks, 2)
+        self.assertEqual([p.name for p in game.captures], ["run.stdout.log.leave-campaign.png"])
+
+    def test_a_menu_that_never_shows_is_stuck_at_leave_campaign_with_its_actions(self) -> None:
+        result, game, saved = self._drive_screen(menu_after_exits=99)
+        self.assertEqual((result.verdict, result.stage), ("LIVE_STUCK", "leave-campaign"))
+        self.assertEqual(game.exit_oks, 2)  # one retry, then nothing more is clicked
+        self.assertNotIn(("click", *live_run.PLAY_MISSION), game.actions)
+        self.assertEqual(saved, result.actions)
+        escapes = [a for a in result.actions if a["action"] == "key 0x1B"]
+        self.assertEqual(len(escapes), 2)
+        self.assertTrue(all(isinstance(a["log_bytes"], int) and a["log_bytes"] > 0 for a in escapes))
+
+    def test_a_menu_on_the_first_exit_needs_no_retry(self) -> None:
+        result, game, _ = self._drive_screen(menu_after_exits=1)
+        self.assertEqual(result.verdict, "LIVE_DONE", result)
+        self.assertEqual((game.exit_oks, game.captures), (1, []))
+
+    def test_every_action_is_recorded_against_the_log(self) -> None:
+        result, game = self._drive()
+        self.assertEqual(len(result.actions), len(game.actions) - sum(1 for a in game.actions if a[0] == "logged"))
+        sizes = [a["log_bytes"] for a in result.actions]
+        self.assertEqual(sizes, sorted(sizes))  # the log only grows while the run acts
 
     def test_game_that_never_reaches_the_menu_is_stuck_at_the_menu(self) -> None:
         with resolved_temp_dir() as base:

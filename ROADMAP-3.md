@@ -748,6 +748,19 @@ unproven).
   - Record each key and click with the game log's length at that moment. A stall report then reads, for example, "Escape at log
     offset X, 1.0 s after `campaign END`, while 'Saving to' had no 'Saving stage 8'". Today that took a manual log comparison.
   Priority: now, stacked on 93.59 (the remaining 96.2 live runs).
+  **Done 2026-11-19.**
+  - `live_run.to_mission_list` leaves the campaign, then reads the screen up to six times, a second apart, for the main menu's
+    Missions button. If none is found it takes a screenshot (`<log>.leave-campaign.png`) and sends Escape, Exit and OK once
+    more. If the menu is still not there, the run stops LIVE_STUCK at `leave-campaign` and nothing more is clicked. When the
+    screen cannot be read the clicks are blind as before.
+  - `drive` wraps the hands in `live_run.recording`. Every key, click and scroll goes to `LiveResult.actions` as
+    `{t, action, log_bytes}`, and a stuck run writes them to `<log>.actions.json`.
+  - Tests: `tests/test_live_run.py`, whose `FakeGame` gains a readable screen whose menu shows after N Exit-OK clicks:
+    - a lost first exit is seen, photographed and sent again;
+    - a menu that never shows stops at `leave-campaign` after one retry, with its actions saved;
+    - a first exit that works needs no retry;
+    - every action is recorded against a growing log.
+    Removing the retry, or the recording, fails two tests each (mutation-checked).
 - 96.10 (S) **`restore-from-done` for a re-port.** Porting Vayra's Sector to RC7 took three manual steps:
   - a September workspace of the same name made the restore refuse ("already exists"). It was moved to
     `In operation/_stale-2026-11-19/` by hand;
@@ -756,6 +769,18 @@ unproven).
   - Station Augments cannot be restored at all: its shipped folder is "Station Augments", not the archive's name.
   `restore-from-done --for-retarget` should move a stale workspace aside (never delete; DOC-001), keep the old report as the
   previous build's, and find the shipped folder from the archive's own record. Priority: now (Station Augments is a 96.2 port).
+  **Done 2026-11-19.**
+  - `restore_from_done` finds the shipped folder: `Done/<X>/<X>`, or else the archive's one other folder with a
+    `mod_info.json` (`original/` and `workspace/` excluded). Two candidates are refused by name.
+  - `--for-retarget` moves an existing workspace to `<queue>/_stale-<date>/` (a free name; never deleted), and keeps the
+    restored REVIVAL_REPORT and REVIVAL_PLAN as `*.previous-build.md`.
+  - `target_impact._workspace_for` treats any shipped folder of a `Done/<Archive>` as an archive, so "Station Augments" is
+    restored, not acted on in place. Its restore step carries `--for-retarget`.
+  - Tests:
+    - `tests/test_workspace_tools.py`: a shipped folder named otherwise; two mod folders refused; an existing workspace kept
+      without the flag and moved aside with it; reports renamed; a second re-port the same day keeps both stale copies;
+    - `tests/test_target_impact.py`: the Station Augments layout gets a restore step.
+  - Mutation-checked: without the rename, or with `original/` counted as a mod folder, a test fails.
 - 96.11 (M) **Revive applies the build-change fixes it is approved for.** `jar-call-signature-changed` is found by
   `target-impact`'s API diff, not by the scan, so `revive --approve jar-call-signature-changed` changed nothing for Vayra's
   Sector, and the fixer had to run as `bridgeforge fix ... --finding jar-call-signature-changed --apply` (as for Kadur
