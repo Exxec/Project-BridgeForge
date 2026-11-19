@@ -1,0 +1,1 @@
+- `probe-group live --save-reload --direct` works: the reload's second start is direct too (ROADMAP-3 95.4).
