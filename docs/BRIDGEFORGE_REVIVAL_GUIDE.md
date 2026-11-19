@@ -514,10 +514,10 @@ python -m bridgeforge probe-group record G1-LIVE-<date> --rig $rig --accept --no
 - **Libraries** a mod declares must be in the rig's `mods/` (UAF's AshLib was copied in by hand; ROADMAP-3 93.5 is open).
 - **smoke** and **live** need the logged-on user's desktop: a game started from an SSH session never shows (93.7). On
   Test1, run them as one-off interactive scheduled tasks and delete each task after its run (a `/SC ONCE /ST 23:59` task
-  fires again at 23:59). The harness still clicks the launcher, and its click positions were measured in a 1920x1440
-  window, larger than Test1's 1920x1080 desktop (93.21, 93.22). The 2026-11-17 runs on Test1 therefore started the game
-  directly through local wrapper scripts (`bridgeforge-state/live-wrappers/`, not in the repository) until ROADMAP-3 95.4
-  builds that in.
+  fires again at 23:59). The harness's click positions were measured in a 1920x1440 window, larger than Test1's 1920x1080
+  desktop (93.21, 93.22). So on Test1, start the game directly and move its window up (ROADMAP-3 95.4, which replaced the
+  local wrapper scripts on 2026-11-19): `probe-group live TESTID --direct --client-top -200 --bat run-j25-frpp.bat`.
+  `smoke` and `live-queue` take the same options.
 - **live** pins the launcher resolution and `canSkipTutorial` for the run and puts the owner's values back after it (93.28).
 - **report** reads the rig's current probe config, so report a group before the next `install` (93.29).
 - **record** reads `<rig>/logs/<TESTID>.stdout.log` and refuses a run that is not bound to its staged inputs (the run

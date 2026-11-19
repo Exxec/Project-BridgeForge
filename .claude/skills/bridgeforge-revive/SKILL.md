@@ -62,8 +62,9 @@ reads READY_FOR_LIVE_TEST; `probe-group plan` requires both.
   `probe-group install N --plan <plan> --rig ...`.
 - **Libraries the mod declares** must be in the rig's `mods/`; AshLib was copied by hand for UAF. Run
   `rig-doctor` before a run: its `launcher_prefs` check fails when no licence key is stored.
-- **Smoke, then live**, as one-off interactive scheduled tasks (`test1-run`). Until 95.4 lands, use the wrappers in
-  `bridgeforge-state/live-wrappers/`. Leave Test1's mouse alone during a live run.
+- **Smoke, then live**, as one-off interactive scheduled tasks (`test1-run`). On Test1 start the game directly (95.4):
+  `probe-group live TESTID --direct --client-top -200 --bat run-j25-frpp.bat` (smoke and `live-queue` take the same options).
+  Leave Test1's mouse alone during a live run.
 - **`probe-group report <log> --rig ...` before the next install.** The report reads the rig's current probe config (93.29).
 - **Harmless report lines** (orphan CSV rows, conditional content): record the owner's ruling per id in
   `working/reports/probe_accepted.json` as `{"check", "subject": "<kind>:<id>", "reason"}`.

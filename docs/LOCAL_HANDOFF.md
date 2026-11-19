@@ -57,7 +57,8 @@ prints `target_core_reports`, the build the core itself reports (ROADMAP-3 92.40
 over SSH never shows. Delete each task after its run, because a `/SC ONCE /ST 23:59` task fires again at 23:59 (93.7). The
 2026-11-17 runs started the game directly through local wrappers in `bridgeforge-state/live-wrappers/` (a 1920x1440 window
 moved up): the harness still clicks the launcher (93.21), and its click positions need a 1920x1440 window, larger than
-Test1's 1920x1080 desktop (93.22). 95.4 builds this into `probe-group smoke|live`. Leave the mouse alone during a run, report
+Test1's 1920x1080 desktop (93.22). 95.4 built this into `probe-group smoke|live|live-queue --direct` and retired the
+wrappers on 2026-11-19 (P954-DIRECT-0985a-20261119, LIVE_DONE). Leave the mouse alone during a run, report
 each group before the next `install` (93.29), and record or archive only on the owner's word. Records written on 2026-11-17
 before 96.5 A1 say "RC8" for runs on the RC7 rig. A1 fixed the code that day; by the owner's rule, the older records stay as
 they are.
