@@ -1,0 +1,1 @@
+- `target-impact --jobs N` checks mods in worker processes (default up to 4) with the same result and a resumable checkpoint (96.5 P10).

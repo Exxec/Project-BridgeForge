@@ -278,6 +278,17 @@ Check S series implementation plan and if applicable add remaining items to road
       portfolio flag, the error type for an unknown AST line, thin tests) are taken.
     - P9 (M): memoize the AST helper in tests (an estimated 2-3 of 11 minutes).
     - P10 (M): a process pool for target-impact and corpus-index (5 -> about 1.5 min).
+      **target-impact part done 2026-11-19.** Each mod's check (`mod_impact`) is independent and read-only, so `--jobs N`
+      (default up to 4, one CPU left free; 1 keeps the in-process loop) checks mods in worker processes. The main process
+      keeps the checkpoint, so an interrupted run still resumes; records stay in the mods' order and the JSON and markdown
+      are unchanged. Progress lines now come in the order mods finish, numbered by mods finished, resumed ones first.
+      Measured on White_Legion, RC8 -> RC7 over the owner's RC8 `mods` folder (191 mods, read-only): 68 s with one worker
+      and 22 s with four once the files were cached (252 s for the first, cold run), and the two JSON results identical
+      (12 BREAKS, 5 RELINK, 5 REVIEW, 169 CLEAN). On 8 mods the gain is small (6-8 s -> 5 s): each worker parses both cores
+      once. corpus-index is not done: its indexers write to SQLite as they read, so a pool needs them split into read and
+      write first.
+      Tests: `tests/test_target_impact.py` (two workers give the same result, in the same order, with one progress line per
+      mod; `--jobs 0` refused; the resume test reads the new numbering).
   - **CI and tooling:**
     - C3 (S): stop duplicate push and pull_request runs. 101 of 191 SHAs ran twice, and nine PRs queued for hours on
       2026-11-17. Docs-only PRs run only the doc-reading tests.
