@@ -1,0 +1,1 @@
+- The Java AST helper's results are kept per process (keyed by the sources' bytes), so repeated scans of the same sources skip the JVM; the suite's AST time fell from 122 s to 70 s (96.5 P9).
