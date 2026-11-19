@@ -878,6 +878,31 @@ unproven).
 - 95.4 (M) **A live harness without wrappers.** Direct start (93.21), first-run preferences pre-flight and pins (93.28), the
   report's own run config (93.29), mission-list reading (93.37) and the run's own save (93.38) in `probe-group smoke|live|record`,
   so `bridgeforge-state/live-wrappers/` can retire.
+  **Direct start done 2026-11-19; live confirmation on Test1 pending.** The pins (93.28), the report's run config (93.29), the
+  mission list (93.37) and the run's save (93.38) were already in BridgeForge. The wrappers' remaining job was the direct start,
+  done by patching BridgeForge at run time. It is built in now:
+  - `bridgeforge/live/direct_start.py`. `DirectStart(resolution, client_top)` gives:
+    - the game's JAVA_TOOL_OPTIONS (`-DlaunchDirect=true -DstartRes=WxH -DstartFS=false -DstartSound=true`), added to any
+      already set;
+    - the launcher resolution pin for the run;
+    - `place_window`, which moves the game window so its client area starts at screen y `client_top` (Windows), in place
+      of the launcher click.
+  - `launch.start_game(..., env=)` gives the options to the game process alone; the wrapper set them process-wide.
+  - `running_game`/`live_run`, `run_boot_test` and `smoke_group` take `direct=`. `live_queue` passes it to every group's run.
+  - CLI: `probe-group live|smoke|live-queue --direct [--resolution WxH] [--client-top Y]`. `--resolution` and `--client-top`
+    without `--direct` are refused, and so is `live --save-reload --direct` (the reload's second start still goes through
+    the launcher).
+  - Test1's runs become, for example: `probe-group live TESTID --direct --client-top -200 --bat run-j25-frpp.bat`.
+  - Tests: `tests/test_direct_start.py`:
+    - options, environment (the caller's not changed) and pins;
+    - malformed resolutions refused;
+    - `start_game` passes the environment;
+    - CLI validation;
+    - `running_game` with `direct` places the window and never clicks the launcher; without it, it clicks as before.
+
+    Mutation-checked: always clicking the launcher, or dropping `env` from `start_game`, fails the tests.
+  - Left: one Test1 run without the wrappers to confirm, then delete `live-wrappers/live_direct.py` and `smoke_direct.py`
+    (`setup_frpp.py` writes the Fast Rendering + Prepatcher bat, 93.42); `--save-reload` with `--direct`.
 - 95.5 (M) **Run-manifest hash reuse (93.27).** About 5 minutes per live run on Test1.
   **Done 2026-11-19.** `file_hash.cached_hashes(cache_file)` opens a hash cache keyed by resolved path, size and modification
   time (ns); inside it `sha256_many` takes unchanged files from the cache and hashes the rest in 8 threads, and the cache is

@@ -1,0 +1,1 @@
+- `probe-group live|smoke|live-queue --direct [--resolution WxH] [--client-top Y]` start the game without its launcher and place its window, which the `live-wrappers` scripts used to patch in at run time (ROADMAP-3 95.4).

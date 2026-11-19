@@ -55,9 +55,10 @@ def command_line(bat: Path, log: Path, err: Path) -> str:
     return f'cmd.exe /c ""{bat}" > "{log}" 2> "{err}""'
 
 
-def start_game(rig: Path, bat: Path, log: Path, err: Path):
-    """Start the rig's launcher bat with its output in `log` / `err`. The only place the game process is created."""
-    return subprocess.Popen(command_line(bat, log, err), cwd=str(rig))
+def start_game(rig: Path, bat: Path, log: Path, err: Path, env: dict[str, str] | None = None):
+    """Start the rig's launcher bat with its output in `log` / `err`. The only place the game process is created. `env`, when
+    given, is the game process's whole environment (a direct start adds its JAVA_TOOL_OPTIONS there, 95.4)."""
+    return subprocess.Popen(command_line(bat, log, err), cwd=str(rig), env=env)
 
 
 def prepare_manifest(rig: Path, test_id: str, kind: str, *, targets: list[str], expected: list[str], scenario: str, bat: Path) -> dict:

@@ -125,7 +125,7 @@ def _result(status: str, reason: str | None, log: Path | None = None, errlog: Pa
     }
 
 
-def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_name: str | None = None, keep_mods: bool = False, bat_name: str | None = None, auto_click: bool = False, bind: bool = False, natural_exit: bool = False) -> dict:
+def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_name: str | None = None, keep_mods: bool = False, bat_name: str | None = None, auto_click: bool = False, bind: bool = False, natural_exit: bool = False, direct=None) -> dict:
     """Launch an isolated Starsector runtime rig headlessly and watch its log for a boot milestone.
 
     NEVER call this against a real/shared install: runtime_dir must be a disposable rig whose
@@ -208,11 +208,14 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
         # An unattended boot goes through the launcher: pin its resolution and give the owner's own back afterwards (rig_prefs).
         from bridgeforge.rig.rig_prefs import pinned_launcher_prefs
 
-        prefs = pinned_launcher_prefs()
+        from bridgeforge.rig.rig_prefs import PINNED
+
+        # 95.4: a direct start pins its own resolution; the launcher is skipped and the window placed instead of clicked.
+        prefs = pinned_launcher_prefs(direct.pinned_prefs(PINNED) if direct is not None else None)
         prefs.__enter__()
     started = time.monotonic()
     try:
-        process = launch.start_game(runtime_dir, bat_path, log_path, err_path)
+        process = launch.start_game(runtime_dir, bat_path, log_path, err_path, env=direct.env() if direct is not None else None)
     except OSError as exc:
         if bind:
             launch.release_manifest(runtime_dir, name, bat_path)
@@ -233,7 +236,12 @@ def run_boot_test(runtime_dir: Path, mods: list[str], timeout: int = 240, log_na
             if auto_click and click_note is None and elapsed >= next_click_try:
                 # The launcher window waits for a click (owner, 2026-10-11); see launcher_click.
                 next_click_try = elapsed + 3.0
-                click_note = launch.click_launcher(runtime_dir, process)
+                if direct is not None:
+                    from bridgeforge.live.direct_start import place_window
+
+                    click_note = place_window(runtime_dir, process, direct.client_top)
+                else:
+                    click_note = launch.click_launcher(runtime_dir, process)
             marker_found = False
             if log_path.is_file():
                 try:
