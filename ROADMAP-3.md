@@ -1015,7 +1015,8 @@ unproven).
 **Review and decisions D1-D4 (2026-11-17):** FEATURE_GENOME_ROADMAP.md section 14. G1 starts after item 96 (D1),
 no GUI or multi-game platform (D2), sister conformance tests when their phase starts (D3), BridgeForge stays Salvor's
 save-diagnosis provider (D4); work packages WP0-WP7 in the order recorded there.
-**Approved strategy addition (GD-1); not implemented.** Design, decisions, estimate and sister entries:
+**Approved strategy addition (GD-1); in progress since 2026-11-19** (owner: "then begin G series after that"; G1's WP1-WP4
+done, below). Design, decisions, estimate and sister entries:
 [docs/FEATURE_GENOME_ROADMAP.md](docs/FEATURE_GENOME_ROADMAP.md). Ids: phases 94.G1-94.G7, decisions GD-1-GD-5,
 refinements GR-1-GR-6 (approved 2026-11-17: one pinned gene.json contract with conformance tests, a gene census before G2,
 history as the closure benchmark, a cross-repository trace check, an early Java probe spike, one licence ledger per mod). Commits and pull requests implementing a phase name its id in the subject. Estimate (section 13):
@@ -1092,11 +1093,61 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - the real section 12 has six linked rows (listed in `tests/doc_tests.json`).
 
     Mutation-checked: dropping the id's trailing boundary, or the pin comparison, fails a test.
-  Next: WP4 (GR-6 licence ledger), then WP5 (evidence-header design) and WP6 (duplication audit).
+  **WP4 Done 2026-11-19** (GR-6: one licence ledger per mod, read in one place).
+  - `bridgeforge/licence_ledger.py` answers what a mod's licence allows. `release_policy.json` and its fragments stay the
+    only record, and `release.py` keeps the file format and its writers. Every other reader asks the ledger: `vendor-copy`,
+    `vendor-plan`'s copy, dependency-substitutes, `revival_licence` (and through it `gene describe` and the archive note),
+    case qualification and `release-policy show`.
+  - `licence_allows(mod, use, paths=, target=)` covers three uses:
+    - `local`: always allowed (GD-2);
+    - `vendor`: a local-only source, or a local-only path of a releasable one, goes only into a local-only target, which
+      must then stay local-only;
+    - `distribute`: needs an explicit RELEASABLE decision and no local-only path among those given.
+  - Path exceptions: a mod's entry may list `paths` (`prefix`, `local_only`, `reason`) for another author's sprites or a
+    bundled library. A prefix is relative to the mod root, in posix form, and matches whole segments (`graphics/foo` is not
+    `graphics/foobar`). A member matches by its file: `jars/x.jar!a/B.class` by the jar, a CSV row by its table. The
+    policy load refuses `..`, absolute paths, drive letters and backslashes.
+  - New: `release-policy path MOD PREFIX --reason R` (or `--remove`). It needs a recorded decision and keeps it. A new
+    decision, and the standing licence that `archive` applies, keep the exceptions: a fragment replaces the whole entry, so
+    `paths` is carried over.
+  - Both copy paths pass the paths they copy. `vendor-copy` refuses a script under a local-only path of a releasable mod.
+  - `revival_licence`'s answer is unchanged, so `gene describe` writes the same manifest. Schema 2 (PR B) takes the
+    ledger's path verdicts into `gene.json`.
+  - An independent review the same day found a real bug and four gaps, all fixed here:
+    - A prefix that could never match (`./graphics/x`, `graphics//x`, surrounding spaces, `.`) was stored and protected
+      nothing. It is now refused, and matching ignores case, since mods ship for Windows.
+    - vendor-plan names a jar member by the jar's file name only (`x.jar!a/B.class`). An exception on any jar of that name
+      now covers it, so it errs towards protecting too much.
+    - A file name containing `!` or ` [` is no longer cut short. Only `<file>.jar!...` and `<file>.csv [id]` are member
+      forms.
+    - A fragment written by a checkout older than WP4 has no `paths` key. It now keeps the exceptions already recorded,
+      and removing the last exception leaves `paths: []`.
+    - Two mods whose keys differ only in punctuation (`a b`, `a_b`) shared one fragment file, a fault older than WP4.
+      The second now gets a hashed name.
+  - **Not covered yet:** the release gate does not look at path exceptions. `release` still packages a releasable mod
+    with its local-only paths; only the copy paths and `distribute` refuse them. Wiring `distribute` into the release gate
+    goes with the owner question below.
+  - **Open owner question:** an UNRECORDED mod gets two answers. The release gate falls back to the policy's `default`
+    (local_only false), so it passes. The new `distribute` use refuses it, as GD-2 reads. The release gate is unchanged
+    here; changing it is the owner's call.
+  - Tests: `tests/test_licence_ledger.py` (14; `ReviewTests` covers the review's points, each mutation-checked):
+    - an exception survives a new decision and the standing licence;
+    - whole-segment matching for files, jar classes and CSV rows;
+    - prefixes that leave the mod are refused;
+    - the three uses, and a local-only path vendored only into a local-only target;
+    - `vendor-copy` refuses a script under a local-only path;
+    - `revival_licence` is unchanged;
+    - the CLI;
+    - an AST check that no module other than `release.py` and the ledger imports the policy internals.
+
+    Mutation-checked: dropping the carry-over, matching by plain prefix, or `vendor-copy`'s path check each fails a test.
+  Next: schema 2 of `gene.json` before any sister pins it (advisor review 2026-11-19), then WP5 (evidence header) and WP6
+  (duplication audit).
 - 94.G2 **Sequencing and proof**: closure for campaign features and registration slicing; subtraction and isolation proofs per
   gene. Project Go exports a gene's strings as one unit.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
-  from vanished authors (GD-3).
+  from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
+  repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
 - 94.G4 **Adaptation**: target-impact, gated fixers and `src-to-jar` at gene scope; Project Go carries translations; SpriteForge
   validates sprites and slots.
 - 94.G5 **Insertion**: carrier mod first, then integration on workspace copies (GD-5); collision checks; XStream aliases

@@ -52,7 +52,37 @@ def _load_policy(policy_path: Path | None) -> dict[str, object]:
     for entry in [default, *mods.values()]:
         if not isinstance(entry, dict) or not isinstance(entry.get("local_only", False), bool):
             raise ReleaseError("Release policy entries must be objects with boolean local_only")
+    for key, entry in mods.items():
+        problem = _paths_problem(entry.get("paths"))
+        if problem:
+            raise ReleaseError(f"Release policy entry {key!r}: {problem}")
     return policy
+
+
+def _prefix_problem(prefix: object) -> str | None:
+    """Why `prefix` is not a path relative to a mod root in posix form, or None (94.G1 WP4)."""
+    if not isinstance(prefix, str) or not prefix.strip("/"):
+        return "a path prefix is a non-empty string"
+    if "\\" in prefix or prefix.startswith("/") or ":" in prefix or ".." in prefix.split("/"):
+        return f"path prefix {prefix!r} must be relative to the mod root, in posix form, without '..'"
+    # Refused rather than normalized: a stored prefix that can never match would protect nothing (review 2026-11-19).
+    if prefix != prefix.strip() or any(segment in ("", ".") for segment in prefix.rstrip("/").split("/")):
+        return f"path prefix {prefix!r} has surrounding spaces, an empty segment or a '.' segment; write it as a/b/c"
+    return None
+
+
+def _paths_problem(paths: object) -> str | None:
+    if paths is None:
+        return None
+    if not isinstance(paths, list):
+        return "paths is a list"
+    for item in paths:
+        if not isinstance(item, dict) or not isinstance(item.get("local_only"), bool) or not str(item.get("reason") or "").strip():
+            return "each path exception is an object with prefix, boolean local_only and a reason"
+        problem = _prefix_problem(item.get("prefix"))
+        if problem:
+            return problem
+    return None
 
 
 # Decisions are fragments (ROADMAP-3 96.5 A7): Test1's `archive` and White_Legion's sessions both wrote release_policy.json, so
@@ -60,7 +90,7 @@ def _load_policy(policy_path: Path | None) -> dict[str, object]:
 # machines deciding about different mods never touch the same file. `_load_policy` lays them over the file;
 # `release-notes assemble` folds them in.
 POLICY_FRAGMENT_DIR = "release_policy.d"
-_DECISION_KEYS = ("local_only", "reason", "recorded_on")
+_DECISION_KEYS = ("local_only", "reason", "recorded_on", "paths")
 
 
 def policy_fragments(policy_path: Path | None = None) -> list[Path]:
@@ -81,7 +111,21 @@ def _overlay_policy_fragments(policy: dict, path: Path) -> None:
             raise ReleaseError(f"Cannot read release decision {fragment}: {exc}") from exc
         if not isinstance(data, dict) or not str(data.get("mod") or "").strip():
             raise ReleaseError(f"Release decision {fragment} must be an object naming its mod")
-        mods[_matching_key(mods, str(data["mod"]))] = {key: data[key] for key in _DECISION_KEYS if key in data}
+        key = _matching_key(mods, str(data["mod"]))
+        entry = {name: data[name] for name in _DECISION_KEYS if name in data}
+        if "paths" not in data and (mods.get(key) or {}).get("paths"):
+            entry["paths"] = mods[key]["paths"]  # written by a checkout older than WP4: it cannot have meant to drop them
+        mods[key] = entry
+
+
+def _fragment_mod(fragment: Path) -> str | None:
+    """The mod a fragment file records, lower-cased, or None when there is no such file."""
+    if not fragment.is_file():
+        return None
+    try:
+        return str(json.loads(fragment.read_text(encoding="utf-8")).get("mod") or "").lower()
+    except (ValueError, OSError, AttributeError):
+        return ""
 
 
 def assemble_policy(policy_path: Path | None = None, *, dry_run: bool = False) -> list[str]:
@@ -114,7 +158,7 @@ def _policy_for_mod(policy: dict[str, object], mod_id: str | None, mod_name: str
 
 
 def record_policy_decision(mod_id: str, *, local_only: bool, reason: str, on: str | None = None,
-                           policy_path: Path | None = None) -> dict[str, object]:
+                           policy_path: Path | None = None, paths: list[dict] | None = None) -> dict[str, object]:
     """Record one mod's publishing decision (read by the release gate and dependency-substitutes) as a fragment,
     release_policy.d/<mod>.json beside release_policy.json (96.5 A7). An existing entry, matched case-insensitively, keeps
     its key."""
@@ -130,13 +174,45 @@ def record_policy_decision(mod_id: str, *, local_only: bool, reason: str, on: st
     key = _matching_key(mods, mod_id)
     previous = mods.get(key)
     current = {"local_only": bool(local_only), "reason": reason.strip(), "recorded_on": on or date.today().isoformat()}
+    kept_paths = paths if paths is not None else (previous or {}).get("paths")
+    if kept_paths is not None:  # a new decision keeps the mod's path exceptions: the fragment replaces the whole entry (94.G1 WP4)
+        problem = _paths_problem(kept_paths)
+        if problem:
+            raise ReleaseError(problem)
+        current["paths"] = kept_paths
     name = re.sub(r"[^A-Za-z0-9._-]+", "_", key).strip("._") or "mod"
     fragment = path.parent / POLICY_FRAGMENT_DIR / f"{name}.json"
+    if _fragment_mod(fragment) not in (None, key.lower()):  # `a b` and `a_b` would share a_b.json (review 2026-11-19)
+        import hashlib
+
+        fragment = fragment.with_name(f"{name}-{hashlib.sha256(key.encode('utf-8')).hexdigest()[:8]}.json")
     # LF as the repository keeps it: a plain write_text gave Test1's copy CRLF (2026-11-17).
     from .safeio import atomic_write_text
 
     atomic_write_text(fragment, json.dumps({"mod": key, **current}, indent=2, ensure_ascii=False) + "\n", newline="")
     return {"mod": key, "previous": previous, "current": current, "file": str(fragment)}
+
+
+def record_path_exception(mod_id: str, prefix: str, *, reason: str | None = None, remove: bool = False,
+                          policy_path: Path | None = None) -> dict[str, object]:
+    """Mark `prefix` of a mod local-only (or remove that mark), keeping its recorded decision (94.G1 WP4). The mod needs a
+    recorded decision first: an exception refines a decision, it does not stand in for one."""
+    problem = _prefix_problem(prefix)
+    if problem:
+        raise ReleaseError(problem)
+    prefix = prefix.rstrip("/")
+    entry = policy_entry(_load_policy(policy_path), mod_id, mod_id)
+    if entry is None:
+        raise ReleaseError(f"{mod_id} has no recorded decision; record one with `release-policy set` before a path exception")
+    paths = [item for item in entry.get("paths") or [] if item["prefix"].rstrip("/").casefold() != prefix.casefold()]
+    if not remove:
+        if not reason or not reason.strip():
+            raise ReleaseError("a reason is required: record the evidence the exception rests on")
+        paths.append({"prefix": prefix, "local_only": True, "reason": reason.strip()})
+    elif len(paths) == len(entry.get("paths") or []):
+        raise ReleaseError(f"{mod_id} has no path exception {prefix!r}")
+    return record_policy_decision(mod_id, local_only=bool(entry.get("local_only")), reason=str(entry.get("reason") or ""),
+                                  on=entry.get("recorded_on"), policy_path=policy_path, paths=sorted(paths, key=lambda p: p["prefix"]))
 
 
 # The owner's standing reason for local-only revivals (owner decision 2026-09-27).
@@ -161,31 +237,6 @@ def _licence_gate(mod_id: str | None, mod_name: str | None, policy_path: Path | 
     entry = _policy_for_mod(policy, mod_id, mod_name)
     local_only = bool(entry.get("local_only"))
     return {"status": "FAIL" if local_only else "PASS", "local_only": local_only, "reason": entry.get("reason")}
-
-
-def vendoring_licence(source_id: str | None, source_name: str | None, target_root: Path, policy_path: Path | None) -> dict[str, object]:
-    """May content from `source` be copied into the mod at `target_root` (`vendor-copy`)?
-
-    A releasable source always may. A local-only source may go only into a target that is itself
-    local-only, so the content can never ship: RevenantLib holds content salvaged from mods whose
-    authors are gone, and is local-only itself (owner decision 2026-09-27). The target must then stay
-    local-only for as long as it holds that content, which `must_stay_local_only` records.
-    """
-    source = _licence_gate(source_id, source_name, policy_path)
-    if not source["local_only"]:
-        return {"allowed": True, "must_stay_local_only": False, "reason": None}
-    root = Path(target_root).expanduser().resolve()
-    info_path = root / "mod_info.json" if (root / "mod_info.json").is_file() else root / "working" / "mod_info.json"
-    info = _load_lenient_json_file(info_path) if info_path.is_file() else None
-    target_id = info.get("id") if isinstance(info, dict) else None
-    target_name = info.get("name") if isinstance(info, dict) else None
-    target = _licence_gate(target_id, target_name, policy_path)
-    label = source_name or source_id
-    if target["local_only"]:
-        return {"allowed": True, "must_stay_local_only": True,
-                "reason": f"{label} is local-only, and so is {target_name or target_id}; it must stay local-only while it holds this content"}
-    return {"allowed": False, "must_stay_local_only": False,
-            "reason": f"{label} is local-only per release_policy.json ({source.get('reason')}); it may only be vendored into a local-only target such as RevenantLib"}
 
 
 # ---------------------------------------------------------------------------

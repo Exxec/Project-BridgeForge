@@ -1,0 +1,1 @@
+- Licence ledger (ROADMAP-3 94.G1 WP4): `bridgeforge/licence_ledger.py` is the one reader of `release_policy.json`; `release-policy path MOD PREFIX --reason` marks part of a releasable mod local-only, and `vendor-copy` refuses such a path for a releasable target.

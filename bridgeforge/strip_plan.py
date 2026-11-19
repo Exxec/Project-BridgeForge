@@ -15,8 +15,8 @@ loses which id), or proposes a real vanilla substitute. This module does both:
   `shields_formshield` into Explorer Society). Scoped to hullmods only - a CSV row plus its
   declared script class is a single, well-defined unit to copy; a weapon/wing/hull involves sprite
   and balance data this command has no reliable way to locate or validate, so those kinds are
-  refused outright rather than copied incompletely. A licence gate (`release.vendoring_licence`, built on the gate
-  `release`/item 7 use) blocks vendoring from a local-only source unless the target is itself
+  refused outright rather than copied incompletely. A licence gate (`licence_ledger.vendoring`, built on the gate
+  `release`/item 7 use, and on path exceptions since 94.G1 WP4) blocks vendoring from a local-only source unless the target is itself
   local-only (RevenantLib, owner decision 2026-09-27). `--apply` is required
   to actually write; the default is a dry-run plan, matching `fold`'s own convention.
 
@@ -108,9 +108,9 @@ def vendor_copy(kind: str, ident: str, from_provider: Path, to_mod: Path, policy
     provider_info = _load_lenient_json_file(from_provider / "mod_info.json")
     provider_id = provider_info.get("id") if isinstance(provider_info, dict) else None
     provider_name = provider_info.get("name") if isinstance(provider_info, dict) else None
-    from .release import DEFAULT_POLICY_PATH, vendoring_licence
+    from .licence_ledger import vendoring
 
-    licence = vendoring_licence(provider_id, provider_name, to_mod, policy_path or DEFAULT_POLICY_PATH)
+    licence = vendoring(provider_id, provider_name, to_mod, policy_path)
     if not licence["allowed"]:
         return {"schema_version": SCHEMA_VERSION, "mode": "vendor-copy", "status": "REFUSED", "reason": licence["reason"]}
 
@@ -141,6 +141,11 @@ def vendor_copy(kind: str, ident: str, from_provider: Path, to_mod: Path, policy
         target_path = to_mod / relative
         conflict = target_path.is_file() and target_path.read_bytes() != source_path.read_bytes()
         copy_plan.append({"relative": relative, "source": str(source_path), "target": str(target_path), "conflict": conflict})
+    # The paths copied, checked against the source's local-only path exceptions too (94.G1 WP4).
+    licence = vendoring(provider_id, provider_name, to_mod, policy_path,
+                        ["data/hullmods/hull_mods.csv"] + [entry["relative"] for entry in copy_plan])
+    if not licence["allowed"]:
+        return {"schema_version": SCHEMA_VERSION, "mode": "vendor-copy", "status": "REFUSED", "reason": licence["reason"]}
     conflicts = [entry["relative"] for entry in copy_plan if entry["conflict"]]
     if conflicts:
         return {"schema_version": SCHEMA_VERSION, "mode": "vendor-copy", "status": "CONFLICT", "reason": f"{to_mod} already has different content at: {', '.join(conflicts)}"}

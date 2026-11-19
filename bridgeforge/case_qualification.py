@@ -16,7 +16,7 @@ from .case_store import CaseStore
 from .case_workspace import _physical
 from .compile_check import discover_loose_scripts
 from .log_triage import triage_log
-from .release import _load_policy, policy_entry
+from .licence_ledger import explicit_entry
 from .run_manifest import CONFIG_RELATIVE, evaluate_run, read_manifest
 from .live.live_trust import shipped_hash
 from .safeio import atomic_write_json
@@ -349,8 +349,7 @@ def qualify_case(store: CaseStore, case_id: str, candidate_id: str, *, run_compi
             dimensions['api'] = result('FAIL' if any(row['severity'] in {'critical', 'high'} for row in api_gaps) else ('INCOMPLETE' if api_gaps else 'PASS'), 'Fresh API/linkage scanner evidence', findings=api_gaps)
         dimensions['compile'] = _compile(observed, loose, run_compile, core, dimensions['dependencies'])
         policy_path = _binding(body, 'policy', 'release', 'file')
-        policy = _load_policy(policy_path) if policy_path else None
-        entry = policy_entry(policy, info.get('id'), info.get('name')) if policy else None
+        entry = explicit_entry(info.get('id'), info.get('name'), policy_path) if policy_path else None
         rights_ok = isinstance(entry, dict) and isinstance(entry.get('local_only'), bool) and isinstance(entry.get('reason'), str) and bool(entry['reason'].strip())
         dimensions['rights'] = result('PASS' if rights_ok else 'INCOMPLETE', 'Explicit local/restricted policy retained; no publication approval' if rights_ok else 'Explicit mod rights/local-only policy required', local_only=entry.get('local_only') if entry else None)
         dimensions['live'] = _live(body, view.working, info, live)
