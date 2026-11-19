@@ -4,8 +4,48 @@
   "withdrawn_versions": [
     1
   ],
+  "evidence_header": {
+    "name": "bridgeforge-gene-evidence",
+    "schema_version": 1,
+    "judged_against": "fixtures/valid-hullmod.json",
+    "fixtures": {
+      "invalid-absolute-input-path.json": {
+        "valid": false
+      },
+      "invalid-input-without-hash.json": {
+        "valid": false
+      },
+      "invalid-other-gene.json": {
+        "valid": false
+      },
+      "invalid-time-without-offset.json": {
+        "valid": false
+      },
+      "invalid-unknown-verdict.json": {
+        "valid": false
+      },
+      "invalid-withdrawn-gene-schema.json": {
+        "valid": false
+      },
+      "valid-producer-fields.json": {
+        "valid": true
+      },
+      "valid-subtraction-proof.json": {
+        "valid": true
+      }
+    }
+  },
   "identity_rule": "identity = SHA-256 (lowercase hex) of the UTF-8 text: the kind and a line feed, then one line per member sorted by (what, path): what, TAB, path, TAB, sha256, line feed. A text member's sha256 is of its normalized bytes (no UTF-8 BOM, LF line ends, no trailing spaces or tabs, no trailing blank lines); a csv-row's is of the JSON object of its named non-empty trimmed cells with sorted keys; a jar-class's and any other file's is of its bytes.",
   "files": {
+    "evidence-header.schema.json": "d66b647da854363a10b2a29da4d8a8fa4a0b81c25576fa9f5285983a42f3d855",
+    "evidence/invalid-absolute-input-path.json": "ca4afeb488a47ae6734e43ff60afe75cfbce80dd5f35dc2aa3463b6d64c32b64",
+    "evidence/invalid-input-without-hash.json": "0ad956a70bb752a83f0ea68b3e1250dc05c7e8d589005588c35629d8a614e7ee",
+    "evidence/invalid-other-gene.json": "776e75a605be67f3f7351520fbeecebdfa24305000d191472ef2ce052faaee0d",
+    "evidence/invalid-time-without-offset.json": "4c52bbcbd6138411b043d45ba81be3ea7baa2a84aa498364143f05dd5d93a9ac",
+    "evidence/invalid-unknown-verdict.json": "05602ef7ba540099818f5fc608613cd6bea95678d4425a3e8f04c3f8074186e2",
+    "evidence/invalid-withdrawn-gene-schema.json": "336fd8948202fb606537876233971e7faef844a4bf30110b226450315e756356",
+    "evidence/valid-producer-fields.json": "a92f463207df9485f1f95c7bef92d3dfb1dec25fdf12343fd5374bd1d0f9662a",
+    "evidence/valid-subtraction-proof.json": "f4acc892e965138455cdcc3a01494c4d60a8c02cdce425c1a3d810cfa5e5d076",
     "fixtures/invalid-anchor-of-other-kind.json": "1c326f931d41303a0f2f7bba67026c7f7f9030752006f8aea80699dacccdce0d",
     "fixtures/invalid-derived-from-short-identity.json": "3c4e2a3d10ce930288692b7d5ed160ec715a6c7bdf23de0e8fbce98410077e23",
     "fixtures/invalid-duplicate-member.json": "3e196a4dd73f78c98a2be5abdde783e50de1927dd5af4b5472ef91e70acb5775",

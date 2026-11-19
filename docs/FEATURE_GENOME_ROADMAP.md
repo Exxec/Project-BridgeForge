@@ -124,7 +124,8 @@ sounds, descriptions, codex entries, portraits. The hard part is **registration 
 several features, so the gene records the exact statements it needs and the tool refuses when they cannot be separated. Two
 proofs per gene: *subtraction* (donor minus gene: no dangling references, still boots) and *isolation* (gene plus its needs in
 an empty carrier: scans clean, boots).
-*Accept:* both proofs pass for the G-pilots; every SUSPECT resolved by a person or listed as an unknown.
+*Accept:* both proofs pass for the G-pilots; every SUSPECT resolved by a person or listed as an unknown; every proof file
+carries the evidence header (WP5) and passes `gene evidence check` against its gene.
 
 **G3. Gene bank.** A content-addressed store of manifests and payloads, indexed by kind, anchor, build, licence and allele;
 duplicates across the 300+ mod corpus found; lineage (which mod copied which feature) recorded. RevenantLib is the
