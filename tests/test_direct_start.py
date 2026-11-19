@@ -53,6 +53,27 @@ class DirectStartTests(unittest.TestCase):
             _direct_from(ns(direct=True, resolution="big", client_top=None))
 
 
+class ReloadDirectTests(unittest.TestCase):
+    def test_the_reload_start_is_direct_too(self) -> None:
+        # The SEEKER and Station Augments save-reload gates need --save-reload with --direct on Test1 (2026-11-19).
+        import contextlib
+
+        from bridgeforge.save import save_reload_run
+
+        seen = {}
+
+        @contextlib.contextmanager
+        def fake_running_game(rig, test_id, bat_name, **kwargs):
+            seen.update(kwargs)
+            yield None, None, 0
+
+        direct = DirectStart("1920x1440", -200)
+        with mock.patch.object(save_reload_run, "running_game", fake_running_game), \
+                mock.patch.object(save_reload_run, "drive_reload", lambda *a, **k: "result"):
+            self.assertEqual(save_reload_run.reload_run(None, "T-reload", direct=direct), "result")
+        self.assertEqual(seen["direct"], direct)
+
+
 class RunningGameDirectTests(unittest.TestCase):
     def _run(self, direct):
         with resolved_temp_dir() as root:
