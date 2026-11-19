@@ -104,7 +104,7 @@ def add_parser(subcommands) -> None:
     decompiler.add_argument("--adapter-argument", action="append", default=[], help="adapter argument; include {input} and {output} placeholders")
     decompiler.add_argument("--output", required=True, type=Path)
     decompiler.add_argument("--execute", action="store_true")
-    port_cmd = subcommands.add_parser("port-interfaces", help="jar classes missing a method RC8's interfaces require (jar-interface-method-missing): port the known contract changes in shipped or decompiled source and patch only when nothing else changes. A queue or one workspace")
+    port_cmd = subcommands.add_parser("port-interfaces", help="jar classes missing a method the target's interfaces require (jar-interface-method-missing): port the known contract changes in shipped or decompiled source and patch only when nothing else changes. A queue or one workspace")
     port_cmd.add_argument("path", type=Path)
     port_cmd.add_argument("--vanilla-core", type=Path, required=True)
     port_cmd.add_argument("--apply", action="store_true")

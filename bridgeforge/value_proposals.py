@@ -315,7 +315,7 @@ def add_parser(subcommands) -> None:
     group = cmd.add_mutually_exclusive_group(required=True)
     group.add_argument("--write", type=Path, metavar="SHEET.csv", help="write the proposals sheet; set its approved column to yes (or your own whole number)")
     group.add_argument("--apply", type=Path, metavar="SHEET.csv", help="apply the approved rows through the fixers (add --dry-run to print the diffs only)")
-    cmd.add_argument("--vanilla-core", type=Path, help="RC8 starsector-core (read-only), for the RC8 comparison rows")
+    cmd.add_argument("--vanilla-core", type=Path, help="target starsector-core (read-only; @target), for the comparison rows")
     cmd.add_argument("--reference-core", type=Path, help="the older starsector-core the mod was written against: gives preset-field rows their old-vanilla evidence")
     cmd.add_argument("--dry-run", action="store_true", help="with --apply: print the diffs and write nothing")
     cmd.add_argument("--json", action="store_true")

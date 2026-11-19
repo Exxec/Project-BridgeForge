@@ -79,7 +79,7 @@ def add_parser(subcommands) -> None:
     dependency_api.add_argument("--target-starsector", default="0.98.x")
     dependency_api.add_argument("--target-java", type=int, default=17)
     dependency_api.add_argument("--output", type=Path)
-    api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and RC8's): every public class, method and field removed or changed, with same-name candidates for where it went")
+    api_diff_cmd = subcommands.add_parser("api-diff", help="compare two game API jars (e.g. an old starfarer.api.jar and the target's): every public class, method and field removed or changed, with same-name candidates for where it went")
     api_diff_cmd.add_argument("old", type=Path, help="older starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("new", type=Path, help="newer starfarer.api.jar, or the starsector-core folder holding it")
     api_diff_cmd.add_argument("--output", type=Path, help="write the JSON catalogue here (for compile-check --api-diff)")

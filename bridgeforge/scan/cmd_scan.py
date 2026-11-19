@@ -28,7 +28,7 @@ def add_parser(subcommands) -> None:
     scan.add_argument("--write-baseline", type=Path, help="write the current scan's finding keys to this file as an accepted baseline")
     scan.add_argument("--compile-check", action="store_true", help="also javac-compile loose scripts against the --vanilla-core build; opt-in, off by default so scans stay fast and hermetic")
     scan.add_argument("--providers", type=Path, action="append", default=[], help="with --compile-check: mods folder, mod folder or In operation tree to search for declared dependencies; repeatable (default: <repo>/In operation and its rig's mods, same as the standalone compile-check command)")
-    scan.add_argument("--removed-content", type=Path, help="catalogue from `content-diff`: report unresolved ids that the older vanilla defined (content-reference-removed-in-vanilla), with same-named RC8 candidates")
+    scan.add_argument("--removed-content", type=Path, help="catalogue from `content-diff`: report unresolved ids that the older vanilla defined (content-reference-removed-in-vanilla), with same-named candidates in the --vanilla-core")
     compile_check_cmd = subcommands.add_parser("compile-check", help="compile a mod's loose scripts against the given core with javac and report every error (javac, not the game's runtime Janino compiler)")
     compile_check_cmd.add_argument("mod", type=Path, help="mod working copy")
     compile_check_cmd.add_argument("--vanilla-core", type=Path, help="read-only starsector-core, put on the compile classpath")
