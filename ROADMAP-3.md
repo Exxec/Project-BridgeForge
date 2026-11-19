@@ -74,6 +74,27 @@ Check S series implementation plan and if applicable add remaining items to road
   Lessons from the ports, 2026-11-19, as items 96.9-96.11 and additions to 95.2 and 95.3. The owner asked for a bird's-eye
   view of what to improve and said: "if these are useful now prioritize their implementation now if not save them for after
   G series implementation or at your recommended order".
+  **Done 2026-11-19.** All six are archived LIVE_VALIDATED on the 0.98.5a-RC7 rig on Test1, with the owner's standing word
+  ("sure archive them if they pass along anything else").
+  - **Kadur Remnant:** gated `jar-call-signature-changed` fixer.
+  - **Vayra's Sector 3.2.1+bf.1:**
+    - `reportSuccess(int)` through the 95.14 rule;
+    - three `saved-object-holds-market-ref` findings accepted as authored ("Accept as authored");
+    - Vayra's own rare_flagships.csv separator-row warning accepted with the file's hash.
+  - **YunruCore +bf.1:** the placeholder `low_maintenance` row dropped ("Drop placeholder").
+  - **Broken Star 0.1+bf.4:** `relink`, plus the decorative weapons moved into `data/weapons/`.
+  - **Neutrino Corporation 1.8.9+bf.1:** RC8's obfuscated `combat.systems.F` is RC7's `combat.systems.return`, with the same
+    members. Two constants were remapped in Neutrino_FighterDroneSystemAI.
+  - **Station Augments 2.4.3+bf.2** ("Port + safety net", "Accept 1-3, draft descriptions"):
+    - the shield-shunt hook's six renamed classes and the interface methods were remapped in bytecode, by shape match of both
+      cores, and its catch was widened to Throwable;
+    - two codex descriptions were drafted and applied;
+    - the original is the author's 2.4.3 GitHub release, with its asset hash checked ("Find author's 2.4.3").
+
+  The live runs needed 93.59 (wait for the probe's save), 93.60 (GraphicsLib's cache) and 93.61 (descriptions draft), all
+  merged the same day. The remap scripts are kept in each workspace's `scratch/rc7-remap/`. Station Augments' shield-shunt
+  combat path needs a station with that augment in battle and was not exercised: a wrong mapping logs and skips it rather
+  than crashing.
 - 96.3 **Docs pass**, by an agent with review: README, `docs/BRIDGEFORGE_REVIVAL_GUIDE.md`, `docs/LOCAL_HANDOFF.md`,
   `docs/ROADMAP_STATUS.md` and CLAUDE.md against what items 93.20-93.38, 95 and 96 changed; then push.
   **Done 2026-11-17.** An agent rewrote the five files for the 0.98.5a-RC7 target. The guide gained sections 0a (intake to
@@ -786,6 +807,29 @@ unproven).
   Sector, and the fixer had to run as `bridgeforge fix ... --finding jar-call-signature-changed --apply` (as for Kadur
   Remnant). When revive has a target core, it should run the jar linkage check against it so these fixers run in the normal
   flow (`relink` likewise). Priority: after the G series (it pays off at the next game build).
+- 96.12 (S) **Syncing a mod into the rig leaves stale files.** `probe-group install`'s sync and `prepare-test --sync` add
+  and update files and never remove one (`sync_working_copy`: "never deleting extras"). Broken Star's bf.4 fix moved two
+  `data/weapons/decorative/*.wpn` into `data/weapons/`, and the rig copy kept the old ones. P962BS5 passed live, but record
+  refused it: "staged files differ from the candidate working copy". It took a hand move to `_rig-0985a/_stale-staged-2026-11-19/`
+  and a re-run (BS6). Sync should move a rig file the working copy no longer has into a dated holding folder in the rig
+  (never deleting it), and say so. Priority: with 95.4.
+- 96.13 (S) **The probe writes no combat END when a battle ends early.** `BfProbeCombatPlugin` writes `combat-perf`,
+  `combat-summary` and `combat END` only once `combatSeconds` have passed. In P962SA2-LIVE-0985a-20261119 Station Augments'
+  one frigate destroyed the filler enemy first: the game closed the battle (mission score 100%), and the probe wrote none of
+  the three. The run ended LIVE_STUCK at combat-round-1 ("no 'combat END' probe line"), although the battle had ended. P962SA,
+  where the fight lasted the full time, ended normally. The plugin should write them as well when the engine ends the combat
+  itself. That needs a probe release, checked first against RC7's `CombatEngineAPI` for the call that says combat is over.
+- 96.14 (M) **A tool for game classes the obfuscator renamed.** Neutrino Corporation and Station Augments both called game
+  classes that RC7's obfuscator renamed with unchanged members (`systems.F` -> `systems.return`, `specs.do` -> `specs.M`,
+  `ai.ooOO` -> `ai.C`, ...). Each port needed hand tools, kept in the workspaces' `scratch/rc7-remap/`:
+  - a shape matcher over `javap` of both cores (`match.py`);
+  - an exact member lister (`members.py`);
+  - a constant-pool rewrite (`remap_class.py`);
+  - a core-ASM remapper that renames declared interface methods and changed calls (`SaRemap.java`).
+
+  `target-impact` should propose the old-to-new class and method map when it reports a missing obfuscated class, with each
+  match's score and the evidence (shape share, agreeing field types). A gated fixer should apply an accepted map to a jar's
+  classes, using the bundled ASM, and re-check linkage and interfaces. Priority: after the G series (the next game build).
 - 95.1 (M) **Owner rulings as standing policy.** The owner ruled the same way many times: CSV rows with no file that nothing uses
   (Musashi, Bultach, UAF: "keep them and ignore warning if it doesn't affect anything"), findings the reference build shares in a
   mod that works there (UAF: "Your clear to proceed"), and behaviour as authored with evidence (Sunrider: "yes"). Encode them as
