@@ -1,0 +1,1 @@
+- `state-snapshot` walks a checkpointed source again when its saved result carries errors, so an old error no longer repeats on every run (ROADMAP-3 96.15).

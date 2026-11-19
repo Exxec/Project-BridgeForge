@@ -97,6 +97,8 @@ def take_snapshot(root: Path, destination: Path, claude_home: Path, quiet: bool 
     with Checkpoint(destination / "snapshot.partial.jsonl", {"command": "state-snapshot", "root": str(root), "sources": sorted(sources)}) as checkpoint:
         for number, (label, folder) in enumerate(sources.items(), 1):
             saved = checkpoint.get(label)
+            if saved is not None and saved.get("errors"):
+                saved = None  # written before H4 kept errors out: walk it again, or the old error replays forever (96.15)
             started = time.monotonic()
             stats = saved if saved is not None else _copy_source(label, folder, current, version_root)
             if saved is None and not stats["errors"]:
