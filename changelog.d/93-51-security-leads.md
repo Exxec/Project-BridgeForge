@@ -1,0 +1,1 @@
+- Compiled Java helpers live in a private per-user folder, and a `.bat`/`.cmd` decompiler adapter refuses arguments cmd.exe would act on (93.51).

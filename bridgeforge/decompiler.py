@@ -1,9 +1,24 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 from bridgeforge.file_hash import sha256_file as _sha256  # 96.5 A10
+
+# A .bat or .cmd adapter runs under cmd.exe. Python quotes an argument only when it holds a space or tab, so in a path
+# without one cmd.exe acts on & | < > ^; and it expands % and ! and ends quoting at " even inside quotes (ROADMAP-3 93.51;
+# launch.command_line refuses the same for the game, 93.47).
+_CMD_ACTS = re.compile(r'[&|<>^"%!\x00-\x1f\x7f]')
+
+
+def _refuse_cmd_metacharacters(adapter: Path, command: list[str]) -> None:
+    # Windows strips a trailing dot or space, so "x.bat." and "x.bat " still run under cmd.exe; the plan JSON is not resolved.
+    if Path(str(adapter).rstrip(". ")).suffix.lower() not in {".bat", ".cmd"}:
+        return
+    for argument in command:  # the adapter's own path reaches cmd.exe too
+        if _CMD_ACTS.search(argument):
+            raise ValueError(f"refusing to run a .bat/.cmd adapter: an argument holds a character cmd.exe would act on: {argument!r}")
 
 
 
@@ -57,6 +72,7 @@ def run_decompiler_review(output: Path, execute: bool = False) -> dict:
         raise ValueError("Decompiler output directory is not empty; create a new review plan.")
     decompiled.mkdir(exist_ok=True)
     command = [str(adapter), *[argument.replace("{input}", str(input_path)).replace("{output}", str(decompiled)) for argument in plan["arguments"]]]
+    _refuse_cmd_metacharacters(adapter, command)
     completed = subprocess.run(command, cwd=output, capture_output=True, text=True, check=False)
     files = sorted(path.relative_to(decompiled).as_posix() for path in decompiled.rglob("*") if path.is_file())
     result = {
