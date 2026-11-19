@@ -488,6 +488,10 @@ Check S series implementation plan and if applicable add remaining items to road
       never sees it; the install check (plain, editable at another version, editable at this one, none). The hygiene tests
       patch the install check (machine state). Removing the routing, the plain-install finding or the suite's environment
       strip each fails a test (mutation-checked).
+      Follow-up the same day: run from White_Legion's main checkout, the check read an old build's gitignored
+      `bridgeforge.egg-info` there (the current folder is on `sys.path`) and called the fresh editable install plain.
+      `hygiene._installed_distribution` now skips the checkout's own folder; `test_paths` covers it (mutation-checked). With
+      that, the main checkout was fast-forwarded to main and the `.venv` reinstalled editable: `installed_package` PASS, 0.4.2.
     - A7 (S/M): MOD_CHANGELOG and release decisions as fragments, since two machines now write them.
       **Done 2026-11-18.** Test1's `archive` and White_Legion's sessions both edited `MOD_CHANGELOG.md` and
       `bridgeforge/release_policy.json`, so two branches changed the same lines (the 2026-11-17 archives).
