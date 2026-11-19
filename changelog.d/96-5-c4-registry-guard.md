@@ -1,0 +1,1 @@
+- The test suite refuses any Windows registry access outside a test key unless the test patches it; this found the rig-doctor tests reading the machine's LongPathsEnabled setting (96.5 C4).

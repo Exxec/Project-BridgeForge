@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import unittest
 
+import tests.support  # noqa: F401  installs the registry guard when this module runs alone (96.5 C4)
+
 from bridgeforge.atlas import atlas_predictions
 
 

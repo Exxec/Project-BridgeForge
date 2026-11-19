@@ -10,6 +10,53 @@ import tempfile
 for _name in [name for name in os.environ if name.startswith("GIT_")]:
     del os.environ[_name]
 
+# Registry guard (ROADMAP-3 96.5 C4, owner 2026-11-18). rig/rig_prefs.py writes HKCU\Software\JavaSoft\Prefs\com\fs\starfarer,
+# the key that also holds the Starsector licence key, and rig-doctor reads HKLM. Only each test's own patch kept them off
+# the real registry. Here, opening, creating or deleting any key outside TEST_REGISTRY_ROOT (under HKEY_CURRENT_USER)
+# raises, so a forgotten patch fails loudly instead of touching the machine. A test that patches `winreg.OpenKey` and the
+# like replaces the guard on purpose. Discovery imports every test module before a test runs, and over half of them import
+# this one, so a whole-suite run is guarded from its first test; a test module that reaches registry code imports this
+# module itself (tests/test_registry_guard.py checks it).
+TEST_REGISTRY_ROOT = "Software\\BridgeForgeTests"
+
+
+class RegistryGuardError(RuntimeError):
+    """A test reached the real Windows registry outside TEST_REGISTRY_ROOT without patching winreg. Not an OSError on
+    purpose: product code catches OSError as "key unreadable" and would hide the access."""
+
+
+def _registry_allowed(root, sub_key) -> bool:
+    import winreg
+
+    path = str(sub_key or "").replace("/", "\\").strip("\\").lower()
+    prefix = TEST_REGISTRY_ROOT.lower()
+    return root == winreg.HKEY_CURRENT_USER and (path == prefix or path.startswith(prefix + "\\"))
+
+
+def _guarded(name: str, original):
+    def call(key, sub_key="", *args, **kwargs):
+        if not _registry_allowed(key, sub_key):
+            raise RegistryGuardError(f"winreg.{name}({sub_key!r}) in a test: patch winreg, or use a key under "
+                                     f"HKEY_CURRENT_USER\\{TEST_REGISTRY_ROOT} (96.5 C4)")
+        return original(key, sub_key, *args, **kwargs)
+
+    call.registry_guard = True
+    return call
+
+
+def install_registry_guard() -> None:
+    try:
+        import winreg
+    except ImportError:  # not Windows: no registry to guard
+        return
+    for name in ("OpenKey", "OpenKeyEx", "CreateKey", "CreateKeyEx", "DeleteKey", "DeleteKeyEx"):
+        current = getattr(winreg, name, None)
+        if current is not None and not getattr(current, "registry_guard", False):
+            setattr(winreg, name, _guarded(name, current))
+
+
+install_registry_guard()
+
 
 @contextmanager
 def resolved_temp_dir(**kwargs):
