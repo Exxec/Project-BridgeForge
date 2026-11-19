@@ -1,7 +1,6 @@
 """Private read-only portfolio worker; never a qualification/repair command."""
 from __future__ import annotations
 
-from contextlib import nullcontext
 import json
 import os
 from pathlib import Path
@@ -12,7 +11,7 @@ import time
 
 import psutil
 
-from .analysis_reuse import reuse_parses
+from .analysis_reuse import no_reuse, reuse_parses
 from .case_evidence import evaluate_request
 from .case_qualification import engine_identity
 from .safeio import atomic_write_json
@@ -43,7 +42,7 @@ def main():
     config = request['parse_reuse']
     if engine_identity() != request['engine_id']:
         raise ValueError('Analysis engine changed before worker execution')
-    scope = reuse_parses(**config) if config else nullcontext()
+    scope = reuse_parses(**config) if config else no_reuse()  # scan_mod would otherwise reuse on its own (96.5 P5)
     began = time.perf_counter()
     with scope as cache:
         raw = evaluate_request(request['scan'])
