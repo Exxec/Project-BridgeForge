@@ -92,6 +92,36 @@ class LiveResult:
     rounds: int = 0
     log: str | None = None
     stages: list[str] = field(default_factory=list)
+    # 96.9: every key, click and scroll with the run log's size and the seconds since the run began, so a stall can be read
+    # against the game's own lines (93.59 took a manual comparison of two logs).
+    actions: list[dict] = field(default_factory=list)
+
+
+def recording(hands: Hands, log: Path, actions: list[dict]) -> Hands:
+    """`hands`, with each key, click and scroll appended to `actions` as {"t", "action", "log_bytes"}."""
+    start = time.monotonic()
+
+    def note(text: str) -> None:
+        try:
+            size = log.stat().st_size
+        except OSError:
+            size = None
+        actions.append({"t": round(time.monotonic() - start, 1), "action": text, "log_bytes": size})
+
+    def click(fx: float, fy: float) -> None:
+        note(f"click {fx:.4f},{fy:.4f}")
+        hands.click(fx, fy)
+
+    def key(vk: int) -> None:
+        note(f"key 0x{vk:02X}")
+        hands.key(vk)
+
+    def scroll(*args) -> None:
+        note("scroll " + ",".join(str(a) for a in args))
+        hands.scroll(*args)
+
+    return Hands(click=click, key=key, scroll=scroll, sleep=hands.sleep, alive=hands.alive, front=hands.front,
+                 geometry=hands.geometry, capture=hands.capture)
 
 
 def _log_text(log: Path) -> str:
@@ -288,8 +318,25 @@ def generic_new_game(hands: Hands, done: Callable[[], bool], shots_dir: Path | N
     return run_pages(lambda fx, fy: (hands.front(), hands.click(fx, fy)), hands.sleep, capture, done, max_pages, shots_dir=shots_dir)
 
 
-def to_mission_list(hands: Hands) -> None:
-    """From the campaign map (or the combat result) to the main menu's mission list."""
+MENU_CHECK_READS = 6  # screen reads, a second apart, for the main menu to appear after leaving the campaign
+
+
+def _main_menu_shown(hands: Hands) -> bool | None:
+    """Whether the main menu is on screen (its Missions button found), waiting up to MENU_CHECK_READS reads; None when the screen
+    cannot be read."""
+    from bridgeforge.screen_read import main_menu_target
+
+    for _ in range(MENU_CHECK_READS):
+        buttons = _menu_buttons(hands)
+        if buttons is None:
+            return None
+        if main_menu_target(buttons, "Missions"):
+            return True
+        hands.sleep(1.0)
+    return False
+
+
+def _leave_campaign(hands: Hands) -> None:
     hands.front()
     hands.key(ESCAPE_KEY)
     hands.sleep(1.5)
@@ -297,8 +344,35 @@ def to_mission_list(hands: Hands) -> None:
     hands.sleep(2)
     hands.click(*GAME_MENU_EXIT_OK)
     hands.sleep(8)
+
+
+def to_mission_list(hands: Hands, shot: Path | None = None) -> bool | None:
+    """From the campaign map (or the combat result) to the main menu's mission list. 96.9: when the screen can be read and shows no
+    main menu after leaving, a screenshot is taken (`shot`.png) and the Escape, Exit and OK are sent once more; False when the
+    menu is still not there (nothing more is clicked), True when it was, None when the screen could not be read (the blind
+    clicks stand, as before)."""
+    _leave_campaign(hands)
+    shown = _main_menu_shown(hands)
+    if shown is False:
+        if shot is not None and hands.capture:
+            hands.capture(Path(f"{shot}.png"))
+        _leave_campaign(hands)
+        shown = _main_menu_shown(hands)
+        if shown is False:
+            return False
     click_menu(hands, "Missions", MAIN_MENU_MISSIONS)
     hands.sleep(3)
+    return shown
+
+
+def _write_actions(log: Path, actions: list[dict]) -> None:
+    """`<log>.actions.json`: the run's keys and clicks against the log's size, for a stuck run's triage (96.9)."""
+    from bridgeforge.safeio import atomic_write_json
+
+    try:
+        atomic_write_json(Path(f"{log}.actions.json"), actions, indent=1)
+    except OSError:
+        pass  # the stuck verdict stands without it
 
 
 _MOD_LINE = re.compile(r"Running with the following mods[^\n]*\n(?P<body>(?:[^\n]*StarfarerLauncher\s+-\s{4}[^\n]+\n)+)")
@@ -463,9 +537,11 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
           vanilla_rows: int = VANILLA_MISSION_ROWS, save_reload: bool = False, probe_saves: bool = False) -> LiveResult:
     """Run the whole live sequence against a started game whose stdout is `log`."""
     result = LiveResult("LIVE_STUCK", log=str(log))
+    hands = recording(hands, log, result.actions)
 
     def stuck(stage: str, detail: str) -> LiveResult:
         result.stage, result.detail = stage, detail
+        _write_actions(log, result.actions)
         return result
 
     if not wait_for(log, MENU_READY, menu_timeout, hands):
@@ -498,7 +574,10 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
                                        "probe line came: leaving the campaign during a save loses the keys and clicks (93.59)")
         result.stages.append("probe-saved")
         hands.sleep(PROBE_SAVE_SETTLE)
-    to_mission_list(hands)
+    left = to_mission_list(hands, Path(f"{log}.leave-campaign"))
+    if left is False:
+        return stuck("leave-campaign", "no main menu on screen after Escape, Exit and OK, also after one retry: the keys did not reach "
+                                       f"the game or a dialog is open; screenshot {log}.leave-campaign.png")
     rounds_total, round_no = 1, 0
     layout = mission_list_layout(_log_text(log), vanilla_rows)
     rows_below, list_total = layout if layout else (0, None)
