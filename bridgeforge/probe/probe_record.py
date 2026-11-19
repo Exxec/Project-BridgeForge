@@ -154,6 +154,10 @@ def group_report(log: Path, config: dict, mods_dir: Path | None = None, accepted
             continue  # a summary line repeating the per-item FAIL lines above it
         if mod_id is None and match["check"] in ("campaign-layout", "combat-perf", "market-supply") and len(members) == 1:
             mod_id = next(iter(members))  # a sector-layout line names a system, not a content id: with one member it is that member's
+        if mod_id is None and match["check"] == "bounty" and subject in members:
+            # A MagicLib bounty line names "<mod id>/<bounty id>", not a content id; YunruCore's eight went to the group and its
+            # own acceptances could not apply (P962YC-LIVE-0985a-20261119).
+            mod_id = subject
         entry = f"{match['check']}|{match['subject']}|{match['detail'].strip()[:200]}"
         if mod_id and any(a["check"] == match["check"] and a["subject"] == match["subject"] for a in (accepted or {}).get(mod_id, [])):
             verdicts[mod_id].setdefault("accepted", []).append(entry)

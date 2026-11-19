@@ -1,0 +1,1 @@
+- `probe-group report` attributes a MagicLib bounty line to the mod it names, so the mod's own acceptances apply (93.57).
