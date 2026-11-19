@@ -1240,8 +1240,86 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     Mutation-checked: dropping the writer exclusion, nested crediting, the self-exclusion, the `save/` limit or the
     `read_mod_info` exclusion each fails a test.
-  Next: GR-2 (census, with registrations per ModPlugin method), GR-3 (closure benchmark) and GR-5 (Java probe spike),
-  into 94.G2.
+  **GR-2 Done 2026-11-19** (the gene census, before G2).
+  - `bridgeforge gene census CORPUS --write OUT` (`bridgeforge/genome/census.py`) counts, per mod:
+    - feature kinds: the six content tables, variants, factions, industries, market conditions, abilities and `rules.csv`
+      rows, plus code-only star systems and markets (`createStarSystem`, `addMarketplace` in the mod's jars);
+    - for each lifecycle hook of the plugin `mod_info.json` names, how many features it sets up together.
+  - Following the advisor review, a hook is followed into the plugin's own methods, recording the depth, and keeps raw
+    counts plus the callee list, so the score can be redone without walking the corpus again. The counts:
+    - registration calls;
+    - distinct mod-own classes it builds or calls;
+    - distinct game-API state changes (`add*`, `set*`, `create*`, `register*`, `spawn*` on `com/fs/`);
+    - all invokes.
+  - Loose-script plugins are a separate "source-only" bucket. The command prints one progress line per mod, keeps a
+    checkpoint (it is in `LONG_RUNNING_COMMANDS`), counts each mod once by id and version (an archive's working copy wins
+    over a raw folder), and skips `_` folders. `atlas_classfile` gains `method_targets`, the (owner, name) of every
+    invoke per method.
+  - Calibrated by hand against source before the corpus run:
+    - Eridani `onNewGame` reaches `generate` at depth 1: `ECE_StarSystem` plus faction relations and the bounty entry,
+      3 features;
+    - Tania: each hook builds `TaniaGen` and makes at most one inline change;
+    - Bultach is monolithic: `onGameLoad` has 6 features;
+    - Scrapyard declares no plugin.
+
+    Calibration found a double count, fixed: a registration call such as `addScript` had also counted as an API
+    mutation.
+  - **Census of Test1's `Done/`, 2026-11-19, 342 mods.** The per-mod output stays on Test1 under
+    `C:\Users\exxec\BridgeForge-census\`; only these aggregates are recorded here.
+
+    Kinds (mods with the kind / items):
+    | Kind | Mods | Items |
+    |---|---|---|
+    | faction | 181 | 1045 |
+    | variant | 175 | 13701 |
+    | hull | 173 | 6868 |
+    | hullmod | 162 | 3290 |
+    | weapon | 150 | 8390 |
+    | wing | 138 | 1237 |
+    | rule | 137 | 21357 |
+    | shipsystem | 127 | 1794 |
+    | code: star system | 82 | 216 |
+    | industry | 80 | 448 |
+    | condition | 68 | 344 |
+    | code: market | 46 | 239 |
+    | ability | 29 | 65 |
+
+    Plugins: 208 measured, 111 none, 22 source-only (under a tenth of those that declare one, so the bytecode numbers
+    stand), 1 not found.
+
+    Busiest hook, features per mod (mod classes + API mutation kinds + registration calls):
+    | Features | Mods |
+    |---|---|
+    | 0 | 13 |
+    | 1 | 44 |
+    | 2-3 | 30 |
+    | 4-7 | 36 |
+    | 8 or more | 81 |
+
+    **147 of the 208 measured plugins (71%) have a hook that sets up two or more features.**
+  - **What it means for G2.** Registration slicing is the common case, not the edge case: most campaign genes will have
+    to be cut out of a shared hook, and 81 plugins put eight or more features in one hook.
+    - G2's order: content kinds first (closure exists), then factions (the most common campaign kind, mostly data), then
+      code-built star systems and markets (82 and 46 mods), then rules.csv dialog trees (137 mods, 21k rows: large and
+      hardest).
+    - The 6-10 session estimate for G2 assumed slicing was the exception. Refusals will be common until slicing works at
+      statement level. Re-estimate after the first sliced pilot (P3 Eridani, 3 features).
+    - The score counts API kinds, not statements, and a deep helper can inflate it, so the 8+ bucket is an upper bound.
+      The callee lists in the per-mod output allow a re-score.
+  - Tests: `tests/test_gene_census.py`:
+    - a compiled plugin's hook followed one level, with its counts;
+    - no plugin and a source-only plugin;
+    - each mod once, the archive preferred, `_` folders skipped;
+    - an interrupted run resumes from its checkpoint, which goes only once the result is written;
+    - the CLI;
+    - `method_targets` parallels `method_calls`.
+
+    Mutation-checked: the registration exclusion, in-class following, the archive preference, the `_` skip and the
+    checkpoint finish each fail a test when removed.
+  - **GR-3 (closure benchmark), checked the same day:** both machines hold at most eight `REMOVALS.json` records and
+    eight `PROVENANCE.md` files with SUSPECT decisions, too few for a benchmark. Recommendation, not yet decided: build
+    GR-3 from G2's own subtraction and isolation proofs as they accumulate, starting with P1-P3.
+  Next: GR-5 (Java probe spike; it needs live testing, paused by the owner 2026-11-19), then 94.G2 starting with P1.
 - 94.G2 **Sequencing and proof**: closure for campaign features and registration slicing; subtraction and isolation proofs per
   gene. Project Go exports a gene's strings as one unit. Acceptance adds (WP5): every proof file carries the evidence header
   and passes `gene evidence check` against its gene with `--root`.

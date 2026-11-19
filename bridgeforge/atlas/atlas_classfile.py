@@ -52,6 +52,8 @@ class ClassInfo:
     calls: list[Call] = field(default_factory=list)  # watched calls with the strings attributed to them
     method_calls: list[set[str]] = field(default_factory=list)  # call names per method body
     code_methods: list[str] = field(default_factory=list)  # name of the method behind each method_calls entry
+    # (owner internal name, method name) of every invoke per method body, parallel to method_calls (94.G1 GR-2 census)
+    method_targets: list[list[tuple[str, str]]] = field(default_factory=list)
     registrations: list[tuple[str, str]] = field(default_factory=list)  # (register method, internal class name of `new X`)
 
 
@@ -219,6 +221,7 @@ class _MethodScan:
         self.pending: list[tuple] = []
         self.built: list[str] = []
         self.names: set[str] = set()
+        self.targets: list[tuple[str, str]] = []
         self.builder_active, self.builder_seen, self.builder_prefix = False, False, ""
 
     def push(self, arg: tuple) -> None:
@@ -228,6 +231,7 @@ class _MethodScan:
     def invoke(self, idx: int) -> None:
         owner, name, descriptor = self.pool.member(idx)
         self.names.add(name)
+        self.targets.append((owner, name))
         if owner in _BUILDERS:
             return self._builder(name, descriptor)
         if name == "<init>":
@@ -285,5 +289,6 @@ def _scan_method(attr: bytes, pool: _Pool, info: ClassInfo, watch: frozenset[str
                 scan.pending.clear()
             pc += _instruction_length(code, pc)
         info.method_calls.append(scan.names)
+        info.method_targets.append(scan.targets)
     except (ClassFormatError, struct.error, IndexError, KeyError):
         info.code_ok = False

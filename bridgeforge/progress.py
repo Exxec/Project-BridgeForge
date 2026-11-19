@@ -102,6 +102,7 @@ def report(done: int, total: int, name: str, detail: str, seconds: float | None)
 # Commands that walk a whole queue or archive. Each must print per-item progress (and offer --quiet)
 # and resume from a checkpoint; tests/test_progress.py holds every entry to that. Add new ones here.
 LONG_RUNNING_COMMANDS = (
+    ("gene", "census"),
     ("portfolio-scan",),
     ("recipe-trial",),
     ("local-kit", "build"),
