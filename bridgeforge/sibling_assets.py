@@ -65,9 +65,13 @@ def _find_asset(relative: str, roots: list[Path]) -> dict:
 
 
 def _read_rows(path: Path) -> list[dict[str, str]]:
+    """Rows as {column: cell}, trimmed. Cells past the header (DictReader's None key, a list) and missing cells (None) are not
+    part of the row the game reads: they are left out and read as blank. ROADMAP-3 93.61: `descriptions draft` for Station
+    Augments crashed on a sibling mod's descriptions.csv row with more cells than its header ('list' object has no attribute 'strip')."""
     try:
         text = path.read_text(encoding="utf-8-sig", errors="replace")
-        return [{(k or "").strip(): (v or "").strip() for k, v in row.items()} for row in csv.DictReader(io.StringIO(text))]
+        return [{k.strip(): (v.strip() if isinstance(v, str) else "") for k, v in row.items() if isinstance(k, str)}
+                for row in csv.DictReader(io.StringIO(text))]
     except (OSError, csv.Error):
         return []
 

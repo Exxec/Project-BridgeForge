@@ -1,0 +1,1 @@
+- `descriptions draft` no longer crashes on a descriptions.csv row with more cells than its header; cells past the header are ignored (ROADMAP-3 93.61).
