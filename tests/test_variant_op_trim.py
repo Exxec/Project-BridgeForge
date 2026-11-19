@@ -8,11 +8,7 @@ from pathlib import Path
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix
 from bridgeforge.scan.scanner import _load_lenient_json_file, scan_mod
 from tests.support import resolved_temp_dir
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 def _fixture(root: Path, weapons: int, caps: int, vents: int, mods: list[str]) -> tuple[Path, Path]:

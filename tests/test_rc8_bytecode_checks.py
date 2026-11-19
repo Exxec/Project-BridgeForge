@@ -6,11 +6,7 @@ import zipfile
 from pathlib import Path
 
 from bridgeforge.scan.scanner import scan_mod
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 def _findings(result, finding_id: str):

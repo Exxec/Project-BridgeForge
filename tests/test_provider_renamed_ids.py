@@ -8,16 +8,12 @@ from pathlib import Path
 from bridgeforge.provider_renamed_ids import closest_known
 from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
+from tests.support import write_text as _write
 
 MOD_INFO = '{"id":"demo","name":"Demo","version":"1.0","gameVersion":"0.98a-RC8","dependencies":[{"id":"tasc","name":"TASC"}]}'
 PROVIDER_INFO = '{"id":"tasc","name":"TASC","version":"10.0.9","gameVersion":"0.98a-RC8"}'
 CSV = "name,id,order\nStation,BOGGLED_REMNANT_STATION,1\nOther,BOGGLED_OUTPOST,2\n"
 SOURCE_WITH_CALL = 'class Gen { void run(Object m) { m.addIndustry("%s"); } }\n'
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 def _fixture(base: Path, code: str) -> tuple[Path, Path, Path]:

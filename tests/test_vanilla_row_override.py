@@ -7,14 +7,10 @@ from pathlib import Path
 
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix
 from bridgeforge.scan.scanner import scan_mod
+from tests.support import write_text as _write
 
 CHECK = "csv-vanilla-row-override"
 INFO = '{"id":"demo","name":"Demo","version":"1.0","gameVersion":"0.98a-RC8"%s}'
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(text.encode("utf-8"))
 
 
 def _fixture(directory: str, *, replace_table: bool = False) -> tuple[Path, Path]:

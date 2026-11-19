@@ -10,12 +10,7 @@ from pathlib import Path
 
 from bridgeforge.cli import main
 from bridgeforge.strip_plan import vendor_copy
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-
+from tests.support import write_text as _write
 
 
 def _core(root: Path) -> Path:

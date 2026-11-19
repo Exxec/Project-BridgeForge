@@ -11,6 +11,7 @@ from bridgeforge.recreation_plan import PLAN_FILE, render_skeleton, section_numb
 from bridgeforge.revive import packet_id, revive
 from bridgeforge.scan.scan_port import PORT_SOURCE_FILE, _scan_port_dropped_feature, dropped_features
 from tests.support import resolved_temp_dir
+from tests.support import write_text as _write
 
 REPO = Path(__file__).resolve().parent.parent
 EVENTS = '{\n "tem_crusade": {"script": "data.scripts.campaign.events.TEM_CrusadeEvent"},\n "tem_other": {},\n}\n'
@@ -18,11 +19,6 @@ REPORTS = "event_type,event_stage,p\ntem_crusade,planning,\ntem_crusade,start,\n
 RULES = "id,trigger,conditions,script\nr1,OpenCommLink,,\nr2,TEMCrusadeNews,,\n"
 OLD_SETTINGS = '{"plugins": {"TEM_Old": "data.scripts.TEM_Old", "TEM_Keep": "data.scripts.TEM_Keep"}, "graphics": {"a": "b.png"}, "x": 1,}'
 NEW_SETTINGS = '{"plugins": {"TEM_Keep": "data.scripts.TEM_Keep"}, "graphics": {}, "x": 1}'
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 def _port(root: Path, *, record: dict | None = None):

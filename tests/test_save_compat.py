@@ -6,6 +6,7 @@ import zipfile
 from pathlib import Path
 
 from bridgeforge.save.save_compat import check_save_compat, compare_builds
+from tests.support import write_text as _write
 
 
 # ---------------------------------------------------------------------------
@@ -60,11 +61,6 @@ def write_jar(path: Path, members: dict[str, bytes]) -> None:
     with zipfile.ZipFile(path, "w") as archive:
         for member, content in members.items():
             archive.writestr(member, content)
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 SAVE_HEADER = '<?xml version="1.0" ?>\n<CampaignEngine z="1">\n<sc z="2">\n'

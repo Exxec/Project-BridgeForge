@@ -6,11 +6,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.dossier import build_dossier
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 def _fixture_mod(root: Path) -> None:

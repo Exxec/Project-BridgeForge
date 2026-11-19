@@ -6,6 +6,7 @@ from pathlib import Path
 
 from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
+from tests.support import write_text as _write
 
 MISSION = """package data.missions.demo;
 public class MissionDefinition {
@@ -24,11 +25,6 @@ public class MissionDefinition {
     }
 }
 """
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 def _build(base: Path, mission: str = MISSION):

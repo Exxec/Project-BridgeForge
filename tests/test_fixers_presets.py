@@ -10,6 +10,7 @@ from bridgeforge.fixers.presets import file_sha256, preset_field_proposals
 from bridgeforge.models import TargetProfile
 from bridgeforge.scan.scanner import _parse_json, scan_mod
 from tests.support import resolved_temp_dir
+from tests.support import write_text as _write
 
 FINDING = "preset-entry-drops-vanilla-fields"
 REL = "data/config/engine_styles.json"
@@ -30,11 +31,6 @@ MOD_TEXT = """# old template
 \t"MY_STYLE": {"engineColor": [1, 2, 3, 255]},
 }
 """
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(text.encode("utf-8"))
 
 
 def _fixture(root: Path, mod_text: str) -> tuple[Path, Path]:

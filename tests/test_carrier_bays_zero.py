@@ -7,17 +7,13 @@ from pathlib import Path
 
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix
 from bridgeforge.scan.scanner import carrier_bays_without_evidence
+from tests.support import write_text as _write
 
 SHIP_DATA = ("name,id,designation,system id,hangar,hints\r\n"
              "Termite,yj_termite,Frigate,,5,\r\n"          # hangar value, no bay slot, no wings: nothing can launch
              "Carrier,yj_carrier,Cruiser,,3,\r\n"          # has a LAUNCH_BAY slot: a real carrier, left to the owner
              "Winged,yj_winged,Destroyer,,2,\r\n"          # a variant carries wings: left to the owner
              "Plain,yj_plain,Frigate,,,\r\n")              # no hangar value: nothing to resolve
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(text.encode("utf-8"))
 
 
 def _mod(directory: str) -> Path:

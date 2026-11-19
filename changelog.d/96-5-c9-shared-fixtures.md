@@ -1,0 +1,1 @@
+- Tests share one fixture writer, `tests/support.write_text` (LF, parent folders made), in place of 48 per-module copies (96.5 C9).

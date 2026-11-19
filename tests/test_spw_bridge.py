@@ -6,11 +6,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.spw_bridge import SpwBridgeError, ingest_spw_report, log_spam, perf_gate
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 class IngestSpwReportTests(unittest.TestCase):

@@ -2,15 +2,10 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
 
 from bridgeforge.renamed_ids import find_renamed
 from tests.support import resolved_temp_dir
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 class RenamedIdsTests(unittest.TestCase):

@@ -9,11 +9,7 @@ from bridgeforge.archive_intake import inspect_zip_archive
 from bridgeforge.intake import RENAME_MAX_WAIT_SECONDS, _rename_with_retry, unprocessed_raw_folders, zip_raw_folder
 from bridgeforge.probe.probe_group import ProbeGroupError, lunalib_rule
 from tests.support import resolved_temp_dir
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 class RawFolderIntakeTests(unittest.TestCase):

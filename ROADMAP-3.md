@@ -395,6 +395,13 @@ Check S series implementation plan and if applicable add remaining items to road
       registry-reaching modules import `support`). Removing the guard fails five of them; widening the prefix rule fails
       one (mutation-checked).
     - C9 (M): shared test fixtures (`_write` is copied in 60 files; 39 copies write CRLF on Windows).
+      **Done 2026-11-18.** `tests/support.write_text(path, text)` makes the parent folders and writes UTF-8 with LF. 48 test
+      modules' own `_write` copies (the two-line make-folder-and-write body, with `write_text` or `write_bytes`) are replaced
+      by `from tests.support import write_text as _write`, so no call site changed; the 40 of them that wrote through
+      `write_text` wrote CRLF on Windows. 13 variants stay (other parameters, bytes or JSON data, a return value).
+      Tests: `tests/test_test_helpers.py` (the writer's folders and LF bytes; no test module keeps a canonical copy, an AST
+      check that caught the unannotated copy in `test_done_audit` the first pass missed; the detector's cases). The 704
+      tests of the 47 first-pass modules passed with LF fixtures before the full suite.
   - **Architecture and process:**
     - A3 (S): `escalation run --all` breaks the long-running rule (no progress, no checkpoint). `auto-open` and
       `atlas migrations` are missing from the list, and a test should require it.
