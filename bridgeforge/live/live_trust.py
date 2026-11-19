@@ -46,9 +46,13 @@ def shipped_files(working: Path) -> dict[str, Path]:
 
 def shipped_hash(working: Path) -> str:
     """SHA-256 over `relative path NUL file sha256 LF` for every shipped file, in path order."""
+    from bridgeforge.file_hash import sha256_many
+
+    files = shipped_files(working)
+    digests = sha256_many(list(files.values()))  # through a run's hash cache when one is open (95.5)
     digest = hashlib.sha256()
-    for relative, path in shipped_files(working).items():
-        digest.update(f"{relative}\0{_sha256(path)}\n".encode("utf-8"))
+    for relative, path in files.items():
+        digest.update(f"{relative}\0{digests[path]}\n".encode("utf-8"))
     return digest.hexdigest()
 
 

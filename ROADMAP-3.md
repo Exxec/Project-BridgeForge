@@ -753,6 +753,14 @@ unproven).
   report's own run config (93.29), mission-list reading (93.37) and the run's own save (93.38) in `probe-group smoke|live|record`,
   so `bridgeforge-state/live-wrappers/` can retire.
 - 95.5 (M) **Run-manifest hash reuse (93.27).** About 5 minutes per live run on Test1.
+  **Done 2026-11-19.** `file_hash.cached_hashes(cache_file)` opens a hash cache keyed by resolved path, size and modification
+  time (ns); inside it `sha256_many` takes unchanged files from the cache and hashes the rest in 8 threads, and the cache is
+  saved when the scope ends. `run_manifest.prepare_run`, `staged_drift` (so `release_run`), `evaluate_run` and
+  `environment_drift` open it at `<rig>/rig_hash_cache.json`; `live_trust.shipped_hash` and `run_manifest._tree_hash` go
+  through it. The digests are unchanged, so manifests written before stay valid; outside a scope nothing is cached. The cache
+  is a speed-up, not evidence: a file whose size or time changed is always hashed again. Tests: `tests/test_hash_cache.py`
+  (reuse across scopes, a changed size or time re-hashed, no cache file without a scope, a foreign or unreadable cache starts
+  empty, tree hashes equal with and without the cache), mutation-checked on the stamp comparison and the save.
 - 95.6 (M, optional) **Two-machine sync.** `sync --to HOST` for the memory folder, workspaces and Done/, hash-verified in both
   directions, never overwriting a newer change without asking; off by default (owner: "if it can be optional that would be
   great"). On 2026-11-17 development ran on White_Legion and live tests on Test1, with workspaces copied by hand (scp).

@@ -17,6 +17,7 @@ File-set algorithm: `copy_drift._collect` (every root file and top-level folder 
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import re
@@ -30,6 +31,7 @@ from .boot_test import _is_link
 from .manifest_echo import echo_state, write_run_file
 from .safeio import atomic_write_json
 from bridgeforge.save.save_fingerprint import parse_fingerprint
+from bridgeforge.file_hash import cached_hashes, sha256_many
 from bridgeforge.file_hash import sha256_file as _sha256_file  # 96.5 A10
 
 MANIFEST_VERSION = 1
@@ -38,6 +40,9 @@ MANIFEST_SUFFIX = ".manifest.json"
 COMPLETED_SUFFIX = ".completed.json"
 OWNER_FILE = "run_owner.json"
 RIG_STATE_FILE = "rig_up_state.json"
+# ROADMAP-3 95.5 / 93.27: digests of staged and candidate files, reused across prepare, release and evaluate while a file's
+# size and modification time are unchanged. Only a speed-up: a missing or unreadable cache means every file is hashed.
+HASH_CACHE_FILE = "rig_hash_cache.json"
 CONFIG_RELATIVE = Path("saves") / "common" / "bf_probe_config.data"
 MILESTONES = ("main_menu", "campaign_load", "save", "content_ids", "combat", "reload_after_save", "campaign_checks")
 # What a kind of run can show at all: a smoke boot passes its boot scenario but never a campaign, combat or save requirement.
@@ -68,6 +73,15 @@ class ManifestError(ValueError):
 RUNTIME_OUTPUT_DIRS = {"starsector_prepatcher": ("logs",)}
 
 
+def _rig_hash_cache(function):
+    """Run `function(rig, ...)` inside the rig's hash cache (95.5)."""
+    @functools.wraps(function)
+    def wrapper(rig, *args, **kwargs):
+        with cached_hashes(Path(rig).expanduser() / HASH_CACHE_FILE):
+            return function(rig, *args, **kwargs)
+    return wrapper
+
+
 def _tree_hash(folder: Path) -> str:
     from bridgeforge.live.live_trust import _mod_info, shipped_files, shipped_hash
 
@@ -75,11 +89,12 @@ def _tree_hash(folder: Path) -> str:
         skipped = RUNTIME_OUTPUT_DIRS.get(str(_mod_info(folder).get("id") or ""))
         if not skipped:
             return shipped_hash(folder)  # every other mod hashes exactly as before
+        kept = {relative: path for relative, path in shipped_files(folder).items()
+                if relative.split("/", 1)[0].lower() not in skipped}
+        digests = sha256_many(list(kept.values()))  # 95.5: through a run's hash cache when one is open
         digest = hashlib.sha256()
-        for relative, path in shipped_files(folder).items():
-            if relative.split("/", 1)[0].lower() in skipped:
-                continue
-            digest.update(f"{relative}\0{_sha256_file(path)}\n".encode("utf-8"))
+        for relative, path in kept.items():
+            digest.update(f"{relative}\0{digests[path]}\n".encode("utf-8"))
         return digest.hexdigest()
     except OSError as exc:
         raise ManifestError(f"cannot read {folder}: {exc}") from exc
@@ -250,6 +265,7 @@ def runtime_hashes(rig: Path, launcher: Path | None) -> dict:
             "launcher_files": files, "java_executable": java, "java_version": _java_version(rig, launcher, java)}
 
 
+@_rig_hash_cache
 def prepare_run(rig: Path, run_id: str, kind: str, *, targets: list[str], expected: list[str], scenario: str = "",
                 candidates: dict[str, Path] | None = None, launcher: Path | None = None, core_baseline: Path | None = None) -> dict:
     """Write the pre-launch manifest and take ownership of the rig. Raises ManifestError (and writes nothing) when the rig is not an
@@ -323,6 +339,7 @@ def read_manifest(rig: Path, run_id: str) -> dict:
     return data
 
 
+@_rig_hash_cache
 def staged_drift(rig: Path, manifest: dict, launcher: Path | None = None) -> list[str]:
     """What differs between the manifest and the rig now: staged mod hashes, the enabled list, runtime configuration."""
     rig = Path(rig)
@@ -390,6 +407,7 @@ def _milestones(log: Path, mods_dir: Path | None) -> dict[str, bool]:
             "campaign_checks": campaign_checks_observed(text)}
 
 
+@_rig_hash_cache
 def evaluate_run(rig: Path, manifest: dict | None, log: Path, *, member_verdicts: dict[str, str] | None = None,
                  mods_dir: Path | None = None, launcher: Path | None = None) -> dict:
     """The shared evidence evaluator. Status ACCEPTABLE only when, for the run as a whole, the manifest is intact, the log is this
@@ -474,6 +492,7 @@ def summary_for_record(manifest: dict) -> dict:
             "expected_milestones": manifest["expected_milestones"]}
 
 
+@_rig_hash_cache
 def environment_drift(rig: Path, summary: dict | None) -> list[str]:
     """How the rig's providers, probe config and launcher files differ now from a recorded run's manifest summary."""
     if not summary:
