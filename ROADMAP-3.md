@@ -1444,6 +1444,14 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   Tests: `tests/test_save_doctor.py` (each list kind, a skin's hull id and a mod's hull defined, `knownIndustries` and a
   non-faction element ignored, the check skipped without a core). Collecting nothing, or collecting outside a Faction, fails
   it (mutation-checked). Next: Salvor's `repair` drops those ids from the lists, and the candidate is run again.
+- 93.57 (S) **A MagicLib bounty line went to the group, not its mod.** YunruCore's 96.2 live run (P962YC-LIVE-0985a-20261119)
+  read UNCLEAR: its eight bounty lines (`bounty|yunrucore/<id>|MagicLib has no bounty data for this id (not loaded)`) were
+  attributed to no member, because `group_report` matches a line's subject against content ids and a bounty names
+  `<mod id>/<bounty id>`. Each of the eight lists `required_mods_id` naming sibling Yunru mods the solo run did not enable,
+  so MagicLib was right not to load them, but the mod's own `probe_accepted.json` could not apply to a group line.
+  **Done 2026-11-19.** A bounty line whose subject starts with a member's mod id belongs to that member, so it fails that
+  member or is cleared by its acceptance. Tests: `tests/test_probe_group.py`
+  (`test_a_bounty_line_belongs_to_the_mod_it_names_and_its_acceptance_applies`; fails without the change).
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct
