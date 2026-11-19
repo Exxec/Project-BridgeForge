@@ -227,9 +227,6 @@ def _probe_live(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
     except ValueError as exc:
         print(f"bridgeforge: {exc}", file=sys.stderr)
         return 2
-    if args.save_reload and direct is not None:
-        print("bridgeforge: --save-reload's second start goes through the launcher; it cannot be combined with --direct yet", file=sys.stderr)
-        return 2
     if args.save_reload:
         from bridgeforge.save.save_reload_run import clear_stale_fingerprint, save_reload_configured
         if not save_reload_configured(rig):
@@ -243,7 +240,7 @@ def _probe_live(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
     if args.save_reload and live.verdict == "LIVE_DONE":
         from bridgeforge.save.save_fingerprint import parse_fingerprint
         from bridgeforge.save.save_reload_run import reload_run
-        reloaded = reload_run(rig, f"{args.test_id}-reload", bat_name=args.bat, menu_timeout=args.menu_timeout)
+        reloaded = reload_run(rig, f"{args.test_id}-reload", bat_name=args.bat, menu_timeout=args.menu_timeout, direct=direct)
         block = parse_fingerprint(Path(reloaded.log).read_text(encoding="utf-8", errors="replace")) if reloaded.log and Path(reloaded.log).is_file() else None
         result["reload"] = {"verdict": reloaded.verdict, "stage": reloaded.stage, "detail": reloaded.detail, "stages": reloaded.stages,
                             "log": reloaded.log, "reload_after_save": bool(block and block["compare_observed"]), "fingerprint": block}

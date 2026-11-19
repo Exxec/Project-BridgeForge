@@ -916,6 +916,11 @@ unproven).
     run-j25-frpp.bat` ran Broken Star's group (PLAN-962b group 2) with no wrapper script. It ended LIVE_DONE (main-menu,
     campaign, probe-saved, combat-1), and the report read PASS, FATAL 0, MOD-ERROR 0. Nothing was recorded: it was a harness
     check. The wrapper scripts are local and git-ignored; they go when the owner says so.
+  - Wrappers deleted on both PCs 2026-11-19 (owner: "yes").
+  - `--save-reload` with `--direct` added the same day. `save_reload_run.reload_run(direct=)` starts the reload's second game
+    directly too, and the CLI no longer refuses the pair. This unblocks the gates that need a save-reload run on Test1:
+    bf-0b-15 (SEEKER Betelgeuse) and bf-strag-station-augments. Test: `tests/test_direct_start.py` (the reload start receives
+    `direct`). Without the pass-through the test fails.
 - 95.5 (M) **Run-manifest hash reuse (93.27).** About 5 minutes per live run on Test1.
   **Done 2026-11-19.** `file_hash.cached_hashes(cache_file)` opens a hash cache keyed by resolved path, size and modification
   time (ns); inside it `sha256_many` takes unchanged files from the cache and hashes the rest in 8 threads, and the cache is

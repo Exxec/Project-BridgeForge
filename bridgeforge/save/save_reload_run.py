@@ -57,10 +57,12 @@ def drive_reload(log: Path, hands: Hands, menu_timeout: float = 240, compare_tim
     return result
 
 
-def reload_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240) -> LiveResult:
-    """Start the rig game again under its own manifest, load the last save and observe the compare line."""
+def reload_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240, direct=None) -> LiveResult:
+    """Start the rig game again under its own manifest, load the last save and observe the compare line. `direct` starts it
+    without the launcher, as the first run did (ROADMAP-3 95.4)."""
     try:
-        with running_game(rig, test_id, bat_name, expected=RELOAD_EXPECTED, scenario="probe-group live --save-reload (reload)") as (log, hands, _rows):
+        with running_game(rig, test_id, bat_name, expected=RELOAD_EXPECTED, scenario="probe-group live --save-reload (reload)",
+                          direct=direct) as (log, hands, _rows):
             return drive_reload(log, hands, menu_timeout=menu_timeout)
     except LaunchNoProcess as exc:
         return LiveResult("LIVE_STUCK", "LAUNCH_NO_PROCESS", str(exc))
