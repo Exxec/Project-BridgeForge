@@ -17,8 +17,23 @@ Check S series implementation plan and if applicable add remaining items to road
 - 97.3 (M) **Scenario families and maintained qualification** (S3.2, S3.4). New-game, campaign, combat and integration
   families, each with a healthy and a known-bug control. When a provider, rule or candidate changes, the obligations it
   affects reopen. Carried by 93.30 (the scenario testbed) and 95.11 (targeted re-validation), not as a separate track.
+  **Closed 2026-11-19 (roadmap review): superseded by 93.30 and 95.11.**
 - 97.4 (S) **Measured review minutes** (S2 overall). Measure the owner's active review time only when a speed-up claim
   is made; it is no longer an acceptance step.
+  **Closed 2026-11-19 (roadmap review): culled.** A standing rule, not work: measure review minutes only when a speed-up is claimed (owner parked it).
+- 97.5 (S) **Roadmap review** (owner 2026-11-19: "Work in whatever order you think is optimal. Anything you deem low value or
+  not really helpful you can cull from roadmap."). Every open item from 78 to 97 was read, except the 94.G series and
+  96.5 P9/P10. 42 items now end in a `**Closed 2026-11-19 (roadmap review): ...**` line, each with its reason; no text was
+  removed:
+  - already built, with the file or check that does it (15): 78.1-78.8, 79.2, 82.5, 82.10, 82.11, 87.5, 88.1, 93.19;
+  - superseded by the item named in the line (14): 97.3, 93.14, 93.21, 93.27, 93.29, 93.32, 93.34, 93.35, 87.9, 87.11,
+    85.1, 86.3, 86.4, 86.6;
+  - culled as low value (13): 86.1, 86.2, 86.5 (AoTD; the owner set it aside on 2026-11-17), 85.2, 88.18, 93.23, 97.4,
+    87.6, 82.6, 79.3, 79.5, 79.6 (sister-repository features) and 88.11 (a stale merge order).
+  Kept although they looked cullable: 95.6 (the owner approved it as optional), 90.4 and 90.5 (item 90 is owner-approved)
+  and item 84 (nothing records that the 94.G series replaced it).
+  The order for the rest (owner: "whatever order you think is optimal"): 96.5 P5/P8, 93.51, P9, P10, 95.5, then the 94.G
+  series, with Test1 work (93.x rig items, 95.4, 95.11, 96.2) between CI waits.
 - Parked (owner 2026-11-17), with the reason recorded beside the S-series entry below:
   - S4.1 supported configurations;
   - S4.2 private exchange and recovery;
@@ -875,6 +890,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
 - 93.14 **One command for a batch.** The six-mod batch ran intake -> revive -> standard approvals -> agent packets -> src-to-jar ->
   descriptions -> translation -> revive by hand, per mod. `revive-queue` chains it and stops only at owner decisions, gathered
   into one decisions sheet for the batch (`escalation sheet` builds one).
+  **Closed 2026-11-19 (roadmap review): superseded by 95.3.**
 - 93.15 **Rebuild the jar right after an agent fix.** `src-to-jar` runs only in an approved revive. `escalation run --apply` runs it
   when a jar mod's source fix verifies, taking library jars from the reference install's `mods/` so `--lib` is not needed.
 - 93.16 **Packets say the source is jar-backed.** Bultach's agents also removed `readResolve` and moved unlisted fields
@@ -888,6 +904,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
 - 93.19 **Warn about a stale installed copy.** The project `.venv` holds an old non-editable `bridgeforge` in `site-packages`; a
   script run outside the checkout imported it and got old code (2026-11-17). `doctor` warns when the installed copy and the
   checkout differ.
+  **Closed 2026-11-19 (roadmap review): already built.** `hygiene.py` `installed_package` check (96.5 A2).
 - 93.20 **No licence key on the rig machine (owner to sort out).** Group 1's smoke on Test1 (G1-SMOKE-0985a-20261117) sat at
   the launcher for 240 s (its log ends at the launcher's fonts) and was reported SUSPECT_FATAL_DIALOG. Test1's Java preferences
   for the game (`HKCU\Software\JavaSoft\Prefs\com\fs\starfarer`) are empty: no `serial`, and none of the values a played game
@@ -910,6 +927,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   key check having failed (93.20). Proven live 2026-11-17 once the key was stored: G1-SMOKE-direct-0985a-20261117 reached the main
   menu in 96 s, and every group's live run started this way through `bridgeforge-state/live-wrappers/`; the harness itself still
   clicks the launcher until this is built.
+  **Closed 2026-11-19 (roadmap review): superseded by 95.4.**
 - 93.22 **The rig window must fit the desktop.** The live click fractions were measured in a 1920x1440 window
   (`rig_prefs.RIG_RESOLUTION`); Test1's desktop is 1920x1080 at 96 DPI (2026-11-17), so that window runs off the screen.
   Pre-flight (93.8) compares the desktop with the pinned size and refuses with the remedy (a larger desktop mode, or click
@@ -917,6 +935,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
 - 93.23 **A launcher click that misses is retried and recorded.** `launcher_click.click_launcher_once` posts one click at
   50%/68% of the window (measured on RC8's launcher) and never again; on Test1 the run then waited out its timeout. Retry until
   the log moves past the launcher and capture the launcher window at each try. Lower priority once 93.21 lands.
+  **Closed 2026-11-19 (roadmap review): culled.** The item itself says lower priority once 93.21 lands; 95.4's direct start removes the launcher click.
 - 93.24 **Captures that show the game window.** On Test1 the full-screen capture (`window_watch.save_screenshot`) showed the
   scheduled task's console where the launcher was, although the launcher was the foreground window and set topmost, and the
   taskbar clock in both captures was 12 hours old (G1-SMOKE-0985a-20261117-no-main-menu.png and the G1-PEEK-0985a-20261117
@@ -947,6 +966,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   on Test1: wrapper 08:14:20, game 08:19:16 for group 1, with GraphicsLib and Scrapyard) and again at release. Keep (path, size,
   mtime, hash) per rig, re-read only changed files, hash in parallel. Owner 2026-11-17 followed the recommendation to build it after
   the six live tests, so the batch's evidence stays one method.
+  **Closed 2026-11-19 (roadmap review): superseded by 95.5.**
 - 93.28 **First-run game preferences.** A Windows user who never played shows "Key configuration options have changed" over the
   main menu and cannot skip the tutorial (rules.csv `ngcSkipTutorialNoSkip`, "Need to start at least one game with the tutorial in
   order to be able to skip it"; `NGCCanSkipTutorial` is `!isNewPlayer()`, backed by the Java preference `canSkipTutorial`). Test1
@@ -965,6 +985,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     is read.
 - 93.29 **A report reads its own run's probe config.** `probe-group report` uses the rig's current config, so group 3's report after
   `install 4` named Tania instead of KoC (2026-11-17). Keep the config, or its hash, with the run manifest and read that.
+  **Closed 2026-11-19 (roadmap review): superseded by 95.4.**
 - 93.30 **Scenario testbed (owner design 2026-11-17).** Hidden mission factions whose fleets the code builds by hand (Tania's Blood
   Trail and Frost Fire: `createEmptyFleet` then `addFleetMember("tania_blood_stork_main_Death_Special")`, spawned by
   `tania_mission_unlocker_per_rep` at WELCOMING/FRIENDLY standing) cannot be exercised by `faction-fleet-gen`. Owner: "start a new
@@ -979,6 +1000,7 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
 - 93.32 **Fewer acceptances: content the game cannot load is information.** CSV rows with no .ship/.wpn/.system file (Musashi 4,
   Bultach 2) and systems a mod creates only under a condition (Tania's `Zufalliger Krieg`, Nexerelin random mode only) are not
   shortfalls: report them as INFO with the reason, so the owner rules only on what can matter.
+  **Closed 2026-11-19 (roadmap review): superseded by 95.1.**
 - 93.33 **Bounded jar reads (hardening gap, found 2026-11-17).** `scan_classfile.iter_class_files_in_jars` (`archive.open(item)`
   then `.read()`) and `behavior_discovery.py` line 182 (`archive.read(member)`) read class entries of untrusted jars unbounded, against
   the `zipsafe.read_limited` rule, and `tests/test_safeio_ratchet.py` does not count zip reads. Found by the 2026-11-17 ultracode
@@ -1001,10 +1023,12 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   "pre-existing, unchanged on <build>" and separate it from what the target build changes, so a mod that works does not read as
   broken (owner 2026-11-17: "UAF works fine under RC8, I'm surprised these are all detected issues?"). Check the
   `script-sandbox-forbidden-api` rule against UAF's live boot: its mod plugin loads on RC8.
+  **Closed 2026-11-19 (roadmap review): superseded by 95.2.**
 - 93.35 **Fast Rendering and Prepatcher on 0.98.5a.** The installed Fast Rendering v1.0.0rc1 (readme: "Starsector 0.98a-RC8 Windows")
   and StarsectorPrepatcher 0.18.4 (gameVersion 0.98a-RC8) are RC8 builds; Fast Rendering patches game classes with an ASM agent.
   `java-matrix setup` already has the `fr` launcher and `--prepatcher`; add them to the 0.98.5a rig once 0.98.5a builds exist and a
   smoke boot proves them.
+  **Closed 2026-11-19 (roadmap review): superseded by 93.42.**
 - 93.36 **The report draft cannot be told where the libraries are.** `revive --draft-report` checks the compile against the queue
   folder and `_rig/mods` only; White_Legion has no rig, so Sunrider's draft stayed BLOCKED on "5 javac error(s)" that were only
   LazyLib and MagicLib not found, although `revive --providers` named a mods folder holding both (it feeds missing-content packets,
@@ -1748,6 +1772,7 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
 88.4-88.5; 88.6 waits for a second mod with the same CSV layout problem. Nothing below is built yet.
 - 88.1 `probe-group record` writes who ran the session: "Owner ran New Game..." is printed even for unattended
   `probe-group live` runs (NGO-LIVE-20261026; corrected by hand). Take it from the live run record.
+  **Closed 2026-11-19 (roadmap review): already built.** 96.5 A1: the record credits the run, not the owner (`tests/test_build_labels.py`).
 - 88.2 The live harness treats "the game window is gone" after the probe's `done` marker and a graceful close as LIVE_DONE
   (87.9, EXO-RC3-LIVE-20261026).
 - 88.3 `rig-check`: scaffold, build, install and collect rig-only check mods. Today two were hand-made (`bf_exotica_check`,
@@ -1772,6 +1797,7 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
 - 88.11 Merge order: the S branch carries all of B0-B6; item 87 merges on top of it with three import fixes and a
   regeneration, done and verified in `integration/s-series-with-87` (87 affected tests OK). Merge S first, then that
   branch, rather than item 87 onto main directly.
+  **Closed 2026-11-19 (roadmap review): culled.** A merge order for branches merged long ago.
 - 88.12 **Done 2026-10-26.** `probe-group live` presses SPACE again after each 90 s without the probe's "combat END" (the round runs
   about 60 s once unpaused). The single press 2 s after deploying could leave the mission paused (EXO-RC4B-LIVE-20261026 stopped
   logging after deployment; the owner had been unpausing combat by hand). Five later unattended runs finished combat on their own.
@@ -1799,6 +1825,7 @@ approved for now set in roadmap").** Each entry names the hand work it replaces.
   maintainer's build from New Game was clean (run H).
 - 88.18 Deferred: a Refit-screen driver that records the owner's clicks once (fixed resolution and ship) and replays them per
   build with screenshot checks, so before/after runs need no person. Module positions and LunaLib panels make it fragile.
+  **Closed 2026-11-19 (roadmap review): culled.** Deferred as fragile (a Refit-screen click replay); the probe and scenarios cover the same ground.
 - 88.19-88.23 below come from the Ironclads v.11+bf.2 runs of 2026-10-30 (RC8-41, RC8-42). Proposed, not started.
 - 88.19 `live --save-reload` calls a reload LIVE_DONE at the compare line, before the load ends: ICBF2-J28FR's Fatal came 243 ms
   later, was reported as LIVE_DONE, and `log-triage` said FATAL=0. Stay up after the compare line and fail on a dialog.
@@ -1841,8 +1868,10 @@ built by delegating eight method bodies to a Java helper (`In operation/Exotica-
   instrumentation javac never emits), like `lambda$`/`access$`. Test: `tests/test_jar_patch.py`.
 - 87.5 RC8-37 (module ids are not unique within a ship) and RC8-38 (`HullVariantSpec` identity; an unset module slot returns
   `SpecStore`'s shared spec) added to `docs/RC8_BEHAVIOUR.md`.
+  **Closed 2026-11-19 (roadmap review): already built.** `docs/RC8_BEHAVIOUR.md` RC8-37 and RC8-38.
 - 87.6 Proposed, not built: a REVIEW scan finding for jar code that keys per-module state by `getHullVariantId()` while the
   mod (or a mod it supports) ships variants that repeat a module id (RC8-37). Needs owner approval.
+  **Closed 2026-11-19 (roadmap review): culled.** Proposed, never approved; the Exotica fix it came from is upstream (PRs #80-#82).
 - 87.7 Exotica RC4 live, 2026-10-26: smoke PASS; EXO-RC4-LIVE-20261026 LIVE_DONE with the rig-only `bf_exotica_check`
   13 PASS/0 FAIL/1 SKIP, while RC3-fix2 (EXO-RC3-LIVE-20261026) fails the two predicted checks (identical-module
   clobbering, prefix-sibling bleed). Results in the RC4 workspace's `working/reports/REVIVAL_REPORT.md`. Still pending:
@@ -1859,9 +1888,11 @@ built by delegating eight method bodies to a Java helper (`In operation/Exotica-
   Order's ship_systems.csv: three rows in vanilla 0.9a's 26-column layout under the mod's 24-column header, so every value
   after column 8 loaded one column off, e.g. EMP active 0.5 s instead of 4). Detection: a too-wide row whose values line up
   with vanilla's header for that file (any reference core) once the missing columns are empty. Fixed by hand in NGO.
+  **Closed 2026-11-19 (roadmap review): superseded by 88.6.**
 - 87.9 Observation, not fixed: `probe-group live` raised "the game window is gone" on EXO-RC3-LIVE-20261026 after the probe's
   `done` marker (campaign, combat) and the graceful close, while `drive` still navigated to the mission list. The run was
   complete; the harness should treat a window that closes after `done` as LIVE_DONE.
+  **Closed 2026-11-19 (roadmap review): superseded by 88.2.**
 
 **86. Re-check the archive across environments and against AoTD (owner 2026-10-22; after item 83, uses 85.1).** Everything
 archived was live-validated on Java 25 direct, alone or in small groups. Scope (Done/ 2026-10-22): 112 archives carry code (jars
@@ -1871,16 +1902,22 @@ ids, dependencies present), about 15-25 groups per environment; a failing group 
 - 86.1 Forecast first, offline: `atlas sweep aotd` over every indexed archive (Mod Atlas, item 67's first use) ranks each mod's
   predicted conflicts with Ashes of the Domain (Vaults of Knowledge, Theory of Toolbox fork, Building Menu Overhaul, Ashlib)
   and refreshes the census. Done when every code archive has a forecast and a risk rank.
+  **Closed 2026-11-19 (roadmap review): culled.** AoTD passes; owner 2026-11-17: AoTD is under an overhaul and can be ignored for now.
 - 86.2 AoTD alone: the `aotd` set with the probe on the pre-patcher launchers (AoTD's Toolbox fork needs the Prepatcher
   javaagent), Java 25 direct-prep and FR Java 28 prep. Its own FAIL lines become the AoTD baseline, so later group runs only
   report what a revived mod adds. Done when the AoTD baseline is recorded.
+  **Closed 2026-11-19 (roadmap review): culled.** AoTD passes; owner 2026-11-17: AoTD is under an overhaul and can be ignored for now.
 - 86.3 Environment pass 1, Java 28 direct (furthest from the original validation), code archives in groups, no AoTD. Done when
   every group is PASS or bisected to named mods.
+  **Closed 2026-11-19 (roadmap review): superseded by 95.11 and 93.42.**
 - 86.4 Environment pass 2, FR Java 28, same groups.
+  **Closed 2026-11-19 (roadmap review): superseded by 95.11 and 93.42.**
 - 86.5 AoTD pass: the code archives grouped with `--also-enable aotd` on Java 25 direct-prep; mods 86.1 ranks high-risk run
   first, in small groups (2-3), the rest in normal groups. Then FR Java 28 prep for the groups that passed. Done when every
   code archive has an AoTD verdict (PASS, FAIL with a named cause, or an accepted incompatibility recorded in its workspace).
+  **Closed 2026-11-19 (roadmap review): culled.** AoTD passes; owner 2026-11-17: AoTD is under an overhaul and can be ignored for now.
 - 86.6 Pre-patcher variants of passes 1-2 only for archives that patch game classes or depend on the Prepatcher.
+  **Closed 2026-11-19 (roadmap review): superseded by 95.11 and 93.42.**
 - Results go into each workspace's live record and gates.json; an archive is re-archived (`revise`) only when a fix is needed.
   New and revised mods are not part of this item: they get the `standard` bundle before archiving (85.1).
 **S-series implementation (owner 2026-10-24: "plan S series implementation then proceed to start S1").**
@@ -1910,9 +1947,11 @@ built yet; LIVE TEST NOT PERFORMED.
   a bundle instead of one launcher; `live-batch plan` expands it, stages each candidate once and runs it through every
   environment before moving on, and records the gate PASS only when every environment passes (per-environment results kept
   in the run records). Archive-eligible runs use the `standard` bundle unless the gate says otherwise.
+  **Closed 2026-11-19 (roadmap review): superseded by 95.3.**
 - 85.2 Refactor-review evidence: one command that produces item 83 section 6's evidence for a PR as JSON (test counts
   before/after, skips, coverage, CLI golden hash, rename similarity, wheel file list, Salvor suite against the branch). Done
   when a refactor PR's review reads that one file.
+  **Closed 2026-11-19 (roadmap review): culled.** Evidence tooling for item 83's refactor, which is finished.
 - 85.3 Workspace brief: one page per workspace (versions, changed files, open findings, accepted baselines, past live runs,
   earlier reviews and decisions such as reports/ASTRA_LIVE_REVIEW.md), printed before any investigation. Done when the EPTA
   Alicerce/narcepolis question would have been answered from the brief.
@@ -2030,8 +2069,10 @@ conclusions.
   runtime evidence. VALIDATED means a defined acceptance test, including negative cases, within a declared scope.
 - P2 82.5 Runtime scheduling: research experiments are gates in `gates.json` (needs.scenario), so `board
   --live-pending` batches them with revival gates in the same rig sessions.
+  **Closed 2026-11-19 (roadmap review): already built.** `gates.py` takes `scenario` needs.
 - Later 82.6 Active research selection, once there is enough empirical data to measure uncertainty against; corpus
   acquisition (multiple releases of the same mods) for version timelines.
+  **Closed 2026-11-19 (roadmap review): culled.** Speculative ('once there is enough empirical data'); no consumer.
 - P1 82.7 Readable code in research reports (2026-10-22). `decompile-jar` (Vineflower 1.12.0) and `rebuild-jar` exist but
   serve revisions only; research reads class files directly (`atlas_classfile`). `research report` decompiles the classes
   a question touches into git-ignored `bridgeforge-state/research/<case>/decompiled/<jar-sha256>/`, records the jar hash
@@ -2057,10 +2098,12 @@ conclusions.
   links from .version files) and a pairs queue for `atlas migrations --pairs-from`. Replaces the 2026-10-22 one-off
   script (`bridgeforge-state/release-inventory/`: 718 mod ids, 200 with two or more versions) and starts 82.6's corpus
   acquisition now.
+  **Closed 2026-11-19 (roadmap review): already built.** `corpus/corpus_releases.py`, `bridgeforge corpus releases`.
 - P2 82.11 Author changelogs as hints: parse the changelog shipped in each mod release (CHANGELOG.txt, changelog.md and
   similar) per version; `research report` quotes lines naming the feature, labelled AUTHOR CLAIM (weaker than STATIC:
   what the author says changed, not what the code shows). For Templar, a changelog line saying the Crusade moved or was
   cut is the fastest hint to confirm or refute in code.
+  **Closed 2026-11-19 (roadmap review): already built.** `research/research_changelog.py` (AUTHOR CLAIM).
 - P2 82.12 Old game API: `api-diff` and `api how` need an older `starfarer.api.jar`. Owner: locate old starsector-core
   installs (0.95.1a, 0.96a, 0.97a); then run `api-diff` once per step to RC8 and let `research report` and `atlas
   migrations --old-api/--new-api` use the results, so migration proposals rest on the authoritative API change, not
@@ -2112,30 +2155,42 @@ combat, but missed a whole missing rules.csv (FIX-001), never proves a save relo
 SAVE_RELOAD stays NOT_TESTED) and needs hand-written hooks per feature. In work 2026-10-20, offline (LIVE TEST NOT
 PERFORMED until the next rig session):
 - 78.1 Manifest id echo: the probe logs the run manifest id first; the evaluator refuses a mismatch (R1 trust).
+  **Closed 2026-11-19 (roadmap review): already built.** the probe echoes the run's manifest id first (`graceful_exit.py`, `probe-mod`).
 - 78.2 Save-and-reload fingerprint: per-mod sector fingerprint before `cmdSave()` and after reload, compared; sets
   `milestones.reload_after_save` only when observed equal; becomes R6's in-game evidence emitter and covers SEEKER SK-6c
   and part of Salvor R4.
+  **Closed 2026-11-19 (roadmap review): already built.** `save/save_fingerprint.py`; `reload_after_save` in `probe/cmd_probe_group.py`.
 - 78.3 Live content parity (77.17): per-mod loaded counts against counts taken from the candidate before launch.
+  **Closed 2026-11-19 (roadmap review): already built.** `live/live_content_parity.py`.
 - 78.4 Declarative per-mod scenarios: `reports/PROBE_SCENARIO.json` (settings for the rig copy, steps, expected log
   lines with deadlines), so rig steps 13-15 and future recreations need no probe code.
+  **Closed 2026-11-19 (roadmap review): already built.** `probe/probe_scenario.py` (`reports/PROBE_SCENARIO.json`).
 - 78.5 One probe: fold Salvor's `salvor_rig_probe` load/save/day stages into this probe as a `salvor` profile (after
   78.2 lands); Salvor's `rig-build-probe` builds that profile.
+  **Closed 2026-11-19 (roadmap review): already built.** `probe/probe_salvor_profile.py` and the probe's `SalvorProfile`.
 - 78.6 Clean exit: the probe writes a done marker; the harness closes the window and records a natural exit by default.
+  **Closed 2026-11-19 (roadmap review): already built.** `graceful_exit.py`: done marker, then WM_CLOSE, natural exit recorded.
 - 78.7 "What was exercised" per mod; a mod with nothing exercised is flagged HOLLOW.
+  **Closed 2026-11-19 (roadmap review): already built.** `exercised.py` (HOLLOW).
 - 78.8 Campaign frame time under load per day (`campaign_perf`), for the Crusade and SPW.
+  **Closed 2026-11-19 (roadmap review): already built.** `campaign_perf.py`.
 
 **79. Same treatment for other components (proposed 2026-10-20).** The probe gaps have counterparts elsewhere:
 - 79.1 Scanner coverage report: per mod, which checks actually ran on which files (a scan can be as hollow as a probe
   run); unread file types listed instead of silently skipped.
 - 79.2 Offline save fingerprint: Salvor and VoidSmith compute the same fingerprint sections from a save's XML, so a
   repaired or edited save can be compared with the probe's in-game fingerprint (78.2) and with its own original.
+  **Closed 2026-11-19 (roadmap review): already built.** `save/save_fingerprint_offline.py`.
 - 79.3 VoidSmith Save Workshop: every written copy carries an expected-fingerprint file; the probe's reload compares
   against it, closing "one Workshop copy loaded in game" and the capacity recompute question in one run.
+  **Closed 2026-11-19 (roadmap review): culled.** A VoidSmith feature; belongs in that repository's plan.
 - 79.4 Duel, raid and capacity sub-mods: the same manifest echo, done marker and scenario format as the main probe.
 - 79.5 Project Go assurance import: read the new record blocks (fingerprint, content parity, scenario, exercised) as
   gate evidence; a HOLLOW member never passes CAMPAIGN.
+  **Closed 2026-11-19 (roadmap review): culled.** A Project Go feature; belongs in that repository's plan.
 - 79.6 SPW: map `campaign_perf` and combat-perf into `performance-report.json` so revivals carry a performance
   baseline (SPW roadmap item 5).
+  **Closed 2026-11-19 (roadmap review): culled.** An SPW feature; belongs in that repository's plan.
 - 79.7 **Built offline, merged (#49); live pending where it needs the rig.** Rig harness: one launcher path (probe-group live, bf-test.ps1, boot-test) with the same manifest, exit and
   done-marker handling, instead of three.
 
