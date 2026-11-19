@@ -1,0 +1,1 @@
+- `hygiene`'s installed-package check no longer mistakes build metadata left in the checkout for the installed copy (96.5 A2 follow-up).
