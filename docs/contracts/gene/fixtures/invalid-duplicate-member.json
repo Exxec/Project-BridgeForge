@@ -1,0 +1,61 @@
+{
+  "schema": "bridgeforge-gene",
+  "schema_version": 1,
+  "identity": "ced995cd4c4b7a281f727136cfeab4e16ad15cfbd9cfd50dd6630587c6ea8107",
+  "kind": "hullmod",
+  "anchors": [
+    "hullmod:example_mod"
+  ],
+  "provides": [
+    "hullmod:example_mod"
+  ],
+  "members": [
+    {
+      "what": "csv-row",
+      "path": "data/hullmods/hull_mods.csv [example_mod]",
+      "sha256": "68b28cebccda169c27b89c9164217d53dd011e355ae836d3dee6053c8f9e1848",
+      "reason": "anchor row"
+    },
+    {
+      "what": "file",
+      "path": "data/hullmods/example.java",
+      "sha256": "1814673d5dfdd363a7a2b11c108a27031bc1efeb27196830178a90e904c9b043",
+      "reason": "the hull mod's script"
+    },
+    {
+      "what": "csv-row",
+      "path": "data/hullmods/hull_mods.csv [example_mod]",
+      "sha256": "68b28cebccda169c27b89c9164217d53dd011e355ae836d3dee6053c8f9e1848",
+      "reason": "anchor row"
+    }
+  ],
+  "needs": {
+    "vanilla": [],
+    "mods": []
+  },
+  "registrations": [],
+  "conditions": [],
+  "persistent_state": [],
+  "build": {
+    "game_version": "0.98.5a-RC7",
+    "mod_version": "1.0.0"
+  },
+  "provenance": {
+    "mod_id": "fixture_mod",
+    "mod_name": "Fixture Mod",
+    "author": "BridgeForge"
+  },
+  "licence": {
+    "decision": "LOCAL_ONLY"
+  },
+  "phenotype_obligations": [
+    "the hull mod applies to a ship and shows its effect"
+  ],
+  "unknowns": {
+    "missing": [],
+    "suspects": []
+  },
+  "collected_from": [
+    "vendor-plan"
+  ]
+}

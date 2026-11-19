@@ -59,6 +59,7 @@ COMMAND_MODULES: dict[str, tuple[str, ...]] = {
     "cmd_shadow": ("shadow-triage",),
     "cmd_gates": ("gates",),
     'research.cmd_research': ("research",),
+    "genome.cmd_gene": ("gene",),
     "cmd_revive": ("revive-review", "mod-changelog", "ready-list", "revive-queue", "revive", "escalation"),
 }
 

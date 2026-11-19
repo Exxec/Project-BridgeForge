@@ -854,6 +854,49 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 - 94.G1 **Gene contract and identity** (read-only): versioned `gene.json` (kind, anchors, members with hashes, needs,
   registrations, conditions, persistent state, build, provenance and licence, phenotype obligations); content-hash identity;
   `gene describe`. Acceptance in section 6.
+  **WP1 Done 2026-11-19** (owner the same day: "then begin G series after that").
+  - `bridgeforge/genome/gene.py`: `describe(mod, "kind:id")` builds `gene.json` schema 1 from `vendor-plan`'s closure for
+    the six content kinds. Members are files, CSV rows and jar classes, each with a SHA-256:
+    - a text file without its UTF-8 BOM, with LF line ends, no trailing spaces or tabs and no trailing blank lines
+      (refused over 64 MB);
+    - a CSV row as its named, non-empty, trimmed cells (cells past the header are not part of it);
+    - a jar class as its bytes, named by the jar's path in the mod (`jars/x.jar!a/B.class`), found without following
+      links or junctions out of the mod; an unreadable jar is skipped.
+  - Identity is the SHA-256 of the kind and the members. Provenance and licence are recorded but are not part of it, and
+    the manifest holds no machine path, so the same feature in another mod or folder is the same allele.
+  - Needs: vanilla-provided parts and the mod's declared dependencies. Licence: `revival_licence`. Unknowns: vendor-plan's
+    MISSING and SUSPECT lists, never dropped. One phenotype obligation per kind (G6 makes them probe obligations).
+  - Registrations, conditions and persistent state are present and empty in schema 1; `collected_from` says
+    `vendor-plan`. They are filled from archaeology with G2's campaign features and registration slicing.
+  - `bridgeforge gene describe MOD KIND:ID [--vanilla-core CORE] [--write FILE]`. `validate()` checks every field's shape
+    (sister repositories read these files), that the identity matches the members and that no member is listed twice;
+    malformed input gives problems, never an exception.
+  - Acceptance on White_Legion: 18 manifests, the six kinds on three batch mods (Sunrider, United Aurora Federation,
+    Bultach Coalition; RC7 core). All valid; each described twice gives the same manifest; closures of 2-36 members (15 of
+    them jar classes) with their unknowns listed.
+  - An independent review's points are taken: a row with cells past the header crashed the hash; the jar lookup followed
+    junctions, read a jar name as a glob pattern and stopped at a corrupt jar; `validate` raised on malformed shapes. The
+    licence `reason` stays in the manifest: it comes from `release_policy.json` and its fragments, which are public here.
+  Tests: `tests/test_gene.py` (a hull mod's closure with hashes and its suspect; the same feature copied into another mod
+  with the other line ending is the same allele, a changed member a new one; a CSV row with a BOM, padding and an extra
+  cell is the same, a renamed one is not; a text file's BOM, trailing space and blank end lines do not count; a jar class
+  named by its jar path and a valid jar behind a junction not used; describing twice is identical; malformed shapes are
+  reported; bad anchors refused; the CLI). Without the line-ending normalization, or the junction guard, a test fails
+  (mutation-checked).
+  **WP2 Done 2026-11-19** (GR-1: export, fixtures and pin).
+  - `docs/contracts/gene/` is the contract a sister repository copies byte for byte:
+    - `gene.schema.json`, a JSON Schema (2020-12) of schema 1;
+    - `fixtures/`, two valid manifests (one hull mod gene, and the same gene from another mod and build, with the same
+      identity) and nine invalid ones, each breaking exactly one rule;
+    - `CONTRACT.json`, with the identity rule in words, every file's SHA-256 and each fixture's verdict.
+  - The consumer pins `CONTRACT.json`'s SHA-256, as it pins `target export`. `bridgeforge gene contract` checks the
+    committed folder against what `bridgeforge/genome/contract.py` writes and prints the pin; `--write` rewrites it.
+    The sister repositories add their conformance tests when their phase starts (D3); WP3 reports pin drift.
+  - Tests: `tests/test_gene_contract.py` (the committed folder is current; fixture verdicts follow `validate`; each invalid
+    fixture breaks one rule; equal identities across mods; the schema requires what `validate` requires; every file listed
+    by hash; `check` names a changed, missing or extra file). Mutation-checked: an unsorted identity and a dropped duplicate
+    check each fail the tests.
+  Next: WP2 (GR-1: export, fixtures and pin) and WP3 (GR-4: `trace` and the cross-repository check).
 - 94.G2 **Sequencing and proof**: closure for campaign features and registration slicing; subtraction and isolation proofs per
   gene. Project Go exports a gene's strings as one unit.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes

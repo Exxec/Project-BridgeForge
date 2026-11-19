@@ -1,0 +1,1 @@
+- `bridgeforge gene contract` checks or writes `docs/contracts/gene/`: the gene.json JSON Schema, shared fixtures and `CONTRACT.json`, whose SHA-256 sister repositories pin (ROADMAP-3 94.G1 WP2, GR-1).
