@@ -1,0 +1,1 @@
+- Roadmap review: 42 open items closed in place with their reasons (15 already built, 14 superseded, 13 culled) (97.5).
