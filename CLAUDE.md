@@ -139,8 +139,8 @@ on the second PC) and `memory-mirror`.
   out-of-date installed copy of bridgeforge in the interpreter.
 - `case_workspace.py` is the S1 read-only adapter for both workspace dialects; it grants no mutation or qualification rights.
   Its implementation/status and next slice are in `docs/S1_PROGRESS.md`.
-- `tests/` unittest suite; `tests/support.py` has `resolved_temp_dir()` and `link_dir()`. B5 CI partitions use
-  `tests/run_partitioned.py` and measured `tests/slow_tests.json`; normal full discovery and the full coverage job remain.
+- `tests/` unittest suite; `tests/support.py` has `resolved_temp_dir()` and `link_dir()`. `tests/run_partitioned.py` runs CI's
+  shards (`--shard K/N`, by `tests/module_timings.json`) and the pre-push hook's fast partition (`tests/slow_tests.json`).
 - `probe-mod/` the in-game probe (Java, public API only); built by `build-probe-mod`.
 - Gitignored and local-only: `In operation/`, `Done/`, `AGENTS.md`, `tools/*.ps1` (except
   `bf-test.ps1` and the scripts the hooks call), `.githooks/` (old local hooks; the tracked ones are `tools/githooks/`). RevenantLib is a separate private repo, `Exxec/RevenantLib`
@@ -202,9 +202,11 @@ without it. The web-session hook installs it.
 After a push, watch the run (`gh run watch <id> --exit-status`): CI was red for a day unnoticed (2026-10-13) because a local suite on
 one Python passed while argparse output, home and checkout paths, and junction handling differ on the CI matrix.
 
-CI (`.github/workflows/ci.yml`) runs all of these, plus disjoint fast/slow test jobs on Windows and Ubuntu with
-Python 3.15, a separate full coverage job and a coverage floor (`[tool.coverage.report] fail_under` in pyproject; raise
-it when coverage rises, never lower it). A pull request that changes only documents runs Lint and the test modules in
+CI (`.github/workflows/ci.yml`) runs all of these, plus four time-balanced test shards on Windows and four on Ubuntu with
+Python 3.15 (`tests/run_partitioned.py --shard K/4`, weighted by `tests/module_timings.json`; refresh it with
+`tools/module-timings.py` from a `--timings` run when shards drift apart). The Ubuntu shards run under coverage and a coverage
+job combines them and applies the floor (`[tool.coverage.report] fail_under` in pyproject; raise it when coverage rises, never
+lower it); 96.5 C2. A pull request that changes only documents runs Lint and the test modules in
 `tests/doc_tests.json`; a push to main always runs everything (`tools/ci-scope.py`, ROADMAP-3 96.5 C3).
 
 ## Test conventions

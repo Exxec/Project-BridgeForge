@@ -86,8 +86,11 @@ class BufferedRunnerTests(unittest.TestCase):
         for path in ("tests/run_partitioned.py", "tests/run_reversed.py"):
             with self.subTest(path=path):
                 self.assertRegex((ROOT / path).read_text(encoding="utf-8"), r"TextTestRunner\([^)]*buffer=True")
-        coverage = jobs((WORKFLOWS / "ci.yml").read_text(encoding="utf-8"))["coverage"]
-        self.assertIn("unittest discover -b -s tests", coverage)
+        test = jobs((WORKFLOWS / "ci.yml").read_text(encoding="utf-8"))["test"]
+        runs = [line for line in test.splitlines() if line.strip().startswith("run: python -m bridgeforge.test_guard")]
+        self.assertEqual(len(runs), 2)  # the Ubuntu shards under coverage, the Windows ones without (96.5 C2)
+        for run in runs:
+            self.assertIn("tests.run_partitioned --shard", run)
 
 
 if __name__ == "__main__":

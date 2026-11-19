@@ -143,7 +143,7 @@ class WorkflowTests(unittest.TestCase):
                 self.assertTrue(any("needs.scope.outputs.docs_only" in line for line in step), step)
 
     def test_single_jobs_are_skipped_whole_and_the_docs_job_runs_the_listed_tests(self):
-        for name in ("coverage", "audit", "lockfile", "shared-fixtures"):
+        for name in ("audit", "lockfile", "shared-fixtures"):
             with self.subTest(job=name):
                 block = self.jobs[name]
                 self.assertIn("    needs: scope", block)
@@ -157,13 +157,27 @@ class WorkflowTests(unittest.TestCase):
     def test_a_failed_scope_job_runs_everything(self):
         """A job whose `needs` failed is skipped, and a skipped check reads as passed: without `!cancelled()` a failed scope
         job would let a pull request through untested. With it, docs_only is empty, so `!= 'true'` holds and all run."""
-        needing = [name for name, block in self.jobs.items() if "    needs: scope" in block]
+        needing = [name for name, block in self.jobs.items()
+                   if any(re.match(r"^    needs: (scope|\[scope(, [\w-]+)*\])$", line) for line in block)]
         self.assertEqual(sorted(needing), ["audit", "coverage", "docs", "lockfile", "shared-fixtures", "test"])
         for name in needing:
             with self.subTest(job=name):
                 conditions = [line for line in self.jobs[name] if re.match(r"^    if:", line)]
                 self.assertEqual(len(conditions), 1)
                 self.assertIn("!cancelled()", conditions[0])
+
+    def test_coverage_combines_the_ubuntu_shards_after_they_pass(self):
+        """96.5 C2: the Ubuntu shards run under coverage and upload their data; the coverage job combines it and applies the
+        floor once every shard passed (a failed shard would otherwise read as a coverage drop)."""
+        coverage, test = "\n".join(self.jobs["coverage"]), "\n".join(self.jobs["test"])
+        self.assertIn("    needs: [scope, test]", coverage)
+        self.assertIn("needs.test.result == 'success'", coverage)
+        self.assertIn("pattern: coverage-data-*", coverage)
+        self.assertIn("coverage combine", coverage)
+        self.assertIn("coverage report --format=total", coverage)
+        self.assertIn("coverage run -p -m tests.run_partitioned --shard ${{ matrix.shard }}/4", test)
+        self.assertIn("name: coverage-data-${{ matrix.shard }}", test)
+        self.assertIn("shard: [1, 2, 3, 4]", test)  # the matrix and the /4 above agree
 
 
 if __name__ == "__main__":

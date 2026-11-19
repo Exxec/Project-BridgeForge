@@ -60,9 +60,47 @@ class TimedResult(unittest.TextTestResult):
         super().stopTest(test)
 
 
+TIMINGS = ROOT / 'tests' / 'module_timings.json'
+
+
+def module_of(case_id: str) -> str:
+    """`test_x.Class.method` -> `test_x` (the module discovery names it by)."""
+    return case_id.split('.', 1)[0]
+
+
+def shard_modules(modules: list[str], weights: dict[str, float], count: int) -> list[list[str]]:
+    """Whole modules dealt longest first to the least loaded of `count` shards (96.5 C2). Deterministic: ties go to the
+    lower shard and equal weights by name. A module with no measured weight counts as the median, so a new test module
+    neither vanishes nor lands everywhere."""
+    if count < 1:
+        raise ValueError('a shard count of at least 1 is needed')
+    known = sorted(weights[m] for m in modules if m in weights)
+    default = known[len(known) // 2] if known else 1.0
+    shards: list[list[str]] = [[] for _ in range(count)]
+    loads = [0.0] * count
+    for module in sorted(set(modules), key=lambda m: (-weights.get(m, default), m)):
+        target = min(range(count), key=lambda i: (loads[i], i))
+        shards[target].append(module)
+        loads[target] += weights.get(module, default)
+    return shards
+
+
+def select_shard(cases: list[unittest.TestCase], spec: str, weights: dict[str, float]) -> list[unittest.TestCase]:
+    """The cases of shard K of N (`spec` is "K/N", 1-based)."""
+    try:
+        index, count = (int(part) for part in spec.split('/'))
+    except ValueError as exc:
+        raise ValueError(f'shard must be K/N, got {spec!r}') from exc
+    if not 1 <= index <= count:
+        raise ValueError(f'shard {spec}: K must be between 1 and N')
+    chosen = set(shard_modules([module_of(case.id()) for case in cases], weights, count)[index - 1])
+    return [case for case in cases if module_of(case.id()) in chosen]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--partition', choices=('all', 'fast', 'slow'), default='all')
+    parser.add_argument('--shard', metavar='K/N', help='only shard K of N, balanced by tests/module_timings.json (96.5 C2)')
     parser.add_argument('--timings', type=Path, help='JSON report outside the tracked checkout (CI uses runner.temp)')
     parser.add_argument('--modules', nargs='+', metavar='MODULE',
                         help='only these test modules (tests.test_x or test_x), as the pre-push selects them (96.5 C5)')
@@ -71,9 +109,13 @@ def main(argv: list[str] | None = None) -> int:
     cases = module_cases(args.modules) if args.modules else list(flatten(unittest.defaultTestLoader.discover(str(ROOT / 'tests'))))
     try:
         chosen = select(cases, set(manifest['tests']), args.partition, subset=bool(args.modules))
+        if args.shard:
+            weights = json.loads(TIMINGS.read_text(encoding='utf-8'))['modules'] if TIMINGS.is_file() else {}
+            chosen = select_shard(chosen, args.shard, weights)
     except ValueError as exc:
         parser.error(str(exc))
-    print(f'{args.partition}: {len(chosen)} / {len(cases)} discovered cases', flush=True)
+    label = args.partition + (f' shard {args.shard}' if args.shard else '')
+    print(f'{label}: {len(chosen)} / {len(cases)} discovered cases', flush=True)
     started = time.perf_counter()
     result = unittest.TextTestRunner(verbosity=1, resultclass=TimedResult, buffer=True).run(unittest.TestSuite(chosen))
     elapsed = time.perf_counter() - started

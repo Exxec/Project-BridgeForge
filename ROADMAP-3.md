@@ -355,6 +355,22 @@ Check S series implementation plan and if applicable add remaining items to road
       Each guard fails with its fix removed (mutation-checked).
     - C2 (M): time-balanced shards with coverage inside the Ubuntu ones (Windows-fast is 12 min now; PR results in
       about 5-6).
+      **Done 2026-11-18.** The test matrix is Windows and Ubuntu x four shards, `tests/run_partitioned.py --shard K/4`.
+      - Shards take whole test modules (class fixtures stay together), dealt longest first to the least loaded shard
+        (`shard_modules`), so every module runs exactly once and the split is the same on every runner. A module with no
+        measured weight counts as the median.
+      - The weights are `tests/module_timings.json`: seconds per module from a timed full run on White_Legion (322 modules,
+        630 s), written by `tools/module-timings.py` (the largest sum wins over several reports). Four shards come out at
+        158 s each; the largest module, `test_behavior_observations`, takes 79 s.
+      - The Ubuntu shards run under `coverage run -p` and upload `coverage-data-<K>`; the coverage job downloads, combines and
+        applies the floor once every shard passed, instead of running the whole suite again under coverage (5 minutes).
+      - The fast/slow split stays for the pre-push hook; CI no longer uses it. Main has no branch protection, so the renamed
+        checks block nothing (checked 2026-11-18).
+      Tests: `tests/test_test_shards.py` (each module once, longest first, the median for an unmeasured module, whole modules
+      in order, a bad spec refused, the measured weights covering the suite and balancing four shards within a tenth, the
+      weights tool); `tests/test_ci_scope.py` (the coverage job combines the Ubuntu shards after they pass, the matrix and
+      the `/4` agree); `tests/test_ci_setup.py` (every shard run goes through the buffered runner). A wrong shard index fails
+      them (mutation-checked).
     - C4 (M): a machine-state sandbox for the suite: winreg raises unless patched; HOME, APPDATA and TEMP point at temp
       folders.
       **Narrowed to S (owner 2026-11-18: "I like your recommended route for C4").** Only the registry guard: in
