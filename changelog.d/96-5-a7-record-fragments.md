@@ -1,0 +1,1 @@
+- MOD_CHANGELOG entries and licence decisions are written as fragments (`mod-changelog.d/`, `bridgeforge/release_policy.d/`), so the two machines never edit the same lines; `release-notes assemble` folds them (96.5 A7).

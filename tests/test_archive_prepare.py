@@ -14,6 +14,7 @@ from bridgeforge.cli import main
 from bridgeforge.live.live_trust import auto_explain_shipped, shipped_hash
 from bridgeforge.release import record_policy_decision
 from tests.support import resolved_temp_dir
+from bridgeforge.release import _load_policy
 
 REPO_POLICY = Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json"
 
@@ -58,7 +59,7 @@ class PlainArchiveTests(unittest.TestCase):
         with resolved_temp_dir() as root:
             ws, policy = _workspace(root), _policy(root)
             code, out, err = _archive(root, ws, policy)
-            entry = json.loads(policy.read_text(encoding="utf-8"))["mods"].get("bf_fixture_radar")
+            entry = _load_policy(policy)["mods"].get("bf_fixture_radar")
             shipped = json.loads((ws / "reports" / "SHIPPED_CHANGES.json").read_text(encoding="utf-8"))["files"]
             archived = (root / "Done" / "Radar" / "ARCHIVE_NOTE.md").is_file()
         self.assertEqual(code, 0, err)
@@ -75,7 +76,7 @@ class PlainArchiveTests(unittest.TestCase):
             ws, policy = _workspace(root), _policy(root)
             record_policy_decision("bf_fixture_radar", local_only=False, reason="the author's open licence (forum post)", policy_path=policy)
             code, out, err = _archive(root, ws, policy)
-            entry = json.loads(policy.read_text(encoding="utf-8"))["mods"]["bf_fixture_radar"]
+            entry = _load_policy(policy)["mods"]["bf_fixture_radar"]
         self.assertEqual(code, 0, err)
         self.assertEqual((entry["local_only"], entry["reason"]), (False, "the author's open licence (forum post)"))
         self.assertNotIn("Licence: LOCAL_ONLY recorded", out)
@@ -84,7 +85,7 @@ class PlainArchiveTests(unittest.TestCase):
         with resolved_temp_dir() as root:
             ws, policy = _workspace(root, unexplained=True), _policy(root)
             code, _out, err = _archive(root, ws, policy)
-            entry = json.loads(policy.read_text(encoding="utf-8"))["mods"].get("bf_fixture_radar")
+            entry = _load_policy(policy)["mods"].get("bf_fixture_radar")
             archived = (root / "Done" / "Radar").exists()
         self.assertEqual(code, 2)
         self.assertFalse(archived)

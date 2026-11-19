@@ -13,6 +13,7 @@ from pathlib import Path
 from .safeio import atomic_write_text
 
 from .paths import checkout_root
+from .release import ReleaseError
 
 ROOT = checkout_root()  # changelog.d/ and CHANGELOG.md in the source tree (96.5 A2)
 FRAGMENT_DIR = "changelog.d"
@@ -68,8 +69,27 @@ def assemble(root: Path, version: str | None = None, dry_run: bool = False) -> l
     return [path.name for path in fragments]
 
 
+def record_fragments(root: Path) -> dict[str, list[Path]]:
+    """The other pending fragments a release folds (96.5 A7): MOD_CHANGELOG.md's and release_policy.json's."""
+    from .mod_changelog import pending_fragments as changelog_entries
+    from .release import policy_fragments
+
+    root = Path(root)
+    return {"mod-changelog.d": changelog_entries(root / "MOD_CHANGELOG.md"),
+            "bridgeforge/release_policy.d": policy_fragments(root / "bridgeforge" / "release_policy.json")}
+
+
+def assemble_records(root: Path, dry_run: bool = False) -> dict[str, list[str]]:
+    from .mod_changelog import assemble as fold_changelog
+    from .release import assemble_policy
+
+    root = Path(root)
+    return {"mod-changelog.d": fold_changelog(root / "MOD_CHANGELOG.md", dry_run=dry_run),
+            "bridgeforge/release_policy.d": assemble_policy(root / "bridgeforge" / "release_policy.json", dry_run=dry_run)}
+
+
 def add_parser(subcommands) -> None:
-    notes = subcommands.add_parser("release-notes", help="changelog fragments: 'assemble' moves changelog.d/*.md under the top unreleased heading of CHANGELOG.md; '--check' lists the pending ones")
+    notes = subcommands.add_parser("release-notes", help="changelog fragments: 'assemble' moves changelog.d/*.md under the top unreleased heading of CHANGELOG.md and folds mod-changelog.d/ into MOD_CHANGELOG.md and bridgeforge/release_policy.d/ into release_policy.json; '--check' lists the pending ones")
     notes.add_argument("action", nargs="?", choices=("assemble",), help="assemble the pending fragments into CHANGELOG.md")
     notes.add_argument("--version", help="the '## <version> (unreleased)' heading to use (default: the first one)")
     notes.add_argument("--check", action="store_true", help="list pending fragments; exit 1 when there are any")
@@ -82,23 +102,31 @@ def run_cli(args: argparse.Namespace) -> int:
     root = Path(args.root)
     if args.check or not args.action:
         names = [p.name for p in pending_fragments(root)]
+        records = {folder: [p.name for p in paths] for folder, paths in record_fragments(root).items()}
         if args.json:
-            print(json.dumps({"pending": names}, indent=2))
+            print(json.dumps({"pending": names, "records": records}, indent=2))
         else:
             print(f"{len(names)} pending changelog fragment(s)")
             for name in names:
                 print(f"  {FRAGMENT_DIR}/{name}")
-        return 1 if names and args.check else 0
+            for folder, pending in records.items():
+                print(f"{len(pending)} pending {folder} fragment(s)")
+                for name in pending:
+                    print(f"  {folder}/{name}")
+        return 1 if (names or any(records.values())) and args.check else 0
     try:
         moved = assemble(root, args.version, args.dry_run)
-    except (ReleaseNotesError, OSError) as error:
+        folded = assemble_records(root, args.dry_run)
+    except (ReleaseNotesError, ReleaseError, OSError) as error:
         print(f"release-notes: {error}")
         return 2
     verb = "would move" if args.dry_run else "moved"
     if args.json:
-        print(json.dumps({"moved": moved, "dry_run": bool(args.dry_run)}, indent=2))
+        print(json.dumps({"moved": moved, "folded": folded, "dry_run": bool(args.dry_run)}, indent=2))
     else:
         print(f"{verb} {len(moved)} fragment(s) into CHANGELOG.md")
         for name in moved:
             print(f"  {name}")
+        for folder, names in folded.items():
+            print(f"{verb} {len(names)} {folder} fragment(s)")
     return 0

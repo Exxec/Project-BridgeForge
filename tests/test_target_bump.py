@@ -15,6 +15,7 @@ from bridgeforge.target_bump import apply_retarget, bump, catalogue, render_cata
 from bridgeforge.targets import (TargetError, load_build, load_target, mod_game_versions, record_build, registry,
                                  resolve_tokens, set_target)
 from tests.support import resolved_temp_dir
+from bridgeforge.mod_changelog import merged_text
 
 
 def _core(root: Path, name: str, version: str) -> Path:
@@ -166,7 +167,7 @@ class CatalogueAndRetargetTests(unittest.TestCase):
             self.assertEqual((info["gameVersion"], info["version"], result["new"]), ("0.98.5a-RC3", "1.0+bf.1", "1.0+bf.1"))
             report = (root / "Alpha" / "working" / "reports" / "REVIVAL_REPORT.md").read_text(encoding="utf-8")
             self.assertTrue(report.rstrip().endswith("READY_FOR_LIVE_TEST"))
-            self.assertIn("Retargeted to Starsector 0.98.5a-RC3", changelog.read_text(encoding="utf-8"))
+            self.assertIn("Retargeted to Starsector 0.98.5a-RC3", merged_text(changelog))
 
     def test_retarget_carries_a_current_baseline_and_leaves_a_stale_one_stale(self) -> None:
         """ROADMAP-3 95.10: a retarget changes only mod_info.json, so acceptances current at the old version stay valid at the new
