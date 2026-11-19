@@ -384,7 +384,7 @@ _CONTENTS_SECTION = re.compile(r"(?ms)^## Contents[ \t]*\r?\n.*?(?=^#{1,2} |\Z)"
 def write_readme_copies(target: Path) -> list[str]:
     """For each zip in an archive folder, write `<name>-with-readme.zip` holding the same files plus a `readme.txt` taken from
     ARCHIVE_NOTE.md without its Contents section, and the folder's own `readme.txt`. Replaces what
-    tools/copy-done-archives-with-readme.ps1 did for the whole Done/ tree, for one archive."""
+    the retired tools/copy-done-archives-with-readme.ps1 did for the whole Done/ tree, for one archive (removed in 96.5 A9)."""
     target = Path(target)
     note = (target / "ARCHIVE_NOTE.md").read_text(encoding="utf-8")
     readme = (_CONTENTS_SECTION.sub("", note).rstrip() + "\r\n").encode("utf-8")
