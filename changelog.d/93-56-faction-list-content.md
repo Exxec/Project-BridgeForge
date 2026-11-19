@@ -1,0 +1,1 @@
+- Fix: `save-doctor` reports FACTION_LIST_UNDEFINED when a faction's known or priority ship, weapon, fighter or hull mod lists name content no enabled mod defines; RC7 stops loading at the first one (ROADMAP-3 93.56).

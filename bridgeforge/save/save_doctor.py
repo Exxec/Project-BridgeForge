@@ -39,6 +39,8 @@ RECOVERY = {
     "VERSION_CHANGED": "informational: check this mod first if the save fails",
     "FACTION_UNDEFINED": "high: the game stops loading in Faction.readResolve (no faction spec for the id); enable the mod "
                          "that defines the faction. Removing a faction from a save is not supported",
+    "FACTION_LIST_UNDEFINED": "high: the game stops loading at the first id it cannot resolve (\"Fatal: Ship hull spec [id] "
+                              "not found!\"); enable the mod that defines them, or drop the ids from those lists on a copy (Salvor)",
 }
 _NON_FINITE = re.compile(r">\s*(-?Infinity|NaN)\s*<")
 # A serialized com.fs.starfarer.campaign.Faction: its `id` leaf and `secondaryColorSegmentsOverride`, a field only Faction
@@ -50,28 +52,61 @@ _OPEN = re.compile(r"^\s*<([\w.$-]+)(?:\s[^>]*)?(?<!/)>\s*$")
 _CLOSE = re.compile(r"^\s*</([\w.$-]+)>\s*$")
 
 
+# A Faction's content lists (LinkedHashSet<String> fields of RC7's com.fs.starfarer.campaign.Faction, javap 2026-11-18) and
+# the kind of id each holds. readResolve rebuilds them from the faction spec only when StarfarerSettings."for.new"() holds;
+# otherwise the saved ids are kept, and one the loaded mods do not define stops the load: "Fatal: Ship hull spec
+# [sa_manticore_remnant] not found!" with Scrapyard Armories removed (Salvor R4 run 7890f07c, Test1, 2026-11-18; 93.56).
+FACTION_LISTS = {"shipsWhenImporting": "hull", "knownShips": "hull", "priorityShips": "hull",
+                 "knownWeapons": "weapon", "priorityWeapons": "weapon",
+                 "knownFighters": "wing", "priorityFighters": "wing",
+                 "knownHullMods": "hullmod", "priorityHullMods": "hullmod"}
+
+
 class _FactionIds:
     """The ids of the Faction objects written in full in campaign.xml, fed one line at a time (one tag per line, as the
-    game writes it). Each open element keeps its own `id` leaf; a marker leaf beside it makes that id a faction's."""
+    game writes it). Each open element keeps its own `id` leaf; a marker leaf beside it makes that id a faction's. The
+    `<st>` values of a faction's content lists (FACTION_LISTS) are kept per faction and list."""
 
     def __init__(self) -> None:
         self.ids: set[str] = set()
-        self._open: list[str | None] = []
+        self.lists: dict[str, dict[str, list[str]]] = {}
+        self._open: list[dict] = []
 
     def feed(self, line: str) -> None:
         leaf = _LEAF.match(line)
         if leaf:
-            if self._open and leaf.group(1) == "id":
-                self._open[-1] = leaf.group(2).strip()
-            elif self._open and leaf.group(1) == FACTION_MARKER and self._open[-1]:
-                self.ids.add(self._open[-1])
+            if not self._open:
+                return
+            tag, value, top = leaf.group(1), leaf.group(2).strip(), self._open[-1]
+            if tag == "id":
+                top["id"] = value
+            elif tag == FACTION_MARKER and top["id"]:
+                top["faction"] = True
+                self.ids.add(top["id"])
+            elif tag == "st" and top["name"] in FACTION_LISTS and len(self._open) > 1:
+                self._open[-2]["lists"].setdefault(top["name"], []).append(value)
             return
         if _CLOSE.match(line):
             if self._open:
-                self._open.pop()
+                frame = self._open.pop()
+                if frame["faction"] and frame["lists"]:
+                    kept = self.lists.setdefault(frame["id"], {})
+                    for name, values in frame["lists"].items():
+                        kept.setdefault(name, []).extend(values)
             return
-        if _OPEN.match(line):
-            self._open.append(None)
+        opened = _OPEN.match(line)
+        if opened:
+            self._open.append({"name": opened.group(1), "id": None, "faction": False, "lists": {}})
+
+
+def _defined_content(vanilla_core: Path, enabled_folders: list[Path]) -> dict[str, set[str]]:
+    from bridgeforge.substitutes import data_ids
+
+    defined = data_ids(Path(vanilla_core) / "data")
+    for folder in enabled_folders:
+        for kind, ids in data_ids(Path(folder) / "data").items():
+            defined[kind] |= ids
+    return defined
 
 
 def _faction_file_ids(directory: Path) -> set[str]:
@@ -199,11 +234,18 @@ def diagnose(save: Path, mods_dir: Path, vanilla_core: Path | None = None, cycle
                     non_finite += 1
                 factions.feed(line)
         if vanilla_core is None:
-            skipped.append("no vanilla core given: the FACTION_UNDEFINED check was skipped")
+            skipped.append("no vanilla core given: the FACTION_UNDEFINED and FACTION_LIST_UNDEFINED checks were skipped")
         else:
             folders = [installed[str(mod.get("id") or "")]["folder"] for mod in enabled if str(mod.get("id") or "") in installed]
             for faction in sorted(factions.ids - _defined_factions(Path(vanilla_core), folders)):
                 problems.append({"class": "FACTION_UNDEFINED", "faction": faction})
+            defined = _defined_content(Path(vanilla_core), folders) if factions.lists else {}
+            for faction, lists in sorted(factions.lists.items()):
+                for name, values in sorted(lists.items()):
+                    kind = FACTION_LISTS[name]
+                    missing = sorted(set(values) - defined[kind])
+                    if missing:
+                        problems.append({"class": "FACTION_LIST_UNDEFINED", "faction": faction, "list": name, "kind": kind, "ids": missing})
     for package, item in sorted(unresolved.items(), key=lambda kv: -kv[1]["occurrences"]):
         problems.append({"class": "CLASS_UNRESOLVED", "package": package, "occurrences": item["occurrences"],
                          "examples": sorted(item["examples"]), "classes": sorted(item["classes"]), "sample_path": item["sample_path"]})
@@ -219,7 +261,7 @@ def diagnose(save: Path, mods_dir: Path, vanilla_core: Path | None = None, cycle
             problems.append({"class": "MEMORY_CYCLE", **cycle, "base_rate": f"{len(found)} cycle(s) among {rate['pcmarkets']} condition market(s); "
                              f"{rate['pcmarkets_sharing_a_memory']} of them share a memory with another element, which is normal on its own"})
     blocking = [p for p in problems if p["class"] in ("TRUNCATED", "MOD_MISSING", "CLASS_UNRESOLVED", "NON_FINITE", "MEMORY_CYCLE",
-                                                       "FACTION_UNDEFINED")]
+                                                       "FACTION_UNDEFINED", "FACTION_LIST_UNDEFINED")]
     verdict = "TRUNCATED" if truncated else ("WILL_LIKELY_FAIL" if blocking else "NO_KNOWN_PROBLEM")
     return {"schema_version": SCHEMA_VERSION, "mode": "READ_ONLY_SAVE_DOCTOR", "save": str(descriptor.get("save_dir")),
             "character": descriptor.get("character_name"), "game_version": descriptor.get("game_version"),
