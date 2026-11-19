@@ -95,38 +95,46 @@ jobs:
           python -m pip_audit --local --skip-editable
 
   coverage:
+    # The Ubuntu test shards run under coverage and upload their data; this job only combines it and applies the floor
+    # (ROADMAP-3 96.5 C2: a separate full run under coverage took 5 minutes on top of the tests).
     name: Coverage (ubuntu / Python 3.15)
-    needs: scope
-    if: ${{ !cancelled() && needs.scope.outputs.docs_only != 'true' }}
+    needs: [scope, test]
+    if: ${{ !cancelled() && needs.scope.outputs.docs_only != 'true' && needs.test.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-bridgeforge
         with:
-          install: '".[archives]" coverage "setuptools>=68"'
-      - name: Run unit tests under coverage
+          install: 'coverage'
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: coverage-data-*
+          path: ${{ runner.temp }}/coverage-parts
+          merge-multiple: true
+      - name: Combine the shards' data
         env:
-          COVERAGE_FILE: ${{ runner.temp }}/.coverage
-        run: python -m bridgeforge.test_guard -- python -m coverage run -m unittest discover -b -s tests
+          COVERAGE_FILE: ${{ runner.temp }}/coverage-data
+        run: python -m coverage combine "${{ runner.temp }}/coverage-parts"
       - name: Report (fails below the pyproject floor)
         env:
-          COVERAGE_FILE: ${{ runner.temp }}/.coverage
+          COVERAGE_FILE: ${{ runner.temp }}/coverage-data
         run: |
           python -m coverage report --sort=cover --format=markdown >> "$GITHUB_STEP_SUMMARY"
           python -m coverage report --format=total
 
   test:
-    name: ${{ matrix.os }} / Python ${{ matrix.python-version }} / ${{ matrix.partition }}
+    # Four shards per system, balanced by tests/module_timings.json (ROADMAP-3 96.5 C2): Windows fast alone took 9-11 minutes.
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }} / shard ${{ matrix.shard }} of 4
     needs: scope
     if: ${{ !cancelled() }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 35
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        partition: [fast, slow]
+        shard: [1, 2, 3, 4]
         python-version: ["3.15"]
     steps:
       - name: Documentation-only pull request
@@ -138,9 +146,22 @@ jobs:
         if: needs.scope.outputs.docs_only != 'true'
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Run ${{ matrix.partition }} unit tests
-        if: needs.scope.outputs.docs_only != 'true'
-        run: python -m bridgeforge.test_guard -- python -m tests.run_partitioned --partition ${{ matrix.partition }} --timings "${{ runner.temp }}/test-timings-${{ matrix.partition }}.json"
+          install: ${{ matrix.os == 'ubuntu-latest' && '".[archives]" coverage "setuptools>=68"' || '. "setuptools>=68"' }}
+      - name: Run shard ${{ matrix.shard }} of 4 under coverage
+        if: needs.scope.outputs.docs_only != 'true' && matrix.os == 'ubuntu-latest'
+        env:
+          COVERAGE_FILE: ${{ runner.temp }}/coverage-data
+        run: python -m bridgeforge.test_guard -- python -m coverage run -p -m tests.run_partitioned --shard ${{ matrix.shard }}/4 --timings "${{ runner.temp }}/test-timings-${{ matrix.shard }}.json"
+      - name: Run shard ${{ matrix.shard }} of 4
+        if: needs.scope.outputs.docs_only != 'true' && matrix.os != 'ubuntu-latest'
+        run: python -m bridgeforge.test_guard -- python -m tests.run_partitioned --shard ${{ matrix.shard }}/4 --timings "${{ runner.temp }}/test-timings-${{ matrix.shard }}.json"
+      - uses: actions/upload-artifact@v7.0.2
+        if: needs.scope.outputs.docs_only != 'true' && matrix.os == 'ubuntu-latest'
+        with:
+          name: coverage-data-${{ matrix.shard }}
+          path: ${{ runner.temp }}/coverage-data.*
+          if-no-files-found: error
+          retention-days: 3
 
   shared-fixtures:
     name: Shared fixtures match Project Go

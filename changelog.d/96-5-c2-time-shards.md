@@ -1,0 +1,1 @@
+- CI runs the tests in four time-balanced shards per system; the Ubuntu shards collect coverage, which one job combines and checks against the floor (96.5 C2).
