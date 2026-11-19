@@ -19,6 +19,7 @@ The recursive Python inventory contains **334 files**: 186 at package root and 1
 | `bridgeforge/scan/` | 28 | Scanner orchestration, parsing, registry and check families. |
 | `bridgeforge/save/` | 17 | Save inspection, fingerprints, compatibility, upgrade planning and save commands. |
 | `bridgeforge/fixers/` | 24 | B2 domain rewrites, common helpers and the public fixer API. |
+| `bridgeforge/genome/` | 3 | The feature genome (ROADMAP-3 item 94): gene manifests (`gene.py`, G1) and the `gene` command; later phases add proofs, the bank and insertion. |
 
 Root modules hold entry points (`__main__.py`, `cli.py`, `cli_commands.py`), shared models/safety/storage helpers (`models.py`, `safeio.py`, `zipsafe.py`, `source_paths.py`), workspace/archive/translation workflows not moved by B3, and the explicitly retained consumer facades. B3 did not relocate every workflow or invent a new dependency/plugin layer.
 

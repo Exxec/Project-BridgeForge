@@ -1,0 +1,1 @@
+- `bridgeforge gene describe MOD KIND:ID` writes a feature's gene manifest (`gene.json` schema 1): members with hashes, needs, licence, unknowns and a content-hash identity shared by every copy of the feature (94.G1 WP1).
