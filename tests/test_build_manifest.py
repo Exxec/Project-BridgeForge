@@ -6,11 +6,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.build_tag import apply_build_tag, compute_working_copy_hashes, record_build_manifest
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 class BuildManifestTests(unittest.TestCase):

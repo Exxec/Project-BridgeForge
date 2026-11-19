@@ -61,6 +61,16 @@ def install_registry_guard() -> None:
 install_registry_guard()
 
 
+def write_text(path: Path, text: str) -> None:
+    """Write `text` as UTF-8 with the LF line ends the repository keeps, creating the parent folders.
+
+    61 test modules each had their own `_write`; 42 used `write_text`, which writes CRLF on Windows and LF on Linux, so the
+    same fixture differed by platform (ROADMAP-3 96.5 C9). Import it as `from tests.support import write_text as _write`."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(text.encode("utf-8"))
+
+
 @contextmanager
 def resolved_temp_dir(**kwargs):
     with tempfile.TemporaryDirectory(**kwargs) as directory:

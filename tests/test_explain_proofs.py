@@ -15,14 +15,10 @@ from bridgeforge.master_log import write_master_log
 from bridgeforge.release import record_policy_decision
 from bridgeforge.sibling_assets import fix_sibling_assets
 from tests.support import resolved_temp_dir
+from tests.support import write_text as _write
 
 REPO_POLICY = Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json"
 DESCRIPTIONS = "data/strings/descriptions.csv"
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8", newline="")
 
 
 def _workspace(root: Path, name: str = "Mod", mod_id: str = "m") -> Path:

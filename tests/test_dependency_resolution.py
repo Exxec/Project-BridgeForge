@@ -1,16 +1,11 @@
 """Classes and content a declared dependency provides count as defined (SEEKER 0.6.6 and MagicLib, 2026-09-28)."""
 import json
 import unittest
-from pathlib import Path
 
 from bridgeforge.scan.scanner import scan_mod
 from tests.save_fixtures import build_class_file, write_jar
 from tests.support import resolved_temp_dir
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 class DependencyResolutionTests(unittest.TestCase):

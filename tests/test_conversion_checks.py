@@ -7,11 +7,7 @@ from pathlib import Path
 
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix
 from bridgeforge.scan.scanner import _load_lenient_json_file, scan_mod
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 FACTION = ('{\n\t"id":"hegemony",\n\t"shipRoles":{\n\t\t"combatSmall":{\n\t\t\t"includeDefault":true,\n\t\t\t"gremlin_Strike":10,\n'

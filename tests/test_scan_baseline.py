@@ -8,11 +8,7 @@ import unittest
 from pathlib import Path
 
 from bridgeforge.cli import main
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 def _make_mod_with_finding(root: Path) -> None:

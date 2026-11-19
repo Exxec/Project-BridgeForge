@@ -13,11 +13,7 @@ from bridgeforge.campaign_layout import mod_body_types, mod_created_systems, mod
 from bridgeforge.fixers import apply_fix, compute_fix
 from bridgeforge.probe.probe_config import build_probe_config
 from bridgeforge.scan.scanner import scan_mod
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 def _mod(root: Path, star_weights: str = "40,35,30", planet_weight: str = "10") -> Path:

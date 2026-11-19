@@ -13,11 +13,7 @@ from bridgeforge.cli import main
 from bridgeforge.fixers import FixerError, apply_fix, compute_fix
 from bridgeforge.scan.scanner import _load_lenient_json_file, scan_mod
 from tests.save_fixtures import _class_entry, _u2, _utf8_entry, build_class_file, write_jar
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 def _findings(result, finding_id: str):

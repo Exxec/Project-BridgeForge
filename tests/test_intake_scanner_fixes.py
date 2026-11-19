@@ -9,6 +9,7 @@ from pathlib import Path
 
 from bridgeforge.models import TargetProfile
 from bridgeforge.scan.scanner import BUNDLED_LIBRARY_PACKAGE_PREFIXES, LIBRARY_DEPENDENCY_IDS, scan_mod
+from tests.support import write_text as _write
 
 
 def _utf8(text: str) -> bytes:
@@ -25,11 +26,6 @@ def _class(this_name: str, *, class_refs: tuple[str, ...] = (), strings: tuple[s
     pool += [_utf8(name) for name in names]
     body = b"\xca\xfe\xba\xbe" + struct.pack(">HH", 0, 52) + struct.pack(">H", len(pool) + 1) + b"".join(pool)
     return body + struct.pack(">HHH", 0x0021, 2, 4) + struct.pack(">HHHH", 0, 0, 0, 0)
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(text.encode("utf-8"))
 
 
 class WeaponSpecIdTests(unittest.TestCase):

@@ -10,11 +10,7 @@ from bridgeforge.build_tag import apply_build_tag
 from bridgeforge.cli import main
 from bridgeforge.release import release_mod
 from bridgeforge.release import _load_policy
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 def _u2(value: int) -> bytes:

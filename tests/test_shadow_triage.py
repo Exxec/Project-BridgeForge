@@ -7,17 +7,13 @@ from bridgeforge.fixers import FixerError, apply_fix, compute_fix
 from bridgeforge.reference_rigs import reference_core_for_game_version
 from bridgeforge.shadow_triage import REMOVED_SHADOW_FOLDER, read_rulings, record_ruling, triage
 from tests.support import resolved_temp_dir
+from tests.support import write_text as _write
 
 OLD_SYSTEM = '{"id":"damper","type":"STAT_MOD","regen":1}'
 RC8_SYSTEM = '{"id":"damper","type":"STAT_MOD","regen":2}'
 EDITED_SYSTEM = '{"id":"damper","type":"STAT_MOD","regen":5}'
 DAMPER = "data/shipsystems/damper.system"
 FLARE = "data/shipsystems/flare.system"
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 def _layout(root: Path) -> tuple[Path, Path, Path, Path]:

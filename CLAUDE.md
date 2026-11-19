@@ -139,7 +139,7 @@ on the second PC) and `memory-mirror`.
   out-of-date installed copy of bridgeforge in the interpreter.
 - `case_workspace.py` is the S1 read-only adapter for both workspace dialects; it grants no mutation or qualification rights.
   Its implementation/status and next slice are in `docs/S1_PROGRESS.md`.
-- `tests/` unittest suite; `tests/support.py` has `resolved_temp_dir()` and `link_dir()`. `tests/run_partitioned.py` runs CI's
+- `tests/` unittest suite; `tests/support.py` has `resolved_temp_dir()`, `link_dir()` and `write_text()` (import it as `_write`; 96.5 C9). `tests/run_partitioned.py` runs CI's
   shards (`--shard K/N`, by `tests/module_timings.json`) and the pre-push hook's fast partition (`tests/slow_tests.json`).
 - `probe-mod/` the in-game probe (Java, public API only); built by `build-probe-mod`.
 - Gitignored and local-only: `In operation/`, `Done/`, `AGENTS.md`, `tools/*.ps1` (except

@@ -15,13 +15,9 @@ from bridgeforge.live.live_trust import auto_explain_shipped, shipped_hash
 from bridgeforge.release import record_policy_decision
 from tests.support import resolved_temp_dir
 from bridgeforge.release import _load_policy
+from tests.support import write_text as _write
 
 REPO_POLICY = Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json"
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(text.encode("utf-8"))
 
 
 def _workspace(root: Path, *, unexplained: bool = False) -> Path:

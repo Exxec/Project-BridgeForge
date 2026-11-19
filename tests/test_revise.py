@@ -17,15 +17,11 @@ from bridgeforge.revise import ReviseError, StepFailed, finalize, prepare
 from tests.bound_runs import BASIC_LOG, bound_run
 from tests.support import resolved_temp_dir
 from bridgeforge.mod_changelog import merged_text
+from tests.support import write_text as _write
 
 REPO_POLICY = Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json"
 MOD_ID = "bf_fixture_radar"
 REASON = "Fixed the radar ring spawn.\nSecond line is not for the changelog."
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 def _mod(base: Path, version: str, hulls: tuple[str, ...] = ("radar_hull",)) -> None:

@@ -17,6 +17,7 @@ from bridgeforge.translation import (
     prefill_from_record,
     prefill_from_reference,
 )
+from tests.support import write_text as _write
 
 
 def _utf8(text: str) -> bytes:
@@ -33,12 +34,6 @@ def _class_with_string(this_name: str, value: str) -> bytes:
     ]
     body = b"\xca\xfe\xba\xbe" + struct.pack(">HH", 0, 52) + struct.pack(">H", len(pool) + 1) + b"".join(pool)
     return body + struct.pack(">HHH", 0x0021, 2, 4) + struct.pack(">HHHH", 0, 0, 0, 0)
-
-
-def _write(path: Path, text: str) -> None:
-    # Exact bytes: text-mode writes turn "\n" into "\r\n" on Windows, which changes quoted CSV cells.
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(text.encode("utf-8"))
 
 
 def _jar(path: Path, classes: dict[str, bytes]) -> None:

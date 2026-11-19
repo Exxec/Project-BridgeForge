@@ -8,11 +8,7 @@ from pathlib import Path
 from bridgeforge.live.live_trust import (archive_gate, audit_shipped, auto_explain_shipped, explain_shipped, live_status, original_root,
                                     write_run_record)
 from tests.support import resolved_temp_dir
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 def _workspace(root: Path, name: str = "Mod") -> Path:

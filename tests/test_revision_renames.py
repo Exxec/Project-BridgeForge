@@ -9,13 +9,9 @@ from unittest import mock
 
 from bridgeforge.revision_renames import (EVIDENCE_FILE, PACK_FIELDS, class_names, migration_requirement, removed_since, write_evidence)
 from tests.support import resolved_temp_dir
+from tests.support import write_text as _write
 
 REASON = "no save can hold the removed hull: it was never spawned by the campaign scripts"
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 def _mod(root: Path, hulls: list[str], java: list[str] = (), jar_classes: list[str] = ()) -> Path:

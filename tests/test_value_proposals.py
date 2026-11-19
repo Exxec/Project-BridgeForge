@@ -18,6 +18,7 @@ from bridgeforge.value_proposals import (
     write_sheet,
 )
 from tests.support import resolved_temp_dir
+from tests.support import write_text as _write
 
 WING_HEADER = "id,variant,tags,tier,rarity,fleet pts,op cost,formation,range,attackRunRange,attackPositionOffset,num,role,role desc,refit,base value\n"
 MOD_WINGS = (WING_HEADER
@@ -31,11 +32,6 @@ CORE_WINGS = (WING_HEADER
               + "broadsword_wing,broadsword_Fighter,,0,,6,8,V,0,500,,2,SUPPORT,Support,10,0\n"
               + "xyphos_wing,xyphos_Fighter,,0,,7,18,V,0,500,,2,SUPPORT,Support,10,0\n"
               + "zero_wing,zero_Fighter,,0,,7,0,V,0,500,,2,SUPPORT,Support,10,0\n")
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(text.encode("utf-8"))
 
 
 def _wing_workspace(root: Path) -> tuple[Path, Path]:

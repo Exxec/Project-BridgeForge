@@ -5,11 +5,7 @@ import unittest
 
 from bridgeforge.done_audit import done_audit
 from tests.support import resolved_temp_dir
-
-
-def _write(path, text):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 class DoneAuditTests(unittest.TestCase):

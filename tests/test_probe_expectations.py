@@ -9,11 +9,7 @@ from bridgeforge.probe.probe_config import build_probe_config
 from bridgeforge.probe.probe_expectations import MAX_BOUNTIES, bounty_ids, entity_checks, expectations_path
 from bridgeforge.probe.probe_group import merge_configs
 from tests.support import resolved_temp_dir
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 def _workspace(root: Path, mod_id: str) -> Path:

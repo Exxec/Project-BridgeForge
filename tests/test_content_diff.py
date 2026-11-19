@@ -11,11 +11,7 @@ from bridgeforge.content_diff import ContentDiffError, annotate_removed_content,
 from bridgeforge.models import TargetProfile
 from bridgeforge.scan.scanner import scan_mod
 from tests.support import resolved_temp_dir
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+from tests.support import write_text as _write
 
 
 def _core(root: Path, weapons: dict[str, str], hullmods: dict[str, str], extra_variant: str | None = None) -> Path:

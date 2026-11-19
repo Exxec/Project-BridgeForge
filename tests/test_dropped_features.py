@@ -11,13 +11,9 @@ from bridgeforge.cli import main
 from bridgeforge.dropped_sweep import check_workspace, select_old_tree
 from bridgeforge.removals import REMOVALS_FILE, RemovalsError, add_removals, load_removals, make_entry
 from tests.support import resolved_temp_dir
+from tests.support import write_text as _write
 
 RULES = "id,trigger,conditions,script\nr1,OpenCommLink,,\nr2,CrusadeNews,,\nr3,CrusadeEnd,,\n"
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 def _mod(root: Path, mod_id: str, *, rules: str | None = RULES, java: tuple[str, ...] = ()) -> Path:

@@ -12,15 +12,11 @@ from bridgeforge.release import record_policy_decision
 from bridgeforge.removals import add_removals, make_entry
 from bridgeforge.revise import ReviseError, _content_gates
 from tests.support import resolved_temp_dir
+from tests.support import write_text as _write
 
 REPO_POLICY = Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json"
 RULES = "id,trigger,conditions,script\nr1,OpenCommLink,,\nr2,CrusadeNews,,\n"
 REASON = "the rules file was split into two mods on purpose"
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 def _workspace(root: Path) -> Path:
