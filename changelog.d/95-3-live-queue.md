@@ -1,0 +1,1 @@
+- `bridgeforge probe-group live-queue --plan P` installs, plays and reports a plan's groups in order; with `--archive` it records and archives the PASS members of each finished group and lists everything else, including a PASS left unarchived, for a person to look at (ROADMAP-3 95.3).

@@ -129,6 +129,7 @@ LONG_RUNNING_COMMANDS = (
     ("java-matrix", "run"),
     ("java-matrix", "mass"),
     ("probe-group", "regress"),
+    ("probe-group", "live-queue"),
     ("atlas", "sweep"),
     ("atlas", "build"),
     ("migrate-inventory",),

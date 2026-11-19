@@ -74,6 +74,23 @@ def add_parser(subcommands) -> None:
     group_live.add_argument("--rig", type=Path)
     group_live.add_argument("--queue", type=Path)
     group_live.add_argument("--json", action="store_true")
+    group_queue = group_sub.add_parser("live-queue", help="run a plan's groups one after another: install (staging providers, probe save "
+                                       "after checks), play (`live`) and report each; with --archive, record and archive the PASS "
+                                       "members of each group that ended LIVE_DONE; anything else goes to the summary's attention list "
+                                       "(ROADMAP-3 95.3); leave the mouse and keyboard alone")
+    group_queue.add_argument("--plan", type=Path, required=True, help="plan JSON from `probe-group plan --write`")
+    group_queue.add_argument("--group", type=int, action="append", default=[], metavar="N", help="only these group numbers; repeatable")
+    group_queue.add_argument("--archive", action="store_true", help="record and archive passing members (the owner's word for this batch)")
+    group_queue.add_argument("--refresh", action="store_true", help="with --archive: replace an earlier archive (moved to Done/_replaced-<date>/)")
+    group_queue.add_argument("--note", default="", help="with --archive: the record note (the owner's words; what ran)")
+    group_queue.add_argument("--also-enable", action="append", default=[], metavar="MOD_OR_SET", help="as for install; repeatable")
+    group_queue.add_argument("--bat", help="launcher bat (default: live's)")
+    group_queue.add_argument("--out", type=Path, help="summary JSON (default: <queue>/_live-queue/live-queue-<date>.json)")
+    group_queue.add_argument("--test-prefix", help="test id prefix (default LQ-<date>)")
+    group_queue.add_argument("--quiet", action="store_true", help="no per-group progress lines")
+    group_queue.add_argument("--rig", type=Path)
+    group_queue.add_argument("--queue", type=Path)
+    group_queue.add_argument("--json", action="store_true")
     group_regress = group_sub.add_parser("regress", help="unattended regression pass: group every LIVE_VALIDATED workspace, then install, play (`live`) and report each group; never records, writes a summary of what needs a look (ROADMAP 60g)")
     group_regress.add_argument("--bat", default="run-j25-direct.bat")
     group_regress.add_argument("--size", type=int, default=8)
@@ -213,6 +230,25 @@ def _probe_live(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
         return 1
+    return result
+
+
+def _probe_live_queue(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
+    """`probe-group live-queue`: its result."""
+    from datetime import date as _date
+
+    from bridgeforge.live_queue import live_queue
+    out = args.out or Path(queue) / "_live-queue" / f"live-queue-{_date.today():%Y%m%d}.json"
+    if args.refresh and not args.archive:
+        print("bridgeforge: --refresh only applies with --archive", file=sys.stderr)
+        return 2
+    print("Starting the live queue: leave the mouse and keyboard alone until it finishes.", file=sys.stderr)
+    result = live_queue(args.plan, queue, rig, out, groups=args.group, archive=args.archive, refresh=args.refresh, note=args.note,
+                        test_prefix=args.test_prefix, bat=args.bat, also_enable=args.also_enable, quiet=args.quiet)
+    if not args.json:
+        print(f"{len(result['groups'])} group(s) run; summary {out}")
+        for row in result["attention"]:
+            print(f"  look at group {row['group']} ({', '.join(row['members'])}): {row['summary']}")
     return result
 
 
@@ -359,6 +395,7 @@ _SUB_COMMANDS = {
     "plan": _probe_plan,
     "install": _probe_install,
     "live": _probe_live,
+    "live-queue": _probe_live_queue,
     "regress": _probe_regress,
     "duel": _probe_duel,
     "smoke": _probe_smoke,

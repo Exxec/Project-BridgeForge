@@ -808,6 +808,29 @@ unproven).
   separate record and archive. `live-queue PLAN --archive-on-pass` should record and archive a passing group under the owner's
   standing 96.2 permission ("archive them if they pass") and stop on anything else with its triage. Priority: now, the
   `live-queue` half (the remaining 96.2 groups and every re-test).
+  **`live-queue` done 2026-11-19** (the `revive-queue` half stays open).
+  - `bridgeforge probe-group live-queue --plan P [--group N ...] [--archive [--refresh] --note "..."]` (`bridgeforge/live_queue.py`).
+    It runs the plan's groups in order: install (staging providers, probe save after checks, `--also-enable`), `live_run`,
+    then `group_report`.
+  - With `--archive`, a group that ended LIVE_DONE goes through `record_group(..., archive=True, accept=True)`. A run that
+    did not finish is never recorded: its log and the harness's actions file (96.9) go to the summary.
+  - The summary's `attention` list holds an error, an unfinished run, a member that did not PASS, and (with `--archive`) a
+    PASS member left unarchived, with the reason record gave. Vayra's Sector passed live on 2026-11-19, then needed four
+    things explained by hand before archiving: an uncovered caught exception, files changed by the RC8 revival's fixers, a
+    junk copy and the resulting stale live result.
+  - One progress line per group and a checkpoint (`("probe-group", "live-queue")` in `LONG_RUNNING_COMMANDS`).
+  - On Test1 it still needs the direct-start overrides of `live-wrappers/live_direct.py` until 95.4: pass that `play`.
+  - Tests: `tests/test_live_queue.py`:
+    - passing groups archived, a stuck one not, and listed with its triage;
+    - nothing recorded without `--archive`;
+    - a failing member left out;
+    - a PASS left unarchived listed with why;
+    - only the chosen groups run;
+    - an interrupted queue resumes after its last finished group;
+    - a group's error does not stop the queue.
+
+    Mutation-checked: recording a stuck run, recording without `--archive`, and dropping the unarchived-PASS rule each fail
+    a test.
 - 95.4 (M) **A live harness without wrappers.** Direct start (93.21), first-run preferences pre-flight and pins (93.28), the
   report's own run config (93.29), mission-list reading (93.37) and the run's own save (93.38) in `probe-group smoke|live|record`,
   so `bridgeforge-state/live-wrappers/` can retire.
