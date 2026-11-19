@@ -12,6 +12,7 @@ import stat
 
 from .safeio import WriteVerificationError
 from bridgeforge.zipsafe import entry_sha256
+from bridgeforge.file_hash import sha256_file as _sha256  # 96.5 A10
 
 
 def _normalized_member_name(name: str) -> str | None:
@@ -95,13 +96,6 @@ def inspect_zip_archive(path: Path, max_entries: int = 20_000, max_uncompressed_
     safe_to_stage = not any(item["id"] in blocking_ids for item in findings)
     return {"schema_version": 1, "mode": "ZIP_PREFLIGHT_ONLY", "archive": path.name, "entry_count": len(entries), "uncompressed_bytes": total, "mod_info_entries": mod_info, "candidate_mod_roots": roots, "findings": findings, "safe_to_stage": safe_to_stage, "safe_to_extract": safe_to_stage}
 
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def stage_zip_archive(path: Path, destination: Path, selected_root: str | None = None, manifest_output: Path | None = None) -> Path:

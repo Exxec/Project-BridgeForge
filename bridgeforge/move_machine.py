@@ -7,7 +7,6 @@ rig's `starsector-core` junction is listed, never followed.
 from __future__ import annotations
 
 import fnmatch
-import hashlib
 import json
 import os
 import re
@@ -18,6 +17,7 @@ import time
 from pathlib import Path
 
 from .progress import Checkpoint, report
+from bridgeforge.file_hash import sha256_file as sha256_of  # 96.5 A10
 
 IN_GIT, IRREPLACEABLE, REGENERABLE, GAME_FILES = "in-git", "gitignored-irreplaceable", "regenerable", "game-files"
 REGENERABLE_PATTERNS = (".venv", "venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "*.egg-info", ".coverage*",
@@ -26,7 +26,6 @@ GAME_PATTERNS = ("Starsector*", "starsector-core", "Fractal Softworks")
 BACKUP_SUFFIX = ".pre-relocate.bak"
 MAX_JSON_BYTES = 200 * 1024 * 1024
 MAX_LINKS_LISTED = 50
-HASH_CHUNK = 1024 * 1024
 ABS_PATH = re.compile(r"[A-Za-z]:[\\/][^\"'\r\n<>|*?]*")
 REPARSE_POINT = 0x400
 
@@ -332,13 +331,6 @@ def format_relocate(result: dict) -> str:
 
 
 # ---- migrate-verify -------------------------------------------------------------------------------------------
-
-def sha256_of(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(HASH_CHUNK):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _tree_files(top: Path, root: Path, excludes: tuple[str, ...]) -> list[Path]:

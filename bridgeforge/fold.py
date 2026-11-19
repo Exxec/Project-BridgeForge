@@ -34,7 +34,7 @@ from pathlib import Path
 
 from bridgeforge.scan.scanner import _load_lenient_json_file
 from .substitutes import SUCCESSORS_PATH, load_successors
-from .workspace import sha256_file
+from .file_hash import sha256_file
 
 SCHEMA_VERSION = 1
 FOLD_KIND = "folded-into-revenantlib"

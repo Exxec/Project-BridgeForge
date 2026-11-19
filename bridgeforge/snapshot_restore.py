@@ -18,7 +18,6 @@ verdict is RESTORED_OFFLINE; `recoverable` stays false until a person runs the b
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import shutil
@@ -29,6 +28,7 @@ from pathlib import Path
 from . import __version__
 from .progress import Checkpoint, report
 from .safeio import _is_link, atomic_write_json, safe_rmtree
+from bridgeforge.file_hash import sha256_file as _sha256  # 96.5 A10
 
 SUPPORTED_SNAPSHOT_FORMAT = 1
 MANIFEST_SCHEMA = 1
@@ -41,13 +41,6 @@ OMITTED_BY_DESIGN = ("In operation/_rig and the rig's starsector-core junction",
 class RestoreRefused(ValueError):
     """The snapshot or the destination is not safe or usable; nothing was written."""
 
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _within(inner: Path, outer: Path) -> bool:

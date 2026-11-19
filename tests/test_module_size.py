@@ -11,7 +11,7 @@ CEILING = 800
 # Modules over CEILING on 2026-11-18, each with the most lines it may have. Lower a number when the module shrinks and
 # remove the entry once it is under CEILING; never raise one or add a module: split it instead (ROADMAP-3 96.5 A6 split
 # behavior_discovery, probe_group, translation and dossier, then 1,274, 1,115, 1,086 and 1,076 lines).
-OVER_CEILING = {"revive.py": 886}
+OVER_CEILING = {"revive.py": 884}
 
 
 def _line_counts() -> dict[str, int]:

@@ -21,6 +21,7 @@ import json
 import re
 from datetime import date
 from pathlib import Path
+from bridgeforge.file_hash import sha256_file as _sha256  # 96.5 A10
 
 LIVE_DIR = "_live"
 RUN_LOG = "live_runs.jsonl"
@@ -29,13 +30,6 @@ SHIPPED_CHANGES = "SHIPPED_CHANGES.json"
 DECLARED_GENERATED = ("mod_info.json", "reports/REVIVAL_REPORT.md", "reports/REVIVAL_PLAN.md", "reports/baseline.json")
 NOISE_JUMP = (1.5, 20)  # a KNOWN-NOISE count over 1.5x the last run of the same members and 20 more is REVIEW
 
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def summary_for_record(manifest: dict) -> dict:

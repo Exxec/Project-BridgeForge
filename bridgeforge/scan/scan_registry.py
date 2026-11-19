@@ -37,6 +37,7 @@ from pathlib import Path
 
 from ..safeio import atomic_write_json
 from ..source_paths import python_sources
+from bridgeforge.file_hash import sha256_file as _sha256  # 96.5 A10
 
 SCHEMA_VERSION = 1
 EXCLUSION_VERSION = 1
@@ -51,13 +52,6 @@ _TOOL_CACHE: dict[str, str] = {}
 class RegistryError(ValueError):
     """Raised when a scan cannot be registered."""
 
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def _tree_digest(entries: list[tuple[str, str]]) -> str:

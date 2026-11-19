@@ -29,6 +29,7 @@ from pathlib import Path
 
 from .archive_checks import check_reason
 from .safeio import atomic_write_json, atomic_write_text
+from bridgeforge.file_hash import sha256_file as _file_sha  # 96.5 A10
 
 SCHEMA_VERSION = 1
 STATES = ("PREPARED", "LIVE_ACCEPTED", "ARCHIVED", "SNAPSHOTTED", "COMPLETE")
@@ -341,11 +342,6 @@ def _step_archive(workspace: Path, journal: dict, done_dir: Path, policy_path: P
                                    "reconciled": result["reconciled"]}
     _set_state(workspace, journal, "ARCHIVED")
 
-
-def _file_sha(path: Path) -> str:
-    import hashlib
-
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def _step_snapshot(workspace: Path, journal: dict, done_dir: Path, policy_path: Path | None, changelog: Path | None) -> None:

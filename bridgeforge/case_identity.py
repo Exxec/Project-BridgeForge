@@ -13,7 +13,7 @@ from .case_workspace import WorkspaceView, _components, _physical
 from .copy_drift import _collect
 from .run_manifest import FILESET_ALGORITHM
 from .scan.scan_registry import EXCLUSION_VERSION, _excluded
-from .workspace import sha256_file
+from .file_hash import sha256_file
 
 CONTEXT_ROLES = ('core', 'dependencies', 'tools', 'rules', 'policy', 'launcher', 'source_authority')
 OUTCOMES = ('PASS', 'FAIL', 'INCOMPLETE', 'NOT_APPLICABLE')

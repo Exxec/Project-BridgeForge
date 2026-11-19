@@ -1,0 +1,1 @@
+- One module, `bridgeforge/file_hash.py`, hashes a file or a tree of files; 28 private copies in 27 modules now use it (96.5 A10).

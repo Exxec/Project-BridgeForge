@@ -34,6 +34,7 @@ from pathlib import Path
 
 from bridgeforge import __version__
 from bridgeforge.safeio import atomic_write_json
+from bridgeforge.file_hash import sha256_file_or_none as _sha  # 96.5 A10
 
 PASS, FAIL, INCOMPLETE, NOT_APPLICABLE = "PASS", "FAIL", "INCOMPLETE", "NOT_APPLICABLE"
 QUALIFYING = (PASS, NOT_APPLICABLE)
@@ -71,9 +72,6 @@ def require_enabled() -> None:
     if not ENABLED:
         raise AutoAcceptError(refusal_message())
 
-
-def _sha(path: Path) -> str | None:
-    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
 def _digest(value: object) -> str:

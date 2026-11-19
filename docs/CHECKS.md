@@ -392,7 +392,6 @@ Private helpers checks reuse. Read Starsector JSON only through `_load_lenient_j
 | `_rules_whitespace_only_line_cells` | `(text: str) -> list[tuple[int, int, str, str]]` | (start, end, column, fixed value) for each conditions/script cell of a real rule holding a whitespace-only line. RC8 skips an empty line but stops at one holding spaces: RuleException 'No tokens found in string: []' (Ironclads ngcSmugglerOption, GRP10K-20261005); vanilla has none outside a commented-out row. |
 | `_settings` | `(tree: Path) -> set[str]` | - |
 | `_settings_value_changes` | `(mod: dict, vanilla: dict, prefix: str='') -> list[str]` | Dotted paths where the mod's settings.json changes a value vanilla already has. |
-| `_sha256` | `(path: Path) -> str` | - |
 | `_ship_file_index` | `(root: Path, vanilla_core: Path \| None) -> dict[str, dict]` | hullId -> parsed .ship data, vanilla first so a mod's own hull of the same id wins. |
 | `_single_quote_json_finding` | `(result: ScanResult, category: str, file: str) -> None` | - |
 | `_skin_index` | `(root: Path, vanilla_core: Path \| None) -> dict[str, str]` | skinHullId -> baseHullId, from .skin files in the mod and vanilla. |

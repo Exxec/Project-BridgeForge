@@ -27,6 +27,7 @@ from pathlib import Path
 from .archive_checks import ALLOW_MIN_CHARS, check_reason, override_section, pre_archive_checks
 from .copy_drift import _collect
 from bridgeforge.scan.scanner import _load_lenient_json_file
+from bridgeforge.file_hash import sha256_file as _digest  # 96.5 A10
 
 SCHEMA_VERSION = 1
 
@@ -42,9 +43,6 @@ def _version_text(version: object) -> str:
         return ".".join(parts) or "unversioned"
     return str(version or "unversioned")
 
-
-def _digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 MAX_LISTED = 40

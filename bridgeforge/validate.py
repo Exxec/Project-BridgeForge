@@ -5,11 +5,9 @@ from pathlib import Path
 
 from .models import TargetProfile
 from bridgeforge.scan.scanner import scan_mod
-from .workspace import sha256_file, workspace_paths
+from .workspace import workspace_paths
+from bridgeforge.file_hash import file_hashes as _tree_hashes  # 96.5 A10
 
-
-def _tree_hashes(root: Path) -> dict[str, str]:
-    return {path.relative_to(root).as_posix(): sha256_file(path) for path in sorted(root.rglob("*")) if path.is_file()}
 
 
 def _active_java_sources(root: Path) -> set[str]:

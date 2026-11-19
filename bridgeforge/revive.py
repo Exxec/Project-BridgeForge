@@ -29,6 +29,7 @@ from pathlib import Path
 
 from .automation import ACTIONABLE, bucket, tier_for
 from .fixers import SUPPORTED_FINDINGS, FixerError, apply_fix, compute_fix, unified_diff_for_change
+from bridgeforge.file_hash import sha256_file_or_none as _sha256  # 96.5 A10
 
 SCHEMA_VERSION = 1
 DEFAULT_TARGET = "0.98a-RC8"
@@ -470,9 +471,6 @@ def _excerpt(path: Path, evidence: list[str]) -> str:
         previous = number
     return "\n".join(out)
 
-
-def _sha256(path: Path) -> str | None:
-    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
 def _informational(finding: dict) -> bool:

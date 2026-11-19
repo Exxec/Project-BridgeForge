@@ -13,13 +13,13 @@ script to merge their results. This module keeps that state in `bridgeforge-stat
 """
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import date
 from pathlib import Path
 
 from .game_version import core_game_version
 from .safeio import atomic_write_json
+from bridgeforge.file_hash import sha256_file as _sha256  # 96.5 A10
 
 SCHEMA_VERSION = 1
 TOKEN = "@target"
@@ -42,13 +42,6 @@ def state_dir(repo_root: Path | None = None) -> Path:
 def build_dir(state: Path, build: str) -> Path:
     return Path(state) / "targets" / build
 
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def core_fingerprint(core: Path) -> dict[str, str]:

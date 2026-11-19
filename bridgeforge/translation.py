@@ -16,7 +16,6 @@ re-verifies CSV structure, JSON-like parsing and class-file parsing afterwards.
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 import os
 import re
@@ -36,6 +35,7 @@ from .translation_formats import (_JAVA_STRING, MAX_TRANSLATION_BYTES, Translati
                                   _decode_java_string, _encode_java_string, _has_cjk, _is_text_line_file, _jsonlike_strings,
                                   _lookup_path, _rewrite_class_strings, _text_line_units, _translation_csv_text,
                                   _translation_text, _units)
+from bridgeforge.file_hash import sha256_file as _sha256  # 96.5 A10
 
 SCHEMA_VERSION = 1
 EXCLUDED_DIRS = {"src", "out", "build", "target", ".idea", ".vscode", ".git", "__macosx", "meta-inf", "disabled_files", "reports", "scratch"}
@@ -50,9 +50,6 @@ _PLACEHOLDER = re.compile(r"%(?:\d+\$)?[-#+0,(]*\d*(?:\.\d+)?[sdfxXeEgGcbhno%]|\
 
 
 # ---- shared helpers ------------------------------------------------------------------------------
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _is_excluded(rel: Path) -> bool:

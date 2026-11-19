@@ -1,17 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import subprocess
 from pathlib import Path
+from bridgeforge.file_hash import sha256_file as _sha256  # 96.5 A10
 
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def create_decompiler_review(input_path: Path, output: Path, adapter: Path, arguments: list[str]) -> dict:

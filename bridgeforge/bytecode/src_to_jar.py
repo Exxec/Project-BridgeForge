@@ -14,7 +14,6 @@ applied agent fixes and Eridani Combine's one were inert in `tania.jar` / `ECE.j
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -25,6 +24,7 @@ from pathlib import Path
 
 from bridgeforge.bytecode.jar_patch import JarPatchError, _package_path, patch_jar_classes, shipped_release
 from bridgeforge.bytecode.java_toolchain import find_jdk, run_javac
+from bridgeforge.file_hash import sha256_file as _sha  # 96.5 A10
 
 LEDGER = Path("reports") / "src-to-jar.json"
 _CP_INDEX = re.compile(r"#\d+")
@@ -33,9 +33,6 @@ _CP_INDEX = re.compile(r"#\d+")
 class SrcToJarError(ValueError):
     pass
 
-
-def _sha(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def original_root(workspace: Path) -> Path | None:

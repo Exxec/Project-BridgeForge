@@ -15,12 +15,12 @@ alone, and nothing here edits a mod:
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import zipfile
 from datetime import date
 from pathlib import Path
 from bridgeforge.zipsafe import read_limited
+from bridgeforge.file_hash import sha256_file as sha256  # 96.5 A10
 
 CREDITS_FILE = "BRIDGEFORGE_CREDITS.txt"
 DESCRIPTIONS_RELATIVE = "data/strings/descriptions.csv"
@@ -28,9 +28,6 @@ DESCRIPTIONS_BACKUP = "descriptions.csv.pre-bf-crafted"
 MOVED_FOLDERS = ("work-files", "translator-workspace", "removed-src", "removed-shadow")
 COPIES_FILE = "COPIES.json"
 
-
-def sha256(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 # ---- descriptions apply -----------------------------------------------------------------------------------------

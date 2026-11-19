@@ -15,12 +15,12 @@ Read-only.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from pathlib import Path
 
 from .safeio import atomic_write_json
+from bridgeforge.file_hash import sha256_file_or_none as _sha256  # 96.5 A10
 
 SCHEMA_VERSION = 1
 KINDS = ("hull", "weapon", "hullmod", "wing")
@@ -30,9 +30,6 @@ SOURCES = ("rename", "provider-rename", "catalogue")
 class ProposalError(ValueError):
     pass
 
-
-def _sha256(path: Path) -> str | None:
-    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
 def _declared_provider_dirs(working: Path, provider_roots: list[Path], index_path: Path | None) -> list[tuple[str, Path]]:
