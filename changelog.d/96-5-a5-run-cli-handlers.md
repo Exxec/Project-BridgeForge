@@ -1,0 +1,1 @@
+- The ten longest `run_cli` if-chains are dispatch tables with one handler per command, and a test stops any new function growing past 200 lines (96.5 A5).

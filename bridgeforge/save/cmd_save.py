@@ -120,8 +120,8 @@ def add_parser(subcommands) -> None:
     compat_set_install_cmd.add_argument("--json", action="store_true")
 
 
-def run_cli(args: argparse.Namespace) -> int:
-    if args.command == "compat-set" and args.compat_set_command == "install":
+def _run_compat_set(args: argparse.Namespace) -> int:
+    if args.compat_set_command == 'install':
         try:
             result = install_compat_set(args.set_name, args.runtime, args.source_mods, dry_run=args.dry_run, reference_manifest=args.reference_manifest)
         except CompatSetError as exc:
@@ -144,187 +144,228 @@ def run_cli(args: argparse.Namespace) -> int:
                 for item in result["installed"]:
                     print(f"COPIED {item['id']}: {len(item['files_copied'])} file(s) -> {item['destination']}")
         return 0
-    if args.command == "save-compat":
-        try:
-            if args.compare_old or args.compare_new:
-                if not (args.compare_old and args.compare_new):
-                    print("bridgeforge: --compare-old and --compare-new must be given together", file=sys.stderr)
-                    return 2
-                result = compare_builds(args.save, args.compare_old, args.compare_new)
-            else:
-                result = check_save_compat(args.save, args.mod_dir, vanilla_core=args.vanilla_core)
-        except (SaveCompatError, ValueError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True, default=str))
-        else:
-            print(f"Status: {result['status']}")
-            for entry in result.get("missing", []):
-                print(f"MISSING {entry['reference']} (x{entry['occurrences']}) at {entry['sample_path']}")
-            for entry in result.get("dropped_in_new", []):
-                print(f"DROPPED {entry}")
-        return 0 if result["status"] != "WILL_FAIL" else 1
-    if args.command == "save-removal-plan":
-        from .save_removal_plan import plan_removal
-        result = plan_removal(args.save, args.mods, args.vanilla_core)
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
-            return 0
-        print(f"{result['objects']} object(s) of missing classes: {result['droppable']} droppable, {result['blocked']} blocked")
-        for row in result["rows"]:
-            print(f"  {row['state']:9} {row['class']} (in {row['parent']}, line {row['line']})"
-                  + (f"  referenced from {', '.join(row['ref_examples'])}" if row["ref_examples"] else ""))
-        return 0
-    if args.command == "save-fingerprint":
-        from .save_fingerprint_offline import FingerprintError, compare_with_file, offline_fingerprint, render
-        try:
-            result = offline_fingerprint(args.save)
-            comparison = compare_with_file(result, args.compare) if args.compare else None
-        except (FingerprintError, SaveReadError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps({**result, **({"comparison": comparison} if comparison else {})}, indent=2, ensure_ascii=False))
-        else:
-            print(render(result, comparison))
-        return 1 if comparison and "differ" in comparison.values() else 0
-    if args.command == "save-doctor":
-        from .save_doctor import diagnose
-        if args.break_cycle:
-            from .save_cycles import SaveCycleError, break_cycle
-            if args.out is None:
-                print("bridgeforge: --break-cycle needs --out (a new folder for the repaired copy).", file=sys.stderr)
-                return 2
-            try:
-                result = break_cycle(args.save, args.out)
-            except (SaveCycleError, OSError, ValueError) as exc:
-                print(f"bridgeforge: {exc}", file=sys.stderr)
-                return 2
-            print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else
-                  f"Copy written: {result['copy']} ({len(result['changed_lines'])} line(s) changed; "
-                  f"cycles {result['cycles_before']} -> {result['cycles_after']}). The original is unchanged.")
-            return 0 if result["cycles_after"] == 0 else 1
-        if args.mods is None:
-            print("bridgeforge: save-doctor needs --mods (or --break-cycle).", file=sys.stderr)
-            return 2
-        result = diagnose(args.save, args.mods, args.vanilla_core, cycles=args.cycles)
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
-            return 0
-        print(f"{result['verdict']}: {result['character']} ({result['game_version']}, {result['enabled_mods']} mods)")
-        for problem in result["problems"]:
-            detail = problem.get("mod") or problem.get("package") or problem.get("file") or f"{problem.get('lines')} line(s)"
-            if problem["class"] == "MEMORY_CYCLE":
-                detail = (f"line {problem['line']}: PCMarket z={problem['pcmarket']} refers back to open memory z={problem['memory']}"
-                          f" via keys {problem['keys']}")
-            print(f"  {problem['class']:16} {detail}" + (f"  e.g. {', '.join(problem['examples'])}" if problem.get("examples") else ""))
-        for name, text in result["recovery"].items():
-            print(f"  recovery {name}: {text}")
-        return 0 if result["verdict"] == "NO_KNOWN_PROBLEM" else 1
-    if args.command == "save-format-survey":
-        try:
-            result = survey_saves(args.saves)
-        except (SaveReadError, ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True, default=str))
-        else:
-            print(f"Surveyed {result['saves_surveyed']} save(s); {result['saves_with_player_cargo']} with player cargo")
-            print(f"  game versions: {result['game_versions']}")
-            print(f"  cargo attributes in every save: {result['cargo_attributes_in_every_save']}")
-            print(f"  credits value present in every save: {result['credits_value_present_in_every_save']}")
-        return 0
-    if args.command in {"save-inspect", "save-diff", "save-scripts", "save-growth", "save-provenance", "save-content", "save-removal", "save-summary"}:
-        try:
-            if args.command == "save-inspect":
-                result = inspect_save(args.save, track_classes=args.track_class, track_ids=args.track_id, mod_dir=args.mod_dir, vanilla_core=args.vanilla_core)
-            elif args.command == "save-diff":
-                result = diff_saves(args.save, args.save_b, track_classes=args.track_class, track_ids=args.track_id, mod_dir=args.mod_dir, vanilla_core=args.vanilla_core)
-            elif args.command == "save-scripts":
-                result = audit_scripts(args.save, args.mod_dir, vanilla_core=args.vanilla_core)
-            elif args.command == "save-growth":
-                result = growth_trend(args.saves, mod_dir=args.mod_dir, growth_rate_warning=args.warn_ratio)
-            elif args.command == "save-provenance":
-                result = save_provenance(args.save, mod_dirs=args.mod_dir)
-            elif args.command == "save-content":
-                result = check_save_content(args.save, args.mod_dir, vanilla_core=args.vanilla_core)
-            elif args.command == "save-removal":
-                result = removal_safety(args.save, args.mod_dir, vanilla_core=args.vanilla_core)
-            else:
-                result = redacted_summary(args.save, args.mod_dir, out_path=args.out, vanilla_core=args.vanilla_core)
-        except (SaveReadError, SaveCompatError, ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        status = result.get("status")
-        if args.json or status is None:
-            print(json.dumps(result, indent=2, sort_keys=True, default=str))
-        else:
-            print(f"Status: {status}")
-            for key in ("missing", "duplicates", "warnings", "reasons"):
-                items = result.get(key) or []
-                for item in items[:50] if isinstance(items, list) else []:
-                    print(f"  {key.upper().rstrip('S')}: {item if isinstance(item, str) else json.dumps(item, sort_keys=True, default=str)}")
-            if args.command == "save-summary":
-                print(f"Written: {args.out}")
-        return 1 if status in _SAVE_ATTENTION_STATUSES else 0
-    if args.command == "save-snapshot":
-        try:
-            if args.snapshot_command == "tag":
-                result = snapshot_tag(args.runtime_dir, args.save_name, args.tag)
-            elif args.snapshot_command == "list":
-                result = snapshot_list(args.runtime_dir)
-            else:
-                result = snapshot_restore(args.runtime_dir, args.tag, as_name=args.as_name, replace=args.replace)
-        except SaveSnapshotError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True))
-        elif args.snapshot_command == "tag":
-            print(f"Snapshot {result['tag']}: {result['snapshot_dir']} ({len(result['manifest']['hashes'])} files)")
-            for mod, tag in (result["manifest"].get("bf_build_tags") or {}).items():
-                print(f"  build tag {mod}: {tag}")
-        elif args.snapshot_command == "list":
-            if not result:
-                print("No snapshots.")
-            for entry in result:
-                manifest = entry.get("manifest") or {}
-                print(f"{entry['tag']}: {manifest.get('source_save', '?')} ({manifest.get('created', '?')})")
-        else:
-            print(f"Restored {result['tag']} to {result['restored_to']} (replaced: {result['replaced']})")
-        return 0
-    if args.command == "scenario":
-        try:
-            if args.scenario_command == "list":
-                result = list_scenarios()
-            elif args.scenario_command == "plan":
-                mod_dirs: dict[str, Path] = {}
-                for item in args.mod:
-                    mod_id, sep, path = item.partition("=")
-                    if not sep or not mod_id or not path:
-                        print(f"bridgeforge: --mod expects ID=PATH, got {item!r}", file=sys.stderr)
-                        return 2
-                    mod_dirs[mod_id] = Path(path)
-                result = scenario_plan(args.name, args.runtime_dir, mod_dirs)
-            else:
-                result = scenario_check(args.name, args.log_path, args.save)
-        except ScenarioError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json or args.scenario_command == "plan":
-            print(json.dumps(result, indent=2, sort_keys=True, default=str))
-        elif args.scenario_command == "list":
-            print("\n".join(result) if result else "No scenarios.")
-        else:
-            print(f"Scenario {result['scenario']}: {result['status']}")
-            for entry in result["probe_assertions"] + result["save_assertions"]:
-                reasons = entry.get("reasons") or ([entry["reason"]] if entry.get("reason") else [])
-                print(f"  {entry['status']} {json.dumps(entry['assertion'], sort_keys=True)}" + (f" - {'; '.join(reasons)}" if reasons else ""))
-            if result.get("save_note"):
-                print(f"  note: {result['save_note']}")
-        if args.scenario_command == "check":
-            return 0 if result["status"] == "PASS" else 1
-        return 0
     return 2
+
+
+def _run_save_compat(args: argparse.Namespace) -> int:
+    try:
+        if args.compare_old or args.compare_new:
+            if not (args.compare_old and args.compare_new):
+                print("bridgeforge: --compare-old and --compare-new must be given together", file=sys.stderr)
+                return 2
+            result = compare_builds(args.save, args.compare_old, args.compare_new)
+        else:
+            result = check_save_compat(args.save, args.mod_dir, vanilla_core=args.vanilla_core)
+    except (SaveCompatError, ValueError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True, default=str))
+    else:
+        print(f"Status: {result['status']}")
+        for entry in result.get("missing", []):
+            print(f"MISSING {entry['reference']} (x{entry['occurrences']}) at {entry['sample_path']}")
+        for entry in result.get("dropped_in_new", []):
+            print(f"DROPPED {entry}")
+    return 0 if result["status"] != "WILL_FAIL" else 1
+
+
+def _run_save_removal_plan(args: argparse.Namespace) -> int:
+    from .save_removal_plan import plan_removal
+    result = plan_removal(args.save, args.mods, args.vanilla_core)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        return 0
+    print(f"{result['objects']} object(s) of missing classes: {result['droppable']} droppable, {result['blocked']} blocked")
+    for row in result["rows"]:
+        print(f"  {row['state']:9} {row['class']} (in {row['parent']}, line {row['line']})"
+              + (f"  referenced from {', '.join(row['ref_examples'])}" if row["ref_examples"] else ""))
+    return 0
+
+
+def _run_save_fingerprint(args: argparse.Namespace) -> int:
+    from .save_fingerprint_offline import FingerprintError, compare_with_file, offline_fingerprint, render
+    try:
+        result = offline_fingerprint(args.save)
+        comparison = compare_with_file(result, args.compare) if args.compare else None
+    except (FingerprintError, SaveReadError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps({**result, **({"comparison": comparison} if comparison else {})}, indent=2, ensure_ascii=False))
+    else:
+        print(render(result, comparison))
+    return 1 if comparison and "differ" in comparison.values() else 0
+
+
+def _run_save_doctor(args: argparse.Namespace) -> int:
+    from .save_doctor import diagnose
+    if args.break_cycle:
+        from .save_cycles import SaveCycleError, break_cycle
+        if args.out is None:
+            print("bridgeforge: --break-cycle needs --out (a new folder for the repaired copy).", file=sys.stderr)
+            return 2
+        try:
+            result = break_cycle(args.save, args.out)
+        except (SaveCycleError, OSError, ValueError) as exc:
+            print(f"bridgeforge: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else
+              f"Copy written: {result['copy']} ({len(result['changed_lines'])} line(s) changed; "
+              f"cycles {result['cycles_before']} -> {result['cycles_after']}). The original is unchanged.")
+        return 0 if result["cycles_after"] == 0 else 1
+    if args.mods is None:
+        print("bridgeforge: save-doctor needs --mods (or --break-cycle).", file=sys.stderr)
+        return 2
+    result = diagnose(args.save, args.mods, args.vanilla_core, cycles=args.cycles)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        return 0
+    print(f"{result['verdict']}: {result['character']} ({result['game_version']}, {result['enabled_mods']} mods)")
+    for problem in result["problems"]:
+        detail = problem.get("mod") or problem.get("package") or problem.get("file") or f"{problem.get('lines')} line(s)"
+        if problem["class"] == "MEMORY_CYCLE":
+            detail = (f"line {problem['line']}: PCMarket z={problem['pcmarket']} refers back to open memory z={problem['memory']}"
+                      f" via keys {problem['keys']}")
+        print(f"  {problem['class']:16} {detail}" + (f"  e.g. {', '.join(problem['examples'])}" if problem.get("examples") else ""))
+    for name, text in result["recovery"].items():
+        print(f"  recovery {name}: {text}")
+    return 0 if result["verdict"] == "NO_KNOWN_PROBLEM" else 1
+
+
+def _run_save_format_survey(args: argparse.Namespace) -> int:
+    try:
+        result = survey_saves(args.saves)
+    except (SaveReadError, ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True, default=str))
+    else:
+        print(f"Surveyed {result['saves_surveyed']} save(s); {result['saves_with_player_cargo']} with player cargo")
+        print(f"  game versions: {result['game_versions']}")
+        print(f"  cargo attributes in every save: {result['cargo_attributes_in_every_save']}")
+        print(f"  credits value present in every save: {result['credits_value_present_in_every_save']}")
+    return 0
+
+
+def _run_save_readers(args: argparse.Namespace) -> int:
+    try:
+        if args.command == "save-inspect":
+            result = inspect_save(args.save, track_classes=args.track_class, track_ids=args.track_id, mod_dir=args.mod_dir, vanilla_core=args.vanilla_core)
+        elif args.command == "save-diff":
+            result = diff_saves(args.save, args.save_b, track_classes=args.track_class, track_ids=args.track_id, mod_dir=args.mod_dir, vanilla_core=args.vanilla_core)
+        elif args.command == "save-scripts":
+            result = audit_scripts(args.save, args.mod_dir, vanilla_core=args.vanilla_core)
+        elif args.command == "save-growth":
+            result = growth_trend(args.saves, mod_dir=args.mod_dir, growth_rate_warning=args.warn_ratio)
+        elif args.command == "save-provenance":
+            result = save_provenance(args.save, mod_dirs=args.mod_dir)
+        elif args.command == "save-content":
+            result = check_save_content(args.save, args.mod_dir, vanilla_core=args.vanilla_core)
+        elif args.command == "save-removal":
+            result = removal_safety(args.save, args.mod_dir, vanilla_core=args.vanilla_core)
+        else:
+            result = redacted_summary(args.save, args.mod_dir, out_path=args.out, vanilla_core=args.vanilla_core)
+    except (SaveReadError, SaveCompatError, ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    status = result.get("status")
+    if args.json or status is None:
+        print(json.dumps(result, indent=2, sort_keys=True, default=str))
+    else:
+        print(f"Status: {status}")
+        for key in ("missing", "duplicates", "warnings", "reasons"):
+            items = result.get(key) or []
+            for item in items[:50] if isinstance(items, list) else []:
+                print(f"  {key.upper().rstrip('S')}: {item if isinstance(item, str) else json.dumps(item, sort_keys=True, default=str)}")
+        if args.command == "save-summary":
+            print(f"Written: {args.out}")
+    return 1 if status in _SAVE_ATTENTION_STATUSES else 0
+
+
+def _run_save_snapshot(args: argparse.Namespace) -> int:
+    try:
+        if args.snapshot_command == "tag":
+            result = snapshot_tag(args.runtime_dir, args.save_name, args.tag)
+        elif args.snapshot_command == "list":
+            result = snapshot_list(args.runtime_dir)
+        else:
+            result = snapshot_restore(args.runtime_dir, args.tag, as_name=args.as_name, replace=args.replace)
+    except SaveSnapshotError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    elif args.snapshot_command == "tag":
+        print(f"Snapshot {result['tag']}: {result['snapshot_dir']} ({len(result['manifest']['hashes'])} files)")
+        for mod, tag in (result["manifest"].get("bf_build_tags") or {}).items():
+            print(f"  build tag {mod}: {tag}")
+    elif args.snapshot_command == "list":
+        if not result:
+            print("No snapshots.")
+        for entry in result:
+            manifest = entry.get("manifest") or {}
+            print(f"{entry['tag']}: {manifest.get('source_save', '?')} ({manifest.get('created', '?')})")
+    else:
+        print(f"Restored {result['tag']} to {result['restored_to']} (replaced: {result['replaced']})")
+    return 0
+
+
+def _run_scenario(args: argparse.Namespace) -> int:
+    try:
+        if args.scenario_command == "list":
+            result = list_scenarios()
+        elif args.scenario_command == "plan":
+            mod_dirs: dict[str, Path] = {}
+            for item in args.mod:
+                mod_id, sep, path = item.partition("=")
+                if not sep or not mod_id or not path:
+                    print(f"bridgeforge: --mod expects ID=PATH, got {item!r}", file=sys.stderr)
+                    return 2
+                mod_dirs[mod_id] = Path(path)
+            result = scenario_plan(args.name, args.runtime_dir, mod_dirs)
+        else:
+            result = scenario_check(args.name, args.log_path, args.save)
+    except ScenarioError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json or args.scenario_command == "plan":
+        print(json.dumps(result, indent=2, sort_keys=True, default=str))
+    elif args.scenario_command == "list":
+        print("\n".join(result) if result else "No scenarios.")
+    else:
+        print(f"Scenario {result['scenario']}: {result['status']}")
+        for entry in result["probe_assertions"] + result["save_assertions"]:
+            reasons = entry.get("reasons") or ([entry["reason"]] if entry.get("reason") else [])
+            print(f"  {entry['status']} {json.dumps(entry['assertion'], sort_keys=True)}" + (f" - {'; '.join(reasons)}" if reasons else ""))
+        if result.get("save_note"):
+            print(f"  note: {result['save_note']}")
+    if args.scenario_command == "check":
+        return 0 if result["status"] == "PASS" else 1
+    return 0
+
+
+_HANDLERS = {
+    "compat-set": _run_compat_set,
+    "save-compat": _run_save_compat,
+    "save-removal-plan": _run_save_removal_plan,
+    "save-fingerprint": _run_save_fingerprint,
+    "save-doctor": _run_save_doctor,
+    "save-format-survey": _run_save_format_survey,
+    "save-content": _run_save_readers,
+    "save-diff": _run_save_readers,
+    "save-growth": _run_save_readers,
+    "save-inspect": _run_save_readers,
+    "save-provenance": _run_save_readers,
+    "save-removal": _run_save_readers,
+    "save-scripts": _run_save_readers,
+    "save-summary": _run_save_readers,
+    "save-snapshot": _run_save_snapshot,
+    "scenario": _run_scenario,
+}
+
+
+def run_cli(args: argparse.Namespace) -> int:
+    handler = _HANDLERS.get(args.command)
+    return handler(args) if handler is not None else 2

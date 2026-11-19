@@ -239,7 +239,8 @@ def _join(values) -> str:
 def _helpers(source: str) -> list[tuple[str, str, str]]:
     rows = []
     for node in ast.parse(source).body:
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("_") and not node.name.startswith("_scan_"):
+        # checks are `_scan_*` and command handlers `_run_*` (cmd_scan's table, 96.5 A5): neither is a helper checks reuse
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("_") and not node.name.startswith(("_scan_", "_run_")):
             signature = f"({ast.unparse(node.args)})" + (f" -> {ast.unparse(node.returns)}" if node.returns else "")
             doc = ast.get_docstring(node) or ""
             rows.append((node.name, signature, " ".join(doc.split("\n\n")[0].split())))

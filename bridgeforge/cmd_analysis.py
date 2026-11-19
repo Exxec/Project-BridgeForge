@@ -86,236 +86,277 @@ def add_parser(subcommands) -> None:
     api_diff_cmd.add_argument("--json", action="store_true")
 
 
+def _run_corpus_audit(args: argparse.Namespace) -> int:
+    try:
+        report = audit_directories(args.mod_directories, TargetProfile(args.target_starsector, args.target_java), args.continue_on_error, args.max_files_per_mod, args.max_jars_per_mod)
+        output = write_corpus_audit(report, args.output, args.mod_directories)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(f"Audited {report['mod_count']} mod(s): {output}")
+    return 0
+
+
+def _run_cross_mod_analyze(args: argparse.Namespace) -> int:
+    try:
+        aliases = {}
+        for item in args.alias:
+            directory_name, separator, mod_id = item.partition("=")
+            if not separator or not directory_name or not mod_id or directory_name in aliases:
+                raise ValueError("Each --alias must be a unique DIRECTORY_NAME=MOD_ID pair.")
+            aliases[directory_name] = mod_id
+        result = analyze_mod_set(args.mod_directories, TargetProfile(args.target_starsector, args.target_java), aliases, args.vanilla_core)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        output = args.output.expanduser().resolve()
+        for directory in args.mod_directories:
+            try:
+                output.relative_to(directory.expanduser().resolve())
+            except ValueError:
+                continue
+            print("bridgeforge: Cross-mod analysis output must not be inside an input mod directory.", file=sys.stderr)
+            return 2
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload + "\n", encoding="utf-8")
+        print(f"Cross-mod analysis: {result['mod_count']} mod(s); {output}")
+    else:
+        print(payload)
+    return 0
+
+
+def _run_campaign_identity_inventory(args: argparse.Namespace) -> int:
+    try:
+        result = build_campaign_identity_inventory(args.mod_directories, TargetProfile(args.target_starsector, args.target_java))
+        output = args.output.expanduser().resolve()
+        for directory in args.mod_directories:
+            try:
+                output.relative_to(directory.expanduser().resolve())
+            except ValueError:
+                continue
+            raise ValueError("Campaign identity inventory output must not be inside an input mod directory.")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(f"Campaign identity inventory: {len(result['entries'])} entry(s); {output}")
+    return 0
+
+
+def _run_campaign_identity_check(args: argparse.Namespace) -> int:
+    try:
+        inventory = load_campaign_identity_inventory(args.inventory)
+        result = check_campaign_identity_references(args.mod_directory, inventory, TargetProfile(args.target_starsector, args.target_java))
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        output = args.output.expanduser().resolve()
+        try:
+            output.relative_to(args.mod_directory.expanduser().resolve())
+        except ValueError:
+            pass
+        else:
+            print("bridgeforge: Campaign identity check output must not be inside the input mod directory.", file=sys.stderr)
+            return 2
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload + "\n", encoding="utf-8")
+        print(f"Campaign identity checks: {len(result['checks'])}; report: {output}")
+    else:
+        print(payload)
+    return 0
+
+
+def _run_release_lineage(args: argparse.Namespace) -> int:
+    try:
+        result = analyze_release_lineage(args.release_directories, TargetProfile(args.target_starsector, args.target_java))
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        output = args.output.expanduser().resolve()
+        for directory in args.release_directories:
+            try:
+                output.relative_to(directory.expanduser().resolve())
+            except ValueError:
+                continue
+            print("bridgeforge: Release lineage output must not be inside an input release directory.", file=sys.stderr)
+            return 2
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload + "\n", encoding="utf-8")
+        print(f"Release lineage: {result['release_count']} release(s); {output}")
+    else:
+        print(payload)
+    return 0
+
+
+def _run_library_api_inventory(args: argparse.Namespace) -> int:
+    try:
+        result = inventory_library_api(args.jar, args.library_id, args.library_version)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        output = args.output.expanduser().resolve()
+        if output == args.jar.expanduser().resolve():
+            print("bridgeforge: Library API inventory output must not replace the input JAR.", file=sys.stderr)
+            return 2
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload + "\n", encoding="utf-8")
+        print(f"Inventoried {result['class_count']} class symbol(s): {output}")
+    else:
+        print(payload)
+    return 0
+
+
+def _run_library_api_match(args: argparse.Namespace) -> int:
+    try:
+        inventory = json.loads(args.inventory.expanduser().resolve().read_text(encoding="utf-8"))
+        result = match_library_imports(args.mod_directory, inventory, TargetProfile(args.target_starsector, args.target_java))
+    except (OSError, ValueError, json.JSONDecodeError, KeyError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        output = args.output.expanduser().resolve()
+        try:
+            output.relative_to(args.mod_directory.expanduser().resolve())
+        except ValueError:
+            pass
+        else:
+            print("bridgeforge: API match output must not be inside the input mod directory.", file=sys.stderr)
+            return 2
+        output.write_text(payload + "\n", encoding="utf-8")
+        print(f"Reported {len(result['migration_candidates'])} research candidate(s): {output}")
+    else:
+        print(payload)
+    return 0
+
+
+def _run_dependency_api_check(args: argparse.Namespace) -> int:
+    try:
+        inventories = [json.loads(path.expanduser().resolve().read_text(encoding="utf-8")) for path in args.inventory]
+        result = check_dependency_apis(args.mod_directory, inventories, TargetProfile(args.target_starsector, args.target_java))
+    except (OSError, ValueError, json.JSONDecodeError, KeyError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        output = args.output.expanduser().resolve()
+        try:
+            output.relative_to(args.mod_directory.expanduser().resolve())
+        except ValueError:
+            pass
+        else:
+            print("bridgeforge: Dependency API check output must not be inside the input mod directory.", file=sys.stderr)
+            return 2
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload + "\n", encoding="utf-8")
+        print(f"Dependency API checks: {len(result['checks'])}; report: {output}")
+    else:
+        print(payload)
+    return 0
+
+
+def _run_corpus_compare(args: argparse.Namespace) -> int:
+    try:
+        result = compare_corpus(args.mod_directory, args.baseline)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(result, indent=2))
+    return 0 if result["status"] == "PASS" else 1
+
+
+def _run_release_evaluate(args: argparse.Namespace) -> int:
+    try:
+        result = evaluate_releases(args.before_directory, args.after_directory, TargetProfile(args.target_starsector, args.target_java))
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        output = args.output.expanduser().resolve()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload + "\n", encoding="utf-8")
+        print(f"Release evaluation: {output}")
+    else:
+        print(payload)
+    return 0
+
+
+def _run_revival_audit(args: argparse.Namespace) -> int:
+    try:
+        result = audit_revival(args.candidate, args.archive)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    if args.output:
+        output = args.output.expanduser().resolve()
+        if output.is_relative_to(args.candidate.expanduser().resolve()):
+            print("bridgeforge: Revival audit output must not be inside the candidate directory.", file=sys.stderr)
+            return 2
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload + "\n", encoding="utf-8")
+        print(f"Revival audit: {output} ({result['status']})")
+    else:
+        print(payload)
+    return 0 if result["status"] in {"PASS", "REVIEW"} else 1
+
+
+def _run_api_diff(args: argparse.Namespace) -> int:
+    import zipfile
+    from .api_diff import ApiDiffError, diff_api_jars
+    try:
+        result = diff_api_jars(args.old, args.new)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    except (ApiDiffError, OSError, zipfile.BadZipFile) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        summary = result["summary"]
+        print(f"API_DIFF: {result['old']['classes']} -> {result['new']['classes']} classes; "
+              f"{summary['classes_removed']} removed, {summary['classes_added']} added, {summary['classes_changed']} changed; "
+              f"{summary['methods_removed']} methods and {summary['fields_removed']} fields removed")
+        for dotted, entry in list(result["changed_classes"].items())[:40]:
+            for method in entry["methods_removed"]:
+                leads = method["same_signature_elsewhere"] or method["same_name_in_class"]
+                print(f"  - {dotted.rsplit('.', 1)[-1]}.{method['signature'].split(' ', 1)[-1]}" + (f"  -> {', '.join(leads)}" if leads else ""))
+        for rename in result.get("parameters_renamed", [])[:40]:
+            from .api_sources import render_rename
+            print(f"  ~ same signature, renamed parameter: {render_rename(rename)}")
+        if args.output:
+            print(f"Written: {args.output}")
+    return 0
+
+
+_HANDLERS = {
+    "corpus-audit": _run_corpus_audit,
+    "cross-mod-analyze": _run_cross_mod_analyze,
+    "campaign-identity-inventory": _run_campaign_identity_inventory,
+    "campaign-identity-check": _run_campaign_identity_check,
+    "release-lineage": _run_release_lineage,
+    "library-api-inventory": _run_library_api_inventory,
+    "library-api-match": _run_library_api_match,
+    "dependency-api-check": _run_dependency_api_check,
+    "corpus-compare": _run_corpus_compare,
+    "release-evaluate": _run_release_evaluate,
+    "revival-audit": _run_revival_audit,
+    "api-diff": _run_api_diff,
+}
+
+
 def run_cli(args: argparse.Namespace) -> int:
-    if args.command == "corpus-audit":
-        try:
-            report = audit_directories(args.mod_directories, TargetProfile(args.target_starsector, args.target_java), args.continue_on_error, args.max_files_per_mod, args.max_jars_per_mod)
-            output = write_corpus_audit(report, args.output, args.mod_directories)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        print(f"Audited {report['mod_count']} mod(s): {output}")
-        return 0
-    if args.command == "cross-mod-analyze":
-        try:
-            aliases = {}
-            for item in args.alias:
-                directory_name, separator, mod_id = item.partition("=")
-                if not separator or not directory_name or not mod_id or directory_name in aliases:
-                    raise ValueError("Each --alias must be a unique DIRECTORY_NAME=MOD_ID pair.")
-                aliases[directory_name] = mod_id
-            result = analyze_mod_set(args.mod_directories, TargetProfile(args.target_starsector, args.target_java), aliases, args.vanilla_core)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        payload = json.dumps(result, indent=2, sort_keys=True)
-        if args.output:
-            output = args.output.expanduser().resolve()
-            for directory in args.mod_directories:
-                try:
-                    output.relative_to(directory.expanduser().resolve())
-                except ValueError:
-                    continue
-                print("bridgeforge: Cross-mod analysis output must not be inside an input mod directory.", file=sys.stderr)
-                return 2
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(payload + "\n", encoding="utf-8")
-            print(f"Cross-mod analysis: {result['mod_count']} mod(s); {output}")
-        else:
-            print(payload)
-        return 0
-    if args.command == "campaign-identity-inventory":
-        try:
-            result = build_campaign_identity_inventory(args.mod_directories, TargetProfile(args.target_starsector, args.target_java))
-            output = args.output.expanduser().resolve()
-            for directory in args.mod_directories:
-                try:
-                    output.relative_to(directory.expanduser().resolve())
-                except ValueError:
-                    continue
-                raise ValueError("Campaign identity inventory output must not be inside an input mod directory.")
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        print(f"Campaign identity inventory: {len(result['entries'])} entry(s); {output}")
-        return 0
-    if args.command == "campaign-identity-check":
-        try:
-            inventory = load_campaign_identity_inventory(args.inventory)
-            result = check_campaign_identity_references(args.mod_directory, inventory, TargetProfile(args.target_starsector, args.target_java))
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        payload = json.dumps(result, indent=2, sort_keys=True)
-        if args.output:
-            output = args.output.expanduser().resolve()
-            try:
-                output.relative_to(args.mod_directory.expanduser().resolve())
-            except ValueError:
-                pass
-            else:
-                print("bridgeforge: Campaign identity check output must not be inside the input mod directory.", file=sys.stderr)
-                return 2
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(payload + "\n", encoding="utf-8")
-            print(f"Campaign identity checks: {len(result['checks'])}; report: {output}")
-        else:
-            print(payload)
-        return 0
-    if args.command == "release-lineage":
-        try:
-            result = analyze_release_lineage(args.release_directories, TargetProfile(args.target_starsector, args.target_java))
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        payload = json.dumps(result, indent=2, sort_keys=True)
-        if args.output:
-            output = args.output.expanduser().resolve()
-            for directory in args.release_directories:
-                try:
-                    output.relative_to(directory.expanduser().resolve())
-                except ValueError:
-                    continue
-                print("bridgeforge: Release lineage output must not be inside an input release directory.", file=sys.stderr)
-                return 2
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(payload + "\n", encoding="utf-8")
-            print(f"Release lineage: {result['release_count']} release(s); {output}")
-        else:
-            print(payload)
-        return 0
-    if args.command == "library-api-inventory":
-        try:
-            result = inventory_library_api(args.jar, args.library_id, args.library_version)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        payload = json.dumps(result, indent=2, sort_keys=True)
-        if args.output:
-            output = args.output.expanduser().resolve()
-            if output == args.jar.expanduser().resolve():
-                print("bridgeforge: Library API inventory output must not replace the input JAR.", file=sys.stderr)
-                return 2
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(payload + "\n", encoding="utf-8")
-            print(f"Inventoried {result['class_count']} class symbol(s): {output}")
-        else:
-            print(payload)
-        return 0
-    if args.command == "library-api-match":
-        try:
-            inventory = json.loads(args.inventory.expanduser().resolve().read_text(encoding="utf-8"))
-            result = match_library_imports(args.mod_directory, inventory, TargetProfile(args.target_starsector, args.target_java))
-        except (OSError, ValueError, json.JSONDecodeError, KeyError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        payload = json.dumps(result, indent=2, sort_keys=True)
-        if args.output:
-            output = args.output.expanduser().resolve()
-            try:
-                output.relative_to(args.mod_directory.expanduser().resolve())
-            except ValueError:
-                pass
-            else:
-                print("bridgeforge: API match output must not be inside the input mod directory.", file=sys.stderr)
-                return 2
-            output.write_text(payload + "\n", encoding="utf-8")
-            print(f"Reported {len(result['migration_candidates'])} research candidate(s): {output}")
-        else:
-            print(payload)
-        return 0
-    if args.command == "dependency-api-check":
-        try:
-            inventories = [json.loads(path.expanduser().resolve().read_text(encoding="utf-8")) for path in args.inventory]
-            result = check_dependency_apis(args.mod_directory, inventories, TargetProfile(args.target_starsector, args.target_java))
-        except (OSError, ValueError, json.JSONDecodeError, KeyError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        payload = json.dumps(result, indent=2, sort_keys=True)
-        if args.output:
-            output = args.output.expanduser().resolve()
-            try:
-                output.relative_to(args.mod_directory.expanduser().resolve())
-            except ValueError:
-                pass
-            else:
-                print("bridgeforge: Dependency API check output must not be inside the input mod directory.", file=sys.stderr)
-                return 2
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(payload + "\n", encoding="utf-8")
-            print(f"Dependency API checks: {len(result['checks'])}; report: {output}")
-        else:
-            print(payload)
-        return 0
-    if args.command == "corpus-compare":
-        try:
-            result = compare_corpus(args.mod_directory, args.baseline)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        print(json.dumps(result, indent=2))
-        return 0 if result["status"] == "PASS" else 1
-    if args.command == "release-evaluate":
-        try:
-            result = evaluate_releases(args.before_directory, args.after_directory, TargetProfile(args.target_starsector, args.target_java))
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        payload = json.dumps(result, indent=2, sort_keys=True)
-        if args.output:
-            output = args.output.expanduser().resolve()
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(payload + "\n", encoding="utf-8")
-            print(f"Release evaluation: {output}")
-        else:
-            print(payload)
-        return 0
-    if args.command == "revival-audit":
-        try:
-            result = audit_revival(args.candidate, args.archive)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        payload = json.dumps(result, indent=2, sort_keys=True)
-        if args.output:
-            output = args.output.expanduser().resolve()
-            if output.is_relative_to(args.candidate.expanduser().resolve()):
-                print("bridgeforge: Revival audit output must not be inside the candidate directory.", file=sys.stderr)
-                return 2
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(payload + "\n", encoding="utf-8")
-            print(f"Revival audit: {output} ({result['status']})")
-        else:
-            print(payload)
-        return 0 if result["status"] in {"PASS", "REVIEW"} else 1
-    if args.command == "api-diff":
-        import zipfile
-        from .api_diff import ApiDiffError, diff_api_jars
-        try:
-            result = diff_api_jars(args.old, args.new)
-            if args.output:
-                args.output.parent.mkdir(parents=True, exist_ok=True)
-                args.output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        except (ApiDiffError, OSError, zipfile.BadZipFile) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-        else:
-            summary = result["summary"]
-            print(f"API_DIFF: {result['old']['classes']} -> {result['new']['classes']} classes; "
-                  f"{summary['classes_removed']} removed, {summary['classes_added']} added, {summary['classes_changed']} changed; "
-                  f"{summary['methods_removed']} methods and {summary['fields_removed']} fields removed")
-            for dotted, entry in list(result["changed_classes"].items())[:40]:
-                for method in entry["methods_removed"]:
-                    leads = method["same_signature_elsewhere"] or method["same_name_in_class"]
-                    print(f"  - {dotted.rsplit('.', 1)[-1]}.{method['signature'].split(' ', 1)[-1]}" + (f"  -> {', '.join(leads)}" if leads else ""))
-            for rename in result.get("parameters_renamed", [])[:40]:
-                from .api_sources import render_rename
-                print(f"  ~ same signature, renamed parameter: {render_rename(rename)}")
-            if args.output:
-                print(f"Written: {args.output}")
-        return 0
-    return 2
+    handler = _HANDLERS.get(args.command)
+    return handler(args) if handler is not None else 2

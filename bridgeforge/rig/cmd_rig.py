@@ -207,440 +207,490 @@ def add_parser(subcommands) -> None:
     dossier.add_argument("--json", action="store_true")
 
 
-def run_cli(args: argparse.Namespace) -> int:
-    if args.command == "accept":
-        try:
-            result = accept_run(args.workspace, args.log, test_id=args.test_id, note=args.note, days=args.days,
-                                not_exercised=args.not_exercised, mods_dir=args.mods_dir,
-                                accept_findings=args.accept_findings, record_only=args.record_only, rig=args.rig)
-        except (AcceptError, ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True))
-        else:
-            print(f"Accepted {result['test_id']} for {result['workspace']}: run record {result['run_record']}")
-            if result["report"]:
-                print(f"  report section written: {result['report']}")
-            if result["accepted_findings"]:
-                print(f"  findings accepted: {'; '.join(result['accepted_findings'])}")
-        return 0
-    if args.command == "soak-report":
-        try:
-            result = soak_report(args.log, args.days, mods_dir=args.mods_dir)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True))
-        else:
-            print(f"Soak: {result['verdict']}: {result['reason']}")
-            for group in result["caught_exceptions"]["groups"][:10]:
-                print(f"  x{group['count']} {group['exception']}: {group['first_frame'] or group['message']}")
-            print(result["caveat"])
-        return 0 if result["verdict"] == "PASS" else 1
-    if args.command == "log-triage":
-        try:
-            result = triage_log(args.log, args.mod_prefix, mods_dir=args.mods_dir, all_mods=args.all_mods, last_sessions=args.last_sessions)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True))
-        else:
-            counts = result["counts"]
-            if result.get("sessions"):
-                sessions = result["sessions"]
-                print(f"Sessions: last {sessions['found']} of the log, from line {sessions['first_line']} (line numbers below count from there)")
-            print(f"FATAL={counts['FATAL']} MOD-ERROR={counts['MOD-ERROR']} KNOWN-NOISE={counts['KNOWN-NOISE']} OTHER={counts['OTHER']}")
-            if result.get("rig_fingerprint"):
-                fingerprint = result["rig_fingerprint"]
-                core = (fingerprint["core_baseline_sha256"] or "none recorded")[:12]
-                print(f"Rig: {len(fingerprint['enabled_mods'])} enabled mod(s), core baseline {core}: " + ", ".join(f"{k} {v}" for k, v in fingerprint["enabled_mods"].items())[:600])
-            milestones = result["milestones"]
-            print(f"Main menu reached: {milestones['main_menu_reached']}; campaign loads: {len(milestones['campaign_loads'])}; finished-saving events: {milestones['finished_saving_count']}; mission variant preloads (startup, not play): {len(milestones['mission_variant_preloads'])}")
-            for event in result["fatal"]:
-                where = f"line {event['line']}" if event.get("line") is not None else event.get("source", "dialog")
-                print(f"FATAL {where} [{event['matched_rule']}]: {event['message']}")
-                if event.get("top_mod_frame"):
-                    print(f"  top mod frame: {event['top_mod_frame']}")
-                if event.get("kind") == "jvm-crash" and event.get("top_mod"):
-                    print(f"  nearest mod frame: {event['top_mod']} ({event['mod_frames'][0]['class']})")
-            for event in result["mod_errors"]:
-                print(f"MOD-ERROR line {event['line']}: {event.get('top_mod_frame') or event['message']}")
-            caught = result["caught_exceptions"]
-            if caught["distinct"]:
-                print(f"Caught exceptions (logged, game carried on): {caught['total_events']} event(s), {caught['distinct']} distinct")
-                for group in caught["groups"][:10]:
-                    owner = f" [{group['suspect']}]" if group.get("suspect") else ""
-                    print(f"  x{group['count']} {group['exception']}{owner} lines {group['first_line']}-{group['last_line']}: {group['first_frame'] or group['message']}")
-            for symptom in result["vanilla_shadowing_symptoms"]:
-                print(f"Vanilla-shadowing symptom line {symptom['line']}: ship system [{symptom['ship_system']}] from {symptom['csv']}")
-            attribution = result.get("attribution")
-            if attribution:
-                print(f"Crash attribution (mod whose code threw, by exception count): {json.dumps(attribution.get('counts_by_suspect', {}), sort_keys=True)}")
-                for event in result["fatal"] + result["mod_errors"]:
-                    if event.get("suspect"):
-                        print(f"  line {event['line']}: suspect {event['suspect']}; on stack: {', '.join(event.get('involved') or [])}")
-                if args.mods_dir is not None and not attribution.get("counts_by_suspect"):
-                    # ROADMAP 53: say so when the crashing mod code is in no mod here (the EPTA report's
-                    # data.scripts.combat.hydrofoil class was in no installed mod: the log came from another folder).
-                    import re
+def _run_accept(args: argparse.Namespace) -> int:
+    try:
+        result = accept_run(args.workspace, args.log, test_id=args.test_id, note=args.note, days=args.days,
+                            not_exercised=args.not_exercised, mods_dir=args.mods_dir,
+                            accept_findings=args.accept_findings, record_only=args.record_only, rig=args.rig)
+    except (AcceptError, ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(f"Accepted {result['test_id']} for {result['workspace']}: run record {result['run_record']}")
+        if result["report"]:
+            print(f"  report section written: {result['report']}")
+        if result["accepted_findings"]:
+            print(f"  findings accepted: {'; '.join(result['accepted_findings'])}")
+    return 0
 
-                    from bridgeforge.log_triage import class_owner_index
-                    index = class_owner_index(args.mods_dir, enabled_only=not args.all_mods)
-                    stack = re.findall(r"\bat\s+((?:data|src|org|com)\.[\w.$]+)\.[\w$<>]+\(", args.log.read_text(encoding="utf-8", errors="replace"))
-                    unowned = sorted({c.split("$")[0] for c in stack if not c.startswith(("com.fs.", "org.lwjgl", "org.json", "org.codehaus.", "org.apache.", "com.thoughtworks.", "sun.", "java."))
-                                      and c.split("$")[0] not in index})
-                    if unowned:
-                        print(f"  Not in any mod under {args.mods_dir}: {', '.join(unowned[:5])} -- the log likely came "
-                              "from a different mods folder; pass that folder as --mods-dir.")
-            print(result["caveat"])
-        return 0 if not result["fatal"] else 1
-    if args.command == "prepare-test":
-        try:
-            result = prepare_test(
-                args.working_dir,
-                args.rig_mod_dir,
-                sync=args.sync,
-                bump=args.bump,
-                label=args.label,
-                boot=args.boot,
-                mods=args.mods,
-                timeout=args.timeout,
-                log_name=args.log_name,
-                keep_mods=args.keep_mods,
-                record_manifest=args.bump and not args.no_manifest,
-            )
-        except (PrepareTestError, ValueError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True))
-        else:
-            print(f"Status: {result['status']}")
-            if result.get("message"):
-                print(result["message"])
-            if "drift_before_sync" in result:
-                print(f"Drift before sync: {result['drift_before_sync']['drift_count']}")
-            if result.get("synced"):
-                print(f"Synced {len(result.get('synced_files', []))} file(s).")
-                for extra in result.get("extra_in_deployed", []):
-                    print(f"EXTRA-IN-DEPLOYED (not touched): {extra}")
-            if "bump" in result:
-                print(f"Bumped build tag: {result['bump']['old_name']} -> {result['bump']['new_name']}")
-            if "boot_test" in result:
-                boot_result = result["boot_test"]
-                print(f"Boot test: {boot_result.get('status')} {boot_result.get('reason', '')}".rstrip())
-        return 0 if result["status"] in {"PASS", "SAME_FOLDER"} else 1
-    if args.command == "env-check":
-        from bridgeforge import env_check as envc
-        try:
-            checked = envc.env_check(args.launcher, args.vmparams, args.mods_dir)
-        except OSError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        print(json.dumps(checked, indent=2) if args.json else envc.render(checked))
-        return 1 if checked["findings"] else 0
-    if args.command == "java-matrix":
-        from bridgeforge.bytecode import java_matrix as jm
-        try:
-            if args.java_matrix_command == "describe-log":
-                result = jm.describe_log_java(args.log)
-                print(json.dumps(result, indent=2) if args.json else f"Java {result['java_version']}; Fast Rendering: {result['fast_rendering']}; launcher hint: {result['launcher_hint']}")
-                return 0
-            if args.java_matrix_command == "discover":
-                jdks = jm.discover_jdks(args.rig, args.jdk_root)
-                print(json.dumps(jdks, indent=2) if args.json else "\n".join(f"Java {j['major']:<3} {j['version']:<14} {j['home']}" for j in jdks) or "no JDKs found")
-                return 0 if jdks else 1
-            if args.java_matrix_command == "instances":
-                found = jm.list_instances(args.rig)
-                print(json.dumps(found, indent=2) if args.json else "\n".join(f"{i.get('variant')}: {i.get('state')} run {i.get('run')}/{i.get('of')} status={i.get('status')} java_alive={i['java_alive']}" for i in found) or "no instances")
-                return 0
-            if args.java_matrix_command == "mass":
-                from bridgeforge import mass_test as mt
-                targets = mt.collect_targets(args.done_dir, args.only)
-                if not targets:
-                    print(f"bridgeforge: no archived mods found under {args.done_dir}", file=sys.stderr)
-                    return 2
-                if args.preset == "compare":
-                    args.java, args.launcher = [25, 28], None
-                elif args.preset == "real":
-                    args.java, args.launcher = [28], ["miko", "miko-noprep"]
-                    args.parallel = min(args.parallel, 2)
-                variants = jm.plan_variants(jm.discover_jdks(args.rig, args.jdk_root), args.launcher, args.java)
-                if not variants:
-                    print("bridgeforge: no JDK matched; try `java-matrix discover` or --jdk-root", file=sys.stderr)
-                    return 2
-                rig_path = Path(args.rig).expanduser().resolve()
-                roots = [*args.providers, rig_path / "mods", (rig_path / "starsector-core").resolve().parent / "mods"]
-                providers = mt.index_providers(roots)
-                for target in targets:
-                    providers.setdefault(target["id"], Path(target["folder"]))
-                result = mt.run_mass(args.rig, targets, variants, providers, args.output, screen=not args.no_screen, skip_baseline_validated=not args.retest_baseline, repeats=args.repeats, timeout=args.timeout, parallel=args.parallel, ledger=args.ledger, skip_known=args.skip_known, quiet=args.quiet, limit=args.limit, bundle=args.bundle)
-                print(json.dumps(result, indent=2) if args.json else "Mass test: " + ", ".join(f"{k}={v}" for k, v in sorted(result["counts"].items())) + f". See {args.output / 'MASS_TEST.md'}")
-                return 0 if not any(k in result["counts"] for k in ("ENVIRONMENT_SENSITIVE", "FLAKY")) else 1
-            if getattr(args, "preset", None) == "compare":
+
+def _run_soak_report(args: argparse.Namespace) -> int:
+    try:
+        result = soak_report(args.log, args.days, mods_dir=args.mods_dir)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(f"Soak: {result['verdict']}: {result['reason']}")
+        for group in result["caught_exceptions"]["groups"][:10]:
+            print(f"  x{group['count']} {group['exception']}: {group['first_frame'] or group['message']}")
+        print(result["caveat"])
+    return 0 if result["verdict"] == "PASS" else 1
+
+
+def _run_log_triage(args: argparse.Namespace) -> int:
+    try:
+        result = triage_log(args.log, args.mod_prefix, mods_dir=args.mods_dir, all_mods=args.all_mods, last_sessions=args.last_sessions)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        counts = result["counts"]
+        if result.get("sessions"):
+            sessions = result["sessions"]
+            print(f"Sessions: last {sessions['found']} of the log, from line {sessions['first_line']} (line numbers below count from there)")
+        print(f"FATAL={counts['FATAL']} MOD-ERROR={counts['MOD-ERROR']} KNOWN-NOISE={counts['KNOWN-NOISE']} OTHER={counts['OTHER']}")
+        if result.get("rig_fingerprint"):
+            fingerprint = result["rig_fingerprint"]
+            core = (fingerprint["core_baseline_sha256"] or "none recorded")[:12]
+            print(f"Rig: {len(fingerprint['enabled_mods'])} enabled mod(s), core baseline {core}: " + ", ".join(f"{k} {v}" for k, v in fingerprint["enabled_mods"].items())[:600])
+        milestones = result["milestones"]
+        print(f"Main menu reached: {milestones['main_menu_reached']}; campaign loads: {len(milestones['campaign_loads'])}; finished-saving events: {milestones['finished_saving_count']}; mission variant preloads (startup, not play): {len(milestones['mission_variant_preloads'])}")
+        for event in result["fatal"]:
+            where = f"line {event['line']}" if event.get("line") is not None else event.get("source", "dialog")
+            print(f"FATAL {where} [{event['matched_rule']}]: {event['message']}")
+            if event.get("top_mod_frame"):
+                print(f"  top mod frame: {event['top_mod_frame']}")
+            if event.get("kind") == "jvm-crash" and event.get("top_mod"):
+                print(f"  nearest mod frame: {event['top_mod']} ({event['mod_frames'][0]['class']})")
+        for event in result["mod_errors"]:
+            print(f"MOD-ERROR line {event['line']}: {event.get('top_mod_frame') or event['message']}")
+        caught = result["caught_exceptions"]
+        if caught["distinct"]:
+            print(f"Caught exceptions (logged, game carried on): {caught['total_events']} event(s), {caught['distinct']} distinct")
+            for group in caught["groups"][:10]:
+                owner = f" [{group['suspect']}]" if group.get("suspect") else ""
+                print(f"  x{group['count']} {group['exception']}{owner} lines {group['first_line']}-{group['last_line']}: {group['first_frame'] or group['message']}")
+        for symptom in result["vanilla_shadowing_symptoms"]:
+            print(f"Vanilla-shadowing symptom line {symptom['line']}: ship system [{symptom['ship_system']}] from {symptom['csv']}")
+        attribution = result.get("attribution")
+        if attribution:
+            print(f"Crash attribution (mod whose code threw, by exception count): {json.dumps(attribution.get('counts_by_suspect', {}), sort_keys=True)}")
+            for event in result["fatal"] + result["mod_errors"]:
+                if event.get("suspect"):
+                    print(f"  line {event['line']}: suspect {event['suspect']}; on stack: {', '.join(event.get('involved') or [])}")
+            if args.mods_dir is not None and not attribution.get("counts_by_suspect"):
+                # ROADMAP 53: say so when the crashing mod code is in no mod here (the EPTA report's
+                # data.scripts.combat.hydrofoil class was in no installed mod: the log came from another folder).
+                import re
+
+                from bridgeforge.log_triage import class_owner_index
+                index = class_owner_index(args.mods_dir, enabled_only=not args.all_mods)
+                stack = re.findall(r"\bat\s+((?:data|src|org|com)\.[\w.$]+)\.[\w$<>]+\(", args.log.read_text(encoding="utf-8", errors="replace"))
+                unowned = sorted({c.split("$")[0] for c in stack if not c.startswith(("com.fs.", "org.lwjgl", "org.json", "org.codehaus.", "org.apache.", "com.thoughtworks.", "sun.", "java."))
+                                  and c.split("$")[0] not in index})
+                if unowned:
+                    print(f"  Not in any mod under {args.mods_dir}: {', '.join(unowned[:5])} -- the log likely came "
+                          "from a different mods folder; pass that folder as --mods-dir.")
+        print(result["caveat"])
+    return 0 if not result["fatal"] else 1
+
+
+def _run_prepare_test(args: argparse.Namespace) -> int:
+    try:
+        result = prepare_test(
+            args.working_dir,
+            args.rig_mod_dir,
+            sync=args.sync,
+            bump=args.bump,
+            label=args.label,
+            boot=args.boot,
+            mods=args.mods,
+            timeout=args.timeout,
+            log_name=args.log_name,
+            keep_mods=args.keep_mods,
+            record_manifest=args.bump and not args.no_manifest,
+        )
+    except (PrepareTestError, ValueError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(f"Status: {result['status']}")
+        if result.get("message"):
+            print(result["message"])
+        if "drift_before_sync" in result:
+            print(f"Drift before sync: {result['drift_before_sync']['drift_count']}")
+        if result.get("synced"):
+            print(f"Synced {len(result.get('synced_files', []))} file(s).")
+            for extra in result.get("extra_in_deployed", []):
+                print(f"EXTRA-IN-DEPLOYED (not touched): {extra}")
+        if "bump" in result:
+            print(f"Bumped build tag: {result['bump']['old_name']} -> {result['bump']['new_name']}")
+        if "boot_test" in result:
+            boot_result = result["boot_test"]
+            print(f"Boot test: {boot_result.get('status')} {boot_result.get('reason', '')}".rstrip())
+    return 0 if result["status"] in {"PASS", "SAME_FOLDER"} else 1
+
+
+def _run_env_check(args: argparse.Namespace) -> int:
+    from bridgeforge import env_check as envc
+    try:
+        checked = envc.env_check(args.launcher, args.vmparams, args.mods_dir)
+    except OSError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(checked, indent=2) if args.json else envc.render(checked))
+    return 1 if checked["findings"] else 0
+
+
+def _run_java_matrix(args: argparse.Namespace) -> int:
+    from bridgeforge.bytecode import java_matrix as jm
+    try:
+        if args.java_matrix_command == "describe-log":
+            result = jm.describe_log_java(args.log)
+            print(json.dumps(result, indent=2) if args.json else f"Java {result['java_version']}; Fast Rendering: {result['fast_rendering']}; launcher hint: {result['launcher_hint']}")
+            return 0
+        if args.java_matrix_command == "discover":
+            jdks = jm.discover_jdks(args.rig, args.jdk_root)
+            print(json.dumps(jdks, indent=2) if args.json else "\n".join(f"Java {j['major']:<3} {j['version']:<14} {j['home']}" for j in jdks) or "no JDKs found")
+            return 0 if jdks else 1
+        if args.java_matrix_command == "instances":
+            found = jm.list_instances(args.rig)
+            print(json.dumps(found, indent=2) if args.json else "\n".join(f"{i.get('variant')}: {i.get('state')} run {i.get('run')}/{i.get('of')} status={i.get('status')} java_alive={i['java_alive']}" for i in found) or "no instances")
+            return 0
+        if args.java_matrix_command == "mass":
+            from bridgeforge import mass_test as mt
+            targets = mt.collect_targets(args.done_dir, args.only)
+            if not targets:
+                print(f"bridgeforge: no archived mods found under {args.done_dir}", file=sys.stderr)
+                return 2
+            if args.preset == "compare":
                 args.java, args.launcher = [25, 28], None
-                args.parallel = args.parallel or 3
-            elif getattr(args, "preset", None) == "real":
+            elif args.preset == "real":
                 args.java, args.launcher = [28], ["miko", "miko-noprep"]
-                args.parallel = args.parallel or 2
-            variants = jm.plan_variants(jm.discover_jdks(args.rig, args.jdk_root), args.launcher, args.java, prepatcher=getattr(args, "prepatcher", False), include_known_fail=getattr(args, "include_known_fail", False))
+                args.parallel = min(args.parallel, 2)
+            variants = jm.plan_variants(jm.discover_jdks(args.rig, args.jdk_root), args.launcher, args.java)
             if not variants:
                 print("bridgeforge: no JDK matched; try `java-matrix discover` or --jdk-root", file=sys.stderr)
                 return 2
-            if args.java_matrix_command == "setup":
-                written = jm.setup_rig(args.rig, variants)
-                print(json.dumps({"written": written, "variants": variants}, indent=2) if args.json else "Wrote " + ", ".join(written))
-                return 0
-            checkpoint = Path(args.rig) / "logs" / "java-matrix.partial.jsonl"
-            result = jm.run_java_matrix(args.rig, args.mods, variants, repeats=args.repeats, timeout=args.timeout, checkpoint=checkpoint, quiet=args.quiet, log_name=args.log_name, parallel=args.parallel or 1, ledger=args.ledger, skip_known=args.skip_known)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
+            rig_path = Path(args.rig).expanduser().resolve()
+            roots = [*args.providers, rig_path / "mods", (rig_path / "starsector-core").resolve().parent / "mods"]
+            providers = mt.index_providers(roots)
+            for target in targets:
+                providers.setdefault(target["id"], Path(target["folder"]))
+            result = mt.run_mass(args.rig, targets, variants, providers, args.output, screen=not args.no_screen, skip_baseline_validated=not args.retest_baseline, repeats=args.repeats, timeout=args.timeout, parallel=args.parallel, ledger=args.ledger, skip_known=args.skip_known, quiet=args.quiet, limit=args.limit, bundle=args.bundle)
+            print(json.dumps(result, indent=2) if args.json else "Mass test: " + ", ".join(f"{k}={v}" for k, v in sorted(result["counts"].items())) + f". See {args.output / 'MASS_TEST.md'}")
+            return 0 if not any(k in result["counts"] for k in ("ENVIRONMENT_SENSITIVE", "FLAKY")) else 1
+        if getattr(args, "preset", None) == "compare":
+            args.java, args.launcher = [25, 28], None
+            args.parallel = args.parallel or 3
+        elif getattr(args, "preset", None) == "real":
+            args.java, args.launcher = [28], ["miko", "miko-noprep"]
+            args.parallel = args.parallel or 2
+        variants = jm.plan_variants(jm.discover_jdks(args.rig, args.jdk_root), args.launcher, args.java, prepatcher=getattr(args, "prepatcher", False), include_known_fail=getattr(args, "include_known_fail", False))
+        if not variants:
+            print("bridgeforge: no JDK matched; try `java-matrix discover` or --jdk-root", file=sys.stderr)
             return 2
-        print(json.dumps(result, indent=2, sort_keys=True) if args.json else jm.render(result))
-        return 0 if result["verdict"] == "PASS_ALL" else 1
-    if args.command == "boot-test":
-        try:
-            from bridgeforge import boot_test as boot_test_module
-        except ImportError:
-            print("bridgeforge: boot-test module unavailable", file=sys.stderr)
-            return 2
-        if args.pack:
-            try:
-                result = boot_test_module.run_boot_matrix(args.runtime_dir, args.mods, args.pack, timeout=args.timeout, log_name=args.log_name)
-            except (ValueError, CompatSetError) as exc:
-                print(f"bridgeforge: {exc}", file=sys.stderr)
-                return 2
-            if args.json:
-                print(json.dumps(result, indent=2, sort_keys=True))
-            else:
-                print(f"Verdict: {result.get('verdict')}")
-                for row in result.get("matrix", []):
-                    print(f"  {row['config']}: {row['status']} mods={row['mods']} triage={row['triage']}")
-                    if row.get("reason"):
-                        print(f"    reason: {row['reason']}")
-            return 0 if result.get("verdict") == "PASS" else 1
-        try:
-            result = boot_test_module.run_boot_test(args.runtime_dir, args.mods, timeout=args.timeout, log_name=args.log_name, keep_mods=args.keep_mods, natural_exit=args.natural_exit)
-        except ValueError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True))
-        else:
-            print(f"Status: {result.get('status')}")
-            if result.get("reason"):
-                print(f"Reason: {result['reason']}")
-            if result.get("log"):
-                print(f"Log: {result['log']}")
-            if result.get("triage"):
-                print(f"Triage counts: {result['triage'].get('counts')}")
-        return 0 if result.get("status") == "PASS" else 1
-    if args.command == "dossier":
-        try:
-            result = write_dossier(
-                args.mod_directory,
-                output=args.output,
-                vanilla_core=args.vanilla_core,
-                baseline=args.baseline,
-                original_jar=args.original_jar,
-                rig=args.rig,
-                log=args.log,
-                save=args.save,
-                perf=args.perf,
-                perf_mod_prefixes=args.perf_mod_prefix or None,
-                discovery_dir=args.discovery_dir,
-                max_kb=args.max_kb,
-                context_lines=args.context_lines,
-            )
-        except (DossierError, ValueError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        summary = result["summary"]
-        if args.json:
-            print(json.dumps({"index_json": str(result["index_json"]), "index_markdown": str(result["index_markdown"]), "summary": summary}, indent=2, sort_keys=True))
-        else:
-            print(f"Dossier index: {result['index_json']}")
-            print(f"Dossier index (Markdown): {result['index_markdown']}")
-            print(f"Parts: {summary['part_count']} (sizes KB: {summary['part_sizes_kb']})")
-            print(f"Index size: {summary['index_size_kb']} KB")
-            print(f"New findings: {summary['new_finding_count']} (baselined: {summary['baselined_count']}, resolved: {summary['resolved_count']})")
-            print(f"Open questions: {summary['open_question_count']}")
-        return 0
-    if args.command == "build-probe-mod":
-        from bridgeforge.paths import checkout_root
+        if args.java_matrix_command == "setup":
+            written = jm.setup_rig(args.rig, variants)
+            print(json.dumps({"written": written, "variants": variants}, indent=2) if args.json else "Wrote " + ", ".join(written))
+            return 0
+        checkpoint = Path(args.rig) / "logs" / "java-matrix.partial.jsonl"
+        result = jm.run_java_matrix(args.rig, args.mods, variants, repeats=args.repeats, timeout=args.timeout, checkpoint=checkpoint, quiet=args.quiet, log_name=args.log_name, parallel=args.parallel or 1, ledger=args.ledger, skip_known=args.skip_known)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(result, indent=2, sort_keys=True) if args.json else jm.render(result))
+    return 0 if result["verdict"] == "PASS_ALL" else 1
 
-        repo_root = checkout_root()  # probe-mod/ is in the source tree
+
+def _run_boot_test(args: argparse.Namespace) -> int:
+    try:
+        from bridgeforge import boot_test as boot_test_module
+    except ImportError:
+        print("bridgeforge: boot-test module unavailable", file=sys.stderr)
+        return 2
+    if args.pack:
         try:
-            result = build_probe_mod(repo_root, args.jdk, args.core)
-            if args.install_release:
-                result["release"] = install_release(repo_root, args.core)
-        except ProbeModBuildError as exc:
+            result = boot_test_module.run_boot_matrix(args.runtime_dir, args.mods, args.pack, timeout=args.timeout, log_name=args.log_name)
+        except (ValueError, CompatSetError) as exc:
             print(f"bridgeforge: {exc}", file=sys.stderr)
             return 2
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
         else:
-            print(f"Jar: {result['jar']} ({result['class_count']} classes)")
-            print(f"Mission source compiles: {result['mission_compiles']}")
-            print(f"Bounty check (loose, MagicLib): {result.get('bounty_check')}")
-            if result.get("mission_error"):
-                print(f"Mission compile error: {result['mission_error']}")
-            if "release" in result:
-                print(f"Release: {result['release']['release_dir']}")
-        return 0 if result["mission_compiles"] else 1
-    if args.command == "probe-config":
-        try:
-            result = write_probe_config(
-                args.mod_dir,
-                args.runtime,
-                track_entities=args.track,
-                combat_seconds=args.seconds,
-                campaign_interval_days=args.campaign_interval_days,
-                combat_cap_per_side=args.combat_cap,
-                setups=args.setup,
-                profile=load_profile(args.profile) if args.profile else None,
-                dry_run=args.dry_run,
-                install=args.install,
-            )
-        except ProbeConfigError as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
+            print(f"Verdict: {result.get('verdict')}")
+            for row in result.get("matrix", []):
+                print(f"  {row['config']}: {row['status']} mods={row['mods']} triage={row['triage']}")
+                if row.get("reason"):
+                    print(f"    reason: {row['reason']}")
+        return 0 if result.get("verdict") == "PASS" else 1
+    try:
+        result = boot_test_module.run_boot_test(args.runtime_dir, args.mods, timeout=args.timeout, log_name=args.log_name, keep_mods=args.keep_mods, natural_exit=args.natural_exit)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(f"Status: {result.get('status')}")
+        if result.get("reason"):
+            print(f"Reason: {result['reason']}")
+        if result.get("log"):
+            print(f"Log: {result['log']}")
+        if result.get("triage"):
+            print(f"Triage counts: {result['triage'].get('counts')}")
+    return 0 if result.get("status") == "PASS" else 1
+
+
+def _run_dossier(args: argparse.Namespace) -> int:
+    try:
+        result = write_dossier(
+            args.mod_directory,
+            output=args.output,
+            vanilla_core=args.vanilla_core,
+            baseline=args.baseline,
+            original_jar=args.original_jar,
+            rig=args.rig,
+            log=args.log,
+            save=args.save,
+            perf=args.perf,
+            perf_mod_prefixes=args.perf_mod_prefix or None,
+            discovery_dir=args.discovery_dir,
+            max_kb=args.max_kb,
+            context_lines=args.context_lines,
+        )
+    except (DossierError, ValueError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    summary = result["summary"]
+    if args.json:
+        print(json.dumps({"index_json": str(result["index_json"]), "index_markdown": str(result["index_markdown"]), "summary": summary}, indent=2, sort_keys=True))
+    else:
+        print(f"Dossier index: {result['index_json']}")
+        print(f"Dossier index (Markdown): {result['index_markdown']}")
+        print(f"Parts: {summary['part_count']} (sizes KB: {summary['part_sizes_kb']})")
+        print(f"Index size: {summary['index_size_kb']} KB")
+        print(f"New findings: {summary['new_finding_count']} (baselined: {summary['baselined_count']}, resolved: {summary['resolved_count']})")
+        print(f"Open questions: {summary['open_question_count']}")
+    return 0
+
+
+def _run_build_probe_mod(args: argparse.Namespace) -> int:
+    from bridgeforge.paths import checkout_root
+
+    repo_root = checkout_root()  # probe-mod/ is in the source tree
+    try:
+        result = build_probe_mod(repo_root, args.jdk, args.core)
+        if args.install_release:
+            result["release"] = install_release(repo_root, args.core)
+    except ProbeModBuildError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(f"Jar: {result['jar']} ({result['class_count']} classes)")
+        print(f"Mission source compiles: {result['mission_compiles']}")
+        print(f"Bounty check (loose, MagicLib): {result.get('bounty_check')}")
+        if result.get("mission_error"):
+            print(f"Mission compile error: {result['mission_error']}")
+        if "release" in result:
+            print(f"Release: {result['release']['release_dir']}")
+    return 0 if result["mission_compiles"] else 1
+
+
+def _run_probe_config(args: argparse.Namespace) -> int:
+    try:
+        result = write_probe_config(
+            args.mod_dir,
+            args.runtime,
+            track_entities=args.track,
+            combat_seconds=args.seconds,
+            campaign_interval_days=args.campaign_interval_days,
+            combat_cap_per_side=args.combat_cap,
+            setups=args.setup,
+            profile=load_profile(args.profile) if args.profile else None,
+            dry_run=args.dry_run,
+            install=args.install,
+        )
+    except ProbeConfigError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        config = result["config"]
+        print(f"Target mod: {config['target_mod_id']}")
+        print(f"Hulls with a variant: {len(config['hulls'])} (skipped, no variant: {len(config['hulls_skipped_no_variant'])})")
+        print(f"Config: {result['config_path']} (written: {result['written']})")
+        print(f"Rig marker: {result['marker_path']}")
+        if result.get("installed"):
+            print(f"Installed probe mod: {result['install']['destination']}")
+        for spec in config.get("setups", []) or []:
+            print(f"Setup: {spec}")
+    return 0
+
+
+def _run_bootstrap(args: argparse.Namespace) -> int:
+    try:
+        result = bootstrap_mods(args.mod_dirs, vanilla_core=args.vanilla_core, baselines_dir=args.baselines_dir, manifests_dir=args.manifests_dir, overwrite=args.overwrite)
+    except (BuildTagError, ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True, default=str))
+    else:
+        for label, entry in result.items():
+            kept = " (kept existing)" if entry["baseline_kept_existing"] else ""
+            print(f"{label}: baseline {entry['baseline_path']}{kept} - {entry['finding_count']} findings, {entry['manual_finding_count']} MANUAL; manifest r{entry['manifest_build']} ({entry['manifest_file_count']} files)")
+    return 0
+
+
+def _run_rig_create(args: argparse.Namespace) -> int:
+    try:
+        manifest_path = write_reference_rig_manifest(args.install, game_version=args.game_version, output=args.output, replace=args.replace)
+    except (ReferenceRigError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    result = {"status": "REGISTERED", "game_version": args.game_version, "manifest": str(manifest_path)}
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(f"Reference rig registered: {args.game_version} -> {manifest_path}")
+        print("Isolation is an operator assertion; run rig-doctor with --reference-manifest before every session.")
+    return 0
+
+
+def _run_rig_doctor(args: argparse.Namespace) -> int:
+    use_defaults = not (args.no_default_working or args.reference_manifest)
+    working: dict[str, Path] = dict(default_working_copies(data_root())) if use_defaults else {}
+    if use_defaults:
+        # Defaults cover every project mod, but each rig holds only some (Vacuum has its own rig), so
+        # compare only the ones installed in THIS rig. Explicit --working entries are never filtered.
+        from bridgeforge.rig.rig_doctor import _mods_by_id
+        installed = _mods_by_id(Path(args.runtime_dir) / "mods") if (Path(args.runtime_dir) / "mods").is_dir() else {}
+        working = {mod_id: path for mod_id, path in working.items() if mod_id in installed}
+    for item in args.working:
+        mod_id, sep, path = item.partition("=")
+        if not sep or not mod_id or not path:
+            print(f"bridgeforge: --working expects ID=PATH, got {item!r}", file=sys.stderr)
             return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True))
-        else:
-            config = result["config"]
-            print(f"Target mod: {config['target_mod_id']}")
-            print(f"Hulls with a variant: {len(config['hulls'])} (skipped, no variant: {len(config['hulls_skipped_no_variant'])})")
-            print(f"Config: {result['config_path']} (written: {result['written']})")
-            print(f"Rig marker: {result['marker_path']}")
-            if result.get("installed"):
-                print(f"Installed probe mod: {result['install']['destination']}")
-            for spec in config.get("setups", []) or []:
-                print(f"Setup: {spec}")
-        return 0
-    if args.command == "bootstrap":
-        try:
-            result = bootstrap_mods(args.mod_dirs, vanilla_core=args.vanilla_core, baselines_dir=args.baselines_dir, manifests_dir=args.manifests_dir, overwrite=args.overwrite)
-        except (BuildTagError, ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True, default=str))
-        else:
-            for label, entry in result.items():
-                kept = " (kept existing)" if entry["baseline_kept_existing"] else ""
-                print(f"{label}: baseline {entry['baseline_path']}{kept} - {entry['finding_count']} findings, {entry['manual_finding_count']} MANUAL; manifest r{entry['manifest_build']} ({entry['manifest_file_count']} files)")
-        return 0
-    if args.command == "rig-create":
-        try:
-            manifest_path = write_reference_rig_manifest(args.install, game_version=args.game_version, output=args.output, replace=args.replace)
-        except (ReferenceRigError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        result = {"status": "REGISTERED", "game_version": args.game_version, "manifest": str(manifest_path)}
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True))
-        else:
-            print(f"Reference rig registered: {args.game_version} -> {manifest_path}")
-            print("Isolation is an operator assertion; run rig-doctor with --reference-manifest before every session.")
-        return 0
-    if args.command == "rig-doctor":
-        # A historical reference rig holds the ORIGINAL mods on purpose: comparing it with the revived
-        # working copies would suggest a `prepare-test --sync` that overwrites the reference. Only
-        # explicit --working entries are compared there.
-        use_defaults = not (args.no_default_working or args.reference_manifest)
-        working: dict[str, Path] = dict(default_working_copies(data_root())) if use_defaults else {}
-        if use_defaults:
-            # Defaults cover every project mod, but each rig holds only some (Vacuum has its own rig), so
-            # compare only the ones installed in THIS rig. Explicit --working entries are never filtered.
-            from bridgeforge.rig.rig_doctor import _mods_by_id
-            installed = _mods_by_id(Path(args.runtime_dir) / "mods") if (Path(args.runtime_dir) / "mods").is_dir() else {}
-            working = {mod_id: path for mod_id, path in working.items() if mod_id in installed}
-        for item in args.working:
-            mod_id, sep, path = item.partition("=")
-            if not sep or not mod_id or not path:
-                print(f"bridgeforge: --working expects ID=PATH, got {item!r}", file=sys.stderr)
-                return 2
-            working[mod_id] = Path(path)
-        try:
-            result = rig_doctor(args.runtime_dir, working_copies=working, real_install=args.real_install, write_saves_baseline=args.write_saves_baseline, reference_manifest=args.reference_manifest, core_baseline=args.core_baseline, write_core_baseline=args.write_core_baseline)
-        except (ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True, default=str))
-        else:
-            print(f"Rig doctor: {result['status']}")
-            for check in result["checks"]:
-                print(f"  {check['status']:<8} {check['name']}: {check['detail']}")
-        return 1 if result["status"] == "FAIL" else 0
-    if args.command == "who-locks":
-        try:
-            result = who_locks(args.path)
-        except (ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True))
-        else:
-            print(f"{result['status']}: {result['target']}")
-            for process in result["processes"]:
-                print(f"  pid {process['pid']} {process['name']}: {', '.join(process['sources'])}")
-            for limitation in result["limitations"]:
-                print(f"  limitation: {limitation}")
-            print(result["note"])
-        return 0
-    if args.command == "test-plan":
-        try:
-            result = plan_tests(args.mod_dir, args.since, manifests_dir=args.manifests_dir, live_test_instructions=args.live_test_instructions)
-        except (TestPlanError, ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True, default=str))
-        else:
-            print(f"Changed since {result['since_tag']}: {result['changed_file_count']} file(s)")
-            print(f"Features to re-test: {', '.join(result['features']) or 'none'}")
-            for assertion in result["probe_assertions"]:
-                print(f"  probe: {assertion if isinstance(assertion, str) else json.dumps(assertion, sort_keys=True)}")
-            print(f"Live-test IDs ({result['live_test_section'] or 'no section for this mod'}): {', '.join(map(str, result['live_test_ids'])) or 'none'}")
-            if result["unmatched_files"]:
-                print(f"Unmatched files (review by hand): {len(result['unmatched_files'])}")
-        return 0
-    if args.command == "perf-gate":
-        if not args.perf_report and not args.log:
-            print("bridgeforge: give --perf-report and/or --log", file=sys.stderr)
-            return 2
-        try:
-            summary: dict[str, object] = {}
-            report = ingest_spw_report(args.perf_report) if args.perf_report else None
-            spam = log_spam(args.log, args.mod_prefix, min_repeats=args.min_repeats) if args.log else None
-            if report:
-                startup_ms = (report.get("startup") or {}).get("total_ms")
-                if isinstance(startup_ms, (int, float)):
-                    summary["startup_ms"] = startup_ms
-                shares = [entry.get("cpu_share") for entry in report.get("per_mod", []) if isinstance(entry.get("cpu_share"), (int, float))]
-                if shares:
-                    summary["cpu_share"] = max(shares)
-            if spam:
-                summary["spam_count"] = spam["total_spam_lines"]
-            thresholds = json.loads(args.thresholds.read_text(encoding="utf-8")) if args.thresholds else None
-            gate = perf_gate(summary, thresholds)
-        except (SpwBridgeError, ValueError, OSError) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
-            return 2
-        result = {"gate": gate, "summary": summary, "report": report, "spam": spam}
-        if args.json:
-            print(json.dumps(result, indent=2, sort_keys=True, default=str))
-        else:
-            print(f"Perf gate: {gate['status']}")
-            for check in gate["checks"]:
-                print(f"  {check['metric']}={check['value']} ({check['result']})")
-            for prefix, entries in (spam or {}).get("by_prefix", {}).items():
-                for entry in entries[:5]:
-                    print(f"  spam [{prefix}] x{entry['count']}: {entry['message'][:160]}")
-        return 1 if gate["status"] == "FAIL" else 0
-    return 2
+        working[mod_id] = Path(path)
+    try:
+        result = rig_doctor(args.runtime_dir, working_copies=working, real_install=args.real_install, write_saves_baseline=args.write_saves_baseline, reference_manifest=args.reference_manifest, core_baseline=args.core_baseline, write_core_baseline=args.write_core_baseline)
+    except (ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True, default=str))
+    else:
+        print(f"Rig doctor: {result['status']}")
+        for check in result["checks"]:
+            print(f"  {check['status']:<8} {check['name']}: {check['detail']}")
+    return 1 if result["status"] == "FAIL" else 0
+
+
+def _run_who_locks(args: argparse.Namespace) -> int:
+    try:
+        result = who_locks(args.path)
+    except (ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(f"{result['status']}: {result['target']}")
+        for process in result["processes"]:
+            print(f"  pid {process['pid']} {process['name']}: {', '.join(process['sources'])}")
+        for limitation in result["limitations"]:
+            print(f"  limitation: {limitation}")
+        print(result["note"])
+    return 0
+
+
+def _run_test_plan(args: argparse.Namespace) -> int:
+    try:
+        result = plan_tests(args.mod_dir, args.since, manifests_dir=args.manifests_dir, live_test_instructions=args.live_test_instructions)
+    except (TestPlanError, ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True, default=str))
+    else:
+        print(f"Changed since {result['since_tag']}: {result['changed_file_count']} file(s)")
+        print(f"Features to re-test: {', '.join(result['features']) or 'none'}")
+        for assertion in result["probe_assertions"]:
+            print(f"  probe: {assertion if isinstance(assertion, str) else json.dumps(assertion, sort_keys=True)}")
+        print(f"Live-test IDs ({result['live_test_section'] or 'no section for this mod'}): {', '.join(map(str, result['live_test_ids'])) or 'none'}")
+        if result["unmatched_files"]:
+            print(f"Unmatched files (review by hand): {len(result['unmatched_files'])}")
+    return 0
+
+
+def _run_perf_gate(args: argparse.Namespace) -> int:
+    if not args.perf_report and not args.log:
+        print("bridgeforge: give --perf-report and/or --log", file=sys.stderr)
+        return 2
+    try:
+        summary: dict[str, object] = {}
+        report = ingest_spw_report(args.perf_report) if args.perf_report else None
+        spam = log_spam(args.log, args.mod_prefix, min_repeats=args.min_repeats) if args.log else None
+        if report:
+            startup_ms = (report.get("startup") or {}).get("total_ms")
+            if isinstance(startup_ms, (int, float)):
+                summary["startup_ms"] = startup_ms
+            shares = [entry.get("cpu_share") for entry in report.get("per_mod", []) if isinstance(entry.get("cpu_share"), (int, float))]
+            if shares:
+                summary["cpu_share"] = max(shares)
+        if spam:
+            summary["spam_count"] = spam["total_spam_lines"]
+        thresholds = json.loads(args.thresholds.read_text(encoding="utf-8")) if args.thresholds else None
+        gate = perf_gate(summary, thresholds)
+    except (SpwBridgeError, ValueError, OSError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    result = {"gate": gate, "summary": summary, "report": report, "spam": spam}
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True, default=str))
+    else:
+        print(f"Perf gate: {gate['status']}")
+        for check in gate["checks"]:
+            print(f"  {check['metric']}={check['value']} ({check['result']})")
+        for prefix, entries in (spam or {}).get("by_prefix", {}).items():
+            for entry in entries[:5]:
+                print(f"  spam [{prefix}] x{entry['count']}: {entry['message'][:160]}")
+    return 1 if gate["status"] == "FAIL" else 0
+
+
+_HANDLERS = {
+    "accept": _run_accept,
+    "soak-report": _run_soak_report,
+    "log-triage": _run_log_triage,
+    "prepare-test": _run_prepare_test,
+    "env-check": _run_env_check,
+    "java-matrix": _run_java_matrix,
+    "boot-test": _run_boot_test,
+    "dossier": _run_dossier,
+    "build-probe-mod": _run_build_probe_mod,
+    "probe-config": _run_probe_config,
+    "bootstrap": _run_bootstrap,
+    "rig-create": _run_rig_create,
+    "rig-doctor": _run_rig_doctor,
+    "who-locks": _run_who_locks,
+    "test-plan": _run_test_plan,
+    "perf-gate": _run_perf_gate,
+}
+
+
+def run_cli(args: argparse.Namespace) -> int:
+    handler = _HANDLERS.get(args.command)
+    return handler(args) if handler is not None else 2

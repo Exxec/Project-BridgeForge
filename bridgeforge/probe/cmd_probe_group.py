@@ -102,227 +102,288 @@ def add_parser(subcommands) -> None:
     group_report_cmd.add_argument("--json", action="store_true")
 
 
-def run_cli(args: argparse.Namespace) -> int:
-    if args.command == "probe-group":
-        from bridgeforge.probe.probe_group import ProbeGroupError, group_report, install_group, plan_groups
-        from bridgeforge.probe.probe_config import CONFIG_FILE
-        from bridgeforge.substitutes import REPO_ROOT
-        queue = (args.queue or REPO_ROOT / "In operation").expanduser().resolve()
-        rig = (args.rig or queue / "_rig").expanduser().resolve()
-        try:
-            if args.probe_group_command == "plan":
-                from bridgeforge.probe.probe_group import DEFAULT_PROVIDER_SOURCES
-                sources = args.provider_source if args.provider_source is not None else [p for p in DEFAULT_PROVIDER_SOURCES if p.is_dir()]
-                from bridgeforge.probe.probe_group import ready_workspaces
-                # Workspace arguments take a path ("In operation/<name>") or a bare name; the plan matches folder names
-                # (`--retest "In operation/X"` was read as In operation/In operation/X, 2026-10-13).
-                args.retest = [Path(name).name for name in args.retest]
-                args.exclude = [Path(name).name for name in args.exclude]
-                args.solo = [Path(name).name for name in args.solo]
-                retest = [Path(queue) / name for name in args.retest]
-                missing = [str(p) for p in retest if not (p / "working" / "mod_info.json").is_file()]
-                if missing:
-                    raise ProbeGroupError("--retest needs a workspace with working/mod_info.json: " + ", ".join(missing))
-                result = plan_groups(queue, rig, size=args.size, exclude=set(args.exclude), solo=set(args.solo) | set(args.retest), auto_solo=not args.no_auto_solo,
-                                     extra_sources=sources, workspaces=[*ready_workspaces(queue), *[p for p in retest if p not in ready_workspaces(queue)]])
-                target = args.write or queue / "PROBE_GROUPS.json"
-                target.write_text(json.dumps(result, indent=2), encoding="utf-8")
-                if not args.json:
-                    for group in result["groups"]:
-                        print(f"Group {group['group']} ({len(group['members'])} mod(s)): " + ", ".join(m["workspace"] for m in group["members"]))
-                    for item in result.get("raw_folders") or []:
-                        print(f"Not taken in: {item['folder']} is a raw mod folder, no workspace yet. Run: {item['next']}")
-                    for item in result["unplaced"]:
-                        print(f"Not grouped: {item['workspace']} - {item['reason']}")
-                        for problem in item.get("providers") or []:
-                            print(f"    {problem}")
-                    staging = sorted({f"{p['mod_id']} from {p.get('source') or p['workspace']}" for g in result["groups"] for m in g["members"] for p in m.get("stage_providers") or []})
-                    if staging:
-                        print("Providers to stage (install those groups with --stage-providers): " + "; ".join(staging))
-                    print(f"Plan written: {target}. Next: bridgeforge probe-group install <N>, then bf-test.ps1 launch <TESTID>.")
-            elif args.probe_group_command == "install":
-                plan = json.loads((args.plan or queue / "PROBE_GROUPS.json").read_text(encoding="utf-8"))
-                result = install_group(plan, args.group, queue, rig, stage=args.stage_providers, with_lunalib=args.with_lunalib,
-                                       setups=args.setup, expect_supply=args.expect_supply, save_after_checks=args.save_after_checks,
-                                       save_reload_after_days=args.save_reload_after_days, save_reload_note=args.save_reload_note,
-                                       no_lunalib=args.no_lunalib, also_enable=args.also_enable)
-                if not args.json:
-                    print(f"Group {result['group']} installed: {', '.join(result['members'])}")
-                    for item in result["staged_providers"]:
-                        print(f"  provider {item['mod_id']} {item['version']} from {item['workspace']}: {item['action']} (id, version and files verified)")
-                    for item in result["copied"]:
-                        print(f"  {item['workspace']}: {item['action']}")
-                    print(f"  enabled_mods.json -> {result['enabled_mods']}")
-                    for folder in result.get("probe_mission_added", []):
-                        print(f"  added the probe mission to {folder}'s mission list (it replaces the list; RC8 would hide the probe)")
-                    for item in result.get("moved_aside", []):
-                        print(f"  moved {item['folder']} to mods-disabled-providers: it shares mod id {item['mod_id']} with {item['kept']}")
-                    for item in result.get("incomplete_providers", []):
-                        print(f"  WARN {item['folder']} lacks {', '.join(item['missing'])} that the real install has; recopy it")
-                    for item in result.get("dependency_version_conflicts", []):
-                        print(f"  WARN {item['mod_id']} wants {item['dependency']} {item['wanted']}, rig has {item['installed']}: "
-                              "RC8 disables a mod whose dependency major differs (RC8-23); fix its mod_info.json")
-                    if result.get("lunalib"):
-                        print(f"  LunaLib: {result['lunalib']}")
-                    if result.get("lunalib_advice"):
-                        print(f"  WARN {result['lunalib_advice']}")
-                    print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
-            elif args.probe_group_command == "live":
-                from bridgeforge.live.live_run import live_run
-                if args.interactive:
-                    print("Starting the game: play, then close it; nothing is clicked for you after the launcher's Play button.", file=sys.stderr)
-                else:
-                    print("Starting the live run: leave the mouse and keyboard alone until it finishes (about three minutes after loading).", file=sys.stderr)
-                if args.save_reload and args.interactive:
-                    print("bridgeforge: --save-reload cannot be combined with --interactive", file=sys.stderr)
-                    return 2
-                if args.save_reload:
-                    from bridgeforge.save.save_reload_run import clear_stale_fingerprint, save_reload_configured
-                    if not save_reload_configured(rig):
-                        print("bridgeforge: --save-reload needs the rig probe config's save_reload.after_days (install with --save-reload-after-days N)", file=sys.stderr)
-                        return 2
-                    clear_stale_fingerprint(rig)
-                live = live_run(rig, args.test_id, bat_name=args.bat, menu_timeout=args.menu_timeout,
-                                natural_exit=args.natural_exit, exit_wait=args.exit_wait, save_reload=args.save_reload,
-                                graceful_exit=not args.no_graceful_close, interactive=args.interactive)
-                result = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "rounds": live.rounds, "stages": live.stages, "log": live.log}
-                if args.save_reload and live.verdict == "LIVE_DONE":
-                    from bridgeforge.save.save_fingerprint import parse_fingerprint
-                    from bridgeforge.save.save_reload_run import reload_run
-                    reloaded = reload_run(rig, f"{args.test_id}-reload", bat_name=args.bat, menu_timeout=args.menu_timeout)
-                    block = parse_fingerprint(Path(reloaded.log).read_text(encoding="utf-8", errors="replace")) if reloaded.log and Path(reloaded.log).is_file() else None
-                    result["reload"] = {"verdict": reloaded.verdict, "stage": reloaded.stage, "detail": reloaded.detail, "stages": reloaded.stages,
-                                        "log": reloaded.log, "reload_after_save": bool(block and block["compare_observed"]), "fingerprint": block}
-                    if not args.json:
-                        print(f"  reload: {reloaded.verdict}; reload_after_save={result['reload']['reload_after_save']}; "
-                              f"equal={block['equal'] if block else None}; differing sections: {', '.join(block['diff_sections']) if block and block['diff_sections'] else 'none'}")
-                        print(f"  Next: bridgeforge run-manifest evaluate for {args.test_id}-reload (milestones.reload_after_save, fingerprint block).")
-                    if reloaded.verdict != "LIVE_DONE":
-                        live = reloaded
-                if not args.json:
-                    print(f"{live.verdict}: stages {', '.join(live.stages) or 'none'}; combat rounds {live.rounds}")
-                    if live.verdict != "LIVE_DONE":
-                        print(f"  stuck at {live.stage}: {live.detail}")
-                    else:
-                        print(f"  Next: bridgeforge probe-group report \"{live.log}\", then record --archive.")
-                if live.verdict != "LIVE_DONE":
-                    if args.json:
-                        print(json.dumps(result, indent=2, ensure_ascii=False))
-                    return 1
-            elif args.probe_group_command == "regress":
-                from datetime import date as _date
+def _probe_plan(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
+    """`probe-group plan`: its result, or an exit code when it stops early."""
+    from bridgeforge.probe.probe_group import ProbeGroupError
+    from bridgeforge.probe.probe_group import plan_groups
+    from bridgeforge.probe.probe_group import DEFAULT_PROVIDER_SOURCES
+    sources = args.provider_source if args.provider_source is not None else [p for p in DEFAULT_PROVIDER_SOURCES if p.is_dir()]
+    from bridgeforge.probe.probe_group import ready_workspaces
+    # Workspace arguments take a path ("In operation/<name>") or a bare name; the plan matches folder names
+    # (`--retest "In operation/X"` was read as In operation/In operation/X, 2026-10-13).
+    args.retest = [Path(name).name for name in args.retest]
+    args.exclude = [Path(name).name for name in args.exclude]
+    args.solo = [Path(name).name for name in args.solo]
+    retest = [Path(queue) / name for name in args.retest]
+    missing = [str(p) for p in retest if not (p / "working" / "mod_info.json").is_file()]
+    if missing:
+        raise ProbeGroupError("--retest needs a workspace with working/mod_info.json: " + ", ".join(missing))
+    result = plan_groups(queue, rig, size=args.size, exclude=set(args.exclude), solo=set(args.solo) | set(args.retest), auto_solo=not args.no_auto_solo,
+                         extra_sources=sources, workspaces=[*ready_workspaces(queue), *[p for p in retest if p not in ready_workspaces(queue)]])
+    target = args.write or queue / "PROBE_GROUPS.json"
+    target.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    if not args.json:
+        for group in result["groups"]:
+            print(f"Group {group['group']} ({len(group['members'])} mod(s)): " + ", ".join(m["workspace"] for m in group["members"]))
+        for item in result.get("raw_folders") or []:
+            print(f"Not taken in: {item['folder']} is a raw mod folder, no workspace yet. Run: {item['next']}")
+        for item in result["unplaced"]:
+            print(f"Not grouped: {item['workspace']} - {item['reason']}")
+            for problem in item.get("providers") or []:
+                print(f"    {problem}")
+        staging = sorted({f"{p['mod_id']} from {p.get('source') or p['workspace']}" for g in result["groups"] for m in g["members"] for p in m.get("stage_providers") or []})
+        if staging:
+            print("Providers to stage (install those groups with --stage-providers): " + "; ".join(staging))
+        print(f"Plan written: {target}. Next: bridgeforge probe-group install <N>, then bf-test.ps1 launch <TESTID>.")
+    return result
 
-                from bridgeforge.regress import rejudge, run_regression
-                out = args.out or Path(queue) / "_regress" / f"regress-{_date.today():%Y%m%d}.json"
-                if args.rejudge:
-                    out = args.out or Path(queue) / "_regress" / f"rejudged-{_date.today():%Y%m%d}.json"
-                    result = rejudge(queue, rig, args.rejudge, out)
-                elif args.changed_since:
-                    from bridgeforge.regress_changed import RegressChangedError, run_changed
-                    out = args.out or Path(queue) / "_regress" / f"regress-changed-{_date.today():%Y%m%d}.json"
-                    try:
-                        print("Starting the changed-only regression pass: leave the mouse and keyboard alone until it finishes.", file=sys.stderr)
-                        result = run_changed(queue, rig, out, args.changed_since, repo_root=REPO_ROOT, bat=args.bat, size=args.size, limit=args.limit,
-                                             quiet=args.quiet, test_prefix=args.test_prefix, clear_hold=args.clear_hold)
-                    except RegressChangedError as exc:
-                        raise ProbeGroupError(str(exc)) from exc
-                    if not args.json:
-                        print(f"{len(result['selected'])} workspace(s) rerun, {len(result['changed_verdicts'])} verdict(s) changed; summary {out}")
-                        for name, row in result["changed_verdicts"].items():
-                            print(f"  {name}: {row['previous']} -> {row['verdict']} ({row['why']})")
-                        if result.get("hold"):
-                            print(f"  REGRESSION: later --changed-since runs stop until a person looks ({result['hold']}).")
-                else:
-                    print("Starting the regression pass: leave the mouse and keyboard alone until it finishes (about five minutes a group).", file=sys.stderr)
-                    result = run_regression(queue, rig, out, bat=args.bat, size=args.size, limit=args.limit, only=args.only or None,
-                                        quiet=args.quiet, test_prefix=args.test_prefix)
-                if not args.json and not args.changed_since:
-                    print(f"{len(result['groups'])} group(s); {len(result['attention'])} item(s) need a look; summary {out}")
-                    for item in result["attention"]:
-                        print(f"  group {item['group']}: {item.get('mod') or item.get('members')}: {item['why']}")
-            elif args.probe_group_command == "duel":
-                from bridgeforge.duel_run import run_duel
-                print("Starting the duel run: leave the mouse and keyboard alone until it finishes (about ten minutes).", file=sys.stderr)
-                result = run_duel(rig, args.test_id, bat_name=args.bat, only=tuple(args.only) or None)
-                if not args.json:
-                    print(f"played: {', '.join(result['played']) or 'none'}" + (f"; PROBLEM: {result['problem']}" if result["problem"] else ""))
-                    for label, row in result["summary"].items():
-                        print(f"  {label}: fight lasted {row['fight_game_seconds']} game s / {row['fight_real_seconds']} real s before the first kill; avg frame {row['avg_ms_before']} ms before the first destruction, {row['avg_ms_after']} ms after; worst frame {row['worst_frame_ms']} ms "
-                              f"(worst in the 4 s after a destruction {row['worst_after_destruction_ms']} ms); peak hulks {row['peak_hulks']}, ships {row['peak_ships']}, projectiles {row['peak_projectiles']}")
-                    print(f"  log {result['log']}")
-                if result["problem"]:
-                    if args.json:
-                        print(json.dumps(result, indent=2, ensure_ascii=False))
-                    return 1
-            elif args.probe_group_command == "smoke":
-                from bridgeforge.probe.probe_group import smoke_group
-                result = smoke_group(rig, bat_name=args.bat, timeout=args.timeout, log_name=args.log_name)
-                if not args.json:
-                    boot = result["boot"]
-                    print(f"{result['verdict']}: {boot['status']} in {boot['elapsed_seconds'] or 0:.0f}s; FATAL={result['fatal']} MOD-ERROR={result['mod_errors']}; log {boot['log']}")
-                    if boot["status"] != "PASS":
-                        print(f"  {boot['reason']}")
-                    for line in result["load_errors"]:
-                        print(f"  load error: {line}")
-                    print("  Startup only: New Game generation and combat still need the real run.")
-                if result["verdict"] != "SMOKE_PASS":
-                    if args.json:
-                        print(json.dumps(result, indent=2, ensure_ascii=False))
-                    return 1
-            elif args.probe_group_command == "bisect":
-                from bridgeforge.probe.probe_group import bisect_group
-                plan_path = args.plan or queue / "PROBE_GROUPS.json"
-                result = bisect_group(json.loads(plan_path.read_text(encoding="utf-8")), args.group)
-                atomic_write_text(plan_path, json.dumps(result, indent=2))
-                if not args.json:
-                    for group in result["groups"][-2:]:
-                        print(f"Group {group['group']} ({len(group['members'])} mod(s)): " + ", ".join(m["workspace"] for m in group["members"]))
-                    print(f"Plan updated: {plan_path}. Install and run each half.")
-            elif args.probe_group_command == "record":
-                from bridgeforge.probe.probe_group import record_group
-                config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
-                result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive, refresh=args.refresh,
-                                      accept=args.accept, note=args.note, observe_exit=args.observe_exit)
-                if not args.json:
-                    if result.get("stopped"):
-                        print(f"STOPPED, not everything recorded: {result['stopped']}")
-                    print(f"Recorded LIVE_VALIDATED ({result['probe_version']}): {', '.join(result['recorded']) or 'none'}")
-                    if args.archive:
-                        print(f"Archived to Done/: {', '.join(result['archived']) or 'none'}")
-                    for item in result["skipped"]:
-                        print(f"  not recorded: {item['mod_id']} ({item['verdict']}) {item.get('archive', '')}")
-                    for item in result.get("warnings", []):
-                        print(f"  WARN {item}")
-                    if args.accept:
-                        from bridgeforge.archive_checks import archive_offer
 
-                        for line in archive_offer(result, queue):
-                            print(line)
-            else:
-                config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
-                from bridgeforge.probe.probe_group import accepted_probe_findings
-                result = group_report(args.log, config, mods_dir=rig / "mods", accepted=accepted_probe_findings(queue, rig / "mods"))
-                if not args.json:
-                    print(f"FATAL={result['fatal']} MOD-ERROR={result['mod_errors']}; content-ids ran: {result['content_ids_ran']}")
-                    for mod_id, verdict in sorted(result["members"].items()):
-                        print(f"  {verdict['verdict']:<10} {mod_id}")
-                        for item in verdict["failures"] + verdict["crashes"]:
-                            print(f"      {item}")
-                        for item in verdict.get("accepted", []):
-                            print(f"      (accepted, not a failure) {item}")
-                    for item in result["unattributed"]:
-                        print(f"  (group) {item}")
-                    if result.get("combat_filler_sides"):
-                        print(f"  combat: vanilla filler ships stood in for side(s) {', '.join(result['combat_filler_sides'])} (the group had no mod ships there)")
-                    rounds = result.get("combat_rounds") or {}
-                    if rounds.get("missing"):
-                        slices = ", ".join(f"round {r} (hulls {h})" for r, h in zip(rounds["missing"], rounds["missing_hulls"]))
-                        print(f"  WARN combat: {slices} of {rounds['planned']} never started a battle (battles fought rounds "
-                              f"{', '.join(map(str, rounds['started'])) or 'none'}); those hulls were not in combat")
-        except (ProbeGroupError, ProbeConfigError, OSError, ValueError, StopIteration) as exc:
-            print(f"bridgeforge: {exc}", file=sys.stderr)
+def _probe_install(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
+    """`probe-group install`: its result, or an exit code when it stops early."""
+    from bridgeforge.probe.probe_group import install_group
+    plan = json.loads((args.plan or queue / "PROBE_GROUPS.json").read_text(encoding="utf-8"))
+    result = install_group(plan, args.group, queue, rig, stage=args.stage_providers, with_lunalib=args.with_lunalib,
+                           setups=args.setup, expect_supply=args.expect_supply, save_after_checks=args.save_after_checks,
+                           save_reload_after_days=args.save_reload_after_days, save_reload_note=args.save_reload_note,
+                           no_lunalib=args.no_lunalib, also_enable=args.also_enable)
+    if not args.json:
+        print(f"Group {result['group']} installed: {', '.join(result['members'])}")
+        for item in result["staged_providers"]:
+            print(f"  provider {item['mod_id']} {item['version']} from {item['workspace']}: {item['action']} (id, version and files verified)")
+        for item in result["copied"]:
+            print(f"  {item['workspace']}: {item['action']}")
+        print(f"  enabled_mods.json -> {result['enabled_mods']}")
+        for folder in result.get("probe_mission_added", []):
+            print(f"  added the probe mission to {folder}'s mission list (it replaces the list; RC8 would hide the probe)")
+        for item in result.get("moved_aside", []):
+            print(f"  moved {item['folder']} to mods-disabled-providers: it shares mod id {item['mod_id']} with {item['kept']}")
+        for item in result.get("incomplete_providers", []):
+            print(f"  WARN {item['folder']} lacks {', '.join(item['missing'])} that the real install has; recopy it")
+        for item in result.get("dependency_version_conflicts", []):
+            print(f"  WARN {item['mod_id']} wants {item['dependency']} {item['wanted']}, rig has {item['installed']}: "
+                  "RC8 disables a mod whose dependency major differs (RC8-23); fix its mod_info.json")
+        if result.get("lunalib"):
+            print(f"  LunaLib: {result['lunalib']}")
+        if result.get("lunalib_advice"):
+            print(f"  WARN {result['lunalib_advice']}")
+        print(f"  probe will check {result['checked_ids']} content id(s). New Game, wait one in-game day, quit, then probe-group report <log>.")
+    return result
+
+
+def _probe_live(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
+    """`probe-group live`: its result, or an exit code when it stops early."""
+    from bridgeforge.live.live_run import live_run
+    if args.interactive:
+        print("Starting the game: play, then close it; nothing is clicked for you after the launcher's Play button.", file=sys.stderr)
+    else:
+        print("Starting the live run: leave the mouse and keyboard alone until it finishes (about three minutes after loading).", file=sys.stderr)
+    if args.save_reload and args.interactive:
+        print("bridgeforge: --save-reload cannot be combined with --interactive", file=sys.stderr)
+        return 2
+    if args.save_reload:
+        from bridgeforge.save.save_reload_run import clear_stale_fingerprint, save_reload_configured
+        if not save_reload_configured(rig):
+            print("bridgeforge: --save-reload needs the rig probe config's save_reload.after_days (install with --save-reload-after-days N)", file=sys.stderr)
             return 2
+        clear_stale_fingerprint(rig)
+    live = live_run(rig, args.test_id, bat_name=args.bat, menu_timeout=args.menu_timeout,
+                    natural_exit=args.natural_exit, exit_wait=args.exit_wait, save_reload=args.save_reload,
+                    graceful_exit=not args.no_graceful_close, interactive=args.interactive)
+    result = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "rounds": live.rounds, "stages": live.stages, "log": live.log}
+    if args.save_reload and live.verdict == "LIVE_DONE":
+        from bridgeforge.save.save_fingerprint import parse_fingerprint
+        from bridgeforge.save.save_reload_run import reload_run
+        reloaded = reload_run(rig, f"{args.test_id}-reload", bat_name=args.bat, menu_timeout=args.menu_timeout)
+        block = parse_fingerprint(Path(reloaded.log).read_text(encoding="utf-8", errors="replace")) if reloaded.log and Path(reloaded.log).is_file() else None
+        result["reload"] = {"verdict": reloaded.verdict, "stage": reloaded.stage, "detail": reloaded.detail, "stages": reloaded.stages,
+                            "log": reloaded.log, "reload_after_save": bool(block and block["compare_observed"]), "fingerprint": block}
+        if not args.json:
+            print(f"  reload: {reloaded.verdict}; reload_after_save={result['reload']['reload_after_save']}; "
+                  f"equal={block['equal'] if block else None}; differing sections: {', '.join(block['diff_sections']) if block and block['diff_sections'] else 'none'}")
+            print(f"  Next: bridgeforge run-manifest evaluate for {args.test_id}-reload (milestones.reload_after_save, fingerprint block).")
+        if reloaded.verdict != "LIVE_DONE":
+            live = reloaded
+    if not args.json:
+        print(f"{live.verdict}: stages {', '.join(live.stages) or 'none'}; combat rounds {live.rounds}")
+        if live.verdict != "LIVE_DONE":
+            print(f"  stuck at {live.stage}: {live.detail}")
+        else:
+            print(f"  Next: bridgeforge probe-group report \"{live.log}\", then record --archive.")
+    if live.verdict != "LIVE_DONE":
         if args.json:
             print(json.dumps(result, indent=2, ensure_ascii=False))
-        return 1 if args.probe_group_command == "record" and result.get("stopped") else 0
-    return 2
+        return 1
+    return result
+
+
+def _probe_regress(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
+    """`probe-group regress`: its result, or an exit code when it stops early."""
+    from bridgeforge.probe.probe_group import ProbeGroupError
+    from bridgeforge.substitutes import REPO_ROOT
+    from datetime import date as _date
+
+    from bridgeforge.regress import rejudge, run_regression
+    out = args.out or Path(queue) / "_regress" / f"regress-{_date.today():%Y%m%d}.json"
+    if args.rejudge:
+        out = args.out or Path(queue) / "_regress" / f"rejudged-{_date.today():%Y%m%d}.json"
+        result = rejudge(queue, rig, args.rejudge, out)
+    elif args.changed_since:
+        from bridgeforge.regress_changed import RegressChangedError, run_changed
+        out = args.out or Path(queue) / "_regress" / f"regress-changed-{_date.today():%Y%m%d}.json"
+        try:
+            print("Starting the changed-only regression pass: leave the mouse and keyboard alone until it finishes.", file=sys.stderr)
+            result = run_changed(queue, rig, out, args.changed_since, repo_root=REPO_ROOT, bat=args.bat, size=args.size, limit=args.limit,
+                                 quiet=args.quiet, test_prefix=args.test_prefix, clear_hold=args.clear_hold)
+        except RegressChangedError as exc:
+            raise ProbeGroupError(str(exc)) from exc
+        if not args.json:
+            print(f"{len(result['selected'])} workspace(s) rerun, {len(result['changed_verdicts'])} verdict(s) changed; summary {out}")
+            for name, row in result["changed_verdicts"].items():
+                print(f"  {name}: {row['previous']} -> {row['verdict']} ({row['why']})")
+            if result.get("hold"):
+                print(f"  REGRESSION: later --changed-since runs stop until a person looks ({result['hold']}).")
+    else:
+        print("Starting the regression pass: leave the mouse and keyboard alone until it finishes (about five minutes a group).", file=sys.stderr)
+        result = run_regression(queue, rig, out, bat=args.bat, size=args.size, limit=args.limit, only=args.only or None,
+                            quiet=args.quiet, test_prefix=args.test_prefix)
+    if not args.json and not args.changed_since:
+        print(f"{len(result['groups'])} group(s); {len(result['attention'])} item(s) need a look; summary {out}")
+        for item in result["attention"]:
+            print(f"  group {item['group']}: {item.get('mod') or item.get('members')}: {item['why']}")
+    return result
+
+
+def _probe_duel(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
+    """`probe-group duel`: its result, or an exit code when it stops early."""
+    from bridgeforge.duel_run import run_duel
+    print("Starting the duel run: leave the mouse and keyboard alone until it finishes (about ten minutes).", file=sys.stderr)
+    result = run_duel(rig, args.test_id, bat_name=args.bat, only=tuple(args.only) or None)
+    if not args.json:
+        print(f"played: {', '.join(result['played']) or 'none'}" + (f"; PROBLEM: {result['problem']}" if result["problem"] else ""))
+        for label, row in result["summary"].items():
+            print(f"  {label}: fight lasted {row['fight_game_seconds']} game s / {row['fight_real_seconds']} real s before the first kill; avg frame {row['avg_ms_before']} ms before the first destruction, {row['avg_ms_after']} ms after; worst frame {row['worst_frame_ms']} ms "
+                  f"(worst in the 4 s after a destruction {row['worst_after_destruction_ms']} ms); peak hulks {row['peak_hulks']}, ships {row['peak_ships']}, projectiles {row['peak_projectiles']}")
+        print(f"  log {result['log']}")
+    if result["problem"]:
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 1
+    return result
+
+
+def _probe_smoke(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
+    """`probe-group smoke`: its result, or an exit code when it stops early."""
+    from bridgeforge.probe.probe_group import smoke_group
+    result = smoke_group(rig, bat_name=args.bat, timeout=args.timeout, log_name=args.log_name)
+    if not args.json:
+        boot = result["boot"]
+        print(f"{result['verdict']}: {boot['status']} in {boot['elapsed_seconds'] or 0:.0f}s; FATAL={result['fatal']} MOD-ERROR={result['mod_errors']}; log {boot['log']}")
+        if boot["status"] != "PASS":
+            print(f"  {boot['reason']}")
+        for line in result["load_errors"]:
+            print(f"  load error: {line}")
+        print("  Startup only: New Game generation and combat still need the real run.")
+    if result["verdict"] != "SMOKE_PASS":
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 1
+    return result
+
+
+def _probe_bisect(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
+    """`probe-group bisect`: its result, or an exit code when it stops early."""
+    from bridgeforge.probe.probe_group import bisect_group
+    plan_path = args.plan or queue / "PROBE_GROUPS.json"
+    result = bisect_group(json.loads(plan_path.read_text(encoding="utf-8")), args.group)
+    atomic_write_text(plan_path, json.dumps(result, indent=2))
+    if not args.json:
+        for group in result["groups"][-2:]:
+            print(f"Group {group['group']} ({len(group['members'])} mod(s)): " + ", ".join(m["workspace"] for m in group["members"]))
+        print(f"Plan updated: {plan_path}. Install and run each half.")
+    return result
+
+
+def _probe_record(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
+    """`probe-group record`: its result, or an exit code when it stops early."""
+    from bridgeforge.probe.probe_config import CONFIG_FILE
+    from bridgeforge.probe.probe_group import record_group
+    config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
+    result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive, refresh=args.refresh,
+                          accept=args.accept, note=args.note, observe_exit=args.observe_exit)
+    if not args.json:
+        if result.get("stopped"):
+            print(f"STOPPED, not everything recorded: {result['stopped']}")
+        print(f"Recorded LIVE_VALIDATED ({result['probe_version']}): {', '.join(result['recorded']) or 'none'}")
+        if args.archive:
+            print(f"Archived to Done/: {', '.join(result['archived']) or 'none'}")
+        for item in result["skipped"]:
+            print(f"  not recorded: {item['mod_id']} ({item['verdict']}) {item.get('archive', '')}")
+        for item in result.get("warnings", []):
+            print(f"  WARN {item}")
+        if args.accept:
+            from bridgeforge.archive_checks import archive_offer
+
+            for line in archive_offer(result, queue):
+                print(line)
+    return result
+
+
+def _probe_report(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
+    """`probe-group report` (any other sub-command): its result."""
+    from bridgeforge.probe.probe_group import group_report
+    from bridgeforge.probe.probe_config import CONFIG_FILE
+    config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
+    from bridgeforge.probe.probe_group import accepted_probe_findings
+    result = group_report(args.log, config, mods_dir=rig / "mods", accepted=accepted_probe_findings(queue, rig / "mods"))
+    if not args.json:
+        print(f"FATAL={result['fatal']} MOD-ERROR={result['mod_errors']}; content-ids ran: {result['content_ids_ran']}")
+        for mod_id, verdict in sorted(result["members"].items()):
+            print(f"  {verdict['verdict']:<10} {mod_id}")
+            for item in verdict["failures"] + verdict["crashes"]:
+                print(f"      {item}")
+            for item in verdict.get("accepted", []):
+                print(f"      (accepted, not a failure) {item}")
+        for item in result["unattributed"]:
+            print(f"  (group) {item}")
+        if result.get("combat_filler_sides"):
+            print(f"  combat: vanilla filler ships stood in for side(s) {', '.join(result['combat_filler_sides'])} (the group had no mod ships there)")
+        rounds = result.get("combat_rounds") or {}
+        if rounds.get("missing"):
+            slices = ", ".join(f"round {r} (hulls {h})" for r, h in zip(rounds["missing"], rounds["missing_hulls"]))
+            print(f"  WARN combat: {slices} of {rounds['planned']} never started a battle (battles fought rounds "
+                  f"{', '.join(map(str, rounds['started'])) or 'none'}); those hulls were not in combat")
+    return result
+
+
+_SUB_COMMANDS = {
+    "plan": _probe_plan,
+    "install": _probe_install,
+    "live": _probe_live,
+    "regress": _probe_regress,
+    "duel": _probe_duel,
+    "smoke": _probe_smoke,
+    "bisect": _probe_bisect,
+    "record": _probe_record,
+}
+
+
+def _run_probe_group(args: argparse.Namespace) -> int:
+    from bridgeforge.probe.probe_group import ProbeGroupError
+    from bridgeforge.substitutes import REPO_ROOT
+    queue = (args.queue or REPO_ROOT / "In operation").expanduser().resolve()
+    rig = (args.rig or queue / "_rig").expanduser().resolve()
+    try:
+        outcome = _SUB_COMMANDS.get(args.probe_group_command, _probe_report)(args, queue, rig)
+    except (ProbeGroupError, ProbeConfigError, OSError, ValueError, StopIteration) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if isinstance(outcome, int):
+        return outcome
+    result = outcome
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 1 if args.probe_group_command == "record" and result.get("stopped") else 0
+
+
+def run_cli(args: argparse.Namespace) -> int:
+    return _run_probe_group(args) if args.command == "probe-group" else 2
