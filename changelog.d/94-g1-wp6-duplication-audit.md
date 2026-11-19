@@ -1,0 +1,1 @@
+- Duplication audit (ROADMAP-3 94.G1 WP6): `duplication-audit` lists where the package re-implements class indexing, mod identity, save reading or lenient JSON instead of calling the canonical function; `tests/duplication_baseline.json` (185 functions) can only shrink.
