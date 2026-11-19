@@ -53,7 +53,7 @@ The dates and original measurements in these documents are preserved. Recheck im
   [performance workbench design](PERFORMANCE_WORKBENCH_DESIGN.md), and `docs/proposals/` describe plans or earlier scopes.
 - [D-series pilot](D_SERIES_PILOT_REPORT.md), [AoTD sweep](AOTD_SWEEP_2026-10-12.md),
   [Vacuum layout record](P12_VACUUM_LAYOUT.md), [0.2.0 publication](RELEASE_0_2_0.md), [0.4.0 publication](RELEASE_0_4_0.md),
-  [0.4.1 publication](RELEASE_0_4_1.md),
+  [0.4.1 publication](RELEASE_0_4_1.md), [0.4.2 publication](RELEASE_0_4_2.md),
   [Zorg/EPTA follow-up](OWNER_MOD_FOLLOWUP_2026-10-17.md) record their own bounded evidence, not current universal acceptance.
 - [CHANGELOG](../CHANGELOG.md) and [mod changelog](../MOD_CHANGELOG.md) retain historical command names/versions where
   relevant; use the live CLI reference rather than executing a superseded example from release history.
@@ -68,8 +68,9 @@ issues/PRs were returned; root roadmap/local reports still contain unresolved wo
 Since then, v0.4.0 was published as a **pre-release** on 2026-11-17. Its [receipt](RELEASE_0_4_0.md) records the source
 commit, the suite and CI results it was tagged on, and asset digests checked after download, and lists four security
 problems found after publication. v0.4.1, which fixes them, followed the same evening. The owner made it a **full release**,
-marked Latest, that night; it is the newest published release, and its [receipt](RELEASE_0_4_1.md) records the same checks
-and the promotion.
+marked Latest, that night; its [receipt](RELEASE_0_4_1.md) records the same checks and the promotion. v0.4.2 followed on
+2026-11-18 as a full release marked Latest; it is the newest published release, and its [receipt](RELEASE_0_4_2.md) records
+the same checks.
 
 The checks above describe the pre-publication audit snapshot. The owner authorized publication of the documentation
 corrections and proposed strategy on 2026-10-18. The strategy documents are included in that documentation commit;

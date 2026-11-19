@@ -6,12 +6,13 @@ Revivals target Starsector 0.98.5a-RC7 / Java 17; 0.98a-RC8, the previous target
 (`bridgeforge target show`). A clean scan or successful compile is not proof that a mod loads, preserves its features
 or is safe for existing saves.
 
-**Version status, checked 2026-11-17:** this checkout identifies as 0.4.2 (the bundled probe mod is 0.3.3). The newest published release is
-[0.4.1](https://github.com/Exxec/Project-BridgeForge/releases/tag/v0.4.1), the first full release (earlier ones are
-pre-releases). It fixes four security problems found in 0.4.0: do not use 0.4.0 on mods you do not trust. 0.3.0 was
-tagged but never published.
-0.4.1's [publication receipt](docs/RELEASE_0_4_1.md) records the exact source, the checks and the artifact hashes;
-[0.4.0's](docs/RELEASE_0_4_0.md) and [0.2.0's](docs/RELEASE_0_2_0.md) receipts do the same for those releases. Main can be ahead of the newest release: later
+**Version status, checked 2026-11-18:** this checkout identifies as 0.4.2 (the bundled probe mod is 0.3.3). The newest published release is
+[0.4.2](https://github.com/Exxec/Project-BridgeForge/releases/tag/v0.4.2), a full release, like
+[0.4.1](https://github.com/Exxec/Project-BridgeForge/releases/tag/v0.4.1) before it (earlier ones are pre-releases). 0.4.1
+fixed four security problems found in 0.4.0: do not use 0.4.0 on mods you do not trust. 0.3.0 was tagged but never published.
+0.4.2's [publication receipt](docs/RELEASE_0_4_2.md) records the exact source, the checks and the artifact hashes;
+[0.4.1's](docs/RELEASE_0_4_1.md), [0.4.0's](docs/RELEASE_0_4_0.md) and [0.2.0's](docs/RELEASE_0_2_0.md) receipts do the same for
+those releases. Main can be ahead of the newest release: later
 changes wait as fragments in `changelog.d/` until they are assembled under the next version in the [CHANGELOG](CHANGELOG.md). For a
 given wheel, use the docs at its tag.
 

@@ -1,0 +1,1 @@
+- BridgeForge 0.4.2 is published on GitHub as a full release marked Latest; `docs/RELEASE_0_4_2.md` records its source, checks and asset hashes (ROADMAP-3 96.8).

@@ -556,6 +556,10 @@ unproven).
   - **After it merges:** the full suite at the merge commit, main CI, wheel and sdist built and checked as for 0.4.1, the
     annotated tag `v0.4.2`, a full GitHub release marked Latest (as 0.4.1 became) with the wheel, sdist and
     `SHA256SUMS.txt`, and a receipt, `docs/RELEASE_0_4_2.md`.
+  **Done 2026-11-18.** Published 2026-11-19 02:36:42 UTC as a full release marked Latest: source `4e71782` (#141), annotated
+  tag `v0.4.2` (object `c5eb5f1`). Suite at the source commit 3075 tests OK; main CI passed (run 44443836062); 401 wheel and
+  732 sdist files equal their blobs, checked again on the public download; the installed-wheel check passed on both wheels.
+  `docs/RELEASE_0_4_2.md` is the receipt, with the asset hashes.
 - 95.1 (M) **Owner rulings as standing policy.** The owner ruled the same way many times: CSV rows with no file that nothing uses
   (Musashi, Bultach, UAF: "keep them and ignore warning if it doesn't affect anything"), findings the reference build shares in a
   mod that works there (UAF: "Your clear to proceed"), and behaviour as authored with evidence (Sunrider: "yes"). Encode them as
