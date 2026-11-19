@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from bridgeforge.probe.probe_group import (ProbeGroupError, bisect_group, combat_rounds, dependency_version_conflicts, group_report,
-                                     install_group, merge_configs, plan_groups)
+from bridgeforge.probe.probe_group import ProbeGroupError, bisect_group, dependency_version_conflicts, install_group, merge_configs, plan_groups
+from bridgeforge.probe.probe_record import combat_rounds, group_report
 from bridgeforge.probe.probe_config import build_probe_config
 from tests.support import link_dir, resolved_temp_dir
 
@@ -126,7 +126,7 @@ class MergeAndReportTests(unittest.TestCase):
     def test_an_accepted_probe_finding_is_listed_and_no_longer_fails_the_mod(self) -> None:
         # Magellan's hidden magellan_startigers builds no patrol and nothing spawns its fleets (GRP5C-20261006); the owner-side
         # decision lives in the workspace's working/reports/probe_accepted.json with a reason
-        from bridgeforge.probe.probe_group import accepted_probe_findings
+        from bridgeforge.probe.probe_record import accepted_probe_findings
 
         with resolved_temp_dir() as root:
             queue = root / "q"
@@ -344,7 +344,7 @@ class InstallTests(unittest.TestCase):
         # ROADMAP P15 31.1: one command replaces the per-group record script and archive loop.
         import shutil
 
-        from bridgeforge.probe.probe_group import record_group
+        from bridgeforge.probe.probe_record import record_group
         with resolved_temp_dir() as root:
             queue = root / "In operation"
             a = _workspace(queue, "A", "mod_a", "hull_a")
@@ -384,7 +384,7 @@ class InstallTests(unittest.TestCase):
         import time
 
         from bridgeforge.live.live_trust import save_made_with
-        from bridgeforge.probe.probe_group import record_group, run_save_made_with
+        from bridgeforge.probe.probe_record import record_group, run_save_made_with
         from tests.bound_runs import LOAD, MENU, bound_run
         from tests.test_live_trust import DESCRIPTOR
 
@@ -415,7 +415,7 @@ class InstallTests(unittest.TestCase):
         # the existing folder and stopped; `--refresh` is the owner's word to replace it.
         import shutil
 
-        from bridgeforge.probe.probe_group import record_group
+        from bridgeforge.probe.probe_record import record_group
         with resolved_temp_dir() as root:
             queue = root / "In operation"
             a = _workspace(queue, "A", "mod_a", "hull_a")
@@ -451,7 +451,7 @@ class InstallTests(unittest.TestCase):
         # recorded and archived, not the SEEKER-0.6 the rig ran. With neither in the rig, the id is ambiguous.
         import shutil
 
-        from bridgeforge.probe.probe_group import _workspaces_by_mod_id
+        from bridgeforge.probe.probe_record import _workspaces_by_mod_id
         with resolved_temp_dir() as root:
             queue = root / "In operation"
             _workspace(queue, "SEEKER", "SEEKER", "hull_a")
@@ -628,7 +628,7 @@ class SmokeGroupTests(unittest.TestCase):
     def _smoke(self, boot: dict, enabled: list[str] | None = None):
         from unittest import mock
 
-        from bridgeforge.probe.probe_group import smoke_group
+        from bridgeforge.probe.probe_record import smoke_group
         with resolved_temp_dir() as base:
             rig = self._rig(base, ["alpha", "bfprobe"] if enabled is None else enabled)
             with mock.patch("bridgeforge.boot_test.run_boot_test", return_value=boot) as run:
@@ -659,7 +659,7 @@ class SmokeLoadErrorTests(unittest.TestCase):
     """Real lines from saved rig logs: Metelson's rules.csv (GRP1-20261005) and a duplicate name row (GRP10B-20261005)."""
 
     def _errors(self, text: str):
-        from bridgeforge.probe.probe_group import smoke_load_errors
+        from bridgeforge.probe.probe_record import smoke_load_errors
         with resolved_temp_dir() as base:
             log = base / "x.stdout.log"
             log.write_text(text, encoding="utf-8")
@@ -674,14 +674,14 @@ class SmokeLoadErrorTests(unittest.TestCase):
         self.assertIn("Mismatched quotes", found[0])
 
     def test_clean_log_and_missing_log_give_nothing(self) -> None:
-        from bridgeforge.probe.probe_group import smoke_load_errors
+        from bridgeforge.probe.probe_record import smoke_load_errors
         self.assertEqual(self._errors("1 [main] INFO  Running with the following mods\n"), [])
         self.assertEqual(smoke_load_errors(Path("does-not-exist.log")), [])
 
     def test_smoke_group_fails_a_clean_menu_boot_whose_log_has_a_load_error(self) -> None:
         from unittest import mock
 
-        from bridgeforge.probe.probe_group import smoke_group
+        from bridgeforge.probe.probe_record import smoke_group
         with resolved_temp_dir() as base:
             rig = SmokeGroupTests()._rig(base, ["alpha"])
             log = base / "boot.stdout.log"

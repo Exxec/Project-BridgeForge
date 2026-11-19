@@ -12,7 +12,7 @@ The recursive Python inventory contains **334 files**: 186 at package root and 1
 | `bridgeforge/atlas/` | 18 | Atlas database, extraction, census, matching and reports. |
 | `bridgeforge/corpus/` | 7 | Corpus indexing, release inventory and corpus command handlers. |
 | `bridgeforge/escalation/` | 8 | Packets, agents, sheets, rules and escalation decisions. |
-| `bridgeforge/probe/` | 8 | Probe build/configuration, group planning, installation and reporting. |
+| `bridgeforge/probe/` | 9 | Probe build/configuration, group planning, installation and reporting (`probe_record`: report, record, smoke). |
 | `bridgeforge/rig/` | 6 | Rig setup, preferences, diagnosis, reset and rig command handlers. |
 | `bridgeforge/live/` | 6 | Live-run orchestration, log/result handling and the live ledger. |
 | `bridgeforge/bytecode/` | 11 | Java/bytecode/JAR analysis, toolchain and helper compilation. |

@@ -27,7 +27,8 @@ class RigUpError(ValueError):
 
 def _resolve_ids(queue: Path, mods_dir: Path, mod_ids: list[str]) -> tuple[dict[str, Path], list[str]]:
     """({mod id: workspace} for ids a queue workspace provides, [ids that are providers already in the rig])."""
-    from bridgeforge.probe.probe_group import _workspaces_by_mod_id, rig_mod_ids
+    from bridgeforge.probe.probe_group import rig_mod_ids
+    from bridgeforge.probe.probe_record import _workspaces_by_mod_id
 
     owners = _workspaces_by_mod_id(queue, mods_dir) if Path(queue).is_dir() else {}
     installed = rig_mod_ids(mods_dir)

@@ -7,7 +7,7 @@
       "write_text": 1
     },
     "behavior_discovery.py": {
-      "write_text": 4
+      "write_text": 3
     },
     "bootstrap.py": {
       "write_text": 1
@@ -141,7 +141,10 @@
       "write_text": 3
     },
     "probe/probe_group.py": {
-      "write_text": 2
+      "write_text": 1
+    },
+    "probe/probe_record.py": {
+      "write_text": 1
     },
     "progress.py": {
       "write_text": 2

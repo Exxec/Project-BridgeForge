@@ -56,7 +56,8 @@ def run_regression(queue: Path, rig: Path, out: Path, *, bat: str | None = None,
                    play: Callable | None = None, install: Callable | None = None, judge: Callable | None = None) -> dict:
     """Plan, install, play and report every group of live-validated workspaces; write the summary to `out`.
     `play`, `install` and `judge` default to live_run, install_group and group_report (tests pass stand-ins)."""
-    from bridgeforge.probe.probe_group import accepted_probe_findings, group_report, install_group, plan_groups
+    from bridgeforge.probe.probe_group import install_group, plan_groups
+    from bridgeforge.probe.probe_record import accepted_probe_findings, group_report
 
     queue, rig, out = Path(queue).expanduser().resolve(), Path(rig).expanduser().resolve(), Path(out)
     if play is None:
@@ -129,7 +130,8 @@ def rejudge(queue: Path, rig: Path, source: Path, out: Path) -> dict:
     re-read here instead of replayed. `source` is the pass's summary JSON or its partial checkpoint; a group's config is rebuilt from the
     workspaces that own its mod ids."""
     from bridgeforge.probe.probe_config import build_probe_config
-    from bridgeforge.probe.probe_group import _workspaces_by_mod_id, accepted_probe_findings, group_report, merge_configs
+    from bridgeforge.probe.probe_group import merge_configs
+    from bridgeforge.probe.probe_record import _workspaces_by_mod_id, accepted_probe_findings, group_report
 
     queue, rig = Path(queue).expanduser().resolve(), Path(rig).expanduser().resolve()
     source = Path(source)

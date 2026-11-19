@@ -8,9 +8,9 @@ import unittest
 import zipfile
 from pathlib import Path
 
+from bridgeforge.translation_formats import _class_string_constants
 from bridgeforge.translation import (
     TranslationError,
-    _class_string_constants,
     apply_translation,
     check_translation,
     export_translation,

@@ -7,7 +7,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from bridgeforge.cli import main
-from bridgeforge.behavior_discovery import _change_matches, check_expected_changes
+from bridgeforge.behavior_evaluation import _change_matches, check_expected_changes
 from bridgeforge.strip_plan import StripPlanError, propose_expected_changes, strip_plan
 from tests.support import resolved_temp_dir
 

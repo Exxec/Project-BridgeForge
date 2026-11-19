@@ -26,7 +26,8 @@ from typing import Callable
 from .progress import Checkpoint, report
 from .safeio import atomic_write_text
 from .translation_memory import load_memory, prefill_from_memory, update_memory
-from .translation import _has_cjk, _placeholders, apply_translation, check_translation, export_translation, prefill_from_record, prefill_from_reference
+from .translation_formats import _has_cjk
+from .translation import _placeholders, apply_translation, check_translation, export_translation, prefill_from_record, prefill_from_reference
 
 DEFAULT_CHUNK = 120
 LIMIT_PATTERN = re.compile(r"hit your session limit|usage limit", re.I)

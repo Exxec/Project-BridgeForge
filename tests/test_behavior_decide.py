@@ -5,7 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.behavior_discovery import DiscoveryError, build_archaeology, evaluate_behavior_release, write_behavior_decisions
+from bridgeforge.behavior_discovery import DiscoveryError, build_archaeology
+from bridgeforge.behavior_evaluation import evaluate_behavior_release, write_behavior_decisions
 
 
 def _model(root: Path) -> Path:

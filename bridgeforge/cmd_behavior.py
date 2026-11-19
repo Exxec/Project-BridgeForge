@@ -6,7 +6,10 @@ import json
 import sys
 from pathlib import Path
 
-from .behavior_discovery import add_expected_change, behavior_diff, check_expected_changes, DiscoveryError, evaluate_behavior_release, update_expected_change_status, write_archaeology, write_behavior_model, write_coverage, write_probe_baseline, write_save_baseline, write_synthesized_tests
+from .behavior_discovery import DiscoveryError, write_archaeology, write_behavior_model
+from .behavior_evaluation import (add_expected_change, behavior_diff, check_expected_changes, evaluate_behavior_release,
+                                  update_expected_change_status, write_coverage, write_probe_baseline, write_save_baseline,
+                                  write_synthesized_tests)
 
 
 def add_parser(subcommands) -> None:
@@ -180,7 +183,7 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"Recorded: {result['recorded']}")
         return 0
     if args.command == "behavior-decide":
-        from .behavior_discovery import write_behavior_decisions
+        from .behavior_evaluation import write_behavior_decisions
         try:
             result = write_behavior_decisions(args.discovery_dir, args.decisions, args.output)
         except (DiscoveryError, OSError, json.JSONDecodeError) as exc:
