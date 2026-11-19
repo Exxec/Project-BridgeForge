@@ -33,6 +33,12 @@ def add_parser(subcommands) -> None:
     sisters_cmd.add_argument("--clone", action="append", default=[], metavar="REPO=DIR",
                              help="read this repository from a local checkout instead of GitHub; repeatable")
     sisters_cmd.add_argument("--json", action="store_true")
+    census_cmd = gene_sub.add_parser("census", help="gene census of a corpus (GR-2): feature kinds per mod and, per plugin hook, how many "
+                                                    "features it sets up together; read-only, one progress line per mod, resumable")
+    census_cmd.add_argument("corpus", type=Path, help="folder of mods or archives, e.g. Done (folders starting with _ are skipped)")
+    census_cmd.add_argument("--write", type=Path, required=True, help="the per-mod result (JSON); keep it outside the repository, it "
+                                                                     "names third-party mods. A checkpoint sits beside it while running")
+    census_cmd.add_argument("--quiet", action="store_true", help="no per-mod progress lines on stderr")
     evidence_cmd = gene_sub.add_parser("evidence", help="evidence files about a gene (WP5): check that one carries the common header and is "
                                                         "about this gene as it stands")
     evidence_sub = evidence_cmd.add_subparsers(dest="evidence_command", required=True)
@@ -64,9 +70,23 @@ def _run_evidence(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def _run_census(args: argparse.Namespace) -> int:
+    from .census import render_summary, run_census
+
+    if not args.corpus.is_dir():
+        print(f"bridgeforge: {args.corpus} is not a folder", file=sys.stderr)
+        return 2
+    result = run_census(args.corpus, args.write, quiet=args.quiet)
+    print(render_summary(result["summary"]))
+    print(f"Written: {args.write}")
+    return 0
+
+
 def run_cli(args: argparse.Namespace) -> int:
     if args.command != "gene":
         return 2
+    if args.gene_command == "census":
+        return _run_census(args)
     if args.gene_command == "evidence":
         return _run_evidence(args)
     if args.gene_command == "contract":
