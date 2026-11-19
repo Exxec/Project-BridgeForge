@@ -11,7 +11,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from bridgeforge.target_impact import discover_mods, render, target_impact
+from bridgeforge.target_impact import default_jobs, discover_mods, render, target_impact
 from tests.support import javac_path, resolved_temp_dir
 from tests.test_jar_linkage import _compile, _jar
 
@@ -113,6 +113,27 @@ class TargetImpactTests(unittest.TestCase):
         self.assertTrue(again["Done/user"]["next"][0].startswith(f"the queue already holds {restored}"))
         self.assertEqual(again["Done/user"]["next"][2], f'bridgeforge relink "{restored}" --vanilla-core "{new.resolve()}" --apply')
 
+    def test_a_process_pool_gives_the_same_result_in_the_same_order(self) -> None:
+        """96.5 P10: mods are checked side by side in worker processes; the result is the one the in-process loop gives."""
+        with resolved_temp_dir() as root:
+            old, new, queue = self._fixture(root)
+            seen: list[str] = []
+            alone = target_impact([queue], old, new, jobs=1)
+            pooled = target_impact([queue], old, new, jobs=2, progress=lambda done, total, label, record, seconds: seen.append(label))
+        self.assertEqual(json.dumps(pooled, sort_keys=True), json.dumps(alone, sort_keys=True))
+        self.assertEqual(sorted(seen), sorted(r["mod"] for r in alone["records"]))  # one progress line per mod
+        self.assertGreaterEqual(default_jobs(), 1)
+
+    def test_jobs_below_one_is_refused(self) -> None:
+        from bridgeforge.cli import main
+
+        with resolved_temp_dir() as root:
+            old, new, queue = self._fixture(root)
+            with redirect_stderr(io.StringIO()) as err:
+                code = main(["target-impact", str(old), str(new), str(queue), "--jobs", "0", "--quiet"])
+        self.assertEqual(code, 2)
+        self.assertIn("--jobs must be 1 or more", err.getvalue())
+
     def test_same_core_twice_reports_nothing(self) -> None:
         with resolved_temp_dir() as root:
             old, _, queue = self._fixture(root)
@@ -139,7 +160,9 @@ class TargetImpactTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertFalse((out / "TARGET_IMPACT.partial.jsonl").exists())
             self.assertTrue((out / "TARGET_IMPACT.md").is_file())
-        self.assertIn("[3/4] queue/plain: RELINK (0 linkage, 0 interface, 0 source, 0 data) (from checkpoint)", err.getvalue())
+        # Resumed mods are reported first; the count is of finished mods, in the order they finish (96.5 P10).
+        self.assertIn("[1/4] queue/plain: RELINK (0 linkage, 0 interface, 0 source, 0 data) (from checkpoint)", err.getvalue())
+        self.assertEqual(err.getvalue().count("/4] "), 4)
         self.assertEqual(data["verdicts"]["RELINK"], 1)
 
     def test_an_archive_the_owner_closed_is_listed_not_checked(self) -> None:
