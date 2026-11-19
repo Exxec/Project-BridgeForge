@@ -1,23 +1,35 @@
 {
   "contract": "bridgeforge-gene",
-  "schema_version": 1,
+  "schema_version": 2,
+  "withdrawn_versions": [
+    1
+  ],
   "identity_rule": "identity = SHA-256 (lowercase hex) of the UTF-8 text: the kind and a line feed, then one line per member sorted by (what, path): what, TAB, path, TAB, sha256, line feed. A text member's sha256 is of its normalized bytes (no UTF-8 BOM, LF line ends, no trailing spaces or tabs, no trailing blank lines); a csv-row's is of the JSON object of its named non-empty trimmed cells with sorted keys; a jar-class's and any other file's is of its bytes.",
   "files": {
-    "fixtures/invalid-anchor-of-other-kind.json": "d54d8aaea3b886973d9e7fe3b251a4c36be298055f906b75e4900fc1fe97f2d9",
-    "fixtures/invalid-duplicate-member.json": "eb1e18d31d8ca4e7f3999a14f92607fd195d6a45366e3d90fc492370e93d2afb",
-    "fixtures/invalid-empty-members.json": "3b904d467c2800acb599156929a762a15bd571eda2acbee9544af3b3e14374ad",
-    "fixtures/invalid-identity-mismatch.json": "89afe5da5663133c04f3cb5698d7c9e9b5f4154ea801a38344428dc4baf8dd96",
-    "fixtures/invalid-licence-without-decision.json": "bebf500649289801e20d516db1fe9a9642845cb47e3e3a5c002a6220fd58f0c3",
-    "fixtures/invalid-member-hash-uppercase.json": "33ca66a558fa4d9636d168a385b086dbf6fb958e7a3b132ea13fe46408fe386f",
-    "fixtures/invalid-missing-members.json": "c788d578bc5939c38456d6aec1325e0b117f371f22baa37bdde14100c83b0e8a",
-    "fixtures/invalid-schema-version-bool.json": "be1ff2b325867d468e1a142a58a42089da9e42e318c97a958c97287ec2f0bee1",
-    "fixtures/invalid-unknown-kind.json": "2575336be123678e7e61dfed0e55f5b1102424c538e5c4081fe9b7e6a1e08fe2",
-    "fixtures/valid-hullmod.json": "d6534194d6e5f973c73fb802161570468264e2d19611fb213c18fe6fb7c3ae52",
-    "fixtures/valid-same-gene-other-mod.json": "66cc9d835315116e5a64ad23b5853dc3f4224742d7bf3d4d2b8ad8fa0fd2f099",
-    "gene.schema.json": "0c8309b0008b5ebff1570bf61bf967b2db8d5f379af0c6c6c551f234a9369ade"
+    "fixtures/invalid-anchor-of-other-kind.json": "1c326f931d41303a0f2f7bba67026c7f7f9030752006f8aea80699dacccdce0d",
+    "fixtures/invalid-derived-from-short-identity.json": "3c4e2a3d10ce930288692b7d5ed160ec715a6c7bdf23de0e8fbce98410077e23",
+    "fixtures/invalid-duplicate-member.json": "3e196a4dd73f78c98a2be5abdde783e50de1927dd5af4b5472ef91e70acb5775",
+    "fixtures/invalid-empty-members.json": "d22bd3d717140fc681e394f767fd1a67b5749b93f98ce2763ff5a6fec19b62cb",
+    "fixtures/invalid-identity-mismatch.json": "e66d5e352027b35fb12ba09b76f316d04353b43e0bde50f383917841dfe4c2db",
+    "fixtures/invalid-licence-without-decision.json": "7222bdcd74adc36cab989a0b786d8b4a55fc0a2a3795629279a7164c02463de3",
+    "fixtures/invalid-local-only-member-not-a-member.json": "a819bc8002c88c91e5bbbfbe4057be95ea90c622731f01198c054634a1034a83",
+    "fixtures/invalid-local-only-member-not-local-only.json": "e6aa6447e9991fa45eba4e800d18ca3640e02e211dd13e508e0efa3ef5902a88",
+    "fixtures/invalid-member-hash-uppercase.json": "64031bf0a620ea01d7ea86584114ddb6e876578a67e08c7a451b74f5bbf284aa",
+    "fixtures/invalid-missing-members.json": "79741772ce4e6c8deca0ac3c288d74e99d7744f60627080167bf2d1b6dfa817a",
+    "fixtures/invalid-registration-without-locus.json": "05070cfa18ee485a54638137a88066316e78e6e31ceaf0bb562990046a69b76d",
+    "fixtures/invalid-schema-version-bool.json": "bc4e2a64e824ff7869a30dfc492e8911e38f192364d3194902fc4668838a2ffb",
+    "fixtures/invalid-unknown-kind.json": "0012b6dcc6309141afeceeb9e63a4c45b3a1d8381612fc14996f83a0c5883b2a",
+    "fixtures/valid-adapted-gene.json": "d86f265fb2c6f41f989eedf0b06ab9b720e6c23aa57d34e765e19ef064d83803",
+    "fixtures/valid-hullmod.json": "6319b3d0f7f77b1626c63f6ca7f2ec1106a24be402e52ec888a5e27ccc9f9553",
+    "fixtures/valid-same-gene-other-mod.json": "f890295b156d62728e215efb683dbeb4eaacce05dbef0d39207c9bc701c0b6c2",
+    "gene.schema.json": "bee35e67f1740b0ccdf9e35a5dea6bde3e65473e796c0079d8c9715ed6561234"
   },
   "fixtures": {
     "invalid-anchor-of-other-kind.json": {
+      "valid": false,
+      "identity": null
+    },
+    "invalid-derived-from-short-identity.json": {
       "valid": false,
       "identity": null
     },
@@ -37,11 +49,23 @@
       "valid": false,
       "identity": null
     },
+    "invalid-local-only-member-not-a-member.json": {
+      "valid": false,
+      "identity": null
+    },
+    "invalid-local-only-member-not-local-only.json": {
+      "valid": false,
+      "identity": null
+    },
     "invalid-member-hash-uppercase.json": {
       "valid": false,
       "identity": null
     },
     "invalid-missing-members.json": {
+      "valid": false,
+      "identity": null
+    },
+    "invalid-registration-without-locus.json": {
       "valid": false,
       "identity": null
     },
@@ -52,6 +76,10 @@
     "invalid-unknown-kind.json": {
       "valid": false,
       "identity": null
+    },
+    "valid-adapted-gene.json": {
+      "valid": true,
+      "identity": "8013a8e0305f828b430332bff9a3e4ce3237d19ea27dff0caa18cace43edd212"
     },
     "valid-hullmod.json": {
       "valid": true,

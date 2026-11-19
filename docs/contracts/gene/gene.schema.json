@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/Exxec/Project-BridgeForge/docs/contracts/gene/gene.schema.json#1",
-  "title": "bridgeforge-gene schema 1",
+  "$id": "https://github.com/Exxec/Project-BridgeForge/docs/contracts/gene/gene.schema.json#2",
+  "title": "bridgeforge-gene schema 2",
   "type": "object",
   "required": [
     "schema",
@@ -17,6 +17,7 @@
     "persistent_state",
     "build",
     "provenance",
+    "derived_from",
     "licence",
     "phenotype_obligations",
     "unknowns",
@@ -27,7 +28,7 @@
       "const": "bridgeforge-gene"
     },
     "schema_version": {
-      "const": 1
+      "const": 2
     },
     "identity": {
       "type": "string",
@@ -110,13 +111,67 @@
       }
     },
     "registrations": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "locus",
+          "statement"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "locus": {
+            "type": "string",
+            "minLength": 1
+          },
+          "statement": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
     },
     "conditions": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "subject"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
     },
     "persistent_state": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "via"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "via": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
     },
     "build": {
       "type": "object"
@@ -124,14 +179,70 @@
     "provenance": {
       "type": "object"
     },
+    "derived_from": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "identity",
+            "by",
+            "from_build"
+          ],
+          "properties": {
+            "identity": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "by": {
+              "type": "string",
+              "minLength": 1
+            },
+            "from_build": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      ]
+    },
     "licence": {
       "type": "object",
       "required": [
-        "decision"
+        "decision",
+        "mod_decision",
+        "local_only_members"
       ],
       "properties": {
         "decision": {
           "type": "string"
+        },
+        "mod_decision": {
+          "type": "string"
+        },
+        "local_only_members": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "local_only_members": {
+            "minItems": 1
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "decision": {
+            "const": "LOCAL_ONLY"
+          }
         }
       }
     },

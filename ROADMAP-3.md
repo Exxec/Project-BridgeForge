@@ -1141,8 +1141,30 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - an AST check that no module other than `release.py` and the ledger imports the policy internals.
 
     Mutation-checked: dropping the carry-over, matching by plain prefix, or `vendor-copy`'s path check each fails a test.
-  Next: schema 2 of `gene.json` before any sister pins it (advisor review 2026-11-19), then WP5 (evidence header) and WP6
-  (duplication audit).
+  **Schema 2 Done 2026-11-19** (advisor review the same day: settle the shapes G2-G4 need before any sister pins the
+  contract; WP3's live run found none pins it yet).
+  - `gene.json` schema 2 replaces schema 1, which is withdrawn (`CONTRACT.json` `withdrawn_versions: [1]`). WP1's 18
+    acceptance manifests were local output, and no sister had pinned schema 1.
+  - Archaeology elements have fixed core fields, so G2 can fill them without another version. An element may carry more
+    (`additionalProperties` open in the JSON Schema):
+    - a registration is `{locus, statement}`;
+    - a condition is `{kind, subject}`;
+    - a persistent-state entry is `{name, via}`.
+  - `derived_from` is null, or `{identity, by, from_build}` for a gene that G4 adapted. `src-to-jar`, `relink` and remaps
+    change class bytes and so the identity; this field keeps the lineage that G3 records. It is not part of the identity.
+  - `licence` is the ledger's answer: `mod_decision`, `local_only_members` (the members a local-only path exception covers)
+    and `decision`, which is LOCAL_ONLY whenever that list is not empty. A listed member must be a member.
+  - Contract: `valid-adapted-gene.json` (derived, filled elements, a local-only member of a releasable mod) and four new
+    invalid fixtures, each breaking one new rule. The new pin is `14dd2ff7…` (`gene contract` prints it in full).
+  - Tests: `tests/test_gene.py`:
+    - element, `derived_from` and licence shapes, each malformed case giving exactly one problem;
+    - a member under a local-only path makes the gene LOCAL_ONLY while the mod stays RELEASABLE;
+    - withdrawn schema 1 is refused.
+
+    Plus `tests/test_gene_contract.py` over the new fixtures. Mutation-checked: dropping the licence narrowing, the
+    element check, the `derived_from` check or the local-only rule each fails a test.
+  Next: WP5 (evidence header, applied to `gene describe`), WP6 (duplication audit with a shrink-only baseline), then
+  GR-2/GR-3/GR-5 into 94.G2.
 - 94.G2 **Sequencing and proof**: closure for campaign features and registration slicing; subtraction and isolation proofs per
   gene. Project Go exports a gene's strings as one unit.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
