@@ -196,6 +196,23 @@ class NegativeTests(unittest.TestCase):
         self.assertEqual(changed["status"], "REFUSED")
         self.assertIn("staged files of starsector_prepatcher changed", " ".join(changed["problems"]))
 
+    def test_graphicslib_cache_written_during_a_run_is_not_drift_but_its_shaders_are(self) -> None:
+        # 93.60: GraphicsLib writes normal maps into cache/ while the game runs (P962NC-LIVE-0985a-20261119, 182 files).
+        with resolved_temp_dir() as root:
+            _, targets = _two(root)
+            rig, log = bound_run(root, targets, "R-5", None, providers={"lib": [], "shaderLib": []}, release=False)
+            cache = rig / "mods" / "shaderLib" / "cache"
+            cache.mkdir()
+            (cache / "lights_hound___TURRET0_normal.png").write_bytes(b"\x89PNG generated")
+            completed = release_run(rig, "R-5")
+            evidence = _evaluate(rig, log, "R-5")
+            (rig / "mods" / "shaderLib" / "shader.frag").write_text("a different shader", encoding="utf-8")
+            changed = _evaluate(rig, log, "R-5")
+        self.assertEqual(completed["drift"], [])
+        self.assertEqual(evidence["status"], "ACCEPTABLE", evidence["problems"])
+        self.assertEqual(changed["status"], "REFUSED")
+        self.assertIn("staged files of shaderLib changed", " ".join(changed["problems"]))
+
     def test_an_unreleased_run_has_no_completion_record(self) -> None:
         with resolved_temp_dir() as root:
             rig, log = self._run(root, release=False)
