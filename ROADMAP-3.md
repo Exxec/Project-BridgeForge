@@ -756,6 +756,18 @@ unproven).
   - Station Augments cannot be restored at all: its shipped folder is "Station Augments", not the archive's name.
   `restore-from-done --for-retarget` should move a stale workspace aside (never delete; DOC-001), keep the old report as the
   previous build's, and find the shipped folder from the archive's own record. Priority: now (Station Augments is a 96.2 port).
+  **Done 2026-11-19.**
+  - `restore_from_done` finds the shipped folder: `Done/<X>/<X>`, or else the archive's one other folder with a
+    `mod_info.json` (`original/` and `workspace/` excluded). Two candidates are refused by name.
+  - `--for-retarget` moves an existing workspace to `<queue>/_stale-<date>/` (a free name; never deleted), and keeps the
+    restored REVIVAL_REPORT and REVIVAL_PLAN as `*.previous-build.md`.
+  - `target_impact._workspace_for` treats any shipped folder of a `Done/<Archive>` as an archive, so "Station Augments" is
+    restored, not acted on in place. Its restore step carries `--for-retarget`.
+  - Tests:
+    - `tests/test_workspace_tools.py`: a shipped folder named otherwise; two mod folders refused; an existing workspace kept
+      without the flag and moved aside with it; reports renamed; a second re-port the same day keeps both stale copies;
+    - `tests/test_target_impact.py`: the Station Augments layout gets a restore step.
+  - Mutation-checked: without the rename, or with `original/` counted as a mod folder, a test fails.
 - 96.11 (M) **Revive applies the build-change fixes it is approved for.** `jar-call-signature-changed` is found by
   `target-impact`'s API diff, not by the scan, so `revive --approve jar-call-signature-changed` changed nothing for Vayra's
   Sector, and the fixer had to run as `bridgeforge fix ... --finding jar-call-signature-changed --apply` (as for Kadur

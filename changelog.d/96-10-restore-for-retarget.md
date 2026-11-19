@@ -1,0 +1,1 @@
+- `restore-from-done` finds a shipped folder named otherwise than its archive (Station Augments), and `--for-retarget` moves an existing workspace to `_stale-<date>/` and keeps the archived report as the previous build's; `target-impact` no longer acts in place on such an archive (ROADMAP-3 96.10).

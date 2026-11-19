@@ -104,7 +104,7 @@ class TargetImpactTests(unittest.TestCase):
         queue = root.resolve() / "In operation"
         restored = queue / "user"
         self.assertEqual(by_mod["Done/user"]["next"], [
-            f'bridgeforge restore-from-done "{(root / "Done" / "user").resolve()}" --queue "{queue}"',
+            f'bridgeforge restore-from-done "{(root / "Done" / "user").resolve()}" --queue "{queue}" --for-retarget',
             f'bridgeforge fix "{restored / "working"}" --finding jar-call-signature-changed --vanilla-core "{new.resolve()}" --apply',
             f'bridgeforge relink "{restored}" --vanilla-core "{new.resolve()}" --apply'])
         workspace = (root / "q" / "W").resolve()
@@ -290,3 +290,17 @@ class ClosedProviderTests(unittest.TestCase):
                 result = module.target_impact([root / "Done", root / "q"], root / "old", root / "new")
         self.assertEqual(seen, {"user": ["lib.jar"]})
         self.assertEqual(result["skipped"], [{"mod": "Done/lib", "status": "SUPERSEDED"}])
+
+
+class WorkspaceForArchiveTests(unittest.TestCase):
+    def test_a_shipped_folder_named_otherwise_is_restored_not_edited_in_place(self) -> None:
+        # 96.10: Done/Station.Augments-2.4.3+bf.1/Station Augments was "any other mod folder", acted on in place.
+        from bridgeforge.target_impact import _workspace_for
+
+        with resolved_temp_dir() as root:
+            shipped = root / "Done" / "Station.Augments-2.4.3+bf.1" / "Station Augments"
+            shipped.mkdir(parents=True)
+            steps, working = _workspace_for(shipped)
+        queue = root / "In operation"
+        self.assertEqual(steps, [f'bridgeforge restore-from-done "{shipped.parent}" --queue "{queue}" --for-retarget'])
+        self.assertEqual(working, queue / "Station.Augments-2.4.3+bf.1" / "working")

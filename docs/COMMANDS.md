@@ -3359,6 +3359,7 @@ rebuild an In operation workspace from a Done/ archive (shipped folder, original
 |---|---|---|
 | `archive` | - | Done/<Mod> |
 | `--queue` QUEUE | - | default: <repo>/In operation |
+| `--for-retarget` | - | porting to a new game build: move a workspace of the same name to <queue>/_stale-<date>/ (never deleted) and keep the archived report and plan as *.previous-build.md, so revive drafts the new build's |
 
 ## done-audit
 
