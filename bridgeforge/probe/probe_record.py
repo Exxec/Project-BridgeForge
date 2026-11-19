@@ -417,7 +417,7 @@ def smoke_load_errors(log: Path, limit: int = 8) -> list[str]:
     return [line.strip()[:240] for line in lines if any(p.search(line) for p in SMOKE_LOAD_ERRORS)][:limit]
 
 
-def smoke_group(rig: Path, bat_name: str = SMOKE_BAT, timeout: int = 240, log_name: str | None = None) -> dict:
+def smoke_group(rig: Path, bat_name: str = SMOKE_BAT, timeout: int = 240, log_name: str | None = None, direct=None) -> dict:
     """Boot the rig with the group `install` just enabled, unattended, and read the startup log (ROADMAP 60a).
 
     Catches what fails at load time before anyone is asked to play: a `rules.csv` with mismatched quotes, a duplicate
@@ -438,7 +438,8 @@ def smoke_group(rig: Path, bat_name: str = SMOKE_BAT, timeout: int = 240, log_na
     enabled = [item for item in (data.get("enabledMods") or []) if isinstance(item, str)] if isinstance(data, dict) else []
     if not enabled:
         raise ProbeGroupError(f"{enabled_path} lists no enabled mods: run `probe-group install N` first.")
-    boot = run_boot_test(rig, enabled, timeout=timeout, log_name=log_name or f"SMOKE-{int(time.time())}", bat_name=bat_name, auto_click=True)
+    boot = run_boot_test(rig, enabled, timeout=timeout, log_name=log_name or f"SMOKE-{int(time.time())}", bat_name=bat_name, auto_click=True,
+                         direct=direct)
     counts = (boot.get("triage") or {}).get("counts") or {}
     fatal, errors = int(counts.get("FATAL", 0)), int(counts.get("MOD-ERROR", 0))
     load_errors = smoke_load_errors(Path(boot["log"])) if boot.get("log") else []

@@ -10,6 +10,28 @@ from bridgeforge.probe.probe_config import ProbeConfigError
 from bridgeforge.safeio import atomic_write_text
 
 
+def _add_direct_args(parser) -> None:
+    """95.4: start the game without its launcher (what live-wrappers/live_direct.py and smoke_direct.py did)."""
+    parser.add_argument("--direct", action="store_true",
+                        help="start the game directly (-DlaunchDirect; needs a stored licence key) and place its window instead of "
+                             "clicking the launcher")
+    parser.add_argument("--resolution", default="1920x1440", metavar="WxH", help="with --direct: the game window's size (default 1920x1440, "
+                                                                                  "the size the click points were measured in)")
+    parser.add_argument("--client-top", type=int, metavar="Y", help="with --direct: move the window so its client area starts at screen "
+                                                                     "y Y (-200 keeps the click points above a 1080-pixel taskbar)")
+
+
+def _direct_from(args):
+    """The DirectStart the arguments ask for, or None. Raises ValueError for a malformed --resolution or options without --direct."""
+    from bridgeforge.live.direct_start import DEFAULT_RESOLUTION, DirectStart
+
+    if not getattr(args, "direct", False):
+        if getattr(args, "client_top", None) is not None or getattr(args, "resolution", DEFAULT_RESOLUTION) != DEFAULT_RESOLUTION:
+            raise ValueError("--resolution and --client-top apply only with --direct")
+        return None
+    return DirectStart(resolution=args.resolution, client_top=args.client_top)
+
+
 def add_parser(subcommands) -> None:
     group_cmd = subcommands.add_parser("probe-group", help="probe several finished mods in one live session: plan compatible groups, install one into the rig, report per mod (ROADMAP P15 item 24)")
     group_sub = group_cmd.add_subparsers(dest="probe_group_command", required=True)
@@ -59,6 +81,7 @@ def add_parser(subcommands) -> None:
     group_smoke.add_argument("--bat", default="run-j25-direct.bat", help="rig launcher to start (default: java 25, started directly)")
     group_smoke.add_argument("--timeout", type=int, default=240)
     group_smoke.add_argument("--log-name")
+    _add_direct_args(group_smoke)
     group_smoke.add_argument("--rig", type=Path)
     group_smoke.add_argument("--queue", type=Path)
     group_smoke.add_argument("--json", action="store_true")
@@ -66,6 +89,7 @@ def add_parser(subcommands) -> None:
     group_live.add_argument("test_id", help="log name: writes <rig>/logs/<TESTID>.stdout.log, readable by `probe-group report` and `record`")
     group_live.add_argument("--bat", default="run-j25-direct.bat")
     group_live.add_argument("--menu-timeout", type=int, default=240)
+    _add_direct_args(group_live)
     group_live.add_argument("--natural-exit", action="store_true", help="after the run, do not kill the game: wait for you to quit it from the main menu and record its return code (NATURAL), or KILLED if it is still up after --exit-wait")
     group_live.add_argument("--no-graceful-close", action="store_true", help="do not close the game by itself when the probe's done marker appears; stop it as before (the exit is then not recorded)")
     group_live.add_argument("--exit-wait", type=int, default=180, help="with --natural-exit: seconds to wait for the game to exit by itself (default 180)")
@@ -85,6 +109,7 @@ def add_parser(subcommands) -> None:
     group_queue.add_argument("--note", default="", help="with --archive: the record note (the owner's words; what ran)")
     group_queue.add_argument("--also-enable", action="append", default=[], metavar="MOD_OR_SET", help="as for install; repeatable")
     group_queue.add_argument("--bat", help="launcher bat (default: live's)")
+    _add_direct_args(group_queue)
     group_queue.add_argument("--out", type=Path, help="summary JSON (default: <queue>/_live-queue/live-queue-<date>.json)")
     group_queue.add_argument("--test-prefix", help="test id prefix (default LQ-<date>)")
     group_queue.add_argument("--quiet", action="store_true", help="no per-group progress lines")
@@ -197,6 +222,14 @@ def _probe_live(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
     if args.save_reload and args.interactive:
         print("bridgeforge: --save-reload cannot be combined with --interactive", file=sys.stderr)
         return 2
+    try:
+        direct = _direct_from(args)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    if args.save_reload and direct is not None:
+        print("bridgeforge: --save-reload's second start goes through the launcher; it cannot be combined with --direct yet", file=sys.stderr)
+        return 2
     if args.save_reload:
         from bridgeforge.save.save_reload_run import clear_stale_fingerprint, save_reload_configured
         if not save_reload_configured(rig):
@@ -205,7 +238,7 @@ def _probe_live(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
         clear_stale_fingerprint(rig)
     live = live_run(rig, args.test_id, bat_name=args.bat, menu_timeout=args.menu_timeout,
                     natural_exit=args.natural_exit, exit_wait=args.exit_wait, save_reload=args.save_reload,
-                    graceful_exit=not args.no_graceful_close, interactive=args.interactive)
+                    graceful_exit=not args.no_graceful_close, interactive=args.interactive, direct=direct)
     result = {"verdict": live.verdict, "stage": live.stage, "detail": live.detail, "rounds": live.rounds, "stages": live.stages, "log": live.log}
     if args.save_reload and live.verdict == "LIVE_DONE":
         from bridgeforge.save.save_fingerprint import parse_fingerprint
@@ -242,9 +275,14 @@ def _probe_live_queue(args: argparse.Namespace, queue: Path, rig: Path) -> dict 
     if args.refresh and not args.archive:
         print("bridgeforge: --refresh only applies with --archive", file=sys.stderr)
         return 2
+    try:
+        direct = _direct_from(args)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
     print("Starting the live queue: leave the mouse and keyboard alone until it finishes.", file=sys.stderr)
     result = live_queue(args.plan, queue, rig, out, groups=args.group, archive=args.archive, refresh=args.refresh, note=args.note,
-                        test_prefix=args.test_prefix, bat=args.bat, also_enable=args.also_enable, quiet=args.quiet)
+                        test_prefix=args.test_prefix, bat=args.bat, also_enable=args.also_enable, quiet=args.quiet, direct=direct)
     if not args.json:
         print(f"{len(result['groups'])} group(s) run; summary {out}")
         for row in result["attention"]:
@@ -310,7 +348,12 @@ def _probe_duel(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
 def _probe_smoke(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
     """`probe-group smoke`: its result, or an exit code when it stops early."""
     from bridgeforge.probe.probe_record import smoke_group
-    result = smoke_group(rig, bat_name=args.bat, timeout=args.timeout, log_name=args.log_name)
+    try:
+        direct = _direct_from(args)
+    except ValueError as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    result = smoke_group(rig, bat_name=args.bat, timeout=args.timeout, log_name=args.log_name, direct=direct)
     if not args.json:
         boot = result["boot"]
         print(f"{result['verdict']}: {boot['status']} in {boot['elapsed_seconds'] or 0:.0f}s; FATAL={result['fatal']} MOD-ERROR={result['mod_errors']}; log {boot['log']}")

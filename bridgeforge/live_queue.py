@@ -51,7 +51,8 @@ def _summary(row: dict) -> str:
 def live_queue(plan_path: Path, queue: Path, rig: Path, out: Path, *, groups: list[int] | None = None, archive: bool = False,
                refresh: bool = False, note: str = "", test_prefix: str | None = None, bat: str | None = None,
                also_enable: list[str] | None = None, quiet: bool = False, play: Callable | None = None,
-               install: Callable | None = None, judge: Callable | None = None, record: Callable | None = None) -> dict:
+               install: Callable | None = None, judge: Callable | None = None, record: Callable | None = None,
+               direct=None) -> dict:
     """Run the plan's groups (all, or the numbers in `groups`) and write the summary to `out`. `play`, `install`, `judge` and
     `record` default to live_run, install_group, group_report and record_group (tests pass stand-ins)."""
     from bridgeforge.probe.probe_group import install_group
@@ -60,7 +61,11 @@ def live_queue(plan_path: Path, queue: Path, rig: Path, out: Path, *, groups: li
     queue, rig, out = Path(queue).expanduser().resolve(), Path(rig).expanduser().resolve(), Path(out)
     plan = json.loads(Path(plan_path).read_text(encoding="utf-8"))
     if play is None:
-        from bridgeforge.live.live_run import live_run as play
+        import functools
+
+        from bridgeforge.live.live_run import live_run
+        # 95.4: a direct start (no launcher, window placed) passes through to every group's run.
+        play = functools.partial(live_run, direct=direct) if direct is not None else live_run
     install = install or (lambda plan, n: install_group(plan, n, queue, rig, stage=True, save_after_checks=True,
                                                         also_enable=list(also_enable or [])))
     judge = judge or (lambda log, config: group_report(log, config, mods_dir=rig / "mods",
