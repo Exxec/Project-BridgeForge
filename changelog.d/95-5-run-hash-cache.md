@@ -1,0 +1,1 @@
+- A live run's manifest, release and evaluation reuse file hashes from `<rig>/rig_hash_cache.json` while a file's size and modification time are unchanged, and hash the rest in parallel (ROADMAP-3 95.5 / 93.27).
