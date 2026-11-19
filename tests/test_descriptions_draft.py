@@ -166,3 +166,19 @@ class GroundedFactsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CsvRowShapeTests(unittest.TestCase):
+    def test_rows_with_extra_or_missing_cells_are_read_not_crashed_on(self) -> None:
+        # 93.61: `descriptions draft` for Station Augments crashed on a sibling descriptions.csv row with more cells than its
+        # header ('list' object has no attribute 'strip'): DictReader puts extra cells in a list under the None key.
+        from bridgeforge.sibling_assets import _read_rows
+
+        with resolved_temp_dir() as root:
+            path = root / "descriptions.csv"
+            path.write_text("id,type,text1\n"
+                            " ship_a ,SHIP, A hull ,extra,cells\n"
+                            "ship_b,SHIP\n", encoding="utf-8")
+            rows = _read_rows(path)
+        self.assertEqual(rows, [{"id": "ship_a", "type": "SHIP", "text1": "A hull"},
+                                {"id": "ship_b", "type": "SHIP", "text1": ""}])

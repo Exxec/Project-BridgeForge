@@ -1509,6 +1509,14 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   an unsafe folder is the caller's unavailable error; every metacharacter refused in any argument without running;
   a plain path and an `.exe` adapter still run). Removing either check fails its tests. An independent security review
   found both holes closed; its points (the scan-ending error, the message, the trailing dot, more tests) are taken.
+- 93.61 (S) **`descriptions draft` crashed on a CSV row with extra cells.** Station Augments' 96.2 port (owner 2026-11-19:
+  "Accept 1-3, draft descriptions") stopped with `AttributeError: 'list' object has no attribute 'strip'` in
+  `sibling_assets._read_rows`: a sibling mod's descriptions.csv had a row with more cells than its header, which
+  `csv.DictReader` puts in a list under the None key.
+  **Done 2026-11-19.** `_read_rows` keeps only named columns and reads a missing cell as blank. Cells past the header are
+  not part of the row the game reads, the rule `gene.py` already follows for CSV members. Tests:
+  `tests/test_descriptions_draft.py` (a row with extra cells and a short row are read, trimmed). Without the fix the test
+  errors as above.
 - 93.52 (S) **save-doctor reported equal versions as changed.** Found testing Salvor's provider on real saves (owner
   2026-11-17: "improve/test Salvor" between CI waits). `save_doctor.installed_mods`, the provider contract Salvor imports,
   stored mod_info's `{"major", "minor", "patch"}` version as its Python repr. A save made with 1.20.0 then read as
