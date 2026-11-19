@@ -79,8 +79,9 @@ evidence, checked 2026-11-17); for it, `gene.json` is a file it reads, nothing m
 
 ## 5. Guardrails
 
-1. **Licence travels with the gene and can stop it.** Third-party genes default to local, personal use (the standing
-   local-only licence); distribution needs recorded permission or the owner's own content. Author credit is part of the gene.
+1. **Licence travels with the gene and can stop it.** A recorded local-only decision (the standing licence a revival gets
+   when archived) or a local-only path exception stops distribution; a mod with no recorded decision counts as releasable
+   (GD-2 as amended 2026-11-19). Author credit is part of the gene.
 2. **Insertion is an authorized departure, never a fix.** VISION.md excludes autonomous gameplay redesign; every insertion is
    an owner request, recorded as a deliberate departure from restoration, with its own acceptance.
 3. **Prove the closure or abstain.** A gene is extractable only when the subtraction and isolation tests (G2) pass. Reflection,
@@ -192,7 +193,7 @@ credit; performance.
 | Id | Decision |
 |---|---|
 | GD-1 | The genome track (G1-G7) is approved as a strategy addition. G1-G3 run alongside S2; G4-G7 follow their stated prerequisites. |
-| GD-2 | Licence posture: genes from third-party mods are for local, personal use; distribution only with the author's recorded permission or for the owner's own content. Author credit always travels with a gene. |
+| GD-2 | Licence posture: genes from third-party mods are for local, personal use; distribution only with the author's recorded permission or for the owner's own content. Author credit always travels with a gene. **Amended 2026-11-19 (owner: "Go ahead and mark unmarked mods as releasable", choosing "Rule only: no decision = releasable"):** a mod with no recorded decision counts as releasable; a recorded LOCAL_ONLY decision or a local-only path exception still stops distribution, and archiving still records the standing local-only decision for a revival (2026-09-27). The licence ledger (ROADMAP-3 94.G1 WP4) applies it. |
 | GD-3 | RevenantLib is the gene bank's distribution home for genes from vanished authors, under its fold-in and licence policy. |
 | GD-4 | Pilots P1-P4 (section 8), in that order. |
 | GD-5 | Integration into third-party hosts is in scope (on workspace copies, under GD-2), after the gene's carrier (plasmid) result is qualified (guardrail 4). |

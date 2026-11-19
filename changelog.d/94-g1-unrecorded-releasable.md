@@ -1,0 +1,1 @@
+- Licence ledger: a mod with no recorded licence decision counts as releasable for `distribute`, as the release gate already read it (owner 2026-11-19; GD-2 amended). A recorded LOCAL_ONLY decision or a local-only path still refuses.
