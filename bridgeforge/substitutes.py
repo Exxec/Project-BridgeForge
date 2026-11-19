@@ -58,6 +58,21 @@ def _csv_ids(path: Path) -> set[str]:
         return set()
 
 
+def data_ids(data: Path) -> dict[str, set[str]]:
+    """The hull, weapon, wing and hull mod ids a `data/` folder defines: the CSV rows and the .ship/.skin/.wpn specs. Works
+    on a mod's data/ and on the core's (save-doctor uses both, 93.56)."""
+    found: dict[str, set[str]] = {"hullmod": set(), "weapon": set(), "wing": set(), "hull": set()}
+    found["hullmod"] |= _csv_ids(data / "hullmods" / "hull_mods.csv")
+    found["weapon"] |= _csv_ids(data / "weapons" / "weapon_data.csv")
+    found["wing"] |= _csv_ids(data / "hulls" / "wing_data.csv")
+    for pattern, kind, key in (("*.wpn", "weapon", "id"), ("*.ship", "hull", "hullId"), ("*.skin", "hull", "skinHullId")):
+        for path in data.rglob(pattern) if data.is_dir() else []:
+            spec = _load_lenient_json_file(path)
+            if isinstance(spec, dict) and isinstance(spec.get(key), str):
+                found[kind].add(spec[key])
+    return found
+
+
 def provider_for(folder: Path, *, contents: bool = True) -> Provider | None:
     """What one mod folder defines. Only file listings and small data files are read.
 
@@ -74,14 +89,8 @@ def provider_for(folder: Path, *, contents: bool = True) -> Provider | None:
     if not contents:
         return provider
     data = folder / "data"
-    provider.provides["hullmod"] |= _csv_ids(data / "hullmods" / "hull_mods.csv")
-    provider.provides["weapon"] |= _csv_ids(data / "weapons" / "weapon_data.csv")
-    provider.provides["wing"] |= _csv_ids(data / "hulls" / "wing_data.csv")
-    for pattern, kind, key in (("*.wpn", "weapon", "id"), ("*.ship", "hull", "hullId"), ("*.skin", "hull", "skinHullId")):
-        for path in data.rglob(pattern) if data.is_dir() else []:
-            spec = _load_lenient_json_file(path)
-            if isinstance(spec, dict) and isinstance(spec.get(key), str):
-                provider.provides[kind].add(spec[key])
+    for kind, ids in data_ids(data).items():
+        provider.provides[kind] |= ids
     for jar in folder.rglob("*.jar"):
         try:
             with zipfile.ZipFile(jar) as archive:

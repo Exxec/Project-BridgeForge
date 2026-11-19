@@ -1275,6 +1275,25 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     neither are nested `id` leaves;
   - with no core, the check is skipped and the result says so;
   - an installed but disabled mod's faction is undefined.
+- 93.56 (S) **save-doctor passed a save whose vanilla factions still list a removed mod's content.** Salvor's R4 run
+  7890f07c on Test1 (2026-11-18), the first with a removal that adds no faction: LeonardCallisto's save without Scrapyard
+  Armories, repaired to NO_KNOWN_PROBLEM with 0 objects removed. The launch was observed; the load stopped at "Fatal: Ship
+  hull spec [sa_manticore_remnant] not found!". The candidate still names Scrapyard hulls, weapons and wings in vanilla
+  factions' `knownShips`, `shipsWhenImporting`, `knownWeapons`, `knownFighters` and `priorityShips`: id strings inside
+  `Faction` objects, put there by the mod's `default_ship_roles.json` and faction merges, not objects of the mod.
+  Evidence (RC7 `starfarer_obf.jar`, javap): `readResolve` calls `updateDoctrineAndKnown(for.new() && !isPlayerFaction())`;
+  it clears and rebuilds those lists from the faction spec only when the argument is true, so in play the saved ids stay
+  (RC8_BEHAVIOUR RC8-43).
+  **Done 2026-11-18.** `save_doctor.diagnose` reports FACTION_LIST_UNDEFINED (blocking), per faction and list, for the ids
+  in a Faction's content lists (`FACTION_LISTS`: the ship, weapon, fighter and hull mod lists, known and priority) that
+  neither the core nor an enabled mod defines. `substitutes.data_ids` (factored out of `provider_for`) reads the ids from a
+  `data/` folder: the CSV rows and the .ship/.skin/.wpn specs. `knownIndustries` and the weighted `e` map entries are not
+  checked: the run did not show how the game resolves them. Needs the core, like FACTION_UNDEFINED.
+  Results on Test1: the failed candidate reports 50 lists in 14 factions, 65 distinct ids, every one Scrapyard's `sa_`; the
+  original save, Scrapyard present, stays NO_KNOWN_PROBLEM (no false positive across the other mods' lists).
+  Tests: `tests/test_save_doctor.py` (each list kind, a skin's hull id and a mod's hull defined, `knownIndustries` and a
+  non-faction element ignored, the check skipped without a core). Collecting nothing, or collecting outside a Faction, fails
+  it (mutation-checked). Next: Salvor's `repair` drops those ids from the lists, and the candidate is run again.
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct
