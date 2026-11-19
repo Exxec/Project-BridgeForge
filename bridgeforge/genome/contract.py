@@ -20,8 +20,8 @@ import copy
 import hashlib
 from pathlib import Path
 
-from bridgeforge.genome.gene import (ELEMENT_FIELDS, GENE_SCHEMA, GENE_SCHEMA_VERSION, PHENOTYPE, REQUIRED_KEYS, dumps,
-                                     identity, validate)
+from bridgeforge.genome.gene import (ELEMENT_FIELDS, GENE_SCHEMA, GENE_SCHEMA_VERSION, MEMBER_KINDS, PHENOTYPE, REQUIRED_KEYS,
+                                     WITHDRAWN_VERSIONS, dumps, identity, validate)
 from bridgeforge.genome import evidence as evidence_header
 from bridgeforge.vendor_plan import KINDS
 
@@ -29,19 +29,19 @@ CONTRACT_RELATIVE = Path("docs") / "contracts" / "gene"
 IDENTITY_RULE = ("identity = SHA-256 (lowercase hex) of the UTF-8 text: the kind and a line feed, then one line per member "
                  "sorted by (what, path): what, TAB, path, TAB, sha256, line feed. A text member's sha256 is of its "
                  "normalized bytes (no UTF-8 BOM, LF line ends, no trailing spaces or tabs, no trailing blank lines); a "
-                 "csv-row's is of the JSON object of its named non-empty trimmed cells with sorted keys; a jar-class's and "
-                 "any other file's is of its bytes.")
+                 "csv-row's is of the JSON object of its named non-empty trimmed cells with sorted keys; a json-entry's is of "
+                 "its parsed value as canonical JSON (sorted keys, ',' and ':' separators, UTF-8, integral numbers as "
+                 "integers); a jar-class's and any other file's is of its bytes.")
 
 _HASH = {"type": "string", "pattern": "^[0-9a-f]{64}$"}
 _STRINGS = {"type": "array", "items": {"type": "string"}}
-WITHDRAWN_VERSIONS = [1]
 
 
 def json_schema() -> dict:
     """Manifest schema 2 as a JSON Schema. The identity's agreement with the members, and local-only members being members,
     are checked by the identity rule and `validate`, not here. Elements allow more fields than they require."""
     member = {"type": "object", "required": ["what", "path", "sha256"],
-              "properties": {"what": {"enum": ["file", "csv-row", "jar-class"]}, "path": {"type": "string", "minLength": 1},
+              "properties": {"what": {"enum": list(MEMBER_KINDS)}, "path": {"type": "string", "minLength": 1},
                              "sha256": _HASH, "reason": {"type": "string"}}}
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -115,7 +115,15 @@ def fixtures() -> dict[str, dict]:
     adapted["persistent_state"] = [{"name": "data.hullmods.Example", "via": "xstream"}]
     adapted["licence"] = {"decision": "LOCAL_ONLY", "reason": "a member under a local-only path", "mod_decision": "RELEASABLE",
                           "local_only_members": [adapted["members"][1]["path"]]}
-    out = {"valid-hullmod.json": base, "valid-same-gene-other-mod.json": moved, "valid-adapted-gene.json": adapted}
+    settings = copy.deepcopy(base)  # a gene that reads two settings keys (P1's shape)
+    settings["members"] = sorted(settings["members"] + [
+        {"what": "json-entry", "path": "data/config/settings.json#/example_mod_rate", "sha256": hashlib.sha256(b"5").hexdigest(),
+         "reason": "settings key a member script reads"},
+        {"what": "json-entry", "path": "data/config/settings.json#/example_mod_sfx", "sha256": hashlib.sha256(b"true").hexdigest(),
+         "reason": "settings key a member script reads"}], key=lambda m: (m["what"], m["path"]))
+    settings["identity"] = identity(settings["kind"], settings["members"])
+    out = {"valid-hullmod.json": base, "valid-same-gene-other-mod.json": moved, "valid-adapted-gene.json": adapted,
+           "valid-settings-entries.json": settings}
 
     def broken(name: str, change) -> None:
         gene = copy.deepcopy(base)
@@ -144,6 +152,16 @@ def fixtures() -> dict[str, dict]:
     broken("local-only-member-not-local-only", lambda g: g["licence"].update(
         decision="RELEASABLE", mod_decision="RELEASABLE", local_only_members=[g["members"][0]["path"]]))
     broken("local-only-member-not-a-member", lambda g: g["licence"].update(local_only_members=["graphics/not_a_member.png"]))
+
+    def entry(path: str):
+        def change(gene: dict) -> None:
+            gene["members"] = gene["members"] + [{"what": "json-entry", "path": path, "sha256": "0" * 64}]
+            gene["identity"] = identity(gene["kind"], gene["members"])  # so only the path rule is broken
+        return change
+
+    broken("json-entry-without-pointer", entry("data/config/settings.json"))
+    broken("json-entry-pointer-without-slash", entry("data/config/settings.json#example_mod_rate"))
+    broken("json-entry-array-element", entry("data/config/settings.json#/ruleCommandPackages/0"))
     return out
 
 
@@ -226,7 +244,7 @@ def contract_files() -> dict[str, bytes]:
         if name.startswith("valid-") == bool(problems):
             raise AssertionError(f"evidence fixture {name} is judged {'invalid' if problems else 'valid'}: {problems}")
         evidence_verdicts[name] = {"valid": not problems}
-    contract = {"contract": GENE_SCHEMA, "schema_version": GENE_SCHEMA_VERSION, "withdrawn_versions": WITHDRAWN_VERSIONS,
+    contract = {"contract": GENE_SCHEMA, "schema_version": GENE_SCHEMA_VERSION, "withdrawn_versions": list(WITHDRAWN_VERSIONS),
                 "evidence_header": {"name": evidence_header.EVIDENCE, "schema_version": evidence_header.EVIDENCE_SCHEMA_VERSION,
                                     "judged_against": "fixtures/valid-hullmod.json", "fixtures": evidence_verdicts},
                 "identity_rule": IDENTITY_RULE,

@@ -40,7 +40,8 @@
           "type": "integer",
           "not": {
             "enum": [
-              1
+              1,
+              2
             ]
           }
         }

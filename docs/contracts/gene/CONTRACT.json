@@ -1,8 +1,9 @@
 {
   "contract": "bridgeforge-gene",
-  "schema_version": 2,
+  "schema_version": 3,
   "withdrawn_versions": [
-    1
+    1,
+    2
   ],
   "evidence_header": {
     "name": "bridgeforge-gene-evidence",
@@ -35,34 +36,38 @@
       }
     }
   },
-  "identity_rule": "identity = SHA-256 (lowercase hex) of the UTF-8 text: the kind and a line feed, then one line per member sorted by (what, path): what, TAB, path, TAB, sha256, line feed. A text member's sha256 is of its normalized bytes (no UTF-8 BOM, LF line ends, no trailing spaces or tabs, no trailing blank lines); a csv-row's is of the JSON object of its named non-empty trimmed cells with sorted keys; a jar-class's and any other file's is of its bytes.",
+  "identity_rule": "identity = SHA-256 (lowercase hex) of the UTF-8 text: the kind and a line feed, then one line per member sorted by (what, path): what, TAB, path, TAB, sha256, line feed. A text member's sha256 is of its normalized bytes (no UTF-8 BOM, LF line ends, no trailing spaces or tabs, no trailing blank lines); a csv-row's is of the JSON object of its named non-empty trimmed cells with sorted keys; a json-entry's is of its parsed value as canonical JSON (sorted keys, ',' and ':' separators, UTF-8, integral numbers as integers); a jar-class's and any other file's is of its bytes.",
   "files": {
-    "evidence-header.schema.json": "d66b647da854363a10b2a29da4d8a8fa4a0b81c25576fa9f5285983a42f3d855",
-    "evidence/invalid-absolute-input-path.json": "ca4afeb488a47ae6734e43ff60afe75cfbce80dd5f35dc2aa3463b6d64c32b64",
-    "evidence/invalid-input-without-hash.json": "0ad956a70bb752a83f0ea68b3e1250dc05c7e8d589005588c35629d8a614e7ee",
-    "evidence/invalid-other-gene.json": "776e75a605be67f3f7351520fbeecebdfa24305000d191472ef2ce052faaee0d",
-    "evidence/invalid-time-without-offset.json": "4c52bbcbd6138411b043d45ba81be3ea7baa2a84aa498364143f05dd5d93a9ac",
-    "evidence/invalid-unknown-verdict.json": "05602ef7ba540099818f5fc608613cd6bea95678d4425a3e8f04c3f8074186e2",
+    "evidence-header.schema.json": "2507ac87069ee9e1ccd849733e9e3e5f4f7eba3d10731e70a7074b6c15affd44",
+    "evidence/invalid-absolute-input-path.json": "d35cad35165a441248434d1fece75b7216bb5e475e2de1ef2050869668203fbc",
+    "evidence/invalid-input-without-hash.json": "65c95e5ac9bba455afe13dcc6379d9a05d608d67441e95979feb000becbca372",
+    "evidence/invalid-other-gene.json": "a564c5a3136bc287eae44791396f65989d8b26fdab2952b703faca5a97463ded",
+    "evidence/invalid-time-without-offset.json": "70548fe45b120861fe65fa0c1bac2d8846ab63b8924857a04a1facfd0ebd0da8",
+    "evidence/invalid-unknown-verdict.json": "eb13c7a57bff136bcc0363a5872d0e3946d653d4039c524b3a8fcc65b2459fda",
     "evidence/invalid-withdrawn-gene-schema.json": "336fd8948202fb606537876233971e7faef844a4bf30110b226450315e756356",
-    "evidence/valid-producer-fields.json": "a92f463207df9485f1f95c7bef92d3dfb1dec25fdf12343fd5374bd1d0f9662a",
-    "evidence/valid-subtraction-proof.json": "f4acc892e965138455cdcc3a01494c4d60a8c02cdce425c1a3d810cfa5e5d076",
-    "fixtures/invalid-anchor-of-other-kind.json": "1c326f931d41303a0f2f7bba67026c7f7f9030752006f8aea80699dacccdce0d",
-    "fixtures/invalid-derived-from-short-identity.json": "3c4e2a3d10ce930288692b7d5ed160ec715a6c7bdf23de0e8fbce98410077e23",
-    "fixtures/invalid-duplicate-member.json": "3e196a4dd73f78c98a2be5abdde783e50de1927dd5af4b5472ef91e70acb5775",
-    "fixtures/invalid-empty-members.json": "d22bd3d717140fc681e394f767fd1a67b5749b93f98ce2763ff5a6fec19b62cb",
-    "fixtures/invalid-identity-mismatch.json": "e66d5e352027b35fb12ba09b76f316d04353b43e0bde50f383917841dfe4c2db",
-    "fixtures/invalid-licence-without-decision.json": "7222bdcd74adc36cab989a0b786d8b4a55fc0a2a3795629279a7164c02463de3",
-    "fixtures/invalid-local-only-member-not-a-member.json": "a819bc8002c88c91e5bbbfbe4057be95ea90c622731f01198c054634a1034a83",
-    "fixtures/invalid-local-only-member-not-local-only.json": "e6aa6447e9991fa45eba4e800d18ca3640e02e211dd13e508e0efa3ef5902a88",
-    "fixtures/invalid-member-hash-uppercase.json": "64031bf0a620ea01d7ea86584114ddb6e876578a67e08c7a451b74f5bbf284aa",
-    "fixtures/invalid-missing-members.json": "79741772ce4e6c8deca0ac3c288d74e99d7744f60627080167bf2d1b6dfa817a",
-    "fixtures/invalid-registration-without-locus.json": "05070cfa18ee485a54638137a88066316e78e6e31ceaf0bb562990046a69b76d",
+    "evidence/valid-producer-fields.json": "a8bfdd7c7140a1174cd5fc71f0f267485230bcf751b2335024e64914f452beb4",
+    "evidence/valid-subtraction-proof.json": "146c605fd49fe1acb5f13c62a4fbb71af895101a0fdee6a30655103d9377bd45",
+    "fixtures/invalid-anchor-of-other-kind.json": "6789b4767691440a26cca2deeea1740b2bc4f31d4c757d9ae6a4ab57aae4a642",
+    "fixtures/invalid-derived-from-short-identity.json": "2f11a7c8472bc120c7bdd1e3e1fe78d5807958697c027100724c26bc61905f72",
+    "fixtures/invalid-duplicate-member.json": "260af6f6963c8e94c11032c123347a7339036ab5e38961419cc8e7e073d916b7",
+    "fixtures/invalid-empty-members.json": "33370db8c8af7cdb6dd41585c5420bb304ba91ad386449a13f3e99854708d519",
+    "fixtures/invalid-identity-mismatch.json": "13320dc0473ba6bc211e27e658b7f09b309ff4af31586ef7cc0695cdd1cf8ab2",
+    "fixtures/invalid-json-entry-array-element.json": "c864ecb080a1ce35007ab729dbe2762e1d5b461bec1aed6cea0dec7e78bce05f",
+    "fixtures/invalid-json-entry-pointer-without-slash.json": "730601a85e5def48c922c5c4c303c4f1bbba3430f9f1b3b1e8791b03d7b3e074",
+    "fixtures/invalid-json-entry-without-pointer.json": "4b77684e7e9676777d9075392cf1388b940c84d2659de57296ebea1c4380339b",
+    "fixtures/invalid-licence-without-decision.json": "9bc4b583d58251a084b2fa00ec8963eca1433a364715cd8bc5b9a6b9f6d90966",
+    "fixtures/invalid-local-only-member-not-a-member.json": "27cac1acc2c8b116f80d801733177dc11a3c26b9b3f79863f0ca55cb4205f5c4",
+    "fixtures/invalid-local-only-member-not-local-only.json": "448a726cbb571653b14f241449e152ff4e9b81b483d65bc25d40744394ac4ee0",
+    "fixtures/invalid-member-hash-uppercase.json": "ae92ee705c16c9e6cfb41812435cb47319d38bef0b256eb50ab6f6dda2e8874e",
+    "fixtures/invalid-missing-members.json": "857b08d58569fac6fb4d4f7fee177ce4a21d1d58c8c6d156a317419692b73e43",
+    "fixtures/invalid-registration-without-locus.json": "672e6b9308e2af26d3dccb3171597973e0511bebb2d926f52ff03de8669532ab",
     "fixtures/invalid-schema-version-bool.json": "bc4e2a64e824ff7869a30dfc492e8911e38f192364d3194902fc4668838a2ffb",
-    "fixtures/invalid-unknown-kind.json": "0012b6dcc6309141afeceeb9e63a4c45b3a1d8381612fc14996f83a0c5883b2a",
-    "fixtures/valid-adapted-gene.json": "d86f265fb2c6f41f989eedf0b06ab9b720e6c23aa57d34e765e19ef064d83803",
-    "fixtures/valid-hullmod.json": "6319b3d0f7f77b1626c63f6ca7f2ec1106a24be402e52ec888a5e27ccc9f9553",
-    "fixtures/valid-same-gene-other-mod.json": "f890295b156d62728e215efb683dbeb4eaacce05dbef0d39207c9bc701c0b6c2",
-    "gene.schema.json": "bee35e67f1740b0ccdf9e35a5dea6bde3e65473e796c0079d8c9715ed6561234"
+    "fixtures/invalid-unknown-kind.json": "9339cac280ae063ef88b188c071577cb82ccf7f32474f36b946345ca6d70abb0",
+    "fixtures/valid-adapted-gene.json": "733d800734b5d35affe226e4cbf89a83c53f45c77b3375f615709333af43775e",
+    "fixtures/valid-hullmod.json": "8a9ce3266ae69e4cb18fda951e325828dc00b3b2ca033024bdfe828292e16689",
+    "fixtures/valid-same-gene-other-mod.json": "f2213605b1078e373fe10adb6afec3b993099a337e152768be8ac143278ee582",
+    "fixtures/valid-settings-entries.json": "5ddf23d6922a664df820892849ce4e7f9b5b9739708cb5b8763969adbb7e72af",
+    "gene.schema.json": "e489e357920ffe52f1971f346f901b1408cd3fd15f2be7040da0ea52891070ff"
   },
   "fixtures": {
     "invalid-anchor-of-other-kind.json": {
@@ -82,6 +87,18 @@
       "identity": null
     },
     "invalid-identity-mismatch.json": {
+      "valid": false,
+      "identity": null
+    },
+    "invalid-json-entry-array-element.json": {
+      "valid": false,
+      "identity": null
+    },
+    "invalid-json-entry-pointer-without-slash.json": {
+      "valid": false,
+      "identity": null
+    },
+    "invalid-json-entry-without-pointer.json": {
       "valid": false,
       "identity": null
     },
@@ -128,6 +145,10 @@
     "valid-same-gene-other-mod.json": {
       "valid": true,
       "identity": "279076c0bd21677449324632e7d7b57cb3a3a94651d0e00960b5b7282b93ac28"
+    },
+    "valid-settings-entries.json": {
+      "valid": true,
+      "identity": "e1e12ff63097d6247a6748730998c1bb0fff3f2201601faf0e994ca33f157a9b"
     }
   }
 }

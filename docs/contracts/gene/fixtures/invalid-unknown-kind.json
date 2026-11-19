@@ -1,6 +1,6 @@
 {
   "schema": "bridgeforge-gene",
-  "schema_version": 2,
+  "schema_version": 3,
   "identity": "fc97c5880d19cc053028f8e6759e45328a88f1ff4ed3fca88cd0db8530e699bc",
   "kind": "planet",
   "anchors": [

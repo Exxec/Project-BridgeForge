@@ -31,7 +31,8 @@ class HeaderTests(unittest.TestCase):
     def test_another_gene_or_another_gene_schema_is_refused(self) -> None:
         made = contract.evidence_fixtures()["valid-subtraction-proof.json"]
         self.assertEqual(check(made, {**GENE, "identity": "e" * 64}), ["the evidence is about another gene (identity differs)"])
-        self.assertIn("the evidence names gene schema 2, the manifest is 3", check(made, {**GENE, "schema_version": 3}))
+        now = GENE["schema_version"]
+        self.assertIn(f"the evidence names gene schema {now}, the manifest is {now + 1}", check(made, {**GENE, "schema_version": now + 1}))
         # Withdrawn schema 1 is refused by the header itself, whatever manifest it is checked against.
         withdrawn = {**made, "gene": {**made["gene"], "schema_version": 1}}
         self.assertEqual(validate(withdrawn), ["gene schema 1 is withdrawn"])
