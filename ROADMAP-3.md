@@ -1047,7 +1047,34 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     fixture breaks one rule; equal identities across mods; the schema requires what `validate` requires; every file listed
     by hash; `check` names a changed, missing or extra file). Mutation-checked: an unsorted identity and a dropped duplicate
     check each fail the tests.
-  Next: WP2 (GR-1: export, fixtures and pin) and WP3 (GR-4: `trace` and the cross-repository check).
+  **WP3 Done 2026-11-19** (GR-4: `trace` and the cross-repository check with pin drift).
+  - `bridgeforge gene trace ID` (`bridgeforge/genome/trace.py`) lists what cites a roadmap id: commits on HEAD, the pull
+    requests whose merge brought them in, test files and documents. It is read-only and offline. An id matches only whole:
+    `94.G2` is not `94.G21`, `96.1` is not `96.10`, and a full stop after it still counts. `trace 94.G1` lists the four
+    citing commits, PRs #86, #110, #162 and #163, both gene test files and the documents.
+  - `bridgeforge gene sisters` (`bridgeforge/genome/sisters.py`) reads section 12 of docs/FEATURE_GENOME_ROADMAP.md and each
+    sister's linked entry, through `gh api`, or from `--clone REPO=DIR`. Failures:
+    - an entry that does not cite a phase section 12 lists for it;
+    - a 94.Gn that ROADMAP-3 lacks;
+    - a missing GD-2, GR-1 or GR-4, or a missing link to the genome document;
+    - an unreadable entry;
+    - pin drift: a sister's `bridgeforge-pins/gene-contract.sha256` that differs from `gene contract`'s pin.
+
+    Other phases an entry mentions (the track's "94.G1-94.G7") and a missing pin are reported as notes: D3 adds the
+    conformance test when the sister's phase starts.
+  - First live run, 2026-11-19: all six sister repositories OK (RevenantLib, Project-Salvor, Project-VoidSmith, SpriteForge,
+    Project-Go, SPW). None pins the contract yet.
+  - Tests: `tests/test_gene_trace.py`:
+    - whole-id matching;
+    - trace over a scratch git repository with a pull-request merge (commit, PR #7, test and document found; `94.G21` not);
+    - section 12 parsed;
+    - each broken promise is a problem; the track range only a note;
+    - pin drift a problem, a current pin a note;
+    - `check_sisters` reads through the given reader;
+    - the real section 12 has six linked rows (listed in `tests/doc_tests.json`).
+
+    Mutation-checked: dropping the id's trailing boundary, or the pin comparison, fails a test.
+  Next: WP4 (GR-6 licence ledger), then WP5 (evidence-header design) and WP6 (duplication audit).
 - 94.G2 **Sequencing and proof**: closure for campaign features and registration slicing; subtraction and isolation proofs per
   gene. Project Go exports a gene's strings as one unit.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes

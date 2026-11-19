@@ -5,6 +5,7 @@
     "test_bug_class_registry": ["docs/BUG_CLASSES.md"],
     "test_checks_index": ["docs/BUG_CLASSES.md", "docs/CHECKS.md", "docs/COMMANDS.md"],
     "test_finding_stats": ["docs/BUG_CLASSES.md"],
+    "test_gene_trace": ["docs/FEATURE_GENOME_ROADMAP.md"],
     "test_roadmap_lint": ["ROADMAP-3.md", "docs/archive/ROADMAP-2.md", "docs/archive/ROADMAP.md"],
     "test_scan_port": ["docs/TEMPLAR_CRUSADE_PLAN.md"],
     "test_source_paths": ["docs/BUG_CLASSES.md"]
@@ -13,6 +14,7 @@
     "test_bug_class_registry",
     "test_checks_index",
     "test_finding_stats",
+    "test_gene_trace",
     "test_roadmap_lint",
     "test_scan_port",
     "test_source_paths"
