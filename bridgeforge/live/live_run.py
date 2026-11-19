@@ -630,10 +630,14 @@ def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu
              graceful_exit: bool = True, interactive: bool = False, scenario: str = "probe-group live") -> LiveResult:
     """Play a group's live run (see drive) on a freshly started rig game, then stop it. With `natural_exit`, a finished run
     (LIVE_DONE) first waits for the game to be quit from its menu and records the observed exit (see running_game)."""
+    from .display_awake import display_kept_on
+
     outcome: dict = {}
     try:
-        with running_game(rig, test_id, bat_name, natural_exit=natural_exit or interactive, exit_wait=exit_wait, outcome=outcome,
-                          graceful_exit=graceful_exit, pin_prefs=not interactive, scenario=scenario) as (log, hands, vanilla_rows):
+        # The display stays on for the whole run: keys and clicks sent to a game whose display went dark were lost (93.58).
+        with display_kept_on(), \
+                running_game(rig, test_id, bat_name, natural_exit=natural_exit or interactive, exit_wait=exit_wait, outcome=outcome,
+                             graceful_exit=graceful_exit, pin_prefs=not interactive, scenario=scenario) as (log, hands, vanilla_rows):
             if interactive:  # the operator plays and closes the game; nothing is clicked or typed (launch.py records NATURAL + code)
                 while hands.alive():
                     hands.sleep(EXIT_POLL_SECONDS)

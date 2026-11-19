@@ -1,0 +1,1 @@
+- A live run keeps the display on, so a rig whose power plan darkens the display mid-run still receives the harness's keys and clicks (93.58).

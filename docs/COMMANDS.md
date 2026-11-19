@@ -985,6 +985,7 @@ which mods a newer game version breaks: jar linkage, interface contracts and dro
 | `roots` | nargs * | Done/ archives, queue folders or single mods; default <repo>/Done and <repo>/In operation |
 | `--write` WRITE | - | write TARGET_IMPACT.json and TARGET_IMPACT.md into DIR; a checkpoint there lets an interrupted run resume |
 | `--restart` | - | with --write: ignore an earlier run's checkpoint |
+| `--jobs` JOBS | - | worker processes checking mods side by side (default: up to 4, one CPU left free; 1 = in-process) |
 | `--quiet` | - | no per-mod progress lines on stderr |
 | `--json` | - | - |
 
