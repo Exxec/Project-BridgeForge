@@ -1199,7 +1199,49 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     Mutation-checked: the identity comparison, the re-hash, the withdrawn rule and the path rule each fail a test when
     removed.
-  Next: WP6 (duplication audit with a shrink-only baseline), then GR-2/GR-3/GR-5 into 94.G2.
+  **WP6 Done 2026-11-19** (the duplication audit). It is a report only: BridgeForge stays Salvor's save-diagnosis
+  provider (D4), and no shared package is added. It ends in a baseline that can only shrink, as the advisor review asked.
+  - A read-only survey that day mapped, by hand, where the package re-implements four things instead of calling the
+    canonical function: class indexing, mod identity, save reading and lenient JSON. `bridgeforge/duplication_audit.py`
+    turns that map into six per-function AST rules. `duplication-audit` prints them, with the canonical function each
+    one should call:
+    | Rule | Re-implementations | Canonical |
+    |---|---|---|
+    | `classfile-pool` | 9 | `scan/scan_classfile.py::_parse_class_file_uncached` |
+    | `jar-class-walk` | 42 | `scan/scan_classfile.py::iter_class_files_in_jars` |
+    | `mod-info-read` | 104 | `mod_files.py::read_mod_info` |
+    | `version-text` | 14 | `corpus/corpus_releases.py::version_text` |
+    | `save-xml-read` | 9 | `save/save_reader.py::parse_descriptor`, `iter_elements` |
+    | `json-comment-strip` | 3 | `scan/scan_json.py::_parse_json_uncached` |
+
+    Lenient JSON is the most consolidated; mod identity and jar class indexing are the most duplicated.
+  - The rules are approximate by design. A zip writer that must walk every entry is not counted. A save tokenizer is
+    a `*TAG*` regex applied in a `save/` module. Some span-editing walkers are missed (`build_tag._structural_depths`,
+    `fixers/presets._object_bounds`). The baseline counts what the rules see, and they stop new copies of the common
+    shapes.
+  - `tests/duplication_baseline.json` lists all 185 functions found. `tests/test_duplication_audit.py` fails on a new
+    one, naming the canonical function to call instead, and on one that is gone, so the baseline shrinks with each
+    consolidation. After a deliberate change: `python -m tests.test_duplication_audit --write`.
+  - Found by the survey and confirmed in the code, not fixed here:
+    - `save/save_inspect.py::_mod_version_lookup` records a `{major, minor, patch}` version as None.
+    - `content_parity.py::mod_id_of` takes the first `"id"` in mod_info.json by regex. If the dependencies come first,
+      it returns a dependency's id.
+    - `live/live_trust.py::save_made_with` is a second descriptor parser that resolves `versionInfo ref=` while
+      `save_reader.parse_descriptor` does not, so the two can disagree.
+
+    Each is a candidate for the first consolidation PR.
+  - Tests:
+    - each rule on its shape;
+    - the canonical shapes are not flagged: a call to `read_mod_info`, a zip writer, and a `*TAG*` regex outside
+      `save/`;
+    - a nested function is credited once, and the audit skips its own module;
+    - the CLI;
+    - the ratchet.
+
+    Mutation-checked: dropping the writer exclusion, nested crediting, the self-exclusion, the `save/` limit or the
+    `read_mod_info` exclusion each fails a test.
+  Next: GR-2 (census, with registrations per ModPlugin method), GR-3 (closure benchmark) and GR-5 (Java probe spike),
+  into 94.G2.
 - 94.G2 **Sequencing and proof**: closure for campaign features and registration slicing; subtraction and isolation proofs per
   gene. Project Go exports a gene's strings as one unit. Acceptance adds (WP5): every proof file carries the evidence header
   and passes `gene evidence check` against its gene with `--root`.
