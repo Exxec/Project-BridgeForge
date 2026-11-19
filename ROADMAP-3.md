@@ -830,6 +830,15 @@ unproven).
   `target-impact` should propose the old-to-new class and method map when it reports a missing obfuscated class, with each
   match's score and the evidence (shape share, agreeing field types). A gated fixer should apply an accepted map to a jar's
   classes, using the bundled ASM, and re-check linkage and interfaces. Priority: after the G series (the next game build).
+- 96.15 (S) **A snapshot error that never clears.** Test1's `state-snapshot` reported one error on every run, "Permission
+  denied" on `Done/_previous/Fuel-Siphoning-1.2.2/Readme.txt`. That file no longer exists. The error came from a
+  `snapshot.partial.jsonl` line written before H4 (2026-10-12), which checkpointed the Done source together with its error.
+  Each later run reused that line and never walked Done again, so the checkpoint was never finished and
+  `snapshot-restore-check` (R8) refused.
+  **Done 2026-11-19.** A checkpointed source that carries errors is walked again.
+  Test: `tests/test_state_snapshot.py` `test_a_checkpointed_source_that_carries_errors_is_walked_again`. On Test1 the stale
+  checkpoint was moved aside (kept as `snapshot.partial.jsonl.stale-20261119`) and a fresh snapshot started. Gate R8 stays
+  open until that snapshot ends with no errors and `snapshot-restore-check` passes.
 - 95.1 (M) **Owner rulings as standing policy.** The owner ruled the same way many times: CSV rows with no file that nothing uses
   (Musashi, Bultach, UAF: "keep them and ignore warning if it doesn't affect anything"), findings the reference build shares in a
   mod that works there (UAF: "Your clear to proceed"), and behaviour as authored with evidence (Sunrider: "yes"). Encode them as

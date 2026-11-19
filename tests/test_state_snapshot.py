@@ -99,6 +99,22 @@ class RetryTests(unittest.TestCase):
             self.assertEqual(second["errors"], [])
             self.assertTrue((dest / "current" / "Done" / "ModA" / "a.txt").is_file())
 
+    def test_a_checkpointed_source_that_carries_errors_is_walked_again(self) -> None:
+        # Test1 2026-11-19: a checkpoint line written before H4 kept a Done error; every run replayed it and never cleared.
+        from bridgeforge.progress import Checkpoint
+        with resolved_temp_dir() as base:
+            root, dest = _tree(base / "repo"), base / "backup"
+            sources = snapshot_sources(root.resolve(), base / "home")
+            header = {"command": "state-snapshot", "root": str(root.resolve()), "sources": sorted(sources)}
+            dest.mkdir()
+            with Checkpoint(dest / "snapshot.partial.jsonl", header) as checkpoint:
+                checkpoint.add("Done", {"copied": 1, "versioned": 0, "skipped": 0, "bytes": 3, "errors": ["ModA/gone.txt: denied"]})
+            self.assertIn("gone.txt", (dest / "snapshot.partial.jsonl").read_text(encoding="utf-8"))
+            result = take_snapshot(root, dest, base / "home", quiet=True, stamp="s1")
+            self.assertEqual(result["errors"], [])
+            self.assertTrue((dest / "current" / "Done" / "ModA" / "a.txt").is_file())
+            self.assertFalse((dest / "snapshot.partial.jsonl").exists())
+
 
 class AfterArchiveTests(unittest.TestCase):
     def test_nothing_happens_without_a_config_and_a_configured_root_snapshots_after_an_archive(self) -> None:
