@@ -234,19 +234,34 @@ def _checkout_version(top: Path) -> str | None:
     return match.group(1) if match else None
 
 
+def _installed_distribution(top: Path, paths: list[str] | None = None):
+    """The interpreter's installed bridgeforge metadata, ignoring the checkout's own folder. Run from a checkout, the
+    current folder is on sys.path, and a gitignored `bridgeforge.egg-info` left by an old build there was found first:
+    the check called White_Legion's fresh editable install "plain" (2026-11-18)."""
+    import importlib.metadata
+
+    top = Path(top).resolve()
+    search = []
+    for entry in sys.path if paths is None else paths:
+        try:
+            if Path(entry or ".").resolve() != top:
+                search.append(entry)
+        except OSError:
+            continue
+    return next(iter(importlib.metadata.distributions(name="bridgeforge", path=search)), None)
+
+
 def _check_installed(top: Path, distribution=None, main_checkout: Path | None = None) -> dict:
     """The interpreter's installed bridgeforge is an editable install at this checkout's version (ROADMAP-3 96.5 A2).
 
     White_Legion's .venv held a plain 0.4.0 install, 68 files behind, which every command run outside a checkout imported
     instead of the code (2026-11-18). An editable install follows its checkout; a plain one goes stale. The fix names the
     main checkout, not a worktree: worktrees are removed after their branch merges."""
-    import importlib.metadata
     from urllib.parse import unquote, urlparse
     from urllib.request import url2pathname
 
-    try:
-        dist = distribution or importlib.metadata.distribution("bridgeforge")
-    except importlib.metadata.PackageNotFoundError:
+    dist = distribution or _installed_distribution(top)
+    if dist is None:
         return {"status": SKIPPED, "reason": "bridgeforge is not installed in this interpreter"}
     try:
         direct = json.loads(dist.read_text("direct_url.json") or "{}")

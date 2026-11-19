@@ -99,10 +99,24 @@ class InstalledPackageCheckTests(unittest.TestCase):
         self.assertEqual(Path(result["source"]).resolve(), ROOT)
 
     def test_no_install_is_skipped(self) -> None:
-        import importlib.metadata
-
-        with mock.patch("importlib.metadata.distribution", side_effect=importlib.metadata.PackageNotFoundError("bridgeforge")):
+        with mock.patch("bridgeforge.hygiene._installed_distribution", return_value=None):
             self.assertEqual(_check_installed(ROOT)["status"], SKIPPED)
+
+    def test_build_metadata_left_in_the_checkout_is_not_the_install(self) -> None:
+        # 2026-11-18: run from White_Legion's main checkout, an old build's gitignored bridgeforge.egg-info (on sys.path as
+        # the current folder) was found first, and a fresh editable install was reported as plain.
+        from bridgeforge.hygiene import _installed_distribution
+
+        with resolved_temp_dir() as checkout, resolved_temp_dir() as site:
+            stale = checkout / "bridgeforge.egg-info"
+            stale.mkdir()
+            (stale / "PKG-INFO").write_text("Metadata-Version: 2.1\nName: bridgeforge\nVersion: 0.0.1\n", encoding="utf-8")
+            real = site / "bridgeforge-9.9.9.dist-info"
+            real.mkdir()
+            (real / "METADATA").write_text("Metadata-Version: 2.1\nName: bridgeforge\nVersion: 9.9.9\n", encoding="utf-8")
+            found = _installed_distribution(checkout, [str(checkout), str(site)])
+            self.assertEqual(found.version, "9.9.9")
+            self.assertIsNone(_installed_distribution(checkout, [str(checkout)]))
 
 
 if __name__ == "__main__":
