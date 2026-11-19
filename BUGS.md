@@ -89,7 +89,7 @@
 ## Resolved in the historical "1.0 hardening" tranche
 
 The tranche name below is historical, not a claim that package version 1.0 has been released. The current package
-identifies as 0.4.1; latest published tool release is the 0.2.0 pre-release (checked 2026-10-21). It was the 0.4.0 pre-release
+identifies as 0.4.2; latest published tool release is the 0.2.0 pre-release (checked 2026-10-21). It was the 0.4.0 pre-release
 from 2026-11-17 (`docs/RELEASE_0_4_0.md`), and since the evening of that day it is 0.4.1, a full release (`docs/RELEASE_0_4_1.md`),
 which fixes the four security problems 0.4.0's receipt lists.
 
