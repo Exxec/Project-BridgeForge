@@ -137,7 +137,7 @@ class WorkflowTests(unittest.TestCase):
         test = self.jobs["test"]
         self.assertEqual([line for line in test if re.match(r"^    if:", line)], ["    if: ${{ !cancelled() }}"])
         self.assertIn("    needs: scope", test)
-        self.assertGreaterEqual(len(steps(test)), 5)
+        self.assertGreaterEqual(len(steps(test)), 4)  # note, checkout, the shared setup (96.5 C8), the run
         for step in steps(test):
             with self.subTest(step=step[0].strip()):
                 self.assertTrue(any("needs.scope.outputs.docs_only" in line for line in step), step)

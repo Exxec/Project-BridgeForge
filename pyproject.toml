@@ -25,6 +25,9 @@ bridgeforge = ["release_policy.json", "dependency_successors.json", "automation_
 
 [tool.ruff]
 target-version = "py315"
+# One ruff for CI, the hooks and sessions (96.5 C8): ruff refuses to run at another version. Update the pin and
+# ci.yml's ruff-action `version` together; tests/test_ci_setup.py checks they agree.
+required-version = "==0.17.5"
 extend-exclude = ["probe-mod", "everything-claude-code"]
 
 [tool.ruff.lint]

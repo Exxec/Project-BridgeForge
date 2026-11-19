@@ -48,9 +48,9 @@ class ScanRobustnessTests(unittest.TestCase):
     def test_the_whole_scan_stays_within_budget_on_very_long_lines(self) -> None:
         with resolved_temp_dir() as root:
             mod = _long_line_mod(root)
-            started = time.monotonic()
+            started = time.process_time()  # CPU seconds, not a busy runner's wall clock (96.5 C7)
             scan_mod(mod)
-            elapsed = time.monotonic() - started
+            elapsed = time.process_time() - started
         self.assertLess(elapsed, BUDGET_SECONDS, f"scan took {elapsed:.1f} s: a check's pattern probably backtracks on long lines")
 
     def test_core_gated_checks_also_stay_within_budget(self) -> None:
@@ -66,9 +66,9 @@ class ScanRobustnessTests(unittest.TestCase):
         with resolved_temp_dir() as root:
             mod = _long_line_mod(root)
             _jar(_compile(javac, root / "api", api), root / "core" / "starfarer.api.jar")
-            started = time.monotonic()
+            started = time.process_time()  # this process's CPU only: javap runs as a child and is not the pattern under test
             scan_mod(mod, vanilla_core=root / "core")
-            elapsed = time.monotonic() - started
+            elapsed = time.process_time() - started
         self.assertLess(elapsed, BUDGET_SECONDS, f"scan with a core took {elapsed:.1f} s")
 
 

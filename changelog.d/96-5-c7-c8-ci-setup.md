@@ -1,0 +1,1 @@
+- CI jobs share one setup action and carry timeouts, test runners buffer output, CPU-bound test budgets use CPU time, and ruff is pinned once in `pyproject.toml` for CI, the hooks and the PR checks (96.5 C7, C8).
