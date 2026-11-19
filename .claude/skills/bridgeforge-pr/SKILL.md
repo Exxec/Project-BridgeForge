@@ -109,9 +109,17 @@ A pull request that changes only Markdown outside `bridgeforge/`, `tests/`, `pro
 Lint and Documentation tests (the modules in `tests/doc_tests.json`); its other checks show as skipped, and the merge to
 main runs everything (`tools/ci-scope.py`, 96.5 C3). A test that starts reading a document belongs in that list.
 
+Before merging, a branch behind main takes main in: `gh pr update-branch <N>` (or `git merge origin/main` in its worktree),
+then CI again, then merge by the new head. A pushed branch is never rebased.
+
+After any merge of main into a branch, run `python tools/regen-generated.py` (or `python -m tests.test_cli_golden --write`
+and `python -m bridgeforge docs-index`) and commit the result: when both sides added commands, git's merge of
+`docs/COMMANDS.md` and `tests/cli_help_golden.json` can come out clean but stale (2026-11-19, caught by the pre-push hook).
+
 Merge only green PRs. After merging:
 - `git fetch`.
-- Rebase the other item branches onto `origin/main`, stashing any uncommitted work first.
+- Bring main into the other open item branches the same way (merge, not rebase, once pushed), stashing any uncommitted
+  work first.
 - Pull on Test1 (the `test1-run` skill, or `git -C "<Test1 repo>" pull --ff-only origin main`).
 - Remove the worktree with `git worktree remove ../BridgeForge-<item>`.
 
