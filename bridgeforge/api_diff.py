@@ -15,11 +15,11 @@ Read-only: both jars are only read. The catalogue holds API names and descriptor
 """
 from __future__ import annotations
 
-import hashlib
 import re
 from pathlib import Path
 
 from .rebuild_jar import _ACC_SYNTHETIC, _classes_from_jar, _parse_class
+from bridgeforge.file_hash import sha256_file as _sha256  # 96.5 A10
 
 SCHEMA_VERSION = 1
 API_JAR_NAME = "starfarer.api.jar"
@@ -121,9 +121,6 @@ def _methods(parsed) -> dict[tuple[str, str], object]:
 def _fields(parsed) -> dict[tuple[str, str], object]:
     return {key: member for key, member in parsed.fields.items() if _visible(member)}
 
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _renames(old_jar: Path, new_jar: Path) -> list[dict]:

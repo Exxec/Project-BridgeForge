@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from bridgeforge.file_hash import sha256_file_or_none as file_sha256  # 96.5 A10
 
 # Helpers are imported at call time (`from . import fixers as _f`): fixers.py imports this module.
 
@@ -97,11 +98,6 @@ def _apply(text: str, edits: list[tuple[int, str]]) -> str:
 
 _APPROVAL_KEYS = frozenset({"file", "entry", "field", "file_sha256"})
 
-
-def file_sha256(path: Path) -> str | None:
-    import hashlib
-
-    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
 def preset_field_proposals(root: Path, vanilla_core: Path, old_core: Path | None = None) -> list[dict]:

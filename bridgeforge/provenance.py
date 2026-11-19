@@ -5,7 +5,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .workspace import sha256_file, workspace_paths
+from .workspace import workspace_paths
+from .file_hash import sha256_file
 
 
 def _tree_hash(root: Path) -> str:

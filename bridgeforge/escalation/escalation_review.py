@@ -44,10 +44,10 @@ TEXT_SUFFIXES = {".java", ".json", ".csv", ".ship", ".variant", ".wpn", ".skin",
 
 
 def snapshot_dir(root: Path) -> dict[str, str]:
+    from bridgeforge.file_hash import file_hashes
+
     root = Path(root)
-    if not root.is_dir():
-        return {}
-    return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(root.rglob("*")) if p.is_file()}
+    return file_hashes(root) if root.is_dir() else {}
 
 
 def diff_snapshots(before: dict[str, str], after: dict[str, str]) -> dict[str, list[str]]:

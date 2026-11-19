@@ -559,6 +559,24 @@ Check S series implementation plan and if applicable add remaining items to road
       An independent review found no blocking bugs. Tests: `tests/test_module_size.py` (no module over 800 lines unless
       listed with a cap equal to its length, so it cannot grow back; only revive.py, 886, is listed; fails on the old
       1,076-line dossier and on a cap left above its module).
+      **A10 Done 2026-11-19.** `bridgeforge/file_hash.py` holds `sha256_file` (streamed in 1 MiB blocks),
+      `sha256_file_or_none` (None when not a file) and `file_hashes(root)` ({posix relative path: digest}, sorted). The
+      roadmap counted 13 copies of `_sha256`; a search over every function that hashes file contents found 31 that
+      compute one of these three results. 28 of them, in 27 modules, are now the shared functions, imported under their
+      old names so no call site changed (api_diff, archive,
+      archive_intake, src_to_jar, decompiler, dossier, escalation_policy, explain_proofs, evaluation, live_trust,
+      move_machine, fixers/presets, reference_rigs, research_decompile, revise, revive, run_manifest, save_snapshot (two),
+      scan_registry, shadow_triage, snapshot_restore, substitution_proposals, targets, translation, validate,
+      vendor_plan, workspace). workspace's importers (case_identity, fold, migrate, provenance) import from file_hash.
+      Three keep their own result for a missing file and call it: lookup (None on any read error), value_proposals ("")
+      and escalation_review.snapshot_dir ({} for a missing folder). Streamed and whole-file reads give the same digest.
+      Left apart, and the module says why: provenance and scan_registry fold a tree into one digest that is stored;
+      revival_audit hashes an open stream in upper case; content_diff, runtime and working_tree build other digests;
+      escalation's `_tree` skips `.pre-bf-` files; kit_resources/verify_kit ships in the kit and must not import
+      bridgeforge. 93.27's cache (not built) is meant to sit behind `file_hashes`. Tests: `tests/test_file_hash.py`
+      (digests equal hashlib's for empty, small and multi-chunk files; None and OSError cases; nested tree order; each of
+      the 27 routed names is the shared function; the three wrappers' missing-file results). revive.py lost its copy, so
+      A6's size ratchet lowered its cap from 886 to 884, as designed; docs/CHECKS.md lost scan_registry's `_sha256` row.
 - 96.6 (S) **`archive` does what `record --archive` does first.** On 2026-11-17 the owner said "archive all". All four plain
   `archive` runs refused (Templars, KoC, Eridani, Scrapyard):
   - `audit-explain --auto` then proved 9 of their unexplained files: KoC's moved work files, Scrapyard's credits file and

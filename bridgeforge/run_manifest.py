@@ -30,6 +30,7 @@ from .boot_test import _is_link
 from .manifest_echo import echo_state, write_run_file
 from .safeio import atomic_write_json
 from bridgeforge.save.save_fingerprint import parse_fingerprint
+from bridgeforge.file_hash import sha256_file as _sha256_file  # 96.5 A10
 
 MANIFEST_VERSION = 1
 FILESET_ALGORITHM = "copy_drift.collect+sha256/1"
@@ -59,13 +60,6 @@ EPOCH_SLACK_SECONDS = 2.0
 class ManifestError(ValueError):
     """A manifest cannot be prepared, read or trusted."""
 
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 # Folders a mod writes into while the game runs: output, not staged input, so they stay out of that mod's staged hash.

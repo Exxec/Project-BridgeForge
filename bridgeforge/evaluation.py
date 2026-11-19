@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-import hashlib
 from collections import Counter
 from pathlib import Path
 
 from .models import ScanResult, TargetProfile
 from bridgeforge.scan.scanner import scan_mod
 from .working_tree import classify_path
+from bridgeforge.file_hash import file_hashes as _tree_hashes  # 96.5 A10
 
-
-def _tree_hashes(root: Path) -> dict[str, str]:
-    return {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(root.rglob("*")) if path.is_file()}
 
 
 def _extension_counts(paths: set[str]) -> dict[str, int]:

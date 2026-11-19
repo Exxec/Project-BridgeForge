@@ -208,9 +208,9 @@ def build_sheet(workspace: Path, vanilla_core: Path | None = None, reference_cor
 
 
 def _sha(path: Path) -> str:
-    import hashlib
+    from .file_hash import sha256_file_or_none
 
-    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else ""
+    return sha256_file_or_none(path) or ""  # "" for a missing file, as before
 
 
 def write_sheet(rows: list[dict[str, str]], path: Path, mod: Path | None = None) -> Path:

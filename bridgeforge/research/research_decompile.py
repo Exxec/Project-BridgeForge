@@ -7,7 +7,6 @@ decompiled again. A missing Vineflower or JDK is reported as missing, with how t
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import subprocess
@@ -22,6 +21,7 @@ from .research_methods import MethodMap, jar_method_index, parse_line_pairs, res
 from .research_terms import STATIC, Matcher
 from ..safeio import atomic_write_bytes, atomic_write_json
 from ..zipsafe import MAX_CLASS_BYTES, read_limited
+from bridgeforge.file_hash import sha256_file as jar_sha256  # 96.5 A10
 
 DEFAULT_MAX_CLASSES = 12
 MAX_EXCERPT_METHODS = 4
@@ -103,13 +103,6 @@ def _unpack_archive(archive: Path, output: Path) -> None:
                 stem = info.filename[:-len(".java")]
                 atomic_write_json(output / f"{stem}.lines.json", {"schema_version": 1, "pairs": [list(p) for p in pairs]})
 
-
-def jar_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def outer_name(entry: str) -> str:

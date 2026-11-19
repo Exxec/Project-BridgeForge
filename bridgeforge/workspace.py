@@ -8,13 +8,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
+from bridgeforge.file_hash import sha256_file  # 96.5 A10
 
 
 def _inside(child: Path, parent: Path) -> bool:

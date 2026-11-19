@@ -19,12 +19,12 @@ A mod file at a vanilla data-relative path replaces RC8's file. The older instal
 from __future__ import annotations
 
 import difflib
-import hashlib
 import json
 from datetime import date
 from pathlib import Path
 
 from bridgeforge.scan.scan_common import SHADOW_PATH_EXTENSIONS
+from bridgeforge.file_hash import sha256_file as _sha  # 96.5 A10
 
 MAX_DIFF_LINES = 15
 REMOVED_SHADOW_FOLDER = "removed-shadow"
@@ -55,9 +55,6 @@ def mod_name_for(root: Path) -> str:
     root = Path(root).resolve()
     return root.parent.name if root.name == "working" else root.name
 
-
-def _sha(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _value_diff(old: Path, new: Path) -> list[str]:

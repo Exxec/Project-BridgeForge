@@ -22,12 +22,12 @@ mod; otherwise it is rebuilt in memory with the same builder (build_archaeology)
 
 from __future__ import annotations
 
-import hashlib
 import json
 from collections import defaultdict
 from pathlib import Path
 
 from .behavior_discovery import build_archaeology
+from .file_hash import sha256_file
 
 SCHEMA_VERSION = 1
 ITEM_KINDS = ("class", "symbol", "data", "source", "jar", "resource", "registration", "lifecycle-hook")
@@ -51,8 +51,8 @@ def default_discovery_dir(mod_dir: Path) -> Path | None:
 
 def _sha256(path: Path) -> str | None:
     try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError:
+        return sha256_file(path)
+    except OSError:  # unlike file_hash.sha256_file_or_none, any read error is None here, not only a missing file
         return None
 
 

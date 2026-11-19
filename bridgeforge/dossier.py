@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from datetime import datetime, timezone
@@ -11,6 +10,7 @@ from .build_tag import DEFAULT_LABEL, BuildTagError, build_tag
 from .copy_drift import _find_mod_root
 from .fixers import SUPPORTED_FINDINGS
 from .models import Finding, TargetProfile
+from bridgeforge.file_hash import sha256_file_or_none as _mod_info_sha256  # 96.5 A10
 from bridgeforge.scan.scanner import scan_mod
 
 # The inventory and artifact sections and the markdown live beside this module (96.5 A6).
@@ -76,11 +76,6 @@ def _current_build_tag(root: Path) -> dict[str, object] | None:
         return None
     return {"label": DEFAULT_LABEL, "build": build - 1}
 
-
-def _mod_info_sha256(mod_info_path: Path) -> str | None:
-    if not mod_info_path.is_file():
-        return None
-    return hashlib.sha256(mod_info_path.read_bytes()).hexdigest()
 
 
 def _build_identity(root: Path, metadata: dict[str, object]) -> dict[str, object]:

@@ -10,7 +10,8 @@ from typing import Any
 
 from .models import TargetProfile
 from bridgeforge.bytecode.java_ast import AstUnavailable, analyze_sources, utf16_offset_to_index
-from .workspace import checkpoint, resolve_inside, sha256_file, workspace_paths
+from .workspace import checkpoint, resolve_inside, workspace_paths
+from .file_hash import sha256_file
 
 
 @dataclass(frozen=True)

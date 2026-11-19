@@ -20,6 +20,7 @@ import re
 from pathlib import Path
 
 from bridgeforge.scan.scanner import _load_lenient_json_file, _parse_class_file, _read_csv_rows_lenient, iter_class_files_in_jars
+from bridgeforge.file_hash import sha256_file as _sha256  # 96.5 A10
 
 SCHEMA_VERSION = 1
 KINDS = ("hullmod", "weapon", "wing", "hull", "variant", "shipsystem")
@@ -365,11 +366,6 @@ def dumps(plan: dict) -> str:
 
 _CSV_ROW = re.compile(r"^(?P<table>.+?\.csv) \[(?P<id>.+)\]$")
 
-
-def _sha256(path: Path) -> str:
-    import hashlib
-
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _append_rows(table: Path, header: list[str], rows: list[dict[str, str]]) -> list[str]:

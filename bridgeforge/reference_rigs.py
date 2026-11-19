@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from pathlib import Path
@@ -11,16 +10,10 @@ class ReferenceRigError(ValueError):
 
 
 from .paths import data_root
+from bridgeforge.file_hash import sha256_file as _sha256  # 96.5 A10
 
 DEFAULT_REGISTRY_RELATIVE = Path("bridgeforge-state") / "reference-rigs"
 
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _safe_version(value: str) -> str:

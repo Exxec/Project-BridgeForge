@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from ..safeio import safe_rmtree
 
-import hashlib
 import json
 import re
 import shutil
@@ -10,6 +9,7 @@ import time
 from pathlib import Path
 
 from ..boot_test import _is_link, _running_java_under
+from bridgeforge.file_hash import file_hashes as _hash_tree  # 96.5 A10
 
 """Roadmap P3b-D: `save-snapshot {tag,list,restore}`.
 
@@ -64,20 +64,6 @@ def _snapshots_root(runtime_dir: Path) -> Path:
     return runtime_dir / SNAPSHOTS_DIR_NAME
 
 
-def _hash_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _hash_tree(root: Path) -> dict[str, str]:
-    return {
-        path.relative_to(root).as_posix(): _hash_file(path)
-        for path in sorted(root.rglob("*"))
-        if path.is_file()
-    }
 
 
 def _extract_bf_build_tags(descriptor_path: Path) -> dict[str, str]:
