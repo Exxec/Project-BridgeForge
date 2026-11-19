@@ -87,7 +87,7 @@ class BufferedRunnerTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertRegex((ROOT / path).read_text(encoding="utf-8"), r"TextTestRunner\([^)]*buffer=True")
         coverage = jobs((WORKFLOWS / "ci.yml").read_text(encoding="utf-8"))["coverage"]
-        self.assertIn("unittest -b discover", coverage)
+        self.assertIn("unittest discover -b -s tests", coverage)
 
 
 if __name__ == "__main__":
