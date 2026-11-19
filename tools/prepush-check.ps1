@@ -34,8 +34,10 @@ try{
     $pyFiles=@($changed | Where-Object { $_ -like '*.py' -and (Test-Path -LiteralPath $_) })
     if($pyFiles){
         $uvx=Get-Command uvx -ErrorAction SilentlyContinue
-        & $py -m ruff --version *> $null
-        if($LASTEXITCODE -eq 0){ & $py -m ruff check -- @pyFiles }elseif($uvx){ & $uvx.Source ruff check -- @pyFiles }else{ $global:LASTEXITCODE=0; Write-Host 'pre-push: no ruff (no uvx); lint skipped' }
+        $ruffPin=(Select-String -LiteralPath (Join-Path $root 'pyproject.toml') -Pattern '^required-version = "==(.+)"$').Matches | ForEach-Object { $_.Groups[1].Value } | Select-Object -First 1
+        if($uvx -and $ruffPin){ & $uvx.Source "ruff@$ruffPin" check -- @pyFiles }
+        else{ & $py -m ruff --version *> $null
+        if($LASTEXITCODE -eq 0){ & $py -m ruff check -- @pyFiles }elseif($uvx){ & $uvx.Source ruff check -- @pyFiles }else{ $global:LASTEXITCODE=0; Write-Host 'pre-push: no ruff (no uvx); lint skipped' } }
         if($LASTEXITCODE -ne 0){Write-Error 'ruff check failed on the changed files; fix lint before pushing.'; exit 12}
     }
     & $py -m bridgeforge docs-index --check *> $null

@@ -21,7 +21,7 @@ def main() -> int:
     # tests' own `from tests.support import ...`.
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     loaded = unittest.defaultTestLoader.discover("tests")
-    result = unittest.TextTestRunner(verbosity=1).run(unittest.TestSuite(reversed(list(flatten(loaded)))))
+    result = unittest.TextTestRunner(verbosity=1, buffer=True).run(unittest.TestSuite(reversed(list(flatten(loaded)))))
     return 0 if result.wasSuccessful() else 1
 
 

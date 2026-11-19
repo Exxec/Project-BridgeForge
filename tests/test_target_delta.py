@@ -101,10 +101,10 @@ class SideBySideTests(unittest.TestCase):
             mod = _mod(root / "queue", "long", {"id": "long"}, None)
             line = "static " + "a, " * 20000 + "fluxFraction"
             (mod / "L.java").write_text(f"class L {{ {line} }}", encoding="utf-8")
-            started = time.monotonic()
+            started = time.process_time()  # CPU seconds, not a busy runner's wall clock (96.5 C7)
             now_provides(mod, old, new)
             touches(mod, [], old, new)
-            self.assertLess(time.monotonic() - started, 5.0)
+            self.assertLess(time.process_time() - started, 5.0)
 
 
 def _api_zip(path: Path, files: dict[str, str]) -> None:

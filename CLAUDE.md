@@ -172,14 +172,15 @@ on the second PC) and `memory-mirror`.
   the log means another mission started, not that the probe's combat hung. `probe-group live` pins the resolution and
   `canSkipTutorial` and restores the owner's values (93.28). `rig-doctor`'s `launcher_prefs` check asks only whether a
   licence key is stored: the key is never read, printed or copied (owner rule 2026-11-17).
-- Run ruff as `uvx ruff check .`: the project `.venv` has none and no `AppData\Local\Python` install exists on this machine
-  (checked 2026-11-15); the local pre-commit hook falls back to `uvx` the same way. It runs pyflakes plus flake8-bugbear (`B`, four noisy rules ignored in `pyproject.toml`).
+- Run ruff as `uvx ruff@0.17.5 check .`: the project `.venv` has none and no `AppData\Local\Python` install exists on this machine
+  (checked 2026-11-15). `[tool.ruff] required-version` in `pyproject.toml` pins it: ruff refuses to run at another version, the
+  hooks and `checks.sh` run `uvx ruff@<pin>`, and CI's ruff-action names the same version (96.5 C8; change them together). It runs pyflakes plus flake8-bugbear (`B`, four noisy rules ignored in `pyproject.toml`).
 - Workspace arguments take a path (`"In operation/<name>"`); `audit-explain` refuses one without `working/`.
 
 ## Checks before committing
 
 ```bash
-uvx ruff check .                          # pyflakes + bugbear + syntax; one-line statements are house style
+uvx ruff@0.17.5 check .                   # pyflakes + bugbear + syntax; one-line statements are house style
 python -m bridgeforge.test_guard          # full suite; also fails if the checkout changed
 python -m bridgeforge docs-index          # after adding a check or CLI option; commit docs/*.md
 uv lock --check                           # after touching pyproject dependencies

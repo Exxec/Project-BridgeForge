@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(str(exc))
     print(f'{args.partition}: {len(chosen)} / {len(cases)} discovered cases', flush=True)
     started = time.perf_counter()
-    result = unittest.TextTestRunner(verbosity=1, resultclass=TimedResult).run(unittest.TestSuite(chosen))
+    result = unittest.TextTestRunner(verbosity=1, resultclass=TimedResult, buffer=True).run(unittest.TestSuite(chosen))
     elapsed = time.perf_counter() - started
     print(f'{args.partition} suite wall time: {elapsed:.3f}s', flush=True)
     if args.timings:
