@@ -69,8 +69,9 @@ def ready_workspaces(queue: Path) -> list[Path]:
 
 
 def _mod_info(root: Path) -> dict:
-    info = _load_lenient_json_file(root / "mod_info.json")
-    return info if isinstance(info, dict) else {}
+    from bridgeforge.mod_files import read_mod_info
+
+    return read_mod_info(root) or {}
 
 
 def rig_mod_ids(rig_mods: Path) -> dict[str, str]:

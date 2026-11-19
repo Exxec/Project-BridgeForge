@@ -23,7 +23,7 @@ from pathlib import Path
 
 from bridgeforge.bytecode import java_matrix
 from .progress import Checkpoint, report
-from bridgeforge.scan.scanner import _load_lenient_json_file
+from bridgeforge.mod_files import read_mod_info
 
 # Folders inside a Done/<Mod>/ archive that hold other copies of the mod, never the shipped one.
 NON_SHIPPED = {"original", "alt-original-descriptions", "workspace", "checkpoints", "reports", "scratch", "working"}
@@ -31,8 +31,8 @@ STATUS_RE = re.compile(r"Revival report status:\s*\*\*(\w+)\*\*")
 
 
 def _mod_info(folder: Path) -> dict | None:
-    info = _load_lenient_json_file(folder / "mod_info.json")
-    return info if isinstance(info, dict) and isinstance(info.get("id"), str) else None
+    info = read_mod_info(folder)
+    return info if info is not None and isinstance(info.get("id"), str) else None
 
 
 def _dep_ids(info: dict) -> list[str]:

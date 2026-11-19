@@ -46,12 +46,12 @@ class VendorPlanError(ValueError):
 
 
 def _mod_root(path: Path) -> Path:
-    path = Path(path).expanduser().resolve()
-    if (path / "working" / "mod_info.json").is_file():
-        return path / "working"
-    if (path / "mod_info.json").is_file():
-        return path
-    raise VendorPlanError(f"{path} is not a mod folder (no mod_info.json) or a workspace holding working/.")
+    from .mod_files import ModRootError, workspace_or_mod_root
+
+    try:
+        return workspace_or_mod_root(path)
+    except ModRootError as exc:
+        raise VendorPlanError(str(exc)) from exc
 
 
 def _rows(root: Path, table: str) -> dict[str, dict[str, str]]:

@@ -1,0 +1,1 @@
+- One module, `bridgeforge/mod_files.py`, finds a mod's folder and reads its mod_info.json; nine copies in nine modules now use it (96.5 A4).

@@ -236,10 +236,9 @@ RAW_ZIP_FOLDER = "_raw-zips"
 
 def _mod_root_of(folder: Path) -> Path | None:
     """The folder holding mod_info.json: the folder itself or its only subfolder that does."""
-    if (folder / "mod_info.json").is_file():
-        return folder
-    nested = [p for p in folder.iterdir() if p.is_dir() and (p / "mod_info.json").is_file()] if folder.is_dir() else []
-    return nested[0] if len(nested) == 1 else None
+    from .mod_files import nearest_mod_root
+
+    return nearest_mod_root(folder)
 
 
 def zip_raw_folder(folder: Path, repo_root: Path) -> Path:

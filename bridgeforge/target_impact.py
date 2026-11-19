@@ -48,8 +48,9 @@ class TargetImpactError(ValueError):
 
 
 def _mod_info(folder: Path) -> dict | None:
-    info = _load_lenient_json_file(folder / "mod_info.json") if (folder / "mod_info.json").is_file() else None
-    return info if isinstance(info, dict) else None
+    from .mod_files import read_mod_info
+
+    return read_mod_info(folder)
 
 
 def _mod_folder(candidate: Path) -> Path | None:

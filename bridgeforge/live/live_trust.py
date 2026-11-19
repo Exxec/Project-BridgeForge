@@ -59,10 +59,9 @@ def shipped_hash(working: Path) -> str:
 
 
 def _mod_info(working: Path) -> dict:
-    from bridgeforge.scan.scanner import _load_lenient_json_file
+    from bridgeforge.mod_files import read_mod_info
 
-    info = _load_lenient_json_file(Path(working) / "mod_info.json") if (Path(working) / "mod_info.json").is_file() else {}
-    return info if isinstance(info, dict) else {}
+    return read_mod_info(working) or {}
 
 
 # ---------------------------------------------------------------------------------------------------------------
