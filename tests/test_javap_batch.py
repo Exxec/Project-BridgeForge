@@ -183,11 +183,11 @@ class RealJavapTests(unittest.TestCase):
         for relative, text in _SOURCES.items():
             (root / "src" / relative).parent.mkdir(parents=True, exist_ok=True)
             (root / "src" / relative).write_text(text, encoding="utf-8")
-        subprocess.run([str(jdk.javac), "-d", str(root / "out"), *[str(root / "src" / r) for r in _SOURCES]], check=True,
+        subprocess.run([str(jdk.javac), "-encoding", "UTF-8", "-d", str(root / "out"), *[str(root / "src" / r) for r in _SOURCES]], check=True,
                        capture_output=True)
         (root / "src" / "r").mkdir()
         (root / "src" / "r" / "Bare.java").write_text("package r;\npublic class Bare { int x; }\n", encoding="utf-8")
-        subprocess.run([str(jdk.javac), "-g:none", "-d", str(root / "out"), str(root / "src" / "r" / "Bare.java")], check=True,
+        subprocess.run([str(jdk.javac), "-encoding", "UTF-8", "-g:none", "-d", str(root / "out"), str(root / "src" / "r" / "Bare.java")], check=True,
                        capture_output=True)  # no SourceFile attribute: no "Compiled from" line
         jar = root / "t.jar"
         with zipfile.ZipFile(jar, "w") as out:

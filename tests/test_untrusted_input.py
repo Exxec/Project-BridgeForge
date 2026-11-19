@@ -227,7 +227,7 @@ def _processor_mod(root, marker) -> tuple:
         "  public boolean process(Set<? extends TypeElement> a, RoundEnvironment r) { return false; }\n"
         "  public javax.lang.model.SourceVersion getSupportedSourceVersion() { return javax.lang.model.SourceVersion.latestSupported(); } }\n",
         encoding="utf-8")
-    subprocess.run([str(jdk.javac), "-d", str(root / "proc_classes"), str(root / "proc" / "evil" / "P.java")], check=True,
+    subprocess.run([str(jdk.javac), "-encoding", "UTF-8", "-d", str(root / "proc_classes"), str(root / "proc" / "evil" / "P.java")], check=True,
                    capture_output=True)
     mod = root / "mod"
     (mod / "jars").mkdir(parents=True)

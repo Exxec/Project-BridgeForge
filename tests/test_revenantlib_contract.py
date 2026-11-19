@@ -92,7 +92,7 @@ class RevenantLibJarTests(unittest.TestCase):
             (build / relative).parent.mkdir(parents=True, exist_ok=True)
             (build / relative).write_text(text, encoding="utf-8")
         files = [str(p) for p in list(api.rglob("*.java")) + list(build.rglob("*.java"))]
-        completed = subprocess.run([self.javac, "--release", "17", "-d", str(out), *files], capture_output=True, text=True, check=False)
+        completed = subprocess.run([self.javac, "-encoding", "UTF-8", "--release", "17", "-d", str(out), *files], capture_output=True, text=True, check=False)
         self.assertEqual(completed.returncode, 0, completed.stderr)
         jar = mod / "jars" / "RevenantLib.jar"
         jar.parent.mkdir(parents=True)

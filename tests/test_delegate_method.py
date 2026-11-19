@@ -58,8 +58,8 @@ class DelegateMethodTests(unittest.TestCase):
         (root / "src" / "p" / "Target.java").write_text(TARGET, encoding="utf-8")
         (root / "src" / "p" / "Fix.java").write_text(FIX, encoding="utf-8")
         javac = str(self.jdk.javac)
-        subprocess.run([javac, "--release", "17", "-d", str(root / "classes"), str(root / "src" / "p" / "Target.java")], check=True)
-        subprocess.run([javac, "--release", "17", "-cp", str(root / "classes"), "-d", str(root / "helper"), str(root / "src" / "p" / "Fix.java")], check=True)
+        subprocess.run([javac, "-encoding", "UTF-8", "--release", "17", "-d", str(root / "classes"), str(root / "src" / "p" / "Target.java")], check=True)
+        subprocess.run([javac, "-encoding", "UTF-8", "--release", "17", "-cp", str(root / "classes"), "-d", str(root / "helper"), str(root / "src" / "p" / "Fix.java")], check=True)
         jar = root / "mod.jar"
         with zipfile.ZipFile(jar, "w") as archive:
             archive.write(root / "classes" / "p" / "Target.class", "p/Target.class")
@@ -72,7 +72,7 @@ class DelegateMethodTests(unittest.TestCase):
             before = jar.read_bytes()
             result = delegate_methods(jar, _spec(root / "spec.json"), helper, root / "out" / "mod.jar")
             (root / "Main.java").write_text(MAIN, encoding="utf-8")
-            subprocess.run([str(self.jdk.javac), "-cp", str(root / "out" / "mod.jar"), "-d", str(root / "main"), str(root / "Main.java")], check=True)
+            subprocess.run([str(self.jdk.javac), "-encoding", "UTF-8", "-cp", str(root / "out" / "mod.jar"), "-d", str(root / "main"), str(root / "Main.java")], check=True)
             classpath = os.pathsep.join([str(root / "main"), str(root / "out" / "mod.jar")])
             ran = subprocess.run([str(self.jdk.java), "-Xverify:all", "-cp", classpath, "Main"], capture_output=True, text=True, check=False)
             names = zipfile.ZipFile(root / "out" / "mod.jar").namelist()

@@ -24,7 +24,7 @@ class Java_astTests(unittest.TestCase):
             root = Path(directory)
             source = root / "Fixture.java"
             source.write_text("class Fixture { static String value() { try { int i = 1; if (i > 0) System.out.print(\"\"); return new String(String.valueOf(Math.abs(-1))); } catch (RuntimeException ex) { return \"\"; } } }", encoding="utf-8")
-            completed = subprocess.run(["javac", "--release", "17", "-d", str(root), str(source)], capture_output=True, text=True, check=False)
+            completed = subprocess.run(["javac", "-encoding", "UTF-8", "--release", "17", "-d", str(root), str(source)], capture_output=True, text=True, check=False)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             result = inspect_bytecode([root / "Fixture.class"])
             self.assertEqual(result["mode"], "INSPECTION_ONLY")

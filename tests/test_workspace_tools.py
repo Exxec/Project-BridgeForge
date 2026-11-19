@@ -144,7 +144,7 @@ class ThisCheckNoiseTests(unittest.TestCase):
                 "public class C { static final String ID = \"x\"; Object o;\n"
                 "  String a() { java.util.Objects.requireNonNull(this); return ID; }\n"
                 "  void b() { java.util.Objects.requireNonNull(o); } }\n", encoding="utf-8")
-            subprocess.run([javac, "-d", str(root), str(root / "C.java")], check=True, capture_output=True)
+            subprocess.run([javac, "-encoding", "UTF-8", "-d", str(root), str(root / "C.java")], check=True, capture_output=True)
             calls, _ = _javap_stats(Path(javap), root / "C.class")
         self.assertEqual(calls["java/util/Objects.requireNonNull:(Ljava/lang/Object;)Ljava/lang/Object;"], 1)  # o, not this
 

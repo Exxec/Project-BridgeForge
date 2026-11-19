@@ -57,9 +57,11 @@ def helper_java_tools() -> tuple[str, str]:
     return str(jdk.javac), str(jdk.java)
 
 
-def find_jdk(explicit: Path | None = None, repo_root: Path | None = None) -> JdkInfo | None:
+def find_jdk(explicit: Path | None = None, repo_root: Path | None = None, prefer_major: int | None = None) -> JdkInfo | None:
     """Locate a JDK with a working javac. Order: explicit --jdk, this repo's rig, JAVA_HOME, PATH.
 
+    With `prefer_major`, the first candidate of that feature version wins over the order, and the order decides only
+    when none matches (the test suite asks for `.java-version`'s, so it compiles with the JDK CI uses; 96.5 C6).
     Returns None rather than raising, so callers can report an UNAVAILABLE status instead of a
     crash when no JDK is installed (e.g. on a CI runner with no Java toolchain configured).
     """
@@ -78,6 +80,7 @@ def find_jdk(explicit: Path | None = None, repo_root: Path | None = None) -> Jdk
     if which_javac:
         candidates.append((Path(which_javac).resolve().parent.parent, "PATH"))
     exe = ".exe" if os.name == "nt" else ""
+    found: list[JdkInfo] = []
     for home, source in candidates:
         try:
             home = home.expanduser().resolve()
@@ -85,8 +88,25 @@ def find_jdk(explicit: Path | None = None, repo_root: Path | None = None) -> Jdk
             continue
         javac = home / "bin" / f"javac{exe}"
         if javac.is_file():
-            return JdkInfo(home=home, javac=javac, javap=home / "bin" / f"javap{exe}", jar=home / "bin" / f"jar{exe}", source=source)
-    return None
+            found.append(JdkInfo(home=home, javac=javac, javap=home / "bin" / f"javap{exe}", jar=home / "bin" / f"jar{exe}", source=source))
+    if prefer_major is not None:
+        for info in found:
+            if jdk_major(info.home) == prefer_major:
+                return info
+    return found[0] if found else None
+
+
+_RELEASE_VERSION = re.compile(r'^JAVA_VERSION="(?:1\.)?(\d+)', re.MULTILINE)
+
+
+def jdk_major(home: Path) -> int | None:
+    """The feature version a JDK's `release` file names (`JAVA_VERSION="25.0.5"` -> 25, `"1.8.0_512"` -> 8), else None."""
+    try:
+        text = (Path(home) / "release").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    match = _RELEASE_VERSION.search(text)
+    return int(match.group(1)) if match else None
 
 
 @dataclass

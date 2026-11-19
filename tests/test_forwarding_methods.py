@@ -47,7 +47,7 @@ class ForwardingMethodTests(unittest.TestCase):
             apply_fix(compute_fix(mod, "forwarding-class-method-missing", {"vanilla_core": root / "core"}))
             text = source.read_text(encoding="utf-8")
             again = [f for f in scan_mod(mod, vanilla_core=root / "core").findings if f.id == "forwarding-class-method-missing"]
-            built = subprocess.run([javac, "-d", str(root / "out"), "-cp", str(api), str(source)], capture_output=True, text=True, check=False)
+            built = subprocess.run([javac, "-encoding", "UTF-8", "-d", str(root / "out"), "-cp", str(api), str(source)], capture_output=True, text=True, check=False)
         self.assertEqual(found[0].evidence, ["getCommands2()Ljava/util/List;", "isBeingIgnored(Z)Z", "setWasHulk(Z)V"])
         self.assertIn("public boolean isBeingIgnored(boolean a0) { return drone.isBeingIgnored(a0); }", text)
         self.assertIn("    public boolean isBeingIgnored() {", text)  # kept, but no longer @Override
