@@ -12,6 +12,7 @@ The owner must leave the mouse and keyboard alone while it runs (about three min
 from __future__ import annotations
 
 import contextlib
+import json
 import re
 import time
 from dataclasses import dataclass, field
@@ -60,6 +61,12 @@ COMBAT_START_TIMEOUT = 45.0
 # that line, not into the transition.
 POST_BATTLE_SETTLE = 15.0
 FINGERPRINT_SAVED = "fingerprint|INFO|save|cmdSave returned true"  # save_reload stage (next probe version)
+# 93.59: with save_after_checks the probe saves right after its first 'campaign END'. Keys and clicks sent during the save are lost:
+# P962BS4 (27.8 s from END to 'cmdSave returned') and P962YC2 (20.3 s) stayed on the campaign map, P962KR3 (2.3 s) passed. The run
+# leaves the campaign once the probe has logged the save's result (INFO or FAIL).
+PROBE_SAVED = re.compile(r"BF-PROBE\|[^|\r\n]+\|save\|(?:INFO|FAIL)\|campaign\|cmdSave returned")
+PROBE_SAVE_TIMEOUT = 180.0
+PROBE_SAVE_SETTLE = 3.0  # the save's own overlay closes after the line
 ROUND_LINE = re.compile(r"combat-round\|INFO\|round (\d+) of (\d+)")
 
 
@@ -453,7 +460,7 @@ def continue_after_battle(log: Path, hands: Hands, round_from: int, timeout: flo
 
 def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: float = 600, combat_timeout: float = 240,
           generic_fallback: bool = True, new_game_grace: float = NEW_GAME_GRACE,
-          vanilla_rows: int = VANILLA_MISSION_ROWS, save_reload: bool = False) -> LiveResult:
+          vanilla_rows: int = VANILLA_MISSION_ROWS, save_reload: bool = False, probe_saves: bool = False) -> LiveResult:
     """Run the whole live sequence against a started game whose stdout is `log`."""
     result = LiveResult("LIVE_STUCK", log=str(log))
 
@@ -485,6 +492,12 @@ def drive(log: Path, hands: Hands, menu_timeout: float = 240, campaign_timeout: 
         if not wait_for(log, FINGERPRINT_SAVED, campaign_timeout, hands):
             return stuck("fingerprint-save", "no 'fingerprint|save|cmdSave returned true' probe line: save_reload.after_days not reached or cmdSave failed")
         result.stages.append("fingerprint-saved")
+    if probe_saves:
+        if not wait_for(log, PROBE_SAVED, PROBE_SAVE_TIMEOUT, hands):
+            return stuck("probe-save", "the probe config asks for a save after the checks, and no 'save|campaign|cmdSave returned' "
+                                       "probe line came: leaving the campaign during a save loses the keys and clicks (93.59)")
+        result.stages.append("probe-saved")
+        hands.sleep(PROBE_SAVE_SETTLE)
     to_mission_list(hands)
     rounds_total, round_no = 1, 0
     layout = mission_list_layout(_log_text(log), vanilla_rows)
@@ -625,6 +638,17 @@ def running_game(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", 
             launch.release_manifest(rig, test_id, bat)
 
 
+def probe_saves_after_checks(rig: Path) -> bool:
+    """Whether the rig's installed probe config asks the probe to save after its first checks (`--save-after-checks`)."""
+    from bridgeforge.run_manifest import CONFIG_RELATIVE
+
+    try:
+        config = json.loads((Path(rig) / CONFIG_RELATIVE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(config, dict) and config.get("save_after_checks") is True
+
+
 def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu_timeout: float = 240,
              natural_exit: bool = False, exit_wait: float = 180, save_reload: bool = False,
              graceful_exit: bool = True, interactive: bool = False, scenario: str = "probe-group live") -> LiveResult:
@@ -643,7 +667,8 @@ def live_run(rig: Path, test_id: str, bat_name: str = "run-j25-direct.bat", menu
                     hands.sleep(EXIT_POLL_SECONDS)
                 outcome["await_exit"] = True
                 return LiveResult("LIVE_DONE", stages=["interactive"], log=str(log))
-            result = drive(log, hands, menu_timeout=menu_timeout, vanilla_rows=vanilla_rows, save_reload=save_reload)
+            result = drive(log, hands, menu_timeout=menu_timeout, vanilla_rows=vanilla_rows, save_reload=save_reload,
+                           probe_saves=probe_saves_after_checks(rig))
             outcome["await_exit"] = result.verdict == "LIVE_DONE"
             return result
     except LaunchNoProcess as exc:
