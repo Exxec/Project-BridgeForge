@@ -1,4 +1,7 @@
-"""Opt-in, invocation-local reuse of pure parsed facts, never qualification evidence.
+"""Invocation-local reuse of pure parsed facts, never qualification evidence.
+
+Every `scan_mod` call uses it (96.5 P5: a scan otherwise parsed each JSON file and jar class 6-10 times). A portfolio run
+without `--reuse-parses` turns it off with `no_reuse()`, so its reuse-on and reuse-off timings still compare.
 
 The byte budget covers serialized payloads; Python container overhead and active
 caller objects are additional. No files are read or written by this cache. Pickle
@@ -15,7 +18,8 @@ import pickle
 from typing import Callable, Iterator, TypeVar
 
 T = TypeVar("T")
-_active: ContextVar["ParseReuse | None"] = ContextVar("parse_reuse", default=None)
+_OFF = "off"  # set by no_reuse(): reuse_within opens nothing and parsed_facts always produces
+_active: ContextVar["ParseReuse | str | None"] = ContextVar("parse_reuse", default=None)
 
 
 class ParseReuse:
@@ -70,8 +74,30 @@ def reuse_parses(*, max_entries: int, max_payload_bytes: int) -> Iterator[ParseR
         _active.reset(token)
 
 
+@contextmanager
+def no_reuse() -> Iterator[None]:
+    """Turn reuse off inside, even for scan_mod's own scope (a portfolio run without --reuse-parses)."""
+    token = _active.set(_OFF)
+    try:
+        yield None
+    finally:
+        _active.reset(token)
+
+
+@contextmanager
+def reuse_within(*, max_entries: int, max_payload_bytes: int) -> Iterator[ParseReuse | None]:
+    """Keep the enclosing scope when there is one (a portfolio worker sets its own limits, or turns reuse off), else start
+    a bounded one."""
+    enclosing = _active.get()
+    if enclosing is not None:
+        yield enclosing if isinstance(enclosing, ParseReuse) else None
+        return
+    with reuse_parses(max_entries=max_entries, max_payload_bytes=max_payload_bytes) as cache:
+        yield cache
+
+
 def parsed_facts(extractor: str, content: bytes | Callable[[], bytes], produce: Callable[[], T]) -> T:
     cache = _active.get()
-    if cache is None:
+    if not isinstance(cache, ParseReuse):
         return produce()
     return cache.facts(extractor, content() if callable(content) else content, produce)

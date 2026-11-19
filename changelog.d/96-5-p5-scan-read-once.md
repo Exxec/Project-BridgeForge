@@ -1,0 +1,1 @@
+- A scan parses each JSON file and jar class once and resolves each Java source once: 17-27% faster on Sunrider and UAF with identical findings (96.5 P5/P8).

@@ -7,6 +7,7 @@ from collections import Counter
 from pathlib import Path
 from pathlib import PurePosixPath
 
+from ..analysis_reuse import reuse_within
 from ..models import ScanResult, TargetProfile
 from .scan_common import (  # noqa: F401
     CLASS_MAJOR_TO_JAVA,
@@ -535,7 +536,19 @@ def _scan_jar_source_not_rebuilt(root: Path, result: ScanResult) -> None:
         )
 
 
+# One scan's parse reuse (96.5 P5): checks re-read the same files, and a Sunrider scan parsed its JSON files and jar
+# classes 6-10 times each. A scan used 7,282 entries and 20 MB; the LRU evicts past these limits.
+SCAN_REUSE_ENTRIES = 50_000
+SCAN_REUSE_BYTES = 128 * 1024 * 1024
+
+
 def scan_mod(input_path: Path, target: TargetProfile | None = None, vanilla_core: Path | None = None, compile_check: bool = False, provider_roots: list[Path] | None = None) -> ScanResult:
+    """Scan one mod folder. Each JSON file and jar class is parsed once per scan; an enclosing reuse scope is kept."""
+    with reuse_within(max_entries=SCAN_REUSE_ENTRIES, max_payload_bytes=SCAN_REUSE_BYTES):
+        return _scan_mod(input_path, target, vanilla_core, compile_check, provider_roots)
+
+
+def _scan_mod(input_path: Path, target: TargetProfile | None, vanilla_core: Path | None, compile_check: bool, provider_roots: list[Path] | None) -> ScanResult:
     root = input_path.expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"Input mod directory does not exist: {root}")

@@ -243,6 +243,24 @@ Check S series implementation plan and if applicable add remaining items to road
       - scripts read once;
       - each caller gets its own faction set.
     - P5, P8 (M, S): read each source and each jar class once per scan.
+      **Done 2026-11-19.** Measured on Sunrider (86 `.java` files, 240 jar classes, RC7 core, White_Legion): one scan read its
+      384 files 27,406 times and its jar classes 3,756 times; the lenient JSON parser ran 2,399 times. Per-check timing
+      showed the reads themselves were cheap and two things cost:
+      - `java_ast.analyze_sources` resolved a path for each of its 12,003 facts (3.4 of its 4.2 profiled seconds); it
+        now resolves each of the 86 files once.
+      - Each check re-parsed the same JSON files and jar classes. `scan_mod` now opens the existing bounded parse-reuse
+        scope (`analysis_reuse.reuse_within`: 50,000 entries, 128 MB; an enclosing portfolio-worker scope is kept), so a
+        file's JSON and a class's facts are parsed once per scan. Each hit is an independent copy, so a check that
+        changes its result cannot affect another. Sunrider used 7,282 entries and 20 MB.
+      Result, median of three fresh processes each scanning twice, identical findings (SHA-256 of the sorted findings):
+      Sunrider 9.91 s -> 7.97 s first scan, 6.98 s -> 5.06 s second; UAF 23.25 s -> 18.73 s and 20.63 s -> 17.09 s.
+      Left as they are: the core jars are parsed once per process already (P7), and the remaining raw text reads cost
+      well under a second. `portfolio` without `--reuse-parses` now turns reuse off (`analysis_reuse.no_reuse`), so its
+      reuse-on and reuse-off comparison still holds. Tests: `tests/test_scan_read_once.py` (each source resolved once
+      for 50 facts, was 50 each; the reuse scope kept or opened and closed; a scan parses each JSON file once and its
+      one jar class once, which was 23 times; scan_mod joins an enclosing scope and `no_reuse` turns it off). Removing
+      either fix fails its test. An independent review found no behaviour change in the scan; its three points (the
+      portfolio flag, the error type for an unknown AST line, thin tests) are taken.
     - P9 (M): memoize the AST helper in tests (an estimated 2-3 of 11 minutes).
     - P10 (M): a process pool for target-impact and corpus-index (5 -> about 1.5 min).
   - **CI and tooling:**
