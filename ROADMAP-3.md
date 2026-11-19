@@ -856,6 +856,19 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   named by its jar path and a valid jar behind a junction not used; describing twice is identical; malformed shapes are
   reported; bad anchors refused; the CLI). Without the line-ending normalization, or the junction guard, a test fails
   (mutation-checked).
+  **WP2 Done 2026-11-19** (GR-1: export, fixtures and pin).
+  - `docs/contracts/gene/` is the contract a sister repository copies byte for byte:
+    - `gene.schema.json`, a JSON Schema (2020-12) of schema 1;
+    - `fixtures/`, two valid manifests (one hull mod gene, and the same gene from another mod and build, with the same
+      identity) and nine invalid ones, each breaking exactly one rule;
+    - `CONTRACT.json`, with the identity rule in words, every file's SHA-256 and each fixture's verdict.
+  - The consumer pins `CONTRACT.json`'s SHA-256, as it pins `target export`. `bridgeforge gene contract` checks the
+    committed folder against what `bridgeforge/genome/contract.py` writes and prints the pin; `--write` rewrites it.
+    The sister repositories add their conformance tests when their phase starts (D3); WP3 reports pin drift.
+  - Tests: `tests/test_gene_contract.py` (the committed folder is current; fixture verdicts follow `validate`; each invalid
+    fixture breaks one rule; equal identities across mods; the schema requires what `validate` requires; every file listed
+    by hash; `check` names a changed, missing or extra file). Mutation-checked: an unsorted identity and a dropped duplicate
+    check each fail the tests.
   Next: WP2 (GR-1: export, fixtures and pin) and WP3 (GR-4: `trace` and the cross-repository check).
 - 94.G2 **Sequencing and proof**: closure for campaign features and registration slicing; subtraction and isolation proofs per
   gene. Project Go exports a gene's strings as one unit.
