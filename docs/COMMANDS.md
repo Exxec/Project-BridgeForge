@@ -2662,6 +2662,9 @@ after `install`: boot the rig unattended to the main menu and triage the startup
 | `--bat` BAT | default run-j25-direct.bat | rig launcher to start (default: java 25, started directly) |
 | `--timeout` TIMEOUT | default 240 | - |
 | `--log-name` LOG_NAME | - | - |
+| `--direct` | - | start the game directly (-DlaunchDirect; needs a stored licence key) and place its window instead of clicking the launcher |
+| `--resolution` WxH | default 1920x1440 | with --direct: the game window's size (default 1920x1440, the size the click points were measured in) |
+| `--client-top` Y | - | with --direct: move the window so its client area starts at screen y Y (-200 keeps the click points above a 1080-pixel taskbar) |
 | `--rig` RIG | - | - |
 | `--queue` QUEUE | - | - |
 | `--json` | - | - |
@@ -2675,6 +2678,9 @@ after `install`: play the group's live run unattended with real mouse clicks (la
 | `test_id` | - | log name: writes <rig>/logs/<TESTID>.stdout.log, readable by `probe-group report` and `record` |
 | `--bat` BAT | default run-j25-direct.bat | - |
 | `--menu-timeout` MENU_TIMEOUT | default 240 | - |
+| `--direct` | - | start the game directly (-DlaunchDirect; needs a stored licence key) and place its window instead of clicking the launcher |
+| `--resolution` WxH | default 1920x1440 | with --direct: the game window's size (default 1920x1440, the size the click points were measured in) |
+| `--client-top` Y | - | with --direct: move the window so its client area starts at screen y Y (-200 keeps the click points above a 1080-pixel taskbar) |
 | `--natural-exit` | - | after the run, do not kill the game: wait for you to quit it from the main menu and record its return code (NATURAL), or KILLED if it is still up after --exit-wait |
 | `--no-graceful-close` | - | do not close the game by itself when the probe's done marker appears; stop it as before (the exit is then not recorded) |
 | `--exit-wait` EXIT_WAIT | default 180 | with --natural-exit: seconds to wait for the game to exit by itself (default 180) |
@@ -2697,6 +2703,9 @@ run a plan's groups one after another: install (staging providers, probe save af
 | `--note` NOTE | default  | with --archive: the record note (the owner's words; what ran) |
 | `--also-enable` MOD_OR_SET | repeatable | as for install; repeatable |
 | `--bat` BAT | - | launcher bat (default: live's) |
+| `--direct` | - | start the game directly (-DlaunchDirect; needs a stored licence key) and place its window instead of clicking the launcher |
+| `--resolution` WxH | default 1920x1440 | with --direct: the game window's size (default 1920x1440, the size the click points were measured in) |
+| `--client-top` Y | - | with --direct: move the window so its client area starts at screen y Y (-200 keeps the click points above a 1080-pixel taskbar) |
 | `--out` OUT | - | summary JSON (default: <queue>/_live-queue/live-queue-<date>.json) |
 | `--test-prefix` TEST_PREFIX | - | test id prefix (default LQ-<date>) |
 | `--quiet` | - | no per-group progress lines |
