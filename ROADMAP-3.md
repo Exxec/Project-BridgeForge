@@ -541,6 +541,24 @@ Check S series implementation plan and if applicable add remaining items to road
       its parser; `compat-set` with another sub-command returns 2; a failed probe-group smoke prints its JSON once and
       returns 1, an error returns 2, a stopped record returns 1; a ratchet: no new function over 200 lines, the three left
       being `build_archaeology`, `_scan_variant_validity` and `_scan_sources`).
+      **A6 Done 2026-11-19.** The four modules over 1,000 lines are split along their seams; the moved code is unchanged
+      apart from the one write noted below.
+      - behavior_discovery (1,274) -> behavior_discovery 594 (archaeology, the behaviour model) + behavior_evaluation 702
+        (probe and save baselines, synthesized tests, expected changes, diff, release evaluation, decisions, coverage).
+      - probe_group (1,115) -> probe_group 692 (plan, install, bisect) + probe/probe_record 447 (report, record, smoke).
+      - translation (1,086) -> translation 702 (export, prefill, apply, check) + translation_formats 409 (the CSV,
+        JSON-like, loose Java, text-line and class-file readers and writers).
+      - dossier (1,076) -> dossier 560 (assembly, findings, open questions) + dossier_sections 311 (inventory, artifacts)
+        + dossier_render 218 (markdown).
+      Each new module depends on the old one or not at all, never both ways. Callers import from the module that defines
+      the name (no shims; Project Salvor imports none of the four). A script moved the statements and an AST check
+      confirmed every top-level statement of each old module is in exactly one of its parts. The one exception:
+      `_write_expected_decision`'s hand-made temp-file-and-replace is now `atomic_write_text` (the same bytes), so
+      behavior_discovery's safeio baseline drops by one. record_group's bare `write_text` of REVIVAL_REPORT.md stays bare (an
+      atomic replace fails on Windows while an editor holds the file) and its count moves with it to probe/probe_record.py.
+      An independent review found no blocking bugs. Tests: `tests/test_module_size.py` (no module over 800 lines unless
+      listed with a cap equal to its length, so it cannot grow back; only revive.py, 886, is listed; fails on the old
+      1,076-line dossier and on a cap left above its module).
 - 96.6 (S) **`archive` does what `record --archive` does first.** On 2026-11-17 the owner said "archive all". All four plain
   `archive` runs refused (Templars, KoC, Eridani, Scrapyard):
   - `audit-explain --auto` then proved 9 of their unexplained files: KoC's moved work files, Scrapyard's credits file and

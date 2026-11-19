@@ -273,7 +273,7 @@ def _probe_duel(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
 
 def _probe_smoke(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
     """`probe-group smoke`: its result, or an exit code when it stops early."""
-    from bridgeforge.probe.probe_group import smoke_group
+    from bridgeforge.probe.probe_record import smoke_group
     result = smoke_group(rig, bat_name=args.bat, timeout=args.timeout, log_name=args.log_name)
     if not args.json:
         boot = result["boot"]
@@ -306,7 +306,7 @@ def _probe_bisect(args: argparse.Namespace, queue: Path, rig: Path) -> dict | in
 def _probe_record(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
     """`probe-group record`: its result, or an exit code when it stops early."""
     from bridgeforge.probe.probe_config import CONFIG_FILE
-    from bridgeforge.probe.probe_group import record_group
+    from bridgeforge.probe.probe_record import record_group
     config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
     result = record_group(rig / "logs" / f"{args.test_id}.stdout.log", config, queue, rig, test_id=args.test_id, archive=args.archive, refresh=args.refresh,
                           accept=args.accept, note=args.note, observe_exit=args.observe_exit)
@@ -330,10 +330,10 @@ def _probe_record(args: argparse.Namespace, queue: Path, rig: Path) -> dict | in
 
 def _probe_report(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
     """`probe-group report` (any other sub-command): its result."""
-    from bridgeforge.probe.probe_group import group_report
+    from bridgeforge.probe.probe_record import group_report
     from bridgeforge.probe.probe_config import CONFIG_FILE
     config = json.loads((rig / "saves" / "common" / CONFIG_FILE).read_text(encoding="utf-8"))
-    from bridgeforge.probe.probe_group import accepted_probe_findings
+    from bridgeforge.probe.probe_record import accepted_probe_findings
     result = group_report(args.log, config, mods_dir=rig / "mods", accepted=accepted_probe_findings(queue, rig / "mods"))
     if not args.json:
         print(f"FATAL={result['fatal']} MOD-ERROR={result['mod_errors']}; content-ids ran: {result['content_ids_ran']}")

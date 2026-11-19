@@ -1,0 +1,1 @@
+- The four modules over 1,000 lines (behavior_discovery, probe_group, translation, dossier) are split along their seams, and a test keeps every module under 800 lines unless it is listed with a cap (96.5 A6).

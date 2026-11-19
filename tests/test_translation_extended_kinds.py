@@ -132,7 +132,7 @@ class ExtendedTranslationKindsTests(unittest.TestCase):
             result = apply_translation(mod, doc, out_dir=out)
 
             self.assertEqual(result["status"], "OK")
-            from bridgeforge.translation import _class_string_constants
+            from bridgeforge.translation_formats import _class_string_constants
             self.assertEqual(_class_string_constants((out / path.relative_to(mod)).read_bytes())[5], "Hello")
             self.assertEqual(path.read_bytes(), original)
 

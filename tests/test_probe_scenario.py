@@ -228,7 +228,7 @@ class EvaluationTests(unittest.TestCase):
 
 class RecordWiringTests(unittest.TestCase):
     def test_member_scenarios_are_judged_from_the_workspace_file(self):
-        from bridgeforge.probe.probe_group import evaluate_member_scenarios
+        from bridgeforge.probe.probe_record import evaluate_member_scenarios
 
         with resolved_temp_dir() as tmp:
             workspace = tmp / "ws"

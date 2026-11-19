@@ -18,7 +18,8 @@ import json
 from pathlib import Path
 
 from .safeio import atomic_write_json
-from .translation import _AUTHOR_PROVENANCE, _has_cjk, _placeholders
+from .translation_formats import _has_cjk
+from .translation import _AUTHOR_PROVENANCE, _placeholders
 
 DEFAULT_MEMORY_RELATIVE = Path("bridgeforge-state") / "translations" / "memory.json"
 MEMORY_PROVENANCE = "memory"

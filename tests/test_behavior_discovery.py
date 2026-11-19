@@ -8,19 +8,21 @@ from pathlib import Path
 
 from bridgeforge.behavior_discovery import (
     DiscoveryError,
-    behavior_diff,
     build_archaeology,
     build_behavior_model,
+    write_archaeology,
+    write_behavior_model,
+)
+from bridgeforge.behavior_evaluation import (
+    add_expected_change,
+    behavior_diff,
     build_coverage,
     build_probe_baseline,
     build_save_baseline,
     check_expected_changes,
     evaluate_behavior_release,
     synthesize_tests,
-    add_expected_change,
     update_expected_change_status,
-    write_archaeology,
-    write_behavior_model,
 )
 from tests.support import write_text as _write
 

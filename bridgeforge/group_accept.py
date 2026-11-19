@@ -39,7 +39,7 @@ def context_of(manifest: dict | None) -> dict | None:
 
 def _earlier_entries(workspace: Path, context: dict | None = None) -> list[dict]:
     """Acceptances that still apply to the workspace: same mod version, plus the standing probe_accepted.json lines."""
-    from bridgeforge.probe.probe_group import ACCEPTED_PROBE_FILE
+    from bridgeforge.probe.probe_record import ACCEPTED_PROBE_FILE
 
     entries: list[dict] = []
     version = _current_version(workspace)
@@ -76,7 +76,7 @@ def _parity_entries(log: Path, workspaces: list[Path]) -> list[dict]:
     The key counts as covered only when every id of every such line of that mod is accepted and no list was capped (fewer ids
     listed than missing): Navarchy of Tania's G4B-LIVE-0985a-20261117 stopped here with its accepted Zufalliger Krieg system."""
     from bridgeforge.live.live_content_parity import _MISSING, _PARITY_LINE
-    from bridgeforge.probe.probe_group import ACCEPTED_PROBE_FILE
+    from bridgeforge.probe.probe_record import ACCEPTED_PROBE_FILE
     from bridgeforge.scan.scanner import _load_lenient_json_file
 
     try:

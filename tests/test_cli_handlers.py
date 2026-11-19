@@ -66,7 +66,7 @@ class HandlerBehaviourTests(unittest.TestCase):
 
     def test_a_failed_smoke_prints_its_json_once_and_returns_1(self) -> None:
         failed = {"verdict": "SMOKE_FAIL", "boot": {}, "fatal": 1, "mod_errors": 0, "load_errors": []}
-        with resolved_temp_dir() as root, mock.patch("bridgeforge.probe.probe_group.smoke_group", return_value=failed):
+        with resolved_temp_dir() as root, mock.patch("bridgeforge.probe.probe_record.smoke_group", return_value=failed):
             code, out = self._probe("smoke", root / "_rig", bat=None, timeout=1, log_name=None)
         self.assertEqual(code, 1)
         self.assertEqual(json.loads(out), failed)  # one document: a second print would not parse
@@ -74,7 +74,7 @@ class HandlerBehaviourTests(unittest.TestCase):
     def test_a_sub_command_error_still_returns_2(self) -> None:
         from bridgeforge.probe.probe_group import ProbeGroupError
 
-        with resolved_temp_dir() as root, mock.patch("bridgeforge.probe.probe_group.smoke_group", side_effect=ProbeGroupError("no rig")):
+        with resolved_temp_dir() as root, mock.patch("bridgeforge.probe.probe_record.smoke_group", side_effect=ProbeGroupError("no rig")):
             code, out = self._probe("smoke", root / "_rig", bat=None, timeout=1, log_name=None)
         self.assertEqual((code, out), (2, ""))
 
@@ -86,7 +86,7 @@ class HandlerBehaviourTests(unittest.TestCase):
             rig = root / "_rig"
             (rig / "saves" / "common").mkdir(parents=True)
             (rig / "saves" / "common" / CONFIG_FILE).write_text("{}", encoding="utf-8")
-            with mock.patch("bridgeforge.probe.probe_group.record_group", return_value=stopped):
+            with mock.patch("bridgeforge.probe.probe_record.record_group", return_value=stopped):
                 code, out = self._probe("record", rig, test_id="T1", archive=False, refresh=False, accept=False, note=None,
                                         observe_exit=False)
         self.assertEqual(code, 1)

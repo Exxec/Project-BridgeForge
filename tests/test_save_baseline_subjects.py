@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridgeforge.behavior_discovery import build_save_baseline
+from bridgeforge.behavior_evaluation import build_save_baseline
 
 CAMPAIGN = """<CampaignEngine z="1">
   <factionManager z="2">
