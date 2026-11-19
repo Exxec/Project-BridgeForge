@@ -278,6 +278,17 @@ Check S series implementation plan and if applicable add remaining items to road
       portfolio flag, the error type for an unknown AST line, thin tests) are taken.
     - P9 (M): memoize the AST helper in tests (an estimated 2-3 of 11 minutes).
     - P10 (M): a process pool for target-impact and corpus-index (5 -> about 1.5 min).
+      **target-impact part done 2026-11-19.** Each mod's check (`mod_impact`) is independent and read-only, so `--jobs N`
+      (default up to 4, one CPU left free; 1 keeps the in-process loop) checks mods in worker processes. The main process
+      keeps the checkpoint, so an interrupted run still resumes; records stay in the mods' order and the JSON and markdown
+      are unchanged. Progress lines now come in the order mods finish, numbered by mods finished, resumed ones first.
+      Measured on White_Legion, RC8 -> RC7 over the owner's RC8 `mods` folder (191 mods, read-only): 68 s with one worker
+      and 22 s with four once the files were cached (252 s for the first, cold run), and the two JSON results identical
+      (12 BREAKS, 5 RELINK, 5 REVIEW, 169 CLEAN). On 8 mods the gain is small (6-8 s -> 5 s): each worker parses both cores
+      once. corpus-index is not done: its indexers write to SQLite as they read, so a pool needs them split into read and
+      write first.
+      Tests: `tests/test_target_impact.py` (two workers give the same result, in the same order, with one progress line per
+      mod; `--jobs 0` refused; the resume test reads the new numbering).
   - **CI and tooling:**
     - C3 (S): stop duplicate push and pull_request runs. 101 of 191 SHAs ran twice, and nine PRs queued for hours on
       2026-11-17. Docs-only PRs run only the doc-reading tests.
@@ -1443,6 +1454,14 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   Tests: `tests/test_save_doctor.py` (each list kind, a skin's hull id and a mod's hull defined, `knownIndustries` and a
   non-faction element ignored, the check skipped without a core). Collecting nothing, or collecting outside a Faction, fails
   it (mutation-checked). Next: Salvor's `repair` drops those ids from the lists, and the candidate is run again.
+- 93.57 (S) **A MagicLib bounty line went to the group, not its mod.** YunruCore's 96.2 live run (P962YC-LIVE-0985a-20261119)
+  read UNCLEAR: its eight bounty lines (`bounty|yunrucore/<id>|MagicLib has no bounty data for this id (not loaded)`) were
+  attributed to no member, because `group_report` matches a line's subject against content ids and a bounty names
+  `<mod id>/<bounty id>`. Each of the eight lists `required_mods_id` naming sibling Yunru mods the solo run did not enable,
+  so MagicLib was right not to load them, but the mod's own `probe_accepted.json` could not apply to a group line.
+  **Done 2026-11-19.** A bounty line whose subject starts with a member's mod id belongs to that member, so it fails that
+  member or is cleared by its acceptance. Tests: `tests/test_probe_group.py`
+  (`test_a_bounty_line_belongs_to_the_mod_it_names_and_its_acceptance_applies`; fails without the change).
 - 93.38 **A group record describes another run's save.** `record_group` takes `save_made_with` from the rig's newest save
   (`_newest_save_made_with`, by modification time), so G3-LIVE-0985a-20261117 (Everybody loves KoC), recorded after group 4's live
   run, lists `navarchy_of_tania` and not KoC among its save's mods. Take the save the run's own log names, or none, and correct

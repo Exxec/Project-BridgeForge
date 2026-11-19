@@ -123,6 +123,26 @@ class MergeAndReportTests(unittest.TestCase):
         self.assertEqual(report["members"]["mod_a"]["verdict"], "PASS")
         self.assertEqual(report["members"]["mod_b"]["verdict"], "FAIL")
 
+    def test_a_bounty_line_belongs_to_the_mod_it_names_and_its_acceptance_applies(self) -> None:
+        # MagicLib bounty lines name "<mod id>/<bounty id>"; YunruCore's eight went to the group and read UNCLEAR, and its own
+        # probe_accepted.json could not apply (P962YC-LIVE-0985a-20261119).
+        with resolved_temp_dir() as root:
+            queue = root / "q"
+            merged = merge_configs([build_probe_config(_workspace(queue, "A", "mod_a", "hull_a")),
+                                    build_probe_config(_workspace(queue, "B", "mod_b", "hull_b"))])
+            log = root / "run.stdout.log"
+            log.write_text(
+                "5 [main] INFO  com.fs.starfarer.StarfarerLauncher  - Starting\n"
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.3.3|content-ids|OK|all-content|checked=2 failed=0 ship-variants built=2\n"
+                "9 [Thread-2] INFO  com.bridgeforge.probe.ProbeLog  - BF-PROBE|0.3.3|bounty|FAIL|mod_b/b_hunt|MagicLib has no bounty data for this id (not loaded)\n",
+                encoding="utf-8")
+            plain = group_report(log, merged)
+            accepted = group_report(log, merged, accepted={"mod_b": [{"check": "bounty", "subject": "mod_b/b_hunt", "reason": "needs a sibling mod"}]})
+        self.assertEqual(plain["unattributed"], [])
+        self.assertEqual((plain["members"]["mod_a"]["verdict"], plain["members"]["mod_b"]["verdict"]), ("PASS", "FAIL"))
+        self.assertEqual(accepted["members"]["mod_b"]["verdict"], "PASS")
+        self.assertEqual(len(accepted["members"]["mod_b"]["accepted"]), 1)
+
     def test_an_accepted_probe_finding_is_listed_and_no_longer_fails_the_mod(self) -> None:
         # Magellan's hidden magellan_startigers builds no patrol and nothing spawns its fleets (GRP5C-20261006); the owner-side
         # decision lives in the workspace's working/reports/probe_accepted.json with a reason
