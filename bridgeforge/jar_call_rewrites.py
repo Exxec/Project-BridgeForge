@@ -26,7 +26,7 @@ from .signature_rewrites import _PORTRAIT_OLD
 from .zipsafe import MAX_CLASS_BYTES, read_limited
 
 _API = "com/fs/starfarer/api/"
-INVOKESPECIAL, INVOKESTATIC, INVOKEINTERFACE = 183, 184, 185
+INVOKEVIRTUAL, INVOKESPECIAL, INVOKESTATIC, INVOKEINTERFACE = 182, 183, 184, 185
 
 
 @dataclass(frozen=True)
@@ -37,7 +37,7 @@ class CallRule:
     descriptor: str
     opcode: int
     new_descriptor: str
-    constant: str  # "null" or "false"
+    constant: str  # "null", "false", or "getter:NAME:()I:K" (the receiver's NAME() + K; 95.14)
 
     @property
     def gate(self) -> tuple[str, tuple[str, str], tuple[str, str]]:
@@ -53,6 +53,12 @@ RULES = (
     # null is RC8's behaviour: 0.98.5a picks with the Random only when one is given (signature_rewrites, item 91).
     CallRule("pickPortraitPreferNonDuplicate", _API + "impl/campaign/events/OfficerManagerEvent", "pickPortraitPreferNonDuplicate",
              _PORTRAIT_OLD, INVOKESTATIC, _PORTRAIT_OLD.replace(";)", ";Ljava/util/Random;)"), "null"),
+    # RC8's reportSuccess() counted one success (successesThisLevel++). RC7's reportSuccess(int completedLevel) counts one
+    # exactly when completedLevel == getLevel() + 1 (both versions' starfarer.api.zip, read 2026-11-19); RC7's own caller,
+    # PersonBountyIntel, passes its bounty's level, which a rule for every mod cannot know. So getLevel() + 1 keeps RC8's
+    # progression (ROADMAP-3 95.14; Vayra's Sector's VayraPersonBountyIntel and VayraUniqueBountyIntel make the call).
+    CallRule("reportSuccess", _API + "impl/campaign/shared/PersonBountyEventData", "reportSuccess", "()V", INVOKEVIRTUAL, "(I)V",
+             "getter:getLevel:()I:1"),
 )
 
 
