@@ -248,6 +248,30 @@ class EnabledModsResolveCheckTests(unittest.TestCase):
             check = next(c for c in result["checks"] if c["name"] == "enabled_mods_resolve")
             self.assertEqual(check["status"], "PASS")
 
+    def test_mods_are_compared_with_the_rig_cores_own_base_version(self) -> None:
+        # 96.3/96.5 A8: the fixed "0.98a" warned about every mod revived to 0.98.5a on the 0.98.5a rig, and passed a 0.98a mod
+        # that rig's launcher unchecks.
+        import zipfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rig = _make_isolated_rig(root)
+            if rig is None:
+                self.skipTest("Could not create an NTFS junction in this environment.")
+            with zipfile.ZipFile(rig / "starsector-core" / "starfarer_obf.jar", "w") as jar:
+                jar.writestr("com/fs/starfarer/StarfarerLauncher.class", b"\xca\xfe\x00" + b"0.98.5a-RC7" + b"\x00")
+            mods_dir = rig / "mods"
+            _make_mod(mods_dir, "Revived", "revived_id", gameVersion="0.98.5a-RC7")
+            _make_mod(mods_dir, "Older", "older_id", gameVersion="0.98a-RC8")
+            _write_json(mods_dir / "enabled_mods.json", {"enabledMods": ["revived_id", "older_id"]})
+            with _patch_repo_root(root), mock.patch("bridgeforge.rig.rig_doctor._running_java_under", return_value=[]):
+                result = rig_doctor(rig)
+            check = next(c for c in result["checks"] if c["name"] == "enabled_mods_resolve")
+            self.assertEqual(check["status"], "WARN")
+            self.assertIn("differs from 0.98.5a", check["detail"])
+            self.assertIn("older_id", check["detail"])
+            self.assertNotIn("revived_id", check["detail"])
+
     def test_pass_when_missing_file_but_no_mod_workspaces_exist(self) -> None:
         """A freshly registered P10 reference rig has no mods enabled yet, so enabled_mods.json
         legitimately does not exist - that is not a configuration problem (ROADMAP P14 item 22,

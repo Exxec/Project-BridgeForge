@@ -4,7 +4,7 @@ For a mod, it collects what the mod needs from other mods: content ids (hull mod
 hulls) and `data.*` classes that neither it nor vanilla defines (the scanner's
 `content-reference-unresolved` / `source-import-unresolved`), plus declared dependencies that no
 visible mod provides. It then ranks every visible mod as a provider:
-- EXACT: provides every needed id/class and targets the 0.98a series; only the dependency line changes;
+- EXACT: provides every needed id/class and targets the current series (`target_series`); only the dependency line changes;
 - PARTIAL: provides some; Starsector has no id aliasing, so the rest means editing this mod's data;
 - NONE: no visible mod provides anything.
 Known renames and splits that coverage can't see come from `dependency_successors.json` (evidence
@@ -30,6 +30,8 @@ from .revival_audit import _completion_statuses
 SCHEMA_VERSION = 1
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUCCESSORS_PATH = Path(__file__).resolve().parent / "dependency_successors.json"
+# The series a provider must target to count as current, when neither the core nor bridgeforge-state/target.json names one.
+# The report key stays "targets_0.98a" (reports and revive options carry it); it means "targets the current series".
 TARGET_SERIES = "0.98a"
 KINDS = ("hullmod", "weapon", "wing", "hull", "class")
 REVIVABLE_MANUAL = 15  # a dependency workspace this clean is worth reviving first
@@ -265,15 +267,37 @@ def _covers(provider: Provider, needed: dict[str, set[str]]) -> dict[str, set[st
     return covered
 
 
-def _current(provider: Provider) -> bool:
-    return bool(provider.game_version) and _base_game_version(provider.game_version).startswith(TARGET_SERIES)
+def target_series(vanilla_core: Path | None = None, state: Path | None = None) -> str:
+    """The base game version current providers target: a given core's own build, else (no core given) the recorded
+    target's, else TARGET_SERIES.
+
+    A fixed "0.98a" never counted a 0.98.5a provider as current after the move to 0.98.5a-RC7 (96.3, 96.5 A8), and the
+    0.98.5a launcher unchecks a 0.98a mod, so a 0.98a provider is not current there either."""
+    build = None
+    if vanilla_core is not None:
+        from bridgeforge.rig.rig_doctor import core_build
+
+        build = core_build(Path(vanilla_core))
+    else:
+        from .targets import TargetError, load_target, state_dir
+
+        try:
+            target = load_target(Path(state) if state is not None else state_dir())
+        except TargetError:
+            target = None
+        build = target["build"] if target else None
+    return _base_game_version(build) if build else TARGET_SERIES
+
+
+def _current(provider: Provider, series: str = TARGET_SERIES) -> bool:
+    return bool(provider.game_version) and _base_game_version(provider.game_version).startswith(series)
 
 
 def _keys(needed: dict[str, set[str]]) -> set[str]:
     return {f"{kind}:{ident}" for kind, ids in needed.items() for ident in ids}
 
 
-def rank(needed: dict[str, set[str]], providers: list[Provider]) -> list[dict]:
+def rank(needed: dict[str, set[str]], providers: list[Provider], series: str = TARGET_SERIES) -> list[dict]:
     total = sum(len(ids) for ids in needed.values())
     ranked = []
     for provider in providers:
@@ -281,7 +305,7 @@ def rank(needed: dict[str, set[str]], providers: list[Provider]) -> list[dict]:
         count = sum(len(ids) for ids in covered.values())
         if not count:
             continue
-        current = _current(provider)
+        current = _current(provider, series)
         verdict = "EXACT" if count == total and current else "PARTIAL"
         ranked.append({
             "mod_id": provider.mod_id, "name": provider.name, "path": provider.path, "game_version": provider.game_version,
@@ -292,10 +316,11 @@ def rank(needed: dict[str, set[str]], providers: list[Provider]) -> list[dict]:
     return sorted(ranked, key=lambda item: (-item["covered"], not item["targets_0.98a"], item["mod_id"]))
 
 
-def cover(needed: dict[str, set[str]], providers: list[Provider], preferred: set[str] | None = None) -> tuple[list[tuple[Provider, set[str]]], set[str]]:
+def cover(needed: dict[str, set[str]], providers: list[Provider], preferred: set[str] | None = None,
+          series: str = TARGET_SERIES) -> tuple[list[tuple[Provider, set[str]]], set[str]]:
     """Greedy smallest set of providers covering the needed ids (Rebal needs FX Core + EZ Damage + ...).
 
-    Ties prefer mods that target 0.98a, then mods the dependent already declares.
+    Ties prefer mods that target the current series, then mods the dependent already declares.
     """
     preferred = preferred or set()
     remaining = _keys(needed)
@@ -306,8 +331,8 @@ def cover(needed: dict[str, set[str]], providers: list[Provider], preferred: set
         for provider in providers:
             covered = _covers(provider, {kind: {key.split(":", 1)[1] for key in remaining if key.startswith(kind + ":")} for kind in KINDS})
             hits = {f"{kind}:{ident}" for kind, ids in covered.items() for ident in ids}
-            key = (len(hits), _current(provider), provider.mod_id in preferred)
-            if hits and (best is None or key > (len(best_hits), _current(best), best.mod_id in preferred)):
+            key = (len(hits), _current(provider, series), provider.mod_id in preferred)
+            if hits and (best is None or key > (len(best_hits), _current(best, series), best.mod_id in preferred)):
                 best, best_hits = provider, hits
         if best is None:
             break
@@ -360,7 +385,7 @@ def _licence_note(mod_id: str, policy_path: Path | None) -> str:
 
 
 def classify_chosen_providers(chosen: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
-    """(current, revive, heavy): `chosen` split by whether it targets 0.98a already, is a
+    """(current, revive, heavy): `chosen` split by whether it targets the current series already, is a
     revivable workspace here (<= REVIVABLE_MANUAL findings), or is too large/unscanned to revive
     for this. Shared by `strategy()`'s own reasoning and ROADMAP P14 item 4's strip/vendor planner,
     which needs the exact same "hard" id set `strategy()` already computes to decide what a
@@ -414,12 +439,12 @@ def strategy(needed: dict[str, set[str]], files: dict[str, int], chosen: list[di
 
     plan = []
     if current:
-        plan.append(f"declare {', '.join(item['name'] for item in current)} (0.98a)")
+        plan.append(f"declare {', '.join(item['name'] for item in current)} (current)")
     if revive:
         plan.append(f"revive {describe(revive)} first")
     if not hard:
         if not revive:
-            return "SWAP", f"{', '.join(item['name'] for item in current)} provide(s) everything and target 0.98a: declare {'it' if len(current) == 1 else 'them'}; nothing else changes."
+            return "SWAP", f"{', '.join(item['name'] for item in current)} provide(s) everything and target the current game version: declare {'it' if len(current) == 1 else 'them'}; nothing else changes."
         return "REVIVE_DEPENDENCY", f"Every needed id/class has a provider: {'; '.join(plan)}. Then this mod works as it is."
     left = f"{', '.join(sorted(hard)[:4])}{' ...' if len(hard) > 4 else ''}"
     heavy_note = f" (only in {describe(heavy)}, too large to revive for this)" if heavy else " (in no visible mod)"
@@ -473,14 +498,15 @@ def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla
     # Vacuum defines thruster_fighter_sm, but Explorer Society and Rebal can't use it.
     excluded_tcs = sorted(p.name for p in providers if p.total_conversion and p.mod_id not in declared)
     providers = [p for p in providers if not p.total_conversion or p.mod_id in declared]
-    candidates = rank(needed, providers)
+    series = target_series(vanilla_core)
+    candidates = rank(needed, providers, series)
     successors = [entry for entry in load_successors() if entry.get("match") in missing_declared or any(ident.startswith(entry.get("match", "\0")) for ids in needed.values() for ident in ids)]
     ops_dir = Path(ops) if ops else REPO_ROOT / "In operation"
-    chosen_providers, uncovered = cover(needed, providers, preferred=set(declared))
+    chosen_providers, uncovered = cover(needed, providers, preferred=set(declared), series=series)
     chosen = []
     for provider, hits in chosen_providers:
         item = {"mod_id": provider.mod_id, "name": provider.name, "game_version": provider.game_version, "version": provider.version,
-                "targets_0.98a": _current(provider), "covers": sorted(hits)}
+                "targets_0.98a": _current(provider, series), "covers": sorted(hits)}
         if not item["targets_0.98a"]:
             item["workspace"] = _workspace_state(ops_dir, provider.mod_id)
             item["licence"] = revival_licence(provider.mod_id, provider.name, policy_path)
@@ -493,7 +519,7 @@ def dependency_substitutes(mod_dir: Path, provider_roots: list[Path], *, vanilla
         course, reason = "NONE_NEEDED", "Everything the mod uses is defined by it, vanilla, or a visible declared dependency."
     return {
         "schema_version": SCHEMA_VERSION, "mode": "DEPENDENCY_SUBSTITUTES", "mod": str(mod_dir), "mod_id": result.metadata.get("id"),
-        "providers_indexed": len(providers),
+        "providers_indexed": len(providers), "target_series": series,
         "total_conversions_excluded": excluded_tcs,
         "needed": {kind: sorted(ids) for kind, ids in needed.items() if ids},
         "declared_dependencies_missing": missing_declared,
@@ -511,7 +537,7 @@ def dependency_graph(queue_root: Path, provider_roots: list[Path], *, vanilla_co
     """Which queued mods need which non-current providers, ordered by unblocking value (ROADMAP P14 item 3).
 
     Runs dependency_substitutes on every queued workspace (`<queue>/*/working` with a mod_info.json).
-    A provider counts when the plan uses it and it does not target 0.98a: reviving it is work that
+    A provider counts when the plan uses it and it does not target the current series: reviving it is work that
     unblocks every queued mod that needs it. Mods needing ids no visible or indexed mod provides are
     listed separately.
     """

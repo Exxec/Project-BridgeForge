@@ -419,6 +419,14 @@ def core_build(core: Path) -> str | None:
     return match.group().decode() if match else None
 
 
+def rig_base_game_version(runtime_dir: Path) -> str:
+    """The base version a rig's launcher accepts ("0.98.5a" for 0.98.5a-RC7), from its core's own build; else
+    TARGET_BASE_GAME_VERSION. The fixed "0.98a" warned about every mod revived to 0.98.5a on the 0.98.5a rig (96.3,
+    96.5 A8)."""
+    build = core_build(Path(runtime_dir) / "starsector-core")
+    return _base_game_version(build) if build else TARGET_BASE_GAME_VERSION
+
+
 def _check_core_integrity(runtime_dir: Path, repo_root: Path, core_baseline: Path | None, write_core_baseline: bool) -> dict[str, object]:
     """The rig's starsector-core still hashes the same as when the baseline was recorded (ROADMAP 35.11, from SPW's
     core_integrity, 2026-10-04): "the rig matches vanilla RC8" is checked, not assumed. Hashing alone never claims a
@@ -552,7 +560,7 @@ def rig_doctor(
             _check_game_not_running(runtime_dir),
             _check_path_locks(runtime_dir),
             _check_probe_installed(runtime_dir, repo_root),
-            _check_enabled_mods_resolve(runtime_dir),
+            _check_enabled_mods_resolve(runtime_dir, rig_base_game_version(runtime_dir)),
             _check_revenantlib_contract(runtime_dir),
             _check_working_copy_drift(runtime_dir, working_copies or {}),
             _check_real_install_saves_untouched(repo_root, real_install, saves_baseline, write_saves_baseline),

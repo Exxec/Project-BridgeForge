@@ -47,7 +47,7 @@ class SameJdkTests(unittest.TestCase):
         self.assertIsNotNone(project_jdk_major(), ".java-version must hold one number, e.g. 25")
 
     def test_every_setup_java_step_reads_the_java_version_file(self) -> None:
-        workflows = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
+        workflows = sorted((ROOT / ".github" / "workflows").glob("*.yml")) + sorted((ROOT / ".github" / "actions").glob("*/action.yml"))
         checked = 0
         for workflow in workflows:
             for step in setup_java_steps(workflow.read_text(encoding="utf-8")):

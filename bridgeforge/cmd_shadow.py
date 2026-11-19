@@ -8,9 +8,9 @@ from pathlib import Path
 
 
 def add_parser(subcommands) -> None:
-    cmd = subcommands.add_parser("shadow-triage", help="vanilla-path-shadowing: show old vanilla / mod / RC8 differences per shadowed file; --approve records an owner approval to move a byte-identical old-vanilla copy (the fixer moves it), --revoke ends one (ROADMAP 73 D3)")
+    cmd = subcommands.add_parser("shadow-triage", help="vanilla-path-shadowing: show old vanilla / mod / target differences per shadowed file; --approve records an owner approval to move a byte-identical old-vanilla copy (the fixer moves it), --revoke ends one (ROADMAP 73 D3)")
     cmd.add_argument("workspace", type=Path, help="a workspace (or its working/ folder)")
-    cmd.add_argument("--vanilla-core", type=Path, required=True, help="RC8 starsector-core")
+    cmd.add_argument("--vanilla-core", type=Path, required=True, help="target starsector-core (@target)")
     cmd.add_argument("--reference-core", type=Path, help="starsector-core of the install the mod was made for (default: the registered reference rig for the mod's gameVersion)")
     cmd.add_argument("--approve", action="append", default=[], metavar="PATH", help="data-relative path of a byte-identical old-vanilla copy to approve for removal; repeatable")
     cmd.add_argument("--revoke", action="append", default=[], metavar="PATH", help="end the approval for this path")

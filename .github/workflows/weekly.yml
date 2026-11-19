@@ -13,18 +13,12 @@ jobs:
   reversed-order:
     name: Suite in reverse order (ubuntu / Python 3.15)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: ./.github/actions/setup-bridgeforge
         with:
-          python-version: "3.15"
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version-file: .java-version
-      - name: Install Bridgeforge
-        # Package discovery tests invoke the build backend in the test interpreter.
-        run: python -m pip install ".[archives]" "setuptools>=68"
+          install: '".[archives]" "setuptools>=68"'
       - name: Run every test case in reverse order and record the time
         run: |
           start=$(date +%s)

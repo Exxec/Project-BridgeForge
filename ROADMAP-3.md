@@ -338,6 +338,21 @@ Check S series implementation plan and if applicable add remaining items to road
       All three guards fail with their fix removed (mutation-checked).
     - C7, C8 (S): wall-clock budgets to `process_time`, `timeout-minutes`, `buffer=True`; a shared setup step and a
       pinned ruff (weekly.yml drifted from ci.yml and failed 5 weeks running).
+      **Done 2026-11-18.**
+      - C7: the four tests that budget a CPU-bound check (`test_forwarding_methods`, `test_target_delta`, two in
+        `test_scan_robustness`) measure `time.process_time()`, not the wall clock, so a busy runner cannot fail them. The
+        scan runs in one process, so its own CPU is what the budget is about; javap children are not counted. The tests
+        that time a real wait (the launch watchdog, an escalation timeout) keep `monotonic`. Every job in `ci.yml` and
+        `weekly.yml` has `timeout-minutes`, about three times its slowest recent run (Windows fast 11.2 min -> 35). The
+        suite runners (`run_partitioned.py`, `run_reversed.py`) and the coverage job's `unittest discover -b` buffer each test's
+        output, so only a failing test's prints reach the log.
+      - C8: `.github/actions/setup-bridgeforge` (composite) sets up Python, the `.java-version` JDK and the install for
+        every job that runs the suite: docs, coverage, the test matrix and weekly. `pyproject.toml` pins ruff with
+        `required-version = "==0.17.5"`; ci.yml's ruff-action names that version, and the hooks and the PR skill's
+        `checks.sh` run `uvx ruff@<pin>`.
+      Tests: `tests/test_ci_setup.py`: every job has a timeout; jobs that run `test_guard` use the shared setup and only
+      the action sets up Java; CI, both hooks and `checks.sh` use the pinned ruff; the runners buffer output.
+      Each guard fails with its fix removed (mutation-checked).
     - C2 (M): time-balanced shards with coverage inside the Ubuntu ones (Windows-fast is 12 min now; PR results in
       about 5-6).
     - C4 (M): a machine-state sandbox for the suite: winreg raises unless patched; HOME, APPDATA and TEMP point at temp
@@ -401,6 +416,24 @@ Check S series implementation plan and if applicable add remaining items to road
 
       Each fails with its guard removed (mutation-checked).
     - A8 (S): the revival guide still teaches the RC8 workflow (docs pass, 96.3).
+      **Done 2026-11-18.** A8 was recorded at 12:28 on 2026-11-17; 96.3 rewrote the guide for RC7 at 13:58 the same day.
+      This closes what 96.3 left for later, because each needed code:
+      - `rig-doctor` compared every enabled mod with a fixed `0.98a`, so it warned about every mod revived to 0.98.5a on
+        the 0.98.5a rig. `rig_doctor.rig_base_game_version` now reads the rig core's own build (`core_build`), falling back
+        to `0.98a`. The guide's section 1 said the check was still wrong; it now says what it does.
+      - `dependency-substitutes` counted a provider as current only at `0.98a`, so a 0.98.5a provider was never EXACT.
+        `substitutes.target_series` takes a given core's build, else (no core given) `bridgeforge-state/target.json`'s, else
+        `0.98a`; `rank` and `cover` take that series and the report names it (`target_series`). The report key stays
+        `targets_0.98a` (reports and revive options carry it) and means "targets the current series". The 0.98.5a
+        launcher unchecks a 0.98a mod, so on an RC7 core a 0.98a provider is no longer current either.
+      - Eleven `--help` texts that called the core "RC8" now say "target" (`shadow-triage`, `strip-plan`,
+        `substitution-proposals`, `value-proposals`, `api-diff`, `port-interfaces`, `scan --removed-content`, `fix
+        --reference-core`, two in `rig-doctor`). The six 96.3 named were already fixed. Kept: `revive --target`'s
+        `0.98a-RC8` fallback (the real default), `target-impact`'s example and the `RC8-nn` behaviour ids.
+      Tests: `tests/test_rig_doctor.py` (a 0.98.5a-RC7 core warns about a 0.98a mod and not a 0.98.5a one);
+      `tests/test_substitutes.py` (on an RC7 core the 0.98.5a provider is EXACT and chosen, the 0.98a one PARTIAL; the
+      series from a recorded target and a named core's precedence). Both fixes fail their tests when removed
+      (mutation-checked).
     - A9 (S): retire two dead tools scripts and a fourth status list (`prepush-check.ps1` lacks NOT_REVIVABLE).
     - A2 (S/M): one resolver for the checkout and the state folder. The `.venv` holds a stale non-editable copy,
       0.4.0, 68 files behind.
