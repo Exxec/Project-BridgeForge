@@ -1,13 +1,6 @@
 $root=(git rev-parse --show-toplevel).Trim()
 $clock=[System.Diagnostics.Stopwatch]::StartNew()
 $budgetSeconds=120  # ROADMAP-3 96.5 C5: a push should be checked in under 2 minutes; CI runs everything
-$bad=@()
-Get-ChildItem -LiteralPath $root -Recurse -File -Filter 'REVIVAL_REPORT.md' -ErrorAction SilentlyContinue | ForEach-Object {
-    $t=Get-Content $_.FullName -Raw
-    if($t -notmatch '\b(READY|READY_WITH_REVIEW_ITEMS|ESCALATION_REQUIRED|READY_FOR_LIVE_TEST|LIVE_VALIDATED|SUPERSEDED|ESCALATED)\b'){$bad+=$_.FullName}
-}
-if($bad){Write-Error ("Invalid report status:`n"+($bad -join "`n")); exit 11}
-
 # Prefer the project venv (this checkout's, else the main checkout's when this is a worktree): a system Python with an
 # editable bridgeforge install imports that checkout's code ahead of this one, so the tests would check the wrong tree.
 $py=$null
@@ -19,7 +12,12 @@ foreach($c in @($venvs + @('python','py'))){
     & $cmd.Source -c 'import sys' *> $null
     if($LASTEXITCODE -eq 0){$py=$cmd.Source;break}
 }
-if(-not $py){Write-Host 'Pre-push validation: PASS (report check only; no Python found, tests skipped)'; exit 0}
+if(-not $py){Write-Host 'Pre-push validation: PASS (no Python found; report check and tests skipped)'; exit 0}
+
+# Every REVIVAL_REPORT.md names a known status. The list is report_status.REPORT_STATUSES (96.5 A9): this script's own copy
+# was a fourth one and lacked NOT_REVIVABLE.
+& $py (Join-Path $root 'tools\report-status-check.py') $root
+if($LASTEXITCODE -ne 0){Write-Error 'A REVIVAL_REPORT.md names no known status (see above).'; exit 11}
 
 $changed=@()
 git -C $root rev-parse --verify --quiet origin/main *> $null

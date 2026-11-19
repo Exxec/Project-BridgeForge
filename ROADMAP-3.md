@@ -396,6 +396,18 @@ Check S series implementation plan and if applicable add remaining items to road
       Each fails with its guard removed (mutation-checked).
     - A8 (S): the revival guide still teaches the RC8 workflow (docs pass, 96.3).
     - A9 (S): retire two dead tools scripts and a fourth status list (`prepush-check.ps1` lacks NOT_REVIVABLE).
+      **Done 2026-11-18.**
+      - `tools/build-done-master-log.ps1` and `tools/copy-done-archives-with-readme.ps1` are deleted, with their
+        `.gitignore` exceptions. `master_log.py` (item 65) writes `Done/MASTER_LOG.md` after every archive, and `archive`
+        writes each archive's `-with-readme.zip`; nothing called either script. `tools/RepairZorg18.java` stays: it is the
+        record of how that release was repaired.
+      - The pre-push report check matched its own list of seven statuses, which lacked NOT_REVIVABLE, so a report closed
+        with `close --status NOT_REVIVABLE` (95.15) would have blocked a push. `tools/report-status-check.py` matches
+        `report_status.REPORT_STATUSES` instead (the same any-word rule as before). It runs once Python is found; with no
+        Python the hook now skips it along with the tests.
+      Tests: `tests/test_report_status_check.py`: every status in the shared list passes, a report with none fails, a
+      NOT_REVIVABLE report passes, the script names no statuses of its own, and the two scripts are gone. Dropping
+      NOT_REVIVABLE from the check fails two of them (mutation-checked).
     - A2 (S/M): one resolver for the checkout and the state folder. The `.venv` holds a stale non-editable copy,
       0.4.0, 68 files behind.
     - A7 (S/M): MOD_CHANGELOG and release decisions as fragments, since two machines now write them.
