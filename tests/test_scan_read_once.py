@@ -23,6 +23,29 @@ def _b64(text: str) -> str:
 
 
 class AstFactsTests(unittest.TestCase):
+    def setUp(self) -> None:
+        java_ast.clear_memo()  # these tests fake the helper's output: start clean and leave nothing behind
+        self.addCleanup(java_ast.clear_memo)
+
+    def test_the_same_sources_run_the_helper_once_and_each_caller_gets_a_copy(self) -> None:
+        """96.5 P9: the suite ran the JVM helper 460 times on 329 distinct inputs; a repeat is answered from memory."""
+        with resolved_temp_dir() as root:
+            source = root / "data" / "scripts" / "A.java"
+            _write(source, "class A {}")
+            line = f"M\t{_b64(str(source))}\t1\t0\t{_b64('call')}"
+            done = subprocess.CompletedProcess([], 0, stdout=line, stderr="")
+            with mock.patch.object(java_ast, "_ensure_helper", return_value=root / "helper"), \
+                    mock.patch.object(java_ast, "_java_tools", return_value=("javac", "java")), \
+                    mock.patch.object(java_ast, "_run", return_value=done) as run:
+                first = java_ast.analyze_sources(root)
+                first[0]["value"] = "changed by a caller"
+                second = java_ast.analyze_sources(root)
+                self.assertEqual(run.call_count, 1)
+                self.assertEqual(second[0]["value"], "call")  # the caller's change did not reach the memo
+                _write(source, "class A { int x; }")  # new bytes: run again
+                java_ast.analyze_sources(root)
+                self.assertEqual(run.call_count, 2)
+
     def test_each_source_file_is_resolved_once_however_many_facts_name_it(self) -> None:
         with resolved_temp_dir() as root:
             sources = [root / "data" / "scripts" / f"{name}.java" for name in ("A", "B")]

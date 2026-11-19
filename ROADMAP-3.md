@@ -277,6 +277,14 @@ Check S series implementation plan and if applicable add remaining items to road
       either fix fails its test. An independent review found no behaviour change in the scan; its three points (the
       portfolio flag, the error type for an unknown AST line, thin tests) are taken.
     - P9 (M): memoize the AST helper in tests (an estimated 2-3 of 11 minutes).
+      **Done 2026-11-19.** Measured first: over the whole suite (3,135 tests) `java_ast.analyze_sources` was called 1,390
+      times, 930 of them on folders with no `.java` file (0.4 s); the 460 real JVM runs took 122 s on 329 distinct inputs. The
+      memo is in `java_ast` itself, not only in tests, because a revive scans each mod several times: a result is keyed by
+      each source's path relative to the root and its bytes, plus the helper's folder (its source digest), so an edited file
+      or a new helper misses; each caller gets copies. It holds at most 1,024 results and 200,000 facts (one real mod gives
+      up to 12,003). The same measurement afterwards: 70 s of AST time instead of 122 s (with other jobs on the machine).
+      Tests that fake the helper's output clear it (`java_ast.clear_memo`). Tests: `tests/test_scan_read_once.py` (the same
+      sources run the helper once, a caller's change does not reach the memo, new bytes run it again; fails without the memo).
     - P10 (M): a process pool for target-impact and corpus-index (5 -> about 1.5 min).
       **target-impact part done 2026-11-19.** Each mod's check (`mod_impact`) is independent and read-only, so `--jobs N`
       (default up to 4, one CPU left free; 1 keeps the in-process loop) checks mods in worker processes. The main process
@@ -1334,6 +1342,16 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     - Why a save was read during New Game is not shown. The rig's `saves/` held 14 saves from the day's runs, and
       `probe-group install` leaves them. Moving the rig's saves aside before each run would make every run start the same
       way.
+- 93.58 (S) **The display goes dark mid-run.** Test1's power plan turns the display off after 180 s without input
+  (`powercfg` VIDEOIDLE 0xb4, read 2026-11-19). The 96.2 runs P962KR and P962KR2 (Kadur Remnant) reached the campaign, then the
+  harness's Escape and menu clicks never reached the game: LIVE_STUCK at the first combat round, the log silent after the
+  probe's checks. P962KR3 passed with a background process holding the display on.
+  **Done 2026-11-19.** `live_run` holds the display and system on for the whole run (`live/display_awake.py`,
+  `SetThreadExecutionState` with ES_DISPLAY_REQUIRED, reset to the plan's timeouts afterwards; a no-op off Windows).
+  This is the likely cause, not a proven one: Broken Star still stalled at the same step with the display held on
+  (P962BS4), so that one has another cause, under 96.2. Tests: `tests/test_display_awake.py` (held inside and released
+  after, also on error; nothing released when nothing was held; `live_run` holds it around the game; Windows accepts the
+  request).
 - 93.51 (S) **Two lower-risk leads from the 93.45 security review,** read 2026-11-17, not yet fixed:
   - BridgeForge's helper classes are cached in the temp folder and reused without a check (`bytecode.py`, `java_ast.py`,
     `delegate_method.py`). On a shared POSIX `/tmp` another local user could plant one. Windows' temp folder is per user.
