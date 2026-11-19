@@ -8,6 +8,7 @@ from pathlib import Path
 from bridgeforge.archive import ArchiveError, archive_mod
 from bridgeforge.release import record_policy_decision
 from tests.support import resolved_temp_dir
+from bridgeforge.mod_changelog import merged_text
 
 REPO_POLICY = Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json"
 
@@ -71,7 +72,7 @@ class ArchiveTests(unittest.TestCase):
             record_policy_decision("bf_fixture_radar", local_only=True, reason="author unreachable", policy_path=policy)
             archive_mod(ws, root / "Done", policy_path=policy, today="2026-11-17")
             note = (root / "Done" / "Radar" / "ARCHIVE_NOTE.md").read_text(encoding="utf-8")
-            changelog = (root / "MOD_CHANGELOG.md").read_text(encoding="utf-8")
+            changelog = merged_text(root / "MOD_CHANGELOG.md")
         self.assertIn("Revival for Starsector 0.98.5a-RC7: BridgeForge by Exxec.", note)
         self.assertNotIn("0.98a-RC8", note)
         self.assertIn("- **Radar** 3.0: revived for 0.98.5a-RC7 and archived (ready for live test)", changelog)

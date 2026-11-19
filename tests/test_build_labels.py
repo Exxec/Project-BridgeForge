@@ -9,6 +9,7 @@ from bridgeforge.master_log import GENERIC, _revived_for
 from bridgeforge.mod_changelog import archived_text, note_build, seed_from_archives
 from tests.bound_runs import write_core_build
 from tests.support import resolved_temp_dir
+from bridgeforge.mod_changelog import merged_text
 
 
 def _working(root, game_version: str | None, revive_target: str | None = None, *, applied: bool = True):
@@ -93,7 +94,7 @@ class ChangelogTextTests(unittest.TestCase):
             changelog = root / "MOD_CHANGELOG.md"
             seed_from_archives(done, changelog)
             again = seed_from_archives(done, changelog)
-            text = changelog.read_text(encoding="utf-8")
+            text = merged_text(changelog)
         self.assertIn("- **New 1.0**: revived for 0.98.5a-RC7 and archived (live validated)", text)
         self.assertIn("- **Old 1.0**: revived for RC8 and archived (live validated)", text)
         # Review 2026-11-17: a credit line naming no build is not an RC8 claim; a note older than the credit line is.

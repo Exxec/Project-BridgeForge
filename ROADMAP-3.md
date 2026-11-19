@@ -473,6 +473,21 @@ Check S series implementation plan and if applicable add remaining items to road
       patch the install check (machine state). Removing the routing, the plain-install finding or the suite's environment
       strip each fails a test (mutation-checked).
     - A7 (S/M): MOD_CHANGELOG and release decisions as fragments, since two machines now write them.
+      **Done 2026-11-18.** Test1's `archive` and White_Legion's sessions both edited `MOD_CHANGELOG.md` and
+      `bridgeforge/release_policy.json`, so two branches changed the same lines (the 2026-11-17 archives).
+      - `mod_changelog.add_entry` writes one file in `mod-changelog.d/` beside `MOD_CHANGELOG.md`, named by date, mod and a
+        hash of the line, so the same entry made on both machines is the same file. An entry already in the file or a
+        fragment is not added again. `merged_text` / `sections` read the file and the fragments together; the master log's
+        timeline and `seed_from_archives` use them.
+      - `release.record_policy_decision` writes `bridgeforge/release_policy.d/<mod>.json` (the existing key's spelling);
+        `_load_policy`, which every reader goes through, lays the fragments over the file and refuses a malformed one. The
+        wheel ships `release_policy.d/*.json`.
+      - `release-notes assemble` folds both kinds into their files with the changelog (LF), and `--check` lists them.
+      Tests: `tests/test_record_fragments.py` (the file untouched, one file for the same entry on two machines, no
+      duplicate of a filed entry, assemble and its dry run, the master log seeing pending entries; a decision laid over
+      the file with its key's spelling, folded, a malformed one refused, the package data; `release-notes --check` and
+      `assemble` over both). Eight test modules that read the two files directly now read the merged views. Removing the overlay,
+      the fold or the duplicate check each fails a test (mutation-checked).
     - A4, A5, A6, A10 (M): one public module for mod files (11 resolvers, 5 `_mod_info` loaders); split the `run_cli`
       if-chains (10 of the 13 functions over 200 lines); split the 1,000-line modules with a size ratchet; one shared
       tree hash with 93.27's cache (13 copies of `_sha256`).

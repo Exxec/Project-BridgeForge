@@ -224,6 +224,11 @@ archived mod). Add a line with `bridgeforge mod-changelog add MOD "what changed"
 update: a new revision, a crash fixed, a translation. When a shipped mod changes after archiving, iterate its version
 (`+bf.N`) and record it there.
 
+Both machines write these records, so they are fragments (96.5 A7): an entry is a file in `mod-changelog.d/` and a
+licence decision is `bridgeforge/release_policy.d/<mod>.json`. Never edit `MOD_CHANGELOG.md` or `release_policy.json` by hand
+for a new record. Readers (`mod_changelog.merged_text`, `release._load_policy`, the master log) see the file and its
+fragments together; `release-notes assemble` folds both at release time, and `release-notes --check` lists them.
+
 ## Commits and roadmap
 
 - Commit subjects follow the roadmap: "Fix item N: ...", "Add item N: ...". The body explains

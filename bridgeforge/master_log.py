@@ -162,8 +162,12 @@ def _set_aside(done: Path) -> list[dict]:
 
 
 def _timeline(changelog: Path) -> list[tuple[str, str]]:
+    from bridgeforge.mod_changelog import merged_text
+
+    # The file and its pending mod-changelog.d/ fragments (96.5 A7).
+    text = merged_text(changelog) if changelog.is_file() or changelog.parent.joinpath("mod-changelog.d").is_dir() else ""
     day, out = "", []
-    for line in _read(changelog).splitlines():
+    for line in text.splitlines():
         if line.startswith("## "):
             day = line[3:].strip()
         elif line.startswith("- ") and day:
