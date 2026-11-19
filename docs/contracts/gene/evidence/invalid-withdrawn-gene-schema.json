@@ -1,0 +1,25 @@
+{
+  "evidence": "bridgeforge-gene-evidence",
+  "schema_version": 1,
+  "kind": "subtraction-proof",
+  "gene": {
+    "identity": "279076c0bd21677449324632e7d7b57cb3a3a94651d0e00960b5b7282b93ac28",
+    "schema_version": 1
+  },
+  "produced_by": {
+    "tool": "bridgeforge",
+    "version": "0.4.2"
+  },
+  "created_at": "2026-11-19T18:00:00+00:00",
+  "build": {
+    "game_version": "0.98.5a-RC7"
+  },
+  "inputs": [
+    {
+      "role": "donor",
+      "path": "data/hullmods/hull_mods.csv",
+      "sha256": "68b28cebccda169c27b89c9164217d53dd011e355ae836d3dee6053c8f9e1848"
+    }
+  ],
+  "verdict": "PASS"
+}

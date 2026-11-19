@@ -4,7 +4,9 @@
 - `gene.schema.json`: a JSON Schema (2020-12) of manifest schema 2, for repositories that validate with a library;
 - `fixtures/`: manifests every consumer must judge as BridgeForge does: the `valid-*` ones pass, each `invalid-*` one
   fails, and `valid-*` identities must come out equal from the identity rule;
-- `CONTRACT.json`: the schema id and version, the identity rule in words, every file's SHA-256 and each fixture's verdict.
+- `CONTRACT.json`: the schema id and version, the identity rule in words, every file's SHA-256 and each fixture's verdict;
+- `evidence-header.schema.json` and `evidence/` (WP5): the header every evidence file about a gene carries, versioned apart
+  from gene.json, with fixtures judged by `genome.evidence.check` against `fixtures/valid-hullmod.json`.
 
 Schema 1 is withdrawn (2026-11-19, before any sister pinned it); CONTRACT.json says so.
 
@@ -20,6 +22,7 @@ from pathlib import Path
 
 from bridgeforge.genome.gene import (ELEMENT_FIELDS, GENE_SCHEMA, GENE_SCHEMA_VERSION, PHENOTYPE, REQUIRED_KEYS, dumps,
                                      identity, validate)
+from bridgeforge.genome import evidence as evidence_header
 from bridgeforge.vendor_plan import KINDS
 
 CONTRACT_RELATIVE = Path("docs") / "contracts" / "gene"
@@ -144,6 +147,62 @@ def fixtures() -> dict[str, dict]:
     return out
 
 
+def evidence_schema() -> dict:
+    """The evidence header (WP5) as a JSON Schema. The gene it names, and its inputs' hashes, are checked by `gene evidence
+    check`, not here. A producer may add fields."""
+    path = {"type": "string", "minLength": 1, "not": {"pattern": "(^/|\\\\|:|(^|/)\\.{1,2}(/|$)|//|^\\s|\\s$)"}}
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": f"https://github.com/Exxec/Project-BridgeForge/docs/contracts/gene/evidence-header.schema.json#{evidence_header.EVIDENCE_SCHEMA_VERSION}",
+        "title": f"{evidence_header.EVIDENCE} schema {evidence_header.EVIDENCE_SCHEMA_VERSION}",
+        "type": "object",
+        "required": list(evidence_header.REQUIRED_KEYS),
+        "properties": {
+            "evidence": {"const": evidence_header.EVIDENCE},
+            "schema_version": {"const": evidence_header.EVIDENCE_SCHEMA_VERSION},
+            "kind": {"type": "string", "minLength": 1},
+            "gene": {"type": "object", "required": ["identity", "schema_version"],
+                     "properties": {"identity": _HASH, "schema_version": {"type": "integer",
+                                                                         "not": {"enum": list(evidence_header.WITHDRAWN_GENE_VERSIONS)}}}},
+            "produced_by": {"type": "object", "required": ["tool", "version"],
+                            "properties": {"tool": {"type": "string", "minLength": 1}, "version": {"type": "string", "minLength": 1}}},
+            "created_at": {"type": "string", "format": "date-time"},
+            "build": {"type": "object", "properties": {"game_version": {"type": ["string", "null"]}}},
+            "inputs": {"type": "array", "items": {"type": "object", "required": ["role", "path", "sha256"],
+                                                  "properties": {"role": {"type": "string", "minLength": 1}, "path": path, "sha256": _HASH}}},
+            "verdict": {"enum": list(evidence_header.VERDICTS)},
+        },
+    }
+
+
+def evidence_fixtures() -> dict[str, dict]:
+    """{file name: evidence header} about `fixtures/valid-hullmod.json`. Each invalid one breaks exactly one rule."""
+    gene = _base()
+    base = {"evidence": evidence_header.EVIDENCE, "schema_version": evidence_header.EVIDENCE_SCHEMA_VERSION,
+            "kind": "subtraction-proof", "gene": {"identity": gene["identity"], "schema_version": GENE_SCHEMA_VERSION},
+            "produced_by": {"tool": "bridgeforge", "version": "0.4.2"}, "created_at": "2026-11-19T18:00:00+00:00",
+            "build": {"game_version": "0.98.5a-RC7"},
+            "inputs": [{"role": "donor", "path": "data/hullmods/hull_mods.csv",
+                        "sha256": hashlib.sha256(b"fixture hull mod row").hexdigest()}],
+            "verdict": "PASS"}
+    extra = copy.deepcopy(base)  # a producer's own fields are allowed
+    extra.update(kind="phenotype-run", verdict="NOT_RUN", spw={"frame_ms_p95": None})
+    out = {"valid-subtraction-proof.json": base, "valid-producer-fields.json": extra}
+
+    def broken(name: str, change) -> None:
+        made = copy.deepcopy(base)
+        change(made)
+        out[f"invalid-{name}.json"] = made
+
+    broken("other-gene", lambda e: e["gene"].update(identity="f" * 64))
+    broken("absolute-input-path", lambda e: e["inputs"][0].update(path="/home/someone/mod/data/hullmods/hull_mods.csv"))
+    broken("input-without-hash", lambda e: e["inputs"][0].pop("sha256"))
+    broken("withdrawn-gene-schema", lambda e: e["gene"].update(schema_version=1))
+    broken("unknown-verdict", lambda e: e.update(verdict="OK"))
+    broken("time-without-offset", lambda e: e.update(created_at="2026-11-19T18:00:00"))
+    return out
+
+
 def _canonical_bytes(data: dict) -> bytes:
     return dumps(data).encode("utf-8")
 
@@ -158,7 +217,18 @@ def contract_files() -> dict[str, bytes]:
         if name.startswith("valid-") == bool(problems):
             raise AssertionError(f"fixture {name} is judged {'invalid' if problems else 'valid'}: {problems}")
         verdicts[name] = {"valid": not problems, "identity": gene.get("identity") if not problems else None}
+    files["evidence-header.schema.json"] = _canonical_bytes(evidence_schema())
+    gene = fixtures()["valid-hullmod.json"]
+    evidence_verdicts = {}
+    for name, made in sorted(evidence_fixtures().items()):
+        files[f"evidence/{name}"] = _canonical_bytes(made)
+        problems = evidence_header.check(made, gene)
+        if name.startswith("valid-") == bool(problems):
+            raise AssertionError(f"evidence fixture {name} is judged {'invalid' if problems else 'valid'}: {problems}")
+        evidence_verdicts[name] = {"valid": not problems}
     contract = {"contract": GENE_SCHEMA, "schema_version": GENE_SCHEMA_VERSION, "withdrawn_versions": WITHDRAWN_VERSIONS,
+                "evidence_header": {"name": evidence_header.EVIDENCE, "schema_version": evidence_header.EVIDENCE_SCHEMA_VERSION,
+                                    "judged_against": "fixtures/valid-hullmod.json", "fixtures": evidence_verdicts},
                 "identity_rule": IDENTITY_RULE,
                 "files": {path: hashlib.sha256(data).hexdigest() for path, data in sorted(files.items())},
                 "fixtures": verdicts}

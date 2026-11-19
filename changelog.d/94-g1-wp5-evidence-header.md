@@ -1,0 +1,1 @@
+- Evidence header (ROADMAP-3 94.G1 WP5): every evidence file about a gene carries `bridgeforge-gene-evidence` schema 1, part of the pinned gene contract; `gene evidence check FILE --gene GENE.json --root DIR` checks it is about that gene and that its inputs are unchanged.
