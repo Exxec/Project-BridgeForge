@@ -71,6 +71,9 @@ Check S series implementation plan and if applicable add remaining items to road
   (hand ports of calls into obfuscated game internals). Each one: `restore-from-done`, fix, live test on Test1, `+bf.N`,
   `record --archive --refresh` (the `bridgeforge-revive` skill). AoTD (Vaults of Knowledge, Theory of Toolbox) is skipped:
   active upstream and under overhaul. Nightcross is superseded.
+  Lessons from the ports, 2026-11-19, as items 96.9-96.11 and additions to 95.2 and 95.3. The owner asked for a bird's-eye
+  view of what to improve and said: "if these are useful now prioritize their implementation now if not save them for after
+  G series implementation or at your recommended order".
 - 96.3 **Docs pass**, by an agent with review: README, `docs/BRIDGEFORGE_REVIVAL_GUIDE.md`, `docs/LOCAL_HANDOFF.md`,
   `docs/ROADMAP_STATUS.md` and CLAUDE.md against what items 93.20-93.38, 95 and 96 changed; then push.
   **Done 2026-11-17.** An agent rewrote the five files for the 0.98.5a-RC7 target. The guide gained sections 0a (intake to
@@ -736,6 +739,28 @@ unproven).
   tag `v0.4.2` (object `c5eb5f1`). Suite at the source commit 3075 tests OK; main CI passed (run 44443836062); 401 wheel and
   732 sdist files equal their blobs, checked again on the public download; the installed-wheel check passed on both wheels.
   `docs/RELEASE_0_4_2.md` is the receipt, with the asset hashes.
+- 96.9 (S) **The live harness checks where it is, and logs when it acted.** After Escape, Exit and OK, `to_mission_list`
+  clicked Missions blind. When those keys were lost (93.59: during the probe's save), the run went on clicking the campaign
+  map until LIVE_STUCK, with nothing in the result saying why.
+  - Read the screen after leaving the campaign: when no main menu is found (`screen_read.main_menu_buttons`), take a
+    screenshot, press Escape again and retry once, then stop with a stage that names the screen, so the next unknown cause is
+    recovered from or named.
+  - Record each key and click with the game log's length at that moment. A stall report then reads, for example, "Escape at log
+    offset X, 1.0 s after `campaign END`, while 'Saving to' had no 'Saving stage 8'". Today that took a manual log comparison.
+  Priority: now, stacked on 93.59 (the remaining 96.2 live runs).
+- 96.10 (S) **`restore-from-done` for a re-port.** Porting Vayra's Sector to RC7 took three manual steps:
+  - a September workspace of the same name made the restore refuse ("already exists"). It was moved to
+    `In operation/_stale-2026-11-19/` by hand;
+  - the restored REVIVAL_REPORT (the RC8 one, LIVE_VALIDATED) made revive's draft refuse ("Would overwrite"). It needed
+    `revival-report-draft --force`;
+  - Station Augments cannot be restored at all: its shipped folder is "Station Augments", not the archive's name.
+  `restore-from-done --for-retarget` should move a stale workspace aside (never delete; DOC-001), keep the old report as the
+  previous build's, and find the shipped folder from the archive's own record. Priority: now (Station Augments is a 96.2 port).
+- 96.11 (M) **Revive applies the build-change fixes it is approved for.** `jar-call-signature-changed` is found by
+  `target-impact`'s API diff, not by the scan, so `revive --approve jar-call-signature-changed` changed nothing for Vayra's
+  Sector, and the fixer had to run as `bridgeforge fix ... --finding jar-call-signature-changed --apply` (as for Kadur
+  Remnant). When revive has a target core, it should run the jar linkage check against it so these fixers run in the normal
+  flow (`relink` likewise). Priority: after the G series (it pays off at the next game build).
 - 95.1 (M) **Owner rulings as standing policy.** The owner ruled the same way many times: CSV rows with no file that nothing uses
   (Musashi, Bultach, UAF: "keep them and ignore warning if it doesn't affect anything"), findings the reference build shares in a
   mod that works there (UAF: "Your clear to proceed"), and behaviour as authored with evidence (Sunrider: "yes"). Encode them as
@@ -745,10 +770,19 @@ unproven).
   many the rules settle before enabling them.
 - 95.2 (M) **Findings the previous build shares, labelled (93.34).** The owner's decision sheet shows what the target build changes
   first and the pre-existing findings apart.
+  Added 2026-11-19 (96.2 lessons): also label a finding whose check is newer than the archive's live validation. Vayra's Sector's
+  three `saved-object-holds-market-ref` packets came from a check added after its 2026-10-05 RC8 archive, so the same code was
+  live-validated without them; the sheet should say so with both dates. Owner 2026-11-19, asked about the order of this
+  session's suggestions: "if these are useful now prioritize their implementation now if not save them for after G series
+  implementation or at your recommended order". Priority: after the G series (it pays off at the next game build).
 - 95.3 (M) **One command per stage chain.** `revive-queue` (93.14): intake, revive, decision sheet, accept, input-tier fixes
   (`bridgeforge fix`, which revive does not apply), report draft; `live-queue`: install, smoke, live, report and record per group,
   unattended, resuming after the last finished step. Each of these is a separate command today, and the Test1 live runs needed
   hand-written task scripts.
+  Added 2026-11-19 (96.2 lessons): the 96.2 runs used a hand-written `.cmd` per group (rig-doctor, install, live, report), then a
+  separate record and archive. `live-queue PLAN --archive-on-pass` should record and archive a passing group under the owner's
+  standing 96.2 permission ("archive them if they pass") and stop on anything else with its triage. Priority: now, the
+  `live-queue` half (the remaining 96.2 groups and every re-test).
 - 95.4 (M) **A live harness without wrappers.** Direct start (93.21), first-run preferences pre-flight and pins (93.28), the
   report's own run config (93.29), mission-list reading (93.37) and the run's own save (93.38) in `probe-group smoke|live|record`,
   so `bridgeforge-state/live-wrappers/` can retire.

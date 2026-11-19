@@ -29,6 +29,10 @@ bridgeforge revive "In operation/<Name>" --vanilla-core "<target starsector-core
   `bridgeforge src-to-jar "<ws>" --jar jars/X.jar --vanilla-core <core> --source-root jars/src --lib <library jars>`. A proof
   must PASS before it installs. No source: bytecode packets, or an owner-approved patch.
 - **Return-type-only linkage** (a call whose game method now returns a value): `bridgeforge relink "<ws>" --vanilla-core <core>`.
+- **A call whose game method changed its parameters** (`target-impact` says `jar-call-signature-changed`) is not a scan
+  finding, so `revive --approve jar-call-signature-changed` does nothing (Vayra's Sector, 2026-11-19; ROADMAP-3 96.11).
+  Run the fixer directly, dry-run first, then check the rewritten call with `javap -c`:
+  `bridgeforge fix "<ws>/working" --finding jar-call-signature-changed --vanilla-core <core> [--apply]`.
 - **The report draft says BLOCKED on javac errors** that are only missing libraries: since 93.36, revive passes its own
   providers; with an older build, run `revival-report-draft <working> --vanilla-core <core> --providers <RC8 mods> --apply`.
 
@@ -91,9 +95,14 @@ through an owner-ordered `+bf.N` bump is re-stamped with `baseline-accept --reas
 
 ## 6. A mod changed after archiving
 
-1. `bridgeforge restore-from-done "Done/<Mod>" --queue "In operation"`.
+1. `bridgeforge restore-from-done "Done/<Mod>" --queue "In operation"`. It refuses when a workspace of that name exists:
+   look at it first, and move an older one to `In operation/_stale-<date>/` (never delete). Until ROADMAP-3 96.10 it cannot
+   restore an archive whose shipped folder name differs from the archive's (Station Augments).
 2. Fix it, then `bridgeforge bump-version "In operation/<Mod>" --note "<what changed>"` (`+bf.N`, MOD_CHANGELOG).
-3. Live-test it again, then `record --archive --refresh`. The old archive moves to `Done/_replaced-<date>/`.
+3. For a new game build, the restored report is the previous build's, and revive's draft refuses to overwrite it. After revive
+   ends UNATTENDED_DONE, run `revival-report-draft "<ws>/working" --vanilla-core <core> --providers <rig mods> --apply --force`
+   and check that it reads READY_FOR_LIVE_TEST. The archived copy keeps the old report.
+4. Live-test it again, then `record --archive --refresh`. The old archive moves to `Done/_replaced-<date>/`.
 
 Never edit Done/ in place.
 
