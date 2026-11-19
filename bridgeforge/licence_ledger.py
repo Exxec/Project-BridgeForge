@@ -4,8 +4,9 @@
 with `local_only`, `reason`, `recorded_on` and, new here, optional `paths` exceptions. This module is the only reader
 outside `release.py` (which owns the file format and the writers); `tests/test_licence_ledger.py` fails on any other module
 importing the policy internals. `vendor-copy`, `vendor-plan`, `gene describe`, the release gate, dependency-substitutes,
-case qualification and the archive note all ask here, so GD-2 (third-party genes are local-only unless recorded otherwise)
-is enforced in one place.
+case qualification and the archive note all ask here, so GD-2 is enforced in one place. GD-2 as amended by the owner on
+2026-11-19: a recorded LOCAL_ONLY decision, or a local-only path, stops distribution; a mod with no recorded decision counts
+as releasable. Archiving still records the standing local-only decision for a revival (owner 2026-09-27).
 
 A path exception marks part of a mod local-only although the mod is releasable: another author's sprites or a bundled
 library. `prefix` is relative to the mod root (the folder holding mod_info.json), in posix form, and matches whole path
@@ -13,12 +14,11 @@ segments: `graphics/foo` covers `graphics/foo/a.png`, not `graphics/foobar/a.png
 `jars/x.jar!a/B.class` by `jars/x.jar`, `data/hullmods/hull_mods.csv [id]` by the CSV file.
 
 Uses (`licence_allows`):
-- `local`: always allowed; the standing posture is local, personal use (GD-2).
+- `local`: always allowed.
 - `vendor`: copy content into another mod. A local-only source, or a local-only path of a releasable one, may go only into
   a target that is itself local-only, which must then stay local-only (owner decision 2026-09-27; RevenantLib).
-- `distribute`: publish. Needs an explicit RELEASABLE decision and no local-only path among the paths given. UNRECORDED is
-  refused here, unlike the release gate, which falls back to the policy's default (an open owner question, ROADMAP-3 94.G1
-  WP4).
+- `distribute`: publish. Refused for a LOCAL_ONLY decision or a local-only path among the paths given; allowed for a
+  RELEASABLE decision and, by the owner's 2026-11-19 ruling, for a mod with no decision, as the release gate already read it.
 """
 from __future__ import annotations
 
@@ -129,11 +129,13 @@ def licence_allows(mod_id: str | None, name: str | None, use: str, *, paths: Ite
         verdict = vendoring(mod_id, name, target, policy_path, paths)
         return {"allowed": verdict["allowed"], "reason": verdict["reason"], "must_stay_local_only": verdict["must_stay_local_only"]}
     recorded = decision(mod_id, name, policy_path)
-    if recorded["decision"] != "RELEASABLE":
-        return {"allowed": False, "reason": f"{recorded['decision']}: {recorded['reason']}"}
+    if recorded["decision"] == "LOCAL_ONLY":
+        return {"allowed": False, "reason": f"LOCAL_ONLY: {recorded['reason']}"}
     restricted = local_only_paths(mod_id, name, paths, policy_path)
     if restricted:
         return {"allowed": False, "reason": f"{restricted[0]['path']} is local-only under {restricted[0]['prefix']}: {restricted[0]['reason']}"}
+    if recorded["decision"] == "UNRECORDED":  # owner 2026-11-19: "mark unmarked mods as releasable", by rule, no records written
+        return {"allowed": True, "reason": "no decision recorded: releasable by default (owner 2026-11-19)"}
     return {"allowed": True, "reason": recorded["reason"]}
 
 

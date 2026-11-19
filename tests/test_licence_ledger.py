@@ -111,12 +111,15 @@ class ReviewTests(unittest.TestCase):
 
 
 class UseTests(unittest.TestCase):
-    def test_local_is_always_allowed_and_distribute_needs_an_explicit_release(self) -> None:
+    def test_local_is_always_allowed_and_distribute_refuses_only_a_local_only_decision(self) -> None:
         with resolved_temp_dir() as base:
             policy = _policy(base, {"open": {"local_only": False, "reason": "MIT", "paths": [ART]},
                                     "closed": {"local_only": True, "reason": "no licence"}})
             self.assertTrue(licence_allows("unknown", None, "local", policy_path=policy)["allowed"])
-            self.assertFalse(licence_allows("unknown", None, "distribute", policy_path=policy)["allowed"])  # UNRECORDED
+            # Owner 2026-11-19: a mod with no recorded decision counts as releasable, as the release gate already read it.
+            unrecorded = licence_allows("unknown", None, "distribute", paths=["graphics/x.png"], policy_path=policy)
+            self.assertTrue(unrecorded["allowed"])
+            self.assertIn("no decision recorded", unrecorded["reason"])
             self.assertFalse(licence_allows("closed", None, "distribute", policy_path=policy)["allowed"])
             self.assertTrue(licence_allows("open", None, "distribute", paths=["graphics/mine/a.png"], policy_path=policy)["allowed"])
             refused = licence_allows("open", None, "distribute", paths=["graphics/other_author/a.png"], policy_path=policy)

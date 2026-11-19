@@ -1127,9 +1127,17 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   - **Not covered yet:** the release gate does not look at path exceptions. `release` still packages a releasable mod
     with its local-only paths; only the copy paths and `distribute` refuse them. Wiring `distribute` into the release gate
     goes with the owner question below.
-  - **Open owner question:** an UNRECORDED mod gets two answers. The release gate falls back to the policy's `default`
-    (local_only false), so it passes. The new `distribute` use refuses it, as GD-2 reads. The release gate is unchanged
-    here; changing it is the owner's call.
+  - **Owner question answered 2026-11-19:** an UNRECORDED mod got two answers: the release gate passed it, while
+    `distribute` refused it, as GD-2 read. The owner said "Go ahead and mark unmarked mods as releasable" and chose,
+    of the options put to them, "Rule only: no decision = releasable". So:
+    - `distribute` now allows a mod with no recorded decision, matching the release gate;
+    - no records are written: 328 mods had none on Test1 that day, 176 in `Done/` (mostly raw folders of current
+      third-party mods) and 152 workspaces in `In operation/`;
+    - a recorded LOCAL_ONLY decision and a local-only path still refuse;
+    - archiving still records the standing local-only decision for a revival (owner 2026-09-27).
+
+    GD-2 is amended to match (docs/FEATURE_GENOME_ROADMAP.md section 11). Test: `UseTests` in
+    `tests/test_licence_ledger.py` (red before the change).
   - Tests: `tests/test_licence_ledger.py` (14; `ReviewTests` covers the review's points, each mutation-checked):
     - an exception survives a new decision and the standing licence;
     - whole-segment matching for files, jar classes and CSV rows;
