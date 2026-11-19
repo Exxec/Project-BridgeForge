@@ -748,6 +748,19 @@ unproven).
   - Record each key and click with the game log's length at that moment. A stall report then reads, for example, "Escape at log
     offset X, 1.0 s after `campaign END`, while 'Saving to' had no 'Saving stage 8'". Today that took a manual log comparison.
   Priority: now, stacked on 93.59 (the remaining 96.2 live runs).
+  **Done 2026-11-19.**
+  - `live_run.to_mission_list` leaves the campaign, then reads the screen up to six times, a second apart, for the main menu's
+    Missions button. If none is found it takes a screenshot (`<log>.leave-campaign.png`) and sends Escape, Exit and OK once
+    more. If the menu is still not there, the run stops LIVE_STUCK at `leave-campaign` and nothing more is clicked. When the
+    screen cannot be read the clicks are blind as before.
+  - `drive` wraps the hands in `live_run.recording`. Every key, click and scroll goes to `LiveResult.actions` as
+    `{t, action, log_bytes}`, and a stuck run writes them to `<log>.actions.json`.
+  - Tests: `tests/test_live_run.py`, whose `FakeGame` gains a readable screen whose menu shows after N Exit-OK clicks:
+    - a lost first exit is seen, photographed and sent again;
+    - a menu that never shows stops at `leave-campaign` after one retry, with its actions saved;
+    - a first exit that works needs no retry;
+    - every action is recorded against a growing log.
+    Removing the retry, or the recording, fails two tests each (mutation-checked).
 - 96.10 (S) **`restore-from-done` for a re-port.** Porting Vayra's Sector to RC7 took three manual steps:
   - a September workspace of the same name made the restore refuse ("already exists"). It was moved to
     `In operation/_stale-2026-11-19/` by hand;
