@@ -344,7 +344,7 @@ Check S series implementation plan and if applicable add remaining items to road
         scan runs in one process, so its own CPU is what the budget is about; javap children are not counted. The tests
         that time a real wait (the launch watchdog, an escalation timeout) keep `monotonic`. Every job in `ci.yml` and
         `weekly.yml` has `timeout-minutes`, about three times its slowest recent run (Windows fast 11.2 min -> 35). The
-        suite runners (`run_partitioned.py`, `run_reversed.py`) and the coverage job's `unittest -b` buffer each test's
+        suite runners (`run_partitioned.py`, `run_reversed.py`) and the coverage job's `unittest discover -b` buffer each test's
         output, so only a failing test's prints reach the log.
       - C8: `.github/actions/setup-bridgeforge` (composite) sets up Python, the `.java-version` JDK and the install for
         every job that runs the suite: docs, coverage, the test matrix and weekly. `pyproject.toml` pins ruff with

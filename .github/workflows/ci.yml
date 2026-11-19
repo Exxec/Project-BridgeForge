@@ -108,7 +108,7 @@ jobs:
       - name: Run unit tests under coverage
         env:
           COVERAGE_FILE: ${{ runner.temp }}/.coverage
-        run: python -m bridgeforge.test_guard -- python -m coverage run -m unittest -b discover -s tests
+        run: python -m bridgeforge.test_guard -- python -m coverage run -m unittest discover -b -s tests
       - name: Report (fails below the pyproject floor)
         env:
           COVERAGE_FILE: ${{ runner.temp }}/.coverage
