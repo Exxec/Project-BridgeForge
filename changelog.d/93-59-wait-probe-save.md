@@ -1,0 +1,1 @@
+- A live run waits for the probe's save after its checks before leaving the campaign; keys sent during a 20-28 s save were lost and the run stalled (ROADMAP-3 93.59).
