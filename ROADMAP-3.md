@@ -1489,6 +1489,16 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   the save: the run waits and loses nothing; without the wait the Escape is lost; a save that never reports is stuck at
   probe-save; the config flag read strictly). Without the wait two tests fail (mutation-checked). Live confirmation: the
   YunruCore and Broken Star re-runs on Test1 (96.2).
+  Confirmed live 2026-11-19: P962VY (Vayra's Sector, YunruCore), P962BS5/BS6 (Broken Star) and P962NC (Neutrino) all
+  reached `probe-saved` before `combat-1` and ended LIVE_DONE.
+- 93.60 (S) **GraphicsLib's cache read as drift.** P962NC-LIVE-0985a-20261119 (Neutrino Corporation, PASS) was refused at
+  record: "staged files of shaderLib changed since launch". GraphicsLib 1.12.1 writes generated normal maps into its own
+  `cache/` while the game runs: 182 files, all under `cache/`, dated during the run. The same class as Prepatcher's
+  `logs/` (93.41).
+  **Done 2026-11-19.** `run_manifest.RUNTIME_OUTPUT_DIRS` gains `"shaderLib": ("cache",)`, so `cache/` stays out of
+  GraphicsLib's staged hash. Any other change to GraphicsLib is still drift. Tests: `tests/test_run_manifest.py`: a cache
+  file written during the run is not drift, a changed shader is. Without the entry the test fails (mutation-checked). Live
+  confirmation: the Neutrino re-run on Test1 (96.2).
 - 93.51 (S) **Two lower-risk leads from the 93.45 security review,** read 2026-11-17, not yet fixed:
   - BridgeForge's helper classes are cached in the temp folder and reused without a check (`bytecode.py`, `java_ast.py`,
     `delegate_method.py`). On a shared POSIX `/tmp` another local user could plant one. Windows' temp folder is per user.

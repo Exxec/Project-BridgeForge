@@ -1,0 +1,1 @@
+- GraphicsLib's `cache/`, which it writes while the game runs, no longer reads as drift of its staged files, so a live run with GraphicsLib can be recorded (ROADMAP-3 93.60).
