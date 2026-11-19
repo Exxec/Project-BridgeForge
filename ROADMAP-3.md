@@ -1171,10 +1171,38 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
 
     Plus `tests/test_gene_contract.py` over the new fixtures. Mutation-checked: dropping the licence narrowing, the
     element check, the `derived_from` check or the local-only rule each fails a test.
-  Next: WP5 (evidence header, applied to `gene describe`), WP6 (duplication audit with a shrink-only baseline), then
-  GR-2/GR-3/GR-5 into 94.G2.
+  **WP5 Done 2026-11-19** (the evidence header). A second advisor review the same day corrected the first: `gene.json` is
+  what evidence is *about*, so the header is not put into it, and schema 2 stays as it is.
+  - `bridgeforge/genome/evidence.py` defines the header every evidence file about a gene carries: G2's proofs, G6's
+    phenotype runs, Salvor's save results and SPW's cost. It is its own small schema (`bridgeforge-gene-evidence`
+    schema 1), versioned apart from gene.json, and it points at a gene by `{identity, schema_version}`.
+  - Required core: `evidence`, `schema_version`, `kind`, `gene`, `produced_by {tool, version}`, `created_at`,
+    `build {game_version}`, `inputs [{role, path, sha256}]` and `verdict`. A producer may add fields. The names follow what
+    the suite already writes: gates.json and the run manifests (`schema_version`, `kind`, `created_at` in UTC), gene.json
+    (`build.game_version`), and the interop design's gate states PASS/FAIL/NOT_RUN/UNKNOWN.
+  - An input's path is relative to the folder the evidence was made from, in posix form. Absolute paths, drive letters,
+    backslashes, and `.`, `..` or empty segments are refused: the repository is public, and the header names no machine
+    path.
+  - `header()` is the writer G2 calls. `gene evidence check FILE --gene GENE.json [--root DIR]` checks that the evidence is
+    about that gene: same identity, same gene schema, not a withdrawn one. With `--root` it re-hashes each input and names
+    one that changed or is gone.
+  - The contract folder gains `evidence-header.schema.json` and `evidence/` (two valid fixtures, one with a producer's own
+    fields, and six invalid ones, one rule each), judged against `fixtures/valid-hullmod.json`. One pin still covers it
+    all (GR-1). The pin becomes `eb1120bf…`.
+  - Tests: `tests/test_gene_evidence.py`:
+    - a written header validates, checks clean, then reports a changed and a removed input;
+    - another gene, another gene schema and withdrawn schema 1;
+    - machine paths refused;
+    - malformed shapes give problems;
+    - the fixtures and the contract record;
+    - the CLI.
+
+    Mutation-checked: the identity comparison, the re-hash, the withdrawn rule and the path rule each fail a test when
+    removed.
+  Next: WP6 (duplication audit with a shrink-only baseline), then GR-2/GR-3/GR-5 into 94.G2.
 - 94.G2 **Sequencing and proof**: closure for campaign features and registration slicing; subtraction and isolation proofs per
-  gene. Project Go exports a gene's strings as one unit.
+  gene. Project Go exports a gene's strings as one unit. Acceptance adds (WP5): every proof file carries the evidence header
+  and passes `gene evidence check` against its gene with `--root`.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

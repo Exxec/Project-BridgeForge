@@ -33,11 +33,42 @@ def add_parser(subcommands) -> None:
     sisters_cmd.add_argument("--clone", action="append", default=[], metavar="REPO=DIR",
                              help="read this repository from a local checkout instead of GitHub; repeatable")
     sisters_cmd.add_argument("--json", action="store_true")
+    evidence_cmd = gene_sub.add_parser("evidence", help="evidence files about a gene (WP5): check that one carries the common header and is "
+                                                        "about this gene as it stands")
+    evidence_sub = evidence_cmd.add_subparsers(dest="evidence_command", required=True)
+    check_cmd = evidence_sub.add_parser("check", help="check an evidence file's header against a gene manifest and, with --root, "
+                                                      "recompute its inputs' SHA-256")
+    check_cmd.add_argument("file", type=Path, help="the evidence file (JSON)")
+    check_cmd.add_argument("--gene", type=Path, required=True, help="the gene.json the evidence is about")
+    check_cmd.add_argument("--root", type=Path, help="the folder the inputs' paths are relative to (a mod or workspace); without it "
+                                                     "the inputs are not re-hashed")
+
+
+def _run_evidence(args: argparse.Namespace) -> int:
+    import json
+
+    from .evidence import check
+
+    try:
+        made = json.loads(args.file.read_text(encoding="utf-8"))
+        gene = json.loads(args.gene.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"bridgeforge: {exc}", file=sys.stderr)
+        return 2
+    problems = check(made, gene if isinstance(gene, dict) else {}, args.root)
+    for problem in problems:
+        print(f"PROBLEM {problem}")
+    if not problems:
+        rehashed = f", {len(made['inputs'])} input(s) re-hashed" if args.root else ", inputs not re-hashed (no --root)"
+        print(f"OK {made['kind']} {made['verdict']} about gene {made['gene']['identity'][:16]}{rehashed}")
+    return 1 if problems else 0
 
 
 def run_cli(args: argparse.Namespace) -> int:
     if args.command != "gene":
         return 2
+    if args.gene_command == "evidence":
+        return _run_evidence(args)
     if args.gene_command == "contract":
         return _run_contract(args)
     if args.gene_command == "trace":
