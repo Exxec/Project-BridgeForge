@@ -46,6 +46,13 @@ def _status(repo: Path) -> str:
 
 
 class HygieneTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # The interpreter's own bridgeforge install is machine state (a plain `pip install .` on CI, a stale copy on
+        # White_Legion); tests/test_paths.py covers that check (96.5 A2).
+        patcher = mock.patch.object(hygiene, "_check_installed", return_value={"status": "SKIPPED", "reason": "patched in tests"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _check(self, repo: Path, *, ruff_clean: bool = True, build: str | None = None) -> dict:
         """Run the check with ruff stubbed clean (or unavailable) so the git results do not depend on the ruff install."""
         with mock.patch.object(hygiene, "_find_ruff", return_value=FAKE_RUFF if ruff_clean else None), \
@@ -210,6 +217,13 @@ class HygieneTests(unittest.TestCase):
 class HooksTests(unittest.TestCase):
     """ROADMAP-3 96.5 C1: the tracked hooks in tools/githooks run only when core.hooksPath points at them. Before, the hooks
     lived in the ignored .githooks/ and core.hooksPath was unset, so no hook ever ran."""
+
+    def setUp(self) -> None:
+        # The interpreter's own bridgeforge install is machine state (a plain `pip install .` on CI, a stale copy on
+        # White_Legion); tests/test_paths.py covers that check (96.5 A2).
+        patcher = mock.patch.object(hygiene, "_check_installed", return_value={"status": "SKIPPED", "reason": "patched in tests"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _hooks(self, repo: Path) -> dict:
         with mock.patch.object(hygiene, "_find_ruff", return_value=FAKE_RUFF), \

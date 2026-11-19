@@ -234,7 +234,9 @@ def build_tag(mod_dir: Path, label: str = DEFAULT_LABEL, set_value: int | None =
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent
+    from .paths import data_root
+
+    return data_root()
 
 
 def default_manifests_dir() -> Path:

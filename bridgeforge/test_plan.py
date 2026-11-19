@@ -8,6 +8,7 @@ from pathlib import Path
 from .build_tag import compute_working_copy_hashes, default_manifests_dir
 from .copy_drift import _find_mod_root
 from bridgeforge.scan.scanner import _load_lenient_json_file
+from .paths import data_root
 
 """Change-impact test selection (roadmap P5).
 
@@ -263,7 +264,7 @@ def plan_tests(
     if live_test_instructions is not None:
         instructions_path = Path(live_test_instructions).expanduser().resolve()
     else:
-        default_path = Path(__file__).resolve().parent.parent / "In operation" / DEFAULT_LIVE_TEST_INSTRUCTIONS
+        default_path = data_root() / "In operation" / DEFAULT_LIVE_TEST_INSTRUCTIONS
         instructions_path = default_path if default_path.is_file() else default_path
     sections = _parse_live_test_instructions(instructions_path)
     section = _matching_section(sections, mod_id, mod_name)

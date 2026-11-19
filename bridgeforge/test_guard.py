@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -101,8 +102,10 @@ def apply_known_failures(counts: dict, known: list[dict], today: str) -> dict:
 
 def run_recorded_suite(repo: Path, command: list[str]) -> tuple[int, dict]:
     """Run the suite, echo its output as it comes, and return (exit code, parsed counts)."""
+    # The suite never sees BRIDGEFORGE_DATA_ROOT: its defaults stay in the checkout, away from the owner's data (96.5 A2).
+    env = {name: value for name, value in os.environ.items() if name != "BRIDGEFORGE_DATA_ROOT"}
     process = subprocess.Popen(command, cwd=repo, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                               encoding="utf-8", errors="replace")
+                               encoding="utf-8", errors="replace", env=env)
     lines: list[str] = []
     assert process.stdout is not None
     for line in process.stdout:

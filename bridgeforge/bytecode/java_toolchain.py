@@ -22,7 +22,9 @@ from pathlib import Path
 
 from bridgeforge.scan.scanner import _load_lenient_json_file
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from bridgeforge.paths import data_root
+
+REPO_ROOT = data_root()  # In operation/, Done/, bridgeforge-state/ (96.5 A2)
 DEFAULT_PROVIDER_ROOTS = (REPO_ROOT / "In operation", REPO_ROOT / "In operation" / "_rig" / "mods")
 
 # A mod's own jar discovery mirrors scanner._loaded_mod_jars (mod_info.json's "jars" list first,

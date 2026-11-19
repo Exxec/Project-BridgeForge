@@ -28,12 +28,21 @@ NON_WORKING_FOLDER_NAMES = {"original", "scratch", "reports", "builds", "workspa
 
 
 def _repo_root() -> Path:
-    """The BridgeForge repo root (this file lives at <repo_root>/bridgeforge/rig_doctor.py).
+    """The data root: In operation/, the saves and core baselines (`paths.data_root`, 96.5 A2).
 
     A separate function (rather than inlining this in rig_doctor()) so tests can monkeypatch it to
     point at a throwaway fixture tree instead of the real repo.
     """
-    return Path(__file__).resolve().parents[2]
+    from bridgeforge.paths import data_root
+
+    return data_root()
+
+
+def _checkout_root() -> Path:
+    """The source tree, where the probe's release copy is built (`paths.checkout_root`). Patchable like _repo_root."""
+    from bridgeforge.paths import checkout_root
+
+    return checkout_root()
 
 
 def _declared_id(folder: Path) -> str | None:
@@ -559,7 +568,7 @@ def rig_doctor(
             _check_isolation(runtime_dir),
             _check_game_not_running(runtime_dir),
             _check_path_locks(runtime_dir),
-            _check_probe_installed(runtime_dir, repo_root),
+            _check_probe_installed(runtime_dir, _checkout_root()),
             _check_enabled_mods_resolve(runtime_dir, rig_base_game_version(runtime_dir)),
             _check_revenantlib_contract(runtime_dir),
             _check_working_copy_drift(runtime_dir, working_copies or {}),

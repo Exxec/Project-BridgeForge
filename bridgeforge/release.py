@@ -217,8 +217,9 @@ def _copy_drift_gate(root: Path, rig: Path | None) -> dict[str, object]:
 
 
 def _default_corpus_dir(root: Path, mod_id: str | None) -> Path | None:
-    repo_root = Path(__file__).resolve().parent.parent
-    candidate = repo_root / "In operation" / DEFAULT_SAVE_CORPUS_DIRNAME / (mod_id or root.name)
+    from .paths import data_root
+
+    candidate = data_root() / "In operation" / DEFAULT_SAVE_CORPUS_DIRNAME / (mod_id or root.name)
     return candidate if candidate.is_dir() else None
 
 

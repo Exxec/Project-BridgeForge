@@ -449,6 +449,29 @@ Check S series implementation plan and if applicable add remaining items to road
       NOT_REVIVABLE from the check fails two of them (mutation-checked).
     - A2 (S/M): one resolver for the checkout and the state folder. The `.venv` holds a stale non-editable copy,
       0.4.0, 68 files behind.
+      **Done 2026-11-18.** `bridgeforge/paths.py`: `checkout_root()` (the source tree) and `data_root()`, `state_dir()`,
+      `ops_dir()`, `done_dir()` (In operation/, Done/, bridgeforge-state/). Without `BRIDGEFORGE_DATA_ROOT` both are the
+      checkout, which is what every module computed before, so nothing moves; with it, the data defaults follow it. That is
+      what White_Legion needs: its checkouts are worktrees under `bridgeforge-state/github-fixes/`, three levels below the
+      real data.
+      - 22 module-relative roots in 20 modules now go through it. The data ones (`substitutes.REPO_ROOT` and
+        `java_toolchain.REPO_ROOT`, which 10 modules import, `novelty`, `bootstrap`, `build_tag`, `reference_rigs`,
+        `release`, `test_plan`, `cmd_archive`'s restore, `cmd_revive`'s Done, `rig-doctor`'s baselines and working
+        copies) use `data_root()`. The source-tree ones (`checks_index`, `release_notes`, the probe build and release copy,
+        `atlas_predictions`, the capacity, duel and raid mods, `MOD_CHANGELOG.md`) use `checkout_root()`. rig-doctor has a
+        second patchable helper, `_checkout_root()`, because it reads both. Package-internal paths (`probe_profiles`,
+        `scan_registry`, the `PYTHONPATH` handed to child runs) stay as they were.
+      - The suite never sees the variable: `tests/support.py` drops it and `test_guard` starts the suite without it.
+      - `hygiene` has a new check, `installed_package`: a plain install, or an editable one at another version, is a
+        finding, with the fix (an editable install of the main checkout, not a worktree). On White_Legion it reports the
+        `.venv`'s plain 0.4.0 copy.
+      Not changed: the command-line defaults written as `Path("bridgeforge-state") / ...` stay relative to the folder a
+      command runs in, as documented.
+      Tests: `tests/test_paths.py`: both roots default to the checkout; the variable moves the data root and not the source
+      tree; a fresh interpreter's module defaults follow it; no module computes a data folder from `__file__`; the suite
+      never sees it; the install check (plain, editable at another version, editable at this one, none). The hygiene tests
+      patch the install check (machine state). Removing the routing, the plain-install finding or the suite's environment
+      strip each fails a test (mutation-checked).
     - A7 (S/M): MOD_CHANGELOG and release decisions as fragments, since two machines now write them.
     - A4, A5, A6, A10 (M): one public module for mod files (11 resolvers, 5 `_mod_info` loaders); split the `run_cli`
       if-chains (10 of the 13 functions over 200 lines); split the 1,000-line modules with a size ratchet; one shared

@@ -28,7 +28,9 @@ from bridgeforge.scan.scanner import _base_game_version, _load_lenient_json_file
 from .revival_audit import _completion_statuses
 
 SCHEMA_VERSION = 1
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from .paths import data_root
+
+REPO_ROOT = data_root()  # In operation/, Done/, bridgeforge-state/ (96.5 A2)
 SUCCESSORS_PATH = Path(__file__).resolve().parent / "dependency_successors.json"
 # The series a provider must target to count as current, when neither the core nor bridgeforge-state/target.json names one.
 # The report key stays "targets_0.98a" (reports and revive options carry it); it means "targets the current series".

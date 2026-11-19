@@ -12,7 +12,9 @@ from pathlib import Path
 
 from .safeio import atomic_write_text
 
-ROOT = Path(__file__).resolve().parent.parent
+from .paths import checkout_root
+
+ROOT = checkout_root()  # changelog.d/ and CHANGELOG.md in the source tree (96.5 A2)
 FRAGMENT_DIR = "changelog.d"
 UNRELEASED_HEADING = re.compile(r"^##\s+(\S+)\s+\(unreleased\)\s*$")
 

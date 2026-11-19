@@ -18,9 +18,10 @@ from pathlib import Path
 
 from bridgeforge.probe.probe_mod_build import ProbeModBuildError, _core_classpath, _find_javac, _janino_check, _run_javac
 from .safeio import atomic_write_text, safe_rmtree
+from .paths import checkout_root
 
 RAID_MOD_ID = "bf_raid"
-RAID_SOURCE = Path(__file__).resolve().parent.parent / "probe-mod" / "raid-mod" / RAID_MOD_ID
+RAID_SOURCE = checkout_root() / "probe-mod" / "raid-mod" / RAID_MOD_ID
 RAID_CONFIG_RELATIVE = Path("data") / "config" / "bf_raid.json"
 RAID_CLASSES = ("data.scripts.bfraid.BfRaidPlugin", "data.scripts.bfraid.BfRaidScript")
 NEXERELIN_JAR_RELATIVE = Path("jars") / "ExerelinCore.jar"

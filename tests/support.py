@@ -9,6 +9,9 @@ import tempfile
 # core.bare=true on the owner's checkout). Every git-running test module imports this one, so drop them before tests run.
 for _name in [name for name in os.environ if name.startswith("GIT_")]:
     del os.environ[_name]
+# BRIDGEFORGE_DATA_ROOT points commands at the owner's real In operation/, Done/ and bridgeforge-state/ (96.5 A2); a test
+# must never resolve its defaults there.
+os.environ.pop("BRIDGEFORGE_DATA_ROOT", None)
 
 # Registry guard (ROADMAP-3 96.5 C4, owner 2026-11-18). rig/rig_prefs.py writes HKCU\Software\JavaSoft\Prefs\com\fs\starfarer,
 # the key that also holds the Starsector licence key, and rig-doctor reads HKLM. Only each test's own patch kept them off

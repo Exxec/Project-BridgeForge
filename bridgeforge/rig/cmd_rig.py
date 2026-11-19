@@ -21,6 +21,7 @@ from bridgeforge.rig.rig_doctor import default_working_copies, rig_doctor
 from bridgeforge.soak_report import soak_report
 from bridgeforge.spw_bridge import ingest_spw_report, log_spam, perf_gate, SpwBridgeError
 from bridgeforge.test_plan import plan_tests, TestPlanError
+from bridgeforge.paths import data_root
 
 
 def add_parser(subcommands) -> None:
@@ -469,7 +470,9 @@ def run_cli(args: argparse.Namespace) -> int:
             print(f"Open questions: {summary['open_question_count']}")
         return 0
     if args.command == "build-probe-mod":
-        repo_root = Path(__file__).resolve().parents[2]
+        from bridgeforge.paths import checkout_root
+
+        repo_root = checkout_root()  # probe-mod/ is in the source tree
         try:
             result = build_probe_mod(repo_root, args.jdk, args.core)
             if args.install_release:
@@ -549,7 +552,7 @@ def run_cli(args: argparse.Namespace) -> int:
         # working copies would suggest a `prepare-test --sync` that overwrites the reference. Only
         # explicit --working entries are compared there.
         use_defaults = not (args.no_default_working or args.reference_manifest)
-        working: dict[str, Path] = dict(default_working_copies(Path(__file__).resolve().parents[2])) if use_defaults else {}
+        working: dict[str, Path] = dict(default_working_copies(data_root())) if use_defaults else {}
         if use_defaults:
             # Defaults cover every project mod, but each rig holds only some (Vacuum has its own rig), so
             # compare only the ones installed in THIS rig. Explicit --working entries are never filtered.

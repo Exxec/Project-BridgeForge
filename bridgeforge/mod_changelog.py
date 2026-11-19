@@ -12,8 +12,9 @@ from .safeio import atomic_write_text
 import re
 from datetime import date
 from pathlib import Path
+from .paths import checkout_root
 
-DEFAULT_PATH = Path(__file__).resolve().parent.parent / "MOD_CHANGELOG.md"
+DEFAULT_PATH = checkout_root() / "MOD_CHANGELOG.md"
 HEADER = ("# Mod changelog\n\nBigger updates to revived mods, newest first. Tool changes are in CHANGELOG.md; each mod's "
           "evidence is in its revival report.\n")
 _DATE = re.compile(r"^## (\d{4}-\d{2}-\d{2})\s*$")
