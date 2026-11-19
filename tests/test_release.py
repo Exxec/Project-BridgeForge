@@ -9,6 +9,7 @@ from pathlib import Path
 from bridgeforge.build_tag import apply_build_tag
 from bridgeforge.cli import main
 from bridgeforge.release import release_mod
+from bridgeforge.release import _load_policy
 
 
 def _write(path: Path, text: str) -> None:
@@ -234,7 +235,7 @@ class ReleasePolicyRecordTests(unittest.TestCase):
             added = record_policy_decision("oldsector", local_only=True, reason="author vanished; no licence", on="2026-09-25", policy_path=policy)
             with self.assertRaises(ReleaseError):
                 record_policy_decision("x", local_only=True, reason="  ", policy_path=policy)
-            data = json.loads(policy.read_text(encoding="utf-8"))
+            data = _load_policy(policy)
             self.assertEqual(revival_licence("oldsector", None, policy)["decision"], "LOCAL_ONLY")
         self.assertEqual(updated["mod"], "ExiGency")  # the existing key's spelling is kept
         self.assertEqual(updated["previous"], {"local_only": True, "reason": "old"})

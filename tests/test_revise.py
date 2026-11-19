@@ -16,6 +16,7 @@ from bridgeforge.removals import add_removals, make_entry
 from bridgeforge.revise import ReviseError, StepFailed, finalize, prepare
 from tests.bound_runs import BASIC_LOG, bound_run
 from tests.support import resolved_temp_dir
+from bridgeforge.mod_changelog import merged_text
 
 REPO_POLICY = Path(__file__).resolve().parent.parent / "bridgeforge" / "release_policy.json"
 MOD_ID = "bf_fixture_radar"
@@ -126,7 +127,7 @@ class FinalizeTests(unittest.TestCase):
             archived = shipped_hash(fx.done / "Radar" / "Radar")
             replaced = sorted(p.name for p in (fx.done / "_replaced-2026-10-18").iterdir()) if (fx.done / "_replaced-2026-10-18").is_dir() else []
             old_note_kept = list(fx.done.glob("_replaced-*/Radar/ARCHIVE_NOTE.md"))
-            changelog_lines = (fx.changelog.read_text(encoding="utf-8")).count("Fixed the radar ring spawn.")
+            changelog_lines = merged_text(fx.changelog).count("Fixed the radar ring spawn.")
             version_after = fx.version()
             top_zip = sorted(p.name for p in fx.done.glob("*.zip"))
         self.assertEqual(result["state"], "COMPLETE")
@@ -238,7 +239,7 @@ class RecoveryTests(unittest.TestCase):
                     fx.finalize(rev)
                 failed = revise.read_journal(fx.ws, rev)
                 result = fx.finalize(rev)
-            lines = fx.changelog.read_text(encoding="utf-8").count("Fixed the radar ring spawn.")
+            lines = merged_text(fx.changelog).count("Fixed the radar ring spawn.")
         self.assertEqual((failed["state"], failed["failed_step"]["step"]), ("LIVE_ACCEPTED", "changelog"))
         self.assertEqual((result["state"], result["failed_step"]), ("COMPLETE", None))
         self.assertEqual(lines, 1)

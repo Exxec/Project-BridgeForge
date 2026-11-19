@@ -10,6 +10,7 @@ from bridgeforge.bytecode.jar_batch import repair_decompile
 from bridgeforge.bytecode.jar_patch import _only_return_type_relinks
 from bridgeforge.workspace_tools import bump_version, next_version, restore_from_done, review_applied
 from tests.support import resolved_temp_dir
+from bridgeforge.mod_changelog import merged_text
 
 
 class WorkspaceToolTests(unittest.TestCase):
@@ -25,7 +26,7 @@ class WorkspaceToolTests(unittest.TestCase):
             result = bump_version(root / "Mod", "Relinked a tooltip call.\nEvidence: javap.", day="2026-10-01", changelog=root / "MOD_CHANGELOG.md")
             info = json.loads((working / "mod_info.json").read_text(encoding="utf-8"))
             report = (working / "reports" / "REVIVAL_REPORT.md").read_text(encoding="utf-8")
-            log = (root / "MOD_CHANGELOG.md").read_text(encoding="utf-8")
+            log = merged_text(root / "MOD_CHANGELOG.md")
         self.assertEqual((result["new"], info["version"]), ("1.2+bf.1", "1.2+bf.1"))
         self.assertTrue(report.rstrip().endswith("READY_FOR_LIVE_TEST"))
         self.assertIn("- **Some Mod** 1.2+bf.1: Relinked a tooltip call.", log)

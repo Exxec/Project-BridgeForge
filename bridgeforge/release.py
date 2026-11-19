@@ -48,10 +48,54 @@ def _load_policy(policy_path: Path | None) -> dict[str, object]:
     mods, default = policy.get("mods", {}), policy.get("default", {})
     if not isinstance(mods, dict) or not isinstance(default, dict):
         raise ReleaseError("Release policy mods/default must be objects")
+    _overlay_policy_fragments(policy, path)
     for entry in [default, *mods.values()]:
         if not isinstance(entry, dict) or not isinstance(entry.get("local_only", False), bool):
             raise ReleaseError("Release policy entries must be objects with boolean local_only")
     return policy
+
+
+# Decisions are fragments (ROADMAP-3 96.5 A7): Test1's `archive` and White_Legion's sessions both wrote release_policy.json, so
+# two branches edited the same file. A decision is now one file in release_policy.d/ beside it, named after the mod: two
+# machines deciding about different mods never touch the same file. `_load_policy` lays them over the file;
+# `release-notes assemble` folds them in.
+POLICY_FRAGMENT_DIR = "release_policy.d"
+_DECISION_KEYS = ("local_only", "reason", "recorded_on")
+
+
+def policy_fragments(policy_path: Path | None = None) -> list[Path]:
+    folder = (Path(policy_path) if policy_path is not None else DEFAULT_POLICY_PATH).parent / POLICY_FRAGMENT_DIR
+    return sorted(folder.glob("*.json")) if folder.is_dir() else []
+
+
+def _matching_key(mods: dict, mod_id: str) -> str:
+    return next((existing for existing in mods if str(existing).lower() == mod_id.lower()), mod_id)
+
+
+def _overlay_policy_fragments(policy: dict, path: Path) -> None:
+    mods = policy.setdefault("mods", {})
+    for fragment in policy_fragments(path):
+        try:
+            data = json.loads(fragment.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            raise ReleaseError(f"Cannot read release decision {fragment}: {exc}") from exc
+        if not isinstance(data, dict) or not str(data.get("mod") or "").strip():
+            raise ReleaseError(f"Release decision {fragment} must be an object naming its mod")
+        mods[_matching_key(mods, str(data["mod"]))] = {key: data[key] for key in _DECISION_KEYS if key in data}
+
+
+def assemble_policy(policy_path: Path | None = None, *, dry_run: bool = False) -> list[str]:
+    """Fold the pending decision fragments into release_policy.json and delete them; the fragment names folded."""
+    from .safeio import atomic_write_text
+
+    path = Path(policy_path) if policy_path is not None else DEFAULT_POLICY_PATH
+    fragments = policy_fragments(path)
+    if fragments and not dry_run:
+        policy = _load_policy(path)
+        atomic_write_text(path, json.dumps(policy, indent=2, ensure_ascii=False) + "\n", newline="")
+        for fragment in fragments:
+            fragment.unlink()
+    return [fragment.name for fragment in fragments]
 
 
 def policy_entry(policy: dict[str, object], mod_id: str | None, mod_name: str | None) -> dict[str, object] | None:
@@ -71,8 +115,10 @@ def _policy_for_mod(policy: dict[str, object], mod_id: str | None, mod_name: str
 
 def record_policy_decision(mod_id: str, *, local_only: bool, reason: str, on: str | None = None,
                            policy_path: Path | None = None) -> dict[str, object]:
-    """Record one mod's publishing decision in release_policy.json (the file the release gate and
-    dependency-substitutes read). An existing entry, matched case-insensitively, keeps its key."""
+    """Record one mod's publishing decision (read by the release gate and dependency-substitutes) as a fragment,
+    release_policy.d/<mod>.json beside release_policy.json (96.5 A7). An existing entry, matched case-insensitively, keeps
+    its key."""
+    import re
     from datetime import date
 
     if not mod_id.strip():
@@ -80,16 +126,17 @@ def record_policy_decision(mod_id: str, *, local_only: bool, reason: str, on: st
     if not reason or not reason.strip():
         raise ReleaseError("a reason is required: record the evidence the decision rests on")
     path = Path(policy_path).expanduser().resolve() if policy_path is not None else DEFAULT_POLICY_PATH
-    policy = _load_policy(path)
-    mods = policy.setdefault("mods", {})
-    key = next((existing for existing in mods if str(existing).lower() == mod_id.lower()), mod_id)
+    mods = _load_policy(path).setdefault("mods", {})
+    key = _matching_key(mods, mod_id)
     previous = mods.get(key)
-    mods[key] = {"local_only": bool(local_only), "reason": reason.strip(), "recorded_on": on or date.today().isoformat()}
+    current = {"local_only": bool(local_only), "reason": reason.strip(), "recorded_on": on or date.today().isoformat()}
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", key).strip("._") or "mod"
+    fragment = path.parent / POLICY_FRAGMENT_DIR / f"{name}.json"
     # LF as the repository keeps it: a plain write_text gave Test1's copy CRLF (2026-11-17).
     from .safeio import atomic_write_text
 
-    atomic_write_text(path, json.dumps(policy, indent=2, ensure_ascii=False) + "\n", newline="")
-    return {"mod": key, "previous": previous, "current": mods[key], "file": str(path)}
+    atomic_write_text(fragment, json.dumps({"mod": key, **current}, indent=2, ensure_ascii=False) + "\n", newline="")
+    return {"mod": key, "previous": previous, "current": current, "file": str(fragment)}
 
 
 # The owner's standing reason for local-only revivals (owner decision 2026-09-27).
