@@ -6,6 +6,7 @@ import re
 import subprocess
 import tempfile
 from pathlib import Path
+from .helper_cache import helper_directory
 
 ASM_SHA256 = "8cadd43ac5eb6d09de05faecca38b917a040bb9139c7edeb4cc81c740b713281"
 
@@ -42,7 +43,7 @@ def _asm() -> Path:
 
 def _helper() -> Path:
     source, asm = _source(), _asm()
-    output = Path(tempfile.gettempdir()) / "bridgeforge-bytecode" / hashlib.sha256(b"release-17" + source.read_bytes() + asm.read_bytes()).hexdigest()[:16]
+    output = helper_directory("bytecode", hashlib.sha256(b"release-17" + source.read_bytes() + asm.read_bytes()).hexdigest()[:16], BytecodeUnavailable)  # private per-user folder (93.51)
     marker = output / "bridgeforge" / "bytecode" / "BridgeforgeBytecode.class"
     if marker.is_file(): return output
     output.mkdir(parents=True, exist_ok=True)
@@ -53,7 +54,7 @@ def _helper() -> Path:
 
 def _rewrite_helper() -> Path:
     source, asm = (Path(__file__).parent.parent / "java") / "BridgeforgeBytecodeRewrite.java", _asm()
-    output = Path(tempfile.gettempdir()) / "bridgeforge-bytecode-rewrite" / hashlib.sha256(b"release-17" + source.read_bytes() + asm.read_bytes()).hexdigest()[:16]
+    output = helper_directory("bytecode-rewrite", hashlib.sha256(b"release-17" + source.read_bytes() + asm.read_bytes()).hexdigest()[:16], BytecodeUnavailable)  # private per-user folder (93.51)
     marker = output / "bridgeforge" / "bytecode" / "BridgeforgeBytecodeRewrite.class"
     if marker.is_file(): return output
     output.mkdir(parents=True, exist_ok=True)

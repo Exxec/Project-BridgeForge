@@ -5,6 +5,7 @@ import hashlib
 import subprocess
 import tempfile
 from pathlib import Path
+from .helper_cache import helper_directory
 
 
 def _java_tools() -> tuple[str, str]:
@@ -43,7 +44,7 @@ def _helper_source() -> Path:
 def _helper_directory() -> Path:
     source = _helper_source()
     digest = hashlib.sha256(b"release-17" + source.read_bytes()).hexdigest()[:16]
-    return Path(tempfile.gettempdir()) / "bridgeforge-ast" / digest
+    return helper_directory("ast", digest, AstUnavailable)  # private per-user folder (93.51)
 
 
 def _ensure_helper() -> Path:

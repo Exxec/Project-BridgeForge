@@ -1320,6 +1320,21 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
     `delegate_method.py`). On a shared POSIX `/tmp` another local user could plant one. Windows' temp folder is per user.
   - `decompiler-review --execute` with a `.bat` adapter: Python quotes an argument only when it holds a space, so an input
     path without spaces reaches cmd.exe unquoted, and an `&` in it would act. The owner's paths all hold spaces.
+
+  **Done 2026-11-19.**
+  - `bridgeforge/bytecode/helper_cache.py` gives the four compiled helpers (AST, bytecode, bytecode rewrite, delegate
+    method) one private folder per user, `<temp>/bridgeforge-helpers-<uid or user>/<kind>/<digest>`. On POSIX it is
+    created with mode 0700 and refused when it is a link, another user's, or open to others; Windows' temp folder is
+    already per user. The helpers recompile once into the new folder. An unsafe folder raises the caller's own
+    `AstUnavailable`/`BytecodeUnavailable`, so a scan degrades as it does without a JDK instead of ending.
+  - `decompiler-review --execute` with a `.bat` or `.cmd` adapter (a trailing dot or space included, which Windows strips)
+    refuses any argument, the adapter's own path included, holding `& | < > ^ " % !` or a control character, before
+    anything runs. An `.exe` adapter is not run through cmd.exe and is unchanged.
+  Tests: `tests/test_security_93_51.py` (the per-user root, 0700 on POSIX; another user's, an open and a linked folder
+  refused, faked so they run on Windows too, plus a real symlink and a real 0755 folder on POSIX; every helper uses it;
+  an unsafe folder is the caller's unavailable error; every metacharacter refused in any argument without running;
+  a plain path and an `.exe` adapter still run). Removing either check fails its tests. An independent security review
+  found both holes closed; its points (the scan-ending error, the message, the trailing dot, more tests) are taken.
 - 93.52 (S) **save-doctor reported equal versions as changed.** Found testing Salvor's provider on real saves (owner
   2026-11-17: "improve/test Salvor" between CI waits). `save_doctor.installed_mods`, the provider contract Salvor imports,
   stored mod_info's `{"major", "minor", "patch"}` version as its Python repr. A save made with 1.20.0 then read as
