@@ -70,7 +70,9 @@ class ManifestError(ValueError):
 # Folders a mod writes into while the game runs: output, not staged input, so they stay out of that mod's staged hash.
 # Keyed by mod_info id. ROADMAP-3 93.41: StarsectorPrepatcher's agent writes logs/prepatcher.log during the run, so
 # SR5-LIVE-0985a-20261117 (Bultach, PASS) read "staged files of starsector_prepatcher changed since launch" and stayed UNBOUND.
-RUNTIME_OUTPUT_DIRS = {"starsector_prepatcher": ("logs",)}
+# 93.60: GraphicsLib (shaderLib) writes generated normal maps into its own cache/ while the game runs: P962NC-LIVE-0985a-20261119
+# (Neutrino Corporation, PASS) wrote 182 files there, all under cache/, and read "staged files of shaderLib changed since launch".
+RUNTIME_OUTPUT_DIRS = {"starsector_prepatcher": ("logs",), "shaderLib": ("cache",)}
 
 
 def _rig_hash_cache(function):
