@@ -1,0 +1,1 @@
+- `jar-call-signature-changed` rewrites RC8's `PersonBountyEventData.reportSuccess()` to RC7's `reportSuccess(getLevel() + 1)`, keeping RC8's progression; Vayra's Sector ports through the fixer (95.14).

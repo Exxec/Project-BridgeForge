@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -82,12 +83,13 @@ def inspect_bytecode(inputs: list[Path]) -> dict[str, object]:
 def append_constant_argument(input_path: Path, output_path: Path, owner: str, name: str, descriptor: str, opcode: int,
                              new_descriptor: str, constant: str, expected: int) -> int:
     """Push `null` or `false` before each matching call and give it `new_descriptor` (one trailing parameter more), into a
-    copy of a .class file; the Java helper checks the shape. Returns the number of calls rewritten (must be `expected`)."""
+    copy of a .class file; the Java helper checks the shape. `getter:NAME:()I:K` instead appends the receiver's NAME() + K
+    to a no-argument instance call (95.14). Returns the number of calls rewritten (must be `expected`)."""
     source, output = input_path.expanduser().resolve(), output_path.expanduser().resolve()
     if source.suffix.lower() != ".class" or not source.is_file() or source == output:
         raise ValueError("append_constant_argument needs an existing .class input and a different output path.")
-    if constant not in {"null", "false"}:
-        raise ValueError("The appended constant is null or false.")
+    if constant not in {"null", "false"} and not re.fullmatch(r"getter:[A-Za-z_$][\w$]*:\(\)I:-?\d{1,3}", constant):
+        raise ValueError("The appended value is null, false or getter:NAME:()I:K.")
     helper, asm = _rewrite_helper(), _asm()
     output.parent.mkdir(parents=True, exist_ok=True)
     done = _run([_java_tools()[1], "-cp", str(helper) + __import__("os").pathsep + str(asm), "bridgeforge.bytecode.BridgeforgeBytecodeRewrite",

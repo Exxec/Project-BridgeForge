@@ -784,6 +784,18 @@ unproven).
   `Random` and a rule exists, so Kadur Remnant clears with the gated fixer; `PersonBountyEventData.reportSuccess()` gained an `int`
   and Vayra's Sector is listed as a hand port. Record what RC7's own callers pass as a rule (`jar_call_rewrites`) with that
   evidence, so the fixer applies it in every mod that makes the call.
+  **Done 2026-11-19** (owner the same day: "slot in 95.14 if possible to knock out Vayra").
+  - Evidence, from both versions' `starfarer.api.zip`: RC8's `reportSuccess()` counted one success. RC7's
+    `reportSuccess(int completedLevel)` counts one exactly when `completedLevel == getLevel() + 1`. RC7's own caller,
+    `PersonBountyIntel`, passes its bounty's level, which a rule for every mod cannot know, so the rule passes
+    `getLevel() + 1` and keeps RC8's progression.
+  - A constant could not do this, so the rewrite has a second kind: `getter:NAME:()I:K` appends the receiver's `NAME()` + K
+    to a no-argument instance call (DUP, the getter, BIPUSH K, IADD; no branch, so frames stay valid). The Java helper
+    and `append_constant_argument` check that shape.
+  - On a copy of Vayra's Sector's `VayraSector.jar` against RC7: both calls (`VayraPersonBountyIntel`,
+    `VayraUniqueBountyIntel`) rewritten, unresolved `reportSuccess` references 2 -> 0. The port itself goes through 96.2.
+  Tests: `tests/test_jar_call_rewrites.py` (scan, fix, rescan and a run under `-Xverify:all` that prints the passed
+  argument, 4 for level 3, and fails with `+0`; gated off on the old API; malformed getter specs refused).
 - 95.15 (S) **Superseded archives skipped.** Seven mod ids are archived twice (14 archives: PatchLib 1.1.0 and 1.1.2, AI Tweaks
   2.2.10 and 2.2.11, Vram Optimizer 1.0.50 and 1.0.51, SEEKER 0.3.0 and 0.6, Epta Consortium 2.0.3 and 2.1.3, Templars 0.9.8f and
   0.9.9e, Neutrino 1.87-RC3 Nostalgia Edition and 1.8.9), some on the owner's word (Templars and Epta, 2026-10-13). A superseded
