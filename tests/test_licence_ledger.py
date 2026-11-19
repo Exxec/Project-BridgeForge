@@ -70,6 +70,46 @@ class PathExceptionTests(unittest.TestCase):
                 record_path_exception("unrecorded", "graphics", reason="r", policy_path=policy)
 
 
+class ReviewTests(unittest.TestCase):
+    """The independent review of 2026-11-19."""
+
+    def test_a_prefix_that_could_never_match_is_refused(self) -> None:
+        with resolved_temp_dir() as base:
+            policy = _policy(base, {"m": {"local_only": False, "reason": "MIT"}})
+            for bad in ("./graphics/x", " graphics/x", "graphics//x", ".", "graphics/./x", "graphics/x "):
+                with self.subTest(bad), self.assertRaises(ReleaseError):
+                    record_path_exception("m", bad, reason="r", policy_path=policy)
+
+    def test_matching_ignores_case_and_covers_jar_names_and_odd_file_names(self) -> None:
+        with resolved_temp_dir() as base:
+            policy = _policy(base, {"m": {"local_only": False, "reason": "MIT", "paths": [
+                {"prefix": "Graphics/Ships", "local_only": True, "reason": "r"},
+                {"prefix": "jars/bundled.jar", "local_only": True, "reason": "r"},
+                {"prefix": "sounds/boom!.ogg", "local_only": True, "reason": "r"},
+                {"prefix": "graphics/foo [v2].png", "local_only": True, "reason": "r"}]}})
+            paths = ["graphics/ships/a.png", "bundled.jar!a/B.class", "other.jar!a/B.class", "sounds/boom!.ogg",
+                     "graphics/foo [v2].png", "graphics/foo"]
+            found = [hit["path"] for hit in local_only_paths("m", None, paths, policy)]
+        self.assertEqual(found, ["graphics/ships/a.png", "bundled.jar!a/B.class", "sounds/boom!.ogg", "graphics/foo [v2].png"])
+        self.assertEqual(member_file("sounds/boom!.ogg"), "sounds/boom!.ogg")
+
+    def test_a_fragment_from_an_older_checkout_keeps_the_recorded_exceptions(self) -> None:
+        with resolved_temp_dir() as base:
+            policy = _policy(base, {"m": {"local_only": False, "reason": "MIT", "paths": [ART]}})
+            _write(policy.parent / "release_policy.d" / "m.json", json.dumps({"mod": "m", "local_only": False, "reason": "old writer"}))
+            entry = _load_policy(policy)["mods"]["m"]
+        self.assertEqual((entry["reason"], entry["paths"]), ("old writer", [ART]))
+
+    def test_two_mods_whose_names_differ_in_punctuation_keep_their_own_fragments(self) -> None:
+        with resolved_temp_dir() as base:
+            policy = _policy(base, {})
+            record_policy_decision("a b", local_only=True, reason="first", policy_path=policy)
+            record_policy_decision("a_b", local_only=False, reason="second", policy_path=policy)
+            record_policy_decision("a b", local_only=True, reason="first, again", policy_path=policy)
+            mods = _load_policy(policy)["mods"]
+        self.assertEqual((mods["a b"]["reason"], mods["a_b"]["reason"]), ("first, again", "second"))
+
+
 class UseTests(unittest.TestCase):
     def test_local_is_always_allowed_and_distribute_needs_an_explicit_release(self) -> None:
         with resolved_temp_dir() as base:
@@ -126,7 +166,7 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(main(["release-policy", "show", "open", "--policy", policy]), 0)
                 self.assertEqual(main(["release-policy", "path", "open", "graphics/other_author", "--remove", "--policy", policy]), 0)
             self.assertIn("local-only path graphics/other_author: theirs", out.getvalue())
-            self.assertNotIn("paths", _load_policy(Path(policy))["mods"]["open"])
+            self.assertEqual(_load_policy(Path(policy))["mods"]["open"]["paths"], [])  # kept empty: an old writer cannot revive it
             with contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(main(["release-policy", "path", "open", "../x", "--reason", "r", "--policy", policy]), 2)
 

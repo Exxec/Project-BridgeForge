@@ -1113,10 +1113,24 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
   - Both copy paths pass the paths they copy. `vendor-copy` refuses a script under a local-only path of a releasable mod.
   - `revival_licence`'s answer is unchanged, so `gene describe` writes the same manifest. Schema 2 (PR B) takes the
     ledger's path verdicts into `gene.json`.
+  - An independent review the same day found a real bug and four gaps, all fixed here:
+    - A prefix that could never match (`./graphics/x`, `graphics//x`, surrounding spaces, `.`) was stored and protected
+      nothing. It is now refused, and matching ignores case, since mods ship for Windows.
+    - vendor-plan names a jar member by the jar's file name only (`x.jar!a/B.class`). An exception on any jar of that name
+      now covers it, so it errs towards protecting too much.
+    - A file name containing `!` or ` [` is no longer cut short. Only `<file>.jar!...` and `<file>.csv [id]` are member
+      forms.
+    - A fragment written by a checkout older than WP4 has no `paths` key. It now keeps the exceptions already recorded,
+      and removing the last exception leaves `paths: []`.
+    - Two mods whose keys differ only in punctuation (`a b`, `a_b`) shared one fragment file, a fault older than WP4.
+      The second now gets a hashed name.
+  - **Not covered yet:** the release gate does not look at path exceptions. `release` still packages a releasable mod
+    with its local-only paths; only the copy paths and `distribute` refuse them. Wiring `distribute` into the release gate
+    goes with the owner question below.
   - **Open owner question:** an UNRECORDED mod gets two answers. The release gate falls back to the policy's `default`
     (local_only false), so it passes. The new `distribute` use refuses it, as GD-2 reads. The release gate is unchanged
     here; changing it is the owner's call.
-  - Tests: `tests/test_licence_ledger.py`:
+  - Tests: `tests/test_licence_ledger.py` (14; `ReviewTests` covers the review's points, each mutation-checked):
     - an exception survives a new decision and the standing licence;
     - whole-segment matching for files, jar classes and CSV rows;
     - prefixes that leave the mod are refused;

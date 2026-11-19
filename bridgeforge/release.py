@@ -65,6 +65,9 @@ def _prefix_problem(prefix: object) -> str | None:
         return "a path prefix is a non-empty string"
     if "\\" in prefix or prefix.startswith("/") or ":" in prefix or ".." in prefix.split("/"):
         return f"path prefix {prefix!r} must be relative to the mod root, in posix form, without '..'"
+    # Refused rather than normalized: a stored prefix that can never match would protect nothing (review 2026-11-19).
+    if prefix != prefix.strip() or any(segment in ("", ".") for segment in prefix.rstrip("/").split("/")):
+        return f"path prefix {prefix!r} has surrounding spaces, an empty segment or a '.' segment; write it as a/b/c"
     return None
 
 
@@ -108,7 +111,21 @@ def _overlay_policy_fragments(policy: dict, path: Path) -> None:
             raise ReleaseError(f"Cannot read release decision {fragment}: {exc}") from exc
         if not isinstance(data, dict) or not str(data.get("mod") or "").strip():
             raise ReleaseError(f"Release decision {fragment} must be an object naming its mod")
-        mods[_matching_key(mods, str(data["mod"]))] = {key: data[key] for key in _DECISION_KEYS if key in data}
+        key = _matching_key(mods, str(data["mod"]))
+        entry = {name: data[name] for name in _DECISION_KEYS if name in data}
+        if "paths" not in data and (mods.get(key) or {}).get("paths"):
+            entry["paths"] = mods[key]["paths"]  # written by a checkout older than WP4: it cannot have meant to drop them
+        mods[key] = entry
+
+
+def _fragment_mod(fragment: Path) -> str | None:
+    """The mod a fragment file records, lower-cased, or None when there is no such file."""
+    if not fragment.is_file():
+        return None
+    try:
+        return str(json.loads(fragment.read_text(encoding="utf-8")).get("mod") or "").lower()
+    except (ValueError, OSError, AttributeError):
+        return ""
 
 
 def assemble_policy(policy_path: Path | None = None, *, dry_run: bool = False) -> list[str]:
@@ -158,13 +175,17 @@ def record_policy_decision(mod_id: str, *, local_only: bool, reason: str, on: st
     previous = mods.get(key)
     current = {"local_only": bool(local_only), "reason": reason.strip(), "recorded_on": on or date.today().isoformat()}
     kept_paths = paths if paths is not None else (previous or {}).get("paths")
-    if kept_paths:  # a new decision keeps the mod's path exceptions: the fragment replaces the whole entry (94.G1 WP4)
+    if kept_paths is not None:  # a new decision keeps the mod's path exceptions: the fragment replaces the whole entry (94.G1 WP4)
         problem = _paths_problem(kept_paths)
         if problem:
             raise ReleaseError(problem)
         current["paths"] = kept_paths
     name = re.sub(r"[^A-Za-z0-9._-]+", "_", key).strip("._") or "mod"
     fragment = path.parent / POLICY_FRAGMENT_DIR / f"{name}.json"
+    if _fragment_mod(fragment) not in (None, key.lower()):  # `a b` and `a_b` would share a_b.json (review 2026-11-19)
+        import hashlib
+
+        fragment = fragment.with_name(f"{name}-{hashlib.sha256(key.encode('utf-8')).hexdigest()[:8]}.json")
     # LF as the repository keeps it: a plain write_text gave Test1's copy CRLF (2026-11-17).
     from .safeio import atomic_write_text
 
@@ -183,7 +204,7 @@ def record_path_exception(mod_id: str, prefix: str, *, reason: str | None = None
     entry = policy_entry(_load_policy(policy_path), mod_id, mod_id)
     if entry is None:
         raise ReleaseError(f"{mod_id} has no recorded decision; record one with `release-policy set` before a path exception")
-    paths = [item for item in entry.get("paths") or [] if item["prefix"].rstrip("/") != prefix]
+    paths = [item for item in entry.get("paths") or [] if item["prefix"].rstrip("/").casefold() != prefix.casefold()]
     if not remove:
         if not reason or not reason.strip():
             raise ReleaseError("a reason is required: record the evidence the exception rests on")

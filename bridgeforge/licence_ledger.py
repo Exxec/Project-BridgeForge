@@ -22,6 +22,7 @@ Uses (`licence_allows`):
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Iterable
 
@@ -49,14 +50,25 @@ def release_gate(mod_id: str | None, name: str | None, policy_path: Path | None 
     return _licence_gate(mod_id, name, policy_path)
 
 
+_JAR_CLASS = re.compile(r"^(?P<file>.+?\.jar)!.")
+_CSV_ROW = re.compile(r"^(?P<file>.+?\.csv) \[.*\]$", re.IGNORECASE)
+
+
 def member_file(path: str) -> str:
-    """The file a member path names: `jars/x.jar!a/B.class` -> `jars/x.jar`, `t.csv [id]` -> `t.csv`."""
-    return path.partition("!")[0].partition(" [")[0]
+    """The file a member path names: `jars/x.jar!a/B.class` -> `jars/x.jar`, `t.csv [id]` -> `t.csv`. Other paths are files,
+    whatever they contain: `foo [v2].png` and `boom!.ogg` are names, not members of something."""
+    match = _JAR_CLASS.match(path) or _CSV_ROW.match(path)
+    return match["file"] if match else path
 
 
 def _covers(prefix: str, path: str) -> bool:
-    prefix = prefix.rstrip("/")
-    return path == prefix or path.startswith(prefix + "/")
+    # Case-folded: mods ship for Windows, where Graphics/Ships and graphics/ships are one folder (review 2026-11-19).
+    prefix, path = prefix.rstrip("/").casefold(), path.casefold()
+    if path == prefix or path.startswith(prefix + "/"):
+        return True
+    # vendor-plan names a jar-class member by the jar's file name only (`x.jar!a/B.class`): an exception on any jar of that
+    # name covers it. That may cover too much, never too little.
+    return "/" not in path and path.endswith(".jar") and prefix.rsplit("/", 1)[-1] == path
 
 
 def local_only_paths(mod_id: str | None, name: str | None, paths: Iterable[str], policy_path: Path | None = None) -> list[dict]:
