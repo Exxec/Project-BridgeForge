@@ -130,6 +130,8 @@ an empty carrier: scans clean, boots).
 duplicates across the 300+ mod corpus found; lineage (which mod copied which feature) recorded. RevenantLib is the
 distribution channel for genes from vanished authors, per its policy. `atlas` research runs over the bank.
 *Accept:* the bank holds the pilots and every allele of them in the corpus; licence state per gene; rebuildable from sources.
+Payloads live under BridgeForge's data root, like `Done/`, never in the public repository; only manifests of the owner's own
+or permitted content become committed fixtures (2026-11-19).
 
 **G4. Adaptation (mutation repair).** Run the existing machinery at gene scope: `target-impact` on the gene's API surface, the
 gated fixers, `src-to-jar` for jar-backed genes, dependency substitution, Project Go for strings, SpriteForge for sprite and
@@ -299,6 +301,17 @@ GR-3 and GR-5) are queued, not started, until the owner says otherwise; nothing 
 - step 2's remaining small items of 96.5;
 - Salvor, whose rig flow is getting its first real runs;
 - live testing between CI waits.
+
+**Resumed (owner 2026-11-19):** "then begin G series after that". The queue above is lifted, and steps 3 and 4 are done the
+same day: WP1, WP2 and WP3 (pull requests #162, #163, #172) and WP4. An advisor review that day added, before G2:
+- **gene.json schema 2** before any sister repository pins the contract: element shapes for registrations, conditions and
+  persistent state; `derived_from` for a gene that G4 adapts; licence path verdicts from the ledger;
+- WP5 and WP6 each with a consumer: the evidence header applied to `gene describe`, and the duplication audit ending in a
+  baseline that can only shrink;
+- GR-2's census also counting registrations per ModPlugin method, the measure of how often slicing will refuse;
+- GR-5's Java probe spike earlier, alongside WP4-WP6.
+
+The four pilots' donors are live-validated on the 0.98.5a-RC7 rig. Status per package is in ROADMAP-3 item 94.
 
 Outside this track unless D2 changes: a shared workspace layout imported from the review (WP1 decides where genes and evidence
 live against the existing workspace forms), a launcher, a GUI, workflow plugins, other games, merging repositories, and a

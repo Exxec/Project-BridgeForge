@@ -397,12 +397,12 @@ def copy_plan(plan: dict, to_mod: Path, *, apply: bool = False, allow_partial: b
 
     The plan is re-checked against the provider as it is now, never trusted: every listed file and
     row must still exist (else STALE), and the licence is re-read from release_policy.json (a
-    local-only provider only into a local-only target, `release.vendoring_licence`). A plan with MISSING or SUSPECT entries or
+    local-only provider, or a local-only path of one, only into a local-only target, `licence_ledger.vendoring`). A plan with MISSING or SUSPECT entries or
     compiled-only classes is INCOMPLETE unless `allow_partial`; what was left out is reported. A
     target file or row that differs is a CONFLICT and nothing is written; identical ones are
     skipped. Dry run unless `apply`. Each copied file's SHA-256 is returned for PROVENANCE.md.
     """
-    from .release import DEFAULT_POLICY_PATH, vendoring_licence
+    from .licence_ledger import vendoring
 
     base = {"schema_version": SCHEMA_VERSION, "mode": "VENDOR_COPY_PLAN", "requested": plan.get("requested"), "apply": apply}
     if plan.get("mode") != "VENDOR_PLAN" or plan.get("schema_version") != SCHEMA_VERSION:
@@ -412,7 +412,8 @@ def copy_plan(plan: dict, to_mod: Path, *, apply: bool = False, allow_partial: b
     info = _load_lenient_json_file(provider / "mod_info.json") if provider.is_dir() else None
     if not isinstance(info, dict):
         return {**base, "status": "STALE", "reason": f"the plan's provider {provider} is no longer a mod folder"}
-    licence = vendoring_licence(info.get("id"), info.get("name"), target, policy_path or DEFAULT_POLICY_PATH)
+    licence = vendoring(info.get("id"), info.get("name"), target, policy_path,
+                        [entry["path"] for entry in plan.get("include", [])])
     if not licence["allowed"]:
         return {**base, "status": "REFUSED", "reason": licence["reason"]}
     left_out = ([f"MISSING {item}" for item in plan.get("missing", [])]

@@ -83,7 +83,13 @@ def add_parser(subcommands) -> None:
     policy_choice.add_argument("--releasable", action="store_true", help="may be published")
     policy_set.add_argument("--reason", required=True, help="the evidence the decision rests on (licence file, forum post, owner decision and date)")
     policy_set.add_argument("--on", help="decision date (default: today)")
-    for command in (policy_show, policy_set):
+    policy_path = policy_sub.add_parser("path", help="mark part of a mod local-only although the mod is releasable (another author's sprites, a bundled library); the mod's decision is kept")
+    policy_path.add_argument("mod")
+    policy_path.add_argument("prefix", help="folder or file relative to the mod root, posix form (graphics/ships/other_author); matches whole path segments")
+    policy_path_choice = policy_path.add_mutually_exclusive_group(required=True)
+    policy_path_choice.add_argument("--reason", help="the evidence: whose content it is and why it may not be published")
+    policy_path_choice.add_argument("--remove", action="store_true", help="drop this exception")
+    for command in (policy_show, policy_set, policy_path):
         command.add_argument("--policy", type=Path, help=argparse.SUPPRESS)
     build_tag = subcommands.add_parser("build-tag", help="iterate a visible build tag in a revived mod's mod_info.json name/version, surgically (never re-serializes the file)")
     build_tag.add_argument("mod_dir", type=Path)
@@ -466,12 +472,17 @@ def _run_release(args: argparse.Namespace) -> int:
 
 
 def _run_release_policy(args: argparse.Namespace) -> int:
-    from .release import ReleaseError as PolicyError, record_policy_decision  # alias: a bare ReleaseError here would shadow main()'s
-    from .substitutes import revival_licence
+    from .licence_ledger import decision as ledger_decision, explicit_entry
+    from .release import ReleaseError as PolicyError, record_path_exception, record_policy_decision  # alias: a bare ReleaseError here would shadow main()'s
     try:
         if args.policy_command == "show":
-            decision = revival_licence(args.mod, args.mod, args.policy)
+            decision = ledger_decision(args.mod, args.mod, args.policy)
             print(f"{args.mod}: {decision['decision']}" + (f" ({decision['reason']})" if decision.get("reason") else ""))
+            for item in (explicit_entry(args.mod, args.mod, args.policy) or {}).get("paths") or []:
+                print(f"  local-only path {item['prefix']}: {item['reason']}")
+        elif args.policy_command == "path":
+            result = record_path_exception(args.mod, args.prefix, reason=args.reason, remove=args.remove, policy_path=args.policy)
+            print(f"{'removed' if args.remove else 'recorded'} path exception {args.prefix.rstrip('/')} for {result['mod']} in {result['file']}")
         else:
             result = record_policy_decision(args.mod, local_only=args.local_only, reason=args.reason, on=args.on, policy_path=args.policy)
             verb = "updated" if result["previous"] else "recorded"

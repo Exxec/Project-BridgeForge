@@ -386,9 +386,9 @@ def _licence_note(mod_id: str, policy_path: Path | None) -> str:
     itself - licence status is a distribution constraint on the *outcome*, not a reason to prefer a
     different strategy (STRIP_FROM_MOD/ESCALATE would need their own owner judgement regardless).
     """
-    from .release import DEFAULT_POLICY_PATH, _licence_gate
+    from .licence_ledger import release_gate
 
-    gate = _licence_gate(mod_id, None, policy_path or DEFAULT_POLICY_PATH)
+    gate = release_gate(mod_id, None, policy_path)
     if not gate["local_only"]:
         return ""
     reason = gate.get("reason")
@@ -472,12 +472,9 @@ def revival_licence(mod_id: str | None, name: str | None, policy_path: Path | No
     it. RELEASABLE: an explicit decision allows publishing. UNRECORDED: no entry; the policy's default
     would treat it as releasable, but no one has checked the licence, so record a decision first.
     """
-    from .release import _load_policy, policy_entry
+    from .licence_ledger import decision
 
-    entry = policy_entry(_load_policy(policy_path), mod_id, name)
-    if entry is None:
-        return {"decision": "UNRECORDED", "reason": "no entry in release_policy.json: check the licence and record a decision before reviving"}
-    return {"decision": "LOCAL_ONLY" if entry.get("local_only") else "RELEASABLE", "reason": entry.get("reason")}
+    return decision(mod_id, name, policy_path)  # the licence ledger answers (94.G1 WP4)
 
 
 def _licence_notes(chosen: list[dict]) -> list[str]:
