@@ -1,0 +1,1 @@
+- Gene census (ROADMAP-3 94.G1 GR-2): `gene census CORPUS --write OUT` counts feature kinds per mod and, per plugin hook, how many features it sets up together; resumable, one progress line per mod.

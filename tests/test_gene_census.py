@@ -52,7 +52,7 @@ def _mod(root: Path, with_plugin: bool = True) -> Path:
     _write(src / "demo" / "Gen.java", GEN)
     out = root / "classes"
     files = [str(p) for p in src.rglob("*.java")]
-    subprocess.run([_javac(), "-proc:none", "-d", str(out), *files], check=True, capture_output=True)
+    subprocess.run([_javac(), "-encoding", "UTF-8", "-proc:none", "-d", str(out), *files], check=True, capture_output=True)
     (mod / "jars").mkdir(parents=True)
     shutil.make_archive(str(mod / "jars" / "demo"), "zip", out / "demo" / "..", "demo")
     (mod / "jars" / "demo.zip").rename(mod / "jars" / "demo.jar")
@@ -144,13 +144,11 @@ class CorpusTests(unittest.TestCase):
 
 class ClassfileTargetsTests(unittest.TestCase):
     def test_method_targets_parallel_method_calls(self) -> None:
-        jar = Path(__file__).resolve().parent  # any class file will do: build one only if javac exists
-        del jar
         if not _javac():
             self.skipTest("needs javac")
         with resolved_temp_dir() as root:
             _write(root / "A.java", "public class A { void f() { g(); } void g() { } }\n")
-            subprocess.run([_javac(), "-proc:none", "-d", str(root), str(root / "A.java")], check=True, capture_output=True)
+            subprocess.run([_javac(), "-encoding", "UTF-8", "-proc:none", "-d", str(root), str(root / "A.java")], check=True, capture_output=True)
             info = parse_class((root / "A.class").read_bytes())
         self.assertEqual(len(info.method_targets), len(info.method_calls))
         self.assertIn(("A", "g"), info.method_targets[info.code_methods.index("f")])
