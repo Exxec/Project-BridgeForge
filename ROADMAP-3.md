@@ -854,8 +854,18 @@ unproven).
   JSON file the source holds with the same bytes is now reported under `inherited_from_source`, not as a fault. Test:
   `test_json_the_source_holds_unreadable_too_is_inherited_not_a_fault`.
   **Gate R8, restore half: PASS (Test1, 2026-11-19).** 460,382 files restored and hash-verified. The status check,
-  re-judged on the restored copy without restoring again, gives PASS on 330 labels with 0 problems and 2 inherited. The
-  rig half (a bounded scenario in the restored copy) is next, now that live testing has resumed.
+  re-judged on the restored copy without restoring again, gives PASS on 330 labels with 0 problems and 2 inherited.
+  **Gate R8, rig half: PASS (Test1, 2026-11-19).** A rig built inside the restored copy (`In operation/_rig-r8`: a
+  junction to the RC7 core, the primary rig's `fast_rendering/`, launcher bat, LazyLib, MagicLib and StarsectorPrepatcher)
+  ran with `BRIDGEFORGE_DATA_ROOT` set to the restored copy. `probe-group plan --retest` and `install --also-enable
+  starsector_prepatcher` staged Kadur Remnant from the restored workspace (its working tree hashes the same as the
+  primary's). R8-RIG-20261119 (`live --direct`, FR + Prepatcher): LIVE_DONE, report PASS, FATAL 0, MOD-ERROR 0;
+  `run-manifest check` ACCEPTABLE, member `kadur_remnant` PASS with the candidate hash equal to the workspace's now. A
+  reading of the primary rig (newest mtime of logs, saves, mods and `bridgeforge-state`; hashes of `rig_up_state.json` and
+  `enabled_mods.json`) taken before setup and after the run is identical. From the restore: the queue, the workspace and the
+  state the commands read. From the environment: the game install, the JDK, Fast Rendering and the libraries. Nothing was
+  recorded or archived under the restored root: its `snapshot.json` names the real snapshot folder. `restore-manifest.json`
+  was not edited, so its `recoverable` still reads false; no command records the rig scenario.
 - 96.16 (S) **A flaky research test on Windows CI.** `tests/test_research_inputs.py`
   `test_flags_reach_the_report_and_the_cache_lands_beside_the_report` failed once on Windows shard 3/4 for PR #185 (run
   44643449898): it found 2 cached `TemCrusade.java` copies where it expects 1. It passes locally, and main's run on the
