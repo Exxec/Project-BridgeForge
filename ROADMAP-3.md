@@ -1589,12 +1589,59 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     an unrecorded 8-round cap. All are fixed with tests; the cap now leaves a suspect. Campaign typing runs for every
     kind, as intended: P1 and P2 are unchanged, and later genes gain vanilla needs their code names. Mutation-checked:
     10 mutants, all killed.
-  - Next, slice 7: the proofs. Subtraction removes the generator and classifies only the recorded call sites as
-    `registration`; the subtracted donor cannot boot, so its boot half is NOT_RUN. Isolation builds a carrier whose own
-    small plugin makes the recorded call, compiled with `--release 17 -proc:none -encoding UTF-8` and hashed as a proof
-    input. The faction need decides whether isolation is possible. Slice 8 (optional) cuts the statement from
-    `ECEModPlugin`, only if compiling `src/ECEModPlugin.java` reproduces the jar class. The boot halves of P1's and P2's
-    proofs still wait for the rig.
+  **Slice 7 Done 2026-11-20: the static proofs of a star-system gene; P3 passes both.**
+  - **Subtraction.** The registration is an element, not a member, so the subtracted donor keeps its plugin calling the
+    removed generator. A new reference naming the generator is classified as the `registration`, not a leak. The proof
+    lists the call sites (`registration_sites`). Its boot note says the donor cannot boot until slice 8 cuts the call.
+  - **Isolation.** The carrier gets a generated plugin, `bfgene.CarrierPlugin` (`genome/carrier_plugin.py`). Its hook
+    makes the recorded call, `new <generator>().<method>(Global.getSector())`.
+    - The class and method names come from mod bytecode, so each must be a plain Java name before it is written into
+      source. Registrations that disagree, and hooks with no generated form, are refused.
+    - It is compiled by `run_javac` (`--release 17 -proc:none -encoding UTF-8`) against the core's `starfarer.api.jar`.
+      A compile error refuses the proof with javac's message: Eridani's fixture `Gen.generate` takes three arguments.
+    - A gene need (`needs.genes`) may stay unresolved in the carrier, like a vanilla need. The carrier's boot note says it
+      waits for that gene: it cannot take the donor, which would generate the system a second time.
+  - **Every carrier lists its jars** in mod_info. The game loads only listed jars, and P2's carrier listed none, so its
+    boot would have loaded no class. P2's carrier now lists `jars/tania.jar`.
+  - **Found by P3's first proof:** removing a nested key re-wrote `settings.json` with `json.dumps`' default
+    `ensure_ascii=True`. Eridani's `天苑四设计` designTypeColors key became `\u` escapes and stopped matching its manufacturer
+    (`design-type-color-unused`). Both rewrites in `proof.py` now keep non-ASCII as text.
+  - **The proof module's jar note is corrected.** A jar that loses classes is written by copying each kept entry's
+    ZipInfo, the method `patch-jar-class` uses. The jar that loaded no class in 2026-10 came from .NET ZipArchive's Update
+    mode. So the boot halves can stage the static copies byte for byte.
+  - **P3, `star-system:Pantheon` (gene `3ebc89de…`): subtraction PASS** (no dependents, no leaks; one registration, the
+    unresolved import in `src/data/scripts/ECEModPlugin.java`, and one site, `ECEModPlugin.generate`). **Isolation PASS**
+    (the carrier plugin compiled; the carrier's own findings are its mod_info). Both pass `gene evidence check --root` with
+    8 inputs re-hashed. The record is in `In operation/Eridani-Combine/genes/p3-Pantheon-20261120-proofs-v2/` (the first run, before the review fixes, stays beside it).
+  - P1 and P2 re-proved with this code: both halves still PASS, with the same dependents (1 and 3).
+  - Tests: `tests/test_gene_star_system.py` (21 in all):
+    - prove passes both halves with a generated carrier plugin; the carrier lists both jars and the call site stays in
+      the donor;
+    - a generator the carrier cannot call refuses the proof;
+    - unsafe names, disagreeing calls and unknown hooks are refused;
+    - a nested rewrite keeps non-ASCII text; the boot notes;
+    - the registration rule (only for a star system); a gene need may stay unresolved in the carrier.
+
+    An independent review (one agent, the diff only) found four defects, all fixed with tests:
+    - the plugin's hook was the alphabetically first one, so `onGameLoad` beat `onNewGame`; it is now the first in
+      lifecycle order;
+    - the generator's simple name matched any line, a false PASS; it now counts only in an import or class finding;
+    - a nested or default-package generator failed in javac; it is now refused by name;
+    - the source was written with CRLF while its hash covered LF; a JDK that cannot start is now a refusal.
+
+    Mutation-checked: 10 mutants, all killed.
+  - **The boot halves (P1 first).** On Test1, `gene describe` gives P1's and P2's recorded identities, so the boot halves are
+    built there. P1 was re-proved into `In operation/Scrapyard-Armories/genes/p1-boot-20261120/` (both PASS; one
+    dependent, `data/hulls/sa_lobster.ship`). Its subtraction copy and carrier are staged as the workspaces
+    `P1-subtraction` and `P1-carrier` of a separate queue, `In operation/_genes-boot-queue`. A separate rig,
+    `In operation/_rig-genes` (the R8 pattern), and the plan `PLAN-P1.json` (two groups) are ready. The first launch
+    did not start: Test1 had restarted at 23:43 on 2026-11-19 and no user was logged on. An interactive task needs the
+    owner's desktop session. `docs/RC8_BEHAVIOUR.md` has no row yet for a hull whose built-in hull mod is missing, so P1's
+    subtraction boot will be that evidence. A boot run is never `probe-group record`ed: the subtraction workspace carries
+    the donor's mod id, and an archive step could put a subtracted donor into Done/.
+  - Next: P1's two boot runs once Test1 is logged on; then a `gene boot` command, shaped by P1's real log, that stages
+    the copies and writes the boot-half evidence beside the static files; then P2. Slice 8 (optional) cuts the statement
+    from `ECEModPlugin`, only if compiling `src/ECEModPlugin.java` reproduces the jar class.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
