@@ -1,0 +1,1 @@
+- `gene describe` names the class the game loads: a loaded jar's class beats its source, a `.java` counts only at its package path, and a source only under `src/` is missing (ROADMAP-3 94.G2).
