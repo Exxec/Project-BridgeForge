@@ -2074,6 +2074,15 @@ fixes of 93.28. 93.26-93.35 are that day's findings.
   loses SPACE presses (`lost_spaces`) and runs a round for a time (`round_seconds`). With the default wait a run whose
   third press starts the round is LIVE_DONE, with three presses. A wait shorter than the retries plus a round is
   LIVE_STUCK at combat-round-1, as SA-SR2 was. `combat_wait()` is 255 s and exceeds 180 + 62 s.
+- 93.63 (S) **The save-reload hint named a command that does not exist.** After SA-SR3-20261119's reload, `probe-group live
+  --save-reload` printed "Next: bridgeforge run-manifest evaluate for SA-SR3-20261119-reload"; `run-manifest` has only
+  `prepare`, `release` and `check`, so it failed with "invalid choice: 'evaluate'". The same name stood in
+  `save_reload_run.py`, `save_upgrade.py` (`--fingerprint-record` help) and `probe-mod/README.md`. The reload's only diff,
+  `systems` (galatia 285 to 243 entities), is the RC8-41 shape, and nothing said so.
+  **Done 2026-11-19.** `cmd_probe_group.reload_next_step` prints `run-manifest check "<rig>" <id>-reload --json`, and when
+  `systems` is the only differing section it points at RC8-41. The other mentions now say `run-manifest check`. Tests:
+  `tests/test_probe_group.py` `ReloadNextStepTests`: the hinted command parses with the real CLI parser (`check`, the reload
+  run id, `--json`), and only a lone `systems` diff names RC8-41.
 - 93.52 (S) **save-doctor reported equal versions as changed.** Found testing Salvor's provider on real saves (owner
   2026-11-17: "improve/test Salvor" between CI waits). `save_doctor.installed_mods`, the provider contract Salvor imports,
   stored mod_info's `{"major", "minor", "patch"}` version as its Python repr. A save made with 1.20.0 then read as

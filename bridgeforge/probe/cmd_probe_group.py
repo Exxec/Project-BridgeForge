@@ -10,6 +10,16 @@ from bridgeforge.probe.probe_config import ProbeConfigError
 from bridgeforge.safeio import atomic_write_text
 
 
+def reload_next_step(rig: Path, test_id: str, block: dict | None) -> str:
+    """The hint after a save-reload run (93.63: it named `run-manifest evaluate`, which does not exist). A lone `systems` diff is the
+    reload shape RC8-41 records with a nearly vanilla mod set, so the hint names it; any other diff is left to the reader."""
+    line = f'  Next: bridgeforge run-manifest check "{rig}" {test_id}-reload --json (milestones.reload_after_save, fingerprint block).'
+    if block and not block.get("equal") and block.get("diff_sections") == ["systems"]:
+        line += ("\n  Only 'systems' differs: compare the WARN diff line with RC8-41 in docs/RC8_BEHAVIOUR.md (one system with fewer"
+                 " entities after any reload).")
+    return line
+
+
 def _add_direct_args(parser) -> None:
     """95.4: start the game without its launcher (what live-wrappers/live_direct.py and smoke_direct.py did)."""
     parser.add_argument("--direct", action="store_true",
@@ -247,7 +257,7 @@ def _probe_live(args: argparse.Namespace, queue: Path, rig: Path) -> dict | int:
         if not args.json:
             print(f"  reload: {reloaded.verdict}; reload_after_save={result['reload']['reload_after_save']}; "
                   f"equal={block['equal'] if block else None}; differing sections: {', '.join(block['diff_sections']) if block and block['diff_sections'] else 'none'}")
-            print(f"  Next: bridgeforge run-manifest evaluate for {args.test_id}-reload (milestones.reload_after_save, fingerprint block).")
+            print(reload_next_step(rig, args.test_id, block))
         if reloaded.verdict != "LIVE_DONE":
             live = reloaded
     if not args.json:

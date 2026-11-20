@@ -1177,7 +1177,7 @@ judge a run's evidence file against the spec; exit 1 unless VERIFIED
 | `evidence` | - | evidence JSON; omitted means LIVE_PENDING |
 | `--run-id` RUN_ID | - | run identity id (from the R1 run manifest once available) |
 | `--run-hash` RUN_HASH | - | the shipped hash that run identity records |
-| `--fingerprint-record` JSON | repeatable | a `run-manifest evaluate` result of a save-reload run (milestones.reload_after_save, fingerprint block) plus the shipped_hash it ran; repeatable |
+| `--fingerprint-record` JSON | repeatable | a `run-manifest check` result of a save-reload run (milestones.reload_after_save, fingerprint block) plus the shipped_hash it ran; repeatable |
 | `--out` OUT | - | also write the verdict JSON here |
 | `--json` | - | - |
 

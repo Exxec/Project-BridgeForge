@@ -4,7 +4,7 @@ The first launch (`probe-group live --save-reload`) ends with the probe's `finge
 `bf_probe_fingerprint` common file. This launch starts the rig game again, clicks the main menu's Continue (RC8-29: Continue loads the
 save the game last wrote or loaded) and waits for `fingerprint|<status>|compare|equal=...`. `reload_after_save` is read from the log by
 `run_manifest.evaluate_run` (field `milestones.reload_after_save`), never set here. If the screen click path fails, the manual fallback is:
-start the rig game, choose Continue (or Load Game and pick the newest save), and read the log with `run-manifest evaluate`.
+start the rig game, choose Continue (or Load Game and pick the newest save), and read the log with `run-manifest check`.
 """
 from __future__ import annotations
 
