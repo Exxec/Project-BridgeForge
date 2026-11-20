@@ -34,7 +34,7 @@ SOURCES = {
     "Plugin": "public class Plugin {\n public void onNewGame() { setUp(null); }\n"
               " private void setUp(SectorAPI s) { new Gen().generate(s, null, null); s.image(\"relations\", \"x\"); "
               "Helper.run(s); }\n}\n",
-    "Helper": "public class Helper { static void run(SectorAPI s) { new Via().generate(s); } }\n",
+    "Helper": "public class Helper {\n    static void run(SectorAPI s) {\n        new Via().generate(s);\n    }\n}\n",
     "Via": "public class Via { public void generate(SectorAPI s) { s.createStarSystem(\"Via\"); } }\n",
     # The name reaches createStarSystem through a local; the strings-table getString is not a settings key.
     "Gen": "public class Gen {\n public void generate(SectorAPI sector, EconomyAPI economy, SettingsAPI settings) {\n"
@@ -80,6 +80,7 @@ def _mod(root: Path) -> Path:
     out = root / "classes"
     subprocess.run([_javac(), "-encoding", "UTF-8", "-proc:none", "-d", str(out), *map(str, src.rglob("*.java"))],
                    check=True, capture_output=True)
+    _write(mod / "src" / "demo" / "Helper.java", (src / "demo" / "Helper.java").read_text(encoding="utf-8"))
     (mod / "jars").mkdir(parents=True)
     with zipfile.ZipFile(mod / "jars" / "demo.jar", "w") as jar:
         for path in sorted((out / "demo").glob("*.class")):
@@ -199,7 +200,14 @@ class StarSystemGeneTests(unittest.TestCase):
             self.assertEqual(result["verdicts"], {"subtraction-proof": "PASS", "isolation-proof": "PASS"})
             subtraction = json.loads((out / "proof" / "subtraction-proof.json").read_text(encoding="utf-8"))
             self.assertEqual(subtraction["registration_sites"][0]["locus"], "demo.Helper.run")
-            self.assertIn("slice 8", subtraction["boot"])
+            cut = subtraction["registration_cut"]["cut"][0]
+            self.assertEqual(cut["removed_lines"], ["new Via().generate(s);"])
+            self.assertEqual(len(cut["checks"]), 4)
+            self.assertIn("needs the test rig", subtraction["boot"])
+            copy = out / "proof" / "work" / "subtraction"
+            self.assertNotIn("Via", (copy / "src" / "demo" / "Helper.java").read_text(encoding="utf-8"))
+            with zipfile.ZipFile(copy / "jars" / "demo.jar") as jar:
+                self.assertNotIn(b"demo/Via", jar.read("demo/Helper.class"))
             isolation = json.loads((out / "proof" / "isolation-proof.json").read_text(encoding="utf-8"))
             self.assertEqual(isolation["carrier_plugin"]["statement"], "new demo.Via().generate(Global.getSector())")
             source = out / "proof" / "work" / "carrier-plugin" / "bfgene" / "CarrierPlugin.java"
@@ -212,7 +220,70 @@ class StarSystemGeneTests(unittest.TestCase):
                 self.assertEqual(jar.namelist(), ["bfgene/CarrierPlugin.class"])
             with zipfile.ZipFile(out / "proof" / "work" / "subtraction" / "jars" / "demo.jar") as jar:
                 self.assertNotIn("demo/Via.class", jar.namelist())
-                self.assertIn("demo/Helper.class", jar.namelist())  # the call site stays in the donor
+                self.assertIn("demo/Helper.class", jar.namelist())  # the call site stays in the donor, without the call
+
+    def test_a_cut_that_changes_more_than_the_call_is_refused_and_the_copy_restored(self) -> None:
+        from unittest import mock
+
+        from bridgeforge.genome import registration_cut
+
+        real = registration_cut.cut_lines
+
+        def careless(text, generator, method):  # cuts the call and also adds a statement
+            kept, removed = real(text, generator, method)
+            return kept.replace("static void run(SectorAPI s) {", "static void run(SectorAPI s) {\n        System.gc();"), removed
+
+        with resolved_temp_dir() as out, mock.patch.object(registration_cut, "cut_lines", careless):
+            prove(self.mod, "star-system:Via", out / "proof", vanilla_core=self.core)
+            subtraction = json.loads((out / "proof" / "subtraction-proof.json").read_text(encoding="utf-8"))
+            self.assertIn("changed more than the call", subtraction["registration_cut"]["refused"])
+            copy = out / "proof" / "work" / "subtraction"
+            self.assertIn("new Via().generate(s);", (copy / "src" / "demo" / "Helper.java").read_text(encoding="utf-8"))
+
+    def test_an_unexpected_error_while_planning_is_a_recorded_refusal_and_the_copy_is_untouched(self) -> None:
+        from unittest import mock
+
+        from bridgeforge.genome import registration_cut
+
+        with resolved_temp_dir() as out, mock.patch.object(registration_cut, "cut_lines", side_effect=RuntimeError("boom")):
+            prove(self.mod, "star-system:Via", out / "proof", vanilla_core=self.core)
+            subtraction = json.loads((out / "proof" / "subtraction-proof.json").read_text(encoding="utf-8"))
+            self.assertEqual(subtraction["registration_cut"]["refused"], "RuntimeError: boom")
+            copy = out / "proof" / "work" / "subtraction"
+            self.assertIn("new Via().generate(s);", (copy / "src" / "demo" / "Helper.java").read_text(encoding="utf-8"))
+
+    def test_a_failed_write_puts_back_what_was_already_written(self) -> None:
+        from unittest import mock
+
+        from bridgeforge.genome import registration_cut
+
+        real = registration_cut._put
+
+        def put(path, data):  # the jar is written, then the source fails
+            if path.suffix == ".java":
+                raise registration_cut.CutRefused("locked")
+            real(path, data)
+
+        with resolved_temp_dir() as out, mock.patch.object(registration_cut, "_put", put):
+            prove(self.mod, "star-system:Via", out / "proof", vanilla_core=self.core)
+            subtraction = json.loads((out / "proof" / "subtraction-proof.json").read_text(encoding="utf-8"))
+            self.assertIn("put back", subtraction["registration_cut"]["refused"])
+            with zipfile.ZipFile(out / "proof" / "work" / "subtraction" / "jars" / "demo.jar") as copy_jar, \
+                    zipfile.ZipFile(self.mod / "jars" / "demo.jar") as donor_jar:
+                self.assertEqual(copy_jar.read("demo/Helper.class"), donor_jar.read("demo/Helper.class"))
+
+    def test_a_source_that_is_not_the_shipped_class_refuses_the_cut_and_leaves_the_copy(self) -> None:
+        source = self.mod / "src" / "demo" / "Helper.java"
+        source.write_text(source.read_text(encoding="utf-8").replace("    static void run", "    static int x = 1;\n    static void run"),
+                          encoding="utf-8")
+        with resolved_temp_dir() as out:
+            prove(self.mod, "star-system:Via", out / "proof", vanilla_core=self.core)
+            subtraction = json.loads((out / "proof" / "subtraction-proof.json").read_text(encoding="utf-8"))
+            self.assertIn("does not compile to the shipped", subtraction["registration_cut"]["refused"])
+            self.assertIn("the cut was refused", subtraction["boot"])
+            with zipfile.ZipFile(out / "proof" / "work" / "subtraction" / "jars" / "demo.jar") as copy_jar, \
+                    zipfile.ZipFile(self.mod / "jars" / "demo.jar") as donor_jar:
+                self.assertEqual(copy_jar.read("demo/Helper.class"), donor_jar.read("demo/Helper.class"))  # all or nothing
 
     def test_a_generator_the_carrier_cannot_call_refuses_the_proof(self) -> None:
         with resolved_temp_dir() as out, self.assertRaisesRegex(ProofError, "javac refused the carrier's plugin"):
@@ -308,6 +379,66 @@ class ClassifierTests(unittest.TestCase):
         self.assertEqual(classify_isolation(_scan(), carrier, _SYSTEM)["verdict"], "PASS")
         other = _scan(("content-reference-unresolved", "data/campaign/industries.csv", ["faction:somebody_else"]))
         self.assertEqual(classify_isolation(_scan(), other, _SYSTEM)["verdict"], "FAIL")
+
+
+class CutTests(unittest.TestCase):
+    def test_only_the_import_and_the_call_statement_are_cut(self) -> None:
+        from bridgeforge.genome.registration_cut import CutRefused, cut_lines
+
+        text = "package a;\nimport b.Gen;\nclass P {\n  void s(Object x) {\n    new Gen().generate(x);\n    other();\n  }\n}\n"
+        kept, removed = cut_lines(text, "b.Gen", "generate")
+        self.assertEqual(removed, ["import b.Gen;", "new Gen().generate(x);"])
+        self.assertNotIn("Gen", kept)
+        self.assertIn("other();", kept)
+        braceless = text.replace("    new Gen().generate(x);", "    if (x != null)\n    new Gen().generate(x);")
+        with self.assertRaisesRegex(CutRefused, "only body"):  # cutting it would make other() the if's body
+            cut_lines(braceless, "b.Gen", "generate")
+        for bad in (text.replace("new Gen().generate(x);", "Gen g = new Gen(); g.generate(x);"),
+                    text.replace("    new Gen().generate(x);", "    else\n    new Gen().generate(x);"),
+                    text.replace("new Gen().generate(x);", "if (x != null) new Gen().generate(x);"),
+                    text.replace("new Gen().generate(x);\n", "")):
+            with self.subTest(bad), self.assertRaises(CutRefused):
+                cut_lines(bad, "b.Gen", "generate")
+
+    @unittest.skipUnless(_javac(), "needs javac")
+    def test_a_branch_after_the_cut_call_still_reads_as_only_lost_lines(self) -> None:
+        from bridgeforge.bytecode.java_toolchain import find_jdk
+        from bridgeforge.genome.registration_cut import javap_lines, only_lost_lines
+
+        body = "class P {{ static void g() {{ }} static int s(Object x) {{ {call} if (x == null) {{ return 1; }} return 2; }} }}\n"
+        with resolved_temp_dir() as root:
+            lines = []
+            for name, call in (("before", "g();"), ("after", "")):
+                _write(root / name / "P.java", body.format(call=call))
+                subprocess.run([_javac(), "-encoding", "UTF-8", "-proc:none", "-d", str(root / name), str(root / name / "P.java")],
+                               check=True, capture_output=True)
+                lines.append(javap_lines(find_jdk().javap, root / name / "P.class"))
+            self.assertEqual(only_lost_lines(*lines), [])  # the ifnonnull target moved; it is a label, not an offset
+
+    def test_a_javap_line_is_compared_by_meaning(self) -> None:
+        from bridgeforge.genome.registration_cut import normalise
+
+        # Eridani's cut ECEModPlugin, 2026-11-20: the same getstatic, padded after #99 and after #100.
+        before = "      60: getstatic     #99                 // Field com/fs/starfarer/api/campaign/RepLevel.INHOSPITABLE"
+        after = "      55: getstatic     #100                // Field com/fs/starfarer/api/campaign/RepLevel.INHOSPITABLE"
+        self.assertEqual(normalise(before), normalise(after))
+        self.assertEqual(normalise("      12: ifnull        110"), normalise("      7: ifnull        98"))
+        self.assertNotEqual(normalise("      1: invokevirtual #5 // Method a.f"), normalise("      1: invokevirtual #5 // Method a.g"))
+        self.assertEqual(normalise("                     1: 40"), "1: 40")  # a switch table keeps its case value and target
+
+    def test_two_sites_in_one_class_are_refused(self) -> None:
+        from bridgeforge.genome.registration_cut import cut_registrations
+
+        sites = [{"locus": "a.P.s", "statement": "a.G: <init>, generate", "hooks": ["onNewGame"]},
+                 {"locus": "a.P.t", "statement": "a.G: <init>, generate", "hooks": ["onGameLoad"]}]
+        self.assertIn("one class", cut_registrations(Path("."), Path("."), {"registrations": sites}, None, [])["refused"])
+
+    def test_the_cut_class_may_only_lose_lines(self) -> None:
+        from bridgeforge.genome.registration_cut import only_lost_lines
+
+        self.assertEqual(only_lost_lines(["a", "b", "c"], ["a", "c"]), [])
+        self.assertEqual(only_lost_lines(["a", "b", "c"], ["a", "x", "c"]), ["x"])
+        self.assertEqual(only_lost_lines(["a", "c"], ["a", "c", "d"]), ["d"])
 
 
 class ParameterSlotTests(unittest.TestCase):
