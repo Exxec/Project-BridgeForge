@@ -115,6 +115,45 @@ class GeneSetPieceTests(unittest.TestCase):
             cut_csv_row(text, "data/world/factions/b.faction")
 
 
+class CarrierResolutionTests(unittest.TestCase):
+    def test_each_kind_resolves_only_when_the_carrier_defines_it(self) -> None:
+        resolved = ["faction:listed", "combat-plugin:loose", "industry:own_industry", "hull:own_hull", "hull:skin_hull",
+                    "variant:own_v", "weapon:own_gun", "wing:own_wing", "hullmod:own_mod", "shipsystem:own_system",
+                    "condition:own_cond", "planet-type:own_planet"]
+        anchors = [*resolved, "faction:unlisted", "faction:absent", "combat-plugin:classless", "combat-plugin:unregistered",
+                   "industry:gone_industry", "hull:gone_hull", "planet-type:gone_planet", "star-system:Nowhere", "market:somewhere"]
+        genes = {"set:all": _gene("set:all", [], needs=anchors)}
+        with resolved_temp_dir() as root:
+            carrier = root / "carrier"
+            _write(carrier / "mod_info.json", json.dumps({"id": "c", "name": "C"}))
+            for ident in ("listed", "unlisted"):
+                _write(carrier / "data/world/factions" / f"{ident}.faction", json.dumps({"id": ident}))
+            _write(carrier / "data/world/factions/factions.csv", "faction\ndata/world/factions/listed.faction\n")
+            _write(carrier / "data/config/settings.json", json.dumps({"plugins": {"loose": "data.scripts.Loose",
+                                                                                 "classless": "data.scripts.Gone"}}))
+            _write(carrier / "data/scripts/Loose.java", "package data.scripts;\npublic class Loose {}\n")
+            _write(carrier / "data/campaign/industries.csv", "id,name\nown_industry,Own\n")
+            _write(carrier / "data/hulls/ship_data.csv", "name,id\nOwn,own_hull\n")
+            _write(carrier / "data/hulls/own.skin", json.dumps({"skinHullId": "skin_hull", "baseHullId": "own_hull"}))
+            _write(carrier / "data/variants/own.variant", json.dumps({"variantId": "own_v", "hullId": "own_hull"}))
+            _write(carrier / "data/weapons/own.wpn", json.dumps({"id": "own_gun"}))
+            _write(carrier / "data/hulls/wing_data.csv", "id,variant\nown_wing,own_v\n")
+            _write(carrier / "data/hullmods/hull_mods.csv", "name,id\nOwn,own_mod\n")
+            _write(carrier / "data/shipsystems/ship_systems.csv", "name,id\nOwn,own_system\n")
+            _write(carrier / "data/campaign/market_conditions.csv", "id,name\nown_cond,Own\n")
+            _write(carrier / "data/config/planets.json", json.dumps({"own_planet": {"name": "Own"}}))
+            unresolved = {u["anchor"]: u["why"] for u in gene_set.unresolved_in_carrier(carrier, genes)}
+        self.assertFalse(set(resolved) & set(unresolved), unresolved)
+        self.assertEqual(sorted(unresolved), ["combat-plugin:classless", "combat-plugin:unregistered", "faction:absent",
+                                              "faction:unlisted", "hull:gone_hull", "industry:gone_industry", "market:somewhere",
+                                              "planet-type:gone_planet", "set:all", "star-system:Nowhere"])
+        self.assertIn("does not list data/world/factions/unlisted.faction", unresolved["faction:unlisted"])
+        self.assertIn("no .faction file", unresolved["faction:absent"])
+        self.assertIn("holds no class data.scripts.Gone", unresolved["combat-plugin:classless"])
+        self.assertIn("createStarSystem", unresolved["star-system:Nowhere"])
+        self.assertIn("is not checked", unresolved["market:somewhere"])
+
+
 class GeneSetWalkTests(unittest.TestCase):
     MANIFESTS = {"star-system:S": _gene("star-system:S", [], needs=["faction:f"]),
                  "faction:f": _gene("faction:f", [], needs=["hull:h", "hull:gone"]),
@@ -214,6 +253,22 @@ class GeneSetProofTests(unittest.TestCase):
             proof = json.loads((root / "proof" / "set-isolation-proof.json").read_text(encoding="utf-8"))
         self.assertEqual((result["verdict"], proof["verdict"]), ("FAIL", "FAIL"))
         self.assertEqual(proof["refused"], [{"anchor": "market:rebal_port", "reason": "kind market cannot be closed yet"}])
+
+    def test_a_knocked_out_gene_fails_the_set_naming_it(self) -> None:
+        # Slice 12: the scan alone passed P3's set with a weapon, a hull or the faction removed (knock-out, 2026-11-20).
+        real = gene_set.walk
+        for dropped in ("weapon:rebal_rail", "hullmod:shields_formshield"):
+            def walk_without(*args, _dropped=dropped, **kwargs):
+                genes, refused = real(*args, **kwargs)
+                return {a: g for a, g in genes.items() if a != _dropped}, refused
+
+            with self.subTest(dropped=dropped), resolved_temp_dir() as root, \
+                    mock.patch.object(gene_set, "walk", side_effect=walk_without), redirect_stderr(io.StringIO()):
+                result = gene_set.prove_set(_with_faction(root), "faction:rebal_faction", root / "proof", vanilla_core=_vanilla(root))
+                proof = json.loads((root / "proof" / "set-isolation-proof.json").read_text(encoding="utf-8"))
+                self.assertEqual((result["verdict"], result["unresolved"]), ("FAIL", 1))
+                self.assertEqual([(u["anchor"], u["named_by"]) for u in proof["unresolved_in_carrier"]],
+                                 [(dropped, ["faction:rebal_faction"])])
 
     def test_two_star_systems_or_a_member_conflict_is_refused_before_building(self) -> None:
         systems = {"star-system:A": _gene("star-system:A", [], needs=["star-system:B"]), "star-system:B": _gene("star-system:B", [])}

@@ -123,7 +123,8 @@ def _run_prove_set(args: argparse.Namespace) -> int:
         print(f"bridgeforge: {exc}", file=sys.stderr)
         return 2
     print(f"set-isolation-proof: {result['verdict']} (static half; boot half NOT_RUN): {result['carried']} gene(s) carried, "
-          f"{result['refused']} refused, {result['failures']} unresolved reference(s)")
+          f"{result['refused']} refused, {result['failures']} unresolved reference(s), "
+          f"{result['unresolved']} anchor(s) the carrier does not define")
     print(f"gene {result['gene'][:16]}; evidence in {result['out']}")
     return 0 if result["verdict"] == "PASS" else 1
 

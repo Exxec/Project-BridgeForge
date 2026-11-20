@@ -1918,6 +1918,58 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - **The `not_carried` wording now says what is checked.**
 
     Mutation-checked: 17 mutants, all killed (the anchor refusal and the workspace fingerprint each needed a new test).
+  **Slice 12 Done 2026-11-20: the set proof checks that the carrier defines what the set provides and needs.**
+  - **Why (advisor knock-out, 2026-11-20):** P3's set carrier was rebuilt with one carried gene removed, and the
+    scan-based isolation still passed each time:
+    - weapon `ECE_truthL`;
+    - hull `ECE_Neptune`;
+    - the faction itself.
+
+    The scanner checks neither the ids a faction lists nor whether a faction exists, so P3's first PASS was not evidence of
+    separation.
+  - **Resolution:** after the build, `gene_set.unresolved_in_carrier` takes every anchor a carried gene provides or names
+    in `needs.genes`, and asks whether the built carrier defines it:
+    - a table row or spec (`vendor_plan._Index`);
+    - a `.faction` file that the carrier's `factions.csv` lists;
+    - a star system's generator among the carrier's loaded classes;
+    - a combat plugin's key and class;
+    - a campaign table row or JSON key.
+
+    A kind it does not know is reported, not passed. Any unresolved anchor FAILs the set; the proof lists each one with
+    the genes naming it.
+  - **P3, re-checked on the recorded carrier and the three knock-out carriers:**
+    - the full set: nothing unresolved;
+    - without the weapon: FAIL, `weapon:ECE_truthL` named by the faction;
+    - without the hull: FAIL, `hull:ECE_Neptune` named by the faction;
+    - without the faction: FAIL, named by the hulls and the system.
+  - **Also on record:**
+    - **Test1 agrees:** its own `prove-set` run gave the same gene (3ebc89de) and carrier (`gene_carrier_b9e6470362d7`,
+      56 genes, 321 members), and its evidence check passed.
+    - **What binds Eridani:** 56 anchors are 45 distinct genes, because the 12 hull mod genes share one identity. One
+      strongly connected group holds 30: the faction, 17 hulls and 12 hull mods. Weapons and wings need no gene.
+    - **Hulls and hull mods to the faction:** an artifact of following source imports. The loaded `ECE_BaseHullmod.class`
+      never references `ECE_IDs`. `ECE_Configs` keeps only an unused constant-pool entry for it, because the strings are
+      inlined. `ECE_IDs` holds three strings, not the hull mod ids.
+    - **Hull mods to each other:** their classes use other hull mod ids as stat-modifier source keys, map keys and
+      `contains` checks. That names an id without needing it.
+
+    Fixing the first is a closure fix (follow loaded classes). The second is a closure-boundary decision put to the owner
+    the same day.
+  - Tests: `tests/test_gene_set.py`:
+    - every kind resolved or not, with its reason;
+    - a weapon or a hull mod knocked out of the fixture set FAILs, naming it and the faction.
+
+    An independent review found no crash and no false result on the normal path. It found one test gap, now closed:
+    most kinds had no resolving case. Every kind except star-system now has one; star-system's needs a compiled class.
+
+    Left open from the review:
+    - a `factions.csv` cell is compared exactly; a backslash or `./` form reads as unlisted, and what the game accepts
+      is unchecked (also open since slice 10);
+    - `_Index.defines` counts a `.wpn` or `.ship` with no table row as defined;
+    - a combat plugin's class counts in any carried jar, not only listed ones. `build_carrier` lists every jar it
+      writes, so this cannot happen in a carrier today.
+
+    Mutation-checked: 15 mutants, all killed.
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).
