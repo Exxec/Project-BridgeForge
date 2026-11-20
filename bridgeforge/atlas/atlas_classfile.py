@@ -145,6 +145,140 @@ def _parse(data: bytes, watch: frozenset[str] | None) -> ClassInfo:
     return info
 
 
+def parameter_slots(descriptor: str, is_static: bool) -> int:
+    """The local slots a method's parameters fill on entry (this, then each argument; long and double take two)."""
+    match = _PARAMS.match(descriptor)
+    params, slots, i = (match.group(1) if match else ""), (0 if is_static else 1), 0
+    while i < len(params):
+        is_array = params[i] == "["
+        while params[i] == "[":
+            i += 1
+        if params[i] == "L":
+            i = params.index(";", i)
+        slots += 2 if params[i] in "JD" and not is_array else 1  # an array of long is one reference
+        i += 1
+    return slots
+
+
+def iter_method_code(data: bytes):
+    """(class internal name, method name, its bytecode, the constant pool, its parameter slots) for each method with a Code
+    attribute: for a caller that needs instruction order the summary scan above drops (94.G2 P3: a constant passed through
+    a local). Read-only; `parse_class`'s results are unchanged. Raises ClassFormatError on a malformed class."""
+    try:
+        if data[:4] != b"\xca\xfe\xba\xbe":
+            raise ClassFormatError("not a class file")
+        pool, pos = _read_pool(data)
+        this_idx, _super, iface_count = struct.unpack_from(">HHH", data, pos + 2)
+        owner = pool.class_name(this_idx)
+        pos += 8 + 2 * iface_count
+        found = []
+        for table in ("fields", "methods"):
+            member_count = struct.unpack_from(">H", data, pos)[0]
+            pos += 2
+            for _ in range(member_count):
+                flags, name_idx, desc_idx, attrs = struct.unpack_from(">HHHH", data, pos)
+                pos += 8
+                for _ in range(attrs):
+                    attr_name, length = pool.text(struct.unpack_from(">H", data, pos)[0]), struct.unpack_from(">I", data, pos + 2)[0]
+                    body = pos + 6
+                    if table == "methods" and attr_name == "Code":
+                        code_length = struct.unpack_from(">I", data, body + 4)[0]
+                        found.append((owner, pool.text(name_idx), data[body + 8:body + 8 + code_length], pool,
+                                      parameter_slots(pool.text(desc_idx), bool(flags & ACC_STATIC))))
+                    pos = body + length
+    except (struct.error, IndexError, KeyError) as exc:
+        raise ClassFormatError(str(exc)) from exc
+    return found
+
+
+_LDC, _LDC_W, _ASTORE, _ALOAD = 0x12, 0x13, 0x3a, 0x19
+_INVOKES = (0xb6, 0xb7, 0xb8, 0xb9)
+
+
+def instructions(code: bytes) -> list[tuple[int, int, int | None]]:
+    """(pc, opcode, operand) in order: the pool index of ldc and invokes, the local of every astore/aload form, folded to
+    0x3a/0x19 (wide included); None for other operands."""
+    found, pc = [], 0
+    while pc < len(code):
+        op, arg = code[pc], None
+        if op == _LDC:
+            arg = code[pc + 1]
+        elif op == _LDC_W or op in _INVOKES:
+            arg = struct.unpack_from(">H", code, pc + 1)[0]
+        elif op in (_ASTORE, _ALOAD):
+            arg = code[pc + 1]
+        elif 0x4b <= op <= 0x4e:
+            op, arg = _ASTORE, op - 0x4b
+        elif 0x2a <= op <= 0x2d:
+            op, arg = _ALOAD, op - 0x2a
+        elif op == 0xc4 and code[pc + 1] in (_ASTORE, _ALOAD):  # wide
+            op, arg = code[pc + 1], struct.unpack_from(">H", code, pc + 2)[0]
+        found.append((pc, op, arg))
+        pc += _instruction_length(code, pc)
+    return found
+
+
+def jump_targets(code: bytes) -> set[int]:
+    """Every pc a branch, goto, jsr or switch can jump to: an instruction there may be reached with another value pushed."""
+    targets, pc = set(), 0
+    while pc < len(code):
+        op = code[pc]
+        if 0x99 <= op <= 0xa8 or op in (0xc6, 0xc7):
+            targets.add(pc + struct.unpack_from(">h", code, pc + 1)[0])
+        elif op in (0xc8, 0xc9):
+            targets.add(pc + struct.unpack_from(">i", code, pc + 1)[0])
+        elif op in (0xaa, 0xab):
+            base = pc + 1 + (-(pc + 1)) % 4
+            targets.add(pc + struct.unpack_from(">i", code, base)[0])
+            if op == 0xaa:
+                low, high = struct.unpack_from(">ii", code, base + 4)
+                targets.update(pc + struct.unpack_from(">i", code, base + 12 + 4 * k)[0] for k in range(high - low + 1))
+            else:
+                pairs = struct.unpack_from(">i", code, base + 4)[0]
+                targets.update(pc + struct.unpack_from(">i", code, base + 12 + 8 * k)[0] for k in range(pairs))
+        pc += _instruction_length(code, pc)
+    return targets
+
+
+def last_argument_constants(code: bytes, pool: _Pool, wanted, params: int = 0) -> list[tuple[str, str, str, str | None]]:
+    """(owner, name, descriptor, constant) for each invoke in one method that `wanted(owner, name, descriptor)` accepts:
+    the string constant of its last argument when the instruction right before the call pushes one (an ldc, or a load of a
+    local every store of which is that same constant), else None (computed). A call or a store a jump reaches takes no
+    constant: `f(c ? "A" : "B")` has `ldc "B"` right before the call. The first `params` slots hold the caller's values
+    (`parameter_slots`), so a parameter reassigned with a constant on one path is not that constant. 94.G2 P3:
+    `createStarSystem(systemName)`."""
+    steps = instructions(code)
+    targets = jump_targets(code)
+
+    def pushed(i: int) -> tuple[int | None, int | None]:
+        """(opcode, operand) of the instruction that alone pushes the value step i consumes, or (None, None)."""
+        if i == 0 or steps[i][0] in targets:
+            return None, None
+        return steps[i - 1][1], steps[i - 1][2]
+
+    def constant(step: tuple[int | None, int | None]) -> str | None:
+        return pool.string(step[1]) if step[0] in (_LDC, _LDC_W) else None
+
+    assigned: dict[int, set] = {slot: {None} for slot in range(params)}
+    for i, (_pc, op, arg) in enumerate(steps):
+        if op == _ASTORE:
+            assigned.setdefault(arg, set()).add(constant(pushed(i)))
+    found = []
+    for i, (_pc, op, arg) in enumerate(steps):
+        if op not in _INVOKES:
+            continue
+        owner, name, descriptor = pool.member(arg)
+        if not wanted(owner, name, descriptor):
+            continue
+        before = pushed(i)
+        if before[0] == _ALOAD:
+            values = assigned.get(before[1], set())
+            found.append((owner, name, descriptor, next(iter(values)) if len(values) == 1 else None))
+        else:
+            found.append((owner, name, descriptor, constant(before)))
+    return found
+
+
 def _read_member(data: bytes, pos: int, pool: _Pool, info: ClassInfo, is_field: bool, watch: frozenset[str] | None) -> int:
     flags, name_idx, desc_idx, attrs = struct.unpack_from(">HHHH", data, pos)
     pos += 8

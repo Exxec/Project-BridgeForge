@@ -1,0 +1,1 @@
+- `gene describe` closes `star-system:<name>` genes: the generator class that passes the name to `createStarSystem`, the campaign rows, graphics keys and classes its code names, vanilla needs typed by table, and a same-mod faction as the new optional `needs.genes` (ROADMAP-3 94.G2 slice 6).

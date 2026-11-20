@@ -313,6 +313,9 @@ def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None
     vanilla_core = Path(vanilla_core) if vanilla_core is not None else None
     if out.exists() and any(out.iterdir()):
         raise ProofError(f"{out} is not empty: proofs go into a fresh folder")
+    if anchor.startswith("star-system:"):
+        raise ProofError("the proofs of a star-system gene need its registration cut from the plugin and a carrier plugin "
+                         "that calls the generator: 94.G2 slice 7; `gene describe` closes it now")
     gene = describe(mod, anchor, vanilla_core=vanilla_core)
     # Who in the donor uses the gene: vendor-plan from the gene's content ids and the classes it registers (a combat
     # plugin's anchor is not a vendor-plan id).

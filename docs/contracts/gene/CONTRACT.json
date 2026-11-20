@@ -69,7 +69,7 @@
     "fixtures/valid-hullmod.json": "a0ee09488931d211fd161df1db0ac492030edfc5f7a6f44f97bfec250d361de5",
     "fixtures/valid-same-gene-other-mod.json": "67ccb773eedaeb4684df4817ffa9ad231df4c3682443b7e08208c0aad4412d93",
     "fixtures/valid-settings-entries.json": "8efbbb567c97305b9b7979112d7c437c5958f60415e6fd00aeff4b870f257a97",
-    "gene.schema.json": "f11e4f0a3e4de2e684af701be926a3a412b3cff992c4dd0a9855fe0ed540fe3d"
+    "gene.schema.json": "56e5331878fb34a4a0391e527b39b9c1328b7e1803c41cd865cc31927ee72cf9"
   },
   "fixtures": {
     "invalid-anchor-of-other-kind.json": {

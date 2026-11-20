@@ -1,0 +1,1 @@
+- `merge_when_clean.sh` keeps `gh`'s per-call hint text out of its output and shows stderr only when a call fails.

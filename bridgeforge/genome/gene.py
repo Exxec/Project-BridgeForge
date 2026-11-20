@@ -19,7 +19,9 @@ the identity.
 members a local-only path exception covers, and `decision`, which is LOCAL_ONLY whenever that list is not empty.
 
 Schema 4 (94.G2, 2026-11-19) names every kind G2 needs (`GENE_KINDS`); `describe` closes the content kinds and
-`combat-plugin` and refuses the rest until their pilot. Schema 3 (the same day) added one member kind, `json-entry`: a key of a JSON file, `<file>#<JSON Pointer>` such as
+`combat-plugin` and, since P3 (2026-11-20), `star-system` (genome/campaign.py), and refuses the rest until their pilot.
+`needs.genes` (P3, additive within schema 4: optional, so earlier manifests stay valid) lists the genes of the same
+donor this one needs and does not carry, such as a star system's owning faction. Schema 3 (the same day) added one member kind, `json-entry`: a key of a JSON file, `<file>#<JSON Pointer>` such as
 `data/config/settings.json#/sa_lobster_tanks_growth_rate`, hashed as its parsed value in canonical JSON (genome/closure.py).
 For now only object keys: a pointer ending in an array index or `-` is refused, and array membership (a hull added to a
 list) stays an unknown until a pilot needs it. Schemas 1-3 are withdrawn; no sister repository had pinned any.
@@ -52,7 +54,7 @@ MEMBER_KINDS = ("file", "csv-row", "jar-class", "json-entry")
 CAMPAIGN_KINDS = ("faction", "star-system", "market", "industry", "condition", "ability", "rule", "combat-plugin",
                   "campaign-plugin", "custom-start")
 GENE_KINDS = (*KINDS, *CAMPAIGN_KINDS)
-CLOSABLE_KINDS = (*KINDS, "combat-plugin")
+CLOSABLE_KINDS = (*KINDS, "combat-plugin", "star-system")
 COLLECTED_FROM = ["vendor-plan"]
 # What the player sees each kind do: the phenotype a live run must observe (S3 makes these real obligations, G6).
 PHENOTYPE = {
@@ -188,28 +190,23 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
     if kind not in CLOSABLE_KINDS:
         raise GeneError(f"{kind} genes cannot be closed yet: G2 adds each campaign kind with its pilot "
                         f"(closable now: {', '.join(CLOSABLE_KINDS)})")
-    registration = None
+    registration, system = None, None
     seeds, classes = ([], [])
     if kind == "combat-plugin":
         plugin_class, registration = _combat_plugin(mod, ident)
         classes = [plugin_class]
+    elif kind == "star-system":
+        from bridgeforge.genome.campaign import star_system
+
+        system = star_system(mod, ident)  # 94.G2 P3: the generator class; its call sites are elements, not members
+        classes = [system["generator"]]
     else:
         seeds = [anchor]
-    plan = vendor_plan(mod, seeds, vanilla_core=vanilla_core, policy_path=policy_path, classes=classes)
+    plan, campaign = _closed_plan(mod, anchor, seeds, classes, vanilla_core, policy_path)
     root = Path(plan["provider"])
-    # Ids the gene's code names as string literals join the closure, and vendor-plan runs again from all of them (94.G2: a
-    # combat plugin's spawned variants and checked hull mods are its gene). Repeated until nothing new is named.
-    from bridgeforge.genome.closure import ids_named_by_code
-
-    for _round in range(8):
-        named = [i for i in ids_named_by_code(root, _code_members(root, plan), vanilla_core) if i not in seeds and i != anchor]
-        if not named:
-            break
-        seeds = sorted({*seeds, *named})
-        plan = vendor_plan(mod, seeds, vanilla_core=vanilla_core, policy_path=policy_path, classes=classes)
-    if kind != "combat-plugin" and anchor not in plan["closure_ids"]:
+    if kind not in ("combat-plugin", "star-system") and anchor not in plan["closure_ids"]:
         raise GeneError(f"{anchor} is not defined by {root} (missing: {', '.join(plan['missing']) or 'nothing'})")
-    members = [registration["member"]] if registration else []
+    members = ([registration["member"]] if registration else []) + campaign["members"]
     loaded = _loaded_classes(root)
     missing_classes = []
     for entry in plan["include"]:
@@ -235,18 +232,21 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
     members += extra["members"]
     members.sort(key=lambda m: (m["what"], m["path"]))
     # The whole-file settings.json SUSPECT is replaced by key-level ones (a key no member reads), or by nothing.
-    suspects = [s for s in plan["suspects"] if s["path"] != SETTINGS_FILE] + extra["suspects"]
+    suspects = ([s for s in plan["suspects"] if s["path"] != SETTINGS_FILE] + extra["suspects"] + campaign["suspects"]
+                + (system["suspects"] if system else []))
     info = read_mod_info(root) or {}
     licence = _licence(plan["licence"], info, [m["path"] for m in members], policy_path)
     dependencies = sorted(d["id"] for d in info.get("dependencies") or [] if isinstance(d, dict) and isinstance(d.get("id"), str))
+    registrations = [registration["element"]] if registration else system["registrations"] if system else []
     gene = {
         "schema": GENE_SCHEMA, "schema_version": GENE_SCHEMA_VERSION,
         "identity": identity(kind, members),
-        "kind": kind, "anchors": [anchor], "provides": sorted({anchor, *plan["closure_ids"]}),
+        "kind": kind, "anchors": [anchor], "provides": sorted({anchor, *plan["closure_ids"], *campaign["provides"]}),
         "members": members,
-        "needs": {"vanilla": sorted(set(plan["provided_by_vanilla"]) | set(extra["vanilla"])),
-                  "mods": mods_needed(root, members, dependencies)},
-        "registrations": [registration["element"]] if registration else [], "conditions": [], "persistent_state": [],
+        "needs": {"vanilla": sorted(set(plan["provided_by_vanilla"]) | set(extra["vanilla"]) | set(campaign["vanilla"])),
+                  "mods": mods_needed(root, members, dependencies),
+                  "genes": [g for g in campaign["genes"] if g != anchor]},
+        "registrations": registrations, "conditions": [], "persistent_state": _saved_state(system, campaign, members),
         "build": {"game_version": info.get("gameVersion"), "mod_version": _version_text(info.get("version"))},
         "provenance": {"mod_id": info.get("id"), "mod_name": info.get("name"), "author": info.get("author")},
         "derived_from": None,
@@ -261,6 +261,47 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
     return gene
 
 
+def _closed_plan(mod: Path, anchor: str, seeds: list[str], classes: list[str], vanilla_core: Path | None,
+                 policy_path: Path | None) -> tuple[dict, dict]:
+    """vendor-plan's closure, run again until the gene's code names nothing new: content ids its literals name (94.G2: a
+    combat plugin's spawned variants are its gene) and the classes the campaign rows it names point at (P3: an industry's
+    plugin). Returns the plan and the campaign ids of its final code (`campaign.campaign_ids`)."""
+    from bridgeforge.genome.campaign import campaign_ids
+    from bridgeforge.genome.closure import ids_named_by_code
+
+    plan = vendor_plan(mod, seeds, vanilla_core=vanilla_core, policy_path=policy_path, classes=classes)
+    for _round in range(8):
+        root = Path(plan["provider"])
+        code = _code_members(root, plan)
+        named = [i for i in ids_named_by_code(root, code, vanilla_core) if i not in seeds and i != anchor]
+        campaign = campaign_ids(root, code, vanilla_core)
+        more = [c for c in campaign["classes"] if c not in classes]
+        if not named and not more:
+            return plan, campaign
+        seeds, classes = sorted({*seeds, *named}), [*classes, *more]
+        plan = vendor_plan(mod, seeds, vanilla_core=vanilla_core, policy_path=policy_path, classes=classes)
+    root = Path(plan["provider"])
+    campaign = campaign_ids(root, _code_members(root, plan), vanilla_core)
+    campaign["suspects"].append({"path": anchor, "mentions": [], "reason": "the closure still named new ids or classes "
+                                 "after 8 rounds: it may be incomplete"})
+    return plan, campaign
+
+
+def _saved_state(system: dict | None, campaign: dict, members: list[dict]) -> list[dict]:
+    """What the gene leaves in a save: a star system and its markets, and each industry it owns, saved by class name with
+    every market that has it (removing the gene then breaks such a save). Evidence, Test1 rig save LeonardCallisto
+    (G1R-LIVE-0985a-20261117, Eridani enabled), read 2026-11-20: `<cL cl="Sstm" ... bN="Pantheon">`, `<Market><id>
+    ECE_planet3_market</id>`, and `<data.scripts.campaign.ECE__PlanetaryCommandCenter id="ECE_PlanetaryCommandCenter">`
+    inside the market's `<industries>` (XStream writes `_` in a class name as `__`)."""
+    state = list(system["persistent_state"]) if system else []
+    rows = {m["path"] for m in members if m["what"] == "csv-row"}
+    for ident in campaign["industries"]:
+        if f"data/campaign/industries.csv [{ident}]" in rows:
+            state.append({"name": f"industry {ident}",
+                          "via": "its plugin class, saved by class name as an element of every market's industries"})
+    return state
+
+
 def _code_members(root: Path, plan: dict) -> list[dict]:
     """The code a plan names, as the members the game loads (a jar class beats its source)."""
     loaded = _loaded_classes(root)
@@ -271,7 +312,10 @@ def _code_members(root: Path, plan: dict) -> list[dict]:
             if member is not None:
                 found.append(member)
         elif entry["what"] == "jar-class":
-            found.append({"what": "jar-class", "path": entry["path"]})
+            # vendor-plan names a jar class by the jar's file name (`x.jar!a/B.class`); the readers open it from the mod root,
+            # so resolve the jar's path in the mod. Before P3 (2026-11-20) a class with no source under src/ was skipped
+            # silently and its literals named nothing.
+            found.append(_jar_member(root, entry["path"]))
     return found
 
 
@@ -401,6 +445,9 @@ def validate(gene: object) -> list[str]:
         value = gene[key]
         if not isinstance(value, dict) or not all(isinstance(value.get(field), list) for field in fields):
             problems.append(f"{key} is an object with lists {', '.join(fields)}")
+        elif key == "needs" and "genes" in value and not (
+                isinstance(value["genes"], list) and all(isinstance(g, str) and ":" in g for g in value["genes"])):
+            problems.append("needs.genes, when present, is a list of 'kind:id' anchors")
     for key in ("build", "provenance"):
         if not isinstance(gene[key], dict):
             problems.append(f"{key} is an object")
