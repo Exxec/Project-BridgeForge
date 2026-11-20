@@ -387,6 +387,9 @@ def prove(mod: Path, anchor: str, out: Path, *, vanilla_core: Path | None = None
     vanilla_core = Path(vanilla_core) if vanilla_core is not None else None
     if out.exists() and any(out.iterdir()):
         raise ProofError(f"{out} is not empty: proofs go into a fresh folder")
+    if anchor.startswith("faction:"):
+        raise ProofError("the proofs of a faction gene come with its own slice (a factions.csv row keyed by its `faction` column "
+                         "to cut, a carrier that needs every listed gene): `gene describe` closes it now")
     gene = describe(mod, anchor, vanilla_core=vanilla_core)
     # Who in the donor uses the gene: vendor-plan from the gene's content ids and the classes it registers (a combat
     # plugin's anchor is not a vendor-plan id).
