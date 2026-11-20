@@ -27,6 +27,8 @@ KINDS = ("hullmod", "weapon", "wing", "hull", "variant", "shipsystem")
 _ASSET = re.compile(r"\.(png|jpg|jpeg|ogg|wav|frag|vert|json)$", re.IGNORECASE)
 _CLASS_NAME = re.compile(r"^[A-Za-z_][\w$]*(?:\.[A-Za-z_][\w$]*)+$")
 _IMPORT = re.compile(r"^\s*import\s+(?:static\s+)?([\w.]+)\s*;", re.MULTILINE)
+# Char literals first, so '"' does not open a string that hides the rest of the line (review 2026-11-20).
+_STRING_LITERALS = re.compile(r"""'(?:[^'\\\n]|\\.)+'|"(?:[^"\\\n]|\\.)*\"""")
 _PACKAGE = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.MULTILINE)
 _COMMENTS = re.compile(r"/\*.*?\*/|//[^\n]*", re.DOTALL)
 _TABLES = {
@@ -135,6 +137,16 @@ class _Index:
         return self.root is not None and (self.root / relative).is_file()
 
 
+def _same_package_uses(key: str, text: str, source: _Index) -> list[str]:
+    """The classes of `key`'s package its source (comments stripped) names in code. Not inside a string or a char literal:
+    Eridani's hull mods test hasHullMod("ECE_FluxEMPHullMod"), an id that equals a class name in data.hullmods (94.G2
+    slice 13)."""
+    package = key.rsplit(".", 1)[0]
+    code = _STRING_LITERALS.sub(lambda m: m.group(0)[0] * 2, text)
+    return [other for other in list(source.sources) + list(source.jar_classes)
+            if other != key and other.rsplit(".", 1)[0] == package and re.search(rf"\b{re.escape(other.rsplit('.', 1)[1])}\b", code)]
+
+
 def vendor_plan(provider: Path, ids: list[str], *, target: Path | None = None, vanilla_core: Path | None = None,
                 policy_path: Path | None = None, classes: list[str] | None = None) -> dict:
     """`classes` (dotted names) also seed the closure: a combat-plugin gene starts from its class (ROADMAP-3 94.G2 schema 4)."""
@@ -212,10 +224,8 @@ def vendor_plan(provider: Path, ids: list[str], *, target: Path | None = None, v
                 for imported in _IMPORT.findall(text):
                     if imported in source.sources or imported in source.jar_classes:
                         queue.append(("class", imported, f"imported by {key}"))
-                package = key.rsplit(".", 1)[0]
-                for other in list(source.sources) + list(source.jar_classes):
-                    if other != key and other.rsplit(".", 1)[0] == package and re.search(rf"\b{re.escape(other.rsplit('.', 1)[1])}\b", text):
-                        queue.append(("class", other, f"same-package use in {key}"))
+                for other in _same_package_uses(key, text, source):
+                    queue.append(("class", other, f"same-package use in {key}"))
                 for literal in re.findall(r'"([^"\n]+)"', text):
                     need_value(literal, f"string in {key}")
             elif key in source.jar_classes:

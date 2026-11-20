@@ -124,24 +124,73 @@ def _core_commodities(vanilla_core: Path | None) -> tuple[dict[str, str], set[st
 _STRING_LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
 
 
-def code_literals(root: Path, members: list[dict]) -> set[str]:
-    """The string literals of a gene's code members: loose scripts by text, jar classes by their constant pool."""
+def _jar_class_sinks(root: Path, member: dict) -> dict[str, set[str]] | None:
+    """{literal: sinks} of one jar-class member (genome/literal_sinks.py), or None when it cannot be read."""
+    from bridgeforge.genome.literal_sinks import class_literal_sinks
     from bridgeforge.scan.scan_classfile import _parse_class_file
     from bridgeforge.zipsafe import MAX_CLASS_BYTES, read_limited
+
+    jar, _, entry = member["path"].partition("!")
+    try:
+        with zipfile.ZipFile(Path(root) / jar) as archive:
+            data = read_limited(archive, entry, MAX_CLASS_BYTES)
+    except (OSError, KeyError, zipfile.BadZipFile, ValueError):
+        return None
+    info = _parse_class_file(data)
+    return class_literal_sinks(data, info.string_constants) if info is not None else None
+
+
+def code_literals(root: Path, members: list[dict]) -> set[str]:
+    """The string literals of a gene's code members that may name what the code needs: every literal of a loose script (by
+    text), and each literal of a jar class used at least once other than as a mention (slice 13, owner 2026-11-20:
+    `literal_sinks.is_mention`)."""
+    from bridgeforge.genome.literal_sinks import is_mention
 
     literals: set[str] = set()
     for member in members:
         if member["what"] == "file" and member["path"].endswith(".java"):
             literals |= set(_STRING_LITERAL.findall((Path(root) / member["path"]).read_text(encoding="utf-8-sig", errors="replace")))
         elif member["what"] == "jar-class":
-            jar, _, entry = member["path"].partition("!")
-            try:
-                with zipfile.ZipFile(Path(root) / jar) as archive:
-                    info = _parse_class_file(read_limited(archive, entry, MAX_CLASS_BYTES))
-            except (OSError, KeyError, zipfile.BadZipFile, ValueError):
-                continue
-            literals |= set(info.string_constants) if info is not None else set()
+            sinks = _jar_class_sinks(root, member)
+            literals |= {value for value, where in (sinks or {}).items() if not is_mention(where)}
     return literals
+
+
+def code_mentions(root: Path, members: list[dict]) -> dict[str, dict[str, set[str]]]:
+    """{jar-class member path: {literal: its sinks}} for the literals its code only mentions (slice 13)."""
+    from bridgeforge.genome.literal_sinks import is_mention
+
+    found: dict[str, dict[str, set[str]]] = {}
+    for member in members:
+        if member["what"] == "jar-class":
+            mentioned = {value: where for value, where in (_jar_class_sinks(root, member) or {}).items() if is_mention(where)}
+            if mentioned:
+                found[member["path"]] = mentioned
+    return found
+
+
+def mention_suspects(root: Path, members: list[dict], vanilla_core: Path | None, own: set[str] = frozenset()) -> list[dict]:
+    """One suspect per jar class whose code only mentions ids the mod or the core defines (content, faction or campaign ids):
+    recorded, not followed (owner 2026-11-20, "Mention = suspect"). An id the gene's code needs elsewhere, or one of the
+    gene's own ids (`own`, such as a hull mod's id used as its stat key), is no suspect (review 2026-11-20)."""
+    from bridgeforge.genome.campaign import _CampaignIndex
+    from bridgeforge.vendor_plan import KINDS, _Index
+
+    core = Path(vanilla_core).expanduser().resolve() if vanilla_core else None
+    indexes = [_Index(Path(root)), _Index(core)]
+    campaigns = [_CampaignIndex(Path(root))] + ([_CampaignIndex(core)] if core else [])
+    needed = code_literals(root, members) | set(own)
+    suspects = []
+    for path, mentioned in sorted(code_mentions(root, members).items()):
+        ids = {value: where for value, where in mentioned.items() if value not in needed and (
+               any(index.defines(kind, value) for kind in KINDS for index in indexes)
+               or any(campaign.hits(value, set(mentioned)) for campaign in campaigns))}
+        if ids:
+            sinks = sorted({s.split("/")[-1] for where in ids.values() for s in where})
+            suspects.append({"path": path, "mentions": sorted(ids),
+                             "reason": f"named only as a key, a check or an unloaded constant ({', '.join(sinks)}): a mention, "
+                                       "not a need (owner 2026-11-20)"})
+    return suspects
 
 
 def ids_named_by_code(root: Path, members: list[dict], vanilla_core: Path | None) -> list[str]:
@@ -241,4 +290,4 @@ def extend(root: Path, members: list[dict], vanilla_core: Path | None, closure_n
     return {"members": added, "vanilla": sorted(set(vanilla)), "missing": missing, "suspects": suspects}
 
 
-__all__ = ["GETTERS", "SETTINGS_FILE", "code_literals", "extend", "ids_named_by_code", "keys_read_by_class", "keys_read_by_source", "pointer", "value_sha256"]
+__all__ = ["GETTERS", "SETTINGS_FILE", "code_literals", "code_mentions", "extend", "ids_named_by_code", "keys_read_by_class", "keys_read_by_source", "mention_suspects", "pointer", "value_sha256"]
