@@ -60,12 +60,17 @@ def fake_method_index(jar: Path):
     return FAKE_INDEX, ""
 
 
+FIXED_ZIP_TIME = (2026, 1, 1, 0, 0, 0)
+
+
 def make_jar(path: Path, extra: bytes = b"") -> None:
+    """A jar whose bytes depend only on its contents. `writestr(name, ...)` stamps the current time, so two jars of the same
+    classes built across a two-second boundary hashed apart and the decompile cache made two folders (ROADMAP-3 96.16)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(path, "w") as archive:
-        archive.writestr("data/scripts/TemCrusade.class", CLASS_BYTES + extra)
-        archive.writestr("data/scripts/TemCrusade$1.class", CLASS_BYTES + extra)
-        archive.writestr("data/scripts/Other.class", b"no term")
+        for name, data in (("data/scripts/TemCrusade.class", CLASS_BYTES + extra), ("data/scripts/TemCrusade$1.class", CLASS_BYTES + extra),
+                           ("data/scripts/Other.class", b"no term")):
+            archive.writestr(zipfile.ZipInfo(name, date_time=FIXED_ZIP_TIME), data)
 
 
 class FakeDecompiler:
