@@ -54,7 +54,7 @@ MEMBER_KINDS = ("file", "csv-row", "jar-class", "json-entry")
 CAMPAIGN_KINDS = ("faction", "star-system", "market", "industry", "condition", "ability", "rule", "combat-plugin",
                   "campaign-plugin", "custom-start")
 GENE_KINDS = (*KINDS, *CAMPAIGN_KINDS)
-CLOSABLE_KINDS = (*KINDS, "combat-plugin", "star-system")
+CLOSABLE_KINDS = (*KINDS, "combat-plugin", "star-system", "faction")
 COLLECTED_FROM = ["vendor-plan"]
 # What the player sees each kind do: the phenotype a live run must observe (S3 makes these real obligations, G6).
 PHENOTYPE = {
@@ -109,10 +109,30 @@ def _file_member(root: Path, relative: str) -> dict:
     return {"what": "file", "path": relative, "sha256": digest}
 
 
+# The column a table's rows are keyed by, when it is not `id`: RC7's SpecStore reads factions.csv through LoadingUtils with the
+# key `faction`, the .faction file's path (javap of com.fs.starfarer.loading.SpecStore, 2026-11-20).
+TABLE_KEYS = {"data/world/factions/factions.csv": "faction"}
+
+
+def keyed_rows(root: Path, table: str) -> dict[str, dict[str, str]]:
+    """{key: row} for `table`, keyed by its key column (TABLE_KEYS, else `id`)."""
+    key = TABLE_KEYS.get(table)
+    if key is None:
+        return _rows(root, table)
+    from bridgeforge.vendor_plan import _read_csv_rows_lenient
+
+    rows: dict[str, dict[str, str]] = {}
+    for row in _read_csv_rows_lenient(Path(root) / table) or []:
+        value = (row.get(key) or "").strip()
+        if value and not value.startswith("#"):
+            rows.setdefault(value, row)
+    return rows
+
+
 def _row_member(root: Path, entry_path: str) -> dict:
     table, _, rest = entry_path.partition(" [")
     ident = rest.rstrip("]")
-    row = _rows(root, table).get(ident)
+    row = keyed_rows(root, table).get(ident)
     if row is None:
         raise GeneError(f"{table} has no row {ident!r} although the closure names it")
     # Only named, non-empty cells, trimmed: cells past the header (DictReader's None key) are not part of the row the game reads.
@@ -190,6 +210,10 @@ def describe(mod: Path, anchor: str, *, vanilla_core: Path | None = None, policy
     if kind not in CLOSABLE_KINDS:
         raise GeneError(f"{kind} genes cannot be closed yet: G2 adds each campaign kind with its pilot "
                         f"(closable now: {', '.join(CLOSABLE_KINDS)})")
+    if kind == "faction":
+        from bridgeforge.genome.faction import describe_faction
+
+        return describe_faction(mod, ident, vanilla_core, policy_path)  # 94.G2 slice 10: the file, its row, its lists as needs
     registration, system = None, None
     seeds, classes = ([], [])
     if kind == "combat-plugin":

@@ -1756,8 +1756,9 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
       `mention unknown`.
     - P3 has no dependents.
   - Also: 93.65's review nits. A folder name holding `]` is read whole, and the same load error logged twice is one entry.
-  - **Candidate, not built:** the shared scanner could report a ship-role list naming a missing variant (Fatal at load,
-    LOBSTER-SUB-20261120). Changing it would shift findings across the whole corpus, so it waits for its own item.
+  - **Candidate, not built:** the shared scanner could report a `default_ship_roles.json` naming a missing variant (Fatal at
+    load, RC8_BEHAVIOUR RC8-46, recorded with slice 10). Changing it would shift findings across the whole corpus, so it
+    waits for its own item.
   - Tests: `tests/test_gene_dependents.py`:
     - literals, templates and specific folders match, and bare folders do not;
     - conditions from the core, nesting, missions and a compiled provider jar's literal;
@@ -1775,6 +1776,61 @@ history as the closure benchmark, a cross-repository trace check, an early Java 
     - a mere mention hid a `(not located)` reference.
 
     Mutation-checked: 12 mutants, all killed.
+  **Slice 10 Done 2026-11-20: faction genes, described.** P3's star system needs `faction:EridaniCombine`, so faction is
+  the next closable kind (`genome/faction.py`; boundary from the advisor the same day, inside schema 4).
+  - **What a faction gene is:** a `.faction` file the mod ships for an id the core lacks. A mod's file for a core id
+    (`hegemony`) merges into the core faction, so it is refused by name; so is an id the mod has no file for.
+  - **Members:**
+    - the `.faction` file whole, so a faction that knows one more ship is a new allele. Element-level membership would
+      need the array member kind schema 4 refuses, a recorded choice;
+    - its `factions.csv` row. RC7's SpecStore reads that table with the key column `faction`, the file's path (javap
+      2026-11-20), so `gene.keyed_rows` keys it that way; other tables stay keyed by `id`;
+    - the mod files its `logo`, `crest` and `portraits` name.
+  - **Needs:** every id its content lists and sell maps name. One the mod defines is `needs.genes` (the faction carries
+    none of them), one the core defines is `needs.vanilla`, one neither defines is `missing`. A named file the core has
+    is a `file:` vanilla need. Tags (`tritachyon`, a blueprint tag) are suspects, not expanded.
+  - **Registrations:** code that passes the id as a constant to `getFaction` or `addParticipatingFaction` is an element
+    with its hooks. A `setRelationship` call in such a method is a suspect, because which faction's relations it sets is
+    not tracked.
+  - **Saved state:** a saved `Faction` keeps its lists (RC8-43).
+  - **`gene prove` refuses a faction for now.** Its proofs need a `factions.csv` row cut keyed by the `faction` column and
+    a carrier holding every listed gene.
+  - **Eridani measured** (`In operation/Eridani-Combine/genes/faction-EridaniCombine-20261120/`, identity 54e5e03e):
+    - 4 members: the file, its row, two logo files;
+    - `needs.genes` 54 (20 weapons, 17 hulls, 12 hull mods, 5 wings);
+    - `needs.vanilla` 66 (32 weapons, 25 portrait files, 5 hull mods, 4 hulls);
+    - nothing missing;
+    - one registration, `ECEModPlugin.generate` from `onNewGame`, which also calls `setRelationship`;
+    - tags `ECE_bp`, `standard` and `tritachyon` as suspects.
+
+    So P3's carrier boot needs most of Eridani's content genes. A faction trimmed to fewer ships would be a derived gene,
+    later.
+  - **Also:** RC8_BEHAVIOUR RC8-46 records LOBSTER-SUB-20261120's cause from javap: `default_ship_roles.json` is read into
+    a spec that asks each variant's fleet-point cost at load. P1, P2 and P3 keep their identities.
+  - Tests: `tests/test_gene_faction.py`:
+    - members and needs;
+    - a faction without its row;
+    - core and unknown ids refused;
+    - `factions.csv` keyed by `faction`;
+    - a compiled `getFaction` registration beside another faction's call, which must not register;
+    - a registering method with and without `setRelationship`;
+    - prove refusing.
+
+    An independent review (one agent, the diff only) found three defects and two weak points, all fixed with tests:
+    - `tests/test_gene.py` still expected `faction:x` to be unclosable;
+    - a list field holding a bare string was read letter by letter (`"hulls": "wolf"` listed `hull:w`, `hull:o`, ...);
+    - a `logo` such as `../other_mod/x.png` was read from outside the mod and became a member. Named files now go through
+      `campaign._inside_file`, which also refuses absolute and backslash paths;
+    - without `--vanilla-core` a core faction's merge fragment passed for a gene, so describe now refuses;
+    - a `setRelationship` suspect's path was a method name, which a later dependent check would read as a file. It is now
+      the class's `jar!entry`.
+
+    Its other points are left open: a `factions.csv` cell written with backslashes or `./` is reported as a missing row,
+    and whether the game reads such a cell is unchecked. A faction file in a subfolder is not found, and of two files with
+    one id the first by path is taken.
+
+    Mutation-checked: 13 mutants, all killed (the any-constant mutant needed the second faction's call; the note mutant
+    needed a registering method that sets no relations).
 - 94.G3 **Gene bank**: content-addressed store, alleles across the corpus, lineage, licence state; RevenantLib distributes genes
   from vanished authors (GD-3). The store's payloads live under `data_root()`, like `Done/`, never in this public
   repository; only manifests of the owner's own or permitted content become committed fixtures (2026-11-19).

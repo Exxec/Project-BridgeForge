@@ -50,7 +50,7 @@ class KindTests(unittest.TestCase):
                 self.assertTrue(PHENOTYPE[kind])
         self.assertIn("combat-plugin", CLOSABLE_KINDS)
         with resolved_temp_dir() as root, self.assertRaisesRegex(GeneError, "cannot be closed yet"):
-            describe(_mod(root), "faction:demo")
+            describe(_mod(root), "market:demo")  # faction closed in 94.G2 slice 10
 
 
 class CombatPluginTests(unittest.TestCase):
